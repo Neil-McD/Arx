@@ -4,6 +4,15 @@ import { internal } from "./_generated/api";
 const crons = cronJobs();
 
 crons.interval(
+  "process pending email outbox",
+  { minutes: 5 },
+  (internal as any).email.processPendingEmailOutboxInternal,
+  {
+    limit: 10,
+  },
+);
+
+crons.interval(
   "reconcile daytona orphan sandboxes",
   { minutes: 15 },
   internal.daytonaOrphanReconciler.reconcileDaytonaOrphanedSandboxesInternal,

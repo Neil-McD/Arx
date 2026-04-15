@@ -1,6 +1,11 @@
 import { resolveUserIdForAuthenticatedRequest } from "./authActor";
 export { resolveUserIdForAuthenticatedRequest } from "./authActor";
-import { resolveCommunityEntryPolicy } from "./communityCore";
+import {
+  communitySubscriptionStatusGrantsAccess,
+  normalizeCommunitySubscriptionStatus,
+  resolveCommunityEntryPolicy,
+} from "./communityCore";
+import { enqueueCommunityAccessGrantedEmailInternal } from "./emailEvents";
 
 export type CommunityLike = {
   _id: any;
@@ -128,7 +133,7 @@ export async function ensureCommunityMembership(args: {
   pricePointId?: any;
   accessSourceOverride?: "free_grant" | "manual_grant" | "paid_subscription";
   nowMs: number;
-}): Promise<CommunityMembershipLike> {
+}): Promise<{ membership: CommunityMembershipLike; accessGranted: boolean }> {
   const existing = await args.ctx.db
     .query("communityMemberships")
     .withIndex("by_community_user", (q: any) => q.eq("communityId", args.communityId).eq("userId", args.userId))
@@ -147,7 +152,10 @@ export async function ensureCommunityMembership(args: {
     await args.ctx.db.patch(existing._id, patch);
     const refreshed = (await args.ctx.db.get(existing._id)) as CommunityMembershipLike | null;
     if (!refreshed) throw new Error("community_membership_not_found");
-    return refreshed;
+    return {
+      membership: refreshed,
+      accessGranted: !Boolean(existing.active),
+    };
   }
   const membershipId = await args.ctx.db.insert("communityMemberships", {
     communityId: args.communityId,
@@ -161,7 +169,10 @@ export async function ensureCommunityMembership(args: {
   });
   const created = (await args.ctx.db.get(membershipId)) as CommunityMembershipLike | null;
   if (!created) throw new Error("community_membership_create_failed");
-  return created;
+  return {
+    membership: created,
+    accessGranted: true,
+  };
 }
 
 export async function createCommunitySubscriptionForMembership(args: {
@@ -170,18 +181,38 @@ export async function createCommunitySubscriptionForMembership(args: {
   membershipId: any;
   userId: any;
   pricePointId: any;
+  source?: "stripe" | "external_sync";
+  providerSubscriptionId?: string | null;
+  providerCustomerId?: string | null;
+  currentPeriodStartAt?: number | null;
+  currentPeriodEndAt?: number | null;
+  status?: "active" | "past_due" | "cancel_at_period_end" | "canceled" | "ended";
+  cancelAtPeriodEnd?: boolean | null;
   nowMs: number;
 }): Promise<void> {
+  const source = args.source ?? "stripe";
+  const status = args.status ?? "active";
+  const cancelAtPeriodEnd = Boolean(args.cancelAtPeriodEnd ?? status === "cancel_at_period_end");
+  const endedAt = status === "canceled" || status === "ended" ? args.nowMs : undefined;
   const existing = await args.ctx.db
     .query("communitySubscriptions" as any)
     .withIndex("by_membership", (q: any) => q.eq("membershipId", args.membershipId))
     .first();
   if (existing) {
     await args.ctx.db.patch(existing._id, {
+      source,
       pricePointId: args.pricePointId,
-      status: "active",
-      cancelAtPeriodEnd: false,
-      endedAt: undefined,
+      status,
+      providerSubscriptionId:
+        String(args.providerSubscriptionId ?? "").trim() || existing.providerSubscriptionId,
+      providerCustomerId:
+        String(args.providerCustomerId ?? "").trim() || existing.providerCustomerId,
+      currentPeriodStartAt:
+        typeof args.currentPeriodStartAt === "number" ? args.currentPeriodStartAt : undefined,
+      currentPeriodEndAt:
+        typeof args.currentPeriodEndAt === "number" ? args.currentPeriodEndAt : undefined,
+      cancelAtPeriodEnd,
+      endedAt,
       updatedAt: args.nowMs,
     });
     return;
@@ -191,8 +222,16 @@ export async function createCommunitySubscriptionForMembership(args: {
     userId: args.userId,
     membershipId: args.membershipId,
     pricePointId: args.pricePointId,
-    status: "active",
-    cancelAtPeriodEnd: false,
+    source,
+    status,
+    providerSubscriptionId: String(args.providerSubscriptionId ?? "").trim() || undefined,
+    providerCustomerId: String(args.providerCustomerId ?? "").trim() || undefined,
+    currentPeriodStartAt:
+      typeof args.currentPeriodStartAt === "number" ? args.currentPeriodStartAt : undefined,
+    currentPeriodEndAt:
+      typeof args.currentPeriodEndAt === "number" ? args.currentPeriodEndAt : undefined,
+    cancelAtPeriodEnd,
+    endedAt,
     createdAt: args.nowMs,
     updatedAt: args.nowMs,
   });
@@ -223,23 +262,111 @@ export async function redeemClaimRow(args: {
   claim: PurchaseClaimLike;
   userId: any;
   nowMs: number;
-}): Promise<string | null> {
+}): Promise<{
+  communityId: string | null;
+  accessGranted: boolean;
+  grantMarker: string | null;
+}> {
   if (args.claim.status !== "pending") {
     if (args.claim.status === "redeemed" && args.claim.redeemedByUserId === args.userId) {
-      return String(args.claim.communityId);
+      return {
+        communityId: String(args.claim.communityId),
+        accessGranted: false,
+        grantMarker: null,
+      };
     }
-    return null;
+    return {
+      communityId: null,
+      accessGranted: false,
+      grantMarker: null,
+    };
   }
   if (args.claim.expiresAt <= args.nowMs) {
     await args.ctx.db.patch(args.claim._id, {
       status: "expired",
       updatedAt: args.nowMs,
     });
-    return null;
+    return {
+      communityId: null,
+      accessGranted: false,
+      grantMarker: null,
+    };
+  }
+  let checkoutSession:
+    | {
+        mode?: string;
+        claimToken?: string;
+        status?: string;
+        expiresAt?: number;
+        providerSubscriptionId?: string;
+        providerCustomerId?: string;
+        currentPeriodStartAt?: number;
+        currentPeriodEndAt?: number;
+        communitySubscriptionStatus?:
+          | "active"
+          | "past_due"
+          | "cancel_at_period_end"
+          | "canceled"
+          | "ended";
+        cancelAtPeriodEnd?: boolean;
+      }
+    | null = null;
+  if (args.claim.sourceSessionId) {
+    checkoutSession = await args.ctx.db
+      .query("checkoutSessions" as any)
+      .withIndex("by_sessionId", (q: any) => q.eq("sessionId", args.claim.sourceSessionId))
+      .first();
+    if (!checkoutSession) {
+      return {
+        communityId: null,
+        accessGranted: false,
+        grantMarker: null,
+      };
+    }
+    if (String(checkoutSession.mode ?? "").trim().toLowerCase() !== "community_join") {
+      return {
+        communityId: null,
+        accessGranted: false,
+        grantMarker: null,
+      };
+    }
+    if (String(checkoutSession.claimToken ?? "").trim() !== args.claim.claimToken) {
+      return {
+        communityId: null,
+        accessGranted: false,
+        grantMarker: null,
+      };
+    }
+    if (
+      args.nowMs > Number(checkoutSession.expiresAt ?? 0) ||
+      String(checkoutSession.status ?? "").trim().toLowerCase() !== "complete"
+    ) {
+      return {
+        communityId: null,
+        accessGranted: false,
+        grantMarker: null,
+      };
+    }
+    const checkoutStatus =
+      normalizeCommunitySubscriptionStatus(checkoutSession.communitySubscriptionStatus ?? "active") ??
+      "active";
+    if (!communitySubscriptionStatusGrantsAccess(checkoutStatus)) {
+      return {
+        communityId: null,
+        accessGranted: false,
+        grantMarker: null,
+      };
+    }
   }
   const community = (await args.ctx.db.get(args.claim.communityId)) as CommunityLike | null;
-  if (!community) return null;
-  const membership = await ensureCommunityMembership({
+  if (!community) {
+    return {
+      communityId: null,
+      accessGranted: false,
+      grantMarker: null,
+    };
+  }
+  const { membership, accessGranted } = await ensureCommunityMembership({
     ctx: args.ctx,
     community,
     communityId: args.claim.communityId,
@@ -254,6 +381,15 @@ export async function redeemClaimRow(args: {
       membershipId: membership._id,
       userId: args.userId,
       pricePointId: args.claim.pricePointId,
+      source: "stripe",
+      providerSubscriptionId: checkoutSession?.providerSubscriptionId ?? null,
+      providerCustomerId: checkoutSession?.providerCustomerId ?? null,
+      currentPeriodStartAt: checkoutSession?.currentPeriodStartAt ?? null,
+      currentPeriodEndAt: checkoutSession?.currentPeriodEndAt ?? null,
+      status:
+        normalizeCommunitySubscriptionStatus(checkoutSession?.communitySubscriptionStatus ?? "active") ??
+        "active",
+      cancelAtPeriodEnd: checkoutSession?.cancelAtPeriodEnd ?? false,
       nowMs: args.nowMs,
     });
   }
@@ -263,5 +399,21 @@ export async function redeemClaimRow(args: {
     redeemedAt: args.nowMs,
     updatedAt: args.nowMs,
   });
-  return String(args.claim.communityId);
+  const communityId = String(args.claim.communityId);
+  if (accessGranted) {
+    await enqueueCommunityAccessGrantedEmailInternal({
+      ctx: args.ctx,
+      userId: args.userId,
+      communityId: args.claim.communityId,
+      grantMarker: `${String(membership._id)}:${membership.updatedAt}`,
+      nowMs: args.nowMs,
+    });
+  }
+  return {
+    communityId,
+    accessGranted,
+    grantMarker: accessGranted
+      ? `${String(membership._id)}:${membership.updatedAt}`
+      : null,
+  };
 }

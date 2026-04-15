@@ -160,6 +160,27 @@ function normalizeStripeSubscriptionStatus(raw: unknown): string {
     .toLowerCase();
 }
 
+function normalizeStripeCommunitySubscriptionStatus(args: {
+  subscriptionStatus: unknown;
+  cancelAtPeriodEnd?: unknown;
+}): "active" | "past_due" | "cancel_at_period_end" | "canceled" | "ended" {
+  const subscriptionStatus = normalizeStripeSubscriptionStatus(args.subscriptionStatus);
+  const cancelAtPeriodEnd = Boolean(args.cancelAtPeriodEnd);
+  if (subscriptionStatus === "active" || subscriptionStatus === "trialing") {
+    return cancelAtPeriodEnd ? "cancel_at_period_end" : "active";
+  }
+  if (subscriptionStatus === "past_due") return "past_due";
+  if (subscriptionStatus === "canceled") return "canceled";
+  if (
+    subscriptionStatus === "unpaid" ||
+    subscriptionStatus === "incomplete" ||
+    subscriptionStatus === "incomplete_expired"
+  ) {
+    return "ended";
+  }
+  return "active";
+}
+
 function stripeSubscriptionGrantsBuilder(status: string): boolean {
   return status === "active" || status === "trialing";
 }
@@ -196,6 +217,13 @@ function readStripeSubscriptionCycle(subscription: Stripe.Subscription): {
     ),
     cycleEndsAt: toStripeTimestampMs((subscription as any)?.current_period_end),
   };
+}
+
+function readStripePaymentReady(raw: unknown): boolean {
+  const paymentStatus = String(raw ?? "")
+    .trim()
+    .toLowerCase();
+  return paymentStatus === "paid" || paymentStatus === "no_payment_required";
 }
 
 export function registerRuntimeBillingRoutes(
@@ -262,6 +290,7 @@ export function registerRuntimeBillingRoutes(
           {
             communityId,
             userId,
+            source: "external_sync",
             status,
             pricePointId:
               parseOptionalString(
@@ -438,6 +467,73 @@ export function registerRuntimeBillingRoutes(
               ignored: true,
               event: event.type,
               reason: "builder_local_session_id_missing",
+            });
+          }
+          const communityCheckoutSession = await (ctx as any).runQuery(
+            internal.communityCommerce.getCommunityJoinCheckoutSessionInternal as any,
+            {
+              sessionId: localSessionId,
+            },
+          );
+          if (communityCheckoutSession) {
+            if (!readStripePaymentReady(session.payment_status)) {
+              return jsonResponse(req, 200, {
+                ok: true,
+                ignored: true,
+                event: event.type,
+                reason: "community_checkout_payment_pending",
+              });
+            }
+            const subscriptionId =
+              typeof session.subscription === "string"
+                ? session.subscription
+                : null;
+            if (!subscriptionId) {
+              return jsonResponse(req, 200, {
+                ok: true,
+                ignored: true,
+                event: event.type,
+                reason: "community_subscription_missing",
+              });
+            }
+            const stripe = getStripeClient();
+            const subscription =
+              await stripe.subscriptions.retrieve(subscriptionId);
+            const providerPriceId = subscription.items.data[0]?.price?.id ?? null;
+            const { cycleStartedAt, cycleEndsAt } =
+              readStripeSubscriptionCycle(subscription);
+            await (ctx as any).runMutation(
+              internal.communityCommerce
+                .syncPendingCommunityCheckoutSubscriptionInternal as any,
+              {
+                sessionId: localSessionId,
+                providerCheckoutSessionId: session.id,
+                providerCustomerId:
+                  typeof subscription.customer === "string"
+                    ? subscription.customer
+                    : typeof session.customer === "string"
+                      ? session.customer
+                      : null,
+                providerSubscriptionId: subscription.id,
+                providerPriceId,
+                subscriptionStatus: normalizeStripeCommunitySubscriptionStatus({
+                  subscriptionStatus: subscription.status,
+                  cancelAtPeriodEnd: (subscription as any)?.cancel_at_period_end,
+                }),
+                currentPeriodStartAt: cycleStartedAt,
+                currentPeriodEndAt: cycleEndsAt,
+                cancelAtPeriodEnd: Boolean((subscription as any)?.cancel_at_period_end),
+                markComplete: true,
+                nowMs:
+                  Number(event.created ?? 0) > 0
+                    ? Number(event.created) * 1000
+                    : Date.now(),
+              },
+            );
+            return jsonResponse(req, 200, {
+              ok: true,
+              received: true,
+              event: event.type,
             });
           }
           let providerCustomerId =
@@ -670,6 +766,87 @@ export function registerRuntimeBillingRoutes(
               ignored: true,
               event: event.type,
               reason: "builder_local_session_id_missing",
+            });
+          }
+          const communityCheckoutSession = await (ctx as any).runQuery(
+            internal.communityCommerce.getCommunityJoinCheckoutSessionInternal as any,
+            {
+              sessionId: localSessionId,
+            },
+          );
+          if (communityCheckoutSession) {
+            const providerPriceId = subscription.items.data[0]?.price?.id ?? null;
+            const { cycleStartedAt, cycleEndsAt } =
+              readStripeSubscriptionCycle(subscription);
+            const normalizedCommunityStatus =
+              normalizeStripeCommunitySubscriptionStatus({
+                subscriptionStatus: subscription.status,
+                cancelAtPeriodEnd: (subscription as any)?.cancel_at_period_end,
+              });
+            await (ctx as any).runMutation(
+              internal.communityCommerce
+                .syncPendingCommunityCheckoutSubscriptionInternal as any,
+              {
+                sessionId: localSessionId,
+                providerCustomerId:
+                  typeof subscription.customer === "string"
+                    ? subscription.customer
+                    : null,
+                providerSubscriptionId: subscription.id,
+                providerPriceId,
+                subscriptionStatus: normalizedCommunityStatus,
+                currentPeriodStartAt: cycleStartedAt,
+                currentPeriodEndAt: cycleEndsAt,
+                cancelAtPeriodEnd: Boolean((subscription as any)?.cancel_at_period_end),
+                markComplete: false,
+                nowMs:
+                  Number(event.created ?? 0) > 0
+                    ? Number(event.created) * 1000
+                    : Date.now(),
+              },
+            );
+            const existingCommunitySubscription = await (ctx as any).runQuery(
+              internal.communityCommerce
+                .getCommunitySubscriptionByProviderSubscriptionIdInternal as any,
+              {
+                providerSubscriptionId: subscription.id,
+              },
+            );
+            if (existingCommunitySubscription?.communityId && existingCommunitySubscription?.userId) {
+              await (ctx as any).runMutation(
+                internal.billing.syncCommunitySubscriptionLifecycleInternal as any,
+                {
+                  communityId: existingCommunitySubscription.communityId,
+                  userId: existingCommunitySubscription.userId,
+                  source: "stripe",
+                  pricePointId: existingCommunitySubscription.pricePointId ?? undefined,
+                  providerPriceId,
+                  providerSubscriptionId: subscription.id,
+                  providerCustomerId:
+                    typeof subscription.customer === "string"
+                      ? subscription.customer
+                      : null,
+                  status: normalizedCommunityStatus,
+                  currentPeriodStartIso:
+                    typeof cycleStartedAt === "number"
+                      ? new Date(cycleStartedAt).toISOString()
+                      : undefined,
+                  currentPeriodEndIso:
+                    typeof cycleEndsAt === "number"
+                      ? new Date(cycleEndsAt).toISOString()
+                      : undefined,
+                  cancelAtPeriodEnd: Boolean((subscription as any)?.cancel_at_period_end),
+                  nowMs:
+                    Number(event.created ?? 0) > 0
+                      ? Number(event.created) * 1000
+                      : Date.now(),
+                },
+              );
+            }
+            return jsonResponse(req, 200, {
+              ok: true,
+              received: true,
+              event: event.type,
             });
           }
           const providerPriceId = subscription.items.data[0]?.price?.id ?? null;

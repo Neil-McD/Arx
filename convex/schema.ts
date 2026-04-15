@@ -5,6 +5,14 @@ export default defineSchema({
   users: defineTable({
     authSubject: v.string(),
     email: v.optional(v.string()),
+    emailVerifiedAt: v.optional(v.number()),
+    emailVerificationSource: v.optional(
+      v.union(
+        v.literal("oauth_provider"),
+        v.literal("magic_link"),
+        v.literal("manual_change_code"),
+      ),
+    ),
     displayName: v.optional(v.string()),
     avatarUrl: v.optional(v.string()),
     createdAt: v.number(),
@@ -77,6 +85,16 @@ export default defineSchema({
     providerPriceId: v.optional(v.string()),
     currentPeriodStartAt: v.optional(v.number()),
     currentPeriodEndAt: v.optional(v.number()),
+    communitySubscriptionStatus: v.optional(
+      v.union(
+        v.literal("active"),
+        v.literal("past_due"),
+        v.literal("cancel_at_period_end"),
+        v.literal("canceled"),
+        v.literal("ended"),
+      ),
+    ),
+    cancelAtPeriodEnd: v.optional(v.boolean()),
     communityId: v.optional(v.id("communities")),
     billingPeriod: v.optional(v.string()),
     pricePointId: v.optional(v.id("communityPricePoints")),
@@ -204,6 +222,56 @@ export default defineSchema({
     createdAt: v.number(),
     updatedAt: v.number(),
   }).index("by_user", ["userId"]),
+
+  emailPreferences: defineTable({
+    userId: v.id("users"),
+    weeklyDigestEnabled: v.boolean(),
+    founderDigestEnabled: v.boolean(),
+    eventReminderEnabled: v.boolean(),
+    founderAdminEmailsEnabled: v.boolean(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_user", ["userId"]),
+
+  emailOutbox: defineTable({
+    kind: v.string(),
+    recipientUserId: v.optional(v.id("users")),
+    recipientEmail: v.string(),
+    templateKey: v.string(),
+    payload: v.any(),
+    dedupeKey: v.optional(v.string()),
+    provider: v.optional(v.string()),
+    providerMessageId: v.optional(v.string()),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("sending"),
+      v.literal("sent"),
+      v.literal("failed"),
+      v.literal("suppressed"),
+    ),
+    scheduledAt: v.number(),
+    attemptCount: v.number(),
+    lastAttemptAt: v.optional(v.number()),
+    sentAt: v.optional(v.number()),
+    failureReason: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_status_scheduledAt", ["status", "scheduledAt"])
+    .index("by_dedupeKey", ["dedupeKey"])
+    .index("by_recipientUserId", ["recipientUserId"])
+    .index("by_providerMessageId", ["providerMessageId"]),
+
+  emailDeliveries: defineTable({
+    outboxId: v.optional(v.id("emailOutbox")),
+    provider: v.string(),
+    providerMessageId: v.optional(v.string()),
+    eventType: v.string(),
+    payload: v.any(),
+    createdAt: v.number(),
+  })
+    .index("by_outbox", ["outboxId"])
+    .index("by_providerMessageId", ["providerMessageId"]),
 
   personalMemoryItems: defineTable({
     userId: v.id("users"),
@@ -371,6 +439,7 @@ export default defineSchema({
     userId: v.id("users"),
     membershipId: v.id("communityMemberships"),
     pricePointId: v.id("communityPricePoints"),
+    source: v.optional(v.union(v.literal("stripe"), v.literal("external_sync"))),
     status: v.union(
       v.literal("active"),
       v.literal("past_due"),
@@ -390,7 +459,8 @@ export default defineSchema({
     .index("by_user", ["userId"])
     .index("by_membership", ["membershipId"])
     .index("by_pricePoint", ["pricePointId"])
-    .index("by_community_user", ["communityId", "userId"]),
+    .index("by_community_user", ["communityId", "userId"])
+    .index("by_providerSubscriptionId", ["providerSubscriptionId"]),
 
   communityChatThreads: defineTable({
     communityId: v.id("communities"),

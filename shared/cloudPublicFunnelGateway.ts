@@ -99,7 +99,7 @@ export async function startCloudPublicFunnelCheckout<SessionT>(
     client = bootstrapped.client;
     authSubject = bootstrapped.authSubject;
   }
-  return (await client.mutation("billing:startPublicCommunityCheckout" as any, {
+  return (await client.action("billing:startPublicCommunityCheckout" as any, {
     communitySlug: params.communitySlug,
     billingPeriod: params.billingPeriod,
     successUrl: params.successUrl,

@@ -6,6 +6,8 @@ type UserRow = {
   _id: any;
   authSubject?: string;
   email?: string;
+  emailVerifiedAt?: number;
+  emailVerificationSource?: "oauth_provider" | "magic_link" | "manual_change_code";
   displayName?: string;
   avatarUrl?: string;
   createdAt: number;
@@ -16,6 +18,8 @@ export type AuthenticatedActor = {
   authSubject: string;
   dbUserId: any;
   email: string | null;
+  emailVerifiedAt: number | null;
+  emailVerificationSource: "oauth_provider" | "magic_link" | "manual_change_code" | null;
   displayName: string | null;
   avatarUrl: string | null;
   createdAt: number;
@@ -29,6 +33,16 @@ function normalizeIdValue(raw: unknown): string {
 function normalizeOptionalString(raw: unknown): string | undefined {
   const normalized = String(raw ?? "").trim();
   return normalized || undefined;
+}
+
+function normalizeEmailVerificationSource(
+  raw: unknown,
+): "oauth_provider" | "magic_link" | "manual_change_code" | undefined {
+  const normalized = String(raw ?? "").trim().toLowerCase();
+  if (normalized === "oauth_provider") return "oauth_provider";
+  if (normalized === "magic_link") return "magic_link";
+  if (normalized === "manual_change_code") return "manual_change_code";
+  return undefined;
 }
 
 async function getUserByResolvedSubject(ctx: any, authSubject: string): Promise<UserRow | null> {
@@ -45,6 +59,8 @@ function toActor(authSubject: string, user: UserRow): AuthenticatedActor {
     authSubject,
     dbUserId: user._id,
     email: user.email ?? null,
+    emailVerifiedAt: typeof user.emailVerifiedAt === "number" ? user.emailVerifiedAt : null,
+    emailVerificationSource: user.emailVerificationSource ?? null,
     displayName: user.displayName ?? null,
     avatarUrl: user.avatarUrl ?? null,
     createdAt: user.createdAt,
@@ -88,6 +104,8 @@ async function ensureActorByResolvedSubject(args: {
   authSubject: string;
   userId?: any;
   email?: string | null;
+  emailVerified?: boolean | null;
+  emailVerificationSource?: "oauth_provider" | "magic_link" | "manual_change_code" | null;
   displayName?: string | null;
   avatarUrl?: string | null;
   nowMs?: number;
@@ -95,6 +113,10 @@ async function ensureActorByResolvedSubject(args: {
   const nowMs = args.nowMs ?? Date.now();
   const requestedUserId = normalizeIdValue(args.userId);
   const email = normalizeOptionalString(args.email);
+  const emailVerified = Boolean(args.emailVerified && email);
+  const emailVerificationSource =
+    normalizeEmailVerificationSource(args.emailVerificationSource) ??
+    (emailVerified ? "oauth_provider" : undefined);
 
   const existing = await getUserByResolvedSubject(args.ctx, args.authSubject);
 
@@ -105,6 +127,7 @@ async function ensureActorByResolvedSubject(args: {
     dbUserId = await args.ctx.db.insert("users", {
       authSubject: args.authSubject,
       email,
+      ...(emailVerified ? { emailVerifiedAt: nowMs, emailVerificationSource } : null),
       displayName,
       avatarUrl,
       createdAt: nowMs,
@@ -117,9 +140,27 @@ async function ensureActorByResolvedSubject(args: {
     }
     const patch: {
       email?: string;
+      emailVerifiedAt?: number;
+      emailVerificationSource?: "oauth_provider" | "magic_link" | "manual_change_code";
       updatedAt?: number;
     } = {};
-    if (email && email !== existing.email) patch.email = email;
+    const emailChanged = Boolean(email && email !== existing.email);
+    if (emailChanged) patch.email = email;
+    if (emailChanged && !emailVerified) {
+      patch.emailVerifiedAt = undefined;
+      patch.emailVerificationSource = undefined;
+    }
+    if (
+      emailVerified &&
+      (
+        existing.email !== email ||
+        typeof existing.emailVerifiedAt !== "number" ||
+        existing.emailVerificationSource !== emailVerificationSource
+      )
+    ) {
+      patch.emailVerifiedAt = nowMs;
+      patch.emailVerificationSource = emailVerificationSource;
+    }
     if (Object.keys(patch).length > 0) {
       patch.updatedAt = nowMs;
       await args.ctx.db.patch(existing._id, patch);
@@ -166,6 +207,8 @@ export async function ensureAuthenticatedActor(args: {
   authSubject?: string | null;
   userId?: any;
   email?: string | null;
+  emailVerified?: boolean | null;
+  emailVerificationSource?: "oauth_provider" | "magic_link" | "manual_change_code" | null;
   displayName?: string | null;
   avatarUrl?: string | null;
   nowMs?: number;
@@ -179,6 +222,8 @@ export async function ensureAuthenticatedActor(args: {
     authSubject,
     userId: args.userId,
     email: args.email ?? null,
+    emailVerified: args.emailVerified ?? false,
+    emailVerificationSource: args.emailVerificationSource ?? null,
     displayName: args.displayName ?? null,
     avatarUrl: args.avatarUrl ?? null,
     nowMs: args.nowMs,
@@ -209,6 +254,14 @@ export const ensureAuthenticatedActorByExplicitSubjectInternal = internalMutatio
   args: {
     authSubject: v.string(),
     email: v.optional(v.string()),
+    emailVerified: v.optional(v.boolean()),
+    emailVerificationSource: v.optional(
+      v.union(
+        v.literal("oauth_provider"),
+        v.literal("magic_link"),
+        v.literal("manual_change_code"),
+      ),
+    ),
     displayName: v.optional(v.string()),
     avatarUrl: v.optional(v.string()),
     nowMs: v.optional(v.number()),
@@ -218,6 +271,8 @@ export const ensureAuthenticatedActorByExplicitSubjectInternal = internalMutatio
       ctx,
       authSubject: args.authSubject,
       email: args.email ?? null,
+      emailVerified: args.emailVerified ?? false,
+      emailVerificationSource: args.emailVerificationSource ?? null,
       displayName: args.displayName ?? null,
       avatarUrl: args.avatarUrl ?? null,
       nowMs: args.nowMs,

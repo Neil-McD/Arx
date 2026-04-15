@@ -5,6 +5,7 @@ import {
   findAuthenticatedActorState,
   resolveAuthenticatedActor,
 } from "./authActor";
+import { resolveAuthenticatedIdentityProfile } from "./authIdentity";
 import { isCreatorDevTierOverrideEmail } from "../shared/devTierOverride";
 
 type CanonicalTier = "free" | "builder" | "architect";
@@ -100,12 +101,18 @@ export const bootstrapActor = mutation({
   handler: async (ctx, args) => {
     const nowMs = args.nowMs ?? Date.now();
     if (args.authState === "authenticated") {
-      const actor = await ensureAuthenticatedActor({
+      const identity = await resolveAuthenticatedIdentityProfile({
         ctx,
         authSubject: args.authSubject ?? null,
-        email: args.email ?? null,
-        displayName: args.displayName ?? null,
-        avatarUrl: args.avatarUrl ?? null,
+      });
+      const actor = await ensureAuthenticatedActor({
+        ctx,
+        authSubject: identity.authSubject,
+        email: identity.email,
+        emailVerified: identity.emailVerified,
+        emailVerificationSource: identity.emailVerificationSource,
+        displayName: identity.displayName,
+        avatarUrl: identity.avatarUrl,
         nowMs,
       });
       const canonicalTier = await getCanonicalTierByUserIdInternal(ctx as never, actor.dbUserId, nowMs);

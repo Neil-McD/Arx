@@ -5,6 +5,8 @@ import { registerRuntimeAuthRoutes } from "./httpAuth";
 import { registerRuntimeAuthBridgeRoutes } from "./httpAuthBridge";
 import { registerRuntimeBillingRoutes } from "./httpBilling";
 import { registerRuntimeContextRoutes } from "./httpContext";
+import { registerEmailRoutes } from "./httpEmail";
+import { readAuthenticatedIdentityProfile } from "./authIdentity";
 import { parseBoolish, parseOptionalString } from "./httpInferenceConfig";
 import { registerRuntimeTurnRoutes } from "./httpRuntimeRoutes";
 import { registerRuntimeVoiceRoutes } from "./httpVoice";
@@ -133,6 +135,8 @@ async function requireVerifiedIdentity(
       identity: {
         authSubject: string;
         email: string | null;
+        emailVerified: boolean;
+        emailVerificationSource: "oauth_provider" | null;
         displayName: string | null;
         avatarUrl: string | null;
       };
@@ -151,19 +155,11 @@ async function requireVerifiedIdentity(
     };
   }
 
-  let identity: Awaited<ReturnType<typeof ctx.auth.getUserIdentity>>;
+  let identity;
   try {
-    identity = await ctx.auth.getUserIdentity();
+    identity = await readAuthenticatedIdentityProfile(ctx);
   } catch {
-    return {
-      ok: false,
-      response: jsonResponse(req, 503, {
-        ok: false,
-        code: "auth_upstream_unavailable",
-        error: "auth_upstream_unavailable",
-        message: "Authentication is temporarily unavailable.",
-      }),
-    };
+    identity = null;
   }
   if (!identity) {
     return {
@@ -177,55 +173,15 @@ async function requireVerifiedIdentity(
     };
   }
 
-  const authSubject = String(identity.subject ?? "").trim();
-  if (!authSubject) {
-    return {
-      ok: false,
-      response: jsonResponse(req, 401, {
-        ok: false,
-        code: "auth_invalid_bearer_token",
-        error: "auth_invalid_bearer_token",
-        message: "Invalid bearer token.",
-      }),
-    };
-  }
-
-  const identityRecord =
-    identity && typeof identity === "object" && !Array.isArray(identity)
-      ? (identity as Record<string, unknown>)
-      : {};
-  const readIdentityString = (...keys: string[]): string => {
-    for (const key of keys) {
-      const value = identityRecord[key];
-      if (typeof value !== "string") continue;
-      const trimmed = value.trim();
-      if (trimmed) return trimmed;
-    }
-    return "";
-  };
-  const email = typeof identity.email === "string" ? identity.email.trim() : "";
-  const directDisplayName = readIdentityString("name", "displayName", "display_name", "full_name", "fullName");
-  const givenName = readIdentityString("given_name", "givenName", "first_name", "firstName");
-  const familyName = readIdentityString("family_name", "familyName", "last_name", "lastName");
-  const displayName = directDisplayName || [givenName, familyName].filter(Boolean).join(" ").trim();
-  const avatarUrl = readIdentityString(
-    "picture",
-    "pictureUrl",
-    "picture_url",
-    "profile_picture_url",
-    "profilePictureUrl",
-    "avatarUrl",
-    "avatar_url",
-    "imageUrl",
-    "image_url",
-  );
   return {
     ok: true,
     identity: {
-      authSubject,
-      email: email || null,
-      displayName: displayName || null,
-      avatarUrl: avatarUrl || null,
+      authSubject: identity.authSubject,
+      email: identity.email,
+      emailVerified: identity.emailVerified,
+      emailVerificationSource: identity.emailVerificationSource,
+      displayName: identity.displayName,
+      avatarUrl: identity.avatarUrl,
     },
   };
 }
@@ -258,10 +214,19 @@ const requireAuthenticatedActor: RequireAuthenticatedActor = async (
 > => {
   const authIdentity = await requireVerifiedIdentity(ctx, req);
   if (!authIdentity.ok) return authIdentity;
-  const { authSubject, email, displayName, avatarUrl } = authIdentity.identity;
+  const {
+    authSubject,
+    email,
+    emailVerified,
+    emailVerificationSource,
+    displayName,
+    avatarUrl,
+  } = authIdentity.identity;
   const actor = (await ctx.runMutation(internal.authActor.ensureAuthenticatedActorByExplicitSubjectInternal as any, {
     authSubject,
     ...(email ? { email } : null),
+    ...(email ? { emailVerified } : null),
+    ...(emailVerificationSource ? { emailVerificationSource } : null),
     ...(displayName ? { displayName } : null),
     ...(avatarUrl ? { avatarUrl } : null),
   })) as { authSubject?: string | null; dbUserId?: any };
@@ -322,6 +287,13 @@ registerRuntimeAuthBridgeRoutes({
 });
 
 registerRuntimeBillingRoutes({
+  http,
+  httpAction,
+  jsonResponse,
+  optionsResponse,
+});
+
+registerEmailRoutes({
   http,
   httpAction,
   jsonResponse,

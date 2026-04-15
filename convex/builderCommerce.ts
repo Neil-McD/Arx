@@ -7,11 +7,29 @@ import {
 } from "./billingCore";
 import { resolveUserIdForAuthenticatedRequest } from "./authActor";
 import { getStripeClient, readStripeBuilderPriceId } from "./stripeCore";
+import { enqueueBuilderSubscriptionStateEmailInternal } from "./emailEvents";
 
 function isActiveWindow(nowMs: number, startsAt: number, endsAt?: number): boolean {
   if (startsAt > nowMs) return false;
   if (typeof endsAt === "number" && nowMs > endsAt) return false;
   return true;
+}
+
+function readEffectiveBuilderTier(rows: Array<{ tier: string }>): "free" | "builder" | "architect" {
+  let rank = 0;
+  for (const row of rows) {
+    const tier = String(row.tier ?? "").trim().toLowerCase();
+    if (tier === "architect" || tier === "pro") {
+      rank = Math.max(rank, 2);
+      continue;
+    }
+    if (tier === "builder") {
+      rank = Math.max(rank, 1);
+    }
+  }
+  if (rank >= 2) return "architect";
+  if (rank >= 1) return "builder";
+  return "free";
 }
 
 export const createPendingBuilderCheckoutSessionInternal = internalMutation({
@@ -143,6 +161,7 @@ export const syncBuilderStripeSubscriptionInternal = internalMutation({
         entry.source === "stripe" &&
         isActiveWindow(nowMs, entry.startsAt, entry.endsAt),
     );
+    const previousTier = readEffectiveBuilderTier(activeStripeRows);
 
     if (args.grantsAccess === true) {
       let hasMatchingTier = false;
@@ -173,6 +192,25 @@ export const syncBuilderStripeSubscriptionInternal = internalMutation({
           updatedAt: nowMs,
         });
       }
+    }
+    const nextTier = args.grantsAccess === true ? targetTier : "free";
+    if (args.grantsAccess === true || args.grantsAccess === false) {
+      await enqueueBuilderSubscriptionStateEmailInternal({
+        ctx,
+        userId: ownerUserId,
+        previousTier,
+        nextTier,
+        subscriptionStatus: args.subscriptionStatus,
+        providerSubscriptionId: args.providerSubscriptionId ?? row.providerSubscriptionId,
+        periodMarker: String(
+          args.currentPeriodStartAt ??
+            args.currentPeriodEndAt ??
+            row.currentPeriodStartAt ??
+            row.currentPeriodEndAt ??
+            args.localSessionId,
+        ),
+        nowMs,
+      });
     }
 
     return {

@@ -1,4 +1,5 @@
 import { internal } from "./_generated/api";
+import { readAuthenticatedIdentityProfile } from "./authIdentity";
 import { normalizeStoredState } from "./authSessions";
 
 type HttpRouteMethod = "GET" | "POST" | "DELETE" | "OPTIONS" | "PUT" | "PATCH";
@@ -95,6 +96,8 @@ async function requireVerifiedIdentity(
       identity: {
         authSubject: string;
         email: string | null;
+        emailVerified: boolean;
+        emailVerificationSource: "oauth_provider" | null;
         displayName: string | null;
         avatarUrl: string | null;
       };
@@ -114,19 +117,11 @@ async function requireVerifiedIdentity(
     };
   }
 
-  let identity: Awaited<ReturnType<typeof ctx.auth.getUserIdentity>>;
+  let identity;
   try {
-    identity = await ctx.auth.getUserIdentity();
+    identity = await readAuthenticatedIdentityProfile(ctx);
   } catch {
-    return {
-      ok: false,
-      response: jsonResponse(req, 503, {
-        ok: false,
-        code: "auth_upstream_unavailable",
-        error: "auth_upstream_unavailable",
-        message: "Authentication is temporarily unavailable.",
-      }),
-    };
+    identity = null;
   }
 
   if (!identity) {
@@ -141,44 +136,15 @@ async function requireVerifiedIdentity(
     };
   }
 
-  const identityRecord = asObject(identity) ?? {};
-  const authSubject = readString(identityRecord.subject);
-  if (!authSubject) {
-    return {
-      ok: false,
-      response: jsonResponse(req, 401, {
-        ok: false,
-        code: "auth_invalid_bearer_token",
-        error: "auth_invalid_bearer_token",
-        message: "Invalid bearer token.",
-      }),
-    };
-  }
-
-  const email = readString(identityRecord.email);
-  const displayName =
-    readString(identityRecord.name) ??
-    readString(identityRecord.displayName) ??
-    readString(identityRecord.display_name) ??
-    ([readString(identityRecord.given_name), readString(identityRecord.family_name)]
-      .filter(Boolean)
-      .join(" ")
-      .trim() || null);
-  const avatarUrl =
-    readString(identityRecord.picture) ??
-    readString(identityRecord.picture_url) ??
-    readString(identityRecord.pictureUrl) ??
-    readString(identityRecord.avatar_url) ??
-    readString(identityRecord.avatarUrl) ??
-    null;
-
   return {
     ok: true,
     identity: {
-      authSubject,
-      email,
-      displayName,
-      avatarUrl,
+      authSubject: identity.authSubject,
+      email: identity.email,
+      emailVerified: identity.emailVerified,
+      emailVerificationSource: identity.emailVerificationSource,
+      displayName: identity.displayName,
+      avatarUrl: identity.avatarUrl,
     },
   };
 }
@@ -298,7 +264,11 @@ export function registerRuntimeAuthBridgeRoutes(args: RegisterRuntimeAuthBridgeR
 
       const actor = await ctx.runMutation(internal.authActor.ensureAuthenticatedActorByExplicitSubjectInternal as any, {
         authSubject,
-        ...(normalizedStored.user.email ? { email: normalizedStored.user.email } : null),
+        ...(verified.identity.email ? { email: verified.identity.email } : null),
+        ...(verified.identity.email ? { emailVerified: verified.identity.emailVerified } : null),
+        ...(verified.identity.emailVerificationSource
+          ? { emailVerificationSource: verified.identity.emailVerificationSource }
+          : null),
         ...(normalizedStored.user.displayName ? { displayName: normalizedStored.user.displayName } : null),
         ...(normalizedStored.user.avatarUrl ? { avatarUrl: normalizedStored.user.avatarUrl } : null),
         nowMs: Date.now(),

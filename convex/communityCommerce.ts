@@ -1,5 +1,9 @@
-import { internalMutation, mutation, query } from "./_generated/server";
+import { internal } from "./_generated/api";
+import { action, internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
+import {
+  getStripeClient,
+} from "./stripeCore";
 import {
   buildCheckoutSuccessUrl,
   type CommunityLike,
@@ -22,11 +26,61 @@ import {
   parseIsoMs,
   resolveCommunityEntryPolicy,
 } from "./communityCore";
+import { enqueueCommunityBillingIssueEmailInternal } from "./emailEvents";
+
+type CommunityCheckoutSessionRow = {
+  _id: any;
+  mode: string;
+  communityId?: any;
+  billingPeriod?: string;
+  pricePointId?: any;
+  amountBaseUnits?: number;
+  currency?: string;
+  currencyDecimals?: number;
+  ownerUserId?: any;
+  claimToken?: string;
+  status: "pending" | "complete" | "expired";
+  expiresAt: number;
+  providerCheckoutSessionId?: string;
+  providerCustomerId?: string;
+  providerSubscriptionId?: string;
+  providerPriceId?: string;
+  currentPeriodStartAt?: number;
+  currentPeriodEndAt?: number;
+  communitySubscriptionStatus?: "active" | "past_due" | "cancel_at_period_end" | "canceled" | "ended";
+  cancelAtPeriodEnd?: boolean;
+  createdAt: number;
+  updatedAt: number;
+};
+
+function normalizeStripeCommunitySubscriptionStatus(args: {
+  subscriptionStatus: unknown;
+  cancelAtPeriodEnd?: unknown;
+}): "active" | "past_due" | "cancel_at_period_end" | "canceled" | "ended" {
+  const subscriptionStatus = String(args.subscriptionStatus ?? "")
+    .trim()
+    .toLowerCase();
+  const cancelAtPeriodEnd = Boolean(args.cancelAtPeriodEnd);
+  if (subscriptionStatus === "active" || subscriptionStatus === "trialing") {
+    return cancelAtPeriodEnd ? "cancel_at_period_end" : "active";
+  }
+  if (subscriptionStatus === "past_due") return "past_due";
+  if (subscriptionStatus === "canceled") return "canceled";
+  if (
+    subscriptionStatus === "unpaid" ||
+    subscriptionStatus === "incomplete" ||
+    subscriptionStatus === "incomplete_expired"
+  ) {
+    return "ended";
+  }
+  return "active";
+}
 
 export const syncCommunitySubscriptionLifecycleInternal = internalMutation({
   args: {
     communityId: v.id("communities"),
     userId: v.id("users"),
+    source: v.union(v.literal("stripe"), v.literal("external_sync")),
     status: v.string(),
     pricePointId: v.optional(v.id("communityPricePoints")),
     providerPriceId: v.optional(v.union(v.string(), v.null())),
@@ -39,6 +93,7 @@ export const syncCommunitySubscriptionLifecycleInternal = internalMutation({
   },
   handler: async (ctx, args) => {
     const nowMs = args.nowMs ?? Date.now();
+    const source = args.source;
     const status = normalizeCommunitySubscriptionStatus(args.status);
     if (!status) throw new Error("community_subscription_status_invalid");
     const community = (await ctx.db.get(args.communityId)) as CommunityLike | null;
@@ -69,6 +124,31 @@ export const syncCommunitySubscriptionLifecycleInternal = internalMutation({
           if (aMatch !== bMatch) return aMatch ? -1 : 1;
           return Number(b.updatedAt ?? 0) - Number(a.updatedAt ?? 0);
         })[0] ?? null;
+    const currentSource = String(current?.source ?? "")
+      .trim()
+      .toLowerCase();
+    if (
+      currentSource &&
+      currentSource !== "stripe" &&
+      currentSource !== "external_sync"
+    ) {
+      throw new Error("community_subscription_source_invalid");
+    }
+    if (currentSource && currentSource !== source) {
+      return {
+        ok: true,
+        ignored: true,
+        reason: "community_subscription_source_conflict",
+        community_id: String(args.communityId),
+        user_id: String(args.userId),
+        price_point_id: String(current?.pricePointId ?? membership.pricePointId ?? ""),
+        source: currentSource,
+        subscription_status: String(current?.status ?? status),
+      };
+    }
+    const previousStatus = String(current?.status ?? "")
+      .trim()
+      .toLowerCase();
 
     let pricePointId = args.pricePointId ?? current?.pricePointId ?? membership.pricePointId ?? undefined;
     const providerPriceId = String(args.providerPriceId ?? "").trim();
@@ -95,6 +175,7 @@ export const syncCommunitySubscriptionLifecycleInternal = internalMutation({
         : undefined;
 
     const patch = {
+      source: currentSource === "stripe" || currentSource === "external_sync" ? current?.source : source,
       pricePointId,
       status,
       providerSubscriptionId: String(args.providerSubscriptionId ?? "").trim() || undefined,
@@ -127,33 +208,41 @@ export const syncCommunitySubscriptionLifecycleInternal = internalMutation({
       updatedAt: nowMs,
     });
 
+    if (status === "past_due" && previousStatus !== "past_due") {
+      const issueMarker = [
+        String(args.providerSubscriptionId ?? "").trim() || String(current?.providerSubscriptionId ?? "").trim() || String(membership._id),
+        String(currentPeriodEndAt ?? current?.currentPeriodEndAt ?? nowMs),
+      ].join(":");
+      await enqueueCommunityBillingIssueEmailInternal({
+        ctx,
+        userId: args.userId,
+        communityId: args.communityId,
+        issueMarker,
+        nowMs,
+      });
+    }
+
     return {
       ok: true,
       community_id: String(args.communityId),
       user_id: String(args.userId),
       price_point_id: String(pricePointId),
+      source,
       subscription_status: status,
     };
   },
 });
 
-export const startPublicCommunityCheckout = mutation({
+export const resolvePublicCommunityCheckoutConfigInternal = internalQuery({
   args: {
     communitySlug: v.string(),
     billingPeriod: v.string(),
-    successUrl: v.string(),
-    cancelUrl: v.string(),
-    userId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    brandosAid: v.optional(v.union(v.string(), v.null())),
     nowMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const nowMs = args.nowMs ?? Date.now();
     const slug = normalizeSlug(args.communitySlug);
     const billingPeriod = normalizeBillingPeriod(args.billingPeriod);
-    const cancelUrl = String(args.cancelUrl ?? "").trim();
-    if (!cancelUrl) throw new Error("checkout_cancel_url_required");
     const community = (await ctx.db
       .query("communities")
       .withIndex("by_slug", (q: any) => q.eq("slug", slug))
@@ -170,58 +259,409 @@ export const startPublicCommunityCheckout = mutation({
       nowMs,
     });
     if (!pricePoint) throw new Error("paid_plan_required");
-
-    void args.brandosAid;
-    const sessionId = newOpaqueToken("chk");
-    const claimToken = newOpaqueToken("claim");
-    const expiresAt = nowMs + 14 * 24 * 60 * 60 * 1000;
-    const ownerUserId = args.authSubject
-      ? await resolveUserIdForAuthenticatedRequest({
-          ctx,
-          userId: args.userId,
-          authSubject: args.authSubject,
-        })
-      : undefined;
-    if (!args.authSubject && args.userId) {
-      throw new Error("auth_subject_required");
-    }
-    await ctx.db.insert("checkoutSessions", {
-      sessionId,
-      mode: "community_join",
+    return {
       communityId: community._id,
+      communitySlug: community.slug,
+      communityName: community.name,
       billingPeriod,
       pricePointId: pricePoint._id,
       amountBaseUnits: pricePoint.amountBaseUnits,
       currency: pricePoint.currency,
       currencyDecimals: pricePoint.currencyDecimals,
-      ownerUserId: ownerUserId ?? undefined,
-      claimToken,
-      status: "complete",
-      expiresAt,
+      providerPriceId: String(pricePoint.providerPriceId ?? "").trim() || null,
+      oneLiner: typeof community.oneLiner === "string" ? community.oneLiner : null,
+    };
+  },
+});
+
+export const attachCommunityPricePointProviderPriceInternal = internalMutation({
+  args: {
+    pricePointId: v.id("communityPricePoints"),
+    providerPriceId: v.string(),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const nowMs = args.nowMs ?? Date.now();
+    const pricePoint = await ctx.db.get(args.pricePointId);
+    if (!pricePoint) throw new Error("community_price_point_not_found");
+    await ctx.db.patch(args.pricePointId, {
+      providerPriceId: String(args.providerPriceId).trim(),
+      updatedAt: nowMs,
+    });
+  },
+});
+
+export const createPendingPublicCommunityCheckoutSessionInternal = internalMutation({
+  args: {
+    sessionId: v.string(),
+    communityId: v.id("communities"),
+    billingPeriod: v.string(),
+    pricePointId: v.id("communityPricePoints"),
+    amountBaseUnits: v.number(),
+    currency: v.string(),
+    currencyDecimals: v.number(),
+    providerPriceId: v.string(),
+    ownerUserId: v.optional(v.id("users")),
+    claimToken: v.string(),
+    expiresAt: v.number(),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const nowMs = args.nowMs ?? Date.now();
+    await ctx.db.insert("checkoutSessions", {
+      sessionId: args.sessionId,
+      mode: "community_join",
+      communityId: args.communityId,
+      billingPeriod: args.billingPeriod,
+      pricePointId: args.pricePointId,
+      amountBaseUnits: args.amountBaseUnits,
+      currency: args.currency,
+      currencyDecimals: args.currencyDecimals,
+      providerPriceId: args.providerPriceId,
+      ownerUserId: args.ownerUserId ?? undefined,
+      claimToken: args.claimToken,
+      status: "pending",
+      expiresAt: args.expiresAt,
       createdAt: nowMs,
       updatedAt: nowMs,
     });
     await ctx.db.insert("purchaseClaims", {
-      claimToken,
-      communityId: community._id,
-      billingPeriod,
-      pricePointId: pricePoint._id,
-      amountBaseUnits: pricePoint.amountBaseUnits,
-      currency: pricePoint.currency,
-      currencyDecimals: pricePoint.currencyDecimals,
-      ownerUserId: ownerUserId ?? undefined,
+      claimToken: args.claimToken,
+      communityId: args.communityId,
+      billingPeriod: args.billingPeriod,
+      pricePointId: args.pricePointId,
+      amountBaseUnits: args.amountBaseUnits,
+      currency: args.currency,
+      currencyDecimals: args.currencyDecimals,
+      ownerUserId: args.ownerUserId ?? undefined,
       status: "pending",
-      sourceSessionId: sessionId,
-      expiresAt,
+      sourceSessionId: args.sessionId,
+      expiresAt: args.expiresAt,
       createdAt: nowMs,
       updatedAt: nowMs,
     });
+  },
+});
 
+export const attachCommunityStripeCheckoutSessionInternal = internalMutation({
+  args: {
+    sessionId: v.string(),
+    providerCheckoutSessionId: v.string(),
+    providerCustomerId: v.optional(v.union(v.string(), v.null())),
+    providerSubscriptionId: v.optional(v.union(v.string(), v.null())),
+    providerPriceId: v.optional(v.union(v.string(), v.null())),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const nowMs = args.nowMs ?? Date.now();
+    const row = (await ctx.db
+      .query("checkoutSessions")
+      .withIndex("by_sessionId", (q: any) => q.eq("sessionId", args.sessionId))
+      .first()) as CommunityCheckoutSessionRow | null;
+    if (!row) throw new Error("community_checkout_session_not_found");
+    if (row.mode !== "community_join") throw new Error("community_checkout_session_invalid");
+    await ctx.db.patch(row._id, {
+      provider: "stripe",
+      providerCheckoutSessionId: String(args.providerCheckoutSessionId ?? "").trim() || undefined,
+      providerCustomerId: String(args.providerCustomerId ?? "").trim() || row.providerCustomerId,
+      providerSubscriptionId:
+        String(args.providerSubscriptionId ?? "").trim() || row.providerSubscriptionId,
+      providerPriceId: String(args.providerPriceId ?? "").trim() || row.providerPriceId,
+      updatedAt: nowMs,
+    });
+  },
+});
+
+export const syncPendingCommunityCheckoutSubscriptionInternal = internalMutation({
+  args: {
+    sessionId: v.string(),
+    providerCheckoutSessionId: v.optional(v.union(v.string(), v.null())),
+    providerCustomerId: v.optional(v.union(v.string(), v.null())),
+    providerSubscriptionId: v.optional(v.union(v.string(), v.null())),
+    providerPriceId: v.optional(v.union(v.string(), v.null())),
+    subscriptionStatus: v.string(),
+    currentPeriodStartAt: v.optional(v.union(v.number(), v.null())),
+    currentPeriodEndAt: v.optional(v.union(v.number(), v.null())),
+    cancelAtPeriodEnd: v.optional(v.union(v.boolean(), v.null())),
+    markComplete: v.optional(v.boolean()),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const nowMs = args.nowMs ?? Date.now();
+    const row = (await ctx.db
+      .query("checkoutSessions")
+      .withIndex("by_sessionId", (q: any) => q.eq("sessionId", args.sessionId))
+      .first()) as CommunityCheckoutSessionRow | null;
+    if (!row) throw new Error("community_checkout_session_not_found");
+    if (row.mode !== "community_join") throw new Error("community_checkout_session_invalid");
+    const communitySubscriptionStatus = normalizeStripeCommunitySubscriptionStatus({
+      subscriptionStatus: args.subscriptionStatus,
+      cancelAtPeriodEnd: args.cancelAtPeriodEnd,
+    });
+    await ctx.db.patch(row._id, {
+      provider: "stripe",
+      providerCheckoutSessionId:
+        String(args.providerCheckoutSessionId ?? "").trim() || row.providerCheckoutSessionId,
+      providerCustomerId: String(args.providerCustomerId ?? "").trim() || row.providerCustomerId,
+      providerSubscriptionId:
+        String(args.providerSubscriptionId ?? "").trim() || row.providerSubscriptionId,
+      providerPriceId: String(args.providerPriceId ?? "").trim() || row.providerPriceId,
+      currentPeriodStartAt:
+        typeof args.currentPeriodStartAt === "number"
+          ? args.currentPeriodStartAt
+          : row.currentPeriodStartAt,
+      currentPeriodEndAt:
+        typeof args.currentPeriodEndAt === "number"
+          ? args.currentPeriodEndAt
+          : row.currentPeriodEndAt,
+      communitySubscriptionStatus,
+      cancelAtPeriodEnd: Boolean(args.cancelAtPeriodEnd ?? communitySubscriptionStatus === "cancel_at_period_end"),
+      status: args.markComplete ? "complete" : row.status,
+      updatedAt: nowMs,
+    });
+  },
+});
+
+export const expirePublicCommunityCheckoutSessionInternal = internalMutation({
+  args: {
+    sessionId: v.string(),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const nowMs = args.nowMs ?? Date.now();
+    const row = (await ctx.db
+      .query("checkoutSessions")
+      .withIndex("by_sessionId", (q: any) => q.eq("sessionId", args.sessionId))
+      .first()) as CommunityCheckoutSessionRow | null;
+    if (!row || row.mode !== "community_join") return;
+    await ctx.db.patch(row._id, {
+      status: "expired",
+      updatedAt: nowMs,
+    });
+  },
+});
+
+export const getCommunityJoinCheckoutSessionInternal = internalQuery({
+  args: {
+    sessionId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const row = (await ctx.db
+      .query("checkoutSessions")
+      .withIndex("by_sessionId", (q: any) => q.eq("sessionId", args.sessionId))
+      .first()) as CommunityCheckoutSessionRow | null;
+    if (!row || row.mode !== "community_join") return null;
     return {
-      ok: true,
-      session_id: sessionId,
-      checkout_url: buildCheckoutSuccessUrl(args.successUrl, sessionId),
+      sessionId: row.sessionId,
+      communityId: row.communityId ?? null,
+      ownerUserId: row.ownerUserId ?? null,
+      pricePointId: row.pricePointId ?? null,
+      claimToken: row.claimToken ?? null,
+      providerCheckoutSessionId: row.providerCheckoutSessionId ?? null,
+      providerCustomerId: row.providerCustomerId ?? null,
+      providerSubscriptionId: row.providerSubscriptionId ?? null,
+      providerPriceId: row.providerPriceId ?? null,
+      currentPeriodStartAt: row.currentPeriodStartAt ?? null,
+      currentPeriodEndAt: row.currentPeriodEndAt ?? null,
+      communitySubscriptionStatus: row.communitySubscriptionStatus ?? null,
+      cancelAtPeriodEnd: row.cancelAtPeriodEnd ?? false,
+      status: row.status,
+      expiresAt: row.expiresAt,
     };
+  },
+});
+
+export const getCommunitySubscriptionByProviderSubscriptionIdInternal = internalQuery({
+  args: {
+    providerSubscriptionId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const providerSubscriptionId = String(args.providerSubscriptionId ?? "").trim();
+    if (!providerSubscriptionId) return null;
+    const row = await ctx.db
+      .query("communitySubscriptions" as any)
+      .withIndex("by_providerSubscriptionId", (q: any) =>
+        q.eq("providerSubscriptionId", providerSubscriptionId),
+      )
+      .first();
+    if (!row) return null;
+    return {
+      communityId: row.communityId,
+      userId: row.userId,
+      pricePointId: row.pricePointId ?? null,
+    };
+  },
+});
+
+export const startPublicCommunityCheckout = action({
+  args: {
+    communitySlug: v.string(),
+    billingPeriod: v.string(),
+    successUrl: v.string(),
+    cancelUrl: v.string(),
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    brandosAid: v.optional(v.union(v.string(), v.null())),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const nowMs = args.nowMs ?? Date.now();
+    const cancelUrl = String(args.cancelUrl ?? "").trim();
+    if (!cancelUrl) throw new Error("checkout_cancel_url_required");
+    const billingPeriod = normalizeBillingPeriod(args.billingPeriod);
+    const checkoutConfig = (await ctx.runQuery(
+      internal.communityCommerce.resolvePublicCommunityCheckoutConfigInternal as any,
+      {
+        communitySlug: args.communitySlug,
+        billingPeriod,
+        nowMs,
+      },
+    )) as {
+      communityId: any;
+      communitySlug: string;
+      communityName: string;
+      billingPeriod: "monthly" | "annual";
+      pricePointId: any;
+      amountBaseUnits: number;
+      currency: string;
+      currencyDecimals: number;
+      providerPriceId: string | null;
+      oneLiner: string | null;
+    };
+    void args.brandosAid;
+    const sessionId = newOpaqueToken("chk");
+    const claimToken = newOpaqueToken("claim");
+    const expiresAt = nowMs + 14 * 24 * 60 * 60 * 1000;
+    const actor = args.authSubject
+      ? ((await ctx.runQuery(internal.authActor.resolveAuthenticatedActorInternal as any, {
+          authSubject: args.authSubject,
+        })) as { dbUserId?: unknown; email?: string | null } | null)
+      : null;
+    const ownerUserId = actor?.dbUserId;
+    const ownerEmail = actor?.email ?? null;
+    if (!args.authSubject && args.userId) {
+      throw new Error("auth_subject_required");
+    }
+    let providerPriceId = String(checkoutConfig.providerPriceId ?? "").trim() || null;
+    if (!providerPriceId) {
+      const stripe = getStripeClient();
+      const product = await stripe.products.create({
+        name: `${checkoutConfig.communityName} (${checkoutConfig.billingPeriod})`,
+        description: checkoutConfig.oneLiner ?? undefined,
+        metadata: {
+          community_id: String(checkoutConfig.communityId),
+          community_slug: checkoutConfig.communitySlug,
+          community_price_point_id: String(checkoutConfig.pricePointId),
+          billing_period: checkoutConfig.billingPeriod,
+        },
+      });
+      const price = await stripe.prices.create({
+        currency: checkoutConfig.currency,
+        unit_amount: checkoutConfig.amountBaseUnits,
+        recurring: {
+          interval: checkoutConfig.billingPeriod === "annual" ? "year" : "month",
+        },
+        product: product.id,
+        metadata: {
+          community_id: String(checkoutConfig.communityId),
+          community_slug: checkoutConfig.communitySlug,
+          community_price_point_id: String(checkoutConfig.pricePointId),
+          billing_period: checkoutConfig.billingPeriod,
+        },
+      });
+      providerPriceId = price.id;
+      await ctx.runMutation(
+        internal.communityCommerce.attachCommunityPricePointProviderPriceInternal as any,
+        {
+          pricePointId: checkoutConfig.pricePointId,
+          providerPriceId,
+          nowMs,
+        },
+      );
+    }
+    await ctx.runMutation(
+      internal.communityCommerce.createPendingPublicCommunityCheckoutSessionInternal as any,
+      {
+        sessionId,
+        communityId: checkoutConfig.communityId,
+        billingPeriod,
+        pricePointId: checkoutConfig.pricePointId,
+        amountBaseUnits: checkoutConfig.amountBaseUnits,
+        currency: checkoutConfig.currency,
+        currencyDecimals: checkoutConfig.currencyDecimals,
+        providerPriceId,
+        ownerUserId: ownerUserId ?? undefined,
+        claimToken,
+        expiresAt,
+        nowMs,
+      },
+    );
+
+    try {
+      const stripe = getStripeClient();
+      const checkoutSession = await stripe.checkout.sessions.create({
+        mode: "subscription",
+        success_url: buildCheckoutSuccessUrl(args.successUrl, sessionId),
+        cancel_url: cancelUrl,
+        client_reference_id: sessionId,
+        line_items: [
+          {
+            price: providerPriceId,
+            quantity: 1,
+          },
+        ],
+        metadata: {
+          local_session_id: sessionId,
+          claim_token: claimToken,
+          community_id: String(checkoutConfig.communityId),
+          community_slug: checkoutConfig.communitySlug,
+          community_price_point_id: String(checkoutConfig.pricePointId),
+          billing_period: billingPeriod,
+        },
+        subscription_data: {
+          metadata: {
+            local_session_id: sessionId,
+            claim_token: claimToken,
+            community_id: String(checkoutConfig.communityId),
+            community_slug: checkoutConfig.communitySlug,
+            community_price_point_id: String(checkoutConfig.pricePointId),
+            billing_period: billingPeriod,
+          },
+        },
+        ...(typeof ownerEmail === "string" && ownerEmail.trim()
+          ? { customer_email: ownerEmail.trim() }
+          : null),
+      });
+      const checkoutUrl = String(checkoutSession.url ?? "").trim();
+      if (!checkoutUrl) throw new Error("stripe_checkout_url_missing");
+      await ctx.runMutation(
+        internal.communityCommerce.attachCommunityStripeCheckoutSessionInternal as any,
+        {
+          sessionId,
+          providerCheckoutSessionId: checkoutSession.id,
+          providerCustomerId:
+            typeof checkoutSession.customer === "string" ? checkoutSession.customer : null,
+          providerSubscriptionId:
+            typeof checkoutSession.subscription === "string" ? checkoutSession.subscription : null,
+          providerPriceId,
+          nowMs: Date.now(),
+        },
+      );
+      return {
+        ok: true,
+        session_id: sessionId,
+        checkout_url: checkoutUrl,
+      };
+    } catch (error) {
+      await ctx.runMutation(
+        internal.communityCommerce.expirePublicCommunityCheckoutSessionInternal as any,
+        {
+          sessionId,
+          nowMs: Date.now(),
+        },
+      );
+      throw error;
+    }
   },
 });
 
@@ -254,6 +694,16 @@ export const finalizeCheckoutSession = query({
       return {
         ok: true,
         status: "pending",
+      };
+    }
+    const grantsAccess = communitySubscriptionStatusGrantsAccess(
+      normalizeCommunitySubscriptionStatus(session.communitySubscriptionStatus ?? "active") ?? "active",
+    );
+    if (!grantsAccess) {
+      return {
+        ok: false,
+        status: "expired",
+        message: "checkout_session_inactive",
       };
     }
     return {
@@ -297,12 +747,13 @@ export const redeemPurchaseClaim = mutation({
       throw new Error("claim_already_redeemed");
     }
 
-    const communityId = await redeemClaimRow({
+    const redemption = await redeemClaimRow({
       ctx,
       claim,
       userId,
       nowMs,
     });
+    const communityId = redemption.communityId;
     if (!communityId) throw new Error("claim_not_redeemable");
     const community = (await ctx.db.get(communityId as any)) as CommunityLike | null;
     return [{ community_id: communityId, community_slug: String(community?.slug ?? "") || null }];
@@ -334,6 +785,22 @@ export const listPendingPurchaseClaims = query({
     }> = [];
     for (const claim of rows) {
       if (claim.expiresAt <= nowMs) continue;
+      if (claim.sourceSessionId) {
+        const session = (await ctx.db
+          .query("checkoutSessions")
+          .withIndex("by_sessionId", (q: any) => q.eq("sessionId", claim.sourceSessionId))
+          .first()) as CommunityCheckoutSessionRow | null;
+        if (
+          !session ||
+          session.status !== "complete" ||
+          !communitySubscriptionStatusGrantsAccess(
+            normalizeCommunitySubscriptionStatus(session.communitySubscriptionStatus ?? "active") ??
+              "active",
+          )
+        ) {
+          continue;
+        }
+      }
       const community = (await ctx.db.get(claim.communityId)) as CommunityLike | null;
       const communityId = String(claim.communityId);
       out.push({
@@ -368,12 +835,13 @@ export const redeemPendingPurchaseClaims = mutation({
     const out: Array<{ community_id: string; community_slug: string | null }> = [];
     const seen = new Set<string>();
     for (const claim of rows) {
-      const communityId = await redeemClaimRow({
+      const redemption = await redeemClaimRow({
         ctx,
         claim,
         userId,
         nowMs,
       });
+      const communityId = redemption.communityId;
       if (!communityId) continue;
       if (seen.has(communityId)) continue;
       seen.add(communityId);

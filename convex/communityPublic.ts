@@ -23,6 +23,7 @@ import {
   toIsoString,
 } from "./communityCore";
 import { resolveCommunityFunnelConfigByCommunityId } from "./communityFunnel";
+import { enqueueCommunityAccessGrantedEmailInternal } from "./emailEvents";
 
 type PublicCommunityFace = {
   user_id: string;
@@ -352,10 +353,11 @@ async function joinPublicCommunityInternal(args: {
     .withIndex("by_community_user", (q: any) => q.eq("communityId", args.community._id).eq("userId", args.userId))
     .collect()) as CommunityMembershipLike[];
   const existingMembership = pickMostRelevantCommunityMembership(existingMembershipRows);
+  let grantedMembershipMarker: string | null = null;
   if (existingMembership) {
     if (!communityMembershipRowIsActive(existingMembership)) {
       const role = normalizeCommunityRoleForOutput(existingMembership.role) || "member";
-      await args.ctx.db.insert("communityMemberships", {
+      const membershipId = await args.ctx.db.insert("communityMemberships", {
         communityId: args.community._id,
         userId: args.userId,
         role,
@@ -363,6 +365,14 @@ async function joinPublicCommunityInternal(args: {
         active: true,
         createdAt: args.nowMs,
         updatedAt: args.nowMs,
+      });
+      grantedMembershipMarker = `${String(membershipId)}:${args.nowMs}`;
+      await enqueueCommunityAccessGrantedEmailInternal({
+        ctx: args.ctx,
+        userId: args.userId,
+        communityId: args.community._id,
+        grantMarker: grantedMembershipMarker,
+        nowMs: args.nowMs,
       });
     }
     return {
@@ -429,7 +439,7 @@ async function joinPublicCommunityInternal(args: {
     }
   }
 
-  await args.ctx.db.insert("communityMemberships", {
+  const membershipId = await args.ctx.db.insert("communityMemberships", {
     communityId: args.community._id,
     userId: args.userId,
     role: "member",
@@ -437,6 +447,14 @@ async function joinPublicCommunityInternal(args: {
     active: true,
     createdAt: args.nowMs,
     updatedAt: args.nowMs,
+  });
+  grantedMembershipMarker = `${String(membershipId)}:${args.nowMs}`;
+  await enqueueCommunityAccessGrantedEmailInternal({
+    ctx: args.ctx,
+    userId: args.userId,
+    communityId: args.community._id,
+    grantMarker: grantedMembershipMarker,
+    nowMs: args.nowMs,
   });
   return {
     outcome: "joined",

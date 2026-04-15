@@ -32,6 +32,7 @@ import {
   toIsoString,
 } from "./communityCore";
 import { logStructuredError } from "./errorLogging";
+import { enqueueCommunityAccessGrantedEmailInternal } from "./emailEvents";
 
 type CommunityMemberUserLike = {
   displayName?: string;
@@ -528,8 +529,9 @@ export const approveCommunityJoinRequest = mutation({
         const existingMembership = pickMostRelevantCommunityMembership(
           existingMembershipRows,
         );
+        let grantedMembershipMarker: string | null = null;
         if (!existingMembership) {
-          await ctx.db.insert("communityMemberships", {
+          const membershipId = await ctx.db.insert("communityMemberships", {
             communityId: request.communityId,
             userId: request.userId,
             role: "member",
@@ -538,6 +540,7 @@ export const approveCommunityJoinRequest = mutation({
             createdAt: nowMs,
             updatedAt: nowMs,
           });
+          grantedMembershipMarker = `${String(membershipId)}:${nowMs}`;
         } else if (!communityMembershipRowIsActive(existingMembership)) {
           await ctx.db.patch(existingMembership._id as any, {
             accessSource:
@@ -551,6 +554,7 @@ export const approveCommunityJoinRequest = mutation({
             revokedReason: undefined,
             updatedAt: nowMs,
           });
+          grantedMembershipMarker = `${String(existingMembership._id)}:${nowMs}`;
         }
         await ctx.db.patch(request._id as any, {
           status: "approved",
@@ -558,6 +562,15 @@ export const approveCommunityJoinRequest = mutation({
           reapplyAt: undefined,
           updatedAt: nowMs,
         });
+        if (grantedMembershipMarker) {
+          await enqueueCommunityAccessGrantedEmailInternal({
+            ctx,
+            userId: request.userId,
+            communityId: request.communityId,
+            grantMarker: grantedMembershipMarker,
+            nowMs,
+          });
+        }
         return { ok: true };
       },
     });
