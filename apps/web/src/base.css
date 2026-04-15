@@ -15884,7 +15884,7 @@ button.message-citation-chip:hover {
   box-sizing: border-box;
   gap: 12px;
   border-radius: 26px;
-  background: color-mix(in srgb, var(--bg-card) 76%, var(--bg-workspace) 24%);
+  background: var(--workspace-composer-bg, color-mix(in srgb, var(--bg-card) 76%, var(--bg-workspace) 24%));
 }
 
 .web-empty-thread-composer .ask-input.ask-input-landing {
