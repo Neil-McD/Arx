@@ -183,7 +183,7 @@ export const validateDeveloperAppInternal = internalAction({
   args: {
     developerAppId: v.id("developerApps"),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<unknown> => {
     const connectionBundle = (await ctx.runQuery(
       internal.appConnections.getDecryptedDeveloperAppConnectionBundleInternal,
       {
@@ -221,7 +221,7 @@ export const validateDeveloperAppInternal = internalAction({
       snapshotVersion = `error-${fetchedAt}`;
     }
 
-    const snapshotId = await ctx.runMutation(internal.appValidation.createAppToolSnapshotInternal, {
+    const snapshotId: any = await ctx.runMutation(internal.appValidation.createAppToolSnapshotInternal, {
       developerAppId: app._id,
       snapshotVersion,
       endpointUrl: app.endpointUrl,

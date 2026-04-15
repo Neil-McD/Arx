@@ -110,7 +110,7 @@ export type DiscoverAppCatalogEntry = {
   capabilities: [string, string, string];
   websiteUrl: string;
   docsUrl: string;
-  logoUrl: string;
+  logoUrl: string | null;
   logoUrlDark?: string | null;
   personalConnect: DiscoverAppPersonalConnectTemplate;
 };

@@ -63,6 +63,10 @@ type RuntimeMountedCommunityAppTool = {
   risk_level: "read" | "write" | "sensitive";
 };
 
+function normalizeRiskLevel(value: unknown): "read" | "write" | "sensitive" {
+  return value === "write" || value === "sensitive" ? value : "read";
+}
+
 function normalizeStringList(input: unknown): string[] {
   if (!Array.isArray(input)) return [];
   const values: string[] = [];
@@ -76,7 +80,14 @@ function normalizeStringList(input: unknown): string[] {
   return values;
 }
 
-function normalizeSnapshotTools(snapshot: AppToolSnapshotRow | null) {
+function normalizeSnapshotTools(
+  snapshot: AppToolSnapshotRow | null,
+): Array<{
+  tool_name: string;
+  namespaced_tool_name: string;
+  description: string | null;
+  risk_level: "read" | "write" | "sensitive";
+}> {
   if (!snapshot || !Array.isArray(snapshot.toolsJson)) return [];
   const tools = [];
   const seen = new Set<string>();
@@ -90,14 +101,21 @@ function normalizeSnapshotTools(snapshot: AppToolSnapshotRow | null) {
       tool_name: toolName,
       namespaced_tool_name: normalizeString(tool.namespaced_tool_name, 240) || toolName,
       description: normalizeString(tool.description, 2_000) || null,
-      risk_level:
-        tool.risk_level === "write" || tool.risk_level === "sensitive" ? tool.risk_level : "read",
+      risk_level: normalizeRiskLevel(tool.risk_level),
     });
   }
   return tools;
 }
 
-function normalizeRuntimeSnapshotTools(snapshot: AppToolSnapshotRow | null) {
+function normalizeRuntimeSnapshotTools(
+  snapshot: AppToolSnapshotRow | null,
+): Array<{
+  tool_name: string;
+  namespaced_tool_name: string;
+  description: string | null;
+  input_schema: unknown;
+  risk_level: "read" | "write" | "sensitive";
+}> {
   if (!snapshot || !Array.isArray(snapshot.toolsJson)) return [];
   const tools = [];
   const seen = new Set<string>();
@@ -114,10 +132,7 @@ function normalizeRuntimeSnapshotTools(snapshot: AppToolSnapshotRow | null) {
       description: normalizeString(tool.description, 2_000) || null,
       input_schema:
         tool.input_schema !== undefined ? tool.input_schema : {},
-      risk_level:
-        tool.risk_level === "write" || tool.risk_level === "sensitive"
-          ? tool.risk_level
-          : "read",
+      risk_level: normalizeRiskLevel(tool.risk_level),
     });
   }
   return tools;
@@ -516,7 +531,7 @@ export const executeCommunityMountedAppToolInternal = internalAction({
       const isError = record?.isError === true;
       const outputText = formatMcpToolResultOutput(callResult);
       return {
-        status: (isError ? "error" : "ok") as const,
+        status: isError ? ("error" as const) : ("ok" as const),
         exitCode: isError ? null : 0,
         outputText,
         errorCode: isError ? "community_app_tool_failed" : null,
@@ -562,7 +577,7 @@ export const patchCommunityAppMountsForDeveloperAppSnapshotInternal = internalMu
     toolSnapshotId: v.id("appToolSnapshots"),
     nowMs: v.optional(v.number()),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<unknown> => {
     const snapshot = await getAppToolSnapshotById(ctx, args.toolSnapshotId);
     if (!snapshot) throw new Error("community_app_snapshot_not_found");
     const mounts = (await ctx.db
@@ -597,7 +612,7 @@ export const connectCommunityApp = action({
     description: v.optional(v.string()),
     secret: v.optional(v.string()),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<unknown> => {
     const { userId } = await resolveAuthenticatedActionUser({
       ctx,
       authSubject: args.authSubject ?? null,
@@ -697,7 +712,7 @@ export const refreshCommunityApp = action({
     communityId: v.id("communities"),
     communityAppMountId: v.id("communityAppMounts"),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<unknown> => {
     const { userId } = await resolveAuthenticatedActionUser({
       ctx,
       authSubject: args.authSubject ?? null,
@@ -748,7 +763,7 @@ export const reconnectCommunityApp = action({
     communityAppMountId: v.id("communityAppMounts"),
     secret: v.string(),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<unknown> => {
     const { userId } = await resolveAuthenticatedActionUser({
       ctx,
       authSubject: args.authSubject ?? null,
