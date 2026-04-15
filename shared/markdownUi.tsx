@@ -161,9 +161,15 @@ function normalizeInlineText(node: ReactNode): string {
 }
 
 function resolveAnswerSectionLabel(children: ReactNode): string | null {
-  const text = normalizeInlineText(children).replace(/:$/, "");
+  const rawText = normalizeInlineText(children);
+  const text = rawText.replace(/:$/, "").trim();
   if (!text) return null;
-  return ANSWER_SECTION_LABELS.get(text.toLowerCase()) ?? null;
+  const explicitLabel = ANSWER_SECTION_LABELS.get(text.toLowerCase());
+  if (explicitLabel) return explicitLabel;
+  if (rawText.endsWith(":") && text.length <= 80 && !/[.!?]$/.test(text)) {
+    return text;
+  }
+  return null;
 }
 
 function resolvePriorityClass(children: ReactNode): string | null {
@@ -177,6 +183,23 @@ function normalizeMathMarkdown(text: string): string {
   const lines = normalized.split("\n");
   const nextLines: string[] = [];
   let inFence = false;
+  let repeatedOneMarkers = 0;
+  let explicitSequentialMarkers = 0;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed.startsWith("```")) {
+      inFence = !inFence;
+      continue;
+    }
+    if (inFence) continue;
+    if (/^1[.)]\s+/.test(line)) repeatedOneMarkers += 1;
+    if (/^[2-9][0-9]*[.)]\s+/.test(line)) explicitSequentialMarkers += 1;
+  }
+
+  const shouldDemoteRepeatedOnes =
+    repeatedOneMarkers >= 2 && explicitSequentialMarkers === 0;
+  inFence = false;
 
   for (const line of lines) {
     const trimmed = line.trim();
@@ -196,7 +219,11 @@ function normalizeMathMarkdown(text: string): string {
       continue;
     }
 
-    const segments = line.split(/(`[^`]*`)/g);
+    const normalizedLine = shouldDemoteRepeatedOnes
+      ? line.replace(/^1[.)]\s+/, "- ")
+      : line;
+
+    const segments = normalizedLine.split(/(`[^`]*`)/g);
     nextLines.push(
       segments
         .map((segment) => {
@@ -277,7 +304,7 @@ export function renderMarkdown(text: string, options?: MarkdownRenderOptions): R
     p({ children }) {
       const sectionLabel = resolveAnswerSectionLabel(children);
       if (sectionLabel) {
-        return <p className="md-paragraph md-section-label">{children}</p>;
+        return <p className="md-paragraph md-section-label">{sectionLabel}</p>;
       }
       return <p className="md-paragraph">{children}</p>;
     },
