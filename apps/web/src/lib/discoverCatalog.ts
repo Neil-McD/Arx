@@ -1,14 +1,58 @@
 import type { DeveloperAppAuthType } from "../../../../shared/communityAppMountTypes";
 
-export type DiscoverAppPersonalConnectTemplate = {
-  availability: "ready" | "later";
+export type DiscoverAppConnectionKind = "known" | "custom";
+export type DiscoverAppAuthMethod = "token" | "oauth" | "none";
+
+type DiscoverAppReadyTokenConnectTemplate = {
+  connectionKind: "known";
+  availability: "ready";
+  authMethod: "token";
+  endpointUrl: string;
+  authType: Exclude<DeveloperAppAuthType, "none">;
+  authLabel: string;
+  secretLabel: string;
+  note: string;
+};
+
+type DiscoverAppReadyNoAuthConnectTemplate = {
+  connectionKind: "known";
+  availability: "ready";
+  authMethod: "none";
+  endpointUrl: string;
+  authType: "none";
+  authLabel: string;
+  note: string;
+};
+
+type DiscoverAppLaterConnectTemplate = {
+  connectionKind: DiscoverAppConnectionKind;
+  availability: "later";
+  authMethod: DiscoverAppAuthMethod;
   endpointUrl: string | null;
   authType: DeveloperAppAuthType | null;
   authLabel: string;
-  requiresSecret: boolean;
-  secretLabel?: string;
   note: string;
+  secretLabel?: string;
 };
+
+export type DiscoverAppPersonalConnectTemplate =
+  | DiscoverAppReadyTokenConnectTemplate
+  | DiscoverAppReadyNoAuthConnectTemplate
+  | DiscoverAppLaterConnectTemplate;
+
+export type DiscoverAppConnectRequirement =
+  | {
+      id: "endpoint" | "auth";
+      kind: "readonly";
+      label: string;
+      value: string;
+    }
+  | {
+      id: "secret";
+      kind: "secret";
+      label: string;
+      placeholder: string;
+    };
 
 export type DiscoverAppCatalogEntry = {
   id: string;
@@ -25,6 +69,78 @@ export type DiscoverAppCatalogEntry = {
   logoUrlDark?: string | null;
   personalConnect: DiscoverAppPersonalConnectTemplate;
 };
+
+export function isDiscoverAppPersonallyConnectable(
+  app: DiscoverAppCatalogEntry,
+): app is DiscoverAppCatalogEntry & {
+  personalConnect:
+    | DiscoverAppReadyTokenConnectTemplate
+    | DiscoverAppReadyNoAuthConnectTemplate;
+} {
+  return app.personalConnect.availability === "ready";
+}
+
+export function buildDiscoverAppPersonalConnectRequirements(
+  app: DiscoverAppCatalogEntry,
+): DiscoverAppConnectRequirement[] {
+  if (!isDiscoverAppPersonallyConnectable(app)) return [];
+  const requirements: DiscoverAppConnectRequirement[] = [
+    {
+      id: "endpoint",
+      kind: "readonly",
+      label: "Endpoint",
+      value: app.personalConnect.endpointUrl,
+    },
+    {
+      id: "auth",
+      kind: "readonly",
+      label: "Auth",
+      value: app.personalConnect.authLabel,
+    },
+  ];
+  if (app.personalConnect.authMethod === "token") {
+    requirements.push({
+      id: "secret",
+      kind: "secret",
+      label: app.personalConnect.secretLabel,
+      placeholder: `Paste your ${app.personalConnect.secretLabel}`,
+    });
+  }
+  return requirements;
+}
+
+export function buildDiscoverAppPersonalConnectInput(
+  app: DiscoverAppCatalogEntry,
+  args: {
+    description?: string;
+    secret?: string;
+  },
+): {
+  name: string;
+  endpoint_url: string;
+  auth_type: DeveloperAppAuthType;
+  description?: string;
+  secret?: string;
+} | null {
+  if (!isDiscoverAppPersonallyConnectable(app)) return null;
+  return {
+    name: app.name,
+    endpoint_url: app.personalConnect.endpointUrl,
+    auth_type: app.personalConnect.authType,
+    description: args.description,
+    secret: app.personalConnect.authMethod === "token" ? args.secret : undefined,
+  };
+}
+
+export function buildDiscoverAppPersonalConnectModalCopy(
+  app: DiscoverAppCatalogEntry,
+): string | null {
+  if (!isDiscoverAppPersonallyConnectable(app)) return null;
+  if (app.personalConnect.authMethod === "token") {
+    return `Paste your ${app.personalConnect.secretLabel} to connect ${app.name} to your personal platform tools.`;
+  }
+  return `Review the connection requirements, then connect ${app.name} to your personal platform tools.`;
+}
 
 export const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
   {
@@ -47,11 +163,12 @@ export const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
     docsUrl: "https://github.com/github/github-mcp-server",
     logoUrl: "/app-logos/github.svg",
     personalConnect: {
+      connectionKind: "known",
       availability: "later",
+      authMethod: "token",
       endpointUrl: null,
       authType: null,
       authLabel: "Bearer token",
-      requiresSecret: true,
       secretLabel: "GitHub token",
       note:
         "GitHub stays catalog-first until the generic hosted MCP path is verified end to end for PolyNet.",
@@ -77,11 +194,12 @@ export const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
     docsUrl: "https://supabase.com/docs/guides/getting-started/mcp",
     logoUrl: "/app-logos/supabase.svg",
     personalConnect: {
+      connectionKind: "known",
       availability: "ready",
+      authMethod: "token",
       endpointUrl: "https://mcp.supabase.com/mcp",
       authType: "bearer",
       authLabel: "Bearer token",
-      requiresSecret: true,
       secretLabel: "Supabase token",
       note:
         "Connects into your baseline platform tools and stays available even when no community lens is active.",
@@ -107,11 +225,12 @@ export const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
     docsUrl: "https://vercel.com/docs/agent-resources/vercel-mcp",
     logoUrl: "/app-logos/vercel.svg",
     personalConnect: {
+      connectionKind: "known",
       availability: "later",
+      authMethod: "oauth",
       endpointUrl: "https://mcp.vercel.com",
       authType: null,
       authLabel: "OAuth or managed auth",
-      requiresSecret: false,
       note:
         "Vercel belongs in the known-app catalog, but not in the live personal connect path yet.",
     },
@@ -136,11 +255,12 @@ export const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
     docsUrl: "https://linear.app/docs/mcp",
     logoUrl: "/app-logos/linear.svg",
     personalConnect: {
+      connectionKind: "known",
       availability: "ready",
+      authMethod: "token",
       endpointUrl: "https://mcp.linear.app/mcp",
       authType: "bearer",
       authLabel: "Bearer token",
-      requiresSecret: true,
       secretLabel: "Linear token",
       note:
         "Connects into your baseline platform tools so it stays active with or without a community lens.",
@@ -166,11 +286,12 @@ export const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
     docsUrl: "https://developers.notion.com/guides/mcp/get-started-with-mcp",
     logoUrl: "/app-logos/notion.svg",
     personalConnect: {
+      connectionKind: "known",
       availability: "later",
+      authMethod: "oauth",
       endpointUrl: "https://mcp.notion.com/mcp",
       authType: null,
       authLabel: "OAuth or managed auth",
-      requiresSecret: false,
       note:
         "Notion needs a richer auth flow before personal connection is honest in PolyNet.",
     },
@@ -195,11 +316,12 @@ export const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
     docsUrl: "https://slack.com/help/articles/48855576908307-Guide-to-the-Slack-MCP-server",
     logoUrl: "/app-logos/slack.svg",
     personalConnect: {
+      connectionKind: "known",
       availability: "later",
+      authMethod: "oauth",
       endpointUrl: null,
       authType: null,
       authLabel: "OAuth",
-      requiresSecret: false,
       note:
         "Slack should stay catalog-first until PolyNet supports the right auth and approval path.",
     },
@@ -224,11 +346,12 @@ export const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
     docsUrl: "https://developers.asana.com/docs/using-asanas-mcp-server",
     logoUrl: "/app-logos/asana.svg",
     personalConnect: {
+      connectionKind: "known",
       availability: "later",
+      authMethod: "oauth",
       endpointUrl: "https://mcp.asana.com/v2/mcp",
       authType: null,
       authLabel: "OAuth",
-      requiresSecret: false,
       note:
         "Asana should stay informational until PolyNet supports the right auth path for it.",
     },

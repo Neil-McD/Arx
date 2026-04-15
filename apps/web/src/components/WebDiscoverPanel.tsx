@@ -8,7 +8,11 @@ import type {
 } from "../../../../shared/userPlatformAppMountTypes";
 import { DiscoverCommunityCard } from "../../../../shared/DiscoverCommunityCard";
 import {
+  buildDiscoverAppPersonalConnectInput,
+  buildDiscoverAppPersonalConnectModalCopy,
+  buildDiscoverAppPersonalConnectRequirements,
   DISCOVER_APP_CATALOG,
+  isDiscoverAppPersonallyConnectable,
   type DiscoverAppCatalogEntry,
 } from "../lib/discoverCatalog";
 import { DiscoverCatalogLogo } from "./DiscoverCatalogLogo";
@@ -145,11 +149,7 @@ function findMatchingPersonalMount(
   app: DiscoverAppCatalogEntry,
   mounts: UserPlatformMountedApp[],
 ): UserPlatformMountedApp | null {
-  if (
-    app.personalConnect.availability !== "ready" ||
-    !app.personalConnect.endpointUrl ||
-    !app.personalConnect.authType
-  ) {
+  if (!isDiscoverAppPersonallyConnectable(app)) {
     return null;
   }
   return (
@@ -240,7 +240,7 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
     ? DISCOVER_APP_CATALOG.find((entry) => entry.id === selectedAppId) ?? null
     : null;
   const isReadyForPersonalConnection =
-    selectedApp?.personalConnect.availability === "ready";
+    selectedApp ? isDiscoverAppPersonallyConnectable(selectedApp) : false;
   const personalConnectLoadError =
     isReadyForPersonalConnection && userPlatformAppMountError
       ? "Couldn't load your personal apps right now. Try refreshing the page."
@@ -288,55 +288,48 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
   const selectedAppActionLabel = selectedApp
     ? selectedPersonalMount
       ? "Manage"
-      : selectedApp.personalConnect.availability === "ready"
+      : isDiscoverAppPersonallyConnectable(selectedApp)
         ? "Connect"
         : null
     : null;
   const personalConnectModalCopy = selectedApp
-    ? selectedApp.personalConnect.requiresSecret
-      ? `Paste your ${
-          selectedApp.personalConnect.secretLabel ?? "token"
-        } to connect ${selectedApp.name} to your personal platform tools.`
-      : `Review the connection requirements, then connect ${selectedApp.name} to your personal platform tools.`
+    ? buildDiscoverAppPersonalConnectModalCopy(selectedApp)
     : null;
+  const personalConnectRequirements = selectedApp
+    ? buildDiscoverAppPersonalConnectRequirements(selectedApp)
+    : [];
 
   const handleUsePersonally = async (
     app: DiscoverAppCatalogEntry,
   ): Promise<void> => {
-    if (app.personalConnect.availability !== "ready") return;
+    if (!isDiscoverAppPersonallyConnectable(app)) return;
     if (!hasSession) {
       onRequireAuth();
       return;
     }
     if (selectedPersonalMount) return;
-    if (!app.personalConnect.endpointUrl || !app.personalConnect.authType) {
-      setPersonalConnectResult("failed");
-      setPersonalConnectError("This app is not ready for direct connection yet.");
-      return;
-    }
     if (
-      app.personalConnect.requiresSecret &&
+      app.personalConnect.authMethod === "token" &&
       !personalConnectSecret.trim()
     ) {
       setPersonalConnectResult("failed");
       setPersonalConnectError(
-        `Paste your ${
-          app.personalConnect.secretLabel ?? `${app.name} token`
-        } to connect ${app.name}.`,
+        `Paste your ${app.personalConnect.secretLabel} to connect ${app.name}.`,
       );
+      return;
+    }
+    const connectInput = buildDiscoverAppPersonalConnectInput(app, {
+      description: app.description,
+      secret: personalConnectSecret.trim() || undefined,
+    });
+    if (!connectInput) {
+      setPersonalConnectResult("failed");
+      setPersonalConnectError("This app is not ready for direct connection yet.");
       return;
     }
     setPersonalConnectError(null);
     setPersonalConnectResult(null);
-    const ok = await onConnectUserPlatformApp({
-      name: app.name,
-      endpoint_url: app.personalConnect.endpointUrl,
-      auth_type: app.personalConnect.authType,
-      description: app.description,
-      secret: app.personalConnect.requiresSecret
-        ? personalConnectSecret.trim()
-        : undefined,
-    });
+    const ok = await onConnectUserPlatformApp(connectInput);
     if (ok) {
       setPersonalConnectResult("passed");
       setPersonalConnectSecret("");
@@ -510,7 +503,7 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
                       {buildMountStatusLabel(selectedPersonalMount)}
                     </div>
                   </div>
-                ) : selectedApp.personalConnect.availability !== "ready" ? (
+                ) : !isDiscoverAppPersonallyConnectable(selectedApp) ? (
                   <div className="discover-connect-status">
                     <div className="discover-connect-status-title">
                       Connect path coming soon
@@ -649,7 +642,7 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
                       <span className="discover-app-action">
                         {findMatchingPersonalMount(app, userPlatformAppMounts)
                           ? "Manage"
-                          : app.personalConnect.availability === "ready"
+                          : isDiscoverAppPersonallyConnectable(app)
                             ? "Connect"
                             : "Catalog"}
                       </span>
@@ -700,7 +693,7 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
         </div>
       </div>
       {selectedApp &&
-      selectedApp.personalConnect.availability === "ready" &&
+      isDiscoverAppPersonallyConnectable(selectedApp) &&
       isPersonalConnectModalOpen ? (
         <div
           className="modal-overlay"
@@ -738,50 +731,50 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
               </button>
             </div>
             <div className="modal-body discover-connect-modal-body">
-              <div className="discover-connect-modal-copy">
-                {personalConnectModalCopy}
-              </div>
+              {personalConnectModalCopy ? (
+                <div className="discover-connect-modal-copy">
+                  {personalConnectModalCopy}
+                </div>
+              ) : null}
               <div className="agent-capability-field-grid discover-connect-grid">
-                <label className="agent-capability-field">
-                  <span className="agent-capability-field-label">Endpoint</span>
-                  <input
-                    className="agent-editor-inline-label-input"
-                    value={selectedApp.personalConnect.endpointUrl ?? ""}
-                    readOnly
-                  />
-                </label>
-                <label className="agent-capability-field">
-                  <span className="agent-capability-field-label">Auth</span>
-                  <input
-                    className="agent-editor-inline-label-input"
-                    value={selectedApp.personalConnect.authLabel}
-                    readOnly
-                  />
-                </label>
-                {selectedApp.personalConnect.requiresSecret ? (
-                  <label className="agent-capability-field discover-connect-secret-field">
-                    <span className="agent-capability-field-label">
-                      {selectedApp.personalConnect.secretLabel ?? "Token"}
-                    </span>
-                    <input
-                      className="agent-editor-inline-label-input"
-                      type="password"
-                      value={personalConnectSecret}
-                      onChange={(event) => {
-                        setPersonalConnectSecret(event.target.value);
-                        if (personalConnectError) {
-                          setPersonalConnectError(null);
-                        }
-                        if (personalConnectResult) {
-                          setPersonalConnectResult(null);
-                        }
-                      }}
-                      placeholder={`Paste your ${
-                        selectedApp.personalConnect.secretLabel ?? "token"
-                      }`}
-                    />
-                  </label>
-                ) : null}
+                {personalConnectRequirements.map((requirement) =>
+                  requirement.kind === "readonly" ? (
+                    <label key={requirement.id} className="agent-capability-field">
+                      <span className="agent-capability-field-label">
+                        {requirement.label}
+                      </span>
+                      <input
+                        className="agent-editor-inline-label-input"
+                        value={requirement.value}
+                        readOnly
+                      />
+                    </label>
+                  ) : (
+                    <label
+                      key={requirement.id}
+                      className="agent-capability-field discover-connect-secret-field"
+                    >
+                      <span className="agent-capability-field-label">
+                        {requirement.label}
+                      </span>
+                      <input
+                        className="agent-editor-inline-label-input"
+                        type="password"
+                        value={personalConnectSecret}
+                        onChange={(event) => {
+                          setPersonalConnectSecret(event.target.value);
+                          if (personalConnectError) {
+                            setPersonalConnectError(null);
+                          }
+                          if (personalConnectResult) {
+                            setPersonalConnectResult(null);
+                          }
+                        }}
+                        placeholder={requirement.placeholder}
+                      />
+                    </label>
+                  ),
+                )}
               </div>
               {personalConnectLoadError ? (
                 <div className="auth-error">{personalConnectLoadError}</div>
