@@ -69,7 +69,9 @@ type WebAccountSettingsSectionProps = {
   openOwnedCommunitySettings: (communityId: string) => void;
   communityInitials: (value: string) => string;
   openBuilderUpgrade: (context: "builder") => void;
+  openBuilderBillingPortal: () => Promise<void> | void;
   builderBillingError: string | null;
+  isOpeningBuilderBillingPortal: boolean;
   canUseDevTierOverride: boolean;
   isSettingDevBuilderTier: boolean;
   setDevBuilderTier: (tier: "free" | "builder" | "architect") => Promise<void> | void;
@@ -115,7 +117,9 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
     openOwnedCommunitySettings,
     communityInitials,
     openBuilderUpgrade,
+    openBuilderBillingPortal,
     builderBillingError,
+    isOpeningBuilderBillingPortal,
     canUseDevTierOverride,
     isSettingDevBuilderTier,
     setDevBuilderTier,
@@ -314,7 +318,17 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
                         Upgrade to Builder ($24/mo)
                       </button>
                     ) : (
-                      <span className="auth-status">Builder includes 500 monthly workspace credits. Connect ChatGPT or OpenRouter to bring your own inference.</span>
+                      <>
+                        <span className="auth-status">Builder includes 500 monthly workspace credits. Connect ChatGPT or OpenRouter to bring your own inference.</span>
+                        <button
+                          type="button"
+                          className="secondary"
+                          onClick={() => void openBuilderBillingPortal()}
+                          disabled={isOpeningBuilderBillingPortal}
+                        >
+                          {isOpeningBuilderBillingPortal ? "Opening…" : "Manage plan"}
+                        </button>
+                      </>
                     )}
                   </div>
                 </div>

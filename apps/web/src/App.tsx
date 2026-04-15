@@ -885,6 +885,8 @@ export default function App() {
     setDevBuilderTierError,
     isStartingBuilderCheckout,
     setIsStartingBuilderCheckout,
+    isOpeningBuilderBillingPortal,
+    setIsOpeningBuilderBillingPortal,
     checkoutStatus,
     setCheckoutStatus,
     checkoutError,
@@ -3323,7 +3325,7 @@ export default function App() {
     navigateToUrl: (url) => window.location.assign(url),
   });
 
-  const { startBuilderPlanCheckout } =
+  const { openBuilderPlanPortal, startBuilderPlanCheckout } =
     useWebBuilderBillingActions({
       getSession: () => sessionRef.current,
       ensureSession: ensureUsableAuthSession,
@@ -3339,8 +3341,15 @@ export default function App() {
           surface: "billing",
         });
       },
+      onPortalOpened: ({ context }) => {
+        captureProductAnalyticsEvent("builder billing portal opened", {
+          billing_context: context,
+          surface: "account_settings",
+        });
+      },
       setBuilderBillingError,
       setIsStartingBuilderCheckout,
+      setIsOpeningBuilderBillingPortal,
       navigateToUrl: (url) => window.location.assign(url),
     });
 
@@ -5254,6 +5263,9 @@ export default function App() {
       openBuilderUpgrade: (context) => {
         setBuilderUpgradeContext(context);
         setIsBuilderUpgradeOpen(true);
+      },
+      openBuilderBillingPortal: () => {
+        void openBuilderPlanPortal({ context: "builder" });
       },
       canUseDevTierOverride,
       setDevBuilderTier,

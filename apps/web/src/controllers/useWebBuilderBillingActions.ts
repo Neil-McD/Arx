@@ -1,5 +1,8 @@
 import { type Dispatch, type SetStateAction } from "react";
-import { buildBuilderCheckoutRequestPayload } from "../../../../shared/builderBilling";
+import {
+  buildBuilderCheckoutRequestPayload,
+  buildBuilderPortalRequestPayload,
+} from "../../../../shared/builderBilling";
 import type { PendingAuthIntentInput } from "../../../../shared/authResumeState";
 import type { AuthSession } from "../auth";
 import {
@@ -16,8 +19,12 @@ type UseWebBuilderBillingActionsArgs = {
     tier: BuilderCheckoutRequestTier;
     context: BuilderUpgradeContext;
   }) => void;
+  onPortalOpened?: (details: {
+    context: BuilderUpgradeContext;
+  }) => void;
   setBuilderBillingError: Dispatch<SetStateAction<string | null>>;
   setIsStartingBuilderCheckout: Dispatch<SetStateAction<boolean>>;
+  setIsOpeningBuilderBillingPortal: Dispatch<SetStateAction<boolean>>;
   navigateToUrl: (url: string) => void;
 };
 
@@ -27,6 +34,7 @@ export function useWebBuilderBillingActions(args: UseWebBuilderBillingActionsArg
     ensureSession: args.ensureSession,
     setBuilderBillingError: args.setBuilderBillingError,
     setIsStartingBuilderCheckout: args.setIsStartingBuilderCheckout,
+    setIsOpeningBuilderBillingPortal: args.setIsOpeningBuilderBillingPortal,
     onMissingAuth: (kind, details) => {
       const tier: BuilderCheckoutRequestTier = details.tier ?? "builder";
       const context: BuilderUpgradeContext = details.context ?? "builder";
@@ -45,7 +53,14 @@ export function useWebBuilderBillingActions(args: UseWebBuilderBillingActionsArg
         context,
         tier,
       }),
+    buildPortalPayload: ({ context }: { context: BuilderUpgradeContext }) =>
+      buildBuilderPortalRequestPayload({
+        origin: window.location.origin,
+        source: "web",
+        context,
+      }),
     onCheckoutStarted: args.onCheckoutStarted,
+    onPortalOpened: args.onPortalOpened,
     openUrl: (_kind, url) => {
       args.navigateToUrl(url);
       return true;

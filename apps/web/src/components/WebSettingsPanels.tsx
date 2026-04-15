@@ -64,6 +64,7 @@ export type WebSettingsPanelsProps = {
     openOwnedCommunitySettings: (communityId: string) => void;
     communityInitials: (value: string) => string;
     openBuilderUpgrade: (context: "builder") => void;
+    openBuilderBillingPortal: () => Promise<void> | void;
     canUseDevTierOverride: boolean;
     setDevBuilderTier: (tier: "free" | "builder" | "architect") => Promise<void> | void;
     redeemPendingPurchases: () => Promise<void> | void;
@@ -192,7 +193,9 @@ export function WebSettingsPanels(props: WebSettingsPanelsProps) {
     openOwnedCommunitySettings: account.openOwnedCommunitySettings,
     communityInitials: account.communityInitials,
     openBuilderUpgrade: account.openBuilderUpgrade,
+    openBuilderBillingPortal: account.openBuilderBillingPortal,
     builderBillingError: account.billingUi.builderBillingError,
+    isOpeningBuilderBillingPortal: account.billingUi.isOpeningBuilderBillingPortal,
     canUseDevTierOverride: account.canUseDevTierOverride,
     isSettingDevBuilderTier: account.billingUi.isSettingDevBuilderTier,
     setDevBuilderTier: account.setDevBuilderTier,

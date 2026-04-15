@@ -37,6 +37,8 @@ export type UseWebBillingUiControllerResult<
   setDevBuilderTierError: Dispatch<SetStateAction<string | null>>;
   isStartingBuilderCheckout: boolean;
   setIsStartingBuilderCheckout: Dispatch<SetStateAction<boolean>>;
+  isOpeningBuilderBillingPortal: boolean;
+  setIsOpeningBuilderBillingPortal: Dispatch<SetStateAction<boolean>>;
   checkoutStatus: "idle" | "loading" | "pending" | "succeeded" | "error";
   setCheckoutStatus: Dispatch<SetStateAction<"idle" | "loading" | "pending" | "succeeded" | "error">>;
   checkoutError: string | null;
@@ -74,6 +76,7 @@ export function useWebBillingUiController<
   const [isSettingDevBuilderTier, setIsSettingDevBuilderTier] = useState(false);
   const [devBuilderTierError, setDevBuilderTierError] = useState<string | null>(null);
   const [isStartingBuilderCheckout, setIsStartingBuilderCheckout] = useState(false);
+  const [isOpeningBuilderBillingPortal, setIsOpeningBuilderBillingPortal] = useState(false);
 
   const [checkoutStatus, setCheckoutStatus] = useState<"idle" | "loading" | "pending" | "succeeded" | "error">(
     "idle",
@@ -119,6 +122,8 @@ export function useWebBillingUiController<
     setDevBuilderTierError,
     isStartingBuilderCheckout,
     setIsStartingBuilderCheckout,
+    isOpeningBuilderBillingPortal,
+    setIsOpeningBuilderBillingPortal,
     checkoutStatus,
     setCheckoutStatus,
     checkoutError,
