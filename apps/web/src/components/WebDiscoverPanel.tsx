@@ -106,6 +106,7 @@ type WebDiscoverPanelProps = {
     input: ConnectUserPlatformAppInput,
   ) => Promise<boolean> | boolean;
   onActivateCommunity: (slug: string) => void;
+  onOpenIntegrationsSettings: () => void;
 };
 
 function renderInfoLink(href: string, label: string) {
@@ -138,6 +139,26 @@ function buildMountStatusLabel(mount: UserPlatformMountedApp): string {
     )}.`;
   }
   return `${count} ${toolLabel} are mounted in your platform layer.`;
+}
+
+function findMatchingPersonalMount(
+  app: DiscoverAppCatalogEntry,
+  mounts: UserPlatformMountedApp[],
+): UserPlatformMountedApp | null {
+  if (
+    app.personalConnect.availability !== "ready" ||
+    !app.personalConnect.endpointUrl ||
+    !app.personalConnect.authType
+  ) {
+    return null;
+  }
+  return (
+    mounts.find(
+      (mount) =>
+        mount.app.endpoint_url === app.personalConnect.endpointUrl &&
+        mount.app.auth_type === app.personalConnect.authType,
+    ) ?? null
+  );
 }
 
 function buildDiscoverCommunityCardProps(args: {
@@ -195,12 +216,15 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
     isConnectingUserPlatformApp,
     onConnectUserPlatformApp,
     onActivateCommunity,
+    onOpenIntegrationsSettings,
   } = props;
   const [selectedAppId, setSelectedAppId] = useState<string | null>(null);
   const [personalConnectSecret, setPersonalConnectSecret] = useState("");
   const [personalConnectError, setPersonalConnectError] = useState<string | null>(
     null,
   );
+  const [isPersonalConnectComposerOpen, setIsPersonalConnectComposerOpen] =
+    useState(false);
 
   const activeTabIndex = DISCOVER_TABS.findIndex((tab) => tab.id === activeTab);
   const tabSwitcherStyle = buildPlatformSwitcherStyle(
@@ -225,20 +249,7 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
 
   const selectedPersonalMount = useMemo(() => {
     if (!selectedApp) return null;
-    if (
-      selectedApp.personalConnect.availability === "ready" &&
-      selectedApp.personalConnect.endpointUrl &&
-      selectedApp.personalConnect.authType
-    ) {
-      return (
-        userPlatformAppMounts.find(
-          (mount) =>
-            mount.app.endpoint_url === selectedApp.personalConnect.endpointUrl &&
-            mount.app.auth_type === selectedApp.personalConnect.authType,
-        ) ?? null
-      );
-    }
-    return null;
+    return findMatchingPersonalMount(selectedApp, userPlatformAppMounts);
   }, [selectedApp, userPlatformAppMounts]);
 
   const isAppsTab = activeTab === "apps";
@@ -253,6 +264,7 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
   useEffect(() => {
     setPersonalConnectSecret("");
     setPersonalConnectError(null);
+    setIsPersonalConnectComposerOpen(false);
   }, [selectedAppId]);
 
   const heroTitle = selectedApp
@@ -417,8 +429,28 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
                   size="detail"
                 />
                 <div className="discover-app-detail-meta">
-                  <div className="discover-app-detail-name">
-                    {selectedApp.name}
+                  <div className="discover-app-detail-heading-row">
+                    <div className="discover-app-detail-name">
+                      {selectedApp.name}
+                    </div>
+                    <button
+                      type="button"
+                      className="settings-cta discover-app-detail-action"
+                      onClick={() => {
+                        if (selectedPersonalMount) {
+                          onOpenIntegrationsSettings();
+                          return;
+                        }
+                        if (selectedApp.personalConnect.availability !== "ready") {
+                          return;
+                        }
+                        setIsPersonalConnectComposerOpen(true);
+                        setPersonalConnectError(null);
+                      }}
+                      disabled={selectedApp.personalConnect.availability !== "ready" && !selectedPersonalMount}
+                    >
+                      {selectedPersonalMount ? "Manage" : "Connect"}
+                    </button>
                   </div>
                   <div className="discover-app-detail-tagline">
                     {selectedApp.tagline}
@@ -432,7 +464,6 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
               <div className="discover-app-spotlight">{selectedApp.heroNote}</div>
 
               <section className="discover-card discover-app-detail-section">
-                <div className="discover-detail-section-title">Use personally</div>
                 <div className="model-note discover-connect-note">
                   {selectedApp.personalConnect.note}
                 </div>
@@ -447,7 +478,7 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
                 {selectedPersonalMount ? (
                   <div className="discover-connect-status">
                     <div className="discover-connect-status-title">
-                      Added to your platform tools
+                      Connected
                     </div>
                     <div className="discover-connect-status-body">
                       {buildMountStatusLabel(selectedPersonalMount)}
@@ -456,10 +487,19 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
                 ) : selectedApp.personalConnect.availability !== "ready" ? (
                   <div className="discover-connect-status">
                     <div className="discover-connect-status-title">
-                      Not ready for direct personal connection yet
+                      Connect path coming soon
                     </div>
                     <div className="discover-connect-status-body">
                       {selectedApp.supportNote}
+                    </div>
+                  </div>
+                ) : !isPersonalConnectComposerOpen ? (
+                  <div className="discover-connect-status">
+                    <div className="discover-connect-status-title">
+                      Ready to connect
+                    </div>
+                    <div className="discover-connect-status-body">
+                      Use `Connect` to add {selectedApp.name} to your baseline platform tools.
                     </div>
                   </div>
                 ) : (
@@ -518,6 +558,18 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
                       <div className="agent-capability-toolbar-actions">
                         <button
                           type="button"
+                          className="settings-cta"
+                          onClick={() => {
+                            setIsPersonalConnectComposerOpen(false);
+                            setPersonalConnectSecret("");
+                            setPersonalConnectError(null);
+                          }}
+                          disabled={isConnectingUserPlatformApp}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
                           className="platform-save-button is-dirty"
                           onClick={() => void handleUsePersonally(selectedApp)}
                           disabled={
@@ -525,7 +577,7 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
                             isLoadingUserPlatformAppMounts
                           }
                         >
-                          {hasSession ? "Use personally" : "Sign in to connect"}
+                          {hasSession ? "Connect" : "Sign in to connect"}
                         </button>
                       </div>
                     </div>
@@ -648,7 +700,11 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
                           {app.tagline}
                         </div>
                       </div>
-                      <span className="discover-app-action">Open</span>
+                      <span className="discover-app-action">
+                        {findMatchingPersonalMount(app, userPlatformAppMounts)
+                          ? "Manage"
+                          : "Connect"}
+                      </span>
                     </button>
                   ))}
                 </div>

@@ -1516,11 +1516,22 @@ body {
   min-width: 0;
 }
 
+.discover-app-detail-heading-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
 .discover-app-detail-name {
   font-size: 30px;
   line-height: 1.05;
   font-weight: 600;
   color: var(--text-primary);
+}
+
+.discover-app-detail-action {
+  flex-shrink: 0;
 }
 
 .discover-app-detail-tagline {
@@ -17522,6 +17533,11 @@ button.message-citation-chip:hover {
 }
 
 .app-root.mobile-shell .discover-app-detail-header {
+  align-items: flex-start;
+}
+
+.app-root.mobile-shell .discover-app-detail-heading-row {
+  flex-direction: column;
   align-items: flex-start;
 }
 

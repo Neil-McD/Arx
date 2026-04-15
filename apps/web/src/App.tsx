@@ -4565,6 +4565,12 @@ export default function App() {
       setActiveView(transition.nextView);
       setActivePage(transition.nextPage);
     };
+    const handleOpenIntegrationsSettings = () => {
+      pushNavSnapshot();
+      setActivePage("workspace");
+      setActiveView("settings");
+      setSettingsPage("integrations");
+    };
     const {
       openMobileCommunitySurface,
       handleSelectMobileMode,
@@ -5544,6 +5550,7 @@ export default function App() {
       userPlatformAppMutationError,
       isConnectingUserPlatformApp,
       onConnectUserPlatformApp: handleConnectUserPlatformApp,
+      onOpenIntegrationsSettings: handleOpenIntegrationsSettings,
       onActivateCommunity: (slug) => {
         activateDiscoverCommunityCard({
           canActivate: Boolean(slug),
