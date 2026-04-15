@@ -6,20 +6,15 @@ import {
 } from "./daytonaWorkspaceSession";
 import { runDaytonaComputerUseTool } from "./daytonaComputerUse";
 import {
-  DAYTONA_WORKSPACE_ROOT,
-  getDaytonaSignedPreviewUrl,
-} from "./daytonaSandboxClient";
-import {
-  createDaytonaProcessSession,
-  deleteDaytonaProcessSession,
-  executeDaytonaProcessSessionCommand,
-  findDaytonaProcessSessionCommand,
-  getDaytonaProcessSession,
-  getDaytonaProcessSessionCommandLogs,
-  readDaytonaProcessSessionCommandExitCode,
-  sendDaytonaProcessSessionCommandInput,
-} from "./daytonaProcessSessions";
-import { mintPreviewProxySessionToken } from "./previewProxySessionToken";
+  normalizeWorkspaceTerminalStartArgs,
+  readWorkspaceToolFailureOutputPreview,
+  reconcileRuntimeSessionTerminalRow,
+  requireRuntimeSessionOwnedTerminalRow,
+  resolveRuntimeSessionTerminalPreview,
+  startRuntimeSessionTerminal,
+  stopRuntimeSessionTerminalRow,
+  writeRuntimeSessionTerminalRow,
+} from "./workspaceTerminalProcessCore";
 import {
   createRuntimeMcpManager,
   type RuntimeMcpConnectionBundle,
@@ -98,162 +93,6 @@ function formatToolOutput(toolName: string, value: unknown): string {
     return formatTerminalStartToolOutput(value);
   }
   return formatJsonToolOutput(value);
-}
-
-type RuntimeWorkspaceTerminalStatus =
-  | "starting"
-  | "running"
-  | "exited"
-  | "failed"
-  | "stopped";
-
-const ACTIVE_TERMINAL_STATUSES = new Set(["starting", "running"]);
-const TERMINAL_OUTPUT_TAIL_MAX_CHARS = 6000;
-
-function normalizeRuntimeOptionalString(value: unknown): string | null {
-  const normalized = String(value ?? "").trim();
-  return normalized || null;
-}
-
-function normalizeRelativeWorkspaceCwd(raw: unknown): string | null {
-  const candidate = String(raw ?? "").trim().replaceAll("\\", "/");
-  if (!candidate) return null;
-  if (candidate.startsWith("/")) throw new Error("cwd_outside_workspace");
-  const parts = candidate
-    .split("/")
-    .filter((part) => part.length > 0 && part !== ".");
-  if (parts.some((part) => part === "..")) {
-    throw new Error("cwd_outside_workspace");
-  }
-  const segments =
-    parts[0]?.toLowerCase() === "workspace" ? parts.slice(1) : parts;
-  if (segments.length === 0) return ".";
-  return segments.join("/");
-}
-
-function normalizePreviewPort(raw: unknown): number | null {
-  if (raw === undefined || raw === null || raw === "") return null;
-  const parsed =
-    typeof raw === "number"
-      ? raw
-      : typeof raw === "string"
-        ? Number(raw)
-        : Number.NaN;
-  if (!Number.isFinite(parsed)) throw new Error("invalid_preview_port");
-  const integer = Math.floor(parsed);
-  if (integer < 3000 || integer > 9999) throw new Error("invalid_preview_port");
-  return integer;
-}
-
-function normalizePreviewPath(raw: unknown): string | null {
-  const normalized = String(raw ?? "").trim();
-  if (!normalized) return null;
-  if (normalized.includes("://") || normalized.startsWith("//")) {
-    throw new Error("invalid_preview_path");
-  }
-  return (normalized.startsWith("/") ? normalized : `/${normalized}`).slice(
-    0,
-    1024,
-  );
-}
-
-function normalizePreviewLabel(raw: unknown): string | null {
-  const normalized = String(raw ?? "").trim();
-  return normalized ? normalized.slice(0, 120) : null;
-}
-
-function resolveWorkspaceCwd(cwd: string | null): string {
-  if (!cwd || cwd === ".") return DAYTONA_WORKSPACE_ROOT;
-  return `${DAYTONA_WORKSPACE_ROOT}/${cwd}`;
-}
-
-function shellQuote(value: string): string {
-  return `'${String(value).replace(/'/g, `'\"'\"'`)}'`;
-}
-
-function normalizeRuntimeTerminalCommand(
-  command: string,
-  workspaceCwd: string,
-): string {
-  const normalized = String(command ?? "").trim();
-  if (!normalized) return normalized;
-  const isPythonHttpServer =
-    /^python(?:3)?\s+-m\s+http\.server(?:\s|$)/i.test(normalized) ||
-    /^python(?:3)?\s+-m\s+simplehttpserver(?:\s|$)/i.test(normalized);
-  if (!isPythonHttpServer) return normalized;
-  if (/\s--directory(?:\s|=)/i.test(normalized.toLowerCase())) {
-    return normalized;
-  }
-  return `${normalized} --directory ${shellQuote(workspaceCwd)}`;
-}
-
-function buildRuntimeTerminalSessionId(): string {
-  const cryptoObject = (globalThis as { crypto?: { randomUUID?: () => string } })
-    .crypto;
-  const randomSuffix =
-    typeof cryptoObject?.randomUUID === "function"
-      ? cryptoObject.randomUUID().replace(/-/g, "").slice(0, 18)
-      : `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
-  return `arx-run-term-${randomSuffix}`;
-}
-
-function truncateTerminalOutputTail(value: string): string {
-  const normalized = String(value ?? "");
-  if (normalized.length <= TERMINAL_OUTPUT_TAIL_MAX_CHARS) return normalized;
-  return normalized.slice(normalized.length - TERMINAL_OUTPUT_TAIL_MAX_CHARS);
-}
-
-function isTerminalActiveStatus(status: unknown): boolean {
-  return ACTIVE_TERMINAL_STATUSES.has(
-    String(status ?? "").trim().toLowerCase(),
-  );
-}
-
-function summarizeTerminalRow(row: any): Record<string, unknown> {
-  return {
-    terminal_session_id: String(row?._id ?? "").trim(),
-    id: String(row?._id ?? "").trim(),
-    run_id_started_by: normalizeRuntimeOptionalString(row?.runIdStartedBy),
-    status:
-      (String(row?.status ?? "stopped").trim().toLowerCase() || "stopped") as
-        | RuntimeWorkspaceTerminalStatus
-        | string,
-    command: String(row?.command ?? "").trim(),
-    cwd: normalizeRuntimeOptionalString(row?.cwd),
-    preview_port:
-      typeof row?.previewPort === "number" ? Math.floor(row.previewPort) : null,
-    preview_path: normalizeRuntimeOptionalString(row?.previewPath),
-    preview_label: normalizeRuntimeOptionalString(row?.previewLabel),
-    output_tail: normalizeRuntimeOptionalString(row?.lastOutputTail),
-    exit_code: typeof row?.exitCode === "number" ? row.exitCode : null,
-  };
-}
-
-function isConfirmedProcessSessionGone(value: unknown): boolean {
-  const record =
-    value && typeof value === "object" && !Array.isArray(value)
-      ? (value as Record<string, unknown>)
-      : null;
-  const code = String(record?.code ?? "").trim().toLowerCase();
-  const details =
-    record?.details && typeof record.details === "object" && !Array.isArray(record.details)
-      ? (record.details as Record<string, unknown>)
-      : null;
-  const responseText = String(details?.response_text ?? "").toLowerCase();
-  return code === "terminal_not_found" || responseText.includes("not found");
-}
-
-function readFailureOutputPreview(details: unknown): string {
-  const record =
-    details && typeof details === "object" && !Array.isArray(details)
-      ? (details as Record<string, unknown>)
-      : null;
-  if (!record) return "";
-  const preferred = String(record.output_preview ?? "").trim();
-  if (preferred) return preferred;
-  const responseText = String(record.response_text ?? "").trim();
-  if (responseText) return responseText;
-  return "";
 }
 
 function isInlineImageDataUrl(value: unknown): value is string {
@@ -424,160 +263,6 @@ export function createPolyNetExecutionSession(params: {
     };
   };
 
-  const requireSessionOwnedTerminalRow = async (
-    terminalSessionId: string,
-  ): Promise<
-    | { ok: true; row: any }
-    | { ok: false; status: number; code: string; message: string }
-  > => {
-    const normalizedTerminalSessionId = String(terminalSessionId ?? "").trim();
-    if (!normalizedTerminalSessionId) {
-      return {
-        ok: false,
-        status: 400,
-        code: "invalid_tool_args",
-        message: "terminal_session_id is required.",
-      };
-    }
-    const row = await params.ctx.runQuery(
-      internal.workspaceTerminals.getWorkspaceTerminalSessionInternal as any,
-      {
-        terminalSessionId: normalizedTerminalSessionId as any,
-      },
-    );
-    if (
-      !row ||
-      String(row.ownerId ?? "") !== String(params.userId ?? "") ||
-      String(row.runIdStartedBy ?? "").trim() !== params.runId
-    ) {
-      return {
-        ok: false,
-        status: 404,
-        code: "terminal_not_found",
-        message: "Runtime terminal session not found.",
-      };
-    }
-    return { ok: true, row };
-  };
-
-  const reconcileSessionOwnedTerminalRow = async (paramsForReconcile: {
-    row: any;
-    session: WorkspaceSandboxSession;
-  }): Promise<Record<string, unknown>> => {
-    const row = paramsForReconcile.row;
-    const activeWorkspaceSession = paramsForReconcile.session;
-    if (!isTerminalActiveStatus(row.status)) return summarizeTerminalRow(row);
-    if (
-      String(row.providerSandboxId ?? "").trim() !==
-      activeWorkspaceSession.providerSandboxId
-    ) {
-      return summarizeTerminalRow(row);
-    }
-
-    const nowMs = Date.now();
-    const markFailed = async (): Promise<Record<string, unknown>> => {
-      const patched = await params.ctx.runMutation(
-        internal.workspaceTerminals.updateWorkspaceTerminalSessionInternal as any,
-        {
-          terminalSessionId: row._id,
-          status: "failed",
-          finishedAt: nowMs,
-          updatedAt: nowMs,
-        },
-      );
-      return summarizeTerminalRow(patched ?? row);
-    };
-
-    const providerSessionId = String(row.providerSessionId ?? "").trim();
-    const providerCommandId = String(row.providerCommandId ?? "").trim();
-    const processSession = await getDaytonaProcessSession({
-      config: activeWorkspaceSession.config,
-      toolboxProxyUrl: activeWorkspaceSession.toolboxProxyUrl,
-      sandboxId: activeWorkspaceSession.providerSandboxId,
-      sessionId: providerSessionId,
-    });
-    if (!processSession.ok) {
-      return isConfirmedProcessSessionGone(processSession)
-        ? await markFailed()
-        : summarizeTerminalRow(row);
-    }
-
-    const command = findDaytonaProcessSessionCommand(
-      processSession.session,
-      providerCommandId,
-    );
-    if (!command) return await markFailed();
-
-    const logs = await getDaytonaProcessSessionCommandLogs({
-      config: activeWorkspaceSession.config,
-      toolboxProxyUrl: activeWorkspaceSession.toolboxProxyUrl,
-      sandboxId: activeWorkspaceSession.providerSandboxId,
-      sessionId: providerSessionId,
-      commandId: providerCommandId,
-    });
-    const exitCode = readDaytonaProcessSessionCommandExitCode(command);
-    if (!logs.ok && exitCode === null) return summarizeTerminalRow(row);
-
-    const nextStatus: RuntimeWorkspaceTerminalStatus =
-      exitCode === null ? "running" : exitCode === 0 ? "exited" : "failed";
-    const patched = await params.ctx.runMutation(
-      internal.workspaceTerminals.updateWorkspaceTerminalSessionInternal as any,
-      {
-        terminalSessionId: row._id,
-        status: nextStatus,
-        updatedAt: nowMs,
-        ...(exitCode === null ? null : { finishedAt: nowMs, exitCode }),
-        ...(logs.ok
-          ? { lastOutputTail: truncateTerminalOutputTail(logs.output) }
-          : null),
-      },
-    );
-
-    if (exitCode !== null) {
-      await deleteDaytonaProcessSession({
-        config: activeWorkspaceSession.config,
-        toolboxProxyUrl: activeWorkspaceSession.toolboxProxyUrl,
-        sandboxId: activeWorkspaceSession.providerSandboxId,
-        sessionId: providerSessionId,
-      });
-    }
-
-    return summarizeTerminalRow(patched ?? row);
-  };
-
-  const stopSessionOwnedTerminalRow = async (paramsForStop: {
-    row: any;
-    session: WorkspaceSandboxSession | null;
-  }): Promise<Record<string, unknown>> => {
-    const row = paramsForStop.row;
-    const activeWorkspaceSession = paramsForStop.session;
-    if (!isTerminalActiveStatus(row.status)) {
-      return summarizeTerminalRow(row);
-    }
-    if (
-      activeWorkspaceSession &&
-      String(row.providerSandboxId ?? "").trim() ===
-        activeWorkspaceSession.providerSandboxId
-    ) {
-      await deleteDaytonaProcessSession({
-        config: activeWorkspaceSession.config,
-        toolboxProxyUrl: activeWorkspaceSession.toolboxProxyUrl,
-        sandboxId: activeWorkspaceSession.providerSandboxId,
-        sessionId: String(row.providerSessionId ?? "").trim(),
-      });
-    }
-    const patched = await params.ctx.runMutation(
-      internal.workspaceTerminals.updateWorkspaceTerminalSessionInternal as any,
-      {
-        terminalSessionId: row._id,
-        status: "stopped",
-        updatedAt: Date.now(),
-        finishedAt: Date.now(),
-      },
-    );
-    return summarizeTerminalRow(patched ?? row);
-  };
-
   return {
     buildPromptSuffix(): string {
       return String(params.mountedPromptSuffix ?? "");
@@ -744,9 +429,15 @@ export function createPolyNetExecutionSession(params: {
         if (ownsWorkspaceSession) {
           for (const terminalSessionId of runtimeTerminalSessionIds) {
             try {
-              const loaded = await requireSessionOwnedTerminalRow(terminalSessionId);
+              const loaded = await requireRuntimeSessionOwnedTerminalRow({
+                ctx: params.ctx,
+                ownerId: params.userId,
+                runId: params.runId,
+                terminalSessionId,
+              });
               if (loaded.ok) {
-                await stopSessionOwnedTerminalRow({
+                await stopRuntimeSessionTerminalRow({
+                  ctx: params.ctx,
                   row: loaded.row,
                   session: workspaceSession,
                 });
@@ -940,22 +631,12 @@ export function createPolyNetExecutionSession(params: {
       try {
         let payload: Record<string, unknown> | null = null;
         if (paramsForTool.toolName === "terminal_start") {
-          let normalizedCwd: string | null = null;
-          let normalizedPreviewPort: number | null = null;
-          let normalizedPreviewPath: string | null = null;
-          let normalizedPreviewLabel: string | null = null;
+          let terminalStartArgs:
+            | ReturnType<typeof normalizeWorkspaceTerminalStartArgs>
+            | null = null;
           try {
-            normalizedCwd = normalizeRelativeWorkspaceCwd(
-              paramsForTool.normalizedArgs.cwd,
-            );
-            normalizedPreviewPort = normalizePreviewPort(
-              paramsForTool.normalizedArgs.preview_port,
-            );
-            normalizedPreviewPath = normalizePreviewPath(
-              paramsForTool.normalizedArgs.preview_path,
-            );
-            normalizedPreviewLabel = normalizePreviewLabel(
-              paramsForTool.normalizedArgs.preview_label,
+            terminalStartArgs = normalizeWorkspaceTerminalStartArgs(
+              paramsForTool.normalizedArgs,
             );
           } catch {
             payload = {
@@ -965,7 +646,15 @@ export function createPolyNetExecutionSession(params: {
               message: "Terminal cwd or preview settings are invalid.",
             };
           }
-          if (!payload) {
+          if (!payload && !terminalStartArgs) {
+            payload = {
+              ok: false,
+              status: 400,
+              code: "invalid_tool_args",
+              message: "Terminal cwd or preview settings are invalid.",
+            };
+          }
+          if (!payload && terminalStartArgs) {
             const createdWorkspace = await this.ensureWorkspaceForTool({
               toolName: paramsForTool.toolName,
             });
@@ -977,97 +666,31 @@ export function createPolyNetExecutionSession(params: {
                 message: createdWorkspace.message,
               };
             } else {
-              const activeWorkspaceSession = createdWorkspace.session;
-              const providerSessionId = buildRuntimeTerminalSessionId();
-              const processSession = await createDaytonaProcessSession({
-                config: activeWorkspaceSession.config,
-                toolboxProxyUrl: activeWorkspaceSession.toolboxProxyUrl,
-                sandboxId: activeWorkspaceSession.providerSandboxId,
-                sessionId: providerSessionId,
+              payload = await startRuntimeSessionTerminal({
+                ctx: params.ctx,
+                ownerId: params.userId,
+                projectId,
+                runId: params.runId,
+                session: createdWorkspace.session,
+                terminal: terminalStartArgs,
               });
-              if (!processSession.ok) {
-                payload = {
-                  ok: false,
-                  status: processSession.status,
-                  code: processSession.code,
-                  message: processSession.message,
-                };
-              } else {
-                const workspaceCwd = resolveWorkspaceCwd(normalizedCwd);
-                const executed = await executeDaytonaProcessSessionCommand({
-                  config: activeWorkspaceSession.config,
-                  toolboxProxyUrl: activeWorkspaceSession.toolboxProxyUrl,
-                  sandboxId: activeWorkspaceSession.providerSandboxId,
-                  sessionId: processSession.sessionId,
-                  command: normalizeRuntimeTerminalCommand(
-                    String(paramsForTool.normalizedArgs.command ?? ""),
-                    workspaceCwd,
-                  ),
-                  cwd: workspaceCwd,
-                  runAsync: true,
-                });
-                if (!executed.ok) {
-                  await deleteDaytonaProcessSession({
-                    config: activeWorkspaceSession.config,
-                    toolboxProxyUrl: activeWorkspaceSession.toolboxProxyUrl,
-                    sandboxId: activeWorkspaceSession.providerSandboxId,
-                    sessionId: processSession.sessionId,
-                  });
-                  payload = {
-                    ok: false,
-                    status: executed.status,
-                    code: executed.code,
-                    message: executed.message,
-                  };
-                } else {
-                  const nowMs = Date.now();
-                  const createdRow = await params.ctx.runMutation(
-                    internal.workspaceTerminals
-                      .createWorkspaceTerminalSessionInternal as any,
-                    {
-                      ownerId: params.userId,
-                      projectId,
-                      runIdStartedBy: params.runId,
-                      providerSandboxId:
-                        activeWorkspaceSession.providerSandboxId,
-                      providerSessionId: processSession.sessionId,
-                      providerCommandId: executed.commandId,
-                      command: String(
-                        paramsForTool.normalizedArgs.command ?? "",
-                      ),
-                      cwd: normalizedCwd ?? undefined,
-                      previewPort: normalizedPreviewPort ?? undefined,
-                      previewPath: normalizedPreviewPath ?? undefined,
-                      previewLabel: normalizedPreviewLabel ?? undefined,
-                      status: "running",
-                      startedAt: nowMs,
-                      updatedAt: nowMs,
-                      lastOutputTail: truncateTerminalOutputTail(
-                        executed.outputText || "",
-                      ),
-                    },
-                  );
-                  const terminalSessionId = String(
-                    createdRow?._id ?? "",
-                  ).trim();
-                  if (terminalSessionId) {
-                    runtimeTerminalSessionIds.add(terminalSessionId);
-                  }
-                  payload = {
-                    ok: true,
-                    terminal_session_id: terminalSessionId,
-                    provider_session_id: processSession.sessionId,
-                    reused_existing: false,
-                    ...summarizeTerminalRow(createdRow),
-                  };
-                }
+              const terminalSessionId = String(
+                payload.terminal_session_id ?? "",
+              ).trim();
+              if (payload.ok === true && terminalSessionId) {
+                runtimeTerminalSessionIds.add(terminalSessionId);
               }
             }
           }
         } else {
-          const loaded = await requireSessionOwnedTerminalRow(
-            String(paramsForTool.normalizedArgs.terminal_session_id ?? "").trim(),
-          );
+          const loaded = await requireRuntimeSessionOwnedTerminalRow({
+            ctx: params.ctx,
+            ownerId: params.userId,
+            runId: params.runId,
+            terminalSessionId: String(
+              paramsForTool.normalizedArgs.terminal_session_id ?? "",
+            ).trim(),
+          });
           if (!loaded.ok) {
             payload = loaded;
           } else {
@@ -1085,54 +708,24 @@ export function createPolyNetExecutionSession(params: {
             } else if (paramsForTool.toolName === "terminal_read") {
               payload = {
                 ok: true,
-                ...(await reconcileSessionOwnedTerminalRow({
+                ...(await reconcileRuntimeSessionTerminalRow({
+                  ctx: params.ctx,
                   row: loaded.row,
                   session: activeWorkspaceSession,
                 })),
               };
             } else if (paramsForTool.toolName === "terminal_write") {
-              if (!isTerminalActiveStatus(loaded.row.status)) {
-                payload = {
-                  ok: false,
-                  status: 409,
-                  code: "terminal_not_running",
-                  message: "Terminal is not running.",
-                };
-              } else {
-                const sent = await sendDaytonaProcessSessionCommandInput({
-                  config: activeWorkspaceSession.config,
-                  toolboxProxyUrl: activeWorkspaceSession.toolboxProxyUrl,
-                  sandboxId: activeWorkspaceSession.providerSandboxId,
-                  sessionId: String(loaded.row.providerSessionId ?? "").trim(),
-                  commandId: String(loaded.row.providerCommandId ?? "").trim(),
-                  data: String(paramsForTool.normalizedArgs.input ?? ""),
-                });
-                if (!sent.ok) {
-                  payload = {
-                    ok: false,
-                    status: sent.status,
-                    code: sent.code,
-                    message: sent.message,
-                  };
-                } else {
-                  const patched = await params.ctx.runMutation(
-                    internal.workspaceTerminals
-                      .updateWorkspaceTerminalSessionInternal as any,
-                    {
-                      terminalSessionId: loaded.row._id,
-                      updatedAt: Date.now(),
-                    },
-                  );
-                  payload = {
-                    ok: true,
-                    ...summarizeTerminalRow(patched ?? loaded.row),
-                  };
-                }
-              }
+              payload = await writeRuntimeSessionTerminalRow({
+                ctx: params.ctx,
+                row: loaded.row,
+                session: activeWorkspaceSession,
+                input: String(paramsForTool.normalizedArgs.input ?? ""),
+              });
             } else {
               payload = {
                 ok: true,
-                ...(await stopSessionOwnedTerminalRow({
+                ...(await stopRuntimeSessionTerminalRow({
+                  ctx: params.ctx,
                   row: loaded.row,
                   session: activeWorkspaceSession,
                 })),
@@ -1281,9 +874,12 @@ export function createPolyNetExecutionSession(params: {
           message: "Preview access requires an authenticated workspace run.",
         };
       }
-      const loaded = await requireSessionOwnedTerminalRow(
-        paramsForPreview.terminalSessionId,
-      );
+      const loaded = await requireRuntimeSessionOwnedTerminalRow({
+        ctx: params.ctx,
+        ownerId: params.userId,
+        runId: params.runId,
+        terminalSessionId: paramsForPreview.terminalSessionId,
+      });
       let result: Record<string, unknown>;
       if (!loaded.ok) {
         result = loaded;
@@ -1291,76 +887,10 @@ export function createPolyNetExecutionSession(params: {
         const activeWorkspaceSession = workspaceSessionFailure
           ? null
           : workspaceSession;
-        const previewPort =
-          typeof loaded.row.previewPort === "number"
-            ? Math.floor(loaded.row.previewPort)
-            : null;
-        if (!activeWorkspaceSession) {
-          result = {
-            ok: false,
-            status: 409,
-            code: "workspace_session_required",
-            message:
-              "Runtime preview is only available while its workspace session is active.",
-          };
-        } else if (!previewPort) {
-          result = {
-            ok: false,
-            status: 409,
-            code: "preview_not_enabled",
-            message: "This runtime terminal does not expose an app preview.",
-          };
-        } else if (
-          String(loaded.row.providerSandboxId ?? "").trim() !==
-          activeWorkspaceSession.providerSandboxId
-        ) {
-          result = {
-            ok: false,
-            status: 409,
-            code: "workspace_session_mismatch",
-            message: "Preview terminal is not attached to this workspace session.",
-          };
-        } else {
-          const signed = await getDaytonaSignedPreviewUrl({
-            config: activeWorkspaceSession.config,
-            sandboxId: activeWorkspaceSession.providerSandboxId,
-            port: previewPort,
-            expiresInSeconds: 3600,
-          });
-          if (!signed.ok) {
-            result = signed;
-          } else {
-            const previewProxyToken = await mintPreviewProxySessionToken({
-              kind: "workspace_preview",
-              previewUrl: signed.url,
-              previewToken: signed.token,
-              expiresAtMs: Date.now() + 3600 * 1000,
-            });
-            if (!previewProxyToken.ok) {
-              result = {
-                ok: false,
-                status: 503,
-                code: previewProxyToken.code,
-                message: previewProxyToken.message,
-              };
-            } else {
-              result = {
-                ok: true,
-                terminal_session_id: String(loaded.row._id ?? "").trim(),
-                preview_port: previewPort,
-                preview_url: signed.url,
-                preview_proxy_token: previewProxyToken.token,
-                preview_path: normalizeRuntimeOptionalString(
-                  loaded.row.previewPath,
-                ),
-                preview_label: normalizeRuntimeOptionalString(
-                  loaded.row.previewLabel,
-                ),
-                expires_in_seconds: 3600,
-              };
-            }
-          }
-        }
+        result = await resolveRuntimeSessionTerminalPreview({
+          row: loaded.row,
+          session: activeWorkspaceSession,
+        });
       }
       await emitRunEvent("terminal_preview_lookup_completed", {
         run_id: params.runId,
@@ -1403,7 +933,9 @@ export function createPolyNetExecutionSession(params: {
           return {
             status: "error",
             exitCode: null,
-            outputText: readFailureOutputPreview((created as any).details),
+            outputText: readWorkspaceToolFailureOutputPreview(
+              (created as any).details,
+            ),
             errorCode: created.code,
             errorMessage: created.message,
           };

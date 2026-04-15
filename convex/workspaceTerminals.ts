@@ -10,33 +10,37 @@ import { v } from "convex/values";
 import {
   createDaytonaSandbox,
   deleteDaytonaSandbox,
-  getDaytonaSignedPreviewUrl,
   getDaytonaToolboxProxyUrl,
   loadDaytonaConfig,
   stopDaytonaSandbox,
   waitForDaytonaSandboxReady,
   waitForDaytonaSandboxStopped,
-  DAYTONA_WORKSPACE_ROOT,
   type DaytonaConfig,
 } from "./daytonaSandboxClient";
 import {
-  createDaytonaProcessSession,
   deleteDaytonaProcessSession,
-  executeDaytonaProcessSessionCommand,
   findDaytonaProcessSessionCommand,
   getDaytonaProcessSession,
   getDaytonaProcessSessionCommandLogs,
   listDaytonaProcessSessions,
   readDaytonaProcessSessionCommandExitCode,
-  sendDaytonaProcessSessionCommandInput,
   type DaytonaProcessSessionDto,
 } from "./daytonaProcessSessions";
-import { mintPreviewProxySessionToken } from "./previewProxySessionToken";
+import {
+  isWorkspaceTerminalActiveStatus,
+  normalizeWorkspaceTerminalCommand,
+  normalizeWorkspaceTerminalStartArgs,
+  resolveWorkspaceTerminalPreview,
+  resolveWorkspaceCwd,
+  startWorkspaceTerminalProcess,
+  stopWorkspaceTerminalProcess,
+  summarizeWorkspaceTerminalRow,
+  truncateTerminalOutputTail,
+  writeWorkspaceTerminalProcessInput,
+} from "./workspaceTerminalProcessCore";
 import { isCreatorDevTierOverrideEmail } from "../shared/devTierOverride";
 
 const BACKGROUND_TERMINAL_MAX_ACTIVE_PER_PROJECT = 10;
-const ACTIVE_TERMINAL_STATUSES = new Set(["starting", "running"]);
-const TERMINAL_OUTPUT_TAIL_MAX_CHARS = 6000;
 const PROJECT_TERMINAL_RECONCILE_FRESH_MS = 8_000;
 
 type WorkspaceTerminalStatus = "starting" | "running" | "exited" | "failed" | "stopped";
@@ -65,66 +69,8 @@ function normalizeOptionalString(value: unknown): string | null {
   return normalized || null;
 }
 
-function normalizeRelativeWorkspaceCwd(raw: unknown): string | null {
-  const candidate = String(raw ?? "").trim().replaceAll("\\", "/");
-  if (!candidate) return null;
-  if (candidate.startsWith("/")) throw new Error("cwd_outside_workspace");
-  const parts = candidate
-    .split("/")
-    .filter((part) => part.length > 0 && part !== ".");
-  if (parts.some((part) => part === "..")) {
-    throw new Error("cwd_outside_workspace");
-  }
-  const segments = parts[0]?.toLowerCase() === "workspace" ? parts.slice(1) : parts;
-  if (segments.length === 0) return ".";
-  return segments.join("/");
-}
-
-function normalizePreviewPort(raw: unknown): number | null {
-  if (raw === undefined || raw === null || raw === "") return null;
-  const parsed =
-    typeof raw === "number" ? raw : typeof raw === "string" ? Number(raw) : Number.NaN;
-  if (!Number.isFinite(parsed)) throw new Error("invalid_preview_port");
-  const integer = Math.floor(parsed);
-  if (integer < 3000 || integer > 9999) throw new Error("invalid_preview_port");
-  return integer;
-}
-
-function normalizePreviewPath(raw: unknown): string | null {
-  const normalized = String(raw ?? "").trim();
-  if (!normalized) return null;
-  if (normalized.includes("://") || normalized.startsWith("//")) throw new Error("invalid_preview_path");
-  return (normalized.startsWith("/") ? normalized : `/${normalized}`).slice(0, 1024);
-}
-
-function normalizePreviewLabel(raw: unknown): string | null {
-  const normalized = String(raw ?? "").trim();
-  return normalized ? normalized.slice(0, 120) : null;
-}
-
-function resolveWorkspaceCwd(cwd: string | null): string {
-  if (!cwd || cwd === ".") return DAYTONA_WORKSPACE_ROOT;
-  return `${DAYTONA_WORKSPACE_ROOT}/${cwd}`;
-}
-
-function shellQuote(value: string): string {
-  return `'${String(value).replace(/'/g, `'\"'\"'`)}'`;
-}
-
-function normalizeBackgroundTerminalCommand(command: string, workspaceCwd: string): string {
-  const normalized = String(command ?? "").trim();
-  if (!normalized) return normalized;
-  const lower = normalized.toLowerCase();
-  const isPythonHttpServer =
-    /^python(?:3)?\s+-m\s+http\.server(?:\s|$)/i.test(normalized) ||
-    /^python(?:3)?\s+-m\s+simplehttpserver(?:\s|$)/i.test(normalized);
-  if (!isPythonHttpServer) return normalized;
-  if (/\s--directory(?:\s|=)/i.test(lower)) return normalized;
-  return `${normalized} --directory ${shellQuote(workspaceCwd)}`;
-}
-
 function normalizeBackgroundTerminalIdentityCommand(command: string, cwd: string | null): string {
-  return normalizeBackgroundTerminalCommand(command, resolveWorkspaceCwd(cwd))
+  return normalizeWorkspaceTerminalCommand(command, resolveWorkspaceCwd(cwd))
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -148,14 +94,8 @@ function findReusableActivePreviewTerminal(params: {
   return null;
 }
 
-function truncateTerminalOutputTail(value: string): string {
-  const normalized = String(value ?? "");
-  if (normalized.length <= TERMINAL_OUTPUT_TAIL_MAX_CHARS) return normalized;
-  return normalized.slice(normalized.length - TERMINAL_OUTPUT_TAIL_MAX_CHARS);
-}
-
 function isTerminalActiveStatus(status: string | null | undefined): boolean {
-  return ACTIVE_TERMINAL_STATUSES.has(String(status ?? "").trim().toLowerCase());
+  return isWorkspaceTerminalActiveStatus(status);
 }
 
 function readFailureText(value: unknown): string {
@@ -219,31 +159,8 @@ function buildBackgroundSandboxRunId(projectId: string, providerSandboxId?: stri
   return `background_terminal:${projectId}`;
 }
 
-function buildDaytonaTerminalSessionId(): string {
-  const cryptoObject = (globalThis as { crypto?: { randomUUID?: () => string } }).crypto;
-  const randomSuffix =
-    typeof cryptoObject?.randomUUID === "function"
-      ? cryptoObject.randomUUID().replace(/-/g, "").slice(0, 18)
-      : `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
-  return `arx-term-${randomSuffix}`;
-}
-
 function summarizeTerminalRow(row: any): WorkspaceTerminalSummary {
-  return {
-    id: String(row?._id ?? "").trim(),
-    run_id_started_by: normalizeOptionalString(row?.runIdStartedBy),
-    status: (String(row?.status ?? "stopped").trim().toLowerCase() || "stopped") as WorkspaceTerminalStatus,
-    command: String(row?.command ?? "").trim(),
-    cwd: normalizeOptionalString(row?.cwd),
-    preview_port: typeof row?.previewPort === "number" ? Math.floor(row.previewPort) : null,
-    preview_path: normalizeOptionalString(row?.previewPath),
-    preview_label: normalizeOptionalString(row?.previewLabel),
-    started_at: Number(row?.startedAt ?? 0) || 0,
-    updated_at: Number(row?.updatedAt ?? 0) || 0,
-    finished_at: typeof row?.finishedAt === "number" ? row.finishedAt : null,
-    exit_code: typeof row?.exitCode === "number" ? row.exitCode : null,
-    output_tail: normalizeOptionalString(row?.lastOutputTail),
-  };
+  return summarizeWorkspaceTerminalRow(row) as WorkspaceTerminalSummary;
 }
 
 function buildTerminalSnapshot(rows: any[]): {
@@ -1314,15 +1231,15 @@ export const startWorkspaceTerminalInternal = internalAction({
       return access;
     }
 
-    let normalizedCwd: string | null = null;
-    let normalizedPreviewPort: number | null = null;
-    let normalizedPreviewPath: string | null = null;
-    let normalizedPreviewLabel: string | null = null;
+    let terminalStartArgs: ReturnType<typeof normalizeWorkspaceTerminalStartArgs>;
     try {
-      normalizedCwd = normalizeRelativeWorkspaceCwd(args.cwd);
-      normalizedPreviewPort = normalizePreviewPort(args.previewPort);
-      normalizedPreviewPath = normalizePreviewPath(args.previewPath);
-      normalizedPreviewLabel = normalizePreviewLabel(args.previewLabel);
+      terminalStartArgs = normalizeWorkspaceTerminalStartArgs({
+        command: args.command,
+        cwd: args.cwd,
+        preview_port: args.previewPort,
+        preview_path: args.previewPath,
+        preview_label: args.previewLabel,
+      });
     } catch {
       return {
         ok: false,
@@ -1341,10 +1258,10 @@ export const startWorkspaceTerminalInternal = internalAction({
     );
     const reusableTerminal = findReusableActivePreviewTerminal({
       active: Array.isArray(snapshot?.active) ? snapshot.active : [],
-      command: args.command,
-      cwd: normalizedCwd,
-      previewPort: normalizedPreviewPort,
-      previewPath: normalizedPreviewPath,
+      command: terminalStartArgs.command,
+      cwd: terminalStartArgs.cwd,
+      previewPort: terminalStartArgs.previewPort,
+      previewPath: terminalStartArgs.previewPath,
     });
     if (reusableTerminal) {
       return {
@@ -1378,70 +1295,16 @@ export const startWorkspaceTerminalInternal = internalAction({
     });
     if (!sandbox.ok) return sandbox;
 
-    const providerSessionId = buildDaytonaTerminalSessionId();
-    const created = await createDaytonaProcessSession({
-      config: sandbox.config,
-      toolboxProxyUrl: sandbox.toolboxProxyUrl,
-      sandboxId: sandbox.providerSandboxId,
-      sessionId: providerSessionId,
+    return await startWorkspaceTerminalProcess({
+      ctx,
+      ownerId: actor.dbUserId,
+      projectId: args.projectId,
+      threadId: args.threadId,
+      runIdStartedBy: normalizeOptionalString(args.runId),
+      session: sandbox,
+      terminal: terminalStartArgs,
+      providerSessionIdPrefix: "arx-term",
     });
-    if (!created.ok) return created;
-
-    const workspaceCwd = resolveWorkspaceCwd(normalizedCwd);
-    const executed = await executeDaytonaProcessSessionCommand({
-      config: sandbox.config,
-      toolboxProxyUrl: sandbox.toolboxProxyUrl,
-      sandboxId: sandbox.providerSandboxId,
-      sessionId: created.sessionId,
-      command: normalizeBackgroundTerminalCommand(args.command, workspaceCwd),
-      cwd: workspaceCwd,
-      runAsync: true,
-    });
-    if (!executed.ok) {
-      await deleteDaytonaProcessSession({
-        config: sandbox.config,
-        toolboxProxyUrl: sandbox.toolboxProxyUrl,
-        sandboxId: sandbox.providerSandboxId,
-        sessionId: created.sessionId,
-      });
-      return executed;
-    }
-
-    const nowMs = Date.now();
-    const createdRow: any = await ctx.runMutation(
-      internal.workspaceTerminals.createWorkspaceTerminalSessionInternal as any,
-      {
-        ownerId: actor.dbUserId,
-        projectId: args.projectId,
-        threadId: args.threadId,
-        runIdStartedBy: normalizeOptionalString(args.runId) ?? undefined,
-        providerSandboxId: sandbox.providerSandboxId,
-        providerSessionId: created.sessionId,
-        providerCommandId: executed.commandId,
-        command: args.command,
-        cwd: normalizedCwd ?? undefined,
-        previewPort: normalizedPreviewPort ?? undefined,
-        previewPath: normalizedPreviewPath ?? undefined,
-        previewLabel: normalizedPreviewLabel ?? undefined,
-        status: "running",
-        startedAt: nowMs,
-        updatedAt: nowMs,
-        lastOutputTail: truncateTerminalOutputTail(executed.outputText || ""),
-      },
-    );
-
-    return {
-      ok: true,
-      terminal_session_id: String(createdRow?._id ?? "").trim(),
-      provider_session_id: created.sessionId,
-      status: "running",
-      command: args.command,
-      cwd: normalizedCwd,
-      preview_port: normalizedPreviewPort,
-      preview_path: normalizedPreviewPath,
-      preview_label: normalizedPreviewLabel,
-      output_tail: truncateTerminalOutputTail(executed.outputText || ""),
-    };
   },
 });
 
@@ -1487,12 +1350,14 @@ export const writeWorkspaceTerminalInternal = internalAction({
       authSubject: args.authSubject ?? null,
       terminalSessionId: args.terminalSessionId,
     });
-    if (!isTerminalActiveStatus(row.status)) {
+    const previewPort =
+      typeof row.previewPort === "number" ? Math.floor(row.previewPort) : null;
+    if (!previewPort) {
       return {
         ok: false,
         status: 409,
-        code: "terminal_not_running",
-        message: "Terminal is not running.",
+        code: "preview_not_enabled",
+        message: "This terminal does not expose an app preview.",
       };
     }
     const runtimeSessionOwned = await isRuntimeSessionOwnedTerminalRow({
@@ -1506,26 +1371,21 @@ export const writeWorkspaceTerminalInternal = internalAction({
       touchProjectBackground: !runtimeSessionOwned,
     });
     if (!sandbox.ok) return sandbox;
-    const sent = await sendDaytonaProcessSessionCommandInput({
-      config: sandbox.config,
-      toolboxProxyUrl: sandbox.toolboxProxyUrl,
-      sandboxId: String(row.providerSandboxId ?? "").trim(),
-      sessionId: String(row.providerSessionId ?? "").trim(),
-      commandId: String(row.providerCommandId ?? "").trim(),
-      data: args.input,
-    });
-    if (!sent.ok) return sent;
-    const patched: any = await ctx.runMutation(
-      internal.workspaceTerminals.updateWorkspaceTerminalSessionInternal as any,
-      {
-        terminalSessionId: row._id,
-        updatedAt: Date.now(),
+    const result = await writeWorkspaceTerminalProcessInput({
+      ctx,
+      row,
+      session: {
+        config: sandbox.config,
+        toolboxProxyUrl: sandbox.toolboxProxyUrl,
+        providerSandboxId: String(row.providerSandboxId ?? "").trim(),
       },
-    );
+      input: args.input,
+    });
+    if (result.ok === false) return result;
     return {
       ok: true,
       terminal_session_id: String(row._id ?? "").trim(),
-      ...summarizeTerminalRow(patched ?? row),
+      ...result,
     };
   },
 });
@@ -1546,32 +1406,24 @@ export const stopWorkspaceTerminalInternal = internalAction({
       row,
     });
 
-    if (isTerminalActiveStatus(row.status)) {
-      const sandbox = await resolveTerminalSandboxContext({
-        ctx,
-        projectId: String(row.projectId ?? "").trim(),
-        providerSandboxId: String(row.providerSandboxId ?? "").trim(),
-        touchProjectBackground: !runtimeSessionOwned,
-      });
-      if (sandbox.ok) {
-        await deleteDaytonaProcessSession({
-          config: sandbox.config,
-          toolboxProxyUrl: sandbox.toolboxProxyUrl,
-          sandboxId: String(row.providerSandboxId ?? "").trim(),
-          sessionId: String(row.providerSessionId ?? "").trim(),
-        });
-      }
-    }
-
-    const patched: any = await ctx.runMutation(
-      internal.workspaceTerminals.updateWorkspaceTerminalSessionInternal as any,
-      {
-        terminalSessionId: row._id,
-        status: "stopped",
-        updatedAt: Date.now(),
-        finishedAt: Date.now(),
-      },
-    );
+    const sandbox = await resolveTerminalSandboxContext({
+      ctx,
+      projectId: String(row.projectId ?? "").trim(),
+      providerSandboxId: String(row.providerSandboxId ?? "").trim(),
+      touchProjectBackground: !runtimeSessionOwned,
+    });
+    const result = await stopWorkspaceTerminalProcess({
+      ctx,
+      row,
+      session: sandbox.ok
+        ? {
+            config: sandbox.config,
+            toolboxProxyUrl: sandbox.toolboxProxyUrl,
+            providerSandboxId: String(row.providerSandboxId ?? "").trim(),
+          }
+        : null,
+      forceStoppedStatus: true,
+    });
 
     if (!runtimeSessionOwned) {
       await releaseProjectBackgroundSandboxIfIdle({
@@ -1585,7 +1437,7 @@ export const stopWorkspaceTerminalInternal = internalAction({
     return {
       ok: true,
       terminal_session_id: String(row._id ?? "").trim(),
-      ...summarizeTerminalRow(patched ?? row),
+      ...result,
     };
   },
 });
@@ -1601,15 +1453,6 @@ export const getWorkspaceTerminalPreviewUrl = action({
       authSubject: args.authSubject ?? null,
       terminalSessionId: args.terminalSessionId,
     });
-    const previewPort = typeof row.previewPort === "number" ? Math.floor(row.previewPort) : null;
-    if (!previewPort) {
-      return {
-        ok: false,
-        status: 409,
-        code: "preview_not_enabled",
-        message: "This terminal does not expose an app preview.",
-      };
-    }
     const runtimeSessionOwned = await isRuntimeSessionOwnedTerminalRow({
       ctx,
       row,
@@ -1621,36 +1464,18 @@ export const getWorkspaceTerminalPreviewUrl = action({
       touchProjectBackground: !runtimeSessionOwned,
     });
     if (!sandbox.ok) return sandbox;
-    const signed = await getDaytonaSignedPreviewUrl({
-      config: sandbox.config,
-      sandboxId: String(row.providerSandboxId ?? "").trim(),
-      port: previewPort,
-      expiresInSeconds: 3600,
+    return await resolveWorkspaceTerminalPreview({
+      row,
+      session: {
+        config: sandbox.config,
+        toolboxProxyUrl: sandbox.toolboxProxyUrl,
+        providerSandboxId: String(row.providerSandboxId ?? "").trim(),
+      },
+      workspaceRequiredMessage:
+        "Preview is only available while its workspace session is active.",
+      previewNotEnabledMessage: "This terminal does not expose an app preview.",
+      workspaceMismatchMessage:
+        "Preview terminal is not attached to this workspace session.",
     });
-    if (!signed.ok) return signed;
-    const previewProxyToken = await mintPreviewProxySessionToken({
-      kind: "workspace_preview",
-      previewUrl: signed.url,
-      previewToken: signed.token,
-      expiresAtMs: Date.now() + 3600 * 1000,
-    });
-    if (!previewProxyToken.ok) {
-      return {
-        ok: false,
-        status: 503,
-        code: previewProxyToken.code,
-        message: previewProxyToken.message,
-      };
-    }
-    return {
-      ok: true,
-      terminal_session_id: String(row._id ?? "").trim(),
-      preview_port: previewPort,
-      preview_url: signed.url,
-      preview_proxy_token: previewProxyToken.token,
-      preview_path: normalizeOptionalString(row.previewPath),
-      preview_label: normalizeOptionalString(row.previewLabel),
-      expires_in_seconds: 3600,
-    };
   },
 });
