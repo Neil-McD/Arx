@@ -533,9 +533,49 @@ async function deleteDaytonaVolume(params: {
   });
 }
 
+function readDaytonaFailureResponseText(result: {
+  details?: Record<string, unknown>;
+}): string {
+  return String(result.details?.response_text ?? "").trim().slice(0, 1000);
+}
+
+function formatDaytonaFailureMessage(result: {
+  message: string;
+  details?: Record<string, unknown>;
+}): string {
+  const responseText = readDaytonaFailureResponseText(result);
+  return responseText ? `${result.message} ${responseText}` : result.message;
+}
+
+function isDaytonaNotFoundFailure(result: {
+  status: number;
+  details?: Record<string, unknown>;
+}): boolean {
+  if (result.status === 404) return true;
+  return readDaytonaFailureResponseText(result).toLowerCase().includes("not found");
+}
+
+function shouldRetryDaytonaVolumeDelete(result: { status: number }): boolean {
+  return result.status === 400 || result.status === 409 || result.status === 423;
+}
+
+function sandboxMatchesProjectOrVolume(params: {
+  sandbox: DaytonaSandboxApiDto;
+  projectId: string;
+  volumeId?: string | null;
+}): boolean {
+  if (readSandboxLabel(params.sandbox, "arx_project_id") === params.projectId) {
+    return true;
+  }
+  const volumeId = String(params.volumeId ?? "").trim();
+  if (!volumeId) return false;
+  return JSON.stringify(params.sandbox).includes(volumeId);
+}
+
 async function cleanupDaytonaProjectSandboxes(params: {
   config: DaytonaConfig;
   projectId: string;
+  volumeId?: string | null;
 }) {
   const listed = await listDaytonaSandboxes({
     config: params.config,
@@ -545,7 +585,13 @@ async function cleanupDaytonaProjectSandboxes(params: {
   for (const sandbox of listed.sandboxes) {
     const sandboxId = String(sandbox.id ?? "").trim();
     if (!sandboxId) continue;
-    if (readSandboxLabel(sandbox, "arx_project_id") !== params.projectId) continue;
+    if (!sandboxMatchesProjectOrVolume({
+      sandbox,
+      projectId: params.projectId,
+      volumeId: params.volumeId,
+    })) {
+      continue;
+    }
 
     const stopped = await stopDaytonaSandbox({
       config: params.config,
@@ -1139,16 +1185,31 @@ export const deleteCloudProjectForOwner = action({
       const cleanedSandboxes = await cleanupDaytonaProjectSandboxes({
         config: loadedDaytonaConfig.config,
         projectId: normalizeIdValue(args.projectId),
+        volumeId: providerVolumeId,
       });
       if (!cleanedSandboxes.ok) {
-        throw new Error(cleanedSandboxes.message);
+        throw new Error(formatDaytonaFailureMessage(cleanedSandboxes));
       }
-      const deletedVolume = await deleteDaytonaVolume({
+      let deletedVolume = await deleteDaytonaVolume({
         config: loadedDaytonaConfig.config,
         volumeId: providerVolumeId,
       });
-      if (!deletedVolume.ok && deletedVolume.status !== 404) {
-        throw new Error(deletedVolume.message);
+      if (!deletedVolume.ok && shouldRetryDaytonaVolumeDelete(deletedVolume)) {
+        const retriedSandboxCleanup = await cleanupDaytonaProjectSandboxes({
+          config: loadedDaytonaConfig.config,
+          projectId: normalizeIdValue(args.projectId),
+          volumeId: providerVolumeId,
+        });
+        if (!retriedSandboxCleanup.ok) {
+          throw new Error(formatDaytonaFailureMessage(retriedSandboxCleanup));
+        }
+        deletedVolume = await deleteDaytonaVolume({
+          config: loadedDaytonaConfig.config,
+          volumeId: providerVolumeId,
+        });
+      }
+      if (!deletedVolume.ok && !isDaytonaNotFoundFailure(deletedVolume)) {
+        throw new Error(formatDaytonaFailureMessage(deletedVolume));
       }
     }
 
