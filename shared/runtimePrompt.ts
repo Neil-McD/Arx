@@ -330,6 +330,7 @@ function buildExplanationContractPrompt(): string {
     "For simple fields, filenames, labels, titles, or names, prefer plain text, flat bullets, or inline code. Reserve block code formatting for actual code, commands, logs, config, or other genuinely block-shaped content.",
     "Use Markdown tables for compact comparisons or matrices. Do not wrap tables in code fences. Use fenced text blocks only for diagrams, logs, or other spacing-sensitive artifacts.",
     "Prefer short prose. Use bullets only for parallel items. Use numbered lists only for real ordered steps. Never use repeated `1.` list markers. Avoid nested lists unless the user asks for exhaustive detail.",
+    "When a numbered item has child bullets, continue the parent numbering as 1, 2, 3 and indent child bullets under the parent item.",
     "After a successful background terminal start, do not enumerate preview/session metadata such as preview label, preview port, preview path, terminal session ids, or provider ids unless the user explicitly asks for those details or debugging genuinely requires them.",
     "Default to a short outcome-oriented update such as that the app is running and the preview is available, instead of restating the full terminal payload.",
     "When it materially improves understanding, include a compact file tree, compact structural map, or short ASCII flow diagram.",

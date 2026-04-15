@@ -364,28 +364,98 @@ function CodeBlock({ code, language, onCopyCode }: CodeBlockProps) {
   );
 }
 
-function normalizeMathMarkdown(text: string): string {
-  const normalized = text.replace(/\r\n?/g, "\n");
-  const lines = normalized.split("\n");
-  const nextLines: string[] = [];
-  let inFence = false;
-  let repeatedOneMarkers = 0;
-  let explicitSequentialMarkers = 0;
+const TOP_LEVEL_ORDERED_LIST_RE = /^(\s{0,3})(\d+)([.)])\s+/;
+const TOP_LEVEL_UNORDERED_LIST_RE = /^\s{0,3}[-*+]\s+/;
 
-  for (const line of lines) {
+function normalizeRepeatedOrderedListRuns(lines: string[]): string[] {
+  const nextLines = [...lines];
+  const regions: Array<{ end: number; start: number }> = [];
+  let inFence = false;
+  let regionStart: number | null = null;
+
+  const closeRegion = (end: number) => {
+    if (regionStart !== null && regionStart < end) {
+      regions.push({ start: regionStart, end });
+    }
+    regionStart = null;
+  };
+
+  lines.forEach((line, index) => {
     const trimmed = line.trim();
     if (trimmed.startsWith("```")) {
+      closeRegion(index);
       inFence = !inFence;
-      continue;
+      return;
     }
-    if (inFence) continue;
-    if (/^\s{0,3}1[.)]\s+/.test(line)) repeatedOneMarkers += 1;
-    if (/^\s{0,3}[2-9][0-9]*[.)]\s+/.test(line)) explicitSequentialMarkers += 1;
+    if (inFence) return;
+    if (!trimmed) {
+      closeRegion(index);
+      return;
+    }
+    if (regionStart === null) regionStart = index;
+  });
+  closeRegion(lines.length);
+
+  for (const region of regions) {
+    const markers: Array<{ index: number; number: number }> = [];
+    for (let index = region.start; index < region.end; index += 1) {
+      const match = lines[index]?.match(TOP_LEVEL_ORDERED_LIST_RE);
+      if (!match) continue;
+      markers.push({ index, number: Number(match[2]) });
+    }
+    if (markers.length < 2) continue;
+
+    const runs: Array<Array<{ index: number; number: number }>> = [];
+    let currentRun: Array<{ index: number; number: number }> = [];
+    for (const marker of markers) {
+      const previous = currentRun[currentRun.length - 1];
+      if (previous && marker.number === 1 && previous.number > 1) {
+        runs.push(currentRun);
+        currentRun = [];
+      }
+      currentRun.push(marker);
+    }
+    if (currentRun.length > 0) runs.push(currentRun);
+
+    for (const run of runs) {
+      if (run.length < 2 || !run.every((marker) => marker.number === 1)) continue;
+
+      for (let runIndex = 0; runIndex < run.length; runIndex += 1) {
+        const marker = run[runIndex];
+        const orderedMatch = nextLines[marker.index]?.match(TOP_LEVEL_ORDERED_LIST_RE);
+        if (orderedMatch) {
+          nextLines[marker.index] = nextLines[marker.index].replace(
+            TOP_LEVEL_ORDERED_LIST_RE,
+            `${orderedMatch[1]}${runIndex + 1}${orderedMatch[3]} `,
+          );
+        }
+
+        const nextMarkerIndex = markers.find((candidate) => candidate.index > marker.index)?.index ?? region.end;
+        const segmentIndexes = Array.from(
+          { length: Math.max(0, nextMarkerIndex - marker.index - 1) },
+          (_, offset) => marker.index + offset + 1,
+        );
+        const hasRootChildBullets = segmentIndexes.some((index) => TOP_LEVEL_UNORDERED_LIST_RE.test(lines[index] ?? ""));
+        if (!hasRootChildBullets) continue;
+
+        for (const index of segmentIndexes) {
+          const line = nextLines[index] ?? "";
+          if (!line.trim() || TOP_LEVEL_ORDERED_LIST_RE.test(line)) continue;
+          if (/^\s{3,}/.test(line)) continue;
+          nextLines[index] = `   ${line}`;
+        }
+      }
+    }
   }
 
-  const shouldDemoteRepeatedOnes =
-    repeatedOneMarkers >= 2 && explicitSequentialMarkers === 0;
-  inFence = false;
+  return nextLines;
+}
+
+function normalizeMathMarkdown(text: string): string {
+  const normalized = text.replace(/\r\n?/g, "\n");
+  const lines = normalizeRepeatedOrderedListRuns(normalized.split("\n"));
+  const nextLines: string[] = [];
+  let inFence = false;
 
   for (const line of lines) {
     const trimmed = line.trim();
@@ -405,11 +475,7 @@ function normalizeMathMarkdown(text: string): string {
       continue;
     }
 
-    const normalizedLine = shouldDemoteRepeatedOnes
-      ? line.replace(/^(\s{0,3})1[.)]\s+/, "$1- ")
-      : line;
-
-    const segments = normalizedLine.split(/(`[^`]*`)/g);
+    const segments = line.split(/(`[^`]*`)/g);
     nextLines.push(
       segments
         .map((segment) => {
