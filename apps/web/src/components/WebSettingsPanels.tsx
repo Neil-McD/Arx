@@ -4,10 +4,7 @@ import type { AppTheme } from "../../../../shared/theme";
 import type { BuilderBillingStatus } from "../../../../shared/builderBillingStatusGateway";
 import type { WorkspaceCreditBalance } from "../../../../shared/workspaceCreditsGateway";
 import type { PendingPurchaseClaim } from "../../../../shared/pay_first";
-import type {
-  ConnectUserPlatformAppInput,
-  UserPlatformMountedApp,
-} from "../../../../shared/userPlatformAppMountTypes";
+import type { UserPlatformMountedApp } from "../../../../shared/userPlatformAppMountTypes";
 import type { UseWebProviderConnectionUiControllerResult } from "../controllers/useWebProviderConnectionUiController";
 import type { useWebProfileSettingsUiController } from "../controllers/useWebProfileSettingsUiController";
 import type { useWebPersonalMemoryUiController } from "../controllers/useWebPersonalMemoryUiController";
@@ -103,14 +100,10 @@ export type WebSettingsPanelsProps = {
   integrations: {
     session: SessionLike;
     openAuthGate: () => void;
+    openDiscoverApps: () => void;
     userPlatformAppMounts: UserPlatformMountedApp[];
     isLoadingUserPlatformAppMounts: boolean;
     userPlatformAppMountError: string | null;
-    userPlatformAppMutationError: string | null;
-    isConnectingUserPlatformApp: boolean;
-    onConnectUserPlatformApp: (
-      input: ConnectUserPlatformAppInput,
-    ) => Promise<boolean> | boolean;
   };
   appearance: {
     appTheme: AppTheme;
@@ -235,12 +228,10 @@ export function WebSettingsPanels(props: WebSettingsPanelsProps) {
   const integrationsSectionProps = {
     session: integrations.session,
     openAuthGate: integrations.openAuthGate,
+    openDiscoverApps: integrations.openDiscoverApps,
     userPlatformAppMounts: integrations.userPlatformAppMounts,
     isLoadingUserPlatformAppMounts: integrations.isLoadingUserPlatformAppMounts,
     userPlatformAppMountError: integrations.userPlatformAppMountError,
-    userPlatformAppMutationError: integrations.userPlatformAppMutationError,
-    isConnectingUserPlatformApp: integrations.isConnectingUserPlatformApp,
-    onConnectUserPlatformApp: integrations.onConnectUserPlatformApp,
   };
 
   return (

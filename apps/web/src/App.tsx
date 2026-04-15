@@ -817,6 +817,9 @@ export default function App() {
   const [activePage, setActivePage] = useState<AppPage>(() => initialAppRoute?.page ?? "workspace");
   const [activeView, setActiveView] = useState<AppView>(() => initialAppRoute?.view ?? "home");
   const [settingsPage, setSettingsPage] = useState<SettingsPage>(() => initialAppRoute?.settingsPage ?? "account");
+  const [discoverActiveTab, setDiscoverActiveTab] = useState<
+    "communities" | "apps" | "skills"
+  >("communities");
   const settingsGroup = settingsGroupForPage(settingsPage);
   const [userWantsSessions, setUserWantsSessions] = useState(false);
   const [appTheme, setAppTheme] = useState<AppTheme>(() => {
@@ -4509,9 +4512,17 @@ export default function App() {
 	  const handleOpenDiscover = () => {
 	    const transition = deriveOpenDiscoverTransition({ activePage });
 	    if (transition.shouldPushSnapshot) pushNavSnapshot();
+      setDiscoverActiveTab("communities");
 	    setActiveView(transition.nextView);
 	    setActivePage(transition.nextPage);
 	  };
+    const handleOpenDiscoverApps = () => {
+      const transition = deriveOpenDiscoverTransition({ activePage });
+      if (transition.shouldPushSnapshot) pushNavSnapshot();
+      setDiscoverActiveTab("apps");
+      setActiveView(transition.nextView);
+      setActivePage(transition.nextPage);
+    };
     const {
       openMobileCommunitySurface,
       handleSelectMobileMode,
@@ -5035,12 +5046,10 @@ export default function App() {
     integrations: {
       session: session,
       openAuthGate,
+      openDiscoverApps: handleOpenDiscoverApps,
       userPlatformAppMounts,
       isLoadingUserPlatformAppMounts,
       userPlatformAppMountError,
-      userPlatformAppMutationError,
-      isConnectingUserPlatformApp,
-      onConnectUserPlatformApp: handleConnectUserPlatformApp,
     },
     appearance: {
       appTheme,
@@ -5466,6 +5475,8 @@ export default function App() {
     },
     discoverPanelProps: {
       showMobileShell,
+      activeTab: discoverActiveTab,
+      onSelectTab: setDiscoverActiveTab,
       hasSession: Boolean(session),
       onRequireAuth: () => openAuthGate(),
       isLoadingDiscover,

@@ -81,6 +81,8 @@ const DISCOVER_SKILL_CATALOG: DiscoverSkillCatalogEntry[] = [
 
 type WebDiscoverPanelProps = {
   showMobileShell: boolean;
+  activeTab: DiscoverTab;
+  onSelectTab: (tab: DiscoverTab) => void;
   hasSession: boolean;
   onRequireAuth: () => void;
   isLoadingDiscover: boolean;
@@ -175,6 +177,8 @@ function buildDiscoverCommunityCardProps(args: {
 
 export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
   const {
+    activeTab,
+    onSelectTab,
     onRequireAuth,
     hasSession,
     isLoadingDiscover,
@@ -192,7 +196,6 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
     onConnectUserPlatformApp,
     onActivateCommunity,
   } = props;
-  const [activeTab, setActiveTab] = useState<DiscoverTab>("communities");
   const [selectedAppId, setSelectedAppId] = useState<string | null>(null);
   const [personalConnectSecret, setPersonalConnectSecret] = useState("");
   const [personalConnectError, setPersonalConnectError] = useState<string | null>(
@@ -372,7 +375,7 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
                   activeTab === tab.id ? " is-active" : ""
                 }`}
                 aria-selected={activeTab === tab.id}
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => onSelectTab(tab.id)}
               >
                 {tab.label}
               </button>

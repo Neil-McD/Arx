@@ -12006,21 +12006,27 @@ button.message-citation-chip:hover {
   margin-bottom: 4px;
 }
 
-.integrations-app-list,
-.integrations-ready-grid {
+.integrations-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.integrations-header-action {
+  flex-shrink: 0;
+}
+
+.integrations-app-list {
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
 
-.integration-mounted-row,
-.integration-ready-card {
+.integration-mounted-row {
   border: 1px solid var(--border-muted);
   background: var(--bg-card);
   border-radius: 14px;
-}
-
-.integration-mounted-row {
   padding: 14px 16px;
 }
 
@@ -12042,8 +12048,7 @@ button.message-citation-chip:hover {
   color: var(--text-primary);
 }
 
-.integration-mounted-meta,
-.integration-ready-note {
+.integration-mounted-meta {
   font-size: 12px;
   color: var(--text-muted);
   line-height: 1.5;
@@ -12061,72 +12066,6 @@ button.message-citation-chip:hover {
   font-weight: 600;
   letter-spacing: 0.02em;
   white-space: nowrap;
-}
-
-.integration-ready-card {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 16px;
-}
-
-.integration-ready-header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.integration-ready-copy {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-
-.integration-ready-title {
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.integration-ready-tagline {
-  font-size: 12px;
-  color: var(--text-secondary);
-}
-
-.integration-ready-meta {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: 11px;
-  color: var(--text-muted);
-}
-
-.integration-secret-input {
-  width: 100%;
-  min-height: 42px;
-  border-radius: 10px;
-  border: 1px solid var(--border-muted);
-  background: var(--bg-input);
-  color: var(--text-primary);
-  padding: 10px 12px;
-  font-size: 12px;
-  transition: border-color 0.15s ease, background 0.15s ease;
-}
-
-.integration-secret-input:focus {
-  outline: none;
-  border-color: var(--border-strong);
-  background: var(--bg-card-alt);
-}
-
-.integration-secret-input::placeholder {
-  color: var(--text-faint);
-}
-
-.integration-ready-actions {
-  display: flex;
-  justify-content: flex-start;
 }
 
 /* Settings CTA button */
