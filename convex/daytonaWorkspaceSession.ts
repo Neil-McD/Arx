@@ -45,6 +45,18 @@ export type WorkspaceSandboxSession = {
   lifecycleMode: "native_stop_delete" | "manual_delete_fallback";
 };
 
+export type WorkspaceSandboxCleanupResult = {
+  ok: boolean;
+  stopStatus: "ok" | "error";
+  stopCode: string | null;
+  stopMessage: string | null;
+  deleteStatus: "ok" | "error";
+  deleteCode: string | null;
+  deleteMessage: string | null;
+  chargeRecorded: boolean;
+  chargeErrorMessage: string | null;
+};
+
 function buildRunPinnedDaytonaConfig(config: DaytonaConfig): DaytonaConfig {
   return {
     ...config,
@@ -287,7 +299,7 @@ export async function cleanupWorkspaceSandboxSession(params: {
     eventKey?: string;
     payload: Record<string, unknown>;
   }) => Promise<void>;
-}): Promise<void> {
+}): Promise<WorkspaceSandboxCleanupResult> {
   const stopped = await stopDaytonaSandbox({
     config: params.session.config,
     sandboxId: params.session.providerSandboxId,
@@ -341,6 +353,8 @@ export async function cleanupWorkspaceSandboxSession(params: {
   });
 
   const computeTerminated = stopSettled.ok || deleted.ok;
+  let chargeRecorded = false;
+  let chargeErrorMessage: string | null = null;
   if (computeTerminated) {
     const endedAt = Date.now();
     try {
@@ -356,22 +370,32 @@ export async function cleanupWorkspaceSandboxSession(params: {
         sandboxMemoryGiB: params.session.sandboxMemoryGiB,
         sandboxDiskGiB: params.session.sandboxDiskGiB,
       });
+      chargeRecorded = true;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      chargeErrorMessage =
+        message || "Failed to record workspace compute charge.";
       await params.appendRunEvent({
         eventType: "sandbox_charge_failed",
         eventKey: `${params.runId}:workspace_sandbox_charge_failed:1`,
         payload: {
           run_id: params.runId,
           sandbox_id: params.session.providerSandboxId,
-          error_message: message || "Failed to record workspace compute charge.",
+          error_message: chargeErrorMessage,
           cleanup_status: deleted.ok ? "sandbox_deleted" : "sandbox_delete_failed",
         },
       });
     }
   }
-
-  if (!deleted.ok) {
-    return;
-  }
+  return {
+    ok: deleted.ok,
+    stopStatus: stopped.ok ? "ok" : "error",
+    stopCode: stopped.ok ? null : stopped.code,
+    stopMessage: stopped.ok ? null : stopped.message,
+    deleteStatus: deleted.ok ? "ok" : "error",
+    deleteCode: deleted.ok ? null : deleted.code,
+    deleteMessage: deleted.ok ? null : deleted.message,
+    chargeRecorded,
+    chargeErrorMessage,
+  };
 }

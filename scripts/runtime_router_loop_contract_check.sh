@@ -75,6 +75,14 @@ require_match_in_file "$DAYTONA_FILE" 'runProviderNativeToolCompletion\(' \
   "workspace loop uses provider-native tool completion"
 require_match_in_file "$DAYTONA_FILE" 'runNativeRuntimeKernel<' \
   "workspace loop uses explicit runtime kernel state machine"
+require_match_in_file "$DAYTONA_FILE" 'createPolyNetExecutionSession\(' \
+  "workspace loop creates a unified PolyNet execution session"
+require_match_in_file "$DAYTONA_FILE" 'executionSession\.' \
+  "workspace loop routes execution through the PolyNet execution session"
+require_match_in_file "$DAYTONA_FILE" 'executionSession\.executeTerminalTool\(' \
+  "workspace loop routes terminal tools through the execution session"
+require_match_in_file "$DAYTONA_FILE" 'executionSession\.executeComputerTool\(' \
+  "workspace loop routes computer tools through the execution session"
 forbid_match_in_file "$DAYTONA_FILE" 'executeCommunityAgentLoop' \
   "community-specific loop wrapper removed"
 forbid_match_in_file "$DAYTONA_FILE" 'executeExternalAgentLoop' \
@@ -85,6 +93,14 @@ forbid_match_in_file "$DAYTONA_FILE" 'Your previous response was not strict JSON
   "workspace loop no longer retries malformed JSON tool decisions"
 forbid_match_in_file "$DAYTONA_FILE" 'Allowed JSON outputs:' \
   "workspace prompt no longer teaches JSON tool wrapper format"
+forbid_match_in_file "$DAYTONA_FILE" 'createRuntimeMcpManager\(' \
+  "workspace loop no longer instantiates MCP managers inline"
+forbid_match_in_file "$DAYTONA_FILE" 'createRuntimeMountedToolExposureState\(' \
+  "workspace loop no longer instantiates mounted tool exposure state inline"
+forbid_match_in_file "$DAYTONA_FILE" 'internal\.workspaceTerminals\.(startWorkspaceTerminalInternal|readWorkspaceTerminalInternal|writeWorkspaceTerminalInternal|stopWorkspaceTerminalInternal)' \
+  "workspace loop no longer calls terminal internals inline"
+forbid_match_in_file "$DAYTONA_FILE" 'runDaytonaComputerUseTool\(' \
+  "workspace loop no longer runs Daytona computer use inline"
 
 if [[ -e "$ROOT/shared/retrievalAgentDecision.ts" ]]; then
   echo "FAIL: deleted parser file still exists: $ROOT/shared/retrievalAgentDecision.ts"

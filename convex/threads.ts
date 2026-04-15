@@ -63,6 +63,11 @@ type RuntimeRunLike = {
   harnessProfile?: string;
   harnessProfileSource?: string;
   capabilityFamilies?: string[];
+  workspaceSessionState?: string;
+  workspaceProviderSandboxId?: string;
+  workspaceToolboxProxyUrl?: string;
+  workspaceSessionRegion?: string;
+  workspaceSessionUpdatedAt?: number;
   status: "running" | "ok" | "error" | "cancelled";
   reason?: string;
   errorCode?: string;
@@ -1250,6 +1255,8 @@ export const ensureCloudRuntimeRunStarted = mutation({
       harnessProfile,
       harnessProfileSource,
       capabilityFamilies,
+      workspaceSessionState: "none",
+      workspaceSessionUpdatedAt: startedAt,
       status: "running",
       lastEventSeq: 1,
       startedAt,
@@ -1521,6 +1528,43 @@ export const touchCloudRuntimeRunHeartbeatInternal = internalMutation({
   },
 });
 
+export const setCloudRuntimeRunWorkspaceSessionInternal = internalMutation({
+  args: {
+    ownerId: v.id("users"),
+    runId: v.string(),
+    state: v.union(
+      v.literal("active"),
+      v.literal("released"),
+      v.literal("failed"),
+    ),
+    providerSandboxId: v.optional(v.string()),
+    toolboxProxyUrl: v.optional(v.string()),
+    region: v.optional(v.string()),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const nowMs = args.nowMs ?? Date.now();
+    const runId = normalizeRunId(args.runId);
+    const run = await getRuntimeRunByOwnerRunId({
+      ctx,
+      ownerId: args.ownerId,
+      runId,
+    });
+    if (!run) return null;
+    await ctx.db.patch(run._id, {
+      workspaceSessionState: args.state,
+      workspaceProviderSandboxId:
+        String(args.providerSandboxId ?? "").trim() || undefined,
+      workspaceToolboxProxyUrl:
+        String(args.toolboxProxyUrl ?? "").trim() || undefined,
+      workspaceSessionRegion: String(args.region ?? "").trim() || undefined,
+      workspaceSessionUpdatedAt: nowMs,
+      updatedAt: nowMs,
+    });
+    return (await ctx.db.get(run._id)) as RuntimeRunLike | null;
+  },
+});
+
 export const getCloudRunningRuntimeRunByThreadKey = query({
   args: {
     ownerId: v.optional(v.id("users")),
@@ -1738,22 +1782,57 @@ export const getCloudRuntimeRunComputerUseLiveSession = action({
         };
       }
 
-      const events = (await ctx.runQuery(internal.threads.listRuntimeRunEventsByOwnerRunIdInternal as any, {
-        ownerId,
-        runId,
-      })) as RuntimeRunEventLike[];
-      const sessionEvent = events
-        .filter((row) => row.eventType === "workspace_session_created")
-        .sort((a, b) => a.seq - b.seq)
-        .at(-1);
-      const payload = asRecord(sessionEvent?.payload);
-      const sandboxId = normalizeIdValue(payload?.sandbox_id);
-      const toolboxProxyUrl = String(payload?.toolbox_proxy_url ?? "").trim();
+      const persistedSessionState = String(run.workspaceSessionState ?? "").trim();
+      const hasAuthoritativeSessionState = persistedSessionState.length > 0;
+      let sessionSource: "runtime_run" | "runtime_event_fallback" =
+        "runtime_run";
+      let sandboxId = normalizeIdValue(run.workspaceProviderSandboxId);
+      let toolboxProxyUrl = String(
+        run.workspaceToolboxProxyUrl ?? "",
+      ).trim();
+      let sessionEvent: RuntimeRunEventLike | null = null;
+      if (!hasAuthoritativeSessionState) {
+        const events = (await ctx.runQuery(
+          internal.threads.listRuntimeRunEventsByOwnerRunIdInternal as any,
+          {
+            ownerId,
+            runId,
+          },
+        )) as RuntimeRunEventLike[];
+        sessionEvent = events
+          .filter((row) => row.eventType === "workspace_session_created")
+          .sort((a, b) => a.seq - b.seq)
+          .at(-1) ?? null;
+        const payload = asRecord(sessionEvent?.payload);
+        sandboxId = normalizeIdValue(payload?.sandbox_id);
+        toolboxProxyUrl = String(payload?.toolbox_proxy_url ?? "").trim();
+        sessionSource = "runtime_event_fallback";
+      } else if (persistedSessionState !== "active") {
+        return {
+          ok: false,
+          status: 409,
+          code: "live_desktop_unavailable",
+          message: "This runtime run does not have an active workspace desktop session.",
+          retryable: true,
+          debug: {
+            ...baseDebug,
+            stage: "workspace_session",
+            run_found: true,
+            run_status: run.status,
+            workspace_session_source: "runtime_run",
+            workspace_session_state: persistedSessionState,
+            sandbox_id_present: Boolean(sandboxId),
+            toolbox_proxy_url_present: Boolean(toolboxProxyUrl),
+          },
+        };
+      }
       const sessionDebug = {
         ...baseDebug,
         stage: "workspace_session",
         run_found: true,
         run_status: run.status,
+        workspace_session_source: sessionSource,
+        workspace_session_state: persistedSessionState || null,
         workspace_session_event_found: Boolean(sessionEvent),
         workspace_session_event_seq: sessionEvent?.seq ?? null,
         sandbox_id_present: Boolean(sandboxId),

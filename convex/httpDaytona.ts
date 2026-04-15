@@ -6,8 +6,6 @@ import {
 } from "./httpChatgpt";
 import { loadDaytonaConfig, type DaytonaConfig } from "./daytonaSandboxClient";
 import {
-  cleanupWorkspaceSandboxSession,
-  createWorkspaceSandboxSession,
   resolveWorkspaceProjectContext,
   type WorkspaceSandboxSession,
 } from "./daytonaWorkspaceSession";
@@ -31,7 +29,6 @@ import {
   sha256DaytonaWorkspaceFile,
   writeDaytonaWorkspaceFile,
 } from "./daytonaWorkspaceTools";
-import { runDaytonaComputerUseTool } from "./daytonaComputerUse";
 import { executeWebResearch } from "./webResearchTools";
 import { runOpenRouterNativeToolCompletion } from "./openRouterNativeTransport";
 import {
@@ -42,7 +39,6 @@ import {
 import {
   type NativeToolAwareCompletionSuccess,
   type NativeToolAwareMessage,
-  type NativeToolInputContentPart,
 } from "../shared/nativeToolProtocol";
 import {
   type NativeToolExecutionResult,
@@ -65,7 +61,7 @@ import { extractExplicitSkillMentions } from "../shared/communitySkillRuntime";
 import {
   buildOpenAiFunctionTools,
   buildResponsesApiFunctionTools,
-  normalizeToolArguments,
+  normalizeToolArguments as normalizeRegistryToolArguments,
   type ResponsesApiFunctionTool,
 } from "../shared/toolRegistry";
 import {
@@ -77,12 +73,11 @@ import { createRuntimeReasoningSummaryEmitter } from "./runtimeReasoningSummaryE
 import { parseProviderModelRef } from "./httpInferenceConfig";
 import { runOpenAiNativeToolCompletion } from "./openAiNativeToolCompletion";
 import { logStructuredError, summarizeErrorForLog } from "./errorLogging";
+import { createPolyNetExecutionSession } from "./runtimeExecutionSession";
 import {
-  createRuntimeMcpManager,
   type RuntimeMountedMcpTool,
 } from "./runtimeMcpManager";
 import {
-  createRuntimeMountedToolExposureState,
   normalizeResolveMountedToolsArguments,
   RESOLVE_MOUNTED_TOOLS_TOOL_NAME,
 } from "./runtimeMountedToolExposure";
@@ -104,7 +99,6 @@ type ChatgptCompatibleFunctionTool = ChatgptFunctionTool;
 type JsonSchema = Record<string, unknown> | boolean;
 
 type RuntimeInferenceSource = "free" | "platform" | "chatgpt" | "user_key";
-const WORKSPACE_RUN_HEARTBEAT_INTERVAL_MS = 2 * 60 * 1000;
 const CHAT_TOOLS_RUNTIME_KERNEL_BUDGET: RuntimeKernelBudget =
   DEFAULT_RUNTIME_KERNEL_BUDGET;
 const RESOLVE_MOUNTED_TOOLS_INPUT_SCHEMA: JsonSchema = {
@@ -451,33 +445,6 @@ function formatJsonToolOutput(value: unknown): string {
   }
 }
 
-function formatTerminalStartToolOutput(value: unknown): string {
-  const record =
-    value && typeof value === "object" && !Array.isArray(value)
-      ? (value as Record<string, unknown>)
-      : null;
-  const status =
-    typeof record?.status === "string" && record.status.trim()
-      ? record.status.trim()
-      : "running";
-  const previewAvailable =
-    typeof record?.preview_port === "number" &&
-    Number.isFinite(record.preview_port);
-  return [
-    "Background terminal started successfully.",
-    `Current status: ${status}.`,
-    previewAvailable
-      ? "Inline preview is available."
-      : "No inline preview was exposed.",
-  ].join("\n");
-}
-
-function formatToolOutput(toolName: string, value: unknown): string {
-  if (toolName === "terminal_start")
-    return formatTerminalStartToolOutput(value);
-  return formatJsonToolOutput(value);
-}
-
 function readFailureOutputPreview(details: unknown): string {
   const record =
     details && typeof details === "object" && !Array.isArray(details)
@@ -533,101 +500,6 @@ function summarizeToolArgsForLog(
   return summary;
 }
 
-function isInlineImageDataUrl(value: unknown): value is string {
-  return String(value ?? "")
-    .trim()
-    .toLowerCase()
-    .startsWith("data:image/");
-}
-
-function dataUrlToBlob(dataUrl: string): { blob: Blob; mimeType: string } {
-  const trimmed = dataUrl.trim();
-  const match = /^data:([^;,]+);base64,(.+)$/i.exec(trimmed);
-  if (!match) throw new Error("invalid_image_data_url");
-  const mimeType = match[1]!.trim() || "application/octet-stream";
-  const binary = atob(match[2]!.trim());
-  const bytes = new Uint8Array(binary.length);
-  for (let index = 0; index < binary.length; index += 1) {
-    bytes[index] = binary.charCodeAt(index);
-  }
-  return {
-    blob: new Blob([bytes], { type: mimeType }),
-    mimeType,
-  };
-}
-
-function extractComputerUseObservation(
-  observationContent: NativeToolInputContentPart[] | null | undefined,
-): { summary: string | null; imageUrl: string | null } {
-  if (!Array.isArray(observationContent) || observationContent.length === 0) {
-    return { summary: null, imageUrl: null };
-  }
-  let summary: string | null = null;
-  let imageUrl: string | null = null;
-  for (const part of observationContent) {
-    if (!part || part.source !== "computer_use_observation") continue;
-    if (part.type === "text" && !summary) {
-      const nextSummary = String(part.text ?? "").trim();
-      if (nextSummary) summary = nextSummary;
-      continue;
-    }
-    if (part.type === "image" && !imageUrl) {
-      const nextUrl = String(part.imageUrl ?? "").trim();
-      if (nextUrl) imageUrl = nextUrl;
-    }
-  }
-  return { summary, imageUrl };
-}
-
-async function enrichComputerUseToolResult(params: {
-  ctx: any;
-  toolName: RetrievalToolName;
-  toolResult: NativeToolExecutionResult;
-}): Promise<NativeToolExecutionResult> {
-  if (!isComputerUseToolName(params.toolName)) return params.toolResult;
-  const existingDetails =
-    params.toolResult.details &&
-    typeof params.toolResult.details === "object" &&
-    !Array.isArray(params.toolResult.details)
-      ? { ...(params.toolResult.details as Record<string, unknown>) }
-      : {};
-  const existingComputerUseDetails =
-    existingDetails.computer_use &&
-    typeof existingDetails.computer_use === "object" &&
-    !Array.isArray(existingDetails.computer_use)
-      ? { ...(existingDetails.computer_use as Record<string, unknown>) }
-      : {};
-  const { summary, imageUrl } = extractComputerUseObservation(
-    params.toolResult.observationContent,
-  );
-  const computerUseDetails: Record<string, unknown> = {
-    ...existingComputerUseDetails,
-    action: params.toolName,
-    summary:
-      summary ||
-      (typeof params.toolResult.outputText === "string" &&
-      params.toolResult.outputText.trim()
-        ? params.toolResult.outputText.trim()
-        : null),
-  };
-  if (isInlineImageDataUrl(imageUrl)) {
-    const { blob, mimeType } = dataUrlToBlob(imageUrl);
-    const storageId = await params.ctx.storage.store(blob);
-    const frameUrl = await params.ctx.storage.getUrl(storageId);
-    computerUseDetails.frame_storage_id =
-      String(storageId ?? "").trim() || null;
-    computerUseDetails.frame_url = frameUrl ?? null;
-    computerUseDetails.frame_mime_type = mimeType;
-  }
-  return {
-    ...params.toolResult,
-    details: {
-      ...existingDetails,
-      computer_use: computerUseDetails,
-    },
-  };
-}
-
 async function executeRetrievalHarnessTool(params: {
   ctx: any;
   userId: string;
@@ -642,7 +514,7 @@ async function executeRetrievalHarnessTool(params: {
 }): Promise<NativeToolExecutionResult> {
   let normalizedArgs: Record<string, unknown>;
   try {
-    normalizedArgs = normalizeToolArguments(params.toolName, params.args);
+    normalizedArgs = normalizeRegistryToolArguments(params.toolName, params.args);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return {
@@ -794,228 +666,6 @@ async function executeRetrievalHarnessTool(params: {
   }
 
   if (
-    params.toolName === "terminal_start" ||
-    params.toolName === "terminal_read" ||
-    params.toolName === "terminal_write" ||
-    params.toolName === "terminal_stop"
-  ) {
-    const projectId = String(params.projectId ?? "").trim();
-    const authSubject = String(params.authSubject ?? "").trim();
-    if (params.toolName === "terminal_start" && (!projectId || !authSubject)) {
-      return {
-        status: "error",
-        exitCode: null,
-        outputText: "",
-        errorCode: "project_required",
-        errorMessage: `${params.toolName} requires a bound project workspace.`,
-      };
-    }
-    if (
-      (params.toolName === "terminal_read" ||
-        params.toolName === "terminal_write" ||
-        params.toolName === "terminal_stop") &&
-      !authSubject
-    ) {
-      return {
-        status: "error",
-        exitCode: null,
-        outputText: "",
-        errorCode: "auth_required",
-        errorMessage: `${params.toolName} requires an authenticated workspace run.`,
-      };
-    }
-
-    try {
-      const payload =
-        params.toolName === "terminal_start"
-          ? await params.ctx.runAction(
-              internal.workspaceTerminals.startWorkspaceTerminalInternal as any,
-              {
-                authSubject,
-                projectId,
-                runId: params.runId,
-                command: String(normalizedArgs.command ?? ""),
-                ...(typeof normalizedArgs.cwd === "string"
-                  ? { cwd: normalizedArgs.cwd }
-                  : null),
-                ...(typeof normalizedArgs.preview_port === "number"
-                  ? { previewPort: normalizedArgs.preview_port }
-                  : null),
-                ...(typeof normalizedArgs.preview_path === "string"
-                  ? { previewPath: normalizedArgs.preview_path }
-                  : null),
-                ...(typeof normalizedArgs.preview_label === "string"
-                  ? { previewLabel: normalizedArgs.preview_label }
-                  : null),
-              },
-            )
-          : params.toolName === "terminal_read"
-            ? await params.ctx.runAction(
-                internal.workspaceTerminals
-                  .readWorkspaceTerminalInternal as any,
-                {
-                  authSubject,
-                  terminalSessionId: String(
-                    normalizedArgs.terminal_session_id ?? "",
-                  ).trim(),
-                },
-              )
-            : params.toolName === "terminal_write"
-              ? await params.ctx.runAction(
-                  internal.workspaceTerminals
-                    .writeWorkspaceTerminalInternal as any,
-                  {
-                    authSubject,
-                    terminalSessionId: String(
-                      normalizedArgs.terminal_session_id ?? "",
-                    ).trim(),
-                    input: String(normalizedArgs.input ?? ""),
-                  },
-                )
-              : params.toolName === "terminal_stop"
-                ? await params.ctx.runAction(
-                    internal.workspaceTerminals
-                      .stopWorkspaceTerminalInternal as any,
-                    {
-                      authSubject,
-                      terminalSessionId: String(
-                        normalizedArgs.terminal_session_id ?? "",
-                      ).trim(),
-                    },
-                  )
-                : null;
-      const ok = Boolean((payload as { ok?: boolean } | null)?.ok);
-      if (!ok) {
-        return {
-          status: "error",
-          exitCode: null,
-          outputText: formatToolOutput(params.toolName, payload),
-          errorCode: String(
-            (payload as { code?: unknown } | null)?.code ??
-              "terminal_operation_failed",
-          ),
-          errorMessage: String(
-            (payload as { message?: unknown } | null)?.message ??
-              "Terminal operation failed.",
-          ),
-        };
-      }
-      return {
-        status: "ok",
-        exitCode: 0,
-        outputText: formatToolOutput(params.toolName, payload),
-        errorCode: null,
-        errorMessage: null,
-        details:
-          params.toolName === "terminal_start" &&
-          payload &&
-          typeof payload === "object" &&
-          !Array.isArray(payload)
-            ? {
-                terminal_session_id:
-                  typeof (payload as Record<string, unknown>)
-                    .terminal_session_id === "string"
-                    ? (payload as Record<string, unknown>).terminal_session_id
-                    : null,
-                status:
-                  typeof (payload as Record<string, unknown>).status ===
-                  "string"
-                    ? (payload as Record<string, unknown>).status
-                    : null,
-                command:
-                  typeof (payload as Record<string, unknown>).command ===
-                  "string"
-                    ? (payload as Record<string, unknown>).command
-                    : null,
-                cwd:
-                  typeof (payload as Record<string, unknown>).cwd === "string"
-                    ? (payload as Record<string, unknown>).cwd
-                    : null,
-                preview_port:
-                  typeof (payload as Record<string, unknown>).preview_port ===
-                  "number"
-                    ? (payload as Record<string, unknown>).preview_port
-                    : null,
-                preview_path:
-                  typeof (payload as Record<string, unknown>).preview_path ===
-                  "string"
-                    ? (payload as Record<string, unknown>).preview_path
-                    : null,
-                preview_label:
-                  typeof (payload as Record<string, unknown>).preview_label ===
-                  "string"
-                    ? (payload as Record<string, unknown>).preview_label
-                    : null,
-                output_tail:
-                  typeof (payload as Record<string, unknown>).output_tail ===
-                  "string"
-                    ? (payload as Record<string, unknown>).output_tail
-                    : null,
-              }
-            : null,
-      };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      return {
-        status: "error",
-        exitCode: null,
-        outputText: "",
-        errorCode: "terminal_operation_failed",
-        errorMessage: message || "Terminal operation failed.",
-      };
-    }
-  }
-
-  if (isComputerUseToolName(params.toolName)) {
-    let workspaceSession = params.workspaceSession ?? null;
-    const projectId = String(
-      params.projectId ?? workspaceSession?.projectId ?? "",
-    ).trim();
-    const authSubject = String(params.authSubject ?? "").trim();
-    if (!projectId || (!authSubject && !workspaceSession)) {
-      return {
-        status: "error",
-        exitCode: null,
-        outputText: "",
-        errorCode: "project_required",
-        errorMessage: `${params.toolName} requires a bound project workspace.`,
-      };
-    }
-    if (!workspaceSession) {
-      const created = await createWorkspaceSandboxSession({
-        ctx: params.ctx,
-        userId: params.userId,
-        authSubject,
-        projectId,
-        runId: params.runId,
-      });
-      if (!created.ok) {
-        return {
-          status: "error",
-          exitCode: null,
-          outputText: readFailureOutputPreview((created as any).details),
-          errorCode: created.code,
-          errorMessage: created.message,
-        };
-      }
-      workspaceSession = created.session;
-    }
-    const computerResult = await runDaytonaComputerUseTool({
-      config: workspaceSession.config,
-      toolboxProxyUrl: workspaceSession.toolboxProxyUrl,
-      sandboxId: workspaceSession.providerSandboxId,
-      toolName: params.toolName,
-      args: normalizedArgs,
-      signal: params.signal,
-    });
-    return await enrichComputerUseToolResult({
-      ctx: params.ctx,
-      toolName: params.toolName,
-      toolResult: computerResult,
-    });
-  }
-
-  if (
     params.toolName === "list_dir" ||
     params.toolName === "read" ||
     params.toolName === "glob" ||
@@ -1025,12 +675,11 @@ async function executeRetrievalHarnessTool(params: {
     params.toolName === "edit" ||
     params.toolName === "bash"
   ) {
-    let workspaceSession = params.workspaceSession ?? null;
+    const workspaceSession = params.workspaceSession ?? null;
     const projectId = String(
       params.projectId ?? workspaceSession?.projectId ?? "",
     ).trim();
-    const authSubject = String(params.authSubject ?? "").trim();
-    if (!projectId || (!authSubject && !workspaceSession)) {
+    if (!projectId || !workspaceSession) {
       return {
         status: "error",
         exitCode: null,
@@ -1038,25 +687,6 @@ async function executeRetrievalHarnessTool(params: {
         errorCode: "project_required",
         errorMessage: `${params.toolName} requires a bound project workspace.`,
       };
-    }
-    if (!workspaceSession) {
-      const created = await createWorkspaceSandboxSession({
-        ctx: params.ctx,
-        userId: params.userId,
-        authSubject,
-        projectId,
-        runId: params.runId,
-      });
-      if (!created.ok) {
-        return {
-          status: "error",
-          exitCode: null,
-          outputText: readFailureOutputPreview((created as any).details),
-          errorCode: created.code,
-          errorMessage: created.message,
-        };
-      }
-      workspaceSession = created.session;
     }
     const result =
       params.toolName === "list_dir"
@@ -1259,25 +889,6 @@ async function executeRetrievalAgentLoop(
     touchRunHeartbeat?: () => Promise<void>;
   },
 ): Promise<RuntimeAgentLoopSuccess | RuntimeAgentLoopFailure> {
-  const ownsWorkspaceSession = !params.workspaceSession;
-  let lazyWorkspaceSession = params.workspaceSession ?? null;
-  let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
-  let heartbeatInFlight = false;
-  const ensureWorkspaceHeartbeat = () => {
-    if (!params.touchRunHeartbeat || !lazyWorkspaceSession || heartbeatTimer)
-      return;
-    const touchRunHeartbeat = params.touchRunHeartbeat;
-    heartbeatTimer = setInterval(() => {
-      if (!lazyWorkspaceSession || heartbeatInFlight) return;
-      heartbeatInFlight = true;
-      void Promise.resolve(touchRunHeartbeat())
-        .catch(() => {})
-        .finally(() => {
-          heartbeatInFlight = false;
-        });
-    }, WORKSPACE_RUN_HEARTBEAT_INTERVAL_MS);
-  };
-  ensureWorkspaceHeartbeat();
   const projectContext = await resolveWorkspaceProjectContext({
     ctx: params.ctx,
     projectId: params.projectId,
@@ -1356,25 +967,6 @@ async function executeRetrievalAgentLoop(
     ...runtimeMountedUserPlatformAppTools,
     ...runtimeMountedCommunityAppTools,
   ];
-  const runtimeMcpManager = createRuntimeMcpManager({
-    runId: params.runId,
-    mountedTools: runtimeMountedTools,
-    loadConnectionBundle: async ({ developerAppId }) =>
-      (await params.ctx.runQuery(
-        internal.appConnections.getDecryptedDeveloperAppConnectionBundleInternal,
-        {
-          developerAppId: developerAppId as any,
-        },
-      )) as {
-        app: any;
-        connection: any;
-        secret: string | null;
-      } | null,
-    appendRunEvent: params.appendRunEvent,
-  });
-  const mountedToolExposureState = createRuntimeMountedToolExposureState({
-    mountedTools: runtimeMountedTools,
-  });
   const explicitCommunitySkillMentions = new Set(
     extractExplicitSkillMentions(params.messages),
   );
@@ -1406,15 +998,37 @@ async function executeRetrievalAgentLoop(
           ),
         )
       : [];
-  const mountedToolByName = new Map(
-    runtimeMountedTools.map((tool) => [tool.runtime_tool_name, tool]),
-  );
   const overlayRuntimeState = buildCommunityOverlayRuntimeState({
     mountedTools: mapMountedToolsToOverlayRuntime(mountedCommunityAppTools),
     attachedSkills: mapCommunitySkillsToOverlayRuntime(attachedCommunitySkills),
     selectedSkills: mapSelectedCommunitySkillsToOverlayRuntime(
       selectedCommunitySkills,
     ),
+  });
+  const executionSession = createPolyNetExecutionSession({
+    ctx: params.ctx,
+    userId: params.userId,
+    authSubject: params.authSubject,
+    projectId: params.projectId,
+    runId: params.runId,
+    mountedTools: runtimeMountedTools,
+    mountedPromptSuffix: `${buildUserPlatformMountedAppsPromptBlock(
+      runtimeMountedUserPlatformAppTools,
+    )}${overlayRuntimeState.systemPromptSuffix}`,
+    initialWorkspaceSession: params.workspaceSession ?? null,
+    appendRunEvent: params.appendRunEvent,
+    touchRunHeartbeat: params.touchRunHeartbeat,
+    loadConnectionBundle: async ({ developerAppId }) =>
+      (await params.ctx.runQuery(
+        internal.appConnections.getDecryptedDeveloperAppConnectionBundleInternal,
+        {
+          developerAppId: developerAppId as any,
+        },
+      )) as {
+        app: any;
+        connection: any;
+        secret: string | null;
+      } | null,
   });
 
   const baseSystemPrompt = buildWorkspaceRuntimeSystemPrompt({
@@ -1448,9 +1062,7 @@ async function executeRetrievalAgentLoop(
     currentDateLabel: runtimeDateLabel,
     currentTimeZone: runtimeTimeZone,
   });
-  const systemPrompt = `${baseSystemPrompt}${buildUserPlatformMountedAppsPromptBlock(
-    runtimeMountedUserPlatformAppTools,
-  )}${overlayRuntimeState.systemPromptSuffix}`;
+  const systemPrompt = `${baseSystemPrompt}${executionSession.buildPromptSuffix()}`;
   const nativeTranscript: NativeToolAwareMessage[] = [
     {
       role: "system",
@@ -1461,41 +1073,16 @@ async function executeRetrievalAgentLoop(
       content: message.content,
     })),
   ];
-  const buildActiveProviderTools = (): {
-    openAiTools: OpenAiCompatibleFunctionTool[];
-    responsesTools: ResponsesApiFunctionTool[];
-    activeToolNames: string[];
-  } => {
-    const exposedMountedTools = mountedToolExposureState.getExposedTools();
-    const resolverTools = mountedToolExposureState.hasMountedTools()
-      ? {
-          openAi: [buildResolveMountedToolsOpenAiTool()],
-          responses: [buildResolveMountedToolsResponsesTool()],
-          names: [RESOLVE_MOUNTED_TOOLS_TOOL_NAME],
-        }
-      : {
-          openAi: [] as OpenAiCompatibleFunctionTool[],
-          responses: [] as ResponsesApiFunctionTool[],
-          names: [] as string[],
-        };
-    return {
-      openAiTools: [
-        ...buildOpenAiFunctionTools(params.allowedToolNames),
-        ...resolverTools.openAi,
-        ...buildMountedAppOpenAiTools(exposedMountedTools),
-      ],
-      responsesTools: [
-        ...buildResponsesApiFunctionTools(params.allowedToolNames),
-        ...resolverTools.responses,
-        ...buildMountedAppResponsesTools(exposedMountedTools),
-      ],
-      activeToolNames: [
-        ...params.allowedToolNames,
-        ...resolverTools.names,
-        ...exposedMountedTools.map((tool) => tool.runtime_tool_name),
-      ],
-    };
-  };
+  const buildActiveProviderTools = () =>
+    executionSession.buildProviderTools({
+      allowedToolNames: params.allowedToolNames,
+      buildFixedOpenAiTools: buildOpenAiFunctionTools,
+      buildFixedResponsesTools: buildResponsesApiFunctionTools,
+      buildMountedOpenAiTools: buildMountedAppOpenAiTools,
+      buildMountedResponsesTools: buildMountedAppResponsesTools,
+      buildResolverOpenAiTool: buildResolveMountedToolsOpenAiTool,
+      buildResolverResponsesTool: buildResolveMountedToolsResponsesTool,
+    });
   let reasoningSummaryStreamCount = 0;
   let reasoningSummaryPartAddedCount = 0;
   let reasoningSummaryTextDeltaCount = 0;
@@ -1676,15 +1263,12 @@ async function executeRetrievalAgentLoop(
         return completion as NativeToolAwareCompletionSuccess<string>;
       },
       normalizeToolArguments: (toolName, rawArgs) => {
-        if (toolName === RESOLVE_MOUNTED_TOOLS_TOOL_NAME) {
-          return normalizeResolveMountedToolsArguments(rawArgs);
-        }
-        if (params.allowedToolNames.includes(toolName as RetrievalToolName)) {
-          return normalizeToolArguments(toolName as RetrievalToolName, rawArgs);
-        }
-        return rawArgs && typeof rawArgs === "object" && !Array.isArray(rawArgs)
-          ? rawArgs
-          : {};
+        return executionSession.normalizeToolArguments({
+          toolName,
+          rawArgs,
+          allowedToolNames: params.allowedToolNames,
+          normalizeFixedToolArguments: normalizeRegistryToolArguments,
+        });
       },
       executeTool: async ({ toolName, normalizedArgs }) => {
         try {
@@ -1702,7 +1286,7 @@ async function executeRetrievalAgentLoop(
           throw error;
         }
         if (toolName === RESOLVE_MOUNTED_TOOLS_TOOL_NAME) {
-          const resolution = mountedToolExposureState.resolve(
+          const resolution = executionSession.resolveMountedToolExposure(
             normalizedArgs as ReturnType<typeof normalizeResolveMountedToolsArguments>,
           );
           try {
@@ -1743,7 +1327,7 @@ async function executeRetrievalAgentLoop(
           toolName as RetrievalToolName,
         );
         if (!isFixedTool) {
-          const mountedTool = mountedToolByName.get(toolName);
+          const mountedTool = executionSession.getMountedTool(toolName);
           if (!mountedTool) {
             return {
               status: "error",
@@ -1799,7 +1383,7 @@ async function executeRetrievalAgentLoop(
               ownerId: params.userId,
               runId: params.runId,
               operation: async (signal) =>
-                await runtimeMcpManager.execute({
+                await executionSession.executeMountedTool({
                   runtimeToolName: toolName,
                   argumentsObject: normalizedArgs,
                   signal,
@@ -1839,46 +1423,114 @@ async function executeRetrievalAgentLoop(
           }
         }
 
-        const needsWorkspaceSession = requiresWorkspaceSandbox(
-          toolName as RetrievalToolName,
-        );
-
-        if (needsWorkspaceSession && !lazyWorkspaceSession) {
-          const projectId = String(params.projectId ?? "").trim();
-          const authSubject = String(params.authSubject ?? "").trim();
-          if (!projectId || !authSubject) {
+        if (
+          toolName === "terminal_start" ||
+          toolName === "terminal_read" ||
+          toolName === "terminal_write" ||
+          toolName === "terminal_stop"
+        ) {
+          try {
+            const toolResult = await executionSession.executeTerminalTool({
+              toolName,
+              normalizedArgs,
+            });
+            await throwIfCancelled();
+            return toolResult;
+          } catch (error) {
+            if (isRuntimeRunCancelledError(error)) {
+              return {
+                status: "error",
+                exitCode: null,
+                outputText: "",
+                errorCode: USER_CANCELLED_RUNTIME_CODE,
+                errorMessage: error.message,
+              };
+            }
+            const summary = summarizeErrorForLog(error);
+            logStructuredError("agent_loop_terminal_tool_execution_crashed", {
+              error,
+              runId: params.runId,
+              threadId: params.threadId ?? undefined,
+              communityId: params.communityId ?? undefined,
+              projectId: params.projectId ?? undefined,
+              ...summarizeToolArgsForLog(toolName, normalizedArgs),
+            });
             return {
               status: "error",
               exitCode: null,
               outputText: "",
-              errorCode: "project_required",
-              errorMessage: `${toolName} requires a bound project workspace.`,
+              errorCode: "terminal_operation_failed",
+              errorMessage: `Terminal operation failed: ${summary.message}`,
             };
           }
+        }
+
+        if (isComputerUseToolName(toolName as RetrievalToolName)) {
+          try {
+            const toolResult = await runAbortableWithRuntimeCancellation({
+              ctx: params.ctx,
+              ownerId: params.userId,
+              runId: params.runId,
+              operation: async (signal) =>
+                await executionSession.executeComputerTool({
+                  toolName,
+                  normalizedArgs,
+                  signal,
+                }),
+            });
+            await throwIfCancelled();
+            return toolResult;
+          } catch (error) {
+            if (isRuntimeRunCancelledError(error)) {
+              return {
+                status: "error",
+                exitCode: null,
+                outputText: "",
+                errorCode: USER_CANCELLED_RUNTIME_CODE,
+                errorMessage: error.message,
+              };
+            }
+            const summary = summarizeErrorForLog(error);
+            logStructuredError("agent_loop_computer_tool_execution_crashed", {
+              error,
+              runId: params.runId,
+              threadId: params.threadId ?? undefined,
+              communityId: params.communityId ?? undefined,
+              projectId: params.projectId ?? undefined,
+              ...summarizeToolArgsForLog(toolName, normalizedArgs),
+            });
+            return {
+              status: "error",
+              exitCode: null,
+              outputText: "",
+              errorCode: "computer_tool_execute_failed",
+              errorMessage: `Computer tool execution failed: ${summary.message}`,
+            };
+          }
+        }
+
+        const needsWorkspaceSession = requiresWorkspaceSandbox(
+          toolName as RetrievalToolName,
+        );
+
+        if (needsWorkspaceSession && !executionSession.hasWorkspaceSession()) {
           try {
             await throwIfCancelled();
-            await params.appendRunEvent({
-              eventType: "workspace_session_create_started",
-              eventKey: `${params.runId}:workspace_session_create_started:1`,
-              payload: {
-                run_id: params.runId,
-                project_id: projectId,
-                tool_name: toolName,
-              },
-            });
-          } catch {
-            // best-effort debug event only
+          } catch (error) {
+            return {
+              status: "error",
+              exitCode: null,
+              outputText: "",
+              errorCode: USER_CANCELLED_RUNTIME_CODE,
+              errorMessage: error instanceof Error ? error.message : "Cancelled",
+            };
           }
           let created: Awaited<
-            ReturnType<typeof createWorkspaceSandboxSession>
+            ReturnType<typeof executionSession.ensureWorkspaceForTool>
           >;
           try {
-            created = await createWorkspaceSandboxSession({
-              ctx: params.ctx,
-              userId: params.userId,
-              authSubject,
-              projectId,
-              runId: params.runId,
+            created = await executionSession.ensureWorkspaceForTool({
+              toolName,
             });
           } catch (error) {
             const summary = summarizeErrorForLog(error);
@@ -1887,7 +1539,7 @@ async function executeRetrievalAgentLoop(
               runId: params.runId,
               threadId: params.threadId ?? undefined,
               toolName,
-              projectId,
+              projectId: params.projectId ?? undefined,
               communityId: params.communityId ?? undefined,
             });
             return {
@@ -1921,52 +1573,6 @@ async function executeRetrievalAgentLoop(
             }
             throw error;
           }
-          lazyWorkspaceSession = created.session;
-          ensureWorkspaceHeartbeat();
-          try {
-            await params.appendRunEvent({
-              eventType: "workspace_session_created",
-              eventKey: `${params.runId}:workspace_session_created:1`,
-              payload: {
-                run_id: params.runId,
-                sandbox_id: created.session.providerSandboxId,
-                region: created.session.region,
-                project_id: projectId,
-                toolbox_proxy_url: created.session.toolboxProxyUrl,
-              },
-            });
-            await params.appendRunEvent({
-              eventType: "sandbox_started",
-              eventKey: `${params.runId}:workspace_sandbox_started:1`,
-              payload: {
-                run_id: params.runId,
-                sandbox_id: created.session.providerSandboxId,
-                region: created.session.region,
-                project_id: projectId,
-              },
-            });
-          } catch (error) {
-            const summary = summarizeErrorForLog(error);
-            logStructuredError(
-              "agent_loop_sandbox_started_event_append_crashed",
-              {
-                error,
-                runId: params.runId,
-                threadId: params.threadId ?? undefined,
-                toolName,
-                projectId,
-                sandboxId: created.session.providerSandboxId,
-                communityId: params.communityId ?? undefined,
-              },
-            );
-            return {
-              status: "error",
-              exitCode: null,
-              outputText: "",
-              errorCode: "sandbox_started_event_failed",
-              errorMessage: `Sandbox started event failed: ${summary.message}`,
-            };
-          }
         }
 
         try {
@@ -1984,7 +1590,7 @@ async function executeRetrievalAgentLoop(
                 runId: params.runId,
                 toolName: toolName as RetrievalToolName,
                 args: normalizedArgs,
-                workspaceSession: lazyWorkspaceSession,
+                workspaceSession: executionSession.getWorkspaceSession(),
                 signal,
               }),
           });
@@ -2146,22 +1752,7 @@ async function executeRetrievalAgentLoop(
       steps: [],
     };
   } finally {
-    if (heartbeatTimer) {
-      clearInterval(heartbeatTimer);
-      heartbeatTimer = null;
-    }
-    if (ownsWorkspaceSession && lazyWorkspaceSession) {
-      await cleanupWorkspaceSandboxSession({
-        ctx: params.ctx,
-        userId: params.userId,
-        session: lazyWorkspaceSession,
-        runId: params.runId,
-        projectId: String(
-          params.projectId ?? lazyWorkspaceSession.projectId ?? "",
-        ).trim(),
-        appendRunEvent: params.appendRunEvent,
-      });
-    }
+    await executionSession.dispose();
   }
 }
 

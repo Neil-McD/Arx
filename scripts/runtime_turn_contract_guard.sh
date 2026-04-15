@@ -12,6 +12,7 @@ HANDLERS_FILE="convex/runtimeTurnHandlers.ts"
 RESOLUTION_FILE="convex/runtimeTurnResolution.ts"
 PERSISTENCE_FILE="convex/runtimeTurnPersistence.ts"
 THREADS_FILE="convex/threads.ts"
+EXECUTION_SESSION_FILE="convex/runtimeExecutionSession.ts"
 SEND_FLOW_FILE="shared/useWebSendFlowController.ts"
 SCHEMA_FILE="convex/schema.ts"
 
@@ -37,6 +38,10 @@ if [[ ! -f "$PERSISTENCE_FILE" ]]; then
 fi
 if [[ ! -f "$THREADS_FILE" ]]; then
   echo "FAIL: missing $THREADS_FILE"
+  exit 1
+fi
+if [[ ! -f "$EXECUTION_SESSION_FILE" ]]; then
+  echo "FAIL: missing $EXECUTION_SESSION_FILE"
   exit 1
 fi
 if [[ ! -f "$SEND_FLOW_FILE" ]]; then
@@ -180,5 +185,23 @@ forbid_match_in_file "$SCHEMA_FILE" 'requestedExecutionTarget' \
   "runtimeRuns schema no longer carries requestedExecutionTarget compatibility residue"
 forbid_match_in_file "$SCHEMA_FILE" 'requiresWorkspaceTools' \
   "runtimeRuns schema no longer carries requiresWorkspaceTools compatibility residue"
+require_match_in_file "$SCHEMA_FILE" 'workspaceSessionState' \
+  "runtimeRuns schema persists workspace session state"
+require_match_in_file "$SCHEMA_FILE" 'workspaceProviderSandboxId' \
+  "runtimeRuns schema persists workspace sandbox id"
+require_match_in_file "$SCHEMA_FILE" 'workspaceToolboxProxyUrl' \
+  "runtimeRuns schema persists workspace toolbox proxy url"
+require_match_in_file "$THREADS_FILE" 'setCloudRuntimeRunWorkspaceSessionInternal = internalMutation\(' \
+  "threads contract exposes runtime workspace session persistence"
+require_match_in_file "$THREADS_FILE" 'run\.workspaceSessionState' \
+  "live desktop lookup reads runtime run workspace session state"
+require_match_in_file "$THREADS_FILE" 'workspaceSessionState: "none"' \
+  "new runtime runs initialize explicit no-workspace-session state"
+require_match_in_file "$THREADS_FILE" 'run\.workspaceProviderSandboxId' \
+  "live desktop lookup reads runtime run sandbox id"
+require_match_in_file "$THREADS_FILE" 'run\.workspaceToolboxProxyUrl' \
+  "live desktop lookup reads runtime run toolbox proxy url"
+require_match_in_file "$EXECUTION_SESSION_FILE" 'workspace_session_state_persist_failed' \
+  "execution session emits explicit session-state persistence failure evidence"
 
 echo "PASS: runtime turn contract markers are present and hardened."
