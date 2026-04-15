@@ -9315,13 +9315,6 @@ button.message-citation-chip:hover {
   margin-top: 0;
 }
 
-.md-list li.md-list-code {
-  list-style: none;
-  margin-left: -1.25em;
-  margin-top: 0.14em;
-  margin-bottom: 0.16em;
-}
-
 .message-text .katex {
   font-size: 1.02em;
 }
@@ -9344,6 +9337,117 @@ button.message-citation-chip:hover {
   padding: 0.15em 0.4em;
   border-radius: 4px;
   color: var(--text-primary);
+}
+
+.md-table-block {
+  margin: 0.72em 0;
+  max-width: 100%;
+}
+
+.md-table-toolbar,
+.md-artifact-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 24px;
+  margin-bottom: 0.24em;
+}
+
+.md-table-label,
+.md-artifact-label {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+}
+
+.md-table-actions,
+.md-artifact-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.md-table-action,
+.md-artifact-action {
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.2;
+  padding: 3px 7px;
+  transition: background 0.15s, border-color 0.15s, color 0.15s, opacity 0.15s;
+}
+
+.md-table-action:hover,
+.md-artifact-action:hover {
+  border-color: color-mix(in srgb, var(--border-muted) 72%, transparent);
+  background: rgba(255, 255, 255, 0.045);
+  color: var(--text-primary);
+}
+
+.md-table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  border-top: 1px solid color-mix(in srgb, var(--border-muted) 72%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--border-muted) 58%, transparent);
+}
+
+.md-table {
+  width: max-content;
+  min-width: 100%;
+  border-collapse: collapse;
+  color: var(--text-secondary);
+  font-size: 0.95em;
+  line-height: 1.4;
+}
+
+.md-table-cell {
+  padding: 0.48em 0.76em;
+  text-align: left;
+  vertical-align: top;
+}
+
+.md-table-header-cell {
+  color: var(--text-primary);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.md-table-body .md-table-row + .md-table-row .md-table-cell {
+  border-top: 1px solid color-mix(in srgb, var(--border-muted) 34%, transparent);
+}
+
+.md-table-body .md-table-cell:first-child {
+  color: color-mix(in srgb, var(--text-primary) 86%, var(--text-secondary) 14%);
+}
+
+.md-artifact-block {
+  margin: 0.62em 0;
+  max-width: 100%;
+}
+
+.md-artifact-content {
+  margin: 0;
+  padding: 0.72em 0.86em;
+  overflow-x: auto;
+  border: 1px solid color-mix(in srgb, var(--border-muted) 62%, transparent);
+  background: rgba(255, 255, 255, 0.032);
+  border-radius: 8px;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  line-height: 1.55;
+  white-space: pre;
+}
+
+.md-artifact-content code {
+  font: inherit;
+  color: inherit;
 }
 
 .md-plain-block {

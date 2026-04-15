@@ -1,4 +1,4 @@
-import { type ReactNode, useMemo, useState } from "react";
+import { type ReactNode, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import type { Components } from "react-markdown";
 import rehypeKatex from "rehype-katex";
@@ -97,10 +97,59 @@ async function copyCodeToClipboard(text: string, onCopyCode?: (text: string) => 
   }
 }
 
+function downloadTextFile(filename: string, text: string, type = "text/plain;charset=utf-8"): void {
+  if (typeof document === "undefined") return;
+  const blob = new Blob([text], { type });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function normalizeTableCellText(text: string): string {
+  return text.replace(/\s+/g, " ").trim();
+}
+
+function readTableRows(table: HTMLTableElement | null): string[][] {
+  if (!table) return [];
+  return Array.from(table.rows).map((row) =>
+    Array.from(row.cells).map((cell) => normalizeTableCellText(cell.textContent ?? "")),
+  );
+}
+
+function tableRowsToTsv(rows: string[][]): string {
+  return rows.map((row) => row.map((cell) => cell.replace(/\t/g, " ").replace(/\n/g, " ")).join("\t")).join("\n");
+}
+
+function escapeCsvCell(cell: string): string {
+  const normalized = cell.replace(/\r\n?/g, "\n");
+  if (!/[",\n]/.test(normalized)) return normalized;
+  return `"${normalized.replace(/"/g, '""')}"`;
+}
+
+function tableRowsToCsv(rows: string[][]): string {
+  return rows.map((row) => row.map(escapeCsvCell).join(",")).join("\n");
+}
+
+function resolveTableTextAlign(
+  align: unknown,
+): "center" | "justify" | "left" | "right" | undefined {
+  return align === "center" || align === "justify" || align === "left" || align === "right"
+    ? align
+    : undefined;
+}
+
 function normalizeCodeLanguage(language?: string): string | null {
   if (!language) return null;
   const trimmed = language.trim().toLowerCase();
   return HIGHLIGHT_LANGUAGE_ALIAS[trimmed] ?? trimmed;
+}
+
+function hasExplicitCodeLanguage(language?: string): boolean {
+  const normalizedLanguage = normalizeCodeLanguage(language);
+  return Boolean(normalizedLanguage && CODE_BLOCK_LANGUAGES.has(normalizedLanguage));
 }
 
 function looksLikeCode(text: string): boolean {
@@ -131,9 +180,69 @@ function looksLikeCode(text: string): boolean {
 }
 
 function shouldRenderCodeCard(code: string, language?: string): boolean {
-  const normalizedLanguage = normalizeCodeLanguage(language);
-  if (normalizedLanguage && CODE_BLOCK_LANGUAGES.has(normalizedLanguage)) return true;
+  if (hasExplicitCodeLanguage(language)) return true;
   return looksLikeCode(code);
+}
+
+function looksLikeDiagram(text: string): boolean {
+  const trimmed = text.trim();
+  if (!trimmed) return false;
+
+  if (/[┌┐└┘├┤┬┴┼─│╭╮╰╯═║╔╗╚╝]/.test(trimmed)) return true;
+
+  const lines = trimmed.split("\n").filter((line) => line.trim());
+  const arrowCount = trimmed.match(/-->|<--|->|<-|=>|<=/g)?.length ?? 0;
+  if (arrowCount >= 2) return true;
+
+  const ruleLineCount = lines.filter((line) => /(?:\+-{2,}\+|[|+][-=_]{3,}|[-=_]{3,}[|+])/.test(line)).length;
+  if (ruleLineCount >= 2) return true;
+
+  const connectorLineCount = lines.filter((line) => /[|+\\/<>-]{3,}/.test(line) && /[A-Za-z0-9]/.test(line)).length;
+  return lines.length >= 2 && connectorLineCount >= 2;
+}
+
+function ArtifactBlock({
+  extension = "txt",
+  label,
+  onCopyText,
+  text,
+}: {
+  extension?: string;
+  label: string;
+  onCopyText?: (text: string) => Promise<void> | void;
+  text: string;
+}) {
+  const [copied, setCopied] = useState(false);
+  const normalizedText = text.trimEnd();
+
+  const handleCopy = async () => {
+    await copyCodeToClipboard(normalizedText, onCopyText);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleDownload = () => {
+    downloadTextFile(`${label.toLowerCase()}.${extension}`, normalizedText);
+  };
+
+  return (
+    <div className="md-artifact-block">
+      <div className="md-artifact-toolbar">
+        <span className="md-artifact-label">{label}</span>
+        <div className="md-artifact-actions">
+          <button className="md-artifact-action" type="button" onClick={() => void handleCopy()}>
+            {copied ? "Copied" : "Copy"}
+          </button>
+          <button className="md-artifact-action" type="button" onClick={handleDownload}>
+            .{extension}
+          </button>
+        </div>
+      </div>
+      <pre className="md-artifact-content">
+        <code>{normalizedText}</code>
+      </pre>
+    </div>
+  );
 }
 
 function PlainTextBlock({ text }: { text: string }) {
@@ -152,6 +261,54 @@ function PlainTextBlock({ text }: { text: string }) {
     <pre className="md-plain-block">
       <code>{trimmed}</code>
     </pre>
+  );
+}
+
+function MarkdownTable({
+  children,
+  onCopyText,
+}: {
+  children: ReactNode;
+  onCopyText?: (text: string) => Promise<void> | void;
+}) {
+  const tableRef = useRef<HTMLTableElement>(null);
+  const [copied, setCopied] = useState(false);
+
+  const getRows = () => readTableRows(tableRef.current);
+
+  const handleCopy = async () => {
+    const tsv = tableRowsToTsv(getRows());
+    if (!tsv) return;
+    await copyCodeToClipboard(tsv, onCopyText);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleDownload = () => {
+    const csv = tableRowsToCsv(getRows());
+    if (!csv) return;
+    downloadTextFile("table.csv", csv, "text/csv;charset=utf-8");
+  };
+
+  return (
+    <div className="md-table-block">
+      <div className="md-table-toolbar">
+        <span className="md-table-label">Table</span>
+        <div className="md-table-actions">
+          <button className="md-table-action" type="button" onClick={() => void handleCopy()}>
+            {copied ? "Copied" : "Copy"}
+          </button>
+          <button className="md-table-action" type="button" onClick={handleDownload}>
+            CSV
+          </button>
+        </div>
+      </div>
+      <div className="md-table-scroll">
+        <table ref={tableRef} className="md-table">
+          {children}
+        </table>
+      </div>
+    </div>
   );
 }
 
@@ -295,6 +452,16 @@ export function renderMarkdown(text: string, options?: MarkdownRenderOptions): R
       }
       const match = className.match(/language-([\w-]+)/);
       const language = match?.[1];
+      if (!hasExplicitCodeLanguage(language) && looksLikeDiagram(raw)) {
+        return (
+          <ArtifactBlock
+            label="Diagram"
+            text={raw}
+            extension="txt"
+            onCopyText={options?.onCopyCode}
+          />
+        );
+      }
       if (!shouldRenderCodeCard(raw, language)) {
         return <PlainTextBlock text={raw} />;
       }
@@ -335,6 +502,34 @@ export function renderMarkdown(text: string, options?: MarkdownRenderOptions): R
     },
     pre({ children }) {
       return <>{children}</>;
+    },
+    table({ children }) {
+      return <MarkdownTable onCopyText={options?.onCopyCode}>{children}</MarkdownTable>;
+    },
+    tbody({ children }) {
+      return <tbody className="md-table-body">{children}</tbody>;
+    },
+    td({ align, children }) {
+      const textAlign = resolveTableTextAlign(align);
+      return (
+        <td className="md-table-cell" style={textAlign ? { textAlign } : undefined}>
+          {children}
+        </td>
+      );
+    },
+    th({ align, children }) {
+      const textAlign = resolveTableTextAlign(align);
+      return (
+        <th className="md-table-cell md-table-header-cell" style={textAlign ? { textAlign } : undefined}>
+          {children}
+        </th>
+      );
+    },
+    thead({ children }) {
+      return <thead className="md-table-head">{children}</thead>;
+    },
+    tr({ children }) {
+      return <tr className="md-table-row">{children}</tr>;
     },
     ul({ children }) {
       return <ul className="md-list">{children}</ul>;
