@@ -311,6 +311,7 @@ import { useCommunityResourcesTabLifecycle } from "../../../shared/useCommunityR
 import { useCommunitySettingsAccessLifecycle } from "../../../shared/useCommunitySettingsAccessLifecycle";
 import { confirmDiscardUnsavedCommunitySettingsWeb } from "../../../shared/communityUnsavedGuard";
 import { fetchCloudMyCommunityAccessBySlug } from "../../../shared/cloudCommunityAccessGateway";
+import { markCloudThreadAgentAttentionSeen } from "../../../shared/cloudThreadsGateway";
 import type { WebSettingsPanelsProps } from "./components/WebSettingsPanels";
 import type { WorkspaceComposerApi, WorkspaceComposerDraft } from "./components/WebWorkspaceHost";
 import { WebAuthBootstrapShell } from "./components/WebAuthBootstrapShell";
@@ -381,6 +382,7 @@ type ThreadRecord = {
   project_id: string | null;
   community_id: string | null;
   context_version: number;
+  agent_attention: boolean;
   last_seq: number;
   created_at: number; // epoch seconds
   updated_at: number; // epoch seconds
@@ -1811,6 +1813,7 @@ export default function App() {
     Record<string, ThreadStreamingState<MemoryUsedItem, HistoryUsedItem, CommunityEvidenceUsedV1>>
   >({});
   const [runtimeEventsByRunId, setRuntimeEventsByRunId] = useState<Record<string, ThreadStreamingRuntimeEvent[]>>({});
+  const threadAgentAttentionSeenInFlightRef = useRef<Set<string>>(new Set());
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const [memoryToast, setMemoryToast] = useState<string | null>(null);
   const memoryToastTimeoutRef = useRef<number | null>(null);
@@ -2816,6 +2819,24 @@ export default function App() {
     const threadModelId = threads.find((t) => t.id === activeThreadId)?.model_id ?? null;
     if (threadModelId) setActiveModelId(threadModelId);
   }, [activeThreadId, threads]);
+
+  useEffect(() => {
+    if (!session || activePage !== "workspace") return;
+    const refreshThreads = () => {
+      void loadThreads(session).catch(() => null);
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        refreshThreads();
+      }
+    };
+    window.addEventListener("focus", refreshThreads);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      window.removeEventListener("focus", refreshThreads);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [activePage, loadThreads, session]);
 
   useEffect(() => {
     if (activeView !== "settings" || settingsGroup !== "agent") return;
@@ -4611,6 +4632,41 @@ export default function App() {
   const displayedThreadError = showGuestRateLimitSignInAction
     ? GUEST_FREE_MODEL_LIMIT_SHORT_MESSAGE
     : threadError;
+
+  useEffect(() => {
+    if (!session || activePage !== "workspace" || !activeThreadId) return;
+    if (!activeThread?.agent_attention) return;
+    if (isHydratingActiveWorkspaceThread || isActiveWorkspaceThreadBusy) return;
+    if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+    if (threadAgentAttentionSeenInFlightRef.current.has(activeThreadId)) return;
+
+    threadAgentAttentionSeenInFlightRef.current.add(activeThreadId);
+    setThreads((prev) =>
+      prev.map((thread) =>
+        thread.id === activeThreadId ? { ...thread, agent_attention: false } : thread,
+      ),
+    );
+
+    void markCloudThreadAgentAttentionSeen({
+      session,
+      threadId: activeThreadId,
+    })
+      .catch(() => {
+        void loadThreads(session).catch(() => null);
+      })
+      .finally(() => {
+        threadAgentAttentionSeenInFlightRef.current.delete(activeThreadId);
+      });
+  }, [
+    activePage,
+    activeThread?.agent_attention,
+    activeThreadId,
+    isActiveWorkspaceThreadBusy,
+    isHydratingActiveWorkspaceThread,
+    loadThreads,
+    session,
+  ]);
+
   const pendingToken =
     (checkoutClaimToken ?? (publicRoute.kind === "claim" ? publicRoute.token : "")).trim() ||
     readPendingPurchaseClaimToken();
@@ -5284,7 +5340,7 @@ export default function App() {
       const touch = event.touches[0];
       mobileShellSwipeStartRef.current = { x: touch.clientX, y: touch.clientY };
     }, [mobileOverlay, showMobileShell]);
-    const handleMobileShellTouchEnd = useCallback((event: TouchEvent<HTMLDivElement>) => {
+  const handleMobileShellTouchEnd = useCallback((event: TouchEvent<HTMLDivElement>) => {
       const start = mobileShellSwipeStartRef.current;
       mobileShellSwipeStartRef.current = null;
       if (!start || !showMobileShell || mobileOverlay || event.changedTouches.length !== 1) return;
@@ -5315,30 +5371,37 @@ export default function App() {
       openMobileCommunitySurface,
       showMobileShell,
     ]);
-	  const communityHomeButton = activeCommunity ? (
-	    <button
-	      className={`icon-button community-btn${activePage === "community" ? " active" : ""}`}
-	      onClick={() => {
+  const activeCommunityAttentionSummary = activeCommunityId
+    ? (attentionByCommunityId[activeCommunityId] ?? { chat: false, ai_feed: false, resources: false })
+    : { chat: false, ai_feed: false, resources: false };
+  const activeCommunityAttentionCount =
+    Number(Boolean(activeCommunityAttentionSummary.chat || (activePage === "community" && activeCommunityId && unreadCount > 0))) +
+    Number(Boolean(activeCommunityAttentionSummary.ai_feed)) +
+    Number(Boolean(activeCommunityAttentionSummary.resources));
+  const communityHomeButton = activeCommunity ? (
+    <button
+      className={`icon-button community-btn${activePage === "community" ? " active" : ""}`}
+      onClick={() => {
         const nextCommunitySlug = String(selectedActiveCommunitySlug ?? activeCommunity.slug ?? "").trim();
-	        if (!nextCommunitySlug) return;
-	        openCommunityChat(nextCommunitySlug, { clearUnread: true });
-	      }}
-	      aria-label="Open community"
-	      title={activeCommunity.name}
-	      type="button"
-	    >
-	      <StableAvatar
-	        className="community-btn-avatar"
-	        imageUrl={activeCommunity.avatar_url}
-	        alt={activeCommunity.name}
-	        fallback={communityInitials(activeCommunity.name)}
-	        fallbackClassName="community-btn-initials"
-	      />
-	      {unreadCount > 0 && activePage !== "community" && (
-	        <span className="unread-badge">{unreadCount > 99 ? "99+" : unreadCount}</span>
-	      )}
-	    </button>
-	  ) : null;
+        if (!nextCommunitySlug) return;
+        openCommunityChat(nextCommunitySlug, { clearUnread: true });
+      }}
+      aria-label="Open community"
+      title={activeCommunity.name}
+      type="button"
+    >
+      <StableAvatar
+        className="community-btn-avatar"
+        imageUrl={activeCommunity.avatar_url}
+        alt={activeCommunity.name}
+        fallback={communityInitials(activeCommunity.name)}
+        fallbackClassName="community-btn-initials"
+      />
+      {activeCommunityAttentionCount > 0 ? (
+        <span className="unread-badge">{activeCommunityAttentionCount}</span>
+      ) : null}
+    </button>
+  ) : null;
   const handleSelectCommunityTab = useCallback((tab: CommunityTab) => {
     if (tab === "chat") {
       setUnreadCount(0);
@@ -5751,7 +5814,7 @@ export default function App() {
     activePage,
     hasSelectedCommunity,
     activeCommunity,
-    unreadCount,
+    activeCommunityAttentionCount,
     openMobileDrawer,
     handleExitMobileSettings,
     handleStartNewWorkspaceThreadFromShell,

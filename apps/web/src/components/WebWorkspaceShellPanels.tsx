@@ -8,6 +8,7 @@ type MobileOverlay = "agent" | "community" | "community_selector" | null;
 
 type ThreadLike = {
   id: string;
+  agent_attention?: boolean;
 };
 
 export type WebWorkspaceShellPanelsProps<TThread extends ThreadLike, TProject extends ProjectLike> = {
@@ -87,6 +88,11 @@ export function WebWorkspaceShellPanels<TThread extends ThreadLike, TProject ext
             <div className="session-content">
               <div className="session-title">{props.getThreadDisplayTitle(thread)}</div>
             </div>
+            {thread.agent_attention ? (
+              <div className="session-meta session-meta-attention" aria-hidden="true">
+                <span className="session-attention-dot" />
+              </div>
+            ) : null}
           </div>
         ),
       }}

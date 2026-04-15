@@ -14,6 +14,8 @@ type ConvexThreadRow = {
   projectId?: string | null;
   communityId?: string | null;
   contextVersion?: number | null;
+  latestUserVisibleCompletedRunId?: string | null;
+  lastSeenUserVisibleCompletedRunId?: string | null;
   lastSeq?: number | null;
   createdAt?: number | null;
   updatedAt?: number | null;
@@ -61,6 +63,7 @@ export type DaytonaCloudThreadTransportRow = {
   project_id: string | null;
   community_id: string | null;
   context_version: number;
+  agent_attention: boolean;
   created_at: string;
   updated_at: string;
   last_seq: number;
@@ -161,6 +164,10 @@ function mapConvexThreadRow(row: ConvexThreadRow): DaytonaCloudThreadTransportRo
     project_id: typeof row.projectId === "string" ? row.projectId : null,
     community_id: typeof row.communityId === "string" ? row.communityId : null,
     context_version: Math.max(0, Math.floor(toFiniteNumber(row.contextVersion, 0))),
+    agent_attention:
+      String(row.latestUserVisibleCompletedRunId ?? "").trim().length > 0 &&
+      String(row.latestUserVisibleCompletedRunId ?? "").trim() !==
+        String(row.lastSeenUserVisibleCompletedRunId ?? "").trim(),
     created_at: toIsoStringFromMs(row.createdAt),
     updated_at: toIsoStringFromMs(row.updatedAt),
     last_seq: Math.max(0, Math.floor(toFiniteNumber(row.lastSeq, 0))),

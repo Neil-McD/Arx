@@ -657,6 +657,8 @@ export default defineSchema({
         updatedAt: v.number(),
       }),
     ),
+    latestUserVisibleCompletedRunId: v.optional(v.string()),
+    lastSeenUserVisibleCompletedRunId: v.optional(v.string()),
     lastSeq: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),

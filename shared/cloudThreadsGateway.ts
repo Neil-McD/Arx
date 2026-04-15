@@ -209,3 +209,20 @@ export async function cancelCloudRuntimeRunByThreadKey(params: {
     nowMs: params.nowMs ?? Date.now(),
   });
 }
+
+export async function markCloudThreadAgentAttentionSeen(params: {
+  session: AuthSessionLike;
+  threadId: string;
+  nowMs?: number;
+}): Promise<void> {
+  const bootstrapped = await bootstrapGatewayAuthContextIfAvailable(params.session);
+  if (!bootstrapped) return;
+  const { client, authSubject } = bootstrapped;
+  const threadKey = String(params.threadId ?? "").trim();
+  if (!threadKey) return;
+  await client.mutation("threads:markCloudThreadAgentAttentionSeen" as any, {
+    authSubject,
+    threadKey,
+    nowMs: params.nowMs ?? Date.now(),
+  });
+}

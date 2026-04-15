@@ -22,6 +22,7 @@ type ThreadRecord = {
   project_id: string | null;
   community_id: string | null;
   context_version: number;
+  agent_attention: boolean;
   last_seq: number;
   created_at: number;
   updated_at: number;
@@ -103,6 +104,7 @@ export function useWebThreadMutationController<SessionT>(
         project_id: convexRow?.project_id ?? projectId,
         community_id: convexRow?.community_id ?? communityId,
         context_version: Number.isFinite(convexRow?.context_version) ? convexRow!.context_version : 0,
+        agent_attention: convexRow?.agent_attention === true,
         last_seq: Number.isFinite(convexRow?.last_seq) ? convexRow!.last_seq : 0,
         created_at: convexRow ? current.toEpochSeconds(convexRow.created_at) : nowSec,
         updated_at: convexRow ? current.toEpochSeconds(convexRow.updated_at) : nowSec,

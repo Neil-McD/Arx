@@ -9,7 +9,7 @@ type WebMobileTopBarProps = {
   activeCommunityName: string | null;
   activeCommunityAvatarUrl: string | null;
   activeCommunityInitials: string;
-  unreadCount: number;
+  activeCommunityAttentionCount: number;
   onOpenDrawer: () => void;
   onBack?: (() => void) | null;
   onStartNewThread?: (() => void) | null;
@@ -26,7 +26,7 @@ export function WebMobileTopBar({
   activeCommunityName,
   activeCommunityAvatarUrl,
   activeCommunityInitials,
-  unreadCount,
+  activeCommunityAttentionCount,
   onOpenDrawer,
   onBack = null,
   onStartNewThread = null,
@@ -122,8 +122,8 @@ export function WebMobileTopBar({
               <svg className="mobile-community-trigger-chevron" viewBox="0 0 24 24" aria-hidden="true">
                 <path d="m6 9 6 6 6-6" />
               </svg>
-              {unreadCount > 0 && mode !== "community" ? (
-                <span className="unread-badge">{unreadCount > 99 ? "99+" : unreadCount}</span>
+              {activeCommunityAttentionCount > 0 ? (
+                <span className="unread-badge">{activeCommunityAttentionCount}</span>
               ) : null}
             </>
           ) : (

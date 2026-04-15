@@ -22,6 +22,8 @@ type ThreadLike = {
   modelId?: string;
   contextVersion?: number;
   workingState?: ThreadWorkingStateLike;
+  latestUserVisibleCompletedRunId?: string;
+  lastSeenUserVisibleCompletedRunId?: string;
   lastSeq?: number;
   createdAt: number;
   updatedAt: number;
@@ -516,6 +518,11 @@ async function finalizeRuntimeRunRecord(args: {
   });
   await args.ctx.db.patch(args.thread._id, {
     workingState,
+    ...(status === "ok" && run.visibility !== "internal_hidden"
+      ? {
+          latestUserVisibleCompletedRunId: run.runId,
+        }
+      : null),
     updatedAt: args.nowMs,
   });
   const updated = (await args.ctx.db.get(run._id)) as RuntimeRunLike | null;
@@ -1542,6 +1549,39 @@ export const getCloudRunningRuntimeRunByThreadKey = query({
     if (isRuntimeRunStale({ run, nowMs: Date.now() })) return null;
     if (run.visibility === "internal_hidden") return null;
     return run;
+  },
+});
+
+export const markCloudThreadAgentAttentionSeen = mutation({
+  args: {
+    ownerId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    threadKey: v.string(),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const ownerId = await resolveOwnerIdForAuthenticatedRequest({
+      ctx,
+      ownerId: args.ownerId,
+      authSubject: args.authSubject ?? null,
+    });
+    const threadKey = String(args.threadKey ?? "").trim();
+    if (!threadKey) throw new Error("thread_key_required");
+    const thread = await getCloudThreadByThreadKeyInternal({
+      ctx,
+      ownerId,
+      threadKey,
+    });
+    if (!thread) return null;
+    const latestRunId = String(thread.latestUserVisibleCompletedRunId ?? "").trim();
+    if (!latestRunId) return thread;
+    if (String(thread.lastSeenUserVisibleCompletedRunId ?? "").trim() === latestRunId) {
+      return thread;
+    }
+    await ctx.db.patch(thread._id, {
+      lastSeenUserVisibleCompletedRunId: latestRunId,
+    });
+    return (await ctx.db.get(thread._id)) as ThreadLike | null;
   },
 });
 

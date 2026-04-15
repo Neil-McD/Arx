@@ -32,7 +32,7 @@ export function buildWebShellChromeHostProps(params: {
   activePage: "workspace" | "community" | "discover";
   hasSelectedCommunity: boolean;
   activeCommunity: CommunityLike | null;
-  unreadCount: number;
+  activeCommunityAttentionCount: number;
   openMobileDrawer: () => void;
   handleExitMobileSettings: () => void;
   handleStartNewWorkspaceThreadFromShell: () => void;
@@ -118,7 +118,7 @@ export function buildWebShellChromeHostProps(params: {
       activeCommunityInitials: params.communityInitials(
         params.activeCommunity?.name ?? "Community",
       ),
-      unreadCount: params.unreadCount,
+      activeCommunityAttentionCount: params.activeCommunityAttentionCount,
       onOpenDrawer: params.openMobileDrawer,
       onBack: params.showMobileSettingsIndex
         ? params.handleExitMobileSettings

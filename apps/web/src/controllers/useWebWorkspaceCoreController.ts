@@ -16,6 +16,7 @@ type ThreadLike = {
   project_id: string | null;
   community_id: string | null;
   context_version: number;
+  agent_attention: boolean;
   last_seq: number;
   created_at: number;
   updated_at: number;

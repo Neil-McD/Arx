@@ -51,6 +51,7 @@ type ThreadRecord = {
   project_id: string | null;
   community_id: string | null;
   context_version: number;
+  agent_attention: boolean;
   last_seq: number;
   created_at: number;
   updated_at: number;
@@ -149,6 +150,7 @@ export function useWebThreadDataController<SessionT, ThreadMessageT extends Thre
           project_id: row.project_id ?? null,
           community_id: row.community_id ?? null,
           context_version: Number.isFinite(row.context_version) ? row.context_version : 0,
+          agent_attention: row.agent_attention === true,
           last_seq: Number.isFinite(row.last_seq) ? row.last_seq : 0,
           created_at: current.toEpochSeconds(row.created_at),
           updated_at: current.toEpochSeconds(row.updated_at),
