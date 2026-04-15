@@ -1175,11 +1175,14 @@ body {
 }
 
 .discover-app-list {
-  width: min(100%, 1080px);
+  grid-column: 1 / -1;
+  width: min(100%, 1120px);
   margin: 0 auto;
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  column-gap: 36px;
+  grid-template-columns: repeat(2, minmax(380px, 460px));
+  justify-content: center;
+  column-gap: 48px;
+  row-gap: 8px;
   align-content: start;
   padding-bottom: 30px;
 }
@@ -1192,8 +1195,8 @@ body {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: 14px;
-  padding: 14px 0;
+  gap: 16px;
+  padding: 18px 10px;
   border-bottom: 1px solid color-mix(in srgb, var(--border-muted) 82%, transparent);
 }
 
@@ -1207,8 +1210,8 @@ body {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: 14px;
-  padding: 14px 0;
+  gap: 16px;
+  padding: 18px 10px;
   border-bottom: 1px solid color-mix(in srgb, var(--border-muted) 82%, transparent);
   cursor: pointer;
 }
@@ -1227,9 +1230,9 @@ body {
 }
 
 .discover-catalog-logo {
-  width: 44px;
-  height: 44px;
-  border-radius: 12px;
+  width: 50px;
+  height: 50px;
+  border-radius: 14px;
   display: grid;
   place-items: center;
   flex-shrink: 0;
@@ -1246,8 +1249,8 @@ body {
 }
 
 .discover-catalog-logo-image {
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
   object-fit: contain;
   display: block;
 }
@@ -1272,11 +1275,11 @@ body {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 4px;
 }
 
 .discover-app-row-name {
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 600;
   line-height: 1.2;
   color: var(--text-primary);
@@ -1284,7 +1287,7 @@ body {
 
 .discover-app-row-tagline {
   min-width: 0;
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.4;
   color: var(--text-muted);
   white-space: nowrap;
@@ -1296,9 +1299,9 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 48px;
-  height: 32px;
-  padding: 0 12px;
+  min-width: 56px;
+  height: 34px;
+  padding: 0 14px;
   border-radius: 999px;
   border: 1px solid var(--border-muted);
   background: color-mix(in srgb, var(--bg-card-alt) 72%, transparent);
@@ -17388,6 +17391,7 @@ button.message-citation-chip:hover {
 .app-root.mobile-shell .discover-app-list {
   width: 100%;
   margin: 0;
+  grid-column: auto;
   grid-template-columns: 1fr;
   column-gap: 0;
   padding-bottom: 18px;
@@ -17395,12 +17399,12 @@ button.message-citation-chip:hover {
 
 .app-root.mobile-shell .discover-app-row {
   gap: 12px;
-  padding: 12px 0;
+  padding: 14px 0;
 }
 
 .app-root.mobile-shell .discover-app-row-button {
   gap: 12px;
-  padding: 12px 0;
+  padding: 14px 0;
 }
 
 .app-root.mobile-shell .discover-app-row-tagline {
