@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ComponentProps } from "react";
 
 import { buildPlatformSwitcherStyle } from "../../../../shared/platformSwitcherUi";
 import type { DiscoverCommunitySnapshot } from "../../../../shared/communityTypes";
@@ -138,6 +138,41 @@ function buildMountStatusLabel(mount: UserPlatformMountedApp): string {
     )}.`;
   }
   return `${count} ${toolLabel} are mounted in your platform layer.`;
+}
+
+function buildDiscoverCommunityCardProps(args: {
+  community: DiscoverCommunitySnapshot;
+  formatPlanPrice: (
+    plan: DiscoverCommunitySnapshot["active_plan"],
+  ) => string;
+  formatCommunityVisibilityLabel: (
+    visibility: DiscoverCommunitySnapshot["visibility"],
+  ) => string;
+  isPublishedCommunityVisibility: (
+    visibility: DiscoverCommunitySnapshot["visibility"],
+  ) => boolean;
+  onActivateCommunity: (slug: string) => void;
+}): ComponentProps<typeof DiscoverCommunityCard> {
+  const { community } = args;
+  return {
+    name: community.name,
+    slug: community.slug,
+    oneLiner: community.one_liner ?? "",
+    avatarUrl: community.avatar_url,
+    bannerUrl: community.banner_url,
+    bannerFocusX: community.banner_focus_x,
+    bannerFocusY: community.banner_focus_y,
+    bannerZoom: community.banner_zoom,
+    priceLabel: args.formatPlanPrice(community.active_plan),
+    visibilityClass: community.visibility,
+    visibilityLabel: args.formatCommunityVisibilityLabel(community.visibility),
+    isPublishedVisibility: args.isPublishedCommunityVisibility(
+      community.visibility,
+    ),
+    clickable: true,
+    ariaLabel: `Open ${community.name}`,
+    onActivate: () => args.onActivateCommunity(community.slug),
+  };
 }
 
 export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
@@ -534,19 +569,17 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
               ) : null}
               {!isAppsTab && !isSkillsTab
                 ? filteredDiscoverCommunities.map((community) => {
-                    const derivedVisibilityLabel = formatCommunityVisibilityLabel(
-                      community.visibility,
-                    );
+                    const cardProps = buildDiscoverCommunityCardProps({
+                      community,
+                      formatPlanPrice,
+                      formatCommunityVisibilityLabel,
+                      isPublishedCommunityVisibility,
+                      onActivateCommunity,
+                    });
                     return (
                       <DiscoverCommunityCard
-                        key={community.id}
-                        community={community}
-                        formatPlanPrice={formatPlanPrice}
-                        visibilityLabel={derivedVisibilityLabel}
-                        isPublic={isPublishedCommunityVisibility(
-                          community.visibility,
-                        )}
-                        onActivate={onActivateCommunity}
+                        key={community.slug}
+                        {...cardProps}
                       />
                     );
                   })
