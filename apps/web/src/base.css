@@ -9253,24 +9253,11 @@ button.message-citation-chip:hover {
 }
 
 .message-text .md-section-label {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0.92em 0 0.18em;
-  color: var(--text-secondary);
-  font-size: 0.82em;
-  font-weight: 700;
-  line-height: 1.25;
-  text-transform: uppercase;
-}
-
-.message-text .md-section-label::before {
-  content: "";
-  width: 3px;
-  height: 1em;
-  border-radius: 999px;
-  background: var(--accent-gold);
-  opacity: 0.82;
+  margin: 0.92em 0 0.2em;
+  color: var(--text-primary);
+  font-size: 0.94em;
+  font-weight: 600;
+  line-height: 1.35;
 }
 
 .message-text .md-section-label:first-child {
@@ -9289,27 +9276,7 @@ button.message-citation-chip:hover {
 }
 
 .message-item.assistant .message-text > .md-section-label + .md-list {
-  margin-top: 0.34em;
-  padding-left: 0;
-  list-style: none;
-}
-
-.message-item.assistant .message-text > .md-section-label + .md-list > li {
-  position: relative;
-  margin: 0.18em 0;
-  padding: 0.2em 0 0.2em 1.08em;
-}
-
-.message-item.assistant .message-text > .md-section-label + .md-list > li::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 0.82em;
-  width: 5px;
-  height: 5px;
-  border-radius: 999px;
-  background: var(--accent-gold);
-  opacity: 0.78;
+  margin-top: 0.22em;
 }
 
 .message-text .md-list {
