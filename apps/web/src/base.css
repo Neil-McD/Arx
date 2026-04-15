@@ -1174,6 +1174,148 @@ body {
   grid-column: 1 / -1;
 }
 
+.discover-app-list {
+  width: min(100%, 1080px);
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 36px;
+  align-content: start;
+  padding-bottom: 30px;
+}
+
+.discover-app-list>.discover-empty {
+  grid-column: 1 / -1;
+}
+
+.discover-app-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--border-muted) 82%, transparent);
+}
+
+.discover-app-row-button {
+  appearance: none;
+  border: 0;
+  width: 100%;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--border-muted) 82%, transparent);
+  cursor: pointer;
+}
+
+.discover-app-row-button:hover .discover-app-action,
+.discover-app-row-button:focus-visible .discover-app-action {
+  border-color: var(--border-strong);
+  background: color-mix(in srgb, var(--bg-card) 94%, transparent);
+  color: var(--text-primary);
+}
+
+.discover-app-row-button:focus-visible {
+  outline: 2px solid var(--border-active);
+  outline-offset: 4px;
+  border-radius: 14px;
+}
+
+.discover-catalog-logo {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  overflow: hidden;
+  background: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 0 0 1px rgba(12, 12, 14, 0.04);
+}
+
+.discover-catalog-logo-detail {
+  width: 56px;
+  height: 56px;
+  border-radius: 16px;
+}
+
+.discover-catalog-logo-image {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+  display: block;
+}
+
+.discover-catalog-logo-detail .discover-catalog-logo-image {
+  width: 28px;
+  height: 28px;
+}
+
+.discover-catalog-logo-fallback {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #111111;
+}
+
+.discover-catalog-logo-detail .discover-catalog-logo-fallback {
+  font-size: 14px;
+}
+
+.discover-app-row-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.discover-app-row-name {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--text-primary);
+}
+
+.discover-app-row-tagline {
+  min-width: 0;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.discover-app-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 48px;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border-muted);
+  background: color-mix(in srgb, var(--bg-card-alt) 72%, transparent);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: border-color 140ms ease, background 140ms ease, color 140ms ease;
+}
+
+.discover-app-action:hover,
+.discover-app-action:focus-visible {
+  border-color: var(--border-strong);
+  background: color-mix(in srgb, var(--bg-card) 94%, transparent);
+  color: var(--text-primary);
+}
+
 .discover-app-card {
   min-height: 0;
 }
@@ -1207,35 +1349,6 @@ body {
 .discover-app-icon svg {
   width: 20px;
   height: 20px;
-}
-
-.discover-app-icon-github {
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.03));
-}
-
-.discover-app-icon-supabase {
-  background: linear-gradient(135deg, rgba(62, 207, 142, 0.22), rgba(62, 207, 142, 0.08));
-  color: #8ff0bf;
-}
-
-.discover-app-icon-vercel {
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.04));
-}
-
-.discover-app-icon-linear {
-  background: linear-gradient(135deg, rgba(147, 112, 255, 0.18), rgba(147, 112, 255, 0.05));
-}
-
-.discover-app-icon-notion {
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02));
-}
-
-.discover-app-icon-slack {
-  background: linear-gradient(135deg, rgba(244, 106, 147, 0.12), rgba(110, 212, 216, 0.08));
-}
-
-.discover-app-icon-asana {
-  background: linear-gradient(135deg, rgba(240, 106, 106, 0.14), rgba(138, 124, 255, 0.08));
 }
 
 .discover-app-icon-custom {
@@ -1392,29 +1505,11 @@ body {
   gap: 16px;
 }
 
-.discover-app-detail-icon {
-  width: 56px;
-  height: 56px;
-  border-radius: 16px;
-}
-
-.discover-app-detail-icon svg {
-  width: 24px;
-  height: 24px;
-}
-
 .discover-app-detail-meta {
   display: flex;
   flex-direction: column;
   gap: 6px;
   min-width: 0;
-}
-
-.discover-app-detail-name-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
 }
 
 .discover-app-detail-name {
@@ -1474,6 +1569,48 @@ body {
   line-height: 1.55;
 }
 
+.discover-connect-note {
+  margin-bottom: 10px;
+}
+
+.discover-connect-stack {
+  display: grid;
+  gap: 12px;
+}
+
+.discover-connect-grid {
+  align-items: start;
+}
+
+.discover-connect-secret-field {
+  grid-column: 1 / -1;
+}
+
+.discover-connect-toolbar {
+  padding-top: 4px;
+}
+
+.discover-connect-status {
+  display: grid;
+  gap: 6px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 1px solid var(--border-default);
+  background: color-mix(in srgb, var(--bg-card-alt) 62%, transparent);
+}
+
+.discover-connect-status-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.discover-connect-status-body {
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+
 .discover-info-grid {
   display: grid;
   gap: 0;
@@ -1516,7 +1653,8 @@ body {
 }
 
 @media (max-width: 720px) {
-  .discover-grid {
+  .discover-grid,
+  .discover-app-list {
     grid-template-columns: 1fr;
   }
 
@@ -2201,6 +2339,7 @@ body {
 .public-community-funnel-body .public-funnel-about {
   font-size: 17px;
   line-height: 1.72;
+  color: var(--text-primary);
 }
 
 .public-community-funnel-body .public-funnel-action-copy {
@@ -17246,8 +17385,38 @@ button.message-citation-chip:hover {
   padding-bottom: 18px;
 }
 
+.app-root.mobile-shell .discover-app-list {
+  width: 100%;
+  margin: 0;
+  grid-template-columns: 1fr;
+  column-gap: 0;
+  padding-bottom: 18px;
+}
+
+.app-root.mobile-shell .discover-app-row {
+  gap: 12px;
+  padding: 12px 0;
+}
+
+.app-root.mobile-shell .discover-app-row-button {
+  gap: 12px;
+  padding: 12px 0;
+}
+
+.app-root.mobile-shell .discover-app-row-tagline {
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
 .app-root.mobile-shell .discover-card {
   min-height: 0;
+}
+
+.app-root.mobile-shell .discover-app-detail-header {
+  align-items: flex-start;
 }
 
 .app-root.mobile-shell .discover-card-body {
@@ -17271,10 +17440,6 @@ button.message-citation-chip:hover {
 .app-root.mobile-shell .discover-app-card-body {
   padding: 16px;
   gap: 12px;
-}
-
-.app-root.mobile-shell .discover-app-detail-grid {
-  grid-template-columns: 1fr;
 }
 
 .app-root.mobile-shell .community-tab-scroll {

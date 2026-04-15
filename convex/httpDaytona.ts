@@ -115,6 +115,34 @@ type RuntimeMountedCommunityAppTool = {
   risk_level: "read" | "write" | "sensitive";
 };
 
+type RuntimeMountedUserPlatformAppTool = {
+  user_platform_app_mount_id: string;
+  developer_app_id: string;
+  app_name: string;
+  endpoint_url: string;
+  auth_type: string;
+  tool_name: string;
+  namespaced_tool_name: string;
+  description: string | null;
+  input_schema: unknown;
+  risk_level: "read" | "write" | "sensitive";
+};
+
+type RuntimeMountedMcpTool = {
+  scope: "user" | "community";
+  mount_id: string;
+  runtime_tool_name: string;
+  developer_app_id: string;
+  app_name: string;
+  endpoint_url: string;
+  auth_type: string;
+  tool_name: string;
+  namespaced_tool_name: string;
+  description: string | null;
+  input_schema: unknown;
+  risk_level: "read" | "write" | "sensitive";
+};
+
 type RuntimeCommunitySkillInventory = {
   community_skill_attachment_id: string;
   skill_package_id: string;
@@ -169,6 +197,51 @@ function normalizeRuntimeMountedCommunityAppTools(
       community_app_mount_id: String(record.community_app_mount_id ?? "").trim(),
       developer_app_id: String(record.developer_app_id ?? "").trim(),
       app_name: String(record.app_name ?? "").trim() || "Community app",
+      endpoint_url: String(record.endpoint_url ?? "").trim(),
+      auth_type: String(record.auth_type ?? "").trim(),
+      tool_name: toolName,
+      namespaced_tool_name: namespacedToolName,
+      description:
+        typeof record.description === "string" && record.description.trim()
+          ? record.description.trim()
+          : null,
+      input_schema: normalizeMountedToolSchema(record.input_schema),
+      risk_level: riskLevel,
+    });
+  }
+  return tools;
+}
+
+function normalizeRuntimeMountedUserPlatformAppTools(
+  value: unknown,
+): RuntimeMountedUserPlatformAppTool[] {
+  if (!Array.isArray(value)) return [];
+  const tools: RuntimeMountedUserPlatformAppTool[] = [];
+  const seen = new Set<string>();
+  for (const item of value) {
+    const record =
+      item && typeof item === "object" && !Array.isArray(item)
+        ? (item as Record<string, unknown>)
+        : null;
+    if (!record) continue;
+    const namespacedToolName = String(
+      record.namespaced_tool_name ?? "",
+    ).trim();
+    const toolName = String(record.tool_name ?? "").trim();
+    if (!namespacedToolName || !toolName || seen.has(namespacedToolName)) {
+      continue;
+    }
+    seen.add(namespacedToolName);
+    const riskLevel =
+      record.risk_level === "write" || record.risk_level === "sensitive"
+        ? record.risk_level
+        : "read";
+    tools.push({
+      user_platform_app_mount_id: String(
+        record.user_platform_app_mount_id ?? "",
+      ).trim(),
+      developer_app_id: String(record.developer_app_id ?? "").trim(),
+      app_name: String(record.app_name ?? "").trim() || "My app",
       endpoint_url: String(record.endpoint_url ?? "").trim(),
       auth_type: String(record.auth_type ?? "").trim(),
       tool_name: toolName,
@@ -252,15 +325,17 @@ function normalizeRuntimeSelectedCommunitySkills(
 }
 
 function buildMountedAppOpenAiTools(
-  mountedTools: RuntimeMountedCommunityAppTool[],
+  mountedTools: RuntimeMountedMcpTool[],
 ): OpenAiCompatibleFunctionTool[] {
   return mountedTools.map((tool) => ({
     type: "function",
     function: {
-      name: tool.namespaced_tool_name,
+      name: tool.runtime_tool_name,
       description:
         tool.description ||
-        `Run ${tool.tool_name} on the ${tool.app_name} community app.`,
+        `Run ${tool.tool_name} on ${
+          tool.scope === "user" ? "your" : "the active community"
+        } ${tool.app_name} app.`,
       parameters: normalizeMountedToolSchema(tool.input_schema),
       strict: true,
     },
@@ -268,17 +343,31 @@ function buildMountedAppOpenAiTools(
 }
 
 function buildMountedAppResponsesTools(
-  mountedTools: RuntimeMountedCommunityAppTool[],
+  mountedTools: RuntimeMountedMcpTool[],
 ): ResponsesApiFunctionTool[] {
   return mountedTools.map((tool) => ({
     type: "function",
-    name: tool.namespaced_tool_name,
+    name: tool.runtime_tool_name,
     description:
       tool.description ||
-      `Run ${tool.tool_name} on the ${tool.app_name} community app.`,
+      `Run ${tool.tool_name} on ${
+        tool.scope === "user" ? "your" : "the active community"
+      } ${tool.app_name} app.`,
     parameters: normalizeMountedToolSchema(tool.input_schema),
     strict: true,
   }));
+}
+
+function buildUserPlatformMountedAppsPromptBlock(
+  mountedTools: RuntimeMountedMcpTool[],
+): string {
+  if (mountedTools.length === 0) return "";
+  return [
+    "",
+    "Your connected app tools are part of your baseline platform harness.",
+    "These baseline app tools use the `me__` prefix when they are exposed to the model.",
+    "These tools stay available across communities. Use the provided structured tool definitions directly.",
+  ].join("\n");
 }
 
 function mapMountedToolsToOverlayRuntime(
@@ -1173,6 +1262,29 @@ async function executeRetrievalAgentLoop(
         )
       : { active: [] };
 
+  const mountedUserPlatformAppTools = normalizeRuntimeMountedUserPlatformAppTools(
+    await params.ctx.runQuery(
+      internal.userPlatformAppMounts.listRuntimeUserPlatformMountedToolsInternal,
+      {
+        userId: params.userId as any,
+      },
+    ),
+  );
+  const runtimeMountedUserPlatformAppTools: RuntimeMountedMcpTool[] =
+    mountedUserPlatformAppTools.map((tool) => ({
+      scope: "user",
+      mount_id: tool.user_platform_app_mount_id,
+      runtime_tool_name: `me__${tool.namespaced_tool_name}`,
+      developer_app_id: tool.developer_app_id,
+      app_name: tool.app_name,
+      endpoint_url: tool.endpoint_url,
+      auth_type: tool.auth_type,
+      tool_name: tool.tool_name,
+      namespaced_tool_name: tool.namespaced_tool_name,
+      description: tool.description,
+      input_schema: tool.input_schema,
+      risk_level: tool.risk_level,
+    }));
   const mountedCommunityAppTools = params.communityId
     ? normalizeRuntimeMountedCommunityAppTools(
         await params.ctx.runQuery(
@@ -1184,6 +1296,25 @@ async function executeRetrievalAgentLoop(
         ),
       )
     : [];
+  const runtimeMountedCommunityAppTools: RuntimeMountedMcpTool[] =
+    mountedCommunityAppTools.map((tool) => ({
+      scope: "community",
+      mount_id: tool.community_app_mount_id,
+      runtime_tool_name: tool.namespaced_tool_name,
+      developer_app_id: tool.developer_app_id,
+      app_name: tool.app_name,
+      endpoint_url: tool.endpoint_url,
+      auth_type: tool.auth_type,
+      tool_name: tool.tool_name,
+      namespaced_tool_name: tool.namespaced_tool_name,
+      description: tool.description,
+      input_schema: tool.input_schema,
+      risk_level: tool.risk_level,
+    }));
+  const runtimeMountedTools = [
+    ...runtimeMountedUserPlatformAppTools,
+    ...runtimeMountedCommunityAppTools,
+  ];
   const explicitCommunitySkillMentions = new Set(
     extractExplicitSkillMentions(params.messages),
   );
@@ -1216,10 +1347,13 @@ async function executeRetrievalAgentLoop(
         )
       : [];
   const mountedToolByName = new Map(
-    mountedCommunityAppTools.map((tool) => [tool.namespaced_tool_name, tool]),
+    runtimeMountedTools.map((tool) => [tool.runtime_tool_name, tool]),
   );
   const overlayRuntimeState = buildCommunityOverlayRuntimeState({
-    allowedToolNames: params.allowedToolNames,
+    allowedToolNames: [
+      ...params.allowedToolNames,
+      ...runtimeMountedUserPlatformAppTools.map((tool) => tool.runtime_tool_name),
+    ],
     mountedTools: mapMountedToolsToOverlayRuntime(mountedCommunityAppTools),
     attachedSkills: mapCommunitySkillsToOverlayRuntime(attachedCommunitySkills),
     selectedSkills: mapSelectedCommunitySkillsToOverlayRuntime(
@@ -1259,7 +1393,9 @@ async function executeRetrievalAgentLoop(
     currentDateLabel: runtimeDateLabel,
     currentTimeZone: runtimeTimeZone,
   });
-  const systemPrompt = `${baseSystemPrompt}${overlayRuntimeState.systemPromptSuffix}`;
+  const systemPrompt = `${baseSystemPrompt}${buildUserPlatformMountedAppsPromptBlock(
+    runtimeMountedUserPlatformAppTools,
+  )}${overlayRuntimeState.systemPromptSuffix}`;
   const nativeTranscript: NativeToolAwareMessage[] = [
     {
       role: "system",
@@ -1272,15 +1408,36 @@ async function executeRetrievalAgentLoop(
   ];
   const nativeTools = [
     ...buildOpenAiFunctionTools(params.allowedToolNames),
-    ...buildMountedAppOpenAiTools(mountedCommunityAppTools),
+    ...buildMountedAppOpenAiTools(runtimeMountedTools),
   ];
   const responsesApiNativeTools = [
     ...buildResponsesApiFunctionTools(params.allowedToolNames),
-    ...buildMountedAppResponsesTools(mountedCommunityAppTools),
+    ...buildMountedAppResponsesTools(runtimeMountedTools),
   ];
   let reasoningSummaryStreamCount = 0;
   let reasoningSummaryPartAddedCount = 0;
   let reasoningSummaryTextDeltaCount = 0;
+  if (runtimeMountedUserPlatformAppTools.length > 0) {
+    try {
+      await params.appendRunEvent({
+        eventType: "platform_app_tools_resolved",
+        eventKey: `${params.runId}:platform_app_tools_resolved:1`,
+        payload: {
+          run_id: params.runId,
+          user_scope_id: params.userId ?? null,
+          tools: runtimeMountedUserPlatformAppTools.map((tool) => ({
+            runtime_tool_name: tool.runtime_tool_name,
+            app_name: tool.app_name,
+            tool_name: tool.tool_name,
+            namespaced_tool_name: tool.namespaced_tool_name,
+            risk_level: tool.risk_level,
+          })),
+        },
+      });
+    } catch {
+      // Best-effort runtime evidence only.
+    }
+  }
   if (mountedCommunityAppTools.length > 0) {
     try {
       await params.appendRunEvent({
@@ -1459,13 +1616,13 @@ async function executeRetrievalAgentLoop(
         );
         if (!isFixedTool) {
           const mountedTool = mountedToolByName.get(toolName);
-          if (!mountedTool || !params.communityId) {
+          if (!mountedTool) {
             return {
               status: "error",
               exitCode: null,
               outputText: "",
-              errorCode: "community_app_tool_not_found",
-              errorMessage: `${toolName} is not active for this community lens.`,
+              errorCode: "mounted_app_tool_not_found",
+              errorMessage: `${toolName} is not active for this runtime.`,
             };
           }
           try {
@@ -1473,8 +1630,28 @@ async function executeRetrievalAgentLoop(
               ctx: params.ctx,
               ownerId: params.userId,
               runId: params.runId,
-              operation: async () =>
-                await params.ctx.runAction(
+              operation: async () => {
+                if (mountedTool.scope === "user") {
+                  return await params.ctx.runAction(
+                    internal.userPlatformAppMounts
+                      .executeUserPlatformMountedAppToolInternal,
+                    {
+                      userId: params.userId as any,
+                      namespacedToolName: mountedTool.namespaced_tool_name,
+                      argsJson: normalizedArgs,
+                    },
+                  );
+                }
+                if (!params.communityId) {
+                  return {
+                    status: "error" as const,
+                    exitCode: null,
+                    outputText: "",
+                    errorCode: "community_app_tool_not_found",
+                    errorMessage: `${toolName} is not active for this community lens.`,
+                  };
+                }
+                return await params.ctx.runAction(
                   internal.communityAppMounts
                     .executeCommunityMountedAppToolInternal,
                   {
@@ -1483,7 +1660,8 @@ async function executeRetrievalAgentLoop(
                     namespacedToolName: mountedTool.namespaced_tool_name,
                     argsJson: normalizedArgs,
                   },
-                ),
+                );
+              },
             });
             await throwIfCancelled();
             return toolResult as NativeToolExecutionResult;
@@ -1498,12 +1676,14 @@ async function executeRetrievalAgentLoop(
               };
             }
             const summary = summarizeErrorForLog(error);
-            logStructuredError("agent_loop_community_app_tool_execution_crashed", {
+            logStructuredError("agent_loop_mounted_app_tool_execution_crashed", {
               error,
               runId: params.runId,
               threadId: params.threadId ?? undefined,
               communityId: params.communityId ?? undefined,
               developerAppId: mountedTool.developer_app_id,
+              mountedToolScope: mountedTool.scope,
+              mountedToolName: mountedTool.runtime_tool_name,
               toolName,
               ...summarizeToolArgsForLog(toolName, normalizedArgs),
             });
@@ -1511,8 +1691,8 @@ async function executeRetrievalAgentLoop(
               status: "error",
               exitCode: null,
               outputText: "",
-              errorCode: "community_app_tool_execute_failed",
-              errorMessage: `Community app tool execution failed: ${summary.message}`,
+              errorCode: "mounted_app_tool_execute_failed",
+              errorMessage: `Mounted app tool execution failed: ${summary.message}`,
             };
           }
         }

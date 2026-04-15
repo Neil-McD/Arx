@@ -63,6 +63,7 @@ import { useWebPersonalMemoryUiController } from "./controllers/useWebPersonalMe
 import { useWebPublicCommunityUiController } from "./controllers/useWebPublicCommunityUiController";
 import { useWebProfileSettingsUiController } from "./controllers/useWebProfileSettingsUiController";
 import { useWebProviderConnectionUiController } from "./controllers/useWebProviderConnectionUiController";
+import { useWebUserPlatformAppMountsController } from "./controllers/useWebUserPlatformAppMountsController";
 import { useWebWorkspaceProjectStateController } from "./controllers/useWebWorkspaceProjectStateController";
 import { useWebWorkspaceModelStateController } from "./controllers/useWebWorkspaceModelStateController";
 import { useWebWorkspaceSurfaceController } from "./controllers/useWebWorkspaceSurfaceController";
@@ -1409,6 +1410,20 @@ export default function App() {
     ensureSession: ensureUsableAuthSession,
   });
   const {
+    userPlatformAppMounts,
+    isLoadingUserPlatformAppMounts,
+    userPlatformAppMountError,
+    isConnectingUserPlatformApp,
+    userPlatformAppMutationError,
+    userPlatformAppMountsLoadedUserIdRef,
+    clearUserPlatformAppMounts,
+    loadUserPlatformAppMounts,
+    connectUserPlatformApp,
+  } = useWebUserPlatformAppMountsController<AuthSession>({
+    session,
+    ensureSession: ensureUsableAuthSession,
+  });
+  const {
     communitySkillAttachments,
     ownedSkillPackages,
     isLoadingCommunitySkillAttachments,
@@ -1961,6 +1976,19 @@ export default function App() {
       return await connectCommunityApp(input);
     },
     [connectCommunityApp],
+  );
+
+  const handleConnectUserPlatformApp = useCallback(
+    async (input: {
+      name: string;
+      endpoint_url: string;
+      auth_type: "none" | "api_key" | "bearer";
+      description?: string;
+      secret?: string;
+    }) => {
+      return await connectUserPlatformApp(input);
+    },
+    [connectUserPlatformApp],
   );
 
   const handleUpdateCommunityAppMount = useCallback(
@@ -2817,6 +2845,22 @@ export default function App() {
     clearCommunityAppMounts,
     loadCommunityAppMounts,
     communityAppMountsLoadedCommunityIdRef,
+  ]);
+
+  useEffect(() => {
+    if (activePage !== "discover") return;
+    if (!session) {
+      clearUserPlatformAppMounts();
+      return;
+    }
+    if (userPlatformAppMountsLoadedUserIdRef.current === session.user.id) return;
+    void loadUserPlatformAppMounts(session);
+  }, [
+    activePage,
+    session,
+    clearUserPlatformAppMounts,
+    loadUserPlatformAppMounts,
+    userPlatformAppMountsLoadedUserIdRef,
   ]);
 
   useEffect(() => {
@@ -5417,8 +5461,10 @@ export default function App() {
     },
     discoverPanelProps: {
       showMobileShell,
+      hasSession: Boolean(session),
       discoverQuery,
       onChangeDiscoverQuery: setDiscoverQuery,
+      onRequireAuth: () => openAuthGate(),
       isLoadingDiscover,
       onRefreshDiscover: () => void loadDiscoverCommunities(),
       discoverCommunitiesCount: discoverCommunities.length,
@@ -5427,6 +5473,12 @@ export default function App() {
       formatPlanPrice: (plan) => (plan ? formatPlanPrice(plan) : "Free"),
       formatCommunityVisibilityLabel,
       isPublishedCommunityVisibility,
+      userPlatformAppMounts,
+      isLoadingUserPlatformAppMounts,
+      userPlatformAppMountError,
+      userPlatformAppMutationError,
+      isConnectingUserPlatformApp,
+      onConnectUserPlatformApp: handleConnectUserPlatformApp,
       onActivateCommunity: (slug) => {
         activateDiscoverCommunityCard({
           canActivate: Boolean(slug),

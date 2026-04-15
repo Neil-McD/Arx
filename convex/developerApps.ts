@@ -197,6 +197,14 @@ export const deleteDeveloperAppCascadeInternal = internalMutation({
       await ctx.db.delete(row._id);
     }
 
+    const userMountRows = (await ctx.db
+      .query("userPlatformAppMounts")
+      .withIndex("by_app", (q: any) => q.eq("developerAppId", args.developerAppId))
+      .collect()) as Array<{ _id: any }>;
+    for (const row of userMountRows) {
+      await ctx.db.delete(row._id);
+    }
+
     await ctx.db.delete(app._id);
     return { deleted: true };
   },
