@@ -1,4 +1,4 @@
-import { isValidElement, type ReactNode, useMemo, useState } from "react";
+import { type ReactNode, useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import type { Components } from "react-markdown";
 import rehypeKatex from "rehype-katex";
@@ -54,22 +54,6 @@ const PLAIN_TEXT_LANGUAGES = new Set([
   "plain",
   "plaintext",
 ]);
-
-const ANSWER_SECTION_LABELS = new Map(
-  [
-    "Verdict",
-    "Top Fixes",
-    "Findings",
-    "Why It Matters",
-    "Recommended Change",
-    "Next Step",
-    "What Changed",
-    "Verification",
-    "Risks",
-    "Blind Spots",
-    "Open Questions",
-  ].map((label) => [label.toLowerCase(), label]),
-);
 
 export type MarkdownRenderOptions = {
   onCopyCode?: (text: string) => Promise<void> | void;
@@ -149,35 +133,6 @@ function CodeBlock({ code, language, onCopyCode }: CodeBlockProps) {
   );
 }
 
-function extractPlainText(node: ReactNode): string {
-  if (typeof node === "string" || typeof node === "number") return String(node);
-  if (Array.isArray(node)) return node.map(extractPlainText).join("");
-  if (isValidElement<{ children?: ReactNode }>(node)) return extractPlainText(node.props.children);
-  return "";
-}
-
-function normalizeInlineText(node: ReactNode): string {
-  return extractPlainText(node).replace(/\s+/g, " ").trim();
-}
-
-function resolveAnswerSectionLabel(children: ReactNode): string | null {
-  const rawText = normalizeInlineText(children);
-  const text = rawText.replace(/:$/, "").trim();
-  if (!text) return null;
-  const explicitLabel = ANSWER_SECTION_LABELS.get(text.toLowerCase());
-  if (explicitLabel) return explicitLabel;
-  if (rawText.endsWith(":") && text.length <= 80 && !/[.!?]$/.test(text)) {
-    return text;
-  }
-  return null;
-}
-
-function resolvePriorityClass(children: ReactNode): string | null {
-  const text = normalizeInlineText(children);
-  const match = text.match(/^\[?(P[0-3])\]?\b/i);
-  return match ? `md-priority-${match[1].toLowerCase()}` : null;
-}
-
 function normalizeMathMarkdown(text: string): string {
   const normalized = text.replace(/\r\n?/g, "\n");
   const lines = normalized.split("\n");
@@ -193,8 +148,8 @@ function normalizeMathMarkdown(text: string): string {
       continue;
     }
     if (inFence) continue;
-    if (/^1[.)]\s+/.test(line)) repeatedOneMarkers += 1;
-    if (/^[2-9][0-9]*[.)]\s+/.test(line)) explicitSequentialMarkers += 1;
+    if (/^\s{0,3}1[.)]\s+/.test(line)) repeatedOneMarkers += 1;
+    if (/^\s{0,3}[2-9][0-9]*[.)]\s+/.test(line)) explicitSequentialMarkers += 1;
   }
 
   const shouldDemoteRepeatedOnes =
@@ -220,7 +175,7 @@ function normalizeMathMarkdown(text: string): string {
     }
 
     const normalizedLine = shouldDemoteRepeatedOnes
-      ? line.replace(/^1[.)]\s+/, "- ")
+      ? line.replace(/^(\s{0,3})1[.)]\s+/, "$1- ")
       : line;
 
     const segments = normalizedLine.split(/(`[^`]*`)/g);
@@ -297,15 +252,7 @@ export function renderMarkdown(text: string, options?: MarkdownRenderOptions): R
     ol({ children }) {
       return <ol className="md-list">{children}</ol>;
     },
-    li({ children }) {
-      const priorityClass = resolvePriorityClass(children);
-      return <li className={priorityClass ?? undefined}>{children}</li>;
-    },
     p({ children }) {
-      const sectionLabel = resolveAnswerSectionLabel(children);
-      if (sectionLabel) {
-        return <p className="md-paragraph md-section-label">{sectionLabel}</p>;
-      }
       return <p className="md-paragraph">{children}</p>;
     },
     pre({ children }) {

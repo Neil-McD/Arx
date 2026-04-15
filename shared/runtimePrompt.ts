@@ -328,26 +328,11 @@ function buildExplanationContractPrompt(): string {
     "Prefer concise, legible explanations over process narration.",
     "Do not use fenced code blocks or indented code blocks for simple scalar values such as status, labels, ports, paths, ids, or other short field values.",
     "For simple fields, prefer plain text, flat bullets, or inline code. Reserve block code formatting for actual code, commands, logs, config, or other genuinely block-shaped content.",
+    "Prefer short prose. Use bullets only for parallel items. Use numbered lists only for real ordered steps. Never use repeated `1.` list markers. Avoid nested lists unless the user asks for exhaustive detail.",
     "After a successful background terminal start, do not enumerate preview/session metadata such as preview label, preview port, preview path, terminal session ids, or provider ids unless the user explicitly asks for those details or debugging genuinely requires them.",
     "Default to a short outcome-oriented update such as that the app is running and the preview is available, instead of restating the full terminal payload.",
     "When it materially improves understanding, include a compact file tree, compact structural map, or short ASCII flow diagram.",
     "Do not expose raw internal event noise when a clearer explanation of state, structure, and outcome will do.",
-  ].join("\n");
-}
-
-function buildAnswerFormatContractPrompt(): string {
-  return [
-    "ANSWER_FORMAT_CONTRACT",
-    "When the answer includes analysis, critique, review, debugging, planning, design feedback, or recommendations, use a scan-first structure.",
-    "Start with **Verdict**: one direct sentence that names the main conclusion.",
-    "Then use **Top Fixes** or **Findings** for the highest-signal items only. Keep this to 3-5 flat bullets unless the user asks for more depth.",
-    "When priorities matter, prefix actionable bullets with P1, P2, or P3. Include impact and fix in the same bullet when possible.",
-    "Use **Recommended Change** for the concrete direction or implementation shape.",
-    "End with **Next Step** when a next action would help the user move.",
-    "Keep observations separate from recommendations. Avoid mixing raw symptoms, impact, and fixes across unrelated bullets.",
-    "Avoid nested bullets unless hierarchy is truly needed. Prefer short paragraphs or flat bullets.",
-    "Use numbered lists only for ordered steps. Do not use repeated `1.` numbering for unordered recommendations.",
-    "For simple factual answers, do not force this template; answer directly.",
   ].join("\n");
 }
 
@@ -606,7 +591,6 @@ export function buildWorkspaceRuntimeSystemPrompt(params: RuntimeCommunityPrompt
       currentTimeZone: params.currentTimeZone,
     }),
     buildExplanationContractPrompt(),
-    buildAnswerFormatContractPrompt(),
     buildWorkspaceOperatingPolicyPrompt({
       loopBudget: params.loopBudget,
       allowedToolNames: params.allowedToolNames,
@@ -634,7 +618,6 @@ export function composeCloudScopedRuntimeSystemPrompt(
       currentDateLabel: params.currentDateLabel,
       currentTimeZone: params.currentTimeZone,
     }),
-    buildAnswerFormatContractPrompt(),
     buildChatOperatingPolicyPrompt(),
   ]);
 }
@@ -652,7 +635,6 @@ export function composeCloudScopedSystemPrompt(params: RuntimeCommunityPromptFie
       customCommunitySystemPrompt: params.customCommunitySystemPrompt,
     }),
     buildPlatformChatContextPrompt(),
-    buildAnswerFormatContractPrompt(),
     buildChatOperatingPolicyPrompt(),
   ]);
 }
