@@ -55,6 +55,24 @@ const PLAIN_TEXT_LANGUAGES = new Set([
   "plaintext",
 ]);
 
+const CODE_BLOCK_LANGUAGES = new Set([
+  "bash",
+  "css",
+  "diff",
+  "go",
+  "java",
+  "javascript",
+  "json",
+  "markdown",
+  "patch",
+  "python",
+  "rust",
+  "sql",
+  "typescript",
+  "xml",
+  "yaml",
+]);
+
 export type MarkdownRenderOptions = {
   onCopyCode?: (text: string) => Promise<void> | void;
 };
@@ -79,12 +97,68 @@ async function copyCodeToClipboard(text: string, onCopyCode?: (text: string) => 
   }
 }
 
+function normalizeCodeLanguage(language?: string): string | null {
+  if (!language) return null;
+  const trimmed = language.trim().toLowerCase();
+  return HIGHLIGHT_LANGUAGE_ALIAS[trimmed] ?? trimmed;
+}
+
+function looksLikeCode(text: string): boolean {
+  const trimmed = text.trim();
+  if (!trimmed) return false;
+
+  const lines = trimmed.split("\n").map((line) => line.trim()).filter(Boolean);
+  if (lines.length === 0) return false;
+
+  if (/^[$>]\s+\S+/.test(trimmed)) return true;
+  if (/^(npm|pnpm|yarn|git|npx|curl|cd|mkdir|rm|cp|mv|cat|sed|rg|grep|node|deno|python|pip|docker|vercel|convex)\b/.test(trimmed)) {
+    return true;
+  }
+  if (/^[-+@]{2,}\s/.test(trimmed)) return true;
+  if (/^<\/?[a-z][\w:-]*(\s|>|\/>)/i.test(trimmed)) return true;
+  if (/^[{[][\s\S]*[}\]]$/.test(trimmed) && /[:",\n]/.test(trimmed)) return true;
+  if (/\b(import|export|from|const|let|var|function|class|return|async|await|if|else|for|while|switch|try|catch|def|SELECT|INSERT|UPDATE|DELETE|CREATE|ALTER)\b/.test(trimmed)) {
+    return true;
+  }
+  if (/[{};=<>]/.test(trimmed) && lines.some((line) => /[{};=<>]/.test(line))) {
+    return true;
+  }
+  if (lines.length >= 2 && lines.every((line) => /^[\w.-]+\s*:\s+.+/.test(line))) {
+    return true;
+  }
+
+  return false;
+}
+
+function shouldRenderCodeCard(code: string, language?: string): boolean {
+  const normalizedLanguage = normalizeCodeLanguage(language);
+  if (normalizedLanguage && CODE_BLOCK_LANGUAGES.has(normalizedLanguage)) return true;
+  return looksLikeCode(code);
+}
+
+function PlainTextBlock({ text }: { text: string }) {
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+
+  if (!trimmed.includes("\n") && trimmed.length <= 96) {
+    return (
+      <p className="md-paragraph">
+        <code className="md-inline-code">{trimmed}</code>
+      </p>
+    );
+  }
+
+  return (
+    <pre className="md-plain-block">
+      <code>{trimmed}</code>
+    </pre>
+  );
+}
+
 function CodeBlock({ code, language, onCopyCode }: CodeBlockProps) {
   const [copied, setCopied] = useState(false);
   const normalizedLanguage = useMemo(() => {
-    if (!language) return null;
-    const trimmed = language.trim().toLowerCase();
-    return HIGHLIGHT_LANGUAGE_ALIAS[trimmed] ?? trimmed;
+    return normalizeCodeLanguage(language);
   }, [language]);
   const isPlainText = normalizedLanguage ? PLAIN_TEXT_LANGUAGES.has(normalizedLanguage) : false;
   const variant: CodeBlockVariant = useMemo(() => {
@@ -220,10 +294,14 @@ export function renderMarkdown(text: string, options?: MarkdownRenderOptions): R
         return <code className="md-inline-code">{raw}</code>;
       }
       const match = className.match(/language-([\w-]+)/);
+      const language = match?.[1];
+      if (!shouldRenderCodeCard(raw, language)) {
+        return <PlainTextBlock text={raw} />;
+      }
       return (
         <CodeBlock
           code={raw}
-          language={match?.[1]}
+          language={language}
           onCopyCode={options?.onCopyCode}
         />
       );

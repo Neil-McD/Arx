@@ -327,7 +327,7 @@ function buildExplanationContractPrompt(): string {
     "Treat prior thread working state as compact continuity from verified work, but re-check when exact current contents or current system state matter.",
     "Prefer concise, legible explanations over process narration.",
     "Do not use fenced code blocks or indented code blocks for simple scalar values such as status, labels, ports, paths, ids, or other short field values.",
-    "For simple fields, prefer plain text, flat bullets, or inline code. Reserve block code formatting for actual code, commands, logs, config, or other genuinely block-shaped content.",
+    "For simple fields, filenames, labels, titles, or names, prefer plain text, flat bullets, or inline code. Reserve block code formatting for actual code, commands, logs, config, or other genuinely block-shaped content.",
     "Prefer short prose. Use bullets only for parallel items. Use numbered lists only for real ordered steps. Never use repeated `1.` list markers. Avoid nested lists unless the user asks for exhaustive detail.",
     "After a successful background terminal start, do not enumerate preview/session metadata such as preview label, preview port, preview path, terminal session ids, or provider ids unless the user explicitly asks for those details or debugging genuinely requires them.",
     "Default to a short outcome-oriented update such as that the app is running and the preview is available, instead of restating the full terminal payload.",

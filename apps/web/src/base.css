@@ -9346,6 +9346,25 @@ button.message-citation-chip:hover {
   color: var(--text-primary);
 }
 
+.md-plain-block {
+  margin: 0.42em 0;
+  padding: 0.48em 0.64em;
+  overflow-x: auto;
+  border-left: 2px solid var(--border-muted);
+  background: rgba(255, 255, 255, 0.035);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.md-plain-block code {
+  font: inherit;
+  color: inherit;
+}
+
 .code-block-wrapper {
   margin: 0.5em 0;
   border-radius: 12px;
