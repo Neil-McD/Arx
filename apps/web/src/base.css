@@ -1588,21 +1588,12 @@ body {
   margin-bottom: 10px;
 }
 
-.discover-connect-stack {
-  display: grid;
-  gap: 12px;
-}
-
 .discover-connect-grid {
   align-items: start;
 }
 
 .discover-connect-secret-field {
   grid-column: 1 / -1;
-}
-
-.discover-connect-toolbar {
-  padding-top: 4px;
 }
 
 .discover-connect-status {
@@ -1624,6 +1615,35 @@ body {
   font-size: 13px;
   line-height: 1.55;
   color: var(--text-muted);
+}
+
+.discover-connect-status.is-success {
+  border-color: color-mix(in srgb, #72d9a2 38%, var(--border-default));
+  background: color-mix(in srgb, rgba(114, 217, 162, 0.18) 42%, var(--bg-card-alt));
+}
+
+.discover-connect-status.is-error {
+  border-color: color-mix(in srgb, #f46a93 38%, var(--border-default));
+  background: color-mix(in srgb, rgba(244, 106, 147, 0.12) 48%, var(--bg-card-alt));
+}
+
+.discover-connect-modal {
+  width: min(560px, calc(100vw - 32px));
+}
+
+.discover-connect-modal-body {
+  display: grid;
+  gap: 16px;
+}
+
+.discover-connect-modal-copy {
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+
+.discover-connect-modal-footer {
+  gap: 10px;
 }
 
 .discover-info-grid {

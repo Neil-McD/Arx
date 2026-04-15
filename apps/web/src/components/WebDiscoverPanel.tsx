@@ -223,8 +223,11 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
   const [personalConnectError, setPersonalConnectError] = useState<string | null>(
     null,
   );
-  const [isPersonalConnectComposerOpen, setIsPersonalConnectComposerOpen] =
+  const [isPersonalConnectModalOpen, setIsPersonalConnectModalOpen] =
     useState(false);
+  const [personalConnectResult, setPersonalConnectResult] = useState<
+    "passed" | "failed" | null
+  >(null);
 
   const activeTabIndex = DISCOVER_TABS.findIndex((tab) => tab.id === activeTab);
   const tabSwitcherStyle = buildPlatformSwitcherStyle(
@@ -264,7 +267,8 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
   useEffect(() => {
     setPersonalConnectSecret("");
     setPersonalConnectError(null);
-    setIsPersonalConnectComposerOpen(false);
+    setPersonalConnectResult(null);
+    setIsPersonalConnectModalOpen(false);
   }, [selectedAppId]);
 
   const heroTitle = selectedApp
@@ -281,6 +285,20 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
       : isSkillsTab
         ? "Browse reusable skill packages here."
         : "Find focused crews to build, learn, and ship faster.";
+  const selectedAppActionLabel = selectedApp
+    ? selectedPersonalMount
+      ? "Manage"
+      : selectedApp.personalConnect.availability === "ready"
+        ? "Connect"
+        : null
+    : null;
+  const personalConnectModalCopy = selectedApp
+    ? selectedApp.personalConnect.requiresSecret
+      ? `Paste your ${
+          selectedApp.personalConnect.secretLabel ?? "token"
+        } to connect ${selectedApp.name} to your personal platform tools.`
+      : `Review the connection requirements, then connect ${selectedApp.name} to your personal platform tools.`
+    : null;
 
   const handleUsePersonally = async (
     app: DiscoverAppCatalogEntry,
@@ -292,6 +310,7 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
     }
     if (selectedPersonalMount) return;
     if (!app.personalConnect.endpointUrl || !app.personalConnect.authType) {
+      setPersonalConnectResult("failed");
       setPersonalConnectError("This app is not ready for direct connection yet.");
       return;
     }
@@ -299,6 +318,7 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
       app.personalConnect.requiresSecret &&
       !personalConnectSecret.trim()
     ) {
+      setPersonalConnectResult("failed");
       setPersonalConnectError(
         `Paste your ${
           app.personalConnect.secretLabel ?? `${app.name} token`
@@ -307,6 +327,7 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
       return;
     }
     setPersonalConnectError(null);
+    setPersonalConnectResult(null);
     const ok = await onConnectUserPlatformApp({
       name: app.name,
       endpoint_url: app.personalConnect.endpointUrl,
@@ -317,8 +338,14 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
         : undefined,
     });
     if (ok) {
+      setPersonalConnectResult("passed");
       setPersonalConnectSecret("");
+      return;
     }
+    setPersonalConnectResult("failed");
+    setPersonalConnectError((current) =>
+      current ?? `Couldn't connect ${app.name}. Check the requirements and try again.`,
+    );
   };
 
   const renderSkillIcon = (icon: DiscoverSkillCatalogEntry["icon"]) => {
@@ -433,24 +460,23 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
                     <div className="discover-app-detail-name">
                       {selectedApp.name}
                     </div>
-                    <button
-                      type="button"
-                      className="settings-cta discover-app-detail-action"
-                      onClick={() => {
-                        if (selectedPersonalMount) {
-                          onOpenIntegrationsSettings();
-                          return;
-                        }
-                        if (selectedApp.personalConnect.availability !== "ready") {
-                          return;
-                        }
-                        setIsPersonalConnectComposerOpen(true);
-                        setPersonalConnectError(null);
-                      }}
-                      disabled={selectedApp.personalConnect.availability !== "ready" && !selectedPersonalMount}
-                    >
-                      {selectedPersonalMount ? "Manage" : "Connect"}
-                    </button>
+                    {selectedAppActionLabel ? (
+                      <button
+                        type="button"
+                        className="settings-cta discover-app-detail-action"
+                        onClick={() => {
+                          if (selectedPersonalMount) {
+                            onOpenIntegrationsSettings();
+                            return;
+                          }
+                          setIsPersonalConnectModalOpen(true);
+                          setPersonalConnectError(null);
+                          setPersonalConnectResult(null);
+                        }}
+                      >
+                        {selectedAppActionLabel}
+                      </button>
+                    ) : null}
                   </div>
                   <div className="discover-app-detail-tagline">
                     {selectedApp.tagline}
@@ -499,87 +525,7 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
                       Ready to connect
                     </div>
                     <div className="discover-connect-status-body">
-                      Use `Connect` to add {selectedApp.name} to your baseline platform tools.
-                    </div>
-                  </div>
-                ) : (
-                  <div className="discover-connect-stack">
-                    <div className="agent-capability-field-grid discover-connect-grid">
-                      <label className="agent-capability-field">
-                        <span className="agent-capability-field-label">
-                          Endpoint
-                        </span>
-                        <input
-                          className="agent-editor-inline-label-input"
-                          value={selectedApp.personalConnect.endpointUrl ?? ""}
-                          readOnly
-                        />
-                      </label>
-                      <label className="agent-capability-field">
-                        <span className="agent-capability-field-label">
-                          Auth
-                        </span>
-                        <input
-                          className="agent-editor-inline-label-input"
-                          value={selectedApp.personalConnect.authLabel}
-                          readOnly
-                        />
-                      </label>
-                      {selectedApp.personalConnect.requiresSecret ? (
-                        <label className="agent-capability-field discover-connect-secret-field">
-                          <span className="agent-capability-field-label">
-                            {selectedApp.personalConnect.secretLabel ?? "Token"}
-                          </span>
-                          <input
-                            className="agent-editor-inline-label-input"
-                            type="password"
-                            value={personalConnectSecret}
-                            onChange={(event) => {
-                              setPersonalConnectSecret(event.target.value);
-                              if (personalConnectError) {
-                                setPersonalConnectError(null);
-                              }
-                            }}
-                            placeholder={`Paste your ${
-                              selectedApp.personalConnect.secretLabel ?? "token"
-                            }`}
-                          />
-                        </label>
-                      ) : null}
-                    </div>
-                    {personalConnectError ? (
-                      <div className="auth-error">{personalConnectError}</div>
-                    ) : null}
-                    <div className="agent-capability-toolbar discover-connect-toolbar">
-                      <div className="model-note">
-                        Connected apps become part of your baseline platform
-                        tools and stay available across communities.
-                      </div>
-                      <div className="agent-capability-toolbar-actions">
-                        <button
-                          type="button"
-                          className="settings-cta"
-                          onClick={() => {
-                            setIsPersonalConnectComposerOpen(false);
-                            setPersonalConnectSecret("");
-                            setPersonalConnectError(null);
-                          }}
-                          disabled={isConnectingUserPlatformApp}
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          type="button"
-                          className="platform-save-button is-dirty"
-                          onClick={() => void handleUsePersonally(selectedApp)}
-                          disabled={
-                            isConnectingUserPlatformApp ||
-                            isLoadingUserPlatformAppMounts
-                          }
-                        >
-                          {hasSession ? "Connect" : "Sign in to connect"}
-                        </button>
-                      </div>
+                      Use `Connect` to open the requirements modal and add {selectedApp.name} to your baseline platform tools.
                     </div>
                   </div>
                 )}
@@ -703,7 +649,9 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
                       <span className="discover-app-action">
                         {findMatchingPersonalMount(app, userPlatformAppMounts)
                           ? "Manage"
-                          : "Connect"}
+                          : app.personalConnect.availability === "ready"
+                            ? "Connect"
+                            : "Catalog"}
                       </span>
                     </button>
                   ))}
@@ -751,6 +699,169 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
           )}
         </div>
       </div>
+      {selectedApp &&
+      selectedApp.personalConnect.availability === "ready" &&
+      isPersonalConnectModalOpen ? (
+        <div
+          className="modal-overlay"
+          role="presentation"
+          onClick={() => {
+            if (isConnectingUserPlatformApp) return;
+            setIsPersonalConnectModalOpen(false);
+            setPersonalConnectResult(null);
+            setPersonalConnectError(null);
+          }}
+        >
+          <div
+            className="modal discover-connect-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="discover-connect-modal-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="modal-header">
+              <div className="modal-title" id="discover-connect-modal-title">
+                Connect {selectedApp.name}
+              </div>
+              <button
+                type="button"
+                className="modal-close"
+                aria-label="Close"
+                onClick={() => {
+                  setIsPersonalConnectModalOpen(false);
+                  setPersonalConnectResult(null);
+                  setPersonalConnectError(null);
+                }}
+                disabled={isConnectingUserPlatformApp}
+              >
+                ×
+              </button>
+            </div>
+            <div className="modal-body discover-connect-modal-body">
+              <div className="discover-connect-modal-copy">
+                {personalConnectModalCopy}
+              </div>
+              <div className="agent-capability-field-grid discover-connect-grid">
+                <label className="agent-capability-field">
+                  <span className="agent-capability-field-label">Endpoint</span>
+                  <input
+                    className="agent-editor-inline-label-input"
+                    value={selectedApp.personalConnect.endpointUrl ?? ""}
+                    readOnly
+                  />
+                </label>
+                <label className="agent-capability-field">
+                  <span className="agent-capability-field-label">Auth</span>
+                  <input
+                    className="agent-editor-inline-label-input"
+                    value={selectedApp.personalConnect.authLabel}
+                    readOnly
+                  />
+                </label>
+                {selectedApp.personalConnect.requiresSecret ? (
+                  <label className="agent-capability-field discover-connect-secret-field">
+                    <span className="agent-capability-field-label">
+                      {selectedApp.personalConnect.secretLabel ?? "Token"}
+                    </span>
+                    <input
+                      className="agent-editor-inline-label-input"
+                      type="password"
+                      value={personalConnectSecret}
+                      onChange={(event) => {
+                        setPersonalConnectSecret(event.target.value);
+                        if (personalConnectError) {
+                          setPersonalConnectError(null);
+                        }
+                        if (personalConnectResult) {
+                          setPersonalConnectResult(null);
+                        }
+                      }}
+                      placeholder={`Paste your ${
+                        selectedApp.personalConnect.secretLabel ?? "token"
+                      }`}
+                    />
+                  </label>
+                ) : null}
+              </div>
+              {personalConnectLoadError ? (
+                <div className="auth-error">{personalConnectLoadError}</div>
+              ) : null}
+              {personalConnectMutationError ? (
+                <div className="auth-error">{personalConnectMutationError}</div>
+              ) : null}
+              {personalConnectError ? (
+                <div className="auth-error">{personalConnectError}</div>
+              ) : null}
+              {personalConnectResult === "passed" || selectedPersonalMount ? (
+                <div
+                  className="discover-connect-status is-success"
+                >
+                  <div className="discover-connect-status-title">
+                    Passed
+                  </div>
+                  <div className="discover-connect-status-body">
+                    {`${selectedApp.name} is now mounted into your personal platform layer.`}
+                  </div>
+                </div>
+              ) : personalConnectResult === "failed" ? (
+                <div
+                  className="discover-connect-status is-error"
+                >
+                  <div className="discover-connect-status-title">
+                    Failed
+                  </div>
+                  <div className="discover-connect-status-body">
+                    {`We couldn't connect ${selectedApp.name}. Check the requirements and try again.`}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+            <div className="modal-footer discover-connect-modal-footer">
+              <button
+                type="button"
+                className="settings-cta"
+                onClick={() => {
+                  setIsPersonalConnectModalOpen(false);
+                  setPersonalConnectResult(null);
+                  setPersonalConnectError(null);
+                }}
+                disabled={isConnectingUserPlatformApp}
+              >
+                {personalConnectResult === "passed" || selectedPersonalMount
+                  ? "Done"
+                  : "Cancel"}
+              </button>
+              {personalConnectResult === "passed" || selectedPersonalMount ? (
+                <button
+                  type="button"
+                  className="platform-save-button is-dirty"
+                  onClick={() => {
+                    setIsPersonalConnectModalOpen(false);
+                    onOpenIntegrationsSettings();
+                  }}
+                >
+                  Manage
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="platform-save-button is-dirty"
+                  onClick={() => void handleUsePersonally(selectedApp)}
+                  disabled={
+                    isConnectingUserPlatformApp || isLoadingUserPlatformAppMounts
+                  }
+                >
+                  {isConnectingUserPlatformApp
+                    ? "Connecting…"
+                    : hasSession
+                      ? "Connect"
+                      : "Sign in to connect"}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
