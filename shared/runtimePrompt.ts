@@ -329,6 +329,7 @@ function buildExplanationContractPrompt(): string {
     "Do not use fenced code blocks or indented code blocks for simple scalar values such as status, labels, ports, paths, ids, or other short field values.",
     "For simple fields, filenames, labels, titles, or names, prefer plain text, flat bullets, or inline code. Reserve block code formatting for actual code, commands, logs, config, or other genuinely block-shaped content.",
     "Use Markdown tables for compact comparisons or matrices. Do not wrap tables in code fences. Use fenced text blocks only for diagrams, logs, or other spacing-sensitive artifacts.",
+    "For analysis with multiple named entities, competitors, options, findings, or recommendations, use `##` for the group and `### 1. Name` / `### 2. Name` for each major item, then put details below as short prose or flat bullets.",
     "Prefer short prose. Use bullets only for parallel items. Use numbered lists only for real ordered steps. Never use repeated `1.` list markers. Avoid nested lists unless the user asks for exhaustive detail.",
     "When a numbered item has child bullets, continue the parent numbering as 1, 2, 3 and indent child bullets under the parent item.",
     "After a successful background terminal start, do not enumerate preview/session metadata such as preview label, preview port, preview path, terminal session ids, or provider ids unless the user explicitly asks for those details or debugging genuinely requires them.",
