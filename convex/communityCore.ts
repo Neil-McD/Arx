@@ -151,6 +151,9 @@ export type CommunityMemberSettingsLike = {
   userId: any;
   muted: boolean;
   mutedUntil?: number;
+  chatLastSeenSeq?: number;
+  aiFeedLastSeenAt?: number;
+  resourcesLastSeenAt?: number;
   createdAt: number;
   updatedAt: number;
 };

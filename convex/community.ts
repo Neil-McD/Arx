@@ -91,6 +91,10 @@ import {
   requestCommunityArchiveBackfill as requestCommunityArchiveBackfillImpl,
   retryCommunityArchiveFailures as retryCommunityArchiveFailuresImpl,
 } from "./communityArchive";
+import {
+  listMyCommunityAttention as listMyCommunityAttentionImpl,
+  markCommunitySurfaceSeen as markCommunitySurfaceSeenImpl,
+} from "./communityAttention";
 
 export const createCommunity = createCommunityImpl;
 export const generateCommunityBrandingUploadUrl = generateCommunityBrandingUploadUrlImpl;
@@ -165,3 +169,5 @@ export const updateCommunitySkillAttachment = updateCommunitySkillAttachmentImpl
 export const detachCommunitySkill = detachCommunitySkillImpl;
 export const getCommunityFunnelConfig = getCommunityFunnelConfigImpl;
 export const saveCommunityPublicPresentation = saveCommunityPublicPresentationImpl;
+export const listMyCommunityAttention = listMyCommunityAttentionImpl;
+export const markCommunitySurfaceSeen = markCommunitySurfaceSeenImpl;

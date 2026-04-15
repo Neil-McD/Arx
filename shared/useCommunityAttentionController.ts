@@ -1,0 +1,187 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  listCloudCommunityAttentionRows,
+  markCloudCommunitySurfaceSeen,
+  type CloudCommunityAttentionRow,
+} from "./cloudCommunityAttentionGateway";
+import { resolveUsableSession, type EnsureSessionFn } from "./ensureUsableSession";
+
+type SessionLike = unknown;
+
+export type CommunityAttentionIndicators = {
+  chat: boolean;
+  ai_feed: boolean;
+  resources: boolean;
+};
+
+type UseCommunityAttentionControllerArgs<SessionT extends SessionLike> = {
+  session: SessionT | null;
+  communityIds: string[];
+  ensureSession?: EnsureSessionFn<SessionT>;
+  pollIntervalMs?: number;
+};
+
+function buildAttentionMap(
+  communityIds: string[],
+  rows: CloudCommunityAttentionRow[],
+): Record<string, CommunityAttentionIndicators> {
+  const next: Record<string, CommunityAttentionIndicators> = {};
+  for (const communityId of communityIds) {
+    next[communityId] = {
+      chat: false,
+      ai_feed: false,
+      resources: false,
+    };
+  }
+  for (const row of rows) {
+    const communityId = String(row.community_id ?? "").trim();
+    if (!communityId) continue;
+    next[communityId] = {
+      chat: Boolean(row.chat),
+      ai_feed: Boolean(row.ai_feed),
+      resources: Boolean(row.resources),
+    };
+  }
+  return next;
+}
+
+export function useCommunityAttentionController<SessionT extends SessionLike>(
+  args: UseCommunityAttentionControllerArgs<SessionT>,
+) {
+  const argsRef = useRef(args);
+  argsRef.current = args;
+
+  const [attentionByCommunityId, setAttentionByCommunityId] = useState<
+    Record<string, CommunityAttentionIndicators>
+  >({});
+  const [isLoadingCommunityAttention, setIsLoadingCommunityAttention] = useState(false);
+  const [communityAttentionError, setCommunityAttentionError] = useState<string | null>(null);
+  const loadGenerationRef = useRef(0);
+  const inFlightMarkKeysRef = useRef<Set<string>>(new Set());
+
+  const normalizedCommunityIds = useMemo(
+    () =>
+      Array.from(new Set(args.communityIds.map((communityId) => String(communityId ?? "").trim()).filter(Boolean))).sort(),
+    [args.communityIds],
+  );
+
+  const refreshCommunityAttention = useCallback(async () => {
+    const current = argsRef.current;
+    const usableSession = await resolveUsableSession(current.session, current.ensureSession);
+    const communityIds = Array.from(
+      new Set(current.communityIds.map((communityId) => String(communityId ?? "").trim()).filter(Boolean)),
+    ).sort();
+    const generation = (loadGenerationRef.current += 1);
+
+    if (!usableSession || communityIds.length === 0) {
+      setAttentionByCommunityId({});
+      setCommunityAttentionError(null);
+      setIsLoadingCommunityAttention(false);
+      return;
+    }
+
+    setIsLoadingCommunityAttention(true);
+    setCommunityAttentionError(null);
+    try {
+      const rows = await listCloudCommunityAttentionRows({
+        session: usableSession,
+        communityIds,
+      });
+      if (loadGenerationRef.current !== generation) return;
+      const nextAttentionMap = buildAttentionMap(communityIds, rows);
+      for (const key of inFlightMarkKeysRef.current) {
+        const [communityId, surface] = key.split(":");
+        if (!communityId || (surface !== "chat" && surface !== "ai_feed" && surface !== "resources")) continue;
+        if (!nextAttentionMap[communityId]) continue;
+        nextAttentionMap[communityId] = {
+          ...nextAttentionMap[communityId],
+          [surface]: false,
+        };
+      }
+      setAttentionByCommunityId(nextAttentionMap);
+    } catch (error) {
+      if (loadGenerationRef.current !== generation) return;
+      setCommunityAttentionError(error instanceof Error ? error.message : "Failed to load community attention.");
+    } finally {
+      if (loadGenerationRef.current === generation) {
+        setIsLoadingCommunityAttention(false);
+      }
+    }
+  }, []);
+
+  const markCommunitySurfaceSeen = useCallback(
+    async (communityIdRaw: string, surface: "chat" | "ai_feed" | "resources") => {
+      const current = argsRef.current;
+      const usableSession = await resolveUsableSession(current.session, current.ensureSession);
+      const communityId = String(communityIdRaw ?? "").trim();
+      if (!usableSession || !communityId) return;
+      const key = `${communityId}:${surface}`;
+      if (inFlightMarkKeysRef.current.has(key)) return;
+      inFlightMarkKeysRef.current.add(key);
+      setAttentionByCommunityId((prev) => {
+        const currentIndicators = prev[communityId];
+        if (!currentIndicators || !currentIndicators[surface]) return prev;
+        return {
+          ...prev,
+          [communityId]: {
+            ...currentIndicators,
+            [surface]: false,
+          },
+        };
+      });
+      try {
+        await markCloudCommunitySurfaceSeen({
+          session: usableSession,
+          communityId,
+          surface,
+        });
+      } catch (error) {
+        void refreshCommunityAttention();
+        throw error;
+      } finally {
+        inFlightMarkKeysRef.current.delete(key);
+      }
+    },
+    [refreshCommunityAttention],
+  );
+
+  useEffect(() => {
+    void refreshCommunityAttention();
+  }, [normalizedCommunityIds, args.session, refreshCommunityAttention]);
+
+  useEffect(() => {
+    if (!args.session || normalizedCommunityIds.length === 0) return;
+    const handleWindowFocus = () => {
+      void refreshCommunityAttention();
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void refreshCommunityAttention();
+      }
+    };
+    window.addEventListener("focus", handleWindowFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      window.removeEventListener("focus", handleWindowFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [args.session, normalizedCommunityIds, refreshCommunityAttention]);
+
+  useEffect(() => {
+    if (!args.session || normalizedCommunityIds.length === 0) return;
+    const pollIntervalMs = Math.max(15_000, Math.floor(args.pollIntervalMs ?? 30_000));
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      void refreshCommunityAttention();
+    }, pollIntervalMs);
+    return () => window.clearInterval(intervalId);
+  }, [args.pollIntervalMs, args.session, normalizedCommunityIds, refreshCommunityAttention]);
+
+  return {
+    attentionByCommunityId,
+    isLoadingCommunityAttention,
+    communityAttentionError,
+    refreshCommunityAttention,
+    markCommunitySurfaceSeen,
+  };
+}

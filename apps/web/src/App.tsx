@@ -81,6 +81,7 @@ import {
 import {
   useCommunityAiFeedController,
 } from "../../../shared/useCommunityAiFeedController";
+import { useCommunityAttentionController } from "../../../shared/useCommunityAttentionController";
 import { uploadCloudCommunityChatAttachmentFile } from "../../../shared/cloudCommunityChatGateway";
 import {
   saveCloudCommunityPublicPresentation,
@@ -1025,13 +1026,9 @@ export default function App() {
   const [communityChatError, setCommunityChatError] = useState<string | null>(null);
   const [copiedCommunityMessageId, setCopiedCommunityMessageId] = useState<string | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
-  const [communityTabIndicatorByCommunityId, setCommunityTabIndicatorByCommunityId] = useState<
-    Record<string, Partial<Record<CommunityTab, boolean>>>
-  >({});
   const [isUserAtBottom, setIsUserAtBottom] = useState(true);
   const isUserAtBottomRef = useRef(true);
-  const communityAiFeedSeenAtByCommunityIdRef = useRef<Record<string, string>>({});
-  const communityResourcesSeenAtByCommunityIdRef = useRef<Record<string, string>>({});
+  const communitySeenAcknowledgeKeyBySurfaceRef = useRef<Record<string, string>>({});
   const communityMessageIdsRef = useRef<Set<string>>(new Set());
   const communityChatListRef = useRef<HTMLDivElement | null>(null);
   const loadOlderFromScrollRef = useRef<(() => void) | null>(null);
@@ -1228,31 +1225,6 @@ export default function App() {
     }, 2000);
   }, []);
 
-  const setCommunityTabIndicator = useCallback((communityId: string, tab: CommunityTab, value: boolean) => {
-    const normalizedCommunityId = String(communityId ?? "").trim();
-    if (!normalizedCommunityId) return;
-    setCommunityTabIndicatorByCommunityId((prev) => {
-      const current = prev[normalizedCommunityId] ?? {};
-      if (Boolean(current[tab]) === value) return prev;
-      const nextForCommunity = { ...current };
-      if (value) {
-        nextForCommunity[tab] = true;
-      } else {
-        delete nextForCommunity[tab];
-      }
-      if (Object.keys(nextForCommunity).length === 0) {
-        if (!(normalizedCommunityId in prev)) return prev;
-        const next = { ...prev };
-        delete next[normalizedCommunityId];
-        return next;
-      }
-      return {
-        ...prev,
-        [normalizedCommunityId]: nextForCommunity,
-      };
-    });
-  }, []);
-
   const [communityResources, setCommunityResources] = useState<CommunityResource[]>([]);
   const [isLoadingResources, setIsLoadingResources] = useState(false);
   const [openResourceEmbedId, setOpenResourceEmbedId] = useState<string | null>(null);
@@ -1315,6 +1287,15 @@ export default function App() {
     communityMembers,
     session: session,
     ensureSession: ensureUsableAuthSession,
+  });
+  const communityAttentionCommunityIds = useMemo(
+    () => communities.map((community) => community.id),
+    [communities],
+  );
+  const { attentionByCommunityId, markCommunitySurfaceSeen } = useCommunityAttentionController<AuthSession>({
+    session,
+    ensureSession: ensureUsableAuthSession,
+    communityIds: communityAttentionCommunityIds,
   });
 
   const {
@@ -2903,109 +2884,126 @@ export default function App() {
   } = useCommunityAiFeedController<AuthSession>({
     activeCommunityId,
     isAiFeedTabActive: communityTab === "ai_feed",
-    shouldPreload: activePage === "community",
     viewerCacheKey: session?.user?.id ?? "anonymous",
     session: session,
     ensureSession: ensureUsableAuthSession,
   });
 
-  const latestActiveCommunityAiFeedAt = useMemo(() => {
-    const timestamps = [...activeCommunityFeedState.live, ...activeCommunityFeedState.ranked]
-      .map((post) => Date.parse(post.updated_at || post.created_at))
+  const latestActiveCommunityChatSeq = useMemo(() => {
+    let latestSeq: number | null = null;
+    for (const message of communityMessages) {
+      const seq = Number(message.seq);
+      if (!Number.isFinite(seq) || seq <= 0 || seq >= Number.MAX_SAFE_INTEGER) continue;
+      if (String(message.id ?? "").startsWith("pending-")) continue;
+      latestSeq = latestSeq === null ? Math.floor(seq) : Math.max(latestSeq, Math.floor(seq));
+    }
+    return latestSeq;
+  }, [communityMessages]);
+
+  const latestActiveCommunityAiFeedCreatedAt = useMemo(() => {
+    const timestamps = activeCommunityFeedState.live
+      .map((post) => Date.parse(post.created_at))
       .filter((value) => Number.isFinite(value));
     if (timestamps.length === 0) return null;
-    return new Date(Math.max(...timestamps)).toISOString();
-  }, [activeCommunityFeedState.live, activeCommunityFeedState.ranked]);
+    return Math.max(...timestamps);
+  }, [activeCommunityFeedState.live]);
 
-  const latestActiveCommunityResourcesAt = useMemo(() => {
+  const latestActiveCommunityResourcesCreatedAt = useMemo(() => {
     const timestamps = communityResources
       .map((resource) => Date.parse(resource.created_at))
       .filter((value) => Number.isFinite(value));
     if (timestamps.length === 0) return null;
-    return new Date(Math.max(...timestamps)).toISOString();
+    return Math.max(...timestamps);
   }, [communityResources]);
 
   useEffect(() => {
-    setCommunityTabIndicatorByCommunityId({});
-    communityAiFeedSeenAtByCommunityIdRef.current = {};
-    communityResourcesSeenAtByCommunityIdRef.current = {};
+    communitySeenAcknowledgeKeyBySurfaceRef.current = {};
   }, [session?.user?.id]);
 
   useEffect(() => {
-    if (!activeCommunityId) return;
-    setCommunityTabIndicator(activeCommunityId, "chat", unreadCount > 0);
-  }, [activeCommunityId, setCommunityTabIndicator, unreadCount]);
-
-  useEffect(() => {
-    if (activePage !== "community" || !activeCommunityId || communityTab !== "ai_feed") return;
-    if (latestActiveCommunityAiFeedAt) {
-      communityAiFeedSeenAtByCommunityIdRef.current[activeCommunityId] = latestActiveCommunityAiFeedAt;
+    if (
+      activePage !== "community"
+      || communityTab !== "chat"
+      || !activeCommunityId
+      || !hasResolvedCommunityChat
+      || !isUserAtBottom
+      || latestActiveCommunityChatSeq === null
+    ) {
+      return;
     }
-    setCommunityTabIndicator(activeCommunityId, "ai_feed", false);
+    const requestKey = `${activeCommunityId}:chat`;
+    const markerKey = String(latestActiveCommunityChatSeq);
+    if (communitySeenAcknowledgeKeyBySurfaceRef.current[requestKey] === markerKey) return;
+    communitySeenAcknowledgeKeyBySurfaceRef.current[requestKey] = markerKey;
+    void markCommunitySurfaceSeen(activeCommunityId, "chat").catch(() => {
+      if (communitySeenAcknowledgeKeyBySurfaceRef.current[requestKey] === markerKey) {
+        delete communitySeenAcknowledgeKeyBySurfaceRef.current[requestKey];
+      }
+    });
   }, [
     activeCommunityId,
     activePage,
     communityTab,
-    latestActiveCommunityAiFeedAt,
-    setCommunityTabIndicator,
+    hasResolvedCommunityChat,
+    isUserAtBottom,
+    latestActiveCommunityChatSeq,
+    markCommunitySurfaceSeen,
   ]);
 
   useEffect(() => {
-    if (activePage !== "community" || !activeCommunityId || !latestActiveCommunityAiFeedAt) return;
-    const seenAt = communityAiFeedSeenAtByCommunityIdRef.current[activeCommunityId] ?? null;
-    if (!seenAt) {
-      communityAiFeedSeenAtByCommunityIdRef.current[activeCommunityId] = latestActiveCommunityAiFeedAt;
+    if (
+      activePage !== "community"
+      || communityTab !== "ai_feed"
+      || !activeCommunityId
+      || activeCommunityFeedState.isLoading
+      || latestActiveCommunityAiFeedCreatedAt === null
+    ) {
       return;
     }
-    if (Date.parse(latestActiveCommunityAiFeedAt) <= Date.parse(seenAt)) return;
-    if (communityTab === "ai_feed") {
-      communityAiFeedSeenAtByCommunityIdRef.current[activeCommunityId] = latestActiveCommunityAiFeedAt;
-      setCommunityTabIndicator(activeCommunityId, "ai_feed", false);
-      return;
-    }
-    setCommunityTabIndicator(activeCommunityId, "ai_feed", true);
+    const requestKey = `${activeCommunityId}:ai_feed`;
+    const markerKey = String(latestActiveCommunityAiFeedCreatedAt);
+    if (communitySeenAcknowledgeKeyBySurfaceRef.current[requestKey] === markerKey) return;
+    communitySeenAcknowledgeKeyBySurfaceRef.current[requestKey] = markerKey;
+    void markCommunitySurfaceSeen(activeCommunityId, "ai_feed").catch(() => {
+      if (communitySeenAcknowledgeKeyBySurfaceRef.current[requestKey] === markerKey) {
+        delete communitySeenAcknowledgeKeyBySurfaceRef.current[requestKey];
+      }
+    });
   }, [
     activeCommunityId,
     activePage,
     communityTab,
-    latestActiveCommunityAiFeedAt,
-    setCommunityTabIndicator,
+    activeCommunityFeedState.isLoading,
+    latestActiveCommunityAiFeedCreatedAt,
+    markCommunitySurfaceSeen,
   ]);
 
   useEffect(() => {
-    if (activePage !== "community" || !activeCommunityId || communityTab !== "resources") return;
-    if (latestActiveCommunityResourcesAt) {
-      communityResourcesSeenAtByCommunityIdRef.current[activeCommunityId] = latestActiveCommunityResourcesAt;
+    if (
+      activePage !== "community"
+      || communityTab !== "resources"
+      || !activeCommunityId
+      || isLoadingResources
+      || latestActiveCommunityResourcesCreatedAt === null
+    ) {
+      return;
     }
-    setCommunityTabIndicator(activeCommunityId, "resources", false);
+    const requestKey = `${activeCommunityId}:resources`;
+    const markerKey = String(latestActiveCommunityResourcesCreatedAt);
+    if (communitySeenAcknowledgeKeyBySurfaceRef.current[requestKey] === markerKey) return;
+    communitySeenAcknowledgeKeyBySurfaceRef.current[requestKey] = markerKey;
+    void markCommunitySurfaceSeen(activeCommunityId, "resources").catch(() => {
+      if (communitySeenAcknowledgeKeyBySurfaceRef.current[requestKey] === markerKey) {
+        delete communitySeenAcknowledgeKeyBySurfaceRef.current[requestKey];
+      }
+    });
   }, [
     activeCommunityId,
     activePage,
     communityTab,
-    latestActiveCommunityResourcesAt,
-    setCommunityTabIndicator,
-  ]);
-
-  useEffect(() => {
-    if (activePage !== "community" || !activeCommunityId || !latestActiveCommunityResourcesAt) return;
-    const seenAt = communityResourcesSeenAtByCommunityIdRef.current[activeCommunityId] ?? null;
-    if (!seenAt) {
-      communityResourcesSeenAtByCommunityIdRef.current[activeCommunityId] = latestActiveCommunityResourcesAt;
-      return;
-    }
-    if (Date.parse(latestActiveCommunityResourcesAt) <= Date.parse(seenAt)) return;
-    if (communityTab === "resources") {
-      communityResourcesSeenAtByCommunityIdRef.current[activeCommunityId] = latestActiveCommunityResourcesAt;
-      setCommunityTabIndicator(activeCommunityId, "resources", false);
-      return;
-    }
-    setCommunityTabIndicator(activeCommunityId, "resources", true);
-  }, [
-    activeCommunityId,
-    activePage,
-    communityTab,
-    latestActiveCommunityResourcesAt,
-    setCommunityTabIndicator,
+    isLoadingResources,
+    latestActiveCommunityResourcesCreatedAt,
+    markCommunitySurfaceSeen,
   ]);
 
   useCommunityAgentConfigLifecycle<AuthSession>({
@@ -3141,7 +3139,6 @@ export default function App() {
     activeCommunityId,
     loadCommunityResources,
     requireCommunityPage: true,
-    shouldPreload: true,
   });
 
   useCommunityAdminAnalyticsLifecycle({
@@ -5720,18 +5717,22 @@ export default function App() {
   const globalOverlays = <WebGlobalOverlayHost {...globalOverlayHostProps} />;
   const mainSurface = <WebAppMainSurfaceHost {...mainSurfaceHostProps} />;
   const activeIndicators = activeCommunityId
-    ? (communityTabIndicatorByCommunityId[activeCommunityId] ?? {})
-    : {};
+    ? (attentionByCommunityId[activeCommunityId] ?? { chat: false, ai_feed: false, resources: false })
+    : { chat: false, ai_feed: false, resources: false };
+  const localActiveCommunityChatAttention = Boolean(activePage === "community" && activeCommunityId && unreadCount > 0);
   const communityTabIndicators = {
-    chat: Boolean(activeIndicators.chat),
+    chat: Boolean(activeIndicators.chat || localActiveCommunityChatAttention),
     ai_feed: Boolean(activeIndicators.ai_feed),
     resources: Boolean(activeIndicators.resources),
   };
   const communityRailAttentionById: Record<string, boolean> = {};
-  for (const [communityId, indicators] of Object.entries(communityTabIndicatorByCommunityId)) {
+  for (const [communityId, indicators] of Object.entries(attentionByCommunityId)) {
     if (indicators.chat || indicators.ai_feed || indicators.resources) {
       communityRailAttentionById[communityId] = true;
     }
+  }
+  if (activeCommunityId && localActiveCommunityChatAttention) {
+    communityRailAttentionById[activeCommunityId] = true;
   }
   const shellChromeHostProps = buildWebShellChromeHostProps({
     showHeaderIslands,

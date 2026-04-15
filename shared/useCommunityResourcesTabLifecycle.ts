@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import type { AppPage, CommunityTab } from "./appShellNavigation";
 
 export function useCommunityResourcesTabLifecycle<SessionT>(params: {
@@ -8,19 +8,11 @@ export function useCommunityResourcesTabLifecycle<SessionT>(params: {
   activeCommunityId: string | null;
   loadCommunityResources: (communityId: string, session: SessionT) => Promise<void>;
   requireCommunityPage?: boolean;
-  shouldPreload?: boolean;
 }) {
-  const backgroundPreloadedCommunityIdRef = useRef<string | null>(null);
-
   useEffect(() => {
     if (!params.session || !params.activeCommunityId) return;
     if ((params.requireCommunityPage ?? false) && params.activePage !== "community") return;
-    const shouldForceLoad = params.communityTab === "resources";
-    if (!shouldForceLoad && !params.shouldPreload) return;
-    if (!shouldForceLoad && backgroundPreloadedCommunityIdRef.current === params.activeCommunityId) return;
-    if (!shouldForceLoad) {
-      backgroundPreloadedCommunityIdRef.current = params.activeCommunityId;
-    }
+    if (params.communityTab !== "resources") return;
     void params.loadCommunityResources(params.activeCommunityId, params.session);
   }, [
     params.session,
@@ -29,11 +21,5 @@ export function useCommunityResourcesTabLifecycle<SessionT>(params: {
     params.communityTab,
     params.loadCommunityResources,
     params.requireCommunityPage,
-    params.shouldPreload,
   ]);
-
-  useEffect(() => {
-    if ((params.requireCommunityPage ?? false) && params.activePage === "community") return;
-    backgroundPreloadedCommunityIdRef.current = null;
-  }, [params.activePage, params.requireCommunityPage]);
 }

@@ -575,6 +575,9 @@ export default defineSchema({
     userId: v.id("users"),
     muted: v.boolean(),
     mutedUntil: v.optional(v.number()),
+    chatLastSeenSeq: v.optional(v.number()),
+    aiFeedLastSeenAt: v.optional(v.number()),
+    resourcesLastSeenAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
