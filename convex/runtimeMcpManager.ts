@@ -287,22 +287,25 @@ export function createRuntimeMcpManager(params: {
     argumentsObject: Record<string, unknown>;
     signal?: AbortSignal;
     allowFreshSessionRetry: boolean;
-  }): Promise<unknown> => {
+  }): Promise<{ callResult: unknown; refreshedSession: boolean }> => {
     const session = await getSession({
       tool: params.tool,
       bundle: params.bundle,
       signal: params.signal,
     });
     try {
-      return await transport.callTool({
-        url: params.tool.endpoint_url,
-        headers: session.headers,
-        protocolVersion: session.protocolVersion,
-        sessionId: session.sessionId,
-        toolName: params.tool.tool_name,
-        argumentsObject: params.argumentsObject,
-        signal: params.signal,
-      });
+      return {
+        callResult: await transport.callTool({
+          url: params.tool.endpoint_url,
+          headers: session.headers,
+          protocolVersion: session.protocolVersion,
+          sessionId: session.sessionId,
+          toolName: params.tool.tool_name,
+          argumentsObject: params.argumentsObject,
+          signal: params.signal,
+        }),
+        refreshedSession: false,
+      };
     } catch (error) {
       if (
         params.allowFreshSessionRetry &&
@@ -324,15 +327,18 @@ export function createRuntimeMcpManager(params: {
           signal: params.signal,
           forceFresh: true,
         });
-        return await transport.callTool({
-          url: params.tool.endpoint_url,
-          headers: freshSession.headers,
-          protocolVersion: freshSession.protocolVersion,
-          sessionId: freshSession.sessionId,
-          toolName: params.tool.tool_name,
-          argumentsObject: params.argumentsObject,
-          signal: params.signal,
-        });
+        return {
+          callResult: await transport.callTool({
+            url: params.tool.endpoint_url,
+            headers: freshSession.headers,
+            protocolVersion: freshSession.protocolVersion,
+            sessionId: freshSession.sessionId,
+            toolName: params.tool.tool_name,
+            argumentsObject: params.argumentsObject,
+            signal: params.signal,
+          }),
+          refreshedSession: true,
+        };
       }
       throw error;
     }
@@ -355,12 +361,32 @@ export function createRuntimeMcpManager(params: {
           details: null,
         };
       }
+      const executionStartedAt = Date.now();
+
+      const emitExecutionCompleted = async (payload: {
+        status: "ok" | "error";
+        latencyMs: number;
+        errorCode: string | null;
+        refreshedSession: boolean;
+      }) => {
+        await emitRunEvent("mcp_tool_execution_completed", {
+          scope: tool.scope,
+          developer_app_id: tool.developer_app_id,
+          app_name: tool.app_name,
+          runtime_tool_name: tool.runtime_tool_name,
+          risk_level: tool.risk_level,
+          latency_ms: payload.latencyMs,
+          status: payload.status,
+          error_code: payload.errorCode,
+          refreshed_session: payload.refreshedSession,
+        });
+      };
 
       try {
         const bundle = await getConnectionBundle(tool);
         if (!bundle) {
-          return {
-            status: "error",
+          const result = {
+            status: "error" as const,
             exitCode: null,
             outputText: "",
             errorCode: buildAppNotFoundCode(tool),
@@ -370,8 +396,15 @@ export function createRuntimeMcpManager(params: {
                 : "Mounted platform app not found.",
             details: buildToolDetails(tool),
           };
+          await emitExecutionCompleted({
+            status: result.status,
+            latencyMs: Date.now() - executionStartedAt,
+            errorCode: result.errorCode,
+            refreshedSession: false,
+          });
+          return result;
         }
-        const callResult = await executeWithSession({
+        const { callResult, refreshedSession } = await executeWithSession({
           tool,
           bundle,
           argumentsObject: params.argumentsObject,
@@ -384,8 +417,8 @@ export function createRuntimeMcpManager(params: {
             : null;
         const isError = record?.isError === true;
         const outputText = transport.formatToolResultOutput(callResult);
-        return {
-          status: isError ? "error" : "ok",
+        const result = {
+          status: (isError ? "error" : "ok") as const,
           exitCode: isError ? null : 0,
           outputText,
           errorCode: isError ? buildToolFailedCode(tool) : null,
@@ -398,13 +431,20 @@ export function createRuntimeMcpManager(params: {
               : null,
           details: buildToolDetails(tool),
         };
+        await emitExecutionCompleted({
+          status: result.status,
+          latencyMs: Date.now() - executionStartedAt,
+          errorCode: result.errorCode,
+          refreshedSession,
+        });
+        return result;
       } catch (error) {
         const message =
           error instanceof Error
             ? normalizeString(error.message, 2_000)
             : buildToolFailedCode(tool);
-        return {
-          status: "error",
+        const result = {
+          status: "error" as const,
           exitCode: null,
           outputText: "",
           errorCode: buildToolFailedCode(tool),
@@ -415,6 +455,13 @@ export function createRuntimeMcpManager(params: {
               : "Platform app tool failed."),
           details: buildToolDetails(tool),
         };
+        await emitExecutionCompleted({
+          status: result.status,
+          latencyMs: Date.now() - executionStartedAt,
+          errorCode: result.errorCode,
+          refreshedSession: false,
+        });
+        return result;
       }
     },
   };

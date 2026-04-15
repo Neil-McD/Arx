@@ -197,6 +197,22 @@ export function createPolyNetExecutionSession(params: {
 
   if (workspaceSession) ensureWorkspaceHeartbeat();
 
+  const emitRunEvent = async (
+    eventType: string,
+    payload: Record<string, unknown>,
+    eventKey?: string,
+  ): Promise<void> => {
+    try {
+      await params.appendRunEvent({
+        eventType,
+        eventKey,
+        payload,
+      });
+    } catch {
+      // Best-effort runtime evidence only.
+    }
+  };
+
   const enrichComputerUseToolResult = async (paramsForEnrich: {
     toolName: RetrievalToolName;
     toolResult: NativeToolExecutionResult;
@@ -286,19 +302,16 @@ export function createPolyNetExecutionSession(params: {
           message: "Workspace session requires a bound project workspace.",
         };
       }
-      try {
-        await params.appendRunEvent({
-          eventType: "workspace_session_create_started",
-          eventKey: `${params.runId}:workspace_session_create_started:1`,
-          payload: {
-            run_id: params.runId,
-            project_id: projectId,
-            tool_name: String(paramsForCreate?.toolName ?? "").trim() || null,
-          },
-        });
-      } catch {
-        // Best-effort runtime evidence only.
-      }
+      const createStartedAt = Date.now();
+      await emitRunEvent(
+        "workspace_session_create_started",
+        {
+          run_id: params.runId,
+          project_id: projectId,
+          tool_name: String(paramsForCreate?.toolName ?? "").trim() || null,
+        },
+        `${params.runId}:workspace_session_create_started:1`,
+      );
       const created = await createWorkspaceSandboxSession({
         ctx: params.ctx,
         userId: params.userId,
@@ -348,25 +361,35 @@ export function createPolyNetExecutionSession(params: {
             clearInterval(heartbeatTimer);
             heartbeatTimer = null;
           }
-          try {
-            await params.appendRunEvent({
-              eventType: "workspace_session_state_persist_failed",
-              eventKey: `${params.runId}:workspace_session_state_persist_failed:1`,
-              payload: {
-                run_id: params.runId,
-                sandbox_id: created.session.providerSandboxId,
-                project_id: projectId,
-              },
-            });
-          } catch {
-            // Best-effort runtime evidence only.
-          }
+          await emitRunEvent(
+            "workspace_session_state_persist_failed",
+            {
+              run_id: params.runId,
+              sandbox_id: created.session.providerSandboxId,
+              project_id: projectId,
+              latency_ms: Date.now() - createStartedAt,
+            },
+            `${params.runId}:workspace_session_state_persist_failed:1`,
+          );
           workspaceSessionFailure = {
             status: 500,
             code: "workspace_session_persist_failed",
             message:
               "Failed to persist workspace session metadata.",
           };
+          await emitRunEvent(
+            "workspace_session_create_completed",
+            {
+              run_id: params.runId,
+              project_id: projectId,
+              tool_name: String(paramsForCreate?.toolName ?? "").trim() || null,
+              latency_ms: Date.now() - createStartedAt,
+              status: "error",
+              code: workspaceSessionFailure.code,
+              sandbox_id: created.session.providerSandboxId,
+            },
+            `${params.runId}:workspace_session_create_completed:error`,
+          );
           return {
             ok: false as const,
             status: workspaceSessionFailure.status,
@@ -374,6 +397,19 @@ export function createPolyNetExecutionSession(params: {
             message: workspaceSessionFailure.message,
           };
         }
+        await emitRunEvent(
+          "workspace_session_create_completed",
+          {
+            run_id: params.runId,
+            project_id: projectId,
+            tool_name: String(paramsForCreate?.toolName ?? "").trim() || null,
+            latency_ms: Date.now() - createStartedAt,
+            status: "ok",
+            sandbox_id: created.session.providerSandboxId,
+            region: created.session.region ?? null,
+          },
+          `${params.runId}:workspace_session_create_completed:ok`,
+        );
       }
       return created;
     },
@@ -393,8 +429,12 @@ export function createPolyNetExecutionSession(params: {
         workspaceSessionFailure ? "failed" : "released";
       if (workspaceSession) {
         if (ownsWorkspaceSession) {
+          const cleanupStartedAt = Date.now();
+          let cleanupResult:
+            | Awaited<ReturnType<typeof cleanupWorkspaceSandboxSession>>
+            | null = null;
           try {
-            const cleanupResult = await cleanupWorkspaceSandboxSession({
+            cleanupResult = await cleanupWorkspaceSandboxSession({
               ctx: params.ctx,
               userId: params.userId,
               session: workspaceSession,
@@ -410,6 +450,24 @@ export function createPolyNetExecutionSession(params: {
           } catch {
             finalWorkspaceState = "failed";
           }
+          await emitRunEvent(
+            "workspace_session_cleanup_completed",
+            {
+              run_id: params.runId,
+              sandbox_id: workspaceSession.providerSandboxId,
+              project_id: String(
+                params.projectId ?? workspaceSession.projectId ?? "",
+              ).trim(),
+              latency_ms: Date.now() - cleanupStartedAt,
+              final_state: finalWorkspaceState,
+              stop_status: cleanupResult?.stopStatus ?? "error",
+              stop_code: cleanupResult?.stopCode ?? "cleanup_failed",
+              delete_status: cleanupResult?.deleteStatus ?? "error",
+              delete_code: cleanupResult?.deleteCode ?? "cleanup_failed",
+              charge_recorded: cleanupResult?.chargeRecorded ?? false,
+            },
+            `${params.runId}:workspace_session_cleanup_completed:1`,
+          );
         }
         try {
           await params.ctx.runMutation(
@@ -552,6 +610,7 @@ export function createPolyNetExecutionSession(params: {
         };
       }
 
+      const terminalStartedAt = Date.now();
       try {
         const payload =
           paramsForTool.toolName === "terminal_start"
@@ -615,6 +674,17 @@ export function createPolyNetExecutionSession(params: {
                   );
         const ok = Boolean((payload as { ok?: boolean } | null)?.ok);
         if (!ok) {
+          await emitRunEvent("terminal_tool_completed", {
+            run_id: params.runId,
+            tool_name: paramsForTool.toolName,
+            latency_ms: Date.now() - terminalStartedAt,
+            status: "error",
+            terminal_session_id:
+              typeof (payload as Record<string, unknown> | null)?.terminal_session_id ===
+              "string"
+                ? (payload as Record<string, unknown>).terminal_session_id
+                : null,
+          });
           return {
             status: "error",
             exitCode: null,
@@ -629,6 +699,20 @@ export function createPolyNetExecutionSession(params: {
             ),
           };
         }
+        await emitRunEvent("terminal_tool_completed", {
+          run_id: params.runId,
+          tool_name: paramsForTool.toolName,
+          latency_ms: Date.now() - terminalStartedAt,
+          status: "ok",
+          terminal_session_id:
+            payload &&
+            typeof payload === "object" &&
+            !Array.isArray(payload) &&
+            typeof (payload as Record<string, unknown>).terminal_session_id ===
+              "string"
+              ? (payload as Record<string, unknown>).terminal_session_id
+              : null,
+        });
         return {
           status: "ok",
           exitCode: 0,
@@ -685,6 +769,13 @@ export function createPolyNetExecutionSession(params: {
         };
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
+        await emitRunEvent("terminal_tool_completed", {
+          run_id: params.runId,
+          tool_name: paramsForTool.toolName,
+          latency_ms: Date.now() - terminalStartedAt,
+          status: "error",
+          error_message: message || "Terminal operation failed.",
+        });
         return {
           status: "error",
           exitCode: null,
@@ -697,8 +788,16 @@ export function createPolyNetExecutionSession(params: {
     async getTerminalPreview(paramsForPreview: {
       terminalSessionId: string;
     }): Promise<unknown> {
+      const previewStartedAt = Date.now();
       const authSubject = String(params.authSubject ?? "").trim();
       if (!authSubject) {
+        await emitRunEvent("terminal_preview_lookup_completed", {
+          run_id: params.runId,
+          terminal_session_id: paramsForPreview.terminalSessionId,
+          latency_ms: Date.now() - previewStartedAt,
+          status: "error",
+          code: "auth_required",
+        });
         return {
           ok: false,
           status: 401,
@@ -706,19 +805,36 @@ export function createPolyNetExecutionSession(params: {
           message: "Preview access requires an authenticated workspace run.",
         };
       }
-      return await params.ctx.runAction(
+      const result = await params.ctx.runAction(
         internal.workspaceTerminals.getWorkspaceTerminalPreviewUrl as any,
         {
           authSubject,
           terminalSessionId: paramsForPreview.terminalSessionId as any,
         },
       );
+      await emitRunEvent("terminal_preview_lookup_completed", {
+        run_id: params.runId,
+        terminal_session_id: paramsForPreview.terminalSessionId,
+        latency_ms: Date.now() - previewStartedAt,
+        status:
+          Boolean(
+            result &&
+              typeof result === "object" &&
+              !Array.isArray(result) &&
+              (result as Record<string, unknown>).ok,
+          )
+            ? "ok"
+            : "error",
+      });
+      return result;
     },
     async executeComputerTool(paramsForComputer: {
       toolName: RetrievalToolName | string;
       normalizedArgs: Record<string, unknown>;
       signal?: AbortSignal;
     }): Promise<NativeToolExecutionResult> {
+      const computerStartedAt = Date.now();
+      const hadWorkspaceSession = workspaceSession !== null;
       if (!isComputerUseToolName(paramsForComputer.toolName)) {
         return {
           status: "error",
@@ -752,10 +868,19 @@ export function createPolyNetExecutionSession(params: {
         args: paramsForComputer.normalizedArgs,
         signal: paramsForComputer.signal,
       });
-      return await enrichComputerUseToolResult({
+      const enriched = await enrichComputerUseToolResult({
         toolName: paramsForComputer.toolName,
         toolResult: computerResult,
       });
+      await emitRunEvent("computer_tool_completed", {
+        run_id: params.runId,
+        tool_name: paramsForComputer.toolName,
+        latency_ms: Date.now() - computerStartedAt,
+        status: enriched.status,
+        used_existing_workspace: hadWorkspaceSession,
+        sandbox_id: activeWorkspaceSession.providerSandboxId,
+      });
+      return enriched;
     },
   };
 }

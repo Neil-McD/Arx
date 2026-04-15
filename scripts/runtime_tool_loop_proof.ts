@@ -6,6 +6,8 @@ import {
   type NativeToolAwareMessage,
 } from "../shared/nativeToolProtocol.ts";
 import { runSerialNativeToolLoop } from "../shared/nativeToolLoop.ts";
+import { runNativeRuntimeKernel } from "../shared/runtimeKernel.ts";
+import { DEFAULT_RUNTIME_KERNEL_BUDGET } from "../shared/runtimeKernelTypes.ts";
 import { normalizeToolArguments } from "../shared/toolRegistry.ts";
 import type { RetrievalToolName } from "../shared/retrievalTools.ts";
 
@@ -383,6 +385,113 @@ async function proveFailureBudget() {
   console.log("PASS: runtime tool loop failure-budget proof");
 }
 
+async function proveToolBudgetExhaustion() {
+  let providerInvocation = 0;
+  const result = await runSerialNativeToolLoop<RetrievalToolName>({
+    messages: [
+      { role: "system", content: "You are in a workspace." },
+      { role: "user", content: "Keep listing the workspace." },
+    ],
+    maxIterations: 1,
+    runCompletion: async () => {
+      providerInvocation += 1;
+      return {
+        ok: true,
+        type: "tool_call",
+        providerCallId: `budget-call-${providerInvocation}`,
+        toolName: "list_dir",
+        arguments: { path: "." },
+        assistantToolCallMessage: buildAssistantToolCallMessage({
+          content: null,
+          providerCallId: `budget-call-${providerInvocation}`,
+          toolName: "list_dir",
+          rawArguments: JSON.stringify({ path: "." }),
+        }),
+        promptTokens: 30 + providerInvocation,
+        completionTokens: 4,
+        resolvedModelId: "mock-model",
+      };
+    },
+    normalizeToolArguments,
+    executeTool: async () => ({
+      status: "ok",
+      exitCode: 0,
+      outputText: "file\talpha.txt",
+      errorCode: null,
+      errorMessage: null,
+    }),
+  });
+
+  assert.equal(result.ok, false, "expected tool budget exhaustion");
+  if (!result.ok) {
+    assert.equal(result.code, "tool_budget_exhausted");
+    assert.equal(result.stopReason, "tool_budget_exhausted");
+    assert.equal(result.stepCount, 1);
+    assert.equal(result.steps.length, 2);
+    assert.equal(result.steps[1]?.blocked, true);
+    assert.equal(result.steps[1]?.providerCallId, "budget-call-2");
+  }
+
+  console.log("PASS: runtime tool loop tool-budget proof");
+}
+
+async function proveNoProgressBudget() {
+  let providerInvocation = 0;
+  const result = await runNativeRuntimeKernel<RetrievalToolName>({
+    messages: [
+      { role: "system", content: "You are in a workspace." },
+      { role: "user", content: "Try a few commands until you make progress." },
+    ],
+    budget: {
+      ...DEFAULT_RUNTIME_KERNEL_BUDGET,
+      maxRepeatedIdenticalCalls: 6,
+      maxConsecutiveFailures: 6,
+      maxNoProgressSteps: 3,
+    },
+    runCompletion: async () => {
+      providerInvocation += 1;
+      return {
+        ok: true,
+        type: "tool_call",
+        providerCallId: `no-progress-${providerInvocation}`,
+        toolName: "read",
+        arguments: { path: `missing-${providerInvocation}.txt` },
+        assistantToolCallMessage: buildAssistantToolCallMessage({
+          content: null,
+          providerCallId: `no-progress-${providerInvocation}`,
+          toolName: "read",
+          rawArguments: JSON.stringify({ path: `missing-${providerInvocation}.txt` }),
+        }),
+        promptTokens: 40 + providerInvocation,
+        completionTokens: 5,
+        resolvedModelId: "mock-model",
+      };
+    },
+    normalizeToolArguments,
+    executeTool: async ({ normalizedArgs }) => ({
+      status: "error",
+      exitCode: 1,
+      outputText: `ENOENT ${String(normalizedArgs.path ?? "")}`,
+      errorCode: "file_not_found",
+      errorMessage: "File not found.",
+    }),
+  });
+
+  assert.equal(result.ok, false, "expected no-progress exhaustion");
+  if (!result.ok) {
+    assert.equal(result.code, "no_progress_exhausted");
+    assert.equal(result.stopReason, "no_progress_exhausted");
+    assert.equal(result.stepCount, 3);
+    assert.equal(result.steps.length, 3);
+    assert.equal(result.steps[2]?.consecutiveNoProgressCount, 3);
+    assert.equal(result.steps[2]?.madeProgress, false);
+  }
+
+  console.log("PASS: runtime tool loop no-progress proof");
+}
+
 await proveSuccessfulToolLoop();
 await proveRepeatedCallBudget();
 await proveFailureBudget();
+await proveToolBudgetExhaustion();
+await proveNoProgressBudget();

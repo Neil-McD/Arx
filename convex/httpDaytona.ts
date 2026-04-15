@@ -1083,6 +1083,7 @@ async function executeRetrievalAgentLoop(
       buildResolverOpenAiTool: buildResolveMountedToolsOpenAiTool,
       buildResolverResponsesTool: buildResolveMountedToolsResponsesTool,
     });
+  const initialProviderTools = buildActiveProviderTools();
   let reasoningSummaryStreamCount = 0;
   let reasoningSummaryPartAddedCount = 0;
   let reasoningSummaryTextDeltaCount = 0;
@@ -1149,6 +1150,35 @@ async function executeRetrievalAgentLoop(
     }
   }
   try {
+    await params.appendRunEvent({
+      eventType: "provider_tool_surface_resolved",
+      eventKey: `${params.runId}:provider_tool_surface_resolved:initial`,
+      payload: {
+        run_id: params.runId,
+        stage: "initial",
+        fixed_allowed_tool_count: params.allowedToolNames.length,
+        mounted_catalog_count:
+          runtimeMountedUserPlatformAppTools.length +
+          mountedCommunityAppTools.length,
+        active_tool_count: initialProviderTools.activeToolNames.length,
+        exposed_mounted_tool_count: initialProviderTools.activeToolNames.filter(
+          (toolName) =>
+            runtimeMountedUserPlatformAppTools.some(
+              (tool) => tool.runtime_tool_name === toolName,
+            ) ||
+            mountedCommunityAppTools.some(
+              (tool) => tool.runtime_tool_name === toolName,
+            ),
+        ).length,
+        resolver_enabled: initialProviderTools.activeToolNames.includes(
+          RESOLVE_MOUNTED_TOOLS_TOOL_NAME,
+        ),
+      },
+    });
+  } catch {
+    // Best-effort runtime evidence only.
+  }
+  try {
     const throwIfCancelled = async (): Promise<void> => {
       await throwIfRuntimeRunCancelled({
         ctx: params.ctx,
@@ -1156,6 +1186,7 @@ async function executeRetrievalAgentLoop(
         runId: params.runId,
       });
     };
+    const loopStartedAt = Date.now();
     const loopResult = await runNativeRuntimeKernel<string>({
       messages: nativeTranscript,
       budget: params.loopBudget,
@@ -1290,6 +1321,7 @@ async function executeRetrievalAgentLoop(
             normalizedArgs as ReturnType<typeof normalizeResolveMountedToolsArguments>,
           );
           try {
+            const providerToolSurface = buildActiveProviderTools();
             await params.appendRunEvent({
               eventType: "mounted_tool_exposure_resolved",
               payload: {
@@ -1307,6 +1339,8 @@ async function executeRetrievalAgentLoop(
                   resolution.resolution.alreadyExposedTools,
                 remaining_exposure_capacity:
                   resolution.resolution.remainingExposureCapacity,
+                active_provider_tool_count:
+                  providerToolSurface.activeToolNames.length,
               },
             });
           } catch {
@@ -1684,6 +1718,7 @@ async function executeRetrievalAgentLoop(
           },
           stop_reason: loopResult.stopReason,
           step_count: loopResult.stepCount,
+          total_latency_ms: Date.now() - loopStartedAt,
           status: loopResult.ok ? "ok" : "error",
           ...(loopResult.ok
             ? null
