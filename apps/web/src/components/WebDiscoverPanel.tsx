@@ -519,7 +519,7 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
                       {selectedApp.supportNote}
                     </div>
                   </div>
-                ) : !isPersonalConnectComposerOpen ? (
+                ) : (
                   <div className="discover-connect-status">
                     <div className="discover-connect-status-title">
                       Ready to connect
