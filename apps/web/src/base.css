@@ -258,6 +258,7 @@
   --bg-input: rgba(24, 24, 28, 0.95);
   --bg-terminal: #0d0d10;
   --surface-nav: rgba(21, 21, 24, 0.9);
+  --workspace-composer-bg: var(--surface-nav, var(--surface-panel));
 
   /* === BUTTONS: Light pills, sparse emphasis === */
   --bg-button: #efeff2;
@@ -7505,12 +7506,10 @@ button.chat-reply-quote:hover {
   padding: 14px 16px 12px;
   /* Match the community chat composer spacing (leave a small bottom gutter). */
   margin: 0 12px 12px 0;
-  background: color-mix(in srgb, var(--bg-card) 82%, var(--bg-workspace) 18%);
+  background: var(--workspace-composer-bg, color-mix(in srgb, var(--bg-card) 82%, var(--bg-workspace) 18%));
   border: 1px solid var(--border-default);
   border-radius: var(--radius-lg);
-  box-shadow:
-    inset 0 1px 0 color-mix(in srgb, var(--text-primary) 4%, transparent),
-    inset 0 0 0 1px color-mix(in srgb, var(--border-default) 24%, transparent);
+  box-shadow: none;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -15003,7 +15002,7 @@ button.message-citation-chip:hover {
   place-items: center;
   border: 1px solid var(--border-muted);
   background: color-mix(in srgb, var(--bg-card) 88%, transparent);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.22);
+  box-shadow: none;
   margin-bottom: 8px;
 }
 
