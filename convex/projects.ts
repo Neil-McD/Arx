@@ -467,6 +467,12 @@ async function daytonaVolumeRequest<T>(params: {
     };
   }
   if (!json || typeof json !== "object") {
+    if (params.method === "DELETE") {
+      return {
+        ok: true,
+        payload: {} as T,
+      };
+    }
     return {
       ok: false,
       status: 503,
