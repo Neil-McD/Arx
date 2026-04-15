@@ -64,7 +64,7 @@ function countObservationMessages(messages: NativeToolAwareMessage[]): number {
   return messages.filter((message) => isComputerUseObservationMessage(message)).length;
 }
 
-async function main() {
+async function proveSuccessfulToolLoop() {
   const providerRequests: NativeToolAwareMessage[][] = [];
   const executedTools: Array<{
     iteration: number;
@@ -281,7 +281,108 @@ async function main() {
     assert.equal(result.completionTokens, 9);
   }
 
-  console.log("PASS: runtime tool loop proof");
+  console.log("PASS: runtime tool loop success proof");
 }
 
-await main();
+async function proveRepeatedCallBudget() {
+  let providerInvocation = 0;
+  const result = await runSerialNativeToolLoop<RetrievalToolName>({
+    messages: [
+      { role: "system", content: "You are in a workspace." },
+      { role: "user", content: "Keep reading alpha.txt until you are done." },
+    ],
+    maxIterations: 6,
+    runCompletion: async () => {
+      providerInvocation += 1;
+      return {
+        ok: true,
+        type: "tool_call",
+        providerCallId: `repeat-call-${providerInvocation}`,
+        toolName: "read",
+        arguments: { path: "alpha.txt" },
+        assistantToolCallMessage: buildAssistantToolCallMessage({
+          content: null,
+          providerCallId: `repeat-call-${providerInvocation}`,
+          toolName: "read",
+          rawArguments: JSON.stringify({ path: "alpha.txt" }),
+        }),
+        promptTokens: 10 + providerInvocation,
+        completionTokens: 5,
+        resolvedModelId: "mock-model",
+      };
+    },
+    normalizeToolArguments,
+    executeTool: async () => ({
+      status: "ok",
+      exitCode: 0,
+      outputText: "alpha stays the same",
+      errorCode: null,
+      errorMessage: null,
+    }),
+  });
+
+  assert.equal(result.ok, false, "expected repeated-call budget failure");
+  if (!result.ok) {
+    assert.equal(result.code, "repeated_call_blocked");
+    assert.equal(result.stopReason, "repeated_call_blocked");
+    assert.equal(result.stepCount, 2);
+    assert.equal(result.steps.length, 3);
+    assert.equal(result.steps[2]?.blocked, true);
+    assert.equal(result.steps[2]?.repeatedCallCount, 3);
+  }
+
+  console.log("PASS: runtime tool loop repeated-call proof");
+}
+
+async function proveFailureBudget() {
+  const result = await runSerialNativeToolLoop<RetrievalToolName>({
+    messages: [
+      { role: "system", content: "You are in a workspace." },
+      { role: "user", content: "Read alpha.txt." },
+    ],
+    maxIterations: 6,
+    runCompletion: async (messages) => {
+      const callNumber =
+        messages.filter((message) => message.role === "tool").length + 1;
+      return {
+        ok: true,
+        type: "tool_call",
+        providerCallId: `failure-call-${callNumber}`,
+        toolName: "read",
+        arguments: { path: `missing-${callNumber}.txt` },
+        assistantToolCallMessage: buildAssistantToolCallMessage({
+          content: null,
+          providerCallId: `failure-call-${callNumber}`,
+          toolName: "read",
+          rawArguments: JSON.stringify({ path: `missing-${callNumber}.txt` }),
+        }),
+        promptTokens: 20 + callNumber,
+        completionTokens: 6,
+        resolvedModelId: "mock-model",
+      };
+    },
+    normalizeToolArguments,
+    executeTool: async ({ normalizedArgs }) => ({
+      status: "error",
+      exitCode: 1,
+      outputText: `ENOENT ${String(normalizedArgs.path ?? "")}`,
+      errorCode: "file_not_found",
+      errorMessage: "File not found.",
+    }),
+  });
+
+  assert.equal(result.ok, false, "expected consecutive-failure budget failure");
+  if (!result.ok) {
+    assert.equal(result.code, "consecutive_failures_exhausted");
+    assert.equal(result.stopReason, "consecutive_failures_exhausted");
+    assert.equal(result.stepCount, 2);
+    assert.equal(result.steps.length, 2);
+    assert.equal(result.steps[1]?.consecutiveFailureCount, 2);
+  }
+
+  console.log("PASS: runtime tool loop failure-budget proof");
+}
+
+await proveSuccessfulToolLoop();
+await proveRepeatedCallBudget();
+await proveFailureBudget();

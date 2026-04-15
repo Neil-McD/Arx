@@ -45,9 +45,16 @@ import {
   type NativeToolInputContentPart,
 } from "../shared/nativeToolProtocol";
 import {
-  runSerialNativeToolLoop,
   type NativeToolExecutionResult,
 } from "../shared/nativeToolLoop";
+import { runNativeRuntimeKernel } from "../shared/runtimeKernel";
+import {
+  DEFAULT_RUNTIME_KERNEL_BUDGET,
+  type RuntimeKernelBudget,
+  type RuntimeKernelFailure,
+  type RuntimeKernelFailureInput,
+  type RuntimeKernelSuccess,
+} from "../shared/runtimeKernelTypes";
 import {
   buildCommunityOverlayRuntimeState,
   type CommunityOverlayMountedTool,
@@ -70,6 +77,15 @@ import { createRuntimeReasoningSummaryEmitter } from "./runtimeReasoningSummaryE
 import { parseProviderModelRef } from "./httpInferenceConfig";
 import { runOpenAiNativeToolCompletion } from "./openAiNativeToolCompletion";
 import { logStructuredError, summarizeErrorForLog } from "./errorLogging";
+import {
+  createRuntimeMcpManager,
+  type RuntimeMountedMcpTool,
+} from "./runtimeMcpManager";
+import {
+  createRuntimeMountedToolExposureState,
+  normalizeResolveMountedToolsArguments,
+  RESOLVE_MOUNTED_TOOLS_TOOL_NAME,
+} from "./runtimeMountedToolExposure";
 
 type InferenceRole = "user" | "assistant" | "system";
 type InferenceMessage = {
@@ -77,30 +93,41 @@ type InferenceMessage = {
   content: string;
 };
 
-type RuntimeAgentLoopSuccess = {
-  ok: true;
-  assistantText: string;
-  promptTokens: number | null;
-  completionTokens: number | null;
-  transcript: NativeToolAwareMessage[];
-};
-
-type RuntimeAgentLoopFailure = {
-  ok: false;
-  status: number;
-  code: string;
-  message: string;
-  pendingToolCallId?: string;
-  pendingToolName?: string;
-};
+type RuntimeAgentLoopSuccess = RuntimeKernelSuccess<string>;
+type RuntimeAgentLoopFailure = RuntimeKernelFailure<string>;
+type RuntimeAgentLoopFailureInput = RuntimeKernelFailureInput;
 
 type OpenAiCompatibleFunctionTool = ReturnType<
   typeof buildOpenAiFunctionTools
 >[number];
 type ChatgptCompatibleFunctionTool = ChatgptFunctionTool;
+type JsonSchema = Record<string, unknown> | boolean;
 
 type RuntimeInferenceSource = "free" | "platform" | "chatgpt" | "user_key";
 const WORKSPACE_RUN_HEARTBEAT_INTERVAL_MS = 2 * 60 * 1000;
+const CHAT_TOOLS_RUNTIME_KERNEL_BUDGET: RuntimeKernelBudget =
+  DEFAULT_RUNTIME_KERNEL_BUDGET;
+const RESOLVE_MOUNTED_TOOLS_INPUT_SCHEMA: JsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["query"],
+  properties: {
+    query: {
+      type: "string",
+      minLength: 1,
+      maxLength: 240,
+    },
+    scope: {
+      type: "string",
+      enum: ["user", "community", "any"],
+    },
+    limit: {
+      type: "integer",
+      minimum: 1,
+      maximum: 8,
+    },
+  },
+};
 
 type RuntimeMountedCommunityAppTool = {
   community_app_mount_id: string;
@@ -117,21 +144,6 @@ type RuntimeMountedCommunityAppTool = {
 
 type RuntimeMountedUserPlatformAppTool = {
   user_platform_app_mount_id: string;
-  developer_app_id: string;
-  app_name: string;
-  endpoint_url: string;
-  auth_type: string;
-  tool_name: string;
-  namespaced_tool_name: string;
-  description: string | null;
-  input_schema: unknown;
-  risk_level: "read" | "write" | "sensitive";
-};
-
-type RuntimeMountedMcpTool = {
-  scope: "user" | "community";
-  mount_id: string;
-  runtime_tool_name: string;
   developer_app_id: string;
   app_name: string;
   endpoint_url: string;
@@ -350,6 +362,30 @@ function buildMountedAppResponsesTools(
   }));
 }
 
+function buildResolveMountedToolsOpenAiTool(): OpenAiCompatibleFunctionTool {
+  return {
+    type: "function",
+    function: {
+      name: RESOLVE_MOUNTED_TOOLS_TOOL_NAME,
+      description:
+        "Resolve connected personal or community app tools by search query. Use this before calling a mounted app tool that is not yet exposed.",
+      parameters: RESOLVE_MOUNTED_TOOLS_INPUT_SCHEMA,
+      strict: true,
+    },
+  };
+}
+
+function buildResolveMountedToolsResponsesTool(): ResponsesApiFunctionTool {
+  return {
+    type: "function",
+    name: RESOLVE_MOUNTED_TOOLS_TOOL_NAME,
+    description:
+      "Resolve connected personal or community app tools by search query. Use this before calling a mounted app tool that is not yet exposed.",
+    parameters: RESOLVE_MOUNTED_TOOLS_INPUT_SCHEMA,
+    strict: true,
+  };
+}
+
 function buildMountedAppToolDescription(tool: RuntimeMountedMcpTool): string {
   const baseDescription =
     tool.description ||
@@ -368,9 +404,9 @@ function buildUserPlatformMountedAppsPromptBlock(
   if (mountedTools.length === 0) return "";
   return [
     "",
-    "Your connected app tools are part of your baseline platform harness.",
-    "These baseline app tools use the `me__` prefix when they are exposed to the model.",
-    "These tools stay available across communities. Use the provided structured tool definitions directly.",
+    "Your connected app tools stay available across communities, but they are exposed lazily.",
+    "Use `resolve_mounted_tools` with a short query when you need a connected personal app tool.",
+    "Resolved personal app tools use the `me__` prefix when they are exposed to the model.",
     "Personal app tools that are marked write or sensitive require an approval flow and will refuse execution until that flow ships. Read tools can run directly.",
   ].join("\n");
 }
@@ -1156,7 +1192,7 @@ async function runProviderNativeToolCompletion(params: {
   }) => Promise<void> | void;
   signal?: AbortSignal;
 }): Promise<
-  NativeToolAwareCompletionSuccess<string> | RuntimeAgentLoopFailure
+  NativeToolAwareCompletionSuccess<string> | RuntimeAgentLoopFailureInput
 > {
   if (params.inferenceSource === "chatgpt") {
     return runChatgptNativeToolCompletion({
@@ -1207,7 +1243,7 @@ async function executeRetrievalAgentLoop(
     maxTokens: number;
     runId: string;
     harnessName: "chat_tools";
-    maxIterations: number;
+    loopBudget: RuntimeKernelBudget;
     allowedToolNames: readonly RetrievalToolName[];
     communitySystemPrompt?: string | null;
     projectId?: string | null;
@@ -1320,6 +1356,25 @@ async function executeRetrievalAgentLoop(
     ...runtimeMountedUserPlatformAppTools,
     ...runtimeMountedCommunityAppTools,
   ];
+  const runtimeMcpManager = createRuntimeMcpManager({
+    runId: params.runId,
+    mountedTools: runtimeMountedTools,
+    loadConnectionBundle: async ({ developerAppId }) =>
+      (await params.ctx.runQuery(
+        internal.appConnections.getDecryptedDeveloperAppConnectionBundleInternal,
+        {
+          developerAppId: developerAppId as any,
+        },
+      )) as {
+        app: any;
+        connection: any;
+        secret: string | null;
+      } | null,
+    appendRunEvent: params.appendRunEvent,
+  });
+  const mountedToolExposureState = createRuntimeMountedToolExposureState({
+    mountedTools: runtimeMountedTools,
+  });
   const explicitCommunitySkillMentions = new Set(
     extractExplicitSkillMentions(params.messages),
   );
@@ -1355,20 +1410,15 @@ async function executeRetrievalAgentLoop(
     runtimeMountedTools.map((tool) => [tool.runtime_tool_name, tool]),
   );
   const overlayRuntimeState = buildCommunityOverlayRuntimeState({
-    allowedToolNames: [
-      ...params.allowedToolNames,
-      ...runtimeMountedUserPlatformAppTools.map((tool) => tool.runtime_tool_name),
-    ],
     mountedTools: mapMountedToolsToOverlayRuntime(mountedCommunityAppTools),
     attachedSkills: mapCommunitySkillsToOverlayRuntime(attachedCommunitySkills),
     selectedSkills: mapSelectedCommunitySkillsToOverlayRuntime(
       selectedCommunitySkills,
     ),
   });
-  const activeToolNames = overlayRuntimeState.activeToolNames;
 
   const baseSystemPrompt = buildWorkspaceRuntimeSystemPrompt({
-    maxIterations: params.maxIterations,
+    loopBudget: params.loopBudget,
     allowedToolNames: params.allowedToolNames,
     harnessName: params.harnessName,
     communityId: params.communityId,
@@ -1411,14 +1461,41 @@ async function executeRetrievalAgentLoop(
       content: message.content,
     })),
   ];
-  const nativeTools = [
-    ...buildOpenAiFunctionTools(params.allowedToolNames),
-    ...buildMountedAppOpenAiTools(runtimeMountedTools),
-  ];
-  const responsesApiNativeTools = [
-    ...buildResponsesApiFunctionTools(params.allowedToolNames),
-    ...buildMountedAppResponsesTools(runtimeMountedTools),
-  ];
+  const buildActiveProviderTools = (): {
+    openAiTools: OpenAiCompatibleFunctionTool[];
+    responsesTools: ResponsesApiFunctionTool[];
+    activeToolNames: string[];
+  } => {
+    const exposedMountedTools = mountedToolExposureState.getExposedTools();
+    const resolverTools = mountedToolExposureState.hasMountedTools()
+      ? {
+          openAi: [buildResolveMountedToolsOpenAiTool()],
+          responses: [buildResolveMountedToolsResponsesTool()],
+          names: [RESOLVE_MOUNTED_TOOLS_TOOL_NAME],
+        }
+      : {
+          openAi: [] as OpenAiCompatibleFunctionTool[],
+          responses: [] as ResponsesApiFunctionTool[],
+          names: [] as string[],
+        };
+    return {
+      openAiTools: [
+        ...buildOpenAiFunctionTools(params.allowedToolNames),
+        ...resolverTools.openAi,
+        ...buildMountedAppOpenAiTools(exposedMountedTools),
+      ],
+      responsesTools: [
+        ...buildResponsesApiFunctionTools(params.allowedToolNames),
+        ...resolverTools.responses,
+        ...buildMountedAppResponsesTools(exposedMountedTools),
+      ],
+      activeToolNames: [
+        ...params.allowedToolNames,
+        ...resolverTools.names,
+        ...exposedMountedTools.map((tool) => tool.runtime_tool_name),
+      ],
+    };
+  };
   let reasoningSummaryStreamCount = 0;
   let reasoningSummaryPartAddedCount = 0;
   let reasoningSummaryTextDeltaCount = 0;
@@ -1492,13 +1569,13 @@ async function executeRetrievalAgentLoop(
         runId: params.runId,
       });
     };
-    const loopResult = await runSerialNativeToolLoop<string>({
+    const loopResult = await runNativeRuntimeKernel<string>({
       messages: nativeTranscript,
-      maxIterations: params.maxIterations,
+      budget: params.loopBudget,
       runCompletion: async (messages) => {
         let completion:
           | NativeToolAwareCompletionSuccess<string>
-          | RuntimeAgentLoopFailure;
+          | RuntimeAgentLoopFailureInput;
         const reasoningSummaryEmitter = createRuntimeReasoningSummaryEmitter({
           runId: params.runId,
           summaryStreamId: `${params.runId}:tool_completion:${reasoningSummaryStreamCount}`,
@@ -1506,6 +1583,7 @@ async function executeRetrievalAgentLoop(
         });
         reasoningSummaryStreamCount += 1;
         try {
+          const providerTools = buildActiveProviderTools();
           completion = await runAbortableWithRuntimeCancellation({
             ctx: params.ctx,
             ownerId: params.userId,
@@ -1519,8 +1597,8 @@ async function executeRetrievalAgentLoop(
                 modelRef: params.modelRef,
                 messages,
                 maxTokens: params.maxTokens,
-                openRouterTools: nativeTools,
-                responsesApiTools: responsesApiNativeTools,
+                openRouterTools: providerTools.openAiTools,
+                responsesApiTools: providerTools.responsesTools,
                 apiKeyOverride: params.apiKeyOverride,
                 onReasoningSummaryPartAdded: async ({ summaryIndex }) => {
                   try {
@@ -1555,6 +1633,7 @@ async function executeRetrievalAgentLoop(
               ok: false,
               status: 409,
               code: USER_CANCELLED_RUNTIME_CODE,
+              stopReason: "user_cancelled",
               message: error.message,
             };
           }
@@ -1574,18 +1653,21 @@ async function executeRetrievalAgentLoop(
             ok: false,
             status: 502,
             code: "agent_loop_provider_crash",
+            stopReason: "model_error",
             message: `Provider completion crashed: ${summary.message}`,
           };
         }
         if (!completion.ok) return completion;
+        const providerTools = buildActiveProviderTools();
         if (
           completion.type === "tool_call" &&
-          !activeToolNames.includes(completion.toolName)
+          !providerTools.activeToolNames.includes(completion.toolName)
         ) {
           return {
             ok: false,
             status: 502,
             code: "invalid_model_output",
+            stopReason: "invalid_model_output",
             message: "Provider returned an unknown tool name.",
             pendingToolCallId: completion.providerCallId,
             pendingToolName: completion.toolName,
@@ -1594,6 +1676,9 @@ async function executeRetrievalAgentLoop(
         return completion as NativeToolAwareCompletionSuccess<string>;
       },
       normalizeToolArguments: (toolName, rawArgs) => {
+        if (toolName === RESOLVE_MOUNTED_TOOLS_TOOL_NAME) {
+          return normalizeResolveMountedToolsArguments(rawArgs);
+        }
         if (params.allowedToolNames.includes(toolName as RetrievalToolName)) {
           return normalizeToolArguments(toolName as RetrievalToolName, rawArgs);
         }
@@ -1616,6 +1701,44 @@ async function executeRetrievalAgentLoop(
           }
           throw error;
         }
+        if (toolName === RESOLVE_MOUNTED_TOOLS_TOOL_NAME) {
+          const resolution = mountedToolExposureState.resolve(
+            normalizedArgs as ReturnType<typeof normalizeResolveMountedToolsArguments>,
+          );
+          try {
+            await params.appendRunEvent({
+              eventType: "mounted_tool_exposure_resolved",
+              payload: {
+                query: resolution.resolution.query,
+                scope: resolution.resolution.scope,
+                requested_limit: resolution.resolution.requestedLimit,
+                total_catalog_count: resolution.resolution.totalCatalogCount,
+                total_matched_count: resolution.resolution.totalMatchedCount,
+                total_exposed_count: resolution.resolution.totalExposedCount,
+                newly_exposed_tool_names:
+                  resolution.resolution.newlyExposedTools.map(
+                    (tool) => tool.runtime_tool_name,
+                  ),
+                already_exposed_tool_names:
+                  resolution.resolution.alreadyExposedTools,
+                remaining_exposure_capacity:
+                  resolution.resolution.remainingExposureCapacity,
+              },
+            });
+          } catch {
+            // Best-effort runtime evidence only.
+          }
+          return {
+            status: "ok" as const,
+            exitCode: 0,
+            outputText: resolution.outputText,
+            errorCode: null,
+            errorMessage: null,
+            details: {
+              mounted_tool_resolution: resolution.resolution,
+            },
+          };
+        }
         const isFixedTool = params.allowedToolNames.includes(
           toolName as RetrievalToolName,
         );
@@ -1630,43 +1753,57 @@ async function executeRetrievalAgentLoop(
               errorMessage: `${toolName} is not active for this runtime.`,
             };
           }
+          if (mountedTool.scope === "user" && mountedTool.risk_level !== "read") {
+            const message =
+              "Personal write and sensitive app tools still require the upcoming approval flow. This tool was not executed.";
+            return {
+              status: "error" as const,
+              exitCode: null,
+              outputText: message,
+              errorCode: "user_platform_app_tool_approval_required",
+              errorMessage: message,
+              details: {
+                approval_required: true,
+                user_platform_app: {
+                  user_platform_app_mount_id: String(mountedTool.mount_id),
+                  developer_app_id: String(mountedTool.developer_app_id),
+                  app_name: mountedTool.app_name,
+                  tool_name: mountedTool.tool_name,
+                  namespaced_tool_name: mountedTool.namespaced_tool_name,
+                  risk_level: mountedTool.risk_level,
+                },
+              },
+            };
+          }
+          if (mountedTool.scope === "community" && mountedTool.risk_level !== "read") {
+            if (!params.communityId) {
+              return {
+                status: "error" as const,
+                exitCode: null,
+                outputText: "",
+                errorCode: "community_app_tool_not_found",
+                errorMessage: `${toolName} is not active for this community lens.`,
+              };
+            }
+            await params.ctx.runQuery(
+              internal.communityAppMounts.assertCommunityManagerAccessInternal,
+              {
+                userId: params.userId as any,
+                communityId: params.communityId as any,
+              },
+            );
+          }
           try {
             const toolResult = await runAbortableWithRuntimeCancellation({
               ctx: params.ctx,
               ownerId: params.userId,
               runId: params.runId,
-              operation: async () => {
-                if (mountedTool.scope === "user") {
-                  return await params.ctx.runAction(
-                    internal.userPlatformAppMounts
-                      .executeUserPlatformMountedAppToolInternal,
-                    {
-                      userId: params.userId as any,
-                      namespacedToolName: mountedTool.namespaced_tool_name,
-                      argsJson: normalizedArgs,
-                    },
-                  );
-                }
-                if (!params.communityId) {
-                  return {
-                    status: "error" as const,
-                    exitCode: null,
-                    outputText: "",
-                    errorCode: "community_app_tool_not_found",
-                    errorMessage: `${toolName} is not active for this community lens.`,
-                  };
-                }
-                return await params.ctx.runAction(
-                  internal.communityAppMounts
-                    .executeCommunityMountedAppToolInternal,
-                  {
-                    userId: params.userId as any,
-                    communityId: params.communityId as any,
-                    namespacedToolName: mountedTool.namespaced_tool_name,
-                    argsJson: normalizedArgs,
-                  },
-                );
-              },
+              operation: async (signal) =>
+                await runtimeMcpManager.execute({
+                  runtimeToolName: toolName,
+                  argumentsObject: normalizedArgs,
+                  signal,
+                }),
             });
             await throwIfCancelled();
             return toolResult as NativeToolExecutionResult;
@@ -1930,24 +2067,28 @@ async function executeRetrievalAgentLoop(
       },
     });
 
-    if (!loopResult.ok && loopResult.code === "empty_response") {
-      return {
-        ok: false,
-        status: 502,
-        code: "empty_response",
-        message: `${params.harnessName} harness model returned an empty response.`,
-      };
-    }
-    if (!loopResult.ok && loopResult.code === "run_loop_limit_exceeded") {
-      return {
-        ok: false,
-        status: 502,
-        code: "run_loop_limit_exceeded",
-        message: `${params.harnessName} harness run exceeded max tool iterations (${params.maxIterations}).`,
-      };
-    }
-    if (!loopResult.ok && loopResult.code === USER_CANCELLED_RUNTIME_CODE) {
-      return loopResult;
+    try {
+      await params.appendRunEvent({
+        eventType: "agent_loop_stopped",
+        eventKey: `${params.runId}:agent_loop_stopped:1`,
+        payload: {
+          run_id: params.runId,
+          harness: {
+            kind: params.harnessName,
+          },
+          stop_reason: loopResult.stopReason,
+          step_count: loopResult.stepCount,
+          status: loopResult.ok ? "ok" : "error",
+          ...(loopResult.ok
+            ? null
+            : {
+                error_code: loopResult.code,
+                error_message: loopResult.message,
+              }),
+        },
+      });
+    } catch {
+      // Best-effort runtime evidence only.
     }
     return loopResult;
   } catch (error) {
@@ -1956,7 +2097,13 @@ async function executeRetrievalAgentLoop(
         ok: false,
         status: 409,
         code: USER_CANCELLED_RUNTIME_CODE,
+        stopReason: "user_cancelled",
         message: error.message,
+        promptTokens: null,
+        completionTokens: null,
+        transcript: [...nativeTranscript],
+        stepCount: 0,
+        steps: [],
       };
     }
     const summary = summarizeErrorForLog(error);
@@ -1990,7 +2137,13 @@ async function executeRetrievalAgentLoop(
       ok: false,
       status: 502,
       code: "agent_loop_internal_error",
+      stopReason: "model_error",
       message: `Agent loop crashed: ${summary.message}`,
+      promptTokens: null,
+      completionTokens: null,
+      transcript: [...nativeTranscript],
+      stepCount: 0,
+      steps: [],
     };
   } finally {
     if (heartbeatTimer) {
@@ -2041,7 +2194,7 @@ async function executeChatToolsAgentLoop(
   return await executeRetrievalAgentLoop({
     ...params,
     harnessName: "chat_tools",
-    maxIterations: 20,
+    loopBudget: CHAT_TOOLS_RUNTIME_KERNEL_BUDGET,
   });
 }
 

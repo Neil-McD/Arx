@@ -67,6 +67,19 @@ function isRuntimeCompletionFailure(
   return "ok" in completion && completion.ok === false;
 }
 
+function emitBufferedAssistantText(params: {
+  content: string;
+  emitDelta: (delta: string) => void;
+  chunkSize?: number;
+}): void {
+  const content = String(params.content ?? "");
+  if (!content) return;
+  const chunkSize = Math.max(1, Math.floor(params.chunkSize ?? 320));
+  for (let index = 0; index < content.length; index += chunkSize) {
+    params.emitDelta(content.slice(index, index + chunkSize));
+  }
+}
+
 export type JsonResponseFn = (
   req: Request,
   status: number,
@@ -570,12 +583,6 @@ export async function handleRuntimeTurnRequest(args: {
               data: mapped,
             });
           };
-          const reasoningSummaryEmitter = createRuntimeReasoningSummaryEmitter({
-            runId,
-            summaryStreamId: `${runId}:assistant_completion:0`,
-            appendRunEvent: streamAppendRunEvent,
-          });
-
           writer.send({
             event: "start",
             data: {
@@ -632,77 +639,13 @@ export async function handleRuntimeTurnRequest(args: {
             });
             return;
           }
-
-          let completion:
-            | Awaited<ReturnType<typeof runChatgptStreamingCompletion>>
-            | Awaited<ReturnType<typeof runOpenRouterStreamingCompletion>>;
-          try {
-            if (inferenceSource === "chatgpt") {
-              runtimeTurnStage = "chatgpt_completion";
-              completion = await runAbortableWithRuntimeCancellation({
-                ctx,
-                ownerId: actor.dbUserId,
-                runId,
-                operation: async (signal) =>
-                  await runChatgptStreamingCompletion({
-                    ctx,
-                    userId: actor.dbUserId,
-                    modelId: requestedModelId,
-                    messages: loopResult.transcript,
-                    maxTokens,
-                    onDelta: emitDelta,
-                    onReasoningSummaryPartAdded: ({ summaryIndex }) =>
-                      reasoningSummaryEmitter.onPartAdded(summaryIndex),
-                    onReasoningSummaryTextDelta: ({ delta, summaryIndex }) =>
-                      reasoningSummaryEmitter.onTextDelta(delta, summaryIndex),
-                    signal,
-                  }),
-              });
-            } else {
-              runtimeTurnStage = "openrouter_completion";
-              completion = await runAbortableWithRuntimeCancellation({
-                ctx,
-                ownerId: actor.dbUserId,
-                runId,
-                operation: async (signal) =>
-                  await runOpenRouterStreamingCompletion({
-                    req,
-                    modelRef,
-                    messages: loopResult.transcript,
-                    maxTokens,
-                    apiKeyOverride: openRouterApiKeyOverride,
-                    onDelta: emitDelta,
-                    signal,
-                  }),
-              });
-            }
-          } catch (error) {
-            if (isRuntimeRunCancelledError(error)) {
-              await finishCancelledRun();
-              return;
-            }
-            throw error;
-          }
-
-          if (isRuntimeCompletionFailure(completion)) {
-            await finishRunBestEffortForRun({
-              status: "error",
-              reason: completion.code,
-              errorCode: completion.code,
-              errorMessage: completion.message,
-            });
-            writer.send({
-              event: "error",
-              data: {
-                error: completion.message,
-              },
-            });
-            return;
-          }
-
-          streamedContent = completion.content;
-          streamedPromptTokens = completion.promptTokens;
-          streamedCompletionTokens = completion.completionTokens;
+          runtimeTurnStage = "assistant_emit";
+          streamedPromptTokens = loopResult.promptTokens;
+          streamedCompletionTokens = loopResult.completionTokens;
+          emitBufferedAssistantText({
+            content: loopResult.assistantText,
+            emitDelta,
+          });
 
           runtimeTurnStage = "assistant_persist";
           if (persistVisibleAssistantMessage) {

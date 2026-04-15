@@ -1,7 +1,7 @@
 import {
   type DeveloperAppRow,
   normalizeString,
-} from "./appCore";
+} from "./appCore.ts";
 
 export type JsonRpcSuccess = {
   result?: any;
@@ -45,6 +45,7 @@ export async function postMcpJson(params: {
   body: string;
   protocolVersion?: string;
   sessionId?: string | null;
+  signal?: AbortSignal;
 }): Promise<{
   status: number;
   sessionId: string | null;
@@ -52,6 +53,18 @@ export async function postMcpJson(params: {
   rawText: string;
 }> {
   const controller = new AbortController();
+  const abortFromExternalSignal = () => {
+    controller.abort(params.signal?.reason);
+  };
+  if (params.signal) {
+    if (params.signal.aborted) {
+      abortFromExternalSignal();
+    } else {
+      params.signal.addEventListener("abort", abortFromExternalSignal, {
+        once: true,
+      });
+    }
+  }
   const timeout = setTimeout(() => controller.abort(), MCP_HTTP_TIMEOUT_MS);
   let response: Response;
   try {
@@ -71,11 +84,17 @@ export async function postMcpJson(params: {
     });
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") {
+      if (params.signal?.aborted) {
+        throw params.signal.reason instanceof Error
+          ? params.signal.reason
+          : new Error("mcp_request_aborted");
+      }
       throw new Error("mcp_request_timed_out");
     }
     throw error;
   } finally {
     clearTimeout(timeout);
+    params.signal?.removeEventListener("abort", abortFromExternalSignal);
   }
   const rawText = await response.text();
   let payload: JsonRpcSuccess | JsonRpcError | null = null;
@@ -132,6 +151,7 @@ export async function initializeStreamableHttpMcpSession(params: {
   headers: Record<string, string>;
   clientName: string;
   clientVersion: string;
+  signal?: AbortSignal;
 }): Promise<{
   protocolVersion: string;
   sessionId: string | null;
@@ -147,6 +167,7 @@ export async function initializeStreamableHttpMcpSession(params: {
         version: params.clientVersion,
       },
     }),
+    signal: params.signal,
   });
   if (initializeResponse.status < 200 || initializeResponse.status >= 300) {
     throw new Error(errorMessageFromRpc(initializeResponse));
@@ -171,6 +192,7 @@ export async function sendInitializedNotification(params: {
   headers: Record<string, string>;
   protocolVersion: string;
   sessionId?: string | null;
+  signal?: AbortSignal;
 }): Promise<void> {
   try {
     await postMcpJson({
@@ -179,6 +201,7 @@ export async function sendInitializedNotification(params: {
       protocolVersion: params.protocolVersion,
       sessionId: params.sessionId ?? null,
       body: buildJsonRpcNotification("notifications/initialized", {}),
+      signal: params.signal,
     });
   } catch {
     // Best-effort only.
@@ -190,6 +213,7 @@ export async function listMcpTools(params: {
   headers: Record<string, string>;
   protocolVersion: string;
   sessionId?: string | null;
+  signal?: AbortSignal;
 }): Promise<unknown> {
   const response = await postMcpJson({
     url: params.url,
@@ -197,6 +221,7 @@ export async function listMcpTools(params: {
     protocolVersion: params.protocolVersion,
     sessionId: params.sessionId ?? null,
     body: buildJsonRpcBody("tools-list", "tools/list", {}),
+    signal: params.signal,
   });
   if (response.status < 200 || response.status >= 300) {
     throw new Error(errorMessageFromRpc(response));
@@ -216,6 +241,7 @@ export async function callMcpTool(params: {
   sessionId?: string | null;
   toolName: string;
   argumentsObject: Record<string, unknown>;
+  signal?: AbortSignal;
 }): Promise<unknown> {
   const response = await postMcpJson({
     url: params.url,
@@ -226,6 +252,7 @@ export async function callMcpTool(params: {
       name: params.toolName,
       arguments: params.argumentsObject,
     }),
+    signal: params.signal,
   });
   if (response.status < 200 || response.status >= 300) {
     throw new Error(errorMessageFromRpc(response));

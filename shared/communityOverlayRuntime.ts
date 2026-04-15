@@ -21,8 +21,9 @@ export function buildMountedAppsPromptBlock(
   if (mountedTools.length === 0) return "";
   return [
     "",
-    "Community-mounted app tools are available for this active community lens.",
-    "Use the provided structured tool definitions directly instead of relying on recalled tool names.",
+    "Community-mounted app tools are available for this active community lens, but they are exposed lazily.",
+    "Use `resolve_mounted_tools` with a short query when you need a community-mounted app tool.",
+    "After resolution, use the exposed structured tool definitions directly instead of relying on recalled tool names.",
   ].join("\n");
 }
 
@@ -57,19 +58,13 @@ export function buildSelectedSkillInstructionsPromptBlock(
 }
 
 export function buildCommunityOverlayRuntimeState(params: {
-  allowedToolNames: readonly string[];
   mountedTools: CommunityOverlayMountedTool[];
   attachedSkills: CommunityOverlaySkillInventory[];
   selectedSkills: CommunityOverlaySelectedSkill[];
 }): {
-  activeToolNames: string[];
   systemPromptSuffix: string;
 } {
   return {
-    activeToolNames: [
-      ...params.allowedToolNames,
-      ...params.mountedTools.map((tool) => tool.namespacedToolName),
-    ],
     systemPromptSuffix: `${buildMountedAppsPromptBlock(
       params.mountedTools,
     )}${buildCommunitySkillsPromptBlock(

@@ -1,4 +1,5 @@
 import { type RetrievalToolName } from "./retrievalTools";
+import type { RuntimeKernelBudget } from "./runtimeKernelTypes";
 
 export type ThreadWorkingStatePrompt = {
   goal?: string | null;
@@ -368,7 +369,7 @@ function buildPlatformChatContextPrompt(): string {
 }
 
 function buildWorkspaceOperatingPolicyPrompt(params: {
-  maxIterations: number;
+  loopBudget: RuntimeKernelBudget;
   allowedToolNames: readonly RetrievalToolName[];
 }): string {
   const toolGuidance: string[] = [];
@@ -530,7 +531,8 @@ function buildWorkspaceOperatingPolicyPrompt(params: {
     "Do not reference filesystem, shell, workspace, or sandbox details unless a tool result supports it.",
     "Example: if the user asks you to inspect a directory and then read the relevant files, listing the directory is not completion; continue by reading the relevant files, and keep reading until you can answer the full request.",
     "Example: if the user asks you to search, inspect, and then modify something, do not stop after search results or one inspection step; continue through the full sequence until the requested work is done.",
-    `Maximum ${params.maxIterations} tool iterations.`,
+    `Maximum ${params.loopBudget.maxToolSteps} tool steps.`,
+    `The runtime may stop earlier after ${params.loopBudget.maxRepeatedIdenticalCalls} repeated identical calls, ${params.loopBudget.maxConsecutiveFailures} consecutive failures, or ${params.loopBudget.maxNoProgressSteps} no-progress steps.`,
   ].join("\n");
 }
 
@@ -547,7 +549,7 @@ function buildChatOperatingPolicyPrompt(): string {
 }
 
 export function buildWorkspaceRuntimeSystemPrompt(params: RuntimeCommunityPromptFields & {
-  maxIterations: number;
+  loopBudget: RuntimeKernelBudget;
   allowedToolNames: readonly RetrievalToolName[];
   harnessName: "chat_tools";
   projectLabel?: string | null;
@@ -589,7 +591,7 @@ export function buildWorkspaceRuntimeSystemPrompt(params: RuntimeCommunityPrompt
     }),
     buildExplanationContractPrompt(),
     buildWorkspaceOperatingPolicyPrompt({
-      maxIterations: params.maxIterations,
+      loopBudget: params.loopBudget,
       allowedToolNames: params.allowedToolNames,
     }),
   ]);

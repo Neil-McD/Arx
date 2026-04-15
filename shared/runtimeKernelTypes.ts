@@ -1,0 +1,138 @@
+import type {
+  NativeToolAssistantMessage,
+  NativeToolAwareCompletionSuccess,
+  NativeToolAwareMessage,
+  NativeToolInputContentPart,
+} from "./nativeToolProtocol";
+
+export type RuntimeKernelStopReason =
+  | "assistant_final"
+  | "tool_budget_exhausted"
+  | "repeated_call_blocked"
+  | "consecutive_failures_exhausted"
+  | "no_progress_exhausted"
+  | "empty_response"
+  | "invalid_model_output"
+  | "user_cancelled"
+  | "model_error"
+  | "tool_error_unrecoverable";
+
+export type RuntimeKernelBudget = {
+  maxToolSteps: number;
+  maxRepeatedIdenticalCalls: number;
+  maxConsecutiveFailures: number;
+  maxNoProgressSteps: number;
+};
+
+export const DEFAULT_RUNTIME_KERNEL_BUDGET: RuntimeKernelBudget = {
+  maxToolSteps: 20,
+  maxRepeatedIdenticalCalls: 2,
+  maxConsecutiveFailures: 2,
+  maxNoProgressSteps: 3,
+};
+
+export type RuntimeKernelToolExecutionResult = {
+  status: "ok" | "error";
+  exitCode: number | null;
+  outputText: string;
+  errorCode: string | null;
+  errorMessage: string | null;
+  details?: Record<string, unknown> | null;
+  observationContent?: NativeToolInputContentPart[] | null;
+};
+
+export type RuntimeKernelToolResultEnvelope<TToolName extends string = string> = {
+  tool_name: TToolName;
+  success: boolean;
+  status: "ok" | "error";
+  exit_code: number | null;
+  error_code: string | null;
+  error_message: string | null;
+  output: string;
+};
+
+export type RuntimeKernelFailureInput = {
+  ok: false;
+  status: number;
+  code: string;
+  message: string;
+  pendingToolCallId?: string;
+  pendingToolName?: string;
+  stopReason?: RuntimeKernelStopReason;
+};
+
+export type RuntimeKernelFinalStep = {
+  kind: "assistant_final";
+  assistantText: string;
+  promptTokens: number | null;
+  completionTokens: number | null;
+};
+
+export type RuntimeKernelResolvedToolStep<TToolName extends string = string> = {
+  kind: "tool_follow_up";
+  providerCallId: string;
+  toolName: TToolName;
+  rawArguments: Record<string, unknown>;
+  normalizedArgs: Record<string, unknown>;
+  assistantToolCallMessage: NativeToolAssistantMessage;
+  promptTokens: number | null;
+  completionTokens: number | null;
+};
+
+export type RuntimeKernelResolvedStep<TToolName extends string = string> =
+  | RuntimeKernelFinalStep
+  | RuntimeKernelResolvedToolStep<TToolName>;
+
+export type RuntimeKernelStepRecord<TToolName extends string = string> = {
+  iteration: number;
+  providerCallId: string;
+  toolName: TToolName;
+  rawArguments: Record<string, unknown>;
+  normalizedArgs: Record<string, unknown>;
+  toolSignature: string;
+  repeatedCallCount: number;
+  toolResultStatus?: "ok" | "error";
+  toolResultErrorCode?: string | null;
+  toolResultSignature?: string | null;
+  madeProgress?: boolean;
+  consecutiveFailureCount?: number;
+  consecutiveNoProgressCount?: number;
+  outputPreview?: string | null;
+  blocked?: boolean;
+};
+
+type RuntimeKernelBaseResult<TToolName extends string = string> = {
+  promptTokens: number | null;
+  completionTokens: number | null;
+  transcript: NativeToolAwareMessage[];
+  stepCount: number;
+  steps: RuntimeKernelStepRecord<TToolName>[];
+};
+
+export type RuntimeKernelSuccess<TToolName extends string = string> =
+  RuntimeKernelBaseResult<TToolName> & {
+    ok: true;
+    assistantText: string;
+    stopReason: "assistant_final";
+  };
+
+export type RuntimeKernelFailure<TToolName extends string = string> =
+  RuntimeKernelBaseResult<TToolName> & {
+    ok: false;
+    status: number;
+    code: string;
+    stopReason: RuntimeKernelStopReason;
+    message: string;
+    pendingToolCallId?: string;
+    pendingToolName?: string;
+  };
+
+export type RuntimeKernelResult<TToolName extends string = string> =
+  | RuntimeKernelSuccess<TToolName>
+  | RuntimeKernelFailure<TToolName>;
+
+export type RuntimeKernelRunCompletion<TToolName extends string> = (
+  messages: NativeToolAwareMessage[],
+) => Promise<
+  NativeToolAwareCompletionSuccess<TToolName> | RuntimeKernelFailureInput
+>;

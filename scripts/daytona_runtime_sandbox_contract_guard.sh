@@ -47,8 +47,12 @@ forbid_in_block() {
 
 require_in_block 'if (params.config.snapshot) payloadBase.snapshot = params.config.snapshot;' \
   "runtime sandbox create may include explicit snapshot"
-require_in_block 'payloadBase.volumes = [{ volumeId: params.projectVolumeId, mountPath: DAYTONA_WORKSPACE_ROOT }];' \
-  "runtime sandbox create preserves workspace volume mount"
+require_in_block 'payloadBase.volumes = [' \
+  "runtime sandbox create preserves workspace volume mount container"
+require_in_block 'volumeId: params.projectVolumeId' \
+  "runtime sandbox create preserves workspace volume id"
+require_in_block 'mountPath: DAYTONA_WORKSPACE_ROOT' \
+  "runtime sandbox create preserves workspace volume mount path"
 
 forbid_in_block 'cpu:' \
   "runtime sandbox create must not send explicit cpu sizing"

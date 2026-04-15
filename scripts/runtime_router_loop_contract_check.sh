@@ -73,8 +73,8 @@ require_match_in_file "$PROMPT_FILE" 'Use native tool calling when a tool is nee
   "workspace prompt instructs native tool calling"
 require_match_in_file "$DAYTONA_FILE" 'runProviderNativeToolCompletion\(' \
   "workspace loop uses provider-native tool completion"
-require_match_in_file "$DAYTONA_FILE" 'runSerialNativeToolLoop<' \
-  "workspace loop uses explicit serial native tool loop state machine"
+require_match_in_file "$DAYTONA_FILE" 'runNativeRuntimeKernel<' \
+  "workspace loop uses explicit runtime kernel state machine"
 forbid_match_in_file "$DAYTONA_FILE" 'executeCommunityAgentLoop' \
   "community-specific loop wrapper removed"
 forbid_match_in_file "$DAYTONA_FILE" 'executeExternalAgentLoop' \
@@ -126,8 +126,24 @@ require_match_in_file "$RESOLUTION_FILE" 'toolNames.push\("community_search", "c
   "runtime capability resolution includes community tools"
 require_match_in_file "$RESOLUTION_FILE" 'toolNames.push\("web_research"\)' \
   "runtime capability resolution includes web research tools"
-require_match_in_file "$RESOLUTION_FILE" 'toolNames.push\("list_dir", "read", "glob", "grep", "sha256", "write", "edit", "bash"\)' \
-  "runtime capability resolution includes workspace tools"
+require_match_in_file "$RESOLUTION_FILE" 'if \(params.activeCapabilityFamilies.includes\("workspace_tools"\)\)' \
+  "runtime capability resolution gates workspace tools structurally"
+require_match_in_file "$RESOLUTION_FILE" '"list_dir"' \
+  "runtime capability resolution includes list_dir"
+require_match_in_file "$RESOLUTION_FILE" '"read"' \
+  "runtime capability resolution includes read"
+require_match_in_file "$RESOLUTION_FILE" '"glob"' \
+  "runtime capability resolution includes glob"
+require_match_in_file "$RESOLUTION_FILE" '"grep"' \
+  "runtime capability resolution includes grep"
+require_match_in_file "$RESOLUTION_FILE" '"sha256"' \
+  "runtime capability resolution includes sha256"
+require_match_in_file "$RESOLUTION_FILE" '"write"' \
+  "runtime capability resolution includes write"
+require_match_in_file "$RESOLUTION_FILE" '"edit"' \
+  "runtime capability resolution includes edit"
+require_match_in_file "$RESOLUTION_FILE" '"bash"' \
+  "runtime capability resolution includes bash"
 
 echo "== Runtime tool loop proof =="
 node --experimental-strip-types --experimental-specifier-resolution=node "$ROOT/scripts/runtime_tool_loop_proof.ts"
