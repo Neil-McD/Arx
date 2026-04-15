@@ -259,6 +259,8 @@
   --bg-terminal: #0d0d10;
   --surface-nav: rgba(21, 21, 24, 0.9);
   --workspace-composer-bg: var(--surface-nav, var(--surface-panel));
+  --workspace-landing-action-bg: var(--surface-nav, var(--surface-panel));
+  --workspace-landing-action-hover-bg: color-mix(in srgb, var(--surface-nav, var(--surface-panel)) 88%, var(--bg-card-hover) 12%);
 
   /* === BUTTONS: Light pills, sparse emphasis === */
   --bg-button: #efeff2;
@@ -16062,7 +16064,7 @@ button.message-citation-chip:hover {
   width: 100%;
   border: 1px solid var(--border-muted);
   border-radius: 18px;
-  background: color-mix(in srgb, var(--bg-card) 72%, transparent);
+  background: var(--workspace-landing-action-bg, color-mix(in srgb, var(--bg-card) 72%, transparent));
   padding: 16px 18px;
   display: flex;
   align-items: center;
@@ -16077,7 +16079,7 @@ button.message-citation-chip:hover {
 .web-empty-thread-action:hover {
   transform: translateY(-1px);
   border-color: var(--border-default);
-  background: var(--bg-card-hover);
+  background: var(--workspace-landing-action-hover-bg, var(--bg-card-hover));
 }
 
 .web-empty-thread-action:disabled {
