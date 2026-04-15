@@ -52,6 +52,7 @@ export function buildWebShellChromeHostProps(params: {
   handleTopbarBackToWorkspace: () => void;
   workspaceShellPanels: ReactNode;
   communityTab: WebShellChromeHostProps["communityShell"]["communityTab"];
+  communityTabIndicators: WebShellChromeHostProps["communityShell"]["communityTabIndicators"];
   canViewMembersActiveCommunity: boolean;
   canViewActiveCommunitySettings: boolean;
   canViewActiveCommunityPolynet: boolean;
@@ -64,6 +65,7 @@ export function buildWebShellChromeHostProps(params: {
   openMobileCreateCommunity: () => void;
   communities: CommunityLike[];
   railCommunities: CommunityLike[];
+  communityRailAttentionById: WebShellChromeHostProps["communityShell"]["communityRailAttentionById"];
   isLoadingCommunities: boolean;
   selectedActiveCommunitySlug: string | null;
   handleSelectActiveCommunity: (community: CommunityLike) => boolean;
@@ -163,6 +165,7 @@ export function buildWebShellChromeHostProps(params: {
           }
         : null,
       communityTab: params.communityTab,
+      communityTabIndicators: params.communityTabIndicators,
       canViewMembersActiveCommunity: params.canViewMembersActiveCommunity,
       canViewActiveCommunitySettings: params.canViewActiveCommunitySettings,
       canViewActiveCommunityPolynet: params.canViewActiveCommunityPolynet,
@@ -185,6 +188,7 @@ export function buildWebShellChromeHostProps(params: {
         name: community.name,
         avatar_url: community.avatar_url ?? null,
       })),
+      communityRailAttentionById: params.communityRailAttentionById,
       isLoadingCommunities: params.isLoadingCommunities,
       selectedActiveCommunitySlug: params.selectedActiveCommunitySlug,
       activePage: params.activePage,

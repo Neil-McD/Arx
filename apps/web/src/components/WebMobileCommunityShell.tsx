@@ -39,6 +39,7 @@ export function WebMobileCommunityShell(props: WebMobileCommunityShellProps) {
         <CommunityNav
           activeCommunity={communityShell.activeCommunity}
           communityTab={communityShell.communityTab}
+          tabIndicators={communityShell.communityTabIndicators}
           canViewMembersActiveCommunity={communityShell.canViewMembersActiveCommunity}
           canViewActiveCommunitySettings={communityShell.canViewActiveCommunitySettings}
           canViewActiveCommunityPolynet={communityShell.canViewActiveCommunityPolynet}

@@ -83,6 +83,7 @@ type BuildWebCommunitySurfaceProjectionParams = {
   communityChatError: WebCommunityChatPanelProps["communityChatError"];
   isUserAtBottom: WebCommunityChatPanelProps["isUserAtBottom"];
   unreadCount: WebCommunityChatPanelProps["unreadCount"];
+  copiedCommunityMessageId: WebCommunityChatPanelProps["copiedCommunityMessageId"];
   reactionEmojis: WebCommunityChatPanelProps["reactionEmojis"];
   messageListRef: WebCommunityChatPanelProps["messageListRef"];
   fileInputRef: WebCommunityChatPanelProps["fileInputRef"];
@@ -251,6 +252,7 @@ export function buildWebCommunitySurfaceProjection(
     communityChatError: params.communityChatError,
     isUserAtBottom: params.isUserAtBottom,
     unreadCount: params.unreadCount,
+    copiedCommunityMessageId: params.copiedCommunityMessageId,
     reactionEmojis: params.reactionEmojis,
     messageListRef: params.messageListRef,
     fileInputRef: params.fileInputRef,

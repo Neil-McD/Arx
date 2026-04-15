@@ -796,6 +796,18 @@ body {
   -webkit-user-drag: none;
 }
 
+.community-rail-dot {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: var(--accent-gold);
+  border: 2px solid var(--surface-rail);
+  pointer-events: none;
+}
+
 .community-rail-icon {
   width: 18px;
   height: 18px;
@@ -957,6 +969,19 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.nav-item-label {
+  min-width: 0;
+}
+
+.nav-item-dot {
+  margin-left: auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--accent-gold);
+  flex-shrink: 0;
 }
 
 .nav-item:hover {
@@ -1596,6 +1621,21 @@ body {
 
 .discover-connect-secret-field {
   grid-column: 1 / -1;
+}
+
+.discover-connect-help-link {
+  margin-top: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  text-decoration: none;
+}
+
+.discover-connect-help-link:hover,
+.discover-connect-help-link:focus-visible {
+  color: var(--text-primary);
 }
 
 .discover-connect-status {
@@ -3754,6 +3794,10 @@ body {
 .chat-action-btn:hover {
   color: var(--text-primary);
   background: var(--hover-overlay);
+}
+
+.chat-action-btn.copied {
+  color: #7bd88f;
 }
 
 .chat-action-btn svg {

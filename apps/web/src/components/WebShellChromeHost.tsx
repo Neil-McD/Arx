@@ -63,6 +63,7 @@ export function WebShellChromeHost(props: WebShellChromeHostProps) {
         <CommunityNav
           activeCommunity={props.communityShell.activeCommunity}
           communityTab={props.communityShell.communityTab}
+          tabIndicators={props.communityShell.communityTabIndicators}
           canViewMembersActiveCommunity={props.communityShell.canViewMembersActiveCommunity}
           canViewActiveCommunitySettings={props.communityShell.canViewActiveCommunitySettings}
           canViewActiveCommunityPolynet={props.communityShell.canViewActiveCommunityPolynet}

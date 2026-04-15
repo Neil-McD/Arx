@@ -55,6 +55,7 @@ export type WebCommunityShellProps = {
   setMobileOverlay: (value: MobileOverlay) => void;
   activeCommunity: CommunityLike | null;
   communityTab: CommunityTab;
+  communityTabIndicators: Partial<Record<CommunityTab, boolean>>;
   canViewMembersActiveCommunity: boolean;
   canViewActiveCommunitySettings: boolean;
   canViewActiveCommunityPolynet: boolean;
@@ -67,6 +68,7 @@ export type WebCommunityShellProps = {
   onOpenMobileCreateCommunity: () => void;
   communities: CommunityLike[];
   railCommunities: CommunityLike[];
+  communityRailAttentionById: Record<string, boolean>;
   isLoadingCommunities: boolean;
   selectedActiveCommunitySlug: string | null;
   activePage: AppPage;

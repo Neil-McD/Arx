@@ -20,6 +20,7 @@ type CommunityAiFeedState = {
 type UseCommunityAiFeedControllerArgs<SessionT> = {
   activeCommunityId: string | null;
   isAiFeedTabActive: boolean;
+  shouldPreload?: boolean;
   viewerCacheKey: string;
   session: SessionT | null;
   ensureSession?: EnsureSessionFn<SessionT>;
@@ -49,6 +50,7 @@ export function useCommunityAiFeedController<SessionT>(
   >({});
   const [reactingPostId, setReactingPostId] = useState<string | null>(null);
   const viewerGenerationRef = useRef(0);
+  const backgroundPreloadedCommunityIdRef = useRef<string | null>(null);
 
   const isRequestSnapshotStale = useCallback((snapshot: FeedRequestSnapshot): boolean => {
     return (
@@ -183,13 +185,30 @@ export function useCommunityAiFeedController<SessionT>(
     viewerGenerationRef.current += 1;
     setCommunityFeedByCommunityId({});
     setReactingPostId(null);
+    backgroundPreloadedCommunityIdRef.current = null;
   }, [args.viewerCacheKey]);
 
   useEffect(() => {
+    if (args.shouldPreload) return;
+    backgroundPreloadedCommunityIdRef.current = null;
+  }, [args.shouldPreload]);
+
+  useEffect(() => {
     if (!args.activeCommunityId) return;
-    if (!args.isAiFeedTabActive) return;
+    const shouldForceLoad = args.isAiFeedTabActive;
+    if (!shouldForceLoad && !args.shouldPreload) return;
+    if (!shouldForceLoad && backgroundPreloadedCommunityIdRef.current === args.activeCommunityId) return;
+    if (!shouldForceLoad) {
+      backgroundPreloadedCommunityIdRef.current = args.activeCommunityId;
+    }
     void loadCommunityAiFeed(args.activeCommunityId);
-  }, [args.activeCommunityId, args.isAiFeedTabActive, args.viewerCacheKey, loadCommunityAiFeed]);
+  }, [
+    args.activeCommunityId,
+    args.isAiFeedTabActive,
+    args.shouldPreload,
+    args.viewerCacheKey,
+    loadCommunityAiFeed,
+  ]);
 
   return {
     activeCommunityFeedState,

@@ -41,6 +41,7 @@ type WebCommunitySettingsSectionProps = {
     communitySettingsPricingMode: CommunityPricingMode;
     communitySettingsPriceUsdMonthly: string;
     communitySettingsPriceUsdAnnual: string;
+    isCommunitySettingsDirty: boolean;
     communitySettingsError: string | null;
     isSavingCommunitySettings: boolean;
     communityMemberMuted: boolean;
@@ -514,15 +515,23 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
             {state.communitySettingsError && <div className="auth-error">{state.communitySettingsError}</div>}
             <div className="create-community-actions">
               <button
-                className="platform-save-button"
+                className={`platform-save-button${
+                  state.isCommunitySettingsDirty ? " is-dirty" : " is-saved"
+                }`}
                 onClick={() => void actions.handleSaveCommunitySettings()}
-                disabled={state.isSavingCommunitySettings || state.isProcessingCommunitySettingsBanner}
+                disabled={
+                  state.isSavingCommunitySettings ||
+                  state.isProcessingCommunitySettingsBanner ||
+                  !state.isCommunitySettingsDirty
+                }
               >
                 {state.isSavingCommunitySettings
                   ? "Saving..."
                   : state.isProcessingCommunitySettingsBanner
                     ? "Processing banner…"
-                    : "Save changes"}
+                    : state.isCommunitySettingsDirty
+                      ? "Save changes"
+                      : "Saved"}
               </button>
             </div>
             {canDeleteCommunity ? <CommunityDangerZoneSection state={state} actions={actions} /> : null}

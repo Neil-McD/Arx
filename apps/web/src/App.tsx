@@ -1023,9 +1023,15 @@ export default function App() {
   const [communityAttachments, setCommunityAttachments] = useState<MessageAttachment[]>([]);
   const communityAttachmentsRef = useRef<MessageAttachment[]>([]);
   const [communityChatError, setCommunityChatError] = useState<string | null>(null);
+  const [copiedCommunityMessageId, setCopiedCommunityMessageId] = useState<string | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [communityTabIndicatorByCommunityId, setCommunityTabIndicatorByCommunityId] = useState<
+    Record<string, Partial<Record<CommunityTab, boolean>>>
+  >({});
   const [isUserAtBottom, setIsUserAtBottom] = useState(true);
   const isUserAtBottomRef = useRef(true);
+  const communityAiFeedSeenAtByCommunityIdRef = useRef<Record<string, string>>({});
+  const communityResourcesSeenAtByCommunityIdRef = useRef<Record<string, string>>({});
   const communityMessageIdsRef = useRef<Set<string>>(new Set());
   const communityChatListRef = useRef<HTMLDivElement | null>(null);
   const loadOlderFromScrollRef = useRef<(() => void) | null>(null);
@@ -1135,7 +1141,7 @@ export default function App() {
   };
 
   useCommunityChatRealtime({
-    isEnabled: activePage === "community" && communityTab === "chat",
+    isEnabled: activePage === "community" && hasResolvedCommunityChat,
     session: session,
     ensureSession: ensureUsableAuthSession,
     activeCommunityId,
@@ -1150,6 +1156,14 @@ export default function App() {
       return loadUserProfiles(userIds, session);
     },
   });
+
+  useEffect(() => {
+    if (activePage !== "community" || !activeCommunityId || !hasResolvedCommunityChat) return;
+    if (communityTab === "chat") return;
+    if (!isUserAtBottomRef.current) return;
+    setIsUserAtBottom(false);
+    isUserAtBottomRef.current = false;
+  }, [activeCommunityId, activePage, communityTab, hasResolvedCommunityChat]);
 
   const {
     handleToggleReaction,
@@ -1205,6 +1219,39 @@ export default function App() {
     setIsSendingCommunityMessage,
     setCommunityChatError,
   });
+
+  const handleCopyCommunityMessage = useCallback(async (messageId: string, text: string): Promise<void> => {
+    await copyTextToClipboard(text);
+    setCopiedCommunityMessageId(messageId);
+    window.setTimeout(() => {
+      setCopiedCommunityMessageId((prev) => (prev === messageId ? null : prev));
+    }, 2000);
+  }, []);
+
+  const setCommunityTabIndicator = useCallback((communityId: string, tab: CommunityTab, value: boolean) => {
+    const normalizedCommunityId = String(communityId ?? "").trim();
+    if (!normalizedCommunityId) return;
+    setCommunityTabIndicatorByCommunityId((prev) => {
+      const current = prev[normalizedCommunityId] ?? {};
+      if (Boolean(current[tab]) === value) return prev;
+      const nextForCommunity = { ...current };
+      if (value) {
+        nextForCommunity[tab] = true;
+      } else {
+        delete nextForCommunity[tab];
+      }
+      if (Object.keys(nextForCommunity).length === 0) {
+        if (!(normalizedCommunityId in prev)) return prev;
+        const next = { ...prev };
+        delete next[normalizedCommunityId];
+        return next;
+      }
+      return {
+        ...prev,
+        [normalizedCommunityId]: nextForCommunity,
+      };
+    });
+  }, []);
 
   const [communityResources, setCommunityResources] = useState<CommunityResource[]>([]);
   const [isLoadingResources, setIsLoadingResources] = useState(false);
@@ -2802,6 +2849,7 @@ export default function App() {
     setCommunityChatError(null);
     setCommunityMessages([]);
     setMessageReactions([]);
+    setCommunityResources([]);
     setReplyingToMessage(null);
     setEditingMessageId(null);
     setEditingMessageText("");
@@ -2827,7 +2875,6 @@ export default function App() {
     session: session,
     activePage,
     activeCommunityId,
-    communityTab,
     hasResolvedCommunityChat,
     loadCommunityChat,
   });
@@ -2856,10 +2903,110 @@ export default function App() {
   } = useCommunityAiFeedController<AuthSession>({
     activeCommunityId,
     isAiFeedTabActive: communityTab === "ai_feed",
+    shouldPreload: activePage === "community",
     viewerCacheKey: session?.user?.id ?? "anonymous",
     session: session,
     ensureSession: ensureUsableAuthSession,
   });
+
+  const latestActiveCommunityAiFeedAt = useMemo(() => {
+    const timestamps = [...activeCommunityFeedState.live, ...activeCommunityFeedState.ranked]
+      .map((post) => Date.parse(post.updated_at || post.created_at))
+      .filter((value) => Number.isFinite(value));
+    if (timestamps.length === 0) return null;
+    return new Date(Math.max(...timestamps)).toISOString();
+  }, [activeCommunityFeedState.live, activeCommunityFeedState.ranked]);
+
+  const latestActiveCommunityResourcesAt = useMemo(() => {
+    const timestamps = communityResources
+      .map((resource) => Date.parse(resource.created_at))
+      .filter((value) => Number.isFinite(value));
+    if (timestamps.length === 0) return null;
+    return new Date(Math.max(...timestamps)).toISOString();
+  }, [communityResources]);
+
+  useEffect(() => {
+    setCommunityTabIndicatorByCommunityId({});
+    communityAiFeedSeenAtByCommunityIdRef.current = {};
+    communityResourcesSeenAtByCommunityIdRef.current = {};
+  }, [session?.user?.id]);
+
+  useEffect(() => {
+    if (!activeCommunityId) return;
+    setCommunityTabIndicator(activeCommunityId, "chat", unreadCount > 0);
+  }, [activeCommunityId, setCommunityTabIndicator, unreadCount]);
+
+  useEffect(() => {
+    if (activePage !== "community" || !activeCommunityId || communityTab !== "ai_feed") return;
+    if (latestActiveCommunityAiFeedAt) {
+      communityAiFeedSeenAtByCommunityIdRef.current[activeCommunityId] = latestActiveCommunityAiFeedAt;
+    }
+    setCommunityTabIndicator(activeCommunityId, "ai_feed", false);
+  }, [
+    activeCommunityId,
+    activePage,
+    communityTab,
+    latestActiveCommunityAiFeedAt,
+    setCommunityTabIndicator,
+  ]);
+
+  useEffect(() => {
+    if (activePage !== "community" || !activeCommunityId || !latestActiveCommunityAiFeedAt) return;
+    const seenAt = communityAiFeedSeenAtByCommunityIdRef.current[activeCommunityId] ?? null;
+    if (!seenAt) {
+      communityAiFeedSeenAtByCommunityIdRef.current[activeCommunityId] = latestActiveCommunityAiFeedAt;
+      return;
+    }
+    if (Date.parse(latestActiveCommunityAiFeedAt) <= Date.parse(seenAt)) return;
+    if (communityTab === "ai_feed") {
+      communityAiFeedSeenAtByCommunityIdRef.current[activeCommunityId] = latestActiveCommunityAiFeedAt;
+      setCommunityTabIndicator(activeCommunityId, "ai_feed", false);
+      return;
+    }
+    setCommunityTabIndicator(activeCommunityId, "ai_feed", true);
+  }, [
+    activeCommunityId,
+    activePage,
+    communityTab,
+    latestActiveCommunityAiFeedAt,
+    setCommunityTabIndicator,
+  ]);
+
+  useEffect(() => {
+    if (activePage !== "community" || !activeCommunityId || communityTab !== "resources") return;
+    if (latestActiveCommunityResourcesAt) {
+      communityResourcesSeenAtByCommunityIdRef.current[activeCommunityId] = latestActiveCommunityResourcesAt;
+    }
+    setCommunityTabIndicator(activeCommunityId, "resources", false);
+  }, [
+    activeCommunityId,
+    activePage,
+    communityTab,
+    latestActiveCommunityResourcesAt,
+    setCommunityTabIndicator,
+  ]);
+
+  useEffect(() => {
+    if (activePage !== "community" || !activeCommunityId || !latestActiveCommunityResourcesAt) return;
+    const seenAt = communityResourcesSeenAtByCommunityIdRef.current[activeCommunityId] ?? null;
+    if (!seenAt) {
+      communityResourcesSeenAtByCommunityIdRef.current[activeCommunityId] = latestActiveCommunityResourcesAt;
+      return;
+    }
+    if (Date.parse(latestActiveCommunityResourcesAt) <= Date.parse(seenAt)) return;
+    if (communityTab === "resources") {
+      communityResourcesSeenAtByCommunityIdRef.current[activeCommunityId] = latestActiveCommunityResourcesAt;
+      setCommunityTabIndicator(activeCommunityId, "resources", false);
+      return;
+    }
+    setCommunityTabIndicator(activeCommunityId, "resources", true);
+  }, [
+    activeCommunityId,
+    activePage,
+    communityTab,
+    latestActiveCommunityResourcesAt,
+    setCommunityTabIndicator,
+  ]);
 
   useCommunityAgentConfigLifecycle<AuthSession>({
     activePage,
@@ -2994,6 +3141,7 @@ export default function App() {
     activeCommunityId,
     loadCommunityResources,
     requireCommunityPage: true,
+    shouldPreload: true,
   });
 
   useCommunityAdminAnalyticsLifecycle({
@@ -4684,6 +4832,7 @@ export default function App() {
         communitySettingsPricingMode,
         communitySettingsPriceUsdMonthly,
         communitySettingsPriceUsdAnnual,
+        isCommunitySettingsDirty: communitySettingsDirtyRef.current,
         communitySettingsError,
         isSavingCommunitySettings,
         communityMemberMuted,
@@ -4903,6 +5052,7 @@ export default function App() {
       communityMessageInput,
       isSendingCommunityMessage,
       communityChatError,
+      copiedCommunityMessageId,
       isUserAtBottom,
       unreadCount,
       reactionEmojis: REACTION_EMOJIS,
@@ -4942,7 +5092,7 @@ export default function App() {
       onToggleReaction: handleToggleReaction,
       onSetReactionPickerMessageId: setReactionPickerMessageId,
       onStartReply: handleStartReply,
-      onCopyMessage: copyTextToClipboard,
+      onCopyMessage: handleCopyCommunityMessage,
       onStartEdit: handleStartEdit,
       onDeleteMessage: handleDeleteMessage,
       onEditingMessageTextChange: setEditingMessageText,
@@ -5193,6 +5343,11 @@ export default function App() {
 	    </button>
 	  ) : null;
   const handleSelectCommunityTab = useCallback((tab: CommunityTab) => {
+    if (tab === "chat") {
+      setUnreadCount(0);
+      setIsUserAtBottom(true);
+      isUserAtBottomRef.current = true;
+    }
     if (isCommunityRouteManagedTab(tab)) {
       const nextCommunitySlug = String(selectedActiveCommunitySlug ?? activeCommunity?.slug ?? "").trim();
       if (nextCommunitySlug) {
@@ -5204,8 +5359,11 @@ export default function App() {
   }, [
     activeCommunity,
     applyCommunityShellState,
+    isUserAtBottomRef,
     openCommunityTab,
     selectedActiveCommunitySlug,
+    setIsUserAtBottom,
+    setUnreadCount,
   ]);
   const handleSelectCommunityTabFromMobile = useCallback((tab: CommunityTab) => {
     setMobileOverlay(null);
@@ -5561,6 +5719,25 @@ export default function App() {
   });
   const globalOverlays = <WebGlobalOverlayHost {...globalOverlayHostProps} />;
   const mainSurface = <WebAppMainSurfaceHost {...mainSurfaceHostProps} />;
+  const communityTabIndicators = useMemo(() => {
+    const activeIndicators = activeCommunityId
+      ? (communityTabIndicatorByCommunityId[activeCommunityId] ?? {})
+      : {};
+    return {
+      chat: Boolean(activeIndicators.chat),
+      ai_feed: Boolean(activeIndicators.ai_feed),
+      resources: Boolean(activeIndicators.resources),
+    };
+  }, [activeCommunityId, communityTabIndicatorByCommunityId]);
+  const communityRailAttentionById = useMemo(() => {
+    const next: Record<string, boolean> = {};
+    for (const [communityId, indicators] of Object.entries(communityTabIndicatorByCommunityId)) {
+      if (indicators.chat || indicators.ai_feed || indicators.resources) {
+        next[communityId] = true;
+      }
+    }
+    return next;
+  }, [communityTabIndicatorByCommunityId]);
   const shellChromeHostProps = buildWebShellChromeHostProps({
     showHeaderIslands,
     isSessionsDrawerOpen,
@@ -5598,6 +5775,7 @@ export default function App() {
     handleTopbarBackToWorkspace,
     workspaceShellPanels,
     communityTab,
+    communityTabIndicators,
     canViewMembersActiveCommunity,
     canViewActiveCommunitySettings,
     canViewActiveCommunityPolynet,
@@ -5610,6 +5788,7 @@ export default function App() {
     openMobileCreateCommunity,
     communities,
     railCommunities,
+    communityRailAttentionById,
     isLoadingCommunities,
     selectedActiveCommunitySlug,
     handleSelectActiveCommunity: (community) => {

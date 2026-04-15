@@ -13,6 +13,7 @@ type CommunityNavCommunityLike = {
 type CommunityNavProps = {
   activeCommunity: CommunityNavCommunityLike;
   communityTab: CommunityTab;
+  tabIndicators?: Partial<Record<CommunityTab, boolean>>;
   canViewMembersActiveCommunity: boolean;
   canViewActiveCommunitySettings: boolean;
   canViewActiveCommunityPolynet: boolean;
@@ -27,6 +28,7 @@ type CommunityNavProps = {
 export function CommunityNav({
   activeCommunity,
   communityTab,
+  tabIndicators = {},
   canViewMembersActiveCommunity,
   canViewActiveCommunitySettings,
   canViewActiveCommunityPolynet,
@@ -81,14 +83,15 @@ export function CommunityNav({
             <path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z" />
           </svg>
         </span>
-        Chat
+        <span className="nav-item-label">Chat</span>
+        {communityTab !== "chat" && tabIndicators.chat ? <span className="nav-item-dot" aria-hidden="true" /> : null}
       </button>
       <button
         className={communityTab === "ai_feed" ? "nav-item active" : "nav-item"}
         type={buttonType}
         onClick={() => onSelectTab("ai_feed")}
         title={maybeTitle("AI Feed")}
-      >
+        >
         <span className="nav-icon">
           <svg
             viewBox="0 0 24 24"
@@ -104,21 +107,23 @@ export function CommunityNav({
             <circle cx="18" cy="17" r="2" />
           </svg>
         </span>
-        AI Feed
+        <span className="nav-item-label">AI Feed</span>
+        {communityTab !== "ai_feed" && tabIndicators.ai_feed ? <span className="nav-item-dot" aria-hidden="true" /> : null}
       </button>
       <button
         className={communityTab === "resources" ? "nav-item active" : "nav-item"}
         type={buttonType}
         onClick={() => onSelectTab("resources")}
         title={maybeTitle("Resources")}
-      >
+        >
         <span className="nav-icon">
           <svg viewBox="0 0 24 24">
             <path d="M10 13a5 5 0 0 0 7.07 0l3.54-3.54a5 5 0 0 0-7.07-7.07L10 5" />
             <path d="M14 11a5 5 0 0 0-7.07 0L3.4 14.54a5 5 0 0 0 7.07 7.07L14 19" />
           </svg>
         </span>
-        Resources
+        <span className="nav-item-label">Resources</span>
+        {communityTab !== "resources" && tabIndicators.resources ? <span className="nav-item-dot" aria-hidden="true" /> : null}
       </button>
       {canViewMembersActiveCommunity && (
         <button

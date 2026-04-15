@@ -35,6 +35,7 @@ type ReplyPrefix = {
 
 type CommunityChatMessageRowProps = {
   message: CommunityChatMessageRecord;
+  copied: boolean;
   dateSeparator: string | null;
   isPending: boolean;
   showMeta: boolean;
@@ -63,7 +64,7 @@ type CommunityChatMessageRowProps = {
   onToggleReaction: (messageId: string, emoji: string) => void | Promise<void>;
   onSetReactionPickerMessageId: (messageId: string | null) => void;
   onStartReply: (message: CommunityChatMessageRecord) => void;
-  onCopyMessage: (body: string) => void | Promise<void>;
+  onCopyMessage: (messageId: string, body: string) => void | Promise<void>;
   onStartEdit: (message: CommunityChatMessageRecord) => void;
   onDeleteMessage: (messageId: string) => void | Promise<void>;
   onEditingMessageTextChange: (value: string) => void;
@@ -73,6 +74,7 @@ type CommunityChatMessageRowProps = {
 
 export function CommunityChatMessageRow({
   message,
+  copied,
   dateSeparator,
   isPending,
   showMeta,
@@ -333,13 +335,22 @@ export function CommunityChatMessageRow({
             </button>
           )}
           <button
-            className="chat-action-btn"
+            className={`chat-action-btn${copied ? " copied" : ""}`}
             onClick={() => {
-              void onCopyMessage(message.body);
+              void onCopyMessage(message.id, message.body);
             }}
-            title="Copy message"
+            title={copied ? "Copied" : "Copy message"}
           >
-            <svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>
+            <svg viewBox="0 0 24 24">
+              {copied ? (
+                <polyline points="20 6 9 17 4 12" />
+              ) : (
+                <>
+                  <rect x="9" y="9" width="13" height="13" rx="2" />
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                </>
+              )}
+            </svg>
           </button>
           {(isOwn || canModerateContent) && !isPending && (
             <>

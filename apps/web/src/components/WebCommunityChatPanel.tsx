@@ -49,6 +49,7 @@ export type WebCommunityChatPanelProps = {
   communityChatError: string | null;
   isUserAtBottom: boolean;
   unreadCount: number;
+  copiedCommunityMessageId: string | null;
   reactionEmojis: string[];
   messageListRef: MutableRefObject<HTMLDivElement | null>;
   fileInputRef: MutableRefObject<HTMLInputElement | null>;
@@ -75,7 +76,7 @@ export type WebCommunityChatPanelProps = {
   onToggleReaction: (messageId: string, emoji: string) => void | Promise<void>;
   onSetReactionPickerMessageId: (messageId: string | null) => void;
   onStartReply: (message: Pick<CommunityChatMessage, "id" | "sender_id" | "body">) => void;
-  onCopyMessage: (body: string) => void | Promise<void>;
+  onCopyMessage: (messageId: string, body: string) => void | Promise<void>;
   onStartEdit: (message: Pick<CommunityChatMessage, "id" | "body">) => void;
   onDeleteMessage: (messageId: string) => void | Promise<void>;
   onEditingMessageTextChange: (value: string) => void;
@@ -111,6 +112,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     communityChatError,
     isUserAtBottom,
     unreadCount,
+    copiedCommunityMessageId,
     reactionEmojis,
     messageListRef,
     fileInputRef,
@@ -267,6 +269,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
                     <CommunityChatMessageRow
                       key={message.id}
                       message={message}
+                      copied={copiedCommunityMessageId === message.id}
                       dateSeparator={dateSeparator}
                       isPending={isPending}
                       showMeta={showMeta}

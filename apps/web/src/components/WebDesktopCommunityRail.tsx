@@ -91,6 +91,9 @@ export function WebDesktopCommunityRail(props: WebDesktopCommunityRailProps) {
                   fallback={communityShell.communityInitials(community.name)}
                   fallbackClassName="community-rail-initials"
                 />
+                {communityShell.communityRailAttentionById[community.id] ? (
+                  <span className="community-rail-dot" aria-hidden="true" />
+                ) : null}
               </button>
             );
           })}
