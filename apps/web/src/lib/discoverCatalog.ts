@@ -1,7 +1,7 @@
 import type { DeveloperAppAuthType } from "../../../../shared/communityAppMountTypes";
 
 export type DiscoverAppConnectionKind = "known" | "custom";
-export type DiscoverAppAuthMethod = "token" | "oauth" | "none";
+export type DiscoverAppAuthMethod = "token" | "oauth" | "none" | "custom";
 
 type DiscoverAppReadyTokenConnectTemplate = {
   connectionKind: "known";
@@ -24,6 +24,24 @@ type DiscoverAppReadyNoAuthConnectTemplate = {
   note: string;
 };
 
+type DiscoverAppCustomAuthOption = {
+  value: DeveloperAppAuthType;
+  label: string;
+  secretLabel?: string;
+};
+
+type DiscoverAppReadyCustomConnectTemplate = {
+  connectionKind: "custom";
+  availability: "ready";
+  authMethod: "custom";
+  endpointUrl: null;
+  authType: null;
+  authLabel: string;
+  note: string;
+  endpointPlaceholder: string;
+  supportedAuthTypes: DiscoverAppCustomAuthOption[];
+};
+
 type DiscoverAppLaterConnectTemplate = {
   connectionKind: DiscoverAppConnectionKind;
   availability: "later";
@@ -38,20 +56,35 @@ type DiscoverAppLaterConnectTemplate = {
 export type DiscoverAppPersonalConnectTemplate =
   | DiscoverAppReadyTokenConnectTemplate
   | DiscoverAppReadyNoAuthConnectTemplate
+  | DiscoverAppReadyCustomConnectTemplate
   | DiscoverAppLaterConnectTemplate;
 
 export type DiscoverAppConnectRequirement =
   | {
-      id: "endpoint" | "auth";
+      id: string;
       kind: "readonly";
       label: string;
       value: string;
     }
   | {
-      id: "secret";
+      id: string;
       kind: "secret";
       label: string;
       placeholder: string;
+    }
+  | {
+      id: string;
+      kind: "text";
+      label: string;
+      placeholder: string;
+      value: string;
+    }
+  | {
+      id: string;
+      kind: "select";
+      label: string;
+      value: string;
+      options: Array<{ value: string; label: string }>;
     };
 
 export type DiscoverAppCatalogEntry = {
@@ -82,8 +115,51 @@ export function isDiscoverAppPersonallyConnectable(
 
 export function buildDiscoverAppPersonalConnectRequirements(
   app: DiscoverAppCatalogEntry,
+  args?: {
+    endpointUrl?: string;
+    authType?: DeveloperAppAuthType;
+  },
 ): DiscoverAppConnectRequirement[] {
   if (!isDiscoverAppPersonallyConnectable(app)) return [];
+  if (app.personalConnect.connectionKind === "custom") {
+    const selectedAuthType = app.personalConnect.supportedAuthTypes.some(
+      (option) => option.value === args?.authType,
+    )
+      ? (args?.authType as DeveloperAppAuthType)
+      : app.personalConnect.supportedAuthTypes[0]?.value ?? "none";
+    const selectedAuthOption =
+      app.personalConnect.supportedAuthTypes.find(
+        (option) => option.value === selectedAuthType,
+      ) ?? null;
+    const requirements: DiscoverAppConnectRequirement[] = [
+      {
+        id: "endpoint",
+        kind: "text",
+        label: "Endpoint",
+        placeholder: app.personalConnect.endpointPlaceholder,
+        value: args?.endpointUrl?.trim() ?? "",
+      },
+      {
+        id: "auth",
+        kind: "select",
+        label: "Auth",
+        value: selectedAuthType,
+        options: app.personalConnect.supportedAuthTypes.map((option) => ({
+          value: option.value,
+          label: option.label,
+        })),
+      },
+    ];
+    if (selectedAuthType !== "none") {
+      requirements.push({
+        id: "secret",
+        kind: "secret",
+        label: selectedAuthOption?.secretLabel ?? "Secret",
+        placeholder: `Paste your ${selectedAuthOption?.secretLabel ?? "secret"}`,
+      });
+    }
+    return requirements;
+  }
   const requirements: DiscoverAppConnectRequirement[] = [
     {
       id: "endpoint",
@@ -112,6 +188,8 @@ export function buildDiscoverAppPersonalConnectRequirements(
 export function buildDiscoverAppPersonalConnectInput(
   app: DiscoverAppCatalogEntry,
   args: {
+    endpointUrl?: string;
+    authType?: DeveloperAppAuthType;
     description?: string;
     secret?: string;
   },
@@ -123,6 +201,28 @@ export function buildDiscoverAppPersonalConnectInput(
   secret?: string;
 } | null {
   if (!isDiscoverAppPersonallyConnectable(app)) return null;
+  if (app.personalConnect.connectionKind === "custom") {
+    const endpointUrl = args.endpointUrl?.trim() ?? "";
+    const authType = args.authType ?? null;
+    if (!endpointUrl || !authType) return null;
+    let hostLabel = "Custom MCP";
+    try {
+      const parsed = new URL(endpointUrl);
+      const hostname = parsed.hostname.replace(/^www\./, "");
+      if (hostname) {
+        hostLabel = `${hostname} MCP`;
+      }
+    } catch {
+      hostLabel = "Custom MCP";
+    }
+    return {
+      name: hostLabel,
+      endpoint_url: endpointUrl,
+      auth_type: authType,
+      description: args.description,
+      secret: authType === "none" ? undefined : args.secret,
+    };
+  }
   return {
     name: app.name,
     endpoint_url: app.personalConnect.endpointUrl,
@@ -136,6 +236,9 @@ export function buildDiscoverAppPersonalConnectModalCopy(
   app: DiscoverAppCatalogEntry,
 ): string | null {
   if (!isDiscoverAppPersonallyConnectable(app)) return null;
+  if (app.personalConnect.connectionKind === "custom") {
+    return "Enter a remote MCP endpoint and auth details to connect it to your personal platform tools.";
+  }
   if (app.personalConnect.authMethod === "token") {
     return `Paste your ${app.personalConnect.secretLabel} to connect ${app.name} to your personal platform tools.`;
   }
@@ -143,6 +246,53 @@ export function buildDiscoverAppPersonalConnectModalCopy(
 }
 
 export const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
+  {
+    id: "custom-mcp",
+    name: "Custom MCP",
+    tagline: "Bring your own remote MCP endpoint",
+    description:
+      "Advanced path for connecting a remote MCP server that is not in the curated known-app catalog yet.",
+    supportLabel: "Advanced path",
+    supportNote:
+      "Use this when you already have a remote MCP endpoint and the auth details it needs.",
+    heroNote:
+      "Best for testing and using remote MCP servers outside the curated app catalog.",
+    capabilities: [
+      "Connect a remote MCP endpoint that you already control or have access to.",
+      "Choose no auth, API key, or bearer-token authentication at connect time.",
+      "Prove the personal harness can mount real MCP tools beyond the built-in known apps.",
+    ],
+    websiteUrl: "https://modelcontextprotocol.io",
+    docsUrl: "https://modelcontextprotocol.io/introduction",
+    logoUrl: null,
+    personalConnect: {
+      connectionKind: "custom",
+      availability: "ready",
+      authMethod: "custom",
+      endpointUrl: null,
+      authType: null,
+      authLabel: "Choose auth",
+      note:
+        "Use this advanced path when you already have a remote MCP endpoint and the credentials it needs.",
+      endpointPlaceholder: "https://your-mcp.example.com/mcp",
+      supportedAuthTypes: [
+        {
+          value: "none",
+          label: "No auth",
+        },
+        {
+          value: "api_key",
+          label: "API key",
+          secretLabel: "API key",
+        },
+        {
+          value: "bearer",
+          label: "Bearer token",
+          secretLabel: "Bearer token",
+        },
+      ],
+    },
+  },
   {
     id: "github",
     name: "GitHub",

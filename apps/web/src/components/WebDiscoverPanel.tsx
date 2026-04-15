@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type ComponentProps } from "react";
 
+import type { DeveloperAppAuthType } from "../../../../shared/communityAppMountTypes";
 import { buildPlatformSwitcherStyle } from "../../../../shared/platformSwitcherUi";
 import type { DiscoverCommunitySnapshot } from "../../../../shared/communityTypes";
 import type {
@@ -149,8 +150,27 @@ function findMatchingPersonalMount(
   app: DiscoverAppCatalogEntry,
   mounts: UserPlatformMountedApp[],
 ): UserPlatformMountedApp | null {
+  const catalogKnownMountKeys = DISCOVER_APP_CATALOG.filter(
+    (entry) =>
+      entry.personalConnect.connectionKind === "known" &&
+      entry.personalConnect.endpointUrl &&
+      entry.personalConnect.authType,
+  ).map(
+    (entry) =>
+      `${entry.personalConnect.endpointUrl}::${entry.personalConnect.authType}`,
+  );
   if (!isDiscoverAppPersonallyConnectable(app)) {
     return null;
+  }
+  if (app.personalConnect.connectionKind === "custom") {
+    return (
+      mounts.find(
+        (mount) =>
+          !catalogKnownMountKeys.includes(
+            `${mount.app.endpoint_url}::${mount.app.auth_type}`,
+          ),
+      ) ?? null
+    );
   }
   return (
     mounts.find(
@@ -219,6 +239,9 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
     onOpenIntegrationsSettings,
   } = props;
   const [selectedAppId, setSelectedAppId] = useState<string | null>(null);
+  const [personalConnectEndpoint, setPersonalConnectEndpoint] = useState("");
+  const [personalConnectAuthType, setPersonalConnectAuthType] =
+    useState<DeveloperAppAuthType>("bearer");
   const [personalConnectSecret, setPersonalConnectSecret] = useState("");
   const [personalConnectError, setPersonalConnectError] = useState<string | null>(
     null,
@@ -265,11 +288,23 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
   }, [isAppsTab, selectedAppId]);
 
   useEffect(() => {
+    if (
+      selectedApp &&
+      isDiscoverAppPersonallyConnectable(selectedApp) &&
+      selectedApp.personalConnect.connectionKind === "custom"
+    ) {
+      setPersonalConnectAuthType(
+        selectedApp.personalConnect.supportedAuthTypes[0]?.value ?? "none",
+      );
+    } else {
+      setPersonalConnectAuthType("bearer");
+    }
+    setPersonalConnectEndpoint("");
     setPersonalConnectSecret("");
     setPersonalConnectError(null);
     setPersonalConnectResult(null);
     setIsPersonalConnectModalOpen(false);
-  }, [selectedAppId]);
+  }, [selectedApp]);
 
   const heroTitle = selectedApp
     ? selectedApp.name
@@ -296,7 +331,10 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
     ? buildDiscoverAppPersonalConnectModalCopy(selectedApp)
     : null;
   const personalConnectRequirements = selectedApp
-    ? buildDiscoverAppPersonalConnectRequirements(selectedApp)
+    ? buildDiscoverAppPersonalConnectRequirements(selectedApp, {
+        endpointUrl: personalConnectEndpoint,
+        authType: personalConnectAuthType,
+      })
     : [];
 
   const handleUsePersonally = async (
@@ -309,6 +347,7 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
     }
     if (selectedPersonalMount) return;
     if (
+      app.personalConnect.connectionKind === "known" &&
       app.personalConnect.authMethod === "token" &&
       !personalConnectSecret.trim()
     ) {
@@ -318,7 +357,26 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
       );
       return;
     }
+    if (
+      app.personalConnect.connectionKind === "custom" &&
+      !personalConnectEndpoint.trim()
+    ) {
+      setPersonalConnectResult("failed");
+      setPersonalConnectError("Paste the MCP endpoint before connecting it.");
+      return;
+    }
+    if (
+      app.personalConnect.connectionKind === "custom" &&
+      personalConnectAuthType !== "none" &&
+      !personalConnectSecret.trim()
+    ) {
+      setPersonalConnectResult("failed");
+      setPersonalConnectError("Paste the secret required for this MCP connection.");
+      return;
+    }
     const connectInput = buildDiscoverAppPersonalConnectInput(app, {
+      endpointUrl: personalConnectEndpoint,
+      authType: personalConnectAuthType,
       description: app.description,
       secret: personalConnectSecret.trim() || undefined,
     });
@@ -737,44 +795,104 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
                 </div>
               ) : null}
               <div className="agent-capability-field-grid discover-connect-grid">
-                {personalConnectRequirements.map((requirement) =>
-                  requirement.kind === "readonly" ? (
-                    <label key={requirement.id} className="agent-capability-field">
-                      <span className="agent-capability-field-label">
-                        {requirement.label}
-                      </span>
-                      <input
-                        className="agent-editor-inline-label-input"
-                        value={requirement.value}
-                        readOnly
-                      />
-                    </label>
-                  ) : (
-                    <label
-                      key={requirement.id}
-                      className="agent-capability-field discover-connect-secret-field"
-                    >
-                      <span className="agent-capability-field-label">
-                        {requirement.label}
-                      </span>
-                      <input
-                        className="agent-editor-inline-label-input"
-                        type="password"
-                        value={personalConnectSecret}
-                        onChange={(event) => {
-                          setPersonalConnectSecret(event.target.value);
-                          if (personalConnectError) {
-                            setPersonalConnectError(null);
-                          }
-                          if (personalConnectResult) {
-                            setPersonalConnectResult(null);
-                          }
-                        }}
-                        placeholder={requirement.placeholder}
-                      />
-                    </label>
-                  ),
-                )}
+                    {personalConnectRequirements.map((requirement) =>
+                      requirement.kind === "readonly" ? (
+                        <label
+                          key={requirement.id}
+                          className="agent-capability-field"
+                        >
+                          <span className="agent-capability-field-label">
+                            {requirement.label}
+                          </span>
+                          <input
+                            className="agent-editor-inline-label-input"
+                            value={requirement.value}
+                            readOnly
+                          />
+                        </label>
+                      ) : requirement.kind === "text" ? (
+                        <label
+                          key={requirement.id}
+                          className="agent-capability-field discover-connect-secret-field"
+                        >
+                          <span className="agent-capability-field-label">
+                            {requirement.label}
+                          </span>
+                          <input
+                            className="agent-editor-inline-label-input"
+                            value={requirement.value}
+                            onChange={(event) => {
+                              setPersonalConnectEndpoint(event.target.value);
+                              if (personalConnectError) {
+                                setPersonalConnectError(null);
+                              }
+                              if (personalConnectResult) {
+                                setPersonalConnectResult(null);
+                              }
+                            }}
+                            placeholder={requirement.placeholder}
+                            autoCapitalize="off"
+                            autoCorrect="off"
+                            spellCheck={false}
+                          />
+                        </label>
+                      ) : requirement.kind === "select" ? (
+                        <label
+                          key={requirement.id}
+                          className="agent-capability-field"
+                        >
+                          <span className="agent-capability-field-label">
+                            {requirement.label}
+                          </span>
+                          <select
+                            className="agent-capability-select"
+                            value={personalConnectAuthType}
+                            onChange={(event) => {
+                              setPersonalConnectAuthType(
+                                event.target.value as DeveloperAppAuthType,
+                              );
+                              setPersonalConnectSecret("");
+                              if (personalConnectError) {
+                                setPersonalConnectError(null);
+                              }
+                              if (personalConnectResult) {
+                                setPersonalConnectResult(null);
+                              }
+                            }}
+                          >
+                            {requirement.options.map((option) => (
+                              <option key={option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      ) : (
+                        <label
+                          key={requirement.id}
+                          className="agent-capability-field discover-connect-secret-field"
+                        >
+                          <span className="agent-capability-field-label">
+                            {requirement.label}
+                          </span>
+                          <input
+                            className="agent-editor-inline-label-input"
+                            type="password"
+                            value={personalConnectSecret}
+                            onChange={(event) => {
+                              setPersonalConnectSecret(event.target.value);
+                              if (personalConnectError) {
+                                setPersonalConnectError(null);
+                              }
+                              if (personalConnectResult) {
+                                setPersonalConnectResult(null);
+                              }
+                            }}
+                            placeholder={requirement.placeholder}
+                          />
+                        </label>
+                      ),
+                    )}
               </div>
               {personalConnectLoadError ? (
                 <div className="auth-error">{personalConnectLoadError}</div>
