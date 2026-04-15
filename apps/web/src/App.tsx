@@ -5719,25 +5719,20 @@ export default function App() {
   });
   const globalOverlays = <WebGlobalOverlayHost {...globalOverlayHostProps} />;
   const mainSurface = <WebAppMainSurfaceHost {...mainSurfaceHostProps} />;
-  const communityTabIndicators = useMemo(() => {
-    const activeIndicators = activeCommunityId
-      ? (communityTabIndicatorByCommunityId[activeCommunityId] ?? {})
-      : {};
-    return {
-      chat: Boolean(activeIndicators.chat),
-      ai_feed: Boolean(activeIndicators.ai_feed),
-      resources: Boolean(activeIndicators.resources),
-    };
-  }, [activeCommunityId, communityTabIndicatorByCommunityId]);
-  const communityRailAttentionById = useMemo(() => {
-    const next: Record<string, boolean> = {};
-    for (const [communityId, indicators] of Object.entries(communityTabIndicatorByCommunityId)) {
-      if (indicators.chat || indicators.ai_feed || indicators.resources) {
-        next[communityId] = true;
-      }
+  const activeIndicators = activeCommunityId
+    ? (communityTabIndicatorByCommunityId[activeCommunityId] ?? {})
+    : {};
+  const communityTabIndicators = {
+    chat: Boolean(activeIndicators.chat),
+    ai_feed: Boolean(activeIndicators.ai_feed),
+    resources: Boolean(activeIndicators.resources),
+  };
+  const communityRailAttentionById: Record<string, boolean> = {};
+  for (const [communityId, indicators] of Object.entries(communityTabIndicatorByCommunityId)) {
+    if (indicators.chat || indicators.ai_feed || indicators.resources) {
+      communityRailAttentionById[communityId] = true;
     }
-    return next;
-  }, [communityTabIndicatorByCommunityId]);
+  }
   const shellChromeHostProps = buildWebShellChromeHostProps({
     showHeaderIslands,
     isSessionsDrawerOpen,
