@@ -1350,16 +1350,6 @@ export const writeWorkspaceTerminalInternal = internalAction({
       authSubject: args.authSubject ?? null,
       terminalSessionId: args.terminalSessionId,
     });
-    const previewPort =
-      typeof row.previewPort === "number" ? Math.floor(row.previewPort) : null;
-    if (!previewPort) {
-      return {
-        ok: false,
-        status: 409,
-        code: "preview_not_enabled",
-        message: "This terminal does not expose an app preview.",
-      };
-    }
     const runtimeSessionOwned = await isRuntimeSessionOwnedTerminalRow({
       ctx,
       row,

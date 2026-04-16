@@ -1010,6 +1010,7 @@ async function executeRetrievalAgentLoop(
     userId: params.userId,
     authSubject: params.authSubject,
     projectId: params.projectId,
+    threadId: params.threadId,
     runId: params.runId,
     mountedTools: runtimeMountedTools,
     mountedPromptSuffix: `${buildUserPlatformMountedAppsPromptBlock(

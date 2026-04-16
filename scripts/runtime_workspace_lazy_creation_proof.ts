@@ -57,33 +57,43 @@ async function proveLazyWorkspaceCreationRules() {
   const terminalBlock = extractFunctionBlock(
     executionSessionSource,
     "async executeTerminalTool(",
-    "async getTerminalPreview(",
+    "async executeComputerTool(",
   );
   const terminalArgValidationIndex = terminalBlock.indexOf(
     "normalizeWorkspaceTerminalStartArgs",
   );
-  const terminalWorkspaceEnsureIndex = terminalBlock.indexOf(
-    "ensureWorkspaceForTool",
+  const terminalStartIndex = terminalBlock.indexOf(
+    "startWorkspaceTerminalInternal",
   );
   assert.ok(
     terminalArgValidationIndex >= 0 &&
-      terminalWorkspaceEnsureIndex > terminalArgValidationIndex,
-    "expected terminal_start args to validate before workspace creation",
+      terminalStartIndex > terminalArgValidationIndex,
+    "expected terminal_start args to validate before background terminal creation",
   );
   assert.equal(
     terminalBlock.includes("ensureWorkspaceForTool"),
-    true,
-    "expected terminal_start to lazily create the execution-session workspace",
+    false,
+    "expected terminal tools not to create the execution-session workspace",
   );
   assert.equal(
     terminalBlock.includes("startWorkspaceTerminalInternal"),
-    false,
-    "expected terminal tools not to use the project background-terminal Daytona path",
+    true,
+    "expected terminal_start to use the project background-terminal Daytona path",
   );
   assert.equal(
-    terminalBlock.includes("startRuntimeSessionTerminal"),
+    terminalBlock.includes("readWorkspaceTerminalInternal"),
     true,
-    "expected terminal tools to delegate process creation to the shared runtime terminal core",
+    "expected terminal_read to use the project background-terminal Daytona path",
+  );
+  assert.equal(
+    terminalBlock.includes("writeWorkspaceTerminalInternal"),
+    true,
+    "expected terminal_write to use the project background-terminal Daytona path",
+  );
+  assert.equal(
+    terminalBlock.includes("stopWorkspaceTerminalInternal"),
+    true,
+    "expected terminal_stop to use the project background-terminal Daytona path",
   );
   assert.equal(
     terminalBlock.includes("createDaytonaProcessSession"),
@@ -98,38 +108,17 @@ async function proveLazyWorkspaceCreationRules() {
   assert.equal(
     terminalProcessCoreSource.includes("runIdStartedBy: params.runId"),
     true,
-    "expected runtime terminal rows to be tied back to the owning runtime run",
+    "expected runtime terminal core to support tying rows back to an owning runtime run",
   );
   assert.equal(
-    terminalBlock.includes("runtimeTerminalSessionIds.add"),
-    true,
-    "expected execution sessions to track owned terminal sessions for cleanup",
+    terminalBlock.includes("startRuntimeSessionTerminal"),
+    false,
+    "expected agent terminal_start not to create runtime-session-owned terminal rows",
   );
   assert.equal(
     terminalBlock.includes("requireRuntimeSessionOwnedTerminalRow"),
-    true,
-    "expected terminal read/write/stop to require a run-owned terminal row",
-  );
-
-  const previewBlock = extractFunctionBlock(
-    executionSessionSource,
-    "async getTerminalPreview(",
-    "async executeComputerTool(",
-  );
-  assert.equal(
-    previewBlock.includes("requireRuntimeSessionOwnedTerminalRow"),
-    true,
-    "expected runtime preview lookup to require a run-owned terminal row",
-  );
-  assert.equal(
-    previewBlock.includes("resolveRuntimeSessionTerminalPreview"),
-    true,
-    "expected runtime preview lookup to delegate preview resolution to the shared runtime terminal core",
-  );
-  assert.equal(
-    previewBlock.includes("getDaytonaSignedPreviewUrl"),
     false,
-    "expected execution session not to own low-level Daytona preview URL minting",
+    "expected terminal read/write/stop not to require runtime-session-owned terminal rows",
   );
   assert.equal(
     terminalProcessCoreSource.includes("getDaytonaSignedPreviewUrl"),
@@ -139,7 +128,7 @@ async function proveLazyWorkspaceCreationRules() {
   assert.equal(
     terminalProcessCoreSource.includes("workspace_session_mismatch"),
     true,
-    "expected runtime preview lookup to fail closed when terminal and workspace sandbox differ",
+    "expected shared preview lookup to fail closed when terminal and workspace sandbox differ",
   );
 
   assert.equal(

@@ -8,12 +8,6 @@ import { runDaytonaComputerUseTool } from "./daytonaComputerUse";
 import {
   normalizeWorkspaceTerminalStartArgs,
   readWorkspaceToolFailureOutputPreview,
-  reconcileRuntimeSessionTerminalRow,
-  requireRuntimeSessionOwnedTerminalRow,
-  resolveRuntimeSessionTerminalPreview,
-  startRuntimeSessionTerminal,
-  stopRuntimeSessionTerminalRow,
-  writeRuntimeSessionTerminalRow,
 } from "./workspaceTerminalProcessCore";
 import {
   createRuntimeMcpManager,
@@ -146,6 +140,7 @@ export function createPolyNetExecutionSession(params: {
   userId: any;
   authSubject?: string | null;
   projectId?: string | null;
+  threadId?: string | null;
   runId: string;
   mountedTools: RuntimeMountedMcpTool[];
   mountedPromptSuffix?: string | null;
@@ -175,7 +170,6 @@ export function createPolyNetExecutionSession(params: {
     code: string;
     message: string;
   } | null = null;
-  const runtimeTerminalSessionIds = new Set<string>();
   let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   let heartbeatInFlight = false;
 
@@ -427,25 +421,6 @@ export function createPolyNetExecutionSession(params: {
         workspaceSessionFailure ? "failed" : "released";
       if (workspaceSession) {
         if (ownsWorkspaceSession) {
-          for (const terminalSessionId of runtimeTerminalSessionIds) {
-            try {
-              const loaded = await requireRuntimeSessionOwnedTerminalRow({
-                ctx: params.ctx,
-                ownerId: params.userId,
-                runId: params.runId,
-                terminalSessionId,
-              });
-              if (loaded.ok) {
-                await stopRuntimeSessionTerminalRow({
-                  ctx: params.ctx,
-                  row: loaded.row,
-                  session: workspaceSession,
-                });
-              }
-            } catch {
-              // Best-effort terminal process cleanup before sandbox teardown.
-            }
-          }
           const cleanupStartedAt = Date.now();
           let cleanupResult:
             | Awaited<ReturnType<typeof cleanupWorkspaceSandboxSession>>
@@ -655,82 +630,57 @@ export function createPolyNetExecutionSession(params: {
             };
           }
           if (!payload && terminalStartArgs) {
-            const createdWorkspace = await this.ensureWorkspaceForTool({
-              toolName: paramsForTool.toolName,
-            });
-            if (!createdWorkspace.ok) {
-              payload = {
-                ok: false,
-                status: createdWorkspace.status,
-                code: createdWorkspace.code,
-                message: createdWorkspace.message,
-              };
-            } else {
-              payload = await startRuntimeSessionTerminal({
-                ctx: params.ctx,
-                ownerId: params.userId,
-                projectId,
+            payload = (await params.ctx.runAction(
+              internal.workspaceTerminals.startWorkspaceTerminalInternal as any,
+              {
+                authSubject,
+                projectId: projectId as any,
+                threadId: params.threadId ? (params.threadId as any) : undefined,
                 runId: params.runId,
-                session: createdWorkspace.session,
-                terminal: terminalStartArgs,
-              });
-              const terminalSessionId = String(
-                payload.terminal_session_id ?? "",
-              ).trim();
-              if (payload.ok === true && terminalSessionId) {
-                runtimeTerminalSessionIds.add(terminalSessionId);
-              }
-            }
+                command: terminalStartArgs.command,
+                cwd: terminalStartArgs.cwd ?? undefined,
+                previewPort: terminalStartArgs.previewPort ?? undefined,
+                previewPath: terminalStartArgs.previewPath ?? undefined,
+                previewLabel: terminalStartArgs.previewLabel ?? undefined,
+              },
+            )) as Record<string, unknown>;
           }
         } else {
-          const loaded = await requireRuntimeSessionOwnedTerminalRow({
-            ctx: params.ctx,
-            ownerId: params.userId,
-            runId: params.runId,
-            terminalSessionId: String(
-              paramsForTool.normalizedArgs.terminal_session_id ?? "",
-            ).trim(),
-          });
-          if (!loaded.ok) {
-            payload = loaded;
-          } else {
-            const activeWorkspaceSession = workspaceSessionFailure
-              ? null
-              : workspaceSession;
-            if (!activeWorkspaceSession) {
-              payload = {
-                ok: false,
-                status: 409,
-                code: "workspace_session_required",
-                message:
-                  "Runtime terminal is only available while its workspace session is active.",
-              };
-            } else if (paramsForTool.toolName === "terminal_read") {
-              payload = {
-                ok: true,
-                ...(await reconcileRuntimeSessionTerminalRow({
-                  ctx: params.ctx,
-                  row: loaded.row,
-                  session: activeWorkspaceSession,
-                })),
-              };
-            } else if (paramsForTool.toolName === "terminal_write") {
-              payload = await writeRuntimeSessionTerminalRow({
-                ctx: params.ctx,
-                row: loaded.row,
-                session: activeWorkspaceSession,
+          const terminalSessionId = String(
+            paramsForTool.normalizedArgs.terminal_session_id ?? "",
+          ).trim();
+          if (!terminalSessionId) {
+            payload = {
+              ok: false,
+              status: 400,
+              code: "invalid_tool_args",
+              message: "terminal_session_id is required.",
+            };
+          } else if (paramsForTool.toolName === "terminal_read") {
+            payload = (await params.ctx.runAction(
+              internal.workspaceTerminals.readWorkspaceTerminalInternal as any,
+              {
+                authSubject,
+                terminalSessionId: terminalSessionId as any,
+              },
+            )) as Record<string, unknown>;
+          } else if (paramsForTool.toolName === "terminal_write") {
+            payload = (await params.ctx.runAction(
+              internal.workspaceTerminals.writeWorkspaceTerminalInternal as any,
+              {
+                authSubject,
+                terminalSessionId: terminalSessionId as any,
                 input: String(paramsForTool.normalizedArgs.input ?? ""),
-              });
-            } else {
-              payload = {
-                ok: true,
-                ...(await stopRuntimeSessionTerminalRow({
-                  ctx: params.ctx,
-                  row: loaded.row,
-                  session: activeWorkspaceSession,
-                })),
-              };
-            }
+              },
+            )) as Record<string, unknown>;
+          } else {
+            payload = (await params.ctx.runAction(
+              internal.workspaceTerminals.stopWorkspaceTerminalInternal as any,
+              {
+                authSubject,
+                terminalSessionId: terminalSessionId as any,
+              },
+            )) as Record<string, unknown>;
           }
         }
         if (!payload) {
@@ -853,60 +803,6 @@ export function createPolyNetExecutionSession(params: {
           errorMessage: message || "Terminal operation failed.",
         };
       }
-    },
-    async getTerminalPreview(paramsForPreview: {
-      terminalSessionId: string;
-    }): Promise<unknown> {
-      const previewStartedAt = Date.now();
-      const authSubject = String(params.authSubject ?? "").trim();
-      if (!authSubject) {
-        await emitRunEvent("terminal_preview_lookup_completed", {
-          run_id: params.runId,
-          terminal_session_id: paramsForPreview.terminalSessionId,
-          latency_ms: Date.now() - previewStartedAt,
-          status: "error",
-          code: "auth_required",
-        });
-        return {
-          ok: false,
-          status: 401,
-          code: "auth_required",
-          message: "Preview access requires an authenticated workspace run.",
-        };
-      }
-      const loaded = await requireRuntimeSessionOwnedTerminalRow({
-        ctx: params.ctx,
-        ownerId: params.userId,
-        runId: params.runId,
-        terminalSessionId: paramsForPreview.terminalSessionId,
-      });
-      let result: Record<string, unknown>;
-      if (!loaded.ok) {
-        result = loaded;
-      } else {
-        const activeWorkspaceSession = workspaceSessionFailure
-          ? null
-          : workspaceSession;
-        result = await resolveRuntimeSessionTerminalPreview({
-          row: loaded.row,
-          session: activeWorkspaceSession,
-        });
-      }
-      await emitRunEvent("terminal_preview_lookup_completed", {
-        run_id: params.runId,
-        terminal_session_id: paramsForPreview.terminalSessionId,
-        latency_ms: Date.now() - previewStartedAt,
-        status:
-          Boolean(
-            result &&
-              typeof result === "object" &&
-              !Array.isArray(result) &&
-              (result as Record<string, unknown>).ok,
-          )
-            ? "ok"
-            : "error",
-      });
-      return result;
     },
     async executeComputerTool(paramsForComputer: {
       toolName: RetrievalToolName | string;
