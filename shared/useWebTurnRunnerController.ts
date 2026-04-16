@@ -18,6 +18,10 @@ import {
 } from "./cloudThreadsGateway";
 import { listConvexCloudRuntimeRunEvents } from "./daytonaCloudThreadsRead";
 import {
+  getNextSmoothStreamingText,
+  shouldDisableStreamingSmoothing,
+} from "./smoothStreamingText";
+import {
   type CreateAssistantMessageParams,
   type CreateThreadMessageParams,
   type PublicTurnThreadMessage,
@@ -44,8 +48,11 @@ export function useWebTurnRunnerController<
   const argsRef = useRef(args);
   argsRef.current = args;
   const threadStreamingContentRefById = useRef<Record<string, string | null>>({});
+  const threadStreamingDisplayContentRefById = useRef<Record<string, string | null>>({});
   const threadStreamingAbortRefById = useRef<Record<string, AbortController | null>>({});
   const threadStreamingRafRefById = useRef<Record<string, number | null>>({});
+  const threadStreamingDrainingRefById = useRef<Record<string, boolean>>({});
+  const threadStreamingDrainResolversRefById = useRef<Record<string, Array<() => void>>>({});
   const threadStreamingUserCancelledRefById = useRef<Record<string, boolean>>({});
 
   const waitForPersistedRuntimeRun = useCallback(
@@ -98,15 +105,106 @@ export function useWebTurnRunnerController<
     [],
   );
 
+  const resolveThreadStreamingDrain = useCallback((threadId: string): void => {
+    const resolvers = threadStreamingDrainResolversRefById.current[threadId] ?? [];
+    delete threadStreamingDrainResolversRefById.current[threadId];
+    for (const resolve of resolvers) resolve();
+  }, []);
+
+  const setThreadStreamingDisplayContent = useCallback(
+    (threadId: string, content: string): void => {
+      threadStreamingDisplayContentRefById.current[threadId] = content;
+      setThreadStreamingState(threadId, (entry) =>
+        entry
+          ? {
+              ...entry,
+              content,
+              streamTransport: "sse",
+            }
+          : null,
+      );
+    },
+    [setThreadStreamingState],
+  );
+
+  const scheduleThreadStreamingFlush = useCallback(
+    (threadId: string, getSanitizedTargetContent: () => string): void => {
+      if (threadStreamingRafRefById.current[threadId]) return;
+      const tick = () => {
+        threadStreamingRafRefById.current[threadId] = null;
+        const targetContent = getSanitizedTargetContent();
+        const currentContent = threadStreamingDisplayContentRefById.current[threadId] ?? "";
+        const nextContent = getNextSmoothStreamingText(currentContent, targetContent, {
+          draining: threadStreamingDrainingRefById.current[threadId] === true,
+          reducedMotion: shouldDisableStreamingSmoothing(),
+        });
+
+        if (nextContent !== currentContent) {
+          setThreadStreamingDisplayContent(threadId, nextContent);
+        }
+
+        if (nextContent !== targetContent) {
+          threadStreamingRafRefById.current[threadId] = window.requestAnimationFrame(tick);
+          return;
+        }
+
+        threadStreamingDrainingRefById.current[threadId] = false;
+        resolveThreadStreamingDrain(threadId);
+      };
+
+      threadStreamingRafRefById.current[threadId] = window.requestAnimationFrame(tick);
+    },
+    [resolveThreadStreamingDrain, setThreadStreamingDisplayContent],
+  );
+
+  const drainThreadStreamingDisplay = useCallback(
+    async (
+      threadId: string,
+      getSanitizedTargetContent: () => string,
+      maxDelayMs = 520,
+    ): Promise<void> => {
+      const targetContent = getSanitizedTargetContent();
+      if (
+        shouldDisableStreamingSmoothing() ||
+        (threadStreamingDisplayContentRefById.current[threadId] ?? "") === targetContent
+      ) {
+        setThreadStreamingDisplayContent(threadId, targetContent);
+        return;
+      }
+
+      threadStreamingDrainingRefById.current[threadId] = true;
+      await new Promise<void>((resolve) => {
+        const timeoutId = window.setTimeout(() => {
+          threadStreamingDrainingRefById.current[threadId] = false;
+          setThreadStreamingDisplayContent(threadId, getSanitizedTargetContent());
+          resolveThreadStreamingDrain(threadId);
+        }, maxDelayMs);
+        const finish = () => {
+          window.clearTimeout(timeoutId);
+          resolve();
+        };
+        threadStreamingDrainResolversRefById.current[threadId] = [
+          ...(threadStreamingDrainResolversRefById.current[threadId] ?? []),
+          finish,
+        ];
+        scheduleThreadStreamingFlush(threadId, getSanitizedTargetContent);
+      });
+    },
+    [resolveThreadStreamingDrain, scheduleThreadStreamingFlush, setThreadStreamingDisplayContent],
+  );
+
   const resetThreadStreamingState = useCallback((threadId: string): void => {
     const current = argsRef.current;
     const rafId = threadStreamingRafRefById.current[threadId] ?? null;
     if (rafId) {
       window.cancelAnimationFrame(rafId);
     }
+    resolveThreadStreamingDrain(threadId);
     delete threadStreamingRafRefById.current[threadId];
     delete threadStreamingAbortRefById.current[threadId];
     delete threadStreamingContentRefById.current[threadId];
+    delete threadStreamingDisplayContentRefById.current[threadId];
+    delete threadStreamingDrainingRefById.current[threadId];
     delete threadStreamingUserCancelledRefById.current[threadId];
     setThreadStreamingState(threadId, () => null);
     current.setThreadSendingStateById((prev) => {
@@ -115,7 +213,7 @@ export function useWebTurnRunnerController<
       delete next[threadId];
       return next;
     });
-  }, [setThreadStreamingState]);
+  }, [resolveThreadStreamingDrain, setThreadStreamingState]);
 
   const ensureCloudThreadRecordForRuntime = useCallback(
     async (session: SessionT, threadId: string): Promise<void> => {
@@ -219,6 +317,8 @@ export function useWebTurnRunnerController<
       threadStreamingAbortRefById.current[params.threadId] = abort;
       threadStreamingUserCancelledRefById.current[params.threadId] = false;
       threadStreamingContentRefById.current[params.threadId] = "";
+      threadStreamingDisplayContentRefById.current[params.threadId] = "";
+      threadStreamingDrainingRefById.current[params.threadId] = false;
       setThreadStreamingState(params.threadId, () => ({
         runId: params.runIdHint,
         meta: {
@@ -235,25 +335,16 @@ export function useWebTurnRunnerController<
         lastRuntimeEventSeq: 0,
       }));
 
-      const scheduleStreamingFlush = () => {
-        if (threadStreamingRafRefById.current[params.threadId]) return;
-        threadStreamingRafRefById.current[params.threadId] = window.requestAnimationFrame(() => {
-          threadStreamingRafRefById.current[params.threadId] = null;
-          const raw = threadStreamingContentRefById.current[params.threadId] ?? "";
-          const nextContent = sanitizeUserFacingAssistantText({
-            text: raw,
-            blockedIds: [params.threadId, runIdFromServer],
-          });
-          setThreadStreamingState(params.threadId, (entry) =>
-            entry
-              ? {
-                  ...entry,
-                  content: nextContent,
-                  streamTransport: "sse",
-                }
-              : null,
-          );
+      const getSanitizedStreamingContent = () => {
+        const raw = threadStreamingContentRefById.current[params.threadId] ?? "";
+        return sanitizeUserFacingAssistantText({
+          text: raw,
+          blockedIds: [params.threadId, runIdFromServer],
         });
+      };
+
+      const scheduleStreamingFlush = () => {
+        scheduleThreadStreamingFlush(params.threadId, getSanitizedStreamingContent);
       };
 
       let finalContent = "";
@@ -420,6 +511,7 @@ export function useWebTurnRunnerController<
           }
         }
         flushEvent();
+        await drainThreadStreamingDisplay(params.threadId, getSanitizedStreamingContent);
         const sanitizedFinalContent = sanitizeUserFacingAssistantText({
           text: finalContent,
           blockedIds: [params.threadId, runIdFromServer],
@@ -436,7 +528,7 @@ export function useWebTurnRunnerController<
         resetThreadStreamingState(params.threadId);
       }
     },
-    [resetThreadStreamingState, setThreadStreamingState],
+    [drainThreadStreamingDisplay, resetThreadStreamingState, scheduleThreadStreamingFlush, setThreadStreamingState],
   );
 
   const runAgentTurn = useCallback(
@@ -465,6 +557,8 @@ export function useWebTurnRunnerController<
       threadStreamingAbortRefById.current[threadId] = abort;
       threadStreamingUserCancelledRefById.current[threadId] = false;
       threadStreamingContentRefById.current[threadId] = "";
+      threadStreamingDisplayContentRefById.current[threadId] = "";
+      threadStreamingDrainingRefById.current[threadId] = false;
       if (exposeStreamingUi) {
         setThreadStreamingState(threadId, () => ({
           runId: params.runIdHint,
@@ -489,25 +583,16 @@ export function useWebTurnRunnerController<
       let firstEventSeen = false;
       let lastEventName: string | null = null;
 
-      const scheduleStreamingFlush = () => {
-        if (threadStreamingRafRefById.current[threadId]) return;
-        threadStreamingRafRefById.current[threadId] = window.requestAnimationFrame(() => {
-          threadStreamingRafRefById.current[threadId] = null;
-          const raw = threadStreamingContentRefById.current[threadId] ?? "";
-          const nextContent = sanitizeUserFacingAssistantText({
-            text: raw,
-            blockedIds: [threadId, params.replyToId ?? null, runIdFromServer],
-          });
-          setThreadStreamingState(threadId, (entry) =>
-            entry
-              ? {
-                  ...entry,
-                  content: nextContent,
-                  streamTransport: "sse",
-                }
-              : null,
-          );
+      const getSanitizedStreamingContent = () => {
+        const raw = threadStreamingContentRefById.current[threadId] ?? "";
+        return sanitizeUserFacingAssistantText({
+          text: raw,
+          blockedIds: [threadId, params.replyToId ?? null, runIdFromServer],
         });
+      };
+
+      const scheduleStreamingFlush = () => {
+        scheduleThreadStreamingFlush(threadId, getSanitizedStreamingContent);
       };
 
       try {
@@ -532,15 +617,6 @@ export function useWebTurnRunnerController<
               idempotency_key: params.runIdHint,
               user_message_key: params.userMessageKey ?? undefined,
               requested_agentic_tools: params.requestedAgenticTools === true,
-              ...(params.internalFollowup
-                ? {
-                    internal_followup: {
-                      kind: params.internalFollowup.kind,
-                      content: params.internalFollowup.content,
-                      suppress_assistant_message: params.internalFollowup.suppressAssistantMessage === true,
-                    },
-                  }
-                : null),
               ...(laneMessages.length > 0 ? { messages: laneMessages } : null),
             },
             signal: abort.signal,
@@ -759,23 +835,22 @@ export function useWebTurnRunnerController<
           }
           flushEvent();
 
-          if (params.internalFollowup?.suppressAssistantMessage !== true) {
-            const safeAssistantText = sanitizeUserFacingAssistantText({
-              text: finalContent,
-              blockedIds: [threadId, params.replyToId ?? null, runIdFromServer],
-            }).trim();
-            if (!safeAssistantText) {
-              throw new Error("Failed to run model.");
-            }
+          const safeAssistantText = sanitizeUserFacingAssistantText({
+            text: finalContent,
+            blockedIds: [threadId, params.replyToId ?? null, runIdFromServer],
+          }).trim();
+          if (!safeAssistantText) {
+            throw new Error("Failed to run model.");
           }
-          if (params.internalFollowup?.suppressAssistantMessage !== true && !persistedAssistantMessageId) {
+          if (!persistedAssistantMessageId) {
             throw new Error("Runtime turn did not persist assistant message.");
           }
-          if (params.internalFollowup?.suppressAssistantMessage !== true) {
-            await current.loadThreadMessages(threadId, session);
-            await current.loadThreads(session);
+          if (exposeStreamingUi) {
+            await drainThreadStreamingDisplay(threadId, getSanitizedStreamingContent);
           }
-        return { cancelled: false, error: null };
+          await current.loadThreadMessages(threadId, session);
+          await current.loadThreads(session);
+          return { cancelled: false, error: null };
       } catch (error) {
         const cancelled =
           Boolean(threadStreamingUserCancelledRefById.current[threadId]) ||
@@ -808,7 +883,13 @@ export function useWebTurnRunnerController<
         resetThreadStreamingState(threadId);
       }
     },
-    [ensureCloudThreadRecordForRuntime, resetThreadStreamingState, setThreadStreamingState],
+    [
+      drainThreadStreamingDisplay,
+      ensureCloudThreadRecordForRuntime,
+      resetThreadStreamingState,
+      scheduleThreadStreamingFlush,
+      setThreadStreamingState,
+    ],
   );
 
   const createThreadMessage = useCallback(

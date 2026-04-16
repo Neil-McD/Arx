@@ -22,35 +22,6 @@ function resolveAuthenticatedTurnRuntimeFlags(): {
   };
 }
 
-function buildPreviewFitRepairInstruction(params: {
-  mode: "inline" | "expanded";
-  previewLabel: string;
-  viewportWidth: number;
-  viewportHeight: number;
-  overflowX: boolean;
-  overflowY: boolean;
-}): string {
-  const surfaceLabel = params.mode === "expanded" ? "expanded desktop preview" : "inline preview";
-  const overflowNotes = [
-    params.overflowX ? "horizontal overflow is present" : null,
-    params.overflowY ? "vertical overflow is present" : null,
-  ]
-    .filter(Boolean)
-    .join(" and ");
-  return [
-    `Repair the app layout for the ${surfaceLabel} surface so the default screen fits without page-level overflow.`,
-    `Preview label: ${params.previewLabel || "App preview"}.`,
-    `Viewport: ${Math.max(0, Math.round(params.viewportWidth))}x${Math.max(0, Math.round(params.viewportHeight))}.`,
-    overflowNotes ? `Observed issue: ${overflowNotes}.` : null,
-    "Keep the existing behavior and visual intent intact. Make the smallest layout changes needed.",
-    "Use the Polynet preview contract already provided by the runtime. Return to the canonical shell: html, body, and the app root should fill the available height with no default margins; the initial screen should avoid document-level scrolling; the app should use one compact top bar plus one main content area sized with min-height: 0 or minmax(0, 1fr); and any necessary scrolling should live inside bounded panels rather than the whole page.",
-    "Reuse the existing preview server for this app. Do not start another preview server or duplicate background terminal for this repair. If a restart is absolutely necessary, stop the existing preview terminal first and then start a single replacement.",
-    "Do the repair silently. Do not explain the repair to the user unless the run cannot be completed.",
-  ]
-    .filter(Boolean)
-    .join(" ");
-}
-
 export function useWebSendFlowController<
   SessionT,
   AttachmentT,
@@ -58,7 +29,6 @@ export function useWebSendFlowController<
   ThreadMessageT extends ThreadMessage,
 >(args: UseWebSendFlowControllerArgs<SessionT, AttachmentT, ThreadRecordT, ThreadMessageT>) {
   const argsRef = useRef(args);
-  const previewFitRepairInFlightByThreadIdRef = useRef<Record<string, boolean>>({});
   argsRef.current = args;
 
   const maybeShowBuilderLimitUpgrade = useCallback((message: string): void => {
@@ -81,79 +51,8 @@ export function useWebSendFlowController<
   const isThreadBusy = useCallback((threadId: string | null): boolean => {
     const trimmedThreadId = String(threadId ?? "").trim();
     if (!trimmedThreadId) return false;
-    return (
-      argsRef.current.isThreadRunActive(trimmedThreadId) ||
-      previewFitRepairInFlightByThreadIdRef.current[trimmedThreadId] === true
-    );
+    return argsRef.current.isThreadRunActive(trimmedThreadId);
   }, []);
-
-  const requestPreviewFitRepair = useCallback(
-    async (opts: {
-      mode: "inline" | "expanded";
-      previewLabel: string;
-      viewportWidth: number;
-      viewportHeight: number;
-      overflowX: boolean;
-      overflowY: boolean;
-    }): Promise<void> => {
-      const current = argsRef.current;
-      const session = current.getSession();
-      const threadId = String(current.activeThreadId ?? "").trim();
-      if (!session || !threadId) return;
-      if (isThreadBusy(threadId)) return;
-      previewFitRepairInFlightByThreadIdRef.current[threadId] = true;
-      const usableSession = await resolveUsableSession(session, current.ensureSession);
-      if (!usableSession) {
-        delete previewFitRepairInFlightByThreadIdRef.current[threadId];
-        return;
-      }
-      const currentThreadMessages = current.threadMessages.filter((message) => message.thread_id === threadId);
-      if (currentThreadMessages.length === 0) {
-        delete previewFitRepairInFlightByThreadIdRef.current[threadId];
-        return;
-      }
-      const preferredModelSelection = resolvePreferredModelSelection();
-      const preferredModelId = preferredModelSelection.modelId;
-      const currentThreadModel = current.threads.find((thread) => thread.id === threadId)?.model_id;
-      if (!currentThreadModel || currentThreadModel !== preferredModelId) {
-        syncThreadModelSelection(threadId, preferredModelId, usableSession);
-      }
-      try {
-        const runtimeFlags = resolveAuthenticatedTurnRuntimeFlags();
-        const repairInstruction = buildPreviewFitRepairInstruction(opts);
-        const turnResult = await current.runAgentTurn(usableSession, threadId, {
-          preferredModelId,
-          mode: "respond",
-          runIdHint: `agent_web_repair:${threadId}:${opts.mode}:${Date.now()}`,
-          systemPrompt: null,
-          inferenceSource: mapRequestedFundingSourceToInferenceSource(
-            preferredModelSelection.fundingSource,
-          ),
-          requestedFundingSource: preferredModelSelection.fundingSource,
-          requestedAgenticTools: runtimeFlags.requestedAgenticTools,
-          messages: currentThreadMessages,
-          suppressStreamingUi: true,
-          internalFollowup: {
-            kind: "preview_fit_repair",
-            content: repairInstruction,
-            suppressAssistantMessage: true,
-          },
-        });
-        if (turnResult.error) {
-          console.warn("preview_fit_repair_failed", { threadId, mode: opts.mode, error: turnResult.error });
-        }
-      } catch (error) {
-        console.warn("preview_fit_repair_failed", {
-          threadId,
-          mode: opts.mode,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      } finally {
-        delete previewFitRepairInFlightByThreadIdRef.current[threadId];
-      }
-    },
-    [isThreadBusy, resolvePreferredModelSelection, syncThreadModelSelection],
-  );
 
   const sendUserMessage = useCallback(async (opts?: {
     text?: string;
@@ -599,6 +498,5 @@ export function useWebSendFlowController<
     sendUserMessage,
     retryLastTurn,
     regenerateLastTurn,
-    requestPreviewFitRepair,
   };
 }

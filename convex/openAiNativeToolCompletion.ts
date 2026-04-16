@@ -1,10 +1,14 @@
 import {
-  buildAssistantToolCallMessage,
+  buildAssistantToolCallsMessage,
   parseNativeToolArguments,
   type NativeToolAwareCompletionSuccess,
   type NativeToolAwareMessage,
   type NativeToolInputContentPart,
 } from "../shared/nativeToolProtocol";
+import {
+  NativeProviderToolCallParseError,
+  parseNativeProviderFunctionCallItem,
+} from "../shared/nativeToolProviderParsers";
 
 type OpenAiResponsesFunctionTool = {
   type: "function";
@@ -17,13 +21,11 @@ type OpenAiResponsesFunctionTool = {
 type OpenAiResponsesParseResult = {
   text: string;
   modelId: string | null;
-  functionCall:
-    | {
-        callId: string;
-        name: string;
-        arguments: string;
-      }
-    | null;
+  functionCalls: Array<{
+    callId: string;
+    name: string;
+    arguments: string;
+  }>;
   promptTokens: number | null;
   completionTokens: number | null;
 };
@@ -202,22 +204,18 @@ function parseOpenAiResponsesPayload(payload: Record<string, any>): OpenAiRespon
     null;
   const tokenUsage = parseTokenUsage(payload);
 
-  let functionCall: OpenAiResponsesParseResult["functionCall"] = null;
+  const functionCalls: OpenAiResponsesParseResult["functionCalls"] = [];
   let text = typeof payload?.output_text === "string" ? payload.output_text : "";
 
   for (const item of outputItems) {
     if (!item || typeof item !== "object") continue;
-    if (!functionCall && item.type === "function_call") {
-      const callId = typeof item.call_id === "string" ? item.call_id.trim() : "";
-      const name = typeof item.name === "string" ? item.name.trim() : "";
-      const argumentsText = typeof item.arguments === "string" ? item.arguments.trim() : "";
-      if (callId && name && argumentsText) {
-        functionCall = {
-          callId,
-          name,
-          arguments: argumentsText,
-        };
-      }
+    if (item.type === "function_call") {
+      functionCalls.push(
+        parseNativeProviderFunctionCallItem({
+          item,
+          providerName: "OpenAI",
+        }),
+      );
       continue;
     }
     if (!text && item.type === "message") {
@@ -228,7 +226,7 @@ function parseOpenAiResponsesPayload(payload: Record<string, any>): OpenAiRespon
   return {
     text,
     modelId,
-    functionCall,
+    functionCalls,
     promptTokens: tokenUsage.promptTokens,
     completionTokens: tokenUsage.completionTokens,
   };
@@ -240,6 +238,7 @@ export async function runOpenAiNativeToolCompletion(params: {
   maxTokens: number;
   tools: OpenAiResponsesFunctionTool[];
   apiKeyOverride?: string | null;
+  parallelToolCalls?: boolean;
   signal?: AbortSignal;
 }): Promise<
   | NativeToolAwareCompletionSuccess<string>
@@ -272,7 +271,7 @@ export async function runOpenAiNativeToolCompletion(params: {
       max_output_tokens: params.maxTokens,
       tools: params.tools,
       tool_choice: "auto",
-      parallel_tool_calls: false,
+      parallel_tool_calls: params.parallelToolCalls === true,
     };
     if (normalized.instructions) requestBody.instructions = normalized.instructions;
   } catch (error) {
@@ -350,35 +349,68 @@ export async function runOpenAiNativeToolCompletion(params: {
 
   try {
     const result = parseOpenAiResponsesPayload(parsed);
-    if (result.functionCall) {
-      let parsedArguments: Record<string, unknown>;
-      try {
-        parsedArguments = parseNativeToolArguments({
-          rawArguments: result.functionCall.arguments,
-          malformedMessage: "OpenAI returned malformed tool arguments.",
+    if (result.functionCalls.length > 0) {
+      const parsedToolCalls: Array<{
+        callId: string;
+        name: string;
+        rawArguments: string;
+        parsedArguments: Record<string, unknown>;
+      }> = [];
+      for (const functionCall of result.functionCalls) {
+        let parsedArguments: Record<string, unknown>;
+        try {
+          parsedArguments = parseNativeToolArguments({
+            rawArguments: functionCall.arguments,
+            malformedMessage: "OpenAI returned malformed tool arguments.",
+          });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "OpenAI returned malformed tool arguments.";
+          return {
+            ok: false,
+            status: 502,
+            code: "invalid_model_output",
+            message,
+          };
+        }
+        parsedToolCalls.push({
+          callId: functionCall.callId,
+          name: functionCall.name,
+          rawArguments: functionCall.arguments,
+          parsedArguments,
         });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "OpenAI returned malformed tool arguments.";
-        return {
-          ok: false,
-          status: 502,
-          code: "invalid_model_output",
-          message,
-        };
       }
 
+      const assistantToolCallMessage = buildAssistantToolCallsMessage({
+        content: result.text.trim() || null,
+        toolCalls: parsedToolCalls.map((toolCall) => ({
+          providerCallId: toolCall.callId,
+          toolName: toolCall.name,
+          rawArguments: toolCall.rawArguments,
+        })),
+      });
+      if (parsedToolCalls.length > 1) {
+        return {
+          ok: true,
+          type: "tool_calls",
+          toolCalls: parsedToolCalls.map((toolCall) => ({
+            providerCallId: toolCall.callId,
+            toolName: toolCall.name,
+            arguments: toolCall.parsedArguments,
+          })),
+          assistantToolCallMessage,
+          promptTokens: result.promptTokens,
+          completionTokens: result.completionTokens,
+          resolvedModelId: result.modelId,
+        };
+      }
+      const toolCall = parsedToolCalls[0]!;
       return {
         ok: true,
         type: "tool_call",
-        providerCallId: result.functionCall.callId,
-        toolName: result.functionCall.name,
-        arguments: parsedArguments,
-        assistantToolCallMessage: buildAssistantToolCallMessage({
-          content: result.text.trim() || null,
-          providerCallId: result.functionCall.callId,
-          toolName: result.functionCall.name,
-          rawArguments: result.functionCall.arguments,
-        }),
+        providerCallId: toolCall.callId,
+        toolName: toolCall.name,
+        arguments: toolCall.parsedArguments,
+        assistantToolCallMessage,
         promptTokens: result.promptTokens,
         completionTokens: result.completionTokens,
         resolvedModelId: result.modelId,
@@ -398,7 +430,10 @@ export async function runOpenAiNativeToolCompletion(params: {
     return {
       ok: false,
       status: 502,
-      code: "provider_inference_error",
+      code:
+        error instanceof NativeProviderToolCallParseError
+          ? "invalid_model_output"
+          : "provider_inference_error",
       message,
     };
   }

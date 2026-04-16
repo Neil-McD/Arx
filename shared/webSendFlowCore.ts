@@ -103,11 +103,6 @@ export type UseWebSendFlowControllerArgs<
       requestedAgenticTools?: boolean;
       replyToId?: string;
       messages?: ThreadMessageT[];
-      internalFollowup?: {
-        kind: "preview_fit_repair";
-        content: string;
-        suppressAssistantMessage?: boolean;
-      };
       suppressStreamingUi?: boolean;
     },
   ) => Promise<{ cancelled: boolean; error: string | null }>;

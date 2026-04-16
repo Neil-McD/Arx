@@ -75,6 +75,14 @@ require_match_in_file "$DAYTONA_FILE" 'runProviderNativeToolCompletion\(' \
   "workspace loop uses provider-native tool completion"
 require_match_in_file "$DAYTONA_FILE" 'runNativeRuntimeKernel<' \
   "workspace loop uses explicit runtime kernel state machine"
+require_match_in_file "$DAYTONA_FILE" 'tool_batch_telemetry' \
+  "workspace loop emits batch telemetry evidence"
+require_match_in_file "$DAYTONA_FILE" 'batch_wall_time_ms' \
+  "workspace batch telemetry records wall time"
+require_match_in_file "$DAYTONA_FILE" 'estimated_parallel_savings_ms' \
+  "workspace batch telemetry estimates parallel savings"
+require_match_in_file "$DAYTONA_FILE" 'parallel_blocker_reason_counts' \
+  "workspace batch telemetry records blocker reasons"
 require_match_in_file "$DAYTONA_FILE" 'createPolyNetExecutionSession\(' \
   "workspace loop creates a unified PolyNet execution session"
 require_match_in_file "$DAYTONA_FILE" 'executionSession\.' \

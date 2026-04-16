@@ -11,6 +11,13 @@ import { mintPreviewProxySessionToken } from "./previewProxySessionToken";
 import {
   getDaytonaComputerUseStatus,
 } from "./daytonaComputerUseTransport";
+import {
+  applyRuntimeHarnessTelemetryEvent,
+  buildRuntimeHarnessScorecard,
+  buildRuntimeHarnessTelemetrySummaryFromEvents,
+  createEmptyRuntimeHarnessTelemetrySummary,
+  type RuntimeHarnessTelemetrySummary,
+} from "../shared/runtimeHarnessScorecard";
 
 type ThreadLike = {
   _id: any;
@@ -68,6 +75,7 @@ type RuntimeRunLike = {
   workspaceToolboxProxyUrl?: string;
   workspaceSessionRegion?: string;
   workspaceSessionUpdatedAt?: number;
+  runtimeHarnessTelemetrySummary?: RuntimeHarnessTelemetrySummary;
   status: "running" | "ok" | "error" | "cancelled";
   reason?: string;
   errorCode?: string;
@@ -432,6 +440,42 @@ async function getRunningRuntimeRunByThread(args: {
     .withIndex("by_thread_status_startedAt", (q: any) => q.eq("threadId", args.threadId).eq("status", "running"))
     .order("desc")
     .first()) as RuntimeRunLike | null;
+}
+
+async function listRecentRuntimeRunsForScorecard(args: {
+  ctx: any;
+  ownerId: any;
+  limit: number;
+  includeInternalHidden: boolean;
+}): Promise<RuntimeRunLike[]> {
+  const out: RuntimeRunLike[] = [];
+  const pageSize = Math.max(50, Math.min(200, args.limit * 2));
+  let cursorStartedAt: number | null = null;
+  let scannedPages = 0;
+
+  while (out.length < args.limit && scannedPages < 10) {
+    const rows = (await args.ctx.db
+      .query("runtimeRuns")
+      .withIndex("by_owner_startedAt", (q: any) =>
+        cursorStartedAt === null
+          ? q.eq("ownerId", args.ownerId)
+          : q.eq("ownerId", args.ownerId).lt("startedAt", cursorStartedAt),
+      )
+      .order("desc")
+      .take(pageSize)) as RuntimeRunLike[];
+    if (rows.length === 0) break;
+    scannedPages += 1;
+    for (const row of rows) {
+      if (!args.includeInternalHidden && row.visibility === "internal_hidden") continue;
+      out.push(row);
+      if (out.length >= args.limit) break;
+    }
+    const nextCursor = rows[rows.length - 1]?.startedAt;
+    if (typeof nextCursor !== "number" || !Number.isFinite(nextCursor)) break;
+    cursorStartedAt = Math.floor(nextCursor);
+  }
+
+  return out.slice(0, args.limit);
 }
 
 function isRuntimeRunStale(args: {
@@ -1102,6 +1146,106 @@ export const listCloudRuntimeRunsByOwner = query({
   },
 });
 
+export const getCloudRuntimeHarnessScorecard = query({
+  args: {
+    ownerId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    limit: v.optional(v.number()),
+    includeInternalHidden: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const ownerId = await resolveOwnerIdForAuthenticatedRequest({
+      ctx,
+      ownerId: args.ownerId,
+      authSubject: args.authSubject ?? null,
+    });
+    const safeLimit = Math.max(1, Math.min(200, Math.floor(args.limit ?? 50)));
+    const includeInternalHidden = args.includeInternalHidden === true;
+    const runs = await listRecentRuntimeRunsForScorecard({
+      ctx,
+      ownerId,
+      limit: safeLimit,
+      includeInternalHidden,
+    });
+
+    return buildRuntimeHarnessScorecard({
+      runs: runs.map((run) => ({
+        run: {
+          runId: run.runId,
+          status: run.status,
+          visibility: run.visibility,
+          startedAt: run.startedAt,
+          finishedAt: run.finishedAt,
+        },
+        telemetrySummary: run.runtimeHarnessTelemetrySummary,
+      })),
+      nowMs: Date.now(),
+    });
+  },
+});
+
+export const backfillCloudRuntimeHarnessTelemetrySummaries = mutation({
+  args: {
+    ownerId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    limit: v.optional(v.number()),
+    includeInternalHidden: v.optional(v.boolean()),
+    force: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const ownerId = await resolveOwnerIdForAuthenticatedRequest({
+      ctx,
+      ownerId: args.ownerId,
+      authSubject: args.authSubject ?? null,
+    });
+    const safeLimit = Math.max(1, Math.min(100, Math.floor(args.limit ?? 50)));
+    const includeInternalHidden = args.includeInternalHidden === true;
+    const force = args.force === true;
+    const runs = await listRecentRuntimeRunsForScorecard({
+      ctx,
+      ownerId,
+      limit: safeLimit,
+      includeInternalHidden,
+    });
+
+    let updatedRunCount = 0;
+    let skippedRunCount = 0;
+
+    for (const run of runs) {
+      const hasExistingSummary =
+        run.runtimeHarnessTelemetrySummary &&
+        typeof run.runtimeHarnessTelemetrySummary === "object" &&
+        !Array.isArray(run.runtimeHarnessTelemetrySummary);
+      if (hasExistingSummary && !force) {
+        skippedRunCount += 1;
+        continue;
+      }
+      const events = (await ctx.db
+        .query("runtimeRunEvents")
+        .withIndex("by_owner_run_seq", (q: any) =>
+          q.eq("ownerId", ownerId).eq("runId", run.runId),
+        )
+        .collect()) as RuntimeRunEventLike[];
+      const telemetrySummary = buildRuntimeHarnessTelemetrySummaryFromEvents(
+        events.map((event) => ({
+          eventType: event.eventType,
+          payload: event.payload,
+        })),
+      );
+      await ctx.db.patch(run._id, {
+        runtimeHarnessTelemetrySummary: telemetrySummary,
+      });
+      updatedRunCount += 1;
+    }
+
+    return {
+      scannedRunCount: runs.length,
+      updatedRunCount,
+      skippedRunCount,
+    };
+  },
+});
+
 export const getRuntimeRunByOwnerRunIdInternal = internalQuery({
   args: {
     ownerId: v.id("users"),
@@ -1256,6 +1400,7 @@ export const ensureCloudRuntimeRunStarted = mutation({
       harnessProfileSource,
       capabilityFamilies,
       workspaceSessionState: "none",
+      runtimeHarnessTelemetrySummary: createEmptyRuntimeHarnessTelemetrySummary(),
       workspaceSessionUpdatedAt: startedAt,
       status: "running",
       lastEventSeq: 1,
@@ -1343,6 +1488,11 @@ export const appendCloudRuntimeRunEvent = mutation({
     const seq = Math.max(0, Math.floor(run.lastEventSeq ?? 0)) + 1;
     const createdAt =
       typeof args.createdAt === "number" && Number.isFinite(args.createdAt) ? Math.floor(args.createdAt) : nowMs;
+    const runtimeHarnessTelemetrySummary = applyRuntimeHarnessTelemetryEvent({
+      summary: run.runtimeHarnessTelemetrySummary,
+      eventType,
+      payload: args.payload,
+    });
     const id = await ctx.db.insert("runtimeRunEvents", {
       ownerId,
       threadId: thread._id,
@@ -1355,6 +1505,7 @@ export const appendCloudRuntimeRunEvent = mutation({
     });
     await ctx.db.patch(run._id, {
       lastEventSeq: seq,
+      runtimeHarnessTelemetrySummary,
       updatedAt: nowMs,
     });
     const created = (await ctx.db.get(id)) as RuntimeRunEventLike | null;

@@ -74,11 +74,13 @@ export async function listProjectWorkspaceTerminalSnapshot<TSession>(params: {
 export async function stopProjectWorkspaceTerminal<TSession>(params: {
   session: TSession;
   terminalSessionId: string;
+  runId?: string | null;
 }): Promise<void> {
   const { client, authSubject } = await bootstrapGatewayAuthContext(params.session as AuthSessionLike);
   await client.action("workspaceTerminals:stopProjectWorkspaceTerminal" as any, {
     authSubject,
     terminalSessionId: params.terminalSessionId,
+    runId: params.runId ?? undefined,
   });
 }
 
@@ -96,11 +98,13 @@ export async function stopAllProjectWorkspaceTerminals<TSession>(params: {
 export async function getProjectWorkspaceTerminalPreviewUrl<TSession>(params: {
   session: TSession;
   terminalSessionId: string;
+  runId?: string | null;
 }): Promise<DaytonaWorkspaceTerminalPreview | null> {
   const { client, authSubject } = await bootstrapGatewayAuthContext(params.session as AuthSessionLike);
   const payload = (await client.action("workspaceTerminals:getWorkspaceTerminalPreviewUrl" as any, {
     authSubject,
     terminalSessionId: params.terminalSessionId,
+    runId: params.runId ?? undefined,
   })) as Record<string, unknown> | null;
   if (!payload || payload.ok !== true) return null;
   const previewUrl = String(payload.preview_url ?? "").trim();

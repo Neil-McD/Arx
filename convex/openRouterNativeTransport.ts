@@ -1,5 +1,5 @@
 import {
-  buildAssistantToolCallMessage,
+  buildAssistantToolCallsMessage,
   parseNativeToolArguments,
   type NativeToolAwareCompletionSuccess,
   type NativeToolAwareMessage,
@@ -37,6 +37,7 @@ export async function runOpenRouterNativeToolCompletion(params: {
   maxTokens: number;
   tools: OpenAiCompatibleFunctionTool[];
   apiKeyOverride?: string | null;
+  parallelToolCalls?: boolean;
   signal?: AbortSignal;
 }): Promise<
   | NativeToolAwareCompletionSuccess<string>
@@ -67,7 +68,7 @@ export async function runOpenRouterNativeToolCompletion(params: {
     stream: false,
     tools: params.tools,
     tool_choice: "auto",
-    parallel_tool_calls: false,
+    parallel_tool_calls: params.parallelToolCalls === true,
   };
   if (params.modelRef.toLowerCase().includes(":free")) {
     requestBody.provider = { data_collection: "allow" };
@@ -144,48 +145,77 @@ export async function runOpenRouterNativeToolCompletion(params: {
     const message = parsed?.choices?.[0]?.message;
     const promptTokens = Number(parsed?.usage?.prompt_tokens);
     const completionTokens = Number(parsed?.usage?.completion_tokens);
-    const toolCall = Array.isArray(message?.tool_calls) ? message.tool_calls[0] : null;
-    if (toolCall) {
-      const toolName = normalizeOpenAiToolCallName(toolCall.function?.name);
-      const providerCallId = String(toolCall.id ?? "").trim();
-      const rawArguments = String(toolCall.function?.arguments ?? "").trim();
-      if (!toolName || !providerCallId || !rawArguments) {
-        return {
-          ok: false,
-          status: 502,
-          code: "invalid_model_output",
-          message: "Provider returned an invalid native tool call.",
-        };
-      }
+    const toolCalls = Array.isArray(message?.tool_calls) ? message.tool_calls : [];
+    if (toolCalls.length > 0) {
+      const parsedToolCalls: Array<{
+        providerCallId: string;
+        toolName: string;
+        rawArguments: string;
+        parsedArguments: Record<string, unknown>;
+      }> = [];
+      for (const toolCall of toolCalls) {
+        const toolName = normalizeOpenAiToolCallName(toolCall.function?.name);
+        const providerCallId = String(toolCall.id ?? "").trim();
+        const rawArguments = String(toolCall.function?.arguments ?? "").trim();
+        if (!toolName || !providerCallId || !rawArguments) {
+          return {
+            ok: false,
+            status: 502,
+            code: "invalid_model_output",
+            message: "Provider returned an invalid native tool call.",
+          };
+        }
 
-      let parsedArguments: Record<string, unknown>;
-      try {
-        parsedArguments = parseNativeToolArguments({
-          rawArguments,
-          malformedMessage: "Provider returned malformed tool arguments.",
-        });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "Provider returned malformed tool arguments.";
-        return {
-          ok: false,
-          status: 502,
-          code: "invalid_model_output",
-          message,
-        };
-      }
-
-      return {
-        ok: true,
-        type: "tool_call",
-        providerCallId,
-        toolName,
-        arguments: parsedArguments,
-        assistantToolCallMessage: buildAssistantToolCallMessage({
-          content: typeof message?.content === "string" ? message.content : null,
+        let parsedArguments: Record<string, unknown>;
+        try {
+          parsedArguments = parseNativeToolArguments({
+            rawArguments,
+            malformedMessage: "Provider returned malformed tool arguments.",
+          });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "Provider returned malformed tool arguments.";
+          return {
+            ok: false,
+            status: 502,
+            code: "invalid_model_output",
+            message,
+          };
+        }
+        parsedToolCalls.push({
           providerCallId,
           toolName,
           rawArguments,
-        }),
+          parsedArguments,
+        });
+      }
+
+      const assistantToolCallMessage = buildAssistantToolCallsMessage({
+        content: typeof message?.content === "string" ? message.content : null,
+        toolCalls: parsedToolCalls,
+      });
+      if (parsedToolCalls.length > 1) {
+        return {
+          ok: true,
+          type: "tool_calls",
+          toolCalls: parsedToolCalls.map((toolCall) => ({
+            providerCallId: toolCall.providerCallId,
+            toolName: toolCall.toolName,
+            arguments: toolCall.parsedArguments,
+          })),
+          assistantToolCallMessage,
+          promptTokens: Number.isFinite(promptTokens) ? Math.floor(promptTokens) : null,
+          completionTokens: Number.isFinite(completionTokens) ? Math.floor(completionTokens) : null,
+          resolvedModelId: null,
+        };
+      }
+      const toolCall = parsedToolCalls[0]!;
+      return {
+        ok: true,
+        type: "tool_call",
+        providerCallId: toolCall.providerCallId,
+        toolName: toolCall.toolName,
+        arguments: toolCall.parsedArguments,
+        assistantToolCallMessage,
         promptTokens: Number.isFinite(promptTokens) ? Math.floor(promptTokens) : null,
         completionTokens: Number.isFinite(completionTokens) ? Math.floor(completionTokens) : null,
         resolvedModelId: null,

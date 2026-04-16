@@ -372,7 +372,6 @@ export async function handleRuntimeTurnRequest(args: {
       resolvedRuntimeCapabilityFamilies,
       resolvedRuntimeHarnessProfile,
       runtimeExecutionMode,
-      internalFollowup,
     } = resolved.value;
     const runId =
       String(input.idempotency_key ?? "").trim() ||
@@ -386,10 +385,9 @@ export async function handleRuntimeTurnRequest(args: {
     const latestUserText = String(
       conversationMessages[conversationMessages.length - 1]?.content ?? "",
     ).trim();
-    const persistVisibleUserMessage = internalFollowup === null;
-    const persistVisibleAssistantMessage =
-      internalFollowup?.suppressAssistantMessage !== true;
-    const runVisibility = internalFollowup ? "internal_hidden" : "user_visible";
+    const persistVisibleUserMessage = true;
+    const persistVisibleAssistantMessage = true;
+    const runVisibility = "user_visible";
     const runStartedAt = Date.now();
     runtimeTurnLogContext = {
       runId,
@@ -404,7 +402,6 @@ export async function handleRuntimeTurnRequest(args: {
       executionMode: runtimeExecutionMode,
       capabilityFamilies: resolvedRuntimeCapabilityFamilies,
       harnessProfile: resolvedRuntimeHarnessProfile,
-      internalFollowupKind: internalFollowup?.kind ?? undefined,
     };
     const runStartArgs: Record<string, unknown> = {
       ownerId: actor.dbUserId,
@@ -412,7 +409,6 @@ export async function handleRuntimeTurnRequest(args: {
       runId,
       lane,
       visibility: runVisibility,
-      internalFollowupKind: internalFollowup?.kind ?? undefined,
       projectId: runtimeProjectId ?? undefined,
       modelId: requestedModelId,
       engineId: "runtime_turn",

@@ -774,6 +774,7 @@ export default defineSchema({
     harnessProfileSource: v.optional(v.string()),
     capabilityFamilies: v.optional(v.array(v.string())),
     workspaceSessionState: v.optional(v.string()),
+    runtimeHarnessTelemetrySummary: v.optional(v.any()),
     workspaceProviderSandboxId: v.optional(v.string()),
     workspaceToolboxProxyUrl: v.optional(v.string()),
     workspaceSessionRegion: v.optional(v.string()),

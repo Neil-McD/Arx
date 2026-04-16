@@ -41,11 +41,6 @@ export type RuntimeTurnInput = {
     text?: string | null;
   } | null;
   messages?: Array<{ role?: string | null; content?: string | null }> | null;
-  internal_followup?: {
-    kind?: string | null;
-    content?: string | null;
-    suppress_assistant_message?: boolean | null;
-  } | null;
   max_tokens?: number | null;
 };
 
@@ -102,13 +97,6 @@ export type RuntimeTurnResolution = {
   resolvedRuntimeCapabilityFamilies: RuntimeCapabilityFamily[];
   resolvedRuntimeHarnessProfile: string;
   runtimeExecutionMode: "agentic" | "chat";
-  internalFollowup:
-    | {
-        kind: "preview_fit_repair";
-        content: string;
-        suppressAssistantMessage: boolean;
-      }
-    | null;
 };
 
 function resolveRequestedAgenticTools(raw: unknown): boolean {
@@ -132,25 +120,6 @@ function stripSystemMessages(
     (message): message is { role: "user" | "assistant"; content: string } =>
       message.role === "user" || message.role === "assistant",
   );
-}
-
-function normalizeInternalFollowup(
-  raw: unknown,
-): {
-  kind: "preview_fit_repair";
-  content: string;
-  suppressAssistantMessage: boolean;
-} | null {
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
-  const record = raw as Record<string, unknown>;
-  const kind = String(record.kind ?? "").trim().toLowerCase();
-  const content = String(record.content ?? "").trim();
-  if (kind !== "preview_fit_repair" || !content) return null;
-  return {
-    kind: "preview_fit_repair",
-    content,
-    suppressAssistantMessage: record.suppress_assistant_message === true,
-  };
 }
 
 function normalizeThreadWorkingState(raw: unknown): ThreadWorkingStatePrompt | null {
@@ -274,11 +243,7 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
 
   setStage("messages");
   const runtimeMessages = asRuntimeMessages(input);
-  const internalFollowup = normalizeInternalFollowup(input.internal_followup);
-  const conversationMessages = [
-    ...stripSystemMessages(runtimeMessages),
-    ...(internalFollowup ? [{ role: "user" as const, content: internalFollowup.content }] : []),
-  ];
+  const conversationMessages = stripSystemMessages(runtimeMessages);
   if (
     conversationMessages.length === 0 ||
     conversationMessages[conversationMessages.length - 1]?.role !== "user"
@@ -502,7 +467,6 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
         activeCapabilityFamilies: resolvedRuntimeCapabilityFamilies,
       }),
       runtimeExecutionMode,
-      internalFollowup,
     },
   };
 }

@@ -37,6 +37,7 @@ import {
   requiresWorkspaceSandbox,
 } from "../shared/retrievalTools";
 import {
+  getNativeToolCompletionToolCalls,
   type NativeToolAwareCompletionSuccess,
   type NativeToolAwareMessage,
 } from "../shared/nativeToolProtocol";
@@ -81,6 +82,10 @@ import {
   normalizeResolveMountedToolsArguments,
   RESOLVE_MOUNTED_TOOLS_TOOL_NAME,
 } from "./runtimeMountedToolExposure";
+import {
+  classifyRuntimeToolSchedule,
+  type RuntimeToolSchedulePlan,
+} from "../shared/runtimeToolPolicy";
 
 type InferenceRole = "user" | "assistant" | "system";
 type InferenceMessage = {
@@ -101,6 +106,8 @@ type JsonSchema = Record<string, unknown> | boolean;
 type RuntimeInferenceSource = "free" | "platform" | "chatgpt" | "user_key";
 const CHAT_TOOLS_RUNTIME_KERNEL_BUDGET: RuntimeKernelBudget =
   DEFAULT_RUNTIME_KERNEL_BUDGET;
+const RUNTIME_PARALLEL_READ_TOOLS_FLAG =
+  "RUNTIME_PARALLEL_READ_TOOLS_ENABLED";
 const RESOLVE_MOUNTED_TOOLS_INPUT_SCHEMA: JsonSchema = {
   type: "object",
   additionalProperties: false,
@@ -122,6 +129,153 @@ const RESOLVE_MOUNTED_TOOLS_INPUT_SCHEMA: JsonSchema = {
     },
   },
 };
+
+function readRuntimeBooleanFlag(name: string, defaultValue: boolean): boolean {
+  try {
+    const rawValue = (globalThis as any)?.process?.env?.[name];
+    if (typeof rawValue !== "string" || !rawValue.trim()) return defaultValue;
+    const value = rawValue.trim().toLowerCase();
+    if (["1", "true", "yes", "on"].includes(value)) return true;
+    if (["0", "false", "no", "off"].includes(value)) return false;
+  } catch {
+    // Convex runtime may not expose process.env; keep the safe default.
+  }
+  return defaultValue;
+}
+
+type RuntimeToolBatchExecutionMode = "serial" | "parallel";
+
+type RuntimeToolBatchTelemetryRecord = {
+  providerCallId: string;
+  toolName: string;
+  index: number;
+  iteration: number | null;
+  startedAtMs: number | null;
+  finishedAtMs: number | null;
+  durationMs: number | null;
+  status: NativeToolExecutionResult["status"] | null;
+  errorCode: string | null;
+  madeProgress: boolean | null;
+  repeatedCallCount: number | null;
+  consecutiveFailureCount: number | null;
+  consecutiveNoProgressCount: number | null;
+};
+
+type ActiveRuntimeToolBatchTelemetry = {
+  startingIteration: number;
+  batchCallCount: number;
+  isBatch: boolean;
+  remainingToolBudget: number;
+  parallelReadToolsEnabled: boolean;
+  scheduledAtMs: number;
+  schedule: RuntimeToolSchedulePlan;
+  actualExecutionMode: RuntimeToolBatchExecutionMode;
+  completedToolCount: number;
+  recordsByCallId: Map<string, RuntimeToolBatchTelemetryRecord>;
+};
+
+function summarizeToolBatchBlockerReasons(
+  schedule: RuntimeToolSchedulePlan,
+): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const call of schedule.calls) {
+    for (const reason of call.reasons) {
+      if (reason === "parallel_safe_read_only") continue;
+      counts[reason] = (counts[reason] ?? 0) + 1;
+    }
+  }
+  return counts;
+}
+
+function buildToolBatchTelemetryPayload(params: {
+  runId: string;
+  harnessName: "chat_tools";
+  telemetry: ActiveRuntimeToolBatchTelemetry;
+  terminalStopReason?: string | null;
+  terminalFailureCode?: string | null;
+  pendingToolCallId?: string | null;
+}): Record<string, unknown> {
+  const records = [...params.telemetry.recordsByCallId.values()].sort(
+    (left, right) => left.index - right.index,
+  );
+  const durationValues = records
+    .map((record) => record.durationMs)
+    .filter((value): value is number => typeof value === "number");
+  const startedAtValues = records
+    .map((record) => record.startedAtMs)
+    .filter((value): value is number => typeof value === "number");
+  const finishedAtValues = records
+    .map((record) => record.finishedAtMs)
+    .filter((value): value is number => typeof value === "number");
+  const batchStartedAtMs =
+    startedAtValues.length > 0
+      ? Math.min(...startedAtValues)
+      : params.telemetry.scheduledAtMs;
+  const batchFinishedAtMs =
+    finishedAtValues.length > 0
+      ? Math.max(...finishedAtValues)
+      : params.telemetry.scheduledAtMs;
+  const batchWallTimeMs = Math.max(0, batchFinishedAtMs - batchStartedAtMs);
+  const serialDurationEstimateMs = durationValues.reduce(
+    (sum, value) => sum + value,
+    0,
+  );
+  const estimatedParallelSavingsMs =
+    params.telemetry.actualExecutionMode === "parallel"
+      ? Math.max(0, serialDurationEstimateMs - batchWallTimeMs)
+      : 0;
+  const statusCounts: Record<string, number> = {};
+  for (const record of records) {
+    const status = record.status ?? "unknown";
+    statusCounts[status] = (statusCounts[status] ?? 0) + 1;
+  }
+
+  return {
+    run_id: params.runId,
+    harness_name: params.harnessName,
+    starting_iteration: params.telemetry.startingIteration,
+    batch_call_count: params.telemetry.batchCallCount,
+    completed_tool_count: params.telemetry.completedToolCount,
+    batch_completed:
+      params.telemetry.completedToolCount >= params.telemetry.batchCallCount,
+    is_batch: params.telemetry.isBatch,
+    remaining_tool_budget: params.telemetry.remainingToolBudget,
+    parallel_read_tools_enabled: params.telemetry.parallelReadToolsEnabled,
+    schedule_decision: params.telemetry.schedule.decision,
+    schedule_execution_mode: params.telemetry.schedule.executionMode,
+    schedule_reason: params.telemetry.schedule.reason,
+    actual_execution_mode: params.telemetry.actualExecutionMode,
+    parallel_eligible_call_count: params.telemetry.schedule.summary.parallelEligible,
+    parallel_blocker_reason_counts: summarizeToolBatchBlockerReasons(
+      params.telemetry.schedule,
+    ),
+    batch_scheduled_at_ms: params.telemetry.scheduledAtMs,
+    batch_started_at_ms: batchStartedAtMs,
+    batch_finished_at_ms: batchFinishedAtMs,
+    batch_wall_time_ms: batchWallTimeMs,
+    serial_duration_estimate_ms: serialDurationEstimateMs,
+    estimated_parallel_savings_ms: estimatedParallelSavingsMs,
+    tool_status_counts: statusCounts,
+    tools: records.map((record) => ({
+      provider_call_id: record.providerCallId,
+      tool_name: record.toolName,
+      index: record.index,
+      iteration: record.iteration,
+      started_at_ms: record.startedAtMs,
+      finished_at_ms: record.finishedAtMs,
+      duration_ms: record.durationMs,
+      status: record.status,
+      error_code: record.errorCode,
+      made_progress: record.madeProgress,
+      repeated_call_count: record.repeatedCallCount,
+      consecutive_failure_count: record.consecutiveFailureCount,
+      consecutive_no_progress_count: record.consecutiveNoProgressCount,
+    })),
+    terminal_stop_reason: params.terminalStopReason ?? null,
+    terminal_failure_code: params.terminalFailureCode ?? null,
+    pending_tool_call_id: params.pendingToolCallId ?? null,
+  };
+}
 
 type RuntimeMountedCommunityAppTool = {
   community_app_mount_id: string;
@@ -813,6 +967,7 @@ async function runProviderNativeToolCompletion(params: {
   openRouterTools: OpenAiCompatibleFunctionTool[];
   responsesApiTools: ChatgptCompatibleFunctionTool[];
   apiKeyOverride?: string | null;
+  parallelToolCalls?: boolean;
   onReasoningSummaryTextDelta?: (params: {
     delta: string;
     summaryIndex: number;
@@ -832,6 +987,7 @@ async function runProviderNativeToolCompletion(params: {
       messages: params.messages as ChatgptToolAwareMessage[],
       maxTokens: params.maxTokens,
       tools: params.responsesApiTools,
+      parallelToolCalls: params.parallelToolCalls,
       onReasoningSummaryTextDelta: params.onReasoningSummaryTextDelta,
       onReasoningSummaryPartAdded: params.onReasoningSummaryPartAdded,
       signal: params.signal,
@@ -847,6 +1003,7 @@ async function runProviderNativeToolCompletion(params: {
       messages: params.messages,
       maxTokens: params.maxTokens,
       tools: params.responsesApiTools,
+      parallelToolCalls: params.parallelToolCalls,
       signal: params.signal,
     });
   }
@@ -856,6 +1013,7 @@ async function runProviderNativeToolCompletion(params: {
     maxTokens: params.maxTokens,
     tools: params.openRouterTools,
     apiKeyOverride: params.apiKeyOverride,
+    parallelToolCalls: params.parallelToolCalls,
     signal: params.signal,
   });
 }
@@ -1085,9 +1243,108 @@ async function executeRetrievalAgentLoop(
       buildResolverResponsesTool: buildResolveMountedToolsResponsesTool,
     });
   const initialProviderTools = buildActiveProviderTools();
+  const parallelReadToolsEnabled = readRuntimeBooleanFlag(
+    RUNTIME_PARALLEL_READ_TOOLS_FLAG,
+    true,
+  );
   let reasoningSummaryStreamCount = 0;
   let reasoningSummaryPartAddedCount = 0;
   let reasoningSummaryTextDeltaCount = 0;
+  let activeToolBatchTelemetry: ActiveRuntimeToolBatchTelemetry | null = null;
+
+  const flushActiveToolBatchTelemetry = async (options: {
+    terminalStopReason?: string | null;
+    terminalFailureCode?: string | null;
+    pendingToolCallId?: string | null;
+  } = {}): Promise<void> => {
+    if (!activeToolBatchTelemetry) return;
+    const telemetry = activeToolBatchTelemetry;
+    activeToolBatchTelemetry = null;
+    try {
+      await params.appendRunEvent({
+        eventType: "tool_batch_telemetry",
+        eventKey: `${params.runId}:tool_batch_telemetry:${telemetry.startingIteration}`,
+        payload: buildToolBatchTelemetryPayload({
+          runId: params.runId,
+          harnessName: params.harnessName,
+          telemetry,
+          terminalStopReason: options.terminalStopReason ?? null,
+          terminalFailureCode: options.terminalFailureCode ?? null,
+          pendingToolCallId: options.pendingToolCallId ?? null,
+        }),
+      });
+    } catch {
+      // Best-effort runtime evidence only.
+    }
+  };
+
+  const markActiveBatchToolStarted = (params: {
+    providerCallId: string;
+    toolName: string;
+    startedAtMs: number;
+  }): void => {
+    if (!activeToolBatchTelemetry) return;
+    const record =
+      activeToolBatchTelemetry.recordsByCallId.get(params.providerCallId);
+    if (!record) return;
+    record.toolName = params.toolName;
+    record.startedAtMs = params.startedAtMs;
+  };
+
+  const markActiveBatchToolFinished = (params: {
+    providerCallId: string;
+    finishedAtMs: number;
+  }): void => {
+    if (!activeToolBatchTelemetry) return;
+    const record =
+      activeToolBatchTelemetry.recordsByCallId.get(params.providerCallId);
+    if (!record) return;
+    record.finishedAtMs = params.finishedAtMs;
+    if (typeof record.startedAtMs === "number") {
+      record.durationMs = Math.max(0, params.finishedAtMs - record.startedAtMs);
+    }
+  };
+
+  const initializeActiveToolBatchTelemetry = (params: {
+    steps: Array<{ providerCallId: string; toolName: string }>;
+    startingIteration: number;
+    isBatch: boolean;
+    remainingToolBudget: number;
+    schedule: RuntimeToolSchedulePlan;
+    actualExecutionMode: RuntimeToolBatchExecutionMode;
+  }): void => {
+    activeToolBatchTelemetry = {
+      startingIteration: params.startingIteration,
+      batchCallCount: params.steps.length,
+      isBatch: params.isBatch,
+      remainingToolBudget: params.remainingToolBudget,
+      parallelReadToolsEnabled,
+      scheduledAtMs: Date.now(),
+      schedule: params.schedule,
+      actualExecutionMode: params.actualExecutionMode,
+      completedToolCount: 0,
+      recordsByCallId: new Map(
+        params.steps.map((step, index) => [
+          step.providerCallId,
+          {
+            providerCallId: step.providerCallId,
+            toolName: step.toolName,
+            index,
+            iteration: null,
+            startedAtMs: null,
+            finishedAtMs: null,
+            durationMs: null,
+            status: null,
+            errorCode: null,
+            madeProgress: null,
+            repeatedCallCount: null,
+            consecutiveFailureCount: null,
+            consecutiveNoProgressCount: null,
+          },
+        ]),
+      ),
+    };
+  };
   if (runtimeMountedUserPlatformAppTools.length > 0) {
     try {
       await params.appendRunEvent({
@@ -1174,6 +1431,8 @@ async function executeRetrievalAgentLoop(
         resolver_enabled: initialProviderTools.activeToolNames.includes(
           RESOLVE_MOUNTED_TOOLS_TOOL_NAME,
         ),
+        tool_policy_enforcement: "metadata_only",
+        tool_policy_summary: initialProviderTools.activeToolPolicySummary,
       },
     });
   } catch {
@@ -1219,6 +1478,7 @@ async function executeRetrievalAgentLoop(
                 openRouterTools: providerTools.openAiTools,
                 responsesApiTools: providerTools.responsesTools,
                 apiKeyOverride: params.apiKeyOverride,
+                parallelToolCalls: parallelReadToolsEnabled,
                 onReasoningSummaryPartAdded: async ({ summaryIndex }) => {
                   try {
                     reasoningSummaryPartAddedCount += 1;
@@ -1278,18 +1538,18 @@ async function executeRetrievalAgentLoop(
         }
         if (!completion.ok) return completion;
         const providerTools = buildActiveProviderTools();
-        if (
-          completion.type === "tool_call" &&
-          !providerTools.activeToolNames.includes(completion.toolName)
-        ) {
+        const unknownToolCall = getNativeToolCompletionToolCalls(completion).find(
+          (toolCall) => !providerTools.activeToolNames.includes(toolCall.toolName),
+        );
+        if (unknownToolCall) {
           return {
             ok: false,
             status: 502,
             code: "invalid_model_output",
             stopReason: "invalid_model_output",
             message: "Provider returned an unknown tool name.",
-            pendingToolCallId: completion.providerCallId,
-            pendingToolName: completion.toolName,
+            pendingToolCallId: unknownToolCall.providerCallId,
+            pendingToolName: unknownToolCall.toolName,
           };
         }
         return completion as NativeToolAwareCompletionSuccess<string>;
@@ -1302,21 +1562,84 @@ async function executeRetrievalAgentLoop(
           normalizeFixedToolArguments: normalizeRegistryToolArguments,
         });
       },
-      executeTool: async ({ toolName, normalizedArgs }) => {
+      onToolBatchResolved: async ({
+        steps,
+        isBatch,
+        remainingToolBudget,
+        toolStepCount,
+      }) => {
+        const providerToolSurface = buildActiveProviderTools();
+        const schedule = classifyRuntimeToolSchedule({
+          toolCalls: steps.map((step, index) => ({
+            providerCallId: step.providerCallId,
+            toolName: step.toolName,
+            index,
+          })),
+          policies: providerToolSurface.activeToolPolicies,
+          enableParallelReadBatches: parallelReadToolsEnabled,
+        });
+        const actualExecutionMode: RuntimeToolBatchExecutionMode =
+          schedule.executionMode === "parallel_read_batch"
+            ? "parallel"
+            : "serial";
+        initializeActiveToolBatchTelemetry({
+          steps,
+          startingIteration: toolStepCount + 1,
+          isBatch,
+          remainingToolBudget,
+          schedule,
+          actualExecutionMode,
+        });
         try {
-          await throwIfCancelled();
-        } catch (error) {
-          if (isRuntimeRunCancelledError(error)) {
-            return {
-              status: "error",
-              exitCode: null,
-              outputText: "",
-              errorCode: USER_CANCELLED_RUNTIME_CODE,
-              errorMessage: error.message,
-            };
-          }
-          throw error;
+          await params.appendRunEvent({
+            eventType: "tool_schedule_resolved",
+            eventKey: `${params.runId}:tool_schedule_resolved:${
+              toolStepCount + 1
+            }:${steps.map((step) => step.providerCallId).join(":")}`,
+            payload: {
+              run_id: params.runId,
+              harness_name: params.harnessName,
+              decision: schedule.decision,
+              execution_mode: schedule.executionMode,
+              reason: schedule.reason,
+              parallel_read_tools_enabled: parallelReadToolsEnabled,
+              is_batch: isBatch,
+              batch_call_count: steps.length,
+              starting_iteration: toolStepCount + 1,
+              remaining_tool_budget: remainingToolBudget,
+              summary: schedule.summary,
+              calls: schedule.calls,
+            },
+          });
+          return {
+            executionMode: actualExecutionMode,
+          };
+        } catch {
+          // Best-effort runtime evidence only.
         }
+        return { executionMode: actualExecutionMode };
+      },
+      executeTool: async ({ providerCallId, toolName, normalizedArgs }) => {
+        markActiveBatchToolStarted({
+          providerCallId,
+          toolName,
+          startedAtMs: Date.now(),
+        });
+        try {
+          try {
+            await throwIfCancelled();
+          } catch (error) {
+            if (isRuntimeRunCancelledError(error)) {
+              return {
+                status: "error",
+                exitCode: null,
+                outputText: "",
+                errorCode: USER_CANCELLED_RUNTIME_CODE,
+                errorMessage: error.message,
+              };
+            }
+            throw error;
+          }
         if (toolName === RESOLVE_MOUNTED_TOOLS_TOOL_NAME) {
           const resolution = executionSession.resolveMountedToolExposure(
             normalizedArgs as ReturnType<typeof normalizeResolveMountedToolsArguments>,
@@ -1342,6 +1665,9 @@ async function executeRetrievalAgentLoop(
                   resolution.resolution.remainingExposureCapacity,
                 active_provider_tool_count:
                   providerToolSurface.activeToolNames.length,
+                tool_policy_enforcement: "metadata_only",
+                tool_policy_summary:
+                  providerToolSurface.activeToolPolicySummary,
               },
             });
           } catch {
@@ -1658,8 +1984,21 @@ async function executeRetrievalAgentLoop(
             errorMessage: `Workspace tool execution failed: ${summary.message}`,
           };
         }
+        } finally {
+          markActiveBatchToolFinished({
+            providerCallId,
+            finishedAtMs: Date.now(),
+          });
+        }
       },
       onToolStepStart: async ({ iteration, step }) => {
+        if (activeToolBatchTelemetry) {
+          const record =
+            activeToolBatchTelemetry.recordsByCallId.get(step.providerCallId);
+          if (record) {
+            record.iteration = iteration;
+          }
+        }
         await appendWorkspaceToolCallStarted({
           appendRunEvent: params.appendRunEvent,
           runId: params.runId,
@@ -1676,7 +2015,24 @@ async function executeRetrievalAgentLoop(
         step,
         toolResult,
         toolResultEnvelope,
+        madeProgress,
+        repeatedCallCount,
+        consecutiveFailureCount,
+        consecutiveNoProgressCount,
       }) => {
+        if (activeToolBatchTelemetry) {
+          const record =
+            activeToolBatchTelemetry.recordsByCallId.get(step.providerCallId);
+          if (record) {
+            record.iteration = iteration;
+            record.status = toolResult.status;
+            record.errorCode = toolResult.errorCode;
+            record.madeProgress = madeProgress;
+            record.repeatedCallCount = repeatedCallCount;
+            record.consecutiveFailureCount = consecutiveFailureCount;
+            record.consecutiveNoProgressCount = consecutiveNoProgressCount;
+          }
+        }
         await appendWorkspaceToolCallFinished({
           appendRunEvent: params.appendRunEvent,
           runId: params.runId,
@@ -1705,8 +2061,38 @@ async function executeRetrievalAgentLoop(
             ...summarizeToolArgsForLog(step.toolName, step.normalizedArgs),
           });
         }
+        if (activeToolBatchTelemetry) {
+          activeToolBatchTelemetry.completedToolCount += 1;
+          if (
+            activeToolBatchTelemetry.completedToolCount >=
+            activeToolBatchTelemetry.batchCallCount
+          ) {
+            await flushActiveToolBatchTelemetry();
+          }
+        }
       },
     });
+    const loopFailure = loopResult.ok
+      ? null
+      : (loopResult as RuntimeKernelFailure<string>);
+    let terminalFailureCode: string | null = null;
+    let pendingToolCallId: string | null = null;
+    let loopErrorPayload: Record<string, unknown> = {};
+    if (loopFailure) {
+      terminalFailureCode = loopFailure.code;
+      pendingToolCallId = loopFailure.pendingToolCallId ?? null;
+      loopErrorPayload = {
+        error_code: loopFailure.code,
+        error_message: loopFailure.message,
+      };
+    }
+    if (activeToolBatchTelemetry) {
+      await flushActiveToolBatchTelemetry({
+        terminalStopReason: loopResult.stopReason,
+        terminalFailureCode,
+        pendingToolCallId,
+      });
+    }
 
     try {
       await params.appendRunEvent({
@@ -1721,12 +2107,7 @@ async function executeRetrievalAgentLoop(
           step_count: loopResult.stepCount,
           total_latency_ms: Date.now() - loopStartedAt,
           status: loopResult.ok ? "ok" : "error",
-          ...(loopResult.ok
-            ? null
-            : {
-                error_code: loopResult.code,
-                error_message: loopResult.message,
-              }),
+          ...loopErrorPayload,
         },
       });
     } catch {
@@ -1735,6 +2116,12 @@ async function executeRetrievalAgentLoop(
     return loopResult;
   } catch (error) {
     if (isRuntimeRunCancelledError(error)) {
+      if (activeToolBatchTelemetry) {
+        await flushActiveToolBatchTelemetry({
+          terminalStopReason: "user_cancelled",
+          terminalFailureCode: USER_CANCELLED_RUNTIME_CODE,
+        });
+      }
       return {
         ok: false,
         status: 409,
@@ -1774,6 +2161,12 @@ async function executeRetrievalAgentLoop(
       });
     } catch {
       // ignore best-effort debug event persistence failures
+    }
+    if (activeToolBatchTelemetry) {
+      await flushActiveToolBatchTelemetry({
+        terminalStopReason: "model_error",
+        terminalFailureCode: "agent_loop_internal_error",
+      });
     }
     return {
       ok: false,

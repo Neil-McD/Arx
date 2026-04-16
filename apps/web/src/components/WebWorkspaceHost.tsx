@@ -132,14 +132,6 @@ export type WebWorkspaceHostProps = {
   workspaceVoiceTitle: string;
   onWorkspaceVoiceClick: () => void;
   modelPickerOpenRequestKey: number;
-  onRequestPreviewFitRepair: (params: {
-    terminal: DaytonaWorkspaceTerminalRecord;
-    mode: "inline" | "expanded";
-    viewportWidth: number;
-    viewportHeight: number;
-    overflowX: boolean;
-    overflowY: boolean;
-  }) => void;
   activeThreadStreamingRunId?: string | null;
   activeThreadRuntimeEvents?: ThreadStreamingRuntimeEvent[] | null;
   runtimeEventsByRunId?: Record<string, ThreadStreamingRuntimeEvent[]>;
@@ -220,6 +212,13 @@ function resolvePreviewOwningRunId(
   if (anchoredRunId) return anchoredRunId;
   const persistedRunId = String(terminal.run_id_started_by ?? "").trim();
   return persistedRunId || null;
+}
+
+function isRuntimeOwnedTerminalRecord(
+  terminal: DaytonaWorkspaceTerminalRecord,
+  latestPreviewRunIdByTerminalId: Record<string, string>,
+): boolean {
+  return Boolean(resolvePreviewOwningRunId(terminal, latestPreviewRunIdByTerminalId));
 }
 
 function isTerminalSnapshotStatusActive(status: DaytonaWorkspaceTerminalRecord["status"]): boolean {
@@ -866,6 +865,15 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
       ),
     [activeWorkspaceTerminals],
   );
+  const activeBackgroundWorkspaceTerminals = useMemo(
+    () =>
+      activeWorkspaceTerminals.filter(
+        (terminal) =>
+          isTerminalSnapshotStatusActive(terminal.status) &&
+          !isRuntimeOwnedTerminalRecord(terminal, latestPreviewRunIdByTerminalId),
+      ),
+    [activeWorkspaceTerminals, latestPreviewRunIdByTerminalId],
+  );
 
   const {
     handleAttachmentFileInputChange: handleWorkspaceFileInputChange,
@@ -1084,11 +1092,17 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
   const handleStopWorkspaceTerminal = async (terminalSessionId: string): Promise<void> => {
     const requestProjectId = props.activeProjectId;
     const requestProjectInstance = activeProjectInstanceRef.current;
+    const targetTerminal =
+      activeWorkspaceTerminals.find((candidate) => candidate.id === terminalSessionId) ?? null;
+    const owningRunId = targetTerminal
+      ? resolvePreviewOwningRunId(targetTerminal, latestPreviewRunIdByTerminalId)
+      : null;
     emitWorkspaceEvent({
       scope: "preview",
       name: "terminal_stop",
       status: "start",
       projectId: requestProjectId,
+      runId: owningRunId,
       detail: {
         terminalSessionId,
       },
@@ -1108,9 +1122,10 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
         stopProjectWorkspaceTerminal({
           session,
           terminalSessionId,
+          runId: owningRunId,
         }),
         PREVIEW_RESOLUTION_TIMEOUT_MS,
-        "Stopping background terminal timed out.",
+        "Stopping terminal timed out.",
       );
       if (isCurrentTerminalScope(requestProjectId, requestProjectInstance)) {
         const next = await withTimeout(
@@ -1130,18 +1145,20 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
         name: "terminal_stop",
         status: "success",
         projectId: requestProjectId,
+        runId: owningRunId,
         detail: {
           terminalSessionId,
         },
       });
     } catch (error) {
       console.warn("Failed to stop workspace terminal:", error);
-      props.showAppToastMessage("Failed to stop background terminal.");
+      props.showAppToastMessage("Failed to stop terminal.");
       emitWorkspaceEvent({
         scope: "preview",
         name: "terminal_stop",
         status: "failure",
         projectId: requestProjectId,
+        runId: owningRunId,
         detail: {
           terminalSessionId,
         },
@@ -1223,6 +1240,10 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
     async (terminalSessionId: string, opts?: { force?: boolean }): Promise<DaytonaWorkspaceTerminalPreview | null> => {
       const terminal = activePreviewCapableTerminals.find((candidate) => candidate.id === terminalSessionId) ?? null;
       if (!terminal || !isPreviewCapableTerminal(terminal)) return null;
+      const owningRunId = resolvePreviewOwningRunId(
+        terminal,
+        latestPreviewRunIdByTerminalId,
+      );
       const existing = previewStateByTerminalId[terminalSessionId] ?? null;
       if (!opts?.force && existing) {
         if (existing.phase === "resolving" || existing.phase === "loading" || existing.phase === "ready") {
@@ -1235,7 +1256,7 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
         name: "preview_attach",
         status: "start",
         projectId: props.activeProjectId,
-        runId: String(terminal.run_id_started_by ?? "").trim() || null,
+        runId: owningRunId,
         detail: {
           terminalSessionId,
           force: opts?.force === true,
@@ -1262,6 +1283,7 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
           getProjectWorkspaceTerminalPreviewUrl({
             session,
             terminalSessionId,
+            runId: owningRunId,
           }),
           PREVIEW_RESOLUTION_TIMEOUT_MS,
           "Preview connection timed out.",
@@ -1282,7 +1304,7 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
           name: "preview_attach",
           status: "success",
           projectId: props.activeProjectId,
-          runId: String(terminal.run_id_started_by ?? "").trim() || null,
+          runId: owningRunId,
           detail: {
             terminalSessionId,
             previewUrlPresent: Boolean(preview?.preview_url),
@@ -1311,7 +1333,7 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
           name: "preview_attach",
           status: shouldRetry ? "skip" : "failure",
           projectId: props.activeProjectId,
-          runId: String(terminal.run_id_started_by ?? "").trim() || null,
+          runId: owningRunId,
           detail: {
             terminalSessionId,
             shouldRetry,
@@ -1324,7 +1346,12 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
         inflightPreviewIdsRef.current.delete(terminalSessionId);
       }
     },
-    [activePreviewCapableTerminals, previewStateByTerminalId, props.activeProjectId],
+    [
+      activePreviewCapableTerminals,
+      latestPreviewRunIdByTerminalId,
+      previewStateByTerminalId,
+      props.activeProjectId,
+    ],
   );
 
   const handlePreviewLifecyclePhaseChange = useCallback((params: {
@@ -1578,7 +1605,7 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
                   : props.authedWorkspaceComposerPlaceholder
                 : props.guestWorkspaceComposerPlaceholder
             }
-              terminals={activeWorkspaceTerminals.filter((terminal) => isTerminalSnapshotStatusActive(terminal.status))}
+              terminals={activeBackgroundWorkspaceTerminals}
             busyTerminalIds={busyWorkspaceTerminalIds}
             isStoppingAllTerminals={isStoppingAllWorkspaceTerminals}
             guestSignupRail={props.guestSignupRail}

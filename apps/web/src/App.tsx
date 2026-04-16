@@ -3941,7 +3941,7 @@ export default function App() {
     Boolean(session) &&
     !hasUserChatgptConnection &&
     !isLoadingChatgptConnection;
-  const { sendUserMessage, retryLastTurn, requestPreviewFitRepair } = useWebSendFlowController<
+  const { sendUserMessage, retryLastTurn } = useWebSendFlowController<
     AuthSession,
     MessageAttachment,
     ThreadRecord,
@@ -5636,17 +5636,6 @@ export default function App() {
     workspaceVoiceTitle: workspaceVoiceIntent.title,
     onWorkspaceVoiceClick: () => void handleVoiceInputClick("workspace"),
     modelPickerOpenRequestKey: workspace.state.modelPickerOpenRequestKey,
-    onRequestPreviewFitRepair: (params) => {
-      void requestPreviewFitRepair({
-        mode: params.mode,
-        previewLabel:
-          String(params.terminal.preview_label ?? "").trim() || "App preview",
-        viewportWidth: params.viewportWidth,
-        viewportHeight: params.viewportHeight,
-        overflowX: params.overflowX,
-        overflowY: params.overflowY,
-      });
-    },
     activeThreadStreamingRunId,
     activeThreadStreamingState,
     runtimeEventsByRunId,

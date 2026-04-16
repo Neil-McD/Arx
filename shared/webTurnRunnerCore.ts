@@ -107,11 +107,6 @@ export type RunAgentTurnParams = {
   requestedAgenticTools?: boolean;
   replyToId?: string;
   messages?: PublicTurnThreadMessage[];
-  internalFollowup?: {
-    kind: "preview_fit_repair";
-    content: string;
-    suppressAssistantMessage?: boolean;
-  };
   suppressStreamingUi?: boolean;
 };
 

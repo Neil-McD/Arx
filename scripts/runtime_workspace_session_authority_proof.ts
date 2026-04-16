@@ -43,11 +43,26 @@ async function proveWorkspaceSessionAuthorityModel() {
     /workspace_session_state_persist_failed/,
     "expected explicit evidence when workspace session state persistence fails",
   );
+  assert.match(
+    executionSessionSource,
+    /const persistWorkspaceSessionState = async/,
+    "expected execution session to use a shared workspace-session persistence helper",
+  );
+  assert.match(
+    executionSessionSource,
+    /WORKSPACE_SESSION_STATE_PERSIST_MAX_ATTEMPTS = 3/,
+    "expected workspace-session state persistence to retry before failing",
+  );
+  assert.match(
+    executionSessionSource,
+    /target_state: paramsForPersist\.state/,
+    "expected persistence failure evidence to record the target workspace-session state",
+  );
   const cleanupInvocationIndex = executionSessionSource.indexOf(
     "cleanupWorkspaceSandboxSession({",
   );
   const persistReleasedIndex = executionSessionSource.indexOf(
-    'state: finalWorkspaceState',
+    'phase: "dispose"',
   );
   assert.ok(
     cleanupInvocationIndex >= 0 && persistReleasedIndex > cleanupInvocationIndex,

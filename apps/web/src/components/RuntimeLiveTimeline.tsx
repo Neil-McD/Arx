@@ -1,6 +1,7 @@
 import { useMemo, type ReactNode } from "react";
 import type { ThreadStreamingRuntimeEvent } from "../../../../shared/webTurnRunnerCore";
 import { buildRuntimeLiveTimeline } from "../../../../shared/runtimeTimelineUi";
+import { useSmoothStreamingText } from "../../../../shared/useSmoothStreamingText";
 
 function splitTraceLinkTitle(title: string): { prefix: string | null; linkText: string } {
   const separatorIndex = title.indexOf(": ");
@@ -11,6 +12,29 @@ function splitTraceLinkTitle(title: string): { prefix: string | null; linkText: 
     prefix: title.slice(0, separatorIndex + 1),
     linkText: title.slice(separatorIndex + 2),
   };
+}
+
+function RuntimeReasoningEntry(props: {
+  id: string;
+  isActive: boolean;
+  text: string;
+  renderReasoningMarkdown: (text: string) => ReactNode;
+  showActiveIndicators: boolean;
+}): JSX.Element {
+  const displayText = useSmoothStreamingText(props.text, {
+    active: props.showActiveIndicators && props.isActive,
+  });
+
+  return (
+    <div
+      className={`runtime-live-timeline-entry runtime-live-timeline-reasoning${props.showActiveIndicators && props.isActive ? " active" : ""}`}
+    >
+      <div className="message-text runtime-live-timeline-reasoning-text">
+        {props.renderReasoningMarkdown(displayText)}
+        {props.showActiveIndicators && props.isActive ? <span className="streaming-caret" aria-hidden="true" /> : null}
+      </div>
+    </div>
+  );
 }
 
 export function RuntimeLiveTimeline(props: {
@@ -26,15 +50,14 @@ export function RuntimeLiveTimeline(props: {
     <div className="runtime-live-timeline">
       {entries.map((entry) =>
         entry.kind === "reasoning" ? (
-          <div
+          <RuntimeReasoningEntry
             key={entry.id}
-            className={`runtime-live-timeline-entry runtime-live-timeline-reasoning${showActiveIndicators && entry.isActive ? " active" : ""}`}
-          >
-            <div className="message-text runtime-live-timeline-reasoning-text">
-              {props.renderReasoningMarkdown(entry.text)}
-              {showActiveIndicators && entry.isActive ? <span className="streaming-caret" aria-hidden="true" /> : null}
-            </div>
-          </div>
+            id={entry.id}
+            isActive={entry.isActive}
+            text={entry.text}
+            renderReasoningMarkdown={props.renderReasoningMarkdown}
+            showActiveIndicators={showActiveIndicators}
+          />
         ) : (
           <details
             key={entry.id}

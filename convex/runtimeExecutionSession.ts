@@ -6,8 +6,17 @@ import {
 } from "./daytonaWorkspaceSession";
 import { runDaytonaComputerUseTool } from "./daytonaComputerUse";
 import {
+  isWorkspaceTerminalActiveStatus,
+  normalizeWorkspaceTerminalCommand,
   normalizeWorkspaceTerminalStartArgs,
+  reconcileRuntimeSessionTerminalRow,
   readWorkspaceToolFailureOutputPreview,
+  requireRuntimeSessionOwnedTerminalRow,
+  resolveWorkspaceCwd,
+  startRuntimeSessionTerminal,
+  stopRuntimeSessionTerminalRow,
+  summarizeWorkspaceTerminalRow,
+  writeRuntimeSessionTerminalRow,
 } from "./workspaceTerminalProcessCore";
 import {
   createRuntimeMcpManager,
@@ -28,8 +37,14 @@ import {
   type RetrievalToolName,
   isComputerUseToolName,
 } from "../shared/retrievalTools";
+import {
+  buildRuntimeToolPolicySurface,
+  type RuntimeToolPolicy,
+  type RuntimeToolPolicySummary,
+} from "../shared/runtimeToolPolicy";
 
 const WORKSPACE_RUN_HEARTBEAT_INTERVAL_MS = 2 * 60 * 1000;
+const WORKSPACE_SESSION_STATE_PERSIST_MAX_ATTEMPTS = 3;
 const TERMINAL_TOOL_NAMES = new Set([
   "terminal_start",
   "terminal_read",
@@ -87,6 +102,15 @@ function formatToolOutput(toolName: string, value: unknown): string {
     return formatTerminalStartToolOutput(value);
   }
   return formatJsonToolOutput(value);
+}
+
+function normalizeRuntimeTerminalIdentityCommand(
+  command: string,
+  cwd: string | null,
+): string {
+  return normalizeWorkspaceTerminalCommand(command, resolveWorkspaceCwd(cwd))
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function isInlineImageDataUrl(value: unknown): value is string {
@@ -203,6 +227,62 @@ export function createPolyNetExecutionSession(params: {
     } catch {
       // Best-effort runtime evidence only.
     }
+  };
+
+  const persistWorkspaceSessionState = async (paramsForPersist: {
+    state: "active" | "released" | "failed";
+    session: WorkspaceSandboxSession;
+    projectId: string;
+    phase: "create" | "dispose";
+  }): Promise<{ ok: true } | { ok: false; attemptCount: number }> => {
+    let attemptCount = 0;
+    for (
+      let attempt = 1;
+      attempt <= WORKSPACE_SESSION_STATE_PERSIST_MAX_ATTEMPTS;
+      attempt += 1
+    ) {
+      attemptCount = attempt;
+      try {
+        await params.ctx.runMutation(
+          internal.threads.setCloudRuntimeRunWorkspaceSessionInternal as any,
+          {
+            ownerId: params.userId,
+            runId: params.runId,
+            state: paramsForPersist.state,
+            providerSandboxId: paramsForPersist.session.providerSandboxId,
+            toolboxProxyUrl: paramsForPersist.session.toolboxProxyUrl,
+            region: paramsForPersist.session.region ?? undefined,
+          },
+        );
+        return { ok: true };
+      } catch (error) {
+        if (attempt >= WORKSPACE_SESSION_STATE_PERSIST_MAX_ATTEMPTS) {
+          const message =
+            error instanceof Error ? error.message : String(error ?? "");
+          await emitRunEvent(
+            "workspace_session_state_persist_failed",
+            {
+              run_id: params.runId,
+              sandbox_id: paramsForPersist.session.providerSandboxId,
+              project_id: paramsForPersist.projectId,
+              target_state: paramsForPersist.state,
+              phase: paramsForPersist.phase,
+              attempt_count: attemptCount,
+              error_message: message || null,
+            },
+            `${params.runId}:workspace_session_state_persist_failed:${paramsForPersist.phase}:${paramsForPersist.state}`,
+          );
+          return {
+            ok: false,
+            attemptCount,
+          };
+        }
+      }
+    }
+    return {
+      ok: false,
+      attemptCount,
+    };
   };
 
   const enrichComputerUseToolResult = async (paramsForEnrich: {
@@ -337,32 +417,20 @@ export function createPolyNetExecutionSession(params: {
               project_id: projectId,
             },
           });
-          await params.ctx.runMutation(
-            internal.threads.setCloudRuntimeRunWorkspaceSessionInternal as any,
-            {
-              ownerId: params.userId,
-              runId: params.runId,
-              state: "active",
-              providerSandboxId: created.session.providerSandboxId,
-              toolboxProxyUrl: created.session.toolboxProxyUrl,
-              region: created.session.region ?? undefined,
-            },
-          );
+          const persisted = await persistWorkspaceSessionState({
+            state: "active",
+            session: created.session,
+            projectId,
+            phase: "create",
+          });
+          if (!persisted.ok) {
+            throw new Error("workspace_session_persist_failed");
+          }
         } catch {
           if (heartbeatTimer) {
             clearInterval(heartbeatTimer);
             heartbeatTimer = null;
           }
-          await emitRunEvent(
-            "workspace_session_state_persist_failed",
-            {
-              run_id: params.runId,
-              sandbox_id: created.session.providerSandboxId,
-              project_id: projectId,
-              latency_ms: Date.now() - createStartedAt,
-            },
-            `${params.runId}:workspace_session_state_persist_failed:1`,
-          );
           workspaceSessionFailure = {
             status: 500,
             code: "workspace_session_persist_failed",
@@ -421,6 +489,40 @@ export function createPolyNetExecutionSession(params: {
         workspaceSessionFailure ? "failed" : "released";
       if (workspaceSession) {
         if (ownsWorkspaceSession) {
+          const activeWorkspaceSession = workspaceSession;
+          const projectId = String(
+            params.projectId ?? activeWorkspaceSession.projectId ?? "",
+          ).trim();
+          let runtimeTerminalCountStopped = 0;
+          if (projectId) {
+            try {
+              const rows = (await params.ctx.runQuery(
+                internal.workspaceTerminals
+                  .listProjectWorkspaceTerminalSessionsInternal as any,
+                {
+                  ownerId: params.userId,
+                  projectId: projectId as any,
+                },
+              )) as any[];
+              const runtimeSessionRows = rows.filter(
+                (row) =>
+                  String(row?.runIdStartedBy ?? "").trim() === params.runId &&
+                  isWorkspaceTerminalActiveStatus(row?.status) &&
+                  String(row?.providerSandboxId ?? "").trim() ===
+                    activeWorkspaceSession.providerSandboxId,
+              );
+              runtimeTerminalCountStopped = runtimeSessionRows.length;
+              for (const row of runtimeSessionRows) {
+                await stopRuntimeSessionTerminalRow({
+                  ctx: params.ctx,
+                  row,
+                  session: activeWorkspaceSession,
+                });
+              }
+            } catch {
+              finalWorkspaceState = "failed";
+            }
+          }
           const cleanupStartedAt = Date.now();
           let cleanupResult:
             | Awaited<ReturnType<typeof cleanupWorkspaceSandboxSession>>
@@ -429,11 +531,9 @@ export function createPolyNetExecutionSession(params: {
             cleanupResult = await cleanupWorkspaceSandboxSession({
               ctx: params.ctx,
               userId: params.userId,
-              session: workspaceSession,
+              session: activeWorkspaceSession,
               runId: params.runId,
-              projectId: String(
-                params.projectId ?? workspaceSession.projectId ?? "",
-              ).trim(),
+              projectId,
               appendRunEvent: params.appendRunEvent,
             });
             if (!cleanupResult.ok) {
@@ -446,10 +546,8 @@ export function createPolyNetExecutionSession(params: {
             "workspace_session_cleanup_completed",
             {
               run_id: params.runId,
-              sandbox_id: workspaceSession.providerSandboxId,
-              project_id: String(
-                params.projectId ?? workspaceSession.projectId ?? "",
-              ).trim(),
+              sandbox_id: activeWorkspaceSession.providerSandboxId,
+              project_id: projectId,
               latency_ms: Date.now() - cleanupStartedAt,
               final_state: finalWorkspaceState,
               stop_status: cleanupResult?.stopStatus ?? "error",
@@ -457,28 +555,26 @@ export function createPolyNetExecutionSession(params: {
               delete_status: cleanupResult?.deleteStatus ?? "error",
               delete_code: cleanupResult?.deleteCode ?? "cleanup_failed",
               charge_recorded: cleanupResult?.chargeRecorded ?? false,
+              runtime_terminal_count_stopped: runtimeTerminalCountStopped,
             },
             `${params.runId}:workspace_session_cleanup_completed:1`,
           );
         }
         try {
-          await params.ctx.runMutation(
-            internal.threads.setCloudRuntimeRunWorkspaceSessionInternal as any,
-            {
-              ownerId: params.userId,
-              runId: params.runId,
-              state: finalWorkspaceState,
-              providerSandboxId: workspaceSession.providerSandboxId,
-              toolboxProxyUrl: workspaceSession.toolboxProxyUrl,
-              region: workspaceSession.region ?? undefined,
-            },
-          );
+          await persistWorkspaceSessionState({
+            state: finalWorkspaceState,
+            session: workspaceSession,
+            projectId: String(
+              params.projectId ?? workspaceSession.projectId ?? "",
+            ).trim(),
+            phase: "dispose",
+          });
         } catch {
-          // Best-effort fail-closed state transition for live desktop discovery.
+          // Persistence helper emits explicit runtime evidence for failure paths.
         }
       }
     },
-    buildProviderTools<TFixedToolName extends string, TOpenAiTool, TResponsesTool>(params: {
+    buildProviderTools<TFixedToolName extends RetrievalToolName, TOpenAiTool, TResponsesTool>(params: {
       allowedToolNames: readonly TFixedToolName[];
       buildFixedOpenAiTools: (
         allowedToolNames: readonly TFixedToolName[],
@@ -498,9 +594,17 @@ export function createPolyNetExecutionSession(params: {
       openAiTools: TOpenAiTool[];
       responsesTools: TResponsesTool[];
       activeToolNames: string[];
+      activeToolPolicies: RuntimeToolPolicy[];
+      activeToolPolicySummary: RuntimeToolPolicySummary;
     } {
       const exposedMountedTools = mountedToolExposureState.getExposedTools();
       const includeResolver = mountedToolExposureState.hasMountedTools();
+      const policySurface = buildRuntimeToolPolicySurface({
+        fixedToolNames: params.allowedToolNames,
+        includeResolver,
+        resolverToolName: RESOLVE_MOUNTED_TOOLS_TOOL_NAME,
+        mountedTools: exposedMountedTools,
+      });
       return {
         openAiTools: [
           ...params.buildFixedOpenAiTools(params.allowedToolNames),
@@ -517,6 +621,8 @@ export function createPolyNetExecutionSession(params: {
           ...(includeResolver ? [RESOLVE_MOUNTED_TOOLS_TOOL_NAME] : []),
           ...exposedMountedTools.map((tool) => tool.runtime_tool_name),
         ],
+        activeToolPolicies: policySurface.policies,
+        activeToolPolicySummary: policySurface.summary,
       };
     },
     normalizeToolArguments<TFixedToolName extends string>(params: {
@@ -630,20 +736,106 @@ export function createPolyNetExecutionSession(params: {
             };
           }
           if (!payload && terminalStartArgs) {
-            payload = (await params.ctx.runAction(
-              internal.workspaceTerminals.startWorkspaceTerminalInternal as any,
-              {
-                authSubject,
-                projectId: projectId as any,
-                threadId: params.threadId ? (params.threadId as any) : undefined,
-                runId: params.runId,
-                command: terminalStartArgs.command,
-                cwd: terminalStartArgs.cwd ?? undefined,
-                previewPort: terminalStartArgs.previewPort ?? undefined,
-                previewPath: terminalStartArgs.previewPath ?? undefined,
-                previewLabel: terminalStartArgs.previewLabel ?? undefined,
-              },
-            )) as Record<string, unknown>;
+            const ensuredWorkspace = await this.ensureWorkspaceForTool({
+              toolName: paramsForTool.toolName,
+            });
+            if (!ensuredWorkspace.ok) {
+              payload = {
+                ok: false,
+                status: ensuredWorkspace.status,
+                code: ensuredWorkspace.code,
+                message: ensuredWorkspace.message,
+                details: (ensuredWorkspace as { details?: unknown }).details ?? null,
+              };
+            } else {
+              const activeWorkspaceSession = ensuredWorkspace.session;
+              const rows = (await params.ctx.runQuery(
+                internal.workspaceTerminals
+                  .listProjectWorkspaceTerminalSessionsInternal as any,
+                {
+                  ownerId: params.userId,
+                  projectId: projectId as any,
+                },
+              )) as any[];
+              const requestedCommandIdentity =
+                normalizeRuntimeTerminalIdentityCommand(
+                  terminalStartArgs.command,
+                  terminalStartArgs.cwd,
+                );
+              for (const row of rows) {
+                if (
+                  String(row?.runIdStartedBy ?? "").trim() !== params.runId ||
+                  String(row?.providerSandboxId ?? "").trim() !==
+                    activeWorkspaceSession.providerSandboxId
+                ) {
+                  continue;
+                }
+                const summary = await reconcileRuntimeSessionTerminalRow({
+                  ctx: params.ctx,
+                  row,
+                  session: activeWorkspaceSession,
+                });
+                if (
+                  !isWorkspaceTerminalActiveStatus(
+                    (summary as { status?: unknown } | null)?.status,
+                  )
+                ) {
+                  continue;
+                }
+                const summaryRecord =
+                  summary &&
+                  typeof summary === "object" &&
+                  !Array.isArray(summary)
+                    ? (summary as Record<string, unknown>)
+                    : null;
+                const summaryCommandIdentity =
+                  normalizeRuntimeTerminalIdentityCommand(
+                    String(summaryRecord?.command ?? ""),
+                    typeof summaryRecord?.cwd === "string"
+                      ? summaryRecord.cwd
+                      : null,
+                  );
+                const summaryPreviewPort =
+                  typeof summaryRecord?.preview_port === "number" &&
+                  Number.isFinite(summaryRecord.preview_port)
+                    ? Math.floor(summaryRecord.preview_port)
+                    : null;
+                const summaryPreviewPath =
+                  typeof summaryRecord?.preview_path === "string" &&
+                  summaryRecord.preview_path.trim()
+                    ? summaryRecord.preview_path.trim()
+                    : null;
+                if (
+                  summaryCommandIdentity !== requestedCommandIdentity ||
+                  summaryPreviewPort !== terminalStartArgs.previewPort ||
+                  summaryPreviewPath !== terminalStartArgs.previewPath
+                ) {
+                  continue;
+                }
+                payload = {
+                  ok: true,
+                  provider_session_id: null,
+                  reused_existing: true,
+                  terminal_session_id: String(
+                    summaryRecord?.terminal_session_id ??
+                      summaryRecord?.id ??
+                      "",
+                  ).trim(),
+                  ...(summaryRecord ?? {}),
+                };
+                break;
+              }
+              if (!payload) {
+                payload = await startRuntimeSessionTerminal({
+                  ctx: params.ctx,
+                  ownerId: params.userId,
+                  projectId,
+                  runId: params.runId,
+                  session: activeWorkspaceSession,
+                  terminal: terminalStartArgs,
+                });
+              }
+            }
           }
         } else {
           const terminalSessionId = String(
@@ -656,31 +848,74 @@ export function createPolyNetExecutionSession(params: {
               code: "invalid_tool_args",
               message: "terminal_session_id is required.",
             };
-          } else if (paramsForTool.toolName === "terminal_read") {
-            payload = (await params.ctx.runAction(
-              internal.workspaceTerminals.readWorkspaceTerminalInternal as any,
-              {
-                authSubject,
-                terminalSessionId: terminalSessionId as any,
-              },
-            )) as Record<string, unknown>;
-          } else if (paramsForTool.toolName === "terminal_write") {
-            payload = (await params.ctx.runAction(
-              internal.workspaceTerminals.writeWorkspaceTerminalInternal as any,
-              {
-                authSubject,
-                terminalSessionId: terminalSessionId as any,
-                input: String(paramsForTool.normalizedArgs.input ?? ""),
-              },
-            )) as Record<string, unknown>;
           } else {
-            payload = (await params.ctx.runAction(
-              internal.workspaceTerminals.stopWorkspaceTerminalInternal as any,
-              {
-                authSubject,
-                terminalSessionId: terminalSessionId as any,
-              },
-            )) as Record<string, unknown>;
+            const access = await requireRuntimeSessionOwnedTerminalRow({
+              ctx: params.ctx,
+              ownerId: params.userId,
+              runId: params.runId,
+              terminalSessionId,
+            });
+            if (!access.ok) {
+              payload = access;
+            } else if (paramsForTool.toolName === "terminal_read") {
+              const summary = workspaceSession
+                ? await reconcileRuntimeSessionTerminalRow({
+                    ctx: params.ctx,
+                    row: access.row,
+                    session: workspaceSession,
+                  })
+                : summarizeWorkspaceTerminalRow(access.row);
+              payload = {
+                ok: true,
+                terminal_session_id: String(access.row?._id ?? "").trim(),
+                ...(summary &&
+                typeof summary === "object" &&
+                !Array.isArray(summary)
+                  ? summary
+                  : {}),
+              };
+            } else if (paramsForTool.toolName === "terminal_write") {
+              if (!workspaceSession) {
+                payload = {
+                  ok: false,
+                  status: 409,
+                  code: "workspace_session_required",
+                  message:
+                    "Runtime terminal input is only available while its workspace session is active.",
+                };
+              } else {
+                const wrote = await writeRuntimeSessionTerminalRow({
+                  ctx: params.ctx,
+                  row: access.row,
+                  session: workspaceSession,
+                  input: String(paramsForTool.normalizedArgs.input ?? ""),
+                });
+                payload = {
+                  ok: Boolean((wrote as { ok?: boolean } | null)?.ok),
+                  terminal_session_id: String(access.row?._id ?? "").trim(),
+                  ...(wrote &&
+                  typeof wrote === "object" &&
+                  !Array.isArray(wrote)
+                    ? wrote
+                    : {}),
+                };
+              }
+            } else {
+              const stopped = await stopRuntimeSessionTerminalRow({
+                ctx: params.ctx,
+                row: access.row,
+                session: workspaceSession ?? null,
+              });
+              payload = {
+                ok: true,
+                terminal_session_id: String(access.row?._id ?? "").trim(),
+                ...(stopped &&
+                typeof stopped === "object" &&
+                !Array.isArray(stopped)
+                  ? stopped
+                  : {}),
+              };
+            }
           }
         }
         if (!payload) {

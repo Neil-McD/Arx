@@ -1,5 +1,5 @@
 import {
-  buildAssistantToolCallMessage,
+  buildAssistantToolCallsMessage,
   parseNativeToolArguments,
   type NativeToolAwareCompletionSuccess,
 } from "../shared/nativeToolProtocol";
@@ -78,7 +78,7 @@ export async function runChatgptStreamingCompletion(params: {
     reasoningSummary: DEFAULT_CHATGPT_REASONING_SUMMARY_LEVEL,
   });
   if (!("ok" in response) || response.ok === false) return response;
-  if (response.parsed.functionCall) {
+  if (response.parsed.functionCalls.length > 0) {
     return {
       ok: false,
       status: 502,
@@ -110,6 +110,7 @@ export async function runChatgptNativeToolCompletion(params: {
   messages: ChatgptToolAwareMessage[];
   maxTokens: number;
   tools: ChatgptFunctionTool[];
+  parallelToolCalls?: boolean;
   onReasoningSummaryTextDelta?: (params: { delta: string; summaryIndex: number }) => Promise<void> | void;
   onReasoningSummaryPartAdded?: (params: { summaryIndex: number }) => Promise<void> | void;
   signal?: AbortSignal;
@@ -121,34 +122,68 @@ export async function runChatgptNativeToolCompletion(params: {
   });
   if (!("ok" in response) || response.ok === false) return response;
 
-  if (response.parsed.functionCall) {
-    let parsedArguments: Record<string, unknown>;
-    try {
-      parsedArguments = parseNativeToolArguments({
-        rawArguments: response.parsed.functionCall.arguments,
-        malformedMessage: "ChatGPT returned malformed tool arguments.",
+  if (response.parsed.functionCalls.length > 0) {
+    const parsedToolCalls: Array<{
+      callId: string;
+      name: string;
+      rawArguments: string;
+      parsedArguments: Record<string, unknown>;
+    }> = [];
+    for (const functionCall of response.parsed.functionCalls) {
+      let parsedArguments: Record<string, unknown>;
+      try {
+        parsedArguments = parseNativeToolArguments({
+          rawArguments: functionCall.arguments,
+          malformedMessage: "ChatGPT returned malformed tool arguments.",
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "ChatGPT returned malformed tool arguments.";
+        return {
+          ok: false,
+          status: 502,
+          code: "invalid_model_output",
+          message,
+        };
+      }
+      parsedToolCalls.push({
+        callId: functionCall.callId,
+        name: functionCall.name,
+        rawArguments: functionCall.arguments,
+        parsedArguments,
       });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "ChatGPT returned malformed tool arguments.";
+    }
+
+    const assistantToolCallMessage = buildAssistantToolCallsMessage({
+      content: response.parsed.text.trim() || null,
+      toolCalls: parsedToolCalls.map((toolCall) => ({
+        providerCallId: toolCall.callId,
+        toolName: toolCall.name,
+        rawArguments: toolCall.rawArguments,
+      })),
+    });
+    if (parsedToolCalls.length > 1) {
       return {
-        ok: false,
-        status: 502,
-        code: "invalid_model_output",
-        message,
+        ok: true,
+        type: "tool_calls",
+        toolCalls: parsedToolCalls.map((toolCall) => ({
+          providerCallId: toolCall.callId,
+          toolName: toolCall.name,
+          arguments: toolCall.parsedArguments,
+        })),
+        assistantToolCallMessage,
+        promptTokens: response.promptTokens,
+        completionTokens: response.completionTokens,
+        resolvedModelId: response.parsed.modelId,
       };
     }
+    const toolCall = parsedToolCalls[0]!;
     return {
       ok: true,
       type: "tool_call",
-      providerCallId: response.parsed.functionCall.callId,
-      toolName: response.parsed.functionCall.name,
-      arguments: parsedArguments,
-      assistantToolCallMessage: buildAssistantToolCallMessage({
-        content: response.parsed.text.trim() || null,
-        providerCallId: response.parsed.functionCall.callId,
-        toolName: response.parsed.functionCall.name,
-        rawArguments: response.parsed.functionCall.arguments,
-      }),
+      providerCallId: toolCall.callId,
+      toolName: toolCall.name,
+      arguments: toolCall.parsedArguments,
+      assistantToolCallMessage,
       promptTokens: response.promptTokens,
       completionTokens: response.completionTokens,
       resolvedModelId: response.parsed.modelId,

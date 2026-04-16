@@ -81,7 +81,6 @@ type BuildWebWorkspaceSurfaceProjectionParams = {
   workspaceVoiceTitle: string;
   onWorkspaceVoiceClick: () => void;
   modelPickerOpenRequestKey: number;
-  onRequestPreviewFitRepair: WebWorkspaceHostProps["onRequestPreviewFitRepair"];
   activeThreadStreamingRunId: string | null;
   activeThreadStreamingState: ThreadStreamingState<MemoryUsedItem, HistoryUsedItem, CommunityEvidenceUsedV1> | null;
   runtimeEventsByRunId: Record<string, ThreadStreamingRuntimeEvent[]>;
@@ -301,7 +300,6 @@ export function buildWebWorkspaceSurfaceProjection(
     workspaceVoiceTitle: params.workspaceVoiceTitle,
     onWorkspaceVoiceClick: params.onWorkspaceVoiceClick,
     modelPickerOpenRequestKey: params.modelPickerOpenRequestKey,
-    onRequestPreviewFitRepair: params.onRequestPreviewFitRepair,
     activeThreadStreamingRunId: params.activeThreadStreamingRunId,
     activeThreadRuntimeEvents: params.activeThreadStreamingState?.runtimeEvents ?? null,
     runtimeEventsByRunId: params.runtimeEventsByRunId,

@@ -41,6 +41,12 @@ export type NativeToolAwareMessage =
 
 export type NativeToolAssistantMessage = Extract<NativeToolAwareMessage, { role: "assistant" }>;
 
+export type NativeToolCallRequest<TToolName extends string = RetrievalToolName> = {
+  providerCallId: string;
+  toolName: TToolName;
+  arguments: Record<string, unknown>;
+};
+
 export type NativeToolAwareCompletionSuccess<TToolName extends string = RetrievalToolName> =
   | {
       ok: true;
@@ -60,7 +66,38 @@ export type NativeToolAwareCompletionSuccess<TToolName extends string = Retrieva
       promptTokens: number | null;
       completionTokens: number | null;
       resolvedModelId: string | null;
+    }
+  | {
+      ok: true;
+      type: "tool_calls";
+      toolCalls: NativeToolCallRequest<TToolName>[];
+      assistantToolCallMessage: NativeToolAssistantMessage;
+      promptTokens: number | null;
+      completionTokens: number | null;
+      resolvedModelId: string | null;
     };
+
+export function buildAssistantToolCallsMessage(params: {
+  content: string | null;
+  toolCalls: Array<{
+    providerCallId: string;
+    toolName: string;
+    rawArguments: string;
+  }>;
+}): NativeToolAssistantMessage {
+  return {
+    role: "assistant",
+    content: typeof params.content === "string" && params.content.trim() ? params.content : null,
+    tool_calls: params.toolCalls.map((toolCall) => ({
+      id: toolCall.providerCallId,
+      type: "function",
+      function: {
+        name: toolCall.toolName,
+        arguments: toolCall.rawArguments,
+      },
+    })),
+  };
+}
 
 export function buildAssistantToolCallMessage(params: {
   content: string | null;
@@ -68,20 +105,32 @@ export function buildAssistantToolCallMessage(params: {
   toolName: string;
   rawArguments: string;
 }): NativeToolAssistantMessage {
-  return {
-    role: "assistant",
-    content: typeof params.content === "string" && params.content.trim() ? params.content : null,
-    tool_calls: [
+  return buildAssistantToolCallsMessage({
+    content: params.content,
+    toolCalls: [
       {
-        id: params.providerCallId,
-        type: "function",
-        function: {
-          name: params.toolName,
-          arguments: params.rawArguments,
-        },
+        providerCallId: params.providerCallId,
+        toolName: params.toolName,
+        rawArguments: params.rawArguments,
       },
     ],
-  };
+  });
+}
+
+export function getNativeToolCompletionToolCalls<TToolName extends string>(
+  completion: NativeToolAwareCompletionSuccess<TToolName>,
+): NativeToolCallRequest<TToolName>[] {
+  if (completion.type === "tool_call") {
+    return [
+      {
+        providerCallId: completion.providerCallId,
+        toolName: completion.toolName,
+        arguments: completion.arguments,
+      },
+    ];
+  }
+  if (completion.type === "tool_calls") return completion.toolCalls;
+  return [];
 }
 
 export function parseNativeToolArguments(params: {

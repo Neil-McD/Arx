@@ -3,6 +3,7 @@ import type {
   NativeToolAwareMessage,
   NativeToolInputContentPart,
 } from "../shared/nativeToolProtocol";
+import { parseNativeProviderFunctionCallItem } from "../shared/nativeToolProviderParsers";
 
 const CHATGPT_CODEX_RESPONSES_URL = "https://chatgpt.com/backend-api/codex/responses";
 
@@ -35,13 +36,11 @@ export type ChatgptCompletionFailure = {
 export type ChatgptResponsesParseResult = {
   text: string;
   modelId: string | null;
-  functionCall:
-    | {
-        callId: string;
-        name: string;
-        arguments: string;
-      }
-    | null;
+  functionCalls: Array<{
+    callId: string;
+    name: string;
+    arguments: string;
+  }>;
 };
 
 type ChatgptReasoningSummaryLevel = "auto" | "concise" | "detailed";
@@ -304,7 +303,7 @@ function parseChatgptResponsesBytes(bytes: Uint8Array, contentType: string): Cha
     let sawDelta = false;
     let sawDoneText = false;
     let modelId: string | null = null;
-    let functionCall: ChatgptResponsesParseResult["functionCall"] = null;
+    const functionCalls: ChatgptResponsesParseResult["functionCalls"] = [];
 
     for (const data of ssePayloads) {
       if (data === "[DONE]") break;
@@ -354,16 +353,12 @@ function parseChatgptResponsesBytes(bytes: Uint8Array, contentType: string): Cha
         const item = parsed?.item;
         if (!item || typeof item !== "object") continue;
         if (item.type === "function_call") {
-          const callId = typeof item.call_id === "string" ? item.call_id.trim() : "";
-          const name = typeof item.name === "string" ? item.name.trim() : "";
-          const argumentsText = typeof item.arguments === "string" ? item.arguments.trim() : "";
-          if (callId && name && argumentsText) {
-            functionCall = {
-              callId,
-              name,
-              arguments: argumentsText,
-            };
-          }
+          functionCalls.push(
+            parseNativeProviderFunctionCallItem({
+              item,
+              providerName: "ChatGPT",
+            }),
+          );
           continue;
         }
         if (sawDelta || sawDoneText || item.type !== "message") continue;
@@ -375,7 +370,7 @@ function parseChatgptResponsesBytes(bytes: Uint8Array, contentType: string): Cha
       }
     }
 
-    return { text, modelId, functionCall };
+    return { text, modelId, functionCalls };
   }
 
   let parsed: Record<string, any>;
@@ -393,28 +388,24 @@ function parseChatgptResponsesBytes(bytes: Uint8Array, contentType: string): Cha
     (typeof parsed?.response?.model === "string" && parsed.response.model.trim()) ||
     null;
   const outputItems = Array.isArray(parsed?.output) ? parsed.output : [];
-  let functionCall: ChatgptResponsesParseResult["functionCall"] = null;
+  const functionCalls: ChatgptResponsesParseResult["functionCalls"] = [];
   let text = typeof parsed?.output_text === "string" ? parsed.output_text : "";
   for (const item of outputItems) {
     if (!item || typeof item !== "object") continue;
-    if (!functionCall && item.type === "function_call") {
-      const callId = typeof item.call_id === "string" ? item.call_id.trim() : "";
-      const name = typeof item.name === "string" ? item.name.trim() : "";
-      const argumentsText = typeof item.arguments === "string" ? item.arguments.trim() : "";
-      if (callId && name && argumentsText) {
-        functionCall = {
-          callId,
-          name,
-          arguments: argumentsText,
-        };
-      }
+    if (item.type === "function_call") {
+      functionCalls.push(
+        parseNativeProviderFunctionCallItem({
+          item,
+          providerName: "ChatGPT",
+        }),
+      );
       continue;
     }
     if (!text && item.type === "message") {
       text = extractMessageTextFromOutputItem(item);
     }
   }
-  return { text, modelId, functionCall };
+  return { text, modelId, functionCalls };
 }
 
 export async function runChatgptResponsesRequest(params: {
@@ -424,6 +415,7 @@ export async function runChatgptResponsesRequest(params: {
   messages: Array<RuntimeChatgptMessage | ChatgptToolAwareMessage>;
   maxTokens: number;
   tools?: ChatgptFunctionTool[];
+  parallelToolCalls?: boolean;
   signal?: AbortSignal;
   reasoningSummary?: ChatgptReasoningSummaryLevel | null;
   reasoningEffort?: ChatgptReasoningEffort | null;
@@ -451,7 +443,7 @@ export async function runChatgptResponsesRequest(params: {
     if (normalized.instructions) requestBody.instructions = normalized.instructions;
     if (Array.isArray(params.tools) && params.tools.length > 0) {
       requestBody.tools = params.tools;
-      requestBody.parallel_tool_calls = false;
+      requestBody.parallel_tool_calls = params.parallelToolCalls === true;
       requestBody.tool_choice = "auto";
     }
     if (params.reasoningSummary) {
@@ -590,6 +582,7 @@ export async function runChatgptResponsesStreamingRequest(params: {
   maxTokens: number;
   tools?: ChatgptFunctionTool[];
   onDelta?: (delta: string) => void;
+  parallelToolCalls?: boolean;
   onReasoningSummaryTextDelta?: (params: { delta: string; summaryIndex: number }) => Promise<void> | void;
   onReasoningSummaryPartAdded?: (params: { summaryIndex: number }) => Promise<void> | void;
   signal?: AbortSignal;
@@ -619,7 +612,7 @@ export async function runChatgptResponsesStreamingRequest(params: {
     if (normalized.instructions) requestBody.instructions = normalized.instructions;
     if (Array.isArray(params.tools) && params.tools.length > 0) {
       requestBody.tools = params.tools;
-      requestBody.parallel_tool_calls = false;
+      requestBody.parallel_tool_calls = params.parallelToolCalls === true;
       requestBody.tool_choice = "auto";
     }
     if (params.reasoningSummary) {
@@ -736,7 +729,7 @@ export async function runChatgptResponsesStreamingRequest(params: {
       let sawDelta = false;
       let sawDoneText = false;
       let modelId: string | null = null;
-      let functionCall: ChatgptResponsesParseResult["functionCall"] = null;
+      const functionCalls: ChatgptResponsesParseResult["functionCalls"] = [];
       let doneSeen = false;
       const flushEvent = async (): Promise<Error | null> => {
         const raw = dataBuffer.trim();
@@ -818,16 +811,12 @@ export async function runChatgptResponsesStreamingRequest(params: {
           const item = parsed?.item;
           if (!item || typeof item !== "object") return null;
           if (item.type === "function_call") {
-            const callId = typeof item.call_id === "string" ? item.call_id.trim() : "";
-            const name = typeof item.name === "string" ? item.name.trim() : "";
-            const argumentsText = typeof item.arguments === "string" ? item.arguments.trim() : "";
-            if (callId && name && argumentsText) {
-              functionCall = {
-                callId,
-                name,
-                arguments: argumentsText,
-              };
-            }
+            functionCalls.push(
+              parseNativeProviderFunctionCallItem({
+                item,
+                providerName: "ChatGPT",
+              }),
+            );
             return null;
           }
           if (!sawDelta && !sawDoneText && item.type === "message") {
@@ -867,7 +856,7 @@ export async function runChatgptResponsesStreamingRequest(params: {
       if (trailingError) throw trailingError;
       return {
         ok: true,
-        parsed: { text, modelId, functionCall },
+        parsed: { text, modelId, functionCalls },
         promptTokens: null,
         completionTokens: null,
       };

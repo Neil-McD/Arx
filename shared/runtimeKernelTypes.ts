@@ -79,9 +79,15 @@ export type RuntimeKernelResolvedToolStep<TToolName extends string = string> = {
   completionTokens: number | null;
 };
 
+export type RuntimeKernelResolvedToolBatchStep<TToolName extends string = string> = {
+  kind: "tool_follow_up_batch";
+  steps: RuntimeKernelResolvedToolStep<TToolName>[];
+};
+
 export type RuntimeKernelResolvedStep<TToolName extends string = string> =
   | RuntimeKernelFinalStep
-  | RuntimeKernelResolvedToolStep<TToolName>;
+  | RuntimeKernelResolvedToolStep<TToolName>
+  | RuntimeKernelResolvedToolBatchStep<TToolName>;
 
 export type RuntimeKernelStepRecord<TToolName extends string = string> = {
   iteration: number;
