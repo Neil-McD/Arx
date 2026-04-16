@@ -48,6 +48,9 @@ This folder is the canonical backend surface for Daytona. Runtime/product paths 
    - WorkOS/AuthKit example:
      - `ARX_AUTH_JWT_ISSUER=https://<AUTHKIT_DOMAIN>`
      - `ARX_AUTH_JWT_JWKS_URL=https://<AUTHKIT_DOMAIN>/oauth2/jwks`
+   - These same OAuth envs are also used by the remote PolyNet MCP surface to serve
+     `/.well-known/oauth-protected-resource` and `/.well-known/oauth-authorization-server`
+     for hosted MCP auth discovery.
 4. Validate auth env readiness:
    - `npm run check:auth-runtime-readiness`
 5. Authenticate Convex CLI (`npx convex login`) if not already logged in.

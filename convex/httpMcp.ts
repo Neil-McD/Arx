@@ -96,6 +96,106 @@ function buildAllowedMcpOrigins(): Set<string> {
   return out;
 }
 
+function trimTrailingSlash(value: string): string {
+  return value.replace(/\/+$/, "");
+}
+
+function resolveRequestOrigin(req: Request): string | null {
+  try {
+    return new URL(req.url).origin;
+  } catch {
+    return null;
+  }
+}
+
+function resolveMcpServerUrl(req: Request): string | null {
+  const origin = resolveRequestOrigin(req);
+  return origin ? `${origin}/runtime/mcp` : null;
+}
+
+function resolveProtectedResourceMetadataUrl(req: Request): string | null {
+  const origin = resolveRequestOrigin(req);
+  return origin ? `${origin}/.well-known/oauth-protected-resource` : null;
+}
+
+function resolveOAuthIssuer(): string {
+  return trimTrailingSlash(readEnv("ARX_AUTH_JWT_ISSUER"));
+}
+
+function resolveOAuthAuthorizeUrl(): string {
+  return readEnv("ARX_AUTH_AUTHORIZE_URL");
+}
+
+function resolveOAuthTokenUrl(): string {
+  return readEnv("ARX_AUTH_TOKEN_URL");
+}
+
+function resolveOAuthJwksUrl(): string {
+  const explicit = readEnv("ARX_AUTH_JWT_JWKS_URL");
+  if (explicit) return explicit;
+  const issuer = resolveOAuthIssuer();
+  return issuer ? `${issuer}/.well-known/jwks.json` : "";
+}
+
+function resolveOAuthScopes(): string[] {
+  const raw = readEnv("ARX_AUTH_SCOPE") || "openid profile email offline_access";
+  return raw
+    .split(/\s+/)
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .slice(0, 32);
+}
+
+type McpResolvedAuthMetadata =
+  | {
+      ok: true;
+      resourceServerUrl: string;
+      protectedResourceMetadataUrl: string;
+      issuer: string;
+      authorizationEndpoint: string;
+      tokenEndpoint: string;
+      jwksUri: string | null;
+      scopesSupported: string[];
+    }
+  | {
+      ok: false;
+      message: string;
+    };
+
+function resolveMcpAuthMetadata(req: Request): McpResolvedAuthMetadata {
+  const resourceServerUrl = resolveMcpServerUrl(req);
+  const protectedResourceMetadataUrl = resolveProtectedResourceMetadataUrl(req);
+  const issuer = resolveOAuthIssuer();
+  const authorizationEndpoint = resolveOAuthAuthorizeUrl();
+  const tokenEndpoint = resolveOAuthTokenUrl();
+  const jwksUri = resolveOAuthJwksUrl();
+  const scopesSupported = resolveOAuthScopes();
+
+  if (!resourceServerUrl || !protectedResourceMetadataUrl) {
+    return {
+      ok: false,
+      message: "MCP auth metadata is unavailable for this request origin.",
+    };
+  }
+  if (!issuer || !authorizationEndpoint || !tokenEndpoint) {
+    return {
+      ok: false,
+      message: "MCP auth metadata is not configured.",
+    };
+  }
+
+  return {
+    ok: true,
+    resourceServerUrl,
+    protectedResourceMetadataUrl,
+    issuer,
+    authorizationEndpoint,
+    tokenEndpoint,
+    jwksUri: jwksUri || null,
+    scopesSupported,
+  };
+}
+
 function validateMcpOrigin(req: Request): { ok: true } | { ok: false; response: Response } {
   const rawOrigin = String(req.headers.get("origin") ?? "").trim();
   if (!rawOrigin) return { ok: true };
@@ -201,6 +301,34 @@ function jsonRpcResultResponse(
   return new Response(response.body, {
     status: response.status,
     headers: nextHeaders,
+  });
+}
+
+function mcpUnauthorizedResponse(
+  req: Request,
+  jsonResponse: JsonResponseFn,
+  errorDescription: string,
+): Response {
+  const authMetadata = resolveMcpAuthMetadata(req);
+  if (!authMetadata.ok) {
+    return jsonResponse(req, 503, {
+      error: "auth_server_metadata_unavailable",
+      error_description: authMetadata.message,
+    });
+  }
+
+  const template = jsonResponse(req, 401, {
+    error: "invalid_token",
+    error_description: errorDescription,
+  });
+  const headers = new Headers(template.headers);
+  headers.set(
+    "WWW-Authenticate",
+    `Bearer resource_metadata="${authMetadata.protectedResourceMetadataUrl}"`,
+  );
+  return new Response(template.body, {
+    status: 401,
+    headers,
   });
 }
 
@@ -564,7 +692,13 @@ async function handleMcpPost(args: {
       return jsonRpcErrorResponse(req, jsonResponse, null, -32600, "Invalid Request.");
     }
     const auth = await requireAuthenticatedActor(ctx, req);
-    if (!auth.ok) return auth.response;
+    if (!auth.ok) {
+      return mcpUnauthorizedResponse(
+        req,
+        jsonResponse,
+        "Authorization required to call protected PolyNet MCP tools.",
+      );
+    }
     const actor = auth.actor;
     const params =
       message.params && typeof message.params === "object" && !Array.isArray(message.params)
@@ -607,6 +741,55 @@ async function handleMcpPost(args: {
 
 export function registerRuntimeMcpRoutes(args: RegisterRuntimeMcpRoutesArgs): void {
   const { http, httpAction, jsonResponse, optionsResponse, requireAuthenticatedActor } = args;
+
+  http.route({
+    path: "/.well-known/oauth-protected-resource",
+    method: "GET",
+    handler: httpAction(async (_ctx, req) => {
+      const authMetadata = resolveMcpAuthMetadata(req);
+      if (!authMetadata.ok) {
+        return jsonResponse(req, 503, {
+          error: "auth_server_metadata_unavailable",
+          error_description: authMetadata.message,
+        });
+      }
+      const authorizationBaseUrl = resolveRequestOrigin(req) ?? authMetadata.issuer;
+      return jsonResponse(req, 200, {
+        resource: authMetadata.resourceServerUrl,
+        // PolyNet delegates auth to an upstream issuer, but publishes OAuth discovery
+        // metadata at the MCP server origin so remote hosts can discover a stable,
+        // MCP-friendly metadata document from the resource server base URL.
+        authorization_servers: [authorizationBaseUrl],
+        bearer_methods_supported: ["header"],
+        scopes_supported: authMetadata.scopesSupported,
+      });
+    }),
+  });
+
+  http.route({
+    path: "/.well-known/oauth-authorization-server",
+    method: "GET",
+    handler: httpAction(async (_ctx, req) => {
+      const authMetadata = resolveMcpAuthMetadata(req);
+      if (!authMetadata.ok) {
+        return jsonResponse(req, 503, {
+          error: "auth_server_metadata_unavailable",
+          error_description: authMetadata.message,
+        });
+      }
+      return jsonResponse(req, 200, {
+        issuer: authMetadata.issuer,
+        authorization_endpoint: authMetadata.authorizationEndpoint,
+        token_endpoint: authMetadata.tokenEndpoint,
+        ...(authMetadata.jwksUri ? { jwks_uri: authMetadata.jwksUri } : null),
+        response_types_supported: ["code"],
+        grant_types_supported: ["authorization_code", "refresh_token"],
+        code_challenge_methods_supported: ["S256"],
+        token_endpoint_auth_methods_supported: ["none"],
+        scopes_supported: authMetadata.scopesSupported,
+      });
+    }),
+  });
 
   http.route({
     path: "/runtime/mcp",
