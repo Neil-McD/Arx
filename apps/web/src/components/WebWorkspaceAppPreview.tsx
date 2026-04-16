@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import {
   type DaytonaWorkspaceTerminalPreview,
   type DaytonaWorkspaceTerminalRecord,
@@ -159,17 +159,10 @@ function buildWorkspaceAppPreviewUrl(
 function buildPreviewFrameUrl(
   baseUrl: string,
   mode: "inline" | "expanded",
-  frameSize: { width: number; height: number },
 ): string {
   const url = new URL(baseUrl);
   url.searchParams.set("polynet_preview", mode);
   url.searchParams.set("polynet_preview_contract", "surface-v1");
-  if (frameSize.width > 0) {
-    url.searchParams.set("polynet_preview_width", String(Math.round(frameSize.width)));
-  }
-  if (frameSize.height > 0) {
-    url.searchParams.set("polynet_preview_height", String(Math.round(frameSize.height)));
-  }
   return url.toString();
 }
 
@@ -178,61 +171,22 @@ function PreviewFrame({
   title,
   mode,
   onLifecyclePhaseChange,
-  onFitReport,
 }: {
   previewUrl: string;
   title: string;
   mode: "inline" | "expanded";
   onLifecyclePhaseChange?: (phase: "loading" | "ready" | "error") => void;
-  onFitReport?: (report: {
-    viewportWidth: number;
-    viewportHeight: number;
-    overflowX: boolean;
-    overflowY: boolean;
-  }) => void;
 }): JSX.Element {
-  const shellRef = useRef<HTMLDivElement | null>(null);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
-  const [frameSize, setFrameSize] = useState({ width: 0, height: 0 });
-  const [contentSize, setContentSize] = useState<{ width: number; height: number } | null>(null);
-  const [fitReport, setFitReport] = useState<{
-    viewportWidth: number;
-    viewportHeight: number;
-    overflowX: boolean;
-    overflowY: boolean;
-  } | null>(null);
+  const lifecycleCallbackRef = useRef(onLifecyclePhaseChange);
 
   useEffect(() => {
-    setContentSize(null);
-    setFitReport(null);
-    onLifecyclePhaseChange?.("loading");
-  }, [previewUrl, mode, onLifecyclePhaseChange]);
+    lifecycleCallbackRef.current = onLifecyclePhaseChange;
+  }, [onLifecyclePhaseChange]);
 
   useEffect(() => {
-    if (!fitReport) return;
-    onFitReport?.(fitReport);
-  }, [fitReport, onFitReport]);
-
-  useEffect(() => {
-    const node = shellRef.current;
-    if (!node) return;
-
-    const updateFrameSize = () => {
-      const nextWidth = node.clientWidth;
-      const nextHeight = node.clientHeight;
-      setFrameSize((prev) =>
-        prev.width === nextWidth && prev.height === nextHeight
-          ? prev
-          : { width: nextWidth, height: nextHeight },
-      );
-    };
-
-    updateFrameSize();
-    if (typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(updateFrameSize);
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, []);
+    lifecycleCallbackRef.current?.("loading");
+  }, [previewUrl, mode]);
 
   useEffect(() => {
     let previewOrigin = "";
@@ -247,90 +201,35 @@ function PreviewFrame({
       if (!iframeRef.current || event.source !== iframeRef.current.contentWindow) return;
       const payload = event.data;
       if (!payload || payload.type !== "polynet_preview_metrics") return;
-      const width = Number(payload.width);
-      const height = Number(payload.height);
-      if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return;
-      const viewportWidth = Number(payload.viewportWidth);
-      const viewportHeight = Number(payload.viewportHeight);
-      const overflowX = payload.overflowX === true;
-      const overflowY = payload.overflowY === true;
-      setContentSize((prev) =>
-        prev && prev.width === width && prev.height === height ? prev : { width, height },
-      );
-      if (
-        Number.isFinite(viewportWidth) &&
-        viewportWidth > 0 &&
-        Number.isFinite(viewportHeight) &&
-        viewportHeight > 0
-      ) {
-        setFitReport((prev) =>
-          prev &&
-          prev.viewportWidth === viewportWidth &&
-          prev.viewportHeight === viewportHeight &&
-          prev.overflowX === overflowX &&
-          prev.overflowY === overflowY
-            ? prev
-            : {
-                viewportWidth,
-                viewportHeight,
-                overflowX,
-                overflowY,
-              },
-        );
-      }
+      // Preview metrics are intentionally passive here. They should not resize,
+      // remount, or trigger hidden repair turns while the user is inspecting the app.
     };
 
     window.addEventListener("message", handleMessage);
     return () => window.removeEventListener("message", handleMessage);
   }, [previewUrl]);
 
-  const fitNeedsAttention = Boolean(fitReport?.overflowX || fitReport?.overflowY);
-  const fitScale = useMemo(() => {
-    if (!contentSize || frameSize.width <= 0 || frameSize.height <= 0) return 1;
-    if (!fitNeedsAttention) return 1;
-    const widthScale = frameSize.width / contentSize.width;
-    const heightScale = frameSize.height / contentSize.height;
-    const scale = Math.min(1, widthScale, heightScale);
-    if (!Number.isFinite(scale) || scale <= 0) return 1;
-    if (scale >= 0.995) return 1;
-    return scale;
-  }, [contentSize, fitNeedsAttention, frameSize.height, frameSize.width]);
-
-  const fitActive = fitNeedsAttention && Boolean(contentSize) && fitScale < 0.995;
   const frameUrl = useMemo(
-    () => buildPreviewFrameUrl(previewUrl, mode, frameSize),
-    [frameSize, mode, previewUrl],
+    () => buildPreviewFrameUrl(previewUrl, mode),
+    [mode, previewUrl],
   );
 
   return (
     <div
-      ref={shellRef}
-      className={`workspace-app-preview-frame-shell${fitActive ? " fit-active" : ""}${fitNeedsAttention ? " fit-needs-attention" : ""}`}
-      data-preview-fit={fitNeedsAttention ? "overflow" : "ok"}
+      className="workspace-app-preview-frame-shell"
+      data-preview-fit="stable"
     >
       <div className="workspace-app-preview-frame-viewport">
-        <div
-          className={`workspace-app-preview-frame-stage${fitActive ? " fit-active" : ""}`}
-          style={
-            fitActive && contentSize
-              ? {
-                  width: `${contentSize.width}px`,
-                  height: `${contentSize.height}px`,
-                  transform: `scale(${fitScale})`,
-                }
-              : undefined
-          }
-        >
+        <div className="workspace-app-preview-frame-stage">
           <iframe
             ref={iframeRef}
-            key={frameUrl}
             className="workspace-app-preview-frame"
             src={frameUrl}
             title={title}
             loading="eager"
             referrerPolicy="no-referrer"
-            onLoad={() => onLifecyclePhaseChange?.("ready")}
-            onError={() => onLifecyclePhaseChange?.("error")}
+            onLoad={() => lifecycleCallbackRef.current?.("ready")}
+            onError={() => lifecycleCallbackRef.current?.("error")}
           />
         </div>
       </div>
@@ -353,14 +252,6 @@ export function WebWorkspaceAppPreview(props: {
   allowExpand?: boolean;
   onExpandPreview?: (terminalSessionId: string) => void;
   onCollapsePreview?: () => void;
-  onPreviewFitReport?: (params: {
-    terminal: DaytonaWorkspaceTerminalRecord;
-    mode: "inline" | "expanded";
-    viewportWidth: number;
-    viewportHeight: number;
-    overflowX: boolean;
-    overflowY: boolean;
-  }) => void;
 }): JSX.Element | null {
   const previewTerminals = useMemo(
     () =>
@@ -376,14 +267,16 @@ export function WebWorkspaceAppPreview(props: {
   const allowExpand = props.allowExpand ?? true;
   const busySet = useMemo(() => new Set(props.busyTerminalIds ?? []), [props.busyTerminalIds]);
 
+  const { previewStateByTerminalId, onEnsurePreview } = props;
+
   useEffect(() => {
     for (const terminal of previewTerminals) {
-      const state = props.previewStateByTerminalId[terminal.id];
+      const state = previewStateByTerminalId[terminal.id];
       if (!state || state.phase === "idle") {
-        props.onEnsurePreview(terminal.id);
+        onEnsurePreview(terminal.id);
       }
     }
-  }, [previewTerminals, props]);
+  }, [onEnsurePreview, previewStateByTerminalId, previewTerminals]);
 
   if (previewTerminals.length === 0) return null;
 
@@ -467,16 +360,6 @@ export function WebWorkspaceAppPreview(props: {
                 mode={mode}
                 onLifecyclePhaseChange={(phase) => {
                   props.onPreviewLifecyclePhaseChange?.({ terminal, phase });
-                }}
-                onFitReport={(report) => {
-                  props.onPreviewFitReport?.({
-                    terminal,
-                    mode,
-                    viewportWidth: report.viewportWidth,
-                    viewportHeight: report.viewportHeight,
-                    overflowX: report.overflowX,
-                    overflowY: report.overflowY,
-                  });
                 }}
               />
             ) : (

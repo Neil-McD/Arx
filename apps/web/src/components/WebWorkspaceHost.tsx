@@ -848,7 +848,6 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
   );
   const savedThreadScrollTopRef = useRef<number | null>(null);
   const pendingRestoreThreadScrollTopRef = useRef<number | null>(null);
-  const attemptedPreviewRepairKeysRef = useRef<Set<string>>(new Set());
   const lastTerminalSnapshotSignatureRef = useRef<string | null>(null);
   const inflightPreviewIdsRef = useRef<Set<string>>(new Set());
   const latestPreviewRunIdByTerminalId = useMemo(
@@ -1385,26 +1384,6 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
     setExpandedPreviewTerminalId(null);
   }, []);
 
-  const handlePreviewFitReport = useCallback(
-    (params: {
-      terminal: DaytonaWorkspaceTerminalRecord;
-      mode: "inline" | "expanded";
-      viewportWidth: number;
-      viewportHeight: number;
-      overflowX: boolean;
-      overflowY: boolean;
-    }) => {
-      if (!params.overflowX && !params.overflowY) return;
-      const runId = String(params.terminal.run_id_started_by ?? "").trim();
-      if (!runId) return;
-      const repairKey = `${params.terminal.id}:${params.mode}`;
-      if (attemptedPreviewRepairKeysRef.current.has(repairKey)) return;
-      attemptedPreviewRepairKeysRef.current.add(repairKey);
-      props.onRequestPreviewFitRepair(params);
-    },
-    [props],
-  );
-
   useEffect(() => {
     if (!expandedPreviewTerminalId) return;
     if (!isDesktopViewport || !expandedPreviewTerminal) {
@@ -1446,7 +1425,6 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
           onEnsurePreview={handleEnsurePreview}
           onExpandPreview={handleExpandPreview}
           onPreviewLifecyclePhaseChange={handlePreviewLifecyclePhaseChange}
-          onPreviewFitReport={handlePreviewFitReport}
           onStopTerminal={(terminalSessionId) => {
             void handleStopWorkspaceTerminal(terminalSessionId);
           }}
@@ -1483,7 +1461,6 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
               onEnsurePreview={handleEnsurePreview}
               onCollapsePreview={handleCollapsePreview}
               onPreviewLifecyclePhaseChange={handlePreviewLifecyclePhaseChange}
-              onPreviewFitReport={handlePreviewFitReport}
               onStopTerminal={(terminalSessionId) => {
                 void handleStopWorkspaceTerminal(terminalSessionId);
               }}
