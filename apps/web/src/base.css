@@ -8449,8 +8449,8 @@ button.chat-reply-quote:hover {
 .runtime-live-timeline {
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  margin-bottom: 12px;
+  gap: 12px;
+  margin-bottom: 14px;
 }
 
 .runtime-live-timeline-entry {
@@ -8462,6 +8462,9 @@ button.chat-reply-quote:hover {
 }
 
 .runtime-live-timeline-reasoning-text {
+  max-width: 74ch;
+  font-size: 0.96em;
+  line-height: 1.55;
   color: color-mix(in srgb, var(--text-primary) 92%, var(--text-secondary));
 }
 
@@ -9544,6 +9547,78 @@ button.message-citation-chip:hover {
   margin-top: 0.32em;
 }
 
+.message-text.runtime-live-timeline-reasoning-text {
+  color: color-mix(in srgb, var(--text-primary) 88%, var(--text-secondary));
+}
+
+.message-text.runtime-live-timeline-reasoning-text .md-paragraph {
+  margin: 0.34em 0;
+}
+
+.message-text.runtime-live-timeline-reasoning-text .md-header {
+  color: var(--text-primary);
+  font-weight: 650;
+  line-height: 1.25;
+  margin: 0.78em 0 0.24em;
+}
+
+.message-text.runtime-live-timeline-reasoning-text h1.md-header,
+.message-text.runtime-live-timeline-reasoning-text h2.md-header {
+  font-size: 1.1em;
+  margin-top: 0.86em;
+  margin-bottom: 0.26em;
+}
+
+.message-text.runtime-live-timeline-reasoning-text h3.md-header {
+  font-size: 1.02em;
+  margin-top: 0.72em;
+  margin-bottom: 0.2em;
+}
+
+.message-text.runtime-live-timeline-reasoning-text h4.md-header,
+.message-text.runtime-live-timeline-reasoning-text h5.md-header,
+.message-text.runtime-live-timeline-reasoning-text h6.md-header {
+  font-size: 0.98em;
+  margin-top: 0.58em;
+  margin-bottom: 0.18em;
+}
+
+.message-text.runtime-live-timeline-reasoning-text .md-list {
+  margin: 0.2em 0;
+  padding-left: 1.18em;
+}
+
+.message-text.runtime-live-timeline-reasoning-text .md-list li {
+  margin: 0.06em 0;
+}
+
+.message-text.runtime-live-timeline-reasoning-text .md-list .md-list {
+  margin: 0.08em 0 0.1em;
+}
+
+.message-text.runtime-live-timeline-reasoning-text .md-header + .md-paragraph,
+.message-text.runtime-live-timeline-reasoning-text .md-header + .md-list,
+.message-text.runtime-live-timeline-reasoning-text .md-header + .code-block-wrapper,
+.message-text.runtime-live-timeline-reasoning-text .md-header + .md-blockquote {
+  margin-top: 0.18em;
+}
+
+.message-text.runtime-live-timeline-reasoning-text .md-paragraph + h2.md-header,
+.message-text.runtime-live-timeline-reasoning-text .md-list + h2.md-header,
+.message-text.runtime-live-timeline-reasoning-text .md-table-block + h2.md-header,
+.message-text.runtime-live-timeline-reasoning-text .md-artifact-block + h2.md-header,
+.message-text.runtime-live-timeline-reasoning-text .code-block-wrapper + h2.md-header {
+  margin-top: 0.82em;
+}
+
+.message-text.runtime-live-timeline-reasoning-text .md-paragraph + h3.md-header,
+.message-text.runtime-live-timeline-reasoning-text .md-list + h3.md-header,
+.message-text.runtime-live-timeline-reasoning-text .md-table-block + h3.md-header,
+.message-text.runtime-live-timeline-reasoning-text .md-artifact-block + h3.md-header,
+.message-text.runtime-live-timeline-reasoning-text .code-block-wrapper + h3.md-header {
+  margin-top: 0.64em;
+}
+
 .code-block-header {
   display: flex;
   justify-content: space-between;
@@ -10335,8 +10410,8 @@ button.message-citation-chip:hover {
 .runtime-tool-trace-item-toggle {
   display: inline-block;
   cursor: pointer;
-  font-size: 13px;
-  font-weight: 500;
+  font-size: 12px;
+  font-weight: 600;
   line-height: 1.35;
   transition: color 0.15s ease;
 }
@@ -10397,9 +10472,9 @@ button.message-citation-chip:hover {
 
 .runtime-tool-trace-title {
   min-width: 0;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
-  line-height: 1.35;
+  line-height: 1.4;
   color: var(--text-secondary);
   white-space: nowrap;
   overflow: hidden;
