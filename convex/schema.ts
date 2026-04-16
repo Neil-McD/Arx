@@ -608,6 +608,7 @@ export default defineSchema({
     title: v.optional(v.string()),
     body: v.string(),
     evidence: v.optional(v.array(v.string())),
+    whyNow: v.optional(v.string()),
     status: v.union(v.literal("live"), v.literal("hidden")),
     score: v.number(),
     goodCount: v.number(),
