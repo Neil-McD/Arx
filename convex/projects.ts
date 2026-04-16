@@ -683,12 +683,12 @@ async function waitForDaytonaVolumeReady(params: {
   return lastSeen;
 }
 
-async function waitForDaytonaVolumeDeletable(params: {
+async function waitForDaytonaVolumeDeleteReadiness(params: {
   config: DaytonaConfig;
   volumeId: string;
   timeoutMs?: number;
   intervalMs?: number;
-}): Promise<boolean> {
+}): Promise<"deletable" | "missing" | "timeout"> {
   const timeoutMs = Math.max(1000, Math.floor(params.timeoutMs ?? 60_000));
   const intervalMs = Math.max(250, Math.floor(params.intervalMs ?? 1000));
   const startedAt = Date.now();
@@ -698,15 +698,84 @@ async function waitForDaytonaVolumeDeletable(params: {
       volumeId: params.volumeId,
     });
     if (!lookup.ok) {
-      if (lookup.status === 404) return false;
+      if (lookup.status === 404) return "missing";
       throw new Error(formatDaytonaFailureMessage(lookup));
     }
     if (isDeletableDaytonaVolumeState(normalizeDaytonaVolumeState(lookup.payload))) {
-      return true;
+      return "deletable";
     }
     await new Promise((resolve) => setTimeout(resolve, intervalMs));
   }
-  return true;
+  return "timeout";
+}
+
+async function cleanupDaytonaDeletedProjectResources(params: {
+  config: DaytonaConfig;
+  projectId: string;
+  volumeId: string;
+  waitForVolumeMs?: number;
+}): Promise<
+  | { ok: true; volumeDeleted: boolean }
+  | {
+      ok: false;
+      status: number;
+      code: string;
+      message: string;
+      details?: Record<string, unknown>;
+    }
+> {
+  const cleanedSandboxes = await cleanupDaytonaProjectSandboxes({
+    config: params.config,
+    projectId: params.projectId,
+    volumeId: params.volumeId,
+  });
+  if (!cleanedSandboxes.ok) return cleanedSandboxes;
+
+  const readiness = await waitForDaytonaVolumeDeleteReadiness({
+    config: params.config,
+    volumeId: params.volumeId,
+    timeoutMs: params.waitForVolumeMs,
+  });
+  if (readiness === "missing") {
+    return { ok: true, volumeDeleted: true };
+  }
+  if (readiness === "timeout") {
+    return { ok: true, volumeDeleted: false };
+  }
+
+  let deletedVolume = await deleteDaytonaVolume({
+    config: params.config,
+    volumeId: params.volumeId,
+  });
+  if (!deletedVolume.ok && shouldRetryDaytonaVolumeDelete(deletedVolume)) {
+    const retriedSandboxCleanup = await cleanupDaytonaProjectSandboxes({
+      config: params.config,
+      projectId: params.projectId,
+      volumeId: params.volumeId,
+    });
+    if (!retriedSandboxCleanup.ok) return retriedSandboxCleanup;
+
+    const retryReadiness = await waitForDaytonaVolumeDeleteReadiness({
+      config: params.config,
+      volumeId: params.volumeId,
+      timeoutMs: params.waitForVolumeMs,
+    });
+    if (retryReadiness === "missing") {
+      return { ok: true, volumeDeleted: true };
+    }
+    if (retryReadiness === "timeout") {
+      return { ok: true, volumeDeleted: false };
+    }
+
+    deletedVolume = await deleteDaytonaVolume({
+      config: params.config,
+      volumeId: params.volumeId,
+    });
+  }
+  if (!deletedVolume.ok && !isDaytonaNotFoundFailure(deletedVolume)) {
+    return deletedVolume;
+  }
+  return { ok: true, volumeDeleted: true };
 }
 
 async function resolveActionUser(args: {
@@ -1166,6 +1235,51 @@ export const deleteCloudProjectInternal = internalMutation({
   },
 });
 
+export const cleanupDeletedCloudProjectDaytonaVolumeInternal = internalAction({
+  args: {
+    projectId: v.string(),
+    providerVolumeId: v.string(),
+    attempt: v.optional(v.number()),
+  },
+  handler: async (ctx, args): Promise<unknown> => {
+    const projectId = normalizeIdValue(args.projectId);
+    const providerVolumeId = normalizeOptionalVolumeValue(args.providerVolumeId);
+    if (!projectId || !providerVolumeId) {
+      return { ok: true, volumeDeleted: true };
+    }
+    const loadedDaytonaConfig = loadDaytonaConfig();
+    if (!loadedDaytonaConfig.ok) {
+      throw new Error(loadedDaytonaConfig.message);
+    }
+
+    const cleanup = await cleanupDaytonaDeletedProjectResources({
+      config: loadedDaytonaConfig.config,
+      projectId,
+      volumeId: providerVolumeId,
+      waitForVolumeMs: 120_000,
+    });
+    if (!cleanup.ok) {
+      throw new Error(formatDaytonaFailureMessage(cleanup));
+    }
+    if (!cleanup.volumeDeleted) {
+      const attempt = Math.max(0, Math.floor(args.attempt ?? 0));
+      if (attempt >= 5) {
+        throw new Error(`Daytona volume ${providerVolumeId} did not become deletable after project deletion.`);
+      }
+      await ctx.scheduler.runAfter(
+        Math.min(5 * 60_000, 30_000 * (attempt + 1)),
+        (internal.projects as any).cleanupDeletedCloudProjectDaytonaVolumeInternal,
+        {
+          projectId,
+          providerVolumeId,
+          attempt: attempt + 1,
+        },
+      );
+    }
+    return cleanup;
+  },
+});
+
 export const deleteCloudProjectForOwner = action({
   args: {
     ownerId: v.optional(v.id("users")),
@@ -1213,46 +1327,24 @@ export const deleteCloudProjectForOwner = action({
       if (!loadedDaytonaConfig.ok) {
         throw new Error(loadedDaytonaConfig.message);
       }
-      const cleanedSandboxes = await cleanupDaytonaProjectSandboxes({
+      const cleanup = await cleanupDaytonaDeletedProjectResources({
         config: loadedDaytonaConfig.config,
         projectId: normalizeIdValue(args.projectId),
         volumeId: providerVolumeId,
+        waitForVolumeMs: 1500,
       });
-      if (!cleanedSandboxes.ok) {
-        throw new Error(formatDaytonaFailureMessage(cleanedSandboxes));
+      if (!cleanup.ok) {
+        throw new Error(formatDaytonaFailureMessage(cleanup));
       }
-      const shouldDeleteVolume = await waitForDaytonaVolumeDeletable({
-        config: loadedDaytonaConfig.config,
-        volumeId: providerVolumeId,
-      });
-      let deletedVolume = shouldDeleteVolume
-        ? await deleteDaytonaVolume({
-            config: loadedDaytonaConfig.config,
-            volumeId: providerVolumeId,
-          })
-        : ({ ok: true as const, payload: {} as DaytonaVolumeApiDto });
-      if (!deletedVolume.ok && shouldRetryDaytonaVolumeDelete(deletedVolume)) {
-        const retriedSandboxCleanup = await cleanupDaytonaProjectSandboxes({
-          config: loadedDaytonaConfig.config,
-          projectId: normalizeIdValue(args.projectId),
-          volumeId: providerVolumeId,
-        });
-        if (!retriedSandboxCleanup.ok) {
-          throw new Error(formatDaytonaFailureMessage(retriedSandboxCleanup));
-        }
-        const shouldRetryDeleteVolume = await waitForDaytonaVolumeDeletable({
-          config: loadedDaytonaConfig.config,
-          volumeId: providerVolumeId,
-        });
-        deletedVolume = shouldRetryDeleteVolume
-          ? await deleteDaytonaVolume({
-              config: loadedDaytonaConfig.config,
-              volumeId: providerVolumeId,
-            })
-          : ({ ok: true as const, payload: {} as DaytonaVolumeApiDto });
-      }
-      if (!deletedVolume.ok && !isDaytonaNotFoundFailure(deletedVolume)) {
-        throw new Error(formatDaytonaFailureMessage(deletedVolume));
+      if (!cleanup.volumeDeleted) {
+        await ctx.scheduler.runAfter(
+          0,
+          (internal.projects as any).cleanupDeletedCloudProjectDaytonaVolumeInternal,
+          {
+            projectId: normalizeIdValue(args.projectId),
+            providerVolumeId,
+          },
+        );
       }
     }
 
