@@ -8,6 +8,20 @@ import {
   normalizePersistedSeq,
 } from "./httpRuntimeTurnState";
 
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function isPartialAssistantContentJson(value: unknown): boolean {
+  const record = asRecord(value);
+  if (!record) return false;
+  const meta = asRecord(record.meta);
+  const partialRun = asRecord(meta?.partial_run);
+  return partialRun?.incomplete === true;
+}
+
 export async function ensureRuntimeRunStarted(args: {
   ctx: any;
   ownerId: any;
@@ -64,6 +78,7 @@ export async function lookupExistingRuntimeReplay(args: {
     contentJson?: unknown;
   } | null;
   if (!existingAssistant) return null;
+  if (isPartialAssistantContentJson(existingAssistant.contentJson)) return null;
   const existingUser = (await ctx.runQuery(
     api.threads.getCloudThreadMessageByOwnerMessageKey as any,
     {
@@ -136,6 +151,12 @@ export async function persistRuntimeAssistantMessage(args: {
   }> | null;
   runId: string;
   content: string;
+  partialRun?: {
+    status: "error" | "cancelled";
+    reason?: string | null;
+    errorCode?: string | null;
+    errorMessage?: string | null;
+  } | null;
 }) {
   const inferenceLaneFallbacks = Array.isArray(args.inferenceLaneFallbacks)
     ? args.inferenceLaneFallbacks.filter(
@@ -152,7 +173,7 @@ export async function persistRuntimeAssistantMessage(args: {
       )
     : [];
   const persisted = (await args.ctx.runMutation(
-    api.threads.addCloudThreadMessage as any,
+    api.threads.upsertCloudThreadMessageByMessageKey as any,
     {
       ownerId: args.ownerId,
       threadId: args.threadId,
@@ -164,6 +185,19 @@ export async function persistRuntimeAssistantMessage(args: {
           model_id: args.requestedModelId,
           inference_source: args.inferenceSource,
           lane: args.lane,
+          ...(args.partialRun
+            ? {
+                partial_run: {
+                  incomplete: true,
+                  status: args.partialRun.status,
+                  reason: String(args.partialRun.reason ?? "").trim() || null,
+                  error_code:
+                    String(args.partialRun.errorCode ?? "").trim() || null,
+                  error_message:
+                    String(args.partialRun.errorMessage ?? "").trim() || null,
+                },
+              }
+            : null),
           ...(inferenceLaneFallbacks.length > 0
             ? { inference_lane_fallbacks: inferenceLaneFallbacks }
             : null),

@@ -42,6 +42,8 @@ type ConvexRuntimeRunRow = {
   status?: string | null;
   visibility?: string | null;
   internalFollowupKind?: string | null;
+  errorCode?: string | null;
+  errorMessage?: string | null;
   startedAt?: number | null;
   updatedAt?: number | null;
   lastEventSeq?: number | null;
@@ -86,6 +88,8 @@ export type DaytonaCloudRuntimeRunTransportRow = {
   run_id: string;
   thread_id: string | null;
   status: string | null;
+  error_code: string | null;
+  error_message: string | null;
   started_at: string;
   updated_at: string;
   last_event_seq: number;
@@ -206,6 +210,8 @@ function mapConvexRuntimeRunRow(row: ConvexRuntimeRunRow): DaytonaCloudRuntimeRu
     run_id: runId,
     thread_id: typeof row.threadId === "string" ? row.threadId : null,
     status: typeof row.status === "string" ? row.status : null,
+    error_code: typeof row.errorCode === "string" ? row.errorCode : null,
+    error_message: typeof row.errorMessage === "string" ? row.errorMessage : null,
     started_at: toIsoStringFromMs(row.startedAt),
     updated_at: toIsoStringFromMs(row.updatedAt),
     last_event_seq: Math.max(0, Math.floor(toFiniteNumber(row.lastEventSeq, 0))),
@@ -362,6 +368,27 @@ export async function getConvexCloudRunningRuntimeRunByThreadKey(params: {
   const row = (await client.query("threads:getCloudRunningRuntimeRunByThreadKey" as any, {
     authSubject,
     threadKey,
+  })) as ConvexRuntimeRunRow | null;
+  if (!row) return null;
+  return mapConvexRuntimeRunRow(row);
+}
+
+export async function getConvexCloudRuntimeRunByRunId(params: {
+  session: AuthSessionLike;
+  runId: string;
+  threadId?: string;
+}): Promise<DaytonaCloudRuntimeRunTransportRow | null> {
+  const bootstrapped = await bootstrapConvexOwnerId(params.session);
+  if (!bootstrapped) return null;
+  const { client, authSubject } = bootstrapped;
+  const runId = String(params.runId ?? "").trim();
+  if (!runId) return null;
+  const row = (await client.query("threads:getCloudRuntimeRunByOwnerRunId" as any, {
+    authSubject,
+    runId,
+    ...(typeof params.threadId === "string" && params.threadId.trim()
+      ? { threadId: params.threadId.trim() }
+      : null),
   })) as ConvexRuntimeRunRow | null;
   if (!row) return null;
   return mapConvexRuntimeRunRow(row);

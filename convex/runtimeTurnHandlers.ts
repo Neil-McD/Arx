@@ -533,6 +533,52 @@ export async function handleRuntimeTurnRequest(args: {
       to: "chatgpt" | "platform" | "public";
       reason: string;
     }> | null = null;
+    const persistPartialAssistantMessageBestEffort = async (params: {
+      content: string;
+      status: "error" | "cancelled";
+      reason?: string;
+      errorCode?: string;
+      errorMessage?: string;
+      inferenceSourceOverride?: "free" | "platform" | "user_key" | "chatgpt";
+      inferenceLaneFallbacksOverride?: Array<{
+        from: "chatgpt" | "platform" | "public";
+        to: "chatgpt" | "platform" | "public";
+        reason: string;
+      }> | null;
+    }): Promise<{
+      assistantMessageId: string | null;
+      assistantMessageKey: string | null;
+      assistantMessageSeq: number | null;
+    } | null> => {
+      if (!persistVisibleAssistantMessage) return null;
+      const partialContent = String(params.content ?? "").trim();
+      const contentToPersist =
+        partialContent || "Run stopped before producing a final answer.";
+      try {
+        return await persistRuntimeAssistantMessage({
+          ctx,
+          ownerId: actor.dbUserId,
+          threadId: ownedThread._id,
+          messageKey: assistantMessageKeyForRun,
+          requestedModelId,
+          inferenceSource:
+            params.inferenceSourceOverride ?? resolvedInferenceSource,
+          lane,
+          inferenceLaneFallbacks:
+            params.inferenceLaneFallbacksOverride ?? inferenceLaneFallbacks,
+          runId,
+          content: contentToPersist,
+          partialRun: {
+            status: params.status,
+            reason: params.reason ?? null,
+            errorCode: params.errorCode ?? null,
+            errorMessage: params.errorMessage ?? null,
+          },
+        });
+      } catch {
+        return null;
+      }
+    };
     await appendRunEvent({
       eventType: "tool_policy_resolved",
       eventKey: `${runId}:tool_policy_resolved:1`,
@@ -591,36 +637,94 @@ export async function handleRuntimeTurnRequest(args: {
             },
           });
           runtimeTurnStage = "agent_loop";
-          const loopResult = await executeChatToolsAgentLoop({
-            ctx,
-            req,
-            userId: actor.dbUserId,
-            threadId: String(ownedThread._id),
-            authSubject: actor.authSubject,
-            projectId: runtimeProjectId,
-            requestedModelId,
-            inferenceSource,
-            modelRef,
-            messages: conversationMessages,
-            maxTokens,
-            runId,
-            communityId: runtimeCommunityId,
-            communityName: runtimeCommunityName,
-            communitySlug: runtimeCommunitySlug,
-            communityOneLiner: runtimeCommunityOneLiner,
-            communityAbout: runtimeCommunityAbout,
-            communitySystemPrompt: runtimeCommunitySystemPrompt,
-            threadWorkingState: ownedThread.workingState ?? null,
-            allowedToolNames,
-            apiKeyOverride: openRouterApiKeyOverride,
-            appendRunEvent: streamAppendRunEvent,
-            touchRunHeartbeat: touchRunHeartbeatBestEffort,
-          });
-          if (!loopResult.ok) {
-            if (loopResult.code === USER_CANCELLED_RUNTIME_CODE) {
+          let loopResult;
+          try {
+            loopResult = await executeChatToolsAgentLoop({
+              ctx,
+              req,
+              userId: actor.dbUserId,
+              threadId: String(ownedThread._id),
+              authSubject: actor.authSubject,
+              projectId: runtimeProjectId,
+              requestedModelId,
+              inferenceSource,
+              modelRef,
+              messages: conversationMessages,
+              maxTokens,
+              runId,
+              communityId: runtimeCommunityId,
+              communityName: runtimeCommunityName,
+              communitySlug: runtimeCommunitySlug,
+              communityOneLiner: runtimeCommunityOneLiner,
+              communityAbout: runtimeCommunityAbout,
+              communitySystemPrompt: runtimeCommunitySystemPrompt,
+              threadWorkingState: ownedThread.workingState ?? null,
+              allowedToolNames,
+              apiKeyOverride: openRouterApiKeyOverride,
+              appendRunEvent: streamAppendRunEvent,
+              touchRunHeartbeat: touchRunHeartbeatBestEffort,
+            });
+          } catch (error) {
+            if (isRuntimeRunCancelledError(error)) {
+              await persistPartialAssistantMessageBestEffort({
+                content: streamedContent,
+                status: "cancelled",
+                reason: USER_CANCELLED_RUNTIME_CODE,
+                errorCode: USER_CANCELLED_RUNTIME_CODE,
+                errorMessage: "Run cancelled by user.",
+                inferenceSourceOverride: streamedInferenceSource,
+                inferenceLaneFallbacksOverride: streamedInferenceLaneFallbacks,
+              });
               await finishCancelledRun();
               return;
             }
+            const message = error instanceof Error ? error.message : String(error);
+            await persistPartialAssistantMessageBestEffort({
+              content: streamedContent,
+              status: "error",
+              reason: "agent_loop_unhandled",
+              errorCode: "agent_loop_unhandled",
+              errorMessage: message || "Agent loop failed unexpectedly.",
+              inferenceSourceOverride: streamedInferenceSource,
+              inferenceLaneFallbacksOverride: streamedInferenceLaneFallbacks,
+            });
+            await finishRunBestEffortForRun({
+              status: "error",
+              reason: "agent_loop_unhandled",
+              errorCode: "agent_loop_unhandled",
+              errorMessage: message || "Agent loop failed unexpectedly.",
+            });
+            writer.send({
+              event: "error",
+              data: {
+                error: message || "Agent loop failed unexpectedly.",
+              },
+            });
+            return;
+          }
+          if (!loopResult.ok) {
+            if (loopResult.code === USER_CANCELLED_RUNTIME_CODE) {
+              await persistPartialAssistantMessageBestEffort({
+                content: streamedContent,
+                status: "cancelled",
+                reason: USER_CANCELLED_RUNTIME_CODE,
+                errorCode: USER_CANCELLED_RUNTIME_CODE,
+                errorMessage: "Run cancelled by user.",
+                inferenceSourceOverride: streamedInferenceSource,
+                inferenceLaneFallbacksOverride: streamedInferenceLaneFallbacks,
+              });
+              await finishCancelledRun();
+              return;
+            }
+            await persistPartialAssistantMessageBestEffort({
+              content: streamedContent,
+              status: "error",
+              reason: loopResult.code,
+              errorCode: loopResult.code,
+              errorMessage: loopResult.message,
+              inferenceSourceOverride: streamedInferenceSource,
+              inferenceLaneFallbacksOverride: streamedInferenceLaneFallbacks,
+            });
             await finishRunBestEffortForRun({
               status: "error",
               reason: loopResult.code,
@@ -665,6 +769,15 @@ export async function handleRuntimeTurnRequest(args: {
               }));
             } catch (error) {
               if (isRuntimeRunCancelledError(error)) {
+                await persistPartialAssistantMessageBestEffort({
+                  content: streamedContent,
+                  status: "cancelled",
+                  reason: USER_CANCELLED_RUNTIME_CODE,
+                  errorCode: USER_CANCELLED_RUNTIME_CODE,
+                  errorMessage: "Run cancelled by user.",
+                  inferenceSourceOverride: streamedInferenceSource,
+                  inferenceLaneFallbacksOverride: streamedInferenceLaneFallbacks,
+                });
                 await finishCancelledRun();
                 return;
               }
@@ -690,6 +803,15 @@ export async function handleRuntimeTurnRequest(args: {
             await throwIfRunCancelled();
           } catch (error) {
             if (isRuntimeRunCancelledError(error)) {
+              await persistPartialAssistantMessageBestEffort({
+                content: streamedContent,
+                status: "cancelled",
+                reason: USER_CANCELLED_RUNTIME_CODE,
+                errorCode: USER_CANCELLED_RUNTIME_CODE,
+                errorMessage: "Run cancelled by user.",
+                inferenceSourceOverride: streamedInferenceSource,
+                inferenceLaneFallbacksOverride: streamedInferenceLaneFallbacks,
+              });
               await finishCancelledRun();
               return;
             }
@@ -721,35 +843,44 @@ export async function handleRuntimeTurnRequest(args: {
         });
       }
       runtimeTurnStage = "agent_loop";
-      const loopResult = await executeChatToolsAgentLoop({
-        ctx,
-        req,
-        userId: actor.dbUserId,
-        threadId: String(ownedThread._id),
-        authSubject: actor.authSubject,
-        projectId: runtimeProjectId,
-        requestedModelId,
-        inferenceSource,
-        modelRef,
-        messages: conversationMessages,
-        maxTokens,
-        runId,
-        communityId: runtimeCommunityId,
-        communityName: runtimeCommunityName,
-        communitySlug: runtimeCommunitySlug,
-        communityOneLiner: runtimeCommunityOneLiner,
-        communityAbout: runtimeCommunityAbout,
-        communitySystemPrompt: runtimeCommunitySystemPrompt,
-        threadWorkingState: ownedThread.workingState ?? null,
-        allowedToolNames,
-        apiKeyOverride: openRouterApiKeyOverride,
-        appendRunEvent: async (event): Promise<void> => {
-          await appendRunEvent(event);
-        },
-        touchRunHeartbeat: touchRunHeartbeatBestEffort,
-      });
-      if (!loopResult.ok) {
-        if (loopResult.code === USER_CANCELLED_RUNTIME_CODE) {
+      let loopResult;
+      try {
+        loopResult = await executeChatToolsAgentLoop({
+          ctx,
+          req,
+          userId: actor.dbUserId,
+          threadId: String(ownedThread._id),
+          authSubject: actor.authSubject,
+          projectId: runtimeProjectId,
+          requestedModelId,
+          inferenceSource,
+          modelRef,
+          messages: conversationMessages,
+          maxTokens,
+          runId,
+          communityId: runtimeCommunityId,
+          communityName: runtimeCommunityName,
+          communitySlug: runtimeCommunitySlug,
+          communityOneLiner: runtimeCommunityOneLiner,
+          communityAbout: runtimeCommunityAbout,
+          communitySystemPrompt: runtimeCommunitySystemPrompt,
+          threadWorkingState: ownedThread.workingState ?? null,
+          allowedToolNames,
+          apiKeyOverride: openRouterApiKeyOverride,
+          appendRunEvent: async (event): Promise<void> => {
+            await appendRunEvent(event);
+          },
+          touchRunHeartbeat: touchRunHeartbeatBestEffort,
+        });
+      } catch (error) {
+        if (isRuntimeRunCancelledError(error)) {
+          await persistPartialAssistantMessageBestEffort({
+            content,
+            status: "cancelled",
+            reason: USER_CANCELLED_RUNTIME_CODE,
+            errorCode: USER_CANCELLED_RUNTIME_CODE,
+            errorMessage: "Run cancelled by user.",
+          });
           await finishCancelledRun();
           return runtimeJsonResponse(409, {
             ok: false,
@@ -759,6 +890,53 @@ export async function handleRuntimeTurnRequest(args: {
             run_id: runId,
           });
         }
+        const message = error instanceof Error ? error.message : String(error);
+        await persistPartialAssistantMessageBestEffort({
+          content,
+          status: "error",
+          reason: "agent_loop_unhandled",
+          errorCode: "agent_loop_unhandled",
+          errorMessage: message || "Agent loop failed unexpectedly.",
+        });
+        await finishRunBestEffortForRun({
+          status: "error",
+          reason: "agent_loop_unhandled",
+          errorCode: "agent_loop_unhandled",
+          errorMessage: message || "Agent loop failed unexpectedly.",
+        });
+        return runtimeJsonResponse(500, {
+          ok: false,
+          code: "agent_loop_unhandled",
+          error: "agent_loop_unhandled",
+          message: message || "Agent loop failed unexpectedly.",
+          run_id: runId,
+        });
+      }
+      if (!loopResult.ok) {
+        if (loopResult.code === USER_CANCELLED_RUNTIME_CODE) {
+          await persistPartialAssistantMessageBestEffort({
+            content,
+            status: "cancelled",
+            reason: USER_CANCELLED_RUNTIME_CODE,
+            errorCode: USER_CANCELLED_RUNTIME_CODE,
+            errorMessage: "Run cancelled by user.",
+          });
+          await finishCancelledRun();
+          return runtimeJsonResponse(409, {
+            ok: false,
+            code: USER_CANCELLED_RUNTIME_CODE,
+            error: USER_CANCELLED_RUNTIME_CODE,
+            message: "Run cancelled by user.",
+            run_id: runId,
+          });
+        }
+        await persistPartialAssistantMessageBestEffort({
+          content,
+          status: "error",
+          reason: loopResult.code,
+          errorCode: loopResult.code,
+          errorMessage: loopResult.message,
+        });
         await finishRunBestEffortForRun({
           status: "error",
           reason: loopResult.code,
@@ -896,13 +1074,53 @@ export async function handleRuntimeTurnRequest(args: {
             }
           } catch (error) {
             if (isRuntimeRunCancelledError(error)) {
+              await persistPartialAssistantMessageBestEffort({
+                content: streamedContent,
+                status: "cancelled",
+                reason: USER_CANCELLED_RUNTIME_CODE,
+                errorCode: USER_CANCELLED_RUNTIME_CODE,
+                errorMessage: "Run cancelled by user.",
+                inferenceSourceOverride: streamedInferenceSource,
+                inferenceLaneFallbacksOverride: streamedInferenceLaneFallbacks,
+              });
               await finishCancelledRun();
               return;
             }
-            throw error;
+            const message = error instanceof Error ? error.message : String(error);
+            await persistPartialAssistantMessageBestEffort({
+              content: streamedContent,
+              status: "error",
+              reason: "runtime_completion_unhandled",
+              errorCode: "runtime_completion_unhandled",
+              errorMessage: message || "Runtime completion failed unexpectedly.",
+              inferenceSourceOverride: streamedInferenceSource,
+              inferenceLaneFallbacksOverride: streamedInferenceLaneFallbacks,
+            });
+            await finishRunBestEffortForRun({
+              status: "error",
+              reason: "runtime_completion_unhandled",
+              errorCode: "runtime_completion_unhandled",
+              errorMessage: message || "Runtime completion failed unexpectedly.",
+            });
+            writer.send({
+              event: "error",
+              data: {
+                error: message || "Runtime completion failed unexpectedly.",
+              },
+            });
+            return;
           }
 
           if (isRuntimeCompletionFailure(completion)) {
+            await persistPartialAssistantMessageBestEffort({
+              content: streamedContent,
+              status: "error",
+              reason: completion.code,
+              errorCode: completion.code,
+              errorMessage: completion.message,
+              inferenceSourceOverride: streamedInferenceSource,
+              inferenceLaneFallbacksOverride: streamedInferenceLaneFallbacks,
+            });
             await finishRunBestEffortForRun({
               status: "error",
               reason: completion.code,
@@ -944,6 +1162,15 @@ export async function handleRuntimeTurnRequest(args: {
               }));
             } catch (error) {
               if (isRuntimeRunCancelledError(error)) {
+                await persistPartialAssistantMessageBestEffort({
+                  content: streamedContent,
+                  status: "cancelled",
+                  reason: USER_CANCELLED_RUNTIME_CODE,
+                  errorCode: USER_CANCELLED_RUNTIME_CODE,
+                  errorMessage: "Run cancelled by user.",
+                  inferenceSourceOverride: streamedInferenceSource,
+                  inferenceLaneFallbacksOverride: streamedInferenceLaneFallbacks,
+                });
                 await finishCancelledRun();
                 return;
               }
@@ -969,6 +1196,15 @@ export async function handleRuntimeTurnRequest(args: {
             await throwIfRunCancelled();
           } catch (error) {
             if (isRuntimeRunCancelledError(error)) {
+              await persistPartialAssistantMessageBestEffort({
+                content: streamedContent,
+                status: "cancelled",
+                reason: USER_CANCELLED_RUNTIME_CODE,
+                errorCode: USER_CANCELLED_RUNTIME_CODE,
+                errorMessage: "Run cancelled by user.",
+                inferenceSourceOverride: streamedInferenceSource,
+                inferenceLaneFallbacksOverride: streamedInferenceLaneFallbacks,
+              });
               await finishCancelledRun();
               return;
             }
@@ -1038,6 +1274,13 @@ export async function handleRuntimeTurnRequest(args: {
         }
       } catch (error) {
         if (isRuntimeRunCancelledError(error)) {
+          await persistPartialAssistantMessageBestEffort({
+            content,
+            status: "cancelled",
+            reason: USER_CANCELLED_RUNTIME_CODE,
+            errorCode: USER_CANCELLED_RUNTIME_CODE,
+            errorMessage: "Run cancelled by user.",
+          });
           await finishCancelledRun();
           return runtimeJsonResponse(409, {
             ok: false,
@@ -1047,9 +1290,36 @@ export async function handleRuntimeTurnRequest(args: {
             run_id: runId,
           });
         }
-        throw error;
+        const message = error instanceof Error ? error.message : String(error);
+        await persistPartialAssistantMessageBestEffort({
+          content,
+          status: "error",
+          reason: "runtime_completion_unhandled",
+          errorCode: "runtime_completion_unhandled",
+          errorMessage: message || "Runtime completion failed unexpectedly.",
+        });
+        await finishRunBestEffortForRun({
+          status: "error",
+          reason: "runtime_completion_unhandled",
+          errorCode: "runtime_completion_unhandled",
+          errorMessage: message || "Runtime completion failed unexpectedly.",
+        });
+        return runtimeJsonResponse(500, {
+          ok: false,
+          code: "runtime_completion_unhandled",
+          error: "runtime_completion_unhandled",
+          message: message || "Runtime completion failed unexpectedly.",
+          run_id: runId,
+        });
       }
       if (isRuntimeCompletionFailure(completion)) {
+        await persistPartialAssistantMessageBestEffort({
+          content,
+          status: "error",
+          reason: completion.code,
+          errorCode: completion.code,
+          errorMessage: completion.message,
+        });
         await finishRunBestEffortForRun({
           status: "error",
           reason: completion.code,
@@ -1090,6 +1360,13 @@ export async function handleRuntimeTurnRequest(args: {
           }));
       } catch (error) {
         if (isRuntimeRunCancelledError(error)) {
+          await persistPartialAssistantMessageBestEffort({
+            content,
+            status: "cancelled",
+            reason: USER_CANCELLED_RUNTIME_CODE,
+            errorCode: USER_CANCELLED_RUNTIME_CODE,
+            errorMessage: "Run cancelled by user.",
+          });
           await finishCancelledRun();
           return runtimeJsonResponse(409, {
             ok: false,
@@ -1120,6 +1397,13 @@ export async function handleRuntimeTurnRequest(args: {
       await throwIfRunCancelled();
     } catch (error) {
       if (isRuntimeRunCancelledError(error)) {
+        await persistPartialAssistantMessageBestEffort({
+          content,
+          status: "cancelled",
+          reason: USER_CANCELLED_RUNTIME_CODE,
+          errorCode: USER_CANCELLED_RUNTIME_CODE,
+          errorMessage: "Run cancelled by user.",
+        });
         await finishCancelledRun();
         return runtimeJsonResponse(409, {
           ok: false,

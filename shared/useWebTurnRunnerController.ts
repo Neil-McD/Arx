@@ -16,7 +16,10 @@ import {
   deleteCloudThreadMessage,
   ensureCloudThreadRecord,
 } from "./cloudThreadsGateway";
-import { listConvexCloudRuntimeRunEvents } from "./daytonaCloudThreadsRead";
+import {
+  getConvexCloudRuntimeRunByRunId,
+  listConvexCloudRuntimeRunEvents,
+} from "./daytonaCloudThreadsRead";
 import {
   getNextSmoothStreamingText,
   shouldDisableStreamingSmoothing,
@@ -54,31 +57,6 @@ export function useWebTurnRunnerController<
   const threadStreamingDrainingRefById = useRef<Record<string, boolean>>({});
   const threadStreamingDrainResolversRefById = useRef<Record<string, Array<() => void>>>({});
   const threadStreamingUserCancelledRefById = useRef<Record<string, boolean>>({});
-
-  const waitForPersistedRuntimeRun = useCallback(
-    async (session: SessionT, runId: string): Promise<boolean> => {
-      const normalizedRunId = String(runId ?? "").trim();
-      if (!normalizedRunId) return false;
-      const delaysMs = [0, 200, 500, 1000];
-      for (const delayMs of delaysMs) {
-        if (delayMs > 0) {
-          await new Promise((resolve) => window.setTimeout(resolve, delayMs));
-        }
-        try {
-          const rows = await listConvexCloudRuntimeRunEvents({
-            session: session as any,
-            runId: normalizedRunId,
-            limit: 1,
-          });
-          if (Array.isArray(rows) && rows.length > 0) return true;
-        } catch {
-          // ignore and keep retrying; a failed read should not mask the original transport error
-        }
-      }
-      return false;
-    },
-    [],
-  );
 
   const setThreadStreamingState = useCallback(
     (
@@ -193,7 +171,12 @@ export function useWebTurnRunnerController<
     [resolveThreadStreamingDrain, scheduleThreadStreamingFlush, setThreadStreamingDisplayContent],
   );
 
-  const resetThreadStreamingState = useCallback((threadId: string): void => {
+  const resetThreadStreamingState = useCallback((
+    threadId: string,
+    options?: {
+      preserveStreamingState?: boolean;
+    },
+  ): void => {
     const current = argsRef.current;
     const rafId = threadStreamingRafRefById.current[threadId] ?? null;
     if (rafId) {
@@ -206,7 +189,9 @@ export function useWebTurnRunnerController<
     delete threadStreamingDisplayContentRefById.current[threadId];
     delete threadStreamingDrainingRefById.current[threadId];
     delete threadStreamingUserCancelledRefById.current[threadId];
-    setThreadStreamingState(threadId, () => null);
+    if (options?.preserveStreamingState !== true) {
+      setThreadStreamingState(threadId, () => null);
+    }
     current.setThreadSendingStateById((prev) => {
       if (!(threadId in prev)) return prev;
       const next = { ...prev };
@@ -214,6 +199,117 @@ export function useWebTurnRunnerController<
       return next;
     });
   }, [resolveThreadStreamingDrain, setThreadStreamingState]);
+
+  const recoverRuntimeTurnFromPersistedState = useCallback(
+    async (params: {
+      session: SessionT;
+      threadId: string;
+      runId: string | null;
+      currentContent: string;
+      exposeStreamingUi: boolean;
+    }): Promise<{
+      recovered: boolean;
+      cancelled: boolean;
+      error: string | null;
+      preserveStreamingState: boolean;
+    }> => {
+      const normalizedRunId = String(params.runId ?? "").trim();
+      if (!normalizedRunId) {
+        return {
+          recovered: false,
+          cancelled: false,
+          error: null,
+          preserveStreamingState: false,
+        };
+      }
+
+      const delaysMs = [0, 200, 500];
+      let latestRun:
+        | Awaited<ReturnType<typeof getConvexCloudRuntimeRunByRunId>>
+        | null = null;
+      for (const delayMs of delaysMs) {
+        if (delayMs > 0) {
+          await new Promise((resolve) => window.setTimeout(resolve, delayMs));
+        }
+        try {
+          latestRun = await getConvexCloudRuntimeRunByRunId({
+            session: params.session as any,
+            runId: normalizedRunId,
+          });
+        } catch {
+          latestRun = null;
+        }
+        const status = String(latestRun?.status ?? "").trim().toLowerCase();
+        if (status && status !== "running") break;
+      }
+
+      const status = String(latestRun?.status ?? "").trim().toLowerCase();
+      if (status === "ok") {
+        const current = argsRef.current;
+        await current.loadThreadMessages(params.threadId, params.session);
+        await current.loadThreads(params.session);
+        return {
+          recovered: true,
+          cancelled: false,
+          error: null,
+          preserveStreamingState: false,
+        };
+      }
+      if (status === "cancelled") {
+        const current = argsRef.current;
+        await current.loadThreadMessages(params.threadId, params.session);
+        await current.loadThreads(params.session);
+        return {
+          recovered: true,
+          cancelled: true,
+          error: null,
+          preserveStreamingState: false,
+        };
+      }
+      if (status === "error") {
+        const current = argsRef.current;
+        await current.loadThreadMessages(params.threadId, params.session);
+        await current.loadThreads(params.session);
+        return {
+          recovered: true,
+          cancelled: false,
+          error:
+            String(latestRun?.error_message ?? "").trim() ||
+            (String(latestRun?.error_code ?? "").trim()
+              ? `Run failed: ${String(latestRun?.error_code ?? "").trim()}.`
+              : "Run failed before producing a response."),
+          preserveStreamingState: false,
+        };
+      }
+      if (status === "running" && params.exposeStreamingUi) {
+        setThreadStreamingState(params.threadId, (entry) => ({
+          runId: normalizedRunId,
+          meta: entry?.meta ?? null,
+          content: entry?.content ?? params.currentContent,
+          streamTransport: "recovery",
+          runtimeEvents: entry?.runtimeEvents ?? [],
+          lastRuntimeEventSeq:
+            typeof entry?.lastRuntimeEventSeq === "number" &&
+            Number.isFinite(entry.lastRuntimeEventSeq)
+              ? Math.max(0, Math.floor(entry.lastRuntimeEventSeq))
+              : 0,
+        }));
+        return {
+          recovered: true,
+          cancelled: false,
+          error: null,
+          preserveStreamingState: true,
+        };
+      }
+      return {
+        recovered: false,
+        cancelled: false,
+        error: null,
+        preserveStreamingState: false,
+      };
+    },
+    [setThreadStreamingState],
+  );
 
   const ensureCloudThreadRecordForRuntime = useCallback(
     async (session: SessionT, threadId: string): Promise<void> => {
@@ -582,6 +678,8 @@ export function useWebTurnRunnerController<
       let responseStarted = false;
       let firstEventSeen = false;
       let lastEventName: string | null = null;
+      let finalContent = "";
+      let preserveStreamingStateForRecovery = false;
 
       const getSanitizedStreamingContent = () => {
         const raw = threadStreamingContentRefById.current[threadId] ?? "";
@@ -840,9 +938,39 @@ export function useWebTurnRunnerController<
             blockedIds: [threadId, params.replyToId ?? null, runIdFromServer],
           }).trim();
           if (!safeAssistantText) {
+            const recovered = await recoverRuntimeTurnFromPersistedState({
+              session,
+              threadId,
+              runId: runIdFromServer,
+              currentContent: finalContent,
+              exposeStreamingUi,
+            });
+            if (recovered.recovered) {
+              preserveStreamingStateForRecovery =
+                recovered.preserveStreamingState;
+              return {
+                cancelled: recovered.cancelled,
+                error: recovered.error,
+              };
+            }
             throw new Error("Failed to run model.");
           }
           if (!persistedAssistantMessageId) {
+            const recovered = await recoverRuntimeTurnFromPersistedState({
+              session,
+              threadId,
+              runId: runIdFromServer,
+              currentContent: finalContent,
+              exposeStreamingUi,
+            });
+            if (recovered.recovered) {
+              preserveStreamingStateForRecovery =
+                recovered.preserveStreamingState;
+              return {
+                cancelled: recovered.cancelled,
+                error: recovered.error,
+              };
+            }
             throw new Error("Runtime turn did not persist assistant message.");
           }
           if (exposeStreamingUi) {
@@ -875,17 +1003,37 @@ export function useWebTurnRunnerController<
           if (!firstEventSeen) return "Runtime response stream failed before first event.";
           return "Runtime stream terminated unexpectedly.";
         })();
+        if (runIdFromServer) {
+          const recovered = await recoverRuntimeTurnFromPersistedState({
+            session,
+            threadId,
+            runId: runIdFromServer,
+            currentContent: finalContent,
+            exposeStreamingUi,
+          });
+          if (recovered.recovered) {
+            preserveStreamingStateForRecovery =
+              recovered.preserveStreamingState;
+            return {
+              cancelled: recovered.cancelled,
+              error: recovered.error,
+            };
+          }
+        }
         return {
           cancelled: false,
           error: details.length > 0 ? `${inferredMessage} (${details.join(", ")})` : inferredMessage,
         };
       } finally {
-        resetThreadStreamingState(threadId);
+        resetThreadStreamingState(threadId, {
+          preserveStreamingState: preserveStreamingStateForRecovery,
+        });
       }
     },
     [
       drainThreadStreamingDisplay,
       ensureCloudThreadRecordForRuntime,
+      recoverRuntimeTurnFromPersistedState,
       resetThreadStreamingState,
       scheduleThreadStreamingFlush,
       setThreadStreamingState,
@@ -910,7 +1058,7 @@ export function useWebTurnRunnerController<
       });
       return messageId;
     },
-    [waitForPersistedRuntimeRun],
+    [],
   );
 
   const createAssistantTextMessage = useCallback(

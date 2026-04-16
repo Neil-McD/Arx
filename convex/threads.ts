@@ -1041,6 +1041,89 @@ export const addCloudThreadMessage = mutation({
   },
 });
 
+export const upsertCloudThreadMessageByMessageKey = mutation({
+  args: {
+    ownerId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    threadId: v.id("threads"),
+    messageKey: v.string(),
+    role: v.union(v.literal("user"), v.literal("assistant"), v.literal("system")),
+    contentJson: v.any(),
+    engineId: v.optional(v.string()),
+    modelId: v.optional(v.string()),
+    runId: v.optional(v.string()),
+    createdAt: v.optional(v.number()),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const ownerId = await resolveOwnerIdForAuthenticatedRequest({
+      ctx,
+      ownerId: args.ownerId,
+      authSubject: args.authSubject ?? null,
+    });
+    const nowMs = args.nowMs ?? Date.now();
+    const thread = await requireOwnedCloudThread({
+      ctx,
+      ownerId,
+      threadId: args.threadId,
+    });
+    const messageKey = String(args.messageKey ?? "").trim();
+    if (!messageKey) throw new Error("message_key_required");
+
+    const existing = (await ctx.db
+      .query("cloudMessages")
+      .withIndex("by_owner_messageKey", (q) =>
+        q.eq("ownerId", ownerId).eq("messageKey", messageKey),
+      )
+      .first()) as CloudMessageLike | null;
+
+    if (existing) {
+      if (existing.threadId !== thread._id) {
+        throw new Error("message_key_conflict");
+      }
+      await ctx.db.patch(existing._id, {
+        role: args.role,
+        contentJson: args.contentJson,
+        engineId: String(args.engineId ?? "").trim() || undefined,
+        modelId: String(args.modelId ?? "").trim() || undefined,
+        runId: String(args.runId ?? "").trim() || undefined,
+      });
+      await ctx.db.patch(thread._id, {
+        updatedAt: nowMs,
+        lastSeq: Math.max(0, Math.floor(Math.max(thread.lastSeq ?? 0, existing.seq ?? 0))),
+      });
+      const updated = (await ctx.db.get(existing._id)) as CloudMessageLike | null;
+      if (!updated) throw new Error("message_update_failed");
+      return updated;
+    }
+
+    const seq = Math.max(0, Math.floor((thread.lastSeq ?? 0) + 1));
+    const createdAt =
+      typeof args.createdAt === "number" && Number.isFinite(args.createdAt)
+        ? Math.floor(args.createdAt)
+        : nowMs;
+    const id = await ctx.db.insert("cloudMessages", {
+      ownerId,
+      threadId: thread._id,
+      messageKey,
+      seq,
+      role: args.role,
+      contentJson: args.contentJson,
+      engineId: String(args.engineId ?? "").trim() || undefined,
+      modelId: String(args.modelId ?? "").trim() || undefined,
+      runId: String(args.runId ?? "").trim() || undefined,
+      createdAt,
+    });
+    await ctx.db.patch(thread._id, {
+      updatedAt: nowMs,
+      lastSeq: Math.max(0, Math.floor(Math.max(thread.lastSeq ?? 0, seq))),
+    });
+    const created = (await ctx.db.get(id)) as CloudMessageLike | null;
+    if (!created) throw new Error("message_create_failed");
+    return created;
+  },
+});
+
 export const deleteCloudThreadMessage = mutation({
   args: {
     ownerId: v.optional(v.id("users")),
