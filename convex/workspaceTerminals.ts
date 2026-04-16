@@ -18,7 +18,6 @@ import {
   resolveRuntimeOwnedTerminalSession,
 } from "./workspaceTerminalRuntimeAccess";
 import {
-  ensureProjectBackgroundSandbox,
   releaseProjectBackgroundSandboxIfIdle,
   resolveTerminalSandboxContext,
 } from "./workspaceTerminalBackgroundService";

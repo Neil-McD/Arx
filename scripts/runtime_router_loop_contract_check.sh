@@ -9,6 +9,8 @@ HTTP_FILE="$ROOT/convex/httpRuntimeRoutes.ts"
 HANDLERS_FILE="$ROOT/convex/runtimeTurnHandlers.ts"
 RESOLUTION_FILE="$ROOT/convex/runtimeTurnResolution.ts"
 DAYTONA_FILE="$ROOT/convex/httpDaytona.ts"
+HARNESS_TELEMETRY_FILE="$ROOT/convex/runtimeHarnessTelemetry.ts"
+HARNESS_SHAPING_FILE="$ROOT/convex/runtimeHarnessShaping.ts"
 TOOL_TYPES_FILE="$ROOT/shared/retrievalTools.ts"
 NATIVE_LOOP_FILE="$ROOT/shared/nativeToolLoop.ts"
 PROMPT_FILE="$ROOT/shared/runtimePrompt.ts"
@@ -77,13 +79,17 @@ require_match_in_file "$DAYTONA_FILE" 'runProviderNativeToolCompletion\(' \
   "workspace loop uses provider-native tool completion"
 require_match_in_file "$DAYTONA_FILE" 'runNativeRuntimeKernel<' \
   "workspace loop uses explicit runtime kernel state machine"
+require_match_in_file "$DAYTONA_FILE" 'from "./runtimeHarnessTelemetry"' \
+  "workspace loop imports extracted runtime harness telemetry helpers"
+require_match_in_file "$DAYTONA_FILE" 'from "./runtimeHarnessShaping"' \
+  "workspace loop imports extracted runtime harness shaping helpers"
 require_match_in_file "$DAYTONA_FILE" 'tool_batch_telemetry' \
   "workspace loop emits batch telemetry evidence"
-require_match_in_file "$DAYTONA_FILE" 'batch_wall_time_ms' \
+require_match_in_file "$HARNESS_TELEMETRY_FILE" 'batch_wall_time_ms' \
   "workspace batch telemetry records wall time"
-require_match_in_file "$DAYTONA_FILE" 'estimated_parallel_savings_ms' \
+require_match_in_file "$HARNESS_TELEMETRY_FILE" 'estimated_parallel_savings_ms' \
   "workspace batch telemetry estimates parallel savings"
-require_match_in_file "$DAYTONA_FILE" 'parallel_blocker_reason_counts' \
+require_match_in_file "$HARNESS_TELEMETRY_FILE" 'parallel_blocker_reason_counts' \
   "workspace batch telemetry records blocker reasons"
 require_match_in_file "$DAYTONA_FILE" 'createPolyNetExecutionSession\(' \
   "workspace loop creates a unified PolyNet execution session"
@@ -107,6 +113,10 @@ forbid_match_in_file "$DAYTONA_FILE" 'createRuntimeMcpManager\(' \
   "workspace loop no longer instantiates MCP managers inline"
 forbid_match_in_file "$DAYTONA_FILE" 'createRuntimeMountedToolExposureState\(' \
   "workspace loop no longer instantiates mounted tool exposure state inline"
+forbid_match_in_file "$DAYTONA_FILE" 'function buildToolBatchTelemetryPayload\(' \
+  "workspace loop no longer defines batch telemetry shaping inline"
+forbid_match_in_file "$DAYTONA_FILE" 'function normalizeRuntimeMountedCommunityAppTools\(' \
+  "workspace loop no longer defines mounted tool shaping inline"
 forbid_match_in_file "$DAYTONA_FILE" 'internal\.workspaceTerminals\.(startWorkspaceTerminalInternal|readWorkspaceTerminalInternal|writeWorkspaceTerminalInternal|stopWorkspaceTerminalInternal)' \
   "workspace loop no longer calls terminal internals inline"
 forbid_match_in_file "$DAYTONA_FILE" 'runDaytonaComputerUseTool\(' \
