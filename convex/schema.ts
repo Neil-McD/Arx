@@ -697,6 +697,7 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_community", ["communityId"])
+    .index("by_community_createdAt", ["communityId", "createdAt"])
     .index("by_community_source", ["communityId", "sourceType", "sourceId"])
     .index("by_community_embeddingStatus", ["communityId", "embeddingStatus"])
     .vectorIndex("by_embedding", {

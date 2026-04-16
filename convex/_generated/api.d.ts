@@ -57,6 +57,7 @@ import type * as daytonaWorkspaceTools from "../daytonaWorkspaceTools.js";
 import type * as developerApps from "../developerApps.js";
 import type * as email from "../email.js";
 import type * as emailCore from "../emailCore.js";
+import type * as emailDigests from "../emailDigests.js";
 import type * as emailEvents from "../emailEvents.js";
 import type * as emailPreferences from "../emailPreferences.js";
 import type * as entitlements from "../entitlements.js";
@@ -165,6 +166,7 @@ declare const fullApi: ApiFromModules<{
   developerApps: typeof developerApps;
   email: typeof email;
   emailCore: typeof emailCore;
+  emailDigests: typeof emailDigests;
   emailEvents: typeof emailEvents;
   emailPreferences: typeof emailPreferences;
   entitlements: typeof entitlements;

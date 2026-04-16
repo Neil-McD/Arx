@@ -12,6 +12,19 @@ crons.interval(
   },
 );
 
+crons.daily(
+  "enqueue weekly community digests",
+  {
+    hourUTC: 13,
+    minuteUTC: 0,
+  },
+  (internal as any).emailDigests.enqueueWeeklyCommunityDigestsInternal,
+  {
+    limitCommunities: 50,
+    limitRecipientsPerCommunity: 500,
+  },
+);
+
 crons.interval(
   "reconcile daytona orphan sandboxes",
   { minutes: 15 },

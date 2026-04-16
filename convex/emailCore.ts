@@ -242,7 +242,7 @@ export function renderEmailTemplate(params: {
     case "weekly_member_digest": {
       const renderedItems = renderDigestItems(items);
       const shell = buildEmailShell({
-        title: "Weekly digest",
+        title: `${communityName} weekly digest`,
         subtitle: dateLabel ? `For ${dateLabel}` : communityName,
         intro:
           readString(payload.intro) ||
@@ -253,7 +253,7 @@ export function renderEmailTemplate(params: {
         footerNote: readString(payload.footerNote),
       });
       return {
-        subject: `Weekly digest${dateLabel ? ` for ${dateLabel}` : ""}`,
+        subject: `${communityName} weekly digest${dateLabel ? ` for ${dateLabel}` : ""}`,
         html: shell.html,
         text: [shell.text, renderedItems.text].filter(Boolean).join("\n\n"),
       };
