@@ -5,6 +5,7 @@ import { registerRuntimeAuthRoutes } from "./httpAuth";
 import { registerRuntimeAuthBridgeRoutes } from "./httpAuthBridge";
 import { registerRuntimeBillingRoutes } from "./httpBilling";
 import { registerRuntimeContextRoutes } from "./httpContext";
+import { registerRuntimeMcpRoutes } from "./httpMcp";
 import { registerEmailRoutes } from "./httpEmail";
 import { readAuthenticatedIdentityProfile } from "./authIdentity";
 import { parseBoolish, parseOptionalString } from "./httpInferenceConfig";
@@ -314,6 +315,14 @@ registerRuntimeContextRoutes({
   jsonResponse,
   optionsResponse,
   requireAuthenticatedSubject,
+});
+
+registerRuntimeMcpRoutes({
+  http,
+  httpAction,
+  jsonResponse,
+  optionsResponse,
+  requireAuthenticatedActor,
 });
 
 registerRuntimeTurnRoutes({
