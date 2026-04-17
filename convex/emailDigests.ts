@@ -288,6 +288,7 @@ async function listRecentArchiveDocuments(ctx: any, params: {
 
 async function listActiveDigestRecipients(ctx: any, params: {
   communityId: any;
+  communityOwnerId: any;
   nowMs: number;
   limit: number;
 }): Promise<any[]> {
@@ -304,7 +305,18 @@ async function listActiveDigestRecipients(ctx: any, params: {
     settingsByUserId.set(String(row.userId), row);
   }
   const recipientUserIds: any[] = [];
+  const ownerId = String(params.communityOwnerId ?? "").trim();
+  if (ownerId) {
+    const ownerSettings = settingsByUserId.get(ownerId);
+    if (
+      ownerSettings?.muted !== true &&
+      !(typeof ownerSettings?.mutedUntil === "number" && ownerSettings.mutedUntil > params.nowMs)
+    ) {
+      recipientUserIds.push(params.communityOwnerId);
+    }
+  }
   for (const membership of memberships.sort((a, b) => a.createdAt - b.createdAt)) {
+    if (ownerId && String(membership.userId) === ownerId) continue;
     if (membership.active === false || typeof membership.revokedAt === "number") continue;
     const settings = settingsByUserId.get(String(membership.userId));
     if (settings?.muted === true) continue;
@@ -457,6 +469,7 @@ export const buildWeeklyCommunityDigestBatchesInternal = internalQuery({
 
       const recipientUserIds = await listActiveDigestRecipients(ctx, {
         communityId: community._id,
+        communityOwnerId: community.ownerId,
         nowMs,
         limit: limitRecipientsPerCommunity,
       });
