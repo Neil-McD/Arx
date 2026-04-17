@@ -4,6 +4,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
 import "./index.css";
+import { WorkOsRuntimeProvider } from "./auth/workosRuntime";
 import { applyAppThemeAttributes, parseAppTheme } from "../../../shared/theme";
 import { bootConvexProbe } from "../../../shared/convexRuntime";
 import { bootstrapConvexAnonymousActor } from "../../../shared/convexAuthBootstrap";
@@ -225,7 +226,9 @@ bootstrapConvexAnonymousActor();
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
     <ErrorBoundary>
-      <App />
+      <WorkOsRuntimeProvider>
+        <App />
+      </WorkOsRuntimeProvider>
     </ErrorBoundary>
   </React.StrictMode>
 );
