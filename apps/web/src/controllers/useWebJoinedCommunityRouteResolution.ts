@@ -72,9 +72,6 @@ export function useWebJoinedCommunityRouteResolution<
         params.navigateTo(`/c/${encodeURIComponent(slug)}`, { replace: true });
       } catch (error) {
         console.warn("Failed to resolve joined community route by slug:", error);
-        if (!cancelled) {
-          params.navigateTo(`/c/${encodeURIComponent(slug)}`, { replace: true });
-        }
       }
     })();
 

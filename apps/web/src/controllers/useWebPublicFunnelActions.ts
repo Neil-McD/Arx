@@ -185,6 +185,7 @@ export function useWebPublicFunnelActions<
       if (!trimmed) return;
       const current = argsRef.current;
       current.setIsLoadingMyPublicCommunityJoinRequest(true);
+      current.setMyPublicCommunityJoinRequest(null);
       try {
         const row = await fetchCloudMyJoinRequestBySlug<AuthSession, MyCommunityJoinRequestT>({
           session,
@@ -351,12 +352,12 @@ export function useWebPublicFunnelActions<
 
       current.setIsLoadingPublicCommunity(true);
       current.setPublicCommunityError(null);
+      current.setPublicJoinError(null);
+      current.setMyPublicCommunityJoinRequest(null);
+      current.setPublicCommunityAccess(null);
       if (!isSameSlugRefresh) {
-        current.setPublicJoinError(null);
         current.setPublicCommunity(null);
         current.setPublicCommunityPlans([]);
-        current.setMyPublicCommunityJoinRequest(null);
-        current.setPublicCommunityAccess(null);
       }
       try {
         const payload = await resolveCloudPublicFunnel<AuthSession, PublicCommunityT, PublicPlanT>({
@@ -373,6 +374,7 @@ export function useWebPublicFunnelActions<
         const rawSession = current.getSession();
         const session = current.ensureSession ? await current.ensureSession(rawSession) : rawSession;
         let hasEnterAccess = false;
+        let accessLookupFailed = false;
         if (session) {
           try {
             const access = await fetchCloudMyCommunityAccessBySlug<AuthSession, CommunityAccessT>({
@@ -384,9 +386,14 @@ export function useWebPublicFunnelActions<
             if (hasEnterAccess) {
               current.setMyPublicCommunityJoinRequest(null);
             }
-          } catch {
+          } catch (error) {
+            accessLookupFailed = true;
             current.setPublicCommunityAccess(null);
-            // ignore; fall back to the public funnel
+            current.setMyPublicCommunityJoinRequest(null);
+            current.setPublicCommunityError(
+              "You are signed in, but PolyNet could not verify your community access. Refresh and try again.",
+            );
+            console.warn("Failed to verify signed-in community access:", error);
           }
         } else {
           current.setPublicCommunityAccess(null);
@@ -395,7 +402,8 @@ export function useWebPublicFunnelActions<
         if (
           session &&
           deriveCommunityJoinMode(payload.community as { entry_policy?: unknown }) === "join_approval" &&
-          !hasEnterAccess
+          !hasEnterAccess &&
+          !accessLookupFailed
         ) {
           void loadMyJoinRequestBySlug(payload.community.slug, session);
         }
