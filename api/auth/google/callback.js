@@ -124,6 +124,34 @@ export default async function handler(req, res) {
     return;
   }
 
+  let bootstrapResponse;
+  try {
+    bootstrapResponse = await callAuthBridgeJson("/runtime/auth_bridge_session_bootstrap", {
+      payload: { session_id: sessionId },
+    });
+  } catch (error) {
+    await redirectWithError(
+      error instanceof Error ? error.message : "Auth session bootstrap verification failed.",
+    );
+    return;
+  }
+
+  if (!bootstrapResponse.ok) {
+    await redirectWithError(await readResponseError(bootstrapResponse));
+    return;
+  }
+
+  try {
+    const bootstrapPayload = await bootstrapResponse.json();
+    if (!bootstrapPayload?.session?.access_token) {
+      await redirectWithError("Auth session bootstrap verification was incomplete.");
+      return;
+    }
+  } catch {
+    await redirectWithError("Auth session bootstrap verification was invalid.");
+    return;
+  }
+
   clearAuthFlowCookie(res, req);
   setAuthSessionCookie(res, req, sessionId);
   redirect(res, buildRedirectUrl(req, pending.returnTo));

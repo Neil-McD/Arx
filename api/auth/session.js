@@ -46,6 +46,15 @@ export default async function handler(req, res) {
 
   if (response.ok) {
     const payload = await response.json();
+    if (!payload?.session?.access_token) {
+      clearAuthSessionCookie(res, req);
+      sendJson(res, 401, {
+        ok: false,
+        code: "auth_session_bootstrap_incomplete",
+        error: "Auth session bootstrap was incomplete.",
+      });
+      return;
+    }
     sendJson(res, 200, {
       ok: true,
       session: payload?.session ?? null,
@@ -55,7 +64,11 @@ export default async function handler(req, res) {
 
   if (response.status === 401) {
     clearAuthSessionCookie(res, req);
-    sendJson(res, 200, { ok: true, session: null });
+    sendJson(res, 401, {
+      ok: false,
+      code: "auth_session_invalid",
+      error: await readResponseError(response),
+    });
     return;
   }
 

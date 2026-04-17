@@ -28,6 +28,7 @@ import {
   storeAuthResumeState,
 } from "../../../../shared/authResumeState";
 import { formatAuthSessionErrorMessage } from "../../../../shared/appErrorMappings";
+import { clearOAuthCallbackParamsFromLocation } from "../../../../shared/cloudPkce";
 import { useWebAuthSessionLifecycle } from "./useWebAuthSessionLifecycle";
 
 type AsyncVoid = void | Promise<void>;
@@ -95,6 +96,18 @@ function sessionsEqual(
   return a.access_token === b.access_token && (a.id_token ?? null) === (b.id_token ?? null);
 }
 
+function readAuthCallbackErrorFromLocation(): string | null {
+  try {
+    const url = new URL(window.location.href);
+    const description = String(url.searchParams.get("error_description") ?? "").trim();
+    if (description) return description;
+    const error = String(url.searchParams.get("error") ?? "").trim();
+    return error ? error.replace(/_/g, " ") : null;
+  } catch {
+    return null;
+  }
+}
+
 export function useWebAppAuthController(
   params: UseWebAppAuthControllerParams,
 ): UseWebAppAuthControllerResult {
@@ -120,6 +133,15 @@ export function useWebAppAuthController(
   const onDidJustSignInRef = useLatestRef(params.onDidJustSignIn);
   const onApplyPostAuthPathRef = useLatestRef(params.onApplyPostAuthPath);
   const onBeforeSignOutRef = useLatestRef(params.onBeforeSignOut);
+
+  useEffect(() => {
+    const callbackError = readAuthCallbackErrorFromLocation();
+    if (!callbackError) return;
+    setAuthError(callbackError);
+    setIsAuthGateOpen(true);
+    clearAuthFlowPending();
+    clearOAuthCallbackParamsFromLocation();
+  }, []);
 
   const markAuthBootstrapComplete = useCallback(() => {
     authBootstrapCompleteRef.current = true;
@@ -301,6 +323,8 @@ export function useWebAppAuthController(
         if (hadPendingAuthFlow) {
           const message = formatAuthSessionErrorMessage(error, "Failed to bootstrap auth session.");
           setAuthError(message);
+          setIsAuthGateOpen(true);
+          clearAuthFlowPending();
         }
       }
 
@@ -336,6 +360,12 @@ export function useWebAppAuthController(
       }
 
       markAuthBootstrapComplete();
+      if (hadPendingAuthFlow) {
+        setAuthError("Sign-in completed, but PolyNet could not establish your account session. Please try again.");
+        setIsAuthGateOpen(true);
+        clearAuthFlowPending();
+        clearAuthResumeState();
+      }
     },
     onDidJustSignIn: () => {
       onDidJustSignInRef.current();
