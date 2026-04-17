@@ -43,6 +43,21 @@ function readFirstEnv(keys: readonly string[]): string {
   return "";
 }
 
+function readPublicAppBaseUrl(): string {
+  const value = readFirstEnv([
+    "ARX_PUBLIC_APP_URL",
+    "PUBLIC_APP_URL",
+    "VITE_PUBLIC_APP_URL",
+    "VITE_APP_URL",
+  ]).replace(/\/+$/, "");
+  if (/^https?:\/\//i.test(value)) return value;
+  return "https://www.polynet.ai";
+}
+
+function readEmailBrandLogoUrl(): string {
+  return `${readPublicAppBaseUrl()}/favicon.png`;
+}
+
 function escapeHtml(value: unknown): string {
   return String(value ?? "")
     .replaceAll("&", "&amp;")
@@ -135,16 +150,25 @@ function buildEmailShell(params: {
   const ctaUrl = readString(params.ctaUrl);
   const footerNote = readString(params.footerNote);
   const bodyHtml = readString(params.bodyHtml);
+  const logoUrl = readEmailBrandLogoUrl();
   const textParts = [params.title, subtitle, intro].filter(Boolean);
   if (ctaLabel && ctaUrl) textParts.push(`${ctaLabel}: ${ctaUrl}`);
   if (footerNote) textParts.push(footerNote);
   return {
     html: `
       <div style="margin:0;padding:24px;background:#0f1116;color:#f3f4f6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
-        <div style="max-width:640px;margin:0 auto;padding:28px;border:1px solid #1f2430;border-radius:20px;background:#12151c;">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:28px;">
-            <div style="font-size:18px;font-weight:800;color:#f3f4f6;">Polynet</div>
-            <div style="font-size:12px;color:#98a1b3;">Community intelligence</div>
+        <div style="max-width:640px;margin:0 auto;padding:24px 28px 28px;border:1px solid #1f2430;border-radius:20px;background:#12151c;">
+          <div style="display:flex;align-items:center;justify-content:flex-end;margin-bottom:14px;">
+            <div style="display:flex;align-items:center;gap:12px;font-size:18px;font-weight:800;color:#f3f4f6;">
+              <img
+                src="${escapeHtml(logoUrl)}"
+                alt=""
+                width="34"
+                height="34"
+                style="display:block;width:34px;height:34px;border-radius:10px;"
+              />
+              <span>Polynet</span>
+            </div>
           </div>
           <div style="font-size:28px;line-height:1.15;font-weight:800;color:#f3f4f6;">${escapeHtml(params.title)}</div>
           ${subtitle ? `<div style="margin-top:10px;font-size:14px;color:#98a1b3;">${escapeHtml(subtitle)}</div>` : ""}
