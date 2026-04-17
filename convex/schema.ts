@@ -5,6 +5,7 @@ export default defineSchema({
   users: defineTable({
     authSubject: v.string(),
     email: v.optional(v.string()),
+    normalizedEmail: v.optional(v.string()),
     emailVerifiedAt: v.optional(v.number()),
     emailVerificationSource: v.optional(
       v.union(
@@ -19,7 +20,8 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_authSubject", ["authSubject"])
-    .index("by_email", ["email"]),
+    .index("by_email", ["email"])
+    .index("by_normalizedEmail", ["normalizedEmail"]),
 
   userEntitlements: defineTable({
     userId: v.id("users"),
