@@ -4,7 +4,7 @@ import {
   AUTH_SIGNED_OUT_TAB_INTENT_KEY,
   clearAuthFlowPending,
   clearAuthSignedOutIntentMarker,
-  ensureAuthSessionForRequestResult,
+  ensureAuthSessionForAuthenticatedSendResult,
   fetchWithAuthShared,
   fetchWithPublicShared,
   hasRecentAuthFlowPending,
@@ -189,7 +189,11 @@ export function useWebAppAuthController(
     const requestSession = currentSession ?? null;
     if (!requestSession) return null;
 
-    const ensured = await ensureAuthSessionForRequestResult(requestSession, refreshAuthSessionLockedResult);
+    const ensured = await ensureAuthSessionForAuthenticatedSendResult({
+      session: requestSession,
+      sessionRef,
+      refreshLockedResult: refreshAuthSessionLockedResult,
+    });
     if (ensured.status === "terminal_failure") {
       await expireAuthSessionLocally();
       return null;
@@ -335,12 +339,22 @@ export function useWebAppAuthController(
       }
 
       if (bootstrappedSession) {
+        const verifiedSession = await ensureUsableAuthSession(bootstrappedSession);
+        if (!verifiedSession) {
+          markAuthBootstrapComplete();
+          setAuthError("Sign-in completed, but PolyNet could not verify your authenticated app session. Please try again.");
+          setIsAuthGateOpen(true);
+          clearAuthFlowPending();
+          clearAuthResumeState();
+          return;
+        }
+
         markAuthBootstrapComplete();
         clearAuthSignedOutIntentMarker();
         if (hadPendingAuthFlow) {
           didJustSignInRef.current = true;
         }
-        adoptAuthSession(bootstrappedSession);
+        adoptAuthSession(verifiedSession);
 
         if (hadPendingAuthFlow) {
           const authResumeState = readAuthResumeState();
