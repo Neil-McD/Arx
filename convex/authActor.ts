@@ -1,11 +1,13 @@
 import { internalMutation, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
 import { resolveAuthenticatedSubject } from "./authIdentity";
+import { isAnonymousAuthSubject, normalizeAuthRelinkEmail } from "../shared/authRelinkPolicy";
 
 type UserRow = {
   _id: any;
   authSubject?: string;
   email?: string;
+  normalizedEmail?: string;
   emailVerifiedAt?: number;
   emailVerificationSource?: "oauth_provider" | "magic_link" | "manual_change_code";
   displayName?: string;
@@ -35,6 +37,14 @@ function normalizeOptionalString(raw: unknown): string | undefined {
   return normalized || undefined;
 }
 
+function normalizeEmailValue(raw: unknown): string | undefined {
+  return normalizeOptionalString(raw);
+}
+
+function normalizeStoredEmail(raw: unknown): string | null {
+  return normalizeAuthRelinkEmail(raw);
+}
+
 function normalizeEmailVerificationSource(
   raw: unknown,
 ): "oauth_provider" | "magic_link" | "manual_change_code" | undefined {
@@ -52,6 +62,101 @@ async function getUserByResolvedSubject(ctx: any, authSubject: string): Promise<
     .query("users")
     .withIndex("by_authSubject", (q: any) => q.eq("authSubject", normalizedSubject))
     .first()) as UserRow | null) ?? null;
+}
+
+async function listUsersByNormalizedEmail(ctx: any, normalizedEmail: string): Promise<UserRow[]> {
+  const normalized = normalizeStoredEmail(normalizedEmail);
+  if (!normalized) return [];
+  const indexed = (await ctx.db
+    .query("users")
+    .withIndex("by_normalizedEmail", (q: any) => q.eq("normalizedEmail", normalized))
+    .collect()) as UserRow[];
+  if (indexed.length > 0) return indexed;
+  const scanned = (await ctx.db.query("users").collect()) as UserRow[];
+  return scanned.filter((user) => normalizeStoredEmail(user.email) === normalized);
+}
+
+async function findUniqueRelinkCandidateByNormalizedEmail(
+  ctx: any,
+  normalizedEmail: string,
+): Promise<UserRow | null> {
+  const users = await listUsersByNormalizedEmail(ctx, normalizedEmail);
+  const candidates = users.filter((user) => {
+    const authSubject = normalizeIdValue(user.authSubject);
+    if (!authSubject || isAnonymousAuthSubject(authSubject)) return false;
+    return normalizeStoredEmail(user.normalizedEmail ?? user.email) === normalizedEmail;
+  });
+  if (candidates.length !== 1) return null;
+  return candidates[0] ?? null;
+}
+
+async function revokeAuthSessionsForUser(ctx: any, userId: any, nowMs: number): Promise<void> {
+  const rows = await ctx.db
+    .query("authSessions")
+    .withIndex("by_user", (q: any) => q.eq("userId", userId))
+    .collect();
+  for (const row of rows) {
+    if (typeof row.revokedAt === "number") continue;
+    await ctx.db.patch(row._id, {
+      revokedAt: nowMs,
+      updatedAt: nowMs,
+    });
+  }
+}
+
+function buildUserPatch(args: {
+  existing: UserRow;
+  authSubject?: string;
+  email?: string;
+  normalizedEmail?: string;
+  emailVerified: boolean;
+  emailVerificationSource?: "oauth_provider" | "magic_link" | "manual_change_code";
+  displayName?: string;
+  avatarUrl?: string;
+  nowMs: number;
+}): Record<string, unknown> {
+  const patch: Record<string, unknown> = {};
+  const nextAuthSubject = normalizeIdValue(args.authSubject);
+  if (nextAuthSubject && nextAuthSubject !== normalizeIdValue(args.existing.authSubject)) {
+    patch.authSubject = nextAuthSubject;
+  }
+
+  const emailChanged = args.email !== args.existing.email;
+  const normalizedEmailChanged =
+    normalizeStoredEmail(args.normalizedEmail) !== normalizeStoredEmail(args.existing.normalizedEmail ?? args.existing.email);
+
+  if (emailChanged) patch.email = args.email;
+  if (normalizedEmailChanged) patch.normalizedEmail = args.normalizedEmail;
+
+  if (args.displayName !== undefined && args.displayName !== args.existing.displayName) {
+    patch.displayName = args.displayName;
+  }
+  if (args.avatarUrl !== undefined && args.avatarUrl !== args.existing.avatarUrl) {
+    patch.avatarUrl = args.avatarUrl;
+  }
+
+  if ((emailChanged || normalizedEmailChanged) && !args.emailVerified) {
+    patch.emailVerifiedAt = undefined;
+    patch.emailVerificationSource = undefined;
+  }
+
+  if (
+    args.emailVerified &&
+    (
+      emailChanged ||
+      normalizedEmailChanged ||
+      typeof args.existing.emailVerifiedAt !== "number" ||
+      args.existing.emailVerificationSource !== args.emailVerificationSource
+    )
+  ) {
+    patch.emailVerifiedAt = args.nowMs;
+    patch.emailVerificationSource = args.emailVerificationSource;
+  }
+
+  if (Object.keys(patch).length > 0) {
+    patch.updatedAt = args.nowMs;
+  }
+  return patch;
 }
 
 function toActor(authSubject: string, user: UserRow): AuthenticatedActor {
@@ -112,21 +217,55 @@ async function ensureActorByResolvedSubject(args: {
 }): Promise<AuthenticatedActor> {
   const nowMs = args.nowMs ?? Date.now();
   const requestedUserId = normalizeIdValue(args.userId);
-  const email = normalizeOptionalString(args.email);
+  const email = normalizeEmailValue(args.email);
+  const normalizedEmail = normalizeStoredEmail(email) ?? undefined;
   const emailVerified = Boolean(args.emailVerified && email);
   const emailVerificationSource =
     normalizeEmailVerificationSource(args.emailVerificationSource) ??
     (emailVerified ? "oauth_provider" : undefined);
+  const displayName = normalizeOptionalString(args.displayName);
+  const avatarUrl = normalizeOptionalString(args.avatarUrl);
 
-  const existing = await getUserByResolvedSubject(args.ctx, args.authSubject);
+  let existing = await getUserByResolvedSubject(args.ctx, args.authSubject);
+  if (!existing && emailVerified && normalizedEmail) {
+    const relinkCandidate = await findUniqueRelinkCandidateByNormalizedEmail(
+      args.ctx,
+      normalizedEmail,
+    );
+    if (relinkCandidate) {
+      const resolvedUserId = normalizeIdValue(relinkCandidate._id);
+      if (requestedUserId && requestedUserId !== resolvedUserId) {
+        throw new Error("user_id_mismatch");
+      }
+      const authSubjectChanged =
+        normalizeIdValue(relinkCandidate.authSubject) !== normalizeIdValue(args.authSubject);
+      const patch = buildUserPatch({
+        existing: relinkCandidate,
+        authSubject: args.authSubject,
+        email,
+        normalizedEmail,
+        emailVerified,
+        emailVerificationSource,
+        displayName,
+        avatarUrl,
+        nowMs,
+      });
+      if (Object.keys(patch).length > 0) {
+        await args.ctx.db.patch(relinkCandidate._id, patch);
+      }
+      if (authSubjectChanged) {
+        await revokeAuthSessionsForUser(args.ctx, relinkCandidate._id, nowMs);
+      }
+      existing = ((await args.ctx.db.get(relinkCandidate._id)) as UserRow | null) ?? relinkCandidate;
+    }
+  }
 
   let dbUserId = existing?._id ?? null;
   if (!existing) {
-    const displayName = normalizeOptionalString(args.displayName);
-    const avatarUrl = normalizeOptionalString(args.avatarUrl);
     dbUserId = await args.ctx.db.insert("users", {
       authSubject: args.authSubject,
       email,
+      normalizedEmail,
       ...(emailVerified ? { emailVerifiedAt: nowMs, emailVerificationSource } : null),
       displayName,
       avatarUrl,
@@ -138,31 +277,17 @@ async function ensureActorByResolvedSubject(args: {
     if (requestedUserId && requestedUserId !== resolvedUserId) {
       throw new Error("user_id_mismatch");
     }
-    const patch: {
-      email?: string;
-      emailVerifiedAt?: number;
-      emailVerificationSource?: "oauth_provider" | "magic_link" | "manual_change_code";
-      updatedAt?: number;
-    } = {};
-    const emailChanged = Boolean(email && email !== existing.email);
-    if (emailChanged) patch.email = email;
-    if (emailChanged && !emailVerified) {
-      patch.emailVerifiedAt = undefined;
-      patch.emailVerificationSource = undefined;
-    }
-    if (
-      emailVerified &&
-      (
-        existing.email !== email ||
-        typeof existing.emailVerifiedAt !== "number" ||
-        existing.emailVerificationSource !== emailVerificationSource
-      )
-    ) {
-      patch.emailVerifiedAt = nowMs;
-      patch.emailVerificationSource = emailVerificationSource;
-    }
+    const patch = buildUserPatch({
+      existing,
+      email,
+      normalizedEmail,
+      emailVerified,
+      emailVerificationSource,
+      displayName,
+      avatarUrl,
+      nowMs,
+    });
     if (Object.keys(patch).length > 0) {
-      patch.updatedAt = nowMs;
       await args.ctx.db.patch(existing._id, patch);
     }
     dbUserId = existing._id;

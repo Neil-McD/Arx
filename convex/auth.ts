@@ -6,6 +6,7 @@ import {
   resolveAuthenticatedActor,
 } from "./authActor";
 import { resolveAuthenticatedIdentityProfile } from "./authIdentity";
+import { normalizeAuthRelinkEmail } from "../shared/authRelinkPolicy";
 import { isCreatorDevTierOverrideEmail } from "../shared/devTierOverride";
 
 type CanonicalTier = "free" | "builder" | "architect";
@@ -136,6 +137,7 @@ export const bootstrapActor = mutation({
       anonymousId: args.anonymousId,
     });
     const email = String(args.email ?? "").trim() || undefined;
+    const normalizedEmail = normalizeAuthRelinkEmail(email) ?? undefined;
     const displayName = String(args.displayName ?? "").trim() || undefined;
     const avatarUrl = String(args.avatarUrl ?? "").trim() || undefined;
     const existing = await ctx.db
@@ -147,6 +149,7 @@ export const bootstrapActor = mutation({
       userId = await ctx.db.insert("users", {
         authSubject: subject,
         email,
+        normalizedEmail,
         displayName,
         avatarUrl,
         createdAt: nowMs,
@@ -155,11 +158,19 @@ export const bootstrapActor = mutation({
     } else {
       const patch: {
         email?: string;
+        normalizedEmail?: string;
         displayName?: string;
         avatarUrl?: string;
         updatedAt?: number;
       } = {};
       if (email && email !== existing.email) patch.email = email;
+      if (
+        normalizedEmail !==
+        (normalizeAuthRelinkEmail((existing as { normalizedEmail?: string }).normalizedEmail ?? existing.email) ??
+          undefined)
+      ) {
+        patch.normalizedEmail = normalizedEmail;
+      }
       if (displayName && displayName !== existing.displayName) patch.displayName = displayName;
       if (avatarUrl && avatarUrl !== existing.avatarUrl) patch.avatarUrl = avatarUrl;
       if (Object.keys(patch).length > 0) {

@@ -14,6 +14,7 @@ import {
 
 type CommunityRow = {
   _id: any;
+  ownerId: any;
   slug: string;
   name: string;
   visibility: "published" | "unlisted";

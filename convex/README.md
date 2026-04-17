@@ -60,6 +60,49 @@ This folder is the canonical backend surface for Daytona. Runtime/product paths 
 7. Confirm probe in browser console:
    - `[convex] probe:health ok ...`
 
+## Auth Migration Preflight
+
+Use the auth migration preflight audit before switching AuthKit/WorkOS tenants if
+you need to preserve existing paid users, memberships, credits, and history on
+the same local `users._id`.
+
+Run:
+
+```bash
+npm run audit:auth-migration -- --prod
+```
+
+Auth:
+
+1. required: `ARX_AUTH_MIGRATION_AUDIT_SECRET`
+
+The audit is read-only and classifies users into:
+
+1. `safe_auto_relink`
+2. `manual_duplicate_email`
+3. `manual_missing_email`
+4. `manual_other`
+
+It skips anonymous `anon:*` rows and treats duplicate normalized email across
+authenticated rows as manual by default. The relink path trusts the incoming
+verified AuthKit identity, so legacy rows do not need to already be marked
+verified if the stored normalized email is unique.
+
+Operator tools:
+
+```bash
+npx convex run authMigrationOps:backfillNormalizedUserEmails '{"secret":"..."}' --prod
+npx convex run authMigrationOps:repairMissingUserEmailsFromTrustedHistory '{"secret":"..."}' --prod
+npx convex run authMigrationOps:manuallyRelinkUserAuthSubject '{"secret":"...","userId":"...","newAuthSubject":"..."}' --prod
+```
+
+Use the backfill before auth cutover so `users.normalizedEmail` is populated.
+Use the trusted-history repair before auth cutover so legacy rows missing stored
+email can still be matched automatically when historical account evidence is
+unambiguous.
+Use the manual relink mutation only for edge cases where automatic relink must
+fail closed.
+
 ## Remaining Hardening Work
 
 1. Broaden end-to-end parity tests across all journeys (auth, threads, community, billing, voice).
