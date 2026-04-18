@@ -4508,8 +4508,7 @@ export default function App() {
     showHeaderIslands,
   } = shellProjection;
   const canReorderCommunities = railCommunities.length > 1;
-  const hasCommunityRailMiddleContent =
-    railCommunities.length > 0 || (communities.length === 0 && isLoadingCommunities);
+  const hasCommunityRailMiddleContent = railCommunities.length > 0;
   const communityRailIds = useMemo(() => railCommunities.map((community) => community.id), [railCommunities]);
   const { setContainerElement: setCommunityRailListElement, getItemBindings: getCommunityRailItemBindings, draggingId: draggingCommunityId } =
     useRailPointerReorder({

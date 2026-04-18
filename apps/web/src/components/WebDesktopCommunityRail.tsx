@@ -98,14 +98,6 @@ export function WebDesktopCommunityRail(props: WebDesktopCommunityRailProps) {
             );
           })}
         </div>
-        {communityShell.communities.length === 0 &&
-        communityShell.isLoadingCommunities ? (
-          <div className="community-rail-skeleton" aria-hidden="true">
-            <div className="community-rail-skeleton-item" />
-            <div className="community-rail-skeleton-item" />
-            <div className="community-rail-skeleton-item" />
-          </div>
-        ) : null}
         <div className="community-rail-divider" />
         <button
           type="button"
