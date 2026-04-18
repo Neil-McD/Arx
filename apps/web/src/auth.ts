@@ -1,6 +1,4 @@
 export {
-  beginOAuthSignIn,
-  bootstrapSession,
   decodeAuthJwtPayload,
   ensureAuthSessionForAuthenticatedSendResult,
   ensureAuthSessionForRequest,
@@ -13,9 +11,6 @@ export {
   isAuthJwtExpired,
   isLikelyAuthJwt,
   readAuthError,
-  refreshAuthSession,
-  refreshAuthSessionResult,
-  refreshAuthSessionWithLock,
   refreshAuthSessionWithLockResult,
   sendAuthMagicLinkOtp,
 } from "../../../shared/authCore";

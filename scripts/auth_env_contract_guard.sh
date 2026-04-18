@@ -7,7 +7,7 @@ cd "$ROOT_DIR"
 echo "== Auth env contract guard =="
 
 AUTH_CORE_FILE="shared/authCore.ts"
-AUTH_FLOW_FILE="shared/authFlow.ts"
+WEB_AUTH_CONTROLLER_FILE="apps/web/src/controllers/useWebAppAuthController.ts"
 WEB_APP_FILE="apps/web/src/App.tsx"
 AUTH_CONFIG_FILE="convex/auth.config.ts"
 AUTH_HTTP_FILE="convex/httpAuth.ts"
@@ -43,14 +43,10 @@ require_match_in_file "$AUTH_CORE_FILE" 'readFirstNonEmptyEnv\(\["VITE_CONVEX_UR
   "auth URL lookup is Convex-only"
 require_match_in_file "$AUTH_CORE_FILE" 'readFirstNonEmptyEnv\(\["VITE_CONVEX_PUBLIC_KEY"\]\)' \
   "optional runtime API key lookup uses VITE_CONVEX_PUBLIC_KEY"
-require_match_in_file "$AUTH_CORE_FILE" 'AUTH_GATEWAY_BEGIN_PATH' \
-  "auth bootstrap uses same-origin auth gateway start endpoint"
-require_match_in_file "$AUTH_CORE_FILE" 'AUTH_GATEWAY_SESSION_PATH' \
-  "auth bootstrap uses same-origin auth session endpoint"
-require_match_in_file "$AUTH_CORE_FILE" 'AUTH_GATEWAY_REFRESH_PATH' \
-  "auth bootstrap uses same-origin auth refresh endpoint"
-require_match_in_file "$AUTH_CORE_FILE" 'AUTH_GATEWAY_LOGOUT_PATH' \
-  "auth bootstrap uses same-origin auth logout endpoint"
+require_match_in_file "$AUTH_CORE_FILE" 'AUTH_GATEWAY_MAGIC_LINK_PATH' \
+  "auth core only keeps the same-origin magic-link gateway"
+forbid_match_in_file "$AUTH_CORE_FILE" 'AUTH_GATEWAY_BEGIN_PATH|AUTH_GATEWAY_SESSION_PATH|AUTH_GATEWAY_REFRESH_PATH|AUTH_GATEWAY_LOGOUT_PATH' \
+  "shared auth core must not carry deleted browser bridge endpoints"
 forbid_match_in_file "$AUTH_CORE_FILE" 'VITE_AUTH_URL' \
   "shared auth core must not use VITE_AUTH_URL"
 forbid_match_in_file "$AUTH_CORE_FILE" 'VITE_AUTH_PUBLIC_KEY' \
@@ -59,16 +55,16 @@ forbid_match_in_file "$AUTH_CORE_FILE" 'CLOUD_FUNCTIONS_V1_SEGMENT' \
   "shared auth core must not classify legacy /functions/v1 surface"
 forbid_match_in_file "$AUTH_CORE_FILE" 'pgrst303|pgrst301' \
   "shared auth core must not depend on PostgREST auth error codes"
-forbid_match_in_file "$AUTH_CORE_FILE" 'CLOUD_BRIDGE_' \
-  "shared auth core must not carry legacy bridge endpoint constants"
+forbid_match_in_file "$AUTH_CORE_FILE" 'beginOAuthSignIn|bootstrapSession|logoutAuthSessionRemote|refreshAuthSessionResult' \
+  "shared auth core must not expose deleted browser bridge helpers"
 
-echo "[2/7] Validating OAuth flow is gateway-driven..."
-require_match_in_file "$AUTH_FLOW_FILE" 'beginOAuthSignIn' \
-  "OAuth sign-in flows through shared auth core"
-forbid_match_in_file "$AUTH_FLOW_FILE" 'readConvexRuntimeUrl\(\)' \
-  "OAuth sign-in must not depend on direct Convex runtime bootstrap"
-forbid_match_in_file "$AUTH_FLOW_FILE" 'exchangeCloudPkceCodeForSession|consumeCloudOAuthCallback' \
-  "OAuth flow must not own browser-side code exchange"
+echo "[2/7] Validating web auth controller is WorkOS-native..."
+require_match_in_file "$WEB_AUTH_CONTROLLER_FILE" 'workos\.signIn\(' \
+  "web auth controller signs in through WorkOS runtime"
+require_match_in_file "$WEB_AUTH_CONTROLLER_FILE" 'workos\.readSession\(' \
+  "web auth controller bootstraps browser session through WorkOS runtime"
+forbid_match_in_file "$WEB_AUTH_CONTROLLER_FILE" 'bootstrapSession\(|refreshAuthSessionResult\(|beginGoogleSignIn\(|revokeAuthSessionRemote\(|shared/authFlow' \
+  "web auth controller must not depend on deleted browser bridge helpers"
 
 echo "[3/7] Validating web model readiness is not coupled to auth keys..."
 forbid_match_in_file "$WEB_APP_FILE" 'getAuthUrl\(\) && getAuthPublicKey\(\)' \
@@ -130,14 +126,12 @@ require_match_in_file "$WEB_ENV_FILE" '^VITE_CONVEX_URL=' \
   "web env template declares VITE_CONVEX_URL"
 require_match_in_file "$WEB_ENV_FILE" '^VITE_CONVEX_PUBLIC_KEY=' \
   "web env template declares VITE_CONVEX_PUBLIC_KEY"
-require_match_in_file "$WEB_ENV_FILE" 'ARX_AUTH_BRIDGE_SECRET' \
-  "web env template documents ARX_AUTH_BRIDGE_SECRET"
-require_match_in_file "$WEB_ENV_FILE" 'ARX_AUTH_AUTHORIZE_URL' \
-  "web env template documents OAuth authorize URL"
-require_match_in_file "$WEB_ENV_FILE" 'ARX_AUTH_TOKEN_URL' \
-  "web env template documents OAuth token URL"
-require_match_in_file "$WEB_ENV_FILE" 'ARX_AUTH_CLIENT_ID' \
-  "web env template documents OAuth client id"
+require_match_in_file "$WEB_ENV_FILE" 'VITE_WORKOS_CLIENT_ID' \
+  "web env template documents native WorkOS client id"
+require_match_in_file "$WEB_ENV_FILE" 'VITE_WORKOS_REDIRECT_URI' \
+  "web env template documents WorkOS redirect uri"
+require_match_in_file "$WEB_ENV_FILE" 'VITE_WORKOS_DEV_MODE' \
+  "web env template documents WorkOS devMode toggle"
 forbid_match_in_file "$WEB_ENV_FILE" '^VITE_AUTH_URL=|^VITE_AUTH_PUBLIC_KEY=|ARX_AUTH_BASE_URL|ARX_AUTH_PUBLIC_KEY' \
   "web env template must not include legacy auth-base/public-key vars"
 

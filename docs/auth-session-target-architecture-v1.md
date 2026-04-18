@@ -5,11 +5,8 @@ Scope: web-native authenticated session posture for Convex + runtime HTTP endpoi
 Goal: simple, scalable, reliable, robust, secure, efficient, and premium
 
 Implementation posture note:
-The current live implementation is still the browser-owned SPA continuity model described in [`/Users/neilmcdevitt/code/arx/.worktrees/daytona/docs/auth-session-spa-posture-v1.md`](/Users/neilmcdevitt/code/arx/.worktrees/daytona/docs/auth-session-spa-posture-v1.md).
-
-The concrete migration plan toward the recommended stronger posture is:
-
-1. [`/Users/neilmcdevitt/code/arx/.worktrees/daytona/docs/auth-session-server-continuity-implementation-plan-v1.md`](/Users/neilmcdevitt/code/arx/.worktrees/daytona/docs/auth-session-server-continuity-implementation-plan-v1.md)
+The current live implementation now uses native WorkOS/AuthKit browser sign-in plus direct Convex runtime acceptance and local actor bootstrap.
+The older browser bridge continuity plan and its intermediate route surface have been removed from the canonical web path.
 
 ## 0) Irreducible Problem
 

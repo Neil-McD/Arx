@@ -9,19 +9,12 @@ import {
   fetchWithPublicShared,
   hasRecentAuthFlowPending,
   markAuthFlowPending,
-  refreshAuthSessionResult,
   refreshAuthSessionWithLockResult,
   sendAuthMagicLinkOtp,
-  bootstrapSession,
   type AuthSession,
   type AuthSessionRefreshResult,
 } from "../auth";
 import type { ConvexAuthenticatedSessionProbeResult } from "../../../../shared/convexAuthSessionProbe";
-import {
-  AUTH_SESSION_EXPIRED_MESSAGE,
-  beginGoogleSignIn,
-  revokeAuthSessionRemote,
-} from "../../../../shared/authFlow";
 import {
   clearAuthResumeState,
   parsePendingAuthIntentInput,
@@ -148,6 +141,8 @@ function logWorkOsBootstrap(stage: string, details: Record<string, unknown>): vo
   console.info("[auth][workos]", stage, details);
 }
 
+const AUTH_SESSION_EXPIRED_MESSAGE = "Session expired. Please sign in again.";
+
 export function useWebAppAuthController(
   params: UseWebAppAuthControllerParams,
 ): UseWebAppAuthControllerResult {
@@ -213,9 +208,6 @@ export function useWebAppAuthController(
     return await refreshAuthSessionWithLockResult({
       inFlightRef: refreshResultInFlightRef,
       refreshSession: async () => {
-        if (!workos.isEnabled) {
-          return await refreshAuthSessionResult();
-        }
         try {
           const refreshed = await workos.readSession({ forceRefresh: true });
           if (!refreshed) {
@@ -285,20 +277,12 @@ export function useWebAppAuthController(
     clearAuthSignedOutIntentMarker();
     markAuthFlowPending();
     storeAuthResumeState({ returnTo: readCurrentAuthReturnTo() });
-    if (workos.isEnabled) {
-      try {
-        await workos.signIn();
-      } catch (error) {
-        setAuthError(errorToMessage(error, "Sign-in failed."));
-      }
-      return;
+    try {
+      await workos.signIn();
+    } catch (error) {
+      setAuthError(errorToMessage(error, "Sign-in failed."));
+      setIsAuthGateOpen(true);
     }
-    const result = await beginGoogleSignIn();
-    if (!result.ok) {
-      setAuthError(result.error);
-      return;
-    }
-    window.location.assign(result.authUrl);
   }, [workos]);
 
   const openAuthGate = useCallback((intentInput?: unknown) => {
@@ -310,13 +294,13 @@ export function useWebAppAuthController(
         intent,
       });
     }
-    if (workos.isEnabled && !session) {
+    if (!session) {
       setIsAuthGateOpen(false);
       void beginGoogleSignInFlow();
       return;
     }
     setIsAuthGateOpen(true);
-  }, [beginGoogleSignInFlow, session, workos.isEnabled]);
+  }, [beginGoogleSignInFlow, session]);
 
   const handleSendMagicLink = useCallback(async (email: string): Promise<void> => {
     const trimmed = email.trim();
@@ -357,23 +341,18 @@ export function useWebAppAuthController(
 
   const handleSignOut = useCallback(async (): Promise<void> => {
     clearAuthFlowPending();
-    const accessToken = sessionRef.current?.access_token ?? session?.access_token ?? null;
     authSessionEpochRef.current += 1;
     setAuthError(null);
     await onBeforeSignOutRef.current?.();
     await clearSessionLocally();
-    if (workos.isEnabled) {
-      try {
-        await workos.signOut({ returnTo: window.location.origin });
-      } catch (error) {
-        if (!isWorkOsLoginRequiredError(error)) {
-          console.warn("WorkOS sign-out failed", error);
-        }
+    try {
+      await workos.signOut({ returnTo: window.location.origin });
+    } catch (error) {
+      if (!isWorkOsLoginRequiredError(error)) {
+        console.warn("WorkOS sign-out failed", error);
       }
-      return;
     }
-    await revokeAuthSessionRemote(accessToken);
-  }, [clearSessionLocally, onBeforeSignOutRef, session, workos]);
+  }, [clearSessionLocally, onBeforeSignOutRef, workos]);
 
   const fetchWithPublic = useCallback(async (url: string, init: RequestInit = {}): Promise<Response> => {
     return await fetchWithPublicShared(url, init);
@@ -406,77 +385,7 @@ export function useWebAppAuthController(
     refreshLocked: refreshAuthSessionLocked,
     didJustSignInRef,
     onMountOAuthBootstrap: async () => {
-      if (workos.isEnabled) return;
-      let hasSignedOutIntent = false;
-      try {
-        hasSignedOutIntent =
-          sessionStorage.getItem(AUTH_SIGNED_OUT_TAB_INTENT_KEY) === "1" ||
-          localStorage.getItem(AUTH_SIGNED_OUT_INTENT_KEY) === "1";
-      } catch {
-        // ignore
-      }
-
-      const hadPendingAuthFlow = hasRecentAuthFlowPending();
-      let bootstrappedSession: AuthSession | null = null;
-      try {
-        bootstrappedSession = await bootstrapSession();
-      } catch (error) {
-        if (hadPendingAuthFlow) {
-          const message = formatAuthSessionErrorMessage(error, "Failed to bootstrap auth session.");
-          setAuthError(message);
-          setIsAuthGateOpen(true);
-          clearAuthFlowPending();
-        }
-      }
-
-      if (hasSignedOutIntent) {
-        markAuthBootstrapComplete();
-        clearAuthFlowPending();
-        return;
-      }
-
-      if (bootstrappedSession) {
-        const verifiedSession = await ensureUsableAuthSession(bootstrappedSession);
-        if (!verifiedSession) {
-          markAuthBootstrapComplete();
-          setAuthError("Sign-in completed, but PolyNet could not verify your authenticated app session. Please try again.");
-          setIsAuthGateOpen(true);
-          clearAuthFlowPending();
-          clearAuthResumeState();
-          return;
-        }
-
-        markAuthBootstrapComplete();
-        clearAuthSignedOutIntentMarker();
-        if (hadPendingAuthFlow) {
-          didJustSignInRef.current = true;
-        }
-        adoptAuthSession(verifiedSession);
-
-        if (hadPendingAuthFlow) {
-          const authResumeState = readAuthResumeState();
-          const pendingReturnTo = String(authResumeState?.return_to ?? "").trim();
-          if (!authResumeState?.intent) {
-            clearAuthResumeState();
-          }
-          const nextPath = pendingReturnTo
-            ? pendingReturnTo.startsWith("/") || pendingReturnTo.startsWith("#")
-              ? pendingReturnTo
-              : "/workspace"
-            : null;
-          onApplyPostAuthPathRef.current(nextPath);
-          clearAuthFlowPending();
-        }
-        return;
-      }
-
       markAuthBootstrapComplete();
-      if (hadPendingAuthFlow) {
-        setAuthError("Sign-in completed, but PolyNet could not establish your account session. Please try again.");
-        setIsAuthGateOpen(true);
-        clearAuthFlowPending();
-        clearAuthResumeState();
-      }
     },
     onDidJustSignIn: () => {
       onDidJustSignInRef.current();

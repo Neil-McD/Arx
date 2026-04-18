@@ -32,11 +32,7 @@ export function readConvexRuntimeUrl() {
 }
 
 function readConvexPublicKey() {
-  return readEnv("VITE_CONVEX_PUBLIC_KEY") || readEnv("VITE_AUTH_PUBLIC_KEY") || "";
-}
-
-function readBridgeSecret() {
-  return readEnv("ARX_AUTH_BRIDGE_SECRET");
+  return readEnv("VITE_CONVEX_PUBLIC_KEY") || "";
 }
 
 function buildRuntimeUrl(routePath) {
@@ -82,22 +78,6 @@ export async function callRuntimeAuthJson(routePath, payload) {
     method: "POST",
     headers: buildHeaders(),
     body: JSON.stringify(payload ?? {}),
-  });
-}
-
-export async function callAuthBridgeJson(routePath, params = {}) {
-  const url = buildRuntimeUrl(routePath);
-  const bridgeSecret = readBridgeSecret();
-  if (!url) throw new Error("Missing Convex runtime URL.");
-  if (!bridgeSecret) throw new Error("Missing ARX_AUTH_BRIDGE_SECRET.");
-  const headers = buildHeaders({
-    accessToken: params.accessToken ?? "",
-  });
-  headers.set("X-Arx-Auth-Bridge-Secret", bridgeSecret);
-  return await fetch(url, {
-    method: "POST",
-    headers,
-    body: JSON.stringify(params.payload ?? {}),
   });
 }
 
