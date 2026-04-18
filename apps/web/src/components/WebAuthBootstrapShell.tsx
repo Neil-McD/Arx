@@ -34,46 +34,10 @@ export function WebAuthBootstrapShell(props: WebAuthBootstrapShellProps) {
               </div>
             </div>
           ) : (
-            <div className="workspace-body workspace-bootstrap-body">
-              <div
-                className="workspace-bootstrap-thread"
-                aria-busy="true"
-                aria-live="polite"
-              >
-                <div className="workspace-bootstrap-status">
-                  <span className="workspace-bootstrap-status-dot" aria-hidden="true" />
-                  <span>Restoring workspace</span>
-                </div>
-                <div className="web-thread-loading-shell" aria-hidden="true">
-                  <div className="web-thread-loading-message">
-                    <div className="web-thread-loading-avatar web-skeleton-card" />
-                    <div className="web-thread-loading-stack">
-                      <div className="web-thread-loading-meta web-skeleton-pill" />
-                      <div className="web-thread-loading-bubble web-skeleton-card" />
-                      <div className="web-thread-loading-row web-skeleton-row web-thread-loading-row-medium" />
-                    </div>
-                  </div>
-                  <div className="web-thread-loading-message">
-                    <div className="web-thread-loading-avatar web-skeleton-card" />
-                    <div className="web-thread-loading-stack">
-                      <div className="web-thread-loading-meta web-thread-loading-meta-wide web-skeleton-pill" />
-                      <div className="web-thread-loading-bubble web-thread-loading-bubble-tall web-skeleton-card" />
-                      <div className="web-thread-loading-row web-skeleton-row web-thread-loading-row-short" />
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div className="workspace-bootstrap-composer-shell" aria-hidden="true">
-                <div className="workspace-bootstrap-composer">
-                  <div className="workspace-bootstrap-composer-input web-skeleton-row" />
-                  <div className="workspace-bootstrap-composer-footer">
-                    <div className="workspace-bootstrap-composer-pill web-skeleton-pill" />
-                    <div className="workspace-bootstrap-composer-actions">
-                      <div className="workspace-bootstrap-composer-pill workspace-bootstrap-composer-pill-small web-skeleton-pill" />
-                      <div className="workspace-bootstrap-composer-send web-skeleton-card" />
-                    </div>
-                  </div>
-                </div>
+            <div className="workspace-body">
+              <div className="chat-loading">
+                <div className="loading-spinner" />
+                <span>Loading workspace...</span>
               </div>
             </div>
           )}
