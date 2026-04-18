@@ -32,6 +32,7 @@ type WebAuthContinuityDebugPanelProps = {
   session: AuthSession | null;
   authError: string | null;
   authRuntimeAcceptance: ConvexAuthenticatedSessionProbeResult | null;
+  authProbeEvents: { ts: number; stage: string; detail: Record<string, unknown> }[];
 };
 
 export function WebAuthContinuityDebugPanel(props: WebAuthContinuityDebugPanelProps) {
@@ -98,12 +99,15 @@ export function WebAuthContinuityDebugPanel(props: WebAuthContinuityDebugPanelPr
       email: workos.user?.email ?? null,
       authenticationMethod: workos.authenticationMethod ?? null,
     },
+    sessionMismatch: Boolean(workos.user && !props.session),
     lastRuntimeAcceptance: props.authRuntimeAcceptance,
+    authProbeEvents: props.authProbeEvents,
     actorDebug,
     loadError,
     isLoading,
   }), [
     actorDebug,
+    props.authProbeEvents,
     enabled,
     isLoading,
     loadError,

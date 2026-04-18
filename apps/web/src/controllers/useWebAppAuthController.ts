@@ -20,7 +20,6 @@ import {
   readAuthResumeState,
   storeAuthResumeState,
 } from "../../../../shared/authResumeState";
-import { formatAuthSessionErrorMessage } from "../../../../shared/appErrorMappings";
 import { clearOAuthCallbackParamsFromLocation } from "../../../../shared/cloudPkce";
 import { isWorkOsLoginRequiredError, useWorkOsRuntime } from "../auth/workosRuntime";
 import { useWebAuthSessionLifecycle } from "./useWebAuthSessionLifecycle";
@@ -45,6 +44,7 @@ type UseWebAppAuthControllerResult = {
   isAuthBootstrapComplete: boolean;
   authError: string | null;
   authRuntimeAcceptance: ConvexAuthenticatedSessionProbeResult | null;
+  authProbeEvents: { ts: number; stage: string; detail: Record<string, unknown> }[];
   requireSignIn: (intentInput?: unknown) => void;
   handleSignOut: () => Promise<void>;
   ensureUsableAuthSession: (session?: AuthSession | null) => Promise<AuthSession | null>;
@@ -141,6 +141,9 @@ export function useWebAppAuthController(
   const [isAuthBootstrapComplete, setIsAuthBootstrapComplete] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   const [authRuntimeAcceptance, setAuthRuntimeAcceptance] = useState<ConvexAuthenticatedSessionProbeResult | null>(null);
+  const [authProbeEvents, setAuthProbeEvents] = useState<
+    { ts: number; stage: string; detail: Record<string, unknown> }[]
+  >([]);
 
   const sessionRef = useRef<AuthSession | null>(null);
   const refreshResultInFlightRef = useRef<Promise<AuthSessionRefreshResult> | null>(null);
@@ -158,6 +161,12 @@ export function useWebAppAuthController(
   const onDidJustSignInRef = useLatestRef(params.onDidJustSignIn);
   const onApplyPostAuthPathRef = useLatestRef(params.onApplyPostAuthPath);
   const onBeforeSignOutRef = useLatestRef(params.onBeforeSignOut);
+
+  const pushAuthProbeEvent = useCallback((stage: string, detail: Record<string, unknown> = {}) => {
+    const event = { ts: Date.now(), stage, detail };
+    setAuthProbeEvents((current) => [...current.slice(-39), event]);
+    console.info("[auth][probe]", stage, detail);
+  }, []);
 
   useEffect(() => {
     const callbackError = readAuthCallbackErrorFromLocation();
@@ -258,21 +267,74 @@ export function useWebAppAuthController(
     return sessionRef.current ?? ensured.session;
   }, [adoptAuthSession, expireAuthSessionLocally, refreshAuthSessionLockedResult, session]);
 
+  const recoverSessionFromWorkOs = useCallback(async (params: {
+    phase: string;
+    forceRefresh?: boolean;
+  }): Promise<AuthSession | null> => {
+    pushAuthProbeEvent(`${params.phase}:recover_begin`, {
+      forceRefresh: Boolean(params.forceRefresh),
+      workos: readWorkOsBootstrapDebugState(workos),
+      sessionPresent: Boolean(sessionRef.current ?? session),
+    });
+    try {
+      const candidateSession = await workos.readSession({ forceRefresh: params.forceRefresh });
+      pushAuthProbeEvent(`${params.phase}:recover_read_session`, {
+        hasSession: Boolean(candidateSession),
+        workos: readWorkOsBootstrapDebugState(workos),
+      });
+      if (!candidateSession) return null;
+
+      const verifiedSession = await ensureUsableAuthSession(candidateSession);
+      pushAuthProbeEvent(`${params.phase}:recover_verify`, {
+        accepted: Boolean(verifiedSession),
+        workos: readWorkOsBootstrapDebugState(workos),
+      });
+      if (!verifiedSession) return null;
+
+      adoptAuthSession(verifiedSession);
+      setAuthError(null);
+      return verifiedSession;
+    } catch (error) {
+      pushAuthProbeEvent(`${params.phase}:recover_failed`, {
+        reason: errorToMessage(error, "workos_session_recovery_failed"),
+        workos: readWorkOsBootstrapDebugState(workos),
+      });
+      return null;
+    }
+  }, [adoptAuthSession, ensureUsableAuthSession, pushAuthProbeEvent, session, workos]);
+
   const beginGoogleSignInFlow = useCallback(async () => {
     setAuthError(null);
     clearAuthSignedOutIntentMarker();
+    const returnTo = readCurrentAuthReturnTo();
+    pushAuthProbeEvent("sign_in_redirect_begin", {
+      returnTo,
+      workos: readWorkOsBootstrapDebugState(workos),
+    });
     markAuthFlowPending();
-    storeAuthResumeState({ returnTo: readCurrentAuthReturnTo() });
+    storeAuthResumeState({ returnTo });
     try {
       await workos.signIn();
+      pushAuthProbeEvent("sign_in_redirect_dispatched", {
+        workos: readWorkOsBootstrapDebugState(workos),
+      });
     } catch (error) {
+      pushAuthProbeEvent("sign_in_redirect_failed", {
+        reason: errorToMessage(error, "sign_in_failed"),
+        workos: readWorkOsBootstrapDebugState(workos),
+      });
       setAuthError(errorToMessage(error, "Sign-in failed."));
     }
-  }, [workos]);
+  }, [pushAuthProbeEvent, workos]);
 
   const requireSignIn = useCallback((intentInput?: unknown) => {
     setAuthError(null);
     const intent = parsePendingAuthIntentInput(intentInput);
+    pushAuthProbeEvent("require_sign_in_invoked", {
+      hasSession: Boolean(session),
+      hasIntent: Boolean(intent),
+      workos: readWorkOsBootstrapDebugState(workos),
+    });
     if (intent && !session) {
       storeAuthResumeState({
         returnTo: readCurrentPathReturnTo(),
@@ -280,8 +342,26 @@ export function useWebAppAuthController(
       });
     }
     if (session) return;
-    void beginGoogleSignInFlow();
-  }, [beginGoogleSignInFlow, session]);
+    void (async () => {
+      if (workos.user) {
+        const recoveredSession = await recoverSessionFromWorkOs({
+          phase: "require_sign_in",
+          forceRefresh: true,
+        });
+        if (recoveredSession) {
+          clearAuthSignedOutIntentMarker();
+          clearAuthFlowPending();
+          await onSessionReadyRef.current(recoveredSession);
+          pushAuthProbeEvent("require_sign_in_recovered_session", {
+            userId: recoveredSession.user.id,
+            email: recoveredSession.user.email ?? null,
+          });
+          return;
+        }
+      }
+      await beginGoogleSignInFlow();
+    })();
+  }, [beginGoogleSignInFlow, onSessionReadyRef, pushAuthProbeEvent, recoverSessionFromWorkOs, session, workos]);
 
   const handleSignOut = useCallback(async (): Promise<void> => {
     clearAuthFlowPending();
@@ -344,6 +424,9 @@ export function useWebAppAuthController(
     },
     onSessionMissing: () => {
       if (!authBootstrapCompleteRef.current) return;
+      pushAuthProbeEvent("session_missing_after_bootstrap", {
+        workos: readWorkOsBootstrapDebugState(workos),
+      });
       markAuthBootstrapComplete();
       void (async () => {
         sessionRef.current = null;
@@ -382,67 +465,31 @@ export function useWebAppAuthController(
       }
 
       const hadPendingAuthFlow = hasRecentAuthFlowPending();
+      pushAuthProbeEvent("bootstrap_begin", {
+        hadPendingAuthFlow,
+        workos: readWorkOsBootstrapDebugState(workos),
+      });
       logWorkOsBootstrap("bootstrap_begin", {
         phase: "bootstrap",
         hadPendingAuthFlow,
         workos: readWorkOsBootstrapDebugState(workos),
       });
       if (hasSignedOutIntent) {
+        pushAuthProbeEvent("bootstrap_signed_out_intent", {
+          workos: readWorkOsBootstrapDebugState(workos),
+        });
         if (cancelled) return;
         markAuthBootstrapComplete();
         clearAuthFlowPending();
         return;
       }
 
-      let bootstrappedSession: AuthSession | null = null;
-      try {
-        bootstrappedSession = await workos.readSession();
-        logWorkOsBootstrap("bootstrap_read_session", {
-          phase: "read_session",
-          workos: readWorkOsBootstrapDebugState(workos),
-          hasSession: Boolean(bootstrappedSession),
-        });
-      } catch (error) {
-        if (cancelled) return;
-        console.warn("[auth][workos] bootstrap_read_session_failed", {
-          phase: "read_session",
-          workos: readWorkOsBootstrapDebugState(workos),
-          error: errorToMessage(error, "workos_bootstrap_failed"),
-        });
-        if (hadPendingAuthFlow) {
-          setAuthError(
-            buildWorkOsBootstrapDebugMessage(
-              formatAuthSessionErrorMessage(error, "Failed to bootstrap WorkOS auth session."),
-              { workos, phase: "read_session", error, hasSession: false },
-            ),
-          );
-          clearAuthFlowPending();
-        }
-        markAuthBootstrapComplete();
-        return;
-      }
+      const verifiedSession = await recoverSessionFromWorkOs({
+        phase: "bootstrap",
+      });
+      if (cancelled) return;
 
-      if (bootstrappedSession) {
-        const verifiedSession = await ensureUsableAuthSession(bootstrappedSession);
-        if (cancelled) return;
-        if (!verifiedSession) {
-          console.warn("[auth][workos] bootstrap_verify_failed", {
-            phase: "convex_probe",
-            workos: readWorkOsBootstrapDebugState(workos),
-            hasSession: true,
-          });
-          markAuthBootstrapComplete();
-          setAuthError(
-            buildWorkOsBootstrapDebugMessage(
-              "Sign-in completed, but PolyNet could not verify your authenticated app session. Please try again.",
-              { workos, phase: "convex_probe", hasSession: true },
-            ),
-          );
-          clearAuthFlowPending();
-          clearAuthResumeState();
-          return;
-        }
-
+      if (verifiedSession) {
         markAuthBootstrapComplete();
         clearAuthSignedOutIntentMarker();
         if (hadPendingAuthFlow) {
@@ -479,6 +526,10 @@ export function useWebAppAuthController(
           workos: readWorkOsBootstrapDebugState(workos),
           hasSession: false,
         });
+        pushAuthProbeEvent("bootstrap_missing_session", {
+          workos: readWorkOsBootstrapDebugState(workos),
+          hadPendingAuthFlow,
+        });
         setAuthError(
           buildWorkOsBootstrapDebugMessage(
             "Sign-in completed, but PolyNet could not establish your account session. Please try again.",
@@ -496,9 +547,10 @@ export function useWebAppAuthController(
   }, [
     adoptAuthSession,
     clearSessionLocally,
-    ensureUsableAuthSession,
     markAuthBootstrapComplete,
     onApplyPostAuthPathRef,
+    pushAuthProbeEvent,
+    recoverSessionFromWorkOs,
     workos,
   ]);
 
@@ -527,6 +579,7 @@ export function useWebAppAuthController(
     isAuthBootstrapComplete,
     authError,
     authRuntimeAcceptance,
+    authProbeEvents,
     requireSignIn,
     handleSignOut,
     ensureUsableAuthSession,

@@ -639,6 +639,7 @@ export default function App() {
     isAuthBootstrapComplete,
     authError,
     authRuntimeAcceptance,
+    authProbeEvents,
     requireSignIn,
     handleSignOut,
     ensureUsableAuthSession,
@@ -5862,6 +5863,7 @@ export default function App() {
         session={session}
         authError={authError}
         authRuntimeAcceptance={authRuntimeAcceptance}
+        authProbeEvents={authProbeEvents}
       />
     </>
   );
