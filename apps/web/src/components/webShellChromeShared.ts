@@ -83,6 +83,8 @@ export type WebCommunityShellProps = {
   setCommunityRailListElement: (node: HTMLDivElement | null) => void;
   getCommunityRailItemBindings: (communityId: string) => CommunityRailBindings;
   onOpenBuilderUpgrade: () => void;
+  builderRailCtaLabel: string;
+  builderRailCtaTitle: string;
   activeView: AppView;
   onToggleWorkspaceSettings: () => void;
 };

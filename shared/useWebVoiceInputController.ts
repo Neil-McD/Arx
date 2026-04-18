@@ -34,7 +34,7 @@ type UseWebVoiceInputControllerArgs<SessionT> = {
   activeCommunity: unknown | null;
   activeCommunityJoinMode: "checkout" | "join_approval" | "join_free" | null;
   canPostMessagesActiveCommunity: boolean;
-  normalizedBuilderTier: "free" | "builder" | "architect";
+  normalizedBuilderTier: "free" | "builder";
   requireSignIn: () => void;
   showAppToastMessage: (message: string) => void;
   appendWorkspaceTranscript: (transcript: string) => void;
@@ -103,7 +103,7 @@ export function useWebVoiceInputController<SessionT>(args: UseWebVoiceInputContr
     return {
       mode: "start_recording",
       title:
-        args.normalizedBuilderTier === "builder" || args.normalizedBuilderTier === "architect"
+        args.normalizedBuilderTier === "builder"
           ? "Start voice input (paid plan)."
           : "Start voice input.",
     };

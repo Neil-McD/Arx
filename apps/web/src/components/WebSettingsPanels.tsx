@@ -66,7 +66,7 @@ export type WebSettingsPanelsProps = {
     openBuilderUpgrade: (context: "builder") => void;
     openBuilderBillingPortal: () => Promise<void> | void;
     canUseDevTierOverride: boolean;
-    setDevBuilderTier: (tier: "free" | "builder" | "architect") => Promise<void> | void;
+    setDevBuilderTier: (tier: "free" | "builder") => Promise<void> | void;
     redeemPendingPurchases: () => Promise<void> | void;
     ensureSession: () => Promise<SessionLike>;
     loadPendingPurchaseClaims: (session: NonNullable<SessionLike>) => Promise<void>;

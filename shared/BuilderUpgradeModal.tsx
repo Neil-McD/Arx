@@ -1,6 +1,6 @@
 import type { RefObject } from "react";
 import {
-  isBuilderTierBuilder,
+  hasBuilderTierPaidAccess,
   isBuilderTierFree,
   type BuilderCheckoutTier,
 } from "./builderBilling";
@@ -38,7 +38,7 @@ export function BuilderUpgradeModal({
   void showBuilderUpgradeScrollHint;
   void onModalBodyScroll;
   const freeIsCurrent = isBuilderTierFree(builderTier);
-  const builderIsCurrent = isBuilderTierBuilder(builderTier) || builderTier === "architect" || builderTier === "pro";
+  const builderIsCurrent = hasBuilderTierPaidAccess(builderTier);
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -56,7 +56,7 @@ export function BuilderUpgradeModal({
               Unlock the private Polynet workbench and bring your own inference into it.
             </div>
             <div className="upgrade-footnote">
-              Builder is the paid path we&apos;re opening first. Community creation stays internal during alpha while we harden the platform.
+              Builder is the single paid creator plan. It unlocks the private workbench and community creation on Polynet.
             </div>
           </div>
           {builderBillingError && <div className="auth-error">{builderBillingError}</div>}

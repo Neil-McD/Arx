@@ -595,7 +595,7 @@ type CommunityAiFeedReactionType = SharedCommunityAiFeedReactionType;
 
 type BuilderBillingStatus = {
   user_id: string;
-  builder_tier: "free" | "builder" | "architect";
+  builder_tier: "free" | "builder";
   max_communities: number;
 };
 
@@ -3405,7 +3405,7 @@ export default function App() {
     redeemPendingPurchasesInFlightRef,
   });
 
-  async function setDevBuilderTier(tier: "free" | "builder" | "architect"): Promise<void> {
+  async function setDevBuilderTier(tier: "free" | "builder"): Promise<void> {
     const session = await ensureUsableAuthSession();
     if (!session || !canUseDevTierOverride) return;
     setIsSettingDevBuilderTier(true);
@@ -4125,7 +4125,7 @@ export default function App() {
     setAuthError,
   });
 
-  const normalizedBuilderTier = useMemo<"free" | "builder" | "architect">(
+  const normalizedBuilderTier = useMemo<"free" | "builder">(
     () => normalizeBuilderTierForUi(builderBillingStatus?.builder_tier),
     [builderBillingStatus?.builder_tier],
   );
@@ -4276,7 +4276,7 @@ export default function App() {
     requireSignIn,
     onRequireBuilderUpgrade: () => {
       setBuilderUpgradeContext("builder");
-      setBuilderBillingError("Upgrade to Builder or Architect to create additional projects.");
+      setBuilderBillingError("Upgrade to Builder to create additional projects.");
       setIsBuilderUpgradeOpen(true);
     },
     showAppToastMessage,
@@ -4818,6 +4818,8 @@ export default function App() {
       openCommunityChat,
       handleOpenDiscover,
       handleTopbarBackToWorkspace,
+      hasBuilderAccess: hasBuilderTierPaidAccess(builderBillingStatus?.builder_tier ?? "free"),
+      openCreateCommunityModal: () => openCreateCommunityModal(),
       setBuilderUpgradeContext,
       setIsBuilderUpgradeOpen,
     });
@@ -5857,6 +5859,8 @@ export default function App() {
     openMobileAgentSettings,
     handleOpenDiscover,
     openMobileCreateCommunity,
+    hasBuilderAccess: hasBuilderTierPaidAccess(builderBillingStatus?.builder_tier ?? "free"),
+    openCreateCommunityModal: () => openCreateCommunityModal(),
     communities,
     railCommunities,
     communityRailAttentionById,

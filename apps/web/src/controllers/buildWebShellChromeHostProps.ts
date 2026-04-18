@@ -63,6 +63,8 @@ export function buildWebShellChromeHostProps(params: {
   openMobileAgentSettings: () => void;
   handleOpenDiscover: () => void;
   openMobileCreateCommunity: () => void;
+  hasBuilderAccess: boolean;
+  openCreateCommunityModal: () => void;
   communities: CommunityLike[];
   railCommunities: CommunityLike[];
   communityRailAttentionById: WebShellChromeHostProps["communityShell"]["communityRailAttentionById"];
@@ -204,9 +206,15 @@ export function buildWebShellChromeHostProps(params: {
       setCommunityRailListElement: params.setCommunityRailListElement,
       getCommunityRailItemBindings: params.getCommunityRailItemBindings,
       onOpenBuilderUpgrade: () => {
+        if (params.hasBuilderAccess) {
+          params.openCreateCommunityModal();
+          return;
+        }
         params.setBuilderUpgradeContext("builder");
         params.setIsBuilderUpgradeOpen(true);
       },
+      builderRailCtaLabel: params.hasBuilderAccess ? "+" : "B",
+      builderRailCtaTitle: params.hasBuilderAccess ? "Create community" : "Become a Builder",
       activeView: params.activeView,
       onToggleWorkspaceSettings: params.handleToggleWorkspaceSettings,
     },

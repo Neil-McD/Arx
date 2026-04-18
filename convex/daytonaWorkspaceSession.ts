@@ -172,7 +172,7 @@ export async function createWorkspaceSandboxSession(params: {
   const canonicalTier = await params.ctx.runQuery(api.entitlements.getCanonicalTierByUserId as any, {
     userId: params.userId,
   });
-  if (canonicalTier !== "builder" && canonicalTier !== "architect") {
+  if (canonicalTier !== "builder") {
     return {
       ok: false,
       status: 403,

@@ -81,7 +81,7 @@ export function buildWebGlobalOverlayHostProps(params: {
         if (isBuilderTierFree(tier)) {
           params.setBuilderUpgradeContext("builder");
           params.setBuilderBillingError(
-            "Upgrade to Builder or Architect to use personal memory.",
+            "Upgrade to Builder to use personal memory.",
           );
           params.setIsBuilderUpgradeOpen(true);
           return;

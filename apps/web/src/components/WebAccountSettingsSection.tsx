@@ -29,7 +29,7 @@ type OpenRouterConnection = {
 };
 
 type BuilderBillingStatus = {
-  builder_tier: "free" | "builder" | "architect";
+  builder_tier: "free" | "builder";
   max_communities: number;
 } | null;
 
@@ -76,7 +76,7 @@ type WebAccountSettingsSectionProps = {
   isOpeningBuilderBillingPortal: boolean;
   canUseDevTierOverride: boolean;
   isSettingDevBuilderTier: boolean;
-  setDevBuilderTier: (tier: "free" | "builder" | "architect") => Promise<void> | void;
+  setDevBuilderTier: (tier: "free" | "builder") => Promise<void> | void;
   devBuilderTierError: string | null;
   pendingPurchaseClaims: PendingPurchaseClaim[];
   isLoadingPendingPurchases: boolean;
@@ -211,7 +211,7 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
           Inference connections
         </div>
         <div className="settings-section-desc">
-          Bring your own inference with ChatGPT auth or an OpenRouter key. Builder and Architect unlock the private workbench and workspace tools.
+          Bring your own inference with ChatGPT auth or an OpenRouter key. Builder unlocks the private workbench and workspace tools.
         </div>
         {!session ? (
           <div className="model-note">Sign in to connect a personal provider.</div>
@@ -391,14 +391,6 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
                           disabled={isSettingDevBuilderTier || tier === "builder"}
                         >
                           Builder
-                        </button>
-                        <button
-                          type="button"
-                          className={tier === "architect" ? "" : "secondary"}
-                          onClick={() => void setDevBuilderTier("architect")}
-                          disabled={isSettingDevBuilderTier || tier === "architect"}
-                        >
-                          Architect
                         </button>
                       </div>
                     </div>

@@ -4,8 +4,8 @@ export type BuilderBillingStatus = "success" | "cancel" | "return";
 export type BuilderBillingSource = "web" | "unknown";
 export type BuilderUpgradeContextValue = "builder" | "create_community";
 export type BuilderBillingContext = BuilderUpgradeContextValue | "unknown";
-export type BuilderTierUi = "free" | "builder" | "architect";
-export type BuilderCheckoutTier = "builder" | "architect";
+export type BuilderTierUi = "free" | "builder";
+export type BuilderCheckoutTier = "builder";
 
 export type BuilderBillingReturn = {
   status: BuilderBillingStatus;
@@ -63,7 +63,7 @@ function normalizeBuilderTierRaw(value: string | null | undefined): string {
 export function normalizeBuilderTierForUi(value: string | null | undefined): BuilderTierUi {
   const raw = normalizeBuilderTierRaw(value);
   if (raw === "builder") return "builder";
-  if (raw === "architect" || raw === "pro") return "architect";
+  if (raw === "architect" || raw === "pro") return "builder";
   return "free";
 }
 
@@ -76,25 +76,15 @@ export function isBuilderTierBuilder(value: string | null | undefined): boolean 
   return raw === "builder";
 }
 
-export function isBuilderTierArchitect(value: string | null | undefined): boolean {
-  const raw = normalizeBuilderTierRaw(value);
-  return raw === "architect" || raw === "pro";
-}
-
 export function hasBuilderTierPaidAccess(value: string | null | undefined): boolean {
-  return isBuilderTierBuilder(value) || isBuilderTierArchitect(value);
+  return normalizeBuilderTierForUi(value) === "builder";
 }
 
 export function hasBuilderWorkbenchAccess(value: string | null | undefined): boolean {
   return hasBuilderTierPaidAccess(value);
 }
 
-export function hasArchitectAccess(value: string | null | undefined): boolean {
-  return isBuilderTierArchitect(value);
-}
-
-export function formatBuilderTierLabel(value: string | null | undefined): "Free" | "Builder" | "Architect" {
-  if (isBuilderTierArchitect(value)) return "Architect";
+export function formatBuilderTierLabel(value: string | null | undefined): "Free" | "Builder" {
   if (isBuilderTierBuilder(value)) return "Builder";
   return "Free";
 }

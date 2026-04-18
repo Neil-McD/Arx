@@ -3,16 +3,16 @@ import { bootstrapConvexAuthenticatedClient, requireConvexUrl } from "./convexAu
 
 export type BuilderBillingStatus = {
   user_id: string;
-  builder_tier: "free" | "builder" | "architect";
+  builder_tier: "free" | "builder";
   max_communities: number;
 };
 
-export type DevBuilderTier = "free" | "builder" | "architect";
+export type DevBuilderTier = "free" | "builder";
 
 function normalizeBuilderTier(raw: unknown): BuilderBillingStatus["builder_tier"] {
   const value = String(raw ?? "").trim().toLowerCase();
   if (value === "builder") return "builder";
-  if (value === "architect" || value === "pro") return "architect";
+  if (value === "architect" || value === "pro") return "builder";
   return "free";
 }
 

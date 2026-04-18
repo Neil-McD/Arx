@@ -1,5 +1,5 @@
 import type { DragEvent } from "react";
-import { hasArchitectAccess } from "../../../../shared/builderBilling";
+import { hasBuilderTierPaidAccess } from "../../../../shared/builderBilling";
 
 type CommunityRecordForModal = {
   id: string;
@@ -89,9 +89,9 @@ export function WebCreateCommunityModal(props: WebCreateCommunityModalProps) {
   );
   const tier = builderBillingStatus?.builder_tier ?? "unknown";
   const max = builderBillingStatus?.max_communities ?? 0;
-  const hasArchitectTier = hasArchitectAccess(tier);
-  const needsPlan = Boolean(hasSession && !hasArchitectTier);
-  const limitReached = Boolean(hasSession && hasArchitectTier && max > 0 && ownedCount >= max);
+  const hasBuilderTier = hasBuilderTierPaidAccess(tier);
+  const needsPlan = Boolean(hasSession && !hasBuilderTier);
+  const limitReached = Boolean(hasSession && hasBuilderTier && max > 0 && ownedCount >= max);
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -249,7 +249,7 @@ export function WebCreateCommunityModal(props: WebCreateCommunityModalProps) {
                 {isCreatingCommunity
                   ? "Creating..."
                   : needsPlan
-                    ? "Upgrade to Architect"
+                    ? "Upgrade to Builder"
                     : limitReached
                       ? "Upgrade plan"
                       : "Create community"}

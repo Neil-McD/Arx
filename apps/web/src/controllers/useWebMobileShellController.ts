@@ -21,6 +21,8 @@ export function useWebMobileShellController(params: {
   openCommunityChat: (communitySlug: string, opts?: { clearUnread?: boolean; pushSnapshot?: boolean }) => void;
   handleOpenDiscover: () => void;
   handleTopbarBackToWorkspace: () => void;
+  hasBuilderAccess: boolean;
+  openCreateCommunityModal: () => void;
   setBuilderUpgradeContext: Dispatch<SetStateAction<BuilderUpgradeContext>>;
   setIsBuilderUpgradeOpen: Dispatch<SetStateAction<boolean>>;
 }) {
@@ -85,9 +87,15 @@ export function useWebMobileShellController(params: {
 
   const openMobileCreateCommunity = useCallback(() => {
     params.setMobileOverlay(null);
+    if (params.hasBuilderAccess) {
+      params.openCreateCommunityModal();
+      return;
+    }
     params.setBuilderUpgradeContext("builder");
     params.setIsBuilderUpgradeOpen(true);
   }, [
+    params.hasBuilderAccess,
+    params.openCreateCommunityModal,
     params.setBuilderUpgradeContext,
     params.setIsBuilderUpgradeOpen,
     params.setMobileOverlay,

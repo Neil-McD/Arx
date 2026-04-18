@@ -9,8 +9,8 @@ import { resolveAuthenticatedIdentityProfile } from "./authIdentity";
 import { normalizeAuthRelinkEmail } from "../shared/authRelinkPolicy";
 import { isCreatorDevTierOverrideEmail } from "../shared/devTierOverride";
 
-type CanonicalTier = "free" | "builder" | "architect";
-type EffectiveTier = "anon_free" | "auth_free" | "builder" | "architect";
+type CanonicalTier = "free" | "builder";
+type EffectiveTier = "anon_free" | "auth_free" | "builder";
 type AuthState = "anonymous" | "authenticated";
 
 type BuilderTierMeta = {
@@ -21,13 +21,6 @@ type BuilderTierMeta = {
 
 function builderTierMeta(tier: CanonicalTier): BuilderTierMeta {
   if (tier === "builder") {
-    return {
-      maxCommunities: 0,
-      platformFeeBps: 0,
-      hasPayouts: false,
-    };
-  }
-  if (tier === "architect") {
     return {
       maxCommunities: 3,
       platformFeeBps: 300,
@@ -46,7 +39,7 @@ function normalizeCanonicalTier(rawTier: unknown): CanonicalTier {
     .trim()
     .toLowerCase();
   if (normalized === "builder") return "builder";
-  if (normalized === "architect" || normalized === "pro") return "architect";
+  if (normalized === "architect" || normalized === "pro") return "builder";
   return "free";
 }
 
@@ -315,9 +308,10 @@ export const setDevTierOverride = mutation({
       throw new Error("dev_tier_override_forbidden");
     }
 
+    const tier = normalizeCanonicalTier(args.tier);
     await ctx.db.insert("userEntitlements", {
       userId: actor.dbUserId,
-      tier: args.tier,
+      tier,
       source: "admin_override",
       startsAt: nowMs,
       createdAt: nowMs,

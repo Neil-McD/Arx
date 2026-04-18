@@ -468,7 +468,7 @@ export const startWorkspaceCreditTopupCheckout = action({
     const canonicalTier = await ctx.runQuery(api.entitlements.getCanonicalTierByUserId as any, {
       userId,
     });
-    if (canonicalTier !== "builder" && canonicalTier !== "architect") {
+    if (canonicalTier !== "builder") {
       throw new Error("plan_required");
     }
 

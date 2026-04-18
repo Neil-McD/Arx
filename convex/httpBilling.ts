@@ -145,12 +145,12 @@ function readStripeLocalSessionIdFromCheckoutSession(
   return readStripeMetadataString(session.metadata, "local_session_id");
 }
 
-function readStripeTargetTier(raw: unknown): "builder" | "architect" | null {
+function readStripeTargetTier(raw: unknown): "builder" | null {
   const value = String(raw ?? "")
     .trim()
     .toLowerCase();
   if (value === "builder") return "builder";
-  if (value === "architect") return "architect";
+  if (value === "architect" || value === "pro") return "builder";
   return null;
 }
 

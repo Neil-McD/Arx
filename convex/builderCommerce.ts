@@ -15,20 +15,13 @@ function isActiveWindow(nowMs: number, startsAt: number, endsAt?: number): boole
   return true;
 }
 
-function readEffectiveBuilderTier(rows: Array<{ tier: string }>): "free" | "builder" | "architect" {
-  let rank = 0;
+function readEffectiveBuilderTier(rows: Array<{ tier: string }>): "free" | "builder" {
+  let hasBuilder = false;
   for (const row of rows) {
     const tier = String(row.tier ?? "").trim().toLowerCase();
-    if (tier === "architect" || tier === "pro") {
-      rank = Math.max(rank, 2);
-      continue;
-    }
-    if (tier === "builder") {
-      rank = Math.max(rank, 1);
-    }
+    if (tier === "builder" || tier === "architect" || tier === "pro") hasBuilder = true;
   }
-  if (rank >= 2) return "architect";
-  if (rank >= 1) return "builder";
+  if (hasBuilder) return "builder";
   return "free";
 }
 
@@ -345,7 +338,6 @@ export const startBuilderCheckout = action({
   handler: async (ctx, args) => {
     const nowMs = args.nowMs ?? Date.now();
     const targetTier = normalizeBuilderTier(args.tier);
-    if (targetTier !== "builder") throw new Error("builder_checkout_architect_unavailable");
     const successUrl = String(args.successUrl ?? "").trim();
     const cancelUrl = String(args.cancelUrl ?? "").trim();
     if (!successUrl) throw new Error("checkout_success_url_required");

@@ -12,7 +12,7 @@ import type { AuthSession } from "../auth";
 
 type BuilderBillingStatus = {
   user_id: string;
-  builder_tier: "free" | "builder" | "architect";
+  builder_tier: "free" | "builder";
   max_communities: number;
 };
 

@@ -151,8 +151,8 @@ export function useWebPostAuthBillingLifecycle<
           lastStatus = status;
           const tier = (status?.builder_tier ?? "free").toLowerCase();
           const max = status?.max_communities ?? 0;
-          const hasCapacity = tier === "architect" && max > 0 && ownedCount < max;
-          if (tier !== "free" && (!wantsCreate || tier === "architect" && hasCapacity)) break;
+          const hasCapacity = tier === "builder" && max > 0 && ownedCount < max;
+          if (tier !== "free" && (!wantsCreate || tier === "builder" && hasCapacity)) break;
           if (params.builderBillingReturn?.status !== "success" && !wantsCreate) break;
           await new Promise((resolve) => window.setTimeout(resolve, 1000));
         }
@@ -164,13 +164,13 @@ export function useWebPostAuthBillingLifecycle<
         }
         const tier = (lastStatus?.builder_tier ?? params.builderBillingStatus?.builder_tier ?? "free").toLowerCase();
         const max = lastStatus?.max_communities ?? params.builderBillingStatus?.max_communities ?? 0;
-        if (tier !== "architect") {
-          params.setBuilderBillingError("Architect is required to create a community.");
+        if (tier !== "builder") {
+          params.setBuilderBillingError("Builder is required to create a community.");
           params.clearBuilderBillingReturn();
           return;
         }
         if (max > 0 && ownedCount >= max) {
-          params.setBuilderBillingError("You've reached your plan limit. Upgrade your plan to create more communities.");
+          params.setBuilderBillingError("You've reached your Builder community limit.");
           params.clearBuilderBillingReturn();
           return;
         }

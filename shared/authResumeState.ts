@@ -7,7 +7,7 @@ const AUTH_RESUME_STATE_STORAGE_KEY = "arx_auth_resume_state_v1";
 const AUTH_RESUME_STATE_TTL_MS = 24 * 60 * 60 * 1000;
 
 export type BuilderUpgradeContext = "builder" | "create_community";
-export type BuilderCheckoutTier = "builder" | "architect";
+export type BuilderCheckoutTier = "builder";
 
 export type PendingAuthIntent =
   | {
@@ -100,12 +100,7 @@ function normalizePendingAuthIntent(
   if (reason === "start_builder_checkout") {
     const rawTier = payload.tier;
     const context = payload.context;
-    const tier =
-      rawTier === "builder"
-        ? "builder"
-        : rawTier === "architect" || rawTier === "pro"
-          ? "architect"
-          : null;
+    const tier = rawTier === "builder" || rawTier === "architect" || rawTier === "pro" ? "builder" : null;
     if (!tier) return null;
     if (context !== "builder" && context !== "create_community") return null;
     return { reason, payload: { tier, context } };

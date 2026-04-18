@@ -1,14 +1,13 @@
 import { query } from "./_generated/server";
 import { v } from "convex/values";
 import { resolveAuthenticatedSubject } from "./authIdentity";
-import { isCreatorDevTierOverrideEmail } from "../shared/devTierOverride";
 import {
   normalizeTierForGate,
   resolveCanonicalGatePolicy,
 } from "../shared/canonicalGateEngine";
 
-type CanonicalTier = "free" | "builder" | "architect";
-type EffectiveTier = "anon_free" | "auth_free" | "builder" | "architect";
+type CanonicalTier = "free" | "builder";
+type EffectiveTier = "anon_free" | "auth_free" | "builder";
 type GateCode =
   | "ok"
   | "auth_required"
@@ -316,8 +315,8 @@ export const resolveGateBundle = query({
         allowWebResearch: entitledCapabilityFamilies.includes("web_research"),
         allowWorkspaceTools: entitledCapabilityFamilies.includes("workspace_tools"),
         allowCommunityCreate:
-          effectiveTier === "architect" && isCreatorDevTierOverrideEmail(userEmail),
-        allowPersonalMemory: effectiveTier === "builder" || effectiveTier === "architect",
+          effectiveTier === "builder",
+        allowPersonalMemory: effectiveTier === "builder",
       },
     };
   },

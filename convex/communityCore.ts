@@ -474,10 +474,7 @@ export function tierHasBuilderAccess(rawTier: unknown): boolean {
 }
 
 export function tierHasArchitectAccess(rawTier: unknown): boolean {
-  const tier = String(rawTier ?? "")
-    .trim()
-    .toLowerCase();
-  return tier === "architect" || tier === "pro";
+  return tierHasBuilderAccess(rawTier);
 }
 
 export async function resolvePublicUserId(

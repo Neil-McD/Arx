@@ -1000,7 +1000,7 @@ export const createCloudProjectForOwner = mutation({
       authSubject: args.authSubject ?? null,
       nowMs,
     });
-    if (canonicalTier !== "builder" && canonicalTier !== "architect") {
+    if (canonicalTier !== "builder") {
       throw new Error("plan_required");
     }
 
@@ -1081,7 +1081,7 @@ export const generateCloudProjectImportUploadUrl = mutation({
       authSubject: args.authSubject ?? null,
       nowMs,
     });
-    if (canonicalTier !== "builder" && canonicalTier !== "architect") {
+    if (canonicalTier !== "builder") {
       throw new Error("plan_required");
     }
     return {

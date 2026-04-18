@@ -24,7 +24,7 @@ type PersonalMemoryItem = {
 };
 
 type BuilderBillingStatus = {
-  builder_tier: "free" | "builder" | "architect";
+  builder_tier: "free" | "builder";
 } | null;
 
 type WebAgentSettingsSectionProps = {
@@ -227,7 +227,7 @@ export function WebAgentSettingsSection(props: WebAgentSettingsSectionProps) {
                     Personal memory
                   </div>
                   <div className="settings-section-desc">
-                    Personal memory is included with Builder and Architect.
+                    Personal memory is included with Builder.
                   </div>
                   <div className="auth-actions" style={{ paddingLeft: 0 }}>
                     <button type="button" onClick={() => openBuilderUpgrade("builder")}>

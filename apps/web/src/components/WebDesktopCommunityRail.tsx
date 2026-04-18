@@ -103,10 +103,10 @@ export function WebDesktopCommunityRail(props: WebDesktopCommunityRailProps) {
           type="button"
           className="community-rail-button community-rail-add"
           onClick={communityShell.onOpenBuilderUpgrade}
-          title="Become a Builder"
-          aria-label="Become a Builder"
+          title={communityShell.builderRailCtaTitle}
+          aria-label={communityShell.builderRailCtaTitle}
         >
-          B
+          {communityShell.builderRailCtaLabel}
         </button>
       </div>
       <div className="rail-footer">
