@@ -115,6 +115,37 @@ function errorToMessage(error: unknown, fallback: string): string {
   return fallback;
 }
 
+function readWorkOsBootstrapDebugState(workos: ReturnType<typeof useWorkOsRuntime>): string {
+  const method = String(workos.authenticationMethod ?? "none").trim() || "none";
+  const userId = String(workos.user?.id ?? "").trim();
+  return `loading=${workos.isLoading ? "1" : "0"} user=${userId ? "1" : "0"} method=${method}`;
+}
+
+function buildWorkOsBootstrapDebugMessage(
+  baseMessage: string,
+  params: {
+    workos: ReturnType<typeof useWorkOsRuntime>;
+    phase: string;
+    hasSession?: boolean;
+    error?: unknown;
+  },
+): string {
+  const detailParts = [
+    `phase=${params.phase}`,
+    readWorkOsBootstrapDebugState(params.workos),
+    `session=${params.hasSession ? "1" : "0"}`,
+  ];
+  const reason = params.error ? errorToMessage(params.error, "unknown_error") : null;
+  if (reason) {
+    detailParts.push(`reason=${reason}`);
+  }
+  return `${baseMessage} Debug: ${detailParts.join(" ")}.`;
+}
+
+function logWorkOsBootstrap(stage: string, details: Record<string, unknown>): void {
+  console.info("[auth][workos]", stage, details);
+}
+
 export function useWebAppAuthController(
   params: UseWebAppAuthControllerParams,
 ): UseWebAppAuthControllerResult {
@@ -181,16 +212,22 @@ export function useWebAppAuthController(
         if (!workos.isEnabled) {
           return await refreshAuthSessionResult();
         }
-        if (!workos.user) {
-          return { status: "terminal_failure", reason: "auth_session_missing" };
-        }
         try {
           const refreshed = await workos.readSession({ forceRefresh: true });
           if (!refreshed) {
+            logWorkOsBootstrap("refresh_session_missing", {
+              phase: "refresh",
+              workos: readWorkOsBootstrapDebugState(workos),
+            });
             return { status: "terminal_failure", reason: "auth_session_missing" };
           }
           return { status: "refreshed", session: refreshed };
         } catch (error) {
+          console.warn("[auth][workos] refresh_session_failed", {
+            phase: "refresh",
+            workos: readWorkOsBootstrapDebugState(workos),
+            error: errorToMessage(error, "workos_refresh_failed"),
+          });
           if (isWorkOsLoginRequiredError(error)) {
             return { status: "terminal_failure", reason: "auth_session_invalid" };
           }
@@ -482,6 +519,11 @@ export function useWebAppAuthController(
       }
 
       const hadPendingAuthFlow = hasRecentAuthFlowPending();
+      logWorkOsBootstrap("bootstrap_begin", {
+        phase: "bootstrap",
+        hadPendingAuthFlow,
+        workos: readWorkOsBootstrapDebugState(workos),
+      });
       if (hasSignedOutIntent) {
         if (cancelled) return;
         markAuthBootstrapComplete();
@@ -490,30 +532,49 @@ export function useWebAppAuthController(
       }
 
       let bootstrappedSession: AuthSession | null = null;
-      if (workos.user) {
-        try {
-          bootstrappedSession = await workos.readSession();
-        } catch (error) {
-          if (cancelled) return;
-          if (hadPendingAuthFlow) {
-            setAuthError(
+      try {
+        bootstrappedSession = await workos.readSession();
+        logWorkOsBootstrap("bootstrap_read_session", {
+          phase: "read_session",
+          workos: readWorkOsBootstrapDebugState(workos),
+          hasSession: Boolean(bootstrappedSession),
+        });
+      } catch (error) {
+        if (cancelled) return;
+        console.warn("[auth][workos] bootstrap_read_session_failed", {
+          phase: "read_session",
+          workos: readWorkOsBootstrapDebugState(workos),
+          error: errorToMessage(error, "workos_bootstrap_failed"),
+        });
+        if (hadPendingAuthFlow) {
+          setAuthError(
+            buildWorkOsBootstrapDebugMessage(
               formatAuthSessionErrorMessage(error, "Failed to bootstrap WorkOS auth session."),
-            );
-            setIsAuthGateOpen(true);
-            clearAuthFlowPending();
-          }
-          markAuthBootstrapComplete();
-          return;
+              { workos, phase: "read_session", error, hasSession: false },
+            ),
+          );
+          setIsAuthGateOpen(true);
+          clearAuthFlowPending();
         }
+        markAuthBootstrapComplete();
+        return;
       }
 
       if (bootstrappedSession) {
         const verifiedSession = await ensureUsableAuthSession(bootstrappedSession);
         if (cancelled) return;
         if (!verifiedSession) {
+          console.warn("[auth][workos] bootstrap_verify_failed", {
+            phase: "convex_probe",
+            workos: readWorkOsBootstrapDebugState(workos),
+            hasSession: true,
+          });
           markAuthBootstrapComplete();
           setAuthError(
-            "Sign-in completed, but PolyNet could not verify your authenticated app session. Please try again.",
+            buildWorkOsBootstrapDebugMessage(
+              "Sign-in completed, but PolyNet could not verify your authenticated app session. Please try again.",
+              { workos, phase: "convex_probe", hasSession: true },
+            ),
           );
           setIsAuthGateOpen(true);
           clearAuthFlowPending();
@@ -552,8 +613,16 @@ export function useWebAppAuthController(
 
       markAuthBootstrapComplete();
       if (hadPendingAuthFlow) {
+        console.warn("[auth][workos] bootstrap_missing_session", {
+          phase: "read_session",
+          workos: readWorkOsBootstrapDebugState(workos),
+          hasSession: false,
+        });
         setAuthError(
-          "Sign-in completed, but PolyNet could not establish your account session. Please try again.",
+          buildWorkOsBootstrapDebugMessage(
+            "Sign-in completed, but PolyNet could not establish your account session. Please try again.",
+            { workos, phase: "read_session", hasSession: false },
+          ),
         );
         setIsAuthGateOpen(true);
         clearAuthFlowPending();

@@ -86,22 +86,55 @@ function coerceAuthSessionUser(user: User): AuthSession["user"] {
   };
 }
 
+function readClaimString(claims: Record<string, unknown>, keys: readonly string[]): string | null {
+  for (const key of keys) {
+    const value = claims[key];
+    if (typeof value !== "string") continue;
+    const trimmed = value.trim();
+    if (trimmed) return trimmed;
+  }
+  return null;
+}
+
+function coerceAuthSessionUserFromClaims(claims: Record<string, unknown>): AuthSession["user"] | null {
+  const id = readClaimString(claims, ["sub"]);
+  if (!id) return null;
+  const fullNameFromParts = [readClaimString(claims, ["given_name", "givenName"]), readClaimString(claims, ["family_name", "familyName"])]
+    .filter(Boolean)
+    .join(" ")
+    .trim();
+  const directDisplayName = readClaimString(claims, ["name", "display_name", "displayName"]);
+  const displayName = directDisplayName ?? (fullNameFromParts || undefined);
+  return {
+    id,
+    email: readClaimString(claims, ["email"]) ?? undefined,
+    displayName: displayName || undefined,
+    avatarUrl:
+      readClaimString(claims, ["picture", "picture_url", "pictureUrl", "profile_picture_url", "profilePictureUrl"]) ??
+      undefined,
+  };
+}
+
 async function buildAuthSessionFromAccessToken(args: {
   user: User | null;
   getAccessToken: (options?: { forceRefresh?: boolean }) => Promise<string>;
   forceRefresh?: boolean;
 }): Promise<AuthSession | null> {
-  if (!args.user) return null;
   const accessToken = await args.getAccessToken({ forceRefresh: args.forceRefresh });
-  const claims = getClaims(accessToken);
+  const claims = getClaims(accessToken) as Record<string, unknown>;
   const expiresAt = Number(claims.exp ?? 0);
   if (!Number.isFinite(expiresAt) || expiresAt <= 0) {
     throw new Error("workos_access_token_missing_exp");
   }
+  const fallbackUser = coerceAuthSessionUserFromClaims(claims);
+  const sessionUser = args.user ? coerceAuthSessionUser(args.user) : fallbackUser;
+  if (!sessionUser?.id) {
+    throw new Error("workos_access_token_missing_sub");
+  }
   return {
     access_token: accessToken,
     expires_at: Math.floor(expiresAt),
-    user: coerceAuthSessionUser(args.user),
+    user: sessionUser,
   };
 }
 
@@ -167,6 +200,23 @@ export function WorkOsRuntimeProvider({ children }: { children: ReactNode }) {
       {...(config.apiHostname ? { apiHostname: config.apiHostname } : {})}
       {...(config.redirectUri ? { redirectUri: config.redirectUri } : {})}
       {...(config.devMode ? { devMode: true } : {})}
+      onRedirectCallback={(response) => {
+        console.info("[auth][workos] redirect_callback", {
+          authenticationMethod: response.authenticationMethod,
+          userId: response.user.id,
+          organizationId: response.organizationId ?? null,
+        });
+      }}
+      onRefresh={(response) => {
+        console.info("[auth][workos] refresh_success", {
+          authenticationMethod: response.authenticationMethod,
+          userId: response.user.id,
+          organizationId: response.organizationId ?? null,
+        });
+      }}
+      onRefreshFailure={() => {
+        console.warn("[auth][workos] refresh_failure");
+      }}
     >
       <WorkOsRuntimeBridge>{children}</WorkOsRuntimeBridge>
     </AuthKitProvider>
