@@ -6,11 +6,15 @@ import App from "./App";
 import "./index.css";
 import { WorkOsRuntimeProvider } from "./auth/workosRuntime";
 import { isLoginTrampolinePathname, LoginTrampolineRoute } from "./auth/loginTrampoline";
+import { WebAuthBootstrapShell } from "./components/WebAuthBootstrapShell";
 import { applyAppThemeAttributes, parseAppTheme } from "../../../shared/theme";
 import { bootConvexProbe } from "../../../shared/convexRuntime";
 import { bootstrapConvexAnonymousActor } from "../../../shared/convexAuthBootstrap";
 
-type ErrorBoundaryState = { error: Error | null };
+type ErrorBoundaryState = {
+  error: Error | null;
+  isRecoveringModuleLoad: boolean;
+};
 
 const MODULE_LOAD_RECOVERY_KEY = "polynet-module-load-recovery";
 const MODULE_LOAD_RECOVERY_WINDOW_MS = 30_000;
@@ -97,10 +101,13 @@ class ErrorBoundary extends React.Component<
   { children: React.ReactNode },
   ErrorBoundaryState
 > {
-  state: ErrorBoundaryState = { error: null };
+  state: ErrorBoundaryState = { error: null, isRecoveringModuleLoad: false };
 
   static getDerivedStateFromError(error: Error): ErrorBoundaryState {
-    return { error };
+    return {
+      error,
+      isRecoveringModuleLoad: isLikelyModuleLoadFailure(error),
+    };
   }
 
   componentDidCatch(error: Error, info: React.ErrorInfo) {
@@ -134,17 +141,23 @@ class ErrorBoundary extends React.Component<
   render() {
     if (!this.state.error) return this.props.children;
 
+    if (this.state.isRecoveringModuleLoad) {
+      return (
+        <div style={{ minHeight: "100vh" }}>
+          <WebAuthBootstrapShell
+            showCommunityChatBootstrapShell={false}
+            isCommunityMode={false}
+          />
+        </div>
+      );
+    }
+
     const message = this.state.error?.message ?? "Unknown error";
     const stack = this.state.error?.stack ?? "";
-    const isModuleLoadError = isLikelyModuleLoadFailure(this.state.error);
     return (
       <div style={{ padding: 24, fontFamily: "ui-sans-serif, system-ui, sans-serif" }}>
         <h1 style={{ margin: 0, fontSize: 18 }}>Polynet Web UI crashed</h1>
-        <p style={{ marginTop: 8, opacity: 0.8 }}>
-          {isModuleLoadError
-            ? "The app was updated and this tab is still holding stale code. Reload to fetch the latest version."
-            : message}
-        </p>
+        <p style={{ marginTop: 8, opacity: 0.8 }}>{message}</p>
         <button
           style={{
             marginTop: 8,
@@ -157,7 +170,7 @@ class ErrorBoundary extends React.Component<
         >
           Reload
         </button>
-        {stack && !isModuleLoadError && (
+        {stack && (
           <pre
             style={{
               marginTop: 16,

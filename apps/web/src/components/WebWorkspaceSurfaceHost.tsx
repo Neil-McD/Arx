@@ -1,4 +1,3 @@
-import { Suspense, lazy } from "react";
 import type {
   AppView,
   SettingsGroup,
@@ -10,13 +9,7 @@ import {
   WebWorkspaceHost,
   type WebWorkspaceHostProps,
 } from "./WebWorkspaceHost";
-import type { WebSettingsPanelsProps } from "./WebSettingsPanels";
-
-const WebSettingsPanels = lazy(() =>
-  import("./WebSettingsPanels").then((module) => ({
-    default: module.WebSettingsPanels,
-  })),
-);
+import { WebSettingsPanels, type WebSettingsPanelsProps } from "./WebSettingsPanels";
 
 type WebWorkspaceSurfaceHostProps = {
   activeView: AppView;
@@ -76,31 +69,16 @@ export function WebWorkspaceSurfaceHost(props: WebWorkspaceSurfaceHostProps) {
               {settingsGroupLabel(settingsGroup)}
             </div>
             <div className="web-settings-centered-pane mobile-global-settings-centered-pane">
-              <SettingsPanelsContent settingsPanelsProps={settingsPanelsProps} />
+              <WebSettingsPanels {...settingsPanelsProps} />
             </div>
           </div>
         )
       ) : (
         <div className="web-settings-centered-pane">
-          <SettingsPanelsContent settingsPanelsProps={settingsPanelsProps} />
+          <WebSettingsPanels {...settingsPanelsProps} />
         </div>
       )}
     </div>
-  );
-}
-
-function SettingsPanelsContent(props: { settingsPanelsProps: WebSettingsPanelsProps }) {
-  return (
-    <Suspense
-      fallback={
-        <div className="chat-loading">
-          <div className="loading-spinner" />
-          <span>Loading settings...</span>
-        </div>
-      }
-    >
-      <WebSettingsPanels {...props.settingsPanelsProps} />
-    </Suspense>
   );
 }
 
