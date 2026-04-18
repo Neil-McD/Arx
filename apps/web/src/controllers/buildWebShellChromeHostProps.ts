@@ -213,8 +213,8 @@ export function buildWebShellChromeHostProps(params: {
         params.setBuilderUpgradeContext("builder");
         params.setIsBuilderUpgradeOpen(true);
       },
-      builderRailCtaLabel: params.hasBuilderAccess ? "+" : "B",
-      builderRailCtaTitle: params.hasBuilderAccess ? "Create community" : "Become a Builder",
+      builderRailCtaLabel: "+",
+      builderRailCtaTitle: "Create community",
       activeView: params.activeView,
       onToggleWorkspaceSettings: params.handleToggleWorkspaceSettings,
     },
