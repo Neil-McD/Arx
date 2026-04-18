@@ -5,6 +5,7 @@ import ReactDOM from "react-dom/client";
 import App from "./App";
 import "./index.css";
 import { WorkOsRuntimeProvider } from "./auth/workosRuntime";
+import { isLoginTrampolinePathname, LoginTrampolineRoute } from "./auth/loginTrampoline";
 import { applyAppThemeAttributes, parseAppTheme } from "../../../shared/theme";
 import { bootConvexProbe } from "../../../shared/convexRuntime";
 import { bootstrapConvexAnonymousActor } from "../../../shared/convexAuthBootstrap";
@@ -182,6 +183,8 @@ try {
   applyAppThemeAttributes("polynet", document.documentElement);
 }
 
+const isLoginTrampoline = isLoginTrampolinePathname(window.location.pathname || "/");
+
 if (typeof window !== "undefined") {
   window.addEventListener("vite:preloadError", (event) => {
     const preloadEvent = event as Event & {
@@ -220,14 +223,20 @@ if (typeof window !== "undefined") {
   }, 5000);
 }
 
-bootConvexProbe();
-bootstrapConvexAnonymousActor();
+if (!isLoginTrampoline) {
+  bootConvexProbe();
+  bootstrapConvexAnonymousActor();
+}
+
+const rootView = isLoginTrampoline
+  ? <LoginTrampolineRoute />
+  : <App />;
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
     <ErrorBoundary>
       <WorkOsRuntimeProvider>
-        <App />
+        {rootView}
       </WorkOsRuntimeProvider>
     </ErrorBoundary>
   </React.StrictMode>

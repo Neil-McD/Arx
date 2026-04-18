@@ -21,6 +21,7 @@ import {
   storeAuthResumeState,
 } from "../../../../shared/authResumeState";
 import { clearOAuthCallbackParamsFromLocation } from "../../../../shared/cloudPkce";
+import { buildLoginTrampolinePath } from "../auth/loginTrampoline";
 import { isWorkOsLoginRequiredError, useWorkOsRuntime } from "../auth/workosRuntime";
 import { useWebAuthSessionLifecycle } from "./useWebAuthSessionLifecycle";
 
@@ -307,17 +308,20 @@ export function useWebAppAuthController(
     setAuthError(null);
     clearAuthSignedOutIntentMarker();
     const returnTo = readCurrentAuthReturnTo();
+    const loginPath = buildLoginTrampolinePath(returnTo);
     pushAuthProbeEvent("sign_in_redirect_begin", {
       returnTo,
+      loginPath,
       workos: readWorkOsBootstrapDebugState(workos),
     });
     markAuthFlowPending();
     storeAuthResumeState({ returnTo });
     try {
-      await workos.signIn();
       pushAuthProbeEvent("sign_in_redirect_dispatched", {
+        loginPath,
         workos: readWorkOsBootstrapDebugState(workos),
       });
+      window.location.assign(loginPath);
     } catch (error) {
       pushAuthProbeEvent("sign_in_redirect_failed", {
         reason: errorToMessage(error, "sign_in_failed"),

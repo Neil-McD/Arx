@@ -8,9 +8,14 @@ import {
 } from "@workos-inc/authkit-react";
 import { createContext, useCallback, useContext, useMemo, type ReactNode } from "react";
 import type { AuthSession } from "../../../../shared/authCore";
+import { DEFAULT_POST_SIGN_IN_PATH } from "../../../../shared/webAppRouteState";
 
 type WorkOsSessionReadOptions = {
   forceRefresh?: boolean;
+};
+
+type WorkOsSignInOptions = {
+  state?: Record<string, unknown> | null;
 };
 
 type WorkOsRuntimeContextValue = {
@@ -19,7 +24,7 @@ type WorkOsRuntimeContextValue = {
   user: User | null;
   authenticationMethod: AuthenticationMethod | null;
   readSession: (options?: WorkOsSessionReadOptions) => Promise<AuthSession | null>;
-  signIn: () => Promise<void>;
+  signIn: (options?: WorkOsSignInOptions) => Promise<void>;
   signOut: (options?: { returnTo?: string }) => Promise<void>;
 };
 
@@ -36,7 +41,7 @@ const DISABLED_RUNTIME: WorkOsRuntimeContextValue = {
   user: null,
   authenticationMethod: null,
   readSession: async () => null,
-  signIn: async () => {
+  signIn: async (_options?: WorkOsSignInOptions) => {
     throw new Error("workos_auth_not_configured");
   },
   signOut: async () => {},
@@ -74,6 +79,18 @@ function readWorkOsConfig(): WorkOsConfig {
     redirectUri,
     devMode: explicitDevMode ?? !apiHostname,
   };
+}
+
+function sanitizeRedirectReturnTo(raw: unknown): string {
+  const normalized = String(raw ?? "").trim();
+  if (!normalized) return DEFAULT_POST_SIGN_IN_PATH;
+  try {
+    const parsed = new URL(normalized, window.location.origin);
+    if (parsed.origin !== window.location.origin) return DEFAULT_POST_SIGN_IN_PATH;
+    return `${parsed.pathname || "/"}${parsed.search || ""}${parsed.hash || ""}` || DEFAULT_POST_SIGN_IN_PATH;
+  } catch {
+    return DEFAULT_POST_SIGN_IN_PATH;
+  }
 }
 
 function coerceAuthSessionUser(user: User): AuthSession["user"] {
@@ -149,8 +166,10 @@ function WorkOsRuntimeBridge({ children }: { children: ReactNode }) {
     });
   }, [auth.getAccessToken, auth.user]);
 
-  const signIn = useCallback(async (): Promise<void> => {
-    await auth.signIn();
+  const signIn = useCallback(async (options?: WorkOsSignInOptions): Promise<void> => {
+    await auth.signIn({
+      ...(options?.state ? { state: options.state } : {}),
+    });
   }, [auth]);
 
   const signOut = useCallback(async (options?: { returnTo?: string }): Promise<void> => {
@@ -201,11 +220,17 @@ export function WorkOsRuntimeProvider({ children }: { children: ReactNode }) {
       {...(config.redirectUri ? { redirectUri: config.redirectUri } : {})}
       {...(config.devMode ? { devMode: true } : {})}
       onRedirectCallback={(response) => {
+        const returnTo = sanitizeRedirectReturnTo(response.state?.returnTo);
         console.info("[auth][workos] redirect_callback", {
           authenticationMethod: response.authenticationMethod,
           userId: response.user.id,
           organizationId: response.organizationId ?? null,
+          returnTo,
         });
+        const currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+        if (returnTo !== currentPath) {
+          window.location.replace(returnTo);
+        }
       }}
       onRefresh={(response) => {
         console.info("[auth][workos] refresh_success", {

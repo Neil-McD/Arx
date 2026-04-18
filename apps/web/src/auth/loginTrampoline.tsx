@@ -1,0 +1,128 @@
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  applyShellVariantToAppPath,
+  DEFAULT_POST_SIGN_IN_PATH,
+  MOBILE_SHELL_PATH_PREFIX,
+  readShellVariantFromPathname,
+  stripShellVariantFromPathname,
+} from "../../../../shared/webAppRouteState";
+import { useWorkOsRuntime } from "./workosRuntime";
+
+function defaultPostSignInPathForShell(shellVariant: "standard" | "mobile"): string {
+  return applyShellVariantToAppPath(DEFAULT_POST_SIGN_IN_PATH, shellVariant);
+}
+
+function sanitizeReturnToPath(raw: string | null | undefined, shellVariant: "standard" | "mobile"): string {
+  const fallback = defaultPostSignInPathForShell(shellVariant);
+  const normalized = String(raw ?? "").trim();
+  if (!normalized) return fallback;
+  try {
+    const parsed = new URL(normalized, window.location.origin);
+    if (parsed.origin !== window.location.origin) return fallback;
+    return `${parsed.pathname || "/"}${parsed.search || ""}${parsed.hash || ""}` || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+export function isLoginTrampolinePathname(pathname: string): boolean {
+  return stripShellVariantFromPathname(pathname || "/") === "/login";
+}
+
+export function buildLoginTrampolinePath(returnTo: string): string {
+  const shellVariant = readShellVariantFromPathname(window.location.pathname || "/");
+  const basePath = shellVariant === "mobile" ? `${MOBILE_SHELL_PATH_PREFIX}/login` : "/login";
+  const url = new URL(basePath, window.location.origin);
+  url.searchParams.set("returnTo", sanitizeReturnToPath(returnTo, shellVariant));
+  return `${url.pathname}${url.search}`;
+}
+
+function readLoginRouteReturnTo(): string {
+  const shellVariant = readShellVariantFromPathname(window.location.pathname || "/");
+  const params = new URLSearchParams(window.location.search);
+  return sanitizeReturnToPath(params.get("returnTo"), shellVariant);
+}
+
+function formatError(error: unknown): string {
+  if (error instanceof Error && error.message.trim()) return error.message.trim();
+  if (typeof error === "string" && error.trim()) return error.trim();
+  return "Sign-in failed.";
+}
+
+export function LoginTrampolineRoute() {
+  const workos = useWorkOsRuntime();
+  const hasStartedRef = useRef(false);
+  const [error, setError] = useState<string | null>(null);
+  const returnTo = useMemo(() => readLoginRouteReturnTo(), []);
+
+  useEffect(() => {
+    if (!workos.isEnabled) {
+      setError("WorkOS auth is not configured.");
+      return;
+    }
+    if (workos.isLoading) return;
+    if (workos.user) {
+      if (`${window.location.pathname}${window.location.search}${window.location.hash}` !== returnTo) {
+        window.location.replace(returnTo);
+      }
+      return;
+    }
+    if (hasStartedRef.current) return;
+    hasStartedRef.current = true;
+    console.info("[auth][probe] login_trampoline_entered", { returnTo });
+    void workos
+      .signIn({ state: { returnTo } })
+      .catch((signInError) => {
+        console.warn("[auth][probe] login_trampoline_signin_failed", signInError);
+        setError(formatError(signInError));
+        hasStartedRef.current = false;
+      });
+  }, [returnTo, workos]);
+
+  return (
+    <div
+      style={{
+        minHeight: "100dvh",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 24,
+        background: "#09090b",
+        color: "#f5f7fb",
+        fontFamily: "ui-sans-serif, system-ui, sans-serif",
+      }}
+    >
+      <div
+        style={{
+          width: "min(100%, 420px)",
+          borderRadius: 20,
+          border: "1px solid rgba(255,255,255,0.12)",
+          background: "rgba(18,18,22,0.94)",
+          boxShadow: "0 18px 50px rgba(0,0,0,0.35)",
+          padding: 24,
+        }}
+      >
+        <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 8 }}>Redirecting to sign in</div>
+        <div style={{ fontSize: 14, lineHeight: 1.6, color: "rgba(245,247,251,0.78)" }}>
+          PolyNet is handing off to WorkOS and will return you to your original page.
+        </div>
+        {error ? (
+          <div
+            style={{
+              marginTop: 16,
+              padding: "10px 12px",
+              borderRadius: 12,
+              border: "1px solid rgba(255,120,120,0.24)",
+              background: "rgba(120,20,20,0.14)",
+              color: "#ffb4b4",
+              fontSize: 13,
+              lineHeight: 1.5,
+            }}
+          >
+            {error}
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
