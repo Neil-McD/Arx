@@ -218,7 +218,7 @@ export function WebWorkspaceShellPanels<TThread extends ThreadLike, TProject ext
               ) : null}
             </div>
           )}
-          {props.session ? renderCloudSidebar() : renderDesktopGuestSidebar()}
+          {props.session ? renderCloudSidebar(undefined, true) : renderDesktopGuestSidebar()}
         </aside>
       )}
 
