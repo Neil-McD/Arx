@@ -8,6 +8,7 @@ import {
 import { resolveAuthenticatedIdentityProfile } from "./authIdentity";
 import { normalizeAuthRelinkEmail } from "../shared/authRelinkPolicy";
 import { isCreatorDevTierOverrideEmail } from "../shared/devTierOverride";
+import { ensurePlatformHomeCommunityMembership } from "./platformHomeCommunity";
 
 type CanonicalTier = "free" | "builder";
 type EffectiveTier = "anon_free" | "auth_free" | "builder";
@@ -142,6 +143,22 @@ export const bootstrapActor = mutation({
         avatarUrl: seededProfile.avatarUrl,
         nowMs,
       });
+      try {
+        const homeMembership = await ensurePlatformHomeCommunityMembership({
+          ctx,
+          userId: actor.dbUserId,
+          nowMs,
+        });
+        if (homeMembership.status === "missing") {
+          console.warn("platform_home_community_missing");
+        } else if (homeMembership.status === "not_open") {
+          console.warn("platform_home_community_not_open", {
+            communityId: homeMembership.communityId,
+          });
+        }
+      } catch (error) {
+        console.error("platform_home_community_membership_ensure_failed", error);
+      }
       const canonicalTier = await getCanonicalTierByUserIdInternal(ctx as never, actor.dbUserId, nowMs);
       const effectiveTier = resolveEffectiveTier({ authState: args.authState, canonicalTier });
 

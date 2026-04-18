@@ -81,6 +81,7 @@ import type * as openAiNativeToolCompletion from "../openAiNativeToolCompletion.
 import type * as openAiWebSearchTransport from "../openAiWebSearchTransport.js";
 import type * as openRouterNativeTransport from "../openRouterNativeTransport.js";
 import type * as personalMemory from "../personalMemory.js";
+import type * as platformHomeCommunity from "../platformHomeCommunity.js";
 import type * as previewProxySessionToken from "../previewProxySessionToken.js";
 import type * as probe from "../probe.js";
 import type * as profiles from "../profiles.js";
@@ -193,6 +194,7 @@ declare const fullApi: ApiFromModules<{
   openAiWebSearchTransport: typeof openAiWebSearchTransport;
   openRouterNativeTransport: typeof openRouterNativeTransport;
   personalMemory: typeof personalMemory;
+  platformHomeCommunity: typeof platformHomeCommunity;
   previewProxySessionToken: typeof previewProxySessionToken;
   probe: typeof probe;
   profiles: typeof profiles;
