@@ -21,9 +21,8 @@ The current auth model has three layers:
 
 Optional:
 
-1. `ARX_AUTH_MAGIC_LINK_URL` for the same-origin public magic-link fallback
-2. `ARX_AUTH_JWT_AUDIENCE=<AuthKit client id>`
-3. `ARX_ALLOW_UNVERIFIED_AUTH_SUBJECT=false`
+1. `ARX_AUTH_JWT_AUDIENCE=<AuthKit client id>`
+2. `ARX_ALLOW_UNVERIFIED_AUTH_SUBJECT=false`
 
 ## 2) WorkOS AuthKit Mapping
 

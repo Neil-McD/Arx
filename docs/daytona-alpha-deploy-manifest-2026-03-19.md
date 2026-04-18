@@ -75,7 +75,6 @@ Strongly recommended:
 
 Optional auth/provider values if your identity provider needs them:
 
-- `ARX_AUTH_MAGIC_LINK_URL`
 - `ARX_AUTH_JWT_AUDIENCE`
 - `VITE_CONVEX_PUBLIC_KEY`
 

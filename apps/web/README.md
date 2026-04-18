@@ -13,7 +13,6 @@ This is the canonical Polynet web app and primary release surface.
    - `VITE_CONVEX_PUBLIC_KEY` is optional
    - Set WorkOS browser vars (`VITE_WORKOS_CLIENT_ID`, `VITE_WORKOS_REDIRECT_URI`, `VITE_WORKOS_DEV_MODE`) for sign-in
    - Set shared OAuth/OIDC metadata vars (`ARX_AUTH_AUTHORIZE_URL`, `ARX_AUTH_TOKEN_URL`, `ARX_AUTH_CLIENT_ID`) for Convex MCP auth discovery
-   - Set `ARX_AUTH_MAGIC_LINK_URL` only if you want the optional same-origin magic-link fallback on public claim/checkout flows
    - Set JWT verifier vars (`ARX_AUTH_JWT_ISSUER`, `ARX_AUTH_JWT_JWKS_URL`) for verified Convex identity
     - Validate config: `npm run check:auth-runtime-readiness`
 3. Run:
@@ -39,7 +38,6 @@ Set the following Vercel env vars:
 - `ARX_AUTH_AUTHORIZE_URL`
 - `ARX_AUTH_TOKEN_URL`
 - `ARX_AUTH_CLIENT_ID`
-- `ARX_AUTH_MAGIC_LINK_URL` (optional)
 - `ARX_AUTH_JWT_ISSUER`
 - `ARX_AUTH_JWT_JWKS_URL`
 

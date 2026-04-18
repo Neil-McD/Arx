@@ -97,7 +97,6 @@ export function getAuthUid(session: AuthSession): string {
   return sub ?? session.user.id;
 }
 
-const AUTH_GATEWAY_MAGIC_LINK_PATH = "/api/auth/magic-link";
 function trimTrailingSlashes(value: string): string {
   return value.replace(/\/+$/, "");
 }
@@ -105,29 +104,6 @@ function trimTrailingSlashes(value: string): string {
 function buildConvexRuntimeUrl(baseUrl: string, routePath: string): string {
   const route = routePath.startsWith("/") ? routePath : `/${routePath}`;
   return `${trimTrailingSlashes(baseUrl)}${route}`;
-}
-
-function buildSameOriginAuthUrl(routePath: string): string {
-  const route = routePath.startsWith("/") ? routePath : `/${routePath}`;
-  return new URL(route, window.location.origin).toString();
-}
-
-async function callSameOriginAuthEndpoint(params: {
-  path: string;
-  method?: "GET" | "POST";
-  payload?: Record<string, unknown>;
-}): Promise<Response | null> {
-  const hasBody = params.method !== "GET" && typeof params.payload === "object" && params.payload !== null;
-  try {
-    return await fetch(buildSameOriginAuthUrl(params.path), {
-      method: params.method ?? "POST",
-      credentials: "include",
-      headers: hasBody ? { "Content-Type": "application/json" } : undefined,
-      ...(hasBody ? { body: JSON.stringify(params.payload) } : null),
-    });
-  } catch {
-    return null;
-  }
 }
 
 function asObject(value: unknown): Record<string, unknown> | null {
@@ -362,25 +338,6 @@ function ensureResultFromRefreshFailure(
     return { status: "terminal_failure", reason: refresh.reason };
   }
   return { status: "transient_failure", reason: refresh.reason };
-}
-
-export async function sendAuthMagicLinkOtp(params: {
-  email: string;
-  createUser?: boolean;
-  redirectTo?: string;
-}): Promise<void> {
-  const gatewayResponse = await callSameOriginAuthEndpoint({
-    path: AUTH_GATEWAY_MAGIC_LINK_PATH,
-    method: "POST",
-    payload: {
-      email: params.email,
-      create_user: params.createUser ?? true,
-      redirect_to: params.redirectTo,
-      email_redirect_to: params.redirectTo,
-    },
-  });
-  if (!gatewayResponse) throw new Error("Auth gateway is unavailable.");
-  if (!gatewayResponse.ok) throw new Error(await readAuthError(gatewayResponse));
 }
 
 export async function transcribeVoice(params: {

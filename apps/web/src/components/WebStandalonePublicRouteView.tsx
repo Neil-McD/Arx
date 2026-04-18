@@ -1,7 +1,6 @@
 type StandalonePublicRouteKind = "checkout_success" | "claim";
 
 type CheckoutStatus = "idle" | "loading" | "pending" | "succeeded" | "error";
-type MagicLinkStatus = "idle" | "sending" | "sent";
 
 export type WebStandalonePublicRouteViewProps = {
   publicRouteKind: StandalonePublicRouteKind;
@@ -12,13 +11,8 @@ export type WebStandalonePublicRouteViewProps = {
   onRetryCheckoutFinalize: () => void;
   onContinueCheckout: () => void;
   onContinueClaim: () => void;
-  onSendMagicLink: () => void;
 
   checkoutError: string | null;
-  magicLinkEmail: string;
-  onChangeMagicLinkEmail: (value: string) => void;
-  magicLinkStatus: MagicLinkStatus;
-  magicLinkError: string | null;
 
   pendingToken: string;
   manualClaimToken: string;
@@ -36,12 +30,7 @@ export function WebStandalonePublicRouteView(props: WebStandalonePublicRouteView
     onRetryCheckoutFinalize,
     onContinueCheckout,
     onContinueClaim,
-    onSendMagicLink,
     checkoutError,
-    magicLinkEmail,
-    onChangeMagicLinkEmail,
-    magicLinkStatus,
-    magicLinkError,
     pendingToken,
     manualClaimToken,
     onChangeManualClaimToken,
@@ -101,37 +90,7 @@ export function WebStandalonePublicRouteView(props: WebStandalonePublicRouteView
                 {isRedeemingClaim && <div className="public-funnel-status">Claiming access…</div>}
               </section>
 
-              {showSignIn && (
-                <section className="public-funnel-support-card">
-                  <div className="public-funnel-support-copy">
-                    <div className="public-funnel-support-title">Need a magic link?</div>
-                    <p className="public-funnel-support-body">
-                      We&apos;ll email a sign-in link so you can finish checkout from the right account.
-                    </p>
-                  </div>
-                  {authError && <div className="auth-error">{authError}</div>}
-                  <div className="public-funnel-support-form">
-                    <input
-                      className="public-funnel-input"
-                      type="email"
-                      inputMode="email"
-                      placeholder="you@example.com"
-                      value={magicLinkEmail}
-                      onChange={(event) => onChangeMagicLinkEmail(event.target.value)}
-                    />
-                    <button
-                      className="public-funnel-secondary"
-                      type="button"
-                      disabled={magicLinkStatus === "sending"}
-                      onClick={onSendMagicLink}
-                    >
-                      {magicLinkStatus === "sending" ? "Sending…" : "Email link"}
-                    </button>
-                  </div>
-                  {magicLinkStatus === "sent" && <div className="auth-success">Check your email for a sign-in link.</div>}
-                  {magicLinkError && <div className="auth-error">{magicLinkError}</div>}
-                </section>
-              )}
+              {authError && showSignIn ? <div className="auth-error">{authError}</div> : null}
             </div>
           </div>
         )
@@ -185,38 +144,7 @@ export function WebStandalonePublicRouteView(props: WebStandalonePublicRouteView
                   {redeemClaimError && <div className="auth-error">{redeemClaimError}</div>}
                   {isRedeemingClaim && <div className="public-funnel-status">Claiming access…</div>}
                 </section>
-
-                {showSignIn && (
-                  <section className="public-funnel-support-card">
-                    <div className="public-funnel-support-copy">
-                      <div className="public-funnel-support-title">Need a magic link?</div>
-                      <p className="public-funnel-support-body">
-                        We&apos;ll email a sign-in link so you can continue with the correct account.
-                      </p>
-                    </div>
-                    {authError && <div className="auth-error">{authError}</div>}
-                    <div className="public-funnel-support-form">
-                      <input
-                        className="public-funnel-input"
-                        type="email"
-                        inputMode="email"
-                        placeholder="you@example.com"
-                        value={magicLinkEmail}
-                        onChange={(event) => onChangeMagicLinkEmail(event.target.value)}
-                      />
-                      <button
-                        className="public-funnel-secondary"
-                        type="button"
-                        disabled={magicLinkStatus === "sending"}
-                        onClick={onSendMagicLink}
-                      >
-                        {magicLinkStatus === "sending" ? "Sending…" : "Email link"}
-                      </button>
-                    </div>
-                    {magicLinkStatus === "sent" && <div className="auth-success">Check your email for a sign-in link.</div>}
-                    {magicLinkError && <div className="auth-error">{magicLinkError}</div>}
-                  </section>
-                )}
+                {authError && showSignIn ? <div className="auth-error">{authError}</div> : null}
               </div>
             </div>
           )

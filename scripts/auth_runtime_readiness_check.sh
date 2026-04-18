@@ -140,7 +140,6 @@ warn_if_missing "ARX_AUTH_JWT_AUDIENCE" "Set audience when your provider include
 warn_if_missing "VITE_WORKOS_CLIENT_ID" "Set the browser WorkOS client id for hosted sign-in."
 warn_if_missing "VITE_WORKOS_REDIRECT_URI" "Set the browser WorkOS redirect URI, for example https://www.polynet.ai/workspace."
 warn_if_missing "VITE_WORKOS_DEV_MODE" "Set this to true unless you have a custom WorkOS auth API hostname."
-warn_if_missing "ARX_AUTH_MAGIC_LINK_URL" "Set this only if you want the optional same-origin magic-link fallback."
 
 if [[ "$missing_count" -gt 0 ]]; then
   echo "FAIL: auth runtime readiness failed (${missing_count} required issues, ${warn_count} warnings)."

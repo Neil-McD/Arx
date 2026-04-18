@@ -2,7 +2,6 @@ import type { PublicRoute } from "../../../../shared/webAppRouteState";
 import type { WebStandalonePublicRouteViewProps } from "../components/WebStandalonePublicRouteView";
 
 type CheckoutStatus = WebStandalonePublicRouteViewProps["checkoutStatus"];
-type MagicLinkStatus = WebStandalonePublicRouteViewProps["magicLinkStatus"];
 
 export function buildWebStandalonePublicRouteViewProps(params: {
   publicRouteKind: Extract<PublicRoute["kind"], "checkout_success" | "claim"> | PublicRoute["kind"];
@@ -13,12 +12,7 @@ export function buildWebStandalonePublicRouteViewProps(params: {
   retryCheckoutFinalize: () => void;
   handlePublicCheckoutContinue: () => void;
   handlePublicClaimContinue: () => void;
-  handleSendMagicLink: (email: string) => void | Promise<void>;
   checkoutError: string | null;
-  magicLinkEmail: string;
-  setMagicLinkEmail: (value: string) => void;
-  magicLinkStatus: MagicLinkStatus;
-  magicLinkError: string | null;
   pendingToken: string;
   manualClaimToken: string;
   setManualClaimToken: (value: string) => void;
@@ -44,14 +38,7 @@ export function buildWebStandalonePublicRouteViewProps(params: {
     onRetryCheckoutFinalize: params.retryCheckoutFinalize,
     onContinueCheckout: params.handlePublicCheckoutContinue,
     onContinueClaim: params.handlePublicClaimContinue,
-    onSendMagicLink: () => {
-      void params.handleSendMagicLink(params.magicLinkEmail);
-    },
     checkoutError: params.checkoutError,
-    magicLinkEmail: params.magicLinkEmail,
-    onChangeMagicLinkEmail: params.setMagicLinkEmail,
-    magicLinkStatus: params.magicLinkStatus,
-    magicLinkError: params.magicLinkError,
     pendingToken: params.pendingToken,
     manualClaimToken: params.manualClaimToken,
     onChangeManualClaimToken: params.setManualClaimToken,

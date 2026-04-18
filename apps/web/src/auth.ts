@@ -12,7 +12,6 @@ export {
   isLikelyAuthJwt,
   readAuthError,
   refreshAuthSessionWithLockResult,
-  sendAuthMagicLinkOtp,
 } from "../../../shared/authCore";
 export type {
   AuthSession,

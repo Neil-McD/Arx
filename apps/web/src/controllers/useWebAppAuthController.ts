@@ -10,7 +10,6 @@ import {
   hasRecentAuthFlowPending,
   markAuthFlowPending,
   refreshAuthSessionWithLockResult,
-  sendAuthMagicLinkOtp,
   type AuthSession,
   type AuthSessionRefreshResult,
 } from "../auth";
@@ -46,11 +45,6 @@ type UseWebAppAuthControllerResult = {
   isAuthBootstrapComplete: boolean;
   authError: string | null;
   authRuntimeAcceptance: ConvexAuthenticatedSessionProbeResult | null;
-  magicLinkEmail: string;
-  setMagicLinkEmail: (value: string) => void;
-  magicLinkStatus: "idle" | "sending" | "sent";
-  magicLinkError: string | null;
-  handleSendMagicLink: (email: string) => Promise<void>;
   requireSignIn: (intentInput?: unknown) => void;
   handleSignOut: () => Promise<void>;
   ensureUsableAuthSession: (session?: AuthSession | null) => Promise<AuthSession | null>;
@@ -147,9 +141,6 @@ export function useWebAppAuthController(
   const [isAuthBootstrapComplete, setIsAuthBootstrapComplete] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   const [authRuntimeAcceptance, setAuthRuntimeAcceptance] = useState<ConvexAuthenticatedSessionProbeResult | null>(null);
-  const [magicLinkEmail, setMagicLinkEmail] = useState("");
-  const [magicLinkStatus, setMagicLinkStatus] = useState<"idle" | "sending" | "sent">("idle");
-  const [magicLinkError, setMagicLinkError] = useState<string | null>(null);
 
   const sessionRef = useRef<AuthSession | null>(null);
   const refreshResultInFlightRef = useRef<Promise<AuthSessionRefreshResult> | null>(null);
@@ -291,43 +282,6 @@ export function useWebAppAuthController(
     if (session) return;
     void beginGoogleSignInFlow();
   }, [beginGoogleSignInFlow, session]);
-
-  const handleSendMagicLink = useCallback(async (email: string): Promise<void> => {
-    const trimmed = email.trim();
-    if (!trimmed) {
-      setMagicLinkError("Email is required.");
-      setMagicLinkStatus("idle");
-      return;
-    }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
-      setMagicLinkError("Enter a valid email.");
-      setMagicLinkStatus("idle");
-      return;
-    }
-
-    clearAuthSignedOutIntentMarker();
-    markAuthFlowPending();
-    storeAuthResumeState({ returnTo: readCurrentPathReturnTo() });
-    setMagicLinkStatus("sending");
-    setMagicLinkError(null);
-    try {
-      await sendAuthMagicLinkOtp({
-        email: trimmed,
-        createUser: true,
-        redirectTo: window.location.origin,
-      });
-      setMagicLinkStatus("sent");
-    } catch (error) {
-      const message =
-        typeof error === "string"
-          ? error
-          : error instanceof Error
-            ? error.message
-            : "Failed to send magic link.";
-      setMagicLinkError(message);
-      setMagicLinkStatus("idle");
-    }
-  }, []);
 
   const handleSignOut = useCallback(async (): Promise<void> => {
     clearAuthFlowPending();
@@ -573,11 +527,6 @@ export function useWebAppAuthController(
     isAuthBootstrapComplete,
     authError,
     authRuntimeAcceptance,
-    magicLinkEmail,
-    setMagicLinkEmail,
-    magicLinkStatus,
-    magicLinkError,
-    handleSendMagicLink,
     requireSignIn,
     handleSignOut,
     ensureUsableAuthSession,

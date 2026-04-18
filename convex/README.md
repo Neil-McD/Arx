@@ -30,7 +30,6 @@ This folder is the canonical backend surface for Daytona. Runtime/product paths 
    - `ARX_AUTH_TOKEN_URL` (required for hosted MCP auth metadata)
    - `ARX_AUTH_CLIENT_ID` (required)
    - `ARX_AUTH_SCOPE` (optional; defaults to `openid profile email offline_access`)
-   - `ARX_AUTH_MAGIC_LINK_URL` (optional)
    - WorkOS/AuthKit example:
      - `ARX_AUTH_AUTHORIZE_URL=https://<AUTHKIT_DOMAIN>/oauth2/authorize`
      - `ARX_AUTH_TOKEN_URL=https://<AUTHKIT_DOMAIN>/oauth2/token`

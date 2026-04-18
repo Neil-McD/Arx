@@ -10,7 +10,9 @@ AUTH_CORE_FILE="shared/authCore.ts"
 WEB_AUTH_CONTROLLER_FILE="apps/web/src/controllers/useWebAppAuthController.ts"
 WEB_APP_FILE="apps/web/src/App.tsx"
 AUTH_CONFIG_FILE="convex/auth.config.ts"
+CONVEX_HTTP_FILE="convex/http.ts"
 AUTH_HTTP_FILE="convex/httpAuth.ts"
+API_AUTH_DIR="api/auth"
 ROOT_ENV_FILE=".env.example"
 WEB_ENV_FILE="apps/web/.env.example"
 
@@ -37,13 +39,23 @@ forbid_match_in_file() {
   echo "OK: $description"
 }
 
+forbid_file_exists() {
+  local path="$1"
+  local description="$2"
+  if [[ -e "$path" ]]; then
+    echo "FAIL: forbidden file exists: $description"
+    exit 1
+  fi
+  echo "OK: $description"
+}
+
 echo "[1/6] Validating canonical auth continuity contract in shared auth core..."
 require_match_in_file "$AUTH_CORE_FILE" 'readFirstNonEmptyEnv\(\["VITE_CONVEX_URL"\]\)' \
   "auth URL lookup is Convex-only"
 require_match_in_file "$AUTH_CORE_FILE" 'readFirstNonEmptyEnv\(\["VITE_CONVEX_PUBLIC_KEY"\]\)' \
   "optional runtime API key lookup uses VITE_CONVEX_PUBLIC_KEY"
-require_match_in_file "$AUTH_CORE_FILE" 'AUTH_GATEWAY_MAGIC_LINK_PATH' \
-  "auth core only keeps the same-origin magic-link gateway"
+forbid_match_in_file "$AUTH_CORE_FILE" 'AUTH_GATEWAY_MAGIC_LINK_PATH|buildSameOriginAuthUrl|callSameOriginAuthEndpoint|sendAuthMagicLinkOtp' \
+  "shared auth core must not carry deleted same-origin auth helpers"
 forbid_match_in_file "$AUTH_CORE_FILE" 'AUTH_GATEWAY_BEGIN_PATH|AUTH_GATEWAY_SESSION_PATH|AUTH_GATEWAY_REFRESH_PATH|AUTH_GATEWAY_LOGOUT_PATH' \
   "shared auth core must not carry deleted browser bridge endpoints"
 forbid_match_in_file "$AUTH_CORE_FILE" 'VITE_AUTH_URL' \
@@ -79,19 +91,12 @@ forbid_match_in_file "$AUTH_CONFIG_FILE" '/auth/v1' \
 forbid_match_in_file "$AUTH_CONFIG_FILE" 'ARX_AUTH_BASE_URL|VITE_AUTH_URL' \
   "JWT verifier must not derive issuer from legacy auth base URL vars"
 
-echo "[5/6] Validating runtime auth surface is magic-link-only..."
-require_match_in_file "$AUTH_HTTP_FILE" '/runtime/auth_send_magic_link_otp' \
-  "runtime auth surface keeps the magic-link route"
-require_match_in_file "$AUTH_HTTP_FILE" 'resolveMagicLinkEndpointUrl\(' \
-  "runtime auth surface reads the explicit magic-link upstream env"
-require_match_in_file "$AUTH_HTTP_FILE" 'forwardAuthJsonRequest\(' \
-  "runtime auth surface proxies magic-link requests as JSON"
-forbid_match_in_file "$AUTH_HTTP_FILE" 'auth_begin_google_sign_in|auth_exchange_pkce_code|auth_refresh_session|auth_logout_session' \
-  "runtime auth surface must not expose deleted sign-in exchange or logout routes"
-forbid_match_in_file "$AUTH_HTTP_FILE" 'resolveOAuthAuthorizeUrl|resolveOAuthTokenUrl|resolveOAuthLogoutUrl|resolveOAuthClientSecret|forwardAuthFormRequest|isLikelyWorkOsAuthConfiguration|normalizeWorkOsProvider' \
-  "runtime auth surface must not carry deleted OAuth proxy helpers"
-forbid_match_in_file "$AUTH_HTTP_FILE" 'AUTH_V1_SEGMENT|buildAuthUpstreamUrl|resolveAuthBaseUrl' \
-  "runtime auth surface must not carry /auth/v1 base-path assumptions"
+echo "[5/6] Validating deleted auth bridge and magic-link surfaces stay deleted..."
+forbid_file_exists "$AUTH_HTTP_FILE" "deleted Convex auth helper module stays removed"
+forbid_file_exists "$API_AUTH_DIR/magic-link.js" "deleted Vercel magic-link route stays removed"
+forbid_file_exists "$API_AUTH_DIR/_bridge.js" "deleted Vercel auth bridge helper stays removed"
+forbid_match_in_file "$CONVEX_HTTP_FILE" 'registerRuntimeAuthRoutes|httpAuth' \
+  "Convex HTTP router must not mount deleted auth helper routes"
 
 echo "[6/6] Validating env templates include canonical keys and remove legacy keys..."
 require_match_in_file "$ROOT_ENV_FILE" '^VITE_CONVEX_URL=' \
@@ -110,6 +115,8 @@ require_match_in_file "$ROOT_ENV_FILE" '^ARX_AUTH_JWT_JWKS_URL=' \
   "root env template declares ARX_AUTH_JWT_JWKS_URL"
 require_match_in_file "$ROOT_ENV_FILE" '^ARX_ALLOW_UNVERIFIED_AUTH_SUBJECT=' \
   "root env template declares verified-identity fallback toggle"
+forbid_match_in_file "$ROOT_ENV_FILE" '^ARX_AUTH_MAGIC_LINK_URL=' \
+  "root env template must not include deleted magic-link env"
 forbid_match_in_file "$ROOT_ENV_FILE" '^VITE_AUTH_URL=|^VITE_AUTH_PUBLIC_KEY=|^ARX_AUTH_BASE_URL=|^ARX_AUTH_PUBLIC_KEY=' \
   "root env template must not include legacy auth-base/public-key vars"
 
@@ -123,6 +130,8 @@ require_match_in_file "$WEB_ENV_FILE" 'VITE_WORKOS_REDIRECT_URI' \
   "web env template documents WorkOS redirect uri"
 require_match_in_file "$WEB_ENV_FILE" 'VITE_WORKOS_DEV_MODE' \
   "web env template documents WorkOS devMode toggle"
+forbid_match_in_file "$WEB_ENV_FILE" 'ARX_AUTH_MAGIC_LINK_URL' \
+  "web env template must not include deleted magic-link env"
 forbid_match_in_file "$WEB_ENV_FILE" '^VITE_AUTH_URL=|^VITE_AUTH_PUBLIC_KEY=|ARX_AUTH_BASE_URL|ARX_AUTH_PUBLIC_KEY' \
   "web env template must not include legacy auth-base/public-key vars"
 
