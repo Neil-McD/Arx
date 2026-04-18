@@ -1555,13 +1555,12 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!isLikelyMobileDevice) return;
     const timer = window.setTimeout(() => {
       preloadWebSettingsPanels();
       preloadWebCommunitySecondaryPanels();
     }, 600);
     return () => window.clearTimeout(timer);
-  }, [isLikelyMobileDevice]);
+  }, []);
 
   function navigateTo(path: string, opts: { replace?: boolean; state?: unknown } = {}) {
     const nextPath = applyShellVariantToKnownPath(path, shellVariant);

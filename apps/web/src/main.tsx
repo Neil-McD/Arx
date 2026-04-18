@@ -49,6 +49,13 @@ function currentRecoveryTarget(): string {
   return `${window.location.pathname}${window.location.search}${window.location.hash}`;
 }
 
+function buildModuleLoadRecoveryExtras(error: unknown): Record<string, unknown> {
+  return {
+    recoveryTarget: currentRecoveryTarget(),
+    errorMessage: readErrorMessage(error) || null,
+  };
+}
+
 function shouldAttemptModuleReload(): boolean {
   try {
     const raw = sessionStorage.getItem(MODULE_LOAD_RECOVERY_KEY);
@@ -117,6 +124,7 @@ class ErrorBoundary extends React.Component<
           error_boundary: true,
           module_load_recovery: true,
         },
+        extras: buildModuleLoadRecoveryExtras(error),
         contexts: {
           react: {
             componentStack: info.componentStack,
@@ -214,6 +222,7 @@ if (typeof window !== "undefined") {
           preload_error: true,
           module_load_recovery: true,
         },
+        extras: buildModuleLoadRecoveryExtras(detail),
       });
       preloadEvent.preventDefault?.();
     }
@@ -226,6 +235,7 @@ if (typeof window !== "undefined") {
           unhandled_rejection: true,
           module_load_recovery: true,
         },
+        extras: buildModuleLoadRecoveryExtras(event.reason),
       });
       event.preventDefault();
     }
