@@ -190,7 +190,10 @@ import {
   storeAuthResumeState,
   type BuilderUpgradeContext,
 } from "../../../shared/authResumeState";
-import { hasOAuthCallbackParamsInLocation } from "../../../shared/cloudPkce";
+import {
+  hasOAuthCallbackParamsInLocation,
+  readOAuthCallbackShellVariantFromLocation,
+} from "../../../shared/cloudPkce";
 import { routePendingAuthIntent } from "../../../shared/authResumeRouter";
 import { resetWebSessionStateAfterSignOut } from "./auth/resetSessionState";
 import { resolveUserAccessPolicy } from "../../../shared/capabilities";
@@ -628,7 +631,10 @@ function formatModelSignature(
 
 export default function App() {
   const initialShellVariant: AppShellVariant =
-    typeof window === "undefined" ? "standard" : readShellVariantFromPathname(window.location.pathname || "/");
+    typeof window === "undefined"
+      ? "standard"
+      : readOAuthCallbackShellVariantFromLocation() ??
+        readShellVariantFromPathname(window.location.pathname || "/");
   const initialPublicRoute = readPublicRouteFromLocation();
   const initialAppRoute = initialPublicRoute.kind === "app" ? readAppRouteFromLocation() : null;
   const hasResolvedInitialStandaloneSignedOutLaunchRef = useRef(false);
