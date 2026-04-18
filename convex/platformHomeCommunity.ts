@@ -13,6 +13,13 @@ import {
 const PLATFORM_HOME_COMMUNITY_SLUG = "polynet";
 const PLATFORM_HOME_AUTOJOIN_OPT_OUT_MESSAGE = "platform_home_autojoin_opt_out";
 
+export type PlatformHomeAutojoinOptOutKind = "left" | "removed";
+
+export type PlatformHomeAutojoinOptOut = {
+  kind: PlatformHomeAutojoinOptOutKind;
+  request: CommunityJoinRequestLike;
+};
+
 export function isPlatformHomeCommunity(args: {
   communitySlug?: string | null;
 }): boolean {
@@ -21,19 +28,60 @@ export function isPlatformHomeCommunity(args: {
     .toLowerCase() === PLATFORM_HOME_COMMUNITY_SLUG;
 }
 
-async function readPlatformHomeAutojoinOptOutRequest(args: {
+function normalizePlatformHomeAutojoinOptOutKind(
+  row: CommunityJoinRequestLike | null | undefined,
+): PlatformHomeAutojoinOptOutKind | null {
+  if (!row) return null;
+  if (
+    String(row.message ?? "").trim() !== PLATFORM_HOME_AUTOJOIN_OPT_OUT_MESSAGE
+  ) {
+    return null;
+  }
+  const status = String(row.status ?? "")
+    .trim()
+    .toLowerCase();
+  if (status === "canceled") return "left";
+  if (status === "denied") return "removed";
+  return null;
+}
+
+export function isPlatformHomeAutojoinOptOutRequest(
+  row: CommunityJoinRequestLike | null | undefined,
+): boolean {
+  return normalizePlatformHomeAutojoinOptOutKind(row) !== null;
+}
+
+async function listPlatformHomeAutojoinOptOutRequests(args: {
   ctx: any;
   communityId: any;
   userId: any;
-}): Promise<CommunityJoinRequestLike | null> {
+}): Promise<CommunityJoinRequestLike[]> {
   const joinRequestRows = (await args.ctx.db
     .query("communityJoinRequests")
     .withIndex("by_community_user", (q: any) => q.eq("communityId", args.communityId).eq("userId", args.userId))
     .collect()) as CommunityJoinRequestLike[];
-  const joinRequest = pickMostRelevantCommunityJoinRequest(joinRequestRows);
-  if (!joinRequest) return null;
-  if (String(joinRequest.message ?? "").trim() !== PLATFORM_HOME_AUTOJOIN_OPT_OUT_MESSAGE) return null;
-  return joinRequest;
+  return joinRequestRows
+    .filter((row) => isPlatformHomeAutojoinOptOutRequest(row))
+    .sort((a, b) => {
+      if (b.updatedAt !== a.updatedAt) return b.updatedAt - a.updatedAt;
+      return b.createdAt - a.createdAt;
+    });
+}
+
+export async function readPlatformHomeAutojoinOptOut(args: {
+  ctx: any;
+  communityId: any;
+  userId: any;
+}): Promise<PlatformHomeAutojoinOptOut | null> {
+  const joinRequest = (
+    await listPlatformHomeAutojoinOptOutRequests(args)
+  )[0] ?? null;
+  const kind = normalizePlatformHomeAutojoinOptOutKind(joinRequest);
+  if (!joinRequest || !kind) return null;
+  return {
+    kind,
+    request: joinRequest,
+  };
 }
 
 export async function clearPlatformHomeCommunityAutojoinOptOut(args: {
@@ -41,9 +89,10 @@ export async function clearPlatformHomeCommunityAutojoinOptOut(args: {
   communityId: any;
   userId: any;
 }): Promise<void> {
-  const joinRequest = await readPlatformHomeAutojoinOptOutRequest(args);
-  if (!joinRequest) return;
-  await args.ctx.db.delete(joinRequest._id as any);
+  const joinRequests = await listPlatformHomeAutojoinOptOutRequests(args);
+  await Promise.all(
+    joinRequests.map((joinRequest) => args.ctx.db.delete(joinRequest._id as any)),
+  );
 }
 
 export async function upsertPlatformHomeCommunityAutojoinOptOut(args: {
@@ -53,7 +102,9 @@ export async function upsertPlatformHomeCommunityAutojoinOptOut(args: {
   nowMs: number;
   kind: "left" | "removed";
 }): Promise<void> {
-  const existing = await readPlatformHomeAutojoinOptOutRequest(args);
+  const existing = (
+    await listPlatformHomeAutojoinOptOutRequests(args)
+  )[0] ?? null;
   const patch =
     args.kind === "removed"
       ? {
@@ -119,7 +170,7 @@ export async function ensurePlatformHomeCommunityMembership(args: {
     return { status: "not_open", communityId };
   }
 
-  const autojoinOptOut = await readPlatformHomeAutojoinOptOutRequest({
+  const autojoinOptOut = await readPlatformHomeAutojoinOptOut({
     ctx: args.ctx,
     communityId: community._id,
     userId: args.userId,

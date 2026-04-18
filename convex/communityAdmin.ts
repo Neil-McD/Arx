@@ -34,6 +34,8 @@ import {
 import { logStructuredError } from "./errorLogging";
 import { enqueueCommunityAccessGrantedEmailInternal } from "./emailEvents";
 import {
+  clearPlatformHomeCommunityAutojoinOptOut,
+  isPlatformHomeAutojoinOptOutRequest,
   isPlatformHomeCommunity,
   upsertPlatformHomeCommunityAutojoinOptOut,
 } from "./platformHomeCommunity";
@@ -462,6 +464,7 @@ export const listCommunityJoinRequests = query({
     const userIdCache = new Map<string, string | null>();
     return await Promise.all(
       rows
+        .filter((row) => !isPlatformHomeAutojoinOptOutRequest(row))
         .filter((row) =>
           statusSet.has(
             String(row.status ?? "")
@@ -566,6 +569,16 @@ export const approveCommunityJoinRequest = mutation({
           reapplyAt: undefined,
           updatedAt: nowMs,
         });
+        const community = (await ctx.db.get(
+          request.communityId,
+        )) as CommunityLike | null;
+        if (isPlatformHomeCommunity({ communitySlug: community?.slug })) {
+          await clearPlatformHomeCommunityAutojoinOptOut({
+            ctx,
+            communityId: request.communityId,
+            userId: request.userId,
+          });
+        }
         if (grantedMembershipMarker) {
           await enqueueCommunityAccessGrantedEmailInternal({
             ctx,
@@ -621,6 +634,18 @@ export const denyCommunityJoinRequest = mutation({
           reapplyAt: nowMs + COMMUNITY_JOIN_REAPPLY_COOLDOWN_MS,
           updatedAt: nowMs,
         });
+        const community = (await ctx.db.get(
+          request.communityId,
+        )) as CommunityLike | null;
+        if (isPlatformHomeCommunity({ communitySlug: community?.slug })) {
+          await upsertPlatformHomeCommunityAutojoinOptOut({
+            ctx,
+            communityId: request.communityId,
+            userId: request.userId,
+            nowMs,
+            kind: "removed",
+          });
+        }
         return { ok: true };
       },
     });

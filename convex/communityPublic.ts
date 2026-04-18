@@ -26,7 +26,9 @@ import { resolveCommunityFunnelConfigByCommunityId } from "./communityFunnel";
 import { enqueueCommunityAccessGrantedEmailInternal } from "./emailEvents";
 import {
   clearPlatformHomeCommunityAutojoinOptOut,
+  isPlatformHomeAutojoinOptOutRequest,
   isPlatformHomeCommunity,
+  readPlatformHomeAutojoinOptOut,
 } from "./platformHomeCommunity";
 
 type PublicCommunityFace = {
@@ -414,6 +416,70 @@ async function joinPublicCommunityInternal(args: {
       outcome: "joined",
       community_id: String(args.community._id),
     };
+  }
+
+  const platformHomeAutojoinOptOut = isPlatformHomeCommunity({
+    communitySlug: args.community.slug,
+  })
+    ? await readPlatformHomeAutojoinOptOut({
+        ctx: args.ctx,
+        communityId: args.community._id,
+        userId: args.userId,
+      })
+    : null;
+  if (platformHomeAutojoinOptOut?.kind === "removed") {
+    const joinRequestRows = (await args.ctx.db
+      .query("communityJoinRequests")
+      .withIndex("by_community_user", (q: any) =>
+        q.eq("communityId", args.community._id).eq("userId", args.userId),
+      )
+      .collect()) as CommunityJoinRequestLike[];
+    const explicitJoinRequest = pickMostRelevantCommunityJoinRequest(
+      joinRequestRows.filter(
+        (row) => !isPlatformHomeAutojoinOptOutRequest(row),
+      ),
+    );
+    const explicitStatus = String(explicitJoinRequest?.status ?? "")
+      .trim()
+      .toLowerCase();
+    if (explicitStatus === "pending") {
+      return {
+        outcome: "approval_pending",
+        community_id: String(args.community._id),
+      };
+    }
+    if (explicitStatus === "approved") {
+      await clearPlatformHomeCommunityAutojoinOptOut({
+        ctx: args.ctx,
+        communityId: args.community._id,
+        userId: args.userId,
+      });
+    } else if (
+      !communityJoinRequestCanReapply(
+        platformHomeAutojoinOptOut.request,
+        args.nowMs,
+      )
+    ) {
+      return {
+        outcome: "approval_denied",
+        community_id: String(args.community._id),
+        reapply_at:
+          typeof platformHomeAutojoinOptOut.request.reapplyAt === "number"
+            ? toIsoString(platformHomeAutojoinOptOut.request.reapplyAt)
+            : null,
+      };
+    } else {
+      await ensurePendingCommunityJoinRequest({
+        ctx: args.ctx,
+        communityId: args.community._id,
+        userId: args.userId,
+        nowMs: args.nowMs,
+      });
+      return {
+        outcome: "approval_pending",
+        community_id: String(args.community._id),
+      };
+    }
   }
 
   const entryPolicy = resolveCommunityEntryPolicy(args.community);
