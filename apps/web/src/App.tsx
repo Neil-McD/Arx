@@ -1861,6 +1861,7 @@ export default function App() {
     updated_at: null,
   });
   const [isLoadingChatgptConnection, setIsLoadingChatgptConnection] = useState(false);
+  const [hasResolvedProviderConnections, setHasResolvedProviderConnections] = useState(false);
   const [contextModal, setContextModal] = useState<
     MessageContextModalPayload<MemoryUsedItem, HistoryUsedItem, MemorySuggestion> | null
   >(null);
@@ -3277,15 +3278,21 @@ export default function App() {
       });
       setIsLoadingOpenRouterConnection(false);
       setIsLoadingChatgptConnection(false);
+      setHasResolvedProviderConnections(false);
       return;
     }
+    setHasResolvedProviderConnections(false);
     void (async () => {
       const usableSession = await ensureUsableAuthSession(session);
       if (!usableSession) return;
-      await Promise.all([
-        loadUserMemorySettings(usableSession),
-        loadOpenRouterConnection(usableSession),
-      ]);
+      try {
+        await Promise.all([
+          loadUserMemorySettings(usableSession),
+          loadOpenRouterConnection(usableSession),
+        ]);
+      } finally {
+        setHasResolvedProviderConnections(true);
+      }
     })();
   }, [session, loadOpenRouterConnection]);
 
@@ -3945,6 +3952,7 @@ export default function App() {
   const hasPendingChatgptAuth = providerConnectionUi.hasPendingChatgptAuth;
   const shouldShowEmptyThreadChatgptCard =
     Boolean(session) &&
+    hasResolvedProviderConnections &&
     !hasUserChatgptConnection &&
     !isLoadingChatgptConnection;
   const { sendUserMessage, retryLastTurn } = useWebSendFlowController<
