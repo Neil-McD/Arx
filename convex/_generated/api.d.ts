@@ -13,6 +13,8 @@ import type * as appCore from "../appCore.js";
 import type * as appValidation from "../appValidation.js";
 import type * as auth from "../auth.js";
 import type * as authActor from "../authActor.js";
+import type * as authContinuityProbe from "../authContinuityProbe.js";
+import type * as authContinuityShared from "../authContinuityShared.js";
 import type * as authIdentity from "../authIdentity.js";
 import type * as authMigrationAudit from "../authMigrationAudit.js";
 import type * as authMigrationOps from "../authMigrationOps.js";
@@ -130,6 +132,8 @@ declare const fullApi: ApiFromModules<{
   appValidation: typeof appValidation;
   auth: typeof auth;
   authActor: typeof authActor;
+  authContinuityProbe: typeof authContinuityProbe;
+  authContinuityShared: typeof authContinuityShared;
   authIdentity: typeof authIdentity;
   authMigrationAudit: typeof authMigrationAudit;
   authMigrationOps: typeof authMigrationOps;

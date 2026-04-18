@@ -8,11 +8,33 @@ import {
   type AuthSessionLike,
 } from "./authSession";
 import { readConvexUrl } from "./convexRuntime";
+import { normalizeGatewayNullableString, readGatewayConvexIdMaybe } from "./cloudGateway";
 
 export type ConvexAuthenticatedClientContext = {
   client: ConvexHttpClient;
   authSubject: string;
   convexUrl: string;
+  bootstrap: ConvexAuthenticatedBootstrapResult | null;
+};
+
+export type ConvexAuthenticatedBootstrapContinuity = {
+  resolutionPath: string | null;
+  blockers: string[];
+  resolvedUserId: string | null;
+  wouldCreateNewUser: boolean;
+  subjectMatchUserId: string | null;
+  relinkCandidateUserId: string | null;
+};
+
+export type ConvexAuthenticatedBootstrapResult = {
+  authSubject: string | null;
+  dbUserId: string | null;
+  canonicalTier: string | null;
+  effectiveTier: string | null;
+  email: string | null;
+  displayName: string | null;
+  avatarUrl: string | null;
+  continuity: ConvexAuthenticatedBootstrapContinuity | null;
 };
 
 export type ConvexClient = ConvexHttpClient;
@@ -99,7 +121,7 @@ export async function bootstrapConvexAuthenticatedClient(
     client.setAuth(identityToken);
   }
 
-  let actor: { authSubject?: string | null } | null = null;
+  let actor: Record<string, unknown> | null = null;
   try {
     actor = (await client.mutation("auth:bootstrapActor" as any, {
       authState: "authenticated",
@@ -107,7 +129,7 @@ export async function bootstrapConvexAuthenticatedClient(
       email: resolveAuthSessionEmail(session),
       displayName: resolveAuthSessionDisplayName(session),
       avatarUrl: resolveAuthSessionAvatarUrl(session),
-    })) as { authSubject?: string | null };
+    })) as Record<string, unknown>;
   } catch (error) {
     rethrowBootstrapActorError(error);
   }
@@ -120,5 +142,38 @@ export async function bootstrapConvexAuthenticatedClient(
     client,
     authSubject,
     convexUrl,
+    bootstrap: {
+      authSubject: actorAuthSubject || null,
+      dbUserId: readGatewayConvexIdMaybe(actor?.dbUserId) ?? null,
+      canonicalTier: normalizeGatewayNullableString(actor?.canonicalTier),
+      effectiveTier: normalizeGatewayNullableString(actor?.effectiveTier),
+      email: normalizeGatewayNullableString(actor?.email),
+      displayName: normalizeGatewayNullableString(actor?.displayName),
+      avatarUrl: normalizeGatewayNullableString(actor?.avatarUrl),
+      continuity: actor?.continuity && typeof actor.continuity === "object"
+        ? {
+            resolutionPath: normalizeGatewayNullableString((actor.continuity as Record<string, unknown>).resolutionPath),
+            blockers: Array.isArray((actor.continuity as Record<string, unknown>).blockers)
+              ? ((actor.continuity as Record<string, unknown>).blockers as unknown[])
+                  .map((value) => normalizeGatewayNullableString(value))
+                  .filter((value): value is string => Boolean(value))
+              : [],
+            resolvedUserId: normalizeGatewayNullableString((actor.continuity as Record<string, unknown>).resolvedUserId),
+            wouldCreateNewUser: Boolean((actor.continuity as Record<string, unknown>).wouldCreateNewUser),
+            subjectMatchUserId: normalizeGatewayNullableString(
+              (actor.continuity as Record<string, unknown>).subjectMatchUser &&
+                typeof (actor.continuity as Record<string, unknown>).subjectMatchUser === "object"
+                ? ((actor.continuity as Record<string, unknown>).subjectMatchUser as Record<string, unknown>).userId
+                : null,
+            ),
+            relinkCandidateUserId: normalizeGatewayNullableString(
+              (actor.continuity as Record<string, unknown>).relinkCandidateUser &&
+                typeof (actor.continuity as Record<string, unknown>).relinkCandidateUser === "object"
+                ? ((actor.continuity as Record<string, unknown>).relinkCandidateUser as Record<string, unknown>).userId
+                : null,
+            ),
+          }
+        : null,
+    },
   };
 }

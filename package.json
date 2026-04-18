@@ -18,6 +18,7 @@
     "check:auth-env-contract-guard": "bash scripts/auth_env_contract_guard.sh",
     "check:auth-runtime-readiness": "bash scripts/auth_runtime_readiness_check.sh",
     "audit:auth-migration": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/auth_migration_audit.ts",
+    "probe:auth-continuity": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/auth_continuity_probe.ts",
     "check:auth-migration-audit-guard": "bash scripts/auth_migration_audit_guard.sh",
     "check:no-direct-legacy-auth-imports-guard": "bash scripts/no_direct_legacy_auth_imports_guard.sh",
     "check:legacy-function-transport-surface-guard": "bash scripts/legacy_function_transport_surface_guard.sh",

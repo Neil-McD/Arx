@@ -1,4 +1,7 @@
-import { probeConvexAuthenticatedActorSession } from "./convexAuthSessionProbe";
+import {
+  probeConvexAuthenticatedActorSessionDetailed,
+  type ConvexAuthenticatedSessionProbeResult,
+} from "./convexAuthSessionProbe";
 import { readConvexRuntimeUrl } from "./convexRuntime";
 import { isStandaloneWebApp } from "./browserRuntimeMode";
 
@@ -34,7 +37,7 @@ export type AuthSessionRefreshResultInFlightRef = {
 };
 
 export type AuthSessionEnsureResult =
-  | { status: "ready"; session: AuthSession }
+  | { status: "ready"; session: AuthSession; runtimeAcceptance?: ConvexAuthenticatedSessionProbeResult }
   | { status: "transient_failure"; reason: string }
   | { status: "terminal_failure"; reason: string };
 
@@ -623,13 +626,17 @@ export async function ensureAuthSessionForAuthenticatedSendResult(params: {
 
   // Step 2: verify the bearer is accepted by Convex runtime auth.
   const firstAccepted = await isAuthSessionAcceptedForRuntime(current);
-  if (firstAccepted) return { status: "ready", session: current };
+  if (firstAccepted.accepted) {
+    return { status: "ready", session: current, runtimeAcceptance: firstAccepted };
+  }
 
   // Step 3: if another concurrent path already rotated session, try it.
   const latest = sessionRef?.current ?? null;
   if (latest && !sameSession(latest, current)) {
     const latestAccepted = await isAuthSessionAcceptedForRuntime(latest);
-    if (latestAccepted) return { status: "ready", session: latest };
+    if (latestAccepted.accepted) {
+      return { status: "ready", session: latest, runtimeAcceptance: latestAccepted };
+    }
     current = latest;
   }
 
@@ -637,25 +644,23 @@ export async function ensureAuthSessionForAuthenticatedSendResult(params: {
   const refreshed = await refreshLockedResult();
   if (refreshed.status !== "refreshed") return ensureResultFromRefreshFailure(refreshed);
   const refreshedAccepted = await isAuthSessionAcceptedForRuntime(refreshed.session);
-  if (!refreshedAccepted) {
+  if (!refreshedAccepted.accepted) {
     return {
       status: "transient_failure",
       reason: "runtime_auth_verification_failed",
     };
   }
-  return { status: "ready", session: refreshed.session };
+  return { status: "ready", session: refreshed.session, runtimeAcceptance: refreshedAccepted };
 }
 
 export async function fetchAuthUser(token: string): Promise<AuthUser | null> {
   return decodeAuthUserFromIdentityToken(token);
 }
 
-async function isAuthSessionAcceptedForRuntime(session: AuthSession): Promise<boolean> {
-  try {
-    return await probeConvexAuthenticatedActorSession(session);
-  } catch {
-    return false;
-  }
+async function isAuthSessionAcceptedForRuntime(
+  session: AuthSession,
+): Promise<ConvexAuthenticatedSessionProbeResult> {
+  return await probeConvexAuthenticatedActorSessionDetailed(session);
 }
 
 export async function refreshAuthSessionWithLock(params: {

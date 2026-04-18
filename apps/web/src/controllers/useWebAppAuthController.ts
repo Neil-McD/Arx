@@ -16,6 +16,7 @@ import {
   type AuthSession,
   type AuthSessionRefreshResult,
 } from "../auth";
+import type { ConvexAuthenticatedSessionProbeResult } from "../../../../shared/convexAuthSessionProbe";
 import {
   AUTH_SESSION_EXPIRED_MESSAGE,
   beginGoogleSignIn,
@@ -51,6 +52,7 @@ type UseWebAppAuthControllerResult = {
   sessionRef: MutableRefObject<AuthSession | null>;
   isAuthBootstrapComplete: boolean;
   authError: string | null;
+  authRuntimeAcceptance: ConvexAuthenticatedSessionProbeResult | null;
   magicLinkEmail: string;
   setMagicLinkEmail: (value: string) => void;
   magicLinkStatus: "idle" | "sending" | "sent";
@@ -152,6 +154,7 @@ export function useWebAppAuthController(
   const [session, setAuthSession] = useState<AuthSession | null>(null);
   const [isAuthBootstrapComplete, setIsAuthBootstrapComplete] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [authRuntimeAcceptance, setAuthRuntimeAcceptance] = useState<ConvexAuthenticatedSessionProbeResult | null>(null);
   const [magicLinkEmail, setMagicLinkEmail] = useState("");
   const [magicLinkStatus, setMagicLinkStatus] = useState<"idle" | "sending" | "sent">("idle");
   const [magicLinkError, setMagicLinkError] = useState<string | null>(null);
@@ -191,6 +194,7 @@ export function useWebAppAuthController(
   const clearSessionLocally = useCallback(async (): Promise<void> => {
     sessionRef.current = null;
     setAuthSession(null);
+    setAuthRuntimeAcceptance(null);
     await onSessionLostRef.current();
   }, [onSessionLostRef]);
 
@@ -269,6 +273,7 @@ export function useWebAppAuthController(
     if (ensured.status !== "ready") {
       return null;
     }
+    setAuthRuntimeAcceptance(ensured.runtimeAcceptance ?? null);
     if (!sessionsEqual(ensured.session, requestSession)) {
       adoptAuthSession(ensured.session);
     }
@@ -666,6 +671,7 @@ export function useWebAppAuthController(
     sessionRef,
     isAuthBootstrapComplete,
     authError,
+    authRuntimeAcceptance,
     magicLinkEmail,
     setMagicLinkEmail,
     magicLinkStatus,

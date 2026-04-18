@@ -1,13 +1,15 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import {
-  ensureAuthenticatedActor,
+  ensureAuthenticatedActorDetailed,
   findAuthenticatedActorState,
+  previewAuthenticatedActorResolutionBySubject,
   resolveAuthenticatedActor,
 } from "./authActor";
 import { resolveAuthenticatedIdentityProfile } from "./authIdentity";
 import { normalizeAuthRelinkEmail } from "../shared/authRelinkPolicy";
 import { isCreatorDevTierOverrideEmail } from "../shared/devTierOverride";
+import { buildAuthContinuityAccountSnapshot, readCanonicalTierByUserId } from "./authContinuityShared";
 
 type CanonicalTier = "free" | "builder" | "architect";
 type EffectiveTier = "anon_free" | "auth_free" | "builder" | "architect";
@@ -62,19 +64,8 @@ function isActiveWindow(nowMs: number, startsAt: number, endsAt?: number): boole
   return true;
 }
 
-async function getCanonicalTierByUserIdInternal(
-  ctx: any,
-  userId: any,
-  nowMs: number,
-): Promise<CanonicalTier> {
-  const rows = await ctx.db
-    .query("userEntitlements")
-    .withIndex("by_user", (q: any) => q.eq("userId", userId))
-    .collect();
-  const activeRows = rows
-    .filter((row: any) => isActiveWindow(nowMs, row.startsAt, row.endsAt))
-    .sort((a: any, b: any) => b.startsAt - a.startsAt);
-  return normalizeCanonicalTier(activeRows[0]?.tier ?? "free");
+async function getCanonicalTierByUserIdInternal(ctx: any, userId: any, nowMs: number): Promise<CanonicalTier> {
+  return await readCanonicalTierByUserId(ctx, userId, nowMs);
 }
 
 function resolveAnonymousSubject(args: {
@@ -106,7 +97,7 @@ export const bootstrapActor = mutation({
         ctx,
         authSubject: args.authSubject ?? null,
       });
-      const actor = await ensureAuthenticatedActor({
+      const { actor, continuity } = await ensureAuthenticatedActorDetailed({
         ctx,
         authSubject: identity.authSubject,
         email: identity.email,
@@ -122,6 +113,7 @@ export const bootstrapActor = mutation({
       return {
         authState: args.authState,
         authSubject: actor.authSubject,
+        dbUserId: String(actor.dbUserId),
         canonicalTier,
         effectiveTier,
         email: actor.email,
@@ -129,6 +121,7 @@ export const bootstrapActor = mutation({
         avatarUrl: actor.avatarUrl,
         createdAt: actor.createdAt,
         updatedAt: actor.updatedAt,
+        continuity,
       };
     }
 
@@ -225,6 +218,7 @@ export const getActor = query({
       return {
         authState: args.authState,
         authSubject,
+        dbUserId: String(actor.dbUserId),
         canonicalTier,
         effectiveTier: resolveEffectiveTier({ authState: args.authState, canonicalTier }),
         email: actor.email,
@@ -259,6 +253,62 @@ export const getActor = query({
       email: user.email ?? null,
       displayName: user.displayName ?? null,
       avatarUrl: user.avatarUrl ?? null,
+    };
+  },
+});
+
+export const getActorDebug = query({
+  args: {
+    authSubject: v.optional(v.string()),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const nowMs = args.nowMs ?? Date.now();
+    const identity = await resolveAuthenticatedIdentityProfile({
+      ctx,
+      authSubject: args.authSubject ?? null,
+    });
+    const continuity = await previewAuthenticatedActorResolutionBySubject({
+      ctx,
+      authSubject: identity.authSubject,
+      email: identity.email,
+      emailVerified: identity.emailVerified,
+      emailVerificationSource: identity.emailVerificationSource,
+      displayName: identity.displayName,
+      avatarUrl: identity.avatarUrl,
+    });
+    const { actor } = await findAuthenticatedActorState({
+      ctx,
+      authSubject: identity.authSubject,
+    });
+    if (!actor) {
+      return {
+        identity,
+        continuity,
+        actor: null,
+        canonicalTier: null,
+        effectiveTier: null,
+        snapshot: null,
+      };
+    }
+    const canonicalTier = await getCanonicalTierByUserIdInternal(ctx, actor.dbUserId, nowMs);
+    return {
+      identity,
+      continuity,
+      actor: {
+        authSubject: actor.authSubject,
+        dbUserId: String(actor.dbUserId),
+        email: actor.email,
+        emailVerifiedAt: actor.emailVerifiedAt,
+        emailVerificationSource: actor.emailVerificationSource,
+        displayName: actor.displayName,
+        avatarUrl: actor.avatarUrl,
+        createdAt: actor.createdAt,
+        updatedAt: actor.updatedAt,
+      },
+      canonicalTier,
+      effectiveTier: resolveEffectiveTier({ authState: "authenticated", canonicalTier }),
+      snapshot: await buildAuthContinuityAccountSnapshot(ctx, actor.dbUserId, nowMs),
     };
   },
 });

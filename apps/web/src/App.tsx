@@ -313,6 +313,7 @@ import { markCloudThreadAgentAttentionSeen } from "../../../shared/cloudThreadsG
 import type { WebSettingsPanelsProps } from "./components/WebSettingsPanels";
 import type { WorkspaceComposerApi, WorkspaceComposerDraft } from "./components/WebWorkspaceHost";
 import { WebAuthBootstrapShell } from "./components/WebAuthBootstrapShell";
+import { WebAuthContinuityDebugPanel } from "./components/WebAuthContinuityDebugPanel";
 import { WebGlobalOverlayHost } from "./components/WebGlobalOverlayHost";
 import { WebAppMainSurfaceHost } from "./components/WebAppMainSurfaceHost";
 import { WebStandalonePublicRouteShell } from "./components/WebStandalonePublicRouteShell";
@@ -638,6 +639,7 @@ export default function App() {
     sessionRef,
     isAuthBootstrapComplete,
     authError,
+    authRuntimeAcceptance,
     magicLinkEmail,
     setMagicLinkEmail,
     magicLinkStatus,
@@ -5870,5 +5872,14 @@ export default function App() {
     globalOverlays,
   });
 
-  return <WebShellChromeHost {...shellChromeHostProps} />;
+  return (
+    <>
+      <WebShellChromeHost {...shellChromeHostProps} />
+      <WebAuthContinuityDebugPanel
+        session={session}
+        authError={authError}
+        authRuntimeAcceptance={authRuntimeAcceptance}
+      />
+    </>
+  );
 }
