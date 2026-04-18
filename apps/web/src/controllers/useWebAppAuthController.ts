@@ -475,13 +475,20 @@ export function useWebAppAuthController(
         workos: readWorkOsBootstrapDebugState(workos),
       });
       if (hasSignedOutIntent) {
-        pushAuthProbeEvent("bootstrap_signed_out_intent", {
-          workos: readWorkOsBootstrapDebugState(workos),
-        });
-        if (cancelled) return;
-        markAuthBootstrapComplete();
-        clearAuthFlowPending();
-        return;
+        if (workos.user) {
+          pushAuthProbeEvent("bootstrap_stale_signed_out_intent_ignored", {
+            workos: readWorkOsBootstrapDebugState(workos),
+          });
+          clearAuthSignedOutIntentMarker();
+        } else {
+          pushAuthProbeEvent("bootstrap_signed_out_intent", {
+            workos: readWorkOsBootstrapDebugState(workos),
+          });
+          if (cancelled) return;
+          markAuthBootstrapComplete();
+          clearAuthFlowPending();
+          return;
+        }
       }
 
       const verifiedSession = await recoverSessionFromWorkOs({
