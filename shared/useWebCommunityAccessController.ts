@@ -14,6 +14,7 @@ type UseWebCommunityAccessControllerArgs<SessionT, CommunityRecordT, UserProfile
   ) => "published" | "unlisted";
 
   activeCommunitySlug: string | null;
+  loadingResetKey?: string | null;
   setIsLoadingCommunities: Dispatch<SetStateAction<boolean>>;
   setHasResolvedCommunities: Dispatch<SetStateAction<boolean>>;
   setCommunityRoleById: Dispatch<SetStateAction<Record<string, string>>>;
@@ -33,6 +34,11 @@ export function useWebCommunityAccessController<
   argsRef.current = args;
   const fetchAbortControllersRef = useRef<Map<string, AbortController>>(new Map());
   const loadCommunitiesSeqRef = useRef(0);
+  const hasCompletedInitialLoadRef = useRef(false);
+
+  useEffect(() => {
+    hasCompletedInitialLoadRef.current = false;
+  }, [args.loadingResetKey]);
 
   const loadCommunities = useCallback(async (session: SessionT): Promise<void> => {
     const current = argsRef.current;
@@ -43,8 +49,11 @@ export function useWebCommunityAccessController<
       inFlightByKind: fetchAbortControllersRef.current,
       kind: "community_access_list",
     });
+    const shouldShowLoading = !hasCompletedInitialLoadRef.current;
     try {
-      current.setIsLoadingCommunities(true);
+      if (shouldShowLoading) {
+        current.setIsLoadingCommunities(true);
+      }
       const rows = await listCloudCommunityMembershipRows<SessionT, CommunityRecordT>({
         session: usableSession,
         selectMode: "full",
@@ -94,6 +103,7 @@ export function useWebCommunityAccessController<
         controller: fetchController,
       });
       if (loadCommunitiesSeqRef.current === seq) {
+        hasCompletedInitialLoadRef.current = true;
         current.setIsLoadingCommunities(false);
         current.setHasResolvedCommunities(true);
       }

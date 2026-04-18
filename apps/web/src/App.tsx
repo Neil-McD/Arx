@@ -1903,6 +1903,7 @@ export default function App() {
   >({
     toCanonicalCommunityVisibility,
     activeCommunitySlug: selectedActiveCommunitySlug,
+    loadingResetKey: canonicalSessionUserId,
     ensureSession: ensureUsableAuthSession,
     setIsLoadingCommunities,
     setHasResolvedCommunities,
