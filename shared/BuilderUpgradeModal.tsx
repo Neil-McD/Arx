@@ -34,11 +34,18 @@ export function BuilderUpgradeModal({
 }: BuilderUpgradeModalProps) {
   if (!isOpen) return null;
 
-  void builderUpgradeContext;
   void showBuilderUpgradeScrollHint;
   void onModalBodyScroll;
   const freeIsCurrent = isBuilderTierFree(builderTier);
   const builderIsCurrent = hasBuilderTierPaidAccess(builderTier);
+  const upgradeKicker =
+    builderUpgradeContext === "create_community"
+      ? "Create on Polynet"
+      : "Build on Polynet";
+  const upgradeLead =
+    builderUpgradeContext === "create_community"
+      ? "Create, launch, and monetize communities, agents, and apps on Polynet."
+      : "Build, deploy, and monetize agents, communities, and apps on Polynet.";
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -51,13 +58,8 @@ export function BuilderUpgradeModal({
         </div>
         <div className="modal-body" ref={builderUpgradeModalBodyRef}>
           <div className="upgrade-copy">
-            <div className="upgrade-kicker">Alpha access</div>
-            <div className="upgrade-lead">
-              Unlock the private Polynet workbench and bring your own inference into it.
-            </div>
-            <div className="upgrade-footnote">
-              Builder is the single paid creator plan. It unlocks the private workbench and community creation on Polynet.
-            </div>
+            <div className="upgrade-kicker">{upgradeKicker}</div>
+            <div className="upgrade-lead">{upgradeLead}</div>
           </div>
           {builderBillingError && <div className="auth-error">{builderBillingError}</div>}
           <div className="plan-grid">
@@ -70,9 +72,8 @@ export function BuilderUpgradeModal({
                 <span className="plan-price-amount">$0</span>
                 <span className="plan-price-period">/mo</span>
               </div>
-              <div className="plan-subtitle">For members using Polynet&apos;s collective intelligence.</div>
               <ul className="plan-points">
-                <li>Tap into intelligence that compounds with the community.</li>
+                <li>Join communities and use Polynet&apos;s collective intelligence.</li>
                 <li>Research, ask, and learn across the network.</li>
                 <li>Keep your threads and context in sync.</li>
               </ul>
@@ -87,13 +88,11 @@ export function BuilderUpgradeModal({
                 <span className="plan-price-amount">$24</span>
                 <span className="plan-price-period">/mo</span>
               </div>
-              <div className="plan-subtitle">
-                For private AI workbenches built for longer-running, multi-step work.
-              </div>
               <ul className="plan-points">
-                <li>Run agents that carry out multi-step tasks over longer time horizons, not just one-off chats.</li>
-                <li>Give the agent a private, sandboxed environment to work safely and independently.</li>
-                <li>Includes monthly execution credits for running real agent workflows inside your workbench.</li>
+                <li>Create and launch communities on Polynet.</li>
+                <li>Build and run private agents and longer-running work.</li>
+                <li>Bring your own inference and execution environment.</li>
+                <li>Monetize the agents, communities, and apps you build.</li>
               </ul>
               {!builderIsCurrent ? (
                 <button
