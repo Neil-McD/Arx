@@ -7,6 +7,15 @@ import {
 import type { AppPage, AppView, CommunityTab, SettingsPage } from "../../../../shared/appShellNavigation";
 import type { AppRouteState, PublicRoute } from "../../../../shared/webAppRouteState";
 
+function hasPendingOAuthCallbackParams(): boolean {
+  try {
+    const url = new URL(window.location.href);
+    return url.searchParams.has("code") || url.searchParams.has("error");
+  } catch {
+    return false;
+  }
+}
+
 export function useWebPathRouteLifecycle(params: {
   publicRouteKind: PublicRoute["kind"];
   activePage: AppPage;
@@ -65,6 +74,7 @@ export function useWebPathRouteLifecycle(params: {
 
   useEffect(() => {
     if (params.publicRouteKind !== "app") return;
+    if (hasPendingOAuthCallbackParams()) return;
 
     const nextPath = params.buildAppRoutePath({
       page: params.activePage,
