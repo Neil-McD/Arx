@@ -70,8 +70,8 @@ forbid_match_in_file "$AUTH_CORE_FILE" 'beginOAuthSignIn|bootstrapSession|logout
   "shared auth core must not expose deleted browser bridge helpers"
 
 echo "[2/6] Validating web auth controller is WorkOS-native..."
-require_match_in_file "$WEB_AUTH_CONTROLLER_FILE" 'workos\.signIn\(' \
-  "web auth controller signs in through WorkOS runtime"
+require_match_in_file "$WEB_AUTH_CONTROLLER_FILE" 'workos\.getSignInUrl\(' \
+  "web auth controller prepares sign-in through WorkOS runtime"
 require_match_in_file "$WEB_AUTH_CONTROLLER_FILE" 'workos\.readSession\(' \
   "web auth controller bootstraps browser session through WorkOS runtime"
 forbid_match_in_file "$WEB_AUTH_CONTROLLER_FILE" 'bootstrapSession\(|refreshAuthSessionResult\(|beginGoogleSignIn\(|revokeAuthSessionRemote\(|shared/authFlow' \
