@@ -196,6 +196,10 @@ import {
 } from "../../../shared/cloudPkce";
 import { routePendingAuthIntent } from "../../../shared/authResumeRouter";
 import { resetWebSessionStateAfterSignOut } from "./auth/resetSessionState";
+import {
+  measureAuthPerfSpan,
+  recordAuthPerfInstant,
+} from "./auth/authPerfProbe";
 import { resolveUserAccessPolicy } from "../../../shared/capabilities";
 import { isStandaloneWebApp } from "../../../shared/browserRuntimeMode";
 import {
@@ -638,6 +642,7 @@ export default function App() {
   const initialPublicRoute = readPublicRouteFromLocation();
   const initialAppRoute = initialPublicRoute.kind === "app" ? readAppRouteFromLocation() : null;
   const hasResolvedInitialStandaloneSignedOutLaunchRef = useRef(false);
+  const firstStableShellSessionKeyRef = useRef<string>("");
 
   const {
     session,
@@ -769,12 +774,18 @@ export default function App() {
       profileUi.setProfileSaveSuccess(false);
     },
     onSessionReady: async (session) => {
-      await Promise.all([
-        workspace.actions.hydrateWorkspaceSurfaceState(session),
-        loadCommunities(session),
-        loadBuilderBillingStatus(session),
-        loadSelfProfile(session),
-      ]);
+      await measureAuthPerfSpan("session_ready", async () => {
+        await Promise.all([
+          measureAuthPerfSpan("workspace_surface_hydrate", async () => {
+            await workspace.actions.hydrateWorkspaceSurfaceState(session);
+          }),
+          measureAuthPerfSpan("communities", async () => {
+            await loadCommunities(session);
+          }),
+          loadBuilderBillingStatus(session),
+          loadSelfProfile(session),
+        ]);
+      });
     },
     onSessionFocusReady: async (session) => {
       await Promise.all([
@@ -3240,8 +3251,10 @@ export default function App() {
     setIsLoadingOpenRouterConnection(true);
     setIsLoadingChatgptConnection(true);
     try {
-      const result = await loadCloudProviderConnections({
-        session: usableSession,
+      const result = await measureAuthPerfSpan("provider_connections", async () => {
+        return await loadCloudProviderConnections({
+          session: usableSession,
+        });
       });
       setOpenRouterConnection(result.openrouter);
       setChatgptConnection(result.chatgpt);
@@ -3956,6 +3969,33 @@ export default function App() {
     hasResolvedProviderConnections &&
     !hasUserChatgptConnection &&
     !isLoadingChatgptConnection;
+
+  useEffect(() => {
+    if (!session) {
+      firstStableShellSessionKeyRef.current = "";
+      return;
+    }
+    if (shellPublicRoute.kind !== "app" || isAuthResolvingSignedInState) return;
+    const sessionKey = `${session.user.id}:${session.expires_at}`;
+    if (firstStableShellSessionKeyRef.current === sessionKey) return;
+    firstStableShellSessionKeyRef.current = sessionKey;
+    const rafId = window.requestAnimationFrame(() => {
+      recordAuthPerfInstant("workspace_first_stable_paint", {
+        shellVariant,
+        path: `${window.location.pathname}${window.location.search}${window.location.hash}`,
+        hasResolvedCommunities,
+        hasResolvedProviderConnections,
+      });
+    });
+    return () => window.cancelAnimationFrame(rafId);
+  }, [
+    hasResolvedCommunities,
+    hasResolvedProviderConnections,
+    isAuthResolvingSignedInState,
+    session,
+    shellPublicRoute.kind,
+    shellVariant,
+  ]);
   const { sendUserMessage, retryLastTurn } = useWebSendFlowController<
     AuthSession,
     MessageAttachment,

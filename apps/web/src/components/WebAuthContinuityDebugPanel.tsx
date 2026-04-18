@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { AuthSession } from "../../../../shared/authCore";
 import type { ConvexAuthenticatedSessionProbeResult } from "../../../../shared/convexAuthSessionProbe";
 import { fetchCloudAuthActorDebug, type CloudAuthActorDebugRow } from "../../../../shared/cloudAuthDebugGateway";
+import { readAuthPerfSnapshot, subscribeToAuthPerfUpdates } from "../auth/authPerfProbe";
 import { useWorkOsRuntime } from "../auth/workosRuntime";
 
 declare global {
@@ -48,6 +49,7 @@ export function WebAuthContinuityDebugPanel(props: WebAuthContinuityDebugPanelPr
   const [actorDebug, setActorDebug] = useState<CloudAuthActorDebugRow | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [perfTick, setPerfTick] = useState(0);
 
   useEffect(() => {
     const sync = () => setEnabled(isAuthDebugEnabled());
@@ -57,6 +59,12 @@ export function WebAuthContinuityDebugPanel(props: WebAuthContinuityDebugPanelPr
       window.removeEventListener("hashchange", sync);
       window.removeEventListener("popstate", sync);
     };
+  }, []);
+
+  useEffect(() => {
+    return subscribeToAuthPerfUpdates(() => {
+      setPerfTick((current) => current + 1);
+    });
   }, []);
 
   useEffect(() => {
@@ -120,6 +128,7 @@ export function WebAuthContinuityDebugPanel(props: WebAuthContinuityDebugPanelPr
     sessionMismatch: Boolean(workos.user && !props.session),
     lastRuntimeAcceptance: props.authRuntimeAcceptance,
     authProbeEvents: props.authProbeEvents,
+    perf: readAuthPerfSnapshot(),
     actorDebug,
     loadError,
     isLoading,
@@ -132,6 +141,7 @@ export function WebAuthContinuityDebugPanel(props: WebAuthContinuityDebugPanelPr
     props.authError,
     props.authRuntimeAcceptance,
     props.session,
+    perfTick,
     workos.authenticationMethod,
     workos.isEnabled,
     workos.isLoading,

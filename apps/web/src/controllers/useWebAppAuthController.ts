@@ -22,6 +22,10 @@ import {
 } from "../../../../shared/authResumeState";
 import { clearOAuthCallbackParamsFromLocation } from "../../../../shared/cloudPkce";
 import { buildLoginTrampolinePath } from "../auth/loginTrampoline";
+import {
+  beginAuthPerfSpan,
+  endAuthPerfSpan,
+} from "../auth/authPerfProbe";
 import { isWorkOsLoginRequiredError, useWorkOsRuntime } from "../auth/workosRuntime";
 import { useWebAuthSessionLifecycle } from "./useWebAuthSessionLifecycle";
 
@@ -285,14 +289,29 @@ export function useWebAppAuthController(
       sessionPresent: Boolean(sessionRef.current ?? session),
     });
     try {
+      beginAuthPerfSpan("workos_read_session", {
+        phase: params.phase,
+        forceRefresh: Boolean(params.forceRefresh),
+      });
       const candidateSession = await workos.readSession({ forceRefresh: params.forceRefresh });
+      endAuthPerfSpan("workos_read_session", {
+        phase: params.phase,
+        hasSession: Boolean(candidateSession),
+      });
       pushAuthProbeEvent(`${params.phase}:recover_read_session`, {
         hasSession: Boolean(candidateSession),
         workos: readWorkOsBootstrapDebugState(workos),
       });
       if (!candidateSession) return null;
 
+      beginAuthPerfSpan("convex_verify", {
+        phase: params.phase,
+      });
       const verifiedSession = await ensureUsableAuthSession(candidateSession);
+      endAuthPerfSpan("convex_verify", {
+        phase: params.phase,
+        accepted: Boolean(verifiedSession),
+      });
       pushAuthProbeEvent(`${params.phase}:recover_verify`, {
         accepted: Boolean(verifiedSession),
         workos: readWorkOsBootstrapDebugState(workos),
@@ -303,6 +322,14 @@ export function useWebAppAuthController(
       setAuthError(null);
       return verifiedSession;
     } catch (error) {
+      endAuthPerfSpan("workos_read_session", {
+        phase: params.phase,
+        status: "error",
+      });
+      endAuthPerfSpan("convex_verify", {
+        phase: params.phase,
+        status: "error",
+      });
       pushAuthProbeEvent(`${params.phase}:recover_failed`, {
         reason: errorToMessage(error, "workos_session_recovery_failed"),
         workos: readWorkOsBootstrapDebugState(workos),
@@ -532,6 +559,10 @@ export function useWebAppAuthController(
         hadPendingAuthFlow,
         workos: readWorkOsBootstrapDebugState(workos),
       });
+      beginAuthPerfSpan("auth_bootstrap", {
+        hadPendingAuthFlow,
+        workos: readWorkOsBootstrapDebugState(workos),
+      });
       if (hasSignedOutIntent) {
         if (workos.user) {
           pushAuthProbeEvent("bootstrap_stale_signed_out_intent_ignored", {
@@ -543,6 +574,9 @@ export function useWebAppAuthController(
             workos: readWorkOsBootstrapDebugState(workos),
           });
           if (cancelled) return;
+          endAuthPerfSpan("auth_bootstrap", {
+            result: "signed_out_intent",
+          });
           markAuthBootstrapComplete();
           clearAuthFlowPending();
           return;
@@ -555,6 +589,9 @@ export function useWebAppAuthController(
       if (cancelled) return;
 
       if (verifiedSession) {
+        endAuthPerfSpan("auth_bootstrap", {
+          result: "verified_session",
+        });
         markAuthBootstrapComplete();
         clearAuthSignedOutIntentMarker();
         if (hadPendingAuthFlow) {
@@ -585,6 +622,9 @@ export function useWebAppAuthController(
       }
 
       markAuthBootstrapComplete();
+      endAuthPerfSpan("auth_bootstrap", {
+        result: hadPendingAuthFlow ? "missing_session" : "no_session",
+      });
       if (hadPendingAuthFlow) {
         console.warn("[auth][workos] bootstrap_missing_session", {
           phase: "read_session",
@@ -608,6 +648,9 @@ export function useWebAppAuthController(
 
     return () => {
       cancelled = true;
+      endAuthPerfSpan("auth_bootstrap", {
+        result: "cancelled",
+      });
     };
   }, [
     adoptAuthSession,
