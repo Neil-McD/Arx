@@ -22,6 +22,11 @@ function isAuthDebugEnabled(): boolean {
   return false;
 }
 
+function isNarrowViewport(): boolean {
+  if (typeof window === "undefined") return false;
+  return window.matchMedia("(max-width: 768px)").matches;
+}
+
 function formatError(error: unknown): string {
   if (error instanceof Error && error.message.trim()) return error.message.trim();
   if (typeof error === "string" && error.trim()) return error.trim();
@@ -38,6 +43,8 @@ type WebAuthContinuityDebugPanelProps = {
 export function WebAuthContinuityDebugPanel(props: WebAuthContinuityDebugPanelProps) {
   const workos = useWorkOsRuntime();
   const [enabled, setEnabled] = useState<boolean>(() => isAuthDebugEnabled());
+  const [isNarrow, setIsNarrow] = useState<boolean>(() => isNarrowViewport());
+  const [isExpanded, setIsExpanded] = useState<boolean>(() => !isNarrowViewport());
   const [actorDebug, setActorDebug] = useState<CloudAuthActorDebugRow | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -50,6 +57,17 @@ export function WebAuthContinuityDebugPanel(props: WebAuthContinuityDebugPanelPr
       window.removeEventListener("hashchange", sync);
       window.removeEventListener("popstate", sync);
     };
+  }, []);
+
+  useEffect(() => {
+    const sync = () => {
+      const narrow = isNarrowViewport();
+      setIsNarrow(narrow);
+      setIsExpanded((current) => (narrow ? current : true));
+    };
+    sync();
+    window.addEventListener("resize", sync);
+    return () => window.removeEventListener("resize", sync);
   }, []);
 
   useEffect(() => {
@@ -128,6 +146,33 @@ export function WebAuthContinuityDebugPanel(props: WebAuthContinuityDebugPanelPr
 
   if (!enabled) return null;
 
+  if (isNarrow && !isExpanded) {
+    return (
+      <button
+        type="button"
+        onClick={() => setIsExpanded(true)}
+        style={{
+          position: "fixed",
+          right: 12,
+          bottom: 12,
+          zIndex: 2000,
+          padding: "10px 12px",
+          borderRadius: 999,
+          border: "1px solid rgba(255,255,255,0.16)",
+          background: "rgba(10,10,12,0.92)",
+          boxShadow: "0 10px 24px rgba(0,0,0,0.32)",
+          color: "#f5f7fb",
+          fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+          fontSize: 11,
+          fontWeight: 700,
+          lineHeight: 1,
+        }}
+      >
+        Auth Debug
+      </button>
+    );
+  }
+
   return (
     <aside
       style={{
@@ -136,7 +181,7 @@ export function WebAuthContinuityDebugPanel(props: WebAuthContinuityDebugPanelPr
         bottom: 16,
         zIndex: 2000,
         width: "min(480px, calc(100vw - 32px))",
-        maxHeight: "min(60vh, 720px)",
+        maxHeight: isNarrow ? "min(46vh, 360px)" : "min(60vh, 720px)",
         overflow: "auto",
         padding: 12,
         borderRadius: 12,
@@ -150,7 +195,27 @@ export function WebAuthContinuityDebugPanel(props: WebAuthContinuityDebugPanelPr
         whiteSpace: "pre-wrap",
       }}
     >
-      <div style={{ marginBottom: 8, fontSize: 12, fontWeight: 700 }}>Auth Debug</div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 8 }}>
+        <div style={{ fontSize: 12, fontWeight: 700 }}>Auth Debug</div>
+        {isNarrow ? (
+          <button
+            type="button"
+            onClick={() => setIsExpanded(false)}
+            style={{
+              border: "1px solid rgba(255,255,255,0.14)",
+              borderRadius: 999,
+              background: "rgba(255,255,255,0.04)",
+              color: "#f5f7fb",
+              fontFamily: "inherit",
+              fontSize: 11,
+              lineHeight: 1,
+              padding: "6px 8px",
+            }}
+          >
+            Hide
+          </button>
+        ) : null}
+      </div>
       <pre style={{ margin: 0 }}>{JSON.stringify(panelPayload, null, 2)}</pre>
     </aside>
   );
