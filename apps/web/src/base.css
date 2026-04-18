@@ -11994,25 +11994,29 @@ button.message-citation-chip:hover {
 
 .upgrade-copy {
   display: grid;
-  gap: 6px;
+  gap: 8px;
   max-width: 720px;
   margin-bottom: 14px;
+  font-family: var(--font-sans, inherit);
 }
 
 .upgrade-kicker {
-  font-size: 11px;
-  letter-spacing: 0.12em;
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  font-weight: 600;
   text-transform: uppercase;
   color: var(--text-muted);
 }
 
 .upgrade-lead {
-  font-size: clamp(18px, 2vw, 24px);
-  line-height: 0.98;
-  letter-spacing: -0.04em;
-  font-weight: 640;
+  font-family: var(--font-sans, inherit);
+  font-size: clamp(19px, 1.9vw, 24px);
+  line-height: 1.08;
+  letter-spacing: -0.02em;
+  font-weight: 700;
   color: var(--text-primary);
-  max-width: 28ch;
+  max-width: 32ch;
+  text-wrap: balance;
 }
 
 .upgrade-footnote {
