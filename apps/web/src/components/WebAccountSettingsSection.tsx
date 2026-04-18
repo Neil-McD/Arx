@@ -1,4 +1,6 @@
+import { useEffect, useState } from "react";
 import { formatBuilderTierLabel, isBuilderTierFree } from "../../../../shared/builderBilling";
+import { WebSignOutConfirmModal } from "./WebSignOutConfirmModal";
 
 type SessionLike = {
   user: {
@@ -86,6 +88,8 @@ type WebAccountSettingsSectionProps = {
 };
 
 export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps) {
+  const [isSignOutConfirmOpen, setIsSignOutConfirmOpen] = useState(false);
+  const [isSubmittingSignOut, setIsSubmittingSignOut] = useState(false);
   const {
     session,
     authError,
@@ -133,6 +137,23 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
     pendingPurchasesSuccess,
   } = props;
 
+  useEffect(() => {
+    if (session) return;
+    setIsSignOutConfirmOpen(false);
+    setIsSubmittingSignOut(false);
+  }, [session]);
+
+  const handleConfirmSignOut = async (): Promise<void> => {
+    if (isSubmittingSignOut) return;
+    setIsSubmittingSignOut(true);
+    try {
+      await handleSignOut();
+      setIsSignOutConfirmOpen(false);
+    } finally {
+      setIsSubmittingSignOut(false);
+    }
+  };
+
   return (
     <>
       <div className="settings-section">
@@ -149,7 +170,12 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
               <span>Signed in as</span>
               <strong>{session.user.email ?? session.user.id}</strong>
             </div>
-            <button className="secondary" type="button" onClick={() => void handleSignOut()}>
+            <button
+              className="secondary"
+              type="button"
+              onClick={() => setIsSignOutConfirmOpen(true)}
+              disabled={isSubmittingSignOut}
+            >
               Sign out
             </button>
           </div>
@@ -168,6 +194,16 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
         )}
         {authError && <div className="key-error">{authError}</div>}
       </div>
+
+      <WebSignOutConfirmModal
+        isOpen={Boolean(session) && isSignOutConfirmOpen}
+        isSubmitting={isSubmittingSignOut}
+        onClose={() => {
+          if (isSubmittingSignOut) return;
+          setIsSignOutConfirmOpen(false);
+        }}
+        onConfirm={handleConfirmSignOut}
+      />
 
       <div className="settings-section">
         <div className="settings-section-title">

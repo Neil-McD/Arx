@@ -147,6 +147,7 @@ export function useWebAppAuthController(
   const [isAuthBootstrapComplete, setIsAuthBootstrapComplete] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   const [authRuntimeAcceptance, setAuthRuntimeAcceptance] = useState<ConvexAuthenticatedSessionProbeResult | null>(null);
+  const [isAuthSigningOut, setIsAuthSigningOut] = useState(false);
   const [authProbeEvents, setAuthProbeEvents] = useState<
     { ts: number; stage: string; detail: Record<string, unknown> }[]
   >([]);
@@ -454,16 +455,38 @@ export function useWebAppAuthController(
     clearAuthFlowPending();
     authSessionEpochRef.current += 1;
     setAuthError(null);
-    await onBeforeSignOutRef.current?.();
-    await clearSessionLocally();
+    setIsAuthSigningOut(true);
+    pushAuthProbeEvent("sign_out_begin", {
+      workos: readWorkOsBootstrapDebugState(workos),
+      hasSession: Boolean(sessionRef.current ?? session),
+    });
     try {
-      await workos.signOut({ returnTo: window.location.origin });
+      await onBeforeSignOutRef.current?.();
+      await clearSessionLocally();
+      pushAuthProbeEvent("sign_out_local_clear", {
+        workos: readWorkOsBootstrapDebugState(workos),
+      });
     } catch (error) {
-      if (!isWorkOsLoginRequiredError(error)) {
-        console.warn("WorkOS sign-out failed", error);
-      }
+      setIsAuthSigningOut(false);
+      throw error;
     }
-  }, [clearSessionLocally, onBeforeSignOutRef, workos]);
+    void workos
+      .signOut({ returnTo: window.location.origin })
+      .then(() => {
+        pushAuthProbeEvent("sign_out_remote_complete", {
+          workos: readWorkOsBootstrapDebugState(workos),
+        });
+      })
+      .catch((error) => {
+        pushAuthProbeEvent("sign_out_remote_failed", {
+          workos: readWorkOsBootstrapDebugState(workos),
+          reason: errorToMessage(error, "workos_sign_out_failed"),
+        });
+        if (!isWorkOsLoginRequiredError(error)) {
+          console.warn("WorkOS sign-out failed", error);
+        }
+      });
+  }, [clearSessionLocally, onBeforeSignOutRef, pushAuthProbeEvent, session, workos]);
 
   const fetchWithPublic = useCallback(async (url: string, init: RequestInit = {}): Promise<Response> => {
     return await fetchWithPublicShared(url, init);
@@ -663,8 +686,15 @@ export function useWebAppAuthController(
   ]);
 
   useEffect(() => {
+    if (!isAuthSigningOut) return;
+    if (workos.user) return;
+    setIsAuthSigningOut(false);
+  }, [isAuthSigningOut, workos.user]);
+
+  useEffect(() => {
     if (!workos.isEnabled || workos.isLoading) return;
     if (!isAuthBootstrapComplete) return;
+    if (isAuthSigningOut) return;
     if (session || !workos.user) return;
 
     let cancelled = false;
@@ -692,6 +722,7 @@ export function useWebAppAuthController(
     };
   }, [
     clearAuthFlowPending,
+    isAuthSigningOut,
     isAuthBootstrapComplete,
     onSessionReadyRef,
     pushAuthProbeEvent,
@@ -702,10 +733,11 @@ export function useWebAppAuthController(
 
   const isAuthResolvingSignedInState = useMemo(() => {
     if (!workos.isEnabled) return !isAuthBootstrapComplete;
+    if (isAuthSigningOut) return false;
     if (workos.isLoading) return true;
     if (!isAuthBootstrapComplete) return true;
     return !session && Boolean(workos.user);
-  }, [isAuthBootstrapComplete, session, workos.isEnabled, workos.isLoading, workos.user]);
+  }, [isAuthBootstrapComplete, isAuthSigningOut, session, workos.isEnabled, workos.isLoading, workos.user]);
 
   useEffect(() => {
     const onStorage = (event: StorageEvent) => {
