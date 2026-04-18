@@ -35,7 +35,7 @@ type UseWebVoiceInputControllerArgs<SessionT> = {
   activeCommunityJoinMode: "checkout" | "join_approval" | "join_free" | null;
   canPostMessagesActiveCommunity: boolean;
   normalizedBuilderTier: "free" | "builder" | "architect";
-  openAuthGate: () => void;
+  requireSignIn: () => void;
   showAppToastMessage: (message: string) => void;
   appendWorkspaceTranscript: (transcript: string) => void;
   focusWorkspaceInput: () => void;
@@ -330,7 +330,7 @@ export function useWebVoiceInputController<SessionT>(args: UseWebVoiceInputContr
   async function handleVoiceInputClick(surface: VoiceSurface) {
     const intent = resolveVoiceInputIntent(surface);
     if (intent.mode === "sign_in") {
-      args.openAuthGate();
+      args.requireSignIn();
       return;
     }
     if (intent.mode === "select_community" || intent.mode === "join_community" || intent.mode === "busy") {

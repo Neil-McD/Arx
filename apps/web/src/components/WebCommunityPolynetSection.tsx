@@ -5,7 +5,7 @@ type WebCommunityPolynetSectionProps = {
   activeCommunityName: string | null;
   hasSession: boolean;
   canManagePolynet: boolean;
-  onOpenAuthGate: () => void;
+  onRequireSignIn: () => void;
   state: {
     health: CloudCommunityArchiveHealthRow | null;
     isLoading: boolean;
@@ -37,7 +37,7 @@ export function WebCommunityPolynetSection(props: WebCommunityPolynetSectionProp
     activeCommunityName,
     hasSession,
     canManagePolynet,
-    onOpenAuthGate,
+    onRequireSignIn,
     state,
     actions,
   } = props;
@@ -51,7 +51,7 @@ export function WebCommunityPolynetSection(props: WebCommunityPolynetSectionProp
       <div className="settings-panel community-settings-panel">
         <div className="chat-empty">
           <div>Sign in to access Polynet.</div>
-          <button className="secondary" type="button" onClick={onOpenAuthGate} style={{ marginTop: 12 }}>
+          <button className="secondary" type="button" onClick={onRequireSignIn} style={{ marginTop: 12 }}>
             Sign in
           </button>
         </div>

@@ -70,7 +70,7 @@ type UseWebProjectUiControllerParams<TSession> = {
   builderTier: string | null | undefined;
   cloudProjects: WebCloudProjectRecord[];
   ensureSession: (session: TSession) => Promise<TSession | null>;
-  openAuthGate: () => void;
+  requireSignIn: () => void;
   onRequireBuilderUpgrade: () => void;
   showAppToastMessage: (message: string) => void;
   onProjectCreated: (project: WebCloudProjectRecord) => void;
@@ -155,7 +155,7 @@ export function useWebProjectUiController<TSession>(
     builderTier,
     cloudProjects,
     ensureSession,
-    openAuthGate,
+    requireSignIn,
     onRequireBuilderUpgrade,
     showAppToastMessage,
     onProjectCreated,
@@ -231,7 +231,7 @@ export function useWebProjectUiController<TSession>(
 
   const openCreateProjectModal = useCallback(() => {
     if (!session) {
-      openAuthGate();
+      requireSignIn();
       return;
     }
     if (!hasBuilderTierPaidAccess(builderTier ?? "free")) {
@@ -241,7 +241,7 @@ export function useWebProjectUiController<TSession>(
     setCreateProjectError(null);
     setCreateProjectImportFile(null);
     setIsCreateProjectModalOpen(true);
-  }, [builderTier, onRequireBuilderUpgrade, openAuthGate, session]);
+  }, [builderTier, onRequireBuilderUpgrade, requireSignIn, session]);
 
   const openEditProjectModal = useCallback((project: WebCloudProjectRecord) => {
     setEditingProjectId(project.id);
@@ -261,7 +261,7 @@ export function useWebProjectUiController<TSession>(
 
   const handleCreateProject = useCallback(async (): Promise<void> => {
     if (!session) {
-      openAuthGate();
+      requireSignIn();
       return;
     }
     const usableSession = await ensureSession(session);
@@ -343,7 +343,7 @@ export function useWebProjectUiController<TSession>(
     onProjectCreated,
     onRequireBuilderUpgrade,
     onStartDraftInProject,
-    openAuthGate,
+    requireSignIn,
     resetCreateProjectModal,
     showAppToastMessage,
   ]);

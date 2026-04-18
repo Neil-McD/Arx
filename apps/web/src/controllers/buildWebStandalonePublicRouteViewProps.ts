@@ -7,7 +7,7 @@ type MagicLinkStatus = WebStandalonePublicRouteViewProps["magicLinkStatus"];
 export function buildWebStandalonePublicRouteViewProps(params: {
   publicRouteKind: Extract<PublicRoute["kind"], "checkout_success" | "claim"> | PublicRoute["kind"];
   showSignIn: boolean;
-  openAuthGate: () => void;
+  requireSignIn: () => void;
   handleSignOut: () => void | Promise<void>;
   checkoutStatus: CheckoutStatus;
   retryCheckoutFinalize: () => void;
@@ -36,7 +36,7 @@ export function buildWebStandalonePublicRouteViewProps(params: {
   return {
     publicRouteKind: params.publicRouteKind,
     showSignIn: params.showSignIn,
-    onOpenAuthGate: () => params.openAuthGate(),
+    onRequireSignIn: () => params.requireSignIn(),
     onSignOut: () => {
       void params.handleSignOut();
     },

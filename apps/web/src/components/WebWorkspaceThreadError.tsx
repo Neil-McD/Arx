@@ -2,7 +2,7 @@ import type { WorkspaceThreadErrorView } from "./webWorkspaceThreadViews";
 
 type WebWorkspaceThreadErrorProps = {
   view: WorkspaceThreadErrorView | null;
-  onOpenAuthGate: () => void;
+  onRequireSignIn: () => void;
   onRetryLastTurn: () => Promise<void> | void;
 };
 
@@ -14,7 +14,7 @@ export function WebWorkspaceThreadError(props: WebWorkspaceThreadErrorProps) {
     <div className="auth-error">
       {view.displayedError}
       {view.showSignInAction ? (
-        <button type="button" className="auth-error-link" onClick={props.onOpenAuthGate}>
+        <button type="button" className="auth-error-link" onClick={props.onRequireSignIn}>
           Sign in
         </button>
       ) : null}

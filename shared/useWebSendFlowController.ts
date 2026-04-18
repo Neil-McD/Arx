@@ -76,7 +76,7 @@ export function useWebSendFlowController<
     if (!session) {
       if (hasAttachments) {
         current.setThreadError(null);
-        current.openAuthGate();
+        current.requireSignIn();
         return;
       }
       const now = new Date().toISOString();
@@ -144,7 +144,7 @@ export function useWebSendFlowController<
 
     const usableSession = await resolveUsableSession(session, current.ensureSession);
     if (!usableSession) {
-      current.openAuthGate();
+      current.requireSignIn();
       return;
     }
 
@@ -332,14 +332,14 @@ export function useWebSendFlowController<
       value: string | null | ((prev: string | null) => string | null),
     ) => current.setThreadErrorForThread(threadId, value);
     if (current.getSession() == null) {
-      current.openAuthGate();
+      current.requireSignIn();
       return;
     }
     const session = current.getSession();
     if (!session) return;
     const usableSession = await resolveUsableSession(session, current.ensureSession);
     if (!usableSession) {
-      current.openAuthGate();
+      current.requireSignIn();
       return;
     }
 
@@ -407,14 +407,14 @@ export function useWebSendFlowController<
       value: string | null | ((prev: string | null) => string | null),
     ) => current.setThreadErrorForThread(threadId, value);
     if (current.getSession() == null) {
-      current.openAuthGate();
+      current.requireSignIn();
       return;
     }
     const session = current.getSession();
     if (!session) return;
     const usableSession = await resolveUsableSession(session, current.ensureSession);
     if (!usableSession) {
-      current.openAuthGate();
+      current.requireSignIn();
       return;
     }
 

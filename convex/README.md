@@ -25,15 +25,11 @@ This folder is the canonical backend surface for Daytona. Runtime/product paths 
 0. Quickstart template:
    - copy `.env.convex.quickstart.example` to `.env` and fill required values.
 1. Add `VITE_CONVEX_URL` in repo-root `.env`.
-2. Configure OAuth/OIDC env for runtime auth routes:
-   - `ARX_AUTH_AUTHORIZE_URL` (required for sign-in)
-   - `ARX_AUTH_TOKEN_URL` (required for code exchange + refresh)
+2. Configure shared OAuth/OIDC env:
+   - `ARX_AUTH_AUTHORIZE_URL` (required for hosted MCP auth metadata)
+   - `ARX_AUTH_TOKEN_URL` (required for hosted MCP auth metadata)
    - `ARX_AUTH_CLIENT_ID` (required)
-   - `ARX_AUTH_CLIENT_SECRET` (optional)
    - `ARX_AUTH_SCOPE` (optional; defaults to `openid profile email offline_access`)
-   - `ARX_AUTH_AUDIENCE` (optional)
-   - `ARX_AUTH_PROVIDER_QUERY_KEY` (optional)
-   - `ARX_AUTH_LOGOUT_URL` (optional)
    - `ARX_AUTH_MAGIC_LINK_URL` (optional)
    - WorkOS/AuthKit example:
      - `ARX_AUTH_AUTHORIZE_URL=https://<AUTHKIT_DOMAIN>/oauth2/authorize`
@@ -48,7 +44,7 @@ This folder is the canonical backend surface for Daytona. Runtime/product paths 
    - WorkOS/AuthKit example:
      - `ARX_AUTH_JWT_ISSUER=https://<AUTHKIT_DOMAIN>`
      - `ARX_AUTH_JWT_JWKS_URL=https://<AUTHKIT_DOMAIN>/oauth2/jwks`
-   - These same OAuth envs are also used by the remote PolyNet MCP surface to serve
+   - These same OAuth envs are used by the remote PolyNet MCP surface to serve
      `/.well-known/oauth-protected-resource` and `/.well-known/oauth-authorization-server`
      for hosted MCP auth discovery.
 4. Validate auth env readiness:

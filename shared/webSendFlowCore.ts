@@ -51,7 +51,7 @@ export type UseWebSendFlowControllerArgs<
 > = {
   getSession: () => SessionT | null;
   ensureSession?: EnsureSessionFn<SessionT>;
-  openAuthGate: (intentInput?: unknown) => void;
+  requireSignIn: (intentInput?: unknown) => void;
   ensureWorkspaceThreadLensBeforeSend: (threadId: string, session: SessionT) => Promise<void>;
   onWorkspaceRunStarted?: (params: {
     threadId: string;

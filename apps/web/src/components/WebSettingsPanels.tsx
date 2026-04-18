@@ -43,7 +43,7 @@ export type WebSettingsPanelsProps = {
   account: {
     session: SessionLike;
     authError: string | null;
-    openAuthGate: () => void;
+    requireSignIn: () => void;
     handleSignOut: () => Promise<void> | void;
     isLoadingChatgptConnection: boolean;
     chatgptConnection: {
@@ -100,7 +100,7 @@ export type WebSettingsPanelsProps = {
   };
   integrations: {
     session: SessionLike;
-    openAuthGate: () => void;
+    requireSignIn: () => void;
     openDiscoverApps: () => void;
     userPlatformAppMounts: UserPlatformMountedApp[];
     isLoadingUserPlatformAppMounts: boolean;
@@ -165,7 +165,7 @@ export function WebSettingsPanels(props: WebSettingsPanelsProps) {
   const accountSectionProps = {
     session: account.session,
     authError: account.authError,
-    openAuthGate: account.openAuthGate,
+    requireSignIn: account.requireSignIn,
     handleSignOut: account.handleSignOut,
     isLoadingChatgptConnection: account.isLoadingChatgptConnection,
     chatgptConnection: account.chatgptConnection,
@@ -252,7 +252,7 @@ export function WebSettingsPanels(props: WebSettingsPanelsProps) {
 
   const integrationsSectionProps = {
     session: integrations.session,
-    openAuthGate: integrations.openAuthGate,
+    requireSignIn: integrations.requireSignIn,
     openDiscoverApps: integrations.openDiscoverApps,
     userPlatformAppMounts: integrations.userPlatformAppMounts,
     isLoadingUserPlatformAppMounts: integrations.isLoadingUserPlatformAppMounts,

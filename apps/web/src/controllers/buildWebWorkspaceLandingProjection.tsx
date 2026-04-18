@@ -14,7 +14,7 @@ type BuildWebWorkspaceLandingProjectionParams = {
   activeCommunity: WorkspaceLandingCommunity | null;
   resolvedActiveProjectName: string | null;
   emptyThreadLandingTitle: ReactNode;
-  onOpenAuthGate: () => void;
+  onRequireSignIn: () => void;
   onOpenLandingCommunity: () => void;
   onOpenLandingProject: () => void;
   shouldShowEmptyThreadChatgptCard: boolean;
@@ -28,7 +28,7 @@ export function buildWebWorkspaceLandingProjection(
   params: BuildWebWorkspaceLandingProjectionParams,
 ) {
   const guestSignupRail = !params.session ? (
-    <WebGuestSignupRail onSignIn={params.onOpenAuthGate} />
+    <WebGuestSignupRail onSignIn={params.onRequireSignIn} />
   ) : null;
 
   const emptyThreadAvatar = params.activeCommunity ? (

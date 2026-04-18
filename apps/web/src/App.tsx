@@ -644,7 +644,7 @@ export default function App() {
     magicLinkStatus,
     magicLinkError,
     handleSendMagicLink,
-    openAuthGate,
+    requireSignIn,
     handleSignOut,
     ensureUsableAuthSession,
     fetchWithAuth,
@@ -1967,7 +1967,7 @@ export default function App() {
     profileSaveFailureMessage: "Failed to save profile.",
     profileSaveUnauthenticatedErrorMessage: null,
     onProfileSaveUnauthenticated: () => {
-      openAuthGate();
+      requireSignIn();
     },
     applyLoadedProfileToLocal: profileUi.applyLoadedProfileToLocal,
     setCommunityMembers,
@@ -2388,7 +2388,7 @@ export default function App() {
   } = useWebMemoryMutationController<AuthSession>({
     getSession: () => sessionRef.current,
     ensureSession: ensureUsableAuthSession,
-    openAuthGate,
+    requireSignIn,
     loadPersonalMemoryItems,
     newPersonalMemoryContent: personalMemoryUi.newPersonalMemoryContent,
     newPersonalMemoryScope,
@@ -2436,7 +2436,7 @@ export default function App() {
 
   const handleImportExternalMemory = useCallback(async (): Promise<void> => {
     if (!session) {
-      openAuthGate();
+      requireSignIn();
       return;
     }
 
@@ -2483,7 +2483,7 @@ export default function App() {
     session,
     createPersonalMemoryItemDirect,
     loadPersonalMemoryItems,
-    openAuthGate,
+    requireSignIn,
     personalMemoryUi,
     showMemoryToastMessage,
   ]);
@@ -2684,7 +2684,7 @@ export default function App() {
     activeCommunityId,
     session: session,
     ensureSession: ensureUsableAuthSession,
-    openAuthGate: () => openAuthGate(),
+    requireSignIn: () => requireSignIn(),
     canManagePolynet: canViewActiveCommunityPolynet,
   });
 
@@ -3217,7 +3217,7 @@ export default function App() {
     session: session,
     getSession: () => sessionRef.current ?? session,
     ensureSession: ensureUsableAuthSession,
-    openAuthGate: (intent) => openAuthGate(intent),
+    requireSignIn: (intent) => requireSignIn(intent),
     chatgptConnection,
     onConnectionsUpdated: (connections) => {
       setOpenRouterConnection(connections.openrouter);
@@ -3300,7 +3300,7 @@ export default function App() {
     getCurrentPublicCommunitySlug: () => publicCommunityUi.publicCommunity?.slug ?? null,
     ensureSession: ensureUsableAuthSession,
     ...sessionArg,
-    openAuthGate,
+    requireSignIn,
     loadCommunities,
     openCommunityWorkspace: ({ communityId, communitySlug }) => {
       void enterJoinedCommunity({ communityId, communitySlug });
@@ -3331,7 +3331,7 @@ export default function App() {
     useWebBuilderBillingActions({
       getSession: () => sessionRef.current,
       ensureSession: ensureUsableAuthSession,
-      openAuthGate: (intent) => openAuthGate(intent),
+      requireSignIn: (intent) => requireSignIn(intent),
       onCheckoutStarted: ({ tier, context }) => {
         markPendingAnalyticsReturn("builder_checkout", {
           requested_tier: tier,
@@ -3363,7 +3363,7 @@ export default function App() {
   } = useWebCommerceAffiliateActions({
     getSession: () => sessionRef.current,
     ensureSession: ensureUsableAuthSession,
-    openAuthGate,
+    requireSignIn,
     openCommunityWorkspace: ({ communityId, communitySlug }) => {
       void enterJoinedCommunity({ communityId, communitySlug });
     },
@@ -3412,7 +3412,7 @@ export default function App() {
   const startWorkspaceCreditTopupCheckout = useCallback(async (): Promise<void> => {
     const session = await ensureUsableAuthSession();
     if (!session) {
-      openAuthGate();
+      requireSignIn();
       return;
     }
     setWorkspaceCreditTopupError(null);
@@ -3451,7 +3451,7 @@ export default function App() {
     } finally {
       setIsStartingWorkspaceCreditTopupCheckout(false);
     }
-  }, [ensureUsableAuthSession, openAuthGate]);
+  }, [ensureUsableAuthSession, requireSignIn]);
 
   const communityUi = useWebCommunityUiController<
     AuthSession,
@@ -3476,10 +3476,10 @@ export default function App() {
       setIsBuilderUpgradeOpen(true);
     },
     onPrimaryUnauthenticated: (draft) => {
-      openAuthGate({ reason: "create_community", payload: { draft } });
+      requireSignIn({ reason: "create_community", payload: { draft } });
     },
     onCreateUnauthenticated: (draft) => {
-      openAuthGate({ reason: "create_community", payload: { draft } });
+      requireSignIn({ reason: "create_community", payload: { draft } });
     },
     onOwnedCommunityLimitReached: () => {
       showAppToastMessage("You've built the maximum number of communities");
@@ -3951,7 +3951,7 @@ export default function App() {
   >({
     getSession: () => sessionRef.current,
     ensureSession: ensureUsableAuthSession,
-    openAuthGate,
+    requireSignIn,
     ensureWorkspaceThreadLensBeforeSend,
     onWorkspaceRunStarted: ({
       threadId,
@@ -4147,7 +4147,7 @@ export default function App() {
     activeCommunityJoinMode,
     canPostMessagesActiveCommunity,
     normalizedBuilderTier,
-    openAuthGate: () => openAuthGate(),
+    requireSignIn: () => requireSignIn(),
     showAppToastMessage,
     appendWorkspaceTranscript: (transcript) => workspaceComposerApiRef.current?.appendTranscript(transcript),
     focusWorkspaceInput: focusWorkspaceComposer,
@@ -4202,7 +4202,7 @@ export default function App() {
     hasUserChatgptConnection,
     updateThreadModel,
     showAppToastMessage,
-    openAuthGate,
+    requireSignIn,
     openModelProviderSettings: (message) => {
       setActiveView("settings");
       setSettingsPage("account");
@@ -4251,7 +4251,7 @@ export default function App() {
     builderTier: builderBillingStatus?.builder_tier,
     cloudProjects: workspace.state.projects,
     ensureSession: ensureUsableAuthSession,
-    openAuthGate,
+    requireSignIn,
     onRequireBuilderUpgrade: () => {
       setBuilderUpgradeContext("builder");
       setBuilderBillingError("Upgrade to Builder or Architect to create additional projects.");
@@ -4703,7 +4703,7 @@ export default function App() {
   const handlePublicCheckoutContinue = () => {
     if (!pendingToken) return;
     if (showPublicSignIn) {
-      openAuthGate({ reason: "redeem_purchase_claim", payload: { token: pendingToken } });
+      requireSignIn({ reason: "redeem_purchase_claim", payload: { token: pendingToken } });
       return;
     }
     void redeemPurchaseClaim(pendingToken);
@@ -4869,7 +4869,7 @@ export default function App() {
       communitySettingsLayer,
       canManageCommunitySettings,
       canDeleteActiveCommunity,
-      openAuthGate,
+      requireSignIn,
       settingsState: {
         isSettingsBannerDragOver,
         isProcessingCommunitySettingsBanner,
@@ -5231,7 +5231,7 @@ export default function App() {
     account: {
       session: session,
       authError,
-      openAuthGate,
+      requireSignIn,
       handleSignOut,
       isLoadingChatgptConnection,
       chatgptConnection,
@@ -5303,7 +5303,7 @@ export default function App() {
     },
     integrations: {
       session: session,
-      openAuthGate,
+      requireSignIn,
       openDiscoverApps: handleOpenDiscoverApps,
       userPlatformAppMounts,
       isLoadingUserPlatformAppMounts,
@@ -5440,7 +5440,7 @@ export default function App() {
   const standalonePublicRouteViewProps = buildWebStandalonePublicRouteViewProps({
     publicRouteKind: publicRoute.kind,
     showSignIn: showPublicSignIn,
-    openAuthGate,
+    requireSignIn,
     handleSignOut,
     checkoutStatus,
     retryCheckoutFinalize,
@@ -5480,7 +5480,7 @@ export default function App() {
       allowMultipleThreads: userAccessPolicy.allowMultipleThreads,
       onBlocked: () => {
         setThreadError(null);
-        openAuthGate();
+        requireSignIn();
       },
       focusComposer: focusWorkspaceComposer,
     });
@@ -5492,7 +5492,7 @@ export default function App() {
     session: session,
     createPersonalMemoryItemDirect,
     showMemoryToastMessage,
-    openAuthGate,
+    requireSignIn,
     builderBillingStatus,
     setBuilderUpgradeContext,
     setBuilderBillingError,
@@ -5539,7 +5539,7 @@ export default function App() {
       showGuestRateLimitSignInAction={showGuestRateLimitSignInAction}
       session={session}
       authError={authError}
-      openAuthGate={() => openAuthGate()}
+      requireSignIn={() => requireSignIn()}
       openMobileAgentSettings={openMobileAgentSettings}
       activeThreadId={activeThreadId}
       guestThreadId={GUEST_THREAD_ID}
@@ -5566,7 +5566,7 @@ export default function App() {
       : null,
     resolvedActiveProjectName: workspace.derived.resolvedActiveProjectName,
     emptyThreadLandingTitle: emptyThreadLanding.title,
-    onOpenAuthGate: () => openAuthGate(),
+    onRequireSignIn: () => requireSignIn(),
     onOpenLandingCommunity: handleOpenLandingCommunity,
     onOpenLandingProject: handleOpenLandingProject,
     shouldShowEmptyThreadChatgptCard,
@@ -5637,7 +5637,7 @@ export default function App() {
     threadError,
     displayedThreadError,
     showGuestRateLimitSignInAction,
-    openAuthGate,
+    requireSignIn,
     canRetryLastThreadTurn,
     retryLastTurn,
     threadMessages,
@@ -5742,7 +5742,7 @@ export default function App() {
       activeTab: discoverActiveTab,
       onSelectTab: setDiscoverActiveTab,
       hasSession: Boolean(session),
-      onRequireAuth: () => openAuthGate(),
+      onRequireAuth: () => requireSignIn(),
       isLoadingDiscover,
       onRefreshDiscover: () => void loadDiscoverCommunities(),
       discoverCommunitiesCount: discoverCommunities.length,

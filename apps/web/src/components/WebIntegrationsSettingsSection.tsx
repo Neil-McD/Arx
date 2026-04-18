@@ -11,7 +11,7 @@ type SessionLike = {
 
 type WebIntegrationsSettingsSectionProps = {
   session: SessionLike;
-  openAuthGate: () => void;
+  requireSignIn: () => void;
   openDiscoverApps: () => void;
   userPlatformAppMounts: UserPlatformMountedApp[];
   isLoadingUserPlatformAppMounts: boolean;
@@ -91,7 +91,7 @@ export function WebIntegrationsSettingsSection(
 ) {
   const {
     session,
-    openAuthGate,
+    requireSignIn,
     openDiscoverApps,
     userPlatformAppMounts,
     isLoadingUserPlatformAppMounts,
@@ -138,7 +138,7 @@ export function WebIntegrationsSettingsSection(
         <button
           type="button"
           className="settings-cta integrations-header-action"
-          onClick={session ? openDiscoverApps : openAuthGate}
+          onClick={session ? openDiscoverApps : requireSignIn}
         >
           {session ? "Connect apps" : "Sign in to connect"}
         </button>

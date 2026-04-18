@@ -22,7 +22,7 @@ type WebCommunityAiAgentSectionProps = {
   canManageMembersActiveCommunity: boolean;
   isLoadingCommunityAgentConfig: boolean;
   communityAgentConfigError: string | null;
-  onOpenAuthGate: () => void;
+  onRequireSignIn: () => void;
   workspaceEditorProps: WebCommunityAiAgentLandingEditorProps;
   appsEditorProps: WebCommunityAiAgentAppsEditorProps;
   skillsEditorProps: WebCommunityAiAgentSkillsEditorProps;
@@ -44,7 +44,7 @@ export function WebCommunityAiAgentSection(props: WebCommunityAiAgentSectionProp
     canManageMembersActiveCommunity,
     isLoadingCommunityAgentConfig,
     communityAgentConfigError,
-    onOpenAuthGate,
+    onRequireSignIn,
     workspaceEditorProps,
     appsEditorProps,
     skillsEditorProps,
@@ -67,7 +67,7 @@ export function WebCommunityAiAgentSection(props: WebCommunityAiAgentSectionProp
         <button
           className="secondary"
           type="button"
-          onClick={onOpenAuthGate}
+          onClick={onRequireSignIn}
           style={{ marginTop: 12 }}
         >
           Sign in

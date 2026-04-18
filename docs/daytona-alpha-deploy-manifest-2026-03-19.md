@@ -75,15 +75,9 @@ Strongly recommended:
 
 Optional auth/provider values if your identity provider needs them:
 
-- `ARX_AUTH_CLIENT_SECRET`
-- `ARX_AUTH_AUDIENCE`
-- `ARX_AUTH_PROVIDER_QUERY_KEY`
-- `ARX_AUTH_LOGOUT_URL`
 - `ARX_AUTH_MAGIC_LINK_URL`
 - `ARX_AUTH_JWT_AUDIENCE`
 - `VITE_CONVEX_PUBLIC_KEY`
-- `VITE_AUTH_JWT_ISSUER`
-- `VITE_AUTH_REDIRECT_URL`
 
 ### Optional Capability Env
 

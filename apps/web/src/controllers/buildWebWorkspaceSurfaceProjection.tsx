@@ -87,7 +87,7 @@ type BuildWebWorkspaceSurfaceProjectionParams = {
   threadError: string | null;
   displayedThreadError: ReactNode;
   showGuestRateLimitSignInAction: boolean;
-  openAuthGate: () => void;
+  requireSignIn: () => void;
   canRetryLastThreadTurn: boolean;
   retryLastTurn: () => Promise<void> | void;
   threadMessages: ThreadMessage[];
@@ -304,7 +304,7 @@ export function buildWebWorkspaceSurfaceProjection(
     activeThreadRuntimeEvents: params.activeThreadStreamingState?.runtimeEvents ?? null,
     runtimeEventsByRunId: params.runtimeEventsByRunId,
     threadErrorView,
-    onOpenThreadErrorAuthGate: params.openAuthGate,
+    onRequireThreadErrorSignIn: params.requireSignIn,
     onRetryLastThreadError: params.retryLastTurn,
     threadMessageViews,
     streamingMessageView,

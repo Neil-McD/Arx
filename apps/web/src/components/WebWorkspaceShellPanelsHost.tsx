@@ -26,7 +26,7 @@ type WebWorkspaceShellPanelsHostProps<
   | "showGuestRateLimitSignInAction"
   | "session"
   | "authError"
-  | "openAuthGate"
+  | "requireSignIn"
   | "openMobileAgentSettings"
   | "activeThreadId"
   | "guestThreadId"
@@ -74,7 +74,7 @@ export function WebWorkspaceShellPanelsHost<
           showGuestRateLimitSignInAction={props.showGuestRateLimitSignInAction}
           session={props.session}
           authError={props.authError}
-          openAuthGate={props.openAuthGate}
+          requireSignIn={props.requireSignIn}
           openMobileAgentSettings={props.openMobileAgentSettings}
           activeThreadId={props.activeThreadId}
           guestThreadId={props.guestThreadId}

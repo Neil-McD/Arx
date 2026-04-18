@@ -51,7 +51,7 @@ type UseWebAppAuthControllerResult = {
   magicLinkStatus: "idle" | "sending" | "sent";
   magicLinkError: string | null;
   handleSendMagicLink: (email: string) => Promise<void>;
-  openAuthGate: (intentInput?: unknown) => void;
+  requireSignIn: (intentInput?: unknown) => void;
   handleSignOut: () => Promise<void>;
   ensureUsableAuthSession: (session?: AuthSession | null) => Promise<AuthSession | null>;
   fetchWithAuth: (url: string, init: RequestInit, session: AuthSession) => Promise<Response>;
@@ -279,7 +279,7 @@ export function useWebAppAuthController(
     }
   }, [workos]);
 
-  const openAuthGate = useCallback((intentInput?: unknown) => {
+  const requireSignIn = useCallback((intentInput?: unknown) => {
     setAuthError(null);
     const intent = parsePendingAuthIntentInput(intentInput);
     if (intent && !session) {
@@ -578,7 +578,7 @@ export function useWebAppAuthController(
     magicLinkStatus,
     magicLinkError,
     handleSendMagicLink,
-    openAuthGate,
+    requireSignIn,
     handleSignOut,
     ensureUsableAuthSession,
     fetchWithAuth,

@@ -8,7 +8,7 @@ type WebCommunityAnalyticsSectionProps = {
   hasActiveCommunity: boolean;
   hasSession: boolean;
   canViewActiveCommunityAnalytics: boolean;
-  onOpenAuthGate: () => void;
+  onRequireSignIn: () => void;
   state: CommunityAnalyticsState;
   actions: CommunityAnalyticsActions;
 };
@@ -18,7 +18,7 @@ export function WebCommunityAnalyticsSection(props: WebCommunityAnalyticsSection
     hasActiveCommunity,
     hasSession,
     canViewActiveCommunityAnalytics,
-    onOpenAuthGate,
+    onRequireSignIn,
     state,
     actions,
   } = props;
@@ -31,7 +31,7 @@ export function WebCommunityAnalyticsSection(props: WebCommunityAnalyticsSection
           <button
             className="secondary"
             type="button"
-            onClick={onOpenAuthGate}
+            onClick={onRequireSignIn}
             style={{ marginTop: 12 }}
           >
             Sign in

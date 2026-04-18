@@ -19,7 +19,7 @@ export function buildWebGlobalOverlayHostProps(params: {
     pinned: boolean;
   }) => Promise<unknown>;
   showMemoryToastMessage: (message: string) => void;
-  openAuthGate: (intentInput?: unknown) => void;
+  requireSignIn: (intentInput?: unknown) => void;
   builderBillingStatus: { builder_tier?: string | null } | null;
   setBuilderUpgradeContext: (value: BuilderUpgradeContext) => void;
   setBuilderBillingError: (value: string | null) => void;
@@ -74,7 +74,7 @@ export function buildWebGlobalOverlayHostProps(params: {
       onClose: () => params.setContextModal(null),
       onSaveSuggestion: (item) => {
         if (!params.session) {
-          params.openAuthGate();
+          params.requireSignIn();
           return;
         }
         const tier = params.builderBillingStatus?.builder_tier ?? "free";
@@ -157,7 +157,7 @@ export function buildWebGlobalOverlayHostProps(params: {
       onStartBuilderPlanCheckout: (tier) => {
         if (!params.session) {
           params.setIsBuilderUpgradeOpen(false);
-          params.openAuthGate({
+          params.requireSignIn({
             reason: "start_builder_checkout",
             payload: { tier, context: params.builderUpgradeContext },
           });

@@ -30,7 +30,7 @@ type UseWebPublicFunnelActionsArgs<
   getCurrentPublicCommunitySlug: () => string | null;
   session: AuthSession | null;
   ensureSession?: (session: AuthSession | null) => Promise<AuthSession | null>;
-  openAuthGate: (intentInput: PendingAuthIntentInput) => void;
+  requireSignIn: (intentInput: PendingAuthIntentInput) => void;
   loadCommunities: (session: AuthSession) => Promise<void>;
   openCommunityWorkspace: (opts: { communityId: string; communitySlug?: string | null }) => void;
   onJoinRequestSent?: (params: { communityId: string | null; communitySlug: string | null }) => void;
@@ -212,7 +212,7 @@ export function useWebPublicFunnelActions<
       const session = current.ensureSession ? await current.ensureSession(rawSession) : rawSession;
       if (!session) {
         storePendingPublicJoin(trimmedSlug || trimmedId);
-        current.openAuthGate({
+        current.requireSignIn({
           reason: "join_public_community",
           payload: {
             community_id: trimmedId || null,

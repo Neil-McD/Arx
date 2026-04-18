@@ -14,7 +14,7 @@ import {
 type UseWebBuilderBillingActionsArgs = {
   getSession: () => AuthSession | null;
   ensureSession?: () => Promise<AuthSession | null>;
-  openAuthGate: (intent: PendingAuthIntentInput) => void;
+  requireSignIn: (intent: PendingAuthIntentInput) => void;
   onCheckoutStarted?: (details: {
     tier: BuilderCheckoutRequestTier;
     context: BuilderUpgradeContext;
@@ -38,7 +38,7 @@ export function useWebBuilderBillingActions(args: UseWebBuilderBillingActionsArg
     onMissingAuth: (kind, details) => {
       const tier: BuilderCheckoutRequestTier = details.tier ?? "builder";
       const context: BuilderUpgradeContext = details.context ?? "builder";
-      args.openAuthGate({ reason: "start_builder_checkout", payload: { tier, context } });
+      args.requireSignIn({ reason: "start_builder_checkout", payload: { tier, context } });
     },
     buildCheckoutPayload: ({
       tier,

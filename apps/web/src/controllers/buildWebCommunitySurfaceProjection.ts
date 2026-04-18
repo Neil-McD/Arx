@@ -26,7 +26,7 @@ type BuildWebCommunitySurfaceProjectionParams = {
   communitySettingsLayer: WebCommunitySecondaryPanelsProps["settings"]["communitySettingsLayer"];
   canManageCommunitySettings: WebCommunitySecondaryPanelsProps["settings"]["canManageCommunitySettings"];
   canDeleteActiveCommunity: WebCommunitySecondaryPanelsProps["settings"]["canDeleteCommunity"];
-  openAuthGate: WebCommunitySecondaryPanelsProps["settings"]["openAuthGate"];
+  requireSignIn: WebCommunitySecondaryPanelsProps["settings"]["requireSignIn"];
   settingsState: WebCommunitySecondaryPanelsProps["settings"]["state"];
   settingsActions: WebCommunitySecondaryPanelsProps["settings"]["actions"];
   setIsCommunityBannerFocusModalOpen:
@@ -134,7 +134,7 @@ export function buildWebCommunitySurfaceProjection(
       communitySettingsLayer: params.communitySettingsLayer,
       canManageCommunitySettings: params.canManageCommunitySettings,
       canDeleteCommunity: params.canDeleteActiveCommunity,
-      openAuthGate: params.openAuthGate,
+      requireSignIn: params.requireSignIn,
       state: params.settingsState,
       actions: params.settingsActions,
       setIsCommunityBannerFocusModalOpen: params.setIsCommunityBannerFocusModalOpen,
@@ -166,7 +166,7 @@ export function buildWebCommunitySurfaceProjection(
       activeCommunityName: params.activeCommunity?.name ?? null,
       hasSession: params.hasSession,
       canManagePolynet: params.canViewActiveCommunityPolynet,
-      onOpenAuthGate: params.openAuthGate,
+      onRequireSignIn: params.requireSignIn,
       state: params.polynetState,
       actions: params.polynetActions,
     },
@@ -176,7 +176,7 @@ export function buildWebCommunitySurfaceProjection(
       canManageMembersActiveCommunity: params.canManageMembersActiveCommunity,
       isLoadingCommunityAgentConfig: params.isLoadingCommunityAgentConfig,
       communityAgentConfigError: params.communityAgentConfigError,
-      onOpenAuthGate: params.openAuthGate,
+      onRequireSignIn: params.requireSignIn,
       workspaceEditorProps: params.aiAgentWorkspaceEditorProps,
       appsEditorProps: params.aiAgentAppsEditorProps,
       skillsEditorProps: params.aiAgentSkillsEditorProps,
@@ -187,14 +187,14 @@ export function buildWebCommunitySurfaceProjection(
       canManageMembersActiveCommunity: params.canManageMembersActiveCommunity,
       isLoadingCommunityFunnel: params.isLoadingCommunityFunnel,
       communityFunnelError: params.communityFunnelError,
-      onOpenAuthGate: params.openAuthGate,
+      onRequireSignIn: params.requireSignIn,
       editorProps: params.funnelEditorProps,
     },
     analytics: {
       hasActiveCommunity: Boolean(params.activeCommunity),
       hasSession: params.hasSession,
       canViewActiveCommunityAnalytics: params.canViewActiveCommunityAnalytics,
-      onOpenAuthGate: params.openAuthGate,
+      onRequireSignIn: params.requireSignIn,
       state: params.analyticsState,
       actions: params.analyticsActions,
     },
@@ -258,7 +258,7 @@ export function buildWebCommunitySurfaceProjection(
     fileInputRef: params.fileInputRef,
     chatInputRef: params.chatInputRef,
     onChatScroll: params.onChatScroll,
-    onOpenAuthGate: params.openAuthGate,
+    onRequireSignIn: params.requireSignIn,
     onScrollToBottom: params.onScrollToBottom,
     onSetReplyingToMessage: params.onSetReplyingToMessage,
     onRemoveCommunityAttachment: params.onRemoveCommunityAttachment,

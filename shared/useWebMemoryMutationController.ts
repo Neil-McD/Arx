@@ -26,7 +26,7 @@ type PersonalMemoryItem = {
 type UseWebMemoryMutationControllerArgs<SessionT> = {
   getSession: () => SessionT | null;
   ensureSession?: () => Promise<SessionT | null>;
-  openAuthGate: (intentInput?: unknown) => void;
+  requireSignIn: (intentInput?: unknown) => void;
   loadPersonalMemoryItems: () => Promise<void>;
 
   newPersonalMemoryContent: string;
@@ -94,7 +94,7 @@ export function useWebMemoryMutationController<SessionT>(
     try {
       const session = await resolveCurrentSession(current.getSession, current.ensureSession);
       if (!session) {
-        current.openAuthGate();
+        current.requireSignIn();
         return;
       }
       await createCloudPersonalMemoryItem({
@@ -120,7 +120,7 @@ export function useWebMemoryMutationController<SessionT>(
     try {
       const session = await resolveCurrentSession(current.getSession, current.ensureSession);
       if (!session) {
-        current.openAuthGate();
+        current.requireSignIn();
         return;
       }
       await updateCloudPersonalMemoryPinned({
@@ -142,7 +142,7 @@ export function useWebMemoryMutationController<SessionT>(
     try {
       const session = await resolveCurrentSession(current.getSession, current.ensureSession);
       if (!session) {
-        current.openAuthGate();
+        current.requireSignIn();
         return;
       }
       await deleteCloudPersonalMemoryItem({

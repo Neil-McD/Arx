@@ -79,17 +79,19 @@ forbid_match_in_file "$AUTH_CONFIG_FILE" '/auth/v1' \
 forbid_match_in_file "$AUTH_CONFIG_FILE" 'ARX_AUTH_BASE_URL|VITE_AUTH_URL' \
   "JWT verifier must not derive issuer from legacy auth base URL vars"
 
-echo "[5/6] Validating runtime auth proxy contract is provider-agnostic..."
-require_match_in_file "$AUTH_HTTP_FILE" 'resolveOAuthAuthorizeUrl\(' \
-  "runtime auth route uses explicit authorize URL env"
-require_match_in_file "$AUTH_HTTP_FILE" 'resolveOAuthTokenUrl\(' \
-  "runtime auth route uses explicit token URL env"
-require_match_in_file "$AUTH_HTTP_FILE" 'resolveOAuthClientId\(' \
-  "runtime auth route uses explicit OAuth client id"
-require_match_in_file "$AUTH_HTTP_FILE" 'forwardAuthFormRequest\(' \
-  "runtime auth token exchange uses form-encoded OAuth transport"
+echo "[5/6] Validating runtime auth surface is magic-link-only..."
+require_match_in_file "$AUTH_HTTP_FILE" '/runtime/auth_send_magic_link_otp' \
+  "runtime auth surface keeps the magic-link route"
+require_match_in_file "$AUTH_HTTP_FILE" 'resolveMagicLinkEndpointUrl\(' \
+  "runtime auth surface reads the explicit magic-link upstream env"
+require_match_in_file "$AUTH_HTTP_FILE" 'forwardAuthJsonRequest\(' \
+  "runtime auth surface proxies magic-link requests as JSON"
+forbid_match_in_file "$AUTH_HTTP_FILE" 'auth_begin_google_sign_in|auth_exchange_pkce_code|auth_refresh_session|auth_logout_session' \
+  "runtime auth surface must not expose deleted sign-in exchange or logout routes"
+forbid_match_in_file "$AUTH_HTTP_FILE" 'resolveOAuthAuthorizeUrl|resolveOAuthTokenUrl|resolveOAuthLogoutUrl|resolveOAuthClientSecret|forwardAuthFormRequest|isLikelyWorkOsAuthConfiguration|normalizeWorkOsProvider' \
+  "runtime auth surface must not carry deleted OAuth proxy helpers"
 forbid_match_in_file "$AUTH_HTTP_FILE" 'AUTH_V1_SEGMENT|buildAuthUpstreamUrl|resolveAuthBaseUrl' \
-  "runtime auth proxy must not carry /auth/v1 base-path assumptions"
+  "runtime auth surface must not carry /auth/v1 base-path assumptions"
 
 echo "[6/6] Validating env templates include canonical keys and remove legacy keys..."
 require_match_in_file "$ROOT_ENV_FILE" '^VITE_CONVEX_URL=' \

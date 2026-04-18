@@ -136,7 +136,7 @@ export type WebWorkspaceHostProps = {
   activeThreadRuntimeEvents?: ThreadStreamingRuntimeEvent[] | null;
   runtimeEventsByRunId?: Record<string, ThreadStreamingRuntimeEvent[]>;
   threadErrorView: WorkspaceThreadErrorView | null;
-  onOpenThreadErrorAuthGate: () => void;
+  onRequireThreadErrorSignIn: () => void;
   onRetryLastThreadError: () => Promise<void> | void;
   threadMessageViews: WorkspaceThreadMessageView[];
   streamingMessageView: WorkspaceStreamingMessageView | null;
@@ -354,7 +354,7 @@ const WorkspaceTimelinePane = memo(function WorkspaceTimelinePane(props: {
   guestSignupRail: ReactNode;
   session: AuthSessionLike | null;
   threadErrorView: WorkspaceThreadErrorView | null;
-  onOpenThreadErrorAuthGate: () => void;
+  onRequireThreadErrorSignIn: () => void;
   onRetryLastThreadError: () => Promise<void> | void;
   threadMessageViews: WorkspaceThreadMessageView[];
   streamingMessageView: WorkspaceStreamingMessageView | null;
@@ -455,7 +455,7 @@ const WorkspaceTimelinePane = memo(function WorkspaceTimelinePane(props: {
       ) : null}
       <WebWorkspaceThreadError
         view={props.threadErrorView}
-        onOpenAuthGate={props.onOpenThreadErrorAuthGate}
+        onRequireSignIn={props.onRequireThreadErrorSignIn}
         onRetryLastTurn={props.onRetryLastThreadError}
       />
       <WebWorkspaceThreadMessageList
@@ -482,7 +482,7 @@ const WorkspaceTimelinePane = memo(function WorkspaceTimelinePane(props: {
     prev.showEmptyThreadLandingSkeleton !== next.showEmptyThreadLandingSkeleton ||
     prev.isHydratingActiveWorkspaceThread !== next.isHydratingActiveWorkspaceThread ||
     prev.renderPreviewForRun !== next.renderPreviewForRun ||
-    prev.onOpenThreadErrorAuthGate !== next.onOpenThreadErrorAuthGate ||
+    prev.onRequireThreadErrorSignIn !== next.onRequireThreadErrorSignIn ||
     prev.onRetryLastThreadError !== next.onRetryLastThreadError ||
     prev.handleCopyMessage !== next.handleCopyMessage ||
     prev.openMessageContextModal !== next.openMessageContextModal ||
@@ -1552,7 +1552,7 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
                 guestSignupRail={props.guestSignupRail}
                 session={props.session}
                 threadErrorView={props.threadErrorView}
-                onOpenThreadErrorAuthGate={props.onOpenThreadErrorAuthGate}
+                onRequireThreadErrorSignIn={props.onRequireThreadErrorSignIn}
                 onRetryLastThreadError={props.onRetryLastThreadError}
                 threadMessageViews={props.threadMessageViews}
                 streamingMessageView={props.streamingMessageView}

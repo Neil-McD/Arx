@@ -24,7 +24,7 @@ export type WebWorkspaceShellPanelsProps<TThread extends ThreadLike, TProject ex
   showGuestRateLimitSignInAction: boolean;
   session: unknown | null;
   authError: string | null;
-  openAuthGate: () => void;
+  requireSignIn: () => void;
   openMobileAgentSettings: () => void;
   activeThreadId: string | null;
   guestThreadId: string;
@@ -122,7 +122,7 @@ export function WebWorkspaceShellPanels<TThread extends ThreadLike, TProject ext
         <button
           type="button"
           className="auth-gate-google-button guest-thread-google-button"
-          onClick={() => props.openAuthGate()}
+          onClick={() => props.requireSignIn()}
         >
           <svg className="auth-gate-google-icon" width="18" height="18" viewBox="0 0 46 46" aria-hidden="true">
             <path fill="#EA4335" d="M24 9.5c3.54 0 6.72 1.22 9.22 3.22l6.84-6.84C35.82 2.12 30.22 0 24 0 14.62 0 6.4 5.38 2.44 13.22l7.94 6.16C12.22 13.22 17.62 9.5 24 9.5z" />
@@ -166,7 +166,7 @@ export function WebWorkspaceShellPanels<TThread extends ThreadLike, TProject ext
         className="auth-gate-google-button mobile-agent-drawer-google"
         onClick={() => {
           props.setMobileOverlay(null);
-          props.openAuthGate();
+          props.requireSignIn();
         }}
       >
         <svg className="auth-gate-google-icon" width="18" height="18" viewBox="0 0 46 46" aria-hidden="true">
@@ -212,7 +212,7 @@ export function WebWorkspaceShellPanels<TThread extends ThreadLike, TProject ext
             <div className="auth-error">
               {props.displayedThreadError}
               {props.showGuestRateLimitSignInAction ? (
-                <button type="button" className="auth-error-link" onClick={() => props.openAuthGate()}>
+                <button type="button" className="auth-error-link" onClick={() => props.requireSignIn()}>
                   Sign in
                 </button>
               ) : null}
@@ -251,7 +251,7 @@ export function WebWorkspaceShellPanels<TThread extends ThreadLike, TProject ext
                 <div className="auth-error">
                   {props.displayedThreadError}
                   {props.showGuestRateLimitSignInAction ? (
-                    <button type="button" className="auth-error-link" onClick={() => props.openAuthGate()}>
+                    <button type="button" className="auth-error-link" onClick={() => props.requireSignIn()}>
                       Sign in
                     </button>
                   ) : null}

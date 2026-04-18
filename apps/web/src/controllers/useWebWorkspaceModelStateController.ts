@@ -41,7 +41,7 @@ type UseWebWorkspaceModelStateControllerParams<SessionT> = {
   hasUserChatgptConnection: boolean;
   updateThreadModel: (threadId: string, modelId: string, session: SessionT) => Promise<void>;
   showAppToastMessage: (message: string) => void;
-  openAuthGate: (opts?: { reason?: string; payload?: Record<string, unknown> }) => void;
+  requireSignIn: (opts?: { reason?: string; payload?: Record<string, unknown> }) => void;
   openModelProviderSettings: (message: string) => void;
   connectChatgpt: () => void | Promise<void>;
   loadGuestThreadStorage: () => GuestThreadStorageLike;
@@ -219,7 +219,7 @@ export function useWebWorkspaceModelStateController<SessionT>(
           return;
         }
         if (!params.session && !supportsDemo) {
-          params.openAuthGate({ reason: "select_model", payload: { model_id: model.id } });
+          params.requireSignIn({ reason: "select_model", payload: { model_id: model.id } });
           return;
         }
         if (params.session && supportsDemo) {

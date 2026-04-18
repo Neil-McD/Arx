@@ -25,7 +25,7 @@ type UseWebCommunityPolynetControllerArgs<SessionT> = {
   activeCommunityId: string | null;
   session: SessionT | null;
   ensureSession: EnsureSessionFn<SessionT>;
-  openAuthGate: () => void;
+  requireSignIn: () => void;
   canManagePolynet: boolean;
 };
 
@@ -117,7 +117,7 @@ export function useWebCommunityPolynetController<SessionT>(
     if (!activeCommunityId) return;
     const usableSession = await current.ensureSession();
     if (!usableSession) {
-      current.openAuthGate();
+      current.requireSignIn();
       return;
     }
     await loadCommunityArchiveHealth(activeCommunityId, usableSession);
@@ -129,7 +129,7 @@ export function useWebCommunityPolynetController<SessionT>(
     if (!activeCommunityId) return;
     const usableSession = await current.ensureSession();
     if (!usableSession) {
-      current.openAuthGate();
+      current.requireSignIn();
       return;
     }
     setIsBackfillingCommunityArchive(true);
@@ -157,7 +157,7 @@ export function useWebCommunityPolynetController<SessionT>(
     if (!activeCommunityId) return;
     const usableSession = await current.ensureSession();
     if (!usableSession) {
-      current.openAuthGate();
+      current.requireSignIn();
       return;
     }
     setIsProcessingCommunityArchive(true);
@@ -188,7 +188,7 @@ export function useWebCommunityPolynetController<SessionT>(
     if (!activeCommunityId) return;
     const usableSession = await current.ensureSession();
     if (!usableSession) {
-      current.openAuthGate();
+      current.requireSignIn();
       return;
     }
     setIsRetryingCommunityArchive(true);

@@ -21,7 +21,7 @@ type WebCommunitySettingsSectionProps = {
   communitySettingsLayer: CommunitySettingsLayer;
   canManageCommunitySettings: boolean;
   canDeleteCommunity: boolean;
-  openAuthGate: () => void;
+  requireSignIn: () => void;
   state: {
     isSettingsBannerDragOver: boolean;
     isProcessingCommunitySettingsBanner: boolean;
@@ -465,7 +465,7 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
     communitySettingsLayer,
     canManageCommunitySettings,
     canDeleteCommunity,
-    openAuthGate,
+    requireSignIn,
     state,
     actions,
   } = props;
@@ -488,7 +488,7 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
           <button
             className="secondary"
             type="button"
-            onClick={openAuthGate}
+            onClick={requireSignIn}
             style={{ marginTop: 12 }}
           >
             Sign in

@@ -19,7 +19,7 @@ type BuilderBillingStatus = {
 type UseWebCommerceAffiliateActionsArgs = {
   getSession: () => AuthSession | null;
   ensureSession?: () => Promise<AuthSession | null>;
-  openAuthGate: (intent: PendingAuthIntentInput) => void;
+  requireSignIn: (intent: PendingAuthIntentInput) => void;
   openCommunityWorkspace: (opts: { communityId: string; communitySlug?: string | null }) => void;
   loadCommunities: (session: AuthSession) => Promise<void>;
   clearPendingPurchaseClaimToken: () => void;
@@ -65,7 +65,7 @@ export function useWebCommerceAffiliateActions(args: UseWebCommerceAffiliateActi
       const session = await resolveCurrentSession(args.getSession, args.ensureSession);
       if (!session) {
         args.storePendingPurchaseClaimToken(token);
-        args.openAuthGate({ reason: "redeem_purchase_claim", payload: { token } });
+        args.requireSignIn({ reason: "redeem_purchase_claim", payload: { token } });
         return;
       }
 
@@ -183,7 +183,7 @@ export function useWebCommerceAffiliateActions(args: UseWebCommerceAffiliateActi
     async (opts?: { navigate?: boolean; silentNoop?: boolean }): Promise<number> => {
       const session = await resolveCurrentSession(args.getSession, args.ensureSession);
       if (!session) {
-        args.openAuthGate({
+        args.requireSignIn({
           reason: "redeem_pending_purchases",
           payload: { navigate: opts?.navigate !== false, silent_noop: Boolean(opts?.silentNoop) },
         });

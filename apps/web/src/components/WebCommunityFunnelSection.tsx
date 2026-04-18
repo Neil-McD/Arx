@@ -6,7 +6,7 @@ type WebCommunityFunnelSectionProps = {
   canManageMembersActiveCommunity: boolean;
   isLoadingCommunityFunnel: boolean;
   communityFunnelError: string | null;
-  onOpenAuthGate: () => void;
+  onRequireSignIn: () => void;
   editorProps: WebCommunityFunnelEditorProps;
 };
 
@@ -17,7 +17,7 @@ export function WebCommunityFunnelSection(props: WebCommunityFunnelSectionProps)
     canManageMembersActiveCommunity,
     isLoadingCommunityFunnel,
     communityFunnelError,
-    onOpenAuthGate,
+    onRequireSignIn,
     editorProps,
   } = props;
 
@@ -31,7 +31,7 @@ export function WebCommunityFunnelSection(props: WebCommunityFunnelSectionProps)
           <button
             className="secondary"
             type="button"
-            onClick={onOpenAuthGate}
+            onClick={onRequireSignIn}
             style={{ marginTop: 12 }}
           >
             Sign in

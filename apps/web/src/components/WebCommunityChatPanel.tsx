@@ -55,7 +55,7 @@ export type WebCommunityChatPanelProps = {
   fileInputRef: MutableRefObject<HTMLInputElement | null>;
   chatInputRef: MutableRefObject<HTMLTextAreaElement | null>;
   onChatScroll: UIEventHandler<HTMLDivElement>;
-  onOpenAuthGate: () => void;
+  onRequireSignIn: () => void;
   onScrollToBottom: () => void;
   onSetReplyingToMessage: (message: CommunityChatMessage | null) => void;
   onRemoveCommunityAttachment: (id: string) => void;
@@ -118,7 +118,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     fileInputRef,
     chatInputRef,
     onChatScroll,
-    onOpenAuthGate,
+    onRequireSignIn,
     onScrollToBottom,
     onSetReplyingToMessage,
     onRemoveCommunityAttachment,
@@ -201,7 +201,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
                     <button
                       className="secondary"
                       type="button"
-                      onClick={onOpenAuthGate}
+                      onClick={onRequireSignIn}
                       style={{ marginTop: 12 }}
                     >
                       Sign in

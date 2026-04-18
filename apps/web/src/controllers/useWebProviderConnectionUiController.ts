@@ -13,7 +13,7 @@ import {
   type CloudOpenRouterConnectionStatus,
 } from "../../../../shared/cloudProviderConnectionsGateway";
 
-type AuthGateIntent = {
+type SignInIntent = {
   reason: "connect_provider";
   payload: { provider: "chatgpt" | "openrouter" };
 };
@@ -22,7 +22,7 @@ type UseWebProviderConnectionUiControllerParams<TSession> = {
   session: TSession | null;
   getSession: () => TSession | null;
   ensureSession: (session?: TSession | null) => Promise<TSession | null>;
-  openAuthGate: (intent?: AuthGateIntent) => void;
+  requireSignIn: (intent?: SignInIntent) => void;
   chatgptConnection: CloudChatgptConnectionStatus;
   onConnectionsUpdated: (connections: {
     openrouter: CloudOpenRouterConnectionStatus;
@@ -82,7 +82,7 @@ export function useWebProviderConnectionUiController<TSession>(
     session,
     getSession,
     ensureSession,
-    openAuthGate,
+    requireSignIn,
     chatgptConnection,
     onConnectionsUpdated,
     chatgptSecuritySettingsUrl,
@@ -148,12 +148,12 @@ export function useWebProviderConnectionUiController<TSession>(
     async (provider: "chatgpt" | "openrouter"): Promise<TSession | null> => {
       const usableSession = await ensureSession(getSession());
       if (!usableSession) {
-        openAuthGate({ reason: "connect_provider", payload: { provider } });
+        requireSignIn({ reason: "connect_provider", payload: { provider } });
         return null;
       }
       return usableSession;
     },
-    [ensureSession, getSession, openAuthGate],
+    [ensureSession, getSession, requireSignIn],
   );
 
   const handleConnectOpenRouter = useCallback(async (): Promise<void> => {
@@ -209,7 +209,7 @@ export function useWebProviderConnectionUiController<TSession>(
 
   const handleConnectChatgpt = useCallback((): void => {
     if (!getSession()) {
-      openAuthGate({ reason: "connect_provider", payload: { provider: "chatgpt" } });
+      requireSignIn({ reason: "connect_provider", payload: { provider: "chatgpt" } });
       return;
     }
     setChatgptConnectionError(null);
@@ -218,7 +218,7 @@ export function useWebProviderConnectionUiController<TSession>(
       resetChatgptConnectFlowState();
     }
     setIsChatgptConnectModalOpen(true);
-  }, [chatgptDeviceLoginId, chatgptManualAuthorizeUrl, getSession, openAuthGate, resetChatgptConnectFlowState]);
+  }, [chatgptDeviceLoginId, chatgptManualAuthorizeUrl, getSession, requireSignIn, resetChatgptConnectFlowState]);
 
   const handleStartChatgptDeviceConnect = useCallback(async (): Promise<void> => {
     const session = await ensureProviderSession("chatgpt");

@@ -6,7 +6,7 @@ type MagicLinkStatus = "idle" | "sending" | "sent";
 export type WebStandalonePublicRouteViewProps = {
   publicRouteKind: StandalonePublicRouteKind;
   showSignIn: boolean;
-  onOpenAuthGate: () => void;
+  onRequireSignIn: () => void;
   onSignOut: () => void;
   checkoutStatus: CheckoutStatus;
   onRetryCheckoutFinalize: () => void;
@@ -48,7 +48,7 @@ export function WebStandalonePublicRouteView(props: WebStandalonePublicRouteView
     isRedeemingClaim,
     redeemClaimError,
     authError,
-    onOpenAuthGate,
+    onRequireSignIn,
   } = props;
 
   return (
@@ -92,7 +92,7 @@ export function WebStandalonePublicRouteView(props: WebStandalonePublicRouteView
                 </div>
                 {showSignIn ? (
                   <div className="public-funnel-state-actions">
-                    <button className="public-funnel-secondary" type="button" onClick={onOpenAuthGate}>
+                    <button className="public-funnel-secondary" type="button" onClick={onRequireSignIn}>
                       Continue with Google
                     </button>
                   </div>
@@ -176,7 +176,7 @@ export function WebStandalonePublicRouteView(props: WebStandalonePublicRouteView
                   </div>
                   {showSignIn ? (
                     <div className="public-funnel-state-actions">
-                      <button className="public-funnel-secondary" type="button" onClick={onOpenAuthGate}>
+                      <button className="public-funnel-secondary" type="button" onClick={onRequireSignIn}>
                         Continue with Google
                       </button>
                     </div>
