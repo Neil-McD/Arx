@@ -56,6 +56,23 @@ export async function resolveCloudPublicFunnel<SessionT, TPublicCommunity, TPubl
   };
 }
 
+export async function fetchCloudPublicFunnelStats<SessionT, TPublicCommunityStats>(
+  params: CloudPublicFunnelParams<SessionT> & {
+    communitySlug: string;
+  },
+): Promise<{
+  ok?: boolean;
+  community?: TPublicCommunityStats;
+}> {
+  const client = createConvexClient();
+  return (await client.query("community:resolvePublicFunnelStatsBySlug" as any, {
+    communitySlug: params.communitySlug,
+  })) as {
+    ok?: boolean;
+    community?: TPublicCommunityStats;
+  };
+}
+
 export async function heartbeatCloudCommunityPresence<SessionT>(
   params: CloudPublicFunnelAuthParams<SessionT> & {
     communityId: string;

@@ -112,7 +112,7 @@ type WebDiscoverPanelProps = {
   onConnectUserPlatformApp: (
     input: ConnectUserPlatformAppInput,
   ) => Promise<boolean> | boolean;
-  onActivateCommunity: (slug: string) => void;
+  onActivateCommunity: (community: DiscoverCommunitySnapshot) => void;
   onOpenIntegrationsSettings: () => void;
 };
 
@@ -194,7 +194,7 @@ function buildDiscoverCommunityCardProps(args: {
   isPublishedCommunityVisibility: (
     visibility: DiscoverCommunitySnapshot["visibility"],
   ) => boolean;
-  onActivateCommunity: (slug: string) => void;
+  onActivateCommunity: (community: DiscoverCommunitySnapshot) => void;
 }): ComponentProps<typeof DiscoverCommunityCard> {
   const { community } = args;
   return {
@@ -214,7 +214,7 @@ function buildDiscoverCommunityCardProps(args: {
     ),
     clickable: true,
     ariaLabel: `Open ${community.name}`,
-    onActivate: () => args.onActivateCommunity(community.slug),
+    onActivate: () => args.onActivateCommunity(community),
   };
 }
 

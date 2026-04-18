@@ -7,6 +7,7 @@ import { toCanonicalCommunityVisibility } from "../../../../shared/communityVisi
 import { fetchCloudMyCommunityAccessBySlug } from "../../../../shared/cloudCommunityAccessGateway";
 import {
   cancelCloudMyJoinRequestBySlug,
+  fetchCloudPublicFunnelStats,
   fetchCloudMyJoinRequestBySlug,
   resolveCloudPublicFunnel,
   startCloudPublicFunnelCheckout,
@@ -353,9 +354,9 @@ export function useWebPublicFunnelActions<
       current.setIsLoadingPublicCommunity(true);
       current.setPublicCommunityError(null);
       current.setPublicJoinError(null);
-      current.setMyPublicCommunityJoinRequest(null);
-      current.setPublicCommunityAccess(null);
       if (!isSameSlugRefresh) {
+        current.setMyPublicCommunityJoinRequest(null);
+        current.setPublicCommunityAccess(null);
         current.setPublicCommunity(null);
         current.setPublicCommunityPlans([]);
       }
@@ -365,49 +366,71 @@ export function useWebPublicFunnelActions<
         });
         if (!payload?.community?.slug) throw new Error("Community not found.");
 
+        const resolvedSlug = payload.community.slug;
         current.setPublicCommunity({
           ...payload.community,
           visibility: toCanonicalCommunityVisibility(payload.community.visibility, "unlisted"),
         } as PublicCommunityT);
         current.setPublicCommunityPlans(payload.active_plan ? [payload.active_plan] : []);
+        current.setIsLoadingPublicCommunity(false);
 
-        const rawSession = current.getSession();
-        const session = current.ensureSession ? await current.ensureSession(rawSession) : rawSession;
-        let hasEnterAccess = false;
-        let accessLookupFailed = false;
-        if (session) {
-          try {
-            const access = await fetchCloudMyCommunityAccessBySlug<AuthSession, CommunityAccessT>({
-              session,
-              communitySlug: payload.community.slug,
-            });
-            hasEnterAccess = Boolean(access && (access.can_enter_community || access.is_owner));
-            current.setPublicCommunityAccess(access);
-            if (hasEnterAccess) {
-              current.setMyPublicCommunityJoinRequest(null);
-            }
-          } catch (error) {
-            accessLookupFailed = true;
-            current.setPublicCommunityAccess(null);
-            current.setMyPublicCommunityJoinRequest(null);
-            current.setPublicCommunityError(
-              "You are signed in, but PolyNet could not verify your community access. Refresh and try again.",
+        void fetchCloudPublicFunnelStats<AuthSession, Record<string, unknown>>({
+          communitySlug: resolvedSlug,
+        })
+          .then((statsPayload) => {
+            const stats = statsPayload?.community as Partial<PublicCommunityT> | undefined;
+            if (!stats) return;
+            current.setPublicCommunity((prev) =>
+              prev && prev.slug === resolvedSlug
+                ? ({ ...prev, ...stats } as PublicCommunityT)
+                : prev,
             );
-            console.warn("Failed to verify signed-in community access:", error);
+          })
+          .catch((error) => {
+            console.warn("Failed to resolve public community stats:", error);
+          });
+
+        void (async () => {
+          const rawSession = current.getSession();
+          const session = current.ensureSession ? await current.ensureSession(rawSession) : rawSession;
+          let hasEnterAccess = false;
+          let accessLookupFailed = false;
+          if (session) {
+            try {
+              const access = await fetchCloudMyCommunityAccessBySlug<AuthSession, CommunityAccessT>({
+                session,
+                communitySlug: resolvedSlug,
+              });
+              if (current.getCurrentPublicCommunitySlug() !== resolvedSlug) return;
+              hasEnterAccess = Boolean(access && (access.can_enter_community || access.is_owner));
+              current.setPublicCommunityAccess(access);
+              if (hasEnterAccess) {
+                current.setMyPublicCommunityJoinRequest(null);
+              }
+            } catch (error) {
+              if (current.getCurrentPublicCommunitySlug() !== resolvedSlug) return;
+              accessLookupFailed = true;
+              current.setPublicCommunityAccess(null);
+              current.setMyPublicCommunityJoinRequest(null);
+              current.setPublicCommunityError(
+                "You are signed in, but PolyNet could not verify your community access. Refresh and try again.",
+              );
+              console.warn("Failed to verify signed-in community access:", error);
+            }
+          } else if (current.getCurrentPublicCommunitySlug() === resolvedSlug) {
+            current.setPublicCommunityAccess(null);
           }
-        } else {
-          current.setPublicCommunityAccess(null);
-        }
 
-        if (
-          session &&
-          deriveCommunityJoinMode(payload.community as { entry_policy?: unknown }) === "join_approval" &&
-          !hasEnterAccess &&
-          !accessLookupFailed
-        ) {
-          void loadMyJoinRequestBySlug(payload.community.slug, session);
-        }
-
+          if (
+            session &&
+            deriveCommunityJoinMode(payload.community as { entry_policy?: unknown }) === "join_approval" &&
+            !hasEnterAccess &&
+            !accessLookupFailed &&
+            current.getCurrentPublicCommunitySlug() === resolvedSlug
+          ) {
+            void loadMyJoinRequestBySlug(resolvedSlug, session);
+          }
+        })();
       } catch (error) {
         const message =
           typeof error === "string"
@@ -416,7 +439,6 @@ export function useWebPublicFunnelActions<
               ? error.message
               : "Failed to load community.";
         current.setPublicCommunityError(message);
-      } finally {
         current.setIsLoadingPublicCommunity(false);
       }
     },

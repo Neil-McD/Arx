@@ -5263,10 +5263,10 @@ export default function App() {
     });
   const activateDiscoverCommunityCard = useCallback((opts: {
     canActivate: boolean;
-    slug: string;
+    community: DiscoverCommunity;
   }) => {
     if (!opts.canActivate) return;
-    const slug = opts.slug.trim();
+    const slug = opts.community.slug.trim();
     if (!slug) return;
     setDiscoverError(null);
 
@@ -5279,11 +5279,43 @@ export default function App() {
       return;
     }
 
+    publicCommunityUi.setPublicCommunity({
+      slug,
+      name: opts.community.name,
+      one_liner: opts.community.one_liner ?? null,
+      about: opts.community.about ?? null,
+      avatar_url: opts.community.avatar_url ?? null,
+      banner_url: opts.community.banner_url ?? null,
+      banner_focus_x: opts.community.banner_focus_x ?? null,
+      banner_focus_y: opts.community.banner_focus_y ?? null,
+      banner_zoom: opts.community.banner_zoom ?? null,
+      visibility: opts.community.visibility,
+      entry_policy: opts.community.entry_policy ?? null,
+      created_at: opts.community.created_at,
+      updated_at: opts.community.updated_at,
+      funnel: opts.community.funnel ?? null,
+      member_count: typeof opts.community.member_count === "number" ? opts.community.member_count : null,
+      admin_count: null,
+      online_count: null,
+      online_faces: null,
+    });
+    publicCommunityUi.setPublicCommunityPlans(opts.community.active_plan ? [opts.community.active_plan] : []);
+    publicCommunityUi.setPublicCommunityAccess(null);
+    publicCommunityUi.setPublicCommunityError(null);
+    publicCommunityUi.setPublicJoinError(null);
+    publicCommunityUi.setMyPublicCommunityJoinRequest(null);
+    publicCommunityUi.setIsLoadingMyPublicCommunityJoinRequest(false);
+    publicCommunityUi.setIsLoadingPublicCommunity(true);
+    setCheckoutError(null);
+    setCheckoutStatus("idle");
     openPublicCommunityFunnel(slug, { pushSnapshot: true });
   }, [
     enterJoinedCommunity,
     openPublicCommunityFunnel,
+    publicCommunityUi,
     resolveKnownCommunityIdBySlug,
+    setCheckoutError,
+    setCheckoutStatus,
   ]);
   const settingsPanelsProps: WebSettingsPanelsProps = {
     settingsGroup: settingsGroup as SettingsGroup,
@@ -5821,10 +5853,10 @@ export default function App() {
       isConnectingUserPlatformApp,
       onConnectUserPlatformApp: handleConnectUserPlatformApp,
       onOpenIntegrationsSettings: handleOpenIntegrationsSettings,
-      onActivateCommunity: (slug) => {
+      onActivateCommunity: (community) => {
         activateDiscoverCommunityCard({
-          canActivate: Boolean(slug),
-          slug,
+          canActivate: Boolean(community.slug),
+          community,
         });
       },
     },

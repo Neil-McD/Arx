@@ -108,6 +108,20 @@ async function resolvePublicCommunityStats(ctx: any, community: CommunityLike): 
   };
 }
 
+function mapPublicCommunityStats(stats: {
+  memberCount: number;
+  adminCount: number;
+  onlineCount: number;
+  onlineFaces: PublicCommunityFace[];
+}) {
+  return {
+    member_count: stats.memberCount,
+    admin_count: stats.adminCount,
+    online_count: stats.onlineCount,
+    online_faces: stats.onlineFaces,
+  };
+}
+
 export const resolvePublicFunnelBySlug = query({
   args: {
     communitySlug: v.string(),
@@ -125,7 +139,6 @@ export const resolvePublicFunnelBySlug = query({
     const branding = await resolveCommunityBrandingFields(ctx, community);
     const entryPolicy = resolveCommunityEntryPolicy(community);
     const funnel = await resolveCommunityFunnelConfigByCommunityId(ctx, community._id);
-    const stats = await resolvePublicCommunityStats(ctx, community);
 
     return {
       ok: true,
@@ -144,12 +157,27 @@ export const resolvePublicFunnelBySlug = query({
         created_at: toIsoString(community.createdAt),
         updated_at: toIsoString(community.updatedAt),
         funnel,
-        member_count: stats.memberCount,
-        admin_count: stats.adminCount,
-        online_count: stats.onlineCount,
-        online_faces: stats.onlineFaces,
       },
       active_plan: activePlan,
+    };
+  },
+});
+
+export const resolvePublicFunnelStatsBySlug = query({
+  args: {
+    communitySlug: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const slug = normalizeSlug(args.communitySlug);
+    const community = (await ctx.db
+      .query("communities")
+      .withIndex("by_slug", (q) => q.eq("slug", slug))
+      .first()) as CommunityLike | null;
+    if (!community) return { ok: false };
+
+    return {
+      ok: true,
+      community: mapPublicCommunityStats(await resolvePublicCommunityStats(ctx, community)),
     };
   },
 });
@@ -213,12 +241,7 @@ export const getCommunityPresenceSummary = query({
       userId,
     });
     const stats = await resolvePublicCommunityStats(ctx, community);
-    return {
-      member_count: stats.memberCount,
-      admin_count: stats.adminCount,
-      online_count: stats.onlineCount,
-      online_faces: stats.onlineFaces,
-    };
+    return mapPublicCommunityStats(stats);
   },
 });
 
@@ -243,6 +266,7 @@ export const listPublicDiscoverCommunities = query({
           slug: community.slug,
           name: community.name,
           one_liner: community.oneLiner ?? null,
+          about: community.about ?? null,
           avatar_url: branding.avatar_url,
           banner_url: branding.banner_url,
           banner_focus_x: branding.banner_focus_x,

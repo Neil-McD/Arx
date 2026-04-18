@@ -1,14 +1,9 @@
-import { Suspense, lazy, type ComponentProps } from "react";
+import type { ComponentProps } from "react";
 import type { AppPage } from "../../../../shared/appShellNavigation";
 import { WebCommunityHost } from "./WebCommunityHost";
 import { WebDiscoverPanel } from "./WebDiscoverPanel";
+import { WebPublicCommunityFunnel } from "./WebPublicCommunityFunnel";
 import { WebWorkspaceSurfaceHost } from "./WebWorkspaceSurfaceHost";
-
-const WebPublicCommunityFunnel = lazy(() =>
-  import("./WebPublicCommunityFunnel").then((module) => ({
-    default: module.WebPublicCommunityFunnel,
-  })),
-);
 
 export type WebAppMainSurfaceHostProps = {
   activePage: AppPage;
@@ -34,9 +29,7 @@ export function WebAppMainSurfaceHost(props: WebAppMainSurfaceHostProps) {
         <div className="community-body">
           <div className="community-panel public-route-panel public-community-funnel-panel">
             <div className="workspace-body public-route-body public-community-funnel-body">
-              <Suspense fallback={null}>
-                <WebPublicCommunityFunnel {...props.publicCommunityFunnelProps} />
-              </Suspense>
+              <WebPublicCommunityFunnel {...props.publicCommunityFunnelProps} />
             </div>
           </div>
         </div>
