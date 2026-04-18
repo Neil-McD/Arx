@@ -643,6 +643,7 @@ export default function App() {
   const initialAppRoute = initialPublicRoute.kind === "app" ? readAppRouteFromLocation() : null;
   const hasResolvedInitialStandaloneSignedOutLaunchRef = useRef(false);
   const firstStableShellSessionKeyRef = useRef<string>("");
+  const firstUsefulWorkspaceDataSessionKeyRef = useRef<string>("");
 
   const {
     session,
@@ -3973,6 +3974,7 @@ export default function App() {
   useEffect(() => {
     if (!session) {
       firstStableShellSessionKeyRef.current = "";
+      firstUsefulWorkspaceDataSessionKeyRef.current = "";
       return;
     }
     if (shellPublicRoute.kind !== "app" || isAuthResolvingSignedInState) return;
@@ -3996,6 +3998,45 @@ export default function App() {
     shellPublicRoute.kind,
     shellVariant,
   ]);
+
+  useEffect(() => {
+    if (!session) {
+      firstUsefulWorkspaceDataSessionKeyRef.current = "";
+      return;
+    }
+    if (
+      shellPublicRoute.kind !== "app" ||
+      isAuthResolvingSignedInState ||
+      !hasResolvedCommunities ||
+      !hasResolvedProviderConnections
+    ) {
+      return;
+    }
+    const sessionKey = `${session.user.id}:${session.expires_at}`;
+    if (firstUsefulWorkspaceDataSessionKeyRef.current === sessionKey) return;
+    firstUsefulWorkspaceDataSessionKeyRef.current = sessionKey;
+    const rafId = window.requestAnimationFrame(() => {
+      recordAuthPerfInstant("workspace_data_ready", {
+        shellVariant,
+        activePage,
+        path: `${window.location.pathname}${window.location.search}${window.location.hash}`,
+        communitiesCount: communities.length,
+        hasResolvedCommunities,
+        hasResolvedProviderConnections,
+      });
+    });
+    return () => window.cancelAnimationFrame(rafId);
+  }, [
+    activePage,
+    communities.length,
+    hasResolvedCommunities,
+    hasResolvedProviderConnections,
+    isAuthResolvingSignedInState,
+    session,
+    shellPublicRoute.kind,
+    shellVariant,
+  ]);
+
   const { sendUserMessage, retryLastTurn } = useWebSendFlowController<
     AuthSession,
     MessageAttachment,

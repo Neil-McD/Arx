@@ -5,6 +5,8 @@ import { fetchCloudAuthActorDebug, type CloudAuthActorDebugRow } from "../../../
 import { readAuthPerfSnapshot, subscribeToAuthPerfUpdates } from "../auth/authPerfProbe";
 import { useWorkOsRuntime } from "../auth/workosRuntime";
 
+const AUTH_DEBUG_SESSION_KEY = "debug:auth:session";
+
 declare global {
   interface Window {
     __authDebugData?: Record<string, unknown>;
@@ -16,11 +18,39 @@ function isAuthDebugEnabled(): boolean {
   try {
     if (window.location.hash.includes("debugAuth=1")) return true;
     if (new URLSearchParams(window.location.search).get("debugAuth") === "1") return true;
+    if (window.sessionStorage.getItem(AUTH_DEBUG_SESSION_KEY) === "1") return true;
     if (window.localStorage.getItem("debug:auth") === "1") return true;
   } catch {
     // ignore
   }
   return false;
+}
+
+function persistAuthDebugFlagFromLocation(): void {
+  if (typeof window === "undefined") return;
+  try {
+    if (
+      window.location.hash.includes("debugAuth=1") ||
+      new URLSearchParams(window.location.search).get("debugAuth") === "1"
+    ) {
+      window.sessionStorage.setItem(AUTH_DEBUG_SESSION_KEY, "1");
+    }
+  } catch {
+    // ignore
+  }
+}
+
+function persistAuthDebugFlagForCurrentTab(enabled: boolean): void {
+  if (typeof window === "undefined") return;
+  try {
+    if (enabled) {
+      window.sessionStorage.setItem(AUTH_DEBUG_SESSION_KEY, "1");
+      return;
+    }
+    window.sessionStorage.removeItem(AUTH_DEBUG_SESSION_KEY);
+  } catch {
+    // ignore
+  }
 }
 
 function isNarrowViewport(): boolean {
@@ -52,14 +82,24 @@ export function WebAuthContinuityDebugPanel(props: WebAuthContinuityDebugPanelPr
   const [perfTick, setPerfTick] = useState(0);
 
   useEffect(() => {
-    const sync = () => setEnabled(isAuthDebugEnabled());
+    const sync = () => {
+      persistAuthDebugFlagFromLocation();
+      setEnabled(isAuthDebugEnabled());
+    };
+    sync();
     window.addEventListener("hashchange", sync);
     window.addEventListener("popstate", sync);
+    window.addEventListener("pageshow", sync);
     return () => {
       window.removeEventListener("hashchange", sync);
       window.removeEventListener("popstate", sync);
+      window.removeEventListener("pageshow", sync);
     };
   }, []);
+
+  useEffect(() => {
+    persistAuthDebugFlagForCurrentTab(enabled);
+  }, [enabled]);
 
   useEffect(() => {
     return subscribeToAuthPerfUpdates(() => {
