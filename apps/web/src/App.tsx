@@ -320,6 +320,8 @@ import { WebAppMainSurfaceHost } from "./components/WebAppMainSurfaceHost";
 import { WebStandalonePublicRouteShell } from "./components/WebStandalonePublicRouteShell";
 import { WebShellChromeHost } from "./components/WebShellChromeHost";
 import { WebWorkspaceShellPanelsHost } from "./components/WebWorkspaceShellPanelsHost";
+import { preloadWebCommunitySecondaryPanels } from "./components/WebCommunityHost";
+import { preloadWebSettingsPanels } from "./components/WebWorkspaceSurfaceHost";
 import { buildWebStandalonePublicRouteViewProps } from "./controllers/buildWebStandalonePublicRouteViewProps";
 import { buildWebGlobalOverlayHostProps } from "./controllers/buildWebGlobalOverlayHostProps";
 import { buildWebAppMainSurfaceHostProps } from "./controllers/buildWebAppMainSurfaceHostProps";
@@ -1551,6 +1553,15 @@ export default function App() {
       (/iPad|Macintosh/i.test(platform) && navigator.maxTouchPoints > 1)
     );
   }, []);
+
+  useEffect(() => {
+    if (!isLikelyMobileDevice) return;
+    const timer = window.setTimeout(() => {
+      preloadWebSettingsPanels();
+      preloadWebCommunitySecondaryPanels();
+    }, 600);
+    return () => window.clearTimeout(timer);
+  }, [isLikelyMobileDevice]);
 
   function navigateTo(path: string, opts: { replace?: boolean; state?: unknown } = {}) {
     const nextPath = applyShellVariantToKnownPath(path, shellVariant);

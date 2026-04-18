@@ -1,3 +1,4 @@
+import { Suspense, lazy } from "react";
 import type {
   AppView,
   SettingsGroup,
@@ -9,7 +10,16 @@ import {
   WebWorkspaceHost,
   type WebWorkspaceHostProps,
 } from "./WebWorkspaceHost";
-import { WebSettingsPanels, type WebSettingsPanelsProps } from "./WebSettingsPanels";
+import type { WebSettingsPanelsProps } from "./WebSettingsPanels";
+
+const loadWebSettingsPanels = () =>
+  import("./WebSettingsPanels");
+
+const WebSettingsPanels = lazy(() =>
+  loadWebSettingsPanels().then((module) => ({
+    default: module.WebSettingsPanels,
+  })),
+);
 
 type WebWorkspaceSurfaceHostProps = {
   activeView: AppView;
@@ -69,16 +79,35 @@ export function WebWorkspaceSurfaceHost(props: WebWorkspaceSurfaceHostProps) {
               {settingsGroupLabel(settingsGroup)}
             </div>
             <div className="web-settings-centered-pane mobile-global-settings-centered-pane">
-              <WebSettingsPanels {...settingsPanelsProps} />
+              <SettingsPanelsContent settingsPanelsProps={settingsPanelsProps} />
             </div>
           </div>
         )
       ) : (
         <div className="web-settings-centered-pane">
-          <WebSettingsPanels {...settingsPanelsProps} />
+          <SettingsPanelsContent settingsPanelsProps={settingsPanelsProps} />
         </div>
       )}
     </div>
+  );
+}
+
+export function preloadWebSettingsPanels(): void {
+  void loadWebSettingsPanels();
+}
+
+function SettingsPanelsContent(props: { settingsPanelsProps: WebSettingsPanelsProps }) {
+  return (
+    <Suspense
+      fallback={
+        <div className="chat-loading">
+          <div className="loading-spinner" />
+          <span>Loading settings...</span>
+        </div>
+      }
+    >
+      <WebSettingsPanels {...props.settingsPanelsProps} />
+    </Suspense>
   );
 }
 

@@ -1,9 +1,16 @@
+import { Suspense, lazy } from "react";
 import type { CommunityTab } from "../../../../shared/appShellNavigation";
 import { WebCommunityChatPanel, type WebCommunityChatPanelProps } from "./WebCommunityChatPanel";
-import {
-  WebCommunitySecondaryPanels,
-  type WebCommunitySecondaryPanelsProps,
-} from "./WebCommunitySecondaryPanels";
+import type { WebCommunitySecondaryPanelsProps } from "./WebCommunitySecondaryPanels";
+
+const loadWebCommunitySecondaryPanels = () =>
+  import("./WebCommunitySecondaryPanels");
+
+const WebCommunitySecondaryPanels = lazy(() =>
+  loadWebCommunitySecondaryPanels().then((module) => ({
+    default: module.WebCommunitySecondaryPanels,
+  })),
+);
 
 type WebCommunityHostProps = {
   communityTab: CommunityTab;
@@ -19,8 +26,14 @@ export function WebCommunityHost(props: WebCommunityHostProps) {
       {communityTab === "chat" ? (
         <WebCommunityChatPanel {...chatPanelProps} />
       ) : (
-        <WebCommunitySecondaryPanels {...secondaryPanelsProps} />
+        <Suspense fallback={null}>
+          <WebCommunitySecondaryPanels {...secondaryPanelsProps} />
+        </Suspense>
       )}
     </div>
   );
+}
+
+export function preloadWebCommunitySecondaryPanels(): void {
+  void loadWebCommunitySecondaryPanels();
 }
