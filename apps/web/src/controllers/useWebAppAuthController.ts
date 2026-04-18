@@ -149,6 +149,7 @@ export function useWebAppAuthController(
   const sessionRef = useRef<AuthSession | null>(null);
   const refreshResultInFlightRef = useRef<Promise<AuthSessionRefreshResult> | null>(null);
   const refreshTimeoutRef = useRef<number | null>(null);
+  const prefetchedSignInRef = useRef<{ returnTo: string; url: string } | null>(null);
   const didJustSignInRef = useRef(false);
   const authSessionEpochRef = useRef(0);
   const authBootstrapCompleteRef = useRef(false);
@@ -304,20 +305,69 @@ export function useWebAppAuthController(
     }
   }, [adoptAuthSession, ensureUsableAuthSession, pushAuthProbeEvent, session, workos]);
 
+  const currentReturnTo = readCurrentAuthReturnTo();
+
+  useEffect(() => {
+    if (!workos.isEnabled || workos.isLoading || session) {
+      prefetchedSignInRef.current = null;
+      return;
+    }
+    let cancelled = false;
+    void workos
+      .getSignInUrl({ state: { returnTo: currentReturnTo } })
+      .then((url) => {
+        if (cancelled) return;
+        const normalized = String(url ?? "").trim();
+        if (!normalized) return;
+        prefetchedSignInRef.current = {
+          returnTo: currentReturnTo,
+          url: normalized,
+        };
+        pushAuthProbeEvent("sign_in_url_prefetched", {
+          returnTo: currentReturnTo,
+          workos: readWorkOsBootstrapDebugState(workos),
+        });
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        prefetchedSignInRef.current = null;
+        pushAuthProbeEvent("sign_in_url_prefetch_failed", {
+          reason: errorToMessage(error, "sign_in_prefetch_failed"),
+          returnTo: currentReturnTo,
+          workos: readWorkOsBootstrapDebugState(workos),
+        });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentReturnTo, pushAuthProbeEvent, session, workos]);
+
   const beginGoogleSignInFlow = useCallback(async () => {
     setAuthError(null);
     clearAuthSignedOutIntentMarker();
     const returnTo = readCurrentAuthReturnTo();
     const loginPath = buildLoginTrampolinePath(returnTo);
+    const prefetchedSignIn = prefetchedSignInRef.current;
     pushAuthProbeEvent("sign_in_redirect_begin", {
       returnTo,
       loginPath,
+      hasPrefetchedUrl: Boolean(prefetchedSignIn?.url && prefetchedSignIn.returnTo === returnTo),
       workos: readWorkOsBootstrapDebugState(workos),
     });
     markAuthFlowPending();
     storeAuthResumeState({ returnTo });
     try {
+      if (prefetchedSignIn?.url && prefetchedSignIn.returnTo === returnTo) {
+        pushAuthProbeEvent("sign_in_redirect_dispatched", {
+          mode: "prefetched_url",
+          workos: readWorkOsBootstrapDebugState(workos),
+        });
+        prefetchedSignInRef.current = null;
+        window.location.assign(prefetchedSignIn.url);
+        return;
+      }
       pushAuthProbeEvent("sign_in_redirect_dispatched", {
+        mode: "login_trampoline",
         loginPath,
         workos: readWorkOsBootstrapDebugState(workos),
       });

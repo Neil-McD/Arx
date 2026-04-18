@@ -24,6 +24,7 @@ type WorkOsRuntimeContextValue = {
   user: User | null;
   authenticationMethod: AuthenticationMethod | null;
   readSession: (options?: WorkOsSessionReadOptions) => Promise<AuthSession | null>;
+  getSignInUrl: (options?: WorkOsSignInOptions) => Promise<string>;
   signIn: (options?: WorkOsSignInOptions) => Promise<void>;
   signOut: (options?: { returnTo?: string }) => Promise<void>;
 };
@@ -41,6 +42,9 @@ const DISABLED_RUNTIME: WorkOsRuntimeContextValue = {
   user: null,
   authenticationMethod: null,
   readSession: async () => null,
+  getSignInUrl: async (_options?: WorkOsSignInOptions) => {
+    throw new Error("workos_auth_not_configured");
+  },
   signIn: async (_options?: WorkOsSignInOptions) => {
     throw new Error("workos_auth_not_configured");
   },
@@ -172,6 +176,12 @@ function WorkOsRuntimeBridge({ children }: { children: ReactNode }) {
     });
   }, [auth]);
 
+  const getSignInUrl = useCallback(async (options?: WorkOsSignInOptions): Promise<string> => {
+    return await auth.getSignInUrl({
+      ...(options?.state ? { state: options.state } : {}),
+    });
+  }, [auth]);
+
   const signOut = useCallback(async (options?: { returnTo?: string }): Promise<void> => {
     await auth.signOut({
       navigate: false,
@@ -185,12 +195,14 @@ function WorkOsRuntimeBridge({ children }: { children: ReactNode }) {
     user: auth.user,
     authenticationMethod: auth.authenticationMethod,
     readSession,
+    getSignInUrl,
     signIn,
     signOut,
   }), [
     auth.authenticationMethod,
     auth.isLoading,
     auth.user,
+    getSignInUrl,
     readSession,
     signIn,
     signOut,

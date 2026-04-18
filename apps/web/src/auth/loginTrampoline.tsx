@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   applyShellVariantToAppPath,
   DEFAULT_POST_SIGN_IN_PATH,
@@ -51,13 +51,14 @@ function formatError(error: unknown): string {
 
 export function LoginTrampolineRoute() {
   const workos = useWorkOsRuntime();
-  const hasStartedRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
+  const [signInUrl, setSignInUrl] = useState<string | null>(null);
   const returnTo = useMemo(() => readLoginRouteReturnTo(), []);
 
   useEffect(() => {
     if (!workos.isEnabled) {
       setError("WorkOS auth is not configured.");
+      setSignInUrl(null);
       return;
     }
     if (workos.isLoading) return;
@@ -67,15 +68,23 @@ export function LoginTrampolineRoute() {
       }
       return;
     }
-    if (hasStartedRef.current) return;
-    hasStartedRef.current = true;
     console.info("[auth][probe] login_trampoline_entered", { returnTo });
     void workos
-      .signIn({ state: { returnTo } })
+      .getSignInUrl({ state: { returnTo } })
+      .then((url) => {
+        const normalized = String(url ?? "").trim();
+        if (!normalized) {
+          setError("WorkOS sign-in URL could not be prepared.");
+          setSignInUrl(null);
+          return;
+        }
+        setSignInUrl(normalized);
+        setError(null);
+      })
       .catch((signInError) => {
         console.warn("[auth][probe] login_trampoline_signin_failed", signInError);
         setError(formatError(signInError));
-        hasStartedRef.current = false;
+        setSignInUrl(null);
       });
   }, [returnTo, workos]);
 
@@ -104,8 +113,30 @@ export function LoginTrampolineRoute() {
       >
         <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 8 }}>Redirecting to sign in</div>
         <div style={{ fontSize: 14, lineHeight: 1.6, color: "rgba(245,247,251,0.78)" }}>
-          PolyNet is handing off to WorkOS and will return you to your original page.
+          {signInUrl
+            ? "Continue to WorkOS sign-in. PolyNet will return you to your original page afterward."
+            : "PolyNet is preparing the WorkOS sign-in handoff and will return you to your original page."}
         </div>
+        {signInUrl ? (
+          <button
+            type="button"
+            onClick={() => window.location.assign(signInUrl)}
+            style={{
+              marginTop: 16,
+              width: "100%",
+              borderRadius: 14,
+              border: "1px solid rgba(255,255,255,0.16)",
+              background: "#f5f7fb",
+              color: "#0b0c10",
+              fontSize: 14,
+              fontWeight: 700,
+              lineHeight: 1,
+              padding: "13px 14px",
+            }}
+          >
+            Continue to sign in
+          </button>
+        ) : null}
         {error ? (
           <div
             style={{
