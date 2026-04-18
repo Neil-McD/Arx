@@ -310,8 +310,13 @@ export function useWebAppAuthController(
         intent,
       });
     }
+    if (workos.isEnabled && !session) {
+      setIsAuthGateOpen(false);
+      void beginGoogleSignInFlow();
+      return;
+    }
     setIsAuthGateOpen(true);
-  }, [session]);
+  }, [beginGoogleSignInFlow, session, workos.isEnabled]);
 
   const handleSendMagicLink = useCallback(async (email: string): Promise<void> => {
     const trimmed = email.trim();

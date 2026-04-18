@@ -1,3 +1,5 @@
+import { useWorkOsRuntime } from "../auth/workosRuntime";
+
 type WebAuthGateModalProps = {
   hasSession: boolean;
   isOpen: boolean;
@@ -8,14 +10,20 @@ type WebAuthGateModalProps = {
 
 export function WebAuthGateModal(props: WebAuthGateModalProps) {
   const { hasSession, isOpen, authError, onClose, onSignIn } = props;
+  const workos = useWorkOsRuntime();
 
   if (hasSession || !isOpen) return null;
+  if (workos.isEnabled && !authError) return null;
+
+  const isErrorOnlyWorkOsModal = workos.isEnabled;
 
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal modal-auth-gate" onClick={(event) => event.stopPropagation()}>
         <div className="modal-header">
-          <div className="modal-title">Sign in</div>
+          <div className="modal-title">
+            {isErrorOnlyWorkOsModal ? "Sign-in issue" : "Sign in"}
+          </div>
           <button
             className="modal-close"
             type="button"
@@ -26,12 +34,18 @@ export function WebAuthGateModal(props: WebAuthGateModalProps) {
           </button>
         </div>
         <div className="modal-body">
-          <ul className="auth-gate-bullets">
-            <li>Save chats and continue across devices</li>
-            <li>Unlock more models and higher limits</li>
-            <li>Use your ChatGPT Plus / Pro or OpenRouter access</li>
-          </ul>
-          {authError && <div className="auth-error">{authError}</div>}
+          {isErrorOnlyWorkOsModal ? (
+            <p className="auth-gate-copy">
+              {authError ?? "PolyNet could not finish establishing your account session."}
+            </p>
+          ) : (
+            <ul className="auth-gate-bullets">
+              <li>Save chats and continue across devices</li>
+              <li>Unlock more models and higher limits</li>
+              <li>Use your ChatGPT Plus / Pro or OpenRouter access</li>
+            </ul>
+          )}
+          {!isErrorOnlyWorkOsModal && authError ? <div className="auth-error">{authError}</div> : null}
         </div>
         <div className="modal-footer">
           <div className="auth-actions">
@@ -61,7 +75,7 @@ export function WebAuthGateModal(props: WebAuthGateModalProps) {
                 />
                 <path fill="none" d="M0 0h46v46H0z" />
               </svg>
-              Continue with Google
+              {isErrorOnlyWorkOsModal ? "Try again" : "Continue with Google"}
             </button>
           </div>
         </div>
