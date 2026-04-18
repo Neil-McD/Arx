@@ -1,6 +1,5 @@
 import { Suspense, lazy, type ComponentProps } from "react";
 import { BuilderUpgradeModal } from "../../../../shared/BuilderUpgradeModal";
-import { WebAuthGateModal } from "./WebAuthGateModal";
 import { WebCommunityModalHost } from "./WebCommunityModalHost";
 import { WebMessageContextModal } from "./WebMessageContextModal";
 import { WebProjectModalHost } from "./WebProjectModalHost";
@@ -60,7 +59,6 @@ export type WebGlobalOverlayHostProps = {
   messageContextModalProps: ComponentProps<typeof WebMessageContextModal>;
   memoryImportModalProps: WebMemoryImportModalProps | null;
   projectModalHostProps: ComponentProps<typeof WebProjectModalHost>;
-  authGateProps: ComponentProps<typeof WebAuthGateModal>;
   providerConnectionModalHostProps: ComponentProps<
     typeof WebProviderConnectionModalHost
   >["modalHostProps"];
@@ -82,8 +80,6 @@ export function WebGlobalOverlayHost(props: WebGlobalOverlayHostProps) {
       ) : null}
 
       <WebProjectModalHost {...props.projectModalHostProps} />
-
-      <WebAuthGateModal {...props.authGateProps} />
 
       <WebProviderConnectionModalHost
         modalHostProps={props.providerConnectionModalHostProps}

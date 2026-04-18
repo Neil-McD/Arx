@@ -24,10 +24,7 @@ export function buildWebStandalonePublicRouteViewProps(params: {
   setManualClaimToken: (value: string) => void;
   isRedeemingClaim: boolean;
   redeemClaimError: string | null;
-  isAuthGateOpen: boolean;
   authError: string | null;
-  setIsAuthGateOpen: (isOpen: boolean) => void;
-  handleSignIn: () => void;
 }): WebStandalonePublicRouteViewProps | null {
   if (
     params.publicRouteKind !== "checkout_success" &&
@@ -60,9 +57,6 @@ export function buildWebStandalonePublicRouteViewProps(params: {
     onChangeManualClaimToken: params.setManualClaimToken,
     isRedeemingClaim: params.isRedeemingClaim,
     redeemClaimError: params.redeemClaimError,
-    isAuthGateOpen: params.isAuthGateOpen,
     authError: params.authError,
-    onCloseAuthGate: () => params.setIsAuthGateOpen(false),
-    onSignIn: params.handleSignIn,
   };
 }

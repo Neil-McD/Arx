@@ -60,7 +60,6 @@ Set these for the deployed environment before alpha smoke testing:
 
 - `VITE_CONVEX_URL`
 - `ARX_DB_KEY`
-- `ARX_AUTH_BRIDGE_SECRET`
 - `ARX_AUTH_AUTHORIZE_URL`
 - `ARX_AUTH_TOKEN_URL`
 - `ARX_AUTH_CLIENT_ID`

@@ -303,20 +303,6 @@ async function listUsersByNormalizedEmail(ctx: any, normalizedEmail: string): Pr
   return scanned.filter((user) => normalizeStoredEmail(user.email) === normalized);
 }
 
-async function revokeAuthSessionsForUser(ctx: any, userId: any, nowMs: number): Promise<void> {
-  const rows = await ctx.db
-    .query("authSessions")
-    .withIndex("by_user", (q: any) => q.eq("userId", userId))
-    .collect();
-  for (const row of rows) {
-    if (typeof row.revokedAt === "number") continue;
-    await ctx.db.patch(row._id, {
-      revokedAt: nowMs,
-      updatedAt: nowMs,
-    });
-  }
-}
-
 function buildUserPatch(args: {
   existing: UserRow;
   authSubject?: string;
@@ -469,9 +455,6 @@ async function ensureActorByResolvedSubject(args: {
     });
     if (Object.keys(patch).length > 0) {
       await args.ctx.db.patch(relinkCandidate._id, patch);
-    }
-    if (authSubjectChanged) {
-      await revokeAuthSessionsForUser(args.ctx, relinkCandidate._id, nowMs);
     }
     existing = ((await args.ctx.db.get(relinkCandidate._id)) as UserRow | null) ?? relinkCandidate;
   }

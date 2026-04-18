@@ -91,9 +91,7 @@ verified if the stored normalized email is unique.
 Operator tools:
 
 ```bash
-npx convex run authMigrationOps:backfillNormalizedUserEmails '{"secret":"..."}' --prod
-npx convex run authMigrationOps:repairMissingUserEmailsFromTrustedHistory '{"secret":"..."}' --prod
-npx convex run authMigrationOps:manuallyRelinkUserAuthSubject '{"secret":"...","userId":"...","newAuthSubject":"..."}' --prod
+npx convex run authContinuityProbe:inspectAuthContinuity '{"secret":"...","email":"founder@example.com"}' --prod
 ```
 
 Use the backfill before auth cutover so `users.normalizedEmail` is populated.

@@ -1,5 +1,3 @@
-import { WebAuthGateModal } from "./WebAuthGateModal";
-
 type StandalonePublicRouteKind = "checkout_success" | "claim";
 
 type CheckoutStatus = "idle" | "loading" | "pending" | "succeeded" | "error";
@@ -27,11 +25,7 @@ export type WebStandalonePublicRouteViewProps = {
   onChangeManualClaimToken: (value: string) => void;
   isRedeemingClaim: boolean;
   redeemClaimError: string | null;
-
-  isAuthGateOpen: boolean;
   authError: string | null;
-  onCloseAuthGate: () => void;
-  onSignIn: () => void;
 };
 
 export function WebStandalonePublicRouteView(props: WebStandalonePublicRouteViewProps) {
@@ -53,10 +47,8 @@ export function WebStandalonePublicRouteView(props: WebStandalonePublicRouteView
     onChangeManualClaimToken,
     isRedeemingClaim,
     redeemClaimError,
-    isAuthGateOpen,
     authError,
-    onCloseAuthGate,
-    onSignIn,
+    onOpenAuthGate,
   } = props;
 
   return (
@@ -98,6 +90,13 @@ export function WebStandalonePublicRouteView(props: WebStandalonePublicRouteView
                     </button>
                   )}
                 </div>
+                {showSignIn ? (
+                  <div className="public-funnel-state-actions">
+                    <button className="public-funnel-secondary" type="button" onClick={onOpenAuthGate}>
+                      Continue with Google
+                    </button>
+                  </div>
+                ) : null}
                 {redeemClaimError && <div className="auth-error">{redeemClaimError}</div>}
                 {isRedeemingClaim && <div className="public-funnel-status">Claiming access…</div>}
               </section>
@@ -110,6 +109,7 @@ export function WebStandalonePublicRouteView(props: WebStandalonePublicRouteView
                       We&apos;ll email a sign-in link so you can finish checkout from the right account.
                     </p>
                   </div>
+                  {authError && <div className="auth-error">{authError}</div>}
                   <div className="public-funnel-support-form">
                     <input
                       className="public-funnel-input"
@@ -174,6 +174,13 @@ export function WebStandalonePublicRouteView(props: WebStandalonePublicRouteView
                       Continue
                     </button>
                   </div>
+                  {showSignIn ? (
+                    <div className="public-funnel-state-actions">
+                      <button className="public-funnel-secondary" type="button" onClick={onOpenAuthGate}>
+                        Continue with Google
+                      </button>
+                    </div>
+                  ) : null}
 
                   {redeemClaimError && <div className="auth-error">{redeemClaimError}</div>}
                   {isRedeemingClaim && <div className="public-funnel-status">Claiming access…</div>}
@@ -187,6 +194,7 @@ export function WebStandalonePublicRouteView(props: WebStandalonePublicRouteView
                         We&apos;ll email a sign-in link so you can continue with the correct account.
                       </p>
                     </div>
+                    {authError && <div className="auth-error">{authError}</div>}
                     <div className="public-funnel-support-form">
                       <input
                         className="public-funnel-input"
@@ -214,14 +222,6 @@ export function WebStandalonePublicRouteView(props: WebStandalonePublicRouteView
           )
         }
       </main >
-
-      <WebAuthGateModal
-        hasSession={!showSignIn}
-        isOpen={isAuthGateOpen}
-        authError={authError}
-        onClose={onCloseAuthGate}
-        onSignIn={onSignIn}
-      />
     </div >
   );
 }

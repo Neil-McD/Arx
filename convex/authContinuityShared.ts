@@ -22,16 +22,6 @@ type CommunityMembershipRow = {
   revokedAt?: number;
 };
 
-type AuthSessionRow = {
-  sessionId: string;
-  provider: string;
-  email?: string;
-  createdAt: number;
-  updatedAt: number;
-  revokedAt?: number;
-  lastRefreshAt?: number;
-};
-
 export type AuthContinuityAccountSnapshot = {
   userId: string;
   canonicalTier: CanonicalTier;
@@ -114,7 +104,6 @@ export async function buildAuthContinuityAccountSnapshot(
     ownedCommunities,
     memberships,
     workspaceCreditBalances,
-    authSessions,
   ] = await Promise.all([
     ctx.db.query("threads").withIndex("by_owner", (q: any) => q.eq("ownerId", userId)).collect(),
     ctx.db.query("cloudProjects").withIndex("by_owner", (q: any) => q.eq("ownerId", userId)).collect(),
@@ -131,7 +120,6 @@ export async function buildAuthContinuityAccountSnapshot(
       .query("workspaceCreditBalances")
       .withIndex("by_user", (q: any) => q.eq("userId", userId))
       .collect(),
-    ctx.db.query("authSessions").withIndex("by_user", (q: any) => q.eq("userId", userId)).collect(),
   ]);
 
   const canonicalTier = await readCanonicalTierByUserId(ctx, userId, nowMs);
@@ -186,17 +174,6 @@ export async function buildAuthContinuityAccountSnapshot(
         revokedAt: typeof membership.revokedAt === "number" ? membership.revokedAt : null,
       };
     }),
-    recentAuthSessions: (authSessions as AuthSessionRow[])
-      .sort((a, b) => b.updatedAt - a.updatedAt)
-      .slice(0, 5)
-      .map((row) => ({
-        sessionId: row.sessionId,
-        provider: row.provider,
-        email: row.email ?? null,
-        createdAt: row.createdAt,
-        updatedAt: row.updatedAt,
-        revokedAt: typeof row.revokedAt === "number" ? row.revokedAt : null,
-        lastRefreshAt: typeof row.lastRefreshAt === "number" ? row.lastRefreshAt : null,
-      })),
+    recentAuthSessions: [],
   };
 }

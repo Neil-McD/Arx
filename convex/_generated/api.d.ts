@@ -17,8 +17,6 @@ import type * as authContinuityProbe from "../authContinuityProbe.js";
 import type * as authContinuityShared from "../authContinuityShared.js";
 import type * as authIdentity from "../authIdentity.js";
 import type * as authMigrationAudit from "../authMigrationAudit.js";
-import type * as authMigrationOps from "../authMigrationOps.js";
-import type * as authSessions from "../authSessions.js";
 import type * as billing from "../billing.js";
 import type * as billingCore from "../billingCore.js";
 import type * as builderCommerce from "../builderCommerce.js";
@@ -70,7 +68,6 @@ import type * as fallbackHtmlSearchTransport from "../fallbackHtmlSearchTranspor
 import type * as gates from "../gates.js";
 import type * as http from "../http.js";
 import type * as httpAuth from "../httpAuth.js";
-import type * as httpAuthBridge from "../httpAuthBridge.js";
 import type * as httpBilling from "../httpBilling.js";
 import type * as httpChatgpt from "../httpChatgpt.js";
 import type * as httpContext from "../httpContext.js";
@@ -136,8 +133,6 @@ declare const fullApi: ApiFromModules<{
   authContinuityShared: typeof authContinuityShared;
   authIdentity: typeof authIdentity;
   authMigrationAudit: typeof authMigrationAudit;
-  authMigrationOps: typeof authMigrationOps;
-  authSessions: typeof authSessions;
   billing: typeof billing;
   billingCore: typeof billingCore;
   builderCommerce: typeof builderCommerce;
@@ -189,7 +184,6 @@ declare const fullApi: ApiFromModules<{
   gates: typeof gates;
   http: typeof http;
   httpAuth: typeof httpAuth;
-  httpAuthBridge: typeof httpAuthBridge;
   httpBilling: typeof httpBilling;
   httpChatgpt: typeof httpChatgpt;
   httpContext: typeof httpContext;

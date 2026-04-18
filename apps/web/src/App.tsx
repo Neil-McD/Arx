@@ -230,7 +230,6 @@ import { useWebWorkspaceActionsController } from "../../../shared/useWebWorkspac
 import { useWebWorkspaceUiActionsController } from "../../../shared/useWebWorkspaceUiActionsController";
 import { useWebSettingsImageUploadController } from "../../../shared/useWebSettingsImageUploadController";
 import { useWebThreadDataController } from "../../../shared/useWebThreadDataController";
-import { useAuthGateLifecycleEffects } from "../../../shared/useAuthGateLifecycleEffects";
 import { useCommunityAdminController } from "../../../shared/useCommunityAdminController";
 import type { CloudCommunityMembershipAdminRow } from "../../../shared/cloudCommunityMembershipGateway";
 import { useCommunityAgentConfigController } from "../../../shared/useCommunityAgentDraftController";
@@ -644,9 +643,6 @@ export default function App() {
     setMagicLinkEmail,
     magicLinkStatus,
     magicLinkError,
-    isAuthGateOpen,
-    setIsAuthGateOpen,
-    handleSignIn,
     handleSendMagicLink,
     openAuthGate,
     handleSignOut,
@@ -1822,6 +1818,7 @@ export default function App() {
   const [inferenceToast] = useState<string | null>(null);
   const [appToast, setAppToast] = useState<string | null>(null);
   const appToastTimeoutRef = useRef<number | null>(null);
+  const lastShownAuthErrorRef = useRef<string | null>(null);
   const [inferenceIssueModal, setInferenceIssueModal] = useState<{
     reason:
       | "quota"
@@ -2427,6 +2424,16 @@ export default function App() {
     setAppToast,
   });
 
+  useEffect(() => {
+    if (!authError) {
+      lastShownAuthErrorRef.current = null;
+      return;
+    }
+    if (lastShownAuthErrorRef.current === authError) return;
+    lastShownAuthErrorRef.current = authError;
+    showAppToastMessage(authError);
+  }, [authError, showAppToastMessage]);
+
   const handleImportExternalMemory = useCallback(async (): Promise<void> => {
     if (!session) {
       openAuthGate();
@@ -2737,13 +2744,6 @@ export default function App() {
   });
 
   // Cloud session is hydrated from browser auth continuity during lifecycle bootstrap.
-
-  useAuthGateLifecycleEffects({
-    isAuthGateOpen,
-    isAuthenticated: Boolean(session),
-    closeAuthGate: () => setIsAuthGateOpen(false),
-    keyTarget: "window",
-  });
 
   useEffect(() => {
     setCloudProfile(null);
@@ -5457,10 +5457,7 @@ export default function App() {
     setManualClaimToken,
     isRedeemingClaim,
     redeemClaimError,
-    isAuthGateOpen,
     authError,
-    setIsAuthGateOpen,
-    handleSignIn,
   });
 
   if (isAuthBootstrapResolvingAppShell) {
@@ -5503,10 +5500,6 @@ export default function App() {
     personalMemoryUi,
     handleImportExternalMemory,
     projectModalHostProps: projectUiController.modalHostProps,
-    isAuthGateOpen,
-    setIsAuthGateOpen,
-    authError,
-    handleSignIn,
     providerConnectionModalHostProps: providerConnectionUi.modalHostProps,
     inferenceIssueModal,
     isInferenceIssueModalRunning,

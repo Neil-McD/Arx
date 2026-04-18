@@ -107,23 +107,20 @@ echo "[1/5] Validating required Convex runtime URL..."
 require_key "VITE_CONVEX_URL" "Use your Convex deployment URL: https://<deployment>.convex.cloud"
 validate_url "VITE_CONVEX_URL"
 
-echo "[2/6] Validating required auth bridge continuity settings..."
-require_key "ARX_AUTH_BRIDGE_SECRET" "Opaque auth session continuity requires a shared bridge secret between Vercel auth gateway and Convex bridge."
-
-echo "[3/6] Validating required OAuth/OIDC runtime endpoints..."
+echo "[2/5] Validating required OAuth/OIDC runtime endpoints..."
 require_key "ARX_AUTH_AUTHORIZE_URL" "OAuth authorize endpoint. WorkOS AuthKit example: https://<AUTHKIT_DOMAIN>/oauth2/authorize"
 require_key "ARX_AUTH_TOKEN_URL" "OAuth token endpoint. WorkOS AuthKit example: https://<AUTHKIT_DOMAIN>/oauth2/token"
 require_key "ARX_AUTH_CLIENT_ID" "OAuth client id from your auth provider app settings."
 validate_url "ARX_AUTH_AUTHORIZE_URL"
 validate_url "ARX_AUTH_TOKEN_URL"
 
-echo "[4/6] Validating required Convex JWT verifier configuration..."
+echo "[3/5] Validating required Convex JWT verifier configuration..."
 require_key "ARX_AUTH_JWT_ISSUER" "JWT issuer URL. WorkOS AuthKit example: https://<AUTHKIT_DOMAIN>"
 require_key "ARX_AUTH_JWT_JWKS_URL" "JWKS URL. WorkOS AuthKit example: https://<AUTHKIT_DOMAIN>/oauth2/jwks"
 validate_url "ARX_AUTH_JWT_ISSUER"
 validate_url "ARX_AUTH_JWT_JWKS_URL"
 
-echo "[5/6] Validating fail-closed auth posture..."
+echo "[4/5] Validating fail-closed auth posture..."
 allow_unverified="$(lookup_key "ARX_ALLOW_UNVERIFIED_AUTH_SUBJECT")"
 if [[ -z "$allow_unverified" ]]; then
   echo "WARN: ARX_ALLOW_UNVERIFIED_AUTH_SUBJECT is unset (recommended: false)"
@@ -138,10 +135,12 @@ else
   fi
 fi
 
-echo "[6/6] Recommended (not required) settings..."
+echo "[5/5] Recommended (not required) settings..."
 warn_if_missing "ARX_AUTH_JWT_AUDIENCE" "Set audience when your provider includes aud checks (often the OAuth client id for ID tokens)."
 warn_if_missing "VITE_AUTH_JWT_ISSUER" "Client-side issuer hint for additional session sanity checks."
-warn_if_missing "ARX_AUTH_SESSION_COOKIE_DOMAIN" "Set this to .polynet.ai when you want cross-subdomain auth continuity."
+warn_if_missing "VITE_WORKOS_CLIENT_ID" "Set the browser WorkOS client id for hosted sign-in."
+warn_if_missing "VITE_WORKOS_REDIRECT_URI" "Set the browser WorkOS redirect URI, for example https://www.polynet.ai/workspace."
+warn_if_missing "VITE_WORKOS_DEV_MODE" "Set this to true unless you have a custom WorkOS auth API hostname."
 
 if [[ "$missing_count" -gt 0 ]]; then
   echo "FAIL: auth runtime readiness failed (${missing_count} required issues, ${warn_count} warnings)."

@@ -11,10 +11,9 @@ This is the canonical Polynet web app and primary release surface.
    - Copy repo root `.env.example` → `.env`
    - Fill `VITE_CONVEX_URL`
    - `VITE_CONVEX_PUBLIC_KEY` is optional
-   - Set OAuth/OIDC vars (`ARX_AUTH_AUTHORIZE_URL`, `ARX_AUTH_TOKEN_URL`, `ARX_AUTH_CLIENT_ID`) for sign-in
+   - Set WorkOS browser vars (`VITE_WORKOS_CLIENT_ID`, `VITE_WORKOS_REDIRECT_URI`, `VITE_WORKOS_DEV_MODE`) for sign-in
+   - Set OAuth/OIDC runtime vars (`ARX_AUTH_AUTHORIZE_URL`, `ARX_AUTH_TOKEN_URL`, `ARX_AUTH_CLIENT_ID`) for Convex runtime auth routes
    - Set JWT verifier vars (`ARX_AUTH_JWT_ISSUER`, `ARX_AUTH_JWT_JWKS_URL`) for verified Convex identity
-   - Set `ARX_AUTH_BRIDGE_SECRET` for the auth continuity bridge
-   - Optionally set `ARX_AUTH_SESSION_COOKIE_DOMAIN=.polynet.ai` for cross-subdomain continuity
     - Validate config: `npm run check:auth-runtime-readiness`
 3. Run:
    - `npm run dev`
@@ -33,13 +32,14 @@ Set the following Vercel env vars:
 
 - `VITE_CONVEX_URL`
 - `VITE_CONVEX_PUBLIC_KEY` (optional)
+- `VITE_WORKOS_CLIENT_ID`
+- `VITE_WORKOS_REDIRECT_URI`
+- `VITE_WORKOS_DEV_MODE`
 - `ARX_AUTH_AUTHORIZE_URL`
 - `ARX_AUTH_TOKEN_URL`
 - `ARX_AUTH_CLIENT_ID`
 - `ARX_AUTH_JWT_ISSUER`
 - `ARX_AUTH_JWT_JWKS_URL`
-- `ARX_AUTH_BRIDGE_SECRET`
-- `ARX_AUTH_SESSION_COOKIE_DOMAIN` (recommended for `*.polynet.ai`)
 
 Workspace preview / live desktop depend on the preview proxy signing secret:
 

@@ -36,10 +36,6 @@ export function buildWebGlobalOverlayHostProps(params: {
   };
   handleImportExternalMemory: () => void | Promise<void>;
   projectModalHostProps: WebGlobalOverlayHostProps["projectModalHostProps"];
-  isAuthGateOpen: boolean;
-  setIsAuthGateOpen: (isOpen: boolean) => void;
-  authError: string | null;
-  handleSignIn: () => void | Promise<void>;
   providerConnectionModalHostProps: WebGlobalOverlayHostProps["providerConnectionModalHostProps"];
   inferenceIssueModal: InferenceIssueModalState;
   isInferenceIssueModalRunning: boolean;
@@ -120,15 +116,6 @@ export function buildWebGlobalOverlayHostProps(params: {
         }
       : null,
     projectModalHostProps: params.projectModalHostProps,
-    authGateProps: {
-      hasSession: Boolean(params.session),
-      isOpen: params.isAuthGateOpen,
-      authError: params.authError,
-      onClose: () => params.setIsAuthGateOpen(false),
-      onSignIn: () => {
-        void params.handleSignIn();
-      },
-    },
     providerConnectionModalHostProps: params.providerConnectionModalHostProps,
     inferenceIssueModalProps: params.inferenceIssueModal
       ? {

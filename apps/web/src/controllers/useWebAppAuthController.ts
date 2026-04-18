@@ -50,9 +50,6 @@ type UseWebAppAuthControllerResult = {
   setMagicLinkEmail: (value: string) => void;
   magicLinkStatus: "idle" | "sending" | "sent";
   magicLinkError: string | null;
-  isAuthGateOpen: boolean;
-  setIsAuthGateOpen: (value: boolean) => void;
-  handleSignIn: () => Promise<void>;
   handleSendMagicLink: (email: string) => Promise<void>;
   openAuthGate: (intentInput?: unknown) => void;
   handleSignOut: () => Promise<void>;
@@ -153,7 +150,6 @@ export function useWebAppAuthController(
   const [magicLinkEmail, setMagicLinkEmail] = useState("");
   const [magicLinkStatus, setMagicLinkStatus] = useState<"idle" | "sending" | "sent">("idle");
   const [magicLinkError, setMagicLinkError] = useState<string | null>(null);
-  const [isAuthGateOpen, setIsAuthGateOpen] = useState(false);
 
   const sessionRef = useRef<AuthSession | null>(null);
   const refreshResultInFlightRef = useRef<Promise<AuthSessionRefreshResult> | null>(null);
@@ -176,7 +172,6 @@ export function useWebAppAuthController(
     const callbackError = readAuthCallbackErrorFromLocation();
     if (!callbackError) return;
     setAuthError(callbackError);
-    setIsAuthGateOpen(true);
     clearAuthFlowPending();
     clearOAuthCallbackParamsFromLocation();
   }, []);
@@ -281,7 +276,6 @@ export function useWebAppAuthController(
       await workos.signIn();
     } catch (error) {
       setAuthError(errorToMessage(error, "Sign-in failed."));
-      setIsAuthGateOpen(true);
     }
   }, [workos]);
 
@@ -294,12 +288,8 @@ export function useWebAppAuthController(
         intent,
       });
     }
-    if (!session) {
-      setIsAuthGateOpen(false);
-      void beginGoogleSignInFlow();
-      return;
-    }
-    setIsAuthGateOpen(true);
+    if (session) return;
+    void beginGoogleSignInFlow();
   }, [beginGoogleSignInFlow, session]);
 
   const handleSendMagicLink = useCallback(async (email: string): Promise<void> => {
@@ -472,7 +462,6 @@ export function useWebAppAuthController(
               { workos, phase: "read_session", error, hasSession: false },
             ),
           );
-          setIsAuthGateOpen(true);
           clearAuthFlowPending();
         }
         markAuthBootstrapComplete();
@@ -495,7 +484,6 @@ export function useWebAppAuthController(
               { workos, phase: "convex_probe", hasSession: true },
             ),
           );
-          setIsAuthGateOpen(true);
           clearAuthFlowPending();
           clearAuthResumeState();
           return;
@@ -543,7 +531,6 @@ export function useWebAppAuthController(
             { workos, phase: "read_session", hasSession: false },
           ),
         );
-        setIsAuthGateOpen(true);
         clearAuthFlowPending();
         clearAuthResumeState();
       }
@@ -590,9 +577,6 @@ export function useWebAppAuthController(
     setMagicLinkEmail,
     magicLinkStatus,
     magicLinkError,
-    isAuthGateOpen,
-    setIsAuthGateOpen,
-    handleSignIn: beginGoogleSignInFlow,
     handleSendMagicLink,
     openAuthGate,
     handleSignOut,

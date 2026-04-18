@@ -2,7 +2,6 @@ import { internal } from "./_generated/api";
 import { httpAction } from "./_generated/server";
 import { httpRouter } from "convex/server";
 import { registerRuntimeAuthRoutes } from "./httpAuth";
-import { registerRuntimeAuthBridgeRoutes } from "./httpAuthBridge";
 import { registerRuntimeBillingRoutes } from "./httpBilling";
 import { registerRuntimeContextRoutes } from "./httpContext";
 import { registerRuntimeMcpRoutes } from "./httpMcp";
@@ -279,14 +278,6 @@ registerRuntimeAuthRoutes({
   parseOptionalString,
   parseBoolish,
 });
-registerRuntimeAuthBridgeRoutes({
-  http,
-  httpAction,
-  jsonResponse,
-  optionsResponse,
-  parseOptionalString,
-});
-
 registerRuntimeBillingRoutes({
   http,
   httpAction,
