@@ -15568,9 +15568,11 @@ button.message-citation-chip:hover {
 }
 
 .workspace-composer-shell {
-  width: min(100%, var(--web-chat-max-width));
+  width: 100%;
   max-width: var(--web-chat-max-width);
   margin: 0 auto 12px;
+  padding-inline: var(--web-chat-gutter);
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
   gap: 0;
