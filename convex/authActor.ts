@@ -40,6 +40,7 @@ export type AuthContinuityResolutionBlocker =
   | "email_not_verified"
   | "ambiguous_email_candidates"
   | "no_matching_email_candidate"
+  | "email_relink_disabled"
   | "requested_user_id_mismatch";
 
 export type AuthContinuityUserSummary = {
@@ -102,6 +103,30 @@ function normalizeEmailVerificationSource(
   return undefined;
 }
 
+function readEnv(name: string): string {
+  try {
+    const value = (globalThis as any)?.process?.env?.[name];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  } catch {
+    // ignore
+  }
+  return "";
+}
+
+function readBoolEnv(name: string): boolean {
+  const normalized = readEnv(name).toLowerCase();
+  return normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "on";
+}
+
+function isExplicitLocalDevEnvironment(): boolean {
+  const nodeEnv = readEnv("NODE_ENV").toLowerCase();
+  return nodeEnv === "development" || nodeEnv === "test";
+}
+
+function allowAutomaticEmailRelink(): boolean {
+  return readBoolEnv("ARX_AUTH_ENABLE_EMAIL_RELINK") && isExplicitLocalDevEnvironment();
+}
+
 function toAuthContinuityUserSummary(user: UserRow): AuthContinuityUserSummary {
   const authSubject = normalizeIdValue(user.authSubject) || null;
   return {
@@ -159,6 +184,7 @@ async function readActorResolutionState(args: {
 
   const subjectMatchUser = await getUserByResolvedSubject(args.ctx, args.authSubject);
   const emailUsers = normalizedEmail ? await listUsersByNormalizedEmail(args.ctx, normalizedEmail) : [];
+  const automaticEmailRelinkEnabled = allowAutomaticEmailRelink();
   const eligibleRelinkCandidates = normalizedEmail
     ? emailUsers.filter((user) => {
         const userAuthSubject = normalizeIdValue(user.authSubject);
@@ -167,7 +193,7 @@ async function readActorResolutionState(args: {
       })
     : [];
   const relinkCandidateUser =
-    !subjectMatchUser && emailVerified && eligibleRelinkCandidates.length === 1
+    !subjectMatchUser && automaticEmailRelinkEnabled && emailVerified && eligibleRelinkCandidates.length === 1
       ? (eligibleRelinkCandidates[0] ?? null)
       : null;
 
@@ -186,6 +212,15 @@ async function readActorResolutionState(args: {
   }
   if (!subjectMatchUser && eligibleRelinkCandidates.length > 1) {
     blockers.push("ambiguous_email_candidates");
+  }
+  if (
+    !subjectMatchUser &&
+    !automaticEmailRelinkEnabled &&
+    emailVerified &&
+    normalizedEmail &&
+    eligibleRelinkCandidates.length === 1
+  ) {
+    blockers.push("email_relink_disabled");
   }
   if (!subjectMatchUser && emailVerified && normalizedEmail && eligibleRelinkCandidates.length === 0) {
     blockers.push("no_matching_email_candidate");

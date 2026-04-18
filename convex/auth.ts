@@ -80,6 +80,33 @@ function resolveAnonymousSubject(args: {
   return `anon:${anonymousId}`;
 }
 
+function normalizeOptionalString(raw: unknown): string | null {
+  const normalized = String(raw ?? "").trim();
+  return normalized || null;
+}
+
+function seedAuthenticatedProfile(args: {
+  identity: Awaited<ReturnType<typeof resolveAuthenticatedIdentityProfile>>;
+  email?: string;
+  displayName?: string;
+  avatarUrl?: string;
+}): {
+  email: string | null;
+  emailVerified: boolean;
+  emailVerificationSource: "oauth_provider" | null;
+  displayName: string | null;
+  avatarUrl: string | null;
+} {
+  const hintedEmail = normalizeOptionalString(args.email);
+  return {
+    email: args.identity.email ?? hintedEmail,
+    emailVerified: args.identity.emailVerified,
+    emailVerificationSource: args.identity.emailVerified ? args.identity.emailVerificationSource : null,
+    displayName: args.identity.displayName ?? normalizeOptionalString(args.displayName),
+    avatarUrl: args.identity.avatarUrl ?? normalizeOptionalString(args.avatarUrl),
+  };
+}
+
 export const bootstrapActor = mutation({
   args: {
     authState: v.union(v.literal("anonymous"), v.literal("authenticated")),
@@ -97,14 +124,20 @@ export const bootstrapActor = mutation({
         ctx,
         authSubject: args.authSubject ?? null,
       });
+      const seededProfile = seedAuthenticatedProfile({
+        identity,
+        email: args.email,
+        displayName: args.displayName,
+        avatarUrl: args.avatarUrl,
+      });
       const { actor, continuity } = await ensureAuthenticatedActorDetailed({
         ctx,
         authSubject: identity.authSubject,
-        email: identity.email,
-        emailVerified: identity.emailVerified,
-        emailVerificationSource: identity.emailVerificationSource,
-        displayName: identity.displayName,
-        avatarUrl: identity.avatarUrl,
+        email: seededProfile.email,
+        emailVerified: seededProfile.emailVerified,
+        emailVerificationSource: seededProfile.emailVerificationSource,
+        displayName: seededProfile.displayName,
+        avatarUrl: seededProfile.avatarUrl,
         nowMs,
       });
       const canonicalTier = await getCanonicalTierByUserIdInternal(ctx as never, actor.dbUserId, nowMs);
