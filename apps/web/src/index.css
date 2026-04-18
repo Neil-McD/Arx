@@ -276,7 +276,7 @@
 }
 
 .app-root.sessions-drawer-open .workspace:not(.scroll-to-bottom) {
-  padding-left: calc(12px + var(--web-sessions-drawer-width));
+  padding-left: var(--web-sessions-drawer-width);
 }
 
 @media (max-width: 920px) {
