@@ -24,6 +24,10 @@ import {
 } from "./communityCore";
 import { resolveCommunityFunnelConfigByCommunityId } from "./communityFunnel";
 import { enqueueCommunityAccessGrantedEmailInternal } from "./emailEvents";
+import {
+  clearPlatformHomeCommunityAutojoinOptOut,
+  isPlatformHomeCommunity,
+} from "./platformHomeCommunity";
 
 type PublicCommunityFace = {
   user_id: string;
@@ -399,6 +403,13 @@ async function joinPublicCommunityInternal(args: {
         nowMs: args.nowMs,
       });
     }
+    if (isPlatformHomeCommunity({ communitySlug: args.community.slug })) {
+      await clearPlatformHomeCommunityAutojoinOptOut({
+        ctx: args.ctx,
+        communityId: args.community._id,
+        userId: args.userId,
+      });
+    }
     return {
       outcome: "joined",
       community_id: String(args.community._id),
@@ -480,6 +491,13 @@ async function joinPublicCommunityInternal(args: {
     grantMarker: grantedMembershipMarker,
     nowMs: args.nowMs,
   });
+  if (isPlatformHomeCommunity({ communitySlug: args.community.slug })) {
+    await clearPlatformHomeCommunityAutojoinOptOut({
+      ctx: args.ctx,
+      communityId: args.community._id,
+      userId: args.userId,
+    });
+  }
   return {
     outcome: "joined",
     community_id: String(args.community._id),

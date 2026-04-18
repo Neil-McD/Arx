@@ -33,6 +33,10 @@ import {
 } from "./communityCore";
 import { logStructuredError } from "./errorLogging";
 import { enqueueCommunityAccessGrantedEmailInternal } from "./emailEvents";
+import {
+  isPlatformHomeCommunity,
+  upsertPlatformHomeCommunityAutojoinOptOut,
+} from "./platformHomeCommunity";
 
 type CommunityMemberUserLike = {
   displayName?: string;
@@ -753,6 +757,15 @@ export const removeCommunityMember = mutation({
             updatedAt: nowMs,
           });
         }
+        if (isPlatformHomeCommunity({ communitySlug: community.slug })) {
+          await upsertPlatformHomeCommunityAutojoinOptOut({
+            ctx,
+            communityId: args.communityId,
+            userId: membership.userId,
+            nowMs,
+            kind: "removed",
+          });
+        }
         return { ok: true };
       },
     });
@@ -1032,6 +1045,15 @@ export const leaveCommunity = mutation({
           .first()) as CommunityJoinRequestLike | null;
         if (joinRequest) {
           await ctx.db.delete(joinRequest._id as any);
+        }
+        if (isPlatformHomeCommunity({ communitySlug: community.slug })) {
+          await upsertPlatformHomeCommunityAutojoinOptOut({
+            ctx,
+            communityId: args.communityId,
+            userId: args.userId,
+            nowMs,
+            kind: "left",
+          });
         }
         return { ok: true };
       },
