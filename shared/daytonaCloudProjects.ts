@@ -30,12 +30,19 @@ type ConvexCloudProjectRow = {
 
 // Gateway class: authenticated read/mutation/action bridge, caller-hardened session, fail-closed.
 
+function normalizeProjectDisplayName(raw: string | null | undefined): string {
+  const normalized = String(raw ?? "").trim();
+  if (!normalized) return "Project 1";
+  if (normalized.toLowerCase() === "workspace") return "Project 1";
+  return normalized;
+}
+
 function mapConvexProjectRowToRecord(row: ConvexCloudProjectRow): DaytonaCloudProjectRecord {
   const id = String(row._id ?? "").trim();
   const createdAtMs = Number(row.createdAt ?? Date.now());
   const updatedAtMs = Number(row.updatedAt ?? Date.now());
   const slug = typeof row.slug === "string" && row.slug.trim() ? row.slug.trim() : null;
-  const name = typeof row.name === "string" && row.name.trim() ? row.name.trim() : "Workspace";
+  const name = normalizeProjectDisplayName(typeof row.name === "string" ? row.name : null);
   return {
     id,
     name,
@@ -78,14 +85,13 @@ export async function fetchMappedDaytonaCloudProjects<TSession>(params: {
 
 export async function ensureDefaultCloudProjectId<TSession>(params: {
   session: TSession;
-}): Promise<string> {
+}): Promise<string | null> {
   const { client, authSubject } = await bootstrapGatewayAuthContext(params.session as AuthSessionLike);
   const row = (await client.mutation("projects:ensureDefaultCloudProjectForOwner" as any, {
     authSubject,
   })) as ConvexCloudProjectRow | null;
   const projectId = String(row?._id ?? "").trim();
-  if (!projectId) throw new Error("default_project_missing_id");
-  return projectId;
+  return projectId || null;
 }
 
 export async function ensureDefaultCloudProject<TSession>(params: {

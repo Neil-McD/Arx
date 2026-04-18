@@ -1,4 +1,4 @@
-import { internal } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import { action, internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { resolveAuthenticatedSubject } from "./authIdentity";
@@ -379,8 +379,15 @@ function normalizeRunLane(raw: unknown): string {
 async function ensureDefaultProjectId(args: {
   ctx: any;
   ownerId: any;
+  authSubject?: string | null;
   nowMs: number;
-}): Promise<any> {
+}): Promise<any | null> {
+  const canonicalTier = await args.ctx.runQuery(api.entitlements.getCanonicalTierByUserId as any, {
+    userId: args.ownerId,
+    authSubject: args.authSubject ?? null,
+    nowMs: args.nowMs,
+  });
+  if (canonicalTier !== "builder") return null;
   const existing = await args.ctx.db
     .query("cloudProjects")
     .withIndex("by_owner", (q: any) => q.eq("ownerId", args.ownerId))
@@ -389,6 +396,8 @@ async function ensureDefaultProjectId(args: {
 
   return await args.ctx.db.insert("cloudProjects", {
     ownerId: args.ownerId,
+    name: "Project 1",
+    status: "active",
     providerVolumeId: undefined,
     createdAt: args.nowMs,
     updatedAt: args.nowMs,
@@ -798,7 +807,14 @@ export const ensureCloudThread = mutation({
       return refreshed ?? existing;
     }
 
-    const projectId = args.projectId ?? (await ensureDefaultProjectId({ ctx, ownerId, nowMs }));
+    const projectId =
+      args.projectId ??
+      (await ensureDefaultProjectId({
+        ctx,
+        ownerId,
+        authSubject: args.authSubject ?? null,
+        nowMs,
+      }));
     const id = await ctx.db.insert("threads", {
       ownerId,
       threadKey,

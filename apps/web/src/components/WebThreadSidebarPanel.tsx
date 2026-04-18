@@ -37,6 +37,7 @@ export function WebThreadSidebarPanel<TThread, TProject extends ProjectLike>(
     chatThreadsCount,
     showChatSignInPrompt,
   } = state;
+  const hasProjectToolbar = Boolean(projectToolbarAction) || projectThreadGroups.length > 0;
   const [showAllThreadsByProjectId, setShowAllThreadsByProjectId] = useState<Record<string, true>>(
     {},
   );
@@ -126,6 +127,7 @@ export function WebThreadSidebarPanel<TThread, TProject extends ProjectLike>(
         </div>
       </div>
       {showWorkspaceToolbar &&
+        hasProjectToolbar &&
         (threadLaneFilter === "agent" || (threadLaneFilter === "chat" && !showChatSignInPrompt)) && (
           <div className="project-toolbar">
             <div className="project-toolbar-label">Projects</div>
@@ -315,10 +317,18 @@ export function WebThreadSidebarPanel<TThread, TProject extends ProjectLike>(
                 )}
                 {threadLaneFilter === "agent"
                   ? agentThreadsCount === 0 && (
-                      <div className="empty-state">No local threads yet. Pick a project and start one.</div>
+                      <div className="empty-state">
+                        {projectThreadGroups.length > 0
+                          ? "No local threads yet. Pick a project and start one."
+                          : "No local threads yet. Start one when Builder workspace access is enabled."}
+                      </div>
                     )
                   : chatThreadsCount === 0 && (
-                      <div className="empty-state">No cloud chats yet. Pick a project and start one.</div>
+                      <div className="empty-state">
+                        {projectThreadGroups.length > 0
+                          ? "No cloud chats yet. Pick a project and start one."
+                          : "No cloud chats yet. Start one."}
+                      </div>
                     )}
               </>
             )}

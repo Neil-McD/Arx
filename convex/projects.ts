@@ -48,6 +48,20 @@ async function resolveOwnerIdForAuthenticatedRequest(args: {
   }
 }
 
+async function hasBuilderProjectAccess(args: {
+  ctx: any;
+  ownerId: any;
+  authSubject?: string | null;
+  nowMs?: number;
+}): Promise<boolean> {
+  const canonicalTier = await args.ctx.runQuery(api.entitlements.getCanonicalTierByUserId as any, {
+    userId: args.ownerId,
+    authSubject: args.authSubject ?? null,
+    nowMs: args.nowMs ?? Date.now(),
+  });
+  return canonicalTier === "builder";
+}
+
 async function ensureDefaultProjectInternal(args: {
   ctx: any;
   ownerId: any;
@@ -62,7 +76,7 @@ async function ensureDefaultProjectInternal(args: {
 
   const id = await args.ctx.db.insert("cloudProjects", {
     ownerId: args.ownerId,
-    name: "Workspace",
+    name: "Project 1",
     status: "active",
     providerVolumeId: undefined,
     createdAt: args.nowMs,
@@ -953,6 +967,16 @@ export const ensureDefaultCloudProjectForOwner = mutation({
       authSubject: args.authSubject ?? null,
     });
     const nowMs = args.nowMs ?? Date.now();
+    if (
+      !(await hasBuilderProjectAccess({
+        ctx,
+        ownerId,
+        authSubject: args.authSubject ?? null,
+        nowMs,
+      }))
+    ) {
+      return null;
+    }
     return await ensureDefaultProjectInternal({
       ctx,
       ownerId,
@@ -972,6 +996,15 @@ export const listCloudProjectsForOwner = query({
       ownerId: args.ownerId,
       authSubject: args.authSubject ?? null,
     });
+    if (
+      !(await hasBuilderProjectAccess({
+        ctx,
+        ownerId,
+        authSubject: args.authSubject ?? null,
+      }))
+    ) {
+      return [];
+    }
     const rows = await ctx.db
       .query("cloudProjects")
       .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
@@ -1047,6 +1080,16 @@ export const updateCloudProjectForOwner = mutation({
     const existing = await ctx.db.get(args.projectId);
     if (!existing || existing.ownerId !== ownerId) {
       throw new Error("project_not_found");
+    }
+    if (
+      !(await hasBuilderProjectAccess({
+        ctx,
+        ownerId,
+        authSubject: args.authSubject ?? null,
+        nowMs: args.nowMs,
+      }))
+    ) {
+      throw new Error("plan_required");
     }
     const nowMs = args.nowMs ?? Date.now();
     const name = normalizeOptionalProjectString(args.name);
@@ -1418,6 +1461,16 @@ export const getCloudProjectById = query({
         })
       : args.ownerId;
     if (ownerId && row.ownerId !== ownerId) return null;
+    if (
+      ownerId &&
+      !(await hasBuilderProjectAccess({
+        ctx,
+        ownerId,
+        authSubject: args.authSubject ?? null,
+      }))
+    ) {
+      return null;
+    }
     return row;
   },
 });

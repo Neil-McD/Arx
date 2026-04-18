@@ -82,7 +82,11 @@ export async function resolveWorkspaceProjectContext(params: {
   if (!row) {
     return { label: null, description: null };
   }
-  const label = String(row.name ?? "").trim() || "Workspace";
+  const normalizedLabel = String(row.name ?? "").trim();
+  const label =
+    !normalizedLabel || normalizedLabel.toLowerCase() === "workspace"
+      ? "Project 1"
+      : normalizedLabel;
   const description = String(row.description ?? "").trim() || null;
   return { label, description };
 }
