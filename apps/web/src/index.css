@@ -320,8 +320,8 @@
   width: min(var(--web-sessions-drawer-width), calc(100vw - var(--web-rail-width)));
   /* Keep drawer content below the floating header controls. */
   padding-top: calc(12px + var(--web-topbar-height));
-  /* Drawer must sit above the community rail or guest auth buttons become unclickable. */
-  z-index: 8;
+  /* Keep the drawer under the rail so it appears to emerge from behind that column. */
+  z-index: 4;
   transform: translateX(-100%);
   opacity: 0;
   pointer-events: none;
