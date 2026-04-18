@@ -36,21 +36,48 @@ export function WebAuthBootstrapShell(props: WebAuthBootstrapShellProps) {
           ) : (
             <div className="workspace-body workspace-bootstrap-body">
               <div
-                className="workspace-bootstrap-composer-shell"
+                className="workspace-composer-shell workspace-bootstrap-composer-shell"
                 aria-busy="true"
                 aria-live="polite"
               >
-                <div className="workspace-bootstrap-composer">
-                  <div className="workspace-bootstrap-label">Restoring workspace</div>
-                  <div
-                    className="workspace-bootstrap-progress web-skeleton-pill"
-                    aria-hidden="true"
-                  />
-                  <div className="workspace-bootstrap-footer" aria-hidden="true">
-                    <div className="workspace-bootstrap-chip web-skeleton-pill" />
-                    <div className="workspace-bootstrap-actions">
-                      <div className="workspace-bootstrap-action-ghost web-skeleton-pill" />
-                      <div className="workspace-bootstrap-send web-skeleton-card" />
+                <div className="workspace-composer-lane">
+                  <div className="ask-bar ask-bar-v2 workspace-bootstrap-ask-bar">
+                    <textarea
+                      className="ask-input ask-input-v2 workspace-bootstrap-input"
+                      placeholder="Restoring workspace..."
+                      value=""
+                      readOnly
+                      disabled
+                      rows={1}
+                    />
+                    <div className="ask-footer" aria-hidden="true">
+                      <div className="ask-footer-left">
+                        <button className="ask-icon-btn ask-plus" type="button" disabled>
+                          <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M12 5v14M5 12h14" />
+                          </svg>
+                        </button>
+                        <button className="ask-model-btn workspace-bootstrap-model-btn" type="button" disabled>
+                          <span className="ask-model-label">GPT 5.4</span>
+                          <svg className="ask-model-chevron" viewBox="0 0 16 16" aria-hidden="true">
+                            <path d="m4 6 4 4 4-4" />
+                          </svg>
+                        </button>
+                      </div>
+                      <div className="ask-actions">
+                        <button className="ask-icon-btn ask-mic" type="button" disabled>
+                          <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M12 15a3 3 0 0 0 3-3V8a3 3 0 1 0-6 0v4a3 3 0 0 0 3 3Z" />
+                            <path d="M7 12a5 5 0 1 0 10 0" />
+                            <path d="M12 17v3" />
+                          </svg>
+                        </button>
+                        <button className="chat-send ask-send-btn ask-send-btn-v2" type="button" disabled>
+                          <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M12 17V8M8.5 11.5 12 8l3.5 3.5" />
+                          </svg>
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>

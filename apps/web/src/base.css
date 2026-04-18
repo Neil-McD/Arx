@@ -3270,70 +3270,41 @@ body {
 }
 
 .workspace-bootstrap-composer-shell {
-  width: 100%;
-  max-width: var(--web-chat-max-width);
-  margin: 0 auto 12px;
-  padding-inline: var(--web-chat-gutter);
-  box-sizing: border-box;
+  pointer-events: none;
 }
 
-.workspace-bootstrap-composer {
-  width: 100%;
-  display: grid;
-  gap: 14px;
-  padding: 14px 16px 12px;
-  border-radius: var(--radius-lg);
-  border: 1px solid color-mix(in srgb, var(--border-default) 84%, transparent);
-  background: var(--workspace-composer-bg, color-mix(in srgb, var(--bg-card) 82%, var(--bg-workspace) 18%));
-  box-sizing: border-box;
+.workspace-bootstrap-ask-bar {
+  position: relative;
 }
 
-.workspace-bootstrap-label {
-  font-size: 11px;
-  font-weight: 650;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+.workspace-bootstrap-input {
+  min-height: 28px;
+  resize: none;
+  overflow: hidden;
+}
+
+.workspace-bootstrap-input.ask-input:disabled {
+  opacity: 1;
+  cursor: default;
+}
+
+.workspace-bootstrap-input::placeholder {
   color: var(--text-faint);
 }
 
-.workspace-bootstrap-progress {
-  width: 152px;
-  height: 8px;
-  border-radius: 999px;
-  opacity: 0.92;
+.workspace-bootstrap-model-btn {
+  min-width: 0;
 }
 
-.workspace-bootstrap-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+.workspace-bootstrap-ask-bar .ask-icon-btn:disabled,
+.workspace-bootstrap-ask-bar .ask-model-btn:disabled {
+  opacity: 0.7;
+  cursor: default;
 }
 
-.workspace-bootstrap-chip {
-  width: 84px;
-  height: 26px;
-  border-radius: 999px;
-  opacity: 0.9;
-}
-
-.workspace-bootstrap-actions {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  margin-left: auto;
-}
-
-.workspace-bootstrap-action-ghost {
-  width: 24px;
-  height: 24px;
-  border-radius: 999px;
-}
-
-.workspace-bootstrap-send {
-  width: 34px;
-  height: 34px;
-  border-radius: 999px;
+.workspace-bootstrap-ask-bar .chat-send.ask-send-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
 }
 
 .chat-feed {
@@ -16399,30 +16370,6 @@ button.message-citation-chip:hover {
 
   .workspace-bootstrap-composer-shell {
     margin-bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
-    padding-inline: 12px;
-  }
-
-  .workspace-bootstrap-composer {
-    gap: 12px;
-    padding: 13px 14px 11px;
-  }
-
-  .workspace-bootstrap-footer {
-    gap: 10px;
-  }
-
-  .workspace-bootstrap-chip {
-    width: 74px;
-    height: 24px;
-  }
-
-  .workspace-bootstrap-actions {
-    gap: 8px;
-  }
-
-  .workspace-bootstrap-send {
-    width: 32px;
-    height: 32px;
   }
 
   .web-empty-thread-avatar {
