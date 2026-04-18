@@ -34,10 +34,26 @@ export function WebAuthBootstrapShell(props: WebAuthBootstrapShellProps) {
               </div>
             </div>
           ) : (
-            <div className="workspace-body">
-              <div className="chat-loading">
-                <div className="loading-spinner" />
-                <span>Loading workspace...</span>
+            <div className="workspace-body workspace-bootstrap-body">
+              <div
+                className="workspace-bootstrap-composer-shell"
+                aria-busy="true"
+                aria-live="polite"
+              >
+                <div className="workspace-bootstrap-composer">
+                  <div className="workspace-bootstrap-label">Restoring workspace</div>
+                  <div
+                    className="workspace-bootstrap-progress web-skeleton-pill"
+                    aria-hidden="true"
+                  />
+                  <div className="workspace-bootstrap-footer" aria-hidden="true">
+                    <div className="workspace-bootstrap-chip web-skeleton-pill" />
+                    <div className="workspace-bootstrap-actions">
+                      <div className="workspace-bootstrap-action-ghost web-skeleton-pill" />
+                      <div className="workspace-bootstrap-send web-skeleton-card" />
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           )}

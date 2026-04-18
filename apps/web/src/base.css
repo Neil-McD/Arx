@@ -3262,6 +3262,80 @@ body {
   border-radius: 999px;
 }
 
+.workspace-bootstrap-body {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  min-height: 0;
+}
+
+.workspace-bootstrap-composer-shell {
+  width: 100%;
+  max-width: var(--web-chat-max-width);
+  margin: 0 auto 12px;
+  padding-inline: var(--web-chat-gutter);
+  box-sizing: border-box;
+}
+
+.workspace-bootstrap-composer {
+  width: 100%;
+  display: grid;
+  gap: 14px;
+  padding: 14px 16px 12px;
+  border-radius: var(--radius-lg);
+  border: 1px solid color-mix(in srgb, var(--border-default) 84%, transparent);
+  background: var(--workspace-composer-bg, color-mix(in srgb, var(--bg-card) 82%, var(--bg-workspace) 18%));
+  box-sizing: border-box;
+}
+
+.workspace-bootstrap-label {
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.workspace-bootstrap-progress {
+  width: 152px;
+  height: 8px;
+  border-radius: 999px;
+  opacity: 0.92;
+}
+
+.workspace-bootstrap-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.workspace-bootstrap-chip {
+  width: 84px;
+  height: 26px;
+  border-radius: 999px;
+  opacity: 0.9;
+}
+
+.workspace-bootstrap-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+}
+
+.workspace-bootstrap-action-ghost {
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+}
+
+.workspace-bootstrap-send {
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+}
+
 .chat-feed {
   flex: 1;
   min-height: 0;
@@ -16321,6 +16395,34 @@ button.message-citation-chip:hover {
 
   .web-thread-loading-bubble-tall {
     height: 86px;
+  }
+
+  .workspace-bootstrap-composer-shell {
+    margin-bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
+    padding-inline: 12px;
+  }
+
+  .workspace-bootstrap-composer {
+    gap: 12px;
+    padding: 13px 14px 11px;
+  }
+
+  .workspace-bootstrap-footer {
+    gap: 10px;
+  }
+
+  .workspace-bootstrap-chip {
+    width: 74px;
+    height: 24px;
+  }
+
+  .workspace-bootstrap-actions {
+    gap: 8px;
+  }
+
+  .workspace-bootstrap-send {
+    width: 32px;
+    height: 32px;
   }
 
   .web-empty-thread-avatar {
