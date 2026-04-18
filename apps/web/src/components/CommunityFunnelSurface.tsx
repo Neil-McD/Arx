@@ -6,7 +6,7 @@ import {
   formatMemberCount,
   getCommunityInitials,
 } from "../../../../shared/communityFunnelUi";
-import { parseEmbedUrl } from "../../../../shared/linkEmbedUi";
+import { parseEmbedUrl, type ParsedEmbed } from "../../../../shared/linkEmbedUi";
 
 export type CommunityFunnelSurfaceFace = {
   user_id: string;
@@ -126,15 +126,38 @@ function renderAvatar(name: string, imageUrl: string | null | undefined, classNa
   return <span className={fallbackClassName}>{getCommunityInitials(name)}</span>;
 }
 
-function DeferredEmbedHero(props: { embedSrc: string; thumbnailUrl?: string | null }) {
+function buildActivatedEmbedSrc(embed: ParsedEmbed): string {
+  const url = new URL(embed.src);
+  switch (embed.provider) {
+    case "youtube":
+      url.searchParams.set("autoplay", "1");
+      url.searchParams.set("playsinline", "1");
+      url.searchParams.set("rel", "0");
+      break;
+    case "vimeo":
+      url.searchParams.set("autoplay", "1");
+      url.searchParams.set("autopause", "0");
+      break;
+    case "loom":
+      url.searchParams.set("autoplay", "1");
+      break;
+    case "wistia":
+      url.searchParams.set("autoplay", "1");
+      break;
+  }
+  return url.toString();
+}
+
+function DeferredEmbedHero(props: { embed: ParsedEmbed }) {
   const [isActive, setIsActive] = useState(false);
+  const thumbnailUrl = "thumbnailUrl" in props.embed ? props.embed.thumbnailUrl : null;
 
   if (isActive) {
     return (
       <div className="public-funnel-media-shell">
         <iframe
           className="public-funnel-media-embed"
-          src={props.embedSrc}
+          src={buildActivatedEmbedSrc(props.embed)}
           title="Community funnel video"
           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
           allowFullScreen
@@ -150,18 +173,13 @@ function DeferredEmbedHero(props: { embedSrc: string; thumbnailUrl?: string | nu
       onClick={() => setIsActive(true)}
       aria-label="Play community funnel video"
     >
-      {props.thumbnailUrl ? (
-        <img className="public-funnel-media-image" src={props.thumbnailUrl} alt="" draggable={false} loading="lazy" />
+      {thumbnailUrl ? (
+        <img className="public-funnel-media-image" src={thumbnailUrl} alt="" draggable={false} loading="lazy" />
       ) : (
         <div className="public-funnel-media-placeholder public-funnel-media-placeholder-rich">
           <div className="public-funnel-media-placeholder-text">Play video</div>
         </div>
       )}
-      <span className="public-funnel-media-play-badge" aria-hidden="true">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M8 5.14v13.72a1 1 0 0 0 1.53.85l10.28-6.86a1 1 0 0 0 0-1.66L9.53 4.29A1 1 0 0 0 8 5.14Z" />
-        </svg>
-      </span>
     </button>
   );
 }
@@ -177,12 +195,7 @@ function renderHeroMedia(kind: CommunityFunnelHeroMediaKind, url: string | null)
   if (kind === "video") {
     const embed = parseEmbedUrl(url);
     if (embed) {
-      return (
-        <DeferredEmbedHero
-          embedSrc={embed.src}
-          thumbnailUrl={"thumbnailUrl" in embed ? embed.thumbnailUrl : null}
-        />
-      );
+      return <DeferredEmbedHero embed={embed} />;
     }
     return (
       <div className="public-funnel-media-shell">

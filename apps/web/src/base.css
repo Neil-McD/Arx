@@ -2137,22 +2137,6 @@ body {
     color-mix(in srgb, var(--bg-card) 84%, black);
 }
 
-.public-funnel-media-play-badge {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  width: 78px;
-  height: 78px;
-  border-radius: 999px;
-  display: grid;
-  place-items: center;
-  color: #ffffff;
-  background: color-mix(in srgb, var(--bg-app) 34%, rgba(0, 0, 0, 0.68));
-  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.22);
-  pointer-events: none;
-}
-
 .public-funnel-media-placeholder-text {
   font-size: 14px;
   font-weight: 540;

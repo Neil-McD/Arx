@@ -315,7 +315,6 @@ import { useCommunityMemberRosterLifecycle } from "../../../shared/useCommunityM
 import { useCommunityResourcesTabLifecycle } from "../../../shared/useCommunityResourcesTabLifecycle";
 import { useCommunitySettingsAccessLifecycle } from "../../../shared/useCommunitySettingsAccessLifecycle";
 import { confirmDiscardUnsavedCommunitySettingsWeb } from "../../../shared/communityUnsavedGuard";
-import { fetchCloudMyCommunityAccessBySlug } from "../../../shared/cloudCommunityAccessGateway";
 import { markCloudThreadAgentAttentionSeen } from "../../../shared/cloudThreadsGateway";
 import type { WebSettingsPanelsProps } from "./components/WebSettingsPanels";
 import type { WorkspaceComposerApi, WorkspaceComposerDraft } from "./components/WebWorkspaceHost";
@@ -5262,7 +5261,7 @@ export default function App() {
         onClose: closeCommunityChatLightbox,
       },
     });
-  const activateDiscoverCommunityCard = useCallback(async (opts: {
+  const activateDiscoverCommunityCard = useCallback((opts: {
     canActivate: boolean;
     slug: string;
   }) => {
@@ -5280,33 +5279,8 @@ export default function App() {
       return;
     }
 
-    const rawSession = session;
-    const usableSession = ensureUsableAuthSession ? await ensureUsableAuthSession(rawSession) : rawSession;
-    if (!usableSession) {
-      openPublicCommunityFunnel(slug, { pushSnapshot: true });
-      return;
-    }
-
-    try {
-      const access = await fetchCloudMyCommunityAccessBySlug<AuthSession, CommunityAccess>({
-        session: usableSession,
-        communitySlug: slug,
-      });
-      if (access?.community_id && (access.can_enter_community || access.is_owner)) {
-        enterJoinedCommunity({
-          communityId: access.community_id,
-          communitySlug: slug,
-        });
-        return;
-      }
-    } catch {
-      // Fall back to the public landing if access lookup fails.
-    }
-
     openPublicCommunityFunnel(slug, { pushSnapshot: true });
   }, [
-    session,
-    ensureUsableAuthSession,
     enterJoinedCommunity,
     openPublicCommunityFunnel,
     resolveKnownCommunityIdBySlug,
