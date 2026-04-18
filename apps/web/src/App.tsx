@@ -644,6 +644,7 @@ export default function App() {
     setAuthError,
     sessionRef,
     isAuthBootstrapComplete,
+    isAuthResolvingSignedInState,
     authError,
     authRuntimeAcceptance,
     authProbeEvents,
@@ -4731,7 +4732,7 @@ export default function App() {
     if (!slug || !approvalPending) return;
     void cancelMyPendingJoinRequest(slug);
   };
-  const isAuthBootstrapResolvingAppShell = shellPublicRoute.kind === "app" && !isAuthBootstrapComplete;
+  const isAuthBootstrapResolvingAppShell = shellPublicRoute.kind === "app" && isAuthResolvingSignedInState;
 
 	  const handleTopbarBackFromWorkspaceSettings = () => {
 	    if (goBack()) return;

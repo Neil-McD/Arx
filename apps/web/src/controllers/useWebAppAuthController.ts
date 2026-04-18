@@ -43,6 +43,7 @@ type UseWebAppAuthControllerResult = {
   setAuthError: Dispatch<SetStateAction<string | null>>;
   sessionRef: MutableRefObject<AuthSession | null>;
   isAuthBootstrapComplete: boolean;
+  isAuthResolvingSignedInState: boolean;
   authError: string | null;
   authRuntimeAcceptance: ConvexAuthenticatedSessionProbeResult | null;
   authProbeEvents: { ts: number; stage: string; detail: Record<string, unknown> }[];
@@ -182,6 +183,11 @@ export function useWebAppAuthController(
     authBootstrapCompleteRef.current = true;
     setIsAuthBootstrapComplete(true);
   }, []);
+
+  useEffect(() => {
+    if (workos.isEnabled) return;
+    markAuthBootstrapComplete();
+  }, [markAuthBootstrapComplete, workos.isEnabled]);
 
   const clearSessionLocally = useCallback(async (): Promise<void> => {
     sessionRef.current = null;
@@ -462,9 +468,7 @@ export function useWebAppAuthController(
     refreshTimeoutRef,
     refreshLocked: refreshAuthSessionLocked,
     didJustSignInRef,
-    onMountOAuthBootstrap: async () => {
-      markAuthBootstrapComplete();
-    },
+    onMountOAuthBootstrap: async () => {},
     onDidJustSignIn: () => {
       onDidJustSignInRef.current();
     },
@@ -616,6 +620,51 @@ export function useWebAppAuthController(
   ]);
 
   useEffect(() => {
+    if (!workos.isEnabled || workos.isLoading) return;
+    if (!isAuthBootstrapComplete) return;
+    if (session || !workos.user) return;
+
+    let cancelled = false;
+
+    void (async () => {
+      pushAuthProbeEvent("post_bootstrap_session_gap_detected", {
+        workos: readWorkOsBootstrapDebugState(workos),
+      });
+      const recoveredSession = await recoverSessionFromWorkOs({
+        phase: "post_bootstrap",
+        forceRefresh: true,
+      });
+      if (cancelled || !recoveredSession) return;
+      clearAuthSignedOutIntentMarker();
+      clearAuthFlowPending();
+      await onSessionReadyRef.current(recoveredSession);
+      pushAuthProbeEvent("post_bootstrap_recovered_session", {
+        userId: recoveredSession.user.id,
+        email: recoveredSession.user.email ?? null,
+      });
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    clearAuthFlowPending,
+    isAuthBootstrapComplete,
+    onSessionReadyRef,
+    pushAuthProbeEvent,
+    recoverSessionFromWorkOs,
+    session,
+    workos,
+  ]);
+
+  const isAuthResolvingSignedInState = useMemo(() => {
+    if (!workos.isEnabled) return !isAuthBootstrapComplete;
+    if (workos.isLoading) return true;
+    if (!isAuthBootstrapComplete) return true;
+    return !session && Boolean(workos.user);
+  }, [isAuthBootstrapComplete, session, workos.isEnabled, workos.isLoading, workos.user]);
+
+  useEffect(() => {
     const onStorage = (event: StorageEvent) => {
       const key = String(event.key ?? "").trim();
       if (key !== AUTH_SIGNED_OUT_INTENT_KEY || event.newValue !== "1") return;
@@ -638,6 +687,7 @@ export function useWebAppAuthController(
     setAuthError,
     sessionRef,
     isAuthBootstrapComplete,
+    isAuthResolvingSignedInState,
     authError,
     authRuntimeAcceptance,
     authProbeEvents,
