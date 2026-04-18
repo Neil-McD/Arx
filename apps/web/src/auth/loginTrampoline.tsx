@@ -53,12 +53,14 @@ export function LoginTrampolineRoute() {
   const workos = useWorkOsRuntime();
   const [error, setError] = useState<string | null>(null);
   const [signInUrl, setSignInUrl] = useState<string | null>(null);
+  const [showManualContinue, setShowManualContinue] = useState(false);
   const returnTo = useMemo(() => readLoginRouteReturnTo(), []);
 
   useEffect(() => {
     if (!workos.isEnabled) {
       setError("WorkOS auth is not configured.");
       setSignInUrl(null);
+      setShowManualContinue(true);
       return;
     }
     if (workos.isLoading) return;
@@ -76,17 +78,36 @@ export function LoginTrampolineRoute() {
         if (!normalized) {
           setError("WorkOS sign-in URL could not be prepared.");
           setSignInUrl(null);
+          setShowManualContinue(true);
           return;
         }
         setSignInUrl(normalized);
         setError(null);
+        setShowManualContinue(false);
       })
       .catch((signInError) => {
         console.warn("[auth][probe] login_trampoline_signin_failed", signInError);
         setError(formatError(signInError));
         setSignInUrl(null);
+        setShowManualContinue(true);
       });
   }, [returnTo, workos]);
+
+  useEffect(() => {
+    if (!signInUrl) return;
+    setShowManualContinue(false);
+    console.info("[auth][probe] login_trampoline_redirect_dispatched", { returnTo });
+    const fallbackTimer = window.setTimeout(() => {
+      setShowManualContinue(true);
+    }, 1200);
+    const redirectTimer = window.setTimeout(() => {
+      window.location.replace(signInUrl);
+    }, 0);
+    return () => {
+      window.clearTimeout(fallbackTimer);
+      window.clearTimeout(redirectTimer);
+    };
+  }, [returnTo, signInUrl]);
 
   return (
     <div
@@ -113,14 +134,16 @@ export function LoginTrampolineRoute() {
       >
         <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 8 }}>Redirecting to sign in</div>
         <div style={{ fontSize: 14, lineHeight: 1.6, color: "rgba(245,247,251,0.78)" }}>
-          {signInUrl
-            ? "Continue to WorkOS sign-in. PolyNet will return you to your original page afterward."
-            : "PolyNet is preparing the WorkOS sign-in handoff and will return you to your original page."}
+          {signInUrl && !showManualContinue
+            ? "PolyNet is redirecting you to WorkOS sign-in and will bring you back to your original page."
+            : signInUrl
+              ? "If the redirect does not continue automatically, use the button below."
+              : "PolyNet is preparing the WorkOS sign-in handoff and will return you to your original page."}
         </div>
-        {signInUrl ? (
+        {signInUrl && showManualContinue ? (
           <button
             type="button"
-            onClick={() => window.location.assign(signInUrl)}
+            onClick={() => window.location.replace(signInUrl)}
             style={{
               marginTop: 16,
               width: "100%",

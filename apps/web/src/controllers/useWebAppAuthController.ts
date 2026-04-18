@@ -400,6 +400,37 @@ export function useWebAppAuthController(
         window.location.assign(prefetchedSignIn.url);
         return;
       }
+      let liveSignInUrl = "";
+      try {
+        liveSignInUrl = String(
+          await workos.getSignInUrl({ state: { returnTo } }),
+        ).trim();
+      } catch (error) {
+        pushAuthProbeEvent("sign_in_redirect_live_url_failed", {
+          reason: errorToMessage(error, "sign_in_live_url_failed"),
+          loginPath,
+          workos: readWorkOsBootstrapDebugState(workos),
+        });
+      }
+      if (liveSignInUrl) {
+        pushAuthProbeEvent("sign_in_redirect_dispatched", {
+          mode: "live_url",
+          workos: readWorkOsBootstrapDebugState(workos),
+        });
+        const currentHref = window.location.href;
+        const fallbackTimer = window.setTimeout(() => {
+          if (window.location.href !== currentHref) return;
+          pushAuthProbeEvent("sign_in_redirect_stalled", {
+            mode: "live_url",
+            loginPath,
+            workos: readWorkOsBootstrapDebugState(workos),
+          });
+          window.location.assign(loginPath);
+        }, 600);
+        window.location.assign(liveSignInUrl);
+        window.setTimeout(() => window.clearTimeout(fallbackTimer), 650);
+        return;
+      }
       pushAuthProbeEvent("sign_in_redirect_dispatched", {
         mode: "login_trampoline",
         loginPath,
