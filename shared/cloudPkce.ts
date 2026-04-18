@@ -1,3 +1,13 @@
+export function hasOAuthCallbackParamsInLocation(): boolean {
+  try {
+    const url = new URL(window.location.href);
+    const oauthKeys = ["code", "error", "error_code", "error_description", "state"];
+    return oauthKeys.some((key) => url.searchParams.has(key));
+  } catch {
+    return false;
+  }
+}
+
 export function clearOAuthCallbackParamsFromLocation(): void {
   try {
     const url = new URL(window.location.href);

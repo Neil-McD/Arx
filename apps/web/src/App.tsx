@@ -190,6 +190,7 @@ import {
   storeAuthResumeState,
   type BuilderUpgradeContext,
 } from "../../../shared/authResumeState";
+import { hasOAuthCallbackParamsInLocation } from "../../../shared/cloudPkce";
 import { routePendingAuthIntent } from "../../../shared/authResumeRouter";
 import { resetWebSessionStateAfterSignOut } from "./auth/resetSessionState";
 import { resolveUserAccessPolicy } from "../../../shared/capabilities";
@@ -2703,6 +2704,7 @@ export default function App() {
 
   useEffect(() => {
     if (shellVariant !== "standard" || !isLikelyMobileDevice) return;
+    if (hasOAuthCallbackParamsInLocation()) return;
     const currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
     const nextPath = applyShellVariantToKnownPath(currentPath, "mobile");
     if (!nextPath || nextPath === currentPath) return;
