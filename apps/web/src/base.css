@@ -11994,18 +11994,10 @@ button.message-citation-chip:hover {
 
 .upgrade-copy {
   display: grid;
-  gap: 8px;
+  gap: 0;
   max-width: 720px;
   margin-bottom: 14px;
   font-family: var(--font-sans, inherit);
-}
-
-.upgrade-kicker {
-  font-size: 12px;
-  letter-spacing: 0.1em;
-  font-weight: 600;
-  text-transform: uppercase;
-  color: var(--text-muted);
 }
 
 .upgrade-lead {

@@ -34,18 +34,13 @@ export function BuilderUpgradeModal({
 }: BuilderUpgradeModalProps) {
   if (!isOpen) return null;
 
+  void builderUpgradeContext;
   void showBuilderUpgradeScrollHint;
   void onModalBodyScroll;
   const freeIsCurrent = isBuilderTierFree(builderTier);
   const builderIsCurrent = hasBuilderTierPaidAccess(builderTier);
-  const upgradeKicker =
-    builderUpgradeContext === "create_community"
-      ? "Create on Polynet"
-      : "Build on Polynet";
   const upgradeLead =
-    builderUpgradeContext === "create_community"
-      ? "Create, launch, and monetize communities, agents, and apps on Polynet."
-      : "Build, deploy, and monetize agents, communities, and apps on Polynet.";
+    "Build, deploy, and monetize AI-driven communities and apps on Polynet.";
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -58,7 +53,6 @@ export function BuilderUpgradeModal({
         </div>
         <div className="modal-body" ref={builderUpgradeModalBodyRef}>
           <div className="upgrade-copy">
-            <div className="upgrade-kicker">{upgradeKicker}</div>
             <div className="upgrade-lead">{upgradeLead}</div>
           </div>
           {builderBillingError && <div className="auth-error">{builderBillingError}</div>}
