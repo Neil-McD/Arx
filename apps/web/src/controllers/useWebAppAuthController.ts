@@ -256,11 +256,40 @@ export function useWebAppAuthController(
     markAuthFlowPending();
     storeAuthResumeState({ returnTo });
     try {
-      window.location.assign(loginPath);
+      let didNavigate = false;
+      const fallbackTimer = window.setTimeout(() => {
+        if (didNavigate) return;
+        didNavigate = true;
+        window.location.assign(loginPath);
+      }, 1200);
+      try {
+        const liveSignInUrl = String(
+          await workos.getSignInUrl({ state: { returnTo } }),
+        ).trim();
+        if (!liveSignInUrl) {
+          window.clearTimeout(fallbackTimer);
+          if (!didNavigate) {
+            didNavigate = true;
+            window.location.assign(loginPath);
+          }
+          return;
+        }
+        window.clearTimeout(fallbackTimer);
+        if (!didNavigate) {
+          didNavigate = true;
+          window.location.assign(liveSignInUrl);
+        }
+      } catch {
+        window.clearTimeout(fallbackTimer);
+        if (!didNavigate) {
+          didNavigate = true;
+          window.location.assign(loginPath);
+        }
+      }
     } catch (error) {
       setAuthError(errorToMessage(error, "Sign-in failed."));
     }
-  }, []);
+  }, [workos]);
 
   const requireSignIn = useCallback((intentInput?: unknown) => {
     setAuthError(null);
