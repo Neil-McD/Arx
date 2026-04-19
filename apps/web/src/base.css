@@ -16161,10 +16161,10 @@ button.message-citation-chip:hover {
 }
 
 .app-root:not(.mobile-shell) .workspace-composer-shell .guest-signup-rail {
-  width: calc(100% - 12px);
-  max-width: calc(100% - 12px);
-  margin: 0 auto 0 0;
-  align-self: flex-start;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  align-self: stretch;
 }
 
 .app-root:not(.mobile-shell) .web-empty-thread-composer > .ask-bar.ask-bar-landing {
