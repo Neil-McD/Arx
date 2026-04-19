@@ -262,7 +262,7 @@
   padding-left: var(--web-sessions-drawer-width);
 }
 
-@media (max-width: 920px) {
+@media (max-width: 1040px) {
   /* On narrow windows, keep the drawer overlayed instead of shrinking the chat column. */
   .app-root.sessions-drawer-open .workspace:not(.scroll-to-bottom) {
     padding-left: 0;
