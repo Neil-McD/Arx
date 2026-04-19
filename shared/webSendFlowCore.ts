@@ -1,5 +1,6 @@
 import { buildCloudCommunityContextEnvelope } from "./communityContextEnvelope";
 import { resolveCloudModelSelection } from "./inferenceLaneResolver";
+import type { GuestInferenceIssue } from "./webTurnRunnerCore";
 
 type ModelToggle = {
   id: string;
@@ -88,7 +89,13 @@ export type UseWebSendFlowControllerArgs<
     runIdHint: string;
     messages: ThreadMessageT[];
     systemPrompt?: string | null;
-  }) => Promise<{ cancelled: boolean; error: string | null; content: string; runId: string | null }>;
+  }) => Promise<{
+    cancelled: boolean;
+    error: string | null;
+    content: string;
+    runId: string | null;
+    guestIssue: GuestInferenceIssue | null;
+  }>;
   runAgentTurn: (
     session: SessionT,
     threadId: string,
@@ -143,6 +150,13 @@ export type UseWebSendFlowControllerArgs<
   setThreadErrorForThread: (
     threadId: string | null,
     value: string | null | ((prev: string | null) => string | null),
+  ) => void;
+  setGuestInferenceIssueForThread: (
+    threadId: string | null,
+    value:
+      | GuestInferenceIssue
+      | null
+      | ((prev: GuestInferenceIssue | null) => GuestInferenceIssue | null),
   ) => void;
   setIsSendingMessage: (value: boolean | ((prev: boolean) => boolean)) => void;
   setThreadRunSending: (threadId: string, sending: boolean) => void;

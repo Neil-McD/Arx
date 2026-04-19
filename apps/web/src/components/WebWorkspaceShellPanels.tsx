@@ -21,7 +21,7 @@ export type WebWorkspaceShellPanelsProps<TThread extends ThreadLike, TProject ex
   sidebar: WorkspaceSidebarState<TThread, TProject>;
   threadError: string | null;
   displayedThreadError: ReactNode;
-  showGuestRateLimitSignInAction: boolean;
+  showGuestSignInAction: boolean;
   session: unknown | null;
   authError: string | null;
   requireSignIn: () => void;
@@ -111,13 +111,15 @@ export function WebWorkspaceShellPanels<TThread extends ThreadLike, TProject ext
         }}
       >
         <div className="session-content">
-          <div className="session-title">Guest thread</div>
+          <div className="session-title">Preview thread</div>
           <div className="session-preview">{props.guestThreadPreview}</div>
         </div>
       </div>
       <div className="guest-thread-signin">
-        <p className="guest-thread-signin-title">Sign in</p>
-        <p className="guest-thread-signin-copy">Save chats, unlock more models, and join communities.</p>
+        <p className="guest-thread-signin-title">Create your free account</p>
+        <p className="guest-thread-signin-copy">
+          Save this chat, unlock more models, use your ChatGPT Plus / Pro access on Polynet, and discover communities, agents, and apps across the network.
+        </p>
         {props.authError ? <div className="auth-error">{props.authError}</div> : null}
         <button
           type="button"
@@ -139,7 +141,7 @@ export function WebWorkspaceShellPanels<TThread extends ThreadLike, TProject ext
           disabled={!props.guestThreadHasMessages}
           onClick={() => {
             if (!props.guestThreadHasMessages) return;
-            const confirmed = window.confirm("Clear this guest chat from this browser?");
+            const confirmed = window.confirm("Clear this preview chat from this browser?");
             if (!confirmed) return;
             props.resetGuestThread();
           }}
@@ -153,7 +155,7 @@ export function WebWorkspaceShellPanels<TThread extends ThreadLike, TProject ext
   const renderMobileGuestSidebar = () => (
     <>
       <div className="session-search-row">
-        <div className="session-search" role="search" aria-label="Guest threads">
+        <div className="session-search" role="search" aria-label="Preview threads">
           <svg className="session-search-icon" viewBox="0 0 24 24" aria-hidden="true">
             <circle cx="11" cy="11" r="7" />
             <path d="M20 20l-3.5-3.5" />
@@ -179,7 +181,7 @@ export function WebWorkspaceShellPanels<TThread extends ThreadLike, TProject ext
         Continue with Google
       </button>
       <div className="mobile-agent-drawer-caption">
-        Save chats, unlock more models, and join communities.
+        Unlock more models, use your ChatGPT Plus / Pro access on Polynet, and discover communities, agents, and apps across the network.
       </div>
       <div className="session-list">
         <div
@@ -193,7 +195,7 @@ export function WebWorkspaceShellPanels<TThread extends ThreadLike, TProject ext
           }}
         >
           <div className="session-content">
-            <div className="session-title">Guest thread</div>
+            <div className="session-title">Preview thread</div>
             <div className="session-preview">{props.guestThreadPreview}</div>
           </div>
         </div>
@@ -211,7 +213,7 @@ export function WebWorkspaceShellPanels<TThread extends ThreadLike, TProject ext
           {props.threadError && (
             <div className="auth-error">
               {props.displayedThreadError}
-              {props.showGuestRateLimitSignInAction ? (
+              {props.showGuestSignInAction ? (
                 <button type="button" className="auth-error-link" onClick={() => props.requireSignIn()}>
                   Sign in
                 </button>
@@ -250,7 +252,7 @@ export function WebWorkspaceShellPanels<TThread extends ThreadLike, TProject ext
               {props.threadError && (
                 <div className="auth-error">
                   {props.displayedThreadError}
-                  {props.showGuestRateLimitSignInAction ? (
+                  {props.showGuestSignInAction ? (
                     <button type="button" className="auth-error-link" onClick={() => props.requireSignIn()}>
                       Sign in
                     </button>

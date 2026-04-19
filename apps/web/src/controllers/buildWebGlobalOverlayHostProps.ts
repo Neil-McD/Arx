@@ -37,6 +37,13 @@ export function buildWebGlobalOverlayHostProps(params: {
   handleImportExternalMemory: () => void | Promise<void>;
   projectModalHostProps: WebGlobalOverlayHostProps["projectModalHostProps"];
   providerConnectionModalHostProps: WebGlobalOverlayHostProps["providerConnectionModalHostProps"];
+  previewAccessGateModal: NonNullable<
+    WebGlobalOverlayHostProps["previewAccessGateModalProps"]
+  >["previewAccessGateModal"];
+  previewAccessGateAuthError: string | null;
+  isPreviewAccessGateRunning: boolean;
+  closePreviewAccessGateModal: () => void;
+  continuePreviewAccessGateAuth: () => void;
   inferenceIssueModal: InferenceIssueModalState;
   isInferenceIssueModalRunning: boolean;
   setInferenceIssueModal: (value: InferenceIssueModalState) => void;
@@ -117,6 +124,15 @@ export function buildWebGlobalOverlayHostProps(params: {
       : null,
     projectModalHostProps: params.projectModalHostProps,
     providerConnectionModalHostProps: params.providerConnectionModalHostProps,
+    previewAccessGateModalProps: params.previewAccessGateModal
+      ? {
+          previewAccessGateModal: params.previewAccessGateModal,
+          authError: params.previewAccessGateAuthError,
+          isRunning: params.isPreviewAccessGateRunning,
+          onClose: params.closePreviewAccessGateModal,
+          onContinueWithGoogle: params.continuePreviewAccessGateAuth,
+        }
+      : null,
     inferenceIssueModalProps: params.inferenceIssueModal
       ? {
           hasSession: Boolean(params.session),

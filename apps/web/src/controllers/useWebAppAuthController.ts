@@ -102,6 +102,10 @@ function errorToMessage(error: unknown, fallback: string): string {
 
 const AUTH_SESSION_EXPIRED_MESSAGE = "Session expired. Please sign in again.";
 
+function shouldPreserveAuthResumeStateOnBootstrapFailure(): boolean {
+  return readAuthResumeState()?.intent?.reason === "open_workspace_draft";
+}
+
 export function useWebAppAuthController(
   params: UseWebAppAuthControllerParams,
 ): UseWebAppAuthControllerResult {
@@ -486,7 +490,9 @@ export function useWebAppAuthController(
       if (hadPendingAuthFlow) {
         setAuthError("Sign-in completed, but PolyNet could not establish your account session. Please try again.");
         clearAuthFlowPending();
-        clearAuthResumeState();
+        if (!shouldPreserveAuthResumeStateOnBootstrapFailure()) {
+          clearAuthResumeState();
+        }
       }
     })();
 

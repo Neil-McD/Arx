@@ -27,12 +27,14 @@ import {
 import {
   type CreateAssistantMessageParams,
   type CreateThreadMessageParams,
+  type GuestInferenceIssue,
   type PublicTurnThreadMessage,
   type RunAgentTurnParams,
   type RunPublicTurnParams,
   type ThreadStreamingState,
   type UseWebTurnRunnerControllerArgs,
   buildAssistantTextMessagePayload,
+  buildGuestInferenceIssue,
   buildPublicTurnMessages,
   isAbortError,
   mapInferenceIssueReason,
@@ -394,13 +396,19 @@ export function useWebTurnRunnerController<
   const runPublicTurn = useCallback(
     async (
       params: RunPublicTurnParams<ThreadMessageT>,
-    ): Promise<{ cancelled: boolean; error: string | null; content: string; runId: string | null }> => {
+    ): Promise<{
+      cancelled: boolean;
+      error: string | null;
+      content: string;
+      runId: string | null;
+      guestIssue: GuestInferenceIssue | null;
+    }> => {
       const current = argsRef.current;
       let baseUrl: string;
       try {
         baseUrl = requireCloudRuntimeBaseUrl(current.getCloudRuntimeBaseUrl);
       } catch {
-        return { cancelled: false, error: "Missing cloud runtime base URL.", content: "", runId: null };
+        return { cancelled: false, error: "Missing cloud runtime base URL.", content: "", runId: null, guestIssue: null };
       }
       const transport: CloudRuntimeTransport<SessionT> = {
         baseUrl,
@@ -467,26 +475,23 @@ export function useWebTurnRunnerController<
         if (!turn.ok) {
           const failure = await readCloudFunctionError(turn);
           if (failure.category === "rate_limited") {
+            const guestIssue = buildGuestInferenceIssue("rate_limited");
             return {
               cancelled: false,
-              error: formatCloudFunctionErrorMessage({
-                ...failure,
-                message:
-                  "Guest chat is hitting the free model limit right now. Sign in to save chats, unlock more models, and use your ChatGPT Plus / Pro or your own provider.",
-              }),
+              error: formatCloudFunctionErrorMessage({ ...failure, message: guestIssue.fullMessage }),
               content: "",
               runId: null,
+              guestIssue,
             };
           }
           if (failure.category === "misconfigured" || failure.category === "unavailable") {
-            const errorMessage = failure.message.trim()
-              ? normalizeGuestInferenceError(failure.message)
-              : "Guest chat is temporarily unavailable.";
+            const guestIssue = buildGuestInferenceIssue(failure.category);
             return {
               cancelled: false,
-              error: formatCloudFunctionErrorMessage({ ...failure, message: errorMessage }),
+              error: formatCloudFunctionErrorMessage({ ...failure, message: guestIssue.fullMessage }),
               content: "",
               runId: null,
+              guestIssue,
             };
           }
           if (failure.category === "auth") {
@@ -495,6 +500,7 @@ export function useWebTurnRunnerController<
               error: formatCloudFunctionErrorMessage(failure),
               content: "",
               runId: null,
+              guestIssue: null,
             };
           }
           throw new Error(
@@ -612,14 +618,22 @@ export function useWebTurnRunnerController<
           text: finalContent,
           blockedIds: [params.threadId, runIdFromServer],
         });
-        return { cancelled: false, error: null, content: sanitizedFinalContent, runId: runIdFromServer };
+        return {
+          cancelled: false,
+          error: null,
+          content: sanitizedFinalContent,
+          runId: runIdFromServer,
+          guestIssue: null,
+        };
       } catch (error) {
         const cancelled =
           threadStreamingUserCancelledRefById.current[params.threadId] === true || abort.signal.aborted || isAbortError(error);
-        if (cancelled) return { cancelled: true, error: null, content: "", runId: null };
+        if (cancelled) return { cancelled: true, error: null, content: "", runId: null, guestIssue: null };
         const rawMessage =
           typeof error === "string" ? error : error instanceof Error ? error.message : "Failed to run model.";
-        return { cancelled: false, error: normalizeGuestInferenceError(rawMessage), content: "", runId: null };
+        console.warn("Guest public turn failed:", normalizeGuestInferenceError(rawMessage));
+        const guestIssue = buildGuestInferenceIssue("unavailable");
+        return { cancelled: false, error: guestIssue.fullMessage, content: "", runId: null, guestIssue };
       } finally {
         resetThreadStreamingState(params.threadId);
       }

@@ -229,7 +229,11 @@ import { useWebMemorySettingsDataController } from "../../../shared/useWebMemory
 import { useWebMemoryMutationController } from "../../../shared/useWebMemoryMutationController";
 import { useWebSendFlowController } from "../../../shared/useWebSendFlowController";
 import { useWebTurnRunnerController } from "../../../shared/useWebTurnRunnerController";
-import type { ThreadStreamingRuntimeEvent, ThreadStreamingState } from "../../../shared/webTurnRunnerCore";
+import type {
+  GuestInferenceIssue,
+  ThreadStreamingRuntimeEvent,
+  ThreadStreamingState,
+} from "../../../shared/webTurnRunnerCore";
 import { useWebWorkspaceActionsController } from "../../../shared/useWebWorkspaceActionsController";
 import { useWebWorkspaceUiActionsController } from "../../../shared/useWebWorkspaceUiActionsController";
 import { useWebSettingsImageUploadController } from "../../../shared/useWebSettingsImageUploadController";
@@ -326,11 +330,6 @@ import { buildWebStandalonePublicRouteViewProps } from "./controllers/buildWebSt
 import { buildWebGlobalOverlayHostProps } from "./controllers/buildWebGlobalOverlayHostProps";
 import { buildWebAppMainSurfaceHostProps } from "./controllers/buildWebAppMainSurfaceHostProps";
 import { buildWebShellChromeHostProps } from "./controllers/buildWebShellChromeHostProps";
-
-const GUEST_FREE_MODEL_LIMIT_MESSAGE =
-  "Guest chat is hitting the free model limit right now. Sign in to save chats, unlock more models, and use your ChatGPT Plus / Pro or your own provider.";
-const GUEST_FREE_MODEL_LIMIT_SHORT_MESSAGE =
-  "Guest chat is hitting the free model limit right now. Sign in to unlock more models and higher limits.";
 
 type CommunityRecord = {
   id: string;
@@ -987,6 +986,7 @@ export default function App() {
     attachments: [],
   });
   const [threadErrorById, setThreadErrorById] = useState<Record<string, string | null>>({});
+  const [guestInferenceIssueById, setGuestInferenceIssueById] = useState<Record<string, GuestInferenceIssue | null>>({});
   const [activeThreadId, setActiveThreadId] = useState<string | null>(() => initialAppRoute?.threadId ?? null);
   const resolveThreadErrorKey = useCallback(
     (threadId: string | null): string => {
@@ -1022,6 +1022,33 @@ export default function App() {
       setThreadErrorForThread(activeThreadId, value);
     },
     [activeThreadId, setThreadErrorForThread],
+  );
+  const setGuestInferenceIssueForThread = useCallback(
+    (
+      threadId: string | null,
+      value:
+        | GuestInferenceIssue
+        | null
+        | ((prev: GuestInferenceIssue | null) => GuestInferenceIssue | null),
+    ): void => {
+      const key = resolveThreadErrorKey(threadId);
+      setGuestInferenceIssueById((prev) => {
+        const previousValue = prev[key] ?? null;
+        const nextValue = typeof value === "function" ? value(previousValue) : value;
+        if (nextValue === null) {
+          if (!(key in prev)) return prev;
+          const next = { ...prev };
+          delete next[key];
+          return next;
+        }
+        if (previousValue === nextValue) return prev;
+        return {
+          ...prev,
+          [key]: nextValue,
+        };
+      });
+    },
+    [resolveThreadErrorKey],
   );
   const [communityAttachments, setCommunityAttachments] = useState<MessageAttachment[]>([]);
   const communityAttachmentsRef = useRef<MessageAttachment[]>([]);
@@ -1829,6 +1856,10 @@ export default function App() {
   const [appToast, setAppToast] = useState<string | null>(null);
   const appToastTimeoutRef = useRef<number | null>(null);
   const lastShownAuthErrorRef = useRef<string | null>(null);
+  const [previewAccessGateModal, setPreviewAccessGateModal] = useState<{
+    reason: "new_thread";
+  } | null>(null);
+  const [isPreviewAccessGateRunning, setIsPreviewAccessGateRunning] = useState(false);
   const [inferenceIssueModal, setInferenceIssueModal] = useState<{
     reason:
       | "quota"
@@ -1889,6 +1920,36 @@ export default function App() {
       intent: { reason: "create_community", payload: { draft } },
     });
   }, []);
+  const closePreviewAccessGateModal = useCallback(() => {
+    setPreviewAccessGateModal(null);
+    setIsPreviewAccessGateRunning(false);
+    if (readAuthResumeState()?.intent?.reason === "open_workspace_draft") {
+      clearAuthResumeState();
+    }
+    setAuthError(null);
+  }, [setAuthError]);
+  const continuePreviewAccessGateAuth = useCallback(() => {
+    setAuthError(null);
+    setIsPreviewAccessGateRunning(true);
+    requireSignIn({
+      reason: "open_workspace_draft",
+      payload: { project_id: null },
+    });
+  }, [requireSignIn, setAuthError]);
+
+  useEffect(() => {
+    if (!session) return;
+    if (!previewAccessGateModal && !isPreviewAccessGateRunning) return;
+    setPreviewAccessGateModal(null);
+    setIsPreviewAccessGateRunning(false);
+  }, [isPreviewAccessGateRunning, previewAccessGateModal, session]);
+
+  useEffect(() => {
+    if (session || !authError) return;
+    if (readAuthResumeState()?.intent?.reason !== "open_workspace_draft") return;
+    setPreviewAccessGateModal({ reason: "new_thread" });
+    setIsPreviewAccessGateRunning(false);
+  }, [authError, session]);
 
   const { loadCommunities, loadUserProfiles } = useWebCommunityAccessController<
     AuthSession,
@@ -2441,10 +2502,16 @@ export default function App() {
       lastShownAuthErrorRef.current = null;
       return;
     }
+    if (
+      previewAccessGateModal ||
+      readAuthResumeState()?.intent?.reason === "open_workspace_draft"
+    ) {
+      return;
+    }
     if (lastShownAuthErrorRef.current === authError) return;
     lastShownAuthErrorRef.current = authError;
     showAppToastMessage(authError);
-  }, [authError, showAppToastMessage]);
+  }, [authError, previewAccessGateModal, showAppToastMessage]);
 
   const handleImportExternalMemory = useCallback(async (): Promise<void> => {
     if (!session) {
@@ -3195,6 +3262,13 @@ export default function App() {
         const modelId = payload.model_id.trim();
         if (!modelId) return;
         setActiveModelId(modelId);
+      },
+      open_workspace_draft: (payload) => {
+        openWorkspaceDraft({
+          replace: true,
+          projectId: payload.project_id ?? null,
+          focusComposer: focusWorkspaceComposer,
+        });
       },
       connect_provider: (payload) => {
         if (payload.provider === "chatgpt") {
@@ -4063,6 +4137,7 @@ export default function App() {
     pinWorkspaceToBottom: () => workspaceComposerApiRef.current?.pinToBottom(),
     setThreadError,
     setThreadErrorForThread,
+    setGuestInferenceIssueForThread,
     setIsSendingMessage,
     setThreadRunSending,
     setWorkspaceWantsNewChatMode,
@@ -4075,7 +4150,7 @@ export default function App() {
     setIsBuilderUpgradeOpen,
   });
 
-  const { resetGuestThread, exportThreadsCsv, exportMessagesCsv, exportMemoryCsv } =
+  const { resetGuestThread: resetGuestThreadBase, exportThreadsCsv, exportMessagesCsv, exportMemoryCsv } =
     useWebWorkspaceActionsController<AuthSession, MessageAttachment, ThreadMessage>({
       getSession: () => sessionRef.current,
       buildCsv,
@@ -4096,6 +4171,10 @@ export default function App() {
       setExportError,
       setIsExporting,
     });
+  const resetGuestThread = useCallback(() => {
+    setGuestInferenceIssueForThread(GUEST_THREAD_ID, null);
+    resetGuestThreadBase();
+  }, [resetGuestThreadBase, setGuestInferenceIssueForThread]);
 
   const {
     handleSettingsBannerDrop,
@@ -4403,7 +4482,7 @@ export default function App() {
 	      const text = extractTextFromContentJson(message.content_json).trim();
 	      if (text) return text;
 	    }
-	    return "Open your guest chat.";
+	    return "Open your preview chat.";
 	  }, [guestThreadHasMessages, guestThreadMessages]);
 
   const hasSelectedCommunity = Boolean(String(selectedActiveCommunitySlug ?? activeCommunity?.slug ?? "").trim());
@@ -4531,6 +4610,12 @@ export default function App() {
   );
   const isEmptyWorkspaceThread = !hasPersistedWorkspaceMessages && !hasStreamingWorkspaceActivity;
   const threadError = threadErrorById[resolveThreadErrorKey(activeThreadId)] ?? null;
+  const guestInferenceIssue = !session ? guestInferenceIssueById[resolveThreadErrorKey(activeThreadId)] ?? null : null;
+
+  useEffect(() => {
+    if (!session) return;
+    setGuestInferenceIssueById({});
+  }, [session]);
 
   useEffect(() => {
     updateSentryUiContext({
@@ -4652,10 +4737,8 @@ export default function App() {
       lastThreadMessageRole === "user" &&
       lastThreadUserMessageId,
   );
-  const showGuestRateLimitSignInAction = !session && threadError === GUEST_FREE_MODEL_LIMIT_MESSAGE;
-  const displayedThreadError = showGuestRateLimitSignInAction
-    ? GUEST_FREE_MODEL_LIMIT_SHORT_MESSAGE
-    : threadError;
+  const showGuestSignInAction = !session && guestInferenceIssue?.cta === "sign_in";
+  const displayedThreadError = guestInferenceIssue?.shortMessage ?? threadError;
 
   useEffect(() => {
     if (!session || activePage !== "workspace" || !activeThreadId) return;
@@ -5504,11 +5587,17 @@ export default function App() {
       allowMultipleThreads: userAccessPolicy.allowMultipleThreads,
       onBlocked: () => {
         setThreadError(null);
-        requireSignIn();
+        setAuthError(null);
+        setPreviewAccessGateModal({ reason: "new_thread" });
+        setIsPreviewAccessGateRunning(false);
       },
       focusComposer: focusWorkspaceComposer,
     });
   };
+  const shouldSuppressPreviewSidebarAuthError =
+    Boolean(previewAccessGateModal) ||
+    readAuthResumeState()?.intent?.reason === "open_workspace_draft";
+  const previewSidebarAuthError = shouldSuppressPreviewSidebarAuthError ? null : authError;
 
   const globalOverlayHostProps = buildWebGlobalOverlayHostProps({
     contextModal,
@@ -5525,6 +5614,11 @@ export default function App() {
     handleImportExternalMemory,
     projectModalHostProps: projectUiController.modalHostProps,
     providerConnectionModalHostProps: providerConnectionUi.modalHostProps,
+    previewAccessGateModal,
+    previewAccessGateAuthError: authError,
+    isPreviewAccessGateRunning,
+    closePreviewAccessGateModal,
+    continuePreviewAccessGateAuth,
     inferenceIssueModal,
     isInferenceIssueModalRunning,
     setInferenceIssueModal,
@@ -5560,9 +5654,9 @@ export default function App() {
       setMobileOverlay={setMobileOverlay}
       threadError={threadError}
       displayedThreadError={displayedThreadError}
-      showGuestRateLimitSignInAction={showGuestRateLimitSignInAction}
+      showGuestSignInAction={showGuestSignInAction}
       session={session}
-      authError={authError}
+      authError={previewSidebarAuthError}
       requireSignIn={() => requireSignIn()}
       openMobileAgentSettings={openMobileAgentSettings}
       activeThreadId={activeThreadId}
@@ -5618,7 +5712,7 @@ export default function App() {
     onRegisterComposerApi: handleRegisterWorkspaceComposerApi,
     landingActionButtons,
     authedWorkspaceComposerPlaceholder: "Ask anything",
-    guestWorkspaceComposerPlaceholder: "Ask anything (guest chat)",
+    guestWorkspaceComposerPlaceholder: "Ask anything (preview)",
     setWorkspaceError: setThreadError,
     ingestWorkspaceAttachmentsFromFileList: async (files, existing, onError) =>
       (await ingestWorkspaceAttachmentsFromFileList(
@@ -5660,7 +5754,7 @@ export default function App() {
     runtimeEventsByRunId,
     threadError,
     displayedThreadError,
-    showGuestRateLimitSignInAction,
+    showGuestSignInAction,
     requireSignIn,
     canRetryLastThreadTurn,
     retryLastTurn,

@@ -9,10 +9,10 @@ export function WebGuestSignupRail(props: WebGuestSignupRailProps) {
     <div className="guest-signup-rail workspace-rail-card" role="note" aria-label="Sign in benefits">
       <div className="guest-signup-rail-copy workspace-rail-card-copy">
         <div className="guest-signup-rail-title workspace-rail-card-title">
-          Sign in to unlock more models and higher limits
+          Create a free account to keep going
         </div>
         <div className="guest-signup-rail-description workspace-rail-card-subtitle">
-          Save chats and use your ChatGPT Plus / Pro limits or your own provider.
+          Unlock more models, use your ChatGPT Plus / Pro access on Polynet, and discover communities, agents, and apps across the network.
         </div>
       </div>
       <button
@@ -20,7 +20,7 @@ export function WebGuestSignupRail(props: WebGuestSignupRailProps) {
         className="guest-signup-rail-button workspace-rail-card-action platform-save-button platform-save-button--compact"
         onClick={onSignIn}
       >
-        Sign in
+        Continue with Google
       </button>
     </div>
   );

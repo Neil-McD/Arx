@@ -86,7 +86,7 @@ type BuildWebWorkspaceSurfaceProjectionParams = {
   runtimeEventsByRunId: Record<string, ThreadStreamingRuntimeEvent[]>;
   threadError: string | null;
   displayedThreadError: ReactNode;
-  showGuestRateLimitSignInAction: boolean;
+  showGuestSignInAction: boolean;
   requireSignIn: () => void;
   canRetryLastThreadTurn: boolean;
   retryLastTurn: () => Promise<void> | void;
@@ -133,7 +133,7 @@ export function buildWebWorkspaceSurfaceProjection(
   const threadErrorView: WorkspaceThreadErrorView | null = params.threadError
     ? {
         displayedError: params.displayedThreadError,
-        showSignInAction: params.showGuestRateLimitSignInAction,
+        showSignInAction: params.showGuestSignInAction,
         showRetryAction: params.canRetryLastThreadTurn,
       }
     : null;

@@ -65,6 +65,10 @@ export function useWebSendFlowController<
       threadId: string | null,
       value: string | null | ((prev: string | null) => string | null),
     ) => current.setThreadErrorForThread(threadId, value);
+    const setGuestIssueForThread = (
+      threadId: string | null,
+      value: Parameters<typeof current.setGuestInferenceIssueForThread>[1],
+    ) => current.setGuestInferenceIssueForThread(threadId, value);
     const text = String(opts?.text ?? "").trim();
     const attachmentsToSend = Array.isArray(opts?.attachments) ? [...opts.attachments] : [];
     const hasAttachments = attachmentsToSend.length > 0;
@@ -95,6 +99,7 @@ export function useWebSendFlowController<
       const baseMessages = [...existing, userMsg];
 
       setErrorForThread(current.guestThreadId, null);
+      setGuestIssueForThread(current.guestThreadId, null);
       current.setIsSendingMessage(true);
       current.setThreadRunSending(current.guestThreadId, true);
       pinToBottom();
@@ -112,6 +117,7 @@ export function useWebSendFlowController<
           messages: baseMessages,
           systemPrompt: buildCloudCommunityContextEnvelope({}).scopedSystemPrompt,
         });
+        setGuestIssueForThread(current.guestThreadId, turnResult.guestIssue ?? null);
         if (turnResult.error) throw new Error(turnResult.error);
         if (turnResult.cancelled) return;
         const assistantContent = (turnResult.content ?? "").trim();

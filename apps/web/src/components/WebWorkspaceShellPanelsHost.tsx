@@ -23,7 +23,7 @@ type WebWorkspaceShellPanelsHostProps<
   | "setMobileOverlay"
   | "threadError"
   | "displayedThreadError"
-  | "showGuestRateLimitSignInAction"
+  | "showGuestSignInAction"
   | "session"
   | "authError"
   | "requireSignIn"
@@ -71,7 +71,7 @@ export function WebWorkspaceShellPanelsHost<
           sidebar={sidebar}
           threadError={props.threadError}
           displayedThreadError={props.displayedThreadError}
-          showGuestRateLimitSignInAction={props.showGuestRateLimitSignInAction}
+          showGuestSignInAction={props.showGuestSignInAction}
           session={props.session}
           authError={props.authError}
           requireSignIn={props.requireSignIn}

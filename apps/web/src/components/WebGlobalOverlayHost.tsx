@@ -2,6 +2,7 @@ import { Suspense, lazy, type ComponentProps } from "react";
 import { BuilderUpgradeModal } from "../../../../shared/BuilderUpgradeModal";
 import { WebCommunityModalHost } from "./WebCommunityModalHost";
 import { WebMessageContextModal } from "./WebMessageContextModal";
+import { WebPreviewAccessGateModal } from "./WebPreviewAccessGateModal";
 import { WebProjectModalHost } from "./WebProjectModalHost";
 import { WebProviderConnectionModalHost } from "./WebProviderConnectionModalHost";
 
@@ -55,6 +56,18 @@ type WebInferenceIssueModalProps = {
   onOpenSettings: (reason: InferenceIssueReason) => void;
 };
 
+type PreviewAccessGateModalState = {
+  reason: "new_thread";
+} | null;
+
+type WebPreviewAccessGateModalProps = {
+  previewAccessGateModal: PreviewAccessGateModalState;
+  authError: string | null;
+  isRunning: boolean;
+  onClose: () => void;
+  onContinueWithGoogle: () => void;
+};
+
 export type WebGlobalOverlayHostProps = {
   messageContextModalProps: ComponentProps<typeof WebMessageContextModal>;
   memoryImportModalProps: WebMemoryImportModalProps | null;
@@ -62,6 +75,7 @@ export type WebGlobalOverlayHostProps = {
   providerConnectionModalHostProps: ComponentProps<
     typeof WebProviderConnectionModalHost
   >["modalHostProps"];
+  previewAccessGateModalProps: WebPreviewAccessGateModalProps | null;
   inferenceIssueModalProps: WebInferenceIssueModalProps | null;
   builderUpgradeModalProps: ComponentProps<typeof BuilderUpgradeModal>;
   communityModalHostProps: ComponentProps<typeof WebCommunityModalHost>["modalHostProps"];
@@ -84,6 +98,10 @@ export function WebGlobalOverlayHost(props: WebGlobalOverlayHostProps) {
       <WebProviderConnectionModalHost
         modalHostProps={props.providerConnectionModalHostProps}
       />
+
+      {props.previewAccessGateModalProps ? (
+        <WebPreviewAccessGateModal {...props.previewAccessGateModalProps} />
+      ) : null}
 
       {props.inferenceIssueModalProps ? (
         <Suspense fallback={null}>
