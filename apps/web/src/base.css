@@ -9049,14 +9049,6 @@ button.message-citation-chip:hover {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
-}
-
-.auth-gate-google-icon {
-  width: 18px;
-  height: 18px;
-  display: block;
-  flex-shrink: 0;
 }
 
 :root[data-theme="dark"] .auth-gate-google-button,
@@ -14026,8 +14018,8 @@ button.message-citation-chip:hover {
 .google-sign-in {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 20px 10px 14px;
+  justify-content: center;
+  padding: 10px 20px;
   background: #fff;
   color: #3c4043;
   border: 1px solid #dadce0;
@@ -14042,12 +14034,6 @@ button.message-citation-chip:hover {
 .google-sign-in:hover {
   background: #f7f8f8;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-}
-
-.google-logo {
-  width: 18px;
-  height: 18px;
-  flex-shrink: 0;
 }
 
 .profile-row {

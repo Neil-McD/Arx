@@ -2458,13 +2458,6 @@
   gap: 10px;
 }
 
-.auth-gate-google-icon {
-  width: 18px;
-  height: 18px;
-  display: block;
-  flex-shrink: 0;
-}
-
 :root[data-theme="dark"] .auth-gate-google-button,
 :root[data-theme="dark-warm"] .auth-gate-google-button,
 :root[data-theme="polynet"] .auth-gate-google-button {
