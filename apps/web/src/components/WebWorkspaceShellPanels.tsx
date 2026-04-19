@@ -126,7 +126,7 @@ export function WebWorkspaceShellPanels<TThread extends ThreadLike, TProject ext
           className="auth-gate-google-button guest-thread-google-button"
           onClick={() => props.requireSignIn()}
         >
-          Continue with Google
+          Continue to sign in
         </button>
         <button
           type="button"
@@ -164,7 +164,7 @@ export function WebWorkspaceShellPanels<TThread extends ThreadLike, TProject ext
           props.requireSignIn();
         }}
       >
-          Continue with Google
+          Continue to sign in
       </button>
       <div className="mobile-agent-drawer-caption">
         Unlock more models, use your ChatGPT Plus / Pro access on Polynet, and discover communities, agents, and apps across the network.

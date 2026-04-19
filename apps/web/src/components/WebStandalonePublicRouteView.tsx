@@ -82,7 +82,7 @@ export function WebStandalonePublicRouteView(props: WebStandalonePublicRouteView
                 {showSignIn ? (
                   <div className="public-funnel-state-actions">
                     <button className="public-funnel-secondary" type="button" onClick={onRequireSignIn}>
-                      Continue with Google
+                      Continue to sign in
                     </button>
                   </div>
                 ) : null}
@@ -136,7 +136,7 @@ export function WebStandalonePublicRouteView(props: WebStandalonePublicRouteView
                   {showSignIn ? (
                     <div className="public-funnel-state-actions">
                       <button className="public-funnel-secondary" type="button" onClick={onRequireSignIn}>
-                        Continue with Google
+                        Continue to sign in
                       </button>
                     </div>
                   ) : null}

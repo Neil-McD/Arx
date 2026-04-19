@@ -130,7 +130,7 @@ export function buildWebGlobalOverlayHostProps(params: {
           authError: params.previewAccessGateAuthError,
           isRunning: params.isPreviewAccessGateRunning,
           onClose: params.closePreviewAccessGateModal,
-          onContinueWithGoogle: params.continuePreviewAccessGateAuth,
+          onContinueToSignIn: params.continuePreviewAccessGateAuth,
         }
       : null,
     inferenceIssueModalProps: params.inferenceIssueModal

@@ -182,7 +182,7 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
         ) : (
           <div className="account-row">
             <button className="google-sign-in" type="button" onClick={requireSignIn}>
-              Sign in with Google
+              Continue to sign in
             </button>
           </div>
         )}

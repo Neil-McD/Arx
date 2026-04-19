@@ -65,7 +65,7 @@ type WebPreviewAccessGateModalProps = {
   authError: string | null;
   isRunning: boolean;
   onClose: () => void;
-  onContinueWithGoogle: () => void;
+  onContinueToSignIn: () => void;
 };
 
 export type WebGlobalOverlayHostProps = {

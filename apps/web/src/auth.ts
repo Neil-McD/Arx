@@ -23,9 +23,12 @@ export type {
 export {
   beginBrowserSignedOutState,
   clearAuthFlowPending,
+  clearAuthFlowReturned,
   clearAuthSignedOutIntentMarker,
+  hasRecentAuthFlowReturned,
   hasRecentAuthFlowPending,
   markAuthFlowPending,
+  markAuthFlowReturned,
   AUTH_SIGNED_OUT_INTENT_KEY,
   AUTH_SIGNED_OUT_TAB_INTENT_KEY,
 } from "./authBrowserMarkers";

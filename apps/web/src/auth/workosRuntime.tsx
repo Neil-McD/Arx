@@ -9,6 +9,7 @@ import {
 import { createContext, useCallback, useContext, useMemo, type ReactNode } from "react";
 import type { AuthSession } from "../../../../shared/authCore";
 import { DEFAULT_POST_SIGN_IN_PATH } from "../../../../shared/webAppRouteState";
+import { markAuthFlowReturned } from "../auth";
 
 type WorkOsSessionReadOptions = {
   forceRefresh?: boolean;
@@ -233,6 +234,7 @@ export function WorkOsRuntimeProvider({ children }: { children: ReactNode }) {
       {...(config.devMode ? { devMode: true } : {})}
       onRedirectCallback={(response) => {
         const returnTo = sanitizeRedirectReturnTo(response.state?.returnTo);
+        markAuthFlowReturned();
         console.info("[auth][workos] redirect_callback", {
           authenticationMethod: response.authenticationMethod,
           userId: response.user.id,

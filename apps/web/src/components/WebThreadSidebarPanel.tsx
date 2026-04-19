@@ -147,7 +147,7 @@ export function WebThreadSidebarPanel<TThread, TProject extends ProjectLike>(
           <>
             {threadLaneFilter === "chat" && showChatSignInPrompt ? (
               <div className="empty-state">
-                <div>Sign in with Google to sync cloud chat threads.</div>
+                <div>Sign in to sync cloud chat threads.</div>
                 {actions.onSignInForChat && (
                   <div style={{ marginTop: 10 }}>
                     <button
@@ -155,7 +155,7 @@ export function WebThreadSidebarPanel<TThread, TProject extends ProjectLike>(
                       type="button"
                       onClick={() => void actions.onSignInForChat?.()}
                     >
-                      Sign in with Google
+                      Continue to sign in
                     </button>
                   </div>
                 )}

@@ -14014,7 +14014,7 @@ button.message-citation-chip:hover {
   color: var(--text-primary);
 }
 
-/* Google sign-in button */
+/* Sign-in button */
 .google-sign-in {
   display: inline-flex;
   align-items: center;

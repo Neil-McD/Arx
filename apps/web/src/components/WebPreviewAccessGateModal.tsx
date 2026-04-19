@@ -7,7 +7,7 @@ type WebPreviewAccessGateModalProps = {
   authError: string | null;
   isRunning: boolean;
   onClose: () => void;
-  onContinueWithGoogle: () => void;
+  onContinueToSignIn: () => void;
 };
 
 export function WebPreviewAccessGateModal(props: WebPreviewAccessGateModalProps) {
@@ -16,7 +16,7 @@ export function WebPreviewAccessGateModal(props: WebPreviewAccessGateModalProps)
     authError,
     isRunning,
     onClose,
-    onContinueWithGoogle,
+    onContinueToSignIn,
   } = props;
 
   if (!previewAccessGateModal) return null;
@@ -69,7 +69,7 @@ export function WebPreviewAccessGateModal(props: WebPreviewAccessGateModalProps)
             <button
               type="button"
               className="auth-gate-google-button"
-              onClick={onContinueWithGoogle}
+              onClick={onContinueToSignIn}
               disabled={isRunning}
             >
               {isRunning ? "Continuing to sign in…" : "Continue to sign in"}

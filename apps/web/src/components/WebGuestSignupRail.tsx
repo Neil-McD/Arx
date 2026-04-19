@@ -20,7 +20,7 @@ export function WebGuestSignupRail(props: WebGuestSignupRailProps) {
         className="guest-signup-rail-button workspace-rail-card-action platform-save-button platform-save-button--compact"
         onClick={onSignIn}
       >
-        Continue with Google
+        Continue to sign in
       </button>
     </div>
   );

@@ -3,10 +3,12 @@ import {
   AUTH_SIGNED_OUT_INTENT_KEY,
   AUTH_SIGNED_OUT_TAB_INTENT_KEY,
   clearAuthFlowPending,
+  clearAuthFlowReturned,
   clearAuthSignedOutIntentMarker,
   ensureAuthSessionForAuthenticatedSendResult,
   fetchWithAuthShared,
   fetchWithPublicShared,
+  hasRecentAuthFlowReturned,
   hasRecentAuthFlowPending,
   markAuthFlowPending,
   refreshAuthSessionWithLockResult,
@@ -117,7 +119,6 @@ export function useWebAppAuthController(
   const sessionRef = useRef<AuthSession | null>(null);
   const refreshResultInFlightRef = useRef<Promise<AuthSessionRefreshResult> | null>(null);
   const refreshTimeoutRef = useRef<number | null>(null);
-  const prefetchedSignInRef = useRef<{ returnTo: string; url: string } | null>(null);
   const didJustSignInRef = useRef(false);
   const authSessionEpochRef = useRef(0);
   const authBootstrapCompleteRef = useRef(false);
@@ -137,6 +138,7 @@ export function useWebAppAuthController(
     if (!callbackError) return;
     setAuthError(callbackError);
     clearAuthFlowPending();
+    clearAuthFlowReturned();
     clearOAuthCallbackParamsFromLocation();
   }, []);
 
@@ -245,69 +247,20 @@ export function useWebAppAuthController(
     }
   }, [adoptAuthSession, ensureUsableAuthSession, workos]);
 
-  const currentReturnTo = readCurrentAuthReturnTo();
-
-  useEffect(() => {
-    if (!workos.isEnabled || workos.isLoading || session) {
-      prefetchedSignInRef.current = null;
-      return;
-    }
-    let cancelled = false;
-    void workos
-      .getSignInUrl({ state: { returnTo: currentReturnTo } })
-      .then((url) => {
-        if (cancelled) return;
-        const normalized = String(url ?? "").trim();
-        if (!normalized) return;
-        prefetchedSignInRef.current = {
-          returnTo: currentReturnTo,
-          url: normalized,
-        };
-      })
-      .catch((error) => {
-        if (cancelled) return;
-        prefetchedSignInRef.current = null;
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [currentReturnTo, session, workos]);
-
-  const beginGoogleSignInFlow = useCallback(async () => {
+  const beginSignInFlow = useCallback(async () => {
     setAuthError(null);
     clearAuthSignedOutIntentMarker();
+    clearAuthFlowReturned();
     const returnTo = readCurrentAuthReturnTo();
     const loginPath = buildLoginTrampolinePath(returnTo);
-    const prefetchedSignIn = prefetchedSignInRef.current;
     markAuthFlowPending();
     storeAuthResumeState({ returnTo });
     try {
-      if (prefetchedSignIn?.url && prefetchedSignIn.returnTo === returnTo) {
-        prefetchedSignInRef.current = null;
-        window.location.assign(prefetchedSignIn.url);
-        return;
-      }
-      let liveSignInUrl = "";
-      try {
-        liveSignInUrl = String(
-          await workos.getSignInUrl({ state: { returnTo } }),
-        ).trim();
-      } catch {}
-      if (liveSignInUrl) {
-        const currentHref = window.location.href;
-        const fallbackTimer = window.setTimeout(() => {
-          if (window.location.href !== currentHref) return;
-          window.location.assign(loginPath);
-        }, 600);
-        window.location.assign(liveSignInUrl);
-        window.setTimeout(() => window.clearTimeout(fallbackTimer), 650);
-        return;
-      }
       window.location.assign(loginPath);
     } catch (error) {
       setAuthError(errorToMessage(error, "Sign-in failed."));
     }
-  }, [workos]);
+  }, []);
 
   const requireSignIn = useCallback((intentInput?: unknown) => {
     setAuthError(null);
@@ -334,9 +287,9 @@ export function useWebAppAuthController(
           return;
         }
       }
-      await beginGoogleSignInFlow();
+      await beginSignInFlow();
     })();
-  }, [beginGoogleSignInFlow, recoverSessionFromWorkOs, session, workos]);
+  }, [beginSignInFlow, recoverSessionFromWorkOs, session, workos]);
 
   const handleSignOut = useCallback(async (): Promise<void> => {
     clearAuthFlowPending();
@@ -442,6 +395,7 @@ export function useWebAppAuthController(
       }
 
       const hadPendingAuthFlow = hasRecentAuthFlowPending();
+      const hadRecentAuthReturn = hasRecentAuthFlowReturned();
       if (hasSignedOutIntent) {
         if (workos.user) {
           clearAuthSignedOutIntentMarker();
@@ -449,6 +403,7 @@ export function useWebAppAuthController(
           if (cancelled) return;
           markAuthBootstrapComplete();
           clearAuthFlowPending();
+          clearAuthFlowReturned();
           return;
         }
       }
@@ -479,6 +434,7 @@ export function useWebAppAuthController(
             : null;
           onApplyPostAuthPathRef.current(nextPath);
           clearAuthFlowPending();
+          clearAuthFlowReturned();
         }
         return;
       }
@@ -490,10 +446,13 @@ export function useWebAppAuthController(
 
       markAuthBootstrapComplete();
       if (hadPendingAuthFlow) {
-        setAuthError("Sign-in completed, but PolyNet could not establish your account session. Please try again.");
         clearAuthFlowPending();
-        if (!shouldPreserveAuthResumeStateOnBootstrapFailure()) {
-          clearAuthResumeState();
+        clearAuthFlowReturned();
+        if (hadRecentAuthReturn) {
+          setAuthError("Sign-in completed, but PolyNet could not establish your account session. Please try again.");
+          if (!shouldPreserveAuthResumeStateOnBootstrapFailure()) {
+            clearAuthResumeState();
+          }
         }
       }
     })();
@@ -532,6 +491,7 @@ export function useWebAppAuthController(
       if (cancelled || !recoveredSession) return;
       clearAuthSignedOutIntentMarker();
       clearAuthFlowPending();
+      clearAuthFlowReturned();
       await onSessionReadyRef.current(recoveredSession);
     })();
 
