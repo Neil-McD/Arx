@@ -20,6 +20,7 @@ import {
   parsePendingAuthIntentInput,
   readAuthResumeState,
   storeAuthResumeState,
+  updateAuthResumeStatePhase,
 } from "../../../../shared/authResumeState";
 import { clearOAuthCallbackParamsFromLocation } from "../../../../shared/cloudPkce";
 import { buildLoginTrampolinePath } from "../auth/loginTrampoline";
@@ -103,10 +104,6 @@ function errorToMessage(error: unknown, fallback: string): string {
 }
 
 const AUTH_SESSION_EXPIRED_MESSAGE = "Session expired. Please sign in again.";
-
-function shouldPreserveAuthResumeStateOnBootstrapFailure(): boolean {
-  return readAuthResumeState()?.intent?.reason === "open_workspace_draft";
-}
 
 export function useWebAppAuthController(
   params: UseWebAppAuthControllerParams,
@@ -254,37 +251,12 @@ export function useWebAppAuthController(
     const returnTo = readCurrentAuthReturnTo();
     const loginPath = buildLoginTrampolinePath(returnTo);
     markAuthFlowPending();
-    storeAuthResumeState({ returnTo });
+    storeAuthResumeState({ returnTo, phase: "awaiting_auth" });
     try {
-      let didNavigate = false;
-      const fallbackTimer = window.setTimeout(() => {
-        if (didNavigate) return;
-        didNavigate = true;
-        window.location.assign(loginPath);
-      }, 1200);
       try {
-        const liveSignInUrl = String(
-          await workos.getSignInUrl({ state: { returnTo } }),
-        ).trim();
-        if (!liveSignInUrl) {
-          window.clearTimeout(fallbackTimer);
-          if (!didNavigate) {
-            didNavigate = true;
-            window.location.assign(loginPath);
-          }
-          return;
-        }
-        window.clearTimeout(fallbackTimer);
-        if (!didNavigate) {
-          didNavigate = true;
-          window.location.assign(liveSignInUrl);
-        }
+        await workos.signIn({ state: { returnTo } });
       } catch {
-        window.clearTimeout(fallbackTimer);
-        if (!didNavigate) {
-          didNavigate = true;
-          window.location.assign(loginPath);
-        }
+        window.location.assign(loginPath);
       }
     } catch (error) {
       setAuthError(errorToMessage(error, "Sign-in failed."));
@@ -298,11 +270,13 @@ export function useWebAppAuthController(
       storeAuthResumeState({
         returnTo: readCurrentPathReturnTo(),
         intent,
+        phase: "awaiting_auth",
       });
     }
     if (session) return;
     void (async () => {
       if (workos.user) {
+        const existingResumeIntent = readAuthResumeState()?.intent;
         const recoveredSession = await recoverSessionFromWorkOs({
           phase: "require_sign_in",
           forceRefresh: true,
@@ -310,7 +284,7 @@ export function useWebAppAuthController(
         if (recoveredSession) {
           clearAuthSignedOutIntentMarker();
           clearAuthFlowPending();
-          if (intent) {
+          if (intent || existingResumeIntent) {
             didJustSignInRef.current = true;
           }
           return;
@@ -479,9 +453,7 @@ export function useWebAppAuthController(
         clearAuthFlowReturned();
         if (hadRecentAuthReturn) {
           setAuthError("Sign-in completed, but PolyNet could not establish your account session. Please try again.");
-          if (!shouldPreserveAuthResumeStateOnBootstrapFailure()) {
-            clearAuthResumeState();
-          }
+          updateAuthResumeStatePhase("awaiting_session");
         }
       }
     })();
@@ -513,6 +485,9 @@ export function useWebAppAuthController(
     let cancelled = false;
 
     void (async () => {
+      const authResumeState = readAuthResumeState();
+      const shouldResumeAfterSessionRecovery =
+        authResumeState?.phase === "awaiting_session";
       const recoveredSession = await recoverSessionFromWorkOs({
         phase: "post_bootstrap",
         forceRefresh: true,
@@ -521,6 +496,11 @@ export function useWebAppAuthController(
       clearAuthSignedOutIntentMarker();
       clearAuthFlowPending();
       clearAuthFlowReturned();
+      if (shouldResumeAfterSessionRecovery && authResumeState?.intent) {
+        didJustSignInRef.current = true;
+      } else if (shouldResumeAfterSessionRecovery && !authResumeState?.intent) {
+        clearAuthResumeState();
+      }
       await onSessionReadyRef.current(recoveredSession);
     })();
 

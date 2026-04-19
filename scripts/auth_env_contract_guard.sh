@@ -69,9 +69,11 @@ forbid_match_in_file "$AUTH_CORE_FILE" 'pgrst303|pgrst301' \
 forbid_match_in_file "$AUTH_CORE_FILE" 'beginOAuthSignIn|bootstrapSession|logoutAuthSessionRemote|refreshAuthSessionResult' \
   "shared auth core must not expose deleted browser bridge helpers"
 
-echo "[2/6] Validating web auth controller routes sign-in through the canonical trampoline..."
+echo "[2/6] Validating web auth controller uses direct WorkOS handoff with trampoline fallback..."
 require_match_in_file "$WEB_AUTH_CONTROLLER_FILE" 'buildLoginTrampolinePath\(' \
-  "web auth controller routes sign-in through the login trampoline"
+  "web auth controller retains the login trampoline as a recovery fallback"
+require_match_in_file "$WEB_AUTH_CONTROLLER_FILE" 'workos\.signIn\(' \
+  "web auth controller hands off directly to WorkOS for the normal sign-in path"
 require_match_in_file "$WEB_AUTH_CONTROLLER_FILE" 'workos\.readSession\(' \
   "web auth controller bootstraps browser session through WorkOS runtime"
 forbid_match_in_file "$WEB_AUTH_CONTROLLER_FILE" 'bootstrapSession\(|refreshAuthSessionResult\(|beginGoogleSignIn\(|revokeAuthSessionRemote\(|shared/authFlow' \

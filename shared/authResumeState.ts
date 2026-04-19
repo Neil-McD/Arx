@@ -5,6 +5,7 @@ import {
 
 const AUTH_RESUME_STATE_STORAGE_KEY = "arx_auth_resume_state_v1";
 const AUTH_RESUME_STATE_TTL_MS = 24 * 60 * 60 * 1000;
+export type AuthResumePhase = "awaiting_auth" | "awaiting_session";
 
 export type BuilderUpgradeContext = "builder" | "create_community";
 export type BuilderCheckoutTier = "builder";
@@ -49,6 +50,7 @@ export type AuthResumeState = {
   v: 1;
   created_at_ms: number;
   return_to: string;
+  phase: AuthResumePhase;
   intent: PendingAuthIntent | null;
 };
 
@@ -135,6 +137,9 @@ function normalizeAuthResumeState(value: unknown, nowMs = Date.now()): AuthResum
 
   const returnTo = typeof record.return_to === "string" ? record.return_to.trim() : "";
   if (!returnTo) return null;
+  const rawPhase = typeof record.phase === "string" ? record.phase.trim() : "";
+  const phase: AuthResumePhase =
+    rawPhase === "awaiting_session" ? "awaiting_session" : "awaiting_auth";
 
   const intentRecord = asObject(record.intent);
   const intent = intentRecord ? normalizePendingAuthIntent(intentRecord.reason, intentRecord.payload) : null;
@@ -143,6 +148,7 @@ function normalizeAuthResumeState(value: unknown, nowMs = Date.now()): AuthResum
     v: 1,
     created_at_ms: createdAtMs,
     return_to: returnTo,
+    phase,
     intent,
   };
 }
@@ -171,6 +177,7 @@ export function storeAuthResumeState(
   params: {
     returnTo: string;
     intent?: PendingAuthIntentInput | PendingAuthIntent | null;
+    phase?: AuthResumePhase;
   },
   nowMs = Date.now(),
 ): void {
@@ -183,6 +190,7 @@ export function storeAuthResumeState(
       : params.intent === null
         ? null
         : normalizePendingAuthIntent(params.intent.reason, params.intent.payload);
+  const phase = params.phase ?? existing?.phase ?? "awaiting_auth";
   try {
     localStorage.setItem(
       AUTH_RESUME_STATE_STORAGE_KEY,
@@ -190,7 +198,28 @@ export function storeAuthResumeState(
         v: 1,
         created_at_ms: nowMs,
         return_to: returnTo,
+        phase,
         intent,
+      } satisfies AuthResumeState),
+    );
+  } catch {
+    // ignore
+  }
+}
+
+export function updateAuthResumeStatePhase(
+  phase: AuthResumePhase,
+  nowMs = Date.now(),
+): void {
+  const existing = readAuthResumeState(nowMs);
+  if (!existing) return;
+  try {
+    localStorage.setItem(
+      AUTH_RESUME_STATE_STORAGE_KEY,
+      JSON.stringify({
+        ...existing,
+        created_at_ms: nowMs,
+        phase,
       } satisfies AuthResumeState),
     );
   } catch {
