@@ -25,15 +25,35 @@ type SentryUiContext = {
 };
 
 const sentryDsn = String(import.meta.env.VITE_SENTRY_DSN ?? "").trim();
+const sentryEnvironment = String(__SENTRY_ENVIRONMENT__ ?? import.meta.env.MODE ?? "").trim();
 const sentryEnabled = sentryDsn.length > 0;
+const sentryTraceSampleRate = resolveSentryTraceSampleRate(sentryEnvironment);
+const sentryTracePropagationTargets: Array<string | RegExp> = [
+  /^\/(?:runtime|api)(?:\/|$)/,
+  /^https:\/\/(?:www\.)?polynet\.ai(?:\/|$)/,
+  /^https:\/\/[^/]*polynet[^/]*\.vercel\.app(?:\/|$)/,
+  /^https:\/\/[a-z0-9-]+\.convex\.(?:cloud|site)(?:\/|$)/,
+  /^http:\/\/localhost(?::\d+)?(?:\/|$)/,
+  /^http:\/\/127\.0\.0\.1(?::\d+)?(?:\/|$)/,
+];
 
 if (sentryEnabled) {
   Sentry.init({
     dsn: sentryDsn,
-    environment: __SENTRY_ENVIRONMENT__ ?? import.meta.env.MODE,
+    environment: sentryEnvironment || import.meta.env.MODE,
     release: __SENTRY_RELEASE__ ?? undefined,
     sendDefaultPii: false,
+    tracesSampleRate: sentryTraceSampleRate,
+    tracePropagationTargets: sentryTracePropagationTargets,
     integrations: [
+      Sentry.browserTracingIntegration({
+        beforeStartSpan(options) {
+          return {
+            ...options,
+            name: normalizeTransactionName(options.name),
+          };
+        },
+      }),
       Sentry.replayIntegration({
         maskAllText: true,
         maskAllInputs: true,
@@ -52,6 +72,30 @@ if (sentryEnabled) {
       return event;
     },
   });
+}
+
+function resolveSentryTraceSampleRate(environment: string | null | undefined): number {
+  const normalized = String(environment ?? "").trim().toLowerCase();
+  if (normalized === "production") return 0.15;
+  if (normalized === "preview") return 0.35;
+  return 1.0;
+}
+
+function normalizeTransactionName(name: string | undefined): string {
+  const normalized = String(name ?? "").trim();
+  if (!normalized) return "/";
+  if (normalized.startsWith("/")) {
+    return normalized.split(/[?#]/, 1)[0] || "/";
+  }
+  if (/^https?:\/\//i.test(normalized)) {
+    try {
+      const parsed = new URL(normalized);
+      return parsed.pathname || "/";
+    } catch {
+      return normalized;
+    }
+  }
+  return normalized;
 }
 
 function normalizeTagValue(value: string | number | boolean | null | undefined): string {
