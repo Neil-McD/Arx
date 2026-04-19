@@ -328,13 +328,15 @@ export function useWebAppAuthController(
         if (recoveredSession) {
           clearAuthSignedOutIntentMarker();
           clearAuthFlowPending();
-          await onSessionReadyRef.current(recoveredSession);
+          if (intent) {
+            didJustSignInRef.current = true;
+          }
           return;
         }
       }
       await beginGoogleSignInFlow();
     })();
-  }, [beginGoogleSignInFlow, onSessionReadyRef, recoverSessionFromWorkOs, session, workos]);
+  }, [beginGoogleSignInFlow, recoverSessionFromWorkOs, session, workos]);
 
   const handleSignOut = useCallback(async (): Promise<void> => {
     clearAuthFlowPending();

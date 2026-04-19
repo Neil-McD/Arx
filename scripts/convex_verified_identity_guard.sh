@@ -28,14 +28,14 @@ require_contains() {
 }
 
 echo "[1/13] Ensuring Convex identity verification is present..."
-require_contains "$TARGET_FILE" 'ctx\.auth\.getUserIdentity\(\)' \
+require_contains "$AUTH_IDENTITY_FILE" 'ctx\.auth\.getUserIdentity\(\)' \
   "runtime auth must use Convex verified identity"
 
 echo "[2/13] Ensuring verified identity helper is present and wired..."
 require_contains "$TARGET_FILE" 'async function requireVerifiedIdentity\(' \
   "requireVerifiedIdentity helper exists"
-require_contains "$TARGET_FILE" 'const authIdentity = await requireVerifiedIdentity\(ctx, req\)' \
-  "requireAuthenticatedActor delegates to requireVerifiedIdentity"
+require_contains "$TARGET_FILE" 'identity = await readAuthenticatedIdentityProfile\(ctx\)' \
+  "requireVerifiedIdentity delegates to authIdentity helper"
 
 echo "[3/13] Ensuring legacy manual JWT-claim trust helpers are absent..."
 LEGACY_PATTERN='function\s+extractBearerToken\s*\(|function\s+decodeJwtClaims\s*\(|decodeJwtClaims\s*\(|extractBearerToken\s*\('
@@ -87,11 +87,34 @@ fi
 echo "OK: gates relies on authenticated subject helper."
 
 echo "[9/13] Ensuring thread/project APIs are no longer hard-required to caller ownerId..."
-if rg -n --fixed-strings 'ownerId: v.id("users")' "$THREADS_FILE" "$PROJECTS_FILE"; then
-  echo "FAIL: required ownerId argument reintroduced in thread/project Convex functions."
+if ! python - "$THREADS_FILE" "$PROJECTS_FILE" <<'PY'
+import pathlib
+import re
+import sys
+
+bad = []
+pattern = re.compile(
+    r'export const (\w+) = (mutation|query|action)\(\{\s*args:\s*\{(?P<body>.*?)\n\s*\},',
+    re.S,
+)
+
+for raw_path in sys.argv[1:]:
+    path = pathlib.Path(raw_path)
+    text = path.read_text()
+    for match in pattern.finditer(text):
+        if 'ownerId: v.id("users")' not in match.group("body"):
+            continue
+        bad.append(f"{path}:{match.group(1)}")
+
+if bad:
+    print("\n".join(bad))
+    sys.exit(1)
+PY
+then
+  echo "FAIL: required ownerId argument reintroduced in public thread/project Convex functions."
   exit 1
 fi
-echo "OK: thread/project APIs allow authenticated-subject-first identity resolution."
+echo "OK: public thread/project APIs allow authenticated-subject-first identity resolution."
 if rg -n --fixed-strings 'owner_identity_required' "$THREADS_FILE" "$PROJECTS_FILE"; then
   echo "FAIL: ownerId-only fallback path reintroduced in thread/project resolvers."
   exit 1
