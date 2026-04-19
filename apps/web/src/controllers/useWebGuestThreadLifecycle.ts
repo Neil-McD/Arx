@@ -23,10 +23,10 @@ export function useWebGuestThreadLifecycle<
     if (session) return;
     if (params.publicRouteKind !== "app") return;
     if (params.activeThreadId && params.activeThreadId !== params.guestThreadId) return;
-    if (params.workspaceWantsNewChat) return;
     const storage = params.loadGuestThreadStorage();
     params.setGuestModelId(storage.model_id);
     const guestMessages = params.guestStoredToThreadMessages(storage);
+    if (params.workspaceWantsNewChat && guestMessages.length === 0) return;
     params.applyGuestWorkspaceState({
       guestThreadId: params.guestThreadId,
       hasMessages: guestMessages.length > 0,
