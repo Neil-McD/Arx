@@ -27,8 +27,8 @@ export function WebPreviewAccessGateModal(props: WebPreviewAccessGateModalProps)
       : "Create a free account";
   const message =
     previewAccessGateModal.reason === "new_thread"
-      ? "Preview supports one thread. Continue with Google to save chats, unlock more models, use your ChatGPT Plus / Pro access on Polynet, and discover communities, agents, and apps across the network."
-      : "Continue with Google to create your free account.";
+      ? "Preview supports one thread. Continue to sign in to save chats, unlock more models, use your ChatGPT Plus / Pro access on Polynet, and discover communities, agents, and apps across the network."
+      : "Continue to sign in to create your free account.";
 
   return (
     <div
@@ -97,7 +97,7 @@ export function WebPreviewAccessGateModal(props: WebPreviewAccessGateModalProps)
                 />
                 <path fill="none" d="M0 0h46v46H0z" />
               </svg>
-              {isRunning ? "Continuing…" : "Continue with Google"}
+              {isRunning ? "Continuing to sign in…" : "Continue to sign in"}
             </button>
           </div>
         </div>
