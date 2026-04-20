@@ -1,5 +1,6 @@
 import { bootstrapConvexAuthenticatedClient } from "./convexAuthenticatedClient";
 import type {
+  ConnectUserPlatformAppResult,
   ConnectUserPlatformAppInput,
   UserPlatformMountedApp,
 } from "./userPlatformAppMountTypes";
@@ -38,7 +39,7 @@ export async function connectCloudUserPlatformApp<SessionT>(
   params: CloudUserPlatformAppMountGatewayParams<SessionT> & {
     input: ConnectUserPlatformAppInput;
   },
-): Promise<UserPlatformMountedApp | null> {
+): Promise<ConnectUserPlatformAppResult> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(
     params.session,
   );
@@ -52,8 +53,24 @@ export async function connectCloudUserPlatformApp<SessionT>(
       description: params.input.description,
       secret: params.input.secret,
     },
-  )) as UserPlatformMountedApp | null;
-  return payload ?? null;
+  )) as
+    | ConnectUserPlatformAppResult
+    | UserPlatformMountedApp
+    | null;
+  if (
+    payload &&
+    typeof payload === "object" &&
+    !Array.isArray(payload) &&
+    "ok" in payload
+  ) {
+    return payload as ConnectUserPlatformAppResult;
+  }
+  return {
+    ok: Boolean(payload),
+    mount: (payload as UserPlatformMountedApp | null) ?? null,
+    validation_report: null,
+    error_message: payload ? null : "developer_app_connect_failed",
+  };
 }
 
 export async function updateCloudUserPlatformAppMount<SessionT>(

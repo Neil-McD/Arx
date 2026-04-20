@@ -9,9 +9,13 @@ import {
   type AppToolValidationStatus,
 } from "./appCore";
 import {
+  buildJsonRpcBody,
   buildDeveloperAppAuthHeaders,
+  errorMessageFromRpc,
   initializeStreamableHttpMcpSession,
-  listMcpTools,
+  type JsonRpcError,
+  type JsonRpcSuccess,
+  postMcpJson,
   sendInitializedNotification,
 } from "./mcpHttpClient";
 import { sha256HexText } from "./providerConnections";
@@ -24,6 +28,55 @@ type McpValidationTool = {
   risk_level: "read" | "write" | "sensitive";
 };
 
+type ValidationStageId =
+  | "endpoint_reachable"
+  | "mcp_initialized"
+  | "tools_discovered";
+
+type ValidationStageStatus = "ok" | "error" | "skipped";
+
+type ValidationStage = {
+  id: ValidationStageId;
+  label: string;
+  status: ValidationStageStatus;
+  detail: string | null;
+};
+
+type ValidationReport = {
+  validation_status: "ok" | "error";
+  validation_error: string | null;
+  tool_count: number;
+  stages: ValidationStage[];
+};
+
+const VALIDATION_STAGE_LABELS: Record<ValidationStageId, string> = {
+  endpoint_reachable: "Endpoint reachable",
+  mcp_initialized: "MCP initialized",
+  tools_discovered: "Tools discovered",
+};
+
+function createBaseValidationStages(): ValidationStage[] {
+  return (Object.keys(VALIDATION_STAGE_LABELS) as ValidationStageId[]).map(
+    (id) => ({
+      id,
+      label: VALIDATION_STAGE_LABELS[id],
+      status: "skipped",
+      detail: null,
+    }),
+  );
+}
+
+function setValidationStage(
+  stages: ValidationStage[],
+  id: ValidationStageId,
+  status: ValidationStageStatus,
+  detail: string | null,
+): void {
+  const stage = stages.find((entry) => entry.id === id);
+  if (!stage) return;
+  stage.status = status;
+  stage.detail = detail;
+}
 
 function classifyToolRisk(name: string, description: string | null): "read" | "write" | "sensitive" {
   const haystack = `${name} ${description ?? ""}`.trim().toLowerCase();
@@ -139,43 +192,153 @@ async function validateStreamableHttpApp(params: {
   toolsJson: unknown;
   snapshotVersion: string;
   fetchedAt: number;
+  validationReport: ValidationReport;
 }> {
   const headers = buildDeveloperAppAuthHeaders(params);
-  const { protocolVersion, sessionId } = await initializeStreamableHttpMcpSession({
+  const stages = createBaseValidationStages();
+  let validationStatus: AppToolValidationStatus = "error";
+  let validationError: string | null = null;
+  let normalizedTools: McpValidationTool[] = [];
+
+  const initializeResponse = await postMcpJson({
     url: params.app.endpointUrl,
     headers,
-    clientName: "polynet",
-    clientVersion: "0.1.0",
-  });
-  await sendInitializedNotification({
-    url: params.app.endpointUrl,
-    headers,
-    protocolVersion,
-    sessionId,
-  });
-  const normalizedTools = normalizeToolArray(
-    params.app,
-    await listMcpTools({
-      url: params.app.endpointUrl,
-      headers,
-      protocolVersion,
-      sessionId,
+    body: buildJsonRpcBody("initialize", "initialize", {
+      protocolVersion: "2025-06-18",
+      capabilities: {},
+      clientInfo: {
+        name: "polynet",
+        version: "0.1.0",
+      },
     }),
-  );
+  });
+  if (initializeResponse.status < 200 || initializeResponse.status >= 300) {
+    validationError = errorMessageFromRpc(initializeResponse);
+    setValidationStage(
+      stages,
+      "endpoint_reachable",
+      "error",
+      validationError,
+    );
+  } else {
+    setValidationStage(
+      stages,
+      "endpoint_reachable",
+      "ok",
+      "Remote MCP endpoint responded.",
+    );
+    const initializeError = normalizeString(
+      (initializeResponse.payload as JsonRpcError | null)?.error?.message,
+      1_500,
+    );
+    if (initializeError) {
+      validationError = initializeError;
+      setValidationStage(
+        stages,
+        "mcp_initialized",
+        "error",
+        initializeError,
+      );
+    } else {
+      const protocolVersion =
+        normalizeString(
+          (initializeResponse.payload as JsonRpcSuccess | null)?.result
+            ?.protocolVersion,
+        ) || "2025-06-18";
+      const sessionId = initializeResponse.sessionId;
+      setValidationStage(
+        stages,
+        "mcp_initialized",
+        "ok",
+        `Protocol ${protocolVersion}`,
+      );
+      await sendInitializedNotification({
+        url: params.app.endpointUrl,
+        headers,
+        protocolVersion,
+        sessionId,
+      });
+      const toolsResponse = await postMcpJson({
+        url: params.app.endpointUrl,
+        headers,
+        protocolVersion,
+        sessionId,
+        body: buildJsonRpcBody("tools-list", "tools/list", {}),
+      });
+      if (toolsResponse.status < 200 || toolsResponse.status >= 300) {
+        validationError = errorMessageFromRpc(toolsResponse);
+        setValidationStage(
+          stages,
+          "tools_discovered",
+          "error",
+          validationError,
+        );
+      } else {
+        const toolsError = normalizeString(
+          (toolsResponse.payload as JsonRpcError | null)?.error?.message,
+          1_500,
+        );
+        if (toolsError) {
+          validationError = toolsError;
+          setValidationStage(
+            stages,
+            "tools_discovered",
+            "error",
+            toolsError,
+          );
+        } else {
+          normalizedTools = normalizeToolArray(
+            params.app,
+            (toolsResponse.payload as JsonRpcSuccess | null)?.result?.tools ?? [],
+          );
+          if (normalizedTools.length > 0) {
+            validationStatus = "ok";
+            validationError = null;
+            setValidationStage(
+              stages,
+              "tools_discovered",
+              "ok",
+              `${normalizedTools.length} tools discovered`,
+            );
+          } else {
+            validationError = "No tools were discovered from this MCP server.";
+            setValidationStage(
+              stages,
+              "tools_discovered",
+              "error",
+              validationError,
+            );
+          }
+        }
+      }
+    }
+  }
   const fetchedAt = Date.now();
   const snapshotVersion = await sha256HexText(
     JSON.stringify({
       endpointUrl: params.app.endpointUrl,
-      protocolVersion,
+      protocolVersion:
+        initializeResponse.status >= 200 && initializeResponse.status < 300
+          ? normalizeString(
+              (initializeResponse.payload as JsonRpcSuccess | null)?.result
+                ?.protocolVersion,
+            ) || "2025-06-18"
+          : "2025-06-18",
       tools: normalizedTools,
     }),
   );
   return {
-    validationStatus: "ok",
-    validationError: null,
+    validationStatus,
+    validationError,
     toolsJson: normalizedTools,
     snapshotVersion,
     fetchedAt,
+    validationReport: {
+      validation_status: validationStatus === "ok" ? "ok" : "error",
+      validation_error: validationError,
+      tool_count: normalizedTools.length,
+      stages,
+    },
   };
 }
 
@@ -201,6 +364,12 @@ export const validateDeveloperAppInternal = internalAction({
     let toolsJson: unknown = [];
     let fetchedAt = Date.now();
     let snapshotVersion = `error-${fetchedAt}`;
+    let validationReport: ValidationReport = {
+      validation_status: "error",
+      validation_error: null,
+      tool_count: 0,
+      stages: createBaseValidationStages(),
+    };
 
     try {
       const result = await validateStreamableHttpApp({
@@ -212,6 +381,7 @@ export const validateDeveloperAppInternal = internalAction({
       toolsJson = result.toolsJson;
       fetchedAt = result.fetchedAt;
       snapshotVersion = result.snapshotVersion;
+      validationReport = result.validationReport;
     } catch (error) {
       validationStatus = "error";
       validationError =
@@ -219,6 +389,31 @@ export const validateDeveloperAppInternal = internalAction({
       toolsJson = [];
       fetchedAt = Date.now();
       snapshotVersion = `error-${fetchedAt}`;
+      validationReport = {
+        validation_status: "error",
+        validation_error: validationError,
+        tool_count: 0,
+        stages: [
+          {
+            id: "endpoint_reachable",
+            label: VALIDATION_STAGE_LABELS.endpoint_reachable,
+            status: "error",
+            detail: validationError,
+          },
+          {
+            id: "mcp_initialized",
+            label: VALIDATION_STAGE_LABELS.mcp_initialized,
+            status: "skipped",
+            detail: null,
+          },
+          {
+            id: "tools_discovered",
+            label: VALIDATION_STAGE_LABELS.tools_discovered,
+            status: "skipped",
+            detail: null,
+          },
+        ],
+      };
     }
 
     const snapshotId: any = await ctx.runMutation(internal.appValidation.createAppToolSnapshotInternal, {
@@ -264,6 +459,7 @@ export const validateDeveloperAppInternal = internalAction({
         tools: toolsJson ?? [],
         fetched_at: new Date(fetchedAt).toISOString(),
       },
+      validation_report: validationReport,
     };
   },
 });

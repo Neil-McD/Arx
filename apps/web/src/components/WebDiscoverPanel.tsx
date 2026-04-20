@@ -4,8 +4,10 @@ import type { DeveloperAppAuthType } from "../../../../shared/communityAppMountT
 import { buildPlatformSwitcherStyle } from "../../../../shared/platformSwitcherUi";
 import type { DiscoverCommunitySnapshot } from "../../../../shared/communityTypes";
 import type {
+  ConnectUserPlatformAppResult,
   ConnectUserPlatformAppInput,
   UserPlatformMountedApp,
+  UserPlatformAppValidationReport,
 } from "../../../../shared/userPlatformAppMountTypes";
 import { DiscoverCommunityCard } from "../../../../shared/DiscoverCommunityCard";
 import {
@@ -112,10 +114,16 @@ type WebDiscoverPanelProps = {
   isConnectingUserPlatformApp: boolean;
   onConnectUserPlatformApp: (
     input: ConnectUserPlatformAppInput,
-  ) => Promise<boolean> | boolean;
+  ) => Promise<ConnectUserPlatformAppResult> | ConnectUserPlatformAppResult;
   onActivateCommunity: (community: DiscoverCommunitySnapshot) => void;
   onOpenIntegrationsSettings: () => void;
 };
+
+function renderValidationStageIcon(status: "ok" | "error" | "skipped") {
+  if (status === "ok") return "✓";
+  if (status === "error") return "!";
+  return "•";
+}
 
 function renderInfoLink(href: string, label: string) {
   return (
@@ -255,6 +263,8 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
   const [personalConnectResult, setPersonalConnectResult] = useState<
     "passed" | "failed" | null
   >(null);
+  const [personalConnectValidationReport, setPersonalConnectValidationReport] =
+    useState<UserPlatformAppValidationReport | null>(null);
 
   const activeTabIndex = DISCOVER_TABS.findIndex((tab) => tab.id === activeTab);
   const tabSwitcherStyle = buildPlatformSwitcherStyle(
@@ -307,6 +317,7 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
     setPersonalConnectSecret("");
     setPersonalConnectError(null);
     setPersonalConnectResult(null);
+    setPersonalConnectValidationReport(null);
     setIsPersonalConnectModalOpen(false);
   }, [selectedApp]);
 
@@ -357,6 +368,7 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
       !personalConnectSecret.trim()
     ) {
       setPersonalConnectResult("failed");
+      setPersonalConnectValidationReport(null);
       setPersonalConnectError(
         `Paste your ${app.personalConnect.secretLabel} to connect ${app.name}.`,
       );
@@ -367,6 +379,7 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
       !personalConnectEndpoint.trim()
     ) {
       setPersonalConnectResult("failed");
+      setPersonalConnectValidationReport(null);
       setPersonalConnectError("Paste the MCP endpoint before connecting it.");
       return;
     }
@@ -376,6 +389,7 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
       !personalConnectSecret.trim()
     ) {
       setPersonalConnectResult("failed");
+      setPersonalConnectValidationReport(null);
       setPersonalConnectError("Paste the secret required for this MCP connection.");
       return;
     }
@@ -392,15 +406,19 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
     }
     setPersonalConnectError(null);
     setPersonalConnectResult(null);
-    const ok = await onConnectUserPlatformApp(connectInput);
-    if (ok) {
+    setPersonalConnectValidationReport(null);
+    const result = await onConnectUserPlatformApp(connectInput);
+    setPersonalConnectValidationReport(result.validation_report);
+    if (result.ok) {
       setPersonalConnectResult("passed");
       setPersonalConnectSecret("");
       return;
     }
     setPersonalConnectResult("failed");
     setPersonalConnectError((current) =>
-      current ?? `Couldn't connect ${app.name}. Check the requirements and try again.`,
+      current ??
+      result.error_message ??
+      `Couldn't connect ${app.name}. Check the requirements and try again.`,
     );
   };
 
@@ -777,6 +795,7 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
             if (isConnectingUserPlatformApp) return;
             setIsPersonalConnectModalOpen(false);
             setPersonalConnectResult(null);
+            setPersonalConnectValidationReport(null);
             setPersonalConnectError(null);
           }}
         >
@@ -798,6 +817,7 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
                 onClick={() => {
                   setIsPersonalConnectModalOpen(false);
                   setPersonalConnectResult(null);
+                  setPersonalConnectValidationReport(null);
                   setPersonalConnectError(null);
                 }}
                 disabled={isConnectingUserPlatformApp}
@@ -846,6 +866,9 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
                               if (personalConnectResult) {
                                 setPersonalConnectResult(null);
                               }
+                              if (personalConnectValidationReport) {
+                                setPersonalConnectValidationReport(null);
+                              }
                             }}
                             placeholder={requirement.placeholder}
                             autoCapitalize="off"
@@ -874,6 +897,9 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
                               }
                               if (personalConnectResult) {
                                 setPersonalConnectResult(null);
+                              }
+                              if (personalConnectValidationReport) {
+                                setPersonalConnectValidationReport(null);
                               }
                             }}
                           >
@@ -904,6 +930,9 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
                               if (personalConnectResult) {
                                 setPersonalConnectResult(null);
                               }
+                              if (personalConnectValidationReport) {
+                                setPersonalConnectValidationReport(null);
+                              }
                             }}
                             placeholder={requirement.placeholder}
                           />
@@ -932,12 +961,53 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
               {personalConnectError ? (
                 <div className="auth-error">{personalConnectError}</div>
               ) : null}
-              {personalConnectResult === "passed" || selectedPersonalMount ? (
+              {personalConnectValidationReport ? (
+                <div
+                  className={`discover-connect-status${
+                    personalConnectResult === "passed"
+                      ? " is-success"
+                      : personalConnectResult === "failed"
+                        ? " is-error"
+                        : ""
+                  }`}
+                >
+                  <div className="discover-connect-status-title">
+                    {personalConnectResult === "passed"
+                      ? "Connection verified"
+                      : "Validation failed"}
+                  </div>
+                  <div className="discover-connect-status-body">
+                    {personalConnectResult === "passed"
+                      ? `${selectedApp.name} is now mounted into your personal platform layer.`
+                      : personalConnectValidationReport.validation_error ??
+                        `We couldn't connect ${selectedApp.name}. Check the validation stages below.`}
+                  </div>
+                  <div className="discover-connect-stage-list" role="list" aria-label="Validation stages">
+                    {personalConnectValidationReport.stages.map((stage) => (
+                      <div
+                        key={stage.id}
+                        className={`discover-connect-stage discover-connect-stage-${stage.status}`}
+                        role="listitem"
+                      >
+                        <span className="discover-connect-stage-icon" aria-hidden="true">
+                          {renderValidationStageIcon(stage.status)}
+                        </span>
+                        <span className="discover-connect-stage-copy">
+                          <span className="discover-connect-stage-label">{stage.label}</span>
+                          {stage.detail ? (
+                            <span className="discover-connect-stage-detail">{stage.detail}</span>
+                          ) : null}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : personalConnectResult === "passed" || selectedPersonalMount ? (
                 <div
                   className="discover-connect-status is-success"
                 >
                   <div className="discover-connect-status-title">
-                    Passed
+                    Connected
                   </div>
                   <div className="discover-connect-status-body">
                     {`${selectedApp.name} is now mounted into your personal platform layer.`}
@@ -960,11 +1030,12 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
               <button
                 type="button"
                 className="settings-cta"
-                onClick={() => {
-                  setIsPersonalConnectModalOpen(false);
-                  setPersonalConnectResult(null);
-                  setPersonalConnectError(null);
-                }}
+                  onClick={() => {
+                    setIsPersonalConnectModalOpen(false);
+                    setPersonalConnectResult(null);
+                    setPersonalConnectValidationReport(null);
+                    setPersonalConnectError(null);
+                  }}
                 disabled={isConnectingUserPlatformApp}
               >
                 {personalConnectResult === "passed" || selectedPersonalMount

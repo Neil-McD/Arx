@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from "react";
 
 import type {
+  ConnectUserPlatformAppResult,
   ConnectUserPlatformAppInput,
   UserPlatformMountedApp,
 } from "../../../../shared/userPlatformAppMountTypes";
@@ -95,32 +96,47 @@ export function useWebUserPlatformAppMountsController<
   }, []);
 
   const connectUserPlatformApp = useCallback(
-    async (input: ConnectUserPlatformAppInput): Promise<boolean> => {
+    async (input: ConnectUserPlatformAppInput): Promise<ConnectUserPlatformAppResult> => {
       const current = argsRef.current;
       const usableSession = await resolveUsableSession(
         current.session,
         current.ensureSession,
       );
-      if (!usableSession) return false;
+      if (!usableSession) {
+        return {
+          ok: false,
+          mount: null,
+          validation_report: null,
+          error_message: null,
+        };
+      }
       setIsConnectingUserPlatformApp(true);
       setUserPlatformAppMutationError(null);
       try {
-        const mounted = await connectCloudUserPlatformApp({
+        const result = await connectCloudUserPlatformApp({
           session: usableSession,
           input,
         });
-        if (!mounted) return false;
-        setUserPlatformAppMounts((prev) => {
-          const next = prev.filter((entry) => entry.id !== mounted.id);
-          next.unshift(mounted);
-          return next;
-        });
-        return true;
+        if (result.mount) {
+          setUserPlatformAppMounts((prev) => {
+            const next = prev.filter((entry) => entry.id !== result.mount?.id);
+            next.unshift(result.mount as UserPlatformMountedApp);
+            return next;
+          });
+        }
+        if (!result.ok && result.error_message && !result.validation_report) {
+          setUserPlatformAppMutationError(result.error_message);
+        }
+        return result;
       } catch (error) {
-        setUserPlatformAppMutationError(
-          toErrorMessage(error, "Failed to connect app."),
-        );
-        return false;
+        const message = toErrorMessage(error, "Failed to connect app.");
+        setUserPlatformAppMutationError(message);
+        return {
+          ok: false,
+          mount: null,
+          validation_report: null,
+          error_message: message,
+        };
       } finally {
         setIsConnectingUserPlatformApp(false);
       }

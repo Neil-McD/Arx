@@ -1659,6 +1659,64 @@ body {
   color: var(--text-muted);
 }
 
+.discover-connect-stage-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.discover-connect-stage {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+}
+
+.discover-connect-stage-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--bg-card) 72%, transparent);
+}
+
+.discover-connect-stage-ok .discover-connect-stage-icon {
+  background: color-mix(in srgb, rgba(114, 217, 162, 0.2) 70%, var(--bg-card));
+  color: color-mix(in srgb, #8ce7b4 90%, white);
+}
+
+.discover-connect-stage-error .discover-connect-stage-icon {
+  background: color-mix(in srgb, rgba(244, 106, 147, 0.18) 72%, var(--bg-card));
+  color: color-mix(in srgb, #ff9fbc 92%, white);
+}
+
+.discover-connect-stage-skipped .discover-connect-stage-icon {
+  color: var(--text-faint);
+}
+
+.discover-connect-stage-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.discover-connect-stage-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.discover-connect-stage-detail {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
 .discover-connect-status.is-success {
   border-color: color-mix(in srgb, #72d9a2 38%, var(--border-default));
   background: color-mix(in srgb, rgba(114, 217, 162, 0.18) 42%, var(--bg-card-alt));

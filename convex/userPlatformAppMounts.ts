@@ -24,6 +24,88 @@ import {
   initializeStreamableHttpMcpSession,
   sendInitializedNotification,
 } from "./mcpHttpClient";
+
+function coerceValidationReport(
+  rawReport: unknown,
+): {
+  validation_status: "ok" | "error";
+  validation_error: string | null;
+  tool_count: number;
+  stages: Array<{
+    id: string;
+    label: string;
+    status: "ok" | "error" | "skipped";
+    detail: string | null;
+  }>;
+} | null {
+  if (!rawReport || typeof rawReport !== "object" || Array.isArray(rawReport)) {
+    return null;
+  }
+  const report = rawReport as Record<string, unknown>;
+  const rawStages = Array.isArray(report.stages) ? report.stages : [];
+  return {
+    validation_status:
+      report.validation_status === "ok" ? "ok" : "error",
+    validation_error: normalizeString(report.validation_error, 2_000) || null,
+    tool_count:
+      typeof report.tool_count === "number" && Number.isFinite(report.tool_count)
+        ? Math.max(0, Math.floor(report.tool_count))
+        : 0,
+    stages: rawStages
+      .map((rawStage) => {
+        if (!rawStage || typeof rawStage !== "object" || Array.isArray(rawStage)) {
+          return null;
+        }
+        const stage = rawStage as Record<string, unknown>;
+        const status =
+          stage.status === "ok" || stage.status === "error" || stage.status === "skipped"
+            ? stage.status
+            : "skipped";
+        return {
+          id: normalizeString(stage.id, 80),
+          label: normalizeString(stage.label, 120),
+          status,
+          detail: normalizeString(stage.detail, 500) || null,
+        };
+      })
+      .filter(
+        (
+          stage,
+        ): stage is {
+          id: string;
+          label: string;
+          status: "ok" | "error" | "skipped";
+          detail: string | null;
+        } => Boolean(stage?.id && stage.label),
+      ),
+  };
+}
+
+function withMountedStage(
+  report: ReturnType<typeof coerceValidationReport>,
+  status: "ok" | "error" | "skipped",
+  detail: string | null,
+) {
+  const stages = [
+    ...(report?.stages ?? []),
+    {
+      id: "mounted",
+      label: "Mounted into your personal layer",
+      status,
+      detail,
+    },
+  ];
+  return {
+    validation_status:
+      report?.validation_status === "ok" && status !== "error" ? "ok" : "error",
+    validation_error:
+      status === "error"
+        ? detail
+        : (report?.validation_error ?? null),
+    tool_count: report?.tool_count ?? 0,
+    stages,
+  };
+}
 import { encryptSecret } from "./providerConnections";
 import { resolveUserIdForAuthenticatedRequest } from "./communityCore";
 
@@ -670,66 +752,114 @@ export const connectUserPlatformApp = action({
       authType: args.authType,
     });
     if (existingMount) {
-      if (args.authType !== "none") {
-        if (normalizedSecret) {
-          const encryptedSecret = await encryptSecret(normalizedSecret);
-          await ctx.runMutation(internal.appConnections.upsertAppConnectionInternal, {
-            developerAppId: existingMount.app._id,
-            connectionStatus: "connected",
-            encryptedSecretHex: encryptedSecret.encryptedSecretHex,
-            secretIvHex: encryptedSecret.secretIvHex,
-            secretVersion: encryptedSecret.secretVersion,
-            nowMs,
-          });
-        } else if (existingMount.connection?.connectionStatus !== "connected") {
-          throw new Error("developer_app_connection_secret_required");
+      try {
+        if (args.authType !== "none") {
+          if (normalizedSecret) {
+            const encryptedSecret = await encryptSecret(normalizedSecret);
+            await ctx.runMutation(internal.appConnections.upsertAppConnectionInternal, {
+              developerAppId: existingMount.app._id,
+              connectionStatus: "connected",
+              encryptedSecretHex: encryptedSecret.encryptedSecretHex,
+              secretIvHex: encryptedSecret.secretIvHex,
+              secretVersion: encryptedSecret.secretVersion,
+              nowMs,
+            });
+          } else if (existingMount.connection?.connectionStatus !== "connected") {
+            return {
+              ok: false,
+              mount: null,
+              validation_report: null,
+              error_message: "developer_app_connection_secret_required",
+            };
+          }
         }
-      }
 
-      const validation = (await ctx.runAction(
-        internal.appValidation.validateDeveloperAppInternal,
-        {
-          developerAppId: existingMount.app._id,
-        },
-      )) as {
-        validation_status?: unknown;
-        validation_error?: unknown;
-      };
-      if (String(validation.validation_status ?? "") !== "ok") {
-        throw new Error(
-          normalizeString(validation.validation_error, 2_000) ||
-            "developer_app_validation_failed",
+        const validation = (await ctx.runAction(
+          internal.appValidation.validateDeveloperAppInternal,
+          {
+            developerAppId: existingMount.app._id,
+          },
+        )) as {
+          validation_status?: unknown;
+          validation_error?: unknown;
+          validation_report?: unknown;
+        };
+        const validationReport = coerceValidationReport(
+          validation.validation_report,
         );
-      }
+        if (String(validation.validation_status ?? "") !== "ok") {
+          return {
+            ok: false,
+            mount: null,
+            validation_report: withMountedStage(
+              validationReport,
+              "skipped",
+              "Mounting was skipped because validation failed.",
+            ),
+            error_message:
+              normalizeString(validation.validation_error, 2_000) ||
+              "developer_app_validation_failed",
+          };
+        }
 
-      const refreshedApp = (await ctx.runQuery(
-        internal.developerApps.getDeveloperAppByIdInternal,
-        {
-          developerAppId: existingMount.app._id,
-        },
-      )) as DeveloperAppRow | null;
-      if (!refreshedApp?.activeSnapshotId) {
-        throw new Error("developer_app_snapshot_missing");
-      }
-      await ctx.runMutation(
-        internal.userPlatformAppMounts.upsertUserPlatformAppMountInternal,
-        {
-          userId,
-          developerAppId: existingMount.app._id,
-          toolSnapshotId: refreshedApp.activeSnapshotId,
-          enabled: true,
-          enabledTools: existingMount.mount.enabledTools,
-          nowMs,
-        },
-      );
+        const refreshedApp = (await ctx.runQuery(
+          internal.developerApps.getDeveloperAppByIdInternal,
+          {
+            developerAppId: existingMount.app._id,
+          },
+        )) as DeveloperAppRow | null;
+        if (!refreshedApp?.activeSnapshotId) {
+          return {
+            ok: false,
+            mount: null,
+            validation_report: withMountedStage(
+              validationReport,
+              "error",
+              "Validation succeeded, but no active tool snapshot was available.",
+            ),
+            error_message: "developer_app_snapshot_missing",
+          };
+        }
+        await ctx.runMutation(
+          internal.userPlatformAppMounts.upsertUserPlatformAppMountInternal,
+          {
+            userId,
+            developerAppId: existingMount.app._id,
+            toolSnapshotId: refreshedApp.activeSnapshotId,
+            enabled: true,
+            enabledTools: existingMount.mount.enabledTools,
+            nowMs,
+          },
+        );
 
-      return await ctx.runQuery(
-        internal.userPlatformAppMounts.getUserPlatformAppMountReadModelInternal,
-        {
-          userId,
-          userPlatformAppMountId: existingMount.mount._id,
-        },
-      );
+        const mount = await ctx.runQuery(
+          internal.userPlatformAppMounts.getUserPlatformAppMountReadModelInternal,
+          {
+            userId,
+            userPlatformAppMountId: existingMount.mount._id,
+          },
+        );
+        return {
+          ok: true,
+          mount,
+          validation_report: withMountedStage(
+            validationReport,
+            "ok",
+            "Personal tools were mounted successfully.",
+          ),
+          error_message: null,
+        };
+      } catch (error) {
+        return {
+          ok: false,
+          mount: null,
+          validation_report: null,
+          error_message:
+            error instanceof Error
+              ? normalizeString(error.message, 2_000)
+              : "developer_app_connect_failed",
+        };
+      }
     }
 
     let developerAppId: any = null;
@@ -749,7 +879,20 @@ export const connectUserPlatformApp = action({
 
       if (args.authType !== "none") {
         if (!normalizedSecret) {
-          throw new Error("developer_app_connection_secret_required");
+          if (developerAppId) {
+            await ctx.runMutation(
+              internal.developerApps.deleteDeveloperAppCascadeInternal,
+              {
+                developerAppId,
+              },
+            );
+          }
+          return {
+            ok: false,
+            mount: null,
+            validation_report: null,
+            error_message: "developer_app_connection_secret_required",
+          };
         }
         const encryptedSecret = await encryptSecret(normalizedSecret);
         await ctx.runMutation(internal.appConnections.upsertAppConnectionInternal, {
@@ -771,12 +914,32 @@ export const connectUserPlatformApp = action({
         validation_status?: unknown;
         validation_error?: unknown;
         snapshot?: { tools?: unknown };
+        validation_report?: unknown;
       };
+      const validationReport = coerceValidationReport(
+        validation.validation_report,
+      );
       if (String(validation.validation_status ?? "") !== "ok") {
-        throw new Error(
-          normalizeString(validation.validation_error, 2_000) ||
+        if (developerAppId) {
+          await ctx.runMutation(
+            internal.developerApps.deleteDeveloperAppCascadeInternal,
+            {
+              developerAppId,
+            },
+          );
+        }
+        return {
+          ok: false,
+          mount: null,
+          validation_report: withMountedStage(
+            validationReport,
+            "skipped",
+            "Mounting was skipped because validation failed.",
+          ),
+          error_message:
+            normalizeString(validation.validation_error, 2_000) ||
             "developer_app_validation_failed",
-        );
+        };
       }
 
       const app = (await ctx.runQuery(
@@ -787,7 +950,24 @@ export const connectUserPlatformApp = action({
         },
       )) as DeveloperAppRow;
       if (!app.activeSnapshotId) {
-        throw new Error("developer_app_snapshot_missing");
+        if (developerAppId) {
+          await ctx.runMutation(
+            internal.developerApps.deleteDeveloperAppCascadeInternal,
+            {
+              developerAppId,
+            },
+          );
+        }
+        return {
+          ok: false,
+          mount: null,
+          validation_report: withMountedStage(
+            validationReport,
+            "error",
+            "Validation succeeded, but no active tool snapshot was available.",
+          ),
+          error_message: "developer_app_snapshot_missing",
+        };
       }
       const mountedTools = Array.isArray(validation.snapshot?.tools)
         ? (validation.snapshot?.tools as Array<{ tool_name?: unknown }>)
@@ -796,7 +976,24 @@ export const connectUserPlatformApp = action({
         .map((tool) => normalizeString(tool.tool_name, 200))
         .filter(Boolean);
       if (enabledTools.length === 0) {
-        throw new Error("developer_app_no_tools_discovered");
+        if (developerAppId) {
+          await ctx.runMutation(
+            internal.developerApps.deleteDeveloperAppCascadeInternal,
+            {
+              developerAppId,
+            },
+          );
+        }
+        return {
+          ok: false,
+          mount: null,
+          validation_report: withMountedStage(
+            validationReport,
+            "skipped",
+            "Mounting was skipped because no tools were discovered.",
+          ),
+          error_message: "developer_app_no_tools_discovered",
+        };
       }
 
       const userPlatformAppMountId = (await ctx.runMutation(
@@ -811,13 +1008,23 @@ export const connectUserPlatformApp = action({
         },
       )) as any;
 
-      return await ctx.runQuery(
+      const mount = await ctx.runQuery(
         internal.userPlatformAppMounts.getUserPlatformAppMountReadModelInternal,
         {
           userId,
           userPlatformAppMountId,
         },
       );
+      return {
+        ok: true,
+        mount,
+        validation_report: withMountedStage(
+          validationReport,
+          "ok",
+          "Personal tools were mounted successfully.",
+        ),
+        error_message: null,
+      };
     } catch (error) {
       if (developerAppId) {
         await ctx.runMutation(
@@ -827,7 +1034,15 @@ export const connectUserPlatformApp = action({
           },
         );
       }
-      throw error;
+      return {
+        ok: false,
+        mount: null,
+        validation_report: null,
+        error_message:
+          error instanceof Error
+            ? normalizeString(error.message, 2_000)
+            : "developer_app_connect_failed",
+      };
     }
   },
 });

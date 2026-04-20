@@ -32,3 +32,32 @@ export type ConnectUserPlatformAppInput = {
   description?: string;
   secret?: string;
 };
+
+export type UserPlatformAppValidationStageId =
+  | "endpoint_reachable"
+  | "mcp_initialized"
+  | "tools_discovered"
+  | "mounted";
+
+export type UserPlatformAppValidationStageStatus = "ok" | "error" | "skipped";
+
+export type UserPlatformAppValidationStage = {
+  id: UserPlatformAppValidationStageId;
+  label: string;
+  status: UserPlatformAppValidationStageStatus;
+  detail: string | null;
+};
+
+export type UserPlatformAppValidationReport = {
+  validation_status: "ok" | "error";
+  validation_error: string | null;
+  tool_count: number;
+  stages: UserPlatformAppValidationStage[];
+};
+
+export type ConnectUserPlatformAppResult = {
+  ok: boolean;
+  mount: UserPlatformMountedApp | null;
+  validation_report: UserPlatformAppValidationReport | null;
+  error_message: string | null;
+};
