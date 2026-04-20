@@ -71,7 +71,7 @@ export async function postMcpJson(params: {
     response = await fetch(params.url, {
       method: "POST",
       headers: {
-        Accept: "application/json",
+        Accept: "application/json, text/event-stream",
         "Content-Type": "application/json",
         ...(params.protocolVersion
           ? { "MCP-Protocol-Version": params.protocolVersion }
