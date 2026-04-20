@@ -68,6 +68,10 @@ import { useWebWorkspaceSurfaceController } from "./controllers/useWebWorkspaceS
 import { useWebAppAuthController } from "./controllers/useWebAppAuthController";
 import { updateSentryUiContext } from "./instrument";
 import {
+  emitWorkspaceEvent,
+  formatWorkspaceInstrumentationError,
+} from "./lib/workspaceInstrumentation";
+import {
   captureProductAnalyticsEvent,
   clearPendingAnalyticsReturn,
   consumePendingAnalyticsReturn,
@@ -653,6 +657,14 @@ export default function App() {
     authenticatedSessionArg,
   } = useWebAppAuthController({
     onSessionLost: async () => {
+      emitWorkspaceEvent({
+        scope: "lifecycle",
+        name: "auth_full_signed_out_reset",
+        status: "start",
+        detail: {
+          reason: "session_lost",
+        },
+      });
       workspace.actions.resetWorkspaceSurfaceState();
       await resetWebSessionStateAfterSignOut({
         beginBrowserSignedOutState,
@@ -700,8 +712,24 @@ export default function App() {
         setIsSettingsAvatarDragOver,
         setDiscoverCommunities,
       });
+      emitWorkspaceEvent({
+        scope: "lifecycle",
+        name: "auth_full_signed_out_reset",
+        status: "success",
+        detail: {
+          reason: "session_lost",
+        },
+      });
     },
     onSessionMissingAfterBootstrap: async () => {
+      emitWorkspaceEvent({
+        scope: "lifecycle",
+        name: "auth_full_signed_out_reset",
+        status: "start",
+        detail: {
+          reason: "session_missing_after_bootstrap",
+        },
+      });
       workspace.actions.resetWorkspaceSurfaceState();
       await resetWebSessionStateAfterSignOut({
         beginBrowserSignedOutState,
@@ -763,21 +791,218 @@ export default function App() {
       setWorkspaceCreditBalanceError(null);
       profileUi.setProfileSaveError(null);
       profileUi.setProfileSaveSuccess(false);
+      emitWorkspaceEvent({
+        scope: "lifecycle",
+        name: "auth_full_signed_out_reset",
+        status: "success",
+        detail: {
+          reason: "session_missing_after_bootstrap",
+        },
+      });
     },
     onSessionReady: async (session) => {
-      await Promise.all([
-        workspace.actions.hydrateWorkspaceSurfaceState(session),
-        loadCommunities(session),
-        loadBuilderBillingStatus(session),
-        loadSelfProfile(session),
-      ]);
+      emitWorkspaceEvent({
+        scope: "lifecycle",
+        name: "account_graph_hydrate",
+        status: "start",
+        detail: {
+          phase: "session_ready",
+          userId: String(session.user?.id ?? "").trim() || null,
+        },
+      });
+      try {
+        await Promise.all([
+          workspace.actions.hydrateWorkspaceSurfaceState(session),
+          (async () => {
+            emitWorkspaceEvent({
+              scope: "lifecycle",
+              name: "communities_load",
+              status: "start",
+              detail: { phase: "session_ready" },
+            });
+            try {
+              await loadCommunities(session);
+              emitWorkspaceEvent({
+                scope: "lifecycle",
+                name: "communities_load",
+                status: "success",
+                detail: { phase: "session_ready" },
+              });
+            } catch (error) {
+              emitWorkspaceEvent({
+                scope: "lifecycle",
+                name: "communities_load",
+                status: "failure",
+                detail: { phase: "session_ready" },
+                error: formatWorkspaceInstrumentationError(error),
+              });
+              throw error;
+            }
+          })(),
+          (async () => {
+            emitWorkspaceEvent({
+              scope: "lifecycle",
+              name: "billing_status_load",
+              status: "start",
+              detail: { phase: "session_ready" },
+            });
+            try {
+              await loadBuilderBillingStatus(session);
+              emitWorkspaceEvent({
+                scope: "lifecycle",
+                name: "billing_status_load",
+                status: "success",
+                detail: { phase: "session_ready" },
+              });
+            } catch (error) {
+              emitWorkspaceEvent({
+                scope: "lifecycle",
+                name: "billing_status_load",
+                status: "failure",
+                detail: { phase: "session_ready" },
+                error: formatWorkspaceInstrumentationError(error),
+              });
+              throw error;
+            }
+          })(),
+          (async () => {
+            emitWorkspaceEvent({
+              scope: "lifecycle",
+              name: "self_profile_load",
+              status: "start",
+              detail: { phase: "session_ready" },
+            });
+            try {
+              await loadSelfProfile(session);
+              emitWorkspaceEvent({
+                scope: "lifecycle",
+                name: "self_profile_load",
+                status: "success",
+                detail: { phase: "session_ready" },
+              });
+            } catch (error) {
+              emitWorkspaceEvent({
+                scope: "lifecycle",
+                name: "self_profile_load",
+                status: "failure",
+                detail: { phase: "session_ready" },
+                error: formatWorkspaceInstrumentationError(error),
+              });
+              throw error;
+            }
+          })(),
+        ]);
+        emitWorkspaceEvent({
+          scope: "lifecycle",
+          name: "account_graph_hydrate",
+          status: "success",
+          detail: {
+            phase: "session_ready",
+            userId: String(session.user?.id ?? "").trim() || null,
+          },
+        });
+      } catch (error) {
+        emitWorkspaceEvent({
+          scope: "lifecycle",
+          name: "account_graph_hydrate",
+          status: "failure",
+          detail: {
+            phase: "session_ready",
+            userId: String(session.user?.id ?? "").trim() || null,
+          },
+          error: formatWorkspaceInstrumentationError(error),
+        });
+        throw error;
+      }
     },
     onSessionFocusReady: async (session) => {
-      await Promise.all([
-        workspace.actions.resumeWorkspaceSurfaceState(session),
-        loadBuilderBillingStatus(session),
-        loadCommunities(session),
-      ]);
+      emitWorkspaceEvent({
+        scope: "lifecycle",
+        name: "account_graph_refresh",
+        status: "start",
+        detail: {
+          phase: "session_focus_ready",
+          userId: String(session.user?.id ?? "").trim() || null,
+        },
+      });
+      try {
+        await Promise.all([
+          workspace.actions.resumeWorkspaceSurfaceState(session),
+          (async () => {
+            emitWorkspaceEvent({
+              scope: "lifecycle",
+              name: "billing_status_load",
+              status: "start",
+              detail: { phase: "session_focus_ready" },
+            });
+            try {
+              await loadBuilderBillingStatus(session);
+              emitWorkspaceEvent({
+                scope: "lifecycle",
+                name: "billing_status_load",
+                status: "success",
+                detail: { phase: "session_focus_ready" },
+              });
+            } catch (error) {
+              emitWorkspaceEvent({
+                scope: "lifecycle",
+                name: "billing_status_load",
+                status: "failure",
+                detail: { phase: "session_focus_ready" },
+                error: formatWorkspaceInstrumentationError(error),
+              });
+              throw error;
+            }
+          })(),
+          (async () => {
+            emitWorkspaceEvent({
+              scope: "lifecycle",
+              name: "communities_load",
+              status: "start",
+              detail: { phase: "session_focus_ready" },
+            });
+            try {
+              await loadCommunities(session);
+              emitWorkspaceEvent({
+                scope: "lifecycle",
+                name: "communities_load",
+                status: "success",
+                detail: { phase: "session_focus_ready" },
+              });
+            } catch (error) {
+              emitWorkspaceEvent({
+                scope: "lifecycle",
+                name: "communities_load",
+                status: "failure",
+                detail: { phase: "session_focus_ready" },
+                error: formatWorkspaceInstrumentationError(error),
+              });
+              throw error;
+            }
+          })(),
+        ]);
+        emitWorkspaceEvent({
+          scope: "lifecycle",
+          name: "account_graph_refresh",
+          status: "success",
+          detail: {
+            phase: "session_focus_ready",
+            userId: String(session.user?.id ?? "").trim() || null,
+          },
+        });
+      } catch (error) {
+        emitWorkspaceEvent({
+          scope: "lifecycle",
+          name: "account_graph_refresh",
+          status: "failure",
+          detail: {
+            phase: "session_focus_ready",
+            userId: String(session.user?.id ?? "").trim() || null,
+          },
+          error: formatWorkspaceInstrumentationError(error),
+        });
+        throw error;
+      }
     },
     onDidJustSignIn: () => {
       resumePendingAuthIntent();

@@ -25,6 +25,10 @@ import {
 import { clearOAuthCallbackParamsFromLocation } from "../../../../shared/cloudPkce";
 import { buildLoginTrampolinePath } from "../auth/loginTrampoline";
 import { isWorkOsLoginRequiredError, useWorkOsRuntime } from "../auth/workosRuntime";
+import {
+  emitWorkspaceEvent,
+  formatWorkspaceInstrumentationError,
+} from "../lib/workspaceInstrumentation";
 import { useWebAuthSessionLifecycle } from "./useWebAuthSessionLifecycle";
 
 type AsyncVoid = void | Promise<void>;
@@ -230,17 +234,75 @@ export function useWebAppAuthController(
     phase: string;
     forceRefresh?: boolean;
   }): Promise<AuthSession | null> => {
+    emitWorkspaceEvent({
+      scope: "lifecycle",
+      name: "auth_recover_session",
+      status: "start",
+      detail: {
+        phase: params.phase,
+        forceRefresh: Boolean(params.forceRefresh),
+        workosUserPresent: Boolean(workos.user),
+      },
+    });
     try {
       const candidateSession = await workos.readSession({ forceRefresh: params.forceRefresh });
-      if (!candidateSession) return null;
+      if (!candidateSession) {
+        emitWorkspaceEvent({
+          scope: "lifecycle",
+          name: "auth_recover_session",
+          status: "skip",
+          detail: {
+            phase: params.phase,
+            forceRefresh: Boolean(params.forceRefresh),
+            reason: "workos_session_missing",
+            workosUserPresent: Boolean(workos.user),
+          },
+        });
+        return null;
+      }
 
       const verifiedSession = await ensureUsableAuthSession(candidateSession);
-      if (!verifiedSession) return null;
+      if (!verifiedSession) {
+        emitWorkspaceEvent({
+          scope: "lifecycle",
+          name: "auth_recover_session",
+          status: "failure",
+          detail: {
+            phase: params.phase,
+            forceRefresh: Boolean(params.forceRefresh),
+            reason: "verified_session_missing",
+            workosUserPresent: Boolean(workos.user),
+          },
+        });
+        return null;
+      }
 
       adoptAuthSession(verifiedSession);
       setAuthError(null);
+      emitWorkspaceEvent({
+        scope: "lifecycle",
+        name: "auth_recover_session",
+        status: "success",
+        detail: {
+          phase: params.phase,
+          forceRefresh: Boolean(params.forceRefresh),
+          workosUserPresent: Boolean(workos.user),
+          userId: String(verifiedSession.user?.id ?? "").trim() || null,
+        },
+      });
       return verifiedSession;
     } catch (error) {
+      emitWorkspaceEvent({
+        scope: "lifecycle",
+        name: "auth_recover_session",
+        status: "failure",
+        detail: {
+          phase: params.phase,
+          forceRefresh: Boolean(params.forceRefresh),
+          workosUserPresent: Boolean(workos.user),
+        },
+        error: formatWorkspaceInstrumentationError(error),
+      });
       return null;
     }
   }, [adoptAuthSession, ensureUsableAuthSession, workos]);
@@ -362,10 +424,44 @@ export function useWebAppAuthController(
     onSessionMissing: () => {
       if (!authBootstrapCompleteRef.current) return;
       markAuthBootstrapComplete();
+      const hasWorkOsUser = Boolean(workos.user);
+      if (!isAuthSigningOut && hasWorkOsUser) {
+        emitWorkspaceEvent({
+          scope: "lifecycle",
+          name: "auth_session_missing_after_bootstrap",
+          status: "skip",
+          detail: {
+            reason: "recovering_signed_in",
+            workosUserPresent: true,
+            isAuthSigningOut: false,
+          },
+        });
+        return;
+      }
+      emitWorkspaceEvent({
+        scope: "lifecycle",
+        name: "auth_session_missing_after_bootstrap",
+        status: "start",
+        detail: {
+          reason: isAuthSigningOut ? "signing_out" : "signed_out",
+          workosUserPresent: hasWorkOsUser,
+          isAuthSigningOut,
+        },
+      });
       void (async () => {
         sessionRef.current = null;
         setAuthSession(null);
         await onSessionMissingAfterBootstrapRef.current();
+        emitWorkspaceEvent({
+          scope: "lifecycle",
+          name: "auth_session_missing_after_bootstrap",
+          status: "success",
+          detail: {
+            reason: isAuthSigningOut ? "signing_out" : "signed_out",
+            workosUserPresent: hasWorkOsUser,
+            isAuthSigningOut,
+          },
+        });
       })();
     },
     onFocusWithSession: (currentSession) => {
