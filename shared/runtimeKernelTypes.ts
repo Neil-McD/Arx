@@ -25,7 +25,7 @@ export type RuntimeKernelBudget = {
 };
 
 export const DEFAULT_RUNTIME_KERNEL_BUDGET: RuntimeKernelBudget = {
-  maxToolSteps: 20,
+  maxToolSteps: 50,
   maxRepeatedIdenticalCalls: 2,
   maxConsecutiveFailures: 2,
   maxNoProgressSteps: 3,
