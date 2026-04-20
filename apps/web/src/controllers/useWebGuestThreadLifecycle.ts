@@ -5,6 +5,7 @@ export function useWebGuestThreadLifecycle<
   GuestStorageT extends { model_id: string },
   ThreadMessageT,
 >(params: {
+  enableGuestThreadLifecycle: boolean;
   session: SessionT | null;
   publicRouteKind: string;
   activeThreadId: string | null;
@@ -20,6 +21,7 @@ export function useWebGuestThreadLifecycle<
   const session = params.session;
 
   useEffect(() => {
+    if (!params.enableGuestThreadLifecycle) return;
     if (session) return;
     if (params.publicRouteKind !== "app") return;
     if (params.activeThreadId && params.activeThreadId !== params.guestThreadId) return;
@@ -41,6 +43,7 @@ export function useWebGuestThreadLifecycle<
     params.publicRouteKind,
     params.activeThreadId,
     params.guestThreadId,
+    params.enableGuestThreadLifecycle,
     params.workspaceWantsNewChat,
   ]);
 

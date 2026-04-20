@@ -1931,6 +1931,8 @@ export default function App() {
   const shellPublicRoute: PublicRoute = shouldDeferStandaloneSignedOutFunnelBoot
     ? { kind: "app" }
     : publicRoute;
+  const isSignedOutAppPresentation =
+    shellPublicRoute.kind === "app" && authPresentationState === "signed_out";
 
   const navStackRef = useRef<NavSnapshot[]>([]);
   const readCurrentRoutePath = () =>
@@ -3101,6 +3103,7 @@ export default function App() {
   }, [activePage, session, loadSelfProfile, loadUserProfiles, visibleCommunityProfileIds]);
 
   useWebGuestThreadLifecycle<AuthSession, GuestThreadStorageV1, ThreadMessage>({
+    enableGuestThreadLifecycle: isSignedOutAppPresentation,
     ...sessionArg,
     publicRouteKind: shellPublicRoute.kind,
     activeThreadId,
@@ -3114,7 +3117,7 @@ export default function App() {
     setThreadMessages,
   });
 
-  const workspaceThreadKey = session ? activeThreadId : GUEST_THREAD_ID;
+  const workspaceThreadKey = isSignedOutAppPresentation ? GUEST_THREAD_ID : activeThreadId;
 
   useEffect(() => {
     if (!activeThreadId) return;
@@ -4692,7 +4695,7 @@ export default function App() {
       workspace.derived.projectById,
     ],
   );
-	  const isAnonymousWorkspace = !session && shellPublicRoute.kind === "app";
+	  const isAnonymousWorkspace = isSignedOutAppPresentation;
 	  const guestThreadMessages = useMemo(() => {
 	    if (!isAnonymousWorkspace) return [] as ThreadMessage[];
 	    return threadMessages.filter((message) => message.thread_id === GUEST_THREAD_ID);
@@ -4834,7 +4837,9 @@ export default function App() {
   );
   const isEmptyWorkspaceThread = !hasPersistedWorkspaceMessages && !hasStreamingWorkspaceActivity;
   const threadError = threadErrorById[resolveThreadErrorKey(activeThreadId)] ?? null;
-  const guestInferenceIssue = !session ? guestInferenceIssueById[resolveThreadErrorKey(activeThreadId)] ?? null : null;
+  const guestInferenceIssue = isSignedOutAppPresentation
+    ? guestInferenceIssueById[resolveThreadErrorKey(activeThreadId)] ?? null
+    : null;
 
   useEffect(() => {
     if (!session) return;
