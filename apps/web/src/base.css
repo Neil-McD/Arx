@@ -12686,7 +12686,7 @@ button.message-citation-chip:hover {
 }
 
 /* Settings panel buttons - consistent styling */
-.settings-panel button:not(.platform-save-button):not(.integration-mounted-menu-trigger):not(.integration-mounted-menu-item) {
+.settings-panel button:not(.platform-save-button):not(.integration-mounted-menu-trigger):not(.integration-mounted-menu-item):not(.platform-switcher-btn):not(.analytics-range-btn):not(.ai-feed-view-button) {
   padding: 10px 16px;
   font-size: 12px;
   font-weight: 500;
@@ -12698,12 +12698,12 @@ button.message-citation-chip:hover {
   color: var(--text-primary);
 }
 
-.settings-panel button:not(.platform-save-button):not(.integration-mounted-menu-trigger):not(.integration-mounted-menu-item):hover:not(:disabled) {
+.settings-panel button:not(.platform-save-button):not(.integration-mounted-menu-trigger):not(.integration-mounted-menu-item):not(.platform-switcher-btn):not(.analytics-range-btn):not(.ai-feed-view-button):hover:not(:disabled) {
   border-color: var(--border-default);
   background: var(--bg-card-hover);
 }
 
-.settings-panel button:not(.platform-save-button):not(.integration-mounted-menu-trigger):not(.integration-mounted-menu-item):disabled {
+.settings-panel button:not(.platform-save-button):not(.integration-mounted-menu-trigger):not(.integration-mounted-menu-item):not(.platform-switcher-btn):not(.analytics-range-btn):not(.ai-feed-view-button):disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
@@ -13132,8 +13132,10 @@ button.message-citation-chip:hover {
 .ai-feed-view-toggle .ai-feed-view-button,
 .settings-panel .platform-switcher .platform-switcher-btn,
 .settings-panel .analytics-range-toggle .analytics-range-btn,
+.settings-panel .ai-feed-view-toggle .ai-feed-view-button,
 .settings-panel .platform-switcher .platform-switcher-btn:hover:not(:disabled),
-.settings-panel .analytics-range-toggle .analytics-range-btn:hover:not(:disabled) {
+.settings-panel .analytics-range-toggle .analytics-range-btn:hover:not(:disabled),
+.settings-panel .ai-feed-view-toggle .ai-feed-view-button:hover:not(:disabled) {
   background: transparent;
   border: 0;
   border-radius: 999px;
@@ -13141,7 +13143,8 @@ button.message-citation-chip:hover {
 }
 
 .settings-panel .platform-switcher .platform-switcher-btn,
-.settings-panel .analytics-range-toggle .analytics-range-btn {
+.settings-panel .analytics-range-toggle .analytics-range-btn,
+.settings-panel .ai-feed-view-toggle .ai-feed-view-button {
   color: var(--text-muted);
 }
 
@@ -13152,7 +13155,8 @@ button.message-citation-chip:hover {
 }
 
 .settings-panel .platform-switcher .platform-switcher-btn:hover:not(.active):not(.is-active),
-.settings-panel .analytics-range-toggle .analytics-range-btn:hover:not(.active) {
+.settings-panel .analytics-range-toggle .analytics-range-btn:hover:not(.active),
+.settings-panel .ai-feed-view-toggle .ai-feed-view-button:hover:not(.active):not(.is-active) {
   color: var(--text-secondary);
 }
 
@@ -13172,7 +13176,9 @@ button.message-citation-chip:hover {
 
 .settings-panel .platform-switcher .platform-switcher-btn.active,
 .settings-panel .platform-switcher .platform-switcher-btn.is-active,
-.settings-panel .analytics-range-toggle .analytics-range-btn.active {
+.settings-panel .analytics-range-toggle .analytics-range-btn.active,
+.settings-panel .ai-feed-view-toggle .ai-feed-view-button.active,
+.settings-panel .ai-feed-view-toggle .ai-feed-view-button.is-active {
   color: var(--text-primary);
 }
 
