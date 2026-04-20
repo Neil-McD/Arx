@@ -16,7 +16,10 @@ import {
   mapDeveloperAppReadModel,
   normalizeString,
 } from "./appCore";
-import { normalizeStoredSnapshotTools } from "./mcpSnapshotCodec";
+import {
+  buildStoredMcpToolSchemaTransport,
+  normalizeStoredSnapshotTools,
+} from "./mcpSnapshotCodec";
 import {
   requireCommunityChatAccess,
   requireCommunityManager,
@@ -52,7 +55,8 @@ type RuntimeMountedCommunityAppTool = {
   tool_name: string;
   namespaced_tool_name: string;
   description: string | null;
-  input_schema: unknown;
+  input_schema_json: string | null;
+  input_schema_kind: "object" | "boolean" | "missing" | "invalid";
   risk_level: "read" | "write" | "sensitive";
 };
 
@@ -91,14 +95,15 @@ function normalizeRuntimeSnapshotTools(
   tool_name: string;
   namespaced_tool_name: string;
   description: string | null;
-  input_schema: unknown;
+  input_schema_json: string | null;
+  input_schema_kind: "object" | "boolean" | "missing" | "invalid";
   risk_level: "read" | "write" | "sensitive";
 }> {
   return normalizeStoredSnapshotTools(snapshot?.toolsJson).map((tool) => ({
     tool_name: tool.tool_name,
     namespaced_tool_name: tool.namespaced_tool_name,
     description: tool.description,
-    input_schema: tool.input_schema,
+    ...buildStoredMcpToolSchemaTransport(tool),
     risk_level: tool.risk_level,
   }));
 }
@@ -161,7 +166,8 @@ function resolveRuntimeMountedCommunityAppTools(args: {
       tool_name: tool.tool_name,
       namespaced_tool_name: tool.namespaced_tool_name,
       description: tool.description,
-      input_schema: tool.input_schema,
+      input_schema_json: tool.input_schema_json,
+      input_schema_kind: tool.input_schema_kind,
       risk_level: tool.risk_level,
     }));
 }

@@ -107,7 +107,9 @@ export function normalizeRuntimeMountedCommunityAppTools(
         typeof record.description === "string" && record.description.trim()
           ? record.description.trim()
           : null,
-      input_schema: normalizeMountedToolSchema(record.input_schema),
+      input_schema: normalizeMountedToolSchema(
+        record.input_schema_json ?? record.input_schema,
+      ),
       risk_level: riskLevel,
     });
   }
@@ -152,7 +154,9 @@ export function normalizeRuntimeMountedUserPlatformAppTools(
         typeof record.description === "string" && record.description.trim()
           ? record.description.trim()
           : null,
-      input_schema: normalizeMountedToolSchema(record.input_schema),
+      input_schema: normalizeMountedToolSchema(
+        record.input_schema_json ?? record.input_schema,
+      ),
       risk_level: riskLevel,
     });
   }

@@ -121,6 +121,32 @@ export function encodeMcpToolForStorage(params: {
   };
 }
 
+export function buildStoredMcpToolSchemaTransport(
+  rawTool: StoredMcpToolLike | null,
+): Pick<StoredMcpToolRecord, "input_schema_json" | "input_schema_kind"> {
+  const existingEncoded = normalizeString(rawTool?.input_schema_json, 200_000);
+  const existingKind =
+    rawTool?.input_schema_kind === "object" ||
+    rawTool?.input_schema_kind === "boolean" ||
+    rawTool?.input_schema_kind === "missing" ||
+    rawTool?.input_schema_kind === "invalid"
+      ? rawTool.input_schema_kind
+      : null;
+  if (existingEncoded) {
+    return {
+      input_schema_json: existingEncoded,
+      input_schema_kind: existingKind ?? "object",
+    };
+  }
+  if (existingKind === "missing" || existingKind === "invalid") {
+    return {
+      input_schema_json: null,
+      input_schema_kind: existingKind,
+    };
+  }
+  return encodeMcpToolInputSchemaForStorage(rawTool?.input_schema);
+}
+
 export function normalizeStoredSnapshotTools(
   rawTools: unknown,
 ): DecodedStoredMcpToolRecord[] {
