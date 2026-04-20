@@ -22,11 +22,17 @@ export type {
 } from "../../../shared/authCore";
 export {
   beginBrowserSignedOutState,
+  clearAuthAutomaticReauthAttempt,
+  clearAuthContinuityHint,
   clearAuthFlowPending,
   clearAuthFlowReturned,
   clearAuthSignedOutIntentMarker,
+  hasRecentAuthAutomaticReauthAttempt,
+  hasRecentAuthContinuityHint,
   hasRecentAuthFlowReturned,
   hasRecentAuthFlowPending,
+  markAuthAutomaticReauthAttempt,
+  markAuthContinuityHint,
   markAuthFlowPending,
   markAuthFlowReturned,
   AUTH_SIGNED_OUT_INTENT_KEY,
