@@ -18,15 +18,11 @@ import {
   postMcpJson,
   sendInitializedNotification,
 } from "./mcpHttpClient";
+import {
+  encodeMcpToolForStorage,
+  type StoredMcpToolRecord,
+} from "./mcpSnapshotCodec";
 import { sha256HexText } from "./providerConnections";
-
-type McpValidationTool = {
-  tool_name: string;
-  namespaced_tool_name: string;
-  description: string | null;
-  input_schema: unknown;
-  risk_level: "read" | "write" | "sensitive";
-};
 
 type ValidationStageId =
   | "endpoint_reachable"
@@ -155,9 +151,12 @@ function buildNamespacedToolName(
   throw new Error("developer_app_namespaced_tool_conflict");
 }
 
-function normalizeToolArray(app: DeveloperAppRow, rawTools: unknown): McpValidationTool[] {
+function normalizeToolArray(
+  app: DeveloperAppRow,
+  rawTools: unknown,
+): StoredMcpToolRecord[] {
   if (!Array.isArray(rawTools)) return [];
-  const tools: McpValidationTool[] = [];
+  const tools: StoredMcpToolRecord[] = [];
   const seen = new Set<string>();
   const seenNamespacedToolNames = new Set<string>();
   for (const rawTool of rawTools) {
@@ -168,17 +167,19 @@ function normalizeToolArray(app: DeveloperAppRow, rawTools: unknown): McpValidat
     seen.add(toolName);
     const description = normalizeString(tool.description, 2_000) || null;
     const risk = classifyToolRisk(toolName, description);
-    tools.push({
-      tool_name: toolName,
-      namespaced_tool_name: buildNamespacedToolName(
-        app,
-        toolName,
-        seenNamespacedToolNames,
-      ),
-      description,
-      input_schema: tool.inputSchema ?? {},
-      risk_level: risk,
-    });
+    tools.push(
+      encodeMcpToolForStorage({
+        tool_name: toolName,
+        namespaced_tool_name: buildNamespacedToolName(
+          app,
+          toolName,
+          seenNamespacedToolNames,
+        ),
+        description,
+        input_schema: tool.inputSchema ?? {},
+        risk_level: risk,
+      }),
+    );
   }
   return tools;
 }
@@ -198,7 +199,7 @@ async function validateStreamableHttpApp(params: {
   const stages = createBaseValidationStages();
   let validationStatus: AppToolValidationStatus = "error";
   let validationError: string | null = null;
-  let normalizedTools: McpValidationTool[] = [];
+  let normalizedTools: StoredMcpToolRecord[] = [];
 
   const initializeResponse = await postMcpJson({
     url: params.app.endpointUrl,

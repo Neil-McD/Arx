@@ -16,6 +16,7 @@ import {
   mapDeveloperAppReadModel,
   normalizeString,
 } from "./appCore";
+import { normalizeStoredSnapshotTools } from "./mcpSnapshotCodec";
 import {
   requireCommunityChatAccess,
   requireCommunityManager,
@@ -42,14 +43,6 @@ type CommunityAppMountRow = {
   updatedAt: number;
 };
 
-type SnapshotToolRow = {
-  tool_name?: unknown;
-  namespaced_tool_name?: unknown;
-  description?: unknown;
-  input_schema?: unknown;
-  risk_level?: unknown;
-};
-
 type RuntimeMountedCommunityAppTool = {
   community_app_mount_id: any;
   developer_app_id: any;
@@ -62,10 +55,6 @@ type RuntimeMountedCommunityAppTool = {
   input_schema: unknown;
   risk_level: "read" | "write" | "sensitive";
 };
-
-function normalizeRiskLevel(value: unknown): "read" | "write" | "sensitive" {
-  return value === "write" || value === "sensitive" ? value : "read";
-}
 
 function normalizeStringList(input: unknown): string[] {
   if (!Array.isArray(input)) return [];
@@ -88,23 +77,12 @@ function normalizeSnapshotTools(
   description: string | null;
   risk_level: "read" | "write" | "sensitive";
 }> {
-  if (!snapshot || !Array.isArray(snapshot.toolsJson)) return [];
-  const tools = [];
-  const seen = new Set<string>();
-  for (const rawTool of snapshot.toolsJson) {
-    if (!rawTool || typeof rawTool !== "object" || Array.isArray(rawTool)) continue;
-    const tool = rawTool as SnapshotToolRow;
-    const toolName = normalizeString(tool.tool_name, 200);
-    if (!toolName || seen.has(toolName)) continue;
-    seen.add(toolName);
-    tools.push({
-      tool_name: toolName,
-      namespaced_tool_name: normalizeString(tool.namespaced_tool_name, 240) || toolName,
-      description: normalizeString(tool.description, 2_000) || null,
-      risk_level: normalizeRiskLevel(tool.risk_level),
-    });
-  }
-  return tools;
+  return normalizeStoredSnapshotTools(snapshot?.toolsJson).map((tool) => ({
+    tool_name: tool.tool_name,
+    namespaced_tool_name: tool.namespaced_tool_name,
+    description: tool.description,
+    risk_level: tool.risk_level,
+  }));
 }
 
 function normalizeRuntimeSnapshotTools(
@@ -116,26 +94,13 @@ function normalizeRuntimeSnapshotTools(
   input_schema: unknown;
   risk_level: "read" | "write" | "sensitive";
 }> {
-  if (!snapshot || !Array.isArray(snapshot.toolsJson)) return [];
-  const tools = [];
-  const seen = new Set<string>();
-  for (const rawTool of snapshot.toolsJson) {
-    if (!rawTool || typeof rawTool !== "object" || Array.isArray(rawTool)) continue;
-    const tool = rawTool as SnapshotToolRow;
-    const toolName = normalizeString(tool.tool_name, 200);
-    if (!toolName || seen.has(toolName)) continue;
-    seen.add(toolName);
-    tools.push({
-      tool_name: toolName,
-      namespaced_tool_name:
-        normalizeString(tool.namespaced_tool_name, 240) || toolName,
-      description: normalizeString(tool.description, 2_000) || null,
-      input_schema:
-        tool.input_schema !== undefined ? tool.input_schema : {},
-      risk_level: normalizeRiskLevel(tool.risk_level),
-    });
-  }
-  return tools;
+  return normalizeStoredSnapshotTools(snapshot?.toolsJson).map((tool) => ({
+    tool_name: tool.tool_name,
+    namespaced_tool_name: tool.namespaced_tool_name,
+    description: tool.description,
+    input_schema: tool.input_schema,
+    risk_level: tool.risk_level,
+  }));
 }
 
 function computeSelectedToolNames(

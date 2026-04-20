@@ -8,6 +8,7 @@ import {
   type ResponsesApiFunctionTool,
 } from "../shared/toolRegistry";
 import type { RuntimeMountedMcpTool } from "./runtimeMcpManager";
+import { decodeStoredMcpToolInputSchema } from "./mcpSnapshotCodec";
 
 type OpenAiCompatibleFunctionTool = ReturnType<
   typeof buildOpenAiFunctionTools
@@ -57,6 +58,11 @@ export function normalizeMountedToolSchema(
   if (typeof value === "boolean") return value;
   if (value && typeof value === "object" && !Array.isArray(value)) {
     return value as Record<string, unknown>;
+  }
+  if (typeof value === "string") {
+    return decodeStoredMcpToolInputSchema({
+      input_schema_json: value,
+    });
   }
   return {
     type: "object",

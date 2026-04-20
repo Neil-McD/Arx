@@ -76,6 +76,7 @@ import type * as httpRuntimeSupport from "../httpRuntimeSupport.js";
 import type * as httpRuntimeTurnState from "../httpRuntimeTurnState.js";
 import type * as httpVoice from "../httpVoice.js";
 import type * as mcpHttpClient from "../mcpHttpClient.js";
+import type * as mcpSnapshotCodec from "../mcpSnapshotCodec.js";
 import type * as modelRegistry from "../modelRegistry.js";
 import type * as openAiNativeToolCompletion from "../openAiNativeToolCompletion.js";
 import type * as openAiWebSearchTransport from "../openAiWebSearchTransport.js";
@@ -189,6 +190,7 @@ declare const fullApi: ApiFromModules<{
   httpRuntimeTurnState: typeof httpRuntimeTurnState;
   httpVoice: typeof httpVoice;
   mcpHttpClient: typeof mcpHttpClient;
+  mcpSnapshotCodec: typeof mcpSnapshotCodec;
   modelRegistry: typeof modelRegistry;
   openAiNativeToolCompletion: typeof openAiNativeToolCompletion;
   openAiWebSearchTransport: typeof openAiWebSearchTransport;
