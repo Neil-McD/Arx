@@ -87,8 +87,15 @@ export async function hydrateWorkspaceSurfaceState<SessionT>(
     await Promise.all([
       deps.loadWorkspaceProjects(session),
       deps.loadThreads(session),
-      deps.loadModelRegistry(session),
     ]);
+    void deps.loadModelRegistry(session).catch((error) => {
+      emitWorkspaceEvent({
+        scope: "lifecycle",
+        name: "workspace_model_registry_hydrate",
+        status: "failure",
+        error: formatWorkspaceInstrumentationError(error),
+      });
+    });
     emitWorkspaceEvent({
       scope: "lifecycle",
       name: "workspace_hydrate",
@@ -127,9 +134,16 @@ export async function resumeWorkspaceSurfaceState<SessionT>(
   try {
     await Promise.all([
       deps.loadWorkspaceProjects(session),
-      deps.loadModelRegistry(session),
       deps.threadsHydratedRef.current ? Promise.resolve() : deps.loadThreads(session),
     ]);
+    void deps.loadModelRegistry(session).catch((error) => {
+      emitWorkspaceEvent({
+        scope: "lifecycle",
+        name: "workspace_model_registry_resume",
+        status: "failure",
+        error: formatWorkspaceInstrumentationError(error),
+      });
+    });
     emitWorkspaceEvent({
       scope: "lifecycle",
       name: "workspace_resume",

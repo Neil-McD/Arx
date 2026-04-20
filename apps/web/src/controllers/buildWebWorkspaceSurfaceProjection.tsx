@@ -40,6 +40,7 @@ type BuildWebWorkspaceSurfaceProjectionParams = {
   session: AuthSession | null;
   hasAuthenticatedPresentation: boolean;
   isAuthRecoveringSignedIn: boolean;
+  isAccountGraphHydratingCritical: boolean;
   activeThreadId: string | null;
   guestThreadId: string;
   isEmptyWorkspaceThread: boolean;
@@ -261,6 +262,7 @@ export function buildWebWorkspaceSurfaceProjection(
     hasSession: Boolean(params.session),
     hasAuthenticatedPresentation: params.hasAuthenticatedPresentation,
     isAuthRecoveringSignedIn: params.isAuthRecoveringSignedIn,
+    isAccountGraphHydratingCritical: params.isAccountGraphHydratingCritical,
     activeThreadId: params.activeThreadId,
     guestThreadId: params.guestThreadId,
     isEmptyWorkspaceThread: params.isEmptyWorkspaceThread,

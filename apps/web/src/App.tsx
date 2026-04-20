@@ -606,6 +606,8 @@ type NavSnapshot = NavSnapshotBase & {
   routePath: string;
 };
 
+type AccountGraphHydrationPhase = "idle" | "critical" | "secondary" | "ready";
+
 const REACTION_EMOJIS = ["👍", "❤️", "😂", "🔥", "🫡", "🎉"];
 const COMMUNITY_CHAT_PAGE_SIZE = 50;
 const COMMUNITY_CHAT_LOAD_MORE_THRESHOLD_PX = 140;
@@ -640,6 +642,90 @@ export default function App() {
   const initialPublicRoute = readPublicRouteFromLocation();
   const initialAppRoute = initialPublicRoute.kind === "app" ? readAppRouteFromLocation() : null;
   const hasResolvedInitialStandaloneSignedOutLaunchRef = useRef(false);
+  const [accountGraphHydrationPhase, setAccountGraphHydrationPhase] =
+    useState<AccountGraphHydrationPhase>("idle");
+  const accountGraphHydrationRunIdRef = useRef(0);
+
+  async function runCommunitiesHydration(session: AuthSession, phase: string): Promise<void> {
+    emitWorkspaceEvent({
+      scope: "lifecycle",
+      name: "communities_load",
+      status: "start",
+      detail: { phase },
+    });
+    try {
+      await loadCommunities(session);
+      emitWorkspaceEvent({
+        scope: "lifecycle",
+        name: "communities_load",
+        status: "success",
+        detail: { phase },
+      });
+    } catch (error) {
+      emitWorkspaceEvent({
+        scope: "lifecycle",
+        name: "communities_load",
+        status: "failure",
+        detail: { phase },
+        error: formatWorkspaceInstrumentationError(error),
+      });
+      throw error;
+    }
+  }
+
+  async function runBillingHydration(session: AuthSession, phase: string): Promise<void> {
+    emitWorkspaceEvent({
+      scope: "lifecycle",
+      name: "billing_status_load",
+      status: "start",
+      detail: { phase },
+    });
+    try {
+      await loadBuilderBillingStatus(session);
+      emitWorkspaceEvent({
+        scope: "lifecycle",
+        name: "billing_status_load",
+        status: "success",
+        detail: { phase },
+      });
+    } catch (error) {
+      emitWorkspaceEvent({
+        scope: "lifecycle",
+        name: "billing_status_load",
+        status: "failure",
+        detail: { phase },
+        error: formatWorkspaceInstrumentationError(error),
+      });
+      throw error;
+    }
+  }
+
+  async function runSelfProfileHydration(session: AuthSession, phase: string): Promise<void> {
+    emitWorkspaceEvent({
+      scope: "lifecycle",
+      name: "self_profile_load",
+      status: "start",
+      detail: { phase },
+    });
+    try {
+      await loadSelfProfile(session);
+      emitWorkspaceEvent({
+        scope: "lifecycle",
+        name: "self_profile_load",
+        status: "success",
+        detail: { phase },
+      });
+    } catch (error) {
+      emitWorkspaceEvent({
+        scope: "lifecycle",
+        name: "self_profile_load",
+        status: "failure",
+        detail: { phase },
+        error: formatWorkspaceInstrumentationError(error),
+      });
+      throw error;
+    }
+  }
 
   const {
     session,
@@ -657,6 +743,8 @@ export default function App() {
     authenticatedSessionArg,
   } = useWebAppAuthController({
     onSessionLost: async () => {
+      accountGraphHydrationRunIdRef.current += 1;
+      setAccountGraphHydrationPhase("idle");
       emitWorkspaceEvent({
         scope: "lifecycle",
         name: "auth_full_signed_out_reset",
@@ -722,6 +810,8 @@ export default function App() {
       });
     },
     onSessionMissingAfterBootstrap: async () => {
+      accountGraphHydrationRunIdRef.current += 1;
+      setAccountGraphHydrationPhase("idle");
       emitWorkspaceEvent({
         scope: "lifecycle",
         name: "auth_full_signed_out_reset",
@@ -801,114 +891,84 @@ export default function App() {
       });
     },
     onSessionReady: async (session) => {
+      const hydrationRunId = ++accountGraphHydrationRunIdRef.current;
+      const userId = String(session.user?.id ?? "").trim() || null;
+      const shouldTreatCommunitiesAsCritical =
+        activePage === "community" || Boolean(String(selectedActiveCommunitySlug ?? "").trim());
+      setAccountGraphHydrationPhase("critical");
       emitWorkspaceEvent({
         scope: "lifecycle",
         name: "account_graph_hydrate",
         status: "start",
         detail: {
           phase: "session_ready",
-          userId: String(session.user?.id ?? "").trim() || null,
+          userId,
         },
       });
       try {
-        await Promise.all([
+        const criticalTasks: Array<Promise<void>> = [
           workspace.actions.hydrateWorkspaceSurfaceState(session),
-          (async () => {
-            emitWorkspaceEvent({
-              scope: "lifecycle",
-              name: "communities_load",
-              status: "start",
-              detail: { phase: "session_ready" },
-            });
-            try {
-              await loadCommunities(session);
-              emitWorkspaceEvent({
-                scope: "lifecycle",
-                name: "communities_load",
-                status: "success",
-                detail: { phase: "session_ready" },
-              });
-            } catch (error) {
-              emitWorkspaceEvent({
-                scope: "lifecycle",
-                name: "communities_load",
-                status: "failure",
-                detail: { phase: "session_ready" },
-                error: formatWorkspaceInstrumentationError(error),
-              });
-              throw error;
-            }
-          })(),
-          (async () => {
-            emitWorkspaceEvent({
-              scope: "lifecycle",
-              name: "billing_status_load",
-              status: "start",
-              detail: { phase: "session_ready" },
-            });
-            try {
-              await loadBuilderBillingStatus(session);
-              emitWorkspaceEvent({
-                scope: "lifecycle",
-                name: "billing_status_load",
-                status: "success",
-                detail: { phase: "session_ready" },
-              });
-            } catch (error) {
-              emitWorkspaceEvent({
-                scope: "lifecycle",
-                name: "billing_status_load",
-                status: "failure",
-                detail: { phase: "session_ready" },
-                error: formatWorkspaceInstrumentationError(error),
-              });
-              throw error;
-            }
-          })(),
-          (async () => {
-            emitWorkspaceEvent({
-              scope: "lifecycle",
-              name: "self_profile_load",
-              status: "start",
-              detail: { phase: "session_ready" },
-            });
-            try {
-              await loadSelfProfile(session);
-              emitWorkspaceEvent({
-                scope: "lifecycle",
-                name: "self_profile_load",
-                status: "success",
-                detail: { phase: "session_ready" },
-              });
-            } catch (error) {
-              emitWorkspaceEvent({
-                scope: "lifecycle",
-                name: "self_profile_load",
-                status: "failure",
-                detail: { phase: "session_ready" },
-                error: formatWorkspaceInstrumentationError(error),
-              });
-              throw error;
-            }
-          })(),
-        ]);
+        ];
+        if (shouldTreatCommunitiesAsCritical) {
+          criticalTasks.push(runCommunitiesHydration(session, "session_ready_critical"));
+        }
+        await Promise.all(criticalTasks);
+        if (accountGraphHydrationRunIdRef.current === hydrationRunId) {
+          setAccountGraphHydrationPhase("secondary");
+        }
         emitWorkspaceEvent({
           scope: "lifecycle",
           name: "account_graph_hydrate",
           status: "success",
           detail: {
             phase: "session_ready",
-            userId: String(session.user?.id ?? "").trim() || null,
+            stage: "critical_ready",
+            userId,
           },
         });
+        const secondaryTasks: Array<Promise<void>> = [
+          runBillingHydration(session, "session_ready_secondary"),
+          runSelfProfileHydration(session, "session_ready_secondary"),
+        ];
+        if (!shouldTreatCommunitiesAsCritical) {
+          secondaryTasks.unshift(runCommunitiesHydration(session, "session_ready_secondary"));
+        }
+        emitWorkspaceEvent({
+          scope: "lifecycle",
+          name: "account_graph_secondary_hydrate",
+          status: "start",
+          detail: {
+            phase: "session_ready",
+            userId,
+          },
+        });
+        void Promise.allSettled(secondaryTasks).then((results) => {
+          const failureCount = results.filter((result) => result.status === "rejected").length;
+          if (accountGraphHydrationRunIdRef.current === hydrationRunId) {
+            setAccountGraphHydrationPhase("ready");
+          }
+          emitWorkspaceEvent({
+            scope: "lifecycle",
+            name: "account_graph_secondary_hydrate",
+            status: failureCount > 0 ? "failure" : "success",
+            detail: {
+              phase: "session_ready",
+              userId,
+              failureCount,
+            },
+          });
+        });
       } catch (error) {
+        if (accountGraphHydrationRunIdRef.current === hydrationRunId) {
+          setAccountGraphHydrationPhase("idle");
+        }
         emitWorkspaceEvent({
           scope: "lifecycle",
           name: "account_graph_hydrate",
           status: "failure",
           detail: {
             phase: "session_ready",
-            userId: String(session.user?.id ?? "").trim() || null,
+            userId,
           },
           error: formatWorkspaceInstrumentationError(error),
         });
@@ -916,79 +976,52 @@ export default function App() {
       }
     },
     onSessionFocusReady: async (session) => {
+      const userId = String(session.user?.id ?? "").trim() || null;
       emitWorkspaceEvent({
         scope: "lifecycle",
         name: "account_graph_refresh",
         status: "start",
         detail: {
           phase: "session_focus_ready",
-          userId: String(session.user?.id ?? "").trim() || null,
+          userId,
         },
       });
       try {
-        await Promise.all([
-          workspace.actions.resumeWorkspaceSurfaceState(session),
-          (async () => {
-            emitWorkspaceEvent({
-              scope: "lifecycle",
-              name: "billing_status_load",
-              status: "start",
-              detail: { phase: "session_focus_ready" },
-            });
-            try {
-              await loadBuilderBillingStatus(session);
-              emitWorkspaceEvent({
-                scope: "lifecycle",
-                name: "billing_status_load",
-                status: "success",
-                detail: { phase: "session_focus_ready" },
-              });
-            } catch (error) {
-              emitWorkspaceEvent({
-                scope: "lifecycle",
-                name: "billing_status_load",
-                status: "failure",
-                detail: { phase: "session_focus_ready" },
-                error: formatWorkspaceInstrumentationError(error),
-              });
-              throw error;
-            }
-          })(),
-          (async () => {
-            emitWorkspaceEvent({
-              scope: "lifecycle",
-              name: "communities_load",
-              status: "start",
-              detail: { phase: "session_focus_ready" },
-            });
-            try {
-              await loadCommunities(session);
-              emitWorkspaceEvent({
-                scope: "lifecycle",
-                name: "communities_load",
-                status: "success",
-                detail: { phase: "session_focus_ready" },
-              });
-            } catch (error) {
-              emitWorkspaceEvent({
-                scope: "lifecycle",
-                name: "communities_load",
-                status: "failure",
-                detail: { phase: "session_focus_ready" },
-                error: formatWorkspaceInstrumentationError(error),
-              });
-              throw error;
-            }
-          })(),
-        ]);
+        await workspace.actions.resumeWorkspaceSurfaceState(session);
         emitWorkspaceEvent({
           scope: "lifecycle",
           name: "account_graph_refresh",
           status: "success",
           detail: {
             phase: "session_focus_ready",
-            userId: String(session.user?.id ?? "").trim() || null,
+            stage: "workspace_ready",
+            userId,
           },
+        });
+        emitWorkspaceEvent({
+          scope: "lifecycle",
+          name: "account_graph_refresh_secondary",
+          status: "start",
+          detail: {
+            phase: "session_focus_ready",
+            userId,
+          },
+        });
+        void Promise.allSettled([
+          runBillingHydration(session, "session_focus_ready_secondary"),
+          runCommunitiesHydration(session, "session_focus_ready_secondary"),
+        ]).then((results) => {
+          const failureCount = results.filter((result) => result.status === "rejected").length;
+          emitWorkspaceEvent({
+            scope: "lifecycle",
+            name: "account_graph_refresh_secondary",
+            status: failureCount > 0 ? "failure" : "success",
+            detail: {
+              phase: "session_focus_ready",
+              userId,
+              failureCount,
+            },
+          });
         });
       } catch (error) {
         emitWorkspaceEvent({
@@ -997,7 +1030,7 @@ export default function App() {
           status: "failure",
           detail: {
             phase: "session_focus_ready",
-            userId: String(session.user?.id ?? "").trim() || null,
+            userId,
           },
           error: formatWorkspaceInstrumentationError(error),
         });
@@ -5055,6 +5088,10 @@ export default function App() {
     shellPublicRoute.kind === "app" && authPresentationState !== "signed_out";
   const isAuthRecoveringSignedInAppShell =
     shellPublicRoute.kind === "app" && authPresentationState === "recovering_signed_in";
+  const isAccountGraphHydratingCriticalAppShell =
+    shellPublicRoute.kind === "app" &&
+    authPresentationState === "signed_in" &&
+    accountGraphHydrationPhase === "critical";
 
 	  const handleTopbarBackFromWorkspaceSettings = () => {
 	    if (goBack()) return;
@@ -5924,6 +5961,7 @@ export default function App() {
     session: session,
     hasAuthenticatedPresentation: hasAuthenticatedAppShellPresentation,
     isAuthRecoveringSignedIn: isAuthRecoveringSignedInAppShell,
+    isAccountGraphHydratingCritical: isAccountGraphHydratingCriticalAppShell,
     activeThreadId,
     guestThreadId: GUEST_THREAD_ID,
     isEmptyWorkspaceThread,

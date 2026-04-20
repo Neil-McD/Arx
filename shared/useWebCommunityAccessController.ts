@@ -122,16 +122,18 @@ export function useWebCommunityAccessController<
         userIds: unique,
       })) as unknown as UserProfileT[];
       if (profiles.length === 0) return;
-      await preloadImageUrls(
-        profiles.map((profile: any) => profile?.avatar_url ?? null),
-        { maxUrls: unique.length, timeoutMs: 1200 },
-      );
       current.setProfilesByUserId((prev) => {
         const next = { ...prev };
         for (const profile of profiles) {
           next[profile.user_id] = profile;
         }
         return next;
+      });
+      void preloadImageUrls(
+        profiles.map((profile: any) => profile?.avatar_url ?? null),
+        { maxUrls: unique.length, timeoutMs: 1200 },
+      ).catch(() => {
+        // Ignore avatar warmup failures; visible profile data should already be applied.
       });
     } catch {
       // ignore

@@ -39,11 +39,18 @@ export type ConvexAuthenticatedBootstrapResult = {
 
 export type ConvexClient = ConvexHttpClient;
 
+type AuthenticatedBootstrapCacheEntry = {
+  key: string;
+  promise: Promise<ConvexAuthenticatedClientContext>;
+};
+
 export type ConvexAnonymousClientContext = {
   client: ConvexHttpClient;
   anonymousId: string;
   convexUrl: string;
 };
+
+let authenticatedBootstrapCache: AuthenticatedBootstrapCacheEntry | null = null;
 
 export function requireConvexUrl(): string {
   const convexUrl = readConvexUrl();
@@ -84,6 +91,13 @@ function rethrowBootstrapActorError(error: unknown): never {
   throw error instanceof Error ? error : new Error("convex_bootstrap_actor_failed");
 }
 
+function buildAuthenticatedBootstrapCacheKey(session: AuthSessionLike): string | null {
+  const authSubject = resolveAuthSubject(session);
+  const identityToken = resolveAuthIdentityToken(session);
+  if (!authSubject || !identityToken) return null;
+  return `${authSubject}::${identityToken}`;
+}
+
 export async function bootstrapConvexAnonymousClient(
   anonymousIdRaw: unknown,
 ): Promise<ConvexAnonymousClientContext> {
@@ -108,72 +122,95 @@ export async function bootstrapConvexAnonymousClient(
 export async function bootstrapConvexAuthenticatedClient(
   sessionRaw: unknown,
 ): Promise<ConvexAuthenticatedClientContext> {
-  const convexUrl = requireConvexUrl();
   const session = sessionRaw as AuthSessionLike;
-  const authSubject = resolveAuthSubject(session);
-  if (!authSubject) {
-    throw new Error("convex_auth_subject_required");
+  const cacheKey = buildAuthenticatedBootstrapCacheKey(session);
+  if (cacheKey && authenticatedBootstrapCache?.key === cacheKey) {
+    return await authenticatedBootstrapCache.promise;
   }
 
-  const client = createConvexClientForUrl(convexUrl);
-  const identityToken = resolveAuthIdentityToken(session);
-  if (identityToken) {
-    client.setAuth(identityToken);
-  }
+  const promise = (async (): Promise<ConvexAuthenticatedClientContext> => {
+    const convexUrl = requireConvexUrl();
+    const authSubject = resolveAuthSubject(session);
+    if (!authSubject) {
+      throw new Error("convex_auth_subject_required");
+    }
 
-  let actor: Record<string, unknown> | null = null;
-  try {
-    actor = (await client.mutation("auth:bootstrapActor" as any, {
-      authState: "authenticated",
+    const client = createConvexClientForUrl(convexUrl);
+    const identityToken = resolveAuthIdentityToken(session);
+    if (identityToken) {
+      client.setAuth(identityToken);
+    }
+
+    let actor: Record<string, unknown> | null = null;
+    try {
+      actor = (await client.mutation("auth:bootstrapActor" as any, {
+        authState: "authenticated",
+        authSubject,
+        email: resolveAuthSessionEmail(session),
+        displayName: resolveAuthSessionDisplayName(session),
+        avatarUrl: resolveAuthSessionAvatarUrl(session),
+      })) as Record<string, unknown>;
+    } catch (error) {
+      rethrowBootstrapActorError(error);
+    }
+
+    const actorAuthSubject = String(actor?.authSubject ?? "").trim();
+    if (actorAuthSubject && actorAuthSubject !== authSubject) {
+      throw new Error("convex_auth_subject_mismatch");
+    }
+    return {
+      client,
       authSubject,
-      email: resolveAuthSessionEmail(session),
-      displayName: resolveAuthSessionDisplayName(session),
-      avatarUrl: resolveAuthSessionAvatarUrl(session),
-    })) as Record<string, unknown>;
-  } catch (error) {
-    rethrowBootstrapActorError(error);
+      convexUrl,
+      bootstrap: {
+        authSubject: actorAuthSubject || null,
+        dbUserId: readGatewayConvexIdMaybe(actor?.dbUserId) ?? null,
+        canonicalTier: normalizeGatewayNullableString(actor?.canonicalTier),
+        effectiveTier: normalizeGatewayNullableString(actor?.effectiveTier),
+        email: normalizeGatewayNullableString(actor?.email),
+        displayName: normalizeGatewayNullableString(actor?.displayName),
+        avatarUrl: normalizeGatewayNullableString(actor?.avatarUrl),
+        continuity: actor?.continuity && typeof actor.continuity === "object"
+          ? {
+              resolutionPath: normalizeGatewayNullableString((actor.continuity as Record<string, unknown>).resolutionPath),
+              blockers: Array.isArray((actor.continuity as Record<string, unknown>).blockers)
+                ? ((actor.continuity as Record<string, unknown>).blockers as unknown[])
+                    .map((value) => normalizeGatewayNullableString(value))
+                    .filter((value): value is string => Boolean(value))
+                : [],
+              resolvedUserId: normalizeGatewayNullableString((actor.continuity as Record<string, unknown>).resolvedUserId),
+              wouldCreateNewUser: Boolean((actor.continuity as Record<string, unknown>).wouldCreateNewUser),
+              subjectMatchUserId: normalizeGatewayNullableString(
+                (actor.continuity as Record<string, unknown>).subjectMatchUser &&
+                  typeof (actor.continuity as Record<string, unknown>).subjectMatchUser === "object"
+                  ? ((actor.continuity as Record<string, unknown>).subjectMatchUser as Record<string, unknown>).userId
+                  : null,
+              ),
+              relinkCandidateUserId: normalizeGatewayNullableString(
+                (actor.continuity as Record<string, unknown>).relinkCandidateUser &&
+                  typeof (actor.continuity as Record<string, unknown>).relinkCandidateUser === "object"
+                  ? ((actor.continuity as Record<string, unknown>).relinkCandidateUser as Record<string, unknown>).userId
+                  : null,
+              ),
+            }
+          : null,
+      },
+    };
+  })();
+
+  if (cacheKey) {
+    authenticatedBootstrapCache = {
+      key: cacheKey,
+      promise,
+    };
   }
 
-  const actorAuthSubject = String(actor?.authSubject ?? "").trim();
-  if (actorAuthSubject && actorAuthSubject !== authSubject) {
-    throw new Error("convex_auth_subject_mismatch");
+  try {
+    return await promise;
+  } catch (error) {
+    if (cacheKey && authenticatedBootstrapCache?.key === cacheKey) {
+      authenticatedBootstrapCache = null;
+    }
+    throw error;
   }
-  return {
-    client,
-    authSubject,
-    convexUrl,
-    bootstrap: {
-      authSubject: actorAuthSubject || null,
-      dbUserId: readGatewayConvexIdMaybe(actor?.dbUserId) ?? null,
-      canonicalTier: normalizeGatewayNullableString(actor?.canonicalTier),
-      effectiveTier: normalizeGatewayNullableString(actor?.effectiveTier),
-      email: normalizeGatewayNullableString(actor?.email),
-      displayName: normalizeGatewayNullableString(actor?.displayName),
-      avatarUrl: normalizeGatewayNullableString(actor?.avatarUrl),
-      continuity: actor?.continuity && typeof actor.continuity === "object"
-        ? {
-            resolutionPath: normalizeGatewayNullableString((actor.continuity as Record<string, unknown>).resolutionPath),
-            blockers: Array.isArray((actor.continuity as Record<string, unknown>).blockers)
-              ? ((actor.continuity as Record<string, unknown>).blockers as unknown[])
-                  .map((value) => normalizeGatewayNullableString(value))
-                  .filter((value): value is string => Boolean(value))
-              : [],
-            resolvedUserId: normalizeGatewayNullableString((actor.continuity as Record<string, unknown>).resolvedUserId),
-            wouldCreateNewUser: Boolean((actor.continuity as Record<string, unknown>).wouldCreateNewUser),
-            subjectMatchUserId: normalizeGatewayNullableString(
-              (actor.continuity as Record<string, unknown>).subjectMatchUser &&
-                typeof (actor.continuity as Record<string, unknown>).subjectMatchUser === "object"
-                ? ((actor.continuity as Record<string, unknown>).subjectMatchUser as Record<string, unknown>).userId
-                : null,
-            ),
-            relinkCandidateUserId: normalizeGatewayNullableString(
-              (actor.continuity as Record<string, unknown>).relinkCandidateUser &&
-                typeof (actor.continuity as Record<string, unknown>).relinkCandidateUser === "object"
-                ? ((actor.continuity as Record<string, unknown>).relinkCandidateUser as Record<string, unknown>).userId
-                : null,
-            ),
-          }
-        : null,
-    },
-  };
 }

@@ -90,6 +90,15 @@ function sessionsEqual(
   return a.access_token === b.access_token && (a.id_token ?? null) === (b.id_token ?? null);
 }
 
+function buildAuthSessionCacheKey(session: AuthSession | null | undefined): string | null {
+  if (!session) return null;
+  const accessToken = String(session.access_token ?? "").trim();
+  if (accessToken) return `${accessToken}:${session.expires_at}`;
+  const idToken = String(session.id_token ?? "").trim();
+  if (idToken) return `${idToken}:${session.expires_at}`;
+  return null;
+}
+
 function readAuthCallbackErrorFromLocation(): string | null {
   try {
     const url = new URL(window.location.href);
@@ -109,6 +118,7 @@ function errorToMessage(error: unknown, fallback: string): string {
 }
 
 const AUTH_SESSION_EXPIRED_MESSAGE = "Session expired. Please sign in again.";
+const ENSURED_SESSION_CACHE_TTL_MS = 15_000;
 
 export function useWebAppAuthController(
   params: UseWebAppAuthControllerParams,
@@ -125,6 +135,15 @@ export function useWebAppAuthController(
   const authSessionEpochRef = useRef(0);
   const authBootstrapCompleteRef = useRef(false);
   const directBootstrapStateRef = useRef<string>("");
+  const ensuredSessionCacheRef = useRef<{
+    key: string;
+    session: AuthSession;
+    checkedAt: number;
+  } | null>(null);
+  const ensuredSessionInFlightRef = useRef<{
+    key: string;
+    promise: Promise<AuthSession | null>;
+  } | null>(null);
   const workos = useWorkOsRuntime();
 
   const onSessionLostRef = useLatestRef(params.onSessionLost);
@@ -156,6 +175,8 @@ export function useWebAppAuthController(
 
   const clearSessionLocally = useCallback(async (): Promise<void> => {
     sessionRef.current = null;
+    ensuredSessionCacheRef.current = null;
+    ensuredSessionInFlightRef.current = null;
     setAuthSession(null);
     await onSessionLostRef.current();
   }, [onSessionLostRef]);
@@ -167,6 +188,14 @@ export function useWebAppAuthController(
 
   const adoptAuthSession = useCallback((nextSession: AuthSession): void => {
     sessionRef.current = nextSession;
+    const cacheKey = buildAuthSessionCacheKey(nextSession);
+    ensuredSessionCacheRef.current = cacheKey
+      ? {
+          key: cacheKey,
+          session: nextSession,
+          checkedAt: Date.now(),
+        }
+      : null;
     setAuthSession(nextSession);
   }, []);
 
@@ -212,22 +241,67 @@ export function useWebAppAuthController(
     const requestSession = currentSession ?? null;
     if (!requestSession) return null;
 
-    const ensured = await ensureAuthSessionForAuthenticatedSendResult({
-      session: requestSession,
-      sessionRef,
-      refreshLockedResult: refreshAuthSessionLockedResult,
-    });
-    if (ensured.status === "terminal_failure") {
-      await expireAuthSessionLocally();
-      return null;
+    const requestKey = buildAuthSessionCacheKey(requestSession);
+    if (requestKey) {
+      const cached = ensuredSessionCacheRef.current;
+      if (
+        cached &&
+        cached.key === requestKey &&
+        Date.now() - cached.checkedAt <= ENSURED_SESSION_CACHE_TTL_MS
+      ) {
+        if (!sessionsEqual(cached.session, requestSession)) {
+          adoptAuthSession(cached.session);
+        }
+        return sessionRef.current ?? cached.session;
+      }
+      if (ensuredSessionInFlightRef.current?.key === requestKey) {
+        return await ensuredSessionInFlightRef.current.promise;
+      }
     }
-    if (ensured.status !== "ready") {
-      return null;
+
+    const promise = (async (): Promise<AuthSession | null> => {
+      const ensured = await ensureAuthSessionForAuthenticatedSendResult({
+        session: requestSession,
+        sessionRef,
+        refreshLockedResult: refreshAuthSessionLockedResult,
+      });
+      if (ensured.status === "terminal_failure") {
+        ensuredSessionCacheRef.current = null;
+        await expireAuthSessionLocally();
+        return null;
+      }
+      if (ensured.status !== "ready") {
+        return null;
+      }
+      if (!sessionsEqual(ensured.session, requestSession)) {
+        adoptAuthSession(ensured.session);
+      } else {
+        const readyKey = buildAuthSessionCacheKey(ensured.session);
+        ensuredSessionCacheRef.current = readyKey
+          ? {
+              key: readyKey,
+              session: ensured.session,
+              checkedAt: Date.now(),
+            }
+          : null;
+      }
+      return sessionRef.current ?? ensured.session;
+    })();
+
+    if (requestKey) {
+      ensuredSessionInFlightRef.current = {
+        key: requestKey,
+        promise,
+      };
     }
-    if (!sessionsEqual(ensured.session, requestSession)) {
-      adoptAuthSession(ensured.session);
+
+    try {
+      return await promise;
+    } finally {
+      if (ensuredSessionInFlightRef.current?.promise === promise) {
+        ensuredSessionInFlightRef.current = null;
+      }
     }
-    return sessionRef.current ?? ensured.session;
   }, [adoptAuthSession, expireAuthSessionLocally, refreshAuthSessionLockedResult, session]);
 
   const recoverSessionFromWorkOs = useCallback(async (params: {

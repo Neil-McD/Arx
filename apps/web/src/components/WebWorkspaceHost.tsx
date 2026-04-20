@@ -83,6 +83,7 @@ export type WebWorkspaceHostProps = {
   hasSession: boolean;
   hasAuthenticatedPresentation: boolean;
   isAuthRecoveringSignedIn: boolean;
+  isAccountGraphHydratingCritical: boolean;
   activeThreadId: string | null;
   guestThreadId: string;
   isEmptyWorkspaceThread: boolean;
@@ -329,6 +330,7 @@ const WorkspaceTimelinePane = memo(function WorkspaceTimelinePane(props: {
   hasSession: boolean;
   hasAuthenticatedPresentation: boolean;
   isAuthRecoveringSignedIn: boolean;
+  isAccountGraphHydratingCritical: boolean;
   isActiveWorkspaceThreadBusy: boolean;
   isStreamingWorkspaceTurn: boolean;
   workspaceAttachments: WorkspaceAttachmentView[];
@@ -398,6 +400,7 @@ const WorkspaceTimelinePane = memo(function WorkspaceTimelinePane(props: {
                   hasSession={props.hasSession}
                   hasAuthenticatedPresentation={props.hasAuthenticatedPresentation}
                   isAuthRecoveringSignedIn={props.isAuthRecoveringSignedIn}
+                  isAccountGraphHydratingCritical={props.isAccountGraphHydratingCritical}
                   isActiveWorkspaceThreadBusy={props.isActiveWorkspaceThreadBusy}
                   isStreamingWorkspaceTurn={props.isStreamingWorkspaceTurn}
                   messageInput={props.messageInput}
@@ -494,6 +497,7 @@ const WorkspaceTimelinePane = memo(function WorkspaceTimelinePane(props: {
     prev.hasSession !== next.hasSession ||
     prev.hasAuthenticatedPresentation !== next.hasAuthenticatedPresentation ||
     prev.isAuthRecoveringSignedIn !== next.isAuthRecoveringSignedIn ||
+    prev.isAccountGraphHydratingCritical !== next.isAccountGraphHydratingCritical ||
     prev.renderPreviewForRun !== next.renderPreviewForRun ||
     prev.onRequireThreadErrorSignIn !== next.onRequireThreadErrorSignIn ||
     prev.onRetryLastThreadError !== next.onRetryLastThreadError ||
@@ -519,6 +523,7 @@ const WorkspaceTimelinePane = memo(function WorkspaceTimelinePane(props: {
     prev.hasSession === next.hasSession &&
     prev.hasAuthenticatedPresentation === next.hasAuthenticatedPresentation &&
     prev.isAuthRecoveringSignedIn === next.isAuthRecoveringSignedIn &&
+    prev.isAccountGraphHydratingCritical === next.isAccountGraphHydratingCritical &&
     prev.isActiveWorkspaceThreadBusy === next.isActiveWorkspaceThreadBusy &&
     prev.isStreamingWorkspaceTurn === next.isStreamingWorkspaceTurn
   );
@@ -642,6 +647,7 @@ function WorkspaceComposer(props: {
   hasSession: boolean;
   hasAuthenticatedPresentation: boolean;
   isAuthRecoveringSignedIn: boolean;
+  isAccountGraphHydratingCritical: boolean;
   isActiveWorkspaceThreadBusy: boolean;
   isStreamingWorkspaceTurn: boolean;
   messageInput: string;
@@ -712,10 +718,13 @@ function WorkspaceComposer(props: {
 
   const disableComposerInteractions =
     props.isAuthRecoveringSignedIn ||
+    props.isAccountGraphHydratingCritical ||
     props.isActiveWorkspaceThreadBusy ||
     props.isStreamingWorkspaceTurn;
   const composerPlaceholder = props.isAuthRecoveringSignedIn
     ? "Restoring your account..."
+    : props.isAccountGraphHydratingCritical
+      ? "Loading your workspace..."
     : props.landing
       ? "Describe what you need help with..."
       : props.workspaceComposerPlaceholder;
@@ -733,7 +742,7 @@ function WorkspaceComposer(props: {
         onKeyDown={(event) => {
           if (event.key === "Enter" && !event.shiftKey) {
             event.preventDefault();
-            if (props.isAuthRecoveringSignedIn) return;
+            if (props.isAuthRecoveringSignedIn || props.isAccountGraphHydratingCritical) return;
             props.onSendMessage();
           }
         }}
@@ -807,6 +816,7 @@ function WorkspaceComposer(props: {
               props.isStreamingWorkspaceTurn
                 ? false
                 : props.isAuthRecoveringSignedIn ||
+                  props.isAccountGraphHydratingCritical ||
                   props.isActiveWorkspaceThreadBusy ||
                   (props.messageInput.trim().length === 0 && props.workspaceAttachments.length === 0)
             }
@@ -1544,6 +1554,7 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
                 hasSession={props.hasSession}
                 hasAuthenticatedPresentation={props.hasAuthenticatedPresentation}
                 isAuthRecoveringSignedIn={props.isAuthRecoveringSignedIn}
+                isAccountGraphHydratingCritical={props.isAccountGraphHydratingCritical}
                 isActiveWorkspaceThreadBusy={props.isActiveWorkspaceThreadBusy}
                 isStreamingWorkspaceTurn={props.isStreamingWorkspaceTurn}
                 workspaceAttachments={workspaceAttachments}
@@ -1626,6 +1637,7 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
             hasSession={props.hasSession}
             hasAuthenticatedPresentation={props.hasAuthenticatedPresentation}
             isAuthRecoveringSignedIn={props.isAuthRecoveringSignedIn}
+            isAccountGraphHydratingCritical={props.isAccountGraphHydratingCritical}
             isActiveWorkspaceThreadBusy={props.isActiveWorkspaceThreadBusy}
             isStreamingWorkspaceTurn={props.isStreamingWorkspaceTurn}
             messageInput={messageInput}
