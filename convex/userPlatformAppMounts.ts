@@ -81,11 +81,13 @@ function coerceValidationReport(
   };
 }
 
+type ValidationReportRecord = NonNullable<ReturnType<typeof coerceValidationReport>>;
+
 function withMountedStage(
   report: ReturnType<typeof coerceValidationReport>,
   status: "ok" | "error" | "skipped",
   detail: string | null,
-) {
+): ValidationReportRecord {
   const stages = [
     ...(report?.stages ?? []),
     {
@@ -95,9 +97,10 @@ function withMountedStage(
       detail,
     },
   ];
+  const validationStatus: "ok" | "error" =
+    report?.validation_status === "ok" && status !== "error" ? "ok" : "error";
   return {
-    validation_status:
-      report?.validation_status === "ok" && status !== "error" ? "ok" : "error",
+    validation_status: validationStatus,
     validation_error:
       status === "error"
         ? detail
@@ -141,8 +144,115 @@ type RuntimeMountedUserPlatformAppTool = {
   risk_level: "read" | "write" | "sensitive";
 };
 
+type ConnectUserPlatformAppErrorCode =
+  | "authenticated_user_required"
+  | "connect_lookup_failed"
+  | "developer_app_connection_secret_required"
+  | "developer_app_create_failed"
+  | "developer_app_secret_store_failed"
+  | "developer_app_validation_failed"
+  | "developer_app_snapshot_missing"
+  | "developer_app_no_tools_discovered"
+  | "developer_app_mount_failed"
+  | "developer_app_connect_failed"
+  | "server_unavailable";
+
+type ConnectUserPlatformAppResultRecord = {
+  ok: boolean;
+  mount: unknown;
+  validation_report: ReturnType<typeof coerceValidationReport> | null;
+  error_code: ConnectUserPlatformAppErrorCode | null;
+  error_message: string | null;
+  connect_attempt_id: string | null;
+};
+
 function normalizeRiskLevel(value: unknown): "read" | "write" | "sensitive" {
   return value === "write" || value === "sensitive" ? value : "read";
+}
+
+function normalizeConnectAttemptId(value: unknown, nowMs: number): string {
+  return normalizeString(value, 120) || `connect-${nowMs}`;
+}
+
+function resolveEndpointHost(value: string): string | null {
+  try {
+    return new URL(value).hostname || null;
+  } catch {
+    return null;
+  }
+}
+
+function buildConnectErrorMessage(
+  code: ConnectUserPlatformAppErrorCode,
+  appName: string,
+): string {
+  switch (code) {
+    case "authenticated_user_required":
+      return "Sign in before connecting a personal app.";
+    case "connect_lookup_failed":
+      return "Couldn't check your existing personal apps right now. Try again.";
+    case "developer_app_connection_secret_required":
+      return `Paste your ${appName} secret and try again.`;
+    case "developer_app_create_failed":
+      return `Couldn't prepare ${appName} for connection right now. Try again.`;
+    case "developer_app_secret_store_failed":
+      return `Couldn't store your ${appName} secret right now. Try again.`;
+    case "developer_app_validation_failed":
+      return `We couldn't validate ${appName}. Check the validation stages and try again.`;
+    case "developer_app_snapshot_missing":
+      return `Validation succeeded, but we couldn't save ${appName}'s discovered tools.`;
+    case "developer_app_no_tools_discovered":
+      return `${appName} responded, but no MCP tools were discovered.`;
+    case "developer_app_mount_failed":
+      return `Validation succeeded, but we couldn't mount ${appName} into your personal layer.`;
+    case "server_unavailable":
+      return "The personal app service is unavailable right now. Try again.";
+    case "developer_app_connect_failed":
+    default:
+      return `We couldn't connect ${appName} right now. Try again.`;
+  }
+}
+
+function buildConnectFailure(args: {
+  code: ConnectUserPlatformAppErrorCode;
+  appName: string;
+  connectAttemptId: string;
+  validationReport?: ReturnType<typeof coerceValidationReport> | null;
+  errorMessage?: string | null;
+}): ConnectUserPlatformAppResultRecord {
+  return {
+    ok: false,
+    mount: null,
+    validation_report: args.validationReport ?? null,
+    error_code: args.code,
+    error_message:
+      normalizeString(args.errorMessage, 2_000) ||
+      buildConnectErrorMessage(args.code, args.appName),
+    connect_attempt_id: args.connectAttemptId,
+  };
+}
+
+function emitPersonalAppConnectTrace(
+  event: string,
+  args: {
+    connectAttemptId: string;
+    appName: string;
+    endpointUrl: string;
+    authType: string;
+    code?: string | null;
+    ok?: boolean;
+    toolCount?: number;
+  },
+): void {
+  console.log(event, {
+    connect_attempt_id: args.connectAttemptId,
+    app_name: args.appName,
+    endpoint_host: resolveEndpointHost(args.endpointUrl),
+    auth_type: args.authType,
+    code: args.code ?? null,
+    ok: args.ok ?? null,
+    tool_count: args.toolCount ?? null,
+  });
 }
 
 function normalizeStringList(input: unknown): string[] {
@@ -382,6 +492,118 @@ export const findExistingUserPlatformMountByEndpointInternal = internalQuery({
     });
   },
 });
+
+async function resolveExistingMountForConnect(args: {
+  ctx: any;
+  userId: any;
+  endpointUrl: string;
+  authType: "none" | "api_key" | "bearer";
+}): Promise<{
+  mount: UserPlatformAppMountRow;
+  app: DeveloperAppRow;
+  connection: AppConnectionRow | null;
+} | null> {
+  return (await args.ctx.runQuery(
+    internal.userPlatformAppMounts.findExistingUserPlatformMountByEndpointInternal,
+    {
+      userId: args.userId,
+      endpointUrl: args.endpointUrl,
+      authType: args.authType,
+    },
+  )) as {
+    mount: UserPlatformAppMountRow;
+    app: DeveloperAppRow;
+    connection: AppConnectionRow | null;
+  } | null;
+}
+
+async function upsertConnectedSecretForConnect(args: {
+  ctx: any;
+  developerAppId: any;
+  secret: string;
+  nowMs: number;
+}): Promise<void> {
+  const encryptedSecret = await encryptSecret(args.secret);
+  await args.ctx.runMutation(internal.appConnections.upsertAppConnectionInternal, {
+    developerAppId: args.developerAppId,
+    connectionStatus: "connected",
+    encryptedSecretHex: encryptedSecret.encryptedSecretHex,
+    secretIvHex: encryptedSecret.secretIvHex,
+    secretVersion: encryptedSecret.secretVersion,
+    nowMs: args.nowMs,
+  });
+}
+
+async function validateDeveloperAppForConnect(args: {
+  ctx: any;
+  developerAppId: any;
+}): Promise<{
+  validationStatus: string;
+  validationError: string | null;
+  validationReport: ReturnType<typeof coerceValidationReport> | null;
+  snapshotTools: Array<{ tool_name?: unknown }>;
+}> {
+  const validation = (await args.ctx.runAction(
+    internal.appValidation.validateDeveloperAppInternal,
+    {
+      developerAppId: args.developerAppId,
+    },
+  )) as {
+    validation_status?: unknown;
+    validation_error?: unknown;
+    snapshot?: { tools?: unknown };
+    validation_report?: unknown;
+  };
+  return {
+    validationStatus: String(validation.validation_status ?? ""),
+    validationError: normalizeString(validation.validation_error, 2_000) || null,
+    validationReport: coerceValidationReport(validation.validation_report),
+    snapshotTools: Array.isArray(validation.snapshot?.tools)
+      ? (validation.snapshot?.tools as Array<{ tool_name?: unknown }>)
+      : [],
+  };
+}
+
+async function mountValidatedDeveloperAppForUser(args: {
+  ctx: any;
+  userId: any;
+  developerAppId: any;
+  toolSnapshotId: any;
+  enabledTools?: string[];
+  nowMs: number;
+}): Promise<{ mountId: any; mount: unknown }> {
+  const mountId = (await args.ctx.runMutation(
+    internal.userPlatformAppMounts.upsertUserPlatformAppMountInternal,
+    {
+      userId: args.userId,
+      developerAppId: args.developerAppId,
+      toolSnapshotId: args.toolSnapshotId,
+      enabled: true,
+      enabledTools: args.enabledTools,
+      nowMs: args.nowMs,
+    },
+  )) as any;
+  const mount = await args.ctx.runQuery(
+    internal.userPlatformAppMounts.getUserPlatformAppMountReadModelInternal,
+    {
+      userId: args.userId,
+      userPlatformAppMountId: mountId,
+    },
+  );
+  return { mountId, mount };
+}
+
+async function cleanupDeveloperAppAfterFailedConnect(args: {
+  ctx: any;
+  developerAppId: any;
+}): Promise<void> {
+  await args.ctx.runMutation(
+    internal.developerApps.deleteDeveloperAppCascadeInternal,
+    {
+      developerAppId: args.developerAppId,
+    },
+  );
+}
 
 async function requireExistingUserPlatformMount(args: {
   ctx: any;
@@ -756,77 +978,138 @@ export const connectUserPlatformApp = action({
     ),
     description: v.optional(v.string()),
     secret: v.optional(v.string()),
+    connectAttemptId: v.optional(v.string()),
   },
   handler: async (ctx, args): Promise<unknown> => {
-    const { userId } = await resolveAuthenticatedActionUser({
-      ctx,
-      authSubject: args.authSubject ?? null,
+    const nowMs = Date.now();
+    const connectAttemptId = normalizeConnectAttemptId(
+      args.connectAttemptId,
+      nowMs,
+    );
+    emitPersonalAppConnectTrace("personal_app_connect.start", {
+      connectAttemptId,
+      appName: args.name,
+      endpointUrl: args.endpointUrl,
+      authType: args.authType,
     });
 
-    const nowMs = Date.now();
-    const normalizedSecret = normalizeString(args.secret, 10_000);
-    const existingMount = (await ctx.runQuery(
-      internal.userPlatformAppMounts.findExistingUserPlatformMountByEndpointInternal,
-      {
-        userId,
+    let userId: any;
+    try {
+      ({ userId } = await resolveAuthenticatedActionUser({
+        ctx,
+        authSubject: args.authSubject ?? null,
+      }));
+    } catch (error) {
+      emitPersonalAppConnectTrace("personal_app_connect.auth_failed", {
+        connectAttemptId,
+        appName: args.name,
         endpointUrl: args.endpointUrl,
         authType: args.authType,
-      },
-    )) as {
+        ok: false,
+        code: "authenticated_user_required",
+      });
+      return buildConnectFailure({
+        code: "authenticated_user_required",
+        appName: args.name,
+        connectAttemptId,
+      });
+    }
+
+    const normalizedSecret = normalizeString(args.secret, 10_000);
+    let existingMount: {
       mount: UserPlatformAppMountRow;
       app: DeveloperAppRow;
       connection: AppConnectionRow | null;
-    } | null;
+    } | null = null;
+    try {
+      existingMount = await resolveExistingMountForConnect({
+        ctx,
+        userId,
+        endpointUrl: args.endpointUrl,
+        authType: args.authType,
+      });
+      emitPersonalAppConnectTrace("personal_app_connect.lookup_existing", {
+        connectAttemptId,
+        appName: args.name,
+        endpointUrl: args.endpointUrl,
+        authType: args.authType,
+        ok: true,
+      });
+    } catch (error) {
+      emitPersonalAppConnectTrace("personal_app_connect.lookup_existing", {
+        connectAttemptId,
+        appName: args.name,
+        endpointUrl: args.endpointUrl,
+        authType: args.authType,
+        ok: false,
+        code: "connect_lookup_failed",
+      });
+      return buildConnectFailure({
+        code: "connect_lookup_failed",
+        appName: args.name,
+        connectAttemptId,
+      });
+    }
+
     if (existingMount) {
       try {
         if (args.authType !== "none") {
           if (normalizedSecret) {
-            const encryptedSecret = await encryptSecret(normalizedSecret);
-            await ctx.runMutation(internal.appConnections.upsertAppConnectionInternal, {
+            await upsertConnectedSecretForConnect({
+              ctx,
               developerAppId: existingMount.app._id,
-              connectionStatus: "connected",
-              encryptedSecretHex: encryptedSecret.encryptedSecretHex,
-              secretIvHex: encryptedSecret.secretIvHex,
-              secretVersion: encryptedSecret.secretVersion,
+              secret: normalizedSecret,
               nowMs,
             });
           } else if (existingMount.connection?.connectionStatus !== "connected") {
-            return {
-              ok: false,
-              mount: null,
-              validation_report: null,
-              error_message: "developer_app_connection_secret_required",
-            };
+            return buildConnectFailure({
+              code: "developer_app_connection_secret_required",
+              appName: args.name,
+              connectAttemptId,
+            });
           }
         }
 
-        const validation = (await ctx.runAction(
-          internal.appValidation.validateDeveloperAppInternal,
-          {
-            developerAppId: existingMount.app._id,
-          },
-        )) as {
-          validation_status?: unknown;
-          validation_error?: unknown;
-          validation_report?: unknown;
-        };
-        const validationReport = coerceValidationReport(
-          validation.validation_report,
-        );
-        if (String(validation.validation_status ?? "") !== "ok") {
-          return {
+        emitPersonalAppConnectTrace("personal_app_connect.validate.start", {
+          connectAttemptId,
+          appName: args.name,
+          endpointUrl: args.endpointUrl,
+          authType: args.authType,
+        });
+        const validation = await validateDeveloperAppForConnect({
+          ctx,
+          developerAppId: existingMount.app._id,
+        });
+        if (validation.validationStatus !== "ok") {
+          emitPersonalAppConnectTrace("personal_app_connect.validate.failure", {
+            connectAttemptId,
+            appName: args.name,
+            endpointUrl: args.endpointUrl,
+            authType: args.authType,
             ok: false,
-            mount: null,
-            validation_report: withMountedStage(
-              validationReport,
+            code: "developer_app_validation_failed",
+            toolCount: validation.validationReport?.tool_count ?? 0,
+          });
+          return buildConnectFailure({
+            code: "developer_app_validation_failed",
+            appName: args.name,
+            connectAttemptId,
+            validationReport: withMountedStage(
+              validation.validationReport,
               "skipped",
               "Mounting was skipped because validation failed.",
             ),
-            error_message:
-              normalizeString(validation.validation_error, 2_000) ||
-              "developer_app_validation_failed",
-          };
+            errorMessage: validation.validationError,
+          });
         }
+        emitPersonalAppConnectTrace("personal_app_connect.validate.success", {
+          connectAttemptId,
+          appName: args.name,
+          endpointUrl: args.endpointUrl,
+          authType: args.authType,
+          ok: true,
+          toolCount: validation.validationReport?.tool_count ?? 0,
+        });
 
         const refreshedApp = (await ctx.runQuery(
           internal.developerApps.getDeveloperAppByIdInternal,
@@ -835,61 +1118,71 @@ export const connectUserPlatformApp = action({
           },
         )) as DeveloperAppRow | null;
         if (!refreshedApp?.activeSnapshotId) {
-          return {
-            ok: false,
-            mount: null,
-            validation_report: withMountedStage(
-              validationReport,
+          return buildConnectFailure({
+            code: "developer_app_snapshot_missing",
+            appName: args.name,
+            connectAttemptId,
+            validationReport: withMountedStage(
+              validation.validationReport,
               "error",
               "Validation succeeded, but no active tool snapshot was available.",
             ),
-            error_message: "developer_app_snapshot_missing",
-          };
+          });
         }
-        await ctx.runMutation(
-          internal.userPlatformAppMounts.upsertUserPlatformAppMountInternal,
-          {
-            userId,
-            developerAppId: existingMount.app._id,
-            toolSnapshotId: refreshedApp.activeSnapshotId,
-            enabled: true,
-            enabledTools: existingMount.mount.enabledTools,
-            nowMs,
-          },
-        );
 
-        const mount = await ctx.runQuery(
-          internal.userPlatformAppMounts.getUserPlatformAppMountReadModelInternal,
-          {
-            userId,
-            userPlatformAppMountId: existingMount.mount._id,
-          },
-        );
+        const mounted = await mountValidatedDeveloperAppForUser({
+          ctx,
+          userId,
+          developerAppId: existingMount.app._id,
+          toolSnapshotId: refreshedApp.activeSnapshotId,
+          enabledTools: existingMount.mount.enabledTools,
+          nowMs,
+        });
+        emitPersonalAppConnectTrace("personal_app_connect.mount.success", {
+          connectAttemptId,
+          appName: args.name,
+          endpointUrl: args.endpointUrl,
+          authType: args.authType,
+          ok: true,
+          toolCount: validation.validationReport?.tool_count ?? 0,
+        });
         return {
           ok: true,
-          mount,
+          mount: mounted.mount,
           validation_report: withMountedStage(
-            validationReport,
+            validation.validationReport,
             "ok",
             "Personal tools were mounted successfully.",
           ),
+          error_code: null,
           error_message: null,
+          connect_attempt_id: connectAttemptId,
         };
       } catch (error) {
-        return {
+        emitPersonalAppConnectTrace("personal_app_connect.mount.failure", {
+          connectAttemptId,
+          appName: args.name,
+          endpointUrl: args.endpointUrl,
+          authType: args.authType,
           ok: false,
-          mount: null,
-          validation_report: null,
-          error_message:
-            error instanceof Error
-              ? normalizeString(error.message, 2_000)
-              : "developer_app_connect_failed",
-        };
+          code: "developer_app_mount_failed",
+        });
+        return buildConnectFailure({
+          code: "developer_app_mount_failed",
+          appName: args.name,
+          connectAttemptId,
+        });
       }
     }
 
     let developerAppId: any = null;
     try {
+      emitPersonalAppConnectTrace("personal_app_connect.create_app", {
+        connectAttemptId,
+        appName: args.name,
+        endpointUrl: args.endpointUrl,
+        authType: args.authType,
+      });
       developerAppId = (await ctx.runMutation(
         internal.developerApps.createDeveloperAppInternal,
         {
@@ -905,68 +1198,94 @@ export const connectUserPlatformApp = action({
 
       if (args.authType !== "none") {
         if (!normalizedSecret) {
-          if (developerAppId) {
-            await ctx.runMutation(
-              internal.developerApps.deleteDeveloperAppCascadeInternal,
-              {
-                developerAppId,
-              },
-            );
-          }
-          return {
-            ok: false,
-            mount: null,
-            validation_report: null,
-            error_message: "developer_app_connection_secret_required",
-          };
+          await cleanupDeveloperAppAfterFailedConnect({
+            ctx,
+            developerAppId,
+          });
+          return buildConnectFailure({
+            code: "developer_app_connection_secret_required",
+            appName: args.name,
+            connectAttemptId,
+          });
         }
-        const encryptedSecret = await encryptSecret(normalizedSecret);
-        await ctx.runMutation(internal.appConnections.upsertAppConnectionInternal, {
-          developerAppId,
-          connectionStatus: "connected",
-          encryptedSecretHex: encryptedSecret.encryptedSecretHex,
-          secretIvHex: encryptedSecret.secretIvHex,
-          secretVersion: encryptedSecret.secretVersion,
-          nowMs,
-        });
+        try {
+          emitPersonalAppConnectTrace("personal_app_connect.store_secret", {
+            connectAttemptId,
+            appName: args.name,
+            endpointUrl: args.endpointUrl,
+            authType: args.authType,
+          });
+          await upsertConnectedSecretForConnect({
+            ctx,
+            developerAppId,
+            secret: normalizedSecret,
+            nowMs,
+          });
+        } catch (error) {
+          emitPersonalAppConnectTrace("personal_app_connect.store_secret.failure", {
+            connectAttemptId,
+            appName: args.name,
+            endpointUrl: args.endpointUrl,
+            authType: args.authType,
+            ok: false,
+            code: "developer_app_secret_store_failed",
+          });
+          await cleanupDeveloperAppAfterFailedConnect({
+            ctx,
+            developerAppId,
+          });
+          return buildConnectFailure({
+            code: "developer_app_secret_store_failed",
+            appName: args.name,
+            connectAttemptId,
+          });
+        }
       }
 
-      const validation = (await ctx.runAction(
-        internal.appValidation.validateDeveloperAppInternal,
-        {
+      emitPersonalAppConnectTrace("personal_app_connect.validate.start", {
+        connectAttemptId,
+        appName: args.name,
+        endpointUrl: args.endpointUrl,
+        authType: args.authType,
+      });
+      const validation = await validateDeveloperAppForConnect({
+        ctx,
+        developerAppId,
+      });
+      if (validation.validationStatus !== "ok") {
+        await cleanupDeveloperAppAfterFailedConnect({
+          ctx,
           developerAppId,
-        },
-      )) as {
-        validation_status?: unknown;
-        validation_error?: unknown;
-        snapshot?: { tools?: unknown };
-        validation_report?: unknown;
-      };
-      const validationReport = coerceValidationReport(
-        validation.validation_report,
-      );
-      if (String(validation.validation_status ?? "") !== "ok") {
-        if (developerAppId) {
-          await ctx.runMutation(
-            internal.developerApps.deleteDeveloperAppCascadeInternal,
-            {
-              developerAppId,
-            },
-          );
-        }
-        return {
+        });
+        emitPersonalAppConnectTrace("personal_app_connect.validate.failure", {
+          connectAttemptId,
+          appName: args.name,
+          endpointUrl: args.endpointUrl,
+          authType: args.authType,
           ok: false,
-          mount: null,
-          validation_report: withMountedStage(
-            validationReport,
+          code: "developer_app_validation_failed",
+          toolCount: validation.validationReport?.tool_count ?? 0,
+        });
+        return buildConnectFailure({
+          code: "developer_app_validation_failed",
+          appName: args.name,
+          connectAttemptId,
+          validationReport: withMountedStage(
+            validation.validationReport,
             "skipped",
             "Mounting was skipped because validation failed.",
           ),
-          error_message:
-            normalizeString(validation.validation_error, 2_000) ||
-            "developer_app_validation_failed",
-        };
+          errorMessage: validation.validationError,
+        });
       }
+      emitPersonalAppConnectTrace("personal_app_connect.validate.success", {
+        connectAttemptId,
+        appName: args.name,
+        endpointUrl: args.endpointUrl,
+        authType: args.authType,
+        ok: true,
+        toolCount: validation.validationReport?.tool_count ?? 0,
+      });
 
       const app = (await ctx.runQuery(
         internal.developerApps.getDeveloperAppForOwnerInternal,
@@ -976,99 +1295,97 @@ export const connectUserPlatformApp = action({
         },
       )) as DeveloperAppRow;
       if (!app.activeSnapshotId) {
-        if (developerAppId) {
-          await ctx.runMutation(
-            internal.developerApps.deleteDeveloperAppCascadeInternal,
-            {
-              developerAppId,
-            },
-          );
-        }
-        return {
-          ok: false,
-          mount: null,
-          validation_report: withMountedStage(
-            validationReport,
+        await cleanupDeveloperAppAfterFailedConnect({
+          ctx,
+          developerAppId,
+        });
+        return buildConnectFailure({
+          code: "developer_app_snapshot_missing",
+          appName: args.name,
+          connectAttemptId,
+          validationReport: withMountedStage(
+            validation.validationReport,
             "error",
             "Validation succeeded, but no active tool snapshot was available.",
           ),
-          error_message: "developer_app_snapshot_missing",
-        };
+        });
       }
-      const mountedTools = Array.isArray(validation.snapshot?.tools)
-        ? (validation.snapshot?.tools as Array<{ tool_name?: unknown }>)
-        : [];
-      const enabledTools = mountedTools
+      const enabledTools = validation.snapshotTools
         .map((tool) => normalizeString(tool.tool_name, 200))
         .filter(Boolean);
       if (enabledTools.length === 0) {
-        if (developerAppId) {
-          await ctx.runMutation(
-            internal.developerApps.deleteDeveloperAppCascadeInternal,
-            {
-              developerAppId,
-            },
-          );
-        }
-        return {
-          ok: false,
-          mount: null,
-          validation_report: withMountedStage(
-            validationReport,
+        await cleanupDeveloperAppAfterFailedConnect({
+          ctx,
+          developerAppId,
+        });
+        return buildConnectFailure({
+          code: "developer_app_no_tools_discovered",
+          appName: args.name,
+          connectAttemptId,
+          validationReport: withMountedStage(
+            validation.validationReport,
             "skipped",
             "Mounting was skipped because no tools were discovered.",
           ),
-          error_message: "developer_app_no_tools_discovered",
-        };
+        });
       }
 
-      const userPlatformAppMountId = (await ctx.runMutation(
-        internal.userPlatformAppMounts.upsertUserPlatformAppMountInternal,
-        {
-          userId,
-          developerAppId,
-          toolSnapshotId: app.activeSnapshotId,
-          enabled: true,
-          enabledTools,
-          nowMs,
-        },
-      )) as any;
-
-      const mount = await ctx.runQuery(
-        internal.userPlatformAppMounts.getUserPlatformAppMountReadModelInternal,
-        {
-          userId,
-          userPlatformAppMountId,
-        },
-      );
+      const mounted = await mountValidatedDeveloperAppForUser({
+        ctx,
+        userId,
+        developerAppId,
+        toolSnapshotId: app.activeSnapshotId,
+        enabledTools,
+        nowMs,
+      });
+      emitPersonalAppConnectTrace("personal_app_connect.mount.success", {
+        connectAttemptId,
+        appName: args.name,
+        endpointUrl: args.endpointUrl,
+        authType: args.authType,
+        ok: true,
+        toolCount: validation.validationReport?.tool_count ?? 0,
+      });
       return {
         ok: true,
-        mount,
+        mount: mounted.mount,
         validation_report: withMountedStage(
-          validationReport,
+          validation.validationReport,
           "ok",
           "Personal tools were mounted successfully.",
         ),
+        error_code: null,
         error_message: null,
+        connect_attempt_id: connectAttemptId,
       };
     } catch (error) {
       if (developerAppId) {
-        await ctx.runMutation(
-          internal.developerApps.deleteDeveloperAppCascadeInternal,
-          {
-            developerAppId,
-          },
-        );
+        await cleanupDeveloperAppAfterFailedConnect({
+          ctx,
+          developerAppId,
+        });
       }
-      return {
+      const errorCode: ConnectUserPlatformAppErrorCode = developerAppId
+        ? "developer_app_connect_failed"
+        : "developer_app_create_failed";
+      emitPersonalAppConnectTrace(
+        developerAppId
+          ? "personal_app_connect.mount.failure"
+          : "personal_app_connect.create_app.failure",
+        {
+        connectAttemptId,
+        appName: args.name,
+        endpointUrl: args.endpointUrl,
+        authType: args.authType,
         ok: false,
-        mount: null,
-        validation_report: null,
-        error_message:
-          error instanceof Error
-            ? normalizeString(error.message, 2_000)
-            : "developer_app_connect_failed",
-      };
+        code: errorCode,
+        },
+      );
+      return buildConnectFailure({
+        code: errorCode,
+        appName: args.name,
+        connectAttemptId,
+      });
     }
   },
 });

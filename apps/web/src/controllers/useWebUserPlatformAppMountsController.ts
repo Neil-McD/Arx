@@ -107,7 +107,9 @@ export function useWebUserPlatformAppMountsController<
           ok: false,
           mount: null,
           validation_report: null,
+          error_code: "authenticated_user_required",
           error_message: null,
+          connect_attempt_id: input.connect_attempt_id ?? null,
         };
       }
       setIsConnectingUserPlatformApp(true);
@@ -129,13 +131,16 @@ export function useWebUserPlatformAppMountsController<
         }
         return result;
       } catch (error) {
-        const message = toErrorMessage(error, "Failed to connect app.");
+        const message =
+          "The personal app service is unavailable right now. Try again.";
         setUserPlatformAppMutationError(message);
         return {
           ok: false,
           mount: null,
           validation_report: null,
+          error_code: "server_unavailable",
           error_message: message,
+          connect_attempt_id: input.connect_attempt_id ?? null,
         };
       } finally {
         setIsConnectingUserPlatformApp(false);

@@ -20,6 +20,19 @@ Use one truth per layer:
 5. Deploy Convex production intentionally when backend/schema/env changes require it.
 6. Run the post-deploy smoke check.
 
+For personal MCP/control-plane changes, treat Convex as required, not optional. If a change touches files like:
+
+- `/Users/neilmcdevitt/code/arx/convex/appValidation.ts`
+- `/Users/neilmcdevitt/code/arx/convex/userPlatformAppMounts.ts`
+- `/Users/neilmcdevitt/code/arx/convex/appConnections.ts`
+- `/Users/neilmcdevitt/code/arx/convex/developerApps.ts`
+
+then the release is not complete until:
+
+1. `main` is pushed and `polynet` is deploying from GitHub
+2. `npm run convex:deploy` has been run from the validated code state
+3. one real MCP connect attempt has been re-tested on production
+
 This is the canonical path. Do not rely on branch names, preview URLs, or old Vercel projects as release truth.
 
 ## Web Production Rule

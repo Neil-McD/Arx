@@ -88,6 +88,16 @@ const DISCOVER_SKILL_CATALOG: DiscoverSkillCatalogEntry[] = [
   },
 ];
 
+function createConnectAttemptId(): string {
+  if (
+    typeof globalThis.crypto !== "undefined" &&
+    typeof globalThis.crypto.randomUUID === "function"
+  ) {
+    return globalThis.crypto.randomUUID();
+  }
+  return `connect-${Date.now()}`;
+}
+
 type WebDiscoverPanelProps = {
   showMobileShell: boolean;
   activeTab: DiscoverTab;
@@ -283,8 +293,10 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
       ? "Couldn't load your personal apps right now. Try refreshing the page."
       : null;
   const personalConnectMutationError =
-    isReadyForPersonalConnection && userPlatformAppMutationError
-      ? "Couldn't update your personal apps right now. Try again."
+    isReadyForPersonalConnection &&
+    userPlatformAppMutationError &&
+    !personalConnectError
+      ? userPlatformAppMutationError
       : null;
 
   const selectedPersonalMount = useMemo(() => {
@@ -407,7 +419,10 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
     setPersonalConnectError(null);
     setPersonalConnectResult(null);
     setPersonalConnectValidationReport(null);
-    const result = await onConnectUserPlatformApp(connectInput);
+    const result = await onConnectUserPlatformApp({
+      ...connectInput,
+      connect_attempt_id: createConnectAttemptId(),
+    });
     setPersonalConnectValidationReport(result.validation_report);
     if (result.ok) {
       setPersonalConnectResult("passed");

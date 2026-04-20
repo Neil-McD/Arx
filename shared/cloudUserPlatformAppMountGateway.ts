@@ -52,6 +52,7 @@ export async function connectCloudUserPlatformApp<SessionT>(
       authType: params.input.auth_type,
       description: params.input.description,
       secret: params.input.secret,
+      connectAttemptId: params.input.connect_attempt_id,
     },
   )) as
     | ConnectUserPlatformAppResult
@@ -69,7 +70,11 @@ export async function connectCloudUserPlatformApp<SessionT>(
     ok: Boolean(payload),
     mount: (payload as UserPlatformMountedApp | null) ?? null,
     validation_report: null,
-    error_message: payload ? null : "developer_app_connect_failed",
+    error_code: payload ? null : "server_unavailable",
+    error_message: payload
+      ? null
+      : "The personal app service is unavailable right now. Try again.",
+    connect_attempt_id: params.input.connect_attempt_id ?? null,
   };
 }
 

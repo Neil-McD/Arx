@@ -494,8 +494,8 @@ export const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
       availability: "ready",
       authMethod: "token",
       connectionStrategy: {
-        defaultMode: "oauth",
-        supportedModes: ["oauth", "token"],
+        defaultMode: "token",
+        supportedModes: ["token", "oauth"],
       },
       endpointUrl: "https://mcp.linear.app/mcp",
       authType: "bearer",
