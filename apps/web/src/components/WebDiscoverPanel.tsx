@@ -343,7 +343,7 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
   const heroSubtitle = selectedApp
     ? selectedApp.tagline
     : isAppsTab
-      ? "Browse known app templates and platform MCP surfaces."
+      ? "Browse trusted apps and verified integrations."
       : isSkillsTab
         ? "Browse reusable skill packages here."
         : "Find focused crews to build, learn, and ship faster.";
@@ -722,8 +722,8 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
                         No apps in the catalog yet.
                       </div>
                       <div className="discover-empty-text">
-                        Curated app templates will appear here as the catalog
-                        expands.
+                        Trusted app integrations will appear here as the
+                        catalog expands.
                       </div>
                     </div>
                   ) : null}

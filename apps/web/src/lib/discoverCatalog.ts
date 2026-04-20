@@ -314,57 +314,6 @@ export function buildDiscoverAppPersonalConnectModalCopy(
 
 export const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
   {
-    id: "custom-mcp",
-    name: "Custom MCP",
-    tagline: "Bring your own remote MCP endpoint",
-    description:
-      "Advanced path for connecting a remote MCP server that is not in the curated known-app catalog yet.",
-    supportLabel: "Advanced path",
-    supportNote:
-      "Use this when you already have a remote MCP endpoint and the auth details it needs.",
-    heroNote:
-      "Best for testing and using remote MCP servers outside the curated app catalog.",
-    capabilities: [
-      "Connect a remote MCP endpoint that you already control or have access to.",
-      "Choose no auth, API key, or bearer-token authentication at connect time.",
-      "Prove the personal harness can mount real MCP tools beyond the built-in known apps.",
-    ],
-    websiteUrl: "https://modelcontextprotocol.io",
-    docsUrl: "https://modelcontextprotocol.io/introduction",
-    logoUrl: null,
-    personalConnect: {
-      connectionKind: "custom",
-      availability: "ready",
-      authMethod: "custom",
-      connectionStrategy: {
-        defaultMode: "custom",
-        supportedModes: ["custom"],
-      },
-      endpointUrl: null,
-      authType: null,
-      authLabel: "Choose auth",
-      note:
-        "Use this advanced path when you already have a remote MCP endpoint and the credentials it needs.",
-      endpointPlaceholder: "https://your-mcp.example.com/mcp",
-      supportedAuthTypes: [
-        {
-          value: "none",
-          label: "No auth",
-        },
-        {
-          value: "api_key",
-          label: "API key",
-          secretLabel: "API key",
-        },
-        {
-          value: "bearer",
-          label: "Bearer token",
-          secretLabel: "Bearer token",
-        },
-      ],
-    },
-  },
-  {
     id: "github",
     name: "GitHub",
     tagline: "Issues, PRs, repos, and CI context",
