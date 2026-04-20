@@ -1,6 +1,8 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import type { UserPlatformMountedApp } from "../../../../shared/userPlatformAppMountTypes";
+import { DISCOVER_APP_CATALOG } from "../lib/discoverCatalog";
+import { DiscoverCatalogLogo } from "./DiscoverCatalogLogo";
 
 type SessionLike = {
   user: {
@@ -86,6 +88,26 @@ function buildMountDetail(mount: UserPlatformMountedApp): string {
   return `${pluralizeTools(enabledCount)} mounted in your baseline platform layer.`;
 }
 
+function findCatalogEntryForMount(mount: UserPlatformMountedApp) {
+  const byEndpoint = DISCOVER_APP_CATALOG.find((entry) => {
+    if (entry.personalConnect.connectionKind !== "known") return false;
+    return (
+      entry.personalConnect.endpointUrl === mount.app.endpoint_url &&
+      entry.personalConnect.authType === mount.app.auth_type
+    );
+  });
+  if (byEndpoint) return byEndpoint;
+  const normalizedSlug = mount.app.slug.trim().toLowerCase();
+  const normalizedName = mount.app.name.trim().toLowerCase();
+  return (
+    DISCOVER_APP_CATALOG.find(
+      (entry) =>
+        entry.id === normalizedSlug ||
+        entry.name.trim().toLowerCase() === normalizedName,
+    ) ?? null
+  );
+}
+
 export function WebIntegrationsSettingsSection(
   props: WebIntegrationsSettingsSectionProps,
 ) {
@@ -110,6 +132,7 @@ export function WebIntegrationsSettingsSection(
   const [reconnectDraftMountId, setReconnectDraftMountId] = useState<
     string | null
   >(null);
+  const [openMountMenuId, setOpenMountMenuId] = useState<string | null>(null);
   const [reconnectSecret, setReconnectSecret] = useState("");
   const [reconnectError, setReconnectError] = useState<string | null>(null);
 
@@ -130,6 +153,24 @@ export function WebIntegrationsSettingsSection(
       updatingUserPlatformAppMountId,
     ],
   );
+
+  useEffect(() => {
+    if (!openMountMenuId) return;
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (
+        target instanceof Element &&
+        target.closest('[data-integration-menu-root="true"]')
+      ) {
+        return;
+      }
+      setOpenMountMenuId(null);
+    };
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+    };
+  }, [openMountMenuId]);
 
   return (
     <>
@@ -188,79 +229,135 @@ export function WebIntegrationsSettingsSection(
               const isBusy = busyMountIds.has(mount.id);
               const isReconnectDraftOpen = reconnectDraftMountId === mount.id;
               const isReconnecting = reconnectingUserPlatformAppMountId === mount.id;
+              const isMenuOpen = openMountMenuId === mount.id;
+              const catalogEntry = findCatalogEntryForMount(mount);
               return (
                 <div key={mount.id} className="integration-mounted-row">
-                  <div className="integration-mounted-main">
-                    <div className="integration-mounted-title-row">
-                      <strong>{mount.app.name}</strong>
-                      <span className="integration-status-pill">
-                        {buildMountStatusLabel(mount)}
-                      </span>
+                  <div className="integration-mounted-top">
+                    <div className="integration-mounted-identity">
+                      <DiscoverCatalogLogo
+                        name={mount.app.name}
+                        logoUrl={catalogEntry?.logoUrl}
+                        logoUrlDark={catalogEntry?.logoUrlDark}
+                      />
+                      <div className="integration-mounted-main">
+                        <div className="integration-mounted-title-row">
+                          <strong>{mount.app.name}</strong>
+                          <span className="integration-status-pill">
+                            {buildMountStatusLabel(mount)}
+                          </span>
+                        </div>
+                        <div className="integration-mounted-meta">
+                          {mount.app.endpoint_url}
+                        </div>
+                        <div className="integration-mounted-detail">
+                          {buildMountDetail(mount)}
+                        </div>
+                      </div>
                     </div>
-                    <div className="integration-mounted-meta">
-                      {mount.app.endpoint_url}
-                    </div>
-                    <div className="integration-mounted-detail">
-                      {buildMountDetail(mount)}
-                    </div>
-                  </div>
-                  <div className="integration-mounted-actions">
-                    <button
-                      type="button"
-                      className="integration-action-button"
-                      disabled={isBusy}
-                      onClick={() =>
-                        void onUpdateUserPlatformAppMount(mount.id, {
-                          enabled: !mount.enabled,
-                        })
-                      }
-                    >
-                      {updatingUserPlatformAppMountId === mount.id
-                        ? "Saving…"
-                        : mount.enabled
-                          ? "Disable"
-                          : "Enable"}
-                    </button>
-                    <button
-                      type="button"
-                      className="integration-action-button"
-                      disabled={isBusy}
-                      onClick={() => void onRefreshUserPlatformApp(mount.id)}
-                    >
-                      {refreshingUserPlatformAppMountId === mount.id
-                        ? "Refreshing…"
-                        : "Refresh"}
-                    </button>
-                    {canReconnect ? (
-                      <button
-                        type="button"
-                        className="integration-action-button"
-                        disabled={isBusy}
-                        onClick={() => {
-                          if (isReconnectDraftOpen) {
-                            setReconnectDraftMountId(null);
-                            setReconnectSecret("");
-                            setReconnectError(null);
-                            return;
-                          }
-                          setReconnectDraftMountId(mount.id);
-                          setReconnectSecret("");
-                          setReconnectError(null);
-                        }}
+                    <div className="integration-mounted-rail">
+                      <label
+                        className={`members-switch integration-mounted-switch${
+                          isBusy ? " is-disabled" : ""
+                        }`}
+                        title={mount.enabled ? "Disable app" : "Enable app"}
                       >
-                        {isReconnectDraftOpen ? "Cancel" : "Reconnect"}
-                      </button>
-                    ) : null}
-                    <button
-                      type="button"
-                      className="integration-action-button is-danger"
-                      disabled={isBusy}
-                      onClick={() => void onUnmountUserPlatformApp(mount.id)}
-                    >
-                      {removingUserPlatformAppMountId === mount.id
-                        ? "Removing…"
-                        : "Remove"}
-                    </button>
+                        <input
+                          type="checkbox"
+                          checked={mount.enabled}
+                          disabled={isBusy}
+                          aria-label={`${
+                            mount.enabled ? "Disable" : "Enable"
+                          } ${mount.app.name}`}
+                          onChange={() =>
+                            void onUpdateUserPlatformAppMount(mount.id, {
+                              enabled: !mount.enabled,
+                            })
+                          }
+                        />
+                        <span className="members-switch-track">
+                          <span className="members-switch-thumb" />
+                        </span>
+                      </label>
+                      <div
+                        className="integration-mounted-menu-shell"
+                        data-integration-menu-root="true"
+                      >
+                        <button
+                          type="button"
+                          className="integration-mounted-menu-trigger"
+                          aria-expanded={isMenuOpen}
+                          aria-label={`${mount.app.name} options`}
+                          disabled={isBusy}
+                          onClick={() =>
+                            setOpenMountMenuId((current) =>
+                              current === mount.id ? null : mount.id,
+                            )
+                          }
+                        >
+                          <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <circle cx="5" cy="12" r="1.8" />
+                            <circle cx="12" cy="12" r="1.8" />
+                            <circle cx="19" cy="12" r="1.8" />
+                          </svg>
+                        </button>
+                        {isMenuOpen ? (
+                          <div
+                            className="integration-mounted-menu"
+                            role="menu"
+                            aria-label={`${mount.app.name} actions`}
+                          >
+                            <button
+                              type="button"
+                              className="integration-mounted-menu-item"
+                              disabled={isBusy}
+                              onClick={() => {
+                                setOpenMountMenuId(null);
+                                void onRefreshUserPlatformApp(mount.id);
+                              }}
+                            >
+                              {refreshingUserPlatformAppMountId === mount.id
+                                ? "Refreshing…"
+                                : "Refresh"}
+                            </button>
+                            {canReconnect ? (
+                              <button
+                                type="button"
+                                className="integration-mounted-menu-item"
+                                disabled={isBusy}
+                                onClick={() => {
+                                  setOpenMountMenuId(null);
+                                  if (isReconnectDraftOpen) {
+                                    setReconnectDraftMountId(null);
+                                    setReconnectSecret("");
+                                    setReconnectError(null);
+                                    return;
+                                  }
+                                  setReconnectDraftMountId(mount.id);
+                                  setReconnectSecret("");
+                                  setReconnectError(null);
+                                }}
+                              >
+                                {isReconnectDraftOpen ? "Cancel reconnect" : "Reconnect"}
+                              </button>
+                            ) : null}
+                            <button
+                              type="button"
+                              className="integration-mounted-menu-item danger"
+                              disabled={isBusy}
+                              onClick={() => {
+                                setOpenMountMenuId(null);
+                                void onUnmountUserPlatformApp(mount.id);
+                              }}
+                            >
+                              {removingUserPlatformAppMountId === mount.id
+                                ? "Removing…"
+                                : "Remove"}
+                            </button>
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
                   </div>
                   {isReconnectDraftOpen ? (
                     <div className="integration-reconnect-panel">

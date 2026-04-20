@@ -12452,10 +12452,26 @@ button.message-citation-chip:hover {
   padding: 14px 16px;
 }
 
+.integration-mounted-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.integration-mounted-identity {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
 .integration-mounted-main {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  min-width: 0;
 }
 
 .integration-mounted-detail {
@@ -12467,8 +12483,8 @@ button.message-citation-chip:hover {
 .integration-mounted-title-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 12px;
+  flex-wrap: wrap;
 }
 
 .integration-mounted-title-row strong {
@@ -12480,23 +12496,115 @@ button.message-citation-chip:hover {
   font-size: 12px;
   color: var(--text-muted);
   line-height: 1.5;
+  overflow-wrap: anywhere;
 }
 
-.integration-mounted-actions {
+.integration-mounted-rail {
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 14px;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+  position: relative;
 }
 
-.integration-action-button.is-danger {
+.integration-mounted-switch .members-switch-track {
+  width: 46px;
+  height: 28px;
+}
+
+.integration-mounted-switch .members-switch-thumb {
+  top: 3px;
+  left: 3px;
+  width: 20px;
+  height: 20px;
+}
+
+.integration-mounted-switch input:checked + .members-switch-track .members-switch-thumb {
+  transform: translateX(20px);
+}
+
+.integration-mounted-menu-shell {
+  position: relative;
+}
+
+.integration-mounted-menu-trigger {
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--border-muted);
+  border-radius: 8px;
+  background: var(--bg-card-alt);
+  color: var(--text-faint);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  padding: 0;
+}
+
+.integration-mounted-menu-trigger svg {
+  width: 13px;
+  height: 13px;
+  fill: currentColor;
+}
+
+.integration-mounted-menu-trigger:hover:not(:disabled),
+.integration-mounted-menu-trigger[aria-expanded="true"] {
+  color: var(--text-primary);
+  border-color: var(--border-default);
+  background: var(--hover-overlay);
+}
+
+.integration-mounted-menu-trigger:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.integration-mounted-menu {
+  position: absolute;
+  right: 0;
+  top: 36px;
+  min-width: 148px;
+  border: 1px solid var(--border-default);
+  border-radius: 10px;
+  background: var(--bg-modal);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28);
+  padding: 4px;
+  z-index: 12;
+}
+
+.integration-mounted-menu-item {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  text-align: left;
+  padding: 7px 9px;
+  border-radius: 7px;
+  cursor: pointer;
+}
+
+.integration-mounted-menu-item:hover:not(:disabled) {
+  background: var(--hover-overlay);
+  color: var(--text-primary);
+}
+
+.integration-mounted-menu-item:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.integration-mounted-menu-item:disabled:hover {
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.integration-mounted-menu-item.danger {
   color: color-mix(in srgb, var(--accent-red) 78%, var(--text-primary));
-  border-color: color-mix(in srgb, var(--accent-red) 26%, var(--border-muted));
 }
 
-.integration-action-button.is-danger:hover:not(:disabled) {
-  border-color: color-mix(in srgb, var(--accent-red) 40%, var(--border-default));
+.integration-mounted-menu-item.danger:hover:not(:disabled) {
   background: color-mix(in srgb, var(--accent-red) 8%, var(--bg-card-hover));
+  color: color-mix(in srgb, var(--accent-red) 86%, white);
 }
 
 .integration-reconnect-panel {
@@ -18272,12 +18380,25 @@ button.message-citation-chip:hover {
   flex-direction: column;
 }
 
-.app-root.mobile-shell .integration-mounted-actions,
-.app-root.mobile-shell .integration-reconnect-actions {
+.app-root.mobile-shell .integration-mounted-top {
+  flex-direction: column;
+  gap: 12px;
+}
+
+.app-root.mobile-shell .integration-mounted-identity {
   width: 100%;
 }
 
-.app-root.mobile-shell .integration-mounted-actions .integration-action-button,
+.app-root.mobile-shell .integration-mounted-rail,
+.app-root.mobile-shell .integration-reconnect-actions {
+  width: 100%;
+  justify-content: flex-end;
+}
+
+.app-root.mobile-shell .integration-mounted-menu {
+  right: 0;
+}
+
 .app-root.mobile-shell .integration-reconnect-actions .settings-cta {
   width: 100%;
 }
