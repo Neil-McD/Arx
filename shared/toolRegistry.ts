@@ -40,7 +40,7 @@ export type ResponsesApiFunctionTool = {
   name: string;
   description: string;
   parameters: JsonSchema;
-  strict: true;
+  strict: boolean;
 };
 
 const PATH_ONLY_TOOL_SCHEMA: JsonSchema = {
@@ -547,65 +547,223 @@ export function buildOpenAiFunctionTools(
   }));
 }
 
+function isSchemaRecord(value: JsonSchema): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function normalizeSchemaTypeList(value: unknown): string[] {
+  if (typeof value === "string") return value.trim() ? [value.trim()] : [];
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((entry) => String(entry ?? "").trim())
+    .filter((entry) => entry.length > 0);
+}
+
+function withNullableType(value: JsonSchema): JsonSchema {
+  if (!isSchemaRecord(value)) return value;
+  const typeList = normalizeSchemaTypeList(value.type);
+  if (typeList.length > 0) {
+    return {
+      ...value,
+      type: typeList.includes("null") ? typeList : [...typeList, "null"],
+    };
+  }
+  if (
+    value.properties &&
+    typeof value.properties === "object" &&
+    !Array.isArray(value.properties)
+  ) {
+    return {
+      ...value,
+      type: ["object", "null"],
+    };
+  }
+  if ("items" in value) {
+    return {
+      ...value,
+      type: ["array", "null"],
+    };
+  }
+  return value;
+}
+
+function sanitizeResponsesApiSchema(schema: JsonSchema): JsonSchema {
+  if (typeof schema === "boolean") return schema;
+  if (!isSchemaRecord(schema)) return schema;
+  const next: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(schema)) {
+    if (
+      key === "$schema" ||
+      key === "$id" ||
+      key === "$defs" ||
+      key === "definitions"
+    ) {
+      continue;
+    }
+    if (key === "properties" && value && typeof value === "object" && !Array.isArray(value)) {
+      next[key] = Object.fromEntries(
+        Object.entries(value as Record<string, JsonSchema>).map(([childKey, childValue]) => [
+          childKey,
+          sanitizeResponsesApiSchema(childValue),
+        ]),
+      );
+      continue;
+    }
+    if (key === "items") {
+      next[key] = Array.isArray(value)
+        ? value.map((entry) => sanitizeResponsesApiSchema(entry as JsonSchema))
+        : sanitizeResponsesApiSchema(value as JsonSchema);
+      continue;
+    }
+    if (
+      (key === "anyOf" || key === "allOf" || key === "oneOf") &&
+      Array.isArray(value)
+    ) {
+      next[key] = value.map((entry) => sanitizeResponsesApiSchema(entry as JsonSchema));
+      continue;
+    }
+    if (
+      (key === "not" || key === "if" || key === "then" || key === "else") &&
+      value
+    ) {
+      next[key] = sanitizeResponsesApiSchema(value as JsonSchema);
+      continue;
+    }
+    next[key] = value;
+  }
+  return next;
+}
+
+function hasStrictResponsesApiSchemaRisk(schema: JsonSchema): boolean {
+  if (typeof schema === "boolean") return true;
+  if (!isSchemaRecord(schema)) return false;
+  const riskyKeys = [
+    "$ref",
+    "anyOf",
+    "allOf",
+    "oneOf",
+    "not",
+    "if",
+    "then",
+    "else",
+    "patternProperties",
+    "propertyNames",
+    "unevaluatedProperties",
+    "prefixItems",
+    "contains",
+    "dependentSchemas",
+    "dependentRequired",
+  ];
+  for (const key of riskyKeys) {
+    if (key in schema) return true;
+  }
+  if (
+    schema.properties &&
+    typeof schema.properties === "object" &&
+    !Array.isArray(schema.properties)
+  ) {
+    for (const value of Object.values(
+      schema.properties as Record<string, JsonSchema>,
+    )) {
+      if (hasStrictResponsesApiSchemaRisk(value)) return true;
+    }
+  }
+  if ("items" in schema) {
+    const items = schema.items;
+    if (Array.isArray(items)) {
+      if (items.some((entry) => hasStrictResponsesApiSchemaRisk(entry as JsonSchema))) {
+        return true;
+      }
+    } else if (hasStrictResponsesApiSchemaRisk(items as JsonSchema)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function buildStrictResponsesApiSchema(schema: JsonSchema): JsonSchema {
-  if (!schema || typeof schema !== "object" || Array.isArray(schema)) return schema;
-  const record = schema as Record<string, unknown>;
-  if (record.type !== "object") return schema;
+  if (typeof schema === "boolean") return schema;
+  if (!isSchemaRecord(schema)) return schema;
+  const record = schema;
   const properties =
-    record.properties && typeof record.properties === "object" && !Array.isArray(record.properties)
+    record.properties &&
+    typeof record.properties === "object" &&
+    !Array.isArray(record.properties)
       ? (record.properties as Record<string, JsonSchema>)
       : null;
-  if (!properties) return schema;
 
-  const required = Array.isArray(record.required)
-    ? record.required
-        .map((value) => String(value ?? "").trim())
-        .filter((value) => value.length > 0)
-    : [];
-
-  const nextProperties: Record<string, JsonSchema> = {};
-  for (const [key, value] of Object.entries(properties)) {
-    if (!required.includes(key) && value && typeof value === "object" && !Array.isArray(value)) {
-      const propertyRecord = value as Record<string, unknown>;
-      const propertyType = propertyRecord.type;
-      if (typeof propertyType === "string") {
-        nextProperties[key] = {
-          ...propertyRecord,
-          type: [propertyType, "null"],
-        };
-        continue;
-      }
-      if (Array.isArray(propertyType)) {
-        const normalizedTypes = propertyType
-          .map((entry) => String(entry ?? "").trim())
-          .filter((entry) => entry.length > 0);
-        nextProperties[key] = {
-          ...propertyRecord,
-          type: normalizedTypes.includes("null") ? normalizedTypes : [...normalizedTypes, "null"],
-        };
-        continue;
-      }
+  if (properties) {
+    const required = Array.isArray(record.required)
+      ? record.required
+          .map((value) => String(value ?? "").trim())
+          .filter((value) => value.length > 0)
+      : [];
+    const nextProperties: Record<string, JsonSchema> = {};
+    for (const [key, value] of Object.entries(properties)) {
+      const normalizedValue = buildStrictResponsesApiSchema(value);
+      nextProperties[key] = required.includes(key)
+        ? normalizedValue
+        : withNullableType(normalizedValue);
     }
-    nextProperties[key] = value;
+    const typeList = normalizeSchemaTypeList(record.type);
+    const isNullableObject = typeList.includes("null");
+    return {
+      ...record,
+      type: isNullableObject ? ["object", "null"] : "object",
+      additionalProperties: false,
+      properties: nextProperties,
+      required: Object.keys(nextProperties),
+    };
   }
 
+  if ("items" in record) {
+    return {
+      ...record,
+      items: Array.isArray(record.items)
+        ? record.items.map((entry) => buildStrictResponsesApiSchema(entry as JsonSchema))
+        : buildStrictResponsesApiSchema(record.items as JsonSchema),
+    };
+  }
+
+  return record;
+}
+
+export function projectResponsesApiToolSchema(
+  schema: JsonSchema,
+  options?: {
+    allowBestEffortFallback?: boolean;
+  },
+): {
+  parameters: JsonSchema;
+  strict: boolean;
+} {
+  const sanitized = sanitizeResponsesApiSchema(schema);
+  const allowBestEffortFallback = options?.allowBestEffortFallback === true;
+  if (allowBestEffortFallback && hasStrictResponsesApiSchemaRisk(sanitized)) {
+    return {
+      parameters: sanitized,
+      strict: false,
+    };
+  }
   return {
-    ...record,
-    properties: nextProperties,
-    required: Object.keys(properties),
+    parameters: buildStrictResponsesApiSchema(sanitized),
+    strict: true,
   };
 }
 
 export function buildResponsesApiFunctionTools(
   names: readonly RetrievalToolName[],
 ): ResponsesApiFunctionTool[] {
-  return getToolDefinitions(names).map((tool) => ({
-    type: "function",
-    name: tool.name,
-    description: tool.description,
-    parameters: buildStrictResponsesApiSchema(tool.inputSchema),
-    strict: true,
-  }));
+  return getToolDefinitions(names).map((tool) => {
+    const projection = projectResponsesApiToolSchema(tool.inputSchema);
+    return {
+      type: "function",
+      name: tool.name,
+      description: tool.description,
+      parameters: projection.parameters,
+      strict: projection.strict,
+    };
+  });
 }
 
 function normalizeString(value: unknown): string | null {

@@ -62,6 +62,7 @@ import { extractExplicitSkillMentions } from "../shared/communitySkillRuntime";
 import {
   buildOpenAiFunctionTools,
   buildResponsesApiFunctionTools,
+  projectResponsesApiToolSchema,
   normalizeToolArguments as normalizeRegistryToolArguments,
   type ResponsesApiFunctionTool,
 } from "../shared/toolRegistry";
@@ -100,6 +101,7 @@ import {
 } from "./runtimeMcpManager";
 import {
   normalizeResolveMountedToolsArguments,
+  RESOLVE_MOUNTED_TOOLS_INPUT_SCHEMA,
   RESOLVE_MOUNTED_TOOLS_TOOL_NAME,
 } from "./runtimeMountedToolExposure";
 import {
@@ -121,35 +123,12 @@ type OpenAiCompatibleFunctionTool = ReturnType<
   typeof buildOpenAiFunctionTools
 >[number];
 type ChatgptCompatibleFunctionTool = ChatgptFunctionTool;
-type JsonSchema = Record<string, unknown> | boolean;
 
 type RuntimeInferenceSource = "free" | "platform" | "chatgpt" | "user_key";
 const CHAT_TOOLS_RUNTIME_KERNEL_BUDGET: RuntimeKernelBudget =
   DEFAULT_RUNTIME_KERNEL_BUDGET;
 const RUNTIME_PARALLEL_READ_TOOLS_FLAG =
   "RUNTIME_PARALLEL_READ_TOOLS_ENABLED";
-const RESOLVE_MOUNTED_TOOLS_INPUT_SCHEMA: JsonSchema = {
-  type: "object",
-  additionalProperties: false,
-  required: ["query"],
-  properties: {
-    query: {
-      type: "string",
-      minLength: 1,
-      maxLength: 240,
-    },
-    scope: {
-      type: "string",
-      enum: ["user", "community", "any"],
-    },
-    limit: {
-      type: "integer",
-      minimum: 1,
-      maximum: 8,
-    },
-  },
-};
-
 function readRuntimeBooleanFlag(name: string, defaultValue: boolean): boolean {
   try {
     const rawValue = (globalThis as any)?.process?.env?.[name];
@@ -177,13 +156,16 @@ function buildResolveMountedToolsOpenAiTool(): OpenAiCompatibleFunctionTool {
 }
 
 function buildResolveMountedToolsResponsesTool(): ResponsesApiFunctionTool {
+  const projection = projectResponsesApiToolSchema(
+    RESOLVE_MOUNTED_TOOLS_INPUT_SCHEMA,
+  );
   return {
     type: "function",
     name: RESOLVE_MOUNTED_TOOLS_TOOL_NAME,
     description:
       "Resolve connected personal or community app tools by search query. Use this before calling a mounted app tool that is not yet exposed.",
-    parameters: RESOLVE_MOUNTED_TOOLS_INPUT_SCHEMA,
-    strict: true,
+    parameters: projection.parameters,
+    strict: projection.strict,
   };
 }
 

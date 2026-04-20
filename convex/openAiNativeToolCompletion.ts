@@ -15,7 +15,7 @@ type OpenAiResponsesFunctionTool = {
   name: string;
   description: string;
   parameters: Record<string, unknown> | boolean;
-  strict: true;
+  strict: boolean;
 };
 
 type OpenAiResponsesParseResult = {

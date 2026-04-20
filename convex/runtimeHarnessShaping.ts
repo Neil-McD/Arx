@@ -5,6 +5,7 @@ import {
 } from "../shared/communityOverlayRuntime";
 import {
   buildOpenAiFunctionTools,
+  projectResponsesApiToolSchema,
   type ResponsesApiFunctionTool,
 } from "../shared/toolRegistry";
 import type { RuntimeMountedMcpTool } from "./runtimeMcpManager";
@@ -261,13 +262,21 @@ export function buildMountedAppOpenAiTools(
 export function buildMountedAppResponsesTools(
   mountedTools: RuntimeMountedMcpTool[],
 ): ResponsesApiFunctionTool[] {
-  return mountedTools.map((tool) => ({
-    type: "function",
-    name: tool.runtime_tool_name,
-    description: buildMountedAppToolDescription(tool),
-    parameters: normalizeMountedToolSchema(tool.input_schema),
-    strict: true,
-  }));
+  return mountedTools.map((tool) => {
+    const projection = projectResponsesApiToolSchema(
+      normalizeMountedToolSchema(tool.input_schema),
+      {
+        allowBestEffortFallback: true,
+      },
+    );
+    return {
+      type: "function",
+      name: tool.runtime_tool_name,
+      description: buildMountedAppToolDescription(tool),
+      parameters: projection.parameters,
+      strict: projection.strict,
+    };
+  });
 }
 
 export function buildUserPlatformMountedAppsPromptBlock(

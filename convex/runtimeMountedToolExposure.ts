@@ -1,6 +1,27 @@
 import type { RuntimeMountedMcpTool } from "./runtimeMcpManager.ts";
 
 export const RESOLVE_MOUNTED_TOOLS_TOOL_NAME = "resolve_mounted_tools";
+export const RESOLVE_MOUNTED_TOOLS_INPUT_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["query"],
+  properties: {
+    query: {
+      type: "string",
+      minLength: 1,
+      maxLength: 240,
+    },
+    scope: {
+      type: "string",
+      enum: ["user", "community", "any"],
+    },
+    limit: {
+      type: "integer",
+      minimum: 1,
+      maximum: 8,
+    },
+  },
+} as const;
 const DEFAULT_EXPOSURE_LIMIT = 4;
 const MAX_EXPOSURE_LIMIT = 8;
 const DEFAULT_MAX_EXPOSED_TOOLS = 12;
