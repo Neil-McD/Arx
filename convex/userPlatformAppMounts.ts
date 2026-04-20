@@ -363,6 +363,26 @@ async function findExistingUserPlatformMountByEndpoint(args: {
   return null;
 }
 
+export const findExistingUserPlatformMountByEndpointInternal = internalQuery({
+  args: {
+    userId: v.id("users"),
+    endpointUrl: v.string(),
+    authType: v.union(
+      v.literal("none"),
+      v.literal("api_key"),
+      v.literal("bearer"),
+    ),
+  },
+  handler: async (ctx, args) => {
+    return await findExistingUserPlatformMountByEndpoint({
+      ctx,
+      userId: args.userId,
+      endpointUrl: args.endpointUrl,
+      authType: args.authType,
+    });
+  },
+});
+
 async function requireExistingUserPlatformMount(args: {
   ctx: any;
   userId: any;
@@ -745,12 +765,18 @@ export const connectUserPlatformApp = action({
 
     const nowMs = Date.now();
     const normalizedSecret = normalizeString(args.secret, 10_000);
-    const existingMount = await findExistingUserPlatformMountByEndpoint({
-      ctx,
-      userId,
-      endpointUrl: args.endpointUrl,
-      authType: args.authType,
-    });
+    const existingMount = (await ctx.runQuery(
+      internal.userPlatformAppMounts.findExistingUserPlatformMountByEndpointInternal,
+      {
+        userId,
+        endpointUrl: args.endpointUrl,
+        authType: args.authType,
+      },
+    )) as {
+      mount: UserPlatformAppMountRow;
+      app: DeveloperAppRow;
+      connection: AppConnectionRow | null;
+    } | null;
     if (existingMount) {
       try {
         if (args.authType !== "none") {
