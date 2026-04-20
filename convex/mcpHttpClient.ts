@@ -15,6 +15,39 @@ export type JsonRpcError = {
 
 const MCP_HTTP_TIMEOUT_MS = 10_000;
 
+function parseSseJsonPayload(
+  rawText: string,
+): JsonRpcSuccess | JsonRpcError | null {
+  const trimmed = rawText.trim();
+  if (!trimmed) return null;
+  const eventChunks = trimmed.split(/\r?\n\r?\n+/);
+  for (const chunk of eventChunks) {
+    const dataLines = chunk
+      .split(/\r?\n/)
+      .filter((line) => line.startsWith("data:"))
+      .map((line) => line.slice(5).trimStart());
+    if (dataLines.length === 0) continue;
+    const dataText = dataLines.join("\n").trim();
+    if (!dataText) continue;
+    try {
+      return JSON.parse(dataText) as JsonRpcSuccess | JsonRpcError;
+    } catch {
+      continue;
+    }
+  }
+  return null;
+}
+
+function parseMcpPayload(rawText: string): JsonRpcSuccess | JsonRpcError | null {
+  const trimmed = rawText.trim();
+  if (!trimmed) return null;
+  try {
+    return JSON.parse(trimmed) as JsonRpcSuccess | JsonRpcError;
+  } catch {
+    return parseSseJsonPayload(trimmed);
+  }
+}
+
 export function buildJsonRpcBody(
   id: string,
   method: string,
@@ -97,14 +130,7 @@ export async function postMcpJson(params: {
     params.signal?.removeEventListener("abort", abortFromExternalSignal);
   }
   const rawText = await response.text();
-  let payload: JsonRpcSuccess | JsonRpcError | null = null;
-  try {
-    payload = rawText
-      ? (JSON.parse(rawText) as JsonRpcSuccess | JsonRpcError)
-      : null;
-  } catch {
-    payload = null;
-  }
+  const payload = parseMcpPayload(rawText);
   return {
     status: response.status,
     sessionId:
