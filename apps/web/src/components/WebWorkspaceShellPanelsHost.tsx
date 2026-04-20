@@ -25,6 +25,8 @@ type WebWorkspaceShellPanelsHostProps<
   | "displayedThreadError"
   | "showGuestSignInAction"
   | "session"
+  | "hasAuthenticatedPresentation"
+  | "isAuthRecoveringSignedIn"
   | "authError"
   | "requireSignIn"
   | "openMobileAgentSettings"
@@ -73,6 +75,8 @@ export function WebWorkspaceShellPanelsHost<
           displayedThreadError={props.displayedThreadError}
           showGuestSignInAction={props.showGuestSignInAction}
           session={props.session}
+          hasAuthenticatedPresentation={props.hasAuthenticatedPresentation}
+          isAuthRecoveringSignedIn={props.isAuthRecoveringSignedIn}
           authError={props.authError}
           requireSignIn={props.requireSignIn}
           openMobileAgentSettings={props.openMobileAgentSettings}

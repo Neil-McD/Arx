@@ -10,7 +10,7 @@ type WorkspaceLandingCommunity = {
 };
 
 type BuildWebWorkspaceLandingProjectionParams = {
-  session: unknown | null;
+  showGuestSignupRail: boolean;
   activeCommunity: WorkspaceLandingCommunity | null;
   resolvedActiveProjectName: string | null;
   emptyThreadLandingTitle: ReactNode;
@@ -27,7 +27,7 @@ type BuildWebWorkspaceLandingProjectionParams = {
 export function buildWebWorkspaceLandingProjection(
   params: BuildWebWorkspaceLandingProjectionParams,
 ) {
-  const guestSignupRail = !params.session ? (
+  const guestSignupRail = params.showGuestSignupRail ? (
     <WebGuestSignupRail onSignIn={params.onRequireSignIn} />
   ) : null;
 

@@ -27,6 +27,8 @@ type UserProfile = SharedUserProfile;
 export type WebCommunityChatPanelProps = {
   activeCommunity: { name: string } | null;
   isResolvingSelectedCommunity: boolean;
+  hasAuthenticatedPresentation: boolean;
+  isAuthRecoveringSignedIn: boolean;
   hasSession: boolean;
   sessionUserId: string | null;
   canPostMessages: boolean;
@@ -90,6 +92,8 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
   const {
     activeCommunity,
     isResolvingSelectedCommunity,
+    hasAuthenticatedPresentation,
+    isAuthRecoveringSignedIn,
     hasSession,
     sessionUserId,
     canPostMessages,
@@ -150,12 +154,13 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
   } = props;
 
   const showCommunityChatBootstrap =
-    hasSession &&
+    hasAuthenticatedPresentation &&
+    (isAuthRecoveringSignedIn ||
     (isResolvingSelectedCommunity ||
       (!!activeCommunity &&
         communityMessages.length === 0 &&
         !communityChatError &&
-        (isLoadingChat || !hasResolvedCommunityChat)));
+        (isLoadingChat || !hasResolvedCommunityChat))));
 
   if (showCommunityChatBootstrap) {
     return (
@@ -194,7 +199,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
             onScroll={onChatScroll}
           >
             <div className="chat-messages-inner">
-              {!hasSession && (
+              {!hasAuthenticatedPresentation && (
                 <div className="chat-messages-state-shell">
                   <div className="chat-empty">
                     <div>Sign in to access community chat.</div>
@@ -413,7 +418,13 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
             className="ask-icon-btn ask-plus"
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            disabled={!hasSession || !activeCommunity || !canPostMessages || isSendingCommunityMessage}
+            disabled={
+              isAuthRecoveringSignedIn ||
+              !hasSession ||
+              !activeCommunity ||
+              !canPostMessages ||
+              isSendingCommunityMessage
+            }
             aria-label="Attach files"
             title="Attach files"
           >
@@ -439,6 +450,8 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
             placeholder={
               !hasSession
                 ? "Sign in to chat..."
+                : isAuthRecoveringSignedIn
+                  ? "Restoring your account..."
                 : isResolvingSelectedCommunity
                   ? "Loading community..."
                 : !activeCommunity
@@ -452,10 +465,11 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
             onKeyDown={(event) => {
               if (event.key === "Enter" && !event.shiftKey) {
                 event.preventDefault();
+                if (isAuthRecoveringSignedIn) return;
                 void onSendCommunityMessage();
               }
             }}
-            disabled={!hasSession || !activeCommunity || !canPostMessages}
+            disabled={isAuthRecoveringSignedIn || !hasSession || !activeCommunity || !canPostMessages}
             rows={1}
           />
           <VoiceInputButton {...voiceButtonProps} />
@@ -463,6 +477,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
             className="chat-send ask-send-btn ask-send-btn-v2"
             onClick={() => void onSendCommunityMessage()}
             disabled={
+              isAuthRecoveringSignedIn ||
               !hasSession ||
               !activeCommunity ||
               !canPostMessages ||

@@ -18,6 +18,8 @@ type BuildWebCommunitySurfaceProjectionParams = {
   communityTab: CommunityTab;
   activeCommunity: CommunitySurfaceCommunityLike | null;
   selectedActiveCommunitySlug: string | null;
+  hasAuthenticatedPresentation: boolean;
+  isAuthRecoveringSignedIn: boolean;
   hasSession: boolean;
   hasResolvedCommunities: boolean;
   isLoadingCommunities: boolean;
@@ -129,7 +131,7 @@ export function buildWebCommunitySurfaceProjection(
     communityTab: params.communityTab,
     settings: {
       activeCommunity: params.activeCommunity,
-      hasSession: params.hasSession,
+      hasSession: params.hasAuthenticatedPresentation,
       canViewActiveCommunitySettings: params.canViewActiveCommunitySettings,
       communitySettingsLayer: params.communitySettingsLayer,
       canManageCommunitySettings: params.canManageCommunitySettings,
@@ -155,7 +157,7 @@ export function buildWebCommunitySurfaceProjection(
     feed: {
       capabilities: {
         hasActiveCommunity: Boolean(params.activeCommunity),
-        hasSession: params.hasSession,
+        hasSession: params.hasAuthenticatedPresentation,
         activeCommunityName: params.activeCommunity?.name ?? null,
       },
       state: params.feedState,
@@ -164,7 +166,7 @@ export function buildWebCommunitySurfaceProjection(
     polynet: {
       hasActiveCommunity: Boolean(params.activeCommunity),
       activeCommunityName: params.activeCommunity?.name ?? null,
-      hasSession: params.hasSession,
+      hasSession: params.hasAuthenticatedPresentation,
       canManagePolynet: params.canViewActiveCommunityPolynet,
       onRequireSignIn: params.requireSignIn,
       state: params.polynetState,
@@ -183,7 +185,7 @@ export function buildWebCommunitySurfaceProjection(
     },
     funnel: {
       activeCommunity: params.activeCommunity,
-      hasSession: params.hasSession,
+      hasSession: params.hasAuthenticatedPresentation,
       canManageMembersActiveCommunity: params.canManageMembersActiveCommunity,
       isLoadingCommunityFunnel: params.isLoadingCommunityFunnel,
       communityFunnelError: params.communityFunnelError,
@@ -192,7 +194,7 @@ export function buildWebCommunitySurfaceProjection(
     },
     analytics: {
       hasActiveCommunity: Boolean(params.activeCommunity),
-      hasSession: params.hasSession,
+      hasSession: params.hasAuthenticatedPresentation,
       canViewActiveCommunityAnalytics: params.canViewActiveCommunityAnalytics,
       onRequireSignIn: params.requireSignIn,
       state: params.analyticsState,
@@ -225,11 +227,13 @@ export function buildWebCommunitySurfaceProjection(
   const communityChatPanelProps: WebCommunityChatPanelProps = {
     activeCommunity: params.activeCommunity ? { name: params.activeCommunity.name } : null,
     isResolvingSelectedCommunity:
-      params.hasSession &&
+      params.hasAuthenticatedPresentation &&
       params.activePage === "community" &&
       Boolean(String(params.selectedActiveCommunitySlug ?? "").trim()) &&
       !params.activeCommunity &&
       (!params.hasResolvedCommunities || params.isLoadingCommunities),
+    hasAuthenticatedPresentation: params.hasAuthenticatedPresentation,
+    isAuthRecoveringSignedIn: params.isAuthRecoveringSignedIn,
     hasSession: params.hasSession,
     sessionUserId: params.sessionUserId,
     canPostMessages: params.canPostMessagesActiveCommunity,

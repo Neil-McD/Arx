@@ -23,6 +23,8 @@ export type WebWorkspaceShellPanelsProps<TThread extends ThreadLike, TProject ex
   displayedThreadError: ReactNode;
   showGuestSignInAction: boolean;
   session: unknown | null;
+  hasAuthenticatedPresentation: boolean;
+  isAuthRecoveringSignedIn: boolean;
   authError: string | null;
   requireSignIn: () => void;
   openMobileAgentSettings: () => void;
@@ -145,6 +147,17 @@ export function WebWorkspaceShellPanels<TThread extends ThreadLike, TProject ext
     </div>
   );
 
+  const renderRecoveringSidebar = () => (
+    <div className="session-list">
+      <div className="guest-thread-signin">
+        <p className="guest-thread-signin-title">Restoring your account</p>
+        <p className="guest-thread-signin-copy">
+          Reloading your threads, projects, and connected account state.
+        </p>
+      </div>
+    </div>
+  );
+
   const renderMobileGuestSidebar = () => (
     <>
       <div className="session-search-row">
@@ -199,14 +212,18 @@ export function WebWorkspaceShellPanels<TThread extends ThreadLike, TProject ext
           {props.threadError && (
             <div className="auth-error">
               {props.displayedThreadError}
-              {props.showGuestSignInAction ? (
-                <button type="button" className="auth-error-link" onClick={() => props.requireSignIn()}>
-                  Sign in
-                </button>
-              ) : null}
-            </div>
-          )}
-          {props.session ? renderCloudSidebar(undefined, true) : renderDesktopGuestSidebar()}
+                  {!props.hasAuthenticatedPresentation && props.showGuestSignInAction ? (
+                    <button type="button" className="auth-error-link" onClick={() => props.requireSignIn()}>
+                      Sign in
+                    </button>
+                  ) : null}
+                </div>
+              )}
+          {props.session
+            ? renderCloudSidebar(undefined, true)
+            : props.hasAuthenticatedPresentation
+              ? renderRecoveringSidebar()
+              : renderDesktopGuestSidebar()}
         </aside>
       )}
 
@@ -238,7 +255,7 @@ export function WebWorkspaceShellPanels<TThread extends ThreadLike, TProject ext
               {props.threadError && (
                 <div className="auth-error">
                   {props.displayedThreadError}
-                  {props.showGuestSignInAction ? (
+                  {!props.hasAuthenticatedPresentation && props.showGuestSignInAction ? (
                     <button type="button" className="auth-error-link" onClick={() => props.requireSignIn()}>
                       Sign in
                     </button>
@@ -247,6 +264,8 @@ export function WebWorkspaceShellPanels<TThread extends ThreadLike, TProject ext
               )}
               {props.session ? (
                 <div className="thread-sidebar-panel">{renderCloudSidebar(() => props.setMobileOverlay(null), true)}</div>
+              ) : props.hasAuthenticatedPresentation ? (
+                renderRecoveringSidebar()
               ) : (
                 renderMobileGuestSidebar()
               )}

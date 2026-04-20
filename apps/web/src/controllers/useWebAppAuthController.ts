@@ -46,6 +46,7 @@ type UseWebAppAuthControllerResult = {
   sessionRef: MutableRefObject<AuthSession | null>;
   isAuthBootstrapComplete: boolean;
   isAuthResolvingSignedInState: boolean;
+  authPresentationState: "signed_out" | "recovering_signed_in" | "signed_in";
   authError: string | null;
   requireSignIn: (intentInput?: unknown) => void;
   handleSignOut: () => Promise<void>;
@@ -525,6 +526,12 @@ export function useWebAppAuthController(
     return !session && Boolean(workos.user);
   }, [isAuthBootstrapComplete, isAuthSigningOut, session, workos.isEnabled, workos.isLoading, workos.user]);
 
+  const authPresentationState = useMemo<"signed_out" | "recovering_signed_in" | "signed_in">(() => {
+    if (session) return "signed_in";
+    if (isAuthResolvingSignedInState) return "recovering_signed_in";
+    return "signed_out";
+  }, [isAuthResolvingSignedInState, session]);
+
   useEffect(() => {
     const onStorage = (event: StorageEvent) => {
       const key = String(event.key ?? "").trim();
@@ -549,6 +556,7 @@ export function useWebAppAuthController(
     sessionRef,
     isAuthBootstrapComplete,
     isAuthResolvingSignedInState,
+    authPresentationState,
     authError,
     requireSignIn,
     handleSignOut,

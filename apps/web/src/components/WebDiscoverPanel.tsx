@@ -91,6 +91,7 @@ type WebDiscoverPanelProps = {
   activeTab: DiscoverTab;
   onSelectTab: (tab: DiscoverTab) => void;
   hasSession: boolean;
+  isAuthRecoveringSignedIn: boolean;
   onRequireAuth: () => void;
   isLoadingDiscover: boolean;
   onRefreshDiscover: () => void;
@@ -224,6 +225,7 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
     onSelectTab,
     onRequireAuth,
     hasSession,
+    isAuthRecoveringSignedIn,
     isLoadingDiscover,
     discoverCommunitiesCount,
     discoverError,
@@ -343,6 +345,7 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
     app: DiscoverAppCatalogEntry,
   ): Promise<void> => {
     if (!isDiscoverAppPersonallyConnectable(app)) return;
+    if (isAuthRecoveringSignedIn) return;
     if (!hasSession) {
       onRequireAuth();
       return;
@@ -985,10 +988,14 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
                   className="platform-save-button is-dirty"
                   onClick={() => void handleUsePersonally(selectedApp)}
                   disabled={
-                    isConnectingUserPlatformApp || isLoadingUserPlatformAppMounts
+                    isAuthRecoveringSignedIn ||
+                    isConnectingUserPlatformApp ||
+                    isLoadingUserPlatformAppMounts
                   }
                 >
-                  {isConnectingUserPlatformApp
+                  {isAuthRecoveringSignedIn
+                    ? "Restoring account…"
+                    : isConnectingUserPlatformApp
                     ? "Connecting…"
                     : hasSession
                       ? "Connect"

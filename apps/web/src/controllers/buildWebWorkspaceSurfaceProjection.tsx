@@ -38,6 +38,8 @@ type ThreadMessage = {
 
 type BuildWebWorkspaceSurfaceProjectionParams = {
   session: AuthSession | null;
+  hasAuthenticatedPresentation: boolean;
+  isAuthRecoveringSignedIn: boolean;
   activeThreadId: string | null;
   guestThreadId: string;
   isEmptyWorkspaceThread: boolean;
@@ -131,9 +133,9 @@ export function buildWebWorkspaceSurfaceProjection(
   params: BuildWebWorkspaceSurfaceProjectionParams,
 ): { workspaceHostProps: WebWorkspaceHostProps } {
   const threadErrorView: WorkspaceThreadErrorView | null = params.threadError
-    ? {
+      ? {
         displayedError: params.displayedThreadError,
-        showSignInAction: params.showGuestSignInAction,
+        showSignInAction: params.showGuestSignInAction && !params.hasAuthenticatedPresentation,
         showRetryAction: params.canRetryLastThreadTurn,
       }
     : null;
@@ -257,6 +259,8 @@ export function buildWebWorkspaceSurfaceProjection(
   const workspaceHostProps: WebWorkspaceHostProps = {
     session: params.session,
     hasSession: Boolean(params.session),
+    hasAuthenticatedPresentation: params.hasAuthenticatedPresentation,
+    isAuthRecoveringSignedIn: params.isAuthRecoveringSignedIn,
     activeThreadId: params.activeThreadId,
     guestThreadId: params.guestThreadId,
     isEmptyWorkspaceThread: params.isEmptyWorkspaceThread,

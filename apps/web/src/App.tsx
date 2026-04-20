@@ -318,7 +318,6 @@ import { confirmDiscardUnsavedCommunitySettingsWeb } from "../../../shared/commu
 import { markCloudThreadAgentAttentionSeen } from "../../../shared/cloudThreadsGateway";
 import type { WebSettingsPanelsProps } from "./components/WebSettingsPanels";
 import type { WorkspaceComposerApi, WorkspaceComposerDraft } from "./components/WebWorkspaceHost";
-import { WebAuthBootstrapShell } from "./components/WebAuthBootstrapShell";
 import { WebGlobalOverlayHost } from "./components/WebGlobalOverlayHost";
 import { WebAppMainSurfaceHost } from "./components/WebAppMainSurfaceHost";
 import { WebStandalonePublicRouteShell } from "./components/WebStandalonePublicRouteShell";
@@ -643,7 +642,7 @@ export default function App() {
     setAuthError,
     sessionRef,
     isAuthBootstrapComplete,
-    isAuthResolvingSignedInState,
+    authPresentationState,
     authError,
     requireSignIn,
     handleSignOut,
@@ -4822,7 +4821,10 @@ export default function App() {
     if (!slug || !approvalPending) return;
     void cancelMyPendingJoinRequest(slug);
   };
-  const isAuthBootstrapResolvingAppShell = shellPublicRoute.kind === "app" && isAuthResolvingSignedInState;
+  const hasAuthenticatedAppShellPresentation =
+    shellPublicRoute.kind === "app" && authPresentationState !== "signed_out";
+  const isAuthRecoveringSignedInAppShell =
+    shellPublicRoute.kind === "app" && authPresentationState === "recovering_signed_in";
 
 	  const handleTopbarBackFromWorkspaceSettings = () => {
 	    if (goBack()) return;
@@ -4966,6 +4968,8 @@ export default function App() {
       communityTab,
       activeCommunity,
       selectedActiveCommunitySlug,
+      hasAuthenticatedPresentation: hasAuthenticatedAppShellPresentation,
+      isAuthRecoveringSignedIn: isAuthRecoveringSignedInAppShell,
       hasSession: Boolean(session),
       hasResolvedCommunities,
       isLoadingCommunities,
@@ -5567,17 +5571,6 @@ export default function App() {
     authError,
   });
 
-  if (isAuthBootstrapResolvingAppShell) {
-    return (
-      <WebAuthBootstrapShell
-        showCommunityChatBootstrapShell={
-          activePage === "community" && communityTab === "chat"
-        }
-        isCommunityMode={activePage !== "workspace"}
-      />
-    );
-  }
-
   if (standalonePublicRouteViewProps) {
     return <WebStandalonePublicRouteShell {...standalonePublicRouteViewProps} />;
   }
@@ -5656,6 +5649,8 @@ export default function App() {
       displayedThreadError={displayedThreadError}
       showGuestSignInAction={showGuestSignInAction}
       session={session}
+      hasAuthenticatedPresentation={hasAuthenticatedAppShellPresentation}
+      isAuthRecoveringSignedIn={isAuthRecoveringSignedInAppShell}
       authError={previewSidebarAuthError}
       requireSignIn={() => requireSignIn()}
       openMobileAgentSettings={openMobileAgentSettings}
@@ -5675,7 +5670,7 @@ export default function App() {
   );
 
   const workspaceLandingProjection = buildWebWorkspaceLandingProjection({
-    session: session,
+    showGuestSignupRail: !hasAuthenticatedAppShellPresentation,
     activeCommunity: activeCommunity
       ? {
           name: activeCommunity.name,
@@ -5697,6 +5692,8 @@ export default function App() {
   });
   const { workspaceHostProps } = buildWebWorkspaceSurfaceProjection({
     session: session,
+    hasAuthenticatedPresentation: hasAuthenticatedAppShellPresentation,
+    isAuthRecoveringSignedIn: isAuthRecoveringSignedInAppShell,
     activeThreadId,
     guestThreadId: GUEST_THREAD_ID,
     isEmptyWorkspaceThread,
@@ -5860,6 +5857,7 @@ export default function App() {
       activeTab: discoverActiveTab,
       onSelectTab: setDiscoverActiveTab,
       hasSession: Boolean(session),
+      isAuthRecoveringSignedIn: isAuthRecoveringSignedInAppShell,
       onRequireAuth: () => requireSignIn(),
       isLoadingDiscover,
       onRefreshDiscover: () => void loadDiscoverCommunities(),

@@ -81,6 +81,8 @@ export type WorkspaceComposerApi = {
 export type WebWorkspaceHostProps = {
   session: AuthSessionLike | null;
   hasSession: boolean;
+  hasAuthenticatedPresentation: boolean;
+  isAuthRecoveringSignedIn: boolean;
   activeThreadId: string | null;
   guestThreadId: string;
   isEmptyWorkspaceThread: boolean;
@@ -325,6 +327,8 @@ const WorkspaceTimelinePane = memo(function WorkspaceTimelinePane(props: {
   emptyThreadChatgptCard: ReactNode;
   landingActionButtons: LandingActionButton[];
   hasSession: boolean;
+  hasAuthenticatedPresentation: boolean;
+  isAuthRecoveringSignedIn: boolean;
   isActiveWorkspaceThreadBusy: boolean;
   isStreamingWorkspaceTurn: boolean;
   workspaceAttachments: WorkspaceAttachmentView[];
@@ -392,6 +396,8 @@ const WorkspaceTimelinePane = memo(function WorkspaceTimelinePane(props: {
                 <WorkspaceComposer
                   landing
                   hasSession={props.hasSession}
+                  hasAuthenticatedPresentation={props.hasAuthenticatedPresentation}
+                  isAuthRecoveringSignedIn={props.isAuthRecoveringSignedIn}
                   isActiveWorkspaceThreadBusy={props.isActiveWorkspaceThreadBusy}
                   isStreamingWorkspaceTurn={props.isStreamingWorkspaceTurn}
                   messageInput={props.messageInput}
@@ -436,7 +442,11 @@ const WorkspaceTimelinePane = memo(function WorkspaceTimelinePane(props: {
                     key={button.id}
                     className="web-empty-thread-action"
                     type="button"
-                    disabled={props.isActiveWorkspaceThreadBusy || props.isStreamingWorkspaceTurn}
+                    disabled={
+                      props.isAuthRecoveringSignedIn ||
+                      props.isActiveWorkspaceThreadBusy ||
+                      props.isStreamingWorkspaceTurn
+                    }
                     onClick={() => props.onSendLandingAction(button.prompt)}
                   >
                     <span className="web-empty-thread-action-text">{button.label}</span>
@@ -481,6 +491,9 @@ const WorkspaceTimelinePane = memo(function WorkspaceTimelinePane(props: {
     prev.isEmptyWorkspaceThread !== next.isEmptyWorkspaceThread ||
     prev.showEmptyThreadLandingSkeleton !== next.showEmptyThreadLandingSkeleton ||
     prev.isHydratingActiveWorkspaceThread !== next.isHydratingActiveWorkspaceThread ||
+    prev.hasSession !== next.hasSession ||
+    prev.hasAuthenticatedPresentation !== next.hasAuthenticatedPresentation ||
+    prev.isAuthRecoveringSignedIn !== next.isAuthRecoveringSignedIn ||
     prev.renderPreviewForRun !== next.renderPreviewForRun ||
     prev.onRequireThreadErrorSignIn !== next.onRequireThreadErrorSignIn ||
     prev.onRetryLastThreadError !== next.onRetryLastThreadError ||
@@ -503,6 +516,9 @@ const WorkspaceTimelinePane = memo(function WorkspaceTimelinePane(props: {
   return (
     prev.messageInput === next.messageInput &&
     prev.workspaceAttachments === next.workspaceAttachments &&
+    prev.hasSession === next.hasSession &&
+    prev.hasAuthenticatedPresentation === next.hasAuthenticatedPresentation &&
+    prev.isAuthRecoveringSignedIn === next.isAuthRecoveringSignedIn &&
     prev.isActiveWorkspaceThreadBusy === next.isActiveWorkspaceThreadBusy &&
     prev.isStreamingWorkspaceTurn === next.isStreamingWorkspaceTurn
   );
@@ -624,6 +640,8 @@ function WorkspaceAttachmentPreview(props: {
 function WorkspaceComposer(props: {
   landing?: boolean;
   hasSession: boolean;
+  hasAuthenticatedPresentation: boolean;
+  isAuthRecoveringSignedIn: boolean;
   isActiveWorkspaceThreadBusy: boolean;
   isStreamingWorkspaceTurn: boolean;
   messageInput: string;
@@ -661,11 +679,12 @@ function WorkspaceComposer(props: {
   const [modelPickerSection, setModelPickerSection] = useState<ModelSectionId>("all");
   const modelPickerRef = useRef<HTMLDivElement>(null);
   const modelPickerSearchRef = useRef<HTMLInputElement>(null);
+  const pickerModels = props.isAuthRecoveringSignedIn ? [] : props.curatedPickerModels;
   const { visiblePickerModels, openModelPicker, closeModelPicker } = useModelPickerController<
     WorkspacePickerModel,
     ModelSectionId
   >({
-    curatedPickerModels: props.curatedPickerModels,
+    curatedPickerModels: pickerModels,
     modelPickerQuery,
     modelPickerSection,
     setModelPickerQuery,
@@ -691,6 +710,16 @@ function WorkspaceComposer(props: {
     }, 60);
   }, [openModelPicker, props.modelPickerOpenRequestKey]);
 
+  const disableComposerInteractions =
+    props.isAuthRecoveringSignedIn ||
+    props.isActiveWorkspaceThreadBusy ||
+    props.isStreamingWorkspaceTurn;
+  const composerPlaceholder = props.isAuthRecoveringSignedIn
+    ? "Restoring your account..."
+    : props.landing
+      ? "Describe what you need help with..."
+      : props.workspaceComposerPlaceholder;
+
   const askBar = (
     <div className={`ask-bar ask-bar-v2${props.landing ? " ask-bar-landing" : ""}`}>
       <textarea
@@ -698,16 +727,17 @@ function WorkspaceComposer(props: {
           props.workspaceAskInputRef.current = node;
         }}
         className={`ask-input ask-input-v2${props.landing ? " ask-input-landing" : ""}`}
-        placeholder={props.landing ? "Describe what you need help with..." : props.workspaceComposerPlaceholder}
+        placeholder={composerPlaceholder}
         value={props.messageInput}
         onChange={(event) => props.setMessageInput(event.target.value)}
         onKeyDown={(event) => {
           if (event.key === "Enter" && !event.shiftKey) {
             event.preventDefault();
+            if (props.isAuthRecoveringSignedIn) return;
             props.onSendMessage();
           }
         }}
-        disabled={props.isActiveWorkspaceThreadBusy || props.isStreamingWorkspaceTurn}
+        disabled={disableComposerInteractions}
         rows={1}
       />
       <WorkspaceAttachmentPreview
@@ -720,7 +750,7 @@ function WorkspaceComposer(props: {
             className="ask-icon-btn ask-plus"
             type="button"
             onClick={() => props.workspaceFileInputRef.current?.click()}
-            disabled={!props.hasSession || props.isActiveWorkspaceThreadBusy || props.isStreamingWorkspaceTurn}
+            disabled={!props.hasSession || disableComposerInteractions}
             aria-label="Attach files"
             title="Attach files"
           >
@@ -743,7 +773,7 @@ function WorkspaceComposer(props: {
             modelPickerSearchRef={modelPickerSearchRef}
             isOpen={isModelPickerOpen}
             activeModelLabel={props.activeModelLabel}
-            curatedPickerModels={props.curatedPickerModels}
+            curatedPickerModels={pickerModels}
             modelPickerQuery={modelPickerQuery}
             setModelPickerQuery={setModelPickerQuery}
             modelPickerSection={modelPickerSection}
@@ -776,7 +806,8 @@ function WorkspaceComposer(props: {
             disabled={
               props.isStreamingWorkspaceTurn
                 ? false
-                : props.isActiveWorkspaceThreadBusy ||
+                : props.isAuthRecoveringSignedIn ||
+                  props.isActiveWorkspaceThreadBusy ||
                   (props.messageInput.trim().length === 0 && props.workspaceAttachments.length === 0)
             }
             aria-label={props.isStreamingWorkspaceTurn ? "Stop" : "Send"}
@@ -798,7 +829,7 @@ function WorkspaceComposer(props: {
   if (props.landing) {
     return (
       <>
-        {!props.hasSession ? props.guestSignupRail : null}
+        {!props.hasAuthenticatedPresentation ? props.guestSignupRail : null}
         {askBar}
       </>
     );
@@ -815,7 +846,7 @@ function WorkspaceComposer(props: {
           onStopAll={props.onStopAllTerminals}
         />
       )}
-      {!props.hasSession ? props.guestSignupRail : null}
+      {!props.hasAuthenticatedPresentation ? props.guestSignupRail : null}
       {askBar}
     </div>
   );
@@ -1511,6 +1542,8 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
                 emptyThreadChatgptCard={props.emptyThreadChatgptCard}
                 landingActionButtons={props.landingActionButtons}
                 hasSession={props.hasSession}
+                hasAuthenticatedPresentation={props.hasAuthenticatedPresentation}
+                isAuthRecoveringSignedIn={props.isAuthRecoveringSignedIn}
                 isActiveWorkspaceThreadBusy={props.isActiveWorkspaceThreadBusy}
                 isStreamingWorkspaceTurn={props.isStreamingWorkspaceTurn}
                 workspaceAttachments={workspaceAttachments}
@@ -1591,6 +1624,8 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
         <div className={`workspace-composer-shell${isDesktopExpandedPreview ? " preview-expanded" : ""}`}>
             <WorkspaceComposer
             hasSession={props.hasSession}
+            hasAuthenticatedPresentation={props.hasAuthenticatedPresentation}
+            isAuthRecoveringSignedIn={props.isAuthRecoveringSignedIn}
             isActiveWorkspaceThreadBusy={props.isActiveWorkspaceThreadBusy}
             isStreamingWorkspaceTurn={props.isStreamingWorkspaceTurn}
             messageInput={messageInput}
