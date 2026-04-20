@@ -12549,7 +12549,7 @@ button.message-citation-chip:hover {
 .integration-mounted-menu-trigger:hover:not(:disabled),
 .integration-mounted-menu-trigger[aria-expanded="true"] {
   color: var(--text-primary);
-  background: color-mix(in srgb, var(--hover-overlay) 72%, transparent);
+  background: color-mix(in srgb, var(--bg-card) 96%, transparent);
 }
 
 .integration-mounted-menu-trigger:disabled {
@@ -12564,7 +12564,7 @@ button.message-citation-chip:hover {
   min-width: 148px;
   border: 1px solid var(--border-default);
   border-radius: 10px;
-  background: var(--bg-modal);
+  background: var(--bg-card);
   box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28);
   padding: 6px 0;
   z-index: 12;
