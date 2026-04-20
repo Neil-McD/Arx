@@ -11,6 +11,7 @@ import {
   emitWorkspaceEvent,
   formatWorkspaceInstrumentationError,
 } from "../lib/workspaceInstrumentation";
+import { formatWorkspaceRestoreErrorMessage } from "../../../../shared/appErrorMappings";
 import type { WebCloudProjectRecord } from "./useWebProjectUiController";
 
 type ThreadLike = {
@@ -98,13 +99,13 @@ export function useWebWorkspaceProjectStateController<SessionT, ThreadT extends 
         });
       } catch (error) {
         console.warn("Failed to load cloud projects:", error);
-        setProjects([]);
-        setActiveProjectId(null);
         emitWorkspaceEvent({
           scope: "project",
           name: "projects_load",
           status: "failure",
-          error: formatWorkspaceInstrumentationError(error),
+          error: formatWorkspaceInstrumentationError(
+            formatWorkspaceRestoreErrorMessage(error, "Couldn't load your projects right now."),
+          ),
         });
       }
     },

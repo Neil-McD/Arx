@@ -62,7 +62,6 @@ export function useCommunitySettingsDataController<SessionT extends SessionLike>
       const row = await fetchCloudCommunityMemberSettingsRow<SessionT, CommunityMemberSettingsRow>({
         session: usableSession,
         communityId: params.communityId,
-        userId: usableSession.user.id,
       });
       current.setCommunityMemberMuted(Boolean(row?.muted));
     } catch {

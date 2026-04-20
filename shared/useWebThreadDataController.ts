@@ -3,6 +3,7 @@ import { resolveUsableSession, type EnsureSessionFn } from "./ensureUsableSessio
 import type { ModelToggle } from "./modelCatalog";
 import { parseModelRegistryRows } from "./modelRegistry";
 import { deriveThreadTitleFromUserText, isMissingThreadTitleValue } from "./threadTitleUi";
+import { formatWorkspaceRestoreErrorMessage } from "./appErrorMappings";
 import {
   isConvexCloudThreadsEnabled,
   listConvexCloudThreadMessagesPageByThreadKey,
@@ -157,14 +158,12 @@ export function useWebThreadDataController<SessionT, ThreadMessageT extends Thre
         }));
       applyLoadedThreadList(convexList);
     } catch (error) {
-      const message =
-        typeof error === "string"
-          ? error
-          : error instanceof Error
-            ? error.message
-            : "Failed to load threads.";
+      const message = formatWorkspaceRestoreErrorMessage(
+        error,
+        "Couldn't load your threads right now.",
+      );
       current.setThreadError(message);
-      current.setThreads([]);
+      current.threadsHydratedRef.current = true;
     }
   }, []);
 

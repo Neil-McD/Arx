@@ -25,6 +25,7 @@ export type WorkspaceSidebarState<TThread, TProject> = {
   normalizedThreadSearch: string;
   threadSearchResults: TThread[];
   projectThreadGroups: Array<ProjectThreadGroup<TThread, TProject>>;
+  generalThreads: TThread[];
   projectExpandedById: Record<string, boolean>;
   visibleThreadsCount: number;
   setThreadSearchQuery: (value: string) => void;
@@ -75,6 +76,13 @@ export function WebWorkspaceSidebarStateHost<TThread extends ThreadLike, TProjec
     () => buildProjectThreadGroups(props.projects, visibleThreads, props.resolveThreadProjectId),
     [props.projects, props.resolveThreadProjectId, visibleThreads],
   );
+  const generalThreads = useMemo(() => {
+    const projectIds = new Set(props.projects.map((project) => project.id));
+    return visibleThreads.filter((thread) => {
+      const projectId = props.resolveThreadProjectId(thread);
+      return !projectId || !projectIds.has(projectId);
+    });
+  }, [props.projects, props.resolveThreadProjectId, visibleThreads]);
 
   const toggleProjectExpanded = useCallback(
     (projectId: string) => {
@@ -92,6 +100,7 @@ export function WebWorkspaceSidebarStateHost<TThread extends ThreadLike, TProjec
     normalizedThreadSearch,
     threadSearchResults,
     projectThreadGroups,
+    generalThreads,
     projectExpandedById,
     visibleThreadsCount: visibleThreads.length,
     setThreadSearchQuery,

@@ -83,39 +83,36 @@ export async function hydrateWorkspaceSurfaceState<SessionT>(
     },
   });
   deps.threadsHydratedRef.current = false;
-  try {
-    await Promise.all([
-      deps.loadWorkspaceProjects(session),
-      deps.loadThreads(session),
-    ]);
-    void deps.loadModelRegistry(session).catch((error) => {
-      emitWorkspaceEvent({
-        scope: "lifecycle",
-        name: "workspace_model_registry_hydrate",
-        status: "failure",
-        error: formatWorkspaceInstrumentationError(error),
-      });
-    });
+  const results = await Promise.allSettled([
+    deps.loadWorkspaceProjects(session),
+    deps.loadThreads(session),
+  ]);
+  const failureCount = results.filter((result) => result.status === "rejected").length;
+  void deps.loadModelRegistry(session).catch((error) => {
     emitWorkspaceEvent({
       scope: "lifecycle",
-      name: "workspace_hydrate",
-      status: "success",
-      detail: {
-        threadsHydratedAfter: deps.threadsHydratedRef.current,
-      },
-    });
-  } catch (error) {
-    emitWorkspaceEvent({
-      scope: "lifecycle",
-      name: "workspace_hydrate",
+      name: "workspace_model_registry_hydrate",
       status: "failure",
-      detail: {
-        threadsHydratedAfter: deps.threadsHydratedRef.current,
-      },
       error: formatWorkspaceInstrumentationError(error),
     });
-    throw error;
-  }
+  });
+  emitWorkspaceEvent({
+    scope: "lifecycle",
+    name: "workspace_hydrate",
+    status: failureCount > 0 ? "failure" : "success",
+    detail: {
+      threadsHydratedAfter: deps.threadsHydratedRef.current,
+      failureCount,
+    },
+    error:
+      failureCount > 0
+        ? formatWorkspaceInstrumentationError(
+            results
+              .filter((result): result is PromiseRejectedResult => result.status === "rejected")
+              .map((result) => result.reason)[0],
+          )
+        : undefined,
+  });
 }
 
 export async function resumeWorkspaceSurfaceState<SessionT>(
@@ -131,37 +128,34 @@ export async function resumeWorkspaceSurfaceState<SessionT>(
       sessionPresent: Boolean(session),
     },
   });
-  try {
-    await Promise.all([
-      deps.loadWorkspaceProjects(session),
-      deps.threadsHydratedRef.current ? Promise.resolve() : deps.loadThreads(session),
-    ]);
-    void deps.loadModelRegistry(session).catch((error) => {
-      emitWorkspaceEvent({
-        scope: "lifecycle",
-        name: "workspace_model_registry_resume",
-        status: "failure",
-        error: formatWorkspaceInstrumentationError(error),
-      });
-    });
+  const results = await Promise.allSettled([
+    deps.loadWorkspaceProjects(session),
+    deps.threadsHydratedRef.current ? Promise.resolve() : deps.loadThreads(session),
+  ]);
+  const failureCount = results.filter((result) => result.status === "rejected").length;
+  void deps.loadModelRegistry(session).catch((error) => {
     emitWorkspaceEvent({
       scope: "lifecycle",
-      name: "workspace_resume",
-      status: "success",
-      detail: {
-        threadsHydratedAfter: deps.threadsHydratedRef.current,
-      },
-    });
-  } catch (error) {
-    emitWorkspaceEvent({
-      scope: "lifecycle",
-      name: "workspace_resume",
+      name: "workspace_model_registry_resume",
       status: "failure",
-      detail: {
-        threadsHydratedAfter: deps.threadsHydratedRef.current,
-      },
       error: formatWorkspaceInstrumentationError(error),
     });
-    throw error;
-  }
+  });
+  emitWorkspaceEvent({
+    scope: "lifecycle",
+    name: "workspace_resume",
+    status: failureCount > 0 ? "failure" : "success",
+    detail: {
+      threadsHydratedAfter: deps.threadsHydratedRef.current,
+      failureCount,
+    },
+    error:
+      failureCount > 0
+        ? formatWorkspaceInstrumentationError(
+            results
+              .filter((result): result is PromiseRejectedResult => result.status === "rejected")
+              .map((result) => result.reason)[0],
+          )
+        : undefined,
+  });
 }

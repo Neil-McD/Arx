@@ -905,75 +905,76 @@ export default function App() {
           userId,
         },
       });
-      try {
-        const criticalTasks: Array<Promise<void>> = [
-          workspace.actions.hydrateWorkspaceSurfaceState(session),
-        ];
-        if (shouldTreatCommunitiesAsCritical) {
-          criticalTasks.push(runCommunitiesHydration(session, "session_ready_critical"));
-        }
-        await Promise.all(criticalTasks);
+      const criticalTasks: Array<Promise<void>> = [
+        workspace.actions.hydrateWorkspaceSurfaceState(session),
+      ];
+      if (shouldTreatCommunitiesAsCritical) {
+        criticalTasks.push(runCommunitiesHydration(session, "session_ready_critical"));
+      }
+      const criticalResults = await Promise.allSettled(criticalTasks);
+      const criticalFailureCount = criticalResults.filter((result) => result.status === "rejected").length;
+      if (accountGraphHydrationRunIdRef.current === hydrationRunId) {
+        setAccountGraphHydrationPhase("secondary");
+      }
+      emitWorkspaceEvent({
+        scope: "lifecycle",
+        name: "account_graph_hydrate",
+        status: criticalFailureCount > 0 ? "failure" : "success",
+        detail: {
+          phase: "session_ready",
+          stage: "critical_ready",
+          userId,
+          failureCount: criticalFailureCount,
+        },
+        error:
+          criticalFailureCount > 0
+            ? formatWorkspaceInstrumentationError(
+                criticalResults
+                  .filter((result): result is PromiseRejectedResult => result.status === "rejected")
+                  .map((result) => result.reason)[0],
+              )
+            : undefined,
+      });
+      const secondaryTasks: Array<Promise<void>> = [
+        runBillingHydration(session, "session_ready_secondary"),
+        runSelfProfileHydration(session, "session_ready_secondary"),
+      ];
+      if (!shouldTreatCommunitiesAsCritical) {
+        secondaryTasks.unshift(runCommunitiesHydration(session, "session_ready_secondary"));
+      }
+      emitWorkspaceEvent({
+        scope: "lifecycle",
+        name: "account_graph_secondary_hydrate",
+        status: "start",
+        detail: {
+          phase: "session_ready",
+          userId,
+        },
+      });
+      void Promise.allSettled(secondaryTasks).then((results) => {
+        const failureCount = results.filter((result) => result.status === "rejected").length;
         if (accountGraphHydrationRunIdRef.current === hydrationRunId) {
-          setAccountGraphHydrationPhase("secondary");
-        }
-        emitWorkspaceEvent({
-          scope: "lifecycle",
-          name: "account_graph_hydrate",
-          status: "success",
-          detail: {
-            phase: "session_ready",
-            stage: "critical_ready",
-            userId,
-          },
-        });
-        const secondaryTasks: Array<Promise<void>> = [
-          runBillingHydration(session, "session_ready_secondary"),
-          runSelfProfileHydration(session, "session_ready_secondary"),
-        ];
-        if (!shouldTreatCommunitiesAsCritical) {
-          secondaryTasks.unshift(runCommunitiesHydration(session, "session_ready_secondary"));
+          setAccountGraphHydrationPhase("ready");
         }
         emitWorkspaceEvent({
           scope: "lifecycle",
           name: "account_graph_secondary_hydrate",
-          status: "start",
+          status: failureCount > 0 ? "failure" : "success",
           detail: {
             phase: "session_ready",
             userId,
+            failureCount,
           },
+          error:
+            failureCount > 0
+              ? formatWorkspaceInstrumentationError(
+                  results
+                    .filter((result): result is PromiseRejectedResult => result.status === "rejected")
+                    .map((result) => result.reason)[0],
+                )
+              : undefined,
         });
-        void Promise.allSettled(secondaryTasks).then((results) => {
-          const failureCount = results.filter((result) => result.status === "rejected").length;
-          if (accountGraphHydrationRunIdRef.current === hydrationRunId) {
-            setAccountGraphHydrationPhase("ready");
-          }
-          emitWorkspaceEvent({
-            scope: "lifecycle",
-            name: "account_graph_secondary_hydrate",
-            status: failureCount > 0 ? "failure" : "success",
-            detail: {
-              phase: "session_ready",
-              userId,
-              failureCount,
-            },
-          });
-        });
-      } catch (error) {
-        if (accountGraphHydrationRunIdRef.current === hydrationRunId) {
-          setAccountGraphHydrationPhase("idle");
-        }
-        emitWorkspaceEvent({
-          scope: "lifecycle",
-          name: "account_graph_hydrate",
-          status: "failure",
-          detail: {
-            phase: "session_ready",
-            userId,
-          },
-          error: formatWorkspaceInstrumentationError(error),
-        });
-        throw error;
-      }
+      });
     },
     onSessionFocusReady: async (session) => {
       const userId = String(session.user?.id ?? "").trim() || null;
@@ -986,56 +987,62 @@ export default function App() {
           userId,
         },
       });
-      try {
-        await workspace.actions.resumeWorkspaceSurfaceState(session);
-        emitWorkspaceEvent({
-          scope: "lifecycle",
-          name: "account_graph_refresh",
-          status: "success",
-          detail: {
-            phase: "session_focus_ready",
-            stage: "workspace_ready",
-            userId,
-          },
-        });
+      const workspaceResults = await Promise.allSettled([
+        workspace.actions.resumeWorkspaceSurfaceState(session),
+      ]);
+      const workspaceFailureCount = workspaceResults.filter((result) => result.status === "rejected").length;
+      emitWorkspaceEvent({
+        scope: "lifecycle",
+        name: "account_graph_refresh",
+        status: workspaceFailureCount > 0 ? "failure" : "success",
+        detail: {
+          phase: "session_focus_ready",
+          stage: "workspace_ready",
+          userId,
+          failureCount: workspaceFailureCount,
+        },
+        error:
+          workspaceFailureCount > 0
+            ? formatWorkspaceInstrumentationError(
+                workspaceResults
+                  .filter((result): result is PromiseRejectedResult => result.status === "rejected")
+                  .map((result) => result.reason)[0],
+              )
+            : undefined,
+      });
+      emitWorkspaceEvent({
+        scope: "lifecycle",
+        name: "account_graph_refresh_secondary",
+        status: "start",
+        detail: {
+          phase: "session_focus_ready",
+          userId,
+        },
+      });
+      void Promise.allSettled([
+        runBillingHydration(session, "session_focus_ready_secondary"),
+        runCommunitiesHydration(session, "session_focus_ready_secondary"),
+      ]).then((results) => {
+        const failureCount = results.filter((result) => result.status === "rejected").length;
         emitWorkspaceEvent({
           scope: "lifecycle",
           name: "account_graph_refresh_secondary",
-          status: "start",
+          status: failureCount > 0 ? "failure" : "success",
           detail: {
             phase: "session_focus_ready",
             userId,
+            failureCount,
           },
+          error:
+            failureCount > 0
+              ? formatWorkspaceInstrumentationError(
+                  results
+                    .filter((result): result is PromiseRejectedResult => result.status === "rejected")
+                    .map((result) => result.reason)[0],
+                )
+              : undefined,
         });
-        void Promise.allSettled([
-          runBillingHydration(session, "session_focus_ready_secondary"),
-          runCommunitiesHydration(session, "session_focus_ready_secondary"),
-        ]).then((results) => {
-          const failureCount = results.filter((result) => result.status === "rejected").length;
-          emitWorkspaceEvent({
-            scope: "lifecycle",
-            name: "account_graph_refresh_secondary",
-            status: failureCount > 0 ? "failure" : "success",
-            detail: {
-              phase: "session_focus_ready",
-              userId,
-              failureCount,
-            },
-          });
-        });
-      } catch (error) {
-        emitWorkspaceEvent({
-          scope: "lifecycle",
-          name: "account_graph_refresh",
-          status: "failure",
-          detail: {
-            phase: "session_focus_ready",
-            userId,
-          },
-          error: formatWorkspaceInstrumentationError(error),
-        });
-        throw error;
-      }
+      });
     },
     onDidJustSignIn: () => {
       resumePendingAuthIntent();

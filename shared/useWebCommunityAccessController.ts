@@ -6,6 +6,7 @@ import { listCloudCommunityMembershipRows } from "./cloudCommunityMembershipGate
 import { listCloudProfileRowsByUserIds } from "./cloudProfilesGateway";
 import { preloadImageUrls } from "./preloadImageUrls";
 import { resolveUsableSession, type EnsureSessionFn } from "./ensureUsableSession";
+import { formatWorkspaceRestoreErrorMessage } from "./appErrorMappings";
 
 type UseWebCommunityAccessControllerArgs<SessionT, CommunityRecordT, UserProfileT> = {
   toCanonicalCommunityVisibility: (
@@ -95,7 +96,10 @@ export function useWebCommunityAccessController<
       }
     } catch (error) {
       if (isAbortError(error)) return;
-      console.warn("Failed to load communities:", error);
+      console.warn(
+        "Failed to load communities:",
+        formatWorkspaceRestoreErrorMessage(error, "Couldn't load your communities right now."),
+      );
     } finally {
       finishScopedAbortRequest({
         inFlightByKind: fetchAbortControllersRef.current,
