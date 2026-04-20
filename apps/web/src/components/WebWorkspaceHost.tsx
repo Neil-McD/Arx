@@ -409,7 +409,7 @@ const WorkspaceTimelinePane = memo(function WorkspaceTimelinePane(props: {
                   workspaceAskInputRef={props.workspaceAskInputRef}
                   workspaceFileInputRef={props.workspaceFileInputRef}
                   workspaceComposerPlaceholder={
-                    props.hasSession
+                    props.hasAuthenticatedPresentation
                       ? props.workspaceAttachments.length > 0
                         ? "Add a message or send files..."
                         : props.authedWorkspaceComposerPlaceholder
@@ -716,18 +716,17 @@ function WorkspaceComposer(props: {
     }, 60);
   }, [openModelPicker, props.modelPickerOpenRequestKey]);
 
-  const disableComposerInteractions =
+  const disableComposerActions =
     props.isAuthRecoveringSignedIn ||
     props.isAccountGraphHydratingCritical ||
     props.isActiveWorkspaceThreadBusy ||
     props.isStreamingWorkspaceTurn;
-  const composerPlaceholder = props.isAuthRecoveringSignedIn
-    ? "Restoring your account..."
-    : props.isAccountGraphHydratingCritical
-      ? "Loading your workspace..."
-    : props.landing
-      ? "Describe what you need help with..."
-      : props.workspaceComposerPlaceholder;
+  const disableComposerInput =
+    props.isActiveWorkspaceThreadBusy ||
+    props.isStreamingWorkspaceTurn;
+  const composerPlaceholder = props.landing
+    ? "Describe what you need help with..."
+    : props.workspaceComposerPlaceholder;
 
   const askBar = (
     <div className={`ask-bar ask-bar-v2${props.landing ? " ask-bar-landing" : ""}`}>
@@ -746,7 +745,7 @@ function WorkspaceComposer(props: {
             props.onSendMessage();
           }
         }}
-        disabled={disableComposerInteractions}
+        disabled={disableComposerInput}
         rows={1}
       />
       <WorkspaceAttachmentPreview
@@ -759,7 +758,7 @@ function WorkspaceComposer(props: {
             className="ask-icon-btn ask-plus"
             type="button"
             onClick={() => props.workspaceFileInputRef.current?.click()}
-            disabled={!props.hasSession || disableComposerInteractions}
+            disabled={!props.hasSession || disableComposerActions}
             aria-label="Attach files"
             title="Attach files"
           >
@@ -1646,7 +1645,7 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
             workspaceAskInputRef={workspaceAskInputRef}
             workspaceFileInputRef={workspaceFileInputRef}
             workspaceComposerPlaceholder={
-              props.hasSession
+              props.hasAuthenticatedPresentation
                 ? workspaceAttachments.length > 0
                   ? "Add a message or send files..."
                   : props.authedWorkspaceComposerPlaceholder
