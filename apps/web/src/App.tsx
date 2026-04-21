@@ -62,6 +62,7 @@ import { useWebPublicCommunityUiController } from "./controllers/useWebPublicCom
 import { useWebProfileSettingsUiController } from "./controllers/useWebProfileSettingsUiController";
 import { useWebProviderConnectionUiController } from "./controllers/useWebProviderConnectionUiController";
 import { useWebUserPlatformAppMountsController } from "./controllers/useWebUserPlatformAppMountsController";
+import { useWebUserPlatformSkillsController } from "./controllers/useWebUserPlatformSkillsController";
 import { useWebWorkspaceProjectStateController } from "./controllers/useWebWorkspaceProjectStateController";
 import { useWebWorkspaceModelStateController } from "./controllers/useWebWorkspaceModelStateController";
 import { useWebWorkspaceSurfaceController } from "./controllers/useWebWorkspaceSurfaceController";
@@ -132,7 +133,7 @@ import type {
   UserProfileDetail as SharedUserProfileDetail,
 } from "../../../shared/communityTypes";
 import type { ConnectCommunityAppInput } from "../../../shared/communityAppMountTypes";
-import type { CreateSkillPackageInput } from "../../../shared/communitySkillTypes";
+import type { CreateSkillPackageInput } from "../../../shared/skillPackageTypes";
 import {
   deriveBackFromWorkspaceSettingsFallbackTransition,
   deriveBackToWorkspaceFallbackTransition,
@@ -1756,6 +1757,24 @@ export default function App() {
     ensureSession: ensureUsableAuthSession,
   });
   const {
+    userPlatformSkills,
+    isLoadingUserPlatformSkills,
+    userPlatformSkillError,
+    isCreatingUserPlatformSkill,
+    userPlatformSkillMutationError,
+    updatingUserPlatformSkillInstallId,
+    removingUserPlatformSkillInstallId,
+    userPlatformSkillsLoadedUserIdRef,
+    clearUserPlatformSkills,
+    loadUserPlatformSkills,
+    createUserPlatformSkill,
+    updateUserPlatformSkill,
+    uninstallUserPlatformSkill,
+  } = useWebUserPlatformSkillsController<AuthSession>({
+    session,
+    ensureSession: ensureUsableAuthSession,
+  });
+  const {
     communitySkillAttachments,
     ownedSkillPackages,
     isLoadingCommunitySkillAttachments,
@@ -2444,6 +2463,32 @@ export default function App() {
       return await createSkillPackage(input);
     },
     [createSkillPackage],
+  );
+
+  const handleCreateUserPlatformSkill = useCallback(
+    async (input: CreateSkillPackageInput) => {
+      return await createUserPlatformSkill(input);
+    },
+    [createUserPlatformSkill],
+  );
+
+  const handleUpdateUserPlatformSkill = useCallback(
+    async (
+      userPlatformSkillInstallId: string,
+      patch: {
+        enabled?: boolean;
+      },
+    ) => {
+      return await updateUserPlatformSkill(userPlatformSkillInstallId, patch);
+    },
+    [updateUserPlatformSkill],
+  );
+
+  const handleUninstallUserPlatformSkill = useCallback(
+    async (userPlatformSkillInstallId: string) => {
+      return await uninstallUserPlatformSkill(userPlatformSkillInstallId);
+    },
+    [uninstallUserPlatformSkill],
   );
 
   const handleAttachSkillPackageToCommunity = useCallback(
@@ -3423,6 +3468,28 @@ export default function App() {
     clearUserPlatformAppMounts,
     loadUserPlatformAppMounts,
     userPlatformAppMountsLoadedUserIdRef,
+  ]);
+
+  useEffect(() => {
+    const shouldLoadUserPlatformSkills =
+      activePage === "workspace" &&
+      activeView === "settings" &&
+      settingsPage === "integrations";
+    if (!shouldLoadUserPlatformSkills) return;
+    if (!session) {
+      clearUserPlatformSkills();
+      return;
+    }
+    if (userPlatformSkillsLoadedUserIdRef.current === session.user.id) return;
+    void loadUserPlatformSkills(session);
+  }, [
+    activePage,
+    activeView,
+    session,
+    settingsPage,
+    clearUserPlatformSkills,
+    loadUserPlatformSkills,
+    userPlatformSkillsLoadedUserIdRef,
   ]);
 
   useEffect(() => {
@@ -5703,10 +5770,20 @@ export default function App() {
       refreshingUserPlatformAppMountId,
       reconnectingUserPlatformAppMountId,
       removingUserPlatformAppMountId,
+      userPlatformSkills,
+      isLoadingUserPlatformSkills,
+      userPlatformSkillError,
+      userPlatformSkillMutationError,
+      isCreatingUserPlatformSkill,
+      updatingUserPlatformSkillInstallId,
+      removingUserPlatformSkillInstallId,
       onUpdateUserPlatformAppMount: handleUpdateUserPlatformAppMount,
       onRefreshUserPlatformApp: handleRefreshUserPlatformApp,
       onReconnectUserPlatformApp: handleReconnectUserPlatformApp,
       onUnmountUserPlatformApp: handleUnmountUserPlatformApp,
+      onCreateUserPlatformSkill: handleCreateUserPlatformSkill,
+      onUpdateUserPlatformSkill: handleUpdateUserPlatformSkill,
+      onUninstallUserPlatformSkill: handleUninstallUserPlatformSkill,
     },
     appearance: {
       appTheme,

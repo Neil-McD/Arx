@@ -21,13 +21,13 @@ function main() {
   );
   assertIncludes(
     httpDaytona,
-    "listRuntimeCommunitySkillInventoryInternal",
-    "community-lens skill inventory query",
+    "internal.runtimeSkillResolution.resolveRuntimeSkillSelectionInternal",
+    "community-lens shared skill resolution query",
   );
   assertIncludes(
     httpDaytona,
-    "requestedMentionTokens: Array.from(explicitCommunitySkillMentions)",
-    "community-lens selected skill query",
+    "buildAmbiguousSkillMentionsPromptBlock",
+    "community-lens ambiguity handling prompt block",
   );
   assertIncludes(
     httpDaytona,

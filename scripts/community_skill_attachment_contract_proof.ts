@@ -13,6 +13,9 @@ function main() {
   const communitySkillAttachments = readText(
     "/Users/neilmcdevitt/code/arx/convex/communitySkillAttachments.ts",
   );
+  const runtimeSkillResolution = readText(
+    "/Users/neilmcdevitt/code/arx/convex/runtimeSkillResolution.ts",
+  );
   const httpDaytona = readText(
     "/Users/neilmcdevitt/code/arx/convex/httpDaytona.ts",
   );
@@ -25,8 +28,6 @@ function main() {
     "export const attachSkillPackageToCommunity = mutation({",
     "export const updateCommunitySkillAttachment = mutation({",
     "export const detachCommunitySkill = mutation({",
-    "export const listRuntimeCommunitySkillInventoryInternal = internalQuery({",
-    "export const listRuntimeSelectedCommunitySkillsInternal = internalQuery({",
   ]) {
     assertIncludes(
       communitySkillAttachments,
@@ -41,9 +42,9 @@ function main() {
     "community attachment read-model dependency guard",
   );
   assertIncludes(
-    httpDaytona,
-    "listRuntimeSelectedCommunitySkillsInternal",
-    "selected community skills runtime query",
+    runtimeSkillResolution,
+    "export const resolveRuntimeSkillSelectionInternal = internalQuery({",
+    "shared runtime skill resolution query",
   );
   assertIncludes(
     httpDaytona,
@@ -59,6 +60,16 @@ function main() {
     httpDaytona,
     "overlayRuntimeState.systemPromptSuffix",
     "selected skill injection prompt suffix wiring",
+  );
+  assertIncludes(
+    httpDaytona,
+    "community_skill_attachment_id",
+    "community skill evidence includes attachment identity",
+  );
+  assertIncludes(
+    httpDaytona,
+    "skill_revision_id",
+    "community skill evidence includes revision identity",
   );
   assert.ok(
     !communitySkillAttachments.includes("dependency_status"),
@@ -86,11 +97,6 @@ function main() {
   assert.ok(
     !skillsEditor.includes("explicitly mentioned by\n              slug"),
     "expected skills editor slug guidance to be removed",
-  );
-  assertIncludes(
-    communitySkillAttachments,
-    "requestedMentionTokens",
-    "runtime selected skills mention token query args",
   );
   assertIncludes(
     communitySkillAttachments,

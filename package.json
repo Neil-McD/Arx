@@ -41,6 +41,7 @@
     "check:community-app-lifecycle-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_app_lifecycle_contract_proof.ts",
     "check:community-skill-attachment-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_skill_attachment_contract_proof.ts",
     "check:community-skill-runtime-behavior-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_skill_runtime_behavior_proof.ts",
+    "check:personal-skill-runtime-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/personal_skill_runtime_contract_proof.ts",
     "check:community-overlay-runtime-behavior-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_overlay_runtime_behavior_proof.ts",
     "check:community-lens-runtime-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_lens_runtime_contract_proof.ts",
     "check:no-legacy-provider-repo-guard": "bash scripts/no_legacy_provider_repo_guard.sh",

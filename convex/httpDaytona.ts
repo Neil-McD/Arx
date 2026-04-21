@@ -58,7 +58,7 @@ import {
   type CommunityOverlaySelectedSkill,
   type CommunityOverlaySkillInventory,
 } from "../shared/communityOverlayRuntime";
-import { extractExplicitSkillMentions } from "../shared/communitySkillRuntime";
+import { buildPersonalSkillOverlayRuntimeState } from "../shared/personalSkillOverlayRuntime";
 import {
   buildOpenAiFunctionTools,
   buildResponsesApiFunctionTools,
@@ -88,11 +88,12 @@ import {
   formatJsonToolOutput,
   mapCommunitySkillsToOverlayRuntime,
   mapMountedToolsToOverlayRuntime,
+  mapSelectedUserPlatformSkillsToOverlayRuntime,
   mapSelectedCommunitySkillsToOverlayRuntime,
-  normalizeRuntimeCommunitySkillInventory,
+  mapUserPlatformSkillsToOverlayRuntime,
   normalizeRuntimeMountedCommunityAppTools,
   normalizeRuntimeMountedUserPlatformAppTools,
-  normalizeRuntimeSelectedCommunitySkills,
+  normalizeRuntimeSkillResolution,
   readFailureOutputPreview,
   summarizeToolArgsForLog,
 } from "./runtimeHarnessShaping";
@@ -140,6 +141,18 @@ function readRuntimeBooleanFlag(name: string, defaultValue: boolean): boolean {
     // Convex runtime may not expose process.env; keep the safe default.
   }
   return defaultValue;
+}
+
+function buildAmbiguousSkillMentionsPromptBlock(
+  mentionTokens: string[],
+): string {
+  if (mentionTokens.length === 0) return "";
+  return [
+    "",
+    "Some explicitly mentioned skill tokens were ambiguous across active scopes, so no skill instructions were loaded for them this turn.",
+    `Ambiguous tokens: ${mentionTokens.map((token) => `$${token}`).join(", ")}`,
+    "If the user still wants one of these skills, ask them to clarify which scope they mean.",
+  ].join("\n");
 }
 
 function buildResolveMountedToolsOpenAiTool(): OpenAiCompatibleFunctionTool {
@@ -641,37 +654,35 @@ async function executeRetrievalAgentLoop(
     ...runtimeMountedUserPlatformAppTools,
     ...runtimeMountedCommunityAppTools,
   ];
-  const explicitCommunitySkillMentions = new Set(
-    extractExplicitSkillMentions(params.messages),
+  const skillResolution = normalizeRuntimeSkillResolution(
+    await params.ctx.runQuery(
+      internal.runtimeSkillResolution.resolveRuntimeSkillSelectionInternal,
+      {
+        userId: params.userId as any,
+        authSubject: params.authSubject ?? undefined,
+        communityId: params.communityId ? (params.communityId as any) : undefined,
+        messages: params.messages.map((message) => ({
+          role: String(message.role ?? ""),
+          content: String(message.content ?? ""),
+        })),
+      },
+    ),
   );
-  const attachedCommunitySkills = params.communityId
-    ? normalizeRuntimeCommunitySkillInventory(
-        await params.ctx.runQuery(
-          internal.communitySkillAttachments
-            .listRuntimeCommunitySkillInventoryInternal,
-          {
-            userId: params.userId as any,
-            authSubject: params.authSubject ?? undefined,
-            communityId: params.communityId as any,
-          },
-        ),
-      )
-    : [];
+  const installedUserPlatformSkills =
+    skillResolution.user_platform_skill_inventory;
+  const selectedUserPlatformSkills =
+    skillResolution.selected_user_platform_skills;
+  const attachedCommunitySkills = skillResolution.community_skill_inventory;
   const selectedCommunitySkills =
-    params.communityId && explicitCommunitySkillMentions.size > 0
-      ? normalizeRuntimeSelectedCommunitySkills(
-          await params.ctx.runQuery(
-            internal.communitySkillAttachments
-              .listRuntimeSelectedCommunitySkillsInternal,
-            {
-              userId: params.userId as any,
-              authSubject: params.authSubject ?? undefined,
-              communityId: params.communityId as any,
-              requestedMentionTokens: Array.from(explicitCommunitySkillMentions),
-            },
-          ),
-        )
-      : [];
+    skillResolution.selected_community_skills;
+  const personalSkillRuntimeState = buildPersonalSkillOverlayRuntimeState({
+    installedSkills: mapUserPlatformSkillsToOverlayRuntime(
+      installedUserPlatformSkills,
+    ),
+    selectedSkills: mapSelectedUserPlatformSkillsToOverlayRuntime(
+      selectedUserPlatformSkills,
+    ),
+  });
   const overlayRuntimeState = buildCommunityOverlayRuntimeState({
     mountedTools: mapMountedToolsToOverlayRuntime(mountedCommunityAppTools),
     attachedSkills: mapCommunitySkillsToOverlayRuntime(attachedCommunitySkills),
@@ -689,6 +700,8 @@ async function executeRetrievalAgentLoop(
     mountedTools: runtimeMountedTools,
     mountedPromptSuffix: `${buildUserPlatformMountedAppsPromptBlock(
       runtimeMountedUserPlatformAppTools,
+    )}${personalSkillRuntimeState.systemPromptSuffix}${buildAmbiguousSkillMentionsPromptBlock(
+      skillResolution.ambiguous_mention_tokens,
     )}${overlayRuntimeState.systemPromptSuffix}`,
     initialWorkspaceSession: params.workspaceSession ?? null,
     appendRunEvent: params.appendRunEvent,
@@ -882,6 +895,42 @@ async function executeRetrievalAgentLoop(
       // Best-effort runtime evidence only.
     }
   }
+  if (installedUserPlatformSkills.length > 0) {
+    try {
+      await params.appendRunEvent({
+        eventType: "personal_skills_resolved",
+        eventKey: `${params.runId}:personal_skills_resolved:1`,
+        payload: {
+          run_id: params.runId,
+          user_scope_id: params.userId ?? null,
+          requested_skill_mention_tokens:
+            skillResolution.requested_mention_tokens,
+          ambiguous_skill_mention_tokens:
+            skillResolution.ambiguous_mention_tokens,
+          skills: installedUserPlatformSkills.map((skill) => {
+            const selected = selectedUserPlatformSkills.find(
+              (candidate) =>
+                candidate.user_platform_skill_install_id ===
+                skill.user_platform_skill_install_id,
+            );
+            return {
+              user_platform_skill_install_id:
+                skill.user_platform_skill_install_id,
+              skill_package_id: skill.skill_package_id,
+              skill_revision_id: selected?.skill_revision_id ?? null,
+              skill_name: skill.name,
+              skill_mention_token: skill.mention_token,
+            };
+          }),
+          selected_skill_mention_tokens: selectedUserPlatformSkills.map(
+            (skill) => skill.mention_token,
+          ),
+        },
+      });
+    } catch {
+      // Best-effort runtime evidence only.
+    }
+  }
   if (mountedCommunityAppTools.length > 0) {
     try {
       await params.appendRunEvent({
@@ -910,7 +959,19 @@ async function executeRetrievalAgentLoop(
         payload: {
           run_id: params.runId,
           community_scope_id: params.communityId ?? null,
+          requested_skill_mention_tokens:
+            skillResolution.requested_mention_tokens,
+          ambiguous_skill_mention_tokens:
+            skillResolution.ambiguous_mention_tokens,
           skills: attachedCommunitySkills.map((skill) => ({
+            community_skill_attachment_id: skill.community_skill_attachment_id,
+            skill_package_id: skill.skill_package_id,
+            skill_revision_id:
+              selectedCommunitySkills.find(
+                (candidate) =>
+                  candidate.community_skill_attachment_id ===
+                  skill.community_skill_attachment_id,
+              )?.skill_revision_id ?? null,
             skill_name: skill.name,
             skill_mention_token: skill.mention_token,
           })),

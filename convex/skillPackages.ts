@@ -1,16 +1,70 @@
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import {
+  type SkillPackageRevisionRow,
   type SkillPackageRow,
   mapSkillPackageReadModel,
   normalizeSkillInstructionsMd,
+  normalizeSkillMentionToken,
   normalizeSkillPackageDescription,
   normalizeSkillPackageName,
+  readSkillMentionToken,
 } from "./skillCore";
 import { resolveUserIdForAuthenticatedRequest } from "./communityCore";
 
 async function getSkillPackageById(ctx: any, skillPackageId: any): Promise<SkillPackageRow | null> {
   return ((await ctx.db.get(skillPackageId)) as SkillPackageRow | null) ?? null;
+}
+
+async function listOwnedSkillPackagesRows(ctx: any, ownerUserId: any): Promise<SkillPackageRow[]> {
+  const rows = (await ctx.db
+    .query("skillPackages")
+    .withIndex("by_owner", (q: any) => q.eq("ownerUserId", ownerUserId))
+    .collect()) as SkillPackageRow[];
+  return rows.sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
+}
+
+async function assertOwnerSkillMentionTokenAvailable(args: {
+  ctx: any;
+  ownerUserId: any;
+  mentionToken: string;
+  excludeSkillPackageId?: any;
+}): Promise<void> {
+  const rows = await listOwnedSkillPackagesRows(args.ctx, args.ownerUserId);
+  for (const row of rows) {
+    if (String(row._id) === String(args.excludeSkillPackageId ?? "")) continue;
+    if (readSkillMentionToken(row) === args.mentionToken) {
+      throw new Error("skill_package_mention_token_conflict");
+    }
+  }
+}
+
+async function createSkillPackageRevisionRow(args: {
+  ctx: any;
+  skillPackageId: any;
+  instructionsMd: string;
+  createdByUserId: any;
+  nowMs: number;
+}): Promise<any> {
+  const existingRevisions = (await args.ctx.db
+    .query("skillPackageRevisions")
+    .withIndex("by_skill", (q: any) => q.eq("skillPackageId", args.skillPackageId))
+    .collect()) as SkillPackageRevisionRow[];
+  const nextRevisionNumber =
+    existingRevisions.reduce(
+      (max, row) =>
+        typeof row.revisionNumber === "number" && Number.isFinite(row.revisionNumber)
+          ? Math.max(max, Math.floor(row.revisionNumber))
+          : max,
+      0,
+    ) + 1;
+  return await args.ctx.db.insert("skillPackageRevisions", {
+    skillPackageId: args.skillPackageId,
+    revisionNumber: nextRevisionNumber,
+    instructionsMd: args.instructionsMd,
+    createdAt: args.nowMs,
+    createdByUserId: args.createdByUserId,
+  });
 }
 
 async function createSkillPackageRow(args: {
@@ -24,17 +78,37 @@ async function createSkillPackageRow(args: {
   const nowMs = args.nowMs ?? Date.now();
   const name = normalizeSkillPackageName(args.name);
   if (!name) throw new Error("skill_package_name_required");
+  const mentionToken = normalizeSkillMentionToken(name);
+  if (!mentionToken) throw new Error("skill_package_mention_token_required");
+  await assertOwnerSkillMentionTokenAvailable({
+    ctx: args.ctx,
+    ownerUserId: args.ownerUserId,
+    mentionToken,
+  });
   const description = normalizeSkillPackageDescription(args.description);
   const instructionsMd = normalizeSkillInstructionsMd(args.instructionsMd);
   if (!instructionsMd) throw new Error("skill_package_instructions_required");
-  return await args.ctx.db.insert("skillPackages", {
+  const skillPackageId = await args.ctx.db.insert("skillPackages", {
     ownerUserId: args.ownerUserId,
     name,
+    mentionToken,
     description: description || undefined,
     instructionsMd,
     createdAt: nowMs,
     updatedAt: nowMs,
   });
+  const revisionId = await createSkillPackageRevisionRow({
+    ctx: args.ctx,
+    skillPackageId,
+    instructionsMd,
+    createdByUserId: args.ownerUserId,
+    nowMs,
+  });
+  await args.ctx.db.patch(skillPackageId, {
+    activeRevisionId: revisionId,
+    updatedAt: nowMs,
+  });
+  return skillPackageId;
 }
 
 export const getSkillPackageByIdInternal = internalQuery({
@@ -57,10 +131,7 @@ export const listOwnedSkillPackages = query({
       userId: args.userId,
       authSubject: args.authSubject ?? null,
     });
-    const rows = (await ctx.db
-      .query("skillPackages")
-      .withIndex("by_owner", (q: any) => q.eq("ownerUserId", userId))
-      .collect()) as SkillPackageRow[];
+    const rows = await listOwnedSkillPackagesRows(ctx, userId);
     return rows.map((row) => mapSkillPackageReadModel(row));
   },
 });
@@ -127,6 +198,22 @@ export const deleteSkillPackageCascadeInternal = internalMutation({
       .withIndex("by_skill", (q: any) => q.eq("skillPackageId", args.skillPackageId))
       .collect()) as Array<{ _id: any }>;
     for (const row of attachmentRows) {
+      await ctx.db.delete(row._id);
+    }
+
+    const installRows = (await ctx.db
+      .query("userPlatformSkillInstalls")
+      .withIndex("by_skill", (q: any) => q.eq("skillPackageId", args.skillPackageId))
+      .collect()) as Array<{ _id: any }>;
+    for (const row of installRows) {
+      await ctx.db.delete(row._id);
+    }
+
+    const revisionRows = (await ctx.db
+      .query("skillPackageRevisions")
+      .withIndex("by_skill", (q: any) => q.eq("skillPackageId", args.skillPackageId))
+      .collect()) as Array<{ _id: any }>;
+    for (const row of revisionRows) {
       await ctx.db.delete(row._id);
     }
 

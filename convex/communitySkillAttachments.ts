@@ -1,6 +1,5 @@
 import { internal } from "./_generated/api";
 import {
-  action,
   internalMutation,
   internalQuery,
   mutation,
@@ -8,17 +7,15 @@ import {
 } from "./_generated/server";
 import { v } from "convex/values";
 import {
-  requireCommunityChatAccess,
   requireCommunityManager,
   resolveUserIdForAuthenticatedRequest,
 } from "./communityCore";
 import {
-  buildSkillMentionToken,
   normalizeSkillString,
   type SkillPackageRow,
   mapSkillPackageReadModel,
+  readSkillMentionToken,
 } from "./skillCore";
-import { selectExplicitlyMentionedSkills } from "../shared/communitySkillRuntime";
 
 type CommunitySkillAttachmentRow = {
   _id: any;
@@ -28,18 +25,6 @@ type CommunitySkillAttachmentRow = {
   enabled: boolean;
   createdAt: number;
   updatedAt: number;
-};
-
-type RuntimeCommunitySkillInventory = {
-  community_skill_attachment_id: any;
-  skill_package_id: any;
-  name: string;
-  mention_token: string;
-  description: string | null;
-};
-
-type RuntimeSelectedCommunitySkill = RuntimeCommunitySkillInventory & {
-  instructions_md: string;
 };
 
 async function getCommunitySkillAttachmentById(
@@ -98,7 +83,6 @@ async function getCommunitySkillAttachmentReadModel(args: {
   ctx: any;
   communityId: any;
   communitySkillAttachmentId: any;
-  userId: any;
 }): Promise<any> {
   const attachment = await requireExistingCommunitySkillAttachment({
     ctx: args.ctx,
@@ -153,60 +137,6 @@ async function upsertCommunitySkillAttachmentRow(args: {
   });
 }
 
-async function resolveRuntimeCommunitySkillInventory(args: {
-  ctx: any;
-  communityId: any;
-}): Promise<RuntimeCommunitySkillInventory[]> {
-  const attachments = await listCommunitySkillAttachmentRows(args.ctx, args.communityId);
-  const resolved: RuntimeCommunitySkillInventory[] = [];
-  for (const attachment of attachments) {
-    if (!attachment.enabled) continue;
-    const skill = await getSkillPackageById(args.ctx, attachment.skillPackageId);
-    if (!skill) continue;
-    const mentionToken = buildSkillMentionToken(skill.name);
-    if (!mentionToken) continue;
-    resolved.push({
-      community_skill_attachment_id: attachment._id,
-      skill_package_id: skill._id,
-      name: skill.name,
-      mention_token: mentionToken,
-      description: skill.description ?? null,
-    });
-  }
-  return resolved;
-}
-
-async function resolveRuntimeSelectedCommunitySkills(args: {
-  ctx: any;
-  communityId: any;
-  requestedMentionTokens: string[];
-}): Promise<RuntimeSelectedCommunitySkill[]> {
-  if (args.requestedMentionTokens.length === 0) return [];
-  const attachments = await listCommunitySkillAttachmentRows(args.ctx, args.communityId);
-  const candidates: Array<{
-    mentionToken: string;
-    value: RuntimeSelectedCommunitySkill;
-  }> = [];
-  for (const attachment of attachments) {
-    if (!attachment.enabled) continue;
-    const skill = await getSkillPackageById(args.ctx, attachment.skillPackageId);
-    const mentionToken = buildSkillMentionToken(skill?.name);
-    if (!skill || !mentionToken) continue;
-    candidates.push({
-      mentionToken,
-      value: {
-        community_skill_attachment_id: attachment._id,
-        skill_package_id: skill._id,
-        name: skill.name,
-        mention_token: mentionToken,
-        description: skill.description ?? null,
-        instructions_md: skill.instructionsMd,
-      },
-    });
-  }
-  return selectExplicitlyMentionedSkills(candidates, args.requestedMentionTokens);
-}
-
 async function assertCommunitySkillMentionTokenAvailable(args: {
   ctx: any;
   communityId: any;
@@ -215,7 +145,7 @@ async function assertCommunitySkillMentionTokenAvailable(args: {
 }): Promise<void> {
   const skill = await getSkillPackageById(args.ctx, args.skillPackageId);
   if (!skill) throw new Error("skill_package_not_found");
-  const nextToken = buildSkillMentionToken(skill.name);
+  const nextToken = readSkillMentionToken(skill);
   if (!nextToken) throw new Error("skill_package_mention_token_required");
   const attachments = await listCommunitySkillAttachmentRows(args.ctx, args.communityId);
   for (const attachment of attachments) {
@@ -227,7 +157,7 @@ async function assertCommunitySkillMentionTokenAvailable(args: {
     if (!attachment.enabled) continue;
     const attachedSkill = await getSkillPackageById(args.ctx, attachment.skillPackageId);
     if (!attachedSkill) continue;
-    if (buildSkillMentionToken(attachedSkill.name) === nextToken) {
+    if (readSkillMentionToken(attachedSkill) === nextToken) {
       throw new Error("community_skill_mention_token_conflict");
     }
   }
@@ -268,57 +198,6 @@ export const getCommunitySkillAttachmentReadModelInternal = internalQuery({
       ctx,
       communityId: args.communityId,
       communitySkillAttachmentId: args.communitySkillAttachmentId,
-      userId: args.userId,
-    });
-  },
-});
-
-export const listRuntimeCommunitySkillInventoryInternal = internalQuery({
-  args: {
-    userId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    communityId: v.id("communities"),
-  },
-  handler: async (ctx, args) => {
-    const userId = await resolveUserIdForAuthenticatedRequest({
-      ctx,
-      userId: args.userId,
-      authSubject: args.authSubject ?? null,
-    });
-    await requireCommunityChatAccess({
-      ctx,
-      communityId: args.communityId,
-      userId,
-    });
-    return await resolveRuntimeCommunitySkillInventory({
-      ctx,
-      communityId: args.communityId,
-    });
-  },
-});
-
-export const listRuntimeSelectedCommunitySkillsInternal = internalQuery({
-  args: {
-    userId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    communityId: v.id("communities"),
-    requestedMentionTokens: v.array(v.string()),
-  },
-  handler: async (ctx, args) => {
-    const userId = await resolveUserIdForAuthenticatedRequest({
-      ctx,
-      userId: args.userId,
-      authSubject: args.authSubject ?? null,
-    });
-    await requireCommunityChatAccess({
-      ctx,
-      communityId: args.communityId,
-      userId,
-    });
-    return await resolveRuntimeSelectedCommunitySkills({
-      ctx,
-      communityId: args.communityId,
-      requestedMentionTokens: args.requestedMentionTokens,
     });
   },
 });
@@ -427,7 +306,6 @@ export const attachSkillPackageToCommunity = mutation({
     });
     return await getCommunitySkillAttachmentReadModel({
       ctx,
-      userId,
       communityId: args.communityId,
       communitySkillAttachmentId,
     });

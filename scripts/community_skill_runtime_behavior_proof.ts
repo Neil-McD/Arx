@@ -3,8 +3,9 @@ import assert from "node:assert/strict";
 import { buildSkillMentionToken } from "../convex/skillCore.ts";
 import {
   extractExplicitSkillMentions,
+  resolveScopedExplicitlyMentionedSkills,
   selectExplicitlyMentionedSkills,
-} from "../shared/communitySkillRuntime.ts";
+} from "../shared/runtimeSkillActivation.ts";
 
 function main() {
   assert.equal(
@@ -62,6 +63,57 @@ function main() {
     ambiguous,
     [],
     "expected ambiguous mention token matches to fail closed",
+  );
+
+  const scoped = resolveScopedExplicitlyMentionedSkills(
+    [
+      {
+        scope: "personal",
+        mentionToken: "weekly-research",
+        value: { scope: "personal", name: "Weekly Research" },
+      },
+      {
+        scope: "community",
+        mentionToken: "board-summary",
+        value: { scope: "community", name: "Board Summary" },
+      },
+    ],
+    ["board-summary", "weekly-research"],
+  );
+  assert.deepEqual(
+    scoped,
+    {
+      selected: [
+        { scope: "community", value: { scope: "community", name: "Board Summary" } },
+        { scope: "personal", value: { scope: "personal", name: "Weekly Research" } },
+      ],
+      ambiguousMentionTokens: [],
+    },
+    "expected scoped skill selection to preserve mention order",
+  );
+
+  const crossScopeAmbiguous = resolveScopedExplicitlyMentionedSkills(
+    [
+      {
+        scope: "personal",
+        mentionToken: "weekly-research",
+        value: { scope: "personal", name: "Weekly Research" },
+      },
+      {
+        scope: "community",
+        mentionToken: "weekly-research",
+        value: { scope: "community", name: "Community Weekly Research" },
+      },
+    ],
+    ["weekly-research"],
+  );
+  assert.deepEqual(
+    crossScopeAmbiguous,
+    {
+      selected: [],
+      ambiguousMentionTokens: ["weekly-research"],
+    },
+    "expected cross-scope token collisions to fail closed",
   );
 
   assert.deepEqual(

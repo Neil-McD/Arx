@@ -559,12 +559,36 @@ export default defineSchema({
   skillPackages: defineTable({
     ownerUserId: v.id("users"),
     name: v.string(),
+    mentionToken: v.optional(v.string()),
     description: v.optional(v.string()),
     instructionsMd: v.string(),
+    activeRevisionId: v.optional(v.id("skillPackageRevisions")),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
-    .index("by_owner", ["ownerUserId"]),
+    .index("by_owner", ["ownerUserId"])
+    .index("by_owner_mentionToken", ["ownerUserId", "mentionToken"]),
+
+  skillPackageRevisions: defineTable({
+    skillPackageId: v.id("skillPackages"),
+    revisionNumber: v.number(),
+    instructionsMd: v.string(),
+    createdAt: v.number(),
+    createdByUserId: v.id("users"),
+  })
+    .index("by_skill", ["skillPackageId"])
+    .index("by_skill_revisionNumber", ["skillPackageId", "revisionNumber"]),
+
+  userPlatformSkillInstalls: defineTable({
+    userId: v.id("users"),
+    skillPackageId: v.id("skillPackages"),
+    enabled: v.boolean(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_user_skill", ["userId", "skillPackageId"])
+    .index("by_skill", ["skillPackageId"]),
 
   communitySkillAttachments: defineTable({
     communityId: v.id("communities"),

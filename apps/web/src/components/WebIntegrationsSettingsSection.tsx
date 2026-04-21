@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 
+import type { CreateSkillPackageInput } from "../../../../shared/skillPackageTypes";
+import type { UserPlatformInstalledSkill } from "../../../../shared/userPlatformSkillTypes";
 import type { UserPlatformMountedApp } from "../../../../shared/userPlatformAppMountTypes";
 import { DISCOVER_APP_CATALOG } from "../lib/discoverCatalog";
 import { DiscoverCatalogLogo } from "./DiscoverCatalogLogo";
@@ -40,7 +42,34 @@ type WebIntegrationsSettingsSectionProps = {
   onUnmountUserPlatformApp: (
     userPlatformAppMountId: string,
   ) => Promise<void> | Promise<boolean> | boolean | void;
+  userPlatformSkills: UserPlatformInstalledSkill[];
+  isLoadingUserPlatformSkills: boolean;
+  userPlatformSkillError: string | null;
+  userPlatformSkillMutationError: string | null;
+  isCreatingUserPlatformSkill: boolean;
+  updatingUserPlatformSkillInstallId: string | null;
+  removingUserPlatformSkillInstallId: string | null;
+  onCreateUserPlatformSkill: (
+    input: CreateSkillPackageInput,
+  ) => Promise<void> | Promise<boolean> | boolean | void;
+  onUpdateUserPlatformSkill: (
+    userPlatformSkillInstallId: string,
+    patch: {
+      enabled?: boolean;
+    },
+  ) => Promise<void> | Promise<boolean> | boolean | void;
+  onUninstallUserPlatformSkill: (
+    userPlatformSkillInstallId: string,
+  ) => Promise<void> | Promise<boolean> | boolean | void;
 };
+
+function buildInitialSkillDraft(): CreateSkillPackageInput {
+  return {
+    name: "",
+    description: "",
+    instructions_md: "",
+  };
+}
 
 function pluralizeTools(count: number): string {
   return `${count} ${count === 1 ? "tool" : "tools"}`;
@@ -127,12 +156,26 @@ export function WebIntegrationsSettingsSection(
     onRefreshUserPlatformApp,
     onReconnectUserPlatformApp,
     onUnmountUserPlatformApp,
+    userPlatformSkills,
+    isLoadingUserPlatformSkills,
+    userPlatformSkillError,
+    userPlatformSkillMutationError,
+    isCreatingUserPlatformSkill,
+    updatingUserPlatformSkillInstallId,
+    removingUserPlatformSkillInstallId,
+    onCreateUserPlatformSkill,
+    onUpdateUserPlatformSkill,
+    onUninstallUserPlatformSkill,
   } = props;
 
   const [reconnectDraftMountId, setReconnectDraftMountId] = useState<
     string | null
   >(null);
   const [openMountMenuId, setOpenMountMenuId] = useState<string | null>(null);
+  const [isCreateSkillOpen, setIsCreateSkillOpen] = useState(false);
+  const [skillDraft, setSkillDraft] = useState<CreateSkillPackageInput>(
+    buildInitialSkillDraft,
+  );
   const [reconnectSecret, setReconnectSecret] = useState("");
   const [reconnectError, setReconnectError] = useState<string | null>(null);
 
@@ -171,6 +214,13 @@ export function WebIntegrationsSettingsSection(
       document.removeEventListener("pointerdown", handlePointerDown);
     };
   }, [openMountMenuId]);
+
+  const handleCreatePersonalSkill = async () => {
+    const ok = await onCreateUserPlatformSkill(skillDraft);
+    if (!ok) return;
+    setSkillDraft(buildInitialSkillDraft());
+    setIsCreateSkillOpen(false);
+  };
 
   return (
     <>
@@ -422,13 +472,219 @@ export function WebIntegrationsSettingsSection(
           My skills
         </div>
         <div className="settings-section-desc">
-          Personal reusable skills will live here once they are wired at the global
-          layer.
+          Personal reusable skills become part of your baseline runtime guidance
+          and stay available across communities when you explicitly mention
+          them.
         </div>
-        <div className="model-note">
-          No personal skills yet. Community skills still stay scoped to the active
-          collective.
-        </div>
+        {!session ? (
+          <div className="model-note">
+            Sign in to create personal skills at the platform layer.
+          </div>
+        ) : (
+          <>
+            <div className="agent-capability-toolbar">
+              <button
+                type="button"
+                onClick={() => setIsCreateSkillOpen((prev) => !prev)}
+                disabled={isCreatingUserPlatformSkill}
+              >
+                {isCreateSkillOpen ? "Close" : "Create skill"}
+              </button>
+            </div>
+
+            {isCreateSkillOpen ? (
+              <div className="agent-capability-card community-skill-create-card">
+                <div className="agent-capability-card-header">
+                  <div className="agent-canvas-target-kicker">
+                    Create personal skill package
+                  </div>
+                </div>
+
+                <label className="agent-capability-field">
+                  <span className="agent-capability-field-label">Skill name</span>
+                  <input
+                    className="agent-editor-inline-label-input"
+                    value={skillDraft.name}
+                    onChange={(event) =>
+                      setSkillDraft((prev) => ({
+                        ...prev,
+                        name: event.target.value,
+                      }))
+                    }
+                    placeholder="Weekly research"
+                  />
+                </label>
+
+                <label className="agent-capability-field">
+                  <span className="agent-capability-field-label">
+                    Optional description
+                  </span>
+                  <textarea
+                    className="agent-editor-inline-prompt-input community-skill-description-input"
+                    rows={3}
+                    value={skillDraft.description ?? ""}
+                    onChange={(event) =>
+                      setSkillDraft((prev) => ({
+                        ...prev,
+                        description: event.target.value,
+                      }))
+                    }
+                    placeholder="What this skill should help you do."
+                  />
+                </label>
+
+                <label className="agent-capability-field">
+                  <span className="agent-capability-field-label">
+                    Skill instructions
+                  </span>
+                  <textarea
+                    className="agent-editor-inline-prompt-input community-skill-instructions-input"
+                    rows={10}
+                    value={skillDraft.instructions_md}
+                    onChange={(event) =>
+                      setSkillDraft((prev) => ({
+                        ...prev,
+                        instructions_md: event.target.value,
+                      }))
+                    }
+                    placeholder={`Write the reusable skill instructions here.\n\nUse this skill when...\nSteps:\n1. ...\n2. ...`}
+                  />
+                </label>
+
+                <div className="agent-capability-toolbar">
+                  <div className="model-note">
+                    Personal skills are applied only when you explicitly mention
+                    them, like <code>$weekly-research</code>.
+                  </div>
+                  <div className="agent-capability-toolbar-actions">
+                    <button
+                      type="button"
+                      onClick={() => setIsCreateSkillOpen(false)}
+                      disabled={isCreatingUserPlatformSkill}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      className="platform-save-button is-dirty"
+                      onClick={() => void handleCreatePersonalSkill()}
+                      disabled={isCreatingUserPlatformSkill}
+                    >
+                      {isCreatingUserPlatformSkill ? "Creating…" : "Create skill"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
+            {userPlatformSkillError ? (
+              <div className="auth-error">{userPlatformSkillError}</div>
+            ) : null}
+            {userPlatformSkillMutationError ? (
+              <div className="auth-error">{userPlatformSkillMutationError}</div>
+            ) : null}
+
+            {isLoadingUserPlatformSkills ? (
+              <div className="model-note">Loading your skills…</div>
+            ) : userPlatformSkills.length === 0 ? (
+              <div className="model-note">
+                No personal skills installed yet. Creating one adds it directly
+                to your baseline layer.
+              </div>
+            ) : (
+              <div className="agent-capability-list" role="list" aria-label="Personal skills">
+                {userPlatformSkills.map((install) => {
+                  const isUpdating =
+                    updatingUserPlatformSkillInstallId === install.id;
+                  const isRemoving =
+                    removingUserPlatformSkillInstallId === install.id;
+                  return (
+                    <div key={install.id} className="agent-capability-card" role="listitem">
+                      <div className="agent-capability-card-header">
+                        <div>
+                          <div className="agent-capability-card-title-row">
+                            <div className="settings-section-subtitle">
+                              {install.skill.name}
+                            </div>
+                            <span
+                              className={`community-app-status-badge${
+                                install.enabled ? "" : " is-muted"
+                              }`}
+                            >
+                              {install.enabled ? "Enabled" : "Disabled"}
+                            </span>
+                          </div>
+                          <div className="model-note">
+                            ${install.skill.mentionToken}
+                            {install.skill.description
+                              ? ` · ${install.skill.description}`
+                              : ""}
+                          </div>
+                        </div>
+                        <div className="agent-capability-toolbar-actions">
+                          <label
+                            className={`members-switch${
+                              isUpdating || isRemoving ? " is-disabled" : ""
+                            }`}
+                            title={
+                              install.enabled ? "Disable skill" : "Enable skill"
+                            }
+                          >
+                            <input
+                              type="checkbox"
+                              checked={install.enabled}
+                              disabled={isUpdating || isRemoving}
+                              aria-label={`${
+                                install.enabled ? "Disable" : "Enable"
+                              } ${install.skill.name}`}
+                              onChange={() =>
+                                void onUpdateUserPlatformSkill(install.id, {
+                                  enabled: !install.enabled,
+                                })
+                              }
+                            />
+                            <span className="members-switch-track">
+                              <span className="members-switch-thumb" />
+                            </span>
+                          </label>
+                          <button
+                            type="button"
+                            className="danger"
+                            disabled={isUpdating || isRemoving}
+                            onClick={() =>
+                              void onUninstallUserPlatformSkill(install.id)
+                            }
+                          >
+                            {isRemoving ? "Removing…" : "Remove"}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="agent-capability-metadata">
+                        <div className="agent-capability-metadata-item">
+                          <span className="agent-capability-metadata-label">
+                            Scope
+                          </span>
+                          <span className="agent-capability-metadata-value">
+                            Personal baseline
+                          </span>
+                        </div>
+                        <div className="agent-capability-metadata-item">
+                          <span className="agent-capability-metadata-label">
+                            Invocation
+                          </span>
+                          <span className="agent-capability-metadata-value">
+                            Explicit <code>${install.skill.mentionToken}</code>
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </>
+        )}
       </div>
     </>
   );

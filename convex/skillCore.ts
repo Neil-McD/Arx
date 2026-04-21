@@ -2,10 +2,21 @@ export type SkillPackageRow = {
   _id: any;
   ownerUserId: any;
   name: string;
+  mentionToken?: string;
   description?: string;
   instructionsMd: string;
+  activeRevisionId?: any;
   createdAt: number;
   updatedAt: number;
+};
+
+export type SkillPackageRevisionRow = {
+  _id: any;
+  skillPackageId: any;
+  revisionNumber: number;
+  instructionsMd: string;
+  createdAt: number;
+  createdByUserId: any;
 };
 
 const MAX_SKILL_NAME_LENGTH = 120;
@@ -32,6 +43,10 @@ export function buildSkillMentionToken(value: unknown, fallback = "skill"): stri
   return base.slice(0, MAX_SKILL_MENTION_TOKEN_LENGTH);
 }
 
+export function normalizeSkillMentionToken(value: unknown, fallback = "skill"): string {
+  return buildSkillMentionToken(value, fallback);
+}
+
 export function normalizeSkillPackageDescription(value: unknown): string {
   return normalizeSkillString(value, MAX_SKILL_DESCRIPTION_LENGTH);
 }
@@ -40,11 +55,43 @@ export function normalizeSkillInstructionsMd(value: unknown): string {
   return normalizeSkillString(value, MAX_SKILL_BODY_LENGTH);
 }
 
+export function readSkillMentionToken(skill: Pick<SkillPackageRow, "mentionToken" | "name">): string {
+  return normalizeSkillMentionToken(skill.mentionToken || skill.name);
+}
+
+export async function getSkillPackageActiveRevision(
+  ctx: any,
+  skill: SkillPackageRow | null | undefined,
+): Promise<SkillPackageRevisionRow | null> {
+  if (!skill?.activeRevisionId) return null;
+  return ((await ctx.db.get(skill.activeRevisionId)) as SkillPackageRevisionRow | null) ?? null;
+}
+
+export async function getSkillPackageActiveInstructionsMd(
+  ctx: any,
+  skill: SkillPackageRow | null | undefined,
+): Promise<{
+  instructionsMd: string;
+  revisionId: any | null;
+}> {
+  const revision = await getSkillPackageActiveRevision(ctx, skill);
+  if (revision?.instructionsMd) {
+    return {
+      instructionsMd: revision.instructionsMd,
+      revisionId: revision._id,
+    };
+  }
+  return {
+    instructionsMd: normalizeSkillInstructionsMd(skill?.instructionsMd),
+    revisionId: null,
+  };
+}
+
 export function mapSkillPackageReadModel(skill: SkillPackageRow) {
   return {
     id: String(skill._id),
     name: skill.name,
-    mentionToken: buildSkillMentionToken(skill.name),
+    mentionToken: readSkillMentionToken(skill),
     description: skill.description ?? null,
   };
 }

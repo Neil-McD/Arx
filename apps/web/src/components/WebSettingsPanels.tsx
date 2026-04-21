@@ -5,6 +5,8 @@ import type { BuilderBillingStatus } from "../../../../shared/builderBillingStat
 import type { WorkspaceCreditBalance } from "../../../../shared/workspaceCreditsGateway";
 import type { PendingPurchaseClaim } from "../../../../shared/pay_first";
 import type { UserPlatformMountedApp } from "../../../../shared/userPlatformAppMountTypes";
+import type { CreateSkillPackageInput } from "../../../../shared/skillPackageTypes";
+import type { UserPlatformInstalledSkill } from "../../../../shared/userPlatformSkillTypes";
 import type { UseWebProviderConnectionUiControllerResult } from "../controllers/useWebProviderConnectionUiController";
 import type { useWebProfileSettingsUiController } from "../controllers/useWebProfileSettingsUiController";
 import type { useWebPersonalMemoryUiController } from "../controllers/useWebPersonalMemoryUiController";
@@ -110,6 +112,13 @@ export type WebSettingsPanelsProps = {
     refreshingUserPlatformAppMountId: string | null;
     reconnectingUserPlatformAppMountId: string | null;
     removingUserPlatformAppMountId: string | null;
+    userPlatformSkills: UserPlatformInstalledSkill[];
+    isLoadingUserPlatformSkills: boolean;
+    userPlatformSkillError: string | null;
+    userPlatformSkillMutationError: string | null;
+    isCreatingUserPlatformSkill: boolean;
+    updatingUserPlatformSkillInstallId: string | null;
+    removingUserPlatformSkillInstallId: string | null;
     onUpdateUserPlatformAppMount: (
       userPlatformAppMountId: string,
       patch: {
@@ -126,6 +135,18 @@ export type WebSettingsPanelsProps = {
     ) => Promise<void> | Promise<boolean> | boolean | void;
     onUnmountUserPlatformApp: (
       userPlatformAppMountId: string,
+    ) => Promise<void> | Promise<boolean> | boolean | void;
+    onCreateUserPlatformSkill: (
+      input: CreateSkillPackageInput,
+    ) => Promise<void> | Promise<boolean> | boolean | void;
+    onUpdateUserPlatformSkill: (
+      userPlatformSkillInstallId: string,
+      patch: {
+        enabled?: boolean;
+      },
+    ) => Promise<void> | Promise<boolean> | boolean | void;
+    onUninstallUserPlatformSkill: (
+      userPlatformSkillInstallId: string,
     ) => Promise<void> | Promise<boolean> | boolean | void;
   };
   appearance: {
@@ -264,10 +285,22 @@ export function WebSettingsPanels(props: WebSettingsPanelsProps) {
     reconnectingUserPlatformAppMountId:
       integrations.reconnectingUserPlatformAppMountId,
     removingUserPlatformAppMountId: integrations.removingUserPlatformAppMountId,
+    userPlatformSkills: integrations.userPlatformSkills,
+    isLoadingUserPlatformSkills: integrations.isLoadingUserPlatformSkills,
+    userPlatformSkillError: integrations.userPlatformSkillError,
+    userPlatformSkillMutationError: integrations.userPlatformSkillMutationError,
+    isCreatingUserPlatformSkill: integrations.isCreatingUserPlatformSkill,
+    updatingUserPlatformSkillInstallId:
+      integrations.updatingUserPlatformSkillInstallId,
+    removingUserPlatformSkillInstallId:
+      integrations.removingUserPlatformSkillInstallId,
     onUpdateUserPlatformAppMount: integrations.onUpdateUserPlatformAppMount,
     onRefreshUserPlatformApp: integrations.onRefreshUserPlatformApp,
     onReconnectUserPlatformApp: integrations.onReconnectUserPlatformApp,
     onUnmountUserPlatformApp: integrations.onUnmountUserPlatformApp,
+    onCreateUserPlatformSkill: integrations.onCreateUserPlatformSkill,
+    onUpdateUserPlatformSkill: integrations.onUpdateUserPlatformSkill,
+    onUninstallUserPlatformSkill: integrations.onUninstallUserPlatformSkill,
   };
 
   return (
