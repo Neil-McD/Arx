@@ -180,15 +180,13 @@ export function useCommunityAdminController<
         userId: profileUserId,
       });
       if (!row) return;
+      await preloadImageUrls([row.avatar_url ?? null], { maxUrls: 1, timeoutMs: 1200 });
       current.setCloudProfile(row);
       current.setProfilesByUserId((prev) => ({
         ...prev,
         [row.user_id]: { user_id: row.user_id, display_name: row.display_name, avatar_url: row.avatar_url } as UserProfileT,
       }));
       current.applyLoadedProfileToLocal?.(row);
-      void preloadImageUrls([row.avatar_url ?? null], { maxUrls: 1, timeoutMs: 1200 }).catch(() => {
-        // Ignore avatar warmup failures; profile state is already applied.
-      });
     } catch {
       // ignore
     }

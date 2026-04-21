@@ -12,6 +12,7 @@ import {
   resolveCloudPublicFunnel,
   startCloudPublicFunnelCheckout,
 } from "../../../../shared/cloudPublicFunnelGateway";
+import { preloadImageUrls } from "../../../../shared/preloadImageUrls";
 import { applyShellVariantToPublicPath, readShellVariantFromPathname } from "../../../../shared/webAppRouteState";
 import type { AuthSession } from "../auth";
 import { deriveCommunityJoinMode } from "../communityJoinPolicy";
@@ -22,6 +23,13 @@ type UseWebPublicFunnelActionsArgs<
     slug: string;
     visibility: string;
     entry_policy?: unknown;
+    avatar_url?: string | null;
+    banner_url?: string | null;
+    online_faces?: Array<{ avatar_url?: string | null } | null> | null;
+    funnel?: {
+      hero_media_kind?: unknown;
+      hero_media_url?: string | null;
+    } | null;
   },
   PublicPlanT extends { billing_period: CommunityBillingPeriod },
   CommunityAccessT extends CommunityAccessRow,
@@ -61,6 +69,13 @@ export function useWebPublicFunnelActions<
     slug: string;
     visibility: string;
     entry_policy?: unknown;
+    avatar_url?: string | null;
+    banner_url?: string | null;
+    online_faces?: Array<{ avatar_url?: string | null } | null> | null;
+    funnel?: {
+      hero_media_kind?: unknown;
+      hero_media_url?: string | null;
+    } | null;
   },
   PublicPlanT extends { billing_period: CommunityBillingPeriod },
   CommunityAccessT extends CommunityAccessRow,
@@ -365,6 +380,16 @@ export function useWebPublicFunnelActions<
           communitySlug: requestedSlug,
         });
         if (!payload?.community?.slug) throw new Error("Community not found.");
+
+        const revealImageUrls = [
+          payload.community.avatar_url ?? null,
+          payload.community.banner_url ?? null,
+          ...((payload.community.online_faces ?? []).map((face) => face?.avatar_url ?? null)),
+          (payload.community.funnel?.hero_media_kind ?? null) === "image"
+            ? (payload.community.funnel?.hero_media_url ?? null)
+            : null,
+        ];
+        await preloadImageUrls(revealImageUrls, { maxUrls: 8, timeoutMs: 1500 });
 
         const resolvedSlug = payload.community.slug;
         current.setPublicCommunity({
