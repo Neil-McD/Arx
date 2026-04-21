@@ -7,7 +7,6 @@ import {
   type ChangeEvent,
   type ReactNode,
   type SetStateAction,
-  type TouchEvent,
 } from "react";
 import "highlight.js/styles/github-dark.css";
 import {
@@ -1639,7 +1638,6 @@ export default function App() {
   const [isLoadingCommunityAnalytics, setIsLoadingCommunityAnalytics] = useState(false);
   const [communityAnalyticsError, setCommunityAnalyticsError] = useState<string | null>(null);
 
-  const mobileShellSwipeStartRef = useRef<{ x: number; y: number } | null>(null);
   const communitySettingsUi = useWebCommunitySettingsUiController();
   const {
     communitySettingsName,
@@ -5193,16 +5191,21 @@ export default function App() {
       setSettingsPage("integrations");
     };
     const {
-      openMobileCommunitySurface,
       handleSelectMobileMode,
       openMobileAgentSettings,
       handleExitMobileSettings,
       openMobileCreateCommunity,
+      openMobileDrawer,
+      handleMobileShellTouchStart,
+      handleMobileShellTouchEnd,
+      handleMobileShellTouchCancel,
     } = useWebMobileShellController({
       activePage,
       activeView,
       activeCommunitySlug: String(activeCommunity?.slug ?? "").trim() || null,
       selectedActiveCommunitySlug,
+      mobileShellMode,
+      hasSelectedCommunity,
       mobileOverlay,
       showMobileShell,
       showMobileSettingsShell,
@@ -5760,61 +5763,6 @@ export default function App() {
       setAppTheme,
     },
   };
-    const mobileAgentDrawerSwipeEdgePx = 44;
-    const openMobileDrawer = useCallback(() => {
-      if (mobileShellMode === "agent") {
-        setMobileOverlay("agent");
-        return;
-      }
-      setMobileOverlay(hasSelectedCommunity ? "community" : "community_selector");
-    }, [hasSelectedCommunity, mobileShellMode]);
-    const handleMobileShellTouchStart = useCallback((event: TouchEvent<HTMLDivElement>) => {
-      if (!showMobileShell || mobileOverlay || event.touches.length !== 1) {
-        mobileShellSwipeStartRef.current = null;
-        return;
-      }
-      const target = event.target;
-      if (
-        target instanceof Element &&
-        target.closest("input, textarea, button, a, [role='button'], [contenteditable='true'], .mobile-drawer")
-      ) {
-        mobileShellSwipeStartRef.current = null;
-        return;
-      }
-      const touch = event.touches[0];
-      mobileShellSwipeStartRef.current = { x: touch.clientX, y: touch.clientY };
-    }, [mobileOverlay, showMobileShell]);
-  const handleMobileShellTouchEnd = useCallback((event: TouchEvent<HTMLDivElement>) => {
-      const start = mobileShellSwipeStartRef.current;
-      mobileShellSwipeStartRef.current = null;
-      if (!start || !showMobileShell || mobileOverlay || event.changedTouches.length !== 1) return;
-      const touch = event.changedTouches[0];
-      const dx = touch.clientX - start.x;
-      const dy = touch.clientY - start.y;
-      if (Math.abs(dx) < 72 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
-      if (dx < 0) {
-        if (activePage === "workspace") {
-          openMobileCommunitySurface();
-        }
-        return;
-      }
-      if (activePage === "workspace") {
-        if (start.x <= mobileAgentDrawerSwipeEdgePx) {
-          openMobileDrawer();
-        }
-        return;
-      }
-      if (activePage === "community" || activePage === "discover") {
-        handleTopbarBackToWorkspace();
-      }
-    }, [
-      activePage,
-      handleTopbarBackToWorkspace,
-      mobileOverlay,
-      openMobileDrawer,
-      openMobileCommunitySurface,
-      showMobileShell,
-    ]);
   const activeCommunityAttentionSummary = activeCommunityId
     ? (attentionByCommunityId[activeCommunityId] ?? { chat: false, ai_feed: false, resources: false })
     : { chat: false, ai_feed: false, resources: false };
@@ -6232,9 +6180,9 @@ export default function App() {
     showMobilePublicFunnel,
     mobileOverlay,
     showMobileShell,
-    mobileShellSwipeStartRef,
     handleMobileShellTouchStart,
     handleMobileShellTouchEnd,
+    handleMobileShellTouchCancel,
     mobileShellMode,
     mobileSecondaryMode,
     showMobileSettingsIndex,

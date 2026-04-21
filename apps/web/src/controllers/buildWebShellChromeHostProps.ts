@@ -23,9 +23,9 @@ export function buildWebShellChromeHostProps(params: {
   showMobilePublicFunnel: boolean;
   mobileOverlay: MobileOverlay;
   showMobileShell: boolean;
-  mobileShellSwipeStartRef: { current: { x: number; y: number } | null };
   handleMobileShellTouchStart: TouchEventHandler<HTMLDivElement>;
   handleMobileShellTouchEnd: TouchEventHandler<HTMLDivElement>;
+  handleMobileShellTouchCancel: TouchEventHandler<HTMLDivElement>;
   mobileShellMode: WebShellChromeHostProps["mobileTopBarProps"]["mode"];
   mobileSecondaryMode: WebShellChromeHostProps["mobileTopBarProps"]["secondaryMode"];
   showMobileSettingsIndex: boolean;
@@ -104,9 +104,7 @@ export function buildWebShellChromeHostProps(params: {
       ? params.handleMobileShellTouchEnd
       : undefined,
     onTouchCancel: params.showMobileShell
-      ? () => {
-          params.mobileShellSwipeStartRef.current = null;
-        }
+      ? params.handleMobileShellTouchCancel
       : undefined,
     mobileTopBarProps: {
       mode: params.showMobileSettingsShell ? "agent" : params.mobileShellMode,
