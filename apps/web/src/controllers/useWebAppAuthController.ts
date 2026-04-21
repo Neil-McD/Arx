@@ -1,7 +1,17 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type Dispatch,
+  type MutableRefObject,
+  type SetStateAction,
+} from "react";
 import {
   AUTH_SIGNED_OUT_INTENT_KEY,
   AUTH_SIGNED_OUT_TAB_INTENT_KEY,
+  bootstrapSession,
   clearAuthAutomaticReauthAttempt,
   clearAuthContinuityHint,
   clearAuthFlowPending,
@@ -12,11 +22,12 @@ import {
   fetchWithPublicShared,
   hasRecentAuthAutomaticReauthAttempt,
   hasRecentAuthContinuityHint,
-  hasRecentAuthFlowReturned,
   hasRecentAuthFlowPending,
   markAuthAutomaticReauthAttempt,
   markAuthContinuityHint,
   markAuthFlowPending,
+  logoutAuthSessionRemote,
+  refreshAuthSessionResult,
   refreshAuthSessionWithLockResult,
   type AuthSession,
   type AuthSessionRefreshResult,
@@ -26,11 +37,9 @@ import {
   parsePendingAuthIntentInput,
   readAuthResumeState,
   storeAuthResumeState,
-  updateAuthResumeStatePhase,
 } from "../../../../shared/authResumeState";
 import { clearOAuthCallbackParamsFromLocation } from "../../../../shared/cloudPkce";
 import { buildLoginTrampolinePath } from "../auth/loginTrampoline";
-import { isWorkOsLoginRequiredError, useWorkOsRuntime } from "../auth/workosRuntime";
 import {
   emitWorkspaceEvent,
   formatWorkspaceInstrumentationError,
@@ -129,12 +138,6 @@ function readAuthCallbackErrorFromLocation(): string | null {
   }
 }
 
-function errorToMessage(error: unknown, fallback: string): string {
-  if (typeof error === "string" && error.trim()) return error.trim();
-  if (error instanceof Error && error.message.trim()) return error.message.trim();
-  return fallback;
-}
-
 const AUTH_SESSION_EXPIRED_MESSAGE = "Session expired. Please sign in again.";
 const ENSURED_SESSION_CACHE_TTL_MS = 15_000;
 
@@ -153,7 +156,6 @@ export function useWebAppAuthController(
   const didJustSignInRef = useRef(false);
   const authSessionEpochRef = useRef(0);
   const authBootstrapCompleteRef = useRef(false);
-  const directBootstrapStateRef = useRef<string>("");
   const ensuredSessionCacheRef = useRef<{
     key: string;
     session: AuthSession;
@@ -163,8 +165,6 @@ export function useWebAppAuthController(
     key: string;
     promise: Promise<AuthSession | null>;
   } | null>(null);
-  const workos = useWorkOsRuntime();
-  const currentPublicRouteKind = readPublicRouteFromLocation().kind;
 
   const onSessionLostRef = useLatestRef(params.onSessionLost);
   const onSessionMissingAfterBootstrapRef = useLatestRef(params.onSessionMissingAfterBootstrap);
@@ -187,11 +187,6 @@ export function useWebAppAuthController(
     authBootstrapCompleteRef.current = true;
     setIsAuthBootstrapComplete(true);
   }, []);
-
-  useEffect(() => {
-    if (workos.isEnabled) return;
-    markAuthBootstrapComplete();
-  }, [markAuthBootstrapComplete, workos.isEnabled]);
 
   const clearSessionLocally = useCallback(async (): Promise<void> => {
     sessionRef.current = null;
@@ -226,24 +221,7 @@ export function useWebAppAuthController(
     const epochAtRefreshStart = authSessionEpochRef.current;
     return await refreshAuthSessionWithLockResult({
       inFlightRef: refreshResultInFlightRef,
-      refreshSession: async () => {
-        try {
-          const refreshed = await workos.readSession({ forceRefresh: true });
-          if (!refreshed) {
-            return { status: "terminal_failure", reason: "auth_session_missing" };
-          }
-          return { status: "refreshed", session: refreshed };
-        } catch (error) {
-          console.warn("WorkOS session refresh failed", error);
-          if (isWorkOsLoginRequiredError(error)) {
-            return { status: "terminal_failure", reason: "auth_session_invalid" };
-          }
-          return {
-            status: "transient_failure",
-            reason: errorToMessage(error, "workos_refresh_failed"),
-          };
-        }
-      },
+      refreshSession: refreshAuthSessionResult,
       onRefreshed: (refreshed) => {
         if (authSessionEpochRef.current !== epochAtRefreshStart) return;
         setAuthError(null);
@@ -251,7 +229,7 @@ export function useWebAppAuthController(
         sessionRef.current = refreshed;
       },
     });
-  }, [workos]);
+  }, []);
 
   const refreshAuthSessionLocked = useCallback(async (): Promise<AuthSession | null> => {
     const refreshed = await refreshAuthSessionLockedResult();
@@ -327,104 +305,16 @@ export function useWebAppAuthController(
     }
   }, [adoptAuthSession, expireAuthSessionLocally, refreshAuthSessionLockedResult, session]);
 
-  const recoverSessionFromWorkOs = useCallback(async (params: {
-    phase: string;
-    forceRefresh?: boolean;
-  }): Promise<AuthSession | null> => {
-    emitWorkspaceEvent({
-      scope: "lifecycle",
-      name: "auth_recover_session",
-      status: "start",
-      detail: {
-        phase: params.phase,
-        forceRefresh: Boolean(params.forceRefresh),
-        workosUserPresent: Boolean(workos.user),
-      },
-    });
-    try {
-      const candidateSession = await workos.readSession({ forceRefresh: params.forceRefresh });
-      if (!candidateSession) {
-        emitWorkspaceEvent({
-          scope: "lifecycle",
-          name: "auth_recover_session",
-          status: "skip",
-          detail: {
-            phase: params.phase,
-            forceRefresh: Boolean(params.forceRefresh),
-            reason: "workos_session_missing",
-            workosUserPresent: Boolean(workos.user),
-          },
-        });
-        return null;
-      }
-
-      const verifiedSession = await ensureUsableAuthSession(candidateSession);
-      if (!verifiedSession) {
-        emitWorkspaceEvent({
-          scope: "lifecycle",
-          name: "auth_recover_session",
-          status: "failure",
-          detail: {
-            phase: params.phase,
-            forceRefresh: Boolean(params.forceRefresh),
-            reason: "verified_session_missing",
-            workosUserPresent: Boolean(workos.user),
-          },
-        });
-        return null;
-      }
-
-      adoptAuthSession(verifiedSession);
-      setAuthError(null);
-      emitWorkspaceEvent({
-        scope: "lifecycle",
-        name: "auth_recover_session",
-        status: "success",
-        detail: {
-          phase: params.phase,
-          forceRefresh: Boolean(params.forceRefresh),
-          workosUserPresent: Boolean(workos.user),
-          userId: String(verifiedSession.user?.id ?? "").trim() || null,
-        },
-      });
-      return verifiedSession;
-    } catch (error) {
-      emitWorkspaceEvent({
-        scope: "lifecycle",
-        name: "auth_recover_session",
-        status: "failure",
-        detail: {
-          phase: params.phase,
-          forceRefresh: Boolean(params.forceRefresh),
-          workosUserPresent: Boolean(workos.user),
-        },
-        error: formatWorkspaceInstrumentationError(error),
-      });
-      return null;
-    }
-  }, [adoptAuthSession, ensureUsableAuthSession, workos]);
-
   const beginSignInFlow = useCallback(async (): Promise<boolean> => {
     setAuthError(null);
     clearAuthSignedOutIntentMarker();
     clearAuthFlowReturned();
     const returnTo = readCurrentAuthReturnTo();
-    const loginPath = buildLoginTrampolinePath(returnTo);
     markAuthFlowPending();
     storeAuthResumeState({ returnTo, phase: "awaiting_auth" });
-    try {
-      try {
-        await workos.signIn({ state: { returnTo } });
-        return true;
-      } catch {
-        window.location.assign(loginPath);
-        return true;
-      }
-    } catch (error) {
-      setAuthError(errorToMessage(error, "Sign-in failed."));
-      return false;
-    }
-  }, [workos]);
+    window.location.assign(buildLoginTrampolinePath(returnTo));
+    return true;
+  }, []);
 
   const attemptAutomaticReauth = useCallback(async (phase: string): Promise<boolean> => {
     const isProtectedAppRoute = readPublicRouteFromLocation().kind === "app";
@@ -433,7 +323,6 @@ export function useWebAppAuthController(
     const hasSignedOutIntent = hasAuthSignedOutIntentMarker();
     const hasPendingFlow = hasRecentAuthFlowPending();
     if (
-      !workos.isEnabled ||
       isAuthSigningOut ||
       !isProtectedAppRoute ||
       !hasContinuityHint ||
@@ -470,33 +359,18 @@ export function useWebAppAuthController(
         hasContinuityHint,
       },
     });
-    const started = await beginSignInFlow();
-    if (started) {
-      emitWorkspaceEvent({
-        scope: "lifecycle",
-        name: "auth_automatic_reauth",
-        status: "success",
-        detail: {
-          phase,
-          result: "redirect_started",
-        },
-      });
-      return true;
-    }
-
-    clearAuthAutomaticReauthAttempt();
-    setIsAutomaticReauthPending(false);
+    await beginSignInFlow();
     emitWorkspaceEvent({
       scope: "lifecycle",
       name: "auth_automatic_reauth",
-      status: "failure",
+      status: "success",
       detail: {
         phase,
-        reason: "sign_in_start_failed",
+        result: "redirect_started",
       },
     });
-    return false;
-  }, [beginSignInFlow, isAuthSigningOut, workos.isEnabled]);
+    return true;
+  }, [beginSignInFlow, isAuthSigningOut]);
 
   const requireSignIn = useCallback((intentInput?: unknown) => {
     setAuthError(null);
@@ -509,25 +383,8 @@ export function useWebAppAuthController(
       });
     }
     if (session) return;
-    void (async () => {
-      if (workos.user) {
-        const existingResumeIntent = readAuthResumeState()?.intent;
-        const recoveredSession = await recoverSessionFromWorkOs({
-          phase: "require_sign_in",
-          forceRefresh: true,
-        });
-        if (recoveredSession) {
-          clearAuthSignedOutIntentMarker();
-          clearAuthFlowPending();
-          if (intent || existingResumeIntent) {
-            didJustSignInRef.current = true;
-          }
-          return;
-        }
-      }
-      await beginSignInFlow();
-    })();
-  }, [beginSignInFlow, recoverSessionFromWorkOs, session, workos]);
+    void beginSignInFlow();
+  }, [beginSignInFlow, session]);
 
   const handleSignOut = useCallback(async (): Promise<void> => {
     clearAuthFlowPending();
@@ -540,19 +397,11 @@ export function useWebAppAuthController(
     try {
       await onBeforeSignOutRef.current?.();
       await clearSessionLocally();
-    } catch (error) {
+      await logoutAuthSessionRemote({ scope: "local" });
+    } finally {
       setIsAuthSigningOut(false);
-      throw error;
     }
-    void workos
-      .signOut({ returnTo: window.location.origin })
-      .then(() => {})
-      .catch((error) => {
-        if (!isWorkOsLoginRequiredError(error)) {
-          console.warn("WorkOS sign-out failed", error);
-        }
-      });
-  }, [clearSessionLocally, onBeforeSignOutRef, workos]);
+  }, [clearSessionLocally, onBeforeSignOutRef]);
 
   const fetchWithPublic = useCallback(async (url: string, init: RequestInit = {}): Promise<Response> => {
     return await fetchWithPublicShared(url, init);
@@ -598,21 +447,6 @@ export function useWebAppAuthController(
     },
     onSessionMissing: () => {
       if (!authBootstrapCompleteRef.current) return;
-      markAuthBootstrapComplete();
-      const hasWorkOsUser = Boolean(workos.user);
-      if (!isAuthSigningOut && hasWorkOsUser) {
-        emitWorkspaceEvent({
-          scope: "lifecycle",
-          name: "auth_session_missing_after_bootstrap",
-          status: "skip",
-          detail: {
-            reason: "recovering_signed_in",
-            workosUserPresent: true,
-            isAuthSigningOut: false,
-          },
-        });
-        return;
-      }
       void (async () => {
         const startedAutomaticReauth = await attemptAutomaticReauth("session_missing_after_bootstrap");
         if (startedAutomaticReauth) {
@@ -622,7 +456,6 @@ export function useWebAppAuthController(
             status: "skip",
             detail: {
               reason: "automatic_reauth_started",
-              workosUserPresent: hasWorkOsUser,
               isAuthSigningOut,
             },
           });
@@ -634,7 +467,6 @@ export function useWebAppAuthController(
           status: "start",
           detail: {
             reason: isAuthSigningOut ? "signing_out" : "signed_out",
-            workosUserPresent: hasWorkOsUser,
             isAuthSigningOut,
           },
         });
@@ -648,7 +480,6 @@ export function useWebAppAuthController(
           status: "success",
           detail: {
             reason: isAuthSigningOut ? "signing_out" : "signed_out",
-            workosUserPresent: hasWorkOsUser,
             isAuthSigningOut,
           },
         });
@@ -664,86 +495,69 @@ export function useWebAppAuthController(
   });
 
   useEffect(() => {
-    if (!workos.isEnabled) return;
-    if (workos.isLoading) return;
-
-    const userId = String(workos.user?.id ?? "").trim() || "signed_out";
-    const stateKey = `ready:${userId}:${currentPublicRouteKind}`;
-    if (directBootstrapStateRef.current === stateKey) return;
-    directBootstrapStateRef.current = stateKey;
-
     let cancelled = false;
 
     void (async () => {
-      const hasSignedOutIntent = hasAuthSignedOutIntentMarker();
-
       const hadPendingAuthFlow = hasRecentAuthFlowPending();
-      const hadRecentAuthReturn = hasRecentAuthFlowReturned();
-      if (hasSignedOutIntent) {
-        if (workos.user) {
-          clearAuthSignedOutIntentMarker();
-        } else {
-          if (cancelled) return;
-          markAuthBootstrapComplete();
-          clearAuthFlowPending();
-          clearAuthFlowReturned();
-          return;
-        }
-      }
-
-      const verifiedSession = await recoverSessionFromWorkOs({
-        phase: "bootstrap",
-      });
-      if (cancelled) return;
-
-      if (verifiedSession) {
-        markAuthBootstrapComplete();
-        clearAuthSignedOutIntentMarker();
-        if (hadPendingAuthFlow) {
-          didJustSignInRef.current = true;
-        }
-        adoptAuthSession(verifiedSession);
-
-        if (hadPendingAuthFlow) {
-          const authResumeState = readAuthResumeState();
-          const pendingReturnTo = String(authResumeState?.return_to ?? "").trim();
-          if (!authResumeState?.intent) {
-            clearAuthResumeState();
-          }
-          const nextPath = pendingReturnTo
-            ? pendingReturnTo.startsWith("/") || pendingReturnTo.startsWith("#")
-              ? pendingReturnTo
-              : "/workspace"
-            : null;
-          onApplyPostAuthPathRef.current(nextPath);
-          clearAuthFlowPending();
-          clearAuthFlowReturned();
-        }
-        return;
-      }
-
-      if (sessionRef.current) {
-        await clearSessionLocally();
+      try {
+        const currentSession = await bootstrapSession();
         if (cancelled) return;
-      }
-
-      const startedAutomaticReauth = await attemptAutomaticReauth("bootstrap");
-      if (cancelled) return;
-      if (startedAutomaticReauth) {
-        return;
-      }
-
-      setIsAutomaticReauthPending(false);
-      markAuthBootstrapComplete();
-      if (hadPendingAuthFlow) {
-        clearAuthFlowPending();
-        clearAuthFlowReturned();
-        if (hadRecentAuthReturn) {
-          clearAuthContinuityHint();
-          clearAuthAutomaticReauthAttempt();
-          setAuthError("Sign-in completed, but PolyNet could not establish your account session. Please try again.");
-          updateAuthResumeStatePhase("awaiting_session");
+        if (currentSession) {
+          const usableSession = await ensureUsableAuthSession(currentSession);
+          if (cancelled) return;
+          if (usableSession) {
+            markAuthBootstrapComplete();
+            clearAuthSignedOutIntentMarker();
+            adoptAuthSession(usableSession);
+            if (hadPendingAuthFlow) {
+              didJustSignInRef.current = true;
+              const authResumeState = readAuthResumeState();
+              const pendingReturnTo = String(authResumeState?.return_to ?? "").trim();
+              if (!authResumeState?.intent) {
+                clearAuthResumeState();
+              }
+              const nextPath = pendingReturnTo
+                ? pendingReturnTo.startsWith("/") || pendingReturnTo.startsWith("#")
+                  ? pendingReturnTo
+                  : "/workspace"
+                : null;
+              onApplyPostAuthPathRef.current(nextPath);
+            }
+            clearAuthFlowPending();
+            clearAuthFlowReturned();
+            setAuthError(null);
+            return;
+          }
         }
+
+        if (sessionRef.current) {
+          await clearSessionLocally();
+          if (cancelled) return;
+        }
+
+        const startedAutomaticReauth = await attemptAutomaticReauth("bootstrap");
+        if (cancelled || startedAutomaticReauth) return;
+
+        setIsAutomaticReauthPending(false);
+        markAuthBootstrapComplete();
+        if (hadPendingAuthFlow) {
+          clearAuthFlowPending();
+          clearAuthFlowReturned();
+        }
+      } catch (error) {
+        if (cancelled) return;
+        emitWorkspaceEvent({
+          scope: "lifecycle",
+          name: "auth_recover_session",
+          status: "failure",
+          detail: {
+            phase: "bootstrap",
+          },
+          error: formatWorkspaceInstrumentationError(error),
+        });
+        const startedAutomaticReauth = await attemptAutomaticReauth("bootstrap_failure");
+        if (cancelled || startedAutomaticReauth) return;
+        markAuthBootstrapComplete();
       }
     })();
 
@@ -752,72 +566,18 @@ export function useWebAppAuthController(
     };
   }, [
     adoptAuthSession,
+    attemptAutomaticReauth,
     clearSessionLocally,
-    currentPublicRouteKind,
+    ensureUsableAuthSession,
     markAuthBootstrapComplete,
     onApplyPostAuthPathRef,
-    recoverSessionFromWorkOs,
-    workos,
-  ]);
-
-  useEffect(() => {
-    if (!isAuthSigningOut) return;
-    if (workos.user) return;
-    setIsAuthSigningOut(false);
-  }, [isAuthSigningOut, workos.user]);
-
-  useEffect(() => {
-    if (!workos.isEnabled || workos.isLoading) return;
-    if (!isAuthBootstrapComplete) return;
-    if (isAuthSigningOut) return;
-    if (session || !workos.user) return;
-
-    let cancelled = false;
-
-    void (async () => {
-      const authResumeState = readAuthResumeState();
-      const shouldResumeAfterSessionRecovery =
-        authResumeState?.phase === "awaiting_session";
-      const recoveredSession = await recoverSessionFromWorkOs({
-        phase: "post_bootstrap",
-        forceRefresh: true,
-      });
-      if (cancelled || !recoveredSession) {
-        setIsAutomaticReauthPending(false);
-        return;
-      }
-      clearAuthSignedOutIntentMarker();
-      clearAuthFlowPending();
-      clearAuthFlowReturned();
-      if (shouldResumeAfterSessionRecovery && authResumeState?.intent) {
-        didJustSignInRef.current = true;
-      } else if (shouldResumeAfterSessionRecovery && !authResumeState?.intent) {
-        clearAuthResumeState();
-      }
-      await onSessionReadyRef.current(recoveredSession);
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    clearAuthFlowPending,
-    isAuthSigningOut,
-    isAuthBootstrapComplete,
-    onSessionReadyRef,
-    recoverSessionFromWorkOs,
-    session,
-    workos,
   ]);
 
   const isAuthResolvingSignedInState = useMemo(() => {
-    if (!workos.isEnabled) return !isAuthBootstrapComplete;
     if (isAuthSigningOut) return false;
     if (isAutomaticReauthPending) return true;
-    if (workos.isLoading) return true;
-    if (!isAuthBootstrapComplete) return true;
-    return !session && Boolean(workos.user);
-  }, [isAuthBootstrapComplete, isAuthSigningOut, isAutomaticReauthPending, session, workos.isEnabled, workos.isLoading, workos.user]);
+    return !isAuthBootstrapComplete;
+  }, [isAuthBootstrapComplete, isAuthSigningOut, isAutomaticReauthPending]);
 
   const authPresentationState = useMemo<"signed_out" | "recovering_signed_in" | "signed_in">(() => {
     if (session) return "signed_in";

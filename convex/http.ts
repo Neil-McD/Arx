@@ -1,6 +1,8 @@
 import { internal } from "./_generated/api";
 import { httpAction } from "./_generated/server";
 import { httpRouter } from "convex/server";
+import { registerRuntimeAuthRoutes } from "./httpAuth";
+import { registerRuntimeAuthBridgeRoutes } from "./httpAuthBridge";
 import { registerRuntimeBillingRoutes } from "./httpBilling";
 import { registerRuntimeContextRoutes } from "./httpContext";
 import { registerRuntimeMcpRoutes } from "./httpMcp";
@@ -267,6 +269,23 @@ const requireAuthenticatedActor: RequireAuthenticatedActor = async (
 };
 
 const http = httpRouter();
+
+registerRuntimeAuthRoutes({
+  http,
+  httpAction,
+  buildCorsHeaders,
+  jsonResponse,
+  optionsResponse,
+  parseOptionalString,
+});
+
+registerRuntimeAuthBridgeRoutes({
+  http,
+  httpAction,
+  jsonResponse,
+  optionsResponse,
+  parseOptionalString,
+});
 
 registerRuntimeBillingRoutes({
   http,

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { beginOAuthSignIn } from "../auth";
 import {
   applyShellVariantToAppPath,
   DEFAULT_POST_SIGN_IN_PATH,
@@ -6,7 +7,6 @@ import {
   readShellVariantFromPathname,
   stripShellVariantFromPathname,
 } from "../../../../shared/webAppRouteState";
-import { useWorkOsRuntime } from "./workosRuntime";
 
 function defaultPostSignInPathForShell(shellVariant: "standard" | "mobile"): string {
   return applyShellVariantToAppPath(DEFAULT_POST_SIGN_IN_PATH, shellVariant);
@@ -50,33 +50,27 @@ function formatError(error: unknown): string {
 }
 
 export function LoginTrampolineRoute() {
-  const workos = useWorkOsRuntime();
   const [error, setError] = useState<string | null>(null);
   const [signInUrl, setSignInUrl] = useState<string | null>(null);
   const [showManualContinue, setShowManualContinue] = useState(false);
   const returnTo = useMemo(() => readLoginRouteReturnTo(), []);
 
   useEffect(() => {
-    if (!workos.isEnabled) {
-      setError("WorkOS auth is not configured.");
-      setSignInUrl(null);
-      setShowManualContinue(true);
-      return;
-    }
-    if (workos.isLoading) return;
-    if (workos.user) {
-      if (`${window.location.pathname}${window.location.search}${window.location.hash}` !== returnTo) {
-        window.location.replace(returnTo);
-      }
-      return;
-    }
     console.info("[auth][probe] login_trampoline_entered", { returnTo });
-    void workos
-      .getSignInUrl({ state: { returnTo } })
+    void beginOAuthSignIn({
+      provider: "GoogleOAuth",
+      returnTo,
+    })
       .then((url) => {
-        const normalized = String(url ?? "").trim();
+        if (!url.ok) {
+          setError(url.error);
+          setSignInUrl(null);
+          setShowManualContinue(true);
+          return;
+        }
+        const normalized = String(url.authUrl ?? "").trim();
         if (!normalized) {
-          setError("WorkOS sign-in URL could not be prepared.");
+          setError("Sign-in URL could not be prepared.");
           setSignInUrl(null);
           setShowManualContinue(true);
           return;
@@ -91,7 +85,7 @@ export function LoginTrampolineRoute() {
         setSignInUrl(null);
         setShowManualContinue(true);
       });
-  }, [returnTo, workos]);
+  }, [returnTo]);
 
   useEffect(() => {
     if (!signInUrl) return;
@@ -135,10 +129,10 @@ export function LoginTrampolineRoute() {
         <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 8 }}>Redirecting to sign in</div>
         <div style={{ fontSize: 14, lineHeight: 1.6, color: "rgba(245,247,251,0.78)" }}>
           {signInUrl && !showManualContinue
-            ? "PolyNet is redirecting you to WorkOS sign-in and will bring you back to your original page."
+            ? "PolyNet is redirecting you to sign in and will bring you back to your original page."
             : signInUrl
               ? "If the redirect does not continue automatically, use the button below."
-              : "PolyNet is preparing the WorkOS sign-in handoff and will return you to your original page."}
+              : "PolyNet is preparing the sign-in handoff and will return you to your original page."}
         </div>
         {signInUrl && showManualContinue ? (
           <button

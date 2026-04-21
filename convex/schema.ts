@@ -23,6 +23,27 @@ export default defineSchema({
     .index("by_email", ["email"])
     .index("by_normalizedEmail", ["normalizedEmail"]),
 
+  authSessions: defineTable({
+    sessionId: v.string(),
+    authSubject: v.string(),
+    userId: v.id("users"),
+    provider: v.string(),
+    encryptedSecretHex: v.string(),
+    secretIvHex: v.string(),
+    secretVersion: v.number(),
+    accessTokenExpiresAt: v.optional(v.number()),
+    email: v.optional(v.string()),
+    displayName: v.optional(v.string()),
+    avatarUrl: v.optional(v.string()),
+    lastRefreshAt: v.optional(v.number()),
+    revokedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_sessionId", ["sessionId"])
+    .index("by_authSubject", ["authSubject"])
+    .index("by_user", ["userId"]),
+
   userEntitlements: defineTable({
     userId: v.id("users"),
     tier: v.union(v.literal("free"), v.literal("builder"), v.literal("architect")),

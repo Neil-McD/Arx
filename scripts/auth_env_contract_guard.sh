@@ -12,9 +12,11 @@ WEB_APP_FILE="apps/web/src/App.tsx"
 AUTH_CONFIG_FILE="convex/auth.config.ts"
 CONVEX_HTTP_FILE="convex/http.ts"
 AUTH_HTTP_FILE="convex/httpAuth.ts"
+AUTH_BRIDGE_HTTP_FILE="convex/httpAuthBridge.ts"
 API_AUTH_DIR="api/auth"
 ROOT_ENV_FILE=".env.example"
 WEB_ENV_FILE="apps/web/.env.example"
+WEB_PACKAGE_FILE="apps/web/package.json"
 
 require_match_in_file() {
   local file="$1"
@@ -54,10 +56,10 @@ require_match_in_file "$AUTH_CORE_FILE" 'readFirstNonEmptyEnv\(\["VITE_CONVEX_UR
   "auth URL lookup is Convex-only"
 require_match_in_file "$AUTH_CORE_FILE" 'readFirstNonEmptyEnv\(\["VITE_CONVEX_PUBLIC_KEY"\]\)' \
   "optional runtime API key lookup uses VITE_CONVEX_PUBLIC_KEY"
-forbid_match_in_file "$AUTH_CORE_FILE" 'AUTH_GATEWAY_MAGIC_LINK_PATH|buildSameOriginAuthUrl|callSameOriginAuthEndpoint|sendAuthMagicLinkOtp' \
-  "shared auth core must not carry deleted same-origin auth helpers"
-forbid_match_in_file "$AUTH_CORE_FILE" 'AUTH_GATEWAY_BEGIN_PATH|AUTH_GATEWAY_SESSION_PATH|AUTH_GATEWAY_REFRESH_PATH|AUTH_GATEWAY_LOGOUT_PATH' \
-  "shared auth core must not carry deleted browser bridge endpoints"
+require_match_in_file "$AUTH_CORE_FILE" 'AUTH_GATEWAY_BEGIN_PATH|AUTH_GATEWAY_SESSION_PATH|AUTH_GATEWAY_REFRESH_PATH|AUTH_GATEWAY_LOGOUT_PATH' \
+  "shared auth core exposes same-origin auth bridge endpoints"
+require_match_in_file "$AUTH_CORE_FILE" 'beginOAuthSignIn|bootstrapSession|logoutAuthSessionRemote|refreshAuthSessionResult' \
+  "shared auth core exposes browser auth bridge helpers"
 forbid_match_in_file "$AUTH_CORE_FILE" 'VITE_AUTH_URL' \
   "shared auth core must not use VITE_AUTH_URL"
 forbid_match_in_file "$AUTH_CORE_FILE" 'VITE_AUTH_PUBLIC_KEY' \
@@ -66,18 +68,18 @@ forbid_match_in_file "$AUTH_CORE_FILE" 'CLOUD_FUNCTIONS_V1_SEGMENT' \
   "shared auth core must not classify legacy /functions/v1 surface"
 forbid_match_in_file "$AUTH_CORE_FILE" 'pgrst303|pgrst301' \
   "shared auth core must not depend on PostgREST auth error codes"
-forbid_match_in_file "$AUTH_CORE_FILE" 'beginOAuthSignIn|bootstrapSession|logoutAuthSessionRemote|refreshAuthSessionResult' \
-  "shared auth core must not expose deleted browser bridge helpers"
 
-echo "[2/6] Validating web auth controller uses direct WorkOS handoff with trampoline fallback..."
+echo "[2/6] Validating web auth controller uses same-origin auth bridge with trampoline fallback..."
 require_match_in_file "$WEB_AUTH_CONTROLLER_FILE" 'buildLoginTrampolinePath\(' \
   "web auth controller retains the login trampoline as a recovery fallback"
-require_match_in_file "$WEB_AUTH_CONTROLLER_FILE" 'workos\.signIn\(' \
-  "web auth controller hands off directly to WorkOS for the normal sign-in path"
-require_match_in_file "$WEB_AUTH_CONTROLLER_FILE" 'workos\.readSession\(' \
-  "web auth controller bootstraps browser session through WorkOS runtime"
-forbid_match_in_file "$WEB_AUTH_CONTROLLER_FILE" 'bootstrapSession\(|refreshAuthSessionResult\(|beginGoogleSignIn\(|revokeAuthSessionRemote\(|shared/authFlow' \
-  "web auth controller must not depend on deleted browser bridge helpers"
+require_match_in_file "$WEB_AUTH_CONTROLLER_FILE" 'bootstrapSession\(' \
+  "web auth controller bootstraps through the same-origin auth bridge"
+require_match_in_file "$WEB_AUTH_CONTROLLER_FILE" 'refreshAuthSessionResult' \
+  "web auth controller refreshes through the same-origin auth bridge"
+require_match_in_file "$WEB_AUTH_CONTROLLER_FILE" 'logoutAuthSessionRemote' \
+  "web auth controller logs out through the same-origin auth bridge"
+forbid_match_in_file "$WEB_AUTH_CONTROLLER_FILE" 'workos\.|useWorkOsRuntime|isWorkOsLoginRequiredError' \
+  "web auth controller must not depend on the deleted browser WorkOS runtime"
 
 echo "[3/6] Validating web model readiness is not coupled to auth keys..."
 forbid_match_in_file "$WEB_APP_FILE" 'getAuthUrl\(\) && getAuthPublicKey\(\)' \
@@ -93,12 +95,30 @@ forbid_match_in_file "$AUTH_CONFIG_FILE" '/auth/v1' \
 forbid_match_in_file "$AUTH_CONFIG_FILE" 'ARX_AUTH_BASE_URL|VITE_AUTH_URL' \
   "JWT verifier must not derive issuer from legacy auth base URL vars"
 
-echo "[5/6] Validating deleted auth bridge and magic-link surfaces stay deleted..."
-forbid_file_exists "$AUTH_HTTP_FILE" "deleted Convex auth helper module stays removed"
-forbid_file_exists "$API_AUTH_DIR/magic-link.js" "deleted Vercel magic-link route stays removed"
-forbid_file_exists "$API_AUTH_DIR/_bridge.js" "deleted Vercel auth bridge helper stays removed"
-forbid_match_in_file "$CONVEX_HTTP_FILE" 'registerRuntimeAuthRoutes|httpAuth' \
-  "Convex HTTP router must not mount deleted auth helper routes"
+echo "[5/6] Validating same-origin auth bridge surfaces exist and old browser WorkOS path is removed..."
+require_match_in_file "$CONVEX_HTTP_FILE" 'registerRuntimeAuthRoutes' \
+  "Convex HTTP router mounts the PKCE auth start/exchange routes"
+require_match_in_file "$CONVEX_HTTP_FILE" 'registerRuntimeAuthBridgeRoutes' \
+  "Convex HTTP router mounts the auth continuity bridge routes"
+require_match_in_file "$AUTH_HTTP_FILE" 'auth_begin_google_sign_in|auth_exchange_pkce_code' \
+  "Convex auth helper exposes PKCE start/exchange routes"
+require_match_in_file "$AUTH_BRIDGE_HTTP_FILE" 'auth_bridge_session_create|auth_bridge_session_bootstrap|auth_bridge_session_refresh|auth_bridge_session_logout' \
+  "Convex auth bridge exposes session continuity routes"
+require_match_in_file "$API_AUTH_DIR/_bridge.js" 'callAuthBridgeJson' \
+  "same-origin auth bridge helper exists"
+require_match_in_file "$API_AUTH_DIR/google/start.js" 'auth_begin_google_sign_in' \
+  "same-origin auth start route exists"
+require_match_in_file "$API_AUTH_DIR/google/callback.js" 'auth_exchange_pkce_code|auth_bridge_session_create' \
+  "same-origin auth callback route exchanges PKCE and stores opaque session"
+require_match_in_file "$API_AUTH_DIR/session.js" 'auth_bridge_session_bootstrap' \
+  "same-origin auth bootstrap route exists"
+require_match_in_file "$API_AUTH_DIR/refresh.js" 'auth_bridge_session_refresh' \
+  "same-origin auth refresh route exists"
+require_match_in_file "$API_AUTH_DIR/logout.js" 'auth_bridge_session_logout' \
+  "same-origin auth logout route exists"
+forbid_file_exists "apps/web/src/auth/workosRuntime.tsx" "deleted browser WorkOS runtime stays removed"
+forbid_match_in_file "$WEB_PACKAGE_FILE" '@workos-inc/authkit-react' \
+  "web package must not depend on the deleted browser WorkOS SDK runtime"
 
 echo "[6/6] Validating env templates include canonical keys and remove legacy keys..."
 require_match_in_file "$ROOT_ENV_FILE" '^VITE_CONVEX_URL=' \
@@ -111,6 +131,8 @@ require_match_in_file "$ROOT_ENV_FILE" '^ARX_AUTH_TOKEN_URL=' \
   "root env template declares ARX_AUTH_TOKEN_URL"
 require_match_in_file "$ROOT_ENV_FILE" '^ARX_AUTH_CLIENT_ID=' \
   "root env template declares ARX_AUTH_CLIENT_ID"
+require_match_in_file "$ROOT_ENV_FILE" '^ARX_AUTH_BRIDGE_SECRET=' \
+  "root env template declares ARX_AUTH_BRIDGE_SECRET"
 require_match_in_file "$ROOT_ENV_FILE" '^ARX_AUTH_JWT_ISSUER=' \
   "root env template declares ARX_AUTH_JWT_ISSUER"
 require_match_in_file "$ROOT_ENV_FILE" '^ARX_AUTH_JWT_JWKS_URL=' \
@@ -126,19 +148,11 @@ require_match_in_file "$WEB_ENV_FILE" '^VITE_CONVEX_URL=' \
   "web env template declares VITE_CONVEX_URL"
 require_match_in_file "$WEB_ENV_FILE" '^VITE_CONVEX_PUBLIC_KEY=' \
   "web env template declares VITE_CONVEX_PUBLIC_KEY"
-require_match_in_file "$WEB_ENV_FILE" 'VITE_WORKOS_CLIENT_ID' \
-  "web env template documents native WorkOS client id"
-require_match_in_file "$WEB_ENV_FILE" 'VITE_WORKOS_API_HOSTNAME' \
-  "web env template documents WorkOS auth API hostname"
-require_match_in_file "$WEB_ENV_FILE" 'VITE_WORKOS_REDIRECT_URI' \
-  "web env template documents WorkOS redirect uri"
-require_match_in_file "$WEB_ENV_FILE" 'VITE_WORKOS_DEV_MODE' \
-  "web env template documents WorkOS devMode toggle"
-forbid_match_in_file "$WEB_ENV_FILE" 'ARX_AUTH_BRIDGE_SECRET|ARX_AUTH_SESSION_COOKIE_DOMAIN|ARX_AUTH_SESSION_COOKIE_MAX_AGE_SECONDS' \
-  "web env template must not include deleted bridge continuity env"
-forbid_match_in_file "$WEB_ENV_FILE" 'ARX_AUTH_MAGIC_LINK_URL' \
-  "web env template must not include deleted magic-link env"
+require_match_in_file "$WEB_ENV_FILE" 'same-origin `/api/auth/\*`' \
+  "web env template documents the same-origin auth bridge posture"
 forbid_match_in_file "$WEB_ENV_FILE" '^VITE_AUTH_URL=|^VITE_AUTH_PUBLIC_KEY=|ARX_AUTH_BASE_URL|ARX_AUTH_PUBLIC_KEY' \
   "web env template must not include legacy auth-base/public-key vars"
+forbid_match_in_file "$WEB_ENV_FILE" 'VITE_WORKOS_CLIENT_ID|VITE_WORKOS_API_HOSTNAME|VITE_WORKOS_REDIRECT_URI|VITE_WORKOS_DEV_MODE' \
+  "web env template must not include deleted browser WorkOS SDK vars"
 
 echo "PASS: auth env contract guard passed."

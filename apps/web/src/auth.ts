@@ -1,4 +1,6 @@
 export {
+  beginOAuthSignIn,
+  bootstrapSession,
   decodeAuthJwtPayload,
   ensureAuthSessionForAuthenticatedSendResult,
   ensureAuthSessionForRequest,
@@ -10,7 +12,10 @@ export {
   getAuthUrl,
   isAuthJwtExpired,
   isLikelyAuthJwt,
+  logoutAuthSessionRemote,
   readAuthError,
+  refreshAuthSession,
+  refreshAuthSessionResult,
   refreshAuthSessionWithLockResult,
 } from "../../../shared/authCore";
 export type {
@@ -29,12 +34,10 @@ export {
   clearAuthSignedOutIntentMarker,
   hasRecentAuthAutomaticReauthAttempt,
   hasRecentAuthContinuityHint,
-  hasRecentAuthFlowReturned,
   hasRecentAuthFlowPending,
   markAuthAutomaticReauthAttempt,
   markAuthContinuityHint,
   markAuthFlowPending,
-  markAuthFlowReturned,
   AUTH_SIGNED_OUT_INTENT_KEY,
   AUTH_SIGNED_OUT_TAB_INTENT_KEY,
 } from "./authBrowserMarkers";

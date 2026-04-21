@@ -4,7 +4,6 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
 import "./index.css";
-import { WorkOsRuntimeProvider } from "./auth/workosRuntime";
 import { isLoginTrampolinePathname, LoginTrampolineRoute } from "./auth/loginTrampoline";
 import { WebAuthBootstrapShell } from "./components/WebAuthBootstrapShell";
 import { applyAppThemeAttributes, parseAppTheme } from "../../../shared/theme";
@@ -258,9 +257,7 @@ const rootView = isLoginTrampoline
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
     <ErrorBoundary>
-      <WorkOsRuntimeProvider>
-        {rootView}
-      </WorkOsRuntimeProvider>
+      {rootView}
     </ErrorBoundary>
   </React.StrictMode>
 );

@@ -97,6 +97,11 @@ export function getAuthUid(session: AuthSession): string {
   return sub ?? session.user.id;
 }
 
+const AUTH_GATEWAY_BEGIN_PATH = "/api/auth/google/start";
+const AUTH_GATEWAY_SESSION_PATH = "/api/auth/session";
+const AUTH_GATEWAY_REFRESH_PATH = "/api/auth/refresh";
+const AUTH_GATEWAY_LOGOUT_PATH = "/api/auth/logout";
+
 function trimTrailingSlashes(value: string): string {
   return value.replace(/\/+$/, "");
 }
@@ -104,6 +109,29 @@ function trimTrailingSlashes(value: string): string {
 function buildConvexRuntimeUrl(baseUrl: string, routePath: string): string {
   const route = routePath.startsWith("/") ? routePath : `/${routePath}`;
   return `${trimTrailingSlashes(baseUrl)}${route}`;
+}
+
+function buildSameOriginAuthUrl(routePath: string): string {
+  const route = routePath.startsWith("/") ? routePath : `/${routePath}`;
+  return new URL(route, window.location.origin).toString();
+}
+
+async function callSameOriginAuthEndpoint(params: {
+  path: string;
+  method?: "GET" | "POST";
+  payload?: Record<string, unknown>;
+}): Promise<Response | null> {
+  const hasBody = params.method !== "GET" && typeof params.payload === "object" && params.payload !== null;
+  try {
+    return await fetch(buildSameOriginAuthUrl(params.path), {
+      method: params.method ?? "POST",
+      credentials: "include",
+      headers: hasBody ? { "Content-Type": "application/json" } : undefined,
+      ...(hasBody ? { body: JSON.stringify(params.payload) } : null),
+    });
+  } catch {
+    return null;
+  }
 }
 
 function asObject(value: unknown): Record<string, unknown> | null {
@@ -331,6 +359,46 @@ function buildAuthHeaders(params: {
   return headers;
 }
 
+export type BeginOAuthSignInUrlResult =
+  | { ok: true; authUrl: string }
+  | { ok: false; error: string };
+
+export async function beginOAuthSignIn(params: {
+  provider: string;
+  returnTo?: string;
+}): Promise<BeginOAuthSignInUrlResult> {
+  void params.provider;
+  const authUrl = new URL(buildSameOriginAuthUrl(AUTH_GATEWAY_BEGIN_PATH));
+  const returnTo = readString(params.returnTo);
+  if (returnTo) authUrl.searchParams.set("return_to", returnTo);
+  return { ok: true, authUrl: authUrl.toString() };
+}
+
+export async function bootstrapSession(): Promise<AuthSession | null> {
+  const response = await callSameOriginAuthEndpoint({
+    path: AUTH_GATEWAY_SESSION_PATH,
+    method: "GET",
+  });
+  if (!response) throw new Error("Auth gateway is unavailable.");
+  if (!response.ok) throw new Error(await readAuthError(response));
+  const payload = (await response.json()) as Record<string, unknown>;
+  return coerceAuthSession(payload?.session ?? null, { requireRefreshToken: false });
+}
+
+export async function logoutAuthSessionRemote(params: {
+  accessToken?: string | null;
+  scope?: string;
+}): Promise<void> {
+  void params.accessToken;
+  void params.scope;
+  const response = await callSameOriginAuthEndpoint({
+    path: AUTH_GATEWAY_LOGOUT_PATH,
+    method: "POST",
+    payload: {},
+  });
+  if (!response || response.ok) return;
+}
+
 function ensureResultFromRefreshFailure(
   refresh: Exclude<AuthSessionRefreshResult, { status: "refreshed"; session: AuthSession }>,
 ): AuthSessionEnsureResult {
@@ -521,6 +589,49 @@ export async function ensureAuthSessionForAuthenticatedSendResult(params: {
     };
   }
   return { status: "ready", session: refreshed.session, runtimeAcceptance: refreshedAccepted };
+}
+
+export async function refreshAuthSessionResult(): Promise<AuthSessionRefreshResult> {
+  const response = await callSameOriginAuthEndpoint({
+    path: AUTH_GATEWAY_REFRESH_PATH,
+    method: "POST",
+    payload: {},
+  });
+  if (!response) {
+    return { status: "transient_failure", reason: "auth_gateway_unavailable" };
+  }
+  if (!response.ok) {
+    if (response.status === 401) {
+      return {
+        status: "terminal_failure",
+        reason: (await readAuthError(response)).trim() || "auth_session_invalid",
+      };
+    }
+    return {
+      status: "transient_failure",
+      reason: (await readAuthError(response)).trim() || `auth_refresh_failed_${response.status}`,
+    };
+  }
+  try {
+    const payload = (await response.json()) as Record<string, unknown>;
+    const refreshed = coerceAuthSession(payload?.session ?? null, {
+      requireRefreshToken: false,
+    });
+    if (!refreshed) {
+      return { status: "transient_failure", reason: "invalid_refresh_response" };
+    }
+    return { status: "refreshed", session: refreshed };
+  } catch {
+    return { status: "transient_failure", reason: "invalid_refresh_response" };
+  }
+}
+
+export async function refreshAuthSession(): Promise<AuthSession | null> {
+  const refreshed = await refreshAuthSessionResult();
+  if (refreshed.status === "refreshed") {
+    return refreshed.session;
+  }
+  return null;
 }
 
 export async function fetchAuthUser(token: string): Promise<AuthUser | null> {

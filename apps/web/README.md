@@ -4,57 +4,50 @@ This is the canonical Polynet web app and primary release surface.
 
 ## Local dev
 
-1. Install deps (requires network access):
+1. Install deps:
    - `cd apps/web`
    - `npm install`
-2. Set env:
-   - Copy repo root `.env.example` → `.env`
-   - Fill `VITE_CONVEX_URL`
-   - `VITE_CONVEX_PUBLIC_KEY` is optional
-   - Set WorkOS browser vars:
-     - `VITE_WORKOS_CLIENT_ID`
-     - `VITE_WORKOS_REDIRECT_URI`
-     - fallback posture: leave `VITE_WORKOS_API_HOSTNAME` unset and use `VITE_WORKOS_DEV_MODE=true`
-     - hardened posture: set `VITE_WORKOS_API_HOSTNAME=<your Authentication API domain>` and `VITE_WORKOS_DEV_MODE=false`
-   - Set shared OAuth/OIDC metadata vars (`ARX_AUTH_AUTHORIZE_URL`, `ARX_AUTH_TOKEN_URL`, `ARX_AUTH_CLIENT_ID`) for Convex MCP auth discovery. These point at your AuthKit / OIDC issuer domain.
-   - Set JWT verifier vars (`ARX_AUTH_JWT_ISSUER`, `ARX_AUTH_JWT_JWKS_URL`) for verified Convex identity. These also point at your AuthKit / OIDC issuer domain.
-    - Validate config: `npm run check:auth-runtime-readiness`
+2. Set env in repo root `.env`:
+   - `VITE_CONVEX_URL`
+   - optional `VITE_CONVEX_PUBLIC_KEY`
+   - `ARX_AUTH_AUTHORIZE_URL`
+   - `ARX_AUTH_TOKEN_URL`
+   - `ARX_AUTH_CLIENT_ID`
+   - `ARX_AUTH_BRIDGE_SECRET`
+   - `ARX_AUTH_JWT_ISSUER`
+   - `ARX_AUTH_JWT_JWKS_URL`
+   - Validate config: `npm run check:auth-runtime-readiness`
 3. Run:
    - `npm run dev`
 4. Cloud Auth:
-   - Add `http://localhost:5174` to the Cloud Auth redirect allowlist.
+   - Add `http://localhost:5174/api/auth/google/callback` to the OAuth redirect allowlist.
 
 ## Vercel deploy
 
 Create a Vercel project for this repo with:
 
-- **Root Directory:** `apps/web`
+- **Root Directory:** `.`
 - **Build Command:** `npm run build`
-- **Output Directory:** `dist`
+- **Output Directory:** `apps/web/dist`
 
 Set the following Vercel env vars:
 
 - `VITE_CONVEX_URL`
-- `VITE_CONVEX_PUBLIC_KEY` (optional)
-- `VITE_WORKOS_CLIENT_ID`
-- `VITE_WORKOS_REDIRECT_URI`
-- `VITE_WORKOS_DEV_MODE`
+- optional `VITE_CONVEX_PUBLIC_KEY`
 - `ARX_AUTH_AUTHORIZE_URL`
 - `ARX_AUTH_TOKEN_URL`
 - `ARX_AUTH_CLIENT_ID`
+- `ARX_AUTH_BRIDGE_SECRET`
+- optional `ARX_AUTH_SESSION_COOKIE_DOMAIN`
+- optional `ARX_AUTH_SESSION_COOKIE_MAX_AGE_SECONDS`
 - `ARX_AUTH_JWT_ISSUER`
 - `ARX_AUTH_JWT_JWKS_URL`
 
 Production auth posture:
 
-- Working fallback posture:
-  - leave `VITE_WORKOS_API_HOSTNAME` unset
-  - set `VITE_WORKOS_DEV_MODE=true`
-- Hardened browser posture:
-  - set `VITE_WORKOS_API_HOSTNAME` to a custom Authentication API domain you control
-  - set `VITE_WORKOS_DEV_MODE=false`
-- Do not point `VITE_WORKOS_API_HOSTNAME` at an `*.authkit.app` hosted AuthKit UI domain.
-- `ARX_AUTH_*` metadata and JWT verifier vars may still point at your AuthKit / OIDC issuer domain.
+- Browser sign-in/session continuity runs through root `/api/auth/*`.
+- `ARX_AUTH_*` metadata and JWT verifier vars point at your AuthKit / OIDC issuer domain.
+- The browser bundle no longer needs direct WorkOS SDK env.
 
 Workspace preview / live desktop depend on the preview proxy signing secret:
 
@@ -64,8 +57,8 @@ Workspace preview / live desktop depend on the preview proxy signing secret:
 
 Cloud Auth redirect allowlist:
 
-- Add your Vercel Production domain (e.g. `https://<project>.vercel.app`)
-- Add Preview domains if you want OAuth to work on previews
+- Add your Vercel Production domain callback, for example `https://www.polynet.ai/api/auth/google/callback`
+- Add Preview callback domains if you want OAuth to work on previews
 
 ## Current scope
 
