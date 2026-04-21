@@ -1,7 +1,7 @@
-import type { SkillPackageSummary } from "./skillPackageTypes";
+import type { SkillPackageDetail } from "./skillPackageTypes";
 
 export type UserPlatformInstalledSkill = {
   id: string;
   enabled: boolean;
-  skill: SkillPackageSummary;
+  skill: SkillPackageDetail;
 };

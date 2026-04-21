@@ -4,8 +4,9 @@ import type { CreateSkillPackageInput } from "../../../../shared/skillPackageTyp
 import type { UserPlatformInstalledSkill } from "../../../../shared/userPlatformSkillTypes";
 import {
   createCloudUserPlatformSkill,
+  deleteCloudUserPlatformSkill,
   listCloudUserPlatformSkills,
-  uninstallCloudUserPlatformSkill,
+  updateCloudUserPlatformSkillPackage,
   updateCloudUserPlatformSkillInstall,
 } from "../../../../shared/cloudUserPlatformSkillGateway";
 import {
@@ -157,7 +158,45 @@ export function useWebUserPlatformSkillsController<
     [],
   );
 
-  const uninstallUserPlatformSkill = useCallback(
+  const saveUserPlatformSkill = useCallback(
+    async (
+      userPlatformSkillInstallId: string,
+      input: CreateSkillPackageInput,
+    ): Promise<boolean> => {
+      const current = argsRef.current;
+      const usableSession = await resolveUsableSession(
+        current.session,
+        current.ensureSession,
+      );
+      if (!usableSession) return false;
+      setUpdatingUserPlatformSkillInstallId(userPlatformSkillInstallId);
+      setUserPlatformSkillMutationError(null);
+      try {
+        const updated = await updateCloudUserPlatformSkillPackage({
+          session: usableSession,
+          userPlatformSkillInstallId,
+          name: input.name,
+          description: input.description,
+          instructionsMd: input.instructions_md,
+        });
+        if (!updated) return false;
+        setUserPlatformSkills((prev) =>
+          prev.map((entry) => (entry.id === updated.id ? updated : entry)),
+        );
+        return true;
+      } catch (error) {
+        setUserPlatformSkillMutationError(
+          toErrorMessage(error, "Failed to save personal skill."),
+        );
+        return false;
+      } finally {
+        setUpdatingUserPlatformSkillInstallId(null);
+      }
+    },
+    [],
+  );
+
+  const deleteUserPlatformSkill = useCallback(
     async (userPlatformSkillInstallId: string): Promise<boolean> => {
       const current = argsRef.current;
       const usableSession = await resolveUsableSession(
@@ -168,7 +207,7 @@ export function useWebUserPlatformSkillsController<
       setRemovingUserPlatformSkillInstallId(userPlatformSkillInstallId);
       setUserPlatformSkillMutationError(null);
       try {
-        const removed = await uninstallCloudUserPlatformSkill({
+        const removed = await deleteCloudUserPlatformSkill({
           session: usableSession,
           userPlatformSkillInstallId,
         });
@@ -179,7 +218,7 @@ export function useWebUserPlatformSkillsController<
         return true;
       } catch (error) {
         setUserPlatformSkillMutationError(
-          toErrorMessage(error, "Failed to remove personal skill."),
+          toErrorMessage(error, "Failed to delete personal skill."),
         );
         return false;
       } finally {
@@ -201,7 +240,8 @@ export function useWebUserPlatformSkillsController<
     clearUserPlatformSkills,
     loadUserPlatformSkills,
     createUserPlatformSkill,
+    saveUserPlatformSkill,
     updateUserPlatformSkill,
-    uninstallUserPlatformSkill,
+    deleteUserPlatformSkill,
   };
 }

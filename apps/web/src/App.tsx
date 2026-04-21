@@ -1762,8 +1762,9 @@ export default function App() {
     clearUserPlatformSkills,
     loadUserPlatformSkills,
     createUserPlatformSkill,
+    saveUserPlatformSkill,
     updateUserPlatformSkill,
-    uninstallUserPlatformSkill,
+    deleteUserPlatformSkill,
   } = useWebUserPlatformSkillsController<AuthSession>({
     session,
     ensureSession: ensureUsableAuthSession,
@@ -1775,7 +1776,7 @@ export default function App() {
     isLoadingOwnedSkillPackages,
     communitySkillAttachmentError,
     ownedSkillPackagesError,
-    isCreatingSkillPackage,
+    isCreatingSkill,
     communitySkillMutationError,
     updatingCommunitySkillAttachmentId,
     removingCommunitySkillAttachmentId,
@@ -1785,7 +1786,7 @@ export default function App() {
     clearCommunitySkillAttachments,
     loadCommunitySkillAttachments,
     loadOwnedSkillPackages,
-    createSkillPackage,
+    createPersonalSkillAndAttach,
     attachSkillPackageToCommunity,
     updateCommunitySkillAttachment,
     detachCommunitySkill,
@@ -2435,11 +2436,11 @@ export default function App() {
     [reconnectCommunityApp],
   );
 
-  const handleCreateSkillPackage = useCallback(
+  const handleCreateCommunitySkill = useCallback(
     async (input: CreateSkillPackageInput) => {
-      return await createSkillPackage(input);
+      return await createPersonalSkillAndAttach(input);
     },
-    [createSkillPackage],
+    [createPersonalSkillAndAttach],
   );
 
   const handleCreateUserPlatformSkill = useCallback(
@@ -2461,11 +2462,21 @@ export default function App() {
     [updateUserPlatformSkill],
   );
 
-  const handleUninstallUserPlatformSkill = useCallback(
-    async (userPlatformSkillInstallId: string) => {
-      return await uninstallUserPlatformSkill(userPlatformSkillInstallId);
+  const handleSaveUserPlatformSkill = useCallback(
+    async (
+      userPlatformSkillInstallId: string,
+      input: CreateSkillPackageInput,
+    ) => {
+      return await saveUserPlatformSkill(userPlatformSkillInstallId, input);
     },
-    [uninstallUserPlatformSkill],
+    [saveUserPlatformSkill],
+  );
+
+  const handleDeleteUserPlatformSkill = useCallback(
+    async (userPlatformSkillInstallId: string) => {
+      return await deleteUserPlatformSkill(userPlatformSkillInstallId);
+    },
+    [deleteUserPlatformSkill],
   );
 
   const handleAttachSkillPackageToCommunity = useCallback(
@@ -5409,7 +5420,7 @@ export default function App() {
       aiAgentSkillsEditorProps: {
         intro: "Attach reusable skill packages here so this community lens can load behavior units on demand without bloating the base prompt.",
         emptyState: "Attach the first skill package to this community. Attached skills become available when members explicitly mention them in this lens.",
-        addButtonLabel: "Create package",
+        addButtonLabel: "Create and attach",
         skills: communitySkillAttachments,
         packages: ownedSkillPackages,
         isLoading: isLoadingCommunitySkillAttachments,
@@ -5417,11 +5428,11 @@ export default function App() {
         error: communitySkillAttachmentError,
         packagesError: ownedSkillPackagesError,
         mutationError: communitySkillMutationError,
-        isCreatingPackage: isCreatingSkillPackage,
+        isCreatingSkill: isCreatingSkill,
         attachingPackageId: attachingSkillPackageId,
         updatingSkillId: updatingCommunitySkillAttachmentId,
         removingSkillId: removingCommunitySkillAttachmentId,
-        onCreatePackage: handleCreateSkillPackage,
+        onCreateSkill: handleCreateCommunitySkill,
         onAttachPackage: handleAttachSkillPackageToCommunity,
         onUpdateSkill: handleUpdateCommunitySkillAttachment,
         onDetachSkill: handleDetachCommunitySkill,
@@ -5755,8 +5766,9 @@ export default function App() {
       onReconnectUserPlatformApp: handleReconnectUserPlatformApp,
       onUnmountUserPlatformApp: handleUnmountUserPlatformApp,
       onCreateUserPlatformSkill: handleCreateUserPlatformSkill,
+      onSaveUserPlatformSkill: handleSaveUserPlatformSkill,
       onUpdateUserPlatformSkill: handleUpdateUserPlatformSkill,
-      onUninstallUserPlatformSkill: handleUninstallUserPlatformSkill,
+      onDeleteUserPlatformSkill: handleDeleteUserPlatformSkill,
     },
     appearance: {
       appTheme,

@@ -3,6 +3,8 @@ import { internalMutation, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { resolveUserIdForAuthenticatedRequest } from "./communityCore";
 import {
+  getSkillPackageActiveInstructionsMd,
+  normalizeSkillMentionToken,
   type SkillPackageRow,
   mapSkillPackageReadModel,
   readSkillMentionToken,
@@ -54,14 +56,22 @@ async function requireExistingUserPlatformSkillInstall(args: {
   return row;
 }
 
-function buildUserPlatformSkillInstallReadModel(args: {
+async function buildUserPlatformSkillInstallReadModel(args: {
+  ctx: any;
   install: UserPlatformSkillInstallRow;
   skill: SkillPackageRow;
 }) {
+  const activeInstructions = await getSkillPackageActiveInstructionsMd(
+    args.ctx,
+    args.skill,
+  );
   return {
     id: String(args.install._id),
     enabled: args.install.enabled === true,
-    skill: mapSkillPackageReadModel(args.skill),
+    skill: {
+      ...mapSkillPackageReadModel(args.skill),
+      instructionsMd: activeInstructions.instructionsMd,
+    },
   };
 }
 
@@ -77,7 +87,8 @@ async function getUserPlatformSkillInstallReadModel(args: {
   });
   const skill = await getSkillPackageById(args.ctx, install.skillPackageId);
   if (!skill) throw new Error("user_platform_skill_install_missing_dependency");
-  return buildUserPlatformSkillInstallReadModel({
+  return await buildUserPlatformSkillInstallReadModel({
+    ctx: args.ctx,
     install,
     skill,
   });
@@ -145,6 +156,42 @@ async function upsertUserPlatformSkillInstallRow(args: {
   });
 }
 
+async function assertUpdatedAttachedCommunityMentionTokenAvailable(args: {
+  ctx: any;
+  skillPackageId: any;
+  nextMentionToken: string;
+}): Promise<void> {
+  const attachments = (await args.ctx.db
+    .query("communitySkillAttachments")
+    .withIndex("by_skill", (q: any) => q.eq("skillPackageId", args.skillPackageId))
+    .collect()) as Array<{
+    _id: any;
+    communityId: any;
+    skillPackageId: any;
+    enabled: boolean;
+  }>;
+  for (const attachment of attachments) {
+    if (!attachment.enabled) continue;
+    const otherAttachments = (await args.ctx.db
+      .query("communitySkillAttachments")
+      .withIndex("by_community", (q: any) => q.eq("communityId", attachment.communityId))
+      .collect()) as Array<{
+      _id: any;
+      skillPackageId: any;
+      enabled: boolean;
+    }>;
+    for (const otherAttachment of otherAttachments) {
+      if (!otherAttachment.enabled) continue;
+      if (String(otherAttachment._id) === String(attachment._id)) continue;
+      const otherSkill = await getSkillPackageById(args.ctx, otherAttachment.skillPackageId);
+      if (!otherSkill) continue;
+      if (readSkillMentionToken(otherSkill) === args.nextMentionToken) {
+        throw new Error("community_skill_mention_token_conflict");
+      }
+    }
+  }
+}
+
 export const listUserPlatformSkills = query({
   args: {
     userId: v.optional(v.id("users")),
@@ -162,7 +209,8 @@ export const listUserPlatformSkills = query({
       const skill = await getSkillPackageById(ctx, install.skillPackageId);
       if (!skill) continue;
       rows.push(
-        buildUserPlatformSkillInstallReadModel({
+        await buildUserPlatformSkillInstallReadModel({
+          ctx,
           install,
           skill,
         }),
@@ -270,7 +318,57 @@ export const updateUserPlatformSkillInstall = mutation({
   },
 });
 
-export const uninstallUserPlatformSkill = mutation({
+export const updateUserPlatformSkillPackage = mutation({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    userPlatformSkillInstallId: v.id("userPlatformSkillInstalls"),
+    name: v.optional(v.string()),
+    description: v.optional(v.string()),
+    instructionsMd: v.optional(v.string()),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      userId: args.userId,
+      authSubject: args.authSubject ?? null,
+    });
+    const install = await requireExistingUserPlatformSkillInstall({
+      ctx,
+      userId,
+      userPlatformSkillInstallId: args.userPlatformSkillInstallId,
+    });
+    const skill = await getSkillPackageById(ctx, install.skillPackageId);
+    if (!skill || String(skill.ownerUserId) !== String(userId)) {
+      throw new Error("skill_package_not_found");
+    }
+    const nextName =
+      typeof args.name === "string" ? args.name.trim() : skill.name;
+    if (!nextName) throw new Error("skill_package_name_required");
+    const nextMentionToken = normalizeSkillMentionToken(nextName);
+    await assertUpdatedAttachedCommunityMentionTokenAvailable({
+      ctx,
+      skillPackageId: skill._id,
+      nextMentionToken,
+    });
+    await ctx.runMutation(internal.skillPackages.updateOwnedSkillPackageInternal, {
+      ownerUserId: userId,
+      skillPackageId: skill._id,
+      name: args.name,
+      description: args.description,
+      instructionsMd: args.instructionsMd,
+      nowMs: args.nowMs,
+    });
+    return await getUserPlatformSkillInstallReadModel({
+      ctx,
+      userId,
+      userPlatformSkillInstallId: install._id,
+    });
+  },
+});
+
+export const deleteUserPlatformSkill = mutation({
   args: {
     userId: v.optional(v.id("users")),
     authSubject: v.optional(v.string()),
@@ -287,7 +385,13 @@ export const uninstallUserPlatformSkill = mutation({
       userId,
       userPlatformSkillInstallId: args.userPlatformSkillInstallId,
     });
-    await ctx.db.delete(install._id);
+    const skill = await getSkillPackageById(ctx, install.skillPackageId);
+    if (!skill || String(skill.ownerUserId) !== String(userId)) {
+      throw new Error("skill_package_not_found");
+    }
+    await ctx.runMutation(internal.skillPackages.deleteSkillPackageCascadeInternal, {
+      skillPackageId: skill._id,
+    });
     return {
       removed: true,
       id: String(install._id),

@@ -139,13 +139,17 @@ export type WebSettingsPanelsProps = {
     onCreateUserPlatformSkill: (
       input: CreateSkillPackageInput,
     ) => Promise<void> | Promise<boolean> | boolean | void;
+    onSaveUserPlatformSkill: (
+      userPlatformSkillInstallId: string,
+      input: CreateSkillPackageInput,
+    ) => Promise<void> | Promise<boolean> | boolean | void;
     onUpdateUserPlatformSkill: (
       userPlatformSkillInstallId: string,
       patch: {
         enabled?: boolean;
       },
     ) => Promise<void> | Promise<boolean> | boolean | void;
-    onUninstallUserPlatformSkill: (
+    onDeleteUserPlatformSkill: (
       userPlatformSkillInstallId: string,
     ) => Promise<void> | Promise<boolean> | boolean | void;
   };
@@ -299,8 +303,9 @@ export function WebSettingsPanels(props: WebSettingsPanelsProps) {
     onReconnectUserPlatformApp: integrations.onReconnectUserPlatformApp,
     onUnmountUserPlatformApp: integrations.onUnmountUserPlatformApp,
     onCreateUserPlatformSkill: integrations.onCreateUserPlatformSkill,
+    onSaveUserPlatformSkill: integrations.onSaveUserPlatformSkill,
     onUpdateUserPlatformSkill: integrations.onUpdateUserPlatformSkill,
-    onUninstallUserPlatformSkill: integrations.onUninstallUserPlatformSkill,
+    onDeleteUserPlatformSkill: integrations.onDeleteUserPlatformSkill,
   };
 
   return (

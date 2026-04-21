@@ -1,7 +1,6 @@
 import { bootstrapConvexAuthenticatedClient } from "./convexAuthenticatedClient";
 import type {
   CommunityAttachedSkill,
-  CreateSkillPackageInput,
   SkillPackageSummary,
 } from "./communitySkillTypes";
 
@@ -45,23 +44,6 @@ export async function listCloudOwnedSkillPackages<SessionT>(
     authSubject,
   });
   return coerceObjectRows<SkillPackageSummary>(payload);
-}
-
-export async function createCloudSkillPackage<SessionT>(
-  params: CloudCommunitySkillGatewayParams<SessionT> & {
-    input: CreateSkillPackageInput;
-  },
-): Promise<SkillPackageSummary | null> {
-  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(
-    params.session,
-  );
-  const payload = (await client.mutation("community:createSkillPackage" as any, {
-    authSubject,
-    name: params.input.name,
-    description: params.input.description,
-    instructionsMd: params.input.instructions_md,
-  })) as SkillPackageSummary | null;
-  return payload ?? null;
 }
 
 export async function attachCloudSkillPackageToCommunity<SessionT>(

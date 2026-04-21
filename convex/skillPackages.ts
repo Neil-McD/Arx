@@ -1,6 +1,7 @@
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import {
+  getSkillPackageActiveInstructionsMd,
   type SkillPackageRevisionRow,
   type SkillPackageRow,
   mapSkillPackageReadModel,
@@ -14,6 +15,18 @@ import { resolveUserIdForAuthenticatedRequest } from "./communityCore";
 
 async function getSkillPackageById(ctx: any, skillPackageId: any): Promise<SkillPackageRow | null> {
   return ((await ctx.db.get(skillPackageId)) as SkillPackageRow | null) ?? null;
+}
+
+async function requireOwnedSkillPackage(args: {
+  ctx: any;
+  ownerUserId: any;
+  skillPackageId: any;
+}): Promise<SkillPackageRow> {
+  const row = await getSkillPackageById(args.ctx, args.skillPackageId);
+  if (!row || String(row.ownerUserId) !== String(args.ownerUserId)) {
+    throw new Error("skill_package_not_found");
+  }
+  return row;
 }
 
 async function listOwnedSkillPackagesRows(ctx: any, ownerUserId: any): Promise<SkillPackageRow[]> {
@@ -111,6 +124,64 @@ async function createSkillPackageRow(args: {
   return skillPackageId;
 }
 
+async function updateSkillPackageRow(args: {
+  ctx: any;
+  skillPackage: SkillPackageRow;
+  name?: string;
+  description?: string;
+  instructionsMd?: string;
+  updatedByUserId: any;
+  nowMs?: number;
+}): Promise<SkillPackageRow> {
+  const nowMs = args.nowMs ?? Date.now();
+  const nextName = normalizeSkillPackageName(args.name ?? args.skillPackage.name);
+  if (!nextName) throw new Error("skill_package_name_required");
+  const nextMentionToken = normalizeSkillMentionToken(nextName);
+  if (!nextMentionToken) throw new Error("skill_package_mention_token_required");
+  await assertOwnerSkillMentionTokenAvailable({
+    ctx: args.ctx,
+    ownerUserId: args.skillPackage.ownerUserId,
+    mentionToken: nextMentionToken,
+    excludeSkillPackageId: args.skillPackage._id,
+  });
+  const nextDescription = normalizeSkillPackageDescription(
+    args.description ?? args.skillPackage.description,
+  );
+  const nextInstructionsMd = normalizeSkillInstructionsMd(
+    args.instructionsMd ?? args.skillPackage.instructionsMd,
+  );
+  if (!nextInstructionsMd) throw new Error("skill_package_instructions_required");
+
+  const patch: Record<string, unknown> = {
+    name: nextName,
+    mentionToken: nextMentionToken,
+    description: nextDescription || undefined,
+    instructionsMd: nextInstructionsMd,
+    updatedAt: nowMs,
+  };
+
+  const activeInstructions = await getSkillPackageActiveInstructionsMd(
+    args.ctx,
+    args.skillPackage,
+  );
+  const instructionsChanged = activeInstructions.instructionsMd !== nextInstructionsMd;
+  if (instructionsChanged) {
+    const revisionId = await createSkillPackageRevisionRow({
+      ctx: args.ctx,
+      skillPackageId: args.skillPackage._id,
+      instructionsMd: nextInstructionsMd,
+      createdByUserId: args.updatedByUserId,
+      nowMs,
+    });
+    patch.activeRevisionId = revisionId;
+  }
+
+  await args.ctx.db.patch(args.skillPackage._id, patch);
+  const updated = await getSkillPackageById(args.ctx, args.skillPackage._id);
+  if (!updated) throw new Error("skill_package_not_found");
+  return updated;
+}
+
 export const getSkillPackageByIdInternal = internalQuery({
   args: {
     skillPackageId: v.id("skillPackages"),
@@ -136,35 +207,6 @@ export const listOwnedSkillPackages = query({
   },
 });
 
-export const createSkillPackage = mutation({
-  args: {
-    userId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    name: v.string(),
-    description: v.optional(v.string()),
-    instructionsMd: v.string(),
-    nowMs: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    const userId = await resolveUserIdForAuthenticatedRequest({
-      ctx,
-      userId: args.userId,
-      authSubject: args.authSubject ?? null,
-    });
-    const skillPackageId = await createSkillPackageRow({
-      ctx,
-      ownerUserId: userId,
-      name: args.name,
-      description: args.description,
-      instructionsMd: args.instructionsMd,
-      nowMs: args.nowMs,
-    });
-    const skill = await getSkillPackageById(ctx, skillPackageId);
-    if (!skill) throw new Error("skill_package_not_found");
-    return mapSkillPackageReadModel(skill);
-  },
-});
-
 export const createSkillPackageInternal = internalMutation({
   args: {
     ownerUserId: v.id("users"),
@@ -180,6 +222,67 @@ export const createSkillPackageInternal = internalMutation({
       name: args.name,
       description: args.description,
       instructionsMd: args.instructionsMd,
+      nowMs: args.nowMs,
+    });
+  },
+});
+
+export const updateOwnedSkillPackage = mutation({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    skillPackageId: v.id("skillPackages"),
+    name: v.optional(v.string()),
+    description: v.optional(v.string()),
+    instructionsMd: v.optional(v.string()),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      userId: args.userId,
+      authSubject: args.authSubject ?? null,
+    });
+    const skillPackage = await requireOwnedSkillPackage({
+      ctx,
+      ownerUserId: userId,
+      skillPackageId: args.skillPackageId,
+    });
+    const updated = await updateSkillPackageRow({
+      ctx,
+      skillPackage,
+      name: args.name,
+      description: args.description,
+      instructionsMd: args.instructionsMd,
+      updatedByUserId: userId,
+      nowMs: args.nowMs,
+    });
+    return mapSkillPackageReadModel(updated);
+  },
+});
+
+export const updateOwnedSkillPackageInternal = internalMutation({
+  args: {
+    ownerUserId: v.id("users"),
+    skillPackageId: v.id("skillPackages"),
+    name: v.optional(v.string()),
+    description: v.optional(v.string()),
+    instructionsMd: v.optional(v.string()),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const skillPackage = await requireOwnedSkillPackage({
+      ctx,
+      ownerUserId: args.ownerUserId,
+      skillPackageId: args.skillPackageId,
+    });
+    return await updateSkillPackageRow({
+      ctx,
+      skillPackage,
+      name: args.name,
+      description: args.description,
+      instructionsMd: args.instructionsMd,
+      updatedByUserId: args.ownerUserId,
       nowMs: args.nowMs,
     });
   },

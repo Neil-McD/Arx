@@ -33,11 +33,11 @@ export type WebCommunityAiAgentSkillsEditorProps = {
   error: string | null;
   packagesError: string | null;
   mutationError: string | null;
-  isCreatingPackage: boolean;
+  isCreatingSkill: boolean;
   attachingPackageId: string | null;
   updatingSkillId: string | null;
   removingSkillId: string | null;
-  onCreatePackage: (input: CreateSkillPackageInput) => Promise<boolean> | boolean;
+  onCreateSkill: (input: CreateSkillPackageInput) => Promise<boolean> | boolean;
   onAttachPackage: (skillPackageId: string) => Promise<boolean> | boolean;
   onUpdateSkill: (
     communitySkillAttachmentId: string,
@@ -60,11 +60,11 @@ export function WebCommunityAiAgentSkillsEditor(
     error,
     packagesError,
     mutationError,
-    isCreatingPackage,
+    isCreatingSkill,
     attachingPackageId,
     updatingSkillId,
     removingSkillId,
-    onCreatePackage,
+    onCreateSkill,
     onAttachPackage,
     onUpdateSkill,
     onDetachSkill,
@@ -74,7 +74,7 @@ export function WebCommunityAiAgentSkillsEditor(
   const attachedSkillPackageIds = new Set(skills.map((attachment) => attachment.skill.id));
 
   const handleCreate = async () => {
-    const ok = await onCreatePackage(draft);
+    const ok = await onCreateSkill(draft);
     if (!ok) return;
     setDraft(buildInitialDraft());
     setIsCreateOpen(false);
@@ -88,17 +88,19 @@ export function WebCommunityAiAgentSkillsEditor(
         <button
           type="button"
           onClick={() => setIsCreateOpen((prev) => !prev)}
-          disabled={isCreatingPackage}
+          disabled={isCreatingSkill}
         >
           {isCreateOpen ? "Close" : addButtonLabel}
         </button>
       </div>
 
       {isCreateOpen ? (
-        <div className="agent-capability-card community-skill-create-card">
-          <div className="agent-capability-card-header">
-            <div className="agent-canvas-target-kicker">Create community skill package</div>
-          </div>
+          <div className="agent-capability-card community-skill-create-card">
+            <div className="agent-capability-card-header">
+              <div className="agent-canvas-target-kicker">
+                Create personal skill and attach it here
+              </div>
+            </div>
 
           <label className="agent-capability-field">
             <span className="agent-capability-field-label">Skill name</span>
@@ -150,7 +152,7 @@ export function WebCommunityAiAgentSkillsEditor(
               <button
                 type="button"
                 onClick={() => setIsCreateOpen(false)}
-                disabled={isCreatingPackage}
+                disabled={isCreatingSkill}
               >
                 Cancel
               </button>
@@ -158,9 +160,9 @@ export function WebCommunityAiAgentSkillsEditor(
                 type="button"
                 className="platform-save-button is-dirty"
                 onClick={() => void handleCreate()}
-                disabled={isCreatingPackage}
+                disabled={isCreatingSkill}
               >
-                {isCreatingPackage ? "Creating…" : "Create package"}
+                {isCreatingSkill ? "Creating…" : "Create and attach"}
               </button>
             </div>
           </div>

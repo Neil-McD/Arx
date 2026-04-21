@@ -40,7 +40,6 @@ import {
   updateCommunitySkillAttachment as updateCommunitySkillAttachmentImpl,
 } from "./communitySkillAttachments";
 import {
-  createSkillPackage as createSkillPackageImpl,
   listOwnedSkillPackages as listOwnedSkillPackagesImpl,
 } from "./skillPackages";
 import {
@@ -163,7 +162,6 @@ export const updateCommunityAppMount = updateCommunityAppMountImpl;
 export const unmountCommunityApp = unmountCommunityAppImpl;
 export const listCommunitySkillAttachments = listCommunitySkillAttachmentsImpl;
 export const listOwnedSkillPackages = listOwnedSkillPackagesImpl;
-export const createSkillPackage = createSkillPackageImpl;
 export const attachSkillPackageToCommunity = attachSkillPackageToCommunityImpl;
 export const updateCommunitySkillAttachment = updateCommunitySkillAttachmentImpl;
 export const detachCommunitySkill = detachCommunitySkillImpl;

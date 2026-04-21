@@ -69,7 +69,31 @@ export async function updateCloudUserPlatformSkillInstall<SessionT>(
   return payload ?? null;
 }
 
-export async function uninstallCloudUserPlatformSkill<SessionT>(
+export async function updateCloudUserPlatformSkillPackage<SessionT>(
+  params: CloudUserPlatformSkillGatewayParams<SessionT> & {
+    userPlatformSkillInstallId: string;
+    name?: string;
+    description?: string;
+    instructionsMd?: string;
+  },
+): Promise<UserPlatformInstalledSkill | null> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(
+    params.session,
+  );
+  const payload = (await client.mutation(
+    "userPlatformSkills:updateUserPlatformSkillPackage" as any,
+    {
+      authSubject,
+      userPlatformSkillInstallId: params.userPlatformSkillInstallId,
+      name: params.name,
+      description: params.description,
+      instructionsMd: params.instructionsMd,
+    },
+  )) as UserPlatformInstalledSkill | null;
+  return payload ?? null;
+}
+
+export async function deleteCloudUserPlatformSkill<SessionT>(
   params: CloudUserPlatformSkillGatewayParams<SessionT> & {
     userPlatformSkillInstallId: string;
   },
@@ -78,7 +102,7 @@ export async function uninstallCloudUserPlatformSkill<SessionT>(
     params.session,
   );
   const payload = (await client.mutation(
-    "userPlatformSkills:uninstallUserPlatformSkill" as any,
+    "userPlatformSkills:deleteUserPlatformSkill" as any,
     {
       authSubject,
       userPlatformSkillInstallId: params.userPlatformSkillInstallId,

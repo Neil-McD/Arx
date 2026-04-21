@@ -52,13 +52,17 @@ type WebIntegrationsSettingsSectionProps = {
   onCreateUserPlatformSkill: (
     input: CreateSkillPackageInput,
   ) => Promise<void> | Promise<boolean> | boolean | void;
+  onSaveUserPlatformSkill: (
+    userPlatformSkillInstallId: string,
+    input: CreateSkillPackageInput,
+  ) => Promise<void> | Promise<boolean> | boolean | void;
   onUpdateUserPlatformSkill: (
     userPlatformSkillInstallId: string,
     patch: {
       enabled?: boolean;
     },
   ) => Promise<void> | Promise<boolean> | boolean | void;
-  onUninstallUserPlatformSkill: (
+  onDeleteUserPlatformSkill: (
     userPlatformSkillInstallId: string,
   ) => Promise<void> | Promise<boolean> | boolean | void;
 };
@@ -68,6 +72,16 @@ function buildInitialSkillDraft(): CreateSkillPackageInput {
     name: "",
     description: "",
     instructions_md: "",
+  };
+}
+
+function buildSkillDraftFromInstall(
+  install: UserPlatformInstalledSkill,
+): CreateSkillPackageInput {
+  return {
+    name: install.skill.name,
+    description: install.skill.description ?? "",
+    instructions_md: install.skill.instructionsMd,
   };
 }
 
@@ -164,8 +178,9 @@ export function WebIntegrationsSettingsSection(
     updatingUserPlatformSkillInstallId,
     removingUserPlatformSkillInstallId,
     onCreateUserPlatformSkill,
+    onSaveUserPlatformSkill,
     onUpdateUserPlatformSkill,
-    onUninstallUserPlatformSkill,
+    onDeleteUserPlatformSkill,
   } = props;
 
   const [reconnectDraftMountId, setReconnectDraftMountId] = useState<
@@ -176,6 +191,10 @@ export function WebIntegrationsSettingsSection(
   const [skillDraft, setSkillDraft] = useState<CreateSkillPackageInput>(
     buildInitialSkillDraft,
   );
+  const [editingUserPlatformSkillInstallId, setEditingUserPlatformSkillInstallId] =
+    useState<string | null>(null);
+  const [editingSkillDraft, setEditingSkillDraft] =
+    useState<CreateSkillPackageInput>(buildInitialSkillDraft);
   const [reconnectSecret, setReconnectSecret] = useState("");
   const [reconnectError, setReconnectError] = useState<string | null>(null);
 
@@ -220,6 +239,17 @@ export function WebIntegrationsSettingsSection(
     if (!ok) return;
     setSkillDraft(buildInitialSkillDraft());
     setIsCreateSkillOpen(false);
+  };
+
+  const handleSavePersonalSkill = async () => {
+    if (!editingUserPlatformSkillInstallId) return;
+    const ok = await onSaveUserPlatformSkill(
+      editingUserPlatformSkillInstallId,
+      editingSkillDraft,
+    );
+    if (!ok) return;
+    setEditingUserPlatformSkillInstallId(null);
+    setEditingSkillDraft(buildInitialSkillDraft());
   };
 
   return (
@@ -473,8 +503,8 @@ export function WebIntegrationsSettingsSection(
         </div>
         <div className="settings-section-desc">
           Personal reusable skills become part of your baseline runtime guidance
-          and stay available across communities when you explicitly mention
-          them.
+          for personal threads. Community lenses use the skills attached to that
+          community.
         </div>
         {!session ? (
           <div className="model-note">
@@ -588,8 +618,8 @@ export function WebIntegrationsSettingsSection(
               <div className="model-note">Loading your skills…</div>
             ) : userPlatformSkills.length === 0 ? (
               <div className="model-note">
-                No personal skills installed yet. Creating one adds it directly
-                to your baseline layer.
+                No personal skills yet. Creating one adds it directly to your
+                baseline layer.
               </div>
             ) : (
               <div className="agent-capability-list" role="list" aria-label="Personal skills">
@@ -598,6 +628,8 @@ export function WebIntegrationsSettingsSection(
                     updatingUserPlatformSkillInstallId === install.id;
                   const isRemoving =
                     removingUserPlatformSkillInstallId === install.id;
+                  const isEditing =
+                    editingUserPlatformSkillInstallId === install.id;
                   return (
                     <div key={install.id} className="agent-capability-card" role="listitem">
                       <div className="agent-capability-card-header">
@@ -622,6 +654,21 @@ export function WebIntegrationsSettingsSection(
                           </div>
                         </div>
                         <div className="agent-capability-toolbar-actions">
+                          <button
+                            type="button"
+                            disabled={isUpdating || isRemoving}
+                            onClick={() => {
+                              if (isEditing) {
+                                setEditingUserPlatformSkillInstallId(null);
+                                setEditingSkillDraft(buildInitialSkillDraft());
+                                return;
+                              }
+                              setEditingUserPlatformSkillInstallId(install.id);
+                              setEditingSkillDraft(buildSkillDraftFromInstall(install));
+                            }}
+                          >
+                            {isEditing ? "Close" : "Edit"}
+                          </button>
                           <label
                             className={`members-switch${
                               isUpdating || isRemoving ? " is-disabled" : ""
@@ -651,11 +698,9 @@ export function WebIntegrationsSettingsSection(
                             type="button"
                             className="danger"
                             disabled={isUpdating || isRemoving}
-                            onClick={() =>
-                              void onUninstallUserPlatformSkill(install.id)
-                            }
+                            onClick={() => void onDeleteUserPlatformSkill(install.id)}
                           >
-                            {isRemoving ? "Removing…" : "Remove"}
+                            {isRemoving ? "Deleting…" : "Delete"}
                           </button>
                         </div>
                       </div>
@@ -678,6 +723,90 @@ export function WebIntegrationsSettingsSection(
                           </span>
                         </div>
                       </div>
+
+                      {isEditing ? (
+                        <div className="agent-capability-card community-skill-create-card">
+                          <label className="agent-capability-field">
+                            <span className="agent-capability-field-label">
+                              Skill name
+                            </span>
+                            <input
+                              className="agent-editor-inline-label-input"
+                              value={editingSkillDraft.name}
+                              onChange={(event) =>
+                                setEditingSkillDraft((prev) => ({
+                                  ...prev,
+                                  name: event.target.value,
+                                }))
+                              }
+                              placeholder="Weekly research"
+                            />
+                          </label>
+
+                          <label className="agent-capability-field">
+                            <span className="agent-capability-field-label">
+                              Optional description
+                            </span>
+                            <textarea
+                              className="agent-editor-inline-prompt-input community-skill-description-input"
+                              rows={3}
+                              value={editingSkillDraft.description ?? ""}
+                              onChange={(event) =>
+                                setEditingSkillDraft((prev) => ({
+                                  ...prev,
+                                  description: event.target.value,
+                                }))
+                              }
+                              placeholder="What this skill should help you do."
+                            />
+                          </label>
+
+                          <label className="agent-capability-field">
+                            <span className="agent-capability-field-label">
+                              Skill instructions
+                            </span>
+                            <textarea
+                              className="agent-editor-inline-prompt-input community-skill-instructions-input"
+                              rows={10}
+                              value={editingSkillDraft.instructions_md}
+                              onChange={(event) =>
+                                setEditingSkillDraft((prev) => ({
+                                  ...prev,
+                                  instructions_md: event.target.value,
+                                }))
+                              }
+                              placeholder={`Write the reusable skill instructions here.\n\nUse this skill when...\nSteps:\n1. ...\n2. ...`}
+                            />
+                          </label>
+
+                          <div className="agent-capability-toolbar">
+                            <div className="model-note">
+                              Editing this skill updates the canonical package
+                              and any community attachments that use it.
+                            </div>
+                            <div className="agent-capability-toolbar-actions">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingUserPlatformSkillInstallId(null);
+                                  setEditingSkillDraft(buildInitialSkillDraft());
+                                }}
+                                disabled={isUpdating || isRemoving}
+                              >
+                                Cancel
+                              </button>
+                              <button
+                                type="button"
+                                className="platform-save-button is-dirty"
+                                onClick={() => void handleSavePersonalSkill()}
+                                disabled={isUpdating || isRemoving}
+                              >
+                                {isUpdating ? "Saving…" : "Save skill"}
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ) : null}
                     </div>
                   );
                 })}

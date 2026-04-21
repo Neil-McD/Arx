@@ -30,7 +30,8 @@ function main() {
     "export const createUserPlatformSkill = mutation({",
     "export const listUserPlatformSkills = query({",
     "export const updateUserPlatformSkillInstall = mutation({",
-    "export const uninstallUserPlatformSkill = mutation({",
+    "export const updateUserPlatformSkillPackage = mutation({",
+    "export const deleteUserPlatformSkill = mutation({",
   ]) {
     assertIncludes(
       userPlatformSkills,
@@ -44,10 +45,9 @@ function main() {
     "skillPackageRevisions",
     "skill revision table usage",
   );
-  assertIncludes(
-    skillPackages,
-    "export const createSkillPackage = mutation({",
-    "pure shared skill package creation surface",
+  assert.ok(
+    !skillPackages.includes("export const createSkillPackage = mutation({"),
+    "expected duplicate community-first package creation surface to be removed",
   );
   assert.ok(
     !skillPackages.includes("upsertUserPlatformSkillInstallInternal"),
@@ -87,6 +87,11 @@ function main() {
     settingsSection,
     "Create personal skill package",
     "settings personal skill create form",
+  );
+  assertIncludes(
+    settingsSection,
+    "Editing this skill updates the canonical package",
+    "settings personal skill edit form",
   );
   assertIncludes(
     settingsSection,

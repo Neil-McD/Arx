@@ -232,12 +232,12 @@ export const resolveRuntimeSkillSelectionInternal = internalQuery({
       args.messages as RuntimeSkillInferenceMessage[],
     );
     const includeSelectedData = requestedMentionTokens.length > 0;
-    const userPlatformSkillScope = await resolveRuntimeUserPlatformSkillScope({
-      ctx,
-      userId,
-      includeSelectedData,
-    });
-
+    let userPlatformSkillScope: Awaited<
+      ReturnType<typeof resolveRuntimeUserPlatformSkillScope>
+    > = {
+      inventory: [],
+      selectedCandidates: [],
+    };
     let communitySkillInventory: RuntimeCommunitySkillInventory[] = [];
     let communitySelectedCandidates: ScopedExplicitlyMentionedSkillCandidate<
       "community",
@@ -256,14 +256,21 @@ export const resolveRuntimeSkillSelectionInternal = internalQuery({
       });
       communitySkillInventory = communitySkillScope.inventory;
       communitySelectedCandidates = communitySkillScope.selectedCandidates;
+    } else {
+      userPlatformSkillScope = await resolveRuntimeUserPlatformSkillScope({
+        ctx,
+        userId,
+        includeSelectedData,
+      });
     }
 
     const scopedCandidates: ScopedExplicitlyMentionedSkillCandidate<
       "personal" | "community",
       RuntimeScopedSelectedSkill
     >[] = [
-      ...userPlatformSkillScope.selectedCandidates,
-      ...communitySelectedCandidates,
+      ...(args.communityId
+        ? communitySelectedCandidates
+        : userPlatformSkillScope.selectedCandidates),
     ];
     const resolved = resolveScopedExplicitlyMentionedSkills(
       scopedCandidates,

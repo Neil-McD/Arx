@@ -5,6 +5,10 @@ export type SkillPackageSummary = {
   description: string | null;
 };
 
+export type SkillPackageDetail = SkillPackageSummary & {
+  instructionsMd: string;
+};
+
 export type CreateSkillPackageInput = {
   name: string;
   description?: string;

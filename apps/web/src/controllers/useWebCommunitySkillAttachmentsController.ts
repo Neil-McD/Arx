@@ -7,12 +7,12 @@ import type {
 } from "../../../../shared/communitySkillTypes";
 import {
   attachCloudSkillPackageToCommunity,
-  createCloudSkillPackage,
   detachCloudCommunitySkill,
   listCloudCommunitySkillAttachments,
   listCloudOwnedSkillPackages,
   updateCloudCommunitySkillAttachment,
 } from "../../../../shared/cloudCommunitySkillGateway";
+import { createCloudUserPlatformSkill } from "../../../../shared/cloudUserPlatformSkillGateway";
 import {
   resolveUsableSession,
   type EnsureSessionFn,
@@ -57,7 +57,7 @@ export function useWebCommunitySkillAttachmentsController<
     useState<string | null>(null);
   const [ownedSkillPackagesError, setOwnedSkillPackagesError] =
     useState<string | null>(null);
-  const [isCreatingSkillPackage, setIsCreatingSkillPackage] = useState(false);
+  const [isCreatingSkill, setIsCreatingSkill] = useState(false);
   const [communitySkillMutationError, setCommunitySkillMutationError] =
     useState<string | null>(null);
   const [updatingCommunitySkillAttachmentId, setUpdatingCommunitySkillAttachmentId] =
@@ -136,35 +136,53 @@ export function useWebCommunitySkillAttachmentsController<
     }
   }, []);
 
-  const createSkillPackage = useCallback(
+  const createPersonalSkillAndAttach = useCallback(
     async (input: CreateSkillPackageInput): Promise<boolean> => {
       const current = argsRef.current;
       const usableSession = await resolveUsableSession(
         current.session,
         current.ensureSession,
       );
-      if (!usableSession) return false;
-      setIsCreatingSkillPackage(true);
+      const communityId = current.activeCommunityId;
+      if (!usableSession || !communityId) return false;
+      setIsCreatingSkill(true);
       setCommunitySkillMutationError(null);
       try {
-        const created = await createCloudSkillPackage({
+        const created = await createCloudUserPlatformSkill({
           session: usableSession,
           input,
         });
         if (!created) return false;
+        const createdSkillPackage = created.skill;
         setOwnedSkillPackages((prev) => {
-          const next = prev.filter((entry) => entry.id !== created.id);
-          next.unshift(created);
+          const next = prev.filter((entry) => entry.id !== createdSkillPackage.id);
+          next.unshift(createdSkillPackage);
+          return next;
+        });
+        const attached = await attachCloudSkillPackageToCommunity({
+          session: usableSession,
+          communityId,
+          skillPackageId: createdSkillPackage.id,
+        });
+        if (!attached) {
+          setCommunitySkillMutationError(
+            "Created personal skill, but failed to attach it to this community.",
+          );
+          return false;
+        }
+        setCommunitySkillAttachments((prev) => {
+          const next = prev.filter((entry) => entry.id !== attached.id);
+          next.unshift(attached);
           return next;
         });
         return true;
       } catch (error) {
         setCommunitySkillMutationError(
-          toErrorMessage(error, "Failed to create skill package."),
+          toErrorMessage(error, "Failed to create and attach skill."),
         );
         return false;
       } finally {
-        setIsCreatingSkillPackage(false);
+        setIsCreatingSkill(false);
       }
     },
     [],
@@ -285,7 +303,7 @@ export function useWebCommunitySkillAttachmentsController<
     isLoadingOwnedSkillPackages,
     communitySkillAttachmentError,
     ownedSkillPackagesError,
-    isCreatingSkillPackage,
+    isCreatingSkill,
     communitySkillMutationError,
     updatingCommunitySkillAttachmentId,
     removingCommunitySkillAttachmentId,
@@ -295,7 +313,7 @@ export function useWebCommunitySkillAttachmentsController<
     clearCommunitySkillAttachments,
     loadCommunitySkillAttachments,
     loadOwnedSkillPackages,
-    createSkillPackage,
+    createPersonalSkillAndAttach,
     attachSkillPackageToCommunity,
     updateCommunitySkillAttachment,
     detachCommunitySkill,
