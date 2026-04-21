@@ -5,7 +5,7 @@ import {
   type BuilderBillingReturn,
 } from "../../../../shared/builderBilling";
 import type { AppPage, AppView, CommunityTab, SettingsPage } from "../../../../shared/appShellNavigation";
-import type { AppRouteState, PublicRoute } from "../../../../shared/webAppRouteState";
+import type { PublicRoute } from "../../../../shared/webAppRouteState";
 
 function hasPendingOAuthCallbackParams(): boolean {
   try {
@@ -24,12 +24,8 @@ export function useWebPathRouteLifecycle(params: {
   activeCommunitySlug: string | null;
   communityTab: CommunityTab;
   activeThreadId: string | null;
-  setPublicRoute: Dispatch<SetStateAction<PublicRoute>>;
-  applyPublicRouteState: (route: PublicRoute) => void;
-  applyAppRouteState: (route: AppRouteState) => void;
+  applyLocationToState: () => void;
   setBuilderBillingReturn: Dispatch<SetStateAction<BuilderBillingReturn | null>>;
-  readPublicRouteFromLocation: () => PublicRoute;
-  readAppRouteFromLocation: () => AppRouteState;
   buildAppRoutePath: (state: {
     page: AppPage;
     view: AppView;
@@ -42,18 +38,6 @@ export function useWebPathRouteLifecycle(params: {
   const paramsRef = useRef(params);
   paramsRef.current = params;
 
-  const applyLocationToState = () => {
-    const current = paramsRef.current;
-    const nextPublicRoute = current.readPublicRouteFromLocation();
-    current.setPublicRoute(nextPublicRoute);
-    if (nextPublicRoute.kind !== "app") {
-      current.applyPublicRouteState(nextPublicRoute);
-      return;
-    }
-
-    current.applyAppRouteState(current.readAppRouteFromLocation());
-  };
-
   useEffect(() => {
     const url = new URL(window.location.href);
     const billingReturn = parseBuilderBillingReturn(url.searchParams);
@@ -63,11 +47,11 @@ export function useWebPathRouteLifecycle(params: {
 
     clearBuilderBillingQueryParams(url.searchParams);
     window.history.replaceState({}, "", `${url.pathname}${url.search}`);
-    applyLocationToState();
+    paramsRef.current.applyLocationToState();
   }, []);
 
   useEffect(() => {
-    const handlePopState = () => applyLocationToState();
+    const handlePopState = () => paramsRef.current.applyLocationToState();
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
   }, []);

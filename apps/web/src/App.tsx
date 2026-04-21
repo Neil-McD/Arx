@@ -1876,13 +1876,7 @@ export default function App() {
     } else {
       window.history.pushState(historyState, document.title, nextPath);
     }
-    setShellVariant(readShellVariantFromPathname(window.location.pathname || "/"));
-    const nextPublicRoute = readPublicRouteFromLocation();
-    setPublicRoute(nextPublicRoute);
-    if (nextPublicRoute.kind !== "app") {
-      return;
-    }
-    applyAppRouteStateFromLocation();
+    applyLocationToState();
   }
 
   const applyAppRouteState = useCallback((nextAppRoute: AppRouteState) => {
@@ -1907,30 +1901,25 @@ export default function App() {
     }
   }, [applyCommunityShellState, workspaceProject.actions]);
 
-  function applyAppRouteStateFromLocation() {
+  const applyLocationToState = useCallback(() => {
     setShellVariant(readShellVariantFromPathname(window.location.pathname || "/"));
+    const nextPublicRoute = readPublicRouteFromLocation();
+    setPublicRoute(nextPublicRoute);
+    if (nextPublicRoute.kind !== "app") return nextPublicRoute;
     applyAppRouteState(readAppRouteFromLocation());
-  }
+    return nextPublicRoute;
+  }, [applyAppRouteState]);
 
   const applyStandaloneWorkspaceLaunch = useCallback((nextPath: string) => {
     window.history.replaceState(window.history.state ?? {}, document.title, nextPath);
-    setShellVariant(readShellVariantFromPathname(window.location.pathname || "/"));
-    setPublicRoute({ kind: "app" });
     applyCommunityShellState({
       communityId: null,
       communitySlug: null,
       communityTab: "chat",
     });
     workspaceProject.actions.setActiveProjectId(null);
-    applyAppRouteState({
-      page: "workspace",
-      view: "home",
-      settingsPage: "agent",
-      communitySlug: null,
-      communityTab: "chat",
-      threadId: null,
-    });
-  }, [applyAppRouteState, applyCommunityShellState, workspaceProject.actions]);
+    applyLocationToState();
+  }, [applyCommunityShellState, applyLocationToState, workspaceProject.actions]);
 
   useEffect(() => {
     if (!isStandaloneWebApp()) return;
@@ -2093,10 +2082,6 @@ export default function App() {
     threads,
     workspaceWantsNewChat,
   ]);
-  const applyPublicRouteState = useCallback((route: PublicRoute) => {
-    setShellVariant(readShellVariantFromPathname(window.location.pathname || "/"));
-    setPublicRoute(route);
-  }, []);
   const restoreNavSnapshot = (snapshot: NavSnapshot) => {
     const nextRoutePath = snapshot.routePath?.trim() || "/";
     navigateTo(nextRoutePath, { replace: true });
@@ -3080,12 +3065,8 @@ export default function App() {
     activeCommunitySlug: selectedActiveCommunitySlug,
     communityTab,
     activeThreadId,
-    setPublicRoute,
-    applyPublicRouteState,
-    applyAppRouteState,
+    applyLocationToState,
     setBuilderBillingReturn,
-    readPublicRouteFromLocation,
-    readAppRouteFromLocation,
     buildAppRoutePath: (state) => applyShellVariantToAppPath(buildAppRoutePath(state) ?? "", shellVariant) || null,
   });
 
@@ -3096,13 +3077,8 @@ export default function App() {
     const nextPath = applyShellVariantToKnownPath(currentPath, "mobile");
     if (!nextPath || nextPath === currentPath) return;
     window.history.replaceState(window.history.state ?? {}, document.title, nextPath);
-    setShellVariant(readShellVariantFromPathname(window.location.pathname || "/"));
-    const nextPublicRoute = readPublicRouteFromLocation();
-    setPublicRoute(nextPublicRoute);
-    if (nextPublicRoute.kind === "app") {
-      applyAppRouteState(readAppRouteFromLocation());
-    }
-  }, [applyAppRouteState, isLikelyMobileDevice, shellVariant]);
+    applyLocationToState();
+  }, [applyLocationToState, isLikelyMobileDevice, shellVariant]);
 
   useEffect(() => {
     communityAttachmentsRef.current = communityAttachments;
