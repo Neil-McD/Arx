@@ -128,10 +128,14 @@ require_match_in_file "$WEB_ENV_FILE" '^VITE_CONVEX_PUBLIC_KEY=' \
   "web env template declares VITE_CONVEX_PUBLIC_KEY"
 require_match_in_file "$WEB_ENV_FILE" 'VITE_WORKOS_CLIENT_ID' \
   "web env template documents native WorkOS client id"
+require_match_in_file "$WEB_ENV_FILE" 'VITE_WORKOS_API_HOSTNAME' \
+  "web env template documents WorkOS auth API hostname"
 require_match_in_file "$WEB_ENV_FILE" 'VITE_WORKOS_REDIRECT_URI' \
   "web env template documents WorkOS redirect uri"
 require_match_in_file "$WEB_ENV_FILE" 'VITE_WORKOS_DEV_MODE' \
   "web env template documents WorkOS devMode toggle"
+forbid_match_in_file "$WEB_ENV_FILE" 'ARX_AUTH_BRIDGE_SECRET|ARX_AUTH_SESSION_COOKIE_DOMAIN|ARX_AUTH_SESSION_COOKIE_MAX_AGE_SECONDS' \
+  "web env template must not include deleted bridge continuity env"
 forbid_match_in_file "$WEB_ENV_FILE" 'ARX_AUTH_MAGIC_LINK_URL' \
   "web env template must not include deleted magic-link env"
 forbid_match_in_file "$WEB_ENV_FILE" '^VITE_AUTH_URL=|^VITE_AUTH_PUBLIC_KEY=|ARX_AUTH_BASE_URL|ARX_AUTH_PUBLIC_KEY' \

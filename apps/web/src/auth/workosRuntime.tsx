@@ -6,10 +6,11 @@ import {
   type AuthenticationMethod,
   type User,
 } from "@workos-inc/authkit-react";
-import { createContext, useCallback, useContext, useMemo, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, type ReactNode } from "react";
 import type { AuthSession } from "../../../../shared/authCore";
 import { DEFAULT_POST_SIGN_IN_PATH } from "../../../../shared/webAppRouteState";
 import { markAuthFlowReturned } from "../auth";
+import { emitWorkspaceEvent } from "../lib/workspaceInstrumentation";
 
 type WorkOsSessionReadOptions = {
   forceRefresh?: boolean;
@@ -218,6 +219,44 @@ function WorkOsRuntimeBridge({ children }: { children: ReactNode }) {
 
 export function WorkOsRuntimeProvider({ children }: { children: ReactNode }) {
   const config = readWorkOsConfig();
+
+  useEffect(() => {
+    if (!config.clientId || import.meta.env.DEV) return;
+    if (config.devMode) {
+      console.warn("[auth][workos] production_dev_mode_enabled", {
+        apiHostname: config.apiHostname ?? null,
+        redirectUri: config.redirectUri ?? null,
+      });
+      emitWorkspaceEvent({
+        scope: "lifecycle",
+        name: "auth_workos_runtime_posture",
+        status: "failure",
+        detail: {
+          reason: "production_dev_mode_enabled",
+          apiHostname: config.apiHostname ?? null,
+          redirectUri: config.redirectUri ?? null,
+        },
+      });
+      return;
+    }
+    if (!config.apiHostname) {
+      console.warn("[auth][workos] production_api_hostname_missing", {
+        redirectUri: config.redirectUri ?? null,
+        fallbackHostname: "api.workos.com",
+      });
+      emitWorkspaceEvent({
+        scope: "lifecycle",
+        name: "auth_workos_runtime_posture",
+        status: "skip",
+        detail: {
+          reason: "production_api_hostname_missing",
+          redirectUri: config.redirectUri ?? null,
+          fallbackHostname: "api.workos.com",
+        },
+      });
+    }
+  }, [config.apiHostname, config.clientId, config.devMode, config.redirectUri]);
+
   if (!config.clientId) {
     return (
       <WorkOsRuntimeContext.Provider value={DISABLED_RUNTIME}>
