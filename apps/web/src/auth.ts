@@ -27,16 +27,9 @@ export type {
 } from "../../../shared/authCore";
 export {
   beginBrowserSignedOutState,
-  clearAuthAutomaticReauthAttempt,
-  clearAuthContinuityHint,
   clearAuthFlowPending,
   clearAuthSignedOutIntentMarker,
-  hasRecentAuthAutomaticReauthAttempt,
-  hasRecentAuthContinuityHint,
   hasRecentAuthFlowPending,
-  markAuthAutomaticReauthAttempt,
-  markAuthContinuityHint,
   markAuthFlowPending,
   AUTH_SIGNED_OUT_INTENT_KEY,
-  AUTH_SIGNED_OUT_TAB_INTENT_KEY,
 } from "./authBrowserMarkers";

@@ -10,20 +10,13 @@ import {
 } from "react";
 import {
   AUTH_SIGNED_OUT_INTENT_KEY,
-  AUTH_SIGNED_OUT_TAB_INTENT_KEY,
   bootstrapSession,
-  clearAuthAutomaticReauthAttempt,
-  clearAuthContinuityHint,
   clearAuthFlowPending,
   clearAuthSignedOutIntentMarker,
   ensureAuthSessionForAuthenticatedSendResult,
   fetchWithAuthShared,
   fetchWithPublicShared,
-  hasRecentAuthAutomaticReauthAttempt,
-  hasRecentAuthContinuityHint,
   hasRecentAuthFlowPending,
-  markAuthAutomaticReauthAttempt,
-  markAuthContinuityHint,
   markAuthFlowPending,
   logoutAuthSessionRemote,
   refreshAuthSessionResult,
@@ -44,7 +37,6 @@ import {
   formatWorkspaceInstrumentationError,
 } from "../lib/workspaceInstrumentation";
 import { useWebAuthSessionLifecycle } from "./useWebAuthSessionLifecycle";
-import { readPublicRouteFromLocation } from "../../../../shared/webAppRouteState";
 
 type AsyncVoid = void | Promise<void>;
 
@@ -97,17 +89,6 @@ function readCurrentPathReturnTo(): string {
   return `${window.location.pathname}${window.location.search}`;
 }
 
-function hasAuthSignedOutIntentMarker(): boolean {
-  try {
-    return (
-      sessionStorage.getItem(AUTH_SIGNED_OUT_TAB_INTENT_KEY) === "1" ||
-      localStorage.getItem(AUTH_SIGNED_OUT_INTENT_KEY) === "1"
-    );
-  } catch {
-    return false;
-  }
-}
-
 function sessionsEqual(
   a: AuthSession | null | undefined,
   b: AuthSession | null | undefined,
@@ -147,7 +128,6 @@ export function useWebAppAuthController(
   const [isAuthBootstrapComplete, setIsAuthBootstrapComplete] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   const [isAuthSigningOut, setIsAuthSigningOut] = useState(false);
-  const [isAutomaticReauthPending, setIsAutomaticReauthPending] = useState(false);
 
   const sessionRef = useRef<AuthSession | null>(null);
   const refreshResultInFlightRef = useRef<Promise<AuthSessionRefreshResult> | null>(null);
@@ -209,9 +189,6 @@ export function useWebAppAuthController(
           checkedAt: Date.now(),
         }
       : null;
-    markAuthContinuityHint();
-    clearAuthAutomaticReauthAttempt();
-    setIsAutomaticReauthPending(false);
     setAuthSession(nextSession);
   }, []);
 
@@ -313,62 +290,6 @@ export function useWebAppAuthController(
     return true;
   }, []);
 
-  const attemptAutomaticReauth = useCallback(async (phase: string): Promise<boolean> => {
-    const isProtectedAppRoute = readPublicRouteFromLocation().kind === "app";
-    const hasContinuityHint = hasRecentAuthContinuityHint();
-    const hasRecentAutomaticAttempt = hasRecentAuthAutomaticReauthAttempt();
-    const hasSignedOutIntent = hasAuthSignedOutIntentMarker();
-    const hasPendingFlow = hasRecentAuthFlowPending();
-    if (
-      isAuthSigningOut ||
-      !isProtectedAppRoute ||
-      !hasContinuityHint ||
-      hasRecentAutomaticAttempt ||
-      hasPendingFlow ||
-      hasSignedOutIntent
-    ) {
-      emitWorkspaceEvent({
-        scope: "lifecycle",
-        name: "auth_automatic_reauth",
-        status: "skip",
-        detail: {
-          phase,
-          isProtectedAppRoute,
-          hasContinuityHint,
-          hasRecentAutomaticAttempt,
-          hasPendingFlow,
-          hasSignedOutIntent,
-          isAuthSigningOut,
-        },
-      });
-      return false;
-    }
-
-    markAuthAutomaticReauthAttempt();
-    setIsAutomaticReauthPending(true);
-    emitWorkspaceEvent({
-      scope: "lifecycle",
-      name: "auth_automatic_reauth",
-      status: "start",
-      detail: {
-        phase,
-        isProtectedAppRoute,
-        hasContinuityHint,
-      },
-    });
-    await beginSignInFlow();
-    emitWorkspaceEvent({
-      scope: "lifecycle",
-      name: "auth_automatic_reauth",
-      status: "success",
-      detail: {
-        phase,
-        result: "redirect_started",
-      },
-    });
-    return true;
-  }, [beginSignInFlow, isAuthSigningOut]);
-
   const requireSignIn = useCallback((intentInput?: unknown) => {
     setAuthError(null);
     const intent = parsePendingAuthIntentInput(intentInput);
@@ -384,11 +305,8 @@ export function useWebAppAuthController(
 
   const handleSignOut = useCallback(async (): Promise<void> => {
     clearAuthFlowPending();
-    clearAuthAutomaticReauthAttempt();
-    clearAuthContinuityHint();
     authSessionEpochRef.current += 1;
     setAuthError(null);
-    setIsAutomaticReauthPending(false);
     setIsAuthSigningOut(true);
     try {
       await onBeforeSignOutRef.current?.();
@@ -444,19 +362,6 @@ export function useWebAppAuthController(
     onSessionMissing: () => {
       if (!authBootstrapCompleteRef.current) return;
       void (async () => {
-        const startedAutomaticReauth = await attemptAutomaticReauth("session_missing_after_bootstrap");
-        if (startedAutomaticReauth) {
-          emitWorkspaceEvent({
-            scope: "lifecycle",
-            name: "auth_session_missing_after_bootstrap",
-            status: "skip",
-            detail: {
-              reason: "automatic_reauth_started",
-              isAuthSigningOut,
-            },
-          });
-          return;
-        }
         emitWorkspaceEvent({
           scope: "lifecycle",
           name: "auth_session_missing_after_bootstrap",
@@ -466,7 +371,6 @@ export function useWebAppAuthController(
             isAuthSigningOut,
           },
         });
-        setIsAutomaticReauthPending(false);
         sessionRef.current = null;
         setAuthSession(null);
         await onSessionMissingAfterBootstrapRef.current();
@@ -529,11 +433,6 @@ export function useWebAppAuthController(
           await clearSessionLocally();
           if (cancelled) return;
         }
-
-        const startedAutomaticReauth = await attemptAutomaticReauth("bootstrap");
-        if (cancelled || startedAutomaticReauth) return;
-
-        setIsAutomaticReauthPending(false);
         markAuthBootstrapComplete();
         if (hadPendingAuthFlow) {
           clearAuthFlowPending();
@@ -549,8 +448,6 @@ export function useWebAppAuthController(
           },
           error: formatWorkspaceInstrumentationError(error),
         });
-        const startedAutomaticReauth = await attemptAutomaticReauth("bootstrap_failure");
-        if (cancelled || startedAutomaticReauth) return;
         markAuthBootstrapComplete();
       }
     })();
@@ -560,7 +457,6 @@ export function useWebAppAuthController(
     };
   }, [
     adoptAuthSession,
-    attemptAutomaticReauth,
     clearSessionLocally,
     ensureUsableAuthSession,
     markAuthBootstrapComplete,
@@ -569,9 +465,8 @@ export function useWebAppAuthController(
 
   const isAuthResolvingSignedInState = useMemo(() => {
     if (isAuthSigningOut) return false;
-    if (isAutomaticReauthPending) return true;
     return !isAuthBootstrapComplete;
-  }, [isAuthBootstrapComplete, isAuthSigningOut, isAutomaticReauthPending]);
+  }, [isAuthBootstrapComplete, isAuthSigningOut]);
 
   const authPresentationState = useMemo<"signed_out" | "recovering_signed_in" | "signed_in">(() => {
     if (session) return "signed_in";
@@ -584,8 +479,6 @@ export function useWebAppAuthController(
       const key = String(event.key ?? "").trim();
       if (key !== AUTH_SIGNED_OUT_INTENT_KEY || event.newValue !== "1") return;
       authSessionEpochRef.current += 1;
-      clearAuthAutomaticReauthAttempt();
-      clearAuthContinuityHint();
       void clearSessionLocally();
     };
     window.addEventListener("storage", onStorage);
