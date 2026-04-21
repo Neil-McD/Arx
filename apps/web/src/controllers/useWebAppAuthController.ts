@@ -10,6 +10,7 @@ import {
 } from "react";
 import {
   AUTH_SIGNED_OUT_INTENT_KEY,
+  beginOAuthSignIn,
   bootstrapSessionDetailed,
   clearAuthFlowPending,
   clearAuthSignedOutIntentMarker,
@@ -29,7 +30,6 @@ import {
   storeAuthResumeState,
 } from "../../../../shared/authResumeState";
 import { clearOAuthCallbackParamsFromLocation } from "../../../../shared/cloudPkce";
-import { buildLoginTrampolinePath } from "../auth/loginTrampoline";
 import {
   emitWorkspaceEvent,
   formatWorkspaceInstrumentationError,
@@ -339,8 +339,26 @@ export function useWebAppAuthController(
     clearAuthSignedOutIntentMarker();
     const returnTo = readCurrentAuthReturnTo();
     markAuthFlowPending();
-    window.location.assign(buildLoginTrampolinePath(returnTo));
-    return true;
+    try {
+      const signIn = await beginOAuthSignIn({ returnTo });
+      if (!signIn.ok) {
+        setAuthError(signIn.error || "Sign-in URL could not be prepared.");
+        clearAuthFlowPending();
+        return false;
+      }
+      const authUrl = String(signIn.authUrl ?? "").trim();
+      if (!authUrl) {
+        setAuthError("Sign-in URL could not be prepared.");
+        clearAuthFlowPending();
+        return false;
+      }
+      window.location.assign(authUrl);
+      return true;
+    } catch (error) {
+      setAuthError(error instanceof Error && error.message.trim() ? error.message.trim() : "Sign-in failed.");
+      clearAuthFlowPending();
+      return false;
+    }
   }, []);
 
   const requireSignIn = useCallback((intentInput?: unknown) => {
