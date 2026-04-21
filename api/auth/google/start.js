@@ -49,7 +49,6 @@ export default async function handler(req, res) {
   let response;
   try {
     response = await callRuntimeAuthJson("/runtime/auth_begin_google_sign_in", {
-      provider: "GoogleOAuth",
       redirect_to: redirectTo,
       code_challenge: codeChallenge,
       code_challenge_method: "S256",

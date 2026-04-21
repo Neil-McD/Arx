@@ -98,7 +98,6 @@ export default async function handler(req, res) {
     bridgeResponse = await callAuthBridgeJson("/runtime/auth_bridge_session_create", {
       accessToken,
       payload: {
-        provider: "GoogleOAuth",
         payload,
       },
     });

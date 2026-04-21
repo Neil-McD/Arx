@@ -15,7 +15,7 @@ The current desktop auth posture has three layers:
    - `ARX_AUTH_CLIENT_ID`
    - `ARX_AUTH_JWT_ISSUER`
    - `ARX_AUTH_JWT_JWKS_URL`
-3. Shared OAuth metadata for hosted MCP auth discovery and server-side PKCE exchange:
+3. Shared OAuth metadata for hosted MCP auth discovery and server-side Google PKCE exchange:
    - `ARX_AUTH_AUTHORIZE_URL`
    - `ARX_AUTH_TOKEN_URL`
 
@@ -38,15 +38,6 @@ This removes browser-owned refresh-token continuity from the desktop path.
 
 ## 3) WorkOS AuthKit Mapping
 
-There are still two WorkOS domain concepts:
-
-1. `AUTHKIT_DOMAIN`
-   - used for hosted AuthKit UI, OIDC issuer, JWKS, and OAuth metadata
-   - examples: `<slug>.authkit.app` or an owned AuthKit domain
-2. `AUTH_API_DOMAIN`
-   - optional future hardening path for direct browser AuthKit
-   - not required for the current same-origin bridge architecture
-
 Given `AUTHKIT_DOMAIN`:
 
 1. `ARX_AUTH_CLIENT_ID=<AuthKit client id>`
@@ -58,7 +49,7 @@ Given `AUTHKIT_DOMAIN`:
 
 ## 4) Redirect URI
 
-The hosted WorkOS flow should redirect back to the same-origin callback route.
+The hosted WorkOS Google flow should redirect back to the same-origin callback route.
 
 Examples:
 

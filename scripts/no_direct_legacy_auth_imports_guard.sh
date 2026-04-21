@@ -7,7 +7,7 @@ cd "$ROOT_DIR"
 echo "== No direct legacy-auth imports guard =="
 
 PATTERN='from ".*cloudAuthCore"|from ".*cloudAuthFlow"|from ".*cloudOAuthCallback"|from ".*cloudAuthClient"'
-TARGETS=(src apps shared)
+TARGETS=(apps shared)
 
 echo "[1/2] Scanning runtime/product paths for direct legacy-auth imports..."
 RAW_MATCHES="$(rg -n --hidden -S "$PATTERN" "${TARGETS[@]}" || true)"

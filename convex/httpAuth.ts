@@ -1,5 +1,4 @@
 type RuntimeAuthBeginGoogleSignInInput = {
-  provider?: unknown;
   redirect_to?: unknown;
   code_challenge?: unknown;
   code_challenge_method?: unknown;
@@ -71,10 +70,6 @@ function resolveOAuthAudience(): string {
   return readEnv("ARX_AUTH_AUDIENCE");
 }
 
-function resolveOAuthProviderQueryKey(): string {
-  return readEnv("ARX_AUTH_PROVIDER_QUERY_KEY");
-}
-
 function isLikelyWorkOsAuthUrl(value: string): boolean {
   const raw = String(value ?? "").trim();
   if (!raw) return false;
@@ -101,15 +96,6 @@ function isLikelyWorkOsAuthConfiguration(params: {
   if (!clientId.startsWith("client_")) return false;
   const candidates = [params.authorizeUrl, params.tokenUrl, params.issuer, params.jwksUrl];
   return candidates.some((value) => isLikelyWorkOsAuthUrl(String(value ?? "")));
-}
-
-function normalizeWorkOsProvider(provider: string): string {
-  const raw = String(provider ?? "").trim();
-  if (!raw) return "GoogleOAuth";
-  const normalized = raw.toLowerCase();
-  if (normalized === "google") return "GoogleOAuth";
-  if (normalized === "authkit") return "authkit";
-  return raw;
 }
 
 function buildAuthProxyHeaders(params: {
@@ -242,9 +228,6 @@ export function registerRuntimeAuthRoutes(args: RegisterRuntimeAuthRoutesArgs): 
         issuer: readEnv("ARX_AUTH_JWT_ISSUER"),
         jwksUrl: readEnv("ARX_AUTH_JWT_JWKS_URL"),
       });
-      const provider = isWorkOsAuth
-        ? normalizeWorkOsProvider(parseOptionalString(input.provider, 64) || "GoogleOAuth")
-        : parseOptionalString(input.provider, 64) || "google";
       const redirectTo = parseOptionalString(input.redirect_to, 2048);
       const codeChallenge = parseOptionalString(input.code_challenge, 1024);
       const codeChallengeMethod = parseOptionalString(input.code_challenge_method, 64) || "S256";
@@ -292,22 +275,17 @@ export function registerRuntimeAuthRoutes(args: RegisterRuntimeAuthRoutesArgs): 
       authUrl.searchParams.set("code_challenge", codeChallenge);
       authUrl.searchParams.set("code_challenge_method", codeChallengeMethod);
       if (isWorkOsAuth) {
-        if (provider) authUrl.searchParams.set("provider", provider);
+        authUrl.searchParams.set("provider", "GoogleOAuth");
       } else {
         authUrl.searchParams.set("scope", resolveOAuthScope());
         const audience = resolveOAuthAudience();
         if (audience) authUrl.searchParams.set("audience", audience);
-        const providerQueryKey = resolveOAuthProviderQueryKey();
-        if (provider && providerQueryKey) {
-          authUrl.searchParams.set(providerQueryKey, provider);
-        }
       }
       if (state) authUrl.searchParams.set("state", state);
 
       return jsonResponse(req, 200, {
         ok: true,
         auth_url: authUrl.toString(),
-        provider,
       });
     }),
   });

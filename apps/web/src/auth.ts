@@ -30,7 +30,6 @@ export {
   clearAuthAutomaticReauthAttempt,
   clearAuthContinuityHint,
   clearAuthFlowPending,
-  clearAuthFlowReturned,
   clearAuthSignedOutIntentMarker,
   hasRecentAuthAutomaticReauthAttempt,
   hasRecentAuthContinuityHint,

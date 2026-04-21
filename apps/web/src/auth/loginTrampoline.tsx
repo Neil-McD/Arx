@@ -58,7 +58,6 @@ export function LoginTrampolineRoute() {
   useEffect(() => {
     console.info("[auth][probe] login_trampoline_entered", { returnTo });
     void beginOAuthSignIn({
-      provider: "GoogleOAuth",
       returnTo,
     })
       .then((url) => {

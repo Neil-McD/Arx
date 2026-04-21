@@ -246,7 +246,6 @@ export function registerRuntimeAuthBridgeRoutes(args: RegisterRuntimeAuthBridgeR
       if (!bodyResult.ok) return bodyResult.response;
 
       const payload = bodyResult.body;
-      const provider = parseOptionalString(payload.provider, 128) ?? "GoogleOAuth";
       const stored = normalizeStoredState((payload.payload ?? payload) as unknown, {
         requireRefreshToken: true,
       });
@@ -287,7 +286,7 @@ export function registerRuntimeAuthBridgeRoutes(args: RegisterRuntimeAuthBridgeR
         sessionId,
         authSubject,
         userId: actor.dbUserId,
-        provider,
+        provider: "GoogleOAuth",
         accessToken: normalizedStored.accessToken,
         ...(normalizedStored.idToken ? { idToken: normalizedStored.idToken } : null),
         refreshToken: normalizedStored.refreshToken,

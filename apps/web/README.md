@@ -45,7 +45,7 @@ Set the following Vercel env vars:
 
 Production auth posture:
 
-- Browser sign-in/session continuity runs through root `/api/auth/*`.
+- Browser Google sign-in/session continuity runs through root `/api/auth/*`.
 - `ARX_AUTH_*` metadata and JWT verifier vars point at your AuthKit / OIDC issuer domain.
 - The browser bundle no longer needs direct WorkOS SDK env.
 

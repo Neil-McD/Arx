@@ -364,10 +364,8 @@ export type BeginOAuthSignInUrlResult =
   | { ok: false; error: string };
 
 export async function beginOAuthSignIn(params: {
-  provider: string;
   returnTo?: string;
 }): Promise<BeginOAuthSignInUrlResult> {
-  void params.provider;
   const authUrl = new URL(buildSameOriginAuthUrl(AUTH_GATEWAY_BEGIN_PATH));
   const returnTo = readString(params.returnTo);
   if (returnTo) authUrl.searchParams.set("return_to", returnTo);

@@ -3,7 +3,6 @@ import { isStandaloneWebApp } from "../../../shared/browserRuntimeMode";
 const AUTH_SIGNED_OUT_INTENT_KEY = "arx_cloud_signed_out_v1";
 const AUTH_SIGNED_OUT_TAB_INTENT_KEY = "arx_cloud_signed_out_tab_v1";
 const AUTH_FLOW_PENDING_KEY = "arx_cloud_auth_flow_pending_v1";
-const AUTH_FLOW_RETURNED_KEY = "arx_cloud_auth_flow_returned_v1";
 const AUTH_CONTINUITY_HINT_KEY = "arx_cloud_auth_continuity_hint_v1";
 const AUTH_AUTO_REAUTH_ATTEMPT_KEY = "arx_cloud_auto_reauth_attempt_v1";
 const AUTH_FLOW_PENDING_TTL_MS = 20 * 60 * 1000;
@@ -126,21 +125,6 @@ export function markAuthFlowPending(): void {
   }
 }
 
-export function markAuthFlowReturned(): void {
-  const createdAt = String(Date.now());
-  try {
-    sessionStorage.setItem(AUTH_FLOW_RETURNED_KEY, createdAt);
-  } catch {
-    // ignore
-  }
-  if (!isStandaloneWebApp()) return;
-  try {
-    localStorage.setItem(AUTH_FLOW_RETURNED_KEY, createdAt);
-  } catch {
-    // ignore
-  }
-}
-
 export function clearAuthFlowPending(): void {
   try {
     sessionStorage.removeItem(AUTH_FLOW_PENDING_KEY);
@@ -149,19 +133,6 @@ export function clearAuthFlowPending(): void {
   }
   try {
     localStorage.removeItem(AUTH_FLOW_PENDING_KEY);
-  } catch {
-    // ignore
-  }
-}
-
-export function clearAuthFlowReturned(): void {
-  try {
-    sessionStorage.removeItem(AUTH_FLOW_RETURNED_KEY);
-  } catch {
-    // ignore
-  }
-  try {
-    localStorage.removeItem(AUTH_FLOW_RETURNED_KEY);
   } catch {
     // ignore
   }
@@ -200,18 +171,9 @@ export function hasRecentAuthFlowPending(nowMs = Date.now()): boolean {
   return nowMs - createdAtMs <= AUTH_FLOW_PENDING_TTL_MS;
 }
 
-export function hasRecentAuthFlowReturned(nowMs = Date.now()): boolean {
-  const returned = loadAnyStorageItem([AUTH_FLOW_RETURNED_KEY]);
-  if (!returned) return false;
-  const createdAtMs = Number(returned.trim());
-  if (!Number.isFinite(createdAtMs) || createdAtMs <= 0) return false;
-  return nowMs - createdAtMs <= AUTH_FLOW_PENDING_TTL_MS;
-}
-
 export function beginBrowserSignedOutState(): void {
   markCloudSignedOutIntent();
   clearAuthFlowPending();
-  clearAuthFlowReturned();
 }
 
 export { AUTH_SIGNED_OUT_INTENT_KEY, AUTH_SIGNED_OUT_TAB_INTENT_KEY };

@@ -15,7 +15,6 @@ import {
   clearAuthAutomaticReauthAttempt,
   clearAuthContinuityHint,
   clearAuthFlowPending,
-  clearAuthFlowReturned,
   clearAuthSignedOutIntentMarker,
   ensureAuthSessionForAuthenticatedSendResult,
   fetchWithAuthShared,
@@ -179,7 +178,6 @@ export function useWebAppAuthController(
     if (!callbackError) return;
     setAuthError(callbackError);
     clearAuthFlowPending();
-    clearAuthFlowReturned();
     clearOAuthCallbackParamsFromLocation();
   }, []);
 
@@ -308,7 +306,6 @@ export function useWebAppAuthController(
   const beginSignInFlow = useCallback(async (): Promise<boolean> => {
     setAuthError(null);
     clearAuthSignedOutIntentMarker();
-    clearAuthFlowReturned();
     const returnTo = readCurrentAuthReturnTo();
     markAuthFlowPending();
     storeAuthResumeState({ returnTo, phase: "awaiting_auth" });
@@ -524,7 +521,6 @@ export function useWebAppAuthController(
               onApplyPostAuthPathRef.current(nextPath);
             }
             clearAuthFlowPending();
-            clearAuthFlowReturned();
             setAuthError(null);
             return;
           }
@@ -542,7 +538,6 @@ export function useWebAppAuthController(
         markAuthBootstrapComplete();
         if (hadPendingAuthFlow) {
           clearAuthFlowPending();
-          clearAuthFlowReturned();
         }
       } catch (error) {
         if (cancelled) return;
