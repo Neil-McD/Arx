@@ -286,7 +286,6 @@ export function registerRuntimeAuthBridgeRoutes(args: RegisterRuntimeAuthBridgeR
         sessionId,
         authSubject,
         userId: actor.dbUserId,
-        provider: "GoogleOAuth",
         accessToken: normalizedStored.accessToken,
         ...(normalizedStored.idToken ? { idToken: normalizedStored.idToken } : null),
         refreshToken: normalizedStored.refreshToken,

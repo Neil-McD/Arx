@@ -21,7 +21,6 @@ type AuthSessionRow = {
   sessionId: string;
   authSubject: string;
   userId: unknown;
-  provider: string;
   encryptedSecretHex: string;
   secretIvHex: string;
   secretVersion: number;
@@ -435,7 +434,6 @@ export const createAuthSessionInternal = internalMutation({
     sessionId: v.string(),
     authSubject: v.string(),
     userId: v.id("users"),
-    provider: v.string(),
     accessToken: v.string(),
     idToken: v.optional(v.string()),
     refreshToken: v.string(),
@@ -469,7 +467,6 @@ export const createAuthSessionInternal = internalMutation({
     const patch = {
       authSubject: args.authSubject,
       userId: args.userId,
-      provider: args.provider,
       encryptedSecretHex: encrypted.encryptedSecretHex,
       secretIvHex: encrypted.secretIvHex,
       secretVersion: encrypted.secretVersion,
