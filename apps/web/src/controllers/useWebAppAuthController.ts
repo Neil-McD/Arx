@@ -308,7 +308,7 @@ export function useWebAppAuthController(
     clearAuthSignedOutIntentMarker();
     const returnTo = readCurrentAuthReturnTo();
     markAuthFlowPending();
-    storeAuthResumeState({ returnTo, phase: "awaiting_auth" });
+    storeAuthResumeState({ returnTo });
     window.location.assign(buildLoginTrampolinePath(returnTo));
     return true;
   }, []);
@@ -376,7 +376,6 @@ export function useWebAppAuthController(
       storeAuthResumeState({
         returnTo: readCurrentPathReturnTo(),
         intent,
-        phase: "awaiting_auth",
       });
     }
     if (session) return;
