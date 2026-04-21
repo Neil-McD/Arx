@@ -3,12 +3,14 @@ import { useEffect, useMemo, useState, type ComponentProps } from "react";
 import type { DeveloperAppAuthType } from "../../../../shared/communityAppMountTypes";
 import { buildPlatformSwitcherStyle } from "../../../../shared/platformSwitcherUi";
 import type { DiscoverCommunitySnapshot } from "../../../../shared/communityTypes";
+import type { CreateSkillPackageInput } from "../../../../shared/skillPackageTypes";
 import type {
   ConnectUserPlatformAppResult,
   ConnectUserPlatformAppInput,
   UserPlatformMountedApp,
   UserPlatformAppValidationReport,
 } from "../../../../shared/userPlatformAppMountTypes";
+import type { UserPlatformInstalledSkill } from "../../../../shared/userPlatformSkillTypes";
 import { DiscoverCommunityCard } from "../../../../shared/DiscoverCommunityCard";
 import {
   buildDiscoverAppConnectionStrategyLabel,
@@ -33,6 +35,9 @@ type DiscoverSkillCatalogEntry = {
   surface: string;
   category: string;
   icon: "research" | "summary" | "workflow" | "custom";
+  heroNote: string;
+  detailBullets: string[];
+  installInput: CreateSkillPackageInput | null;
 };
 
 const DISCOVER_TABS: Array<{ id: DiscoverTab; label: string }> = [
@@ -52,6 +57,19 @@ const DISCOVER_SKILL_CATALOG: DiscoverSkillCatalogEntry[] = [
     surface: "Community first",
     category: "Curated",
     icon: "research",
+    heroNote:
+      "A reusable operator for surveying a topic quickly, extracting signal, and leaving you with a structured next-step brief.",
+    detailBullets: [
+      "Scans a topic from multiple angles before forming conclusions.",
+      "Turns noisy input into a compact signal summary and follow-up list.",
+      "Works best when you want fast synthesis instead of open-ended brainstorming.",
+    ],
+    installInput: {
+      name: "Weekly Research",
+      description:
+        "Scan, synthesize, and surface signal from a topic before deciding what matters next.",
+      instructions_md: `Use this skill when the user wants a fast research pass on a topic, market, company, trend, or decision.\n\nOperating rules:\n1. Start by reducing the topic into the fewest important dimensions.\n2. Separate facts, signals, risks, and open questions.\n3. Prefer synthesis over raw dump.\n4. End with a concise summary and clear next steps.\n5. Stay practical and decision-useful.`,
+    },
   },
   {
     id: "board-summary",
@@ -63,6 +81,19 @@ const DISCOVER_SKILL_CATALOG: DiscoverSkillCatalogEntry[] = [
     surface: "Community first",
     category: "Curated",
     icon: "summary",
+    heroNote:
+      "A compression skill for turning long threads, notes, or updates into a concise executive readout with clear decisions and risks.",
+    detailBullets: [
+      "Compresses long discussions into high-signal board-level bullets.",
+      "Surfaces decisions, risks, blockers, and next actions explicitly.",
+      "Useful when you need leadership-ready summaries instead of full transcripts.",
+    ],
+    installInput: {
+      name: "Board Summary",
+      description:
+        "Turn long discussions into concise executive bullets with decisions, risks, and next actions.",
+      instructions_md: `Use this skill when the user wants an executive-level summary of a long discussion, status update, or planning thread.\n\nOperating rules:\n1. Compress aggressively without losing decisions.\n2. Separate decisions, risks, blockers, and next actions.\n3. Prefer bullet clarity over prose.\n4. Keep the output brief, concrete, and leadership-ready.\n5. Do not pad or restate obvious context.`,
+    },
   },
   {
     id: "workflow-builder",
@@ -74,6 +105,19 @@ const DISCOVER_SKILL_CATALOG: DiscoverSkillCatalogEntry[] = [
     surface: "Personal or community",
     category: "Curated",
     icon: "workflow",
+    heroNote:
+      "A reusable planning skill for converting a goal into a tight sequence of steps, checks, and handoff points.",
+    detailBullets: [
+      "Breaks goals down into clean operational steps.",
+      "Makes dependencies, risks, and stop-rules explicit.",
+      "Useful when a task is vague and needs a pragmatic execution plan.",
+    ],
+    installInput: {
+      name: "Workflow Builder",
+      description:
+        "Compose repeatable operating patterns and step-based execution workflows.",
+      instructions_md: `Use this skill when the user wants to turn a broad goal into a practical workflow.\n\nOperating rules:\n1. Reduce the problem to the fewest real moving parts.\n2. Turn the work into a concrete execution sequence.\n3. Call out blockers, assumptions, and proof steps.\n4. Prefer the smallest viable workflow over exhaustive planning.\n5. End with a crisp recommended path forward.`,
+    },
   },
   {
     id: "custom-skill",
@@ -85,6 +129,14 @@ const DISCOVER_SKILL_CATALOG: DiscoverSkillCatalogEntry[] = [
     surface: "Advanced",
     category: "Manual",
     icon: "custom",
+    heroNote:
+      "The manual path for when the curated set is close but not quite right and you need a skill package tailored to your own operating style.",
+    detailBullets: [
+      "Create your own named personal skill package.",
+      "Define the exact reusable instructions you want available at runtime.",
+      "Best when a curated skill is close but you need a custom behavior contract.",
+    ],
+    installInput: null,
   },
 ];
 
@@ -125,6 +177,14 @@ type WebDiscoverPanelProps = {
   onConnectUserPlatformApp: (
     input: ConnectUserPlatformAppInput,
   ) => Promise<ConnectUserPlatformAppResult> | ConnectUserPlatformAppResult;
+  userPlatformSkills: UserPlatformInstalledSkill[];
+  isLoadingUserPlatformSkills: boolean;
+  userPlatformSkillError: string | null;
+  userPlatformSkillMutationError: string | null;
+  isCreatingUserPlatformSkill: boolean;
+  onCreateUserPlatformSkill: (
+    input: CreateSkillPackageInput,
+  ) => Promise<boolean> | boolean;
   onActivateCommunity: (community: DiscoverCommunitySnapshot) => void;
   onOpenIntegrationsSettings: () => void;
 };
@@ -202,6 +262,27 @@ function findMatchingPersonalMount(
   );
 }
 
+function readSkillInvocationToken(invocation: string): string | null {
+  const trimmed = invocation.trim();
+  if (!trimmed.startsWith("$")) return null;
+  const token = trimmed.slice(1).trim().toLowerCase();
+  return token || null;
+}
+
+function findMatchingPersonalSkillInstall(
+  skill: DiscoverSkillCatalogEntry,
+  installs: UserPlatformInstalledSkill[],
+): UserPlatformInstalledSkill | null {
+  const token = readSkillInvocationToken(skill.invocation);
+  if (!token) return null;
+  return (
+    installs.find(
+      (install) =>
+        String(install.skill.mentionToken ?? "").trim().toLowerCase() === token,
+    ) ?? null
+  );
+}
+
 function buildDiscoverCommunityCardProps(args: {
   community: DiscoverCommunitySnapshot;
   formatPlanPrice: (
@@ -257,10 +338,17 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
     userPlatformAppMutationError,
     isConnectingUserPlatformApp,
     onConnectUserPlatformApp,
+    userPlatformSkills,
+    isLoadingUserPlatformSkills,
+    userPlatformSkillError,
+    userPlatformSkillMutationError,
+    isCreatingUserPlatformSkill,
+    onCreateUserPlatformSkill,
     onActivateCommunity,
     onOpenIntegrationsSettings,
   } = props;
   const [selectedAppId, setSelectedAppId] = useState<string | null>(null);
+  const [selectedSkillId, setSelectedSkillId] = useState<string | null>(null);
   const [personalConnectEndpoint, setPersonalConnectEndpoint] = useState("");
   const [personalConnectAuthType, setPersonalConnectAuthType] =
     useState<DeveloperAppAuthType>("bearer");
@@ -275,6 +363,9 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
   >(null);
   const [personalConnectValidationReport, setPersonalConnectValidationReport] =
     useState<UserPlatformAppValidationReport | null>(null);
+  const [selectedSkillActionError, setSelectedSkillActionError] = useState<
+    string | null
+  >(null);
 
   const activeTabIndex = DISCOVER_TABS.findIndex((tab) => tab.id === activeTab);
   const tabSwitcherStyle = buildPlatformSwitcherStyle(
@@ -285,6 +376,9 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
   const filteredSkills = DISCOVER_SKILL_CATALOG;
   const selectedApp = selectedAppId
     ? DISCOVER_APP_CATALOG.find((entry) => entry.id === selectedAppId) ?? null
+    : null;
+  const selectedSkill = selectedSkillId
+    ? DISCOVER_SKILL_CATALOG.find((entry) => entry.id === selectedSkillId) ?? null
     : null;
   const isReadyForPersonalConnection =
     selectedApp ? isDiscoverAppPersonallyConnectable(selectedApp) : false;
@@ -303,6 +397,10 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
     if (!selectedApp) return null;
     return findMatchingPersonalMount(selectedApp, userPlatformAppMounts);
   }, [selectedApp, userPlatformAppMounts]);
+  const selectedPersonalSkillInstall = useMemo(() => {
+    if (!selectedSkill) return null;
+    return findMatchingPersonalSkillInstall(selectedSkill, userPlatformSkills);
+  }, [selectedSkill, userPlatformSkills]);
 
   const isAppsTab = activeTab === "apps";
   const isSkillsTab = activeTab === "skills";
@@ -312,6 +410,13 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
       setSelectedAppId(null);
     }
   }, [isAppsTab, selectedAppId]);
+
+  useEffect(() => {
+    if (!isSkillsTab && selectedSkillId) {
+      setSelectedSkillId(null);
+      setSelectedSkillActionError(null);
+    }
+  }, [isSkillsTab, selectedSkillId]);
 
   useEffect(() => {
     if (
@@ -333,8 +438,14 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
     setIsPersonalConnectModalOpen(false);
   }, [selectedApp]);
 
+  useEffect(() => {
+    setSelectedSkillActionError(null);
+  }, [selectedSkillId]);
+
   const heroTitle = selectedApp
     ? selectedApp.name
+    : selectedSkill
+      ? selectedSkill.name
     : isAppsTab
       ? "Discover apps"
       : isSkillsTab
@@ -342,6 +453,8 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
         : "Discover communities";
   const heroSubtitle = selectedApp
     ? selectedApp.tagline
+    : selectedSkill
+      ? selectedSkill.tagline
     : isAppsTab
       ? "Browse trusted apps and verified integrations."
       : isSkillsTab
@@ -353,6 +466,13 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
       : isDiscoverAppPersonallyConnectable(selectedApp)
         ? "Connect"
         : null
+    : null;
+  const selectedSkillActionLabel = selectedSkill
+    ? selectedPersonalSkillInstall
+      ? "Manage"
+      : selectedSkill.installInput
+        ? "Add skill"
+        : "Create skill"
     : null;
   const personalConnectModalCopy = selectedApp
     ? buildDiscoverAppPersonalConnectModalCopy(selectedApp)
@@ -435,6 +555,34 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
       result.error_message ??
       `Couldn't connect ${app.name}. Check the requirements and try again.`,
     );
+  };
+
+  const handleAddSkill = async (
+    skill: DiscoverSkillCatalogEntry,
+  ): Promise<void> => {
+    if (isAuthRecoveringSignedIn) return;
+    if (isLoadingUserPlatformSkills) return;
+    if (!hasSession) {
+      onRequireAuth();
+      return;
+    }
+    const existingInstall = findMatchingPersonalSkillInstall(
+      skill,
+      userPlatformSkills,
+    );
+    if (existingInstall || !skill.installInput) {
+      onOpenIntegrationsSettings();
+      return;
+    }
+    setSelectedSkillActionError(null);
+    const ok = await onCreateUserPlatformSkill(skill.installInput);
+    if (!ok) {
+      setSelectedSkillActionError(
+        `Couldn't add ${skill.name} right now. Check the error and try again.`,
+      );
+      return;
+    }
+    onOpenIntegrationsSettings();
   };
 
   const renderSkillIcon = (icon: DiscoverSkillCatalogEntry["icon"]) => {
@@ -673,6 +821,170 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
                 </div>
               </section>
             </div>
+          ) : isSkillsTab && selectedSkill ? (
+            <div className="discover-app-detail-page">
+              <div className="discover-breadcrumb">
+                <button
+                  type="button"
+                  className="discover-breadcrumb-button"
+                  onClick={() => {
+                    setSelectedSkillId(null);
+                    setSelectedSkillActionError(null);
+                  }}
+                >
+                  Skills
+                </button>
+                <span className="discover-breadcrumb-separator">›</span>
+                <span>{selectedSkill.name}</span>
+              </div>
+
+              <div className="discover-app-detail-header">
+                <div
+                  className={`discover-app-icon discover-app-icon-${selectedSkill.icon} discover-app-icon-detail`}
+                >
+                  {renderSkillIcon(selectedSkill.icon)}
+                </div>
+                <div className="discover-app-detail-meta">
+                  <div className="discover-app-detail-heading-row">
+                    <div className="discover-app-detail-name">
+                      {selectedSkill.name}
+                    </div>
+                    {selectedSkillActionLabel ? (
+                      <button
+                        type="button"
+                        className="settings-cta discover-app-detail-action"
+                        onClick={() => void handleAddSkill(selectedSkill)}
+                        disabled={
+                          isCreatingUserPlatformSkill || isLoadingUserPlatformSkills
+                        }
+                      >
+                        {selectedPersonalSkillInstall
+                          ? selectedSkillActionLabel
+                          : isCreatingUserPlatformSkill
+                            ? "Adding…"
+                            : selectedSkillActionLabel}
+                      </button>
+                    ) : null}
+                  </div>
+                  <div className="discover-app-detail-tagline">
+                    {selectedSkill.tagline}
+                  </div>
+                  <div className="discover-card-desc">
+                    {selectedSkill.description}
+                  </div>
+                </div>
+              </div>
+
+              <div className="discover-app-spotlight">
+                {selectedSkill.heroNote}
+              </div>
+
+              <section className="discover-card discover-app-detail-section">
+                {hasSession && userPlatformSkillError ? (
+                  <div className="auth-error">{userPlatformSkillError}</div>
+                ) : null}
+                {hasSession && userPlatformSkillMutationError ? (
+                  <div className="auth-error">{userPlatformSkillMutationError}</div>
+                ) : null}
+                {selectedSkillActionError ? (
+                  <div className="auth-error">{selectedSkillActionError}</div>
+                ) : null}
+                {!hasSession ? (
+                  <div className="discover-connect-status">
+                    <div className="discover-connect-status-title">
+                      Sign in required
+                    </div>
+                    <div className="discover-connect-status-body">
+                      Sign in first, then add this skill to your personal
+                      skills layer.
+                    </div>
+                  </div>
+                ) : selectedPersonalSkillInstall ? (
+                  <div className="discover-connect-status">
+                    <div className="discover-connect-status-title">Added</div>
+                    <div className="discover-connect-status-body">
+                      This skill is already in your personal skills and can be
+                      managed from Integrations.
+                    </div>
+                  </div>
+                ) : selectedSkill.installInput ? (
+                  <div className="discover-connect-status">
+                    <div className="discover-connect-status-title">
+                      Ready to add
+                    </div>
+                    <div className="discover-connect-status-body">
+                      Add this curated skill and it will appear in Settings{" "}
+                      {">"} Integrations {">"} My skills.
+                    </div>
+                  </div>
+                ) : (
+                  <div className="discover-connect-status">
+                    <div className="discover-connect-status-title">
+                      Manual skill
+                    </div>
+                    <div className="discover-connect-status-body">
+                      This is the custom path. Open Integrations to create your
+                      own personal skill package.
+                    </div>
+                  </div>
+                )}
+              </section>
+
+              <section className="discover-card discover-app-detail-section">
+                <div className="discover-detail-section-title">
+                  What it does
+                </div>
+                <ul className="discover-detail-list">
+                  {selectedSkill.detailBullets.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+              </section>
+
+              <section className="discover-card discover-app-detail-section">
+                <div className="discover-detail-section-title">Information</div>
+                <div className="discover-info-grid">
+                  <div className="discover-info-row">
+                    <div className="discover-info-label">Invocation</div>
+                    <div className="discover-info-value">
+                      {selectedSkill.invocation}
+                    </div>
+                  </div>
+                  <div className="discover-info-row">
+                    <div className="discover-info-label">Scope</div>
+                    <div className="discover-info-value">
+                      {selectedSkill.surface}
+                    </div>
+                  </div>
+                  <div className="discover-info-row">
+                    <div className="discover-info-label">Category</div>
+                    <div className="discover-info-value">
+                      {selectedSkill.category}
+                    </div>
+                  </div>
+                  <div className="discover-info-row">
+                    <div className="discover-info-label">Destination</div>
+                    <div className="discover-info-value">
+                      Settings {">"} Integrations {">"} My skills
+                    </div>
+                  </div>
+                  <div className="discover-info-row">
+                    <div className="discover-info-label">Status</div>
+                    <div className="discover-info-value">
+                      {hasSession
+                        ? isLoadingUserPlatformSkills
+                          ? "Checking…"
+                          : selectedPersonalSkillInstall
+                            ? "Added to your personal layer"
+                            : selectedSkill.installInput
+                              ? "Available to add"
+                              : "Create manually"
+                        : "Sign in to add"}
+                    </div>
+                  </div>
+                </div>
+              </section>
+            </div>
           ) : (
             <div className="discover-grid">
               {!isAppsTab && !isSkillsTab && isLoadingDiscover ? (
@@ -759,32 +1071,54 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
                 </div>
               ) : null}
               {isSkillsTab
-                ? filteredSkills.map((skill) => (
-                    <div key={skill.id} className="discover-card discover-app-card">
-                      <div className="discover-app-card-body">
-                        <div className="discover-app-card-header">
-                          <div
-                            className={`discover-app-icon discover-app-icon-${skill.icon}`}
-                          >
-                            {renderSkillIcon(skill.icon)}
-                          </div>
-                          <div className="discover-app-meta">
-                            <div className="discover-card-name-row">
-                              <div className="discover-card-name">
-                                {skill.name}
+                ? filteredSkills.map((skill) => {
+                    const matchingInstall = findMatchingPersonalSkillInstall(
+                      skill,
+                      userPlatformSkills,
+                    );
+                    return (
+                      <button
+                        key={skill.id}
+                        type="button"
+                        className="discover-card discover-app-card discover-skill-card-button"
+                        onClick={() => {
+                          setSelectedSkillId(skill.id);
+                          setSelectedSkillActionError(null);
+                        }}
+                        aria-label={`Open ${skill.name}`}
+                      >
+                        <div className="discover-app-card-body">
+                          <div className="discover-app-card-header">
+                            <div
+                              className={`discover-app-icon discover-app-icon-${skill.icon}`}
+                            >
+                              {renderSkillIcon(skill.icon)}
+                            </div>
+                            <div className="discover-app-meta">
+                              <div className="discover-card-name-row">
+                                <div className="discover-card-name">
+                                  {skill.name}
+                                </div>
+                              </div>
+                              <div className="discover-app-tagline">
+                                {skill.tagline}
                               </div>
                             </div>
-                            <div className="discover-app-tagline">
-                              {skill.tagline}
-                            </div>
+                          </div>
+                          <div className="discover-card-desc">
+                            {skill.description}
                           </div>
                         </div>
-                        <div className="discover-card-desc">
-                          {skill.description}
-                        </div>
-                      </div>
-                    </div>
-                  ))
+                        <span className="discover-app-action">
+                          {matchingInstall
+                            ? "Manage"
+                            : skill.installInput
+                              ? "Add skill"
+                              : "Create"}
+                        </span>
+                      </button>
+                    );
+                  })
                 : null}
               {isSkillsTab && filteredSkills.length === 0 ? (
                 <div className="discover-empty">

@@ -3451,9 +3451,10 @@ export default function App() {
 
   useEffect(() => {
     const shouldLoadUserPlatformSkills =
-      activePage === "workspace" &&
-      activeView === "settings" &&
-      settingsPage === "integrations";
+      activePage === "discover" ||
+      (activePage === "workspace" &&
+        activeView === "settings" &&
+        settingsPage === "integrations");
     if (!shouldLoadUserPlatformSkills) return;
     if (!session) {
       clearUserPlatformSkills();
@@ -5195,6 +5196,13 @@ export default function App() {
       setActiveView(transition.nextView);
       setActivePage(transition.nextPage);
     };
+    const handleOpenDiscoverSkills = () => {
+      const transition = deriveOpenDiscoverTransition({ activePage });
+      if (transition.shouldPushSnapshot) pushNavSnapshot();
+      setDiscoverActiveTab("skills");
+      setActiveView(transition.nextView);
+      setActivePage(transition.nextPage);
+    };
     const handleOpenIntegrationsSettings = () => {
       pushNavSnapshot();
       setActivePage("workspace");
@@ -5746,6 +5754,7 @@ export default function App() {
       session: session,
       requireSignIn,
       openDiscoverApps: handleOpenDiscoverApps,
+      openDiscoverSkills: handleOpenDiscoverSkills,
       userPlatformAppMounts,
       isLoadingUserPlatformAppMounts,
       userPlatformAppMountError,
@@ -6155,6 +6164,12 @@ export default function App() {
       userPlatformAppMutationError,
       isConnectingUserPlatformApp,
       onConnectUserPlatformApp: handleConnectUserPlatformApp,
+      userPlatformSkills,
+      isLoadingUserPlatformSkills,
+      userPlatformSkillError,
+      userPlatformSkillMutationError,
+      isCreatingUserPlatformSkill,
+      onCreateUserPlatformSkill: handleCreateUserPlatformSkill,
       onOpenIntegrationsSettings: handleOpenIntegrationsSettings,
       onActivateCommunity: (community) => {
         activateDiscoverCommunityCard({

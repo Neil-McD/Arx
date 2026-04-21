@@ -17,6 +17,7 @@ type WebIntegrationsSettingsSectionProps = {
   session: SessionLike;
   requireSignIn: () => void;
   openDiscoverApps: () => void;
+  openDiscoverSkills: () => void;
   userPlatformAppMounts: UserPlatformMountedApp[];
   isLoadingUserPlatformAppMounts: boolean;
   userPlatformAppMountError: string | null;
@@ -158,6 +159,7 @@ export function WebIntegrationsSettingsSection(
     session,
     requireSignIn,
     openDiscoverApps,
+    openDiscoverSkills,
     userPlatformAppMounts,
     isLoadingUserPlatformAppMounts,
     userPlatformAppMountError,
@@ -515,10 +517,17 @@ export function WebIntegrationsSettingsSection(
             <div className="agent-capability-toolbar">
               <button
                 type="button"
+                onClick={session ? openDiscoverSkills : requireSignIn}
+                disabled={isCreatingUserPlatformSkill}
+              >
+                Browse skills
+              </button>
+              <button
+                type="button"
                 onClick={() => setIsCreateSkillOpen((prev) => !prev)}
                 disabled={isCreatingUserPlatformSkill}
               >
-                {isCreateSkillOpen ? "Close" : "Create skill"}
+                {isCreateSkillOpen ? "Close" : "Create custom skill"}
               </button>
             </div>
 
@@ -618,8 +627,8 @@ export function WebIntegrationsSettingsSection(
               <div className="model-note">Loading your skills…</div>
             ) : userPlatformSkills.length === 0 ? (
               <div className="model-note">
-                No personal skills yet. Creating one adds it directly to your
-                baseline layer.
+                No personal skills yet. Browse Skills from Discover to add a
+                curated skill, or create a custom one here.
               </div>
             ) : (
               <div className="agent-capability-list" role="list" aria-label="Personal skills">

@@ -1245,7 +1245,9 @@ body {
 }
 
 .discover-app-row-button:hover .discover-app-action,
-.discover-app-row-button:focus-visible .discover-app-action {
+.discover-app-row-button:focus-visible .discover-app-action,
+.discover-skill-card-button:hover .discover-app-action,
+.discover-skill-card-button:focus-visible .discover-app-action {
   border-color: var(--border-strong);
   background: color-mix(in srgb, var(--bg-card) 94%, transparent);
   color: var(--text-primary);
@@ -1351,6 +1353,26 @@ body {
   min-height: 0;
 }
 
+.discover-skill-card-button {
+  appearance: none;
+  width: 100%;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  display: flex;
+  align-items: stretch;
+  justify-content: space-between;
+  gap: 16px;
+  cursor: pointer;
+}
+
+.discover-skill-card-button:focus-visible {
+  outline: 2px solid var(--border-active);
+  outline-offset: 4px;
+}
+
 .discover-app-card-body {
   padding: 14px 16px;
   display: flex;
@@ -1375,6 +1397,12 @@ body {
   border: 1px solid var(--border-muted);
   background: color-mix(in srgb, var(--bg-card-alt) 88%, transparent);
   color: var(--text-primary);
+}
+
+.discover-app-icon-detail {
+  width: 56px;
+  height: 56px;
+  border-radius: 16px;
 }
 
 .discover-app-icon svg {

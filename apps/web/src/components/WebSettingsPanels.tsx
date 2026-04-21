@@ -104,6 +104,7 @@ export type WebSettingsPanelsProps = {
     session: SessionLike;
     requireSignIn: () => void;
     openDiscoverApps: () => void;
+    openDiscoverSkills: () => void;
     userPlatformAppMounts: UserPlatformMountedApp[];
     isLoadingUserPlatformAppMounts: boolean;
     userPlatformAppMountError: string | null;
@@ -279,6 +280,7 @@ export function WebSettingsPanels(props: WebSettingsPanelsProps) {
     session: integrations.session,
     requireSignIn: integrations.requireSignIn,
     openDiscoverApps: integrations.openDiscoverApps,
+    openDiscoverSkills: integrations.openDiscoverSkills,
     userPlatformAppMounts: integrations.userPlatformAppMounts,
     isLoadingUserPlatformAppMounts: integrations.isLoadingUserPlatformAppMounts,
     userPlatformAppMountError: integrations.userPlatformAppMountError,
