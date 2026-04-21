@@ -1,4 +1,4 @@
-import { internalAction, internalMutation, internalQuery } from "./_generated/server";
+import { internalAction, internalMutation, internalQuery, mutation } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import { decryptStoredSecret, encryptSecret } from "./providerConnections";
@@ -21,6 +21,7 @@ type AuthSessionRow = {
   sessionId: string;
   authSubject: string;
   userId: unknown;
+  replacedBySessionId?: string | null;
   encryptedSecretHex: string;
   secretIvHex: string;
   secretVersion: number;
@@ -36,6 +37,7 @@ type AuthSessionRow = {
 
 const DEFAULT_OAUTH_SCOPE = "openid profile email offline_access";
 const WORKOS_AUTHENTICATE_UPSTREAM_URL = "https://api.workos.com/user_management/authenticate";
+const MAX_SESSION_CHAIN_DEPTH = 8;
 
 function normalizeString(value: unknown): string {
   return String(value ?? "").trim();
@@ -271,6 +273,14 @@ function readEnv(name: string): string {
   return "";
 }
 
+function buildSessionId(): string {
+  try {
+    return crypto.randomUUID();
+  } catch {
+    return `sess_${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`;
+  }
+}
+
 function resolveOAuthAuthorizeUrl(): string {
   return readEnv("ARX_AUTH_AUTHORIZE_URL");
 }
@@ -420,6 +430,63 @@ async function getAuthSessionRowBySessionId(ctx: any, sessionId: string): Promis
   return (row as AuthSessionRow | null) ?? null;
 }
 
+async function resolveAuthSessionRowForAction(
+  ctx: {
+    runQuery: (queryRef: any, args: Record<string, unknown>) => Promise<unknown>;
+  },
+  requestedSessionId: string,
+): Promise<
+  | {
+      ok: true;
+      row: AuthSessionRow;
+      resolvedSessionId: string;
+      wasRedirected: boolean;
+    }
+  | {
+      ok: false;
+      reason: "auth_session_missing" | "auth_session_chain_invalid";
+    }
+> {
+  let currentSessionId = requestedSessionId;
+  const visited = new Set<string>();
+
+  for (let depth = 0; depth < MAX_SESSION_CHAIN_DEPTH; depth += 1) {
+    if (visited.has(currentSessionId)) {
+      return { ok: false, reason: "auth_session_chain_invalid" };
+    }
+    visited.add(currentSessionId);
+    const row = (await ctx.runQuery(internal.authSessions.getAuthSessionBySessionIdInternal as any, {
+      sessionId: currentSessionId,
+    })) as AuthSessionRow | null;
+    if (!row) {
+      return { ok: false, reason: "auth_session_missing" };
+    }
+    const replacementSessionId = normalizeString(row.replacedBySessionId);
+    if (!replacementSessionId) {
+      return {
+        ok: true,
+        row,
+        resolvedSessionId: currentSessionId,
+        wasRedirected: currentSessionId !== requestedSessionId,
+      };
+    }
+    currentSessionId = replacementSessionId;
+  }
+
+  return { ok: false, reason: "auth_session_chain_invalid" };
+}
+
+function isTerminalRefreshFailure(reason: string): boolean {
+  return (
+    reason.includes("invalid_grant") ||
+    reason.includes("invalid refresh token") ||
+    reason.includes("missing refresh token") ||
+    reason.includes("auth_refresh_failed_400") ||
+    reason.includes("auth_refresh_failed_401") ||
+    reason.includes("auth_refresh_failed_403")
+  );
+}
+
 export const getAuthSessionBySessionIdInternal = internalQuery({
   args: {
     sessionId: v.string(),
@@ -467,6 +534,7 @@ export const createAuthSessionInternal = internalMutation({
     const patch = {
       authSubject: args.authSubject,
       userId: args.userId,
+      replacedBySessionId: undefined,
       encryptedSecretHex: encrypted.encryptedSecretHex,
       secretIvHex: encrypted.secretIvHex,
       secretVersion: encrypted.secretVersion,
@@ -532,6 +600,7 @@ export const updateAuthSessionInternal = internalMutation({
     );
 
     await ctx.db.patch(existing._id as any, {
+      replacedBySessionId: undefined,
       encryptedSecretHex: encrypted.encryptedSecretHex,
       secretIvHex: encrypted.secretIvHex,
       secretVersion: encrypted.secretVersion,
@@ -566,33 +635,105 @@ export const revokeAuthSessionInternal = internalMutation({
   },
 });
 
+export const rotateAuthSessionInternal = internalMutation({
+  args: {
+    currentSessionId: v.string(),
+    newSessionId: v.string(),
+    accessToken: v.string(),
+    idToken: v.optional(v.string()),
+    refreshToken: v.string(),
+    accessTokenExpiresAt: v.optional(v.number()),
+    email: v.optional(v.string()),
+    displayName: v.optional(v.string()),
+    avatarUrl: v.optional(v.string()),
+    externalUserId: v.string(),
+    nowMs: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const existing = await getAuthSessionRowBySessionId(ctx, args.currentSessionId);
+    if (!existing) return { rotated: false };
+
+    const encrypted = await encryptSecret(
+      encodeStoredState({
+        accessToken: args.accessToken,
+        idToken: normalizeString(args.idToken) || null,
+        refreshToken: args.refreshToken,
+        accessTokenExpiresAt:
+          typeof args.accessTokenExpiresAt === "number" && Number.isFinite(args.accessTokenExpiresAt)
+            ? Math.floor(args.accessTokenExpiresAt)
+            : null,
+        user: {
+          id: args.externalUserId,
+          email: normalizeString(args.email) || null,
+          displayName: normalizeString(args.displayName) || null,
+          avatarUrl: normalizeString(args.avatarUrl) || null,
+        },
+      }),
+    );
+
+    await ctx.db.insert("authSessions", {
+      sessionId: args.newSessionId,
+      authSubject: existing.authSubject,
+      userId: existing.userId as any,
+      encryptedSecretHex: encrypted.encryptedSecretHex,
+      secretIvHex: encrypted.secretIvHex,
+      secretVersion: encrypted.secretVersion,
+      accessTokenExpiresAt:
+        typeof args.accessTokenExpiresAt === "number" && Number.isFinite(args.accessTokenExpiresAt)
+          ? Math.floor(args.accessTokenExpiresAt)
+          : undefined,
+      email: normalizeString(args.email) || undefined,
+      displayName: normalizeString(args.displayName) || undefined,
+      avatarUrl: normalizeString(args.avatarUrl) || undefined,
+      lastRefreshAt: args.nowMs,
+      revokedAt: undefined,
+      createdAt: args.nowMs,
+      updatedAt: args.nowMs,
+    });
+
+    await ctx.db.patch(existing._id as any, {
+      replacedBySessionId: args.newSessionId,
+      revokedAt: args.nowMs,
+      updatedAt: args.nowMs,
+    });
+
+    return { rotated: true };
+  },
+});
+
 export const bootstrapAuthSessionInternal = internalAction({
   args: {
     sessionId: v.string(),
   },
   handler: async (ctx, args) => {
-    const row = (await ctx.runQuery(internal.authSessions.getAuthSessionBySessionIdInternal as any, {
-      sessionId: args.sessionId,
-    })) as AuthSessionRow | null;
-    if (!row || typeof row.revokedAt === "number") {
+    const resolved = await resolveAuthSessionRowForAction(ctx, args.sessionId);
+    if (!resolved.ok) {
+      return { status: "terminal_failure" as const, reason: resolved.reason };
+    }
+    const row = resolved.row;
+    if (typeof row.revokedAt === "number") {
       return { status: "terminal_failure" as const, reason: "auth_session_missing" };
     }
     const stored = await decodeStoredState(row);
     if (!stored?.refreshToken) {
       await ctx.runMutation(internal.authSessions.revokeAuthSessionInternal as any, {
-        sessionId: args.sessionId,
+        sessionId: resolved.resolvedSessionId,
         nowMs: Date.now(),
       });
       return { status: "terminal_failure" as const, reason: "auth_session_invalid" };
     }
     const nowSec = Math.floor(Date.now() / 1000);
     if (hasUsableAccessToken(stored, nowSec, 60)) {
-      return { status: "ready" as const, session: toPublicSession(stored) };
+      return {
+        status: "ready" as const,
+        session: toPublicSession(stored),
+        sessionId: resolved.resolvedSessionId,
+      };
     }
     try {
       const refreshed = await refreshUpstreamSession(stored);
       await ctx.runMutation(internal.authSessions.updateAuthSessionInternal as any, {
-        sessionId: args.sessionId,
+        sessionId: resolved.resolvedSessionId,
         accessToken: refreshed.accessToken,
         ...(refreshed.idToken ? { idToken: refreshed.idToken } : null),
         refreshToken: refreshed.refreshToken,
@@ -605,25 +746,26 @@ export const bootstrapAuthSessionInternal = internalAction({
         ...(refreshed.user.avatarUrl ? { avatarUrl: refreshed.user.avatarUrl } : null),
         nowMs: Date.now(),
       });
-      return { status: "ready" as const, session: toPublicSession(refreshed) };
+      return {
+        status: "ready" as const,
+        session: toPublicSession(refreshed),
+        sessionId: resolved.resolvedSessionId,
+      };
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error ?? "");
-      if (
-        reason.includes("invalid_grant") ||
-        reason.includes("invalid refresh token") ||
-        reason.includes("missing refresh token") ||
-        reason.includes("auth_refresh_failed_400") ||
-        reason.includes("auth_refresh_failed_401") ||
-        reason.includes("auth_refresh_failed_403")
-      ) {
+      if (isTerminalRefreshFailure(reason)) {
         await ctx.runMutation(internal.authSessions.revokeAuthSessionInternal as any, {
-          sessionId: args.sessionId,
+          sessionId: resolved.resolvedSessionId,
           nowMs: Date.now(),
         });
         return { status: "terminal_failure" as const, reason: reason || "auth_session_refresh_invalid" };
       }
       if (hasUsableAccessToken(stored, nowSec, 0)) {
-        return { status: "ready" as const, session: toPublicSession(stored) };
+        return {
+          status: "ready" as const,
+          session: toPublicSession(stored),
+          sessionId: resolved.resolvedSessionId,
+        };
       }
       return { status: "transient_failure" as const, reason: reason || "auth_session_refresh_unavailable" };
     }
@@ -635,16 +777,18 @@ export const refreshAuthSessionInternal = internalAction({
     sessionId: v.string(),
   },
   handler: async (ctx, args) => {
-    const row = (await ctx.runQuery(internal.authSessions.getAuthSessionBySessionIdInternal as any, {
-      sessionId: args.sessionId,
-    })) as AuthSessionRow | null;
-    if (!row || typeof row.revokedAt === "number") {
+    const resolved = await resolveAuthSessionRowForAction(ctx, args.sessionId);
+    if (!resolved.ok) {
+      return { status: "terminal_failure" as const, reason: resolved.reason };
+    }
+    const row = resolved.row;
+    if (typeof row.revokedAt === "number") {
       return { status: "terminal_failure" as const, reason: "auth_session_missing" };
     }
     const stored = await decodeStoredState(row);
     if (!stored?.refreshToken) {
       await ctx.runMutation(internal.authSessions.revokeAuthSessionInternal as any, {
-        sessionId: args.sessionId,
+        sessionId: resolved.resolvedSessionId,
         nowMs: Date.now(),
       });
       return { status: "terminal_failure" as const, reason: "auth_session_invalid" };
@@ -652,8 +796,10 @@ export const refreshAuthSessionInternal = internalAction({
     const nowSec = Math.floor(Date.now() / 1000);
     try {
       const refreshed = await refreshUpstreamSession(stored);
-      await ctx.runMutation(internal.authSessions.updateAuthSessionInternal as any, {
-        sessionId: args.sessionId,
+      const newSessionId = buildSessionId();
+      await ctx.runMutation(internal.authSessions.rotateAuthSessionInternal as any, {
+        currentSessionId: resolved.resolvedSessionId,
+        newSessionId,
         accessToken: refreshed.accessToken,
         ...(refreshed.idToken ? { idToken: refreshed.idToken } : null),
         refreshToken: refreshed.refreshToken,
@@ -666,25 +812,26 @@ export const refreshAuthSessionInternal = internalAction({
         ...(refreshed.user.avatarUrl ? { avatarUrl: refreshed.user.avatarUrl } : null),
         nowMs: Date.now(),
       });
-      return { status: "refreshed" as const, session: toPublicSession(refreshed) };
+      return {
+        status: "refreshed" as const,
+        session: toPublicSession(refreshed),
+        sessionId: newSessionId,
+      };
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error ?? "");
-      if (
-        reason.includes("invalid_grant") ||
-        reason.includes("invalid refresh token") ||
-        reason.includes("missing refresh token") ||
-        reason.includes("auth_refresh_failed_400") ||
-        reason.includes("auth_refresh_failed_401") ||
-        reason.includes("auth_refresh_failed_403")
-      ) {
+      if (isTerminalRefreshFailure(reason)) {
         await ctx.runMutation(internal.authSessions.revokeAuthSessionInternal as any, {
-          sessionId: args.sessionId,
+          sessionId: resolved.resolvedSessionId,
           nowMs: Date.now(),
         });
         return { status: "terminal_failure" as const, reason: reason || "auth_session_refresh_invalid" };
       }
       if (hasUsableAccessToken(stored, nowSec, 0)) {
-        return { status: "ready" as const, session: toPublicSession(stored) };
+        return {
+          status: "ready" as const,
+          session: toPublicSession(stored),
+          sessionId: resolved.resolvedSessionId,
+        };
       }
       return { status: "transient_failure" as const, reason: reason || "auth_session_refresh_unavailable" };
     }
@@ -696,10 +843,12 @@ export const logoutAuthSessionInternal = internalAction({
     sessionId: v.string(),
   },
   handler: async (ctx, args) => {
-    const row = (await ctx.runQuery(internal.authSessions.getAuthSessionBySessionIdInternal as any, {
-      sessionId: args.sessionId,
-    })) as AuthSessionRow | null;
-    if (!row || typeof row.revokedAt === "number") {
+    const resolved = await resolveAuthSessionRowForAction(ctx, args.sessionId);
+    if (!resolved.ok) {
+      return { status: "ok" as const };
+    }
+    const row = resolved.row;
+    if (typeof row.revokedAt === "number") {
       return { status: "ok" as const };
     }
     const stored = await decodeStoredState(row);
@@ -707,10 +856,49 @@ export const logoutAuthSessionInternal = internalAction({
       await logoutUpstream(stored.accessToken);
     }
     await ctx.runMutation(internal.authSessions.revokeAuthSessionInternal as any, {
-      sessionId: args.sessionId,
+      sessionId: resolved.resolvedSessionId,
       nowMs: Date.now(),
     });
     return { status: "ok" as const };
+  },
+});
+
+export const pruneRevokedAuthSessionsForMaintenance = mutation({
+  args: {
+    secret: v.string(),
+    revokedBeforeMs: v.number(),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const expectedSecret = readEnv("ARX_AUTH_MIGRATION_AUDIT_SECRET");
+    if (!expectedSecret || args.secret !== expectedSecret) {
+      throw new Error("auth_session_maintenance_unauthorized");
+    }
+    const limit =
+      typeof args.limit === "number" && Number.isFinite(args.limit) && args.limit > 0
+        ? Math.floor(args.limit)
+        : 500;
+    const rows = await ctx.db.query("authSessions").collect();
+    let deleted = 0;
+    let remaining = 0;
+
+    for (const row of rows) {
+      const revokedAt =
+        typeof row.revokedAt === "number" && Number.isFinite(row.revokedAt) ? Math.floor(row.revokedAt) : null;
+      if (revokedAt === null || revokedAt > args.revokedBeforeMs) continue;
+      if (deleted >= limit) {
+        remaining += 1;
+        continue;
+      }
+      await ctx.db.delete(row._id);
+      deleted += 1;
+    }
+
+    return {
+      deleted,
+      remaining,
+      done: remaining === 0,
+    };
   },
 });
 

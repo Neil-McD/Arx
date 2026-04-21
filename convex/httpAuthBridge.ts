@@ -185,6 +185,7 @@ function mapBridgeSessionActionResult(
   if (result?.status === "ready" || result?.status === "refreshed") {
     return jsonResponse(req, 200, {
       ok: true,
+      ...(readString(result?.sessionId) ? { session_id: readString(result?.sessionId) } : null),
       session: result.session,
     });
   }

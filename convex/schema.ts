@@ -27,6 +27,7 @@ export default defineSchema({
     sessionId: v.string(),
     authSubject: v.string(),
     userId: v.id("users"),
+    replacedBySessionId: v.optional(v.string()),
     encryptedSecretHex: v.string(),
     secretIvHex: v.string(),
     secretVersion: v.number(),
