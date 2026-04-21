@@ -728,10 +728,16 @@ export const bootstrapAuthSessionInternal = internalAction({
         status: "ready" as const,
         session: toPublicSession(stored),
         sessionId: resolved.resolvedSessionId,
+        trace: {
+          bootstrapPath: "stored_token",
+          rotatedSessionFollowed: resolved.wasRedirected,
+        },
       };
     }
     try {
+      const upstreamRefreshStartedAt = Date.now();
       const refreshed = await refreshUpstreamSession(stored);
+      const upstreamRefreshMs = Date.now() - upstreamRefreshStartedAt;
       await ctx.runMutation(internal.authSessions.updateAuthSessionInternal as any, {
         sessionId: resolved.resolvedSessionId,
         accessToken: refreshed.accessToken,
@@ -750,6 +756,11 @@ export const bootstrapAuthSessionInternal = internalAction({
         status: "ready" as const,
         session: toPublicSession(refreshed),
         sessionId: resolved.resolvedSessionId,
+        trace: {
+          bootstrapPath: "upstream_refresh",
+          rotatedSessionFollowed: resolved.wasRedirected,
+          upstreamRefreshMs,
+        },
       };
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error ?? "");

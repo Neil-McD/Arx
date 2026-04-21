@@ -1,6 +1,7 @@
 export {
   beginOAuthSignIn,
   bootstrapSession,
+  bootstrapSessionDetailed,
   decodeAuthJwtPayload,
   ensureAuthSessionForAuthenticatedSendResult,
   ensureAuthSessionForRequest,
@@ -19,7 +20,9 @@ export {
   refreshAuthSessionWithLockResult,
 } from "../../../shared/authCore";
 export type {
+  AuthBridgeBootstrapTrace,
   AuthSession,
+  AuthSessionBootstrapResult,
   AuthSessionEnsureResult,
   AuthSessionRefreshResult,
   AuthSessionRefreshResultInFlightRef,

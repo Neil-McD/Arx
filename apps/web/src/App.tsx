@@ -896,6 +896,7 @@ export default function App() {
       const userId = String(session.user?.id ?? "").trim() || null;
       const shouldTreatCommunitiesAsCritical =
         activePage === "community" || Boolean(String(selectedActiveCommunitySlug ?? "").trim());
+      const criticalStartedAt = Date.now();
       setAccountGraphHydrationPhase("critical");
       emitWorkspaceEvent({
         scope: "lifecycle",
@@ -926,6 +927,7 @@ export default function App() {
           stage: "critical_ready",
           userId,
           failureCount: criticalFailureCount,
+          durationMs: Date.now() - criticalStartedAt,
         },
         error:
           criticalFailureCount > 0
@@ -943,6 +945,7 @@ export default function App() {
       if (!shouldTreatCommunitiesAsCritical) {
         secondaryTasks.unshift(runCommunitiesHydration(session, "session_ready_secondary"));
       }
+      const secondaryStartedAt = Date.now();
       emitWorkspaceEvent({
         scope: "lifecycle",
         name: "account_graph_secondary_hydrate",
@@ -961,11 +964,12 @@ export default function App() {
           scope: "lifecycle",
           name: "account_graph_secondary_hydrate",
           status: failureCount > 0 ? "failure" : "success",
-          detail: {
-            phase: "session_ready",
-            userId,
-            failureCount,
-          },
+            detail: {
+              phase: "session_ready",
+              userId,
+              failureCount,
+              durationMs: Date.now() - secondaryStartedAt,
+            },
           error:
             failureCount > 0
               ? formatWorkspaceInstrumentationError(
@@ -979,6 +983,7 @@ export default function App() {
     },
     onSessionFocusReady: async (session) => {
       const userId = String(session.user?.id ?? "").trim() || null;
+      const focusCriticalStartedAt = Date.now();
       emitWorkspaceEvent({
         scope: "lifecycle",
         name: "account_graph_refresh",
@@ -1001,6 +1006,7 @@ export default function App() {
           stage: "workspace_ready",
           userId,
           failureCount: workspaceFailureCount,
+          durationMs: Date.now() - focusCriticalStartedAt,
         },
         error:
           workspaceFailureCount > 0
@@ -1020,6 +1026,7 @@ export default function App() {
           userId,
         },
       });
+      const focusSecondaryStartedAt = Date.now();
       void Promise.allSettled([
         runBillingHydration(session, "session_focus_ready_secondary"),
         runCommunitiesHydration(session, "session_focus_ready_secondary"),
@@ -1029,11 +1036,12 @@ export default function App() {
           scope: "lifecycle",
           name: "account_graph_refresh_secondary",
           status: failureCount > 0 ? "failure" : "success",
-          detail: {
-            phase: "session_focus_ready",
-            userId,
-            failureCount,
-          },
+            detail: {
+              phase: "session_focus_ready",
+              userId,
+              failureCount,
+              durationMs: Date.now() - focusSecondaryStartedAt,
+            },
           error:
             failureCount > 0
               ? formatWorkspaceInstrumentationError(

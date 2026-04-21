@@ -72,7 +72,7 @@ forbid_match_in_file "$AUTH_CORE_FILE" 'pgrst303|pgrst301' \
 echo "[2/6] Validating web auth controller uses same-origin auth bridge with trampoline fallback..."
 require_match_in_file "$WEB_AUTH_CONTROLLER_FILE" 'buildLoginTrampolinePath\(' \
   "web auth controller retains the login trampoline as a recovery fallback"
-require_match_in_file "$WEB_AUTH_CONTROLLER_FILE" 'bootstrapSession\(' \
+require_match_in_file "$WEB_AUTH_CONTROLLER_FILE" 'bootstrapSessionDetailed\(|bootstrapSession\(' \
   "web auth controller bootstraps through the same-origin auth bridge"
 require_match_in_file "$WEB_AUTH_CONTROLLER_FILE" 'refreshAuthSessionResult' \
   "web auth controller refreshes through the same-origin auth bridge"

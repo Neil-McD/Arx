@@ -27,7 +27,13 @@ export default async function handler(req, res) {
 
   const sessionId = readAuthSessionId(req);
   if (!sessionId) {
-    sendJson(res, 200, { ok: true, session: null });
+    sendJson(res, 200, {
+      ok: true,
+      session: null,
+      trace: {
+        bootstrap_path: "missing_cookie",
+      },
+    });
     return;
   }
 
@@ -53,13 +59,20 @@ export default async function handler(req, res) {
     sendJson(res, 200, {
       ok: true,
       session: payload?.session ?? null,
+      trace: payload?.trace ?? null,
     });
     return;
   }
 
   if (response.status === 401) {
     clearAuthSessionCookie(res, req);
-    sendJson(res, 200, { ok: true, session: null });
+    sendJson(res, 200, {
+      ok: true,
+      session: null,
+      trace: {
+        bootstrap_path: "cleared_invalid_session",
+      },
+    });
     return;
   }
 

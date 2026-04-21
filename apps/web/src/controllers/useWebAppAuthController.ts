@@ -10,7 +10,7 @@ import {
 } from "react";
 import {
   AUTH_SIGNED_OUT_INTENT_KEY,
-  bootstrapSession,
+  bootstrapSessionDetailed,
   clearAuthFlowPending,
   clearAuthSignedOutIntentMarker,
   ensureAuthSessionForAuthenticatedSendResult,
@@ -58,13 +58,13 @@ type UseWebAppAuthControllerResult = {
   authError: string | null;
   requireSignIn: (intentInput?: unknown) => void;
   handleSignOut: () => Promise<void>;
-  ensureUsableAuthSession: (session?: AuthSession | null) => Promise<AuthSession | null>;
+  ensureUsableAuthSession: (session?: AuthSession | null, source?: string) => Promise<AuthSession | null>;
   fetchWithAuth: (url: string, init: RequestInit, session: AuthSession) => Promise<Response>;
   fetchWithPublic: (url: string, init?: RequestInit) => Promise<Response>;
   sessionArg: { session: AuthSession | null };
   authenticatedSessionArg: {
     session: AuthSession | null;
-    ensureSession: (session?: AuthSession | null) => Promise<AuthSession | null>;
+    ensureSession: (session?: AuthSession | null, source?: string) => Promise<AuthSession | null>;
   };
 };
 
@@ -205,9 +205,12 @@ export function useWebAppAuthController(
 
   const ensureUsableAuthSession = useCallback(async (
     currentSession: AuthSession | null | undefined = sessionRef.current ?? session,
+    sourceInput?: string,
   ): Promise<AuthSession | null> => {
     const requestSession = currentSession ?? null;
     if (!requestSession) return null;
+    const source = String(sourceInput ?? "").trim() || "unknown";
+    const startedAt = Date.now();
 
     const requestKey = buildAuthSessionCacheKey(requestSession);
     if (requestKey) {
@@ -220,10 +223,31 @@ export function useWebAppAuthController(
         if (!sessionsEqual(cached.session, requestSession)) {
           adoptAuthSession(cached.session);
         }
+        emitWorkspaceEvent({
+          scope: "lifecycle",
+          name: "auth_session_ensure",
+          status: "success",
+          detail: {
+            source,
+            cacheHit: true,
+            durationMs: Date.now() - startedAt,
+          },
+        });
         return sessionRef.current ?? cached.session;
       }
       if (ensuredSessionInFlightRef.current?.key === requestKey) {
-        return await ensuredSessionInFlightRef.current.promise;
+        const ensured = await ensuredSessionInFlightRef.current.promise;
+        emitWorkspaceEvent({
+          scope: "lifecycle",
+          name: "auth_session_ensure",
+          status: ensured ? "success" : "failure",
+          detail: {
+            source,
+            sharedInFlight: true,
+            durationMs: Date.now() - startedAt,
+          },
+        });
+        return ensured;
       }
     }
 
@@ -235,10 +259,32 @@ export function useWebAppAuthController(
       });
       if (ensured.status === "terminal_failure") {
         ensuredSessionCacheRef.current = null;
+        emitWorkspaceEvent({
+          scope: "lifecycle",
+          name: "auth_session_ensure",
+          status: "failure",
+          detail: {
+            source,
+            cacheHit: false,
+            durationMs: Date.now() - startedAt,
+            reason: ensured.reason,
+          },
+        });
         await expireAuthSessionLocally();
         return null;
       }
       if (ensured.status !== "ready") {
+        emitWorkspaceEvent({
+          scope: "lifecycle",
+          name: "auth_session_ensure",
+          status: "failure",
+          detail: {
+            source,
+            cacheHit: false,
+            durationMs: Date.now() - startedAt,
+            reason: ensured.reason,
+          },
+        });
         return null;
       }
       if (!sessionsEqual(ensured.session, requestSession)) {
@@ -253,6 +299,22 @@ export function useWebAppAuthController(
             }
           : null;
       }
+      emitWorkspaceEvent({
+        scope: "lifecycle",
+        name: "auth_session_ensure",
+        status: "success",
+        detail: {
+          source,
+          cacheHit: false,
+          durationMs: Date.now() - startedAt,
+          sessionChanged: !sessionsEqual(ensured.session, requestSession),
+          runtimeProbeAccepted: ensured.runtimeAcceptance?.accepted ?? null,
+          runtimeProbeTotalMs: ensured.runtimeAcceptance?.totalMs ?? null,
+          runtimeProbeBootstrapActorMs: ensured.runtimeAcceptance?.bootstrapActorMs ?? null,
+          runtimeProbeGetActorMs: ensured.runtimeAcceptance?.getActorMs ?? null,
+          runtimeProbeFailureStage: ensured.runtimeAcceptance?.failureStage ?? null,
+        },
+      });
       return sessionRef.current ?? ensured.session;
     })();
 
@@ -342,7 +404,7 @@ export function useWebAppAuthController(
     onSessionAvailable: (currentSession) => {
       markAuthBootstrapComplete();
       void (async () => {
-        const usableSession = await ensureUsableAuthSession(currentSession);
+        const usableSession = await ensureUsableAuthSession(currentSession, "session_available");
         if (!usableSession) return;
         await onSessionReadyRef.current(usableSession);
       })();
@@ -375,7 +437,7 @@ export function useWebAppAuthController(
     },
     onFocusWithSession: (currentSession) => {
       void (async () => {
-        const usableSession = await ensureUsableAuthSession(currentSession);
+        const usableSession = await ensureUsableAuthSession(currentSession, "session_focus");
         if (!usableSession) return;
         await onSessionFocusReadyRef.current(usableSession);
       })();
@@ -387,11 +449,35 @@ export function useWebAppAuthController(
 
     void (async () => {
       const hadPendingAuthFlow = hasRecentAuthFlowPending();
+      const bootstrapStartedAt = Date.now();
+      emitWorkspaceEvent({
+        scope: "lifecycle",
+        name: "auth_bridge_bootstrap",
+        status: "start",
+        detail: {
+          hadPendingAuthFlow,
+        },
+      });
       try {
-        const currentSession = await bootstrapSession();
+        const bootstrapResult = await bootstrapSessionDetailed();
+        const bootstrapDurationMs = Date.now() - bootstrapStartedAt;
+        const currentSession = bootstrapResult.session;
+        emitWorkspaceEvent({
+          scope: "lifecycle",
+          name: "auth_bridge_bootstrap",
+          status: "success",
+          detail: {
+            hadPendingAuthFlow,
+            durationMs: bootstrapDurationMs,
+            hasSession: Boolean(currentSession),
+            bootstrapPath: bootstrapResult.trace?.bootstrapPath ?? null,
+            upstreamRefreshMs: bootstrapResult.trace?.upstreamRefreshMs ?? null,
+            rotatedSessionFollowed: bootstrapResult.trace?.rotatedSessionFollowed ?? false,
+          },
+        });
         if (cancelled) return;
         if (currentSession) {
-          const usableSession = await ensureUsableAuthSession(currentSession);
+          const usableSession = await ensureUsableAuthSession(currentSession, "bootstrap");
           if (cancelled) return;
           if (usableSession) {
             markAuthBootstrapComplete();
@@ -416,6 +502,16 @@ export function useWebAppAuthController(
         }
       } catch (error) {
         if (cancelled) return;
+        emitWorkspaceEvent({
+          scope: "lifecycle",
+          name: "auth_bridge_bootstrap",
+          status: "failure",
+          detail: {
+            hadPendingAuthFlow,
+            durationMs: Date.now() - bootstrapStartedAt,
+          },
+          error: formatWorkspaceInstrumentationError(error),
+        });
         emitWorkspaceEvent({
           scope: "lifecycle",
           name: "auth_recover_session",

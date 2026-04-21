@@ -187,6 +187,7 @@ function mapBridgeSessionActionResult(
       ok: true,
       ...(readString(result?.sessionId) ? { session_id: readString(result?.sessionId) } : null),
       session: result.session,
+      ...(asObject(result?.trace) ? { trace: result.trace } : null),
     });
   }
   if (result?.status === "ok") {

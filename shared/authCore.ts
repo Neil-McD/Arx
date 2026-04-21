@@ -23,6 +23,17 @@ export type AuthSessionRef = {
   current: AuthSession | null;
 };
 
+export type AuthBridgeBootstrapTrace = {
+  bootstrapPath: string | null;
+  rotatedSessionFollowed: boolean;
+  upstreamRefreshMs: number | null;
+};
+
+export type AuthSessionBootstrapResult = {
+  session: AuthSession | null;
+  trace: AuthBridgeBootstrapTrace | null;
+};
+
 export type AuthSessionRefreshInFlightRef = {
   current: Promise<AuthSession | null> | null;
 };
@@ -211,6 +222,15 @@ function readEpochSeconds(value: unknown): number | null {
   return null;
 }
 
+function readOptionalNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const numeric = Number(value.trim());
+    if (Number.isFinite(numeric)) return numeric;
+  }
+  return null;
+}
+
 function findNestedObjectCandidate(
   payload: Record<string, unknown>,
   keys: readonly string[],
@@ -343,6 +363,24 @@ function coerceAuthSession(
   };
 }
 
+function coerceAuthBridgeBootstrapTrace(payload: unknown): AuthBridgeBootstrapTrace | null {
+  const record = asObject(payload);
+  if (!record) return null;
+  const bootstrapPath =
+    readObjectString(record, ["bootstrap_path", "bootstrapPath", "path"]) ?? null;
+  const rotatedSessionFollowed =
+    record.rotated_session_followed === true || record.rotatedSessionFollowed === true;
+  const upstreamRefreshMs = readOptionalNumber(
+    record.upstream_refresh_ms ?? record.upstreamRefreshMs,
+  );
+  if (!bootstrapPath && !rotatedSessionFollowed && upstreamRefreshMs === null) return null;
+  return {
+    bootstrapPath,
+    rotatedSessionFollowed,
+    upstreamRefreshMs,
+  };
+}
+
 function buildAuthHeaders(params: {
   apiKey?: string | null;
   accessToken?: string | null;
@@ -372,7 +410,7 @@ export async function beginOAuthSignIn(params: {
   return { ok: true, authUrl: authUrl.toString() };
 }
 
-export async function bootstrapSession(): Promise<AuthSession | null> {
+export async function bootstrapSessionDetailed(): Promise<AuthSessionBootstrapResult> {
   const response = await callSameOriginAuthEndpoint({
     path: AUTH_GATEWAY_SESSION_PATH,
     method: "GET",
@@ -380,7 +418,14 @@ export async function bootstrapSession(): Promise<AuthSession | null> {
   if (!response) throw new Error("Auth gateway is unavailable.");
   if (!response.ok) throw new Error(await readAuthError(response));
   const payload = (await response.json()) as Record<string, unknown>;
-  return coerceAuthSession(payload?.session ?? null, { requireRefreshToken: false });
+  return {
+    session: coerceAuthSession(payload?.session ?? null, { requireRefreshToken: false }),
+    trace: coerceAuthBridgeBootstrapTrace(payload?.trace ?? null),
+  };
+}
+
+export async function bootstrapSession(): Promise<AuthSession | null> {
+  return (await bootstrapSessionDetailed()).session;
 }
 
 export async function logoutAuthSessionRemote(params: {

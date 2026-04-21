@@ -9,6 +9,10 @@ export type ConvexAuthenticatedSessionProbeResult = {
   authSubject: string | null;
   actorAuthSubject: string | null;
   bootstrap: ConvexAuthenticatedBootstrapResult | null;
+  bootstrapActorMs: number | null;
+  getActorMs: number | null;
+  totalMs: number;
+  failureStage: "bootstrap_actor" | "get_actor" | null;
   error: string | null;
 };
 
@@ -21,27 +25,43 @@ function toErrorMessage(error: unknown): string {
 export async function probeConvexAuthenticatedActorSessionDetailed(
   session: AuthSessionLike,
 ): Promise<ConvexAuthenticatedSessionProbeResult> {
+  const totalStartedAt = Date.now();
+  let bootstrapActorMs: number | null = null;
+  let getActorMs: number | null = null;
   try {
+    const bootstrapStartedAt = Date.now();
     const { client, authSubject, bootstrap } = await bootstrapConvexAuthenticatedClient(session);
+    bootstrapActorMs = Date.now() - bootstrapStartedAt;
+    const getActorStartedAt = Date.now();
     const actor = (await client.query("auth:getActor" as any, {
       authState: "authenticated",
       authSubject,
     })) as { authSubject?: string | null } | null;
+    getActorMs = Date.now() - getActorStartedAt;
     const actorAuthSubject = String(actor?.authSubject ?? "").trim() || null;
     return {
       accepted: actorAuthSubject === authSubject,
       authSubject,
       actorAuthSubject,
       bootstrap,
+      bootstrapActorMs,
+      getActorMs,
+      totalMs: Date.now() - totalStartedAt,
+      failureStage: null,
       error: null,
     };
   } catch (error) {
+    const message = toErrorMessage(error);
     return {
       accepted: false,
       authSubject: null,
       actorAuthSubject: null,
       bootstrap: null,
-      error: toErrorMessage(error),
+      bootstrapActorMs,
+      getActorMs,
+      totalMs: Date.now() - totalStartedAt,
+      failureStage: bootstrapActorMs === null ? "bootstrap_actor" : "get_actor",
+      error: message,
     };
   }
 }

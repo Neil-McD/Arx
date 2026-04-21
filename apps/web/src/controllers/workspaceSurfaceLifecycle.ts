@@ -73,6 +73,7 @@ export async function hydrateWorkspaceSurfaceState<SessionT>(
   deps: WorkspaceSurfaceHydrationDeps<SessionT>,
   session: SessionT,
 ): Promise<void> {
+  const startedAt = Date.now();
   emitWorkspaceEvent({
     scope: "lifecycle",
     name: "workspace_hydrate",
@@ -103,6 +104,7 @@ export async function hydrateWorkspaceSurfaceState<SessionT>(
     detail: {
       threadsHydratedAfter: deps.threadsHydratedRef.current,
       failureCount,
+      durationMs: Date.now() - startedAt,
     },
     error:
       failureCount > 0
@@ -119,6 +121,7 @@ export async function resumeWorkspaceSurfaceState<SessionT>(
   deps: WorkspaceSurfaceHydrationDeps<SessionT>,
   session: SessionT,
 ): Promise<void> {
+  const startedAt = Date.now();
   emitWorkspaceEvent({
     scope: "lifecycle",
     name: "workspace_resume",
@@ -148,6 +151,7 @@ export async function resumeWorkspaceSurfaceState<SessionT>(
     detail: {
       threadsHydratedAfter: deps.threadsHydratedRef.current,
       failureCount,
+      durationMs: Date.now() - startedAt,
     },
     error:
       failureCount > 0
