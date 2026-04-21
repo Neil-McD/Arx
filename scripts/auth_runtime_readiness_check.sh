@@ -101,6 +101,21 @@ is_truthy() {
   [[ "$normalized" == "1" || "$normalized" == "true" || "$normalized" == "yes" || "$normalized" == "on" ]]
 }
 
+normalize_hostname_like() {
+  local value
+  value="$(trim "$1")"
+  value="${value#http://}"
+  value="${value#https://}"
+  value="${value%%/*}"
+  printf '%s' "$(printf '%s' "$value" | tr '[:upper:]' '[:lower:]')"
+}
+
+looks_like_authkit_ui_hostname() {
+  local normalized
+  normalized="$(normalize_hostname_like "$1")"
+  [[ "$normalized" == "authkit.app" || "$normalized" == *.authkit.app ]]
+}
+
 validate_url() {
   local key="$1"
   local value
@@ -153,29 +168,36 @@ echo "[5/5] Recommended (not required) settings..."
 warn_if_missing "ARX_AUTH_AUTHORIZE_URL" "OAuth authorize endpoint for MCP auth metadata. WorkOS AuthKit example: https://<AUTHKIT_DOMAIN>/oauth2/authorize"
 warn_if_missing "ARX_AUTH_TOKEN_URL" "OAuth token endpoint for MCP auth metadata. WorkOS AuthKit example: https://<AUTHKIT_DOMAIN>/oauth2/token"
 warn_if_missing "ARX_AUTH_JWT_AUDIENCE" "Set audience when your provider includes aud checks (often the OAuth client id for ID tokens)."
-warn_if_missing "VITE_WORKOS_API_HOSTNAME" "Production should point this at your AuthKit domain (for example https://auth.polynet.ai -> auth.polynet.ai in VITE_WORKOS_API_HOSTNAME)."
+warn_if_missing "VITE_WORKOS_API_HOSTNAME" "Optional hardened browser posture only. Set this only when you have a custom Authentication API domain."
 
 workos_redirect_uri="$(lookup_key "VITE_WORKOS_REDIRECT_URI")"
 workos_api_hostname="$(lookup_key "VITE_WORKOS_API_HOSTNAME")"
 workos_dev_mode="$(lookup_key "VITE_WORKOS_DEV_MODE")"
 
-if [[ -n "$workos_redirect_uri" ]] && ! is_local_url "$workos_redirect_uri"; then
-  if [[ -z "$workos_api_hostname" ]]; then
-    echo "WARN: VITE_WORKOS_API_HOSTNAME is unset for a non-local redirect URI."
-    echo "  hint: Production continuity will fall back to WorkOS defaults instead of an owned AuthKit domain."
-    warn_count=$((warn_count + 1))
-  fi
-  if [[ -n "$workos_dev_mode" ]] && is_truthy "$workos_dev_mode"; then
-    echo "WARN: VITE_WORKOS_DEV_MODE is true for a non-local redirect URI."
-    echo "  hint: This keeps refresh continuity browser-owned and is not the intended production posture."
-    warn_count=$((warn_count + 1))
-  fi
+if [[ -n "$workos_api_hostname" ]] && looks_like_authkit_ui_hostname "$workos_api_hostname"; then
+  echo "FAIL: VITE_WORKOS_API_HOSTNAME points at an AuthKit hosted UI domain (${workos_api_hostname})."
+  echo "  hint: This env must be a custom Authentication API domain, not an *.authkit.app hosted sign-in domain."
+  missing_count=$((missing_count + 1))
 fi
 
 if [[ -n "$workos_api_hostname" && -n "$workos_dev_mode" ]] && is_truthy "$workos_dev_mode"; then
   echo "WARN: VITE_WORKOS_API_HOSTNAME is set but VITE_WORKOS_DEV_MODE is still true."
-  echo "  hint: Pick one posture. Owned AuthKit domain + cookie-backed continuity should use VITE_WORKOS_DEV_MODE=false."
+  echo "  hint: Pick one posture. Custom Authentication API domain + cookie-backed continuity should use VITE_WORKOS_DEV_MODE=false."
   warn_count=$((warn_count + 1))
+fi
+
+if [[ -n "$workos_redirect_uri" ]] && ! is_local_url "$workos_redirect_uri"; then
+  if [[ -z "$workos_api_hostname" ]]; then
+    if [[ -n "$workos_dev_mode" ]] && is_truthy "$workos_dev_mode"; then
+      echo "WARN: fallback browser auth posture is active for a non-local redirect URI."
+      echo "  hint: This is valid without a custom Authentication API domain, but refresh continuity remains browser-managed."
+      warn_count=$((warn_count + 1))
+    else
+      echo "WARN: VITE_WORKOS_API_HOSTNAME is unset and VITE_WORKOS_DEV_MODE is not true for a non-local redirect URI."
+      echo "  hint: Either stay on the fallback posture (VITE_WORKOS_DEV_MODE=true) or configure a custom Authentication API domain."
+      warn_count=$((warn_count + 1))
+    fi
+  fi
 fi
 
 if [[ "$missing_count" -gt 0 ]]; then

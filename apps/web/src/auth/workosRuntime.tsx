@@ -87,6 +87,24 @@ function readWorkOsConfig(): WorkOsConfig {
   };
 }
 
+function normalizeHostnameLike(value: string | null): string | null {
+  const trimmed = value?.trim();
+  if (!trimmed) return null;
+  try {
+    return new URL(trimmed.includes("://") ? trimmed : `https://${trimmed}`).hostname.toLowerCase();
+  } catch {
+    return trimmed
+      .replace(/^https?:\/\//i, "")
+      .split("/")[0]
+      ?.toLowerCase() ?? null;
+  }
+}
+
+function isLikelyAuthKitHostedUiDomain(value: string | null): boolean {
+  const hostname = normalizeHostnameLike(value);
+  return hostname === "authkit.app" || hostname?.endsWith(".authkit.app") === true;
+}
+
 function sanitizeRedirectReturnTo(raw: unknown): string {
   const normalized = String(raw ?? "").trim();
   if (!normalized) return DEFAULT_POST_SIGN_IN_PATH;
@@ -222,24 +240,43 @@ export function WorkOsRuntimeProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!config.clientId || import.meta.env.DEV) return;
-    if (config.devMode) {
-      console.warn("[auth][workos] production_dev_mode_enabled", {
+    if (config.apiHostname && isLikelyAuthKitHostedUiDomain(config.apiHostname)) {
+      console.warn("[auth][workos] invalid_api_hostname_domain_type", {
         apiHostname: config.apiHostname ?? null,
         redirectUri: config.redirectUri ?? null,
+        expected: "custom_authentication_api_domain",
       });
       emitWorkspaceEvent({
         scope: "lifecycle",
         name: "auth_workos_runtime_posture",
         status: "failure",
         detail: {
-          reason: "production_dev_mode_enabled",
+          reason: "invalid_api_hostname_domain_type",
           apiHostname: config.apiHostname ?? null,
           redirectUri: config.redirectUri ?? null,
+          expected: "custom_authentication_api_domain",
         },
       });
       return;
     }
     if (!config.apiHostname) {
+      if (config.devMode) {
+        console.warn("[auth][workos] fallback_dev_mode_active", {
+          redirectUri: config.redirectUri ?? null,
+          detail: "no_custom_authentication_api_domain_configured",
+        });
+        emitWorkspaceEvent({
+          scope: "lifecycle",
+          name: "auth_workos_runtime_posture",
+          status: "skip",
+          detail: {
+            reason: "fallback_dev_mode_active",
+            redirectUri: config.redirectUri ?? null,
+            detail: "no_custom_authentication_api_domain_configured",
+          },
+        });
+        return;
+      }
       console.warn("[auth][workos] production_api_hostname_missing", {
         redirectUri: config.redirectUri ?? null,
         fallbackHostname: "api.workos.com",
@@ -252,6 +289,23 @@ export function WorkOsRuntimeProvider({ children }: { children: ReactNode }) {
           reason: "production_api_hostname_missing",
           redirectUri: config.redirectUri ?? null,
           fallbackHostname: "api.workos.com",
+        },
+      });
+      return;
+    }
+    if (config.devMode) {
+      console.warn("[auth][workos] mixed_runtime_posture", {
+        apiHostname: config.apiHostname ?? null,
+        redirectUri: config.redirectUri ?? null,
+      });
+      emitWorkspaceEvent({
+        scope: "lifecycle",
+        name: "auth_workos_runtime_posture",
+        status: "skip",
+        detail: {
+          reason: "mixed_runtime_posture",
+          apiHostname: config.apiHostname ?? null,
+          redirectUri: config.redirectUri ?? null,
         },
       });
     }

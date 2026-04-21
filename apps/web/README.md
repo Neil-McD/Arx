@@ -14,10 +14,10 @@ This is the canonical Polynet web app and primary release surface.
    - Set WorkOS browser vars:
      - `VITE_WORKOS_CLIENT_ID`
      - `VITE_WORKOS_REDIRECT_URI`
-     - local-only fallback: `VITE_WORKOS_DEV_MODE=true` if you do not have an AuthKit domain for local testing
-     - production posture: `VITE_WORKOS_API_HOSTNAME=<your AuthKit domain>` and `VITE_WORKOS_DEV_MODE=false`
-   - Set shared OAuth/OIDC metadata vars (`ARX_AUTH_AUTHORIZE_URL`, `ARX_AUTH_TOKEN_URL`, `ARX_AUTH_CLIENT_ID`) for Convex MCP auth discovery
-   - Set JWT verifier vars (`ARX_AUTH_JWT_ISSUER`, `ARX_AUTH_JWT_JWKS_URL`) for verified Convex identity
+     - fallback posture: leave `VITE_WORKOS_API_HOSTNAME` unset and use `VITE_WORKOS_DEV_MODE=true`
+     - hardened posture: set `VITE_WORKOS_API_HOSTNAME=<your Authentication API domain>` and `VITE_WORKOS_DEV_MODE=false`
+   - Set shared OAuth/OIDC metadata vars (`ARX_AUTH_AUTHORIZE_URL`, `ARX_AUTH_TOKEN_URL`, `ARX_AUTH_CLIENT_ID`) for Convex MCP auth discovery. These point at your AuthKit / OIDC issuer domain.
+   - Set JWT verifier vars (`ARX_AUTH_JWT_ISSUER`, `ARX_AUTH_JWT_JWKS_URL`) for verified Convex identity. These also point at your AuthKit / OIDC issuer domain.
     - Validate config: `npm run check:auth-runtime-readiness`
 3. Run:
    - `npm run dev`
@@ -37,9 +37,8 @@ Set the following Vercel env vars:
 - `VITE_CONVEX_URL`
 - `VITE_CONVEX_PUBLIC_KEY` (optional)
 - `VITE_WORKOS_CLIENT_ID`
-- `VITE_WORKOS_API_HOSTNAME`
 - `VITE_WORKOS_REDIRECT_URI`
-- `VITE_WORKOS_DEV_MODE=false`
+- `VITE_WORKOS_DEV_MODE`
 - `ARX_AUTH_AUTHORIZE_URL`
 - `ARX_AUTH_TOKEN_URL`
 - `ARX_AUTH_CLIENT_ID`
@@ -48,9 +47,14 @@ Set the following Vercel env vars:
 
 Production auth posture:
 
-- Use an AuthKit domain you control for `VITE_WORKOS_API_HOSTNAME`.
-- Do not ship the browser app with `VITE_WORKOS_DEV_MODE=true`.
-- Keep `VITE_WORKOS_DEV_MODE` for local fallback only.
+- Working fallback posture:
+  - leave `VITE_WORKOS_API_HOSTNAME` unset
+  - set `VITE_WORKOS_DEV_MODE=true`
+- Hardened browser posture:
+  - set `VITE_WORKOS_API_HOSTNAME` to a custom Authentication API domain you control
+  - set `VITE_WORKOS_DEV_MODE=false`
+- Do not point `VITE_WORKOS_API_HOSTNAME` at an `*.authkit.app` hosted AuthKit UI domain.
+- `ARX_AUTH_*` metadata and JWT verifier vars may still point at your AuthKit / OIDC issuer domain.
 
 Workspace preview / live desktop depend on the preview proxy signing secret:
 
