@@ -80,3 +80,16 @@ After the env posture is aligned, verify the actual failure seam:
 3. close and reopen the desktop app
 4. leave the session idle past access-token expiry
 5. confirm bootstrap recovers without a manual sign-in click
+
+## 7) Session Maintenance
+
+Revoked rotated session rows are safe to prune after a retention window.
+
+Run:
+
+```bash
+npm run auth:prune-sessions -- --older-than-days 14 --limit 500
+```
+
+This deletes only revoked auth session rows older than the chosen cutoff from
+the production Convex deployment.
