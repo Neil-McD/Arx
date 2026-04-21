@@ -1,4 +1,3 @@
-import { internal } from "./_generated/api";
 import {
   internalMutation,
   internalQuery,
@@ -11,7 +10,6 @@ import {
   resolveUserIdForAuthenticatedRequest,
 } from "./communityCore";
 import {
-  normalizeSkillString,
   type SkillPackageRow,
   mapSkillPackageReadModel,
   readSkillMentionToken,
@@ -161,25 +159,6 @@ async function assertCommunitySkillMentionTokenAvailable(args: {
       throw new Error("community_skill_mention_token_conflict");
     }
   }
-}
-
-async function resolveAuthenticatedActionUser(args: {
-  ctx: any;
-  authSubject?: string | null;
-}): Promise<{ userId: any; authSubject: string }> {
-  const actor = (await args.ctx.runQuery(
-    internal.authActor.resolveAuthenticatedActorInternal as any,
-    {
-      authSubject: args.authSubject ?? undefined,
-    },
-  )) as { authSubject?: unknown; dbUserId?: unknown } | null;
-  const authSubject = normalizeSkillString(actor?.authSubject, 200);
-  const userId = actor?.dbUserId;
-  if (!authSubject || !userId) throw new Error("authenticated_user_required");
-  return {
-    userId,
-    authSubject,
-  };
 }
 
 export const getCommunitySkillAttachmentReadModelInternal = internalQuery({

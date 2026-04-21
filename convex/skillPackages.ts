@@ -1,4 +1,4 @@
-import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
+import { internalMutation, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import {
   getSkillPackageActiveInstructionsMd,
@@ -181,15 +181,6 @@ async function updateSkillPackageRow(args: {
   if (!updated) throw new Error("skill_package_not_found");
   return updated;
 }
-
-export const getSkillPackageByIdInternal = internalQuery({
-  args: {
-    skillPackageId: v.id("skillPackages"),
-  },
-  handler: async (ctx, args) => {
-    return await getSkillPackageById(ctx, args.skillPackageId);
-  },
-});
 
 export const listOwnedSkillPackages = query({
   args: {

@@ -1,5 +1,5 @@
 import { internal } from "./_generated/api";
-import { internalMutation, mutation, query } from "./_generated/server";
+import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { resolveUserIdForAuthenticatedRequest } from "./communityCore";
 import {
@@ -256,24 +256,6 @@ export const createUserPlatformSkill = mutation({
       ctx,
       userId,
       userPlatformSkillInstallId,
-    });
-  },
-});
-
-export const upsertUserPlatformSkillInstallInternal = internalMutation({
-  args: {
-    userId: v.id("users"),
-    skillPackageId: v.id("skillPackages"),
-    enabled: v.boolean(),
-    nowMs: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    return await upsertUserPlatformSkillInstallRow({
-      ctx,
-      userId: args.userId,
-      skillPackageId: args.skillPackageId,
-      enabled: args.enabled,
-      nowMs: args.nowMs,
     });
   },
 });
