@@ -48,8 +48,7 @@ export type PendingAuthIntentInput = PendingAuthIntent;
 export type AuthResumeState = {
   v: 1;
   created_at_ms: number;
-  return_to: string;
-  intent: PendingAuthIntent | null;
+  intent: PendingAuthIntent;
 };
 
 function asObject(value: unknown): Record<string, unknown> | null {
@@ -133,15 +132,13 @@ function normalizeAuthResumeState(value: unknown, nowMs = Date.now()): AuthResum
   if (!Number.isFinite(createdAtMs) || createdAtMs <= 0) return null;
   if (nowMs - createdAtMs > AUTH_RESUME_STATE_TTL_MS) return null;
 
-  const returnTo = typeof record.return_to === "string" ? record.return_to.trim() : "";
-  if (!returnTo) return null;
   const intentRecord = asObject(record.intent);
   const intent = intentRecord ? normalizePendingAuthIntent(intentRecord.reason, intentRecord.payload) : null;
+  if (!intent) return null;
 
   return {
     v: 1,
     created_at_ms: createdAtMs,
-    return_to: returnTo,
     intent,
   };
 }
@@ -168,27 +165,18 @@ export function readAuthResumeState(nowMs = Date.now()): AuthResumeState | null 
 
 export function storeAuthResumeState(
   params: {
-    returnTo: string;
-    intent?: PendingAuthIntentInput | PendingAuthIntent | null;
+    intent: PendingAuthIntentInput | PendingAuthIntent;
   },
   nowMs = Date.now(),
 ): void {
-  const returnTo = params.returnTo.trim();
-  if (!returnTo) return;
-  const existing = readAuthResumeState(nowMs);
-  const intent =
-    params.intent === undefined
-      ? existing?.intent ?? null
-      : params.intent === null
-        ? null
-        : normalizePendingAuthIntent(params.intent.reason, params.intent.payload);
+  const intent = normalizePendingAuthIntent(params.intent.reason, params.intent.payload);
+  if (!intent) return;
   try {
     localStorage.setItem(
       AUTH_RESUME_STATE_STORAGE_KEY,
       JSON.stringify({
         v: 1,
         created_at_ms: nowMs,
-        return_to: returnTo,
         intent,
       } satisfies AuthResumeState),
     );

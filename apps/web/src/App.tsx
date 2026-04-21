@@ -1048,18 +1048,6 @@ export default function App() {
     onDidJustSignIn: () => {
       resumePendingAuthIntent();
     },
-    onApplyPostAuthPath: (nextPath) => {
-      if (nextPath) {
-        window.history.replaceState({}, document.title, nextPath);
-      }
-      const nextPublicRoute = readPublicRouteFromLocation();
-      if (nextPublicRoute.kind === "app") {
-        setPublicRoute(nextPublicRoute);
-        applyAppRouteState(readAppRouteFromLocation());
-      } else {
-        applyPublicRouteState(nextPublicRoute);
-      }
-    },
     onBeforeSignOut: async () => {
       stopAllStreamingTurns();
     },
@@ -2199,9 +2187,7 @@ export default function App() {
   }, []);
 
   const persistCreateCommunityIntent = useCallback((draft: CreateCommunityIntentDraft): void => {
-    const returnTo = `${window.location.pathname}${window.location.search}`;
     storeAuthResumeState({
-      returnTo,
       intent: { reason: "create_community", payload: { draft } },
     });
   }, []);

@@ -25,9 +25,7 @@ import {
   type AuthSessionRefreshResult,
 } from "../auth";
 import {
-  clearAuthResumeState,
   parsePendingAuthIntentInput,
-  readAuthResumeState,
   storeAuthResumeState,
 } from "../../../../shared/authResumeState";
 import { clearOAuthCallbackParamsFromLocation } from "../../../../shared/cloudPkce";
@@ -46,7 +44,6 @@ type UseWebAppAuthControllerParams = {
   onSessionReady: (session: AuthSession) => AsyncVoid;
   onSessionFocusReady: (session: AuthSession) => AsyncVoid;
   onDidJustSignIn: () => void;
-  onApplyPostAuthPath: (nextPath: string | null) => void;
   onBeforeSignOut?: () => AsyncVoid;
 };
 
@@ -83,10 +80,6 @@ function readCurrentAuthReturnTo(): string {
   const currentUrl = new URL(window.location.href);
   const search = currentUrl.searchParams.toString();
   return `${currentUrl.pathname}${search ? `?${search}` : ""}${currentUrl.hash}`;
-}
-
-function readCurrentPathReturnTo(): string {
-  return `${window.location.pathname}${window.location.search}`;
 }
 
 function sessionsEqual(
@@ -150,7 +143,6 @@ export function useWebAppAuthController(
   const onSessionReadyRef = useLatestRef(params.onSessionReady);
   const onSessionFocusReadyRef = useLatestRef(params.onSessionFocusReady);
   const onDidJustSignInRef = useLatestRef(params.onDidJustSignIn);
-  const onApplyPostAuthPathRef = useLatestRef(params.onApplyPostAuthPath);
   const onBeforeSignOutRef = useLatestRef(params.onBeforeSignOut);
 
   useEffect(() => {
@@ -285,7 +277,6 @@ export function useWebAppAuthController(
     clearAuthSignedOutIntentMarker();
     const returnTo = readCurrentAuthReturnTo();
     markAuthFlowPending();
-    storeAuthResumeState({ returnTo });
     window.location.assign(buildLoginTrampolinePath(returnTo));
     return true;
   }, []);
@@ -294,10 +285,7 @@ export function useWebAppAuthController(
     setAuthError(null);
     const intent = parsePendingAuthIntentInput(intentInput);
     if (intent && !session) {
-      storeAuthResumeState({
-        returnTo: readCurrentPathReturnTo(),
-        intent,
-      });
+      storeAuthResumeState({ intent });
     }
     if (session) return;
     void beginSignInFlow();
@@ -411,17 +399,6 @@ export function useWebAppAuthController(
             adoptAuthSession(usableSession);
             if (hadPendingAuthFlow) {
               didJustSignInRef.current = true;
-              const authResumeState = readAuthResumeState();
-              const pendingReturnTo = String(authResumeState?.return_to ?? "").trim();
-              if (!authResumeState?.intent) {
-                clearAuthResumeState();
-              }
-              const nextPath = pendingReturnTo
-                ? pendingReturnTo.startsWith("/") || pendingReturnTo.startsWith("#")
-                  ? pendingReturnTo
-                  : "/workspace"
-                : null;
-              onApplyPostAuthPathRef.current(nextPath);
             }
             clearAuthFlowPending();
             setAuthError(null);
@@ -460,7 +437,6 @@ export function useWebAppAuthController(
     clearSessionLocally,
     ensureUsableAuthSession,
     markAuthBootstrapComplete,
-    onApplyPostAuthPathRef,
   ]);
 
   const isAuthResolvingSignedInState = useMemo(() => {
