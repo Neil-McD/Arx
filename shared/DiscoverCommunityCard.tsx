@@ -1,4 +1,5 @@
 import type { KeyboardEvent } from "react";
+import { getCommunityAvatarImageStyle } from "./communityAvatarUi";
 import { StableAvatar } from "./StableAvatar";
 import { getCommunityBannerImageStyle } from "./communityBannerUi";
 import { communityInitials } from "./messageMetadataUi";
@@ -8,6 +9,9 @@ type DiscoverCommunityCardProps = {
   slug?: string | null;
   oneLiner: string;
   avatarUrl?: string | null;
+  avatarFocusX?: number | null;
+  avatarFocusY?: number | null;
+  avatarZoom?: number | null;
   bannerUrl?: string | null;
   bannerFocusX?: number | null;
   bannerFocusY?: number | null;
@@ -26,6 +30,9 @@ export function DiscoverCommunityCard({
   slug,
   oneLiner,
   avatarUrl,
+  avatarFocusX,
+  avatarFocusY,
+  avatarZoom,
   bannerUrl,
   bannerFocusX,
   bannerFocusY,
@@ -82,6 +89,11 @@ export function DiscoverCommunityCard({
             readyClassName="has-image"
             fallbackClassName="fallback"
             imageUrl={avatarUrl}
+            imageStyle={getCommunityAvatarImageStyle({
+              focusX: avatarFocusX,
+              focusY: avatarFocusY,
+              zoom: avatarZoom,
+            })}
             alt={name}
             fallback={communityInitials(name)}
           />

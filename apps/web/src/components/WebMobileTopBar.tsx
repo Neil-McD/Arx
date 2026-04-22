@@ -1,4 +1,5 @@
 import { StableAvatar } from "../../../../shared/StableAvatar";
+import { getCommunityAvatarImageStyle } from "../../../../shared/communityAvatarUi";
 
 type WebMobileTopBarProps = {
   mode: "agent" | "discover" | "community";
@@ -8,6 +9,9 @@ type WebMobileTopBarProps = {
   hasActiveCommunity: boolean;
   activeCommunityName: string | null;
   activeCommunityAvatarUrl: string | null;
+  activeCommunityAvatarFocusX?: number | null;
+  activeCommunityAvatarFocusY?: number | null;
+  activeCommunityAvatarZoom?: number | null;
   activeCommunityInitials: string;
   activeCommunityAttentionCount: number;
   onOpenDrawer: () => void;
@@ -25,6 +29,9 @@ export function WebMobileTopBar({
   hasActiveCommunity,
   activeCommunityName,
   activeCommunityAvatarUrl,
+  activeCommunityAvatarFocusX,
+  activeCommunityAvatarFocusY,
+  activeCommunityAvatarZoom,
   activeCommunityInitials,
   activeCommunityAttentionCount,
   onOpenDrawer,
@@ -115,6 +122,11 @@ export function WebMobileTopBar({
               <StableAvatar
                 className="mobile-community-trigger-avatar"
                 imageUrl={activeCommunityAvatarUrl}
+                imageStyle={getCommunityAvatarImageStyle({
+                  focusX: activeCommunityAvatarFocusX,
+                  focusY: activeCommunityAvatarFocusY,
+                  zoom: activeCommunityAvatarZoom,
+                })}
                 alt={communityLabel}
                 fallback={activeCommunityInitials}
                 fallbackClassName="mobile-community-trigger-initials"

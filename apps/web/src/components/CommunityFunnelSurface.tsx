@@ -1,5 +1,6 @@
 import { useState, type CSSProperties, type ReactNode } from "react";
 
+import { getCommunityAvatarImageStyle } from "../../../../shared/communityAvatarUi";
 import type { CommunityFunnelHeroMediaKind } from "../../../../shared/communityTypes";
 import {
   formatCompactStat,
@@ -19,6 +20,9 @@ export type CommunityFunnelSurfaceAction = {
   communityLinkLabel?: string | null;
   communityLinkHref?: string | null;
   avatarUrl?: string | null;
+  avatarFocusX?: number | null;
+  avatarFocusY?: number | null;
+  avatarZoom?: number | null;
   cardBlurb: string;
   memberCount: number | null;
   onlineCount: number | null;
@@ -119,9 +123,15 @@ function renderTextWithLinks(text: string): JSX.Element[] {
   });
 }
 
-function renderAvatar(name: string, imageUrl: string | null | undefined, className: string, fallbackClassName: string) {
+function renderAvatar(
+  name: string,
+  imageUrl: string | null | undefined,
+  className: string,
+  fallbackClassName: string,
+  imageStyle?: CSSProperties,
+) {
   if (imageUrl) {
-    return <img className={className} src={imageUrl} alt={`${name} avatar`} draggable={false} />;
+    return <img className={className} src={imageUrl} alt={`${name} avatar`} draggable={false} style={imageStyle} />;
   }
   return <span className={fallbackClassName}>{getCommunityInitials(name)}</span>;
 }
@@ -249,6 +259,11 @@ function CommunityFunnelActionModule(props: {
             action.avatarUrl,
             "public-funnel-avatar-image",
             "public-funnel-avatar-fallback",
+            getCommunityAvatarImageStyle({
+              focusX: action.avatarFocusX,
+              focusY: action.avatarFocusY,
+              zoom: action.avatarZoom,
+            }),
           )}
         </div>
 

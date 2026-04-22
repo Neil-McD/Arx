@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { getCommunityAvatarImageStyle } from "../../../../shared/communityAvatarUi";
 import { StableAvatar } from "../../../../shared/StableAvatar";
 import { communityInitials } from "../../../../shared/messageMetadataUi";
 import { WebChatgptEmptyStateCard } from "../components/WebChatgptEmptyStateCard";
@@ -7,6 +8,9 @@ import { WebGuestSignupRail } from "../components/WebGuestSignupRail";
 type WorkspaceLandingCommunity = {
   name: string;
   avatar_url: string | null;
+  avatar_focus_x?: number | null;
+  avatar_focus_y?: number | null;
+  avatar_zoom?: number | null;
 };
 
 type BuildWebWorkspaceLandingProjectionParams = {
@@ -35,6 +39,11 @@ export function buildWebWorkspaceLandingProjection(
     <StableAvatar
       className="web-empty-thread-avatar"
       imageUrl={params.activeCommunity.avatar_url}
+      imageStyle={getCommunityAvatarImageStyle({
+        focusX: params.activeCommunity.avatar_focus_x,
+        focusY: params.activeCommunity.avatar_focus_y,
+        zoom: params.activeCommunity.avatar_zoom,
+      })}
       alt={params.activeCommunity.name}
       fallback={communityInitials(params.activeCommunity.name)}
       fallbackClassName="web-empty-thread-avatar-fallback"

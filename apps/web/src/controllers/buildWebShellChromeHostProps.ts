@@ -9,6 +9,9 @@ type CommunityLike = {
   slug?: string | null;
   name: string;
   avatar_url?: string | null;
+  avatar_focus_x?: number | null;
+  avatar_focus_y?: number | null;
+  avatar_zoom?: number | null;
   banner_url?: string | null;
   banner_focus_x?: number | null;
   banner_focus_y?: number | null;
@@ -115,6 +118,11 @@ export function buildWebShellChromeHostProps(params: {
       hasActiveCommunity: params.hasSelectedCommunity,
       activeCommunityName: params.activeCommunity?.name ?? null,
       activeCommunityAvatarUrl: params.activeCommunity?.avatar_url ?? null,
+      activeCommunityAvatarFocusX:
+        params.activeCommunity?.avatar_focus_x ?? null,
+      activeCommunityAvatarFocusY:
+        params.activeCommunity?.avatar_focus_y ?? null,
+      activeCommunityAvatarZoom: params.activeCommunity?.avatar_zoom ?? null,
       activeCommunityInitials: params.communityInitials(
         params.activeCommunity?.name ?? "Community",
       ),
@@ -158,6 +166,9 @@ export function buildWebShellChromeHostProps(params: {
             slug: params.activeCommunity.slug ?? null,
             name: params.activeCommunity.name,
             avatar_url: params.activeCommunity.avatar_url ?? null,
+            avatar_focus_x: params.activeCommunity.avatar_focus_x ?? null,
+            avatar_focus_y: params.activeCommunity.avatar_focus_y ?? null,
+            avatar_zoom: params.activeCommunity.avatar_zoom ?? null,
             banner_url: params.activeCommunity.banner_url ?? null,
             banner_focus_x: params.activeCommunity.banner_focus_x ?? null,
             banner_focus_y: params.activeCommunity.banner_focus_y ?? null,
@@ -181,12 +192,18 @@ export function buildWebShellChromeHostProps(params: {
         slug: community.slug ?? null,
         name: community.name,
         avatar_url: community.avatar_url ?? null,
+        avatar_focus_x: community.avatar_focus_x ?? null,
+        avatar_focus_y: community.avatar_focus_y ?? null,
+        avatar_zoom: community.avatar_zoom ?? null,
       })),
       railCommunities: params.railCommunities.map((community) => ({
         id: community.id,
         slug: community.slug ?? null,
         name: community.name,
         avatar_url: community.avatar_url ?? null,
+        avatar_focus_x: community.avatar_focus_x ?? null,
+        avatar_focus_y: community.avatar_focus_y ?? null,
+        avatar_zoom: community.avatar_zoom ?? null,
       })),
       communityRailAttentionById: params.communityRailAttentionById,
       isLoadingCommunities: params.isLoadingCommunities,

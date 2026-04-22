@@ -10,6 +10,7 @@ type StableAvatarProps = {
   fallbackClassName?: string;
   imageClassName?: string;
   style?: CSSProperties;
+  imageStyle?: CSSProperties;
   fallbackStyle?: CSSProperties;
   title?: string;
   "aria-hidden"?: boolean;
@@ -25,6 +26,7 @@ export function StableAvatar(props: StableAvatarProps) {
     fallbackClassName,
     imageClassName,
     style,
+    imageStyle,
     fallbackStyle,
     title,
   } = props;
@@ -51,6 +53,7 @@ export function StableAvatar(props: StableAvatarProps) {
           alt={alt}
           decoding="async"
           draggable={false}
+          style={imageStyle}
         />
       ) : (
         fallback

@@ -14730,6 +14730,10 @@ button.message-citation-chip:hover {
   width: min(720px, calc(100vw - 32px));
 }
 
+.avatar-focus-modal {
+  width: min(560px, calc(100vw - 32px));
+}
+
 .banner-editor-stage {
   display: grid;
   gap: 10px;
@@ -14752,6 +14756,13 @@ button.message-citation-chip:hover {
 
 .banner-editor-viewport.dragging {
   cursor: grabbing;
+}
+
+.avatar-editor-viewport {
+  width: min(100%, 360px);
+  aspect-ratio: 1 / 1;
+  margin-inline: auto;
+  border-radius: 24px;
 }
 
 .banner-editor-image {

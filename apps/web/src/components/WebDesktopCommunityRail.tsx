@@ -1,4 +1,5 @@
 import { StableAvatar } from "../../../../shared/StableAvatar";
+import { getCommunityAvatarImageStyle } from "../../../../shared/communityAvatarUi";
 import type { WebCommunityShellProps } from "./webShellChromeShared";
 
 type WebDesktopCommunityRailProps = {
@@ -87,6 +88,11 @@ export function WebDesktopCommunityRail(props: WebDesktopCommunityRailProps) {
                 <StableAvatar
                   className="community-rail-avatar"
                   imageUrl={community.avatar_url}
+                  imageStyle={getCommunityAvatarImageStyle({
+                    focusX: community.avatar_focus_x,
+                    focusY: community.avatar_focus_y,
+                    zoom: community.avatar_zoom,
+                  })}
                   alt={community.name}
                   fallback={communityShell.communityInitials(community.name)}
                   fallbackClassName="community-rail-initials"

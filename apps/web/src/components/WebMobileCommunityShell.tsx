@@ -1,5 +1,6 @@
 import { CommunityNav } from "../../../../shared/CommunityNav";
 import { StableAvatar } from "../../../../shared/StableAvatar";
+import { getCommunityAvatarImageStyle } from "../../../../shared/communityAvatarUi";
 import { WebMobileDrawer } from "./WebMobileDrawer";
 import type { WebCommunityShellProps } from "./webShellChromeShared";
 
@@ -132,6 +133,11 @@ export function WebMobileCommunityShell(props: WebMobileCommunityShellProps) {
                         <StableAvatar
                           className="mobile-community-selector-avatar"
                           imageUrl={community.avatar_url}
+                          imageStyle={getCommunityAvatarImageStyle({
+                            focusX: community.avatar_focus_x,
+                            focusY: community.avatar_focus_y,
+                            zoom: community.avatar_zoom,
+                          })}
                           alt={community.name}
                           fallback={communityShell.communityInitials(community.name)}
                           fallbackClassName="mobile-community-selector-initials"
