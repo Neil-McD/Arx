@@ -37,8 +37,14 @@ type BuildWebCommunitySurfaceProjectionParams = {
     WebCommunitySecondaryPanelsProps["settings"]["isStartingBuilderConnectOnboarding"];
   settingsState: WebCommunitySecondaryPanelsProps["settings"]["state"];
   settingsActions: WebCommunitySecondaryPanelsProps["settings"]["actions"];
+  setIsCommunityAvatarFocusModalOpen:
+    WebCommunitySecondaryPanelsProps["settings"]["setIsCommunityAvatarFocusModalOpen"];
   setIsCommunityBannerFocusModalOpen:
     WebCommunitySecondaryPanelsProps["settings"]["setIsCommunityBannerFocusModalOpen"];
+  communitySettingsAvatarUrl: WebCommunitySecondaryPanelsProps["avatarEditor"]["avatarUrl"];
+  communitySettingsAvatarFocusX: WebCommunitySecondaryPanelsProps["avatarEditor"]["focusX"];
+  communitySettingsAvatarFocusY: WebCommunitySecondaryPanelsProps["avatarEditor"]["focusY"];
+  communitySettingsAvatarZoom: WebCommunitySecondaryPanelsProps["avatarEditor"]["zoom"];
   communitySettingsBannerUrl: WebCommunitySecondaryPanelsProps["bannerEditor"]["bannerUrl"];
   communitySettingsBannerFocusX: WebCommunitySecondaryPanelsProps["bannerEditor"]["focusX"];
   communitySettingsBannerFocusY: WebCommunitySecondaryPanelsProps["bannerEditor"]["focusY"];
@@ -149,7 +155,24 @@ export function buildWebCommunitySurfaceProjection(
       isStartingBuilderConnectOnboarding: params.isStartingBuilderConnectOnboarding,
       state: params.settingsState,
       actions: params.settingsActions,
+      setIsCommunityAvatarFocusModalOpen:
+        params.setIsCommunityAvatarFocusModalOpen,
       setIsCommunityBannerFocusModalOpen: params.setIsCommunityBannerFocusModalOpen,
+    },
+    avatarEditor: {
+      isSettingsTabActive: params.communityTab === "settings",
+      isCommunityAvatarFocusModalOpen:
+        params.settingsState.isCommunityAvatarFocusModalOpen,
+      avatarUrl: params.communitySettingsAvatarUrl,
+      focusX: params.communitySettingsAvatarFocusX,
+      focusY: params.communitySettingsAvatarFocusY,
+      zoom: params.communitySettingsAvatarZoom,
+      onChangeFocusX: params.settingsActions.setCommunitySettingsAvatarFocusX,
+      onChangeFocusY: params.settingsActions.setCommunitySettingsAvatarFocusY,
+      onChangeZoom: params.settingsActions.setCommunitySettingsAvatarZoom,
+      markCommunitySettingsDirty: params.markCommunitySettingsDirty,
+      setIsCommunityAvatarFocusModalOpen:
+        params.setIsCommunityAvatarFocusModalOpen,
     },
     bannerEditor: {
       isSettingsTabActive: params.communityTab === "settings",

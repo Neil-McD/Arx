@@ -1,42 +1,28 @@
-import type { RefObject } from "react";
 import {
   hasBuilderTierPaidAccess,
   isBuilderTierFree,
   type BuilderCheckoutTier,
 } from "./builderBilling";
 
-type BuilderUpgradeContext = "builder" | "create_community";
-
 type BuilderUpgradeModalProps = {
   isOpen: boolean;
-  builderUpgradeContext: BuilderUpgradeContext;
   builderTier: string | null | undefined;
   isStartingBuilderCheckout: boolean;
   builderBillingError: string | null;
-  showBuilderUpgradeScrollHint: boolean;
-  builderUpgradeModalBodyRef: RefObject<HTMLDivElement>;
   onClose: () => void;
-  onModalBodyScroll: () => void;
   onStartBuilderPlanCheckout: (tier: BuilderCheckoutTier) => void;
 };
 
 export function BuilderUpgradeModal({
   isOpen,
-  builderUpgradeContext,
   builderTier,
   isStartingBuilderCheckout,
   builderBillingError,
-  showBuilderUpgradeScrollHint,
-  builderUpgradeModalBodyRef,
   onClose,
-  onModalBodyScroll,
   onStartBuilderPlanCheckout,
 }: BuilderUpgradeModalProps) {
   if (!isOpen) return null;
 
-  void builderUpgradeContext;
-  void showBuilderUpgradeScrollHint;
-  void onModalBodyScroll;
   const freeIsCurrent = isBuilderTierFree(builderTier);
   const builderIsCurrent = hasBuilderTierPaidAccess(builderTier);
   const upgradeLead =
@@ -51,7 +37,7 @@ export function BuilderUpgradeModal({
             ×
           </button>
         </div>
-        <div className="modal-body" ref={builderUpgradeModalBodyRef}>
+        <div className="modal-body">
           <div className="upgrade-copy">
             <div className="upgrade-lead">{upgradeLead}</div>
           </div>

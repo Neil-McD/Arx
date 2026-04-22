@@ -185,7 +185,6 @@ import {
 } from "../../../shared/linkEmbedUi";
 import { renderMarkdown } from "../../../shared/markdownUi";
 import {
-  readAvatarFileAsSquareDataUrl,
   readBannerFileAsWideDataUrlWithinLimit,
 } from "../../../shared/imageTransforms";
 import {
@@ -226,7 +225,6 @@ import { useCommunityChatDataController } from "../../../shared/useCommunityChat
 import { useCommunityChatMutationController } from "../../../shared/useCommunityChatMutationController";
 import { useCommunityRailOrder } from "../../../shared/useCommunityRailOrder";
 import { useRailPointerReorder } from "../../../shared/useRailPointerReorder";
-import { useBuilderUpgradeScrollHint } from "../../../shared/useBuilderUpgradeScrollHint";
 import { useWebCommunityAccessController } from "../../../shared/useWebCommunityAccessController";
 import { useWebDiscoverController } from "../../../shared/useWebDiscoverController";
 import { useWebMemorySettingsDataController } from "../../../shared/useWebMemorySettingsDataController";
@@ -347,6 +345,9 @@ type CommunityRecord = {
   about: string | null;
   avatar_url: string | null;
   avatar_storage_id?: string | null;
+  avatar_focus_x?: number | null;
+  avatar_focus_y?: number | null;
+  avatar_zoom?: number | null;
   banner_url: string | null;
   banner_storage_id?: string | null;
   banner_focus_x?: number | null;
@@ -365,6 +366,9 @@ type PublicCommunityRecord = {
   one_liner: string | null;
   about: string | null;
   avatar_url: string | null;
+  avatar_focus_x?: number | null;
+  avatar_focus_y?: number | null;
+  avatar_zoom?: number | null;
   banner_url: string | null;
   banner_focus_x?: number | null;
   banner_focus_y?: number | null;
@@ -1173,15 +1177,6 @@ export default function App() {
   const [builderConnectReturn, setBuilderConnectReturn] = useState<BuilderConnectReturn | null>(null);
   const [builderBillingReturn, setBuilderBillingReturn] = useState<BuilderBillingReturn | null>(null);
   const [, setIsFinalizingBuilderReturn] = useState(false);
-  const builderUpgradeScrollRefreshToken = `${builderBillingStatus?.builder_tier ?? ""}:${builderUpgradeContext}`;
-  const {
-    builderUpgradeModalBodyRef,
-    showBuilderUpgradeScrollHint,
-    updateBuilderUpgradeScrollHint,
-  } = useBuilderUpgradeScrollHint({
-    isOpen: isBuilderUpgradeOpen,
-    refreshToken: builderUpgradeScrollRefreshToken,
-  });
   const lastAutoRedeemPendingPurchasesUserIdRef = useRef<string | null>(null);
   const autoRedeemPendingPurchasesAttemptRef = useRef(0);
   const autoRedeemPendingPurchasesTimeoutRef = useRef<number | null>(null);
@@ -1656,6 +1651,12 @@ export default function App() {
     setCommunitySettingsVisibility,
     communitySettingsAvatarUrl,
     setCommunitySettingsAvatarUrl,
+    communitySettingsAvatarFocusX,
+    setCommunitySettingsAvatarFocusX,
+    communitySettingsAvatarFocusY,
+    setCommunitySettingsAvatarFocusY,
+    communitySettingsAvatarZoom,
+    setCommunitySettingsAvatarZoom,
     communitySettingsBannerUrl,
     setCommunitySettingsBannerUrl,
     communitySettingsBannerFocusX,
@@ -1676,6 +1677,8 @@ export default function App() {
     setCommunitySettingsBannerUploadError,
     isProcessingCommunitySettingsBanner,
     setIsProcessingCommunitySettingsBanner,
+    isCommunityAvatarFocusModalOpen,
+    setIsCommunityAvatarFocusModalOpen,
     isCommunityBannerFocusModalOpen,
     setIsCommunityBannerFocusModalOpen,
     isSavingCommunitySettings,
@@ -2568,6 +2571,9 @@ export default function App() {
     setCommunitySettingsAbout,
     setCommunitySettingsVisibility,
     setCommunitySettingsAvatarUrl,
+    setCommunitySettingsAvatarFocusX,
+    setCommunitySettingsAvatarFocusY,
+    setCommunitySettingsAvatarZoom,
     setCommunitySettingsBannerUrl,
     setCommunitySettingsBannerFocusX,
     setCommunitySettingsBannerFocusY,
@@ -2630,6 +2636,9 @@ export default function App() {
     communitySettingsAbout,
     communitySettingsVisibility,
     communitySettingsAvatarUrl,
+    communitySettingsAvatarFocusX,
+    communitySettingsAvatarFocusY,
+    communitySettingsAvatarZoom,
     communitySettingsBannerUrl,
     communitySettingsBannerFocusX,
     communitySettingsBannerFocusY,
@@ -2652,6 +2661,9 @@ export default function App() {
                 about: result.about ?? null,
                 avatar_url: result.avatar_url,
                 avatar_storage_id: result.avatar_storage_id ?? null,
+                avatar_focus_x: result.avatar_focus_x ?? 0.5,
+                avatar_focus_y: result.avatar_focus_y ?? 0.5,
+                avatar_zoom: result.avatar_zoom ?? 1,
                 banner_url: result.banner_url,
                 banner_storage_id: result.banner_storage_id ?? null,
                 banner_focus_x: result.banner_focus_x ?? 0.5,
@@ -3805,7 +3817,7 @@ export default function App() {
     redeemPendingPurchasesInFlightRef,
   });
 
-  async function setDevBuilderTier(tier: "free" | "builder"): Promise<void> {
+  async function setDevBuilderTier(tier: "free" | "builder" | "architect"): Promise<void> {
     const session = await ensureUsableAuthSession();
     if (!session || !canUseDevTierOverride) return;
     setIsSettingDevBuilderTier(true);
@@ -3912,7 +3924,6 @@ export default function App() {
         communitySlug: community.slug,
       });
     },
-    readAvatarFileAsSquareDataUrl,
     readBannerFileAsWideDataUrlWithinLimit,
     isLikelyImageFile,
     maxCreateImageDataUrlChars: MAX_WEB_IMAGE_DATA_URL_CHARS,
@@ -4524,6 +4535,9 @@ export default function App() {
     setIsSettingsAvatarDragOver,
     setIsProfileAvatarDragOver: profileUi.setIsProfileAvatarDragOver,
     setCommunitySettingsAvatarUrl,
+    setCommunitySettingsAvatarFocusX,
+    setCommunitySettingsAvatarFocusY,
+    setCommunitySettingsAvatarZoom,
     setCommunitySettingsBannerUrl,
     setCommunitySettingsBannerFocusX,
     setCommunitySettingsBannerFocusY,
@@ -4532,6 +4546,7 @@ export default function App() {
     setCommunitySettingsBannerUploadError,
     setIsProcessingCommunitySettingsBanner,
     markCommunitySettingsDirty,
+    onCommunityAvatarUploadSuccess: () => setIsCommunityAvatarFocusModalOpen(true),
     onCommunityBannerUploadSuccess: () => setIsCommunityBannerFocusModalOpen(true),
     isLikelyImageFile,
     maxWebImageDataUrlChars: MAX_WEB_IMAGE_DATA_URL_CHARS,
@@ -4539,7 +4554,7 @@ export default function App() {
     setAuthError,
   });
 
-  const normalizedBuilderTier = useMemo<"free" | "builder">(
+  const normalizedBuilderTier = useMemo<"free" | "builder" | "architect">(
     () => normalizeBuilderTierForUi(builderBillingStatus?.builder_tier),
     [builderBillingStatus?.builder_tier],
   );
@@ -5349,7 +5364,11 @@ export default function App() {
       settingsState: {
         isSettingsBannerDragOver,
         isProcessingCommunitySettingsBanner,
+        isCommunityAvatarFocusModalOpen,
         isCommunityBannerFocusModalOpen,
+        communitySettingsAvatarFocusX,
+        communitySettingsAvatarFocusY,
+        communitySettingsAvatarZoom,
         communitySettingsBannerUrl,
         communitySettingsBannerFocusX,
         communitySettingsBannerFocusY,
@@ -5387,6 +5406,9 @@ export default function App() {
         handleSettingsAvatarDrop,
         handleCommunityAvatarUpload,
         setCommunitySettingsAvatarUrl,
+        setCommunitySettingsAvatarFocusX,
+        setCommunitySettingsAvatarFocusY,
+        setCommunitySettingsAvatarZoom,
         setCommunitySettingsName,
         setCommunitySettingsSlug,
         setCommunitySettingsOneLiner,
@@ -5401,7 +5423,12 @@ export default function App() {
         handleToggleCommunityMute,
         handleLeaveCommunity,
       },
+      setIsCommunityAvatarFocusModalOpen,
       setIsCommunityBannerFocusModalOpen,
+      communitySettingsAvatarUrl,
+      communitySettingsAvatarFocusX,
+      communitySettingsAvatarFocusY,
+      communitySettingsAvatarZoom,
       communitySettingsBannerUrl,
       communitySettingsBannerFocusX,
       communitySettingsBannerFocusY,
@@ -5957,9 +5984,6 @@ export default function App() {
     builderUpgradeContext,
     isStartingBuilderCheckout,
     builderBillingError,
-    showBuilderUpgradeScrollHint,
-    builderUpgradeModalBodyRef,
-    updateBuilderUpgradeScrollHint,
     startBuilderPlanCheckout,
     communityModalHostProps: communityUi.modalHostProps,
     appToast,

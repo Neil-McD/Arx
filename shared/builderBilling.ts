@@ -4,7 +4,7 @@ export type BuilderBillingStatus = "success" | "cancel" | "return";
 export type BuilderBillingSource = "web" | "unknown";
 export type BuilderUpgradeContextValue = "builder" | "create_community";
 export type BuilderBillingContext = BuilderUpgradeContextValue | "unknown";
-export type BuilderTierUi = "free" | "builder";
+export type BuilderTierUi = "free" | "builder" | "architect";
 export type BuilderCheckoutTier = "builder";
 
 export type BuilderBillingReturn = {
@@ -72,7 +72,8 @@ function normalizeBuilderTierRaw(value: string | null | undefined): string {
 export function normalizeBuilderTierForUi(value: string | null | undefined): BuilderTierUi {
   const raw = normalizeBuilderTierRaw(value);
   if (raw === "builder") return "builder";
-  if (raw === "architect" || raw === "pro") return "builder";
+  if (raw === "architect") return "architect";
+  if (raw === "pro") return "builder";
   return "free";
 }
 
@@ -86,14 +87,17 @@ export function isBuilderTierBuilder(value: string | null | undefined): boolean 
 }
 
 export function hasBuilderTierPaidAccess(value: string | null | undefined): boolean {
-  return normalizeBuilderTierForUi(value) === "builder";
+  return normalizeBuilderTierForUi(value) !== "free";
 }
 
 export function hasBuilderWorkbenchAccess(value: string | null | undefined): boolean {
   return hasBuilderTierPaidAccess(value);
 }
 
-export function formatBuilderTierLabel(value: string | null | undefined): "Free" | "Builder" {
+export function formatBuilderTierLabel(
+  value: string | null | undefined,
+): "Free" | "Builder" | "Architect" {
+  if (normalizeBuilderTierForUi(value) === "architect") return "Architect";
   if (isBuilderTierBuilder(value)) return "Builder";
   return "Free";
 }

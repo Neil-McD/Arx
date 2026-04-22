@@ -24,7 +24,7 @@ type PersonalMemoryItem = {
 };
 
 type BuilderBillingStatus = {
-  builder_tier: "free" | "builder";
+  builder_tier: "free" | "builder" | "architect";
 } | null;
 
 type WebAgentSettingsSectionProps = {

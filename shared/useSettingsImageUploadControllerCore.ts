@@ -1,5 +1,6 @@
 import { useCallback, type Dispatch, type DragEvent, type SetStateAction } from "react";
 import {
+  readCommunityAvatarFileAsDataUrlWithinLimit,
   readAvatarFileAsSquareDataUrl,
   readBannerFileAsWideDataUrlWithinLimit,
 } from "./imageTransforms";
@@ -9,6 +10,9 @@ type UseSettingsImageUploadControllerCoreArgs = {
   setIsSettingsAvatarDragOver: Dispatch<SetStateAction<boolean>>;
   setIsProfileAvatarDragOver: Dispatch<SetStateAction<boolean>>;
   setCommunitySettingsAvatarUrl: Dispatch<SetStateAction<string | null>>;
+  setCommunitySettingsAvatarFocusX?: Dispatch<SetStateAction<number>>;
+  setCommunitySettingsAvatarFocusY?: Dispatch<SetStateAction<number>>;
+  setCommunitySettingsAvatarZoom?: Dispatch<SetStateAction<number>>;
   setCommunitySettingsBannerUrl: Dispatch<SetStateAction<string | null>>;
   setCommunitySettingsBannerFocusX?: Dispatch<SetStateAction<number>>;
   setCommunitySettingsBannerFocusY?: Dispatch<SetStateAction<number>>;
@@ -17,6 +21,7 @@ type UseSettingsImageUploadControllerCoreArgs = {
   setCommunitySettingsBannerUploadError: Dispatch<SetStateAction<string | null>>;
   setIsProcessingCommunitySettingsBanner: Dispatch<SetStateAction<boolean>>;
   markCommunitySettingsDirty: () => void;
+  onCommunityAvatarUploadSuccess?: () => void;
   onCommunityBannerUploadSuccess?: () => void;
   isLikelyCommunityBannerImageFile: (file: File) => boolean;
   maxCommunityImageDataUrlChars: number;
@@ -53,6 +58,9 @@ export function useSettingsImageUploadControllerCore(
     setIsSettingsAvatarDragOver,
     setIsProfileAvatarDragOver,
     setCommunitySettingsAvatarUrl,
+    setCommunitySettingsAvatarFocusX,
+    setCommunitySettingsAvatarFocusY,
+    setCommunitySettingsAvatarZoom,
     setCommunitySettingsBannerUrl,
     setCommunitySettingsBannerFocusX,
     setCommunitySettingsBannerFocusY,
@@ -61,6 +69,7 @@ export function useSettingsImageUploadControllerCore(
     setCommunitySettingsBannerUploadError,
     setIsProcessingCommunitySettingsBanner,
     markCommunitySettingsDirty,
+    onCommunityAvatarUploadSuccess,
     onCommunityBannerUploadSuccess,
     isLikelyCommunityBannerImageFile,
     maxCommunityImageDataUrlChars,
@@ -78,12 +87,16 @@ export function useSettingsImageUploadControllerCore(
     async (file: File | null) => {
       if (!file) return;
       try {
-        const dataUrl = await readAvatarFileAsSquareDataUrl(file, 128);
+        const dataUrl = await readCommunityAvatarFileAsDataUrlWithinLimit(file, maxCommunityImageDataUrlChars);
         if (enforceCommunityAvatarDataUrlLimit && dataUrl.length > maxCommunityImageDataUrlChars) {
           throw new Error("Avatar image is too large. Try a smaller image.");
         }
         setCommunitySettingsAvatarUrl(dataUrl);
+        setCommunitySettingsAvatarFocusX?.(0.5);
+        setCommunitySettingsAvatarFocusY?.(0.5);
+        setCommunitySettingsAvatarZoom?.(1);
         markCommunitySettingsDirty();
+        onCommunityAvatarUploadSuccess?.();
       } catch (error) {
         setCommunitySettingsError(getErrorMessage(error, communityAvatarReadErrorFallback));
       }
@@ -94,7 +107,11 @@ export function useSettingsImageUploadControllerCore(
       markCommunitySettingsDirty,
       maxCommunityImageDataUrlChars,
       setCommunitySettingsAvatarUrl,
+      setCommunitySettingsAvatarFocusX,
+      setCommunitySettingsAvatarFocusY,
+      setCommunitySettingsAvatarZoom,
       setCommunitySettingsError,
+      onCommunityAvatarUploadSuccess,
     ],
   );
 

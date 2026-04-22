@@ -20,6 +20,9 @@ export type CloudCommunitySettingsSaveResult = {
   about: string | null;
   avatar_url: string | null;
   avatar_storage_id?: string | null;
+  avatar_focus_x?: number | null;
+  avatar_focus_y?: number | null;
+  avatar_zoom?: number | null;
   banner_url: string | null;
   banner_storage_id?: string | null;
   banner_focus_x?: number | null;
@@ -406,6 +409,9 @@ export async function createCloudCommunity<SessionT, TCommunity = unknown>(
     visibility: string;
     avatarStorageId?: string | null;
     avatarUrl?: string | null;
+    avatarFocusX?: number | null;
+    avatarFocusY?: number | null;
+    avatarZoom?: number | null;
     oneLiner: string | null;
     bannerStorageId?: string | null;
     bannerUrl?: string | null;
@@ -422,6 +428,9 @@ export async function createCloudCommunity<SessionT, TCommunity = unknown>(
     visibility: params.visibility,
     avatarStorageId: params.avatarStorageId ?? null,
     avatarUrl: params.avatarUrl ?? null,
+    avatarFocusX: params.avatarFocusX ?? 0.5,
+    avatarFocusY: params.avatarFocusY ?? 0.5,
+    avatarZoom: params.avatarZoom ?? 1,
     oneLiner: params.oneLiner,
     bannerStorageId: params.bannerStorageId ?? null,
     bannerUrl: params.bannerUrl ?? null,
@@ -468,6 +477,9 @@ export async function saveCloudCommunitySettings<SessionT>(
     about: string | null;
     avatarStorageId?: string | null;
     avatarUrl?: string | null;
+    avatarFocusX?: number | null;
+    avatarFocusY?: number | null;
+    avatarZoom?: number | null;
     bannerStorageId?: string | null;
     bannerUrl?: string | null;
     bannerFocusX?: number | null;
@@ -488,6 +500,9 @@ export async function saveCloudCommunitySettings<SessionT>(
     about: params.about,
     avatarStorageId: params.avatarStorageId ?? null,
     avatarUrl: params.avatarUrl ?? null,
+    avatarFocusX: params.avatarFocusX ?? 0.5,
+    avatarFocusY: params.avatarFocusY ?? 0.5,
+    avatarZoom: params.avatarZoom ?? 1,
     bannerStorageId: params.bannerStorageId ?? null,
     bannerUrl: params.bannerUrl ?? null,
     bannerFocusX: params.bannerFocusX ?? 0.5,

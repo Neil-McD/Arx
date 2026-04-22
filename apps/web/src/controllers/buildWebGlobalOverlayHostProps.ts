@@ -64,9 +64,6 @@ export function buildWebGlobalOverlayHostProps(params: {
   builderUpgradeContext: BuilderUpgradeContext;
   isStartingBuilderCheckout: boolean;
   builderBillingError: string | null;
-  showBuilderUpgradeScrollHint: boolean;
-  builderUpgradeModalBodyRef: { current: HTMLDivElement | null };
-  updateBuilderUpgradeScrollHint: () => void;
   startBuilderPlanCheckout: (
     tier: BuilderCheckoutTier,
     options: { context: BuilderUpgradeContext },
@@ -162,14 +159,10 @@ export function buildWebGlobalOverlayHostProps(params: {
       : null,
     builderUpgradeModalProps: {
       isOpen: params.isBuilderUpgradeOpen,
-      builderUpgradeContext: params.builderUpgradeContext,
       builderTier: params.builderBillingStatus?.builder_tier,
       isStartingBuilderCheckout: params.isStartingBuilderCheckout,
       builderBillingError: params.builderBillingError,
-      showBuilderUpgradeScrollHint: params.showBuilderUpgradeScrollHint,
-      builderUpgradeModalBodyRef: params.builderUpgradeModalBodyRef,
       onClose: () => params.setIsBuilderUpgradeOpen(false),
-      onModalBodyScroll: params.updateBuilderUpgradeScrollHint,
       onStartBuilderPlanCheckout: (tier) => {
         if (!params.session) {
           params.setIsBuilderUpgradeOpen(false);

@@ -10,6 +10,9 @@ export type CommunityLike = {
   about?: string;
   avatarUrl?: string;
   avatarStorageId?: any;
+  avatarFocusX?: number;
+  avatarFocusY?: number;
+  avatarZoom?: number;
   bannerUrl?: string;
   bannerStorageId?: any;
   bannerFocusX?: number;
@@ -196,7 +199,19 @@ export function normalizeBannerFocus(raw: unknown): number {
   return Math.max(0, Math.min(1, parsed));
 }
 
+export function normalizeAvatarFocus(raw: unknown): number {
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed)) return 0.5;
+  return Math.max(0, Math.min(1, parsed));
+}
+
 export function normalizeBannerZoom(raw: unknown): number {
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed)) return 1;
+  return Math.max(1, Math.min(2.5, parsed));
+}
+
+export function normalizeAvatarZoom(raw: unknown): number {
   const parsed = Number(raw);
   if (!Number.isFinite(parsed)) return 1;
   return Math.max(1, Math.min(2.5, parsed));
@@ -223,6 +238,9 @@ export async function resolveCommunityBrandingFields(
 ): Promise<{
   avatar_url: string | null;
   avatar_storage_id: string | null;
+  avatar_focus_x: number;
+  avatar_focus_y: number;
+  avatar_zoom: number;
   banner_url: string | null;
   banner_storage_id: string | null;
   banner_focus_x: number;
@@ -236,6 +254,9 @@ export async function resolveCommunityBrandingFields(
   return {
     avatar_url: avatarUrl ?? row.avatarUrl ?? null,
     avatar_storage_id: row.avatarStorageId ? String(row.avatarStorageId) : null,
+    avatar_focus_x: normalizeAvatarFocus(row.avatarFocusX),
+    avatar_focus_y: normalizeAvatarFocus(row.avatarFocusY),
+    avatar_zoom: normalizeAvatarZoom(row.avatarZoom),
     banner_url: bannerUrl ?? row.bannerUrl ?? null,
     banner_storage_id: row.bannerStorageId ? String(row.bannerStorageId) : null,
     banner_focus_x: normalizeBannerFocus(row.bannerFocusX),
@@ -474,7 +495,10 @@ export function tierHasBuilderAccess(rawTier: unknown): boolean {
 }
 
 export function tierHasArchitectAccess(rawTier: unknown): boolean {
-  return tierHasBuilderAccess(rawTier);
+  const tier = String(rawTier ?? "")
+    .trim()
+    .toLowerCase();
+  return tier === "architect";
 }
 
 export async function resolvePublicUserId(

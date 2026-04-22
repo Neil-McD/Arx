@@ -177,7 +177,7 @@ export async function createWorkspaceSandboxSession(params: {
   const canonicalTier = await params.ctx.runQuery(api.entitlements.getCanonicalTierByUserId as any, {
     userId: params.userId,
   });
-  if (canonicalTier !== "builder") {
+  if (canonicalTier === "free") {
     return {
       ok: false,
       status: 403,
@@ -198,7 +198,7 @@ export async function createWorkspaceSandboxSession(params: {
       userId: params.userId,
     },
   );
-  if (canonicalTier === "builder") {
+  if (canonicalTier !== "free") {
     let provisioningWindow:
       | { cycleStartedAt: number; cycleEndsAt: number }
       | null = null;
@@ -233,7 +233,7 @@ export async function createWorkspaceSandboxSession(params: {
     if (provisioningWindow && needsProvisioningSync) {
       await params.ctx.runMutation(internal.workspaceCredits.syncBuilderMonthlyCreditsInternal as any, {
         userId: params.userId,
-        targetTier: "builder",
+        targetTier: canonicalTier === "architect" ? "architect" : "builder",
         grantsAccess: true,
         cycleStartedAt: provisioningWindow.cycleStartedAt,
         cycleEndsAt: provisioningWindow.cycleEndsAt,
@@ -247,7 +247,7 @@ export async function createWorkspaceSandboxSession(params: {
       );
     }
   }
-  if (!creditBalance && canonicalTier === "builder" && !creatorDevCreditBypass) {
+  if (!creditBalance && canonicalTier !== "free" && !creatorDevCreditBypass) {
     return {
       ok: false,
       status: 503,

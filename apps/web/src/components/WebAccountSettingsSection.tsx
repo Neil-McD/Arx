@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { formatBuilderTierLabel, isBuilderTierFree } from "../../../../shared/builderBilling";
 import type { BuilderBillingStatus } from "../../../../shared/builderBillingStatusGateway";
+import { getCommunityAvatarImageStyle } from "../../../../shared/communityAvatarUi";
+import { buildStripeConnectPresentation } from "../controllers/buildStripeConnectPresentation";
 import { StripeWordmark } from "./StripeWordmark";
 import { WebSignOutConfirmModal } from "./WebSignOutConfirmModal";
 
@@ -35,6 +37,9 @@ type OwnedCommunity = {
   slug: string;
   name: string;
   avatar_url: string | null;
+  avatar_focus_x?: number | null;
+  avatar_focus_y?: number | null;
+  avatar_zoom?: number | null;
 };
 
 type WebAccountSettingsSectionProps = {
@@ -78,7 +83,7 @@ type WebAccountSettingsSectionProps = {
   isStartingBuilderConnectOnboarding: boolean;
   canUseDevTierOverride: boolean;
   isSettingDevBuilderTier: boolean;
-  setDevBuilderTier: (tier: "free" | "builder") => Promise<void> | void;
+  setDevBuilderTier: (tier: "free" | "builder" | "architect") => Promise<void> | void;
   devBuilderTierError: string | null;
   pendingPurchaseClaims: PendingPurchaseClaim[];
   isLoadingPendingPurchases: boolean;
@@ -334,35 +339,10 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
               max > 0 ? `${ownedCount}/${max} owned ${communityWord}` : `${ownedCount} owned ${communityWord}`;
             const tierLabel = formatBuilderTierLabel(tier);
             const canManagePlan = status?.can_manage_plan === true;
-            const stripeConnect = status?.stripe_connect ?? null;
-            const stripeConnectStatus = stripeConnect?.status ?? "not_connected";
-            const isStripeReady = stripeConnect?.can_accept_charges === true;
-            const platformFeePercent = Number(status?.platform_fee_bps ?? 0) / 100;
-            const requirementsPreview = stripeConnect?.requirements_currently_due?.slice(0, 3) ?? [];
-            const hasRequirementsPreview = requirementsPreview.length > 0;
-            const connectCtaLabel = isStripeReady
-              ? "Open Stripe dashboard"
-              : stripeConnectStatus === "pending_requirements" || stripeConnectStatus === "restricted"
-                ? "Continue Stripe setup"
-                : "Connect Stripe";
-            const stripeStatusTitle = isStripeReady
-              ? "Ready for paid community subscriptions"
-              : stripeConnectStatus === "restricted"
-                ? "Action required before payouts can start"
-                : stripeConnectStatus === "pending_requirements" && !hasRequirementsPreview
-                  ? "Stripe is reviewing your payout setup"
-                  : stripeConnectStatus === "pending_requirements"
-                    ? "Finish Stripe setup before payouts can start"
-                    : "Not connected";
-            const stripeStatusMessage = isStripeReady
-              ? `PolyNet owns pricing, access, and community revenue reporting. Stripe Connect Express handles regulated payouts and verification. PolyNet keeps ${platformFeePercent.toFixed(0)}% plus Stripe fees.`
-              : stripeConnectStatus === "restricted"
-                ? "Stripe needs more information or action before paid community subscriptions can start."
-                : stripeConnectStatus === "pending_requirements" && !hasRequirementsPreview
-                  ? "Stripe is still reviewing or activating your account before payouts can start."
-                  : stripeConnectStatus === "pending_requirements"
-                    ? "Finish Stripe onboarding before you enable paid access on your community."
-                    : "Connect Stripe to accept paid community subscriptions.";
+            const stripeConnectPresentation = buildStripeConnectPresentation({
+              builderBillingStatus: status,
+              surface: "account",
+            });
             return (
               <>
                 <div className="account-row">
@@ -406,10 +386,10 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
                   <div className="account-row">
                     <div className="account-identity">
                       <span>Stripe monetization</span>
-                      <strong>{stripeStatusTitle}</strong>
+                      <strong>{stripeConnectPresentation.statusTitle}</strong>
                     </div>
                     <div className="auth-actions">
-                      <span className="auth-status">{stripeStatusMessage}</span>
+                      <span className="auth-status">{stripeConnectPresentation.statusMessage}</span>
                       <button
                         type="button"
                         className="secondary stripe-connect-btn"
@@ -419,16 +399,18 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
                         {!isStartingBuilderConnectOnboarding ? (
                           <StripeWordmark className="stripe-connect-icon" />
                         ) : null}
-                        {isStartingBuilderConnectOnboarding ? "Opening…" : connectCtaLabel}
+                        {isStartingBuilderConnectOnboarding
+                          ? "Opening…"
+                          : stripeConnectPresentation.connectCtaLabel}
                       </button>
                     </div>
                   </div>
                 ) : null}
                 {!isBuilderTierFree(tier) &&
-                  !isStripeReady &&
-                  requirementsPreview.length > 0 && (
+                  !stripeConnectPresentation.isReady &&
+                  stripeConnectPresentation.requirementsPreview.length > 0 && (
                     <div className="auth-status">
-                      Stripe still needs: {requirementsPreview.join(", ")}.
+                      Stripe still needs: {stripeConnectPresentation.requirementsPreview.join(", ")}.
                     </div>
                   )}
                 {canUseDevTierOverride && (
@@ -454,6 +436,14 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
                           disabled={isSettingDevBuilderTier || tier === "builder"}
                         >
                           Builder
+                        </button>
+                        <button
+                          type="button"
+                          className={tier === "architect" ? "" : "secondary"}
+                          onClick={() => void setDevBuilderTier("architect")}
+                          disabled={isSettingDevBuilderTier || tier === "architect"}
+                        >
+                          Architect
                         </button>
                       </div>
                     </div>
@@ -493,6 +483,11 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
                             src={community.avatar_url}
                             alt=""
                             loading="lazy"
+                            style={getCommunityAvatarImageStyle({
+                              focusX: community.avatar_focus_x,
+                              focusY: community.avatar_focus_y,
+                              zoom: community.avatar_zoom,
+                            })}
                           />
                         ) : (
                           <span className="invite-avatar-fallback">{communityInitials(community.name)}</span>

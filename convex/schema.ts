@@ -367,6 +367,9 @@ export default defineSchema({
     about: v.optional(v.string()),
     avatarUrl: v.optional(v.string()),
     avatarStorageId: v.optional(v.id("_storage")),
+    avatarFocusX: v.optional(v.number()),
+    avatarFocusY: v.optional(v.number()),
+    avatarZoom: v.optional(v.number()),
     bannerUrl: v.optional(v.string()),
     bannerStorageId: v.optional(v.id("_storage")),
     bannerFocusX: v.optional(v.number()),
@@ -527,6 +530,7 @@ export default defineSchema({
 
   developerApps: defineTable({
     ownerUserId: v.id("users"),
+    catalogAppId: v.optional(v.string()),
     name: v.string(),
     slug: v.string(),
     description: v.optional(v.string()),
@@ -544,6 +548,7 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_owner", ["ownerUserId"])
+    .index("by_owner_catalogAppId", ["ownerUserId", "catalogAppId"])
     .index("by_owner_slug", ["ownerUserId", "slug"])
     .index("by_owner_status", ["ownerUserId", "status"]),
 

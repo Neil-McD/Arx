@@ -9,6 +9,9 @@ type CommunityLike = {
   about: string | null;
   visibility: string | null;
   avatar_url: string | null;
+  avatar_focus_x?: number | null;
+  avatar_focus_y?: number | null;
+  avatar_zoom?: number | null;
   banner_url: string | null;
   banner_focus_x?: number | null;
   banner_focus_y?: number | null;
@@ -29,6 +32,9 @@ type UseCommunitySettingsFormControllerArgs = {
   setCommunitySettingsAbout: Dispatch<SetStateAction<string>>;
   setCommunitySettingsVisibility: Dispatch<SetStateAction<string>>;
   setCommunitySettingsAvatarUrl: Dispatch<SetStateAction<string | null>>;
+  setCommunitySettingsAvatarFocusX: Dispatch<SetStateAction<number>>;
+  setCommunitySettingsAvatarFocusY: Dispatch<SetStateAction<number>>;
+  setCommunitySettingsAvatarZoom: Dispatch<SetStateAction<number>>;
   setCommunitySettingsBannerUrl: Dispatch<SetStateAction<string | null>>;
   setCommunitySettingsBannerFocusX: Dispatch<SetStateAction<number>>;
   setCommunitySettingsBannerFocusY: Dispatch<SetStateAction<number>>;
@@ -83,6 +89,9 @@ export function useCommunitySettingsFormController<CommunityT extends CommunityL
       current.setCommunitySettingsAbout("");
       current.setCommunitySettingsVisibility("unlisted");
       current.setCommunitySettingsAvatarUrl(null);
+      current.setCommunitySettingsAvatarFocusX(0.5);
+      current.setCommunitySettingsAvatarFocusY(0.5);
+      current.setCommunitySettingsAvatarZoom(1);
       current.setCommunitySettingsBannerUrl(null);
       current.setCommunitySettingsBannerFocusX(0.5);
       current.setCommunitySettingsBannerFocusY(0.5);
@@ -105,6 +114,21 @@ export function useCommunitySettingsFormController<CommunityT extends CommunityL
     current.setCommunitySettingsAbout(selectedCommunity.about ?? "");
     current.setCommunitySettingsVisibility(toCanonicalCommunityVisibility(selectedCommunity.visibility, "unlisted"));
     current.setCommunitySettingsAvatarUrl(selectedCommunity.avatar_url ?? null);
+    current.setCommunitySettingsAvatarFocusX(
+      typeof selectedCommunity.avatar_focus_x === "number" && Number.isFinite(selectedCommunity.avatar_focus_x)
+        ? Math.max(0, Math.min(1, selectedCommunity.avatar_focus_x))
+        : 0.5,
+    );
+    current.setCommunitySettingsAvatarFocusY(
+      typeof selectedCommunity.avatar_focus_y === "number" && Number.isFinite(selectedCommunity.avatar_focus_y)
+        ? Math.max(0, Math.min(1, selectedCommunity.avatar_focus_y))
+        : 0.5,
+    );
+    current.setCommunitySettingsAvatarZoom(
+      typeof selectedCommunity.avatar_zoom === "number" && Number.isFinite(selectedCommunity.avatar_zoom)
+        ? Math.max(1, Math.min(2.5, selectedCommunity.avatar_zoom))
+        : 1,
+    );
     current.setCommunitySettingsBannerUrl(selectedCommunity.banner_url ?? null);
     current.setCommunitySettingsBannerFocusX(
       typeof selectedCommunity.banner_focus_x === "number" && Number.isFinite(selectedCommunity.banner_focus_x)

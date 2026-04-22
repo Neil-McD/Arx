@@ -59,7 +59,7 @@ async function hasBuilderProjectAccess(args: {
     authSubject: args.authSubject ?? null,
     nowMs: args.nowMs ?? Date.now(),
   });
-  return canonicalTier === "builder";
+  return canonicalTier !== "free";
 }
 
 async function ensureDefaultProjectInternal(args: {
@@ -1033,7 +1033,7 @@ export const createCloudProjectForOwner = mutation({
       authSubject: args.authSubject ?? null,
       nowMs,
     });
-    if (canonicalTier !== "builder") {
+    if (canonicalTier === "free") {
       throw new Error("plan_required");
     }
 
@@ -1124,7 +1124,7 @@ export const generateCloudProjectImportUploadUrl = mutation({
       authSubject: args.authSubject ?? null,
       nowMs,
     });
-    if (canonicalTier !== "builder") {
+    if (canonicalTier === "free") {
       throw new Error("plan_required");
     }
     return {

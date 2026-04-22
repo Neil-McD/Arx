@@ -5,6 +5,7 @@ import { slugifyCommunityName } from "../../../../shared/communitySlug";
 import { CommunityAiFeedPanel } from "./CommunityAiFeedPanel";
 import { WebCommunityAnalyticsSection } from "./WebCommunityAnalyticsSection";
 import { WebCommunityAiAgentSection } from "./WebCommunityAiAgentSection";
+import { WebCommunityAvatarEditorModal } from "./WebCommunityAvatarEditorModal";
 import { WebCommunityBannerEditorModal } from "./WebCommunityBannerEditorModal";
 import { WebCommunityMembersSection } from "./WebCommunityMembersSection";
 import { WebCommunityPolynetSection } from "./WebCommunityPolynetSection";
@@ -21,13 +22,22 @@ export type WebCommunitySecondaryPanelsProps = {
       ComponentProps<typeof WebCommunitySettingsSection>["actions"],
       | "openCommunityBannerFocusModal"
       | "closeCommunityBannerFocusModal"
+      | "openCommunityAvatarFocusModal"
+      | "closeCommunityAvatarFocusModal"
       | "setCommunityPricingDirty"
       | "communityInitials"
       | "slugifyCommunityName"
     > & {
       communityPricingDirtyRef: MutableRefObject<boolean>;
     };
+    setIsCommunityAvatarFocusModalOpen: (value: boolean) => void;
     setIsCommunityBannerFocusModalOpen: (value: boolean) => void;
+  };
+  avatarEditor: Omit<ComponentProps<typeof WebCommunityAvatarEditorModal>, "isOpen" | "onDirty" | "onClose"> & {
+    isSettingsTabActive: boolean;
+    isCommunityAvatarFocusModalOpen: boolean;
+    markCommunitySettingsDirty: () => void;
+    setIsCommunityAvatarFocusModalOpen: (value: boolean) => void;
   };
   bannerEditor: Omit<ComponentProps<typeof WebCommunityBannerEditorModal>, "isOpen" | "onDirty" | "onClose"> & {
     isSettingsTabActive: boolean;
@@ -60,6 +70,8 @@ export function WebCommunitySecondaryPanels(props: WebCommunitySecondaryPanelsPr
     ...props.settings,
     actions: {
       ...props.settings.actions,
+      openCommunityAvatarFocusModal: () => props.settings.setIsCommunityAvatarFocusModalOpen(true),
+      closeCommunityAvatarFocusModal: () => props.settings.setIsCommunityAvatarFocusModalOpen(false),
       openCommunityBannerFocusModal: () => props.settings.setIsCommunityBannerFocusModalOpen(true),
       closeCommunityBannerFocusModal: () => props.settings.setIsCommunityBannerFocusModalOpen(false),
       setCommunityPricingDirty: () => {
@@ -68,6 +80,13 @@ export function WebCommunitySecondaryPanels(props: WebCommunitySecondaryPanelsPr
       communityInitials,
       slugifyCommunityName,
     },
+  };
+
+  const avatarEditorModalProps: ComponentProps<typeof WebCommunityAvatarEditorModal> = {
+    ...props.avatarEditor,
+    isOpen: props.avatarEditor.isSettingsTabActive && props.avatarEditor.isCommunityAvatarFocusModalOpen,
+    onDirty: props.avatarEditor.markCommunitySettingsDirty,
+    onClose: () => props.avatarEditor.setIsCommunityAvatarFocusModalOpen(false),
   };
 
   const bannerEditorModalProps: ComponentProps<typeof WebCommunityBannerEditorModal> = {
@@ -89,6 +108,7 @@ export function WebCommunitySecondaryPanels(props: WebCommunitySecondaryPanelsPr
     <>
       {props.communityTab === "settings" &&
         renderCenteredPane(<WebCommunitySettingsSection {...settingsSectionProps} />)}
+      <WebCommunityAvatarEditorModal {...avatarEditorModalProps} />
       <WebCommunityBannerEditorModal {...bannerEditorModalProps} />
 
       {props.communityTab === "ai_feed" && renderCenteredPane(<CommunityAiFeedPanel {...props.feed} />)}

@@ -633,7 +633,7 @@ export const startConnectOnboarding = action({
       { userId, nowMs: Date.now() },
     )) as { builder_tier?: unknown; has_payouts?: unknown } | null;
     const hasBuilderPayoutAccess =
-      String(builderAccess?.builder_tier ?? "").trim().toLowerCase() === "builder" &&
+      String(builderAccess?.builder_tier ?? "").trim().toLowerCase() !== "free" &&
       builderAccess?.has_payouts === true;
     if (!hasBuilderPayoutAccess) {
       throw new Error("builder_connect_builder_required");

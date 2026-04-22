@@ -387,7 +387,7 @@ async function ensureDefaultProjectId(args: {
     authSubject: args.authSubject ?? null,
     nowMs: args.nowMs,
   });
-  if (canonicalTier !== "builder") return null;
+  if (canonicalTier === "free") return null;
   const existing = await args.ctx.db
     .query("cloudProjects")
     .withIndex("by_owner", (q: any) => q.eq("ownerId", args.ownerId))

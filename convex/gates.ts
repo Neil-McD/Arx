@@ -6,8 +6,8 @@ import {
   resolveCanonicalGatePolicy,
 } from "../shared/canonicalGateEngine";
 
-type CanonicalTier = "free" | "builder";
-type EffectiveTier = "anon_free" | "auth_free" | "builder";
+type CanonicalTier = "free" | "builder" | "architect";
+type EffectiveTier = "anon_free" | "auth_free" | "builder" | "architect";
 type GateCode =
   | "ok"
   | "auth_required"
@@ -315,8 +315,9 @@ export const resolveGateBundle = query({
         allowWebResearch: entitledCapabilityFamilies.includes("web_research"),
         allowWorkspaceTools: entitledCapabilityFamilies.includes("workspace_tools"),
         allowCommunityCreate:
-          effectiveTier === "builder",
-        allowPersonalMemory: effectiveTier === "builder",
+          effectiveTier === "builder" || effectiveTier === "architect",
+        allowPersonalMemory:
+          effectiveTier === "builder" || effectiveTier === "architect",
       },
     };
   },

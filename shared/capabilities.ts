@@ -4,7 +4,7 @@ import {
 
 export type AccessSurface = "web";
 export type AccessAuthState = "anonymous" | "authenticated";
-export type BuilderTier = "free" | "builder" | "unknown";
+export type BuilderTier = "free" | "builder" | "architect" | "unknown";
 export type ThreadMode = "single_guest" | "multi_cloud";
 
 export type UserAccessPolicy = {
@@ -51,17 +51,17 @@ function resolveUserAccessPolicyViaCanonicalGate(input: {
 
   const isAnonymous = effectiveTier === "anon_free";
   const isAuthenticated = !isAnonymous;
-  const hasWorkbenchAccess = effectiveTier === "builder";
+  const hasWorkbenchAccess = effectiveTier === "builder" || effectiveTier === "architect";
 
   const tier: BuilderTier = isAnonymous
     ? "unknown"
-    : effectiveTier === "builder"
+    : effectiveTier === "builder" || effectiveTier === "architect"
       ? effectiveTier
       : "free";
 
   const threadMode: ThreadMode = isAuthenticated ? "multi_cloud" : "single_guest";
   const entitledCapabilityFamilies = policy.entitledCapabilityFamilies;
-  const canCreateCommunityInAlpha = effectiveTier === "builder";
+  const canCreateCommunityInAlpha = hasWorkbenchAccess;
 
   return {
     surface: input.surface,

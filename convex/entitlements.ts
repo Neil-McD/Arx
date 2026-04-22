@@ -2,8 +2,8 @@ import { query } from "./_generated/server";
 import { v } from "convex/values";
 import { resolveUserIdForAuthenticatedRequest } from "./authActor";
 
-type CanonicalTier = "free" | "builder";
-type EffectiveTier = "anon_free" | "auth_free" | "builder";
+type CanonicalTier = "free" | "builder" | "architect";
+type EffectiveTier = "anon_free" | "auth_free" | "builder" | "architect";
 type AuthState = "anonymous" | "authenticated";
 
 function normalizeCanonicalTier(rawTier: unknown): CanonicalTier {
@@ -11,7 +11,8 @@ function normalizeCanonicalTier(rawTier: unknown): CanonicalTier {
     .trim()
     .toLowerCase();
   if (normalized === "builder") return "builder";
-  if (normalized === "architect" || normalized === "pro") return "builder";
+  if (normalized === "architect") return "architect";
+  if (normalized === "pro") return "builder";
   return "free";
 }
 

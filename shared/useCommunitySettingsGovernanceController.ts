@@ -35,6 +35,9 @@ type UseCommunitySettingsGovernanceControllerArgs<SessionT extends SessionLike> 
   communitySettingsAbout: string;
   communitySettingsVisibility: string;
   communitySettingsAvatarUrl: string | null;
+  communitySettingsAvatarFocusX: number;
+  communitySettingsAvatarFocusY: number;
+  communitySettingsAvatarZoom: number;
   communitySettingsBannerUrl: string | null;
   communitySettingsBannerFocusX: number;
   communitySettingsBannerFocusY: number;
@@ -76,7 +79,7 @@ function formatCommunitySettingsErrorMessage(error: unknown): string {
     return "Only the community owner can change pricing or paid access.";
   }
   if (message === "community_builder_plan_required") {
-    return "Builder is required before this community can charge for access.";
+    return "A paid creator plan is required before this community can charge for access.";
   }
   if (message === "community_stripe_connect_required") {
     return "Connect Stripe before enabling paid access for this community.";
@@ -216,6 +219,9 @@ export function useCommunitySettingsGovernanceController<SessionT extends Sessio
         about: current.communitySettingsAbout.trim() || null,
         avatarStorageId: avatarField.storageId ?? null,
         avatarUrl: avatarField.url ?? null,
+        avatarFocusX: current.communitySettingsAvatarFocusX,
+        avatarFocusY: current.communitySettingsAvatarFocusY,
+        avatarZoom: current.communitySettingsAvatarZoom,
         bannerStorageId: bannerField.storageId ?? null,
         bannerUrl: bannerField.url ?? null,
         bannerFocusX: current.communitySettingsBannerFocusX,

@@ -2,7 +2,7 @@ import { internal } from "./_generated/api";
 import { formatBuilderTierLabel, normalizeBuilderTierForUi } from "../shared/builderBilling";
 import { buildCommunityTabPath, buildSettingsPath } from "../shared/webAppRouteState";
 
-type BuilderPlanTier = "free" | "builder";
+type BuilderPlanTier = "free" | "builder" | "architect";
 type BuilderSubscriptionEmailKind =
   | "builder_plan_upgraded"
   | "builder_plan_downgraded"
@@ -49,7 +49,7 @@ function normalizeBuilderPlanTier(value: unknown): BuilderPlanTier {
 }
 
 function readBuilderPlanRank(value: BuilderPlanTier): number {
-  if (value === "builder") return 1;
+  if (value === "builder" || value === "architect") return 1;
   return 0;
 }
 

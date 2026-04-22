@@ -13,6 +13,8 @@ import {
   type CommunityPricePointLike,
   type CommunityResourceLike,
   maybeDeleteStorageAsset,
+  normalizeAvatarFocus,
+  normalizeAvatarZoom,
   normalizeBannerFocus,
   normalizeEntryPolicy,
   normalizeBannerZoom,
@@ -43,6 +45,9 @@ async function mapCommunityRecord(ctx: any, row: CommunityLike): Promise<{
   about: string | null;
   avatar_url: string | null;
   avatar_storage_id: string | null;
+  avatar_focus_x: number;
+  avatar_focus_y: number;
+  avatar_zoom: number;
   banner_url: string | null;
   banner_storage_id: string | null;
   banner_focus_x: number;
@@ -65,6 +70,9 @@ async function mapCommunityRecord(ctx: any, row: CommunityLike): Promise<{
     about: row.about ?? null,
     avatar_url: branding.avatar_url,
     avatar_storage_id: branding.avatar_storage_id,
+    avatar_focus_x: branding.avatar_focus_x,
+    avatar_focus_y: branding.avatar_focus_y,
+    avatar_zoom: branding.avatar_zoom,
     banner_url: branding.banner_url,
     banner_storage_id: branding.banner_storage_id,
     banner_focus_x: branding.banner_focus_x,
@@ -102,6 +110,9 @@ export const createCommunity = mutation({
     visibility: v.optional(v.string()),
     avatarStorageId: v.optional(v.union(v.id("_storage"), v.null())),
     avatarUrl: v.optional(v.union(v.string(), v.null())),
+    avatarFocusX: v.optional(v.number()),
+    avatarFocusY: v.optional(v.number()),
+    avatarZoom: v.optional(v.number()),
     oneLiner: v.optional(v.union(v.string(), v.null())),
     bannerStorageId: v.optional(v.union(v.id("_storage"), v.null())),
     bannerUrl: v.optional(v.union(v.string(), v.null())),
@@ -122,7 +133,7 @@ export const createCommunity = mutation({
       authSubject: args.authSubject ?? undefined,
       nowMs,
     });
-    if (!billingStatus || String(billingStatus.builder_tier ?? "").trim().toLowerCase() !== "builder") {
+    if (!billingStatus || String(billingStatus.builder_tier ?? "").trim().toLowerCase() === "free") {
       throw new Error("community_builder_required");
     }
     const ownedCommunities = await ctx.db
@@ -151,6 +162,9 @@ export const createCommunity = mutation({
       oneLiner: normalizeOptionalText(args.oneLiner),
       avatarUrl: avatarStorageId ? undefined : normalizeOptionalCommunityImageUrl(args.avatarUrl),
       avatarStorageId,
+      avatarFocusX: normalizeAvatarFocus(args.avatarFocusX),
+      avatarFocusY: normalizeAvatarFocus(args.avatarFocusY),
+      avatarZoom: normalizeAvatarZoom(args.avatarZoom),
       bannerUrl: bannerStorageId ? undefined : normalizeOptionalCommunityImageUrl(args.bannerUrl),
       bannerStorageId,
       bannerFocusX: normalizeBannerFocus(args.bannerFocusX),
@@ -196,6 +210,9 @@ export const saveCommunitySettings = mutation({
     about: v.optional(v.union(v.string(), v.null())),
     avatarStorageId: v.optional(v.union(v.id("_storage"), v.null())),
     avatarUrl: v.optional(v.union(v.string(), v.null())),
+    avatarFocusX: v.optional(v.number()),
+    avatarFocusY: v.optional(v.number()),
+    avatarZoom: v.optional(v.number()),
     bannerStorageId: v.optional(v.union(v.id("_storage"), v.null())),
     bannerUrl: v.optional(v.union(v.string(), v.null())),
     bannerFocusX: v.optional(v.number()),
@@ -270,7 +287,7 @@ export const saveCommunitySettings = mutation({
             nowMs,
           },
         )) as { builder_tier?: unknown } | null;
-        if (String(ownerBilling?.builder_tier ?? "").trim().toLowerCase() !== "builder") {
+        if (String(ownerBilling?.builder_tier ?? "").trim().toLowerCase() === "free") {
           throw new Error("community_builder_plan_required");
         }
         const connectAccount = (await ctx.runQuery(
@@ -328,6 +345,12 @@ export const saveCommunitySettings = mutation({
         : args.avatarUrl !== undefined
           ? normalizeOptionalCommunityImageUrl(args.avatarUrl)
           : community.avatarUrl;
+    const nextAvatarFocusX =
+      args.avatarFocusX !== undefined ? normalizeAvatarFocus(args.avatarFocusX) : normalizeAvatarFocus(community.avatarFocusX);
+    const nextAvatarFocusY =
+      args.avatarFocusY !== undefined ? normalizeAvatarFocus(args.avatarFocusY) : normalizeAvatarFocus(community.avatarFocusY);
+    const nextAvatarZoom =
+      args.avatarZoom !== undefined ? normalizeAvatarZoom(args.avatarZoom) : normalizeAvatarZoom(community.avatarZoom);
     const nextBannerUrl =
       nextBannerStorageId
         ? undefined
@@ -352,6 +375,9 @@ export const saveCommunitySettings = mutation({
       about: nextAbout,
       avatarUrl: nextAvatarUrl,
       avatarStorageId: nextAvatarStorageId,
+      avatarFocusX: nextAvatarFocusX,
+      avatarFocusY: nextAvatarFocusY,
+      avatarZoom: nextAvatarZoom,
       bannerUrl: nextBannerUrl,
       bannerStorageId: nextBannerStorageId,
       bannerFocusX: nextBannerFocusX,
@@ -456,6 +482,9 @@ export const saveCommunitySettings = mutation({
       about: updated.about ?? null,
       avatar_url: branding.avatar_url,
       avatar_storage_id: branding.avatar_storage_id,
+      avatar_focus_x: branding.avatar_focus_x,
+      avatar_focus_y: branding.avatar_focus_y,
+      avatar_zoom: branding.avatar_zoom,
       banner_url: branding.banner_url,
       banner_storage_id: branding.banner_storage_id,
       banner_focus_x: branding.banner_focus_x,

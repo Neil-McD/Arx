@@ -1,5 +1,5 @@
-export type CanonicalTier = "free" | "builder";
-export type EffectiveTier = "anon_free" | "auth_free" | "builder";
+export type CanonicalTier = "free" | "builder" | "architect";
+export type EffectiveTier = "anon_free" | "auth_free" | "builder" | "architect";
 export type AuthState = "anonymous" | "authenticated";
 export type Surface = "web";
 export type ExecutionMode = "cloud";
@@ -49,8 +49,11 @@ export type CanonicalGatePolicy = {
   harnessProfile: string;
 };
 
-const CANONICAL_TIER_SET = new Set<CanonicalTier>(["free", "builder"]);
-const WORKBENCH_TIER_SET = new Set<Exclude<EffectiveTier, "anon_free" | "auth_free">>(["builder"]);
+const CANONICAL_TIER_SET = new Set<CanonicalTier>(["free", "builder", "architect"]);
+const WORKBENCH_TIER_SET = new Set<Exclude<EffectiveTier, "anon_free" | "auth_free">>([
+  "builder",
+  "architect",
+]);
 const VALID_AUTH_STATE = new Set<AuthState>(["anonymous", "authenticated"]);
 const VALID_MODEL_CLASS = new Set<ModelClass>(["free_model", "paid_model"]);
 const VALID_REQUESTED_FUNDING_SOURCE = new Set<RequestedFundingSource>([
@@ -103,7 +106,8 @@ function normalizeRequestedFundingSource(
 
 function normalizeCanonicalTier(rawTier: unknown): CanonicalTier {
   const normalized = toLowerTrimmed(rawTier);
-  if (normalized === "pro" || normalized === "architect") return "builder";
+  if (normalized === "architect") return "architect";
+  if (normalized === "pro") return "builder";
   if (CANONICAL_TIER_SET.has(normalized as CanonicalTier)) {
     return normalized as CanonicalTier;
   }

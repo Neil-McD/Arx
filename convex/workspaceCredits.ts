@@ -276,7 +276,7 @@ export const syncBuilderMonthlyCreditsInternal = internalMutation({
       .query("workspaceCreditBalances")
       .withIndex("by_user", (q) => q.eq("userId", args.userId))
       .first();
-    if (!args.grantsAccess || args.targetTier !== "builder") {
+    if (!args.grantsAccess) {
       return existing ?? null;
     }
 
@@ -531,7 +531,7 @@ export const startWorkspaceCreditTopupCheckout = action({
     const canonicalTier = await ctx.runQuery(api.entitlements.getCanonicalTierByUserId as any, {
       userId,
     });
-    if (canonicalTier !== "builder") {
+    if (canonicalTier === "free") {
       throw new Error("plan_required");
     }
 

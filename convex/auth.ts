@@ -11,8 +11,8 @@ import { normalizeAuthRelinkEmail } from "../shared/authRelinkPolicy";
 import { isCreatorDevTierOverrideEmail } from "../shared/devTierOverride";
 import { ensurePlatformHomeCommunityMembership } from "./platformHomeCommunity";
 
-type CanonicalTier = "free" | "builder";
-type EffectiveTier = "anon_free" | "auth_free" | "builder";
+type CanonicalTier = "free" | "builder" | "architect";
+type EffectiveTier = "anon_free" | "auth_free" | "builder" | "architect";
 type AuthState = "anonymous" | "authenticated";
 
 type BuilderTierMeta = {
@@ -22,6 +22,13 @@ type BuilderTierMeta = {
 };
 
 function builderTierMeta(tier: CanonicalTier): BuilderTierMeta {
+  if (tier === "architect") {
+    return {
+      maxCommunities: 3,
+      platformFeeBps: 300,
+      hasPayouts: true,
+    };
+  }
   if (tier === "builder") {
     return {
       maxCommunities: 1,
@@ -41,7 +48,8 @@ function normalizeCanonicalTier(rawTier: unknown): CanonicalTier {
     .trim()
     .toLowerCase();
   if (normalized === "builder") return "builder";
-  if (normalized === "architect" || normalized === "pro") return "builder";
+  if (normalized === "architect") return "architect";
+  if (normalized === "pro") return "builder";
   return "free";
 }
 
@@ -379,17 +387,18 @@ export const getBuilderBillingStatus = query({
     if (!actor) return null;
     const canonicalTier = await getCanonicalTierByUserIdInternal(ctx as never, actor.dbUserId, nowMs);
     const meta = builderTierMeta(canonicalTier);
-    const billingCustomer: { providerCustomerId?: unknown } | null = canonicalTier === "builder"
+    const hasPaidCreatorAccess = canonicalTier !== "free";
+    const billingCustomer: { providerCustomerId?: unknown } | null = hasPaidCreatorAccess
       ? ((await ctx.runQuery(
           internal.builderCommerce.getLatestBuilderBillingCustomerForOwnerInternal as any,
           { ownerUserId: actor.dbUserId },
         )) as { providerCustomerId?: unknown } | null)
       : null;
     const canManagePlan: boolean =
-      canonicalTier === "builder" &&
+      hasPaidCreatorAccess &&
       typeof billingCustomer?.providerCustomerId === "string" &&
       billingCustomer.providerCustomerId.trim().length > 0;
-    const stripeConnect = canonicalTier === "builder"
+    const stripeConnect = hasPaidCreatorAccess
       ? ((await ctx.runQuery(
           internal.builderCommerce.getUserStripeConnectAccountInternal as any,
           { userId: actor.dbUserId },

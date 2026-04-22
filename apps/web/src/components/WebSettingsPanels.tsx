@@ -72,7 +72,7 @@ export type WebSettingsPanelsProps = {
       communitySlug?: string | null;
     }) => Promise<void> | void;
     canUseDevTierOverride: boolean;
-    setDevBuilderTier: (tier: "free" | "builder") => Promise<void> | void;
+    setDevBuilderTier: (tier: "free" | "builder" | "architect") => Promise<void> | void;
     redeemPendingPurchases: () => Promise<void> | void;
     ensureSession: () => Promise<SessionLike>;
     loadPendingPurchaseClaims: (session: NonNullable<SessionLike>) => Promise<void>;

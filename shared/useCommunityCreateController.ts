@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useRef, type Dispatch, type DragEvent, type SetStateAction } from "react";
+import { hasBuilderTierPaidAccess } from "./builderBilling";
 import { type CreateCommunityIntentDraft } from "./createCommunityIntent";
 import { resolveUsableSession, type EnsureSessionFn } from "./ensureUsableSession";
 
 import { createCloudCommunity, prepareCloudCommunityBrandingField } from "./cloudCommunityAdminGateway";
 import { isValidCommunitySlug, slugifyCommunityName } from "./communitySlug";
 import { toCanonicalCommunityVisibility } from "./communityVisibility";
+import { readCommunityAvatarFileAsDataUrlWithinLimit } from "./imageTransforms";
 
 type SessionLike = {
   user: {
@@ -61,7 +63,6 @@ type UseCommunityCreateControllerArgs<
   setIsCreatingCommunity: Dispatch<SetStateAction<boolean>>;
   setIsCreateAvatarDragOver: Dispatch<SetStateAction<boolean>>;
   setIsCreateBannerDragOver: Dispatch<SetStateAction<boolean>>;
-  readAvatarFileAsSquareDataUrl: (file: File, size?: number) => Promise<string>;
   readBannerFileAsWideDataUrlWithinLimit: (file: File, maxChars: number) => Promise<string>;
   isLikelyImageFile: (file: File) => boolean;
   maxCreateImageDataUrlChars: number;
@@ -86,10 +87,10 @@ function mapCreateCommunityErrorMessage(error: unknown): string {
       ? error.message
       : "Failed to create community.";
   if (message === "community_builder_required") {
-    return "Builder is required to create a community.";
+    return "A paid creator plan is required to create a community.";
   }
   if (message === "community_owner_limit_reached") {
-    return "You've reached your Builder community limit.";
+    return "You've reached your community limit.";
   }
   return message;
 }
@@ -147,7 +148,7 @@ export function useCommunityCreateController<
     const tier = (current.builderBillingStatus?.builder_tier ?? "free").toLowerCase();
     const max = current.builderBillingStatus?.max_communities ?? 0;
     const ownedCount = getOwnedCountForOpenModal();
-    if (tier === "builder" && max > 0 && ownedCount >= max) {
+    if (hasBuilderTierPaidAccess(tier) && max > 0 && ownedCount >= max) {
       current.onOwnedCommunityLimitReached?.();
       return;
     }
@@ -277,8 +278,9 @@ export function useCommunityCreateController<
     const tier = (status.builder_tier ?? "free").toLowerCase();
     const max = status.max_communities ?? 0;
     const ownedCount = getOwnedCountForPrimary();
-    const needsPlan = tier !== "builder";
-    const limitReached = tier === "builder" && max > 0 && ownedCount >= max;
+    const hasPaidCreatorAccess = hasBuilderTierPaidAccess(tier);
+    const needsPlan = !hasPaidCreatorAccess;
+    const limitReached = hasPaidCreatorAccess && max > 0 && ownedCount >= max;
     const canCreate = !needsPlan && !limitReached;
     if (canCreate) {
       await handleCreateCommunity();
@@ -301,7 +303,7 @@ export function useCommunityCreateController<
     const current = argsRef.current;
     if (!file) return;
     try {
-      const dataUrl = await current.readAvatarFileAsSquareDataUrl(file, 128);
+      const dataUrl = await readCommunityAvatarFileAsDataUrlWithinLimit(file, current.maxCreateImageDataUrlChars);
       current.setCreateCommunityAvatarUrl(dataUrl);
     } catch (error) {
       const message = typeof error === "string"

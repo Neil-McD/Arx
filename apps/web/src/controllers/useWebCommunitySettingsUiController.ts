@@ -9,6 +9,9 @@ export function useWebCommunitySettingsUiController() {
   const [communitySettingsAbout, setCommunitySettingsAbout] = useState("");
   const [communitySettingsVisibility, setCommunitySettingsVisibility] = useState("unlisted");
   const [communitySettingsAvatarUrl, setCommunitySettingsAvatarUrl] = useState<string | null>(null);
+  const [communitySettingsAvatarFocusX, setCommunitySettingsAvatarFocusX] = useState(0.5);
+  const [communitySettingsAvatarFocusY, setCommunitySettingsAvatarFocusY] = useState(0.5);
+  const [communitySettingsAvatarZoom, setCommunitySettingsAvatarZoom] = useState(1);
   const [communitySettingsBannerUrl, setCommunitySettingsBannerUrl] = useState<string | null>(null);
   const [communitySettingsBannerFocusX, setCommunitySettingsBannerFocusX] = useState(0.5);
   const [communitySettingsBannerFocusY, setCommunitySettingsBannerFocusY] = useState(0.5);
@@ -21,6 +24,7 @@ export function useWebCommunitySettingsUiController() {
   const [communitySettingsBannerUploadError, setCommunitySettingsBannerUploadError] =
     useState<string | null>(null);
   const [isProcessingCommunitySettingsBanner, setIsProcessingCommunitySettingsBanner] = useState(false);
+  const [isCommunityAvatarFocusModalOpen, setIsCommunityAvatarFocusModalOpen] = useState(false);
   const [isCommunityBannerFocusModalOpen, setIsCommunityBannerFocusModalOpen] = useState(false);
   const [isSavingCommunitySettings, setIsSavingCommunitySettings] = useState(false);
   const [isSettingsBannerDragOver, setIsSettingsBannerDragOver] = useState(false);
@@ -51,6 +55,12 @@ export function useWebCommunitySettingsUiController() {
     setCommunitySettingsVisibility,
     communitySettingsAvatarUrl,
     setCommunitySettingsAvatarUrl,
+    communitySettingsAvatarFocusX,
+    setCommunitySettingsAvatarFocusX,
+    communitySettingsAvatarFocusY,
+    setCommunitySettingsAvatarFocusY,
+    communitySettingsAvatarZoom,
+    setCommunitySettingsAvatarZoom,
     communitySettingsBannerUrl,
     setCommunitySettingsBannerUrl,
     communitySettingsBannerFocusX,
@@ -71,6 +81,8 @@ export function useWebCommunitySettingsUiController() {
     setCommunitySettingsBannerUploadError,
     isProcessingCommunitySettingsBanner,
     setIsProcessingCommunitySettingsBanner,
+    isCommunityAvatarFocusModalOpen,
+    setIsCommunityAvatarFocusModalOpen,
     isCommunityBannerFocusModalOpen,
     setIsCommunityBannerFocusModalOpen,
     isSavingCommunitySettings,

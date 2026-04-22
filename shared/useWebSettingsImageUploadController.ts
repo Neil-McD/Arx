@@ -9,6 +9,9 @@ type UseWebSettingsImageUploadControllerArgs = {
   setIsSettingsAvatarDragOver: Dispatch<SetStateAction<boolean>>;
   setIsProfileAvatarDragOver: Dispatch<SetStateAction<boolean>>;
   setCommunitySettingsAvatarUrl: Dispatch<SetStateAction<string | null>>;
+  setCommunitySettingsAvatarFocusX: Dispatch<SetStateAction<number>>;
+  setCommunitySettingsAvatarFocusY: Dispatch<SetStateAction<number>>;
+  setCommunitySettingsAvatarZoom: Dispatch<SetStateAction<number>>;
   setCommunitySettingsBannerUrl: Dispatch<SetStateAction<string | null>>;
   setCommunitySettingsBannerFocusX: Dispatch<SetStateAction<number>>;
   setCommunitySettingsBannerFocusY: Dispatch<SetStateAction<number>>;
@@ -17,6 +20,7 @@ type UseWebSettingsImageUploadControllerArgs = {
   setCommunitySettingsBannerUploadError: Dispatch<SetStateAction<string | null>>;
   setIsProcessingCommunitySettingsBanner: Dispatch<SetStateAction<boolean>>;
   markCommunitySettingsDirty: () => void;
+  onCommunityAvatarUploadSuccess?: () => void;
   onCommunityBannerUploadSuccess?: () => void;
   isLikelyImageFile: (file: File) => boolean;
   maxWebImageDataUrlChars: number;
@@ -32,6 +36,9 @@ export function useWebSettingsImageUploadController(
     setIsSettingsAvatarDragOver: args.setIsSettingsAvatarDragOver,
     setIsProfileAvatarDragOver: args.setIsProfileAvatarDragOver,
     setCommunitySettingsAvatarUrl: args.setCommunitySettingsAvatarUrl,
+    setCommunitySettingsAvatarFocusX: args.setCommunitySettingsAvatarFocusX,
+    setCommunitySettingsAvatarFocusY: args.setCommunitySettingsAvatarFocusY,
+    setCommunitySettingsAvatarZoom: args.setCommunitySettingsAvatarZoom,
     setCommunitySettingsBannerUrl: args.setCommunitySettingsBannerUrl,
     setCommunitySettingsBannerFocusX: args.setCommunitySettingsBannerFocusX,
     setCommunitySettingsBannerFocusY: args.setCommunitySettingsBannerFocusY,
@@ -40,6 +47,7 @@ export function useWebSettingsImageUploadController(
     setCommunitySettingsBannerUploadError: args.setCommunitySettingsBannerUploadError,
     setIsProcessingCommunitySettingsBanner: args.setIsProcessingCommunitySettingsBanner,
     markCommunitySettingsDirty: args.markCommunitySettingsDirty,
+    onCommunityAvatarUploadSuccess: args.onCommunityAvatarUploadSuccess,
     onCommunityBannerUploadSuccess: args.onCommunityBannerUploadSuccess,
     isLikelyCommunityBannerImageFile: args.isLikelyImageFile,
     maxCommunityImageDataUrlChars: args.maxWebImageDataUrlChars,

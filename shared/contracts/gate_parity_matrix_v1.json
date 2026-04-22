@@ -67,7 +67,7 @@
         "cta": "connect_provider",
         "lane": null,
         "fundingSource": null,
-        "effectiveTier": "builder"
+        "effectiveTier": "architect"
       }
     },
     {

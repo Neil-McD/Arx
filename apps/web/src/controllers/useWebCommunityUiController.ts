@@ -50,7 +50,6 @@ type UseWebCommunityUiControllerParams<
   onCreateUnauthenticated?: (draft: CreateCommunityIntentDraft) => Promise<void> | void;
   onOwnedCommunityLimitReached?: () => void;
   onCommunityCreated: (community: CommunityT) => void;
-  readAvatarFileAsSquareDataUrl: (file: File, size?: number) => Promise<string>;
   readBannerFileAsWideDataUrlWithinLimit: (file: File, maxChars: number) => Promise<string>;
   isLikelyImageFile: (file: File) => boolean;
   maxCreateImageDataUrlChars: number;
@@ -204,7 +203,6 @@ export function useWebCommunityUiController<
     setIsCreatingCommunity,
     setIsCreateAvatarDragOver,
     setIsCreateBannerDragOver,
-    readAvatarFileAsSquareDataUrl: params.readAvatarFileAsSquareDataUrl,
     readBannerFileAsWideDataUrlWithinLimit: params.readBannerFileAsWideDataUrlWithinLimit,
     isLikelyImageFile: params.isLikelyImageFile,
     maxCreateImageDataUrlChars: params.maxCreateImageDataUrlChars,

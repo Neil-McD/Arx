@@ -280,8 +280,11 @@ export const resolvePublicCommunityCheckoutConfigInternal = internalQuery({
         userId: community.ownerId,
         nowMs,
       },
-    )) as { builder_tier?: unknown; platform_fee_bps?: unknown } | null;
-    if (String(ownerBilling?.builder_tier ?? "").trim().toLowerCase() !== "builder") {
+    )) as { builder_tier?: unknown; platform_fee_bps?: unknown; has_payouts?: unknown } | null;
+    if (
+      String(ownerBilling?.builder_tier ?? "").trim().toLowerCase() === "free" ||
+      ownerBilling?.has_payouts !== true
+    ) {
       throw new Error("community_checkout_unavailable");
     }
     const connectAccount = (await ctx.runQuery(

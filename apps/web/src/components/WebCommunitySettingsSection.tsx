@@ -1,9 +1,12 @@
 import { useEffect } from "react";
 import type { DragEvent } from "react";
+import { hasBuilderTierPaidAccess } from "../../../../shared/builderBilling";
 import type { CommunitySettingsLayer } from "../../../../shared/communityAccessViewModel";
+import { getCommunityAvatarImageStyle } from "../../../../shared/communityAvatarUi";
 import type { BuilderBillingStatus } from "../../../../shared/builderBillingStatusGateway";
 import { getCommunityBannerImageStyle } from "../../../../shared/communityBannerUi";
 import { buildPlatformSwitcherStyle } from "../../../../shared/platformSwitcherUi";
+import { buildStripeConnectPresentation } from "../controllers/buildStripeConnectPresentation";
 import { StripeWordmark } from "./StripeWordmark";
 
 type CommunityPricingMode = "free" | "monthly" | "annual";
@@ -34,7 +37,11 @@ type WebCommunitySettingsSectionProps = {
   state: {
     isSettingsBannerDragOver: boolean;
     isProcessingCommunitySettingsBanner: boolean;
+    isCommunityAvatarFocusModalOpen: boolean;
     isCommunityBannerFocusModalOpen: boolean;
+    communitySettingsAvatarFocusX: number;
+    communitySettingsAvatarFocusY: number;
+    communitySettingsAvatarZoom: number;
     communitySettingsBannerUrl: string | null;
     communitySettingsBannerFocusX: number;
     communitySettingsBannerFocusY: number;
@@ -75,6 +82,11 @@ type WebCommunitySettingsSectionProps = {
     communityInitials: (value: string) => string;
     handleCommunityAvatarUpload: (file: File | null) => Promise<void> | void;
     setCommunitySettingsAvatarUrl: (value: string | null) => void;
+    setCommunitySettingsAvatarFocusX: (value: number) => void;
+    setCommunitySettingsAvatarFocusY: (value: number) => void;
+    setCommunitySettingsAvatarZoom: (value: number) => void;
+    openCommunityAvatarFocusModal: () => void;
+    closeCommunityAvatarFocusModal: () => void;
     setCommunitySettingsName: (value: string) => void;
     setCommunitySettingsSlug: (value: string) => void;
     slugifyCommunityName: (value: string) => string;
@@ -241,7 +253,16 @@ function CommunityBrandingSettingsSection({
           onDrop={actions.handleSettingsAvatarDrop}
         >
           {state.communitySettingsAvatarUrl ? (
-            <img src={state.communitySettingsAvatarUrl} alt="Community avatar preview" draggable={false} />
+            <img
+              src={state.communitySettingsAvatarUrl}
+              alt="Community avatar preview"
+              draggable={false}
+              style={getCommunityAvatarImageStyle({
+                focusX: state.communitySettingsAvatarFocusX,
+                focusY: state.communitySettingsAvatarFocusY,
+                zoom: state.communitySettingsAvatarZoom,
+              })}
+            />
           ) : (
             <span>
               {actions.communityInitials(
@@ -264,16 +285,29 @@ function CommunityBrandingSettingsSection({
             />
           </label>
           {state.communitySettingsAvatarUrl ? (
-            <button
-              className="create-avatar-remove"
-              type="button"
-              onClick={() => {
-                actions.setCommunitySettingsAvatarUrl(null);
-                actions.markCommunitySettingsDirty();
-              }}
-            >
-              Remove
-            </button>
+            <>
+              <button
+                className="create-avatar-btn"
+                type="button"
+                onClick={actions.openCommunityAvatarFocusModal}
+              >
+                Adjust avatar
+              </button>
+              <button
+                className="create-avatar-remove"
+                type="button"
+                onClick={() => {
+                  actions.setCommunitySettingsAvatarUrl(null);
+                  actions.setCommunitySettingsAvatarFocusX(0.5);
+                  actions.setCommunitySettingsAvatarFocusY(0.5);
+                  actions.setCommunitySettingsAvatarZoom(1);
+                  actions.closeCommunityAvatarFocusModal();
+                  actions.markCommunitySettingsDirty();
+                }}
+              >
+                Remove
+              </button>
+            </>
           ) : null}
         </div>
       </div>
@@ -369,27 +403,12 @@ function CommunityMonetizationConfigSection({
     pricingOptions.findIndex((opt) => opt.key === state.communitySettingsPricingMode),
   );
   const builderTier = builderBillingStatus?.builder_tier ?? "free";
-  const stripeConnect = builderBillingStatus?.stripe_connect ?? null;
-  const canAcceptCharges = stripeConnect?.can_accept_charges === true;
-  const needsStripeConnect = builderTier !== "builder" || !canAcceptCharges;
-  const requirementsPreview = stripeConnect?.requirements_currently_due?.slice(0, 3) ?? [];
-  const hasRequirementsPreview = requirementsPreview.length > 0;
-  const connectStatus = stripeConnect?.status ?? "not_connected";
-  const connectCtaLabel = canAcceptCharges
-    ? "Open Stripe dashboard"
-    : connectStatus === "pending_requirements" || connectStatus === "restricted"
-      ? "Continue Stripe setup"
-      : "Connect Stripe";
-  const platformFeePercent = Number(builderBillingStatus?.platform_fee_bps ?? 0) / 100;
-  const stripeStatusMessage = canAcceptCharges
-    ? `PolyNet owns pricing, access, and community revenue reporting. Stripe Connect Express handles payouts and verification. PolyNet keeps ${platformFeePercent.toFixed(0)}% plus Stripe processing.`
-    : connectStatus === "restricted"
-      ? "Stripe needs more information or action before this community can charge for access."
-      : connectStatus === "pending_requirements" && !hasRequirementsPreview
-        ? "Stripe is still reviewing or activating your account before this community can charge for access."
-        : connectStatus === "pending_requirements"
-          ? "Finish Stripe setup before enabling paid access for this community."
-          : "Connect Stripe before enabling paid access for this community.";
+  const stripeConnectPresentation = buildStripeConnectPresentation({
+    builderBillingStatus,
+    surface: "community",
+  });
+  const canAcceptCharges = stripeConnectPresentation.isReady;
+  const needsStripeConnect = !hasBuilderTierPaidAccess(builderTier) || !canAcceptCharges;
 
   return (
     <div className="settings-section">
@@ -480,18 +499,18 @@ function CommunityMonetizationConfigSection({
           <span className="create-community-hint">Billed annually.</span>
         </label>
       ) : null}
-      {builderTier !== "builder" ? (
+      {!hasBuilderTierPaidAccess(builderTier) ? (
         <div className="settings-section-desc" style={{ marginTop: 12 }}>
-          Builder is required before this community can charge for access.
+          A paid creator plan is required before this community can charge for access.
         </div>
       ) : (
         <>
           <div className="settings-section-desc" style={{ marginTop: 12 }}>
-            {stripeStatusMessage}
+            {stripeConnectPresentation.statusMessage}
           </div>
-          {canAcceptCharges ? null : requirementsPreview.length > 0 ? (
+          {canAcceptCharges ? null : stripeConnectPresentation.requirementsPreview.length > 0 ? (
             <div className="auth-status" style={{ marginTop: 8 }}>
-              Stripe still needs: {requirementsPreview.join(", ")}.
+              Stripe still needs: {stripeConnectPresentation.requirementsPreview.join(", ")}.
             </div>
           ) : null}
           <div className="create-community-actions" style={{ marginTop: 12 }}>
@@ -509,7 +528,9 @@ function CommunityMonetizationConfigSection({
               {!isStartingBuilderConnectOnboarding ? (
                 <StripeWordmark className="stripe-connect-icon" />
               ) : null}
-              {isStartingBuilderConnectOnboarding ? "Opening…" : connectCtaLabel}
+              {isStartingBuilderConnectOnboarding
+                ? "Opening…"
+                : stripeConnectPresentation.connectCtaLabel}
             </button>
           </div>
           {builderBillingError ? (
@@ -563,6 +584,12 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
   } = props;
   const isMemberSettingsLayer = communitySettingsLayer === "member";
   const canLeaveCommunity = communitySettingsLayer !== "owner";
+
+  useEffect(() => {
+    if (!state.communitySettingsAvatarUrl && state.isCommunityAvatarFocusModalOpen) {
+      actions.closeCommunityAvatarFocusModal();
+    }
+  }, [actions, state.communitySettingsAvatarUrl, state.isCommunityAvatarFocusModalOpen]);
 
   useEffect(() => {
     if (!state.communitySettingsBannerUrl && state.isCommunityBannerFocusModalOpen) {

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
+import { hasBuilderTierPaidAccess } from "./builderBilling";
 import { blobToBase64 } from "./imageTransforms";
 import { transcribeVoice } from "./authCore";
 import { resolveUsableSession } from "./ensureUsableSession";
@@ -34,7 +35,7 @@ type UseWebVoiceInputControllerArgs<SessionT> = {
   activeCommunity: unknown | null;
   activeCommunityJoinMode: "checkout" | "join_approval" | "join_free" | null;
   canPostMessagesActiveCommunity: boolean;
-  normalizedBuilderTier: "free" | "builder";
+  normalizedBuilderTier: "free" | "builder" | "architect";
   requireSignIn: () => void;
   showAppToastMessage: (message: string) => void;
   appendWorkspaceTranscript: (transcript: string) => void;
@@ -103,7 +104,7 @@ export function useWebVoiceInputController<SessionT>(args: UseWebVoiceInputContr
     return {
       mode: "start_recording",
       title:
-        args.normalizedBuilderTier === "builder"
+        hasBuilderTierPaidAccess(args.normalizedBuilderTier)
           ? "Start voice input (paid plan)."
           : "Start voice input.",
     };
