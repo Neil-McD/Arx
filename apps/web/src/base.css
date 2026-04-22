@@ -15660,7 +15660,7 @@ button.message-citation-chip:hover {
 .web-empty-thread-avatar {
   width: 82px;
   height: 82px;
-  border-radius: var(--radius-sm);
+  border-radius: 24px;
   overflow: hidden;
   display: grid;
   place-items: center;
@@ -15675,7 +15675,7 @@ button.message-citation-chip:hover {
   height: 100%;
   display: block;
   object-fit: contain;
-  border-radius: var(--radius-sm);
+  border-radius: 24px;
 }
 
 .web-empty-thread-avatar-fallback {
