@@ -14465,10 +14465,12 @@ button.message-citation-chip:hover {
 }
 
 .stripe-connect-icon {
-  width: 20px;
-  height: 20px;
+  width: 42px;
+  height: auto;
+  max-height: 14px;
   flex: 0 0 auto;
   display: block;
+  opacity: 0.92;
 }
 
 .auth-status {

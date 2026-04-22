@@ -4,6 +4,7 @@ import type { CommunitySettingsLayer } from "../../../../shared/communityAccessV
 import type { BuilderBillingStatus } from "../../../../shared/builderBillingStatusGateway";
 import { getCommunityBannerImageStyle } from "../../../../shared/communityBannerUi";
 import { buildPlatformSwitcherStyle } from "../../../../shared/platformSwitcherUi";
+import { StripeWordmark } from "./StripeWordmark";
 
 type CommunityPricingMode = "free" | "monthly" | "annual";
 
@@ -494,7 +495,7 @@ function CommunityMonetizationConfigSection({
           ) : null}
           <div className="create-community-actions" style={{ marginTop: 12 }}>
             <button
-              className="secondary"
+              className="secondary stripe-connect-btn"
               type="button"
               onClick={() =>
                 void startBuilderConnectOnboarding({
@@ -504,6 +505,9 @@ function CommunityMonetizationConfigSection({
               }
               disabled={isStartingBuilderConnectOnboarding}
             >
+              {!isStartingBuilderConnectOnboarding ? (
+                <StripeWordmark className="stripe-connect-icon" />
+              ) : null}
               {isStartingBuilderConnectOnboarding ? "Opening…" : connectCtaLabel}
             </button>
           </div>

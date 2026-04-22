@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { formatBuilderTierLabel, isBuilderTierFree } from "../../../../shared/builderBilling";
 import type { BuilderBillingStatus } from "../../../../shared/builderBillingStatusGateway";
+import { StripeWordmark } from "./StripeWordmark";
 import { WebSignOutConfirmModal } from "./WebSignOutConfirmModal";
 
 type SessionLike = {
@@ -414,10 +415,13 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
                           <span className="auth-status">{stripeStatusMessage}</span>
                           <button
                             type="button"
-                            className="secondary"
+                            className="secondary stripe-connect-btn"
                             onClick={() => void startBuilderConnectOnboarding({ context: "account" })}
                             disabled={isStartingBuilderConnectOnboarding}
                           >
+                            {!isStartingBuilderConnectOnboarding ? (
+                              <StripeWordmark className="stripe-connect-icon" />
+                            ) : null}
                             {isStartingBuilderConnectOnboarding ? "Opening…" : connectCtaLabel}
                           </button>
                         </>
