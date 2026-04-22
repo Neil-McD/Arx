@@ -337,11 +337,30 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
             const stripeConnectStatus = stripeConnect?.status ?? "not_connected";
             const isStripeReady = stripeConnect?.can_accept_charges === true;
             const platformFeePercent = Number(status?.platform_fee_bps ?? 0) / 100;
+            const requirementsPreview = stripeConnect?.requirements_currently_due?.slice(0, 3) ?? [];
+            const hasRequirementsPreview = requirementsPreview.length > 0;
             const connectCtaLabel =
               stripeConnectStatus === "pending_requirements" || stripeConnectStatus === "restricted"
-                ? "Resume Stripe onboarding"
+                ? "Continue Stripe setup"
                 : "Connect Stripe";
-            const requirementsPreview = stripeConnect?.requirements_currently_due?.slice(0, 3) ?? [];
+            const stripeStatusTitle = isStripeReady
+              ? "Ready for paid community subscriptions"
+              : stripeConnectStatus === "restricted"
+                ? "Action required before payouts can start"
+                : stripeConnectStatus === "pending_requirements" && !hasRequirementsPreview
+                  ? "Stripe is reviewing your payout setup"
+                  : stripeConnectStatus === "pending_requirements"
+                    ? "Finish Stripe setup before payouts can start"
+                    : "Not connected";
+            const stripeStatusMessage = isStripeReady
+              ? `Paid community revenue routes through Stripe Connect Express. PolyNet keeps ${platformFeePercent.toFixed(0)}% plus Stripe fees.`
+              : stripeConnectStatus === "restricted"
+                ? "Stripe needs more information or action before paid community subscriptions can start."
+                : stripeConnectStatus === "pending_requirements" && !hasRequirementsPreview
+                  ? "Stripe is still reviewing or activating your account before payouts can start."
+                  : stripeConnectStatus === "pending_requirements"
+                    ? "Finish Stripe onboarding before you enable paid access on your community."
+                    : "Connect Stripe to accept paid community subscriptions.";
             return (
               <>
                 <div className="account-row">
@@ -385,26 +404,14 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
                   <div className="account-row">
                     <div className="account-identity">
                       <span>Stripe monetization</span>
-                      <strong>
-                        {isStripeReady
-                          ? "Ready for paid community subscriptions"
-                          : stripeConnectStatus === "pending_requirements" || stripeConnectStatus === "restricted"
-                            ? "Action required before payouts can start"
-                            : "Not connected"}
-                      </strong>
+                      <strong>{stripeStatusTitle}</strong>
                     </div>
                     <div className="auth-actions">
                       {isStripeReady ? (
-                        <span className="auth-status">
-                          {`Paid community revenue routes through Stripe Connect Express. PolyNet keeps ${platformFeePercent.toFixed(0)}% plus Stripe fees.`}
-                        </span>
+                        <span className="auth-status">{stripeStatusMessage}</span>
                       ) : (
                         <>
-                          <span className="auth-status">
-                            {stripeConnectStatus === "pending_requirements" || stripeConnectStatus === "restricted"
-                              ? "Finish Stripe onboarding before you enable paid access on your community."
-                              : "Connect Stripe to accept paid community subscriptions."}
-                          </span>
+                          <span className="auth-status">{stripeStatusMessage}</span>
                           <button
                             type="button"
                             className="secondary"

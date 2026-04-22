@@ -7,6 +7,7 @@ import {
 import Stripe from "stripe";
 import type { PublicHttpAction } from "convex/server";
 import { logStructuredError } from "./errorLogging";
+import { buildStripeConnectAccountSnapshot } from "./stripeConnectAccountCore";
 
 type HttpRouteMethod = "GET" | "POST" | "DELETE" | "OPTIONS" | "PUT" | "PATCH";
 
@@ -897,6 +898,8 @@ export function registerRuntimeBillingRoutes(
 
         if (event.type === "account.updated") {
           const account = event.data.object as Stripe.Account;
+          const nowMs =
+            Number(event.created ?? 0) > 0 ? Number(event.created) * 1000 : Date.now();
           const existingConnectAccount = await (ctx as any).runQuery(
             internal.builderCommerce.getUserStripeConnectAccountByStripeAccountIdInternal as any,
             {
@@ -913,45 +916,22 @@ export function registerRuntimeBillingRoutes(
               reason: "stripe_connect_user_missing",
             });
           }
+          const snapshot = buildStripeConnectAccountSnapshot(account, { readyAtMs: nowMs });
           await (ctx as any).runMutation(
             internal.builderCommerce.syncUserStripeConnectAccountInternal as any,
             {
               userId,
-              stripeAccountId: account.id,
-              accountType: "express",
-              status:
-                account.charges_enabled === true && account.payouts_enabled === true
-                  ? "ready"
-                  : Array.isArray(account.requirements?.currently_due) &&
-                      account.requirements.currently_due.length > 0
-                    ? "pending_requirements"
-                    : account.details_submitted === true
-                      ? "restricted"
-                      : "onboarding_required",
-              detailsSubmitted: account.details_submitted === true,
-              chargesEnabled: account.charges_enabled === true,
-              payoutsEnabled: account.payouts_enabled === true,
-              requirementsCurrentlyDue: Array.isArray(account.requirements?.currently_due)
-                ? account.requirements.currently_due
-                    .map((value) => String(value ?? "").trim())
-                    .filter(Boolean)
-                : [],
-              requirementsEventuallyDue: Array.isArray(account.requirements?.eventually_due)
-                ? account.requirements.eventually_due
-                    .map((value) => String(value ?? "").trim())
-                    .filter(Boolean)
-                : [],
-              requirementsDisabledReason: parseOptionalString(account.requirements?.disabled_reason, 200),
-              onboardingCompleteAt:
-                account.charges_enabled === true && account.payouts_enabled === true
-                  ? (Number(event.created ?? 0) > 0
-                      ? Number(event.created) * 1000
-                      : Date.now())
-                  : undefined,
-              nowMs:
-                Number(event.created ?? 0) > 0
-                  ? Number(event.created) * 1000
-                  : Date.now(),
+              stripeAccountId: snapshot.stripeAccountId,
+              accountType: snapshot.accountType,
+              status: snapshot.status,
+              detailsSubmitted: snapshot.detailsSubmitted,
+              chargesEnabled: snapshot.chargesEnabled,
+              payoutsEnabled: snapshot.payoutsEnabled,
+              requirementsCurrentlyDue: snapshot.requirementsCurrentlyDue,
+              requirementsEventuallyDue: snapshot.requirementsEventuallyDue,
+              requirementsDisabledReason: snapshot.requirementsDisabledReason,
+              onboardingCompleteAt: snapshot.onboardingCompleteAt,
+              nowMs,
             },
           );
           return jsonResponse(req, 200, {

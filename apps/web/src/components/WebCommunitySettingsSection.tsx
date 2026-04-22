@@ -368,12 +368,22 @@ function CommunityMonetizationConfigSection({
   const stripeConnect = builderBillingStatus?.stripe_connect ?? null;
   const canAcceptCharges = stripeConnect?.can_accept_charges === true;
   const needsStripeConnect = builderTier !== "builder" || !canAcceptCharges;
-  const connectCtaLabel =
-    stripeConnect?.status === "pending_requirements" || stripeConnect?.status === "restricted"
-      ? "Resume Stripe onboarding"
-      : "Connect Stripe";
   const requirementsPreview = stripeConnect?.requirements_currently_due?.slice(0, 3) ?? [];
+  const hasRequirementsPreview = requirementsPreview.length > 0;
+  const connectStatus = stripeConnect?.status ?? "not_connected";
+  const connectCtaLabel =
+    connectStatus === "pending_requirements" || connectStatus === "restricted"
+      ? "Continue Stripe setup"
+      : "Connect Stripe";
   const platformFeePercent = Number(builderBillingStatus?.platform_fee_bps ?? 0) / 100;
+  const stripeStatusMessage =
+    connectStatus === "restricted"
+      ? "Stripe needs more information or action before this community can charge for access."
+      : connectStatus === "pending_requirements" && !hasRequirementsPreview
+        ? "Stripe is still reviewing or activating your account before this community can charge for access."
+        : connectStatus === "pending_requirements"
+          ? "Finish Stripe setup before enabling paid access for this community."
+        : "Connect Stripe before enabling paid access for this community.";
 
   return (
     <div className="settings-section">
@@ -475,7 +485,7 @@ function CommunityMonetizationConfigSection({
       ) : (
         <>
           <div className="settings-section-desc" style={{ marginTop: 12 }}>
-            Connect Stripe before enabling paid access for this community.
+            {stripeStatusMessage}
           </div>
           {requirementsPreview.length > 0 ? (
             <div className="auth-status" style={{ marginTop: 8 }}>

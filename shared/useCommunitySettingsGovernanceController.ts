@@ -69,7 +69,10 @@ function formatCommunitySettingsErrorMessage(error: unknown): string {
       : error instanceof Error
         ? error.message
         : "Failed to save settings.";
-  if (message === "community_monetization_owner_required") {
+  if (
+    message === "community_monetization_owner_required" ||
+    message === "community_owner_required"
+  ) {
     return "Only the community owner can change pricing or paid access.";
   }
   if (message === "community_builder_plan_required") {

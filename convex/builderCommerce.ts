@@ -9,6 +9,11 @@ import {
 import { getStripeClient, readStripeBuilderPriceId } from "./stripeCore";
 import { enqueueBuilderSubscriptionStateEmailInternal } from "./emailEvents";
 import { buildCommunityTabPath, buildSettingsPath } from "../shared/webAppRouteState";
+import {
+  buildStripeConnectAccountSnapshot,
+  normalizeOptionalStripeConnectString,
+  normalizeStripeConnectRequirementList,
+} from "./stripeConnectAccountCore";
 
 function isActiveWindow(nowMs: number, startsAt: number, endsAt?: number): boolean {
   if (startsAt > nowMs) return false;
@@ -42,15 +47,6 @@ const BUILDER_CONNECT_CONTEXT_VALIDATOR = v.union(
   v.literal("account"),
   v.literal("community"),
 );
-
-type StripeConnectStatus =
-  | "not_connected"
-  | "onboarding_required"
-  | "pending_requirements"
-  | "ready"
-  | "restricted";
-
-type StoredStripeConnectStatus = Exclude<StripeConnectStatus, "not_connected">;
 
 function readEnv(name: string): string {
   try {
@@ -87,68 +83,6 @@ function buildBuilderBillingRedirectUrls(args: {
     successUrl: `${origin}/?billing=success&billing_source=web&billing_context=${encodedContext}`,
     cancelUrl: `${origin}/?billing=cancel&billing_source=web&billing_context=${encodedContext}`,
     returnUrl: `${origin}/?billing=return&billing_source=web&billing_context=${encodedContext}`,
-  };
-}
-
-function normalizeStripeRequirementList(raw: unknown): string[] {
-  if (!Array.isArray(raw)) return [];
-  return raw
-    .map((value) => String(value ?? "").trim())
-    .filter(Boolean)
-    .slice(0, 64);
-}
-
-function normalizeOptionalString(raw: unknown, maxLen = 300): string | null {
-  const value = String(raw ?? "").trim();
-  if (!value) return null;
-  return value.slice(0, maxLen);
-}
-
-function deriveStripeConnectStatus(args: {
-  detailsSubmitted: boolean;
-  chargesEnabled: boolean;
-  payoutsEnabled: boolean;
-  requirementsDisabledReason: string | null;
-}): StoredStripeConnectStatus {
-  if (args.chargesEnabled && args.payoutsEnabled) return "ready";
-  if (args.requirementsDisabledReason) return "restricted";
-  if (!args.detailsSubmitted) return "onboarding_required";
-  return "pending_requirements";
-}
-
-function buildStripeConnectAccountSnapshot(account: Stripe.Account): {
-  stripeAccountId: string;
-  accountType: "express";
-  status: StoredStripeConnectStatus;
-  detailsSubmitted: boolean;
-  chargesEnabled: boolean;
-  payoutsEnabled: boolean;
-  requirementsCurrentlyDue: string[];
-  requirementsEventuallyDue: string[];
-  requirementsDisabledReason: string | null;
-  onboardingCompleteAt?: number;
-} {
-  const detailsSubmitted = account.details_submitted === true;
-  const chargesEnabled = account.charges_enabled === true;
-  const payoutsEnabled = account.payouts_enabled === true;
-  const requirementsDisabledReason = normalizeOptionalString(account.requirements?.disabled_reason);
-  const status = deriveStripeConnectStatus({
-    detailsSubmitted,
-    chargesEnabled,
-    payoutsEnabled,
-    requirementsDisabledReason,
-  });
-  return {
-    stripeAccountId: account.id,
-    accountType: "express",
-    status,
-    detailsSubmitted,
-    chargesEnabled,
-    payoutsEnabled,
-    requirementsCurrentlyDue: normalizeStripeRequirementList(account.requirements?.currently_due),
-    requirementsEventuallyDue: normalizeStripeRequirementList(account.requirements?.eventually_due),
-    requirementsDisabledReason,
-    onboardingCompleteAt: status === "ready" ? Date.now() : undefined,
   };
 }
 
@@ -509,9 +443,10 @@ export const syncUserStripeConnectAccountInternal = internalMutation({
       detailsSubmitted: args.detailsSubmitted === true,
       chargesEnabled: args.chargesEnabled === true,
       payoutsEnabled: args.payoutsEnabled === true,
-      requirementsCurrentlyDue: normalizeStripeRequirementList(args.requirementsCurrentlyDue),
-      requirementsEventuallyDue: normalizeStripeRequirementList(args.requirementsEventuallyDue),
-      requirementsDisabledReason: normalizeOptionalString(args.requirementsDisabledReason) ?? undefined,
+      requirementsCurrentlyDue: normalizeStripeConnectRequirementList(args.requirementsCurrentlyDue),
+      requirementsEventuallyDue: normalizeStripeConnectRequirementList(args.requirementsEventuallyDue),
+      requirementsDisabledReason:
+        normalizeOptionalStripeConnectString(args.requirementsDisabledReason) ?? undefined,
       onboardingCompleteAt:
         typeof args.onboardingCompleteAt === "number" && Number.isFinite(args.onboardingCompleteAt)
           ? args.onboardingCompleteAt
@@ -683,6 +618,16 @@ export const startConnectOnboarding = action({
     if (args.userId && String(args.userId) !== String(userId)) {
       throw new Error("user_id_mismatch");
     }
+    const builderAccess = (await ctx.runQuery(
+      internal.auth.getBuilderCommerceAccessForUserInternal as any,
+      { userId, nowMs: Date.now() },
+    )) as { builder_tier?: unknown; has_payouts?: unknown } | null;
+    const hasBuilderPayoutAccess =
+      String(builderAccess?.builder_tier ?? "").trim().toLowerCase() === "builder" &&
+      builderAccess?.has_payouts === true;
+    if (!hasBuilderPayoutAccess) {
+      throw new Error("builder_connect_builder_required");
+    }
 
     const existing = (await ctx.runQuery(
       internal.builderCommerce.getUserStripeConnectAccountInternal as any,
@@ -692,13 +637,13 @@ export const startConnectOnboarding = action({
     } | null;
     const stripe = getStripeClient();
     let account: Stripe.Account;
-    const existingAccountId = normalizeOptionalString(existing?.stripeAccountId);
+    const existingAccountId = normalizeOptionalStripeConnectString(existing?.stripeAccountId);
     if (existingAccountId) {
       account = await stripe.accounts.retrieve(existingAccountId);
     } else {
       account = await stripe.accounts.create({
         type: "express",
-        email: normalizeOptionalString(actor?.email, 200) ?? undefined,
+        email: normalizeOptionalStripeConnectString(actor?.email, 200) ?? undefined,
         capabilities: {
           card_payments: { requested: true },
           transfers: { requested: true },
@@ -709,8 +654,8 @@ export const startConnectOnboarding = action({
       });
     }
 
-    const snapshot = buildStripeConnectAccountSnapshot(account);
     const nowMs = Date.now();
+    const snapshot = buildStripeConnectAccountSnapshot(account, { readyAtMs: nowMs });
     await ctx.runMutation(internal.builderCommerce.syncUserStripeConnectAccountInternal as any, {
       userId,
       stripeAccountId: snapshot.stripeAccountId,

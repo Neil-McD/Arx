@@ -66,6 +66,13 @@ function formatBuilderPortalUnavailableMessage(code: string | null): string | nu
   return null;
 }
 
+function formatBuilderConnectUnavailableMessage(message: string): string | null {
+  if (message === "builder_connect_builder_required") {
+    return "Builder is required before connecting Stripe monetization.";
+  }
+  return null;
+}
+
 function formatActionError(error: unknown, fallback: string): string {
   if (typeof error === "string") return error;
   if (error instanceof Error && error.message) return error.message;
@@ -170,7 +177,10 @@ export function useBuilderBillingActionsCore<SessionT>(args: UseBuilderBillingAc
         const opened = await current.openUrl("connect", onboardingUrl);
         if (!opened) throw new Error("Failed to open Stripe onboarding.");
       } catch (error) {
-        current.setBuilderBillingError(formatActionError(error, "Failed to start Stripe onboarding."));
+        const message = formatActionError(error, "Failed to start Stripe onboarding.");
+        current.setBuilderBillingError(
+          formatBuilderConnectUnavailableMessage(message) ?? message,
+        );
       } finally {
         current.setIsStartingBuilderConnectOnboarding(false);
       }
