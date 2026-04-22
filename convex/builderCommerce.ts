@@ -428,7 +428,12 @@ export const openBuilderBillingPortal = action({
       { ownerUserId: userId },
     )) as { providerCustomerId?: unknown } | null;
     const providerCustomerId = String(customer?.providerCustomerId ?? "").trim();
-    if (!providerCustomerId) throw new Error("builder_billing_customer_missing");
+    if (!providerCustomerId) {
+      return {
+        url: null,
+        unavailable_code: "builder_billing_customer_missing" as const,
+      };
+    }
 
     try {
       const stripe = getStripeClient();

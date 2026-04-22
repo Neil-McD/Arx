@@ -27,13 +27,14 @@ export async function openCloudBuilderBillingPortal<SessionT>(
   params: CloudBuilderBillingGatewayParams<SessionT> & {
     context: "builder" | "create_community";
   },
-): Promise<{ url?: unknown }> {
+): Promise<{ url?: unknown; unavailable_code?: unknown }> {
   const { client, authSubject } = await bootstrapGatewayAuthContext(params.session);
   return (await client.action("billing:openBuilderBillingPortal" as any, {
     authSubject,
     context: params.context,
   })) as {
     url?: unknown;
+    unavailable_code?: unknown;
   };
 }
 

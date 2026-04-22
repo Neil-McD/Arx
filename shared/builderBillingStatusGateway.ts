@@ -5,6 +5,7 @@ export type BuilderBillingStatus = {
   user_id: string;
   builder_tier: "free" | "builder";
   max_communities: number;
+  can_manage_plan: boolean;
 };
 
 export type DevBuilderTier = "free" | "builder";
@@ -28,6 +29,7 @@ async function loadBuilderBillingStatusViaConvex(session: AuthSessionLike): Prom
     ...row,
     builder_tier: normalizeBuilderTier(row.builder_tier),
     max_communities: Number(row.max_communities ?? 0),
+    can_manage_plan: row.can_manage_plan === true,
   };
 }
 

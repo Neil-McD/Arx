@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { formatBuilderTierLabel, isBuilderTierFree } from "../../../../shared/builderBilling";
+import type { BuilderBillingStatus } from "../../../../shared/builderBillingStatusGateway";
 import { WebSignOutConfirmModal } from "./WebSignOutConfirmModal";
 
 type SessionLike = {
@@ -27,11 +28,6 @@ type OpenRouterConnection = {
   key_last_four?: string | null;
   updated_at?: string | null;
 };
-
-type BuilderBillingStatus = {
-  builder_tier: "free" | "builder";
-  max_communities: number;
-} | null;
 
 type OwnedCommunity = {
   id: string;
@@ -65,7 +61,7 @@ type WebAccountSettingsSectionProps = {
   openRouterConnectionError: string | null;
   openRouterConnectionSuccess: string | null;
   formatRelativeTime: (value: string) => string;
-  builderBillingStatus: BuilderBillingStatus;
+  builderBillingStatus: BuilderBillingStatus | null;
   communities: OwnedCommunity[];
   communityRoleById: Record<string, string>;
   openOwnedCommunitySettings: (communityId: string) => void;
@@ -329,6 +325,7 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
             const communitiesLabel =
               max > 0 ? `${ownedCount}/${max} owned ${communityWord}` : `${ownedCount} owned ${communityWord}`;
             const tierLabel = formatBuilderTierLabel(tier);
+            const canManagePlan = status?.can_manage_plan === true;
             return (
               <>
                 <div className="account-row">
@@ -350,14 +347,20 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
                     ) : (
                       <>
                         <span className="auth-status">Builder includes 500 monthly workspace credits. Connect ChatGPT or OpenRouter to bring your own inference.</span>
-                        <button
-                          type="button"
-                          className="secondary"
-                          onClick={() => void openBuilderBillingPortal()}
-                          disabled={isOpeningBuilderBillingPortal}
-                        >
-                          {isOpeningBuilderBillingPortal ? "Opening…" : "Manage plan"}
-                        </button>
+                        {canManagePlan ? (
+                          <button
+                            type="button"
+                            className="secondary"
+                            onClick={() => void openBuilderBillingPortal()}
+                            disabled={isOpeningBuilderBillingPortal}
+                          >
+                            {isOpeningBuilderBillingPortal ? "Opening…" : "Manage plan"}
+                          </button>
+                        ) : (
+                          <span className="auth-status">
+                            This Builder access is managed outside self-serve billing.
+                          </span>
+                        )}
                       </>
                     )}
                   </div>

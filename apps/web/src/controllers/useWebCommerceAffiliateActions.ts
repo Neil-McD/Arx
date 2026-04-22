@@ -7,14 +7,11 @@ import {
   type PendingPurchaseClaim,
 } from "../../../../shared/pay_first";
 import type { PendingAuthIntentInput } from "../../../../shared/authResumeState";
-import { loadBuilderBillingStatusCanonical } from "../../../../shared/builderBillingStatusGateway";
+import {
+  loadBuilderBillingStatusCanonical,
+  type BuilderBillingStatus,
+} from "../../../../shared/builderBillingStatusGateway";
 import type { AuthSession } from "../auth";
-
-type BuilderBillingStatus = {
-  user_id: string;
-  builder_tier: "free" | "builder";
-  max_communities: number;
-};
 
 type UseWebCommerceAffiliateActionsArgs = {
   getSession: () => AuthSession | null;

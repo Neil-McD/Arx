@@ -37,6 +37,20 @@ function readRequiredStringField(data: unknown, key: string, missingMessage: str
   return text;
 }
 
+function readOptionalStringField(data: unknown, key: string): string | null {
+  const value =
+    data && typeof data === "object" ? (data as Record<string, unknown>)[key] : null;
+  const text = typeof value === "string" ? value.trim() : "";
+  return text || null;
+}
+
+function formatBuilderPortalUnavailableMessage(code: string | null): string | null {
+  if (code === "builder_billing_customer_missing") {
+    return "This Builder access is managed outside self-serve billing, so there is no plan portal for this account.";
+  }
+  return null;
+}
+
 function formatActionError(error: unknown, fallback: string): string {
   if (typeof error === "string") return error;
   if (error instanceof Error && error.message) return error.message;
@@ -95,6 +109,12 @@ export function useBuilderBillingActionsCore<SessionT>(args: UseBuilderBillingAc
           session,
           context,
         });
+        const unavailableCode = readOptionalStringField(data, "unavailable_code");
+        const unavailableMessage = formatBuilderPortalUnavailableMessage(unavailableCode);
+        if (unavailableMessage) {
+          current.setBuilderBillingError(unavailableMessage);
+          return;
+        }
         const portalUrl = readRequiredStringField(data, "url", "Missing billing portal url.");
         current.onPortalOpened?.({ context });
         const opened = await current.openUrl("portal", portalUrl);

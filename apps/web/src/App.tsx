@@ -283,7 +283,11 @@ import {
   extractModelIdFromMessageContent,
   formatModelAttributionLabel,
 } from "../../../shared/modelAttributionUi";
-import { setDevBuilderTierCanonical } from "../../../shared/builderBillingStatusGateway";
+import {
+  loadBuilderBillingStatusCanonical,
+  setDevBuilderTierCanonical,
+  type BuilderBillingStatus,
+} from "../../../shared/builderBillingStatusGateway";
 import { startCloudWorkspaceCreditTopupCheckout } from "../../../shared/cloudBuilderBillingGateway";
 import { loadWorkspaceCreditBalanceCanonical, type WorkspaceCreditBalance } from "../../../shared/workspaceCreditsGateway";
 import { formatUsdCents, toEpochSeconds } from "../../../shared/displayFormatting";
@@ -594,12 +598,6 @@ type PublicPlanSummary = SharedPublicPlanSummary;
 type DiscoverCommunity = SharedDiscoverCommunitySnapshot;
 type CommunityAiFeedPost = SharedCommunityAiFeedPost;
 type CommunityAiFeedReactionType = SharedCommunityAiFeedReactionType;
-
-type BuilderBillingStatus = {
-  user_id: string;
-  builder_tier: "free" | "builder";
-  max_communities: number;
-};
 
 type NavSnapshot = NavSnapshotBase & {
   workspaceWantsNewChat: boolean;

@@ -1,3 +1,4 @@
+import { internal } from "./_generated/api";
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import {
@@ -348,7 +349,15 @@ export const getBuilderBillingStatus = query({
     authSubject: v.optional(v.string()),
     nowMs: v.optional(v.number()),
   },
-  handler: async (ctx, args) => {
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{
+    user_id: string;
+    builder_tier: CanonicalTier;
+    max_communities: number;
+    can_manage_plan: boolean;
+  } | null> => {
     const nowMs = args.nowMs ?? Date.now();
     const { authSubject, actor } = await findAuthenticatedActorState({
       ctx,
@@ -357,11 +366,22 @@ export const getBuilderBillingStatus = query({
     if (!actor) return null;
     const canonicalTier = await getCanonicalTierByUserIdInternal(ctx as never, actor.dbUserId, nowMs);
     const meta = builderTierMeta(canonicalTier);
+    const billingCustomer: { providerCustomerId?: unknown } | null = canonicalTier === "builder"
+      ? ((await ctx.runQuery(
+          internal.builderCommerce.getLatestBuilderBillingCustomerForOwnerInternal as any,
+          { ownerUserId: actor.dbUserId },
+        )) as { providerCustomerId?: unknown } | null)
+      : null;
+    const canManagePlan: boolean =
+      canonicalTier === "builder" &&
+      typeof billingCustomer?.providerCustomerId === "string" &&
+      billingCustomer.providerCustomerId.trim().length > 0;
 
     return {
       user_id: actor.authSubject,
       builder_tier: canonicalTier,
       max_communities: meta.maxCommunities,
+      can_manage_plan: canManagePlan,
     };
   },
 });
