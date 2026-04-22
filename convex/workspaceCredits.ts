@@ -32,6 +32,42 @@ function compareBillingCycle(
   return left.cycleEndsAt - right.cycleEndsAt;
 }
 
+const SYNTHETIC_BUILDER_CYCLE_MS = 30 * 24 * 60 * 60 * 1000;
+
+function normalizeBuilderAccessTier(value: unknown): "free" | "builder" {
+  const normalized = String(value ?? "")
+    .trim()
+    .toLowerCase();
+  if (normalized === "builder" || normalized === "architect" || normalized === "pro") {
+    return "builder";
+  }
+  return "free";
+}
+
+function isActiveWindow(nowMs: number, startsAt: number, endsAt?: number): boolean {
+  if (startsAt > nowMs) return false;
+  if (typeof endsAt === "number" && nowMs > endsAt) return false;
+  return true;
+}
+
+function deriveSyntheticBuilderProvisioningWindow(args: {
+  nowMs: number;
+  startsAt: number;
+  endsAt?: number;
+}): { cycleStartedAt: number; cycleEndsAt: number } {
+  const offsetPeriods = Math.max(
+    0,
+    Math.floor(Math.max(0, args.nowMs - args.startsAt) / SYNTHETIC_BUILDER_CYCLE_MS),
+  );
+  const cycleStartedAt = args.startsAt + offsetPeriods * SYNTHETIC_BUILDER_CYCLE_MS;
+  const nominalCycleEndsAt = cycleStartedAt + SYNTHETIC_BUILDER_CYCLE_MS;
+  const cycleEndsAt =
+    typeof args.endsAt === "number"
+      ? Math.min(args.endsAt, nominalCycleEndsAt)
+      : nominalCycleEndsAt;
+  return { cycleStartedAt, cycleEndsAt };
+}
+
 export const getWorkspaceCreditBalanceInternal = internalQuery({
   args: {
     userId: v.id("users"),
@@ -57,6 +93,33 @@ export const getWorkspaceCreditBalance = query({
       .query("workspaceCreditBalances")
       .withIndex("by_user", (q) => q.eq("userId", actor.dbUserId))
       .first();
+  },
+});
+
+export const getActiveBuilderCreditProvisioningWindowInternal = internalQuery({
+  args: {
+    userId: v.id("users"),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const nowMs = args.nowMs ?? Date.now();
+    const entitlements = await ctx.db
+      .query("userEntitlements")
+      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .collect();
+    const activeBuilderEntitlement = entitlements
+      .filter(
+        (row) =>
+          normalizeBuilderAccessTier(row.tier) === "builder" &&
+          isActiveWindow(nowMs, row.startsAt, row.endsAt),
+      )
+      .sort((a, b) => b.startsAt - a.startsAt)[0];
+    if (!activeBuilderEntitlement) return null;
+    return deriveSyntheticBuilderProvisioningWindow({
+      nowMs,
+      startsAt: activeBuilderEntitlement.startsAt,
+      endsAt: activeBuilderEntitlement.endsAt,
+    });
   },
 });
 

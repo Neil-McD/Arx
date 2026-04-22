@@ -28,6 +28,27 @@ type UseWebBuilderBillingActionsArgs = {
   navigateToUrl: (url: string) => void;
 };
 
+function readCanonicalBuilderBillingOrigin(): string {
+  const candidates = [
+    import.meta.env.VITE_PUBLIC_APP_URL,
+    import.meta.env.VITE_APP_URL,
+    window.location.origin,
+  ];
+  for (const candidate of candidates) {
+    const value = String(candidate ?? "").trim();
+    if (!value) continue;
+    try {
+      const parsed = new URL(value, window.location.origin);
+      if (parsed.protocol === "https:" || parsed.protocol === "http:") {
+        return parsed.origin;
+      }
+    } catch {
+      // Ignore malformed browser config values and fall through.
+    }
+  }
+  return window.location.origin;
+}
+
 export function useWebBuilderBillingActions(args: UseWebBuilderBillingActionsArgs) {
   return useBuilderBillingActionsCore({
     getSession: args.getSession,
@@ -48,14 +69,14 @@ export function useWebBuilderBillingActions(args: UseWebBuilderBillingActionsArg
       context: BuilderUpgradeContext;
     }) =>
       buildBuilderCheckoutRequestPayload({
-        origin: window.location.origin,
+        origin: readCanonicalBuilderBillingOrigin(),
         source: "web",
         context,
         tier,
       }),
     buildPortalPayload: ({ context }: { context: BuilderUpgradeContext }) =>
       buildBuilderPortalRequestPayload({
-        origin: window.location.origin,
+        origin: readCanonicalBuilderBillingOrigin(),
         source: "web",
         context,
       }),

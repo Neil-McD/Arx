@@ -173,6 +173,7 @@ export async function createWorkspaceSandboxSession(params: {
       details?: Record<string, unknown>;
     }
 > {
+  const nowMs = Date.now();
   const canonicalTier = await params.ctx.runQuery(api.entitlements.getCanonicalTierByUserId as any, {
     userId: params.userId,
   });
@@ -197,7 +198,10 @@ export async function createWorkspaceSandboxSession(params: {
       userId: params.userId,
     },
   );
-  if (!creditBalance && canonicalTier === "builder") {
+  if (canonicalTier === "builder") {
+    let provisioningWindow:
+      | { cycleStartedAt: number; cycleEndsAt: number }
+      | null = null;
     const latestBuilderBillingCycle = await params.ctx.runQuery(
       internal.builderCommerce.getLatestBuilderBillingCycleForOwnerInternal as any,
       {
@@ -205,15 +209,35 @@ export async function createWorkspaceSandboxSession(params: {
       },
     );
     if (
-      latestBuilderBillingCycle?.currentPeriodStartAt &&
-      latestBuilderBillingCycle?.currentPeriodEndAt
+      typeof latestBuilderBillingCycle?.currentPeriodStartAt === "number" &&
+      typeof latestBuilderBillingCycle?.currentPeriodEndAt === "number"
     ) {
+      provisioningWindow = {
+        cycleStartedAt: latestBuilderBillingCycle.currentPeriodStartAt,
+        cycleEndsAt: latestBuilderBillingCycle.currentPeriodEndAt,
+      };
+    } else {
+      provisioningWindow = await params.ctx.runQuery(
+        internal.workspaceCredits.getActiveBuilderCreditProvisioningWindowInternal as any,
+        {
+          userId: params.userId,
+          nowMs,
+        },
+      );
+    }
+    const needsProvisioningSync =
+      !!provisioningWindow &&
+      (!creditBalance ||
+        creditBalance.includedCycleStartedAt !== provisioningWindow.cycleStartedAt ||
+        creditBalance.includedCycleEndsAt !== provisioningWindow.cycleEndsAt);
+    if (provisioningWindow && needsProvisioningSync) {
       await params.ctx.runMutation(internal.workspaceCredits.syncBuilderMonthlyCreditsInternal as any, {
         userId: params.userId,
         targetTier: "builder",
         grantsAccess: true,
-        cycleStartedAt: latestBuilderBillingCycle.currentPeriodStartAt,
-        cycleEndsAt: latestBuilderBillingCycle.currentPeriodEndAt,
+        cycleStartedAt: provisioningWindow.cycleStartedAt,
+        cycleEndsAt: provisioningWindow.cycleEndsAt,
+        nowMs,
       });
       creditBalance = await params.ctx.runQuery(
         internal.workspaceCredits.getWorkspaceCreditBalanceInternal as any,

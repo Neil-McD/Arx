@@ -60,6 +60,28 @@ function readAllowedBillingPortalReturnOrigins(): Set<string> {
   return origins;
 }
 
+function normalizeComparableHostname(hostname: string): string {
+  const normalized = String(hostname ?? "").trim().toLowerCase();
+  if (normalized.startsWith("www.")) return normalized.slice(4);
+  return normalized;
+}
+
+function readNormalizedOriginPort(url: URL): string {
+  if (url.port) return url.port;
+  if (url.protocol === "https:") return "443";
+  if (url.protocol === "http:") return "80";
+  return "";
+}
+
+function rewriteUrlToAllowedOrigin(input: URL, allowedOrigin: string): string {
+  const allowed = new URL(allowedOrigin);
+  const rewritten = new URL(input.toString());
+  rewritten.protocol = allowed.protocol;
+  rewritten.hostname = allowed.hostname;
+  rewritten.port = allowed.port;
+  return rewritten.toString();
+}
+
 function normalizeBillingPortalReturnUrl(raw: unknown): string {
   const value = String(raw ?? "").trim();
   if (!value) throw new Error("builder_billing_return_url_required");
@@ -73,10 +95,20 @@ function normalizeBillingPortalReturnUrl(raw: unknown): string {
     throw new Error("builder_billing_return_url_invalid");
   }
   const allowedOrigins = readAllowedBillingPortalReturnOrigins();
-  if (!allowedOrigins.has(parsed.origin)) {
-    throw new Error("builder_billing_return_url_invalid");
+  if (allowedOrigins.has(parsed.origin)) {
+    return parsed.toString();
   }
-  return parsed.toString();
+  for (const allowedOrigin of allowedOrigins) {
+    const allowed = new URL(allowedOrigin);
+    const sameRootHostname =
+      normalizeComparableHostname(parsed.hostname) ===
+      normalizeComparableHostname(allowed.hostname);
+    if (!sameRootHostname) continue;
+    if (parsed.protocol !== allowed.protocol) continue;
+    if (readNormalizedOriginPort(parsed) !== readNormalizedOriginPort(allowed)) continue;
+    return rewriteUrlToAllowedOrigin(parsed, allowedOrigin);
+  }
+  throw new Error("builder_billing_return_url_invalid");
 }
 
 export const createPendingBuilderCheckoutSessionInternal = internalMutation({
