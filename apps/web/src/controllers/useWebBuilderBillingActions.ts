@@ -2,6 +2,10 @@ import { type Dispatch, type SetStateAction } from "react";
 import type { PendingAuthIntentInput } from "../../../../shared/authResumeState";
 import type { AuthSession } from "../auth";
 import {
+  emitWorkspaceEvent,
+  formatWorkspaceInstrumentationError,
+} from "../lib/workspaceInstrumentation";
+import {
   useBuilderBillingActionsCore,
   type BuilderCheckoutRequestTier,
   type BuilderUpgradeContext,
@@ -49,6 +53,15 @@ export function useWebBuilderBillingActions(args: UseWebBuilderBillingActionsArg
     onCheckoutStarted: args.onCheckoutStarted,
     onPortalOpened: args.onPortalOpened,
     onConnectOnboardingStarted: args.onConnectOnboardingStarted,
+    onActionEvent: ({ kind, phase, status, detail, error }) => {
+      emitWorkspaceEvent({
+        scope: "lifecycle",
+        name: `builder_${kind}_${phase}`,
+        status,
+        detail,
+        error: error ? formatWorkspaceInstrumentationError(error) : null,
+      });
+    },
     openUrl: (_kind, url) => {
       args.navigateToUrl(url);
       return true;

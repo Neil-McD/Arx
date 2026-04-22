@@ -30,6 +30,7 @@ type BuildWebCommunitySurfaceProjectionParams = {
   canDeleteActiveCommunity: WebCommunitySecondaryPanelsProps["settings"]["canDeleteCommunity"];
   requireSignIn: WebCommunitySecondaryPanelsProps["settings"]["requireSignIn"];
   builderBillingStatus: WebCommunitySecondaryPanelsProps["settings"]["builderBillingStatus"];
+  builderBillingError: WebCommunitySecondaryPanelsProps["settings"]["builderBillingError"];
   startBuilderConnectOnboarding:
     WebCommunitySecondaryPanelsProps["settings"]["startBuilderConnectOnboarding"];
   isStartingBuilderConnectOnboarding:
@@ -143,6 +144,7 @@ export function buildWebCommunitySurfaceProjection(
       canDeleteCommunity: params.canDeleteActiveCommunity,
       requireSignIn: params.requireSignIn,
       builderBillingStatus: params.builderBillingStatus,
+      builderBillingError: params.builderBillingError,
       startBuilderConnectOnboarding: params.startBuilderConnectOnboarding,
       isStartingBuilderConnectOnboarding: params.isStartingBuilderConnectOnboarding,
       state: params.settingsState,

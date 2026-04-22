@@ -25,6 +25,7 @@ type WebCommunitySettingsSectionProps = {
   canDeleteCommunity: boolean;
   requireSignIn: () => void;
   builderBillingStatus: BuilderBillingStatus | null;
+  builderBillingError: string | null;
   startBuilderConnectOnboarding: (opts?: {
     context?: "account" | "community";
     communitySlug?: string | null;
@@ -343,6 +344,7 @@ function CommunityProfileSettingsSection({ state, actions }: SharedSettingsProps
 function CommunityMonetizationConfigSection({
   activeCommunity,
   builderBillingStatus,
+  builderBillingError,
   startBuilderConnectOnboarding,
   isStartingBuilderConnectOnboarding,
   state,
@@ -350,6 +352,7 @@ function CommunityMonetizationConfigSection({
 }: SharedSettingsProps & {
   activeCommunity: ActiveCommunity;
   builderBillingStatus: BuilderBillingStatus | null;
+  builderBillingError: string | null;
   startBuilderConnectOnboarding: (opts?: {
     context?: "account" | "community";
     communitySlug?: string | null;
@@ -509,6 +512,11 @@ function CommunityMonetizationConfigSection({
               {isStartingBuilderConnectOnboarding ? "Opening…" : connectCtaLabel}
             </button>
           </div>
+          {builderBillingError ? (
+            <div className="auth-error" style={{ marginTop: 10 }}>
+              {builderBillingError}
+            </div>
+          ) : null}
         </>
       )}
     </div>
@@ -547,6 +555,7 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
     canDeleteCommunity,
     requireSignIn,
     builderBillingStatus,
+    builderBillingError,
     startBuilderConnectOnboarding,
     isStartingBuilderConnectOnboarding,
     state,
@@ -591,6 +600,7 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
             <CommunityMonetizationConfigSection
               activeCommunity={activeCommunity}
               builderBillingStatus={builderBillingStatus}
+              builderBillingError={builderBillingError}
               startBuilderConnectOnboarding={startBuilderConnectOnboarding}
               isStartingBuilderConnectOnboarding={isStartingBuilderConnectOnboarding}
               state={state}

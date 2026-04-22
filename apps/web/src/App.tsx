@@ -5343,6 +5343,7 @@ export default function App() {
       canDeleteActiveCommunity,
       requireSignIn,
       builderBillingStatus,
+      builderBillingError,
       startBuilderConnectOnboarding,
       isStartingBuilderConnectOnboarding,
       settingsState: {
