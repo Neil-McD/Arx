@@ -953,54 +953,72 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
                 </div>
               ) : null}
               {isSkillsTab
-                ? filteredSkills.map((skill) => {
-                    const matchingInstall = findMatchingDiscoverSkillInstall(
-                      skill,
-                      userPlatformSkills,
-                    );
-                    return (
-                      <button
-                        key={skill.id}
-                        type="button"
-                        className="discover-card discover-app-card discover-skill-card-button"
-                        onClick={() => {
-                          setSelectedSkillId(skill.id);
-                          setSelectedSkillActionError(null);
-                        }}
-                        aria-label={`Open ${skill.name}`}
-                      >
-                        <div className="discover-app-card-body">
-                          <div className="discover-app-card-header">
+                ? (
+                    <div
+                      className="discover-app-list discover-skill-list"
+                      role="list"
+                      aria-label="Skill catalog"
+                    >
+                      {filteredSkills.map((skill) => {
+                        const matchingInstall = findMatchingDiscoverSkillInstall(
+                          skill,
+                          userPlatformSkills,
+                        );
+                        return (
+                          <button
+                            key={skill.id}
+                            type="button"
+                            className="discover-app-row-button discover-skill-row-button"
+                            role="listitem"
+                            onClick={() => {
+                              setSelectedSkillId(skill.id);
+                              setSelectedSkillActionError(null);
+                            }}
+                            aria-label={`Open ${skill.name}`}
+                          >
                             <div
-                              className={`discover-app-icon discover-app-icon-${skill.icon}`}
+                              className={`discover-app-icon discover-app-icon-${skill.icon} discover-skill-row-icon`}
                             >
                               {renderSkillIcon(skill.icon)}
                             </div>
-                            <div className="discover-app-meta">
-                              <div className="discover-card-name-row">
-                                <div className="discover-card-name">
+                            <div className="discover-app-row-copy discover-skill-row-copy">
+                              <div className="discover-skill-row-heading">
+                                <div className="discover-app-row-name">
                                   {skill.name}
                                 </div>
+                                <span className="discover-skill-row-badge">
+                                  {skill.kind === "custom" ? "Custom" : "Curated"}
+                                </span>
                               </div>
-                              <div className="discover-app-tagline">
+                              <div className="discover-app-row-tagline">
                                 {skill.tagline}
                               </div>
+                              <div className="discover-skill-row-desc">
+                                {skill.description}
+                              </div>
+                              <div className="discover-skill-row-meta">
+                                <span className="discover-skill-row-token">
+                                  {skill.installInput ? skill.invocation : "Name-derived token"}
+                                </span>
+                                <span>{skill.surface}</span>
+                              </div>
                             </div>
-                          </div>
-                          <div className="discover-card-desc">
-                            {skill.description}
-                          </div>
-                        </div>
-                        <span className="discover-app-action">
-                          {matchingInstall
-                            ? "Manage"
-                            : skill.installInput
-                              ? "Add skill"
-                              : "Create custom"}
-                        </span>
-                      </button>
-                    );
-                  })
+                            <span
+                              className={`discover-app-action${
+                                matchingInstall ? " is-installed" : ""
+                              }`}
+                            >
+                              {matchingInstall
+                                ? "Manage"
+                                : skill.installInput
+                                  ? "Add"
+                                  : "Create"}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )
                 : null}
               {isSkillsTab && filteredSkills.length === 0 ? (
                 <div className="discover-empty">
