@@ -61,6 +61,29 @@ export default defineSchema({
     .index("by_user", ["userId"])
     .index("by_user_startsAt", ["userId", "startsAt"]),
 
+  userStripeConnectAccounts: defineTable({
+    userId: v.id("users"),
+    stripeAccountId: v.string(),
+    accountType: v.literal("express"),
+    status: v.union(
+      v.literal("onboarding_required"),
+      v.literal("pending_requirements"),
+      v.literal("ready"),
+      v.literal("restricted"),
+    ),
+    detailsSubmitted: v.boolean(),
+    chargesEnabled: v.boolean(),
+    payoutsEnabled: v.boolean(),
+    requirementsCurrentlyDue: v.array(v.string()),
+    requirementsEventuallyDue: v.array(v.string()),
+    requirementsDisabledReason: v.optional(v.string()),
+    onboardingCompleteAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_stripeAccountId", ["stripeAccountId"]),
+
   workspaceCreditBalances: defineTable({
     userId: v.id("users"),
     includedCreditsBalance: v.number(),

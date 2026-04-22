@@ -19,9 +19,7 @@ Scope: web + mobile, chat + agent, inference + Daytona sandbox entitlement
 3. `builder`
    - authenticated free plus Daytona workbench
    - some Polynet inference
-   - no community creation
-4. `architect`
-   - builder plus community creation, pricing, subscriptions, payouts, and community agent configuration
+   - community creation, pricing, subscriptions, payouts, and community agent configuration
 
 ## 1) Irreducible Contract
 
@@ -30,7 +28,7 @@ The platform behavior is defined by 6 inputs:
 1. Surface: `web` | `mobile`
 2. Funding source request: `demo_public` | `platform` | `user_key` | `user_chatgpt`
 3. Auth state: `anonymous` | `authenticated`
-4. Account tier: `free` | `builder` | `architect`
+4. Account tier: `free` | `builder`
 5. Active project context: absent | present
 6. Active community lens: absent | present
 
@@ -54,22 +52,21 @@ And 7 outputs:
 5. Workspace tools are workbench-tier only:
    - `free`: never receives `workspace_tools`
    - `builder`: `workspace_tools` allowed
-   - `architect`: `workspace_tools` allowed
 6. Capability entitlements are tier-based:
    - anonymous: `[]`
    - authenticated free: `["community_tools","web_research"]`
-   - builder / architect: `["community_tools","web_research","workspace_tools"]`
+   - builder: `["community_tools","web_research","workspace_tools"]`
 7. Active run capability families are run-specific:
    - authenticated cloud chat with no active community lens: `["web_research"]`
    - authenticated cloud chat with an active community lens: `["community_tools","web_research"]`
-   - project-bound builder / architect run: `["community_tools","web_research","workspace_tools"]` when a community lens is active, otherwise `["web_research","workspace_tools"]`
+   - project-bound builder run: `["community_tools","web_research","workspace_tools"]` when a community lens is active, otherwise `["web_research","workspace_tools"]`
 8. Chat turns may route to:
    - `public` for `demo_public`
    - `platform` for `platform`
    - `platform` for `user_key` because the cloud runtime substrate is the same even though the funding source differs
    - `chatgpt` for `user_chatgpt`
 9. ChatGPT auth is a user-funded lane and does not imply workspace entitlement.
-10. Community creation remains architect-tier-gated.
+10. Community creation remains builder-tier-gated.
 11. Authenticated free never receives Polynet-funded inference; it must route through `user_chatgpt` or `user_key`.
 
 ## 3) Behavior Matrix (Phase 1)
@@ -86,11 +83,6 @@ And 7 outputs:
 | Web/Mobile | Chat | authenticated | builder | `user_key` | absent | `platform` | `user_key` | denied | allowed | denied |
 | Web/Mobile | Chat | authenticated | builder | `user_chatgpt` | absent | `chatgpt` | `user_chatgpt` | denied | allowed | denied |
 | Web/Mobile | Chat | authenticated | builder | any | present | `platform` / `chatgpt` / `public` per funding source | varies | allowed | allowed | denied |
-| Web/Mobile | Chat | authenticated | architect | `platform` | absent | `platform` | `platform` | denied | allowed | allowed |
-| Web/Mobile | Chat | authenticated | architect | `user_key` | absent | `platform` | `user_key` | denied | allowed | allowed |
-| Web/Mobile | Chat | authenticated | architect | `user_chatgpt` | absent | `chatgpt` | `user_chatgpt` | denied | allowed | allowed |
-| Web/Mobile | Chat | authenticated | architect | any | present | `platform` / `chatgpt` / `public` per funding source | varies | allowed | allowed | allowed |
-
 Notes:
 - Workspace tools are structural and project-bound, not chosen via a separate execution target.
 - Authenticated cloud chat may enter the same serial native loop with `web_research`, and with `community_tools` when a community lens is active.

@@ -274,6 +274,40 @@ export const resolvePublicCommunityCheckoutConfigInternal = internalQuery({
       nowMs,
     });
     if (!pricePoint) throw new Error("paid_plan_required");
+    const ownerBilling = (await ctx.runQuery(
+      internal.auth.getBuilderCommerceAccessForUserInternal as any,
+      {
+        userId: community.ownerId,
+        nowMs,
+      },
+    )) as { builder_tier?: unknown; platform_fee_bps?: unknown } | null;
+    if (String(ownerBilling?.builder_tier ?? "").trim().toLowerCase() !== "builder") {
+      throw new Error("community_checkout_unavailable");
+    }
+    const connectAccount = (await ctx.runQuery(
+      internal.builderCommerce.getUserStripeConnectAccountInternal as any,
+      {
+        userId: community.ownerId,
+      },
+    )) as {
+      stripeAccountId?: unknown;
+      status?: unknown;
+      chargesEnabled?: unknown;
+      payoutsEnabled?: unknown;
+    } | null;
+    const destinationAccountId =
+      typeof connectAccount?.stripeAccountId === "string" && connectAccount.stripeAccountId.trim()
+        ? connectAccount.stripeAccountId.trim()
+        : null;
+    const connectStatus = String(connectAccount?.status ?? "").trim().toLowerCase();
+    const canAcceptCharges =
+      destinationAccountId !== null &&
+      connectStatus === "ready" &&
+      connectAccount?.chargesEnabled === true &&
+      connectAccount?.payoutsEnabled === true;
+    if (!canAcceptCharges) {
+      throw new Error("community_checkout_unavailable");
+    }
     return {
       communityId: community._id,
       communitySlug: community.slug,
@@ -284,6 +318,8 @@ export const resolvePublicCommunityCheckoutConfigInternal = internalQuery({
       currency: pricePoint.currency,
       currencyDecimals: pricePoint.currencyDecimals,
       providerPriceId: String(pricePoint.providerPriceId ?? "").trim() || null,
+      destinationAccountId,
+      platformFeeBps: Math.max(0, Math.floor(Number(ownerBilling?.platform_fee_bps ?? 0))),
       oneLiner: typeof community.oneLiner === "string" ? community.oneLiner : null,
     };
   },
@@ -569,6 +605,8 @@ export const startPublicCommunityCheckout = action({
       currency: string;
       currencyDecimals: number;
       providerPriceId: string | null;
+      destinationAccountId: string;
+      platformFeeBps: number;
       oneLiner: string | null;
     };
     const sessionId = newOpaqueToken("chk");
@@ -678,6 +716,10 @@ export const startPublicCommunityCheckout = action({
           billing_period: billingPeriod,
         },
         subscription_data: {
+          application_fee_percent: checkoutConfig.platformFeeBps / 100,
+          transfer_data: {
+            destination: checkoutConfig.destinationAccountId,
+          },
           metadata: {
             local_session_id: sessionId,
             claim_token: claimToken,

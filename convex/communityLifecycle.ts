@@ -1,4 +1,4 @@
-import { api } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import { mutation } from "./_generated/server";
 import { v } from "convex/values";
 import {
@@ -230,6 +230,19 @@ export const saveCommunitySettings = mutation({
       throw new Error("community_slug_taken");
     }
 
+    const currentPricePointRows = (await ctx.db
+      .query("communityPricePoints" as any)
+      .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
+      .collect()) as CommunityPricePointLike[];
+    const pickCurrentAmount = (billingPeriod: "monthly" | "annual"): number | null => {
+      const current = currentPricePointRows
+        .filter((row) => row.billingPeriod === billingPeriod && row.isCurrent)
+        .sort((a, b) => b.updatedAt - a.updatedAt)[0] ?? null;
+      return current ? Math.max(1, Math.floor(Number(current.amountBaseUnits ?? 0))) : null;
+    };
+    const currentMonthlyAmount = pickCurrentAmount("monthly");
+    const currentAnnualAmount = pickCurrentAmount("annual");
+
     const normalizePlanAmount = (value: unknown): number | null => {
       if (value === null || value === undefined) return null;
       const parsed = Number(value);
@@ -240,6 +253,48 @@ export const saveCommunitySettings = mutation({
     const annualAmount = normalizePlanAmount(args.annualAmountBaseUnits);
     if (monthlyAmount !== null && annualAmount !== null) {
       throw new Error("community_pricing_mode_invalid");
+    }
+    const monetizationChanged =
+      monthlyAmount !== currentMonthlyAmount || annualAmount !== currentAnnualAmount;
+    if (monetizationChanged) {
+      await requireCommunityOwner({
+        ctx,
+        communityId: args.communityId,
+        userId,
+      });
+      if (monthlyAmount !== null || annualAmount !== null) {
+        const ownerBilling = (await ctx.runQuery(
+          internal.auth.getBuilderCommerceAccessForUserInternal as any,
+          {
+            userId: community.ownerId,
+            nowMs,
+          },
+        )) as { builder_tier?: unknown } | null;
+        if (String(ownerBilling?.builder_tier ?? "").trim().toLowerCase() !== "builder") {
+          throw new Error("community_builder_plan_required");
+        }
+        const connectAccount = (await ctx.runQuery(
+          internal.builderCommerce.getUserStripeConnectAccountInternal as any,
+          {
+            userId: community.ownerId,
+          },
+        )) as {
+          status?: unknown;
+          chargesEnabled?: unknown;
+          payoutsEnabled?: unknown;
+        } | null;
+        if (!connectAccount) {
+          throw new Error("community_stripe_connect_required");
+        }
+        const connectStatus = String(connectAccount.status ?? "").trim().toLowerCase();
+        const canAcceptCharges =
+          connectStatus === "ready" &&
+          connectAccount.chargesEnabled === true &&
+          connectAccount.payoutsEnabled === true;
+        if (!canAcceptCharges) {
+          throw new Error("community_stripe_connect_not_ready");
+        }
+      }
     }
     const hasPaidPlan = monthlyAmount !== null || annualAmount !== null;
     const currentEntryPolicy = resolveCommunityEntryPolicy(community);

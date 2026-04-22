@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import type { DragEvent } from "react";
 import type { CommunitySettingsLayer } from "../../../../shared/communityAccessViewModel";
+import type { BuilderBillingStatus } from "../../../../shared/builderBillingStatusGateway";
 import { getCommunityBannerImageStyle } from "../../../../shared/communityBannerUi";
 import { buildPlatformSwitcherStyle } from "../../../../shared/platformSwitcherUi";
 
@@ -22,6 +23,12 @@ type WebCommunitySettingsSectionProps = {
   canManageCommunitySettings: boolean;
   canDeleteCommunity: boolean;
   requireSignIn: () => void;
+  builderBillingStatus: BuilderBillingStatus | null;
+  startBuilderConnectOnboarding: (opts?: {
+    context?: "account" | "community";
+    communitySlug?: string | null;
+  }) => Promise<void> | void;
+  isStartingBuilderConnectOnboarding: boolean;
   state: {
     isSettingsBannerDragOver: boolean;
     isProcessingCommunitySettingsBanner: boolean;
@@ -332,7 +339,22 @@ function CommunityProfileSettingsSection({ state, actions }: SharedSettingsProps
   );
 }
 
-function CommunityMonetizationConfigSection({ state, actions }: SharedSettingsProps) {
+function CommunityMonetizationConfigSection({
+  activeCommunity,
+  builderBillingStatus,
+  startBuilderConnectOnboarding,
+  isStartingBuilderConnectOnboarding,
+  state,
+  actions,
+}: SharedSettingsProps & {
+  activeCommunity: ActiveCommunity;
+  builderBillingStatus: BuilderBillingStatus | null;
+  startBuilderConnectOnboarding: (opts?: {
+    context?: "account" | "community";
+    communitySlug?: string | null;
+  }) => Promise<void> | void;
+  isStartingBuilderConnectOnboarding: boolean;
+}) {
   const pricingOptions = [
     { key: "free", label: "Free" },
     { key: "monthly", label: "Monthly" },
@@ -342,6 +364,16 @@ function CommunityMonetizationConfigSection({ state, actions }: SharedSettingsPr
     pricingOptions.length,
     pricingOptions.findIndex((opt) => opt.key === state.communitySettingsPricingMode),
   );
+  const builderTier = builderBillingStatus?.builder_tier ?? "free";
+  const stripeConnect = builderBillingStatus?.stripe_connect ?? null;
+  const canAcceptCharges = stripeConnect?.can_accept_charges === true;
+  const needsStripeConnect = builderTier !== "builder" || !canAcceptCharges;
+  const connectCtaLabel =
+    stripeConnect?.status === "pending_requirements" || stripeConnect?.status === "restricted"
+      ? "Resume Stripe onboarding"
+      : "Connect Stripe";
+  const requirementsPreview = stripeConnect?.requirements_currently_due?.slice(0, 3) ?? [];
+  const platformFeePercent = Number(builderBillingStatus?.platform_fee_bps ?? 0) / 100;
 
   return (
     <div className="settings-section">
@@ -380,7 +412,9 @@ function CommunityMonetizationConfigSection({ state, actions }: SharedSettingsPr
               className={`platform-switcher-btn${
                 state.communitySettingsPricingMode === opt.key ? " active" : ""
               }`}
+              disabled={opt.key !== "free" && needsStripeConnect}
               onClick={() => {
+                if (opt.key !== "free" && needsStripeConnect) return;
                 actions.setCommunitySettingsPricingMode(opt.key);
                 actions.setCommunityPricingDirty();
                 actions.markCommunitySettingsDirty();
@@ -402,6 +436,7 @@ function CommunityMonetizationConfigSection({ state, actions }: SharedSettingsPr
             inputMode="decimal"
             placeholder="29"
             value={state.communitySettingsPriceUsdMonthly}
+            disabled={needsStripeConnect}
             onChange={(event) => {
               actions.setCommunitySettingsPriceUsdMonthly(event.target.value);
               actions.setCommunityPricingDirty();
@@ -419,6 +454,7 @@ function CommunityMonetizationConfigSection({ state, actions }: SharedSettingsPr
             inputMode="decimal"
             placeholder="290"
             value={state.communitySettingsPriceUsdAnnual}
+            disabled={needsStripeConnect}
             onChange={(event) => {
               actions.setCommunitySettingsPriceUsdAnnual(event.target.value);
               actions.setCommunityPricingDirty();
@@ -428,9 +464,41 @@ function CommunityMonetizationConfigSection({ state, actions }: SharedSettingsPr
           <span className="create-community-hint">Billed annually.</span>
         </label>
       ) : null}
-      <div className="settings-section-desc" style={{ marginTop: 12 }}>
-        Billing operations, payouts, and revenue reporting are not managed from this tab yet.
-      </div>
+      {builderTier !== "builder" ? (
+        <div className="settings-section-desc" style={{ marginTop: 12 }}>
+          Builder is required before this community can charge for access.
+        </div>
+      ) : canAcceptCharges ? (
+        <div className="settings-section-desc" style={{ marginTop: 12 }}>
+          {`Paid memberships route through your Stripe Connect Express account. PolyNet keeps ${platformFeePercent.toFixed(0)}% plus Stripe processing.`}
+        </div>
+      ) : (
+        <>
+          <div className="settings-section-desc" style={{ marginTop: 12 }}>
+            Connect Stripe before enabling paid access for this community.
+          </div>
+          {requirementsPreview.length > 0 ? (
+            <div className="auth-status" style={{ marginTop: 8 }}>
+              Stripe still needs: {requirementsPreview.join(", ")}.
+            </div>
+          ) : null}
+          <div className="create-community-actions" style={{ marginTop: 12 }}>
+            <button
+              className="secondary"
+              type="button"
+              onClick={() =>
+                void startBuilderConnectOnboarding({
+                  context: "community",
+                  communitySlug: activeCommunity.slug,
+                })
+              }
+              disabled={isStartingBuilderConnectOnboarding}
+            >
+              {isStartingBuilderConnectOnboarding ? "Opening…" : connectCtaLabel}
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -466,6 +534,9 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
     canManageCommunitySettings,
     canDeleteCommunity,
     requireSignIn,
+    builderBillingStatus,
+    startBuilderConnectOnboarding,
+    isStartingBuilderConnectOnboarding,
     state,
     actions,
   } = props;
@@ -505,7 +576,14 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
               actions={actions}
             />
             <CommunityProfileSettingsSection state={state} actions={actions} />
-            <CommunityMonetizationConfigSection state={state} actions={actions} />
+            <CommunityMonetizationConfigSection
+              activeCommunity={activeCommunity}
+              builderBillingStatus={builderBillingStatus}
+              startBuilderConnectOnboarding={startBuilderConnectOnboarding}
+              isStartingBuilderConnectOnboarding={isStartingBuilderConnectOnboarding}
+              state={state}
+              actions={actions}
+            />
             <CommunityPersonalSettingsSection
               state={state}
               actions={actions}

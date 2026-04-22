@@ -62,6 +62,28 @@ function parsePriceBaseUnits(raw: string): number | null {
   return Math.round(parsed * 100);
 }
 
+function formatCommunitySettingsErrorMessage(error: unknown): string {
+  const message =
+    typeof error === "string"
+      ? error
+      : error instanceof Error
+        ? error.message
+        : "Failed to save settings.";
+  if (message === "community_monetization_owner_required") {
+    return "Only the community owner can change pricing or paid access.";
+  }
+  if (message === "community_builder_plan_required") {
+    return "Builder is required before this community can charge for access.";
+  }
+  if (message === "community_stripe_connect_required") {
+    return "Connect Stripe before enabling paid access for this community.";
+  }
+  if (message === "community_stripe_connect_not_ready") {
+    return "Finish Stripe onboarding before enabling paid access for this community.";
+  }
+  return message;
+}
+
 export function useCommunitySettingsGovernanceController<SessionT extends SessionLike>(
   args: UseCommunitySettingsGovernanceControllerArgs<SessionT>,
 ) {
@@ -207,13 +229,7 @@ export function useCommunitySettingsGovernanceController<SessionT extends Sessio
         });
       }
     } catch (error) {
-      const message =
-        typeof error === "string"
-          ? error
-          : error instanceof Error
-            ? error.message
-            : "Failed to save settings.";
-      current.setCommunitySettingsError(message);
+      current.setCommunitySettingsError(formatCommunitySettingsErrorMessage(error));
     } finally {
       current.setIsSavingCommunitySettings(false);
     }

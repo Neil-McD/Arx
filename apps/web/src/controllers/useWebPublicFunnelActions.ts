@@ -497,12 +497,16 @@ export function useWebPublicFunnelActions<
         if (!checkoutUrl) throw new Error("Missing checkout_url.");
         current.navigateToUrl(checkoutUrl);
       } catch (error) {
-        const message =
+        const rawMessage =
           typeof error === "string"
             ? error
             : error instanceof Error
               ? error.message
               : "Failed to start checkout.";
+        const message =
+          rawMessage === "community_checkout_unavailable"
+            ? "Checkout is temporarily unavailable for this community."
+            : rawMessage;
         current.setCheckoutError(message);
         current.setCheckoutStatus("error");
       }

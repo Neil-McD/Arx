@@ -35,7 +35,11 @@ const startBuilderCheckoutBlock = sliceBetween(
 const openBuilderBillingPortalBlock = sliceBetween(
   builderCommerceSource,
   "export const openBuilderBillingPortal = action({",
-  "export const startConnectOnboarding = query({",
+  "export const startConnectOnboarding = action({",
+);
+const startConnectOnboardingBlock = sliceBetween(
+  builderCommerceSource,
+  "export const startConnectOnboarding = action({",
 );
 const startCloudBuilderCheckoutBlock = sliceBetween(
   cloudBuilderBillingGatewaySource,
@@ -46,6 +50,10 @@ const openCloudBuilderBillingPortalBlock = sliceBetween(
   cloudBuilderBillingGatewaySource,
   "export async function openCloudBuilderBillingPortal",
   "export async function startCloudWorkspaceCreditTopupCheckout",
+);
+const startCloudConnectOnboardingBlock = sliceBetween(
+  cloudBuilderBillingGatewaySource,
+  "export async function startCloudConnectOnboarding",
 );
 
 assert(
@@ -71,6 +79,18 @@ assert(
 assert(
   !openBuilderBillingPortalBlock.includes("returnUrl: v.string()"),
   "expected builder portal action to stop accepting client returnUrl",
+);
+assert(
+  !startConnectOnboardingBlock.includes("returnUrl: v.string()"),
+  "expected connect onboarding action to stop accepting client returnUrl",
+);
+assert(
+  !startConnectOnboardingBlock.includes("refreshUrl: v.string()"),
+  "expected connect onboarding action to stop accepting client refreshUrl",
+);
+assert(
+  startConnectOnboardingBlock.includes('context: BUILDER_CONNECT_CONTEXT_VALIDATOR'),
+  "expected connect onboarding action to accept semantic context",
 );
 
 assert(
@@ -101,6 +121,14 @@ assert(
 assert(
   !openCloudBuilderBillingPortalBlock.includes("returnUrl: params.returnUrl"),
   "expected cloud builder portal gateway to stop forwarding returnUrl",
+);
+assert(
+  !startCloudConnectOnboardingBlock.includes("returnUrl: params.returnUrl"),
+  "expected cloud connect onboarding gateway to stop forwarding returnUrl",
+);
+assert(
+  !startCloudConnectOnboardingBlock.includes("refreshUrl: params.refreshUrl"),
+  "expected cloud connect onboarding gateway to stop forwarding refreshUrl",
 );
 
 assert(

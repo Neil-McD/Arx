@@ -67,6 +67,10 @@ export type WebSettingsPanelsProps = {
     communityInitials: (value: string) => string;
     openBuilderUpgrade: (context: "builder") => void;
     openBuilderBillingPortal: () => Promise<void> | void;
+    startBuilderConnectOnboarding: (opts?: {
+      context?: "account" | "community";
+      communitySlug?: string | null;
+    }) => Promise<void> | void;
     canUseDevTierOverride: boolean;
     setDevBuilderTier: (tier: "free" | "builder") => Promise<void> | void;
     redeemPendingPurchases: () => Promise<void> | void;
@@ -222,8 +226,10 @@ export function WebSettingsPanels(props: WebSettingsPanelsProps) {
     communityInitials: account.communityInitials,
     openBuilderUpgrade: account.openBuilderUpgrade,
     openBuilderBillingPortal: account.openBuilderBillingPortal,
+    startBuilderConnectOnboarding: account.startBuilderConnectOnboarding,
     builderBillingError: account.billingUi.builderBillingError,
     isOpeningBuilderBillingPortal: account.billingUi.isOpeningBuilderBillingPortal,
+    isStartingBuilderConnectOnboarding: account.billingUi.isStartingBuilderConnectOnboarding,
     canUseDevTierOverride: account.canUseDevTierOverride,
     isSettingDevBuilderTier: account.billingUi.isSettingDevBuilderTier,
     setDevBuilderTier: account.setDevBuilderTier,

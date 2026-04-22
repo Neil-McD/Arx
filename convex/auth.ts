@@ -1,5 +1,5 @@
 import { internal } from "./_generated/api";
-import { mutation, query } from "./_generated/server";
+import { internalQuery, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import {
   ensureAuthenticatedActorDetailed,
@@ -356,7 +356,20 @@ export const getBuilderBillingStatus = query({
     user_id: string;
     builder_tier: CanonicalTier;
     max_communities: number;
+    platform_fee_bps: number;
     can_manage_plan: boolean;
+    stripe_connect: {
+      status: "not_connected" | "onboarding_required" | "pending_requirements" | "ready" | "restricted";
+      account_id: string | null;
+      details_submitted: boolean;
+      charges_enabled: boolean;
+      payouts_enabled: boolean;
+      requirements_currently_due: string[];
+      requirements_eventually_due: string[];
+      requirements_disabled_reason: string | null;
+      onboarding_complete_at: number | null;
+      can_accept_charges: boolean;
+    };
   } | null> => {
     const nowMs = args.nowMs ?? Date.now();
     const { authSubject, actor } = await findAuthenticatedActorState({
@@ -376,12 +389,90 @@ export const getBuilderBillingStatus = query({
       canonicalTier === "builder" &&
       typeof billingCustomer?.providerCustomerId === "string" &&
       billingCustomer.providerCustomerId.trim().length > 0;
+    const stripeConnect = canonicalTier === "builder"
+      ? ((await ctx.runQuery(
+          internal.builderCommerce.getUserStripeConnectAccountInternal as any,
+          { userId: actor.dbUserId },
+        )) as {
+          stripeAccountId?: unknown;
+          status?: unknown;
+          detailsSubmitted?: unknown;
+          chargesEnabled?: unknown;
+          payoutsEnabled?: unknown;
+          requirementsCurrentlyDue?: unknown;
+          requirementsEventuallyDue?: unknown;
+          requirementsDisabledReason?: unknown;
+          onboardingCompleteAt?: unknown;
+        } | null)
+      : null;
+    const stripeConnectStatusRaw = String(stripeConnect?.status ?? "").trim();
+    const stripeConnectStatus =
+      stripeConnectStatusRaw === "onboarding_required" ||
+      stripeConnectStatusRaw === "pending_requirements" ||
+      stripeConnectStatusRaw === "ready" ||
+      stripeConnectStatusRaw === "restricted"
+        ? stripeConnectStatusRaw
+        : "not_connected";
 
     return {
       user_id: actor.authSubject,
       builder_tier: canonicalTier,
       max_communities: meta.maxCommunities,
+      platform_fee_bps: meta.platformFeeBps,
       can_manage_plan: canManagePlan,
+      stripe_connect: {
+        status: stripeConnectStatus,
+        account_id:
+          typeof stripeConnect?.stripeAccountId === "string" && stripeConnect.stripeAccountId.trim()
+            ? stripeConnect.stripeAccountId.trim()
+            : null,
+        details_submitted: stripeConnect?.detailsSubmitted === true,
+        charges_enabled: stripeConnect?.chargesEnabled === true,
+        payouts_enabled: stripeConnect?.payoutsEnabled === true,
+        requirements_currently_due: Array.isArray(stripeConnect?.requirementsCurrentlyDue)
+          ? stripeConnect.requirementsCurrentlyDue
+              .map((value) => String(value ?? "").trim())
+              .filter(Boolean)
+          : [],
+        requirements_eventually_due: Array.isArray(stripeConnect?.requirementsEventuallyDue)
+          ? stripeConnect.requirementsEventuallyDue
+              .map((value) => String(value ?? "").trim())
+              .filter(Boolean)
+          : [],
+        requirements_disabled_reason:
+          typeof stripeConnect?.requirementsDisabledReason === "string" &&
+          stripeConnect.requirementsDisabledReason.trim()
+            ? stripeConnect.requirementsDisabledReason.trim()
+            : null,
+        onboarding_complete_at:
+          typeof stripeConnect?.onboardingCompleteAt === "number" &&
+          Number.isFinite(stripeConnect.onboardingCompleteAt)
+            ? stripeConnect.onboardingCompleteAt
+            : null,
+        can_accept_charges:
+          stripeConnectStatus === "ready" &&
+          stripeConnect?.chargesEnabled === true &&
+          stripeConnect?.payoutsEnabled === true,
+      },
+    };
+  },
+});
+
+export const getBuilderCommerceAccessForUserInternal = internalQuery({
+  args: {
+    userId: v.id("users"),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const nowMs = args.nowMs ?? Date.now();
+    const builderTier = await getCanonicalTierByUserIdInternal(ctx as never, args.userId, nowMs);
+    const meta = builderTierMeta(builderTier);
+    return {
+      user_id: String(args.userId),
+      builder_tier: builderTier,
+      max_communities: meta.maxCommunities,
+      platform_fee_bps: meta.platformFeeBps,
+      has_payouts: meta.hasPayouts,
     };
   },
 });

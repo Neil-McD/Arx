@@ -57,15 +57,15 @@ export async function startCloudWorkspaceCreditTopupCheckout<SessionT>(
 
 export async function startCloudConnectOnboarding<SessionT>(
   params: CloudBuilderBillingGatewayParams<SessionT> & {
-    returnUrl: string;
-    refreshUrl: string;
+    context: "account" | "community";
+    communitySlug?: string | null;
   },
 ): Promise<{ url?: unknown }> {
   const { client, authSubject } = await bootstrapGatewayAuthContext(params.session);
-  return (await client.query("billing:startConnectOnboarding" as any, {
+  return (await client.action("billing:startConnectOnboarding" as any, {
     authSubject,
-    returnUrl: params.returnUrl,
-    refreshUrl: params.refreshUrl,
+    context: params.context,
+    communitySlug: params.communitySlug ?? undefined,
   })) as {
     url?: unknown;
   };

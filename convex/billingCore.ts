@@ -9,6 +9,7 @@ import { enqueueCommunityAccessGrantedEmailInternal } from "./emailEvents";
 
 export type CommunityLike = {
   _id: any;
+  ownerId?: any;
   slug: string;
   name: string;
   oneLiner?: string;

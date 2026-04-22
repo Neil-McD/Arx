@@ -2,29 +2,44 @@ import { useCallback, useRef, type Dispatch, type SetStateAction } from "react";
 import type { BuilderCheckoutTier, BuilderUpgradeContextValue } from "./builderBilling";
 import { resolveCurrentSession } from "./ensureUsableSession";
 
-import { openCloudBuilderBillingPortal, startCloudBuilderCheckout } from "./cloudBuilderBillingGateway";
+import {
+  openCloudBuilderBillingPortal,
+  startCloudBuilderCheckout,
+  startCloudConnectOnboarding,
+} from "./cloudBuilderBillingGateway";
 
 export type BuilderCheckoutRequestTier = BuilderCheckoutTier;
 export type BuilderUpgradeContext = BuilderUpgradeContextValue;
 
-type BillingActionKind = "checkout" | "portal";
+type BuilderConnectOnboardingContext = "account" | "community";
+type BillingActionKind = "checkout" | "portal" | "connect";
 
 type UseBuilderBillingActionsCoreArgs<SessionT> = {
   getSession: () => SessionT | null;
   ensureSession?: () => Promise<SessionT | null>;
   onMissingAuth: (
     kind: BillingActionKind,
-    details: { tier?: BuilderCheckoutTier; context?: BuilderUpgradeContext },
+    details: {
+      tier?: BuilderCheckoutTier;
+      context?: BuilderUpgradeContext;
+      connectContext?: BuilderConnectOnboardingContext;
+      communitySlug?: string | null;
+    },
   ) => Promise<void> | void;
   setBuilderBillingError: Dispatch<SetStateAction<string | null>>;
   setIsStartingBuilderCheckout: Dispatch<SetStateAction<boolean>>;
   setIsOpeningBuilderBillingPortal: Dispatch<SetStateAction<boolean>>;
+  setIsStartingBuilderConnectOnboarding: Dispatch<SetStateAction<boolean>>;
   onCheckoutStarted?: (details: {
     tier: BuilderCheckoutTier;
     context: BuilderUpgradeContext;
   }) => void;
   onPortalOpened?: (details: {
     context: BuilderUpgradeContext;
+  }) => void;
+  onConnectOnboardingStarted?: (details: {
+    context: BuilderConnectOnboardingContext;
+    communitySlug: string | null;
   }) => void;
   openUrl: (kind: BillingActionKind, url: string) => Promise<boolean> | boolean;
 };
@@ -128,8 +143,44 @@ export function useBuilderBillingActionsCore<SessionT>(args: UseBuilderBillingAc
     [],
   );
 
+  const startBuilderConnectOnboarding = useCallback(
+    async (opts?: {
+      context?: BuilderConnectOnboardingContext;
+      communitySlug?: string | null;
+    }): Promise<void> => {
+      const context: BuilderConnectOnboardingContext = opts?.context ?? "account";
+      const communitySlug = opts?.communitySlug?.trim() || null;
+      const current = argsRef.current;
+      const session = await resolveCurrentSession(current.getSession, current.ensureSession);
+      if (!session) {
+        await current.onMissingAuth("connect", { connectContext: context, communitySlug });
+        return;
+      }
+
+      current.setBuilderBillingError(null);
+      current.setIsStartingBuilderConnectOnboarding(true);
+      try {
+        const data = await startCloudConnectOnboarding({
+          session,
+          context,
+          communitySlug,
+        });
+        const onboardingUrl = readRequiredStringField(data, "url", "Missing onboarding url.");
+        current.onConnectOnboardingStarted?.({ context, communitySlug });
+        const opened = await current.openUrl("connect", onboardingUrl);
+        if (!opened) throw new Error("Failed to open Stripe onboarding.");
+      } catch (error) {
+        current.setBuilderBillingError(formatActionError(error, "Failed to start Stripe onboarding."));
+      } finally {
+        current.setIsStartingBuilderConnectOnboarding(false);
+      }
+    },
+    [],
+  );
+
   return {
     openBuilderPlanPortal,
+    startBuilderConnectOnboarding,
     startBuilderPlanCheckout,
   };
 }

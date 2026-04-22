@@ -29,6 +29,11 @@ type BuildWebCommunitySurfaceProjectionParams = {
   canManageCommunitySettings: WebCommunitySecondaryPanelsProps["settings"]["canManageCommunitySettings"];
   canDeleteActiveCommunity: WebCommunitySecondaryPanelsProps["settings"]["canDeleteCommunity"];
   requireSignIn: WebCommunitySecondaryPanelsProps["settings"]["requireSignIn"];
+  builderBillingStatus: WebCommunitySecondaryPanelsProps["settings"]["builderBillingStatus"];
+  startBuilderConnectOnboarding:
+    WebCommunitySecondaryPanelsProps["settings"]["startBuilderConnectOnboarding"];
+  isStartingBuilderConnectOnboarding:
+    WebCommunitySecondaryPanelsProps["settings"]["isStartingBuilderConnectOnboarding"];
   settingsState: WebCommunitySecondaryPanelsProps["settings"]["state"];
   settingsActions: WebCommunitySecondaryPanelsProps["settings"]["actions"];
   setIsCommunityBannerFocusModalOpen:
@@ -137,6 +142,9 @@ export function buildWebCommunitySurfaceProjection(
       canManageCommunitySettings: params.canManageCommunitySettings,
       canDeleteCommunity: params.canDeleteActiveCommunity,
       requireSignIn: params.requireSignIn,
+      builderBillingStatus: params.builderBillingStatus,
+      startBuilderConnectOnboarding: params.startBuilderConnectOnboarding,
+      isStartingBuilderConnectOnboarding: params.isStartingBuilderConnectOnboarding,
       state: params.settingsState,
       actions: params.settingsActions,
       setIsCommunityBannerFocusModalOpen: params.setIsCommunityBannerFocusModalOpen,

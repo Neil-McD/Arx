@@ -68,8 +68,13 @@ type WebAccountSettingsSectionProps = {
   communityInitials: (value: string) => string;
   openBuilderUpgrade: (context: "builder") => void;
   openBuilderBillingPortal: () => Promise<void> | void;
+  startBuilderConnectOnboarding: (opts?: {
+    context?: "account" | "community";
+    communitySlug?: string | null;
+  }) => Promise<void> | void;
   builderBillingError: string | null;
   isOpeningBuilderBillingPortal: boolean;
+  isStartingBuilderConnectOnboarding: boolean;
   canUseDevTierOverride: boolean;
   isSettingDevBuilderTier: boolean;
   setDevBuilderTier: (tier: "free" | "builder") => Promise<void> | void;
@@ -118,8 +123,10 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
     communityInitials,
     openBuilderUpgrade,
     openBuilderBillingPortal,
+    startBuilderConnectOnboarding,
     builderBillingError,
     isOpeningBuilderBillingPortal,
+    isStartingBuilderConnectOnboarding,
     canUseDevTierOverride,
     isSettingDevBuilderTier,
     setDevBuilderTier,
@@ -326,6 +333,15 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
               max > 0 ? `${ownedCount}/${max} owned ${communityWord}` : `${ownedCount} owned ${communityWord}`;
             const tierLabel = formatBuilderTierLabel(tier);
             const canManagePlan = status?.can_manage_plan === true;
+            const stripeConnect = status?.stripe_connect ?? null;
+            const stripeConnectStatus = stripeConnect?.status ?? "not_connected";
+            const isStripeReady = stripeConnect?.can_accept_charges === true;
+            const platformFeePercent = Number(status?.platform_fee_bps ?? 0) / 100;
+            const connectCtaLabel =
+              stripeConnectStatus === "pending_requirements" || stripeConnectStatus === "restricted"
+                ? "Resume Stripe onboarding"
+                : "Connect Stripe";
+            const requirementsPreview = stripeConnect?.requirements_currently_due?.slice(0, 3) ?? [];
             return (
               <>
                 <div className="account-row">
@@ -365,6 +381,50 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
                     )}
                   </div>
                 </div>
+                {!isBuilderTierFree(tier) ? (
+                  <div className="account-row">
+                    <div className="account-identity">
+                      <span>Stripe monetization</span>
+                      <strong>
+                        {isStripeReady
+                          ? "Ready for paid community subscriptions"
+                          : stripeConnectStatus === "pending_requirements" || stripeConnectStatus === "restricted"
+                            ? "Action required before payouts can start"
+                            : "Not connected"}
+                      </strong>
+                    </div>
+                    <div className="auth-actions">
+                      {isStripeReady ? (
+                        <span className="auth-status">
+                          {`Paid community revenue routes through Stripe Connect Express. PolyNet keeps ${platformFeePercent.toFixed(0)}% plus Stripe fees.`}
+                        </span>
+                      ) : (
+                        <>
+                          <span className="auth-status">
+                            {stripeConnectStatus === "pending_requirements" || stripeConnectStatus === "restricted"
+                              ? "Finish Stripe onboarding before you enable paid access on your community."
+                              : "Connect Stripe to accept paid community subscriptions."}
+                          </span>
+                          <button
+                            type="button"
+                            className="secondary"
+                            onClick={() => void startBuilderConnectOnboarding({ context: "account" })}
+                            disabled={isStartingBuilderConnectOnboarding}
+                          >
+                            {isStartingBuilderConnectOnboarding ? "Opening…" : connectCtaLabel}
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                ) : null}
+                {!isBuilderTierFree(tier) &&
+                  !isStripeReady &&
+                  requirementsPreview.length > 0 && (
+                    <div className="auth-status">
+                      Stripe still needs: {requirementsPreview.join(", ")}.
+                    </div>
+                  )}
                 {canUseDevTierOverride && (
                   <>
                     <div className="account-row">

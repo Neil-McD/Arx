@@ -1146,6 +1146,8 @@ export default function App() {
     setIsStartingBuilderCheckout,
     isOpeningBuilderBillingPortal,
     setIsOpeningBuilderBillingPortal,
+    isStartingBuilderConnectOnboarding,
+    setIsStartingBuilderConnectOnboarding,
     checkoutStatus,
     setCheckoutStatus,
     checkoutError,
@@ -3734,7 +3736,7 @@ export default function App() {
     navigateToUrl: (url) => window.location.assign(url),
   });
 
-  const { openBuilderPlanPortal, startBuilderPlanCheckout } =
+  const { openBuilderPlanPortal, startBuilderPlanCheckout, startBuilderConnectOnboarding } =
     useWebBuilderBillingActions({
       getSession: () => sessionRef.current,
       ensureSession: ensureUsableAuthSession,
@@ -3756,9 +3758,17 @@ export default function App() {
           surface: "account_settings",
         });
       },
+      onConnectOnboardingStarted: ({ context, communitySlug }) => {
+        captureProductAnalyticsEvent("builder stripe connect onboarding started", {
+          billing_context: context,
+          community_slug: communitySlug,
+          surface: context === "community" ? "community_settings" : "account_settings",
+        });
+      },
       setBuilderBillingError,
       setIsStartingBuilderCheckout,
       setIsOpeningBuilderBillingPortal,
+      setIsStartingBuilderConnectOnboarding,
       navigateToUrl: (url) => window.location.assign(url),
     });
 
@@ -5320,6 +5330,9 @@ export default function App() {
       canManageCommunitySettings,
       canDeleteActiveCommunity,
       requireSignIn,
+      builderBillingStatus,
+      startBuilderConnectOnboarding,
+      isStartingBuilderConnectOnboarding,
       settingsState: {
         isSettingsBannerDragOver,
         isProcessingCommunitySettingsBanner,
@@ -5725,6 +5738,12 @@ export default function App() {
       },
       openBuilderBillingPortal: () => {
         void openBuilderPlanPortal({ context: "builder" });
+      },
+      startBuilderConnectOnboarding: (opts) => {
+        void startBuilderConnectOnboarding({
+          context: opts?.context ?? "account",
+          communitySlug: opts?.communitySlug ?? null,
+        });
       },
       canUseDevTierOverride,
       setDevBuilderTier,
