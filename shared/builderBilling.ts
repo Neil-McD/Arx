@@ -89,62 +89,6 @@ export function formatBuilderTierLabel(value: string | null | undefined): "Free"
   return "Free";
 }
 
-function buildBuilderBillingRedirectUrls(args: {
-  origin: string;
-  source: "web";
-  context: BuilderUpgradeContextValue;
-}): { successUrl: string; cancelUrl: string; returnUrl: string } {
-  const base = args.origin.replace(/\/+$/, "");
-  const encodedContext = encodeURIComponent(args.context);
-  return {
-    successUrl: `${base}/?billing=success&billing_source=${args.source}&billing_context=${encodedContext}`,
-    cancelUrl: `${base}/?billing=cancel&billing_source=${args.source}&billing_context=${encodedContext}`,
-    returnUrl: `${base}/?billing=return&billing_source=${args.source}&billing_context=${encodedContext}`,
-  };
-}
-
-export function buildBuilderCheckoutRequestPayload(args: {
-  origin: string;
-  source: "web";
-  context: BuilderUpgradeContextValue;
-  tier: BuilderCheckoutTier;
-}): { tier: BuilderCheckoutTier; successUrl: string; cancelUrl: string } {
-  const urls = buildBuilderBillingRedirectUrls({
-    origin: args.origin,
-    source: args.source,
-    context: args.context,
-  });
-  return {
-    tier: args.tier,
-    successUrl: urls.successUrl,
-    cancelUrl: urls.cancelUrl,
-  };
-}
-
-export function buildBuilderPortalRequestPayload(args: {
-  origin: string;
-  source: "web";
-  context: BuilderUpgradeContextValue;
-}): { returnUrl: string } {
-  const returnUrl = buildBuilderBillingRedirectUrls({
-    origin: args.origin,
-    source: args.source,
-    context: args.context,
-  }).returnUrl;
-  return { returnUrl };
-}
-
-export function buildBuilderConnectRequestPayload(args: {
-  origin: string;
-  returnStatus: "done" | "return";
-}): { returnUrl: string; refreshUrl: string } {
-  const base = args.origin.replace(/\/+$/, "");
-  return {
-    returnUrl: `${base}/?payouts=${args.returnStatus}`,
-    refreshUrl: `${base}/?payouts=refresh`,
-  };
-}
-
 function normalizeBuilderBillingStatus(value: string | null | undefined): BuilderBillingStatus | null {
   const normalized = String(value ?? "").trim().toLowerCase();
   if (normalized === "success" || normalized === "cancel" || normalized === "return") {

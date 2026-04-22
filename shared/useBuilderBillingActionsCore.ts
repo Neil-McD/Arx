@@ -19,19 +19,6 @@ type UseBuilderBillingActionsCoreArgs<SessionT> = {
   setBuilderBillingError: Dispatch<SetStateAction<string | null>>;
   setIsStartingBuilderCheckout: Dispatch<SetStateAction<boolean>>;
   setIsOpeningBuilderBillingPortal: Dispatch<SetStateAction<boolean>>;
-  buildCheckoutPayload: (input: {
-    tier: BuilderCheckoutTier;
-    context: BuilderUpgradeContext;
-  }) => {
-    tier: BuilderCheckoutRequestTier;
-    successUrl: string;
-    cancelUrl: string;
-  };
-  buildPortalPayload: (input: {
-    context: BuilderUpgradeContext;
-  }) => {
-    returnUrl: string;
-  };
   onCheckoutStarted?: (details: {
     tier: BuilderCheckoutTier;
     context: BuilderUpgradeContext;
@@ -73,12 +60,10 @@ export function useBuilderBillingActionsCore<SessionT>(args: UseBuilderBillingAc
       current.setBuilderBillingError(null);
       current.setIsStartingBuilderCheckout(true);
       try {
-        const payload = current.buildCheckoutPayload({ tier, context });
         const data = await startCloudBuilderCheckout({
           session,
-          tier: payload.tier,
-          successUrl: payload.successUrl,
-          cancelUrl: payload.cancelUrl,
+          tier,
+          context,
         });
         const checkoutUrl = readRequiredStringField(data, "checkout_url", "Missing checkout_url.");
         current.onCheckoutStarted?.({ tier, context });
@@ -106,10 +91,9 @@ export function useBuilderBillingActionsCore<SessionT>(args: UseBuilderBillingAc
       current.setBuilderBillingError(null);
       current.setIsOpeningBuilderBillingPortal(true);
       try {
-        const payload = current.buildPortalPayload({ context });
         const data = await openCloudBuilderBillingPortal({
           session,
-          returnUrl: payload.returnUrl,
+          context,
         });
         const portalUrl = readRequiredStringField(data, "url", "Missing billing portal url.");
         current.onPortalOpened?.({ context });

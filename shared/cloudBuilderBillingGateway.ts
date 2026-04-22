@@ -9,16 +9,14 @@ type CloudBuilderBillingGatewayParams<SessionT> = {
 export async function startCloudBuilderCheckout<SessionT>(
   params: CloudBuilderBillingGatewayParams<SessionT> & {
     tier: string;
-    successUrl: string;
-    cancelUrl: string;
+    context: "builder" | "create_community";
   },
 ): Promise<{ checkout_url?: unknown }> {
   const { client, authSubject } = await bootstrapGatewayAuthContext(params.session);
   return (await client.action("billing:startBuilderCheckout" as any, {
     authSubject,
     tier: params.tier,
-    successUrl: params.successUrl,
-    cancelUrl: params.cancelUrl,
+    context: params.context,
     nowMs: Date.now(),
   })) as {
     checkout_url?: unknown;
@@ -27,13 +25,13 @@ export async function startCloudBuilderCheckout<SessionT>(
 
 export async function openCloudBuilderBillingPortal<SessionT>(
   params: CloudBuilderBillingGatewayParams<SessionT> & {
-    returnUrl: string;
+    context: "builder" | "create_community";
   },
 ): Promise<{ url?: unknown }> {
   const { client, authSubject } = await bootstrapGatewayAuthContext(params.session);
   return (await client.action("billing:openBuilderBillingPortal" as any, {
     authSubject,
-    returnUrl: params.returnUrl,
+    context: params.context,
   })) as {
     url?: unknown;
   };

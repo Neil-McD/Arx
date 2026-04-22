@@ -32,6 +32,11 @@ const PUBLIC_APP_URL_ENV_KEYS = [
   "VITE_APP_URL",
 ] as const;
 
+const BUILDER_BILLING_CONTEXT_VALIDATOR = v.union(
+  v.literal("builder"),
+  v.literal("create_community"),
+);
+
 function readEnv(name: string): string {
   try {
     const value = (globalThis as any)?.process?.env?.[name];
@@ -42,73 +47,32 @@ function readEnv(name: string): string {
   return "";
 }
 
-function readAllowedBillingPortalReturnOrigins(): Set<string> {
-  const origins = new Set<string>();
+function readCanonicalPublicAppOrigin(): string {
   for (const key of PUBLIC_APP_URL_ENV_KEYS) {
     const value = readEnv(key).replace(/\/+$/, "");
     if (!value) continue;
     try {
       const parsed = new URL(value);
       if (parsed.protocol === "https:" || parsed.protocol === "http:") {
-        origins.add(parsed.origin);
+        return parsed.origin;
       }
     } catch {
       // Ignore malformed fallback envs; fail below if none are usable.
     }
   }
-  if (origins.size === 0) throw new Error("public_app_url_missing");
-  return origins;
+  throw new Error("public_app_url_missing");
 }
 
-function normalizeComparableHostname(hostname: string): string {
-  const normalized = String(hostname ?? "").trim().toLowerCase();
-  if (normalized.startsWith("www.")) return normalized.slice(4);
-  return normalized;
-}
-
-function readNormalizedOriginPort(url: URL): string {
-  if (url.port) return url.port;
-  if (url.protocol === "https:") return "443";
-  if (url.protocol === "http:") return "80";
-  return "";
-}
-
-function rewriteUrlToAllowedOrigin(input: URL, allowedOrigin: string): string {
-  const allowed = new URL(allowedOrigin);
-  const rewritten = new URL(input.toString());
-  rewritten.protocol = allowed.protocol;
-  rewritten.hostname = allowed.hostname;
-  rewritten.port = allowed.port;
-  return rewritten.toString();
-}
-
-function normalizeBillingPortalReturnUrl(raw: unknown): string {
-  const value = String(raw ?? "").trim();
-  if (!value) throw new Error("builder_billing_return_url_required");
-  let parsed: URL;
-  try {
-    parsed = new URL(value);
-  } catch {
-    throw new Error("builder_billing_return_url_invalid");
-  }
-  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
-    throw new Error("builder_billing_return_url_invalid");
-  }
-  const allowedOrigins = readAllowedBillingPortalReturnOrigins();
-  if (allowedOrigins.has(parsed.origin)) {
-    return parsed.toString();
-  }
-  for (const allowedOrigin of allowedOrigins) {
-    const allowed = new URL(allowedOrigin);
-    const sameRootHostname =
-      normalizeComparableHostname(parsed.hostname) ===
-      normalizeComparableHostname(allowed.hostname);
-    if (!sameRootHostname) continue;
-    if (parsed.protocol !== allowed.protocol) continue;
-    if (readNormalizedOriginPort(parsed) !== readNormalizedOriginPort(allowed)) continue;
-    return rewriteUrlToAllowedOrigin(parsed, allowedOrigin);
-  }
-  throw new Error("builder_billing_return_url_invalid");
+function buildBuilderBillingRedirectUrls(args: {
+  context: "builder" | "create_community";
+}): { successUrl: string; cancelUrl: string; returnUrl: string } {
+  const origin = readCanonicalPublicAppOrigin();
+  const encodedContext = encodeURIComponent(args.context);
+  return {
+    successUrl: `${origin}/?billing=success&billing_source=web&billing_context=${encodedContext}`,
+    cancelUrl: `${origin}/?billing=cancel&billing_source=web&billing_context=${encodedContext}`,
+    returnUrl: `${origin}/?billing=return&billing_source=web&billing_context=${encodedContext}`,
+  };
 }
 
 export const createPendingBuilderCheckoutSessionInternal = internalMutation({
@@ -363,17 +327,15 @@ export const startBuilderCheckout = action({
     userId: v.optional(v.id("users")),
     authSubject: v.optional(v.string()),
     tier: v.string(),
-    successUrl: v.string(),
-    cancelUrl: v.string(),
+    context: BUILDER_BILLING_CONTEXT_VALIDATOR,
     nowMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const nowMs = args.nowMs ?? Date.now();
     const targetTier = normalizeBuilderTier(args.tier);
-    const successUrl = String(args.successUrl ?? "").trim();
-    const cancelUrl = String(args.cancelUrl ?? "").trim();
-    if (!successUrl) throw new Error("checkout_success_url_required");
-    if (!cancelUrl) throw new Error("checkout_cancel_url_required");
+    const { successUrl, cancelUrl } = buildBuilderBillingRedirectUrls({
+      context: args.context,
+    });
     const sessionId = newOpaqueToken("builder");
     const actor = (await ctx.runQuery(internal.authActor.resolveAuthenticatedActorInternal as any, {
       authSubject: args.authSubject ?? null,
@@ -447,10 +409,12 @@ export const openBuilderBillingPortal = action({
   args: {
     userId: v.optional(v.id("users")),
     authSubject: v.optional(v.string()),
-    returnUrl: v.string(),
+    context: BUILDER_BILLING_CONTEXT_VALIDATOR,
   },
   handler: async (ctx, args) => {
-    const returnUrl = normalizeBillingPortalReturnUrl(args.returnUrl);
+    const { returnUrl } = buildBuilderBillingRedirectUrls({
+      context: args.context,
+    });
     const actor = (await ctx.runQuery(internal.authActor.resolveAuthenticatedActorInternal as any, {
       authSubject: args.authSubject ?? null,
     })) as { dbUserId?: unknown };
