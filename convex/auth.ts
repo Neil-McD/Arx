@@ -24,7 +24,7 @@ type BuilderTierMeta = {
 function builderTierMeta(tier: CanonicalTier): BuilderTierMeta {
   if (tier === "builder") {
     return {
-      maxCommunities: 3,
+      maxCommunities: 1,
       platformFeeBps: 300,
       hasPayouts: true,
     };
