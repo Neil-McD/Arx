@@ -1,7 +1,10 @@
 import { useEffect, useRef, type Dispatch, type SetStateAction } from "react";
 import {
+  clearBuilderConnectQueryParams,
   clearBuilderBillingQueryParams,
+  parseBuilderConnectReturn,
   parseBuilderBillingReturn,
+  type BuilderConnectReturn,
   type BuilderBillingReturn,
 } from "../../../../shared/builderBilling";
 import type { AppPage, AppView, CommunityTab, SettingsPage } from "../../../../shared/appShellNavigation";
@@ -25,6 +28,7 @@ export function useWebPathRouteLifecycle(params: {
   communityTab: CommunityTab;
   activeThreadId: string | null;
   applyLocationToState: () => void;
+  setBuilderConnectReturn: Dispatch<SetStateAction<BuilderConnectReturn | null>>;
   setBuilderBillingReturn: Dispatch<SetStateAction<BuilderBillingReturn | null>>;
   buildAppRoutePath: (state: {
     page: AppPage;
@@ -40,12 +44,19 @@ export function useWebPathRouteLifecycle(params: {
 
   useEffect(() => {
     const url = new URL(window.location.href);
+    const connectReturn = parseBuilderConnectReturn(url.searchParams);
     const billingReturn = parseBuilderBillingReturn(url.searchParams);
-    if (!billingReturn) return;
+    if (!connectReturn && !billingReturn) return;
 
-    params.setBuilderBillingReturn(billingReturn);
+    if (connectReturn) {
+      params.setBuilderConnectReturn(connectReturn);
+      clearBuilderConnectQueryParams(url.searchParams);
+    }
+    if (billingReturn) {
+      params.setBuilderBillingReturn(billingReturn);
+      clearBuilderBillingQueryParams(url.searchParams);
+    }
 
-    clearBuilderBillingQueryParams(url.searchParams);
     window.history.replaceState({}, "", `${url.pathname}${url.search}`);
     paramsRef.current.applyLocationToState();
   }, []);

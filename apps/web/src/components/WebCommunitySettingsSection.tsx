@@ -372,19 +372,21 @@ function CommunityMonetizationConfigSection({
   const requirementsPreview = stripeConnect?.requirements_currently_due?.slice(0, 3) ?? [];
   const hasRequirementsPreview = requirementsPreview.length > 0;
   const connectStatus = stripeConnect?.status ?? "not_connected";
-  const connectCtaLabel =
-    connectStatus === "pending_requirements" || connectStatus === "restricted"
+  const connectCtaLabel = canAcceptCharges
+    ? "Open Stripe dashboard"
+    : connectStatus === "pending_requirements" || connectStatus === "restricted"
       ? "Continue Stripe setup"
       : "Connect Stripe";
   const platformFeePercent = Number(builderBillingStatus?.platform_fee_bps ?? 0) / 100;
-  const stripeStatusMessage =
-    connectStatus === "restricted"
+  const stripeStatusMessage = canAcceptCharges
+    ? `PolyNet owns pricing, access, and community revenue reporting. Stripe Connect Express handles payouts and verification. PolyNet keeps ${platformFeePercent.toFixed(0)}% plus Stripe processing.`
+    : connectStatus === "restricted"
       ? "Stripe needs more information or action before this community can charge for access."
       : connectStatus === "pending_requirements" && !hasRequirementsPreview
         ? "Stripe is still reviewing or activating your account before this community can charge for access."
         : connectStatus === "pending_requirements"
           ? "Finish Stripe setup before enabling paid access for this community."
-        : "Connect Stripe before enabling paid access for this community.";
+          : "Connect Stripe before enabling paid access for this community.";
 
   return (
     <div className="settings-section">
@@ -479,16 +481,12 @@ function CommunityMonetizationConfigSection({
         <div className="settings-section-desc" style={{ marginTop: 12 }}>
           Builder is required before this community can charge for access.
         </div>
-      ) : canAcceptCharges ? (
-        <div className="settings-section-desc" style={{ marginTop: 12 }}>
-          {`Paid memberships route through your Stripe Connect Express account. PolyNet keeps ${platformFeePercent.toFixed(0)}% plus Stripe processing.`}
-        </div>
       ) : (
         <>
           <div className="settings-section-desc" style={{ marginTop: 12 }}>
             {stripeStatusMessage}
           </div>
-          {requirementsPreview.length > 0 ? (
+          {canAcceptCharges ? null : requirementsPreview.length > 0 ? (
             <div className="auth-status" style={{ marginTop: 8 }}>
               Stripe still needs: {requirementsPreview.join(", ")}.
             </div>

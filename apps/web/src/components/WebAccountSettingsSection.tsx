@@ -340,8 +340,9 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
             const platformFeePercent = Number(status?.platform_fee_bps ?? 0) / 100;
             const requirementsPreview = stripeConnect?.requirements_currently_due?.slice(0, 3) ?? [];
             const hasRequirementsPreview = requirementsPreview.length > 0;
-            const connectCtaLabel =
-              stripeConnectStatus === "pending_requirements" || stripeConnectStatus === "restricted"
+            const connectCtaLabel = isStripeReady
+              ? "Open Stripe dashboard"
+              : stripeConnectStatus === "pending_requirements" || stripeConnectStatus === "restricted"
                 ? "Continue Stripe setup"
                 : "Connect Stripe";
             const stripeStatusTitle = isStripeReady
@@ -354,7 +355,7 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
                     ? "Finish Stripe setup before payouts can start"
                     : "Not connected";
             const stripeStatusMessage = isStripeReady
-              ? `Paid community revenue routes through Stripe Connect Express. PolyNet keeps ${platformFeePercent.toFixed(0)}% plus Stripe fees.`
+              ? `PolyNet owns pricing, access, and community revenue reporting. Stripe Connect Express handles regulated payouts and verification. PolyNet keeps ${platformFeePercent.toFixed(0)}% plus Stripe fees.`
               : stripeConnectStatus === "restricted"
                 ? "Stripe needs more information or action before paid community subscriptions can start."
                 : stripeConnectStatus === "pending_requirements" && !hasRequirementsPreview
@@ -408,24 +409,18 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
                       <strong>{stripeStatusTitle}</strong>
                     </div>
                     <div className="auth-actions">
-                      {isStripeReady ? (
-                        <span className="auth-status">{stripeStatusMessage}</span>
-                      ) : (
-                        <>
-                          <span className="auth-status">{stripeStatusMessage}</span>
-                          <button
-                            type="button"
-                            className="secondary stripe-connect-btn"
-                            onClick={() => void startBuilderConnectOnboarding({ context: "account" })}
-                            disabled={isStartingBuilderConnectOnboarding}
-                          >
-                            {!isStartingBuilderConnectOnboarding ? (
-                              <StripeWordmark className="stripe-connect-icon" />
-                            ) : null}
-                            {isStartingBuilderConnectOnboarding ? "Opening…" : connectCtaLabel}
-                          </button>
-                        </>
-                      )}
+                      <span className="auth-status">{stripeStatusMessage}</span>
+                      <button
+                        type="button"
+                        className="secondary stripe-connect-btn"
+                        onClick={() => void startBuilderConnectOnboarding({ context: "account" })}
+                        disabled={isStartingBuilderConnectOnboarding}
+                      >
+                        {!isStartingBuilderConnectOnboarding ? (
+                          <StripeWordmark className="stripe-connect-icon" />
+                        ) : null}
+                        {isStartingBuilderConnectOnboarding ? "Opening…" : connectCtaLabel}
+                      </button>
                     </div>
                   </div>
                 ) : null}

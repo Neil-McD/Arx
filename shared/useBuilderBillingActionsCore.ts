@@ -70,6 +70,12 @@ function formatBuilderConnectUnavailableMessage(message: string): string | null 
   if (message === "builder_connect_builder_required") {
     return "Builder is required before connecting Stripe monetization.";
   }
+  if (
+    message.includes("responsibilities of managing losses for connected accounts") ||
+    message.includes("ongoing compliance")
+  ) {
+    return "Stripe Connect setup for PolyNet is still incomplete. Finish the Connect platform-profile acknowledgements in Stripe, then retry.";
+  }
   return null;
 }
 
@@ -172,12 +178,12 @@ export function useBuilderBillingActionsCore<SessionT>(args: UseBuilderBillingAc
           context,
           communitySlug,
         });
-        const onboardingUrl = readRequiredStringField(data, "url", "Missing onboarding url.");
+        const onboardingUrl = readRequiredStringField(data, "url", "Missing Stripe Connect url.");
         current.onConnectOnboardingStarted?.({ context, communitySlug });
         const opened = await current.openUrl("connect", onboardingUrl);
-        if (!opened) throw new Error("Failed to open Stripe onboarding.");
+        if (!opened) throw new Error("Failed to open Stripe Connect.");
       } catch (error) {
-        const message = formatActionError(error, "Failed to start Stripe onboarding.");
+        const message = formatActionError(error, "Failed to open Stripe Connect.");
         current.setBuilderBillingError(
           formatBuilderConnectUnavailableMessage(message) ?? message,
         );

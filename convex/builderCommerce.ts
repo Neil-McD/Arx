@@ -97,9 +97,19 @@ function buildStripeConnectRedirectUrls(args: {
       ? buildCommunityTabPath(args.communitySlug ?? null, "settings")
       : null;
   const path = communitySettingsPath ?? fallbackPath;
+  const buildUrl = (action: "refresh" | "return") => {
+    const url = new URL(`${origin}${path}`);
+    url.searchParams.set("connect", action);
+    url.searchParams.set("connect_context", args.context);
+    if (args.context === "community") {
+      const slug = String(args.communitySlug ?? "").trim();
+      if (slug) url.searchParams.set("community_slug", slug);
+    }
+    return url.toString();
+  };
   return {
-    refreshUrl: `${origin}${path}`,
-    returnUrl: `${origin}${path}`,
+    refreshUrl: buildUrl("refresh"),
+    returnUrl: buildUrl("return"),
   };
 }
 
@@ -670,6 +680,13 @@ export const startConnectOnboarding = action({
       onboardingCompleteAt: snapshot.status === "ready" ? nowMs : null,
       nowMs,
     });
+
+    if (snapshot.status === "ready") {
+      const loginLink = await stripe.accounts.createLoginLink(account.id);
+      const url = String((loginLink as { url?: unknown })?.url ?? "").trim();
+      if (!url) throw new Error("builder_payout_dashboard_url_missing");
+      return { url };
+    }
 
     const { returnUrl, refreshUrl } = buildStripeConnectRedirectUrls({
       context: args.context,

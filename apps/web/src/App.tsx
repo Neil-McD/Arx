@@ -40,7 +40,7 @@ import { normalizeCommunityFunnelConfig } from "../../../shared/communityFunnel"
 import {
   buildCsv, dateKeyLocal, formatChatTime, formatCount, formatMoneyBaseUnits, formatPercent, formatRelativeTimeFromIso as formatRelativeTime, parseContentRangeTotal, } from "../../../shared/contentFormatting";
 import {
-  formatBuilderTierLabel, hasBuilderTierPaidAccess, isBuilderTierFree, normalizeBuilderTierForUi, formatPlanPrice, formatSubscriptionPrice, type BuilderBillingReturn, } from "../../../shared/builderBilling";
+  formatBuilderTierLabel, hasBuilderTierPaidAccess, isBuilderTierFree, normalizeBuilderTierForUi, formatPlanPrice, formatSubscriptionPrice, type BuilderBillingReturn, type BuilderConnectReturn, } from "../../../shared/builderBilling";
 import { canUseCreatorDevTierOverride } from "../../../shared/devTierOverride";
 import { useCheckoutFinalizeController } from "../../../shared/useCheckoutFinalizeController";
 import {
@@ -304,6 +304,7 @@ import { useWebGuestThreadLifecycle } from "./controllers/useWebGuestThreadLifec
 import { useWebMobileShellController } from "./controllers/useWebMobileShellController";
 import { useWebCommunityPolynetController } from "./controllers/useWebCommunityPolynetController";
 import { useWebPostAuthBillingLifecycle } from "./controllers/useWebPostAuthBillingLifecycle";
+import { useWebPostAuthStripeConnectLifecycle } from "./controllers/useWebPostAuthStripeConnectLifecycle";
 import { useWebPathRouteLifecycle } from "./controllers/useWebPathRouteLifecycle";
 import { useWebCommunityRouteController } from "./controllers/useWebCommunityRouteController";
 import { useWebActiveCommunityShellController } from "./controllers/useWebActiveCommunityShellController";
@@ -1169,6 +1170,7 @@ export default function App() {
   const lastTrackedBuilderReturnKeyRef = useRef<string | null>(null);
   const [isBuilderUpgradeOpen, setIsBuilderUpgradeOpen] = useState(false);
   const [builderUpgradeContext, setBuilderUpgradeContext] = useState<BuilderUpgradeContext>("builder");
+  const [builderConnectReturn, setBuilderConnectReturn] = useState<BuilderConnectReturn | null>(null);
   const [builderBillingReturn, setBuilderBillingReturn] = useState<BuilderBillingReturn | null>(null);
   const [, setIsFinalizingBuilderReturn] = useState(false);
   const builderUpgradeScrollRefreshToken = `${builderBillingStatus?.builder_tier ?? ""}:${builderUpgradeContext}`;
@@ -3077,6 +3079,7 @@ export default function App() {
     communityTab,
     activeThreadId,
     applyLocationToState,
+    setBuilderConnectReturn,
     setBuilderBillingReturn,
     buildAppRoutePath: (state) => applyShellVariantToAppPath(buildAppRoutePath(state) ?? "", shellVariant) || null,
   });
@@ -4016,6 +4019,15 @@ export default function App() {
     loadBuilderBillingStatus,
     joinPublicCommunity,
     resumeCreateCommunityIntent: resumePendingCreateCommunityIntent,
+  });
+
+  useWebPostAuthStripeConnectLifecycle({
+    session,
+    builderConnectReturn,
+    clearBuilderConnectReturn: () => setBuilderConnectReturn(null),
+    setBuilderBillingError,
+    loadBuilderBillingStatus,
+    startBuilderConnectOnboarding,
   });
 
   const { retryCheckoutFinalize } = useCheckoutFinalizeController({
