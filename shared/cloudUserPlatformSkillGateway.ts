@@ -41,6 +41,7 @@ export async function createCloudUserPlatformSkill<SessionT>(
     "userPlatformSkills:createUserPlatformSkill" as any,
     {
       authSubject,
+      catalogSkillId: params.input.catalog_skill_id,
       name: params.input.name,
       description: params.input.description,
       instructionsMd: params.input.instructions_md,

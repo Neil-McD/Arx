@@ -1080,6 +1080,8 @@ export default function App() {
   const [discoverActiveTab, setDiscoverActiveTab] = useState<
     "communities" | "apps" | "skills"
   >("communities");
+  const [shouldOpenCreatePersonalSkill, setShouldOpenCreatePersonalSkill] =
+    useState(false);
   const settingsGroup = settingsGroupForPage(settingsPage);
   const [userWantsSessions, setUserWantsSessions] = useState(false);
   const [appTheme, setAppTheme] = useState<AppTheme>(() => {
@@ -5205,6 +5207,14 @@ export default function App() {
     };
     const handleOpenIntegrationsSettings = () => {
       pushNavSnapshot();
+      setShouldOpenCreatePersonalSkill(false);
+      setActivePage("workspace");
+      setActiveView("settings");
+      setSettingsPage("integrations");
+    };
+    const handleOpenCreatePersonalSkill = () => {
+      pushNavSnapshot();
+      setShouldOpenCreatePersonalSkill(true);
       setActivePage("workspace");
       setActiveView("settings");
       setSettingsPage("integrations");
@@ -5755,6 +5765,9 @@ export default function App() {
       requireSignIn,
       openDiscoverApps: handleOpenDiscoverApps,
       openDiscoverSkills: handleOpenDiscoverSkills,
+      shouldOpenCreateSkillComposer: shouldOpenCreatePersonalSkill,
+      onConsumeCreateSkillComposerOpen: () =>
+        setShouldOpenCreatePersonalSkill(false),
       userPlatformAppMounts,
       isLoadingUserPlatformAppMounts,
       userPlatformAppMountError,
@@ -6171,6 +6184,7 @@ export default function App() {
       isCreatingUserPlatformSkill,
       onCreateUserPlatformSkill: handleCreateUserPlatformSkill,
       onOpenIntegrationsSettings: handleOpenIntegrationsSettings,
+      onOpenCreateUserPlatformSkill: handleOpenCreatePersonalSkill,
       onActivateCommunity: (community) => {
         activateDiscoverCommunityCard({
           canActivate: Boolean(community.slug),

@@ -1,6 +1,7 @@
 export type SkillPackageRow = {
   _id: any;
   ownerUserId: any;
+  catalogSkillId?: string;
   name: string;
   mentionToken?: string;
   description?: string;
@@ -20,6 +21,7 @@ export type SkillPackageRevisionRow = {
 };
 
 const MAX_SKILL_NAME_LENGTH = 120;
+const MAX_SKILL_CATALOG_ID_LENGTH = 120;
 const MAX_SKILL_MENTION_TOKEN_LENGTH = 80;
 const MAX_SKILL_DESCRIPTION_LENGTH = 2_000;
 const MAX_SKILL_BODY_LENGTH = 40_000;
@@ -30,6 +32,10 @@ export function normalizeSkillString(value: unknown, maxLength = 10_000): string
 
 export function normalizeSkillPackageName(value: unknown): string {
   return normalizeSkillString(value, MAX_SKILL_NAME_LENGTH);
+}
+
+export function normalizeSkillCatalogId(value: unknown): string {
+  return normalizeSkillString(value, MAX_SKILL_CATALOG_ID_LENGTH).toLowerCase();
 }
 
 export function buildSkillMentionToken(value: unknown, fallback = "skill"): string {
@@ -93,5 +99,6 @@ export function mapSkillPackageReadModel(skill: SkillPackageRow) {
     name: skill.name,
     mentionToken: readSkillMentionToken(skill),
     description: skill.description ?? null,
+    catalogSkillId: skill.catalogSkillId ?? null,
   };
 }

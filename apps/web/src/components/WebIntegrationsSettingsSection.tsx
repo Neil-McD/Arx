@@ -18,6 +18,8 @@ type WebIntegrationsSettingsSectionProps = {
   requireSignIn: () => void;
   openDiscoverApps: () => void;
   openDiscoverSkills: () => void;
+  shouldOpenCreateSkillComposer: boolean;
+  onConsumeCreateSkillComposerOpen: () => void;
   userPlatformAppMounts: UserPlatformMountedApp[];
   isLoadingUserPlatformAppMounts: boolean;
   userPlatformAppMountError: string | null;
@@ -160,6 +162,8 @@ export function WebIntegrationsSettingsSection(
     requireSignIn,
     openDiscoverApps,
     openDiscoverSkills,
+    shouldOpenCreateSkillComposer,
+    onConsumeCreateSkillComposerOpen,
     userPlatformAppMounts,
     isLoadingUserPlatformAppMounts,
     userPlatformAppMountError,
@@ -235,6 +239,15 @@ export function WebIntegrationsSettingsSection(
       document.removeEventListener("pointerdown", handlePointerDown);
     };
   }, [openMountMenuId]);
+
+  useEffect(() => {
+    if (!shouldOpenCreateSkillComposer) return;
+    setEditingUserPlatformSkillInstallId(null);
+    setEditingSkillDraft(buildInitialSkillDraft());
+    setSkillDraft(buildInitialSkillDraft());
+    setIsCreateSkillOpen(true);
+    onConsumeCreateSkillComposerOpen();
+  }, [onConsumeCreateSkillComposerOpen, shouldOpenCreateSkillComposer]);
 
   const handleCreatePersonalSkill = async () => {
     const ok = await onCreateUserPlatformSkill(skillDraft);

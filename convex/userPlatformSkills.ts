@@ -4,6 +4,7 @@ import { v } from "convex/values";
 import { resolveUserIdForAuthenticatedRequest } from "./communityCore";
 import {
   getSkillPackageActiveInstructionsMd,
+  normalizeSkillCatalogId,
   normalizeSkillMentionToken,
   type SkillPackageRow,
   mapSkillPackageReadModel,
@@ -39,6 +40,23 @@ async function listUserPlatformSkillInstallRows(
     .withIndex("by_user", (q: any) => q.eq("userId", userId))
     .collect()) as UserPlatformSkillInstallRow[];
   return rows.sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
+}
+
+async function findOwnedCatalogSkillPackage(
+  ctx: any,
+  ownerUserId: any,
+  catalogSkillId: string,
+): Promise<SkillPackageRow | null> {
+  const normalizedCatalogSkillId = normalizeSkillCatalogId(catalogSkillId);
+  if (!normalizedCatalogSkillId) return null;
+  return (
+    ((await ctx.db
+      .query("skillPackages")
+      .withIndex("by_owner_catalogSkillId", (q: any) =>
+        q.eq("ownerUserId", ownerUserId).eq("catalogSkillId", normalizedCatalogSkillId),
+      )
+      .first()) as SkillPackageRow | null) ?? null
+  );
 }
 
 async function requireExistingUserPlatformSkillInstall(args: {
@@ -224,6 +242,7 @@ export const createUserPlatformSkill = mutation({
   args: {
     userId: v.optional(v.id("users")),
     authSubject: v.optional(v.string()),
+    catalogSkillId: v.optional(v.string()),
     name: v.string(),
     description: v.optional(v.string()),
     instructionsMd: v.string(),
@@ -235,16 +254,20 @@ export const createUserPlatformSkill = mutation({
       userId: args.userId,
       authSubject: args.authSubject ?? null,
     });
-    const skillPackageId = await ctx.runMutation(
-      internal.skillPackages.createSkillPackageInternal,
-      {
+    const existingCatalogSkill =
+      typeof args.catalogSkillId === "string" && args.catalogSkillId.trim()
+        ? await findOwnedCatalogSkillPackage(ctx, userId, args.catalogSkillId)
+        : null;
+    const skillPackageId =
+      existingCatalogSkill?._id ??
+      (await ctx.runMutation(internal.skillPackages.createSkillPackageInternal, {
         ownerUserId: userId,
+        catalogSkillId: args.catalogSkillId,
         name: args.name,
         description: args.description,
         instructionsMd: args.instructionsMd,
         nowMs: args.nowMs,
-      },
-    );
+      }));
     const userPlatformSkillInstallId = await upsertUserPlatformSkillInstallRow({
       ctx,
       userId,

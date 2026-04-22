@@ -105,6 +105,8 @@ export type WebSettingsPanelsProps = {
     requireSignIn: () => void;
     openDiscoverApps: () => void;
     openDiscoverSkills: () => void;
+    shouldOpenCreateSkillComposer: boolean;
+    onConsumeCreateSkillComposerOpen: () => void;
     userPlatformAppMounts: UserPlatformMountedApp[];
     isLoadingUserPlatformAppMounts: boolean;
     userPlatformAppMountError: string | null;
@@ -281,6 +283,9 @@ export function WebSettingsPanels(props: WebSettingsPanelsProps) {
     requireSignIn: integrations.requireSignIn,
     openDiscoverApps: integrations.openDiscoverApps,
     openDiscoverSkills: integrations.openDiscoverSkills,
+    shouldOpenCreateSkillComposer: integrations.shouldOpenCreateSkillComposer,
+    onConsumeCreateSkillComposerOpen:
+      integrations.onConsumeCreateSkillComposerOpen,
     userPlatformAppMounts: integrations.userPlatformAppMounts,
     isLoadingUserPlatformAppMounts: integrations.isLoadingUserPlatformAppMounts,
     userPlatformAppMountError: integrations.userPlatformAppMountError,

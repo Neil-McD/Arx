@@ -579,6 +579,7 @@ export default defineSchema({
 
   skillPackages: defineTable({
     ownerUserId: v.id("users"),
+    catalogSkillId: v.optional(v.string()),
     name: v.string(),
     mentionToken: v.optional(v.string()),
     description: v.optional(v.string()),
@@ -588,7 +589,8 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_owner", ["ownerUserId"])
-    .index("by_owner_mentionToken", ["ownerUserId", "mentionToken"]),
+    .index("by_owner_mentionToken", ["ownerUserId", "mentionToken"])
+    .index("by_owner_catalogSkillId", ["ownerUserId", "catalogSkillId"]),
 
   skillPackageRevisions: defineTable({
     skillPackageId: v.id("skillPackages"),

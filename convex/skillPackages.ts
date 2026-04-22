@@ -5,6 +5,7 @@ import {
   type SkillPackageRevisionRow,
   type SkillPackageRow,
   mapSkillPackageReadModel,
+  normalizeSkillCatalogId,
   normalizeSkillInstructionsMd,
   normalizeSkillMentionToken,
   normalizeSkillPackageDescription,
@@ -83,6 +84,7 @@ async function createSkillPackageRevisionRow(args: {
 async function createSkillPackageRow(args: {
   ctx: any;
   ownerUserId: any;
+  catalogSkillId?: string;
   name: string;
   description?: string;
   instructionsMd: string;
@@ -98,11 +100,13 @@ async function createSkillPackageRow(args: {
     ownerUserId: args.ownerUserId,
     mentionToken,
   });
+  const catalogSkillId = normalizeSkillCatalogId(args.catalogSkillId);
   const description = normalizeSkillPackageDescription(args.description);
   const instructionsMd = normalizeSkillInstructionsMd(args.instructionsMd);
   if (!instructionsMd) throw new Error("skill_package_instructions_required");
   const skillPackageId = await args.ctx.db.insert("skillPackages", {
     ownerUserId: args.ownerUserId,
+    catalogSkillId: catalogSkillId || undefined,
     name,
     mentionToken,
     description: description || undefined,
@@ -201,6 +205,7 @@ export const listOwnedSkillPackages = query({
 export const createSkillPackageInternal = internalMutation({
   args: {
     ownerUserId: v.id("users"),
+    catalogSkillId: v.optional(v.string()),
     name: v.string(),
     description: v.optional(v.string()),
     instructionsMd: v.string(),
@@ -210,6 +215,7 @@ export const createSkillPackageInternal = internalMutation({
     return await createSkillPackageRow({
       ctx,
       ownerUserId: args.ownerUserId,
+      catalogSkillId: args.catalogSkillId,
       name: args.name,
       description: args.description,
       instructionsMd: args.instructionsMd,
