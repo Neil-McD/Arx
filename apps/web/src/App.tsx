@@ -6032,6 +6032,9 @@ export default function App() {
       ? {
           name: activeCommunity.name,
           avatar_url: activeCommunity.avatar_url,
+          avatar_focus_x: activeCommunity.avatar_focus_x,
+          avatar_focus_y: activeCommunity.avatar_focus_y,
+          avatar_zoom: activeCommunity.avatar_zoom,
         }
       : null,
     resolvedActiveProjectName: workspace.derived.resolvedActiveProjectName,
