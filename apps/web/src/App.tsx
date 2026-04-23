@@ -26,6 +26,7 @@ import { resolveAuthSubject } from "../../../shared/authSession";
 import {
   buildContextFallbackThreadTitle, deriveThreadTitleFromUserText, isMissingThreadTitleValue, traceThreadContext, } from "../../../shared/threadTitleUi";
 import { StableAvatar } from "../../../shared/StableAvatar";
+import { getCommunityAvatarImageStyle } from "../../../shared/communityAvatarUi";
 import {
   formatProviderConnectionErrorMessage,
 } from "../../../shared/appErrorMappings";
@@ -5876,6 +5877,11 @@ export default function App() {
       <StableAvatar
         className="community-btn-avatar"
         imageUrl={activeCommunity.avatar_url}
+        imageStyle={getCommunityAvatarImageStyle({
+          focusX: activeCommunity.avatar_focus_x,
+          focusY: activeCommunity.avatar_focus_y,
+          zoom: activeCommunity.avatar_zoom,
+        })}
         alt={activeCommunity.name}
         fallback={communityInitials(activeCommunity.name)}
         fallbackClassName="community-btn-initials"
