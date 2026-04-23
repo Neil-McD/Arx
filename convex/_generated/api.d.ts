@@ -94,6 +94,7 @@ import type * as providerConnectionProbes from "../providerConnectionProbes.js";
 import type * as providerConnections from "../providerConnections.js";
 import type * as runtimeCancellation from "../runtimeCancellation.js";
 import type * as runtimeExecutionSession from "../runtimeExecutionSession.js";
+import type * as runtimeHarnessComposition from "../runtimeHarnessComposition.js";
 import type * as runtimeHarnessShaping from "../runtimeHarnessShaping.js";
 import type * as runtimeHarnessTelemetry from "../runtimeHarnessTelemetry.js";
 import type * as runtimeMcpManager from "../runtimeMcpManager.js";
@@ -214,6 +215,7 @@ declare const fullApi: ApiFromModules<{
   providerConnections: typeof providerConnections;
   runtimeCancellation: typeof runtimeCancellation;
   runtimeExecutionSession: typeof runtimeExecutionSession;
+  runtimeHarnessComposition: typeof runtimeHarnessComposition;
   runtimeHarnessShaping: typeof runtimeHarnessShaping;
   runtimeHarnessTelemetry: typeof runtimeHarnessTelemetry;
   runtimeMcpManager: typeof runtimeMcpManager;
