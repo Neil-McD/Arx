@@ -7,7 +7,7 @@ import type { BuilderBillingStatus } from "../../../../shared/builderBillingStat
 import { getCommunityBannerImageStyle } from "../../../../shared/communityBannerUi";
 import { buildPlatformSwitcherStyle } from "../../../../shared/platformSwitcherUi";
 import { buildStripeConnectPresentation } from "../controllers/buildStripeConnectPresentation";
-import { StripeWordmark } from "./StripeWordmark";
+import { StripeSetupButton } from "./StripeSetupButton";
 
 type CommunityPricingMode = "free" | "monthly" | "annual";
 
@@ -514,9 +514,12 @@ function CommunityMonetizationConfigSection({
             </div>
           ) : null}
           <div className="create-community-actions" style={{ marginTop: 12 }}>
-            <button
-              className="secondary stripe-connect-btn"
-              type="button"
+            <StripeSetupButton
+              label={
+                isStartingBuilderConnectOnboarding
+                  ? "Opening…"
+                  : stripeConnectPresentation.connectCtaLabel
+              }
               onClick={() =>
                 void startBuilderConnectOnboarding({
                   context: "community",
@@ -524,14 +527,7 @@ function CommunityMonetizationConfigSection({
                 })
               }
               disabled={isStartingBuilderConnectOnboarding}
-            >
-              {!isStartingBuilderConnectOnboarding ? (
-                <StripeWordmark className="stripe-connect-icon" />
-              ) : null}
-              {isStartingBuilderConnectOnboarding
-                ? "Opening…"
-                : stripeConnectPresentation.connectCtaLabel}
-            </button>
+            />
           </div>
           {builderBillingError ? (
             <div className="auth-error" style={{ marginTop: 10 }}>

@@ -3,7 +3,7 @@ import { formatBuilderTierLabel, isBuilderTierFree } from "../../../../shared/bu
 import type { BuilderBillingStatus } from "../../../../shared/builderBillingStatusGateway";
 import { getCommunityAvatarImageStyle } from "../../../../shared/communityAvatarUi";
 import { buildStripeConnectPresentation } from "../controllers/buildStripeConnectPresentation";
-import { StripeWordmark } from "./StripeWordmark";
+import { StripeSetupButton } from "./StripeSetupButton";
 import { WebSignOutConfirmModal } from "./WebSignOutConfirmModal";
 
 type SessionLike = {
@@ -390,19 +390,15 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
                     </div>
                     <div className="auth-actions">
                       <span className="auth-status">{stripeConnectPresentation.statusMessage}</span>
-                      <button
-                        type="button"
-                        className="secondary stripe-connect-btn"
+                      <StripeSetupButton
+                        label={
+                          isStartingBuilderConnectOnboarding
+                            ? "Opening…"
+                            : stripeConnectPresentation.connectCtaLabel
+                        }
                         onClick={() => void startBuilderConnectOnboarding({ context: "account" })}
                         disabled={isStartingBuilderConnectOnboarding}
-                      >
-                        {!isStartingBuilderConnectOnboarding ? (
-                          <StripeWordmark className="stripe-connect-icon" />
-                        ) : null}
-                        {isStartingBuilderConnectOnboarding
-                          ? "Opening…"
-                          : stripeConnectPresentation.connectCtaLabel}
-                      </button>
+                      />
                     </div>
                   </div>
                 ) : null}
