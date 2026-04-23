@@ -25,6 +25,23 @@ type DiscoverCommunityCardProps = {
   onActivate?: () => void;
 };
 
+function renderDiscoverPriceLabel(priceLabel: string) {
+  const trimmed = priceLabel.trim();
+  const paidPriceMatch = trimmed.match(/^(.+?)\/(month|monthly|mo|year|annual|yr)$/i);
+  if (paidPriceMatch) {
+    const amount = paidPriceMatch[1]?.trim() ?? trimmed;
+    const rawPeriod = paidPriceMatch[2]?.toLowerCase() ?? "";
+    const period = rawPeriod === "year" || rawPeriod === "annual" || rawPeriod === "yr" ? "/yr" : "/mo";
+    return (
+      <>
+        <span className="discover-price-amount">{amount}</span>
+        <span className="discover-price-period">{period}</span>
+      </>
+    );
+  }
+  return <span className="discover-price-free">{trimmed}</span>;
+}
+
 export function DiscoverCommunityCard({
   name,
   slug,
@@ -100,7 +117,7 @@ export function DiscoverCommunityCard({
           <div className="discover-card-meta">
             <div className="discover-card-name-row">
               <div className="discover-card-name">{name}</div>
-              <span className="discover-tag price">{priceLabel}</span>
+              <span className="discover-tag price">{renderDiscoverPriceLabel(priceLabel)}</span>
               <span className={`discover-visibility-icon ${visibilityClass ?? "unlisted"}`} title={visibilityLabel}>
                 {isPublishedVisibility ? (
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">

@@ -2065,11 +2065,28 @@ body {
 }
 
 .discover-tag.price {
-  color: #8fe3b1;
   border: none;
   background: none;
   padding: 0;
   font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0.01em;
+}
+
+.discover-price-amount,
+.discover-price-free {
+  color: #8fe3b1;
+}
+
+.discover-price-free {
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.discover-price-period {
+  color: var(--text-muted);
+  font-weight: 500;
+  letter-spacing: 0.01em;
 }
 
 .discover-visibility-icon {
