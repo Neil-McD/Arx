@@ -89,9 +89,10 @@ function buildPrimaryActionLabel(args: {
   approvalPending: boolean;
   approvalDenied: boolean;
   canRequestAgain: boolean;
+  priceLabel: string | null;
 }): string {
   if (args.mode === "enter") return "Enter community";
-  if (args.mode === "checkout") return "Join now";
+  if (args.mode === "checkout") return args.priceLabel ? `Join now · ${formatCtaPriceLabel(args.priceLabel)}` : "Join now";
   if (args.mode === "join_approval") {
     if (args.isJoiningPublicCommunity) return "Joining…";
     if (args.approvalPending) return "Request pending";
@@ -100,6 +101,15 @@ function buildPrimaryActionLabel(args: {
   }
   if (args.mode === "join_free") return args.isJoiningPublicCommunity ? "Joining…" : "Join now";
   return "Private community";
+}
+
+function formatCtaPriceLabel(priceLabel: string): string {
+  return priceLabel
+    .trim()
+    .replace(/\/\s*month\b/i, "/mo")
+    .replace(/\/\s*monthly\b/i, "/mo")
+    .replace(/\/\s*year\b/i, "/yr")
+    .replace(/\/\s*annual\b/i, "/yr");
 }
 
 export function WebPublicCommunityFunnel(props: WebPublicCommunityFunnelProps) {
@@ -167,6 +177,7 @@ export function WebPublicCommunityFunnel(props: WebPublicCommunityFunnelProps) {
     approvalPending,
     approvalDenied,
     canRequestAgain,
+    priceLabel: isFreePricing ? null : pricingLabel,
   });
   const isPrimaryActionDisabled =
     isPreviewMode ||
