@@ -17,6 +17,7 @@ export type RuntimeMountedMcpTool = {
   mount_id: string;
   runtime_tool_name: string;
   developer_app_id: string;
+  catalog_app_id: string | null;
   app_name: string;
   endpoint_url: string;
   auth_type: string;

@@ -4,6 +4,7 @@ import {
   type AppConnectionRow,
   type DeveloperAppRow,
   isDeveloperAppAuthType,
+  normalizeDeveloperAppCatalogId,
   normalizeDeveloperAppDescription,
   normalizeDeveloperAppEndpointUrl,
   normalizeDeveloperAppName,
@@ -99,6 +100,7 @@ export const getDeveloperAppByIdInternal = internalQuery({
 export const createDeveloperAppInternal = internalMutation({
   args: {
     ownerUserId: v.id("users"),
+    catalogAppId: v.optional(v.string()),
     name: v.string(),
     slug: v.optional(v.string()),
     description: v.optional(v.string()),
@@ -108,6 +110,7 @@ export const createDeveloperAppInternal = internalMutation({
   },
   handler: async (ctx, args) => {
     const nowMs = args.nowMs ?? Date.now();
+    const catalogAppId = normalizeDeveloperAppCatalogId(args.catalogAppId);
     const name = normalizeDeveloperAppName(args.name);
     if (!name) throw new Error("developer_app_name_required");
     const baseSlug = normalizeDeveloperAppSlug(args.slug, name);
@@ -125,6 +128,7 @@ export const createDeveloperAppInternal = internalMutation({
     }
     return await ctx.db.insert("developerApps", {
       ownerUserId: args.ownerUserId,
+      catalogAppId: catalogAppId || undefined,
       name,
       slug,
       description: description || undefined,

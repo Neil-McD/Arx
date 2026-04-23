@@ -13,6 +13,12 @@ function main() {
   const httpDaytona = readText(
     "/Users/neilmcdevitt/code/arx/convex/httpDaytona.ts",
   );
+  const runtimeSkillResolution = readText(
+    "/Users/neilmcdevitt/code/arx/convex/runtimeSkillResolution.ts",
+  );
+  const runtimeHarnessComposition = readText(
+    "/Users/neilmcdevitt/code/arx/convex/runtimeHarnessComposition.ts",
+  );
 
   assertIncludes(
     httpDaytona,
@@ -25,19 +31,24 @@ function main() {
     "community-lens shared skill resolution query",
   );
   assertIncludes(
-    httpDaytona,
+    runtimeHarnessComposition,
     "buildAmbiguousSkillMentionsPromptBlock",
     "community-lens ambiguity handling prompt block",
   );
   assertIncludes(
-    httpDaytona,
+    runtimeHarnessComposition,
     "buildCommunityOverlayRuntimeState({",
     "shared overlay runtime composition helper",
   );
   assertIncludes(
     httpDaytona,
-    "overlayRuntimeState.systemPromptSuffix",
-    "overlay prompt suffix composition",
+    "composeResolvedRuntimeHarness({",
+    "community-lens effective harness composer",
+  );
+  assertIncludes(
+    httpDaytona,
+    "mountedToolDiscoveryCatalog: resolvedHarness.discoveryMountedTools",
+    "community-lens effective mounted tool discovery projection",
   );
   assertIncludes(
     httpDaytona,
@@ -48,6 +59,26 @@ function main() {
     httpDaytona,
     "community_skills_resolved",
     "runtime evidence for skill overlays",
+  );
+  assertIncludes(
+    runtimeSkillResolution,
+    "filterUserSkillScopeAgainstCommunity({",
+    "community-lens personal skill shadowing helper",
+  );
+  assertIncludes(
+    runtimeSkillResolution,
+    "...userPlatformSkillScope.selectedCandidates",
+    "community-lens personal skill candidates remain available when unique",
+  );
+  assertIncludes(
+    runtimeSkillResolution,
+    "...communitySelectedCandidates",
+    "community-lens community skill candidates remain active",
+  );
+  assertIncludes(
+    httpDaytona,
+    "effective_harness_resolved",
+    "community-lens effective harness evidence event",
   );
 
   console.log("community_lens_runtime_contract_proof: ok");

@@ -90,7 +90,7 @@ require_multiline_match "$COMMUNITY_ADMIN_FILE" \
 
 echo "[5/9] Ensuring public user identity is returned for admin membership rows..."
 require_multiline_match "$COMMUNITY_ADMIN_FILE" \
-  'user_id: \(await resolvePublicUserId\(ctx, row\.userId, userIdCache\)\) \?\? String\(row\.userId\)' \
+  'user_id:\s*\(await resolvePublicUserId\(ctx, row\.userId, userIdCache\)\) \?\?\s*String\(row\.userId\)' \
   "admin membership rows resolve public user IDs"
 
 echo "[6/9] Ensuring manager-owned analytics queries resolve authenticated subject before access checks..."

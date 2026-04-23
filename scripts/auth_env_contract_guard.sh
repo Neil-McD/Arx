@@ -8,6 +8,8 @@ echo "== Auth env contract guard =="
 
 AUTH_CORE_FILE="shared/authCore.ts"
 WEB_AUTH_CONTROLLER_FILE="apps/web/src/controllers/useWebAppAuthController.ts"
+WEB_LOGIN_TRAMPOLINE_FILE="apps/web/src/auth/loginTrampoline.tsx"
+WEB_MAIN_FILE="apps/web/src/main.tsx"
 WEB_APP_FILE="apps/web/src/App.tsx"
 AUTH_CONFIG_FILE="convex/auth.config.ts"
 CONVEX_HTTP_FILE="convex/http.ts"
@@ -69,15 +71,21 @@ forbid_match_in_file "$AUTH_CORE_FILE" 'CLOUD_FUNCTIONS_V1_SEGMENT' \
 forbid_match_in_file "$AUTH_CORE_FILE" 'pgrst303|pgrst301' \
   "shared auth core must not depend on PostgREST auth error codes"
 
-echo "[2/6] Validating web auth controller uses same-origin auth bridge with trampoline fallback..."
-require_match_in_file "$WEB_AUTH_CONTROLLER_FILE" 'buildLoginTrampolinePath\(' \
-  "web auth controller retains the login trampoline as a recovery fallback"
+echo "[2/6] Validating web auth controller uses same-origin auth bridge with direct handoff..."
+require_match_in_file "$WEB_AUTH_CONTROLLER_FILE" 'beginOAuthSignIn\(\{ returnTo \}\)' \
+  "web auth controller starts sign-in through the same-origin auth bridge"
+require_match_in_file "$WEB_AUTH_CONTROLLER_FILE" 'window\.location\.assign\(authUrl\)' \
+  "web auth controller dispatches the prepared same-origin sign-in URL"
 require_match_in_file "$WEB_AUTH_CONTROLLER_FILE" 'bootstrapSessionDetailed\(|bootstrapSession\(' \
   "web auth controller bootstraps through the same-origin auth bridge"
 require_match_in_file "$WEB_AUTH_CONTROLLER_FILE" 'refreshAuthSessionResult' \
   "web auth controller refreshes through the same-origin auth bridge"
 require_match_in_file "$WEB_AUTH_CONTROLLER_FILE" 'logoutAuthSessionRemote' \
   "web auth controller logs out through the same-origin auth bridge"
+require_match_in_file "$WEB_LOGIN_TRAMPOLINE_FILE" 'export function LoginTrampolineRoute' \
+  "login trampoline route remains available as an explicit recovery route"
+require_match_in_file "$WEB_MAIN_FILE" 'LoginTrampolineRoute' \
+  "web entrypoint still mounts the login trampoline route"
 forbid_match_in_file "$WEB_AUTH_CONTROLLER_FILE" 'workos\.|useWorkOsRuntime|isWorkOsLoginRequiredError' \
   "web auth controller must not depend on the deleted browser WorkOS runtime"
 

@@ -1,4 +1,4 @@
-import { normalizeString } from "./appCore";
+import { normalizeString } from "./appCore.ts";
 
 export type StoredMcpToolRiskLevel = "read" | "write" | "sensitive";
 export type StoredMcpToolInputSchemaKind =

@@ -49,6 +49,7 @@ type CommunityAppMountRow = {
 type RuntimeMountedCommunityAppTool = {
   community_app_mount_id: any;
   developer_app_id: any;
+  catalog_app_id: string | null;
   app_name: string;
   endpoint_url: string;
   auth_type: string;
@@ -160,6 +161,7 @@ function resolveRuntimeMountedCommunityAppTools(args: {
     .map((tool) => ({
       community_app_mount_id: args.mount._id,
       developer_app_id: args.app._id,
+      catalog_app_id: args.app.catalogAppId ?? null,
       app_name: args.app.name,
       endpoint_url: args.app.endpointUrl,
       auth_type: args.app.authType,
@@ -577,6 +579,7 @@ export const connectCommunityApp = action({
   args: {
     authSubject: v.optional(v.string()),
     communityId: v.id("communities"),
+    catalogAppId: v.optional(v.string()),
     name: v.string(),
     endpointUrl: v.string(),
     authType: v.union(v.literal("none"), v.literal("api_key"), v.literal("bearer")),
@@ -598,6 +601,7 @@ export const connectCommunityApp = action({
     try {
       developerAppId = (await ctx.runMutation(internal.developerApps.createDeveloperAppInternal, {
         ownerUserId: userId,
+        catalogAppId: args.catalogAppId,
         name: args.name,
         slug: undefined,
         description: args.description,

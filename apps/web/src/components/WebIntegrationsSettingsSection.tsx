@@ -135,6 +135,13 @@ function buildMountDetail(mount: UserPlatformMountedApp): string {
 }
 
 function findCatalogEntryForMount(mount: UserPlatformMountedApp) {
+  const byCatalogId =
+    typeof mount.app.catalog_app_id === "string" && mount.app.catalog_app_id.trim()
+      ? DISCOVER_APP_CATALOG.find(
+          (entry) => entry.id === mount.app.catalog_app_id,
+        ) ?? null
+      : null;
+  if (byCatalogId) return byCatalogId;
   const byEndpoint = DISCOVER_APP_CATALOG.find((entry) => {
     if (entry.personalConnect.connectionKind !== "known") return false;
     return (

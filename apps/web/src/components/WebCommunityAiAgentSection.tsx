@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import { buildPlatformSwitcherStyle } from "../../../../shared/platformSwitcherUi";
 import {
@@ -20,6 +20,7 @@ type WebCommunityAiAgentSectionProps = {
   activeCommunity: unknown | null;
   hasSession: boolean;
   canManageMembersActiveCommunity: boolean;
+  preferredTab?: CommunityAiAgentTab;
   isLoadingCommunityAgentConfig: boolean;
   communityAgentConfigError: string | null;
   onRequireSignIn: () => void;
@@ -42,6 +43,7 @@ export function WebCommunityAiAgentSection(props: WebCommunityAiAgentSectionProp
     activeCommunity,
     hasSession,
     canManageMembersActiveCommunity,
+    preferredTab,
     isLoadingCommunityAgentConfig,
     communityAgentConfigError,
     onRequireSignIn,
@@ -50,6 +52,10 @@ export function WebCommunityAiAgentSection(props: WebCommunityAiAgentSectionProp
     skillsEditorProps,
   } = props;
   const [activeTab, setActiveTab] = useState<CommunityAiAgentTab>("workspace");
+  useEffect(() => {
+    if (!preferredTab) return;
+    setActiveTab(preferredTab);
+  }, [preferredTab]);
   const activeTabIndex = COMMUNITY_AI_AGENT_TABS.findIndex((tab) => tab.id === activeTab);
   const tabSwitcherStyle = buildPlatformSwitcherStyle(COMMUNITY_AI_AGENT_TABS.length, activeTabIndex);
   const canRenderTabbedEditor =

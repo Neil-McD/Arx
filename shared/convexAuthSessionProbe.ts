@@ -27,18 +27,25 @@ export async function probeConvexAuthenticatedActorSessionDetailed(
 ): Promise<ConvexAuthenticatedSessionProbeResult> {
   const totalStartedAt = Date.now();
   let bootstrapActorMs: number | null = null;
+  let getActorMs: number | null = null;
   try {
     const bootstrapStartedAt = Date.now();
-    const { authSubject, bootstrap } = await bootstrapConvexAuthenticatedClient(session);
+    const { client, authSubject, bootstrap } = await bootstrapConvexAuthenticatedClient(session);
     bootstrapActorMs = Date.now() - bootstrapStartedAt;
-    const actorAuthSubject = String(bootstrap?.authSubject ?? authSubject ?? "").trim() || null;
+    const getActorStartedAt = Date.now();
+    const actor = (await client.query("auth:getActor" as any, {
+      authState: "authenticated",
+      authSubject,
+    })) as { authSubject?: unknown } | null;
+    getActorMs = Date.now() - getActorStartedAt;
+    const actorAuthSubject = String(actor?.authSubject ?? bootstrap?.authSubject ?? authSubject ?? "").trim() || null;
     return {
       accepted: actorAuthSubject === authSubject,
       authSubject,
       actorAuthSubject,
       bootstrap,
       bootstrapActorMs,
-      getActorMs: 0,
+      getActorMs,
       totalMs: Date.now() - totalStartedAt,
       failureStage: null,
       error: null,
@@ -51,9 +58,9 @@ export async function probeConvexAuthenticatedActorSessionDetailed(
       actorAuthSubject: null,
       bootstrap: null,
       bootstrapActorMs,
-      getActorMs: 0,
+      getActorMs,
       totalMs: Date.now() - totalStartedAt,
-      failureStage: "bootstrap_actor",
+      failureStage: bootstrapActorMs === null ? "bootstrap_actor" : "get_actor",
       error: message,
     };
   }

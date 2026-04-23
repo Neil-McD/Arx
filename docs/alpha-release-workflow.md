@@ -2,7 +2,8 @@
 
 ## Canonical Truths
 
-- Active development worktree: `/Users/neilmcdevitt/code/arx/.worktrees/daytona`
+- Active development worktree: `/Users/neilmcdevitt/code/arx`
+- Legacy Daytona worktree: `/Users/neilmcdevitt/code/arx/.worktrees/daytona` may still exist as a side worktree or frozen snapshot, but it is not release truth
 - Canonical Git remote: `origin` -> `Neil-McD/Arx`
 - Canonical release branch: `main`
 - Canonical production web target: Vercel project `polynet`
@@ -13,7 +14,7 @@
 
 Use one truth per layer:
 
-1. Build and verify in the Daytona worktree.
+1. Build and verify in the root `main` worktree at `/Users/neilmcdevitt/code/arx`.
 2. Land the intended Git delta on `main`.
 3. Push `main`.
 4. Let Vercel `polynet` production deploy from GitHub `main`.
@@ -47,14 +48,14 @@ This is the canonical path. Do not rely on branch names, preview URLs, or old Ve
 
 Use when the change is ready and not urgent.
 
-1. Make the change in `/Users/neilmcdevitt/code/arx/.worktrees/daytona`.
+1. Make the change in `/Users/neilmcdevitt/code/arx`.
 2. Run the relevant local checks.
 3. Land the intended changes on `main`.
 4. Push `main`.
 5. If Convex changed, run:
 
 ```bash
-cd /Users/neilmcdevitt/code/arx/.worktrees/daytona
+cd /Users/neilmcdevitt/code/arx
 npm run convex:deploy
 ```
 
@@ -76,7 +77,7 @@ Use when production is broken or trust is at risk.
 Run only the checks relevant to the change. Common commands:
 
 ```bash
-cd /Users/neilmcdevitt/code/arx/.worktrees/daytona
+cd /Users/neilmcdevitt/code/arx
 npm run convex:codegen
 npm run check:gate-parity
 npm run check:runtime-turn-contract-guard

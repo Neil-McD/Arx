@@ -19,6 +19,9 @@ function main() {
   const httpDaytona = readText(
     "/Users/neilmcdevitt/code/arx/convex/httpDaytona.ts",
   );
+  const runtimeHarnessComposition = readText(
+    "/Users/neilmcdevitt/code/arx/convex/runtimeHarnessComposition.ts",
+  );
   const skillsEditor = readText(
     "/Users/neilmcdevitt/code/arx/apps/web/src/components/WebCommunityAiAgentSkillsEditor.tsx",
   );
@@ -52,14 +55,24 @@ function main() {
     "runtime skill evidence event",
   );
   assertIncludes(
-    httpDaytona,
+    runtimeHarnessComposition,
     "buildCommunityOverlayRuntimeState({",
     "shared overlay runtime composition for selected skill injection",
   );
   assertIncludes(
-    httpDaytona,
+    runtimeHarnessComposition,
     "overlayRuntimeState.systemPromptSuffix",
     "selected skill injection prompt suffix wiring",
+  );
+  assertIncludes(
+    httpDaytona,
+    "composeResolvedRuntimeHarness({",
+    "runtime uses shared harness composition",
+  );
+  assertIncludes(
+    httpDaytona,
+    "resolvedHarness.systemPromptSuffix",
+    "runtime consumes composed skill prompt suffix",
   );
   assertIncludes(
     httpDaytona,

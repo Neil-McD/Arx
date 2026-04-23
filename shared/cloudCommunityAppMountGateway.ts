@@ -42,6 +42,7 @@ export async function connectCloudCommunityApp<SessionT>(
   const payload = (await client.action("community:connectCommunityApp" as any, {
     authSubject,
     communityId: params.communityId,
+    catalogAppId: params.input.catalog_app_id,
     name: params.input.name,
     endpointUrl: params.input.endpoint_url,
     authType: params.input.auth_type,

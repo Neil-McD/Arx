@@ -57,6 +57,7 @@ type BuildWebCommunitySurfaceProjectionParams = {
   canViewActiveCommunityPolynet: WebCommunitySecondaryPanelsProps["polynet"]["canManagePolynet"];
   aiAgentHasSession: WebCommunitySecondaryPanelsProps["aiAgent"]["hasSession"];
   canManageMembersActiveCommunity: WebCommunitySecondaryPanelsProps["aiAgent"]["canManageMembersActiveCommunity"];
+  aiAgentPreferredTab: WebCommunitySecondaryPanelsProps["aiAgent"]["preferredTab"];
   isLoadingCommunityAgentConfig: WebCommunitySecondaryPanelsProps["aiAgent"]["isLoadingCommunityAgentConfig"];
   communityAgentConfigError: WebCommunitySecondaryPanelsProps["aiAgent"]["communityAgentConfigError"];
   isActiveCommunityOwner: WebCommunitySecondaryPanelsProps["members"]["capabilities"]["isActiveCommunityOwner"];
@@ -209,6 +210,7 @@ export function buildWebCommunitySurfaceProjection(
       activeCommunity: params.activeCommunity,
       hasSession: params.aiAgentHasSession,
       canManageMembersActiveCommunity: params.canManageMembersActiveCommunity,
+      preferredTab: params.aiAgentPreferredTab,
       isLoadingCommunityAgentConfig: params.isLoadingCommunityAgentConfig,
       communityAgentConfigError: params.communityAgentConfigError,
       onRequireSignIn: params.requireSignIn,

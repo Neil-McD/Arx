@@ -13,6 +13,7 @@ export type CommunityMountedApp = {
   enabled: boolean;
   enabled_tools: string[];
   app: {
+    catalog_app_id: string | null;
     name: string;
     slug: string;
     endpoint_url: string;
@@ -26,6 +27,7 @@ export type CommunityMountedApp = {
 };
 
 export type ConnectCommunityAppInput = {
+  catalog_app_id?: string;
   name: string;
   endpoint_url: string;
   auth_type: DeveloperAppAuthType;

@@ -2151,6 +2151,9 @@ export default function App() {
     memory_mode: "auto",
     remember_intent_enabled: true,
   });
+  const [communityAiAgentPreferredTab, setCommunityAiAgentPreferredTab] = useState<
+    "workspace" | "apps" | "skills"
+  >("workspace");
   const [, setIsLoadingUserMemorySettings] = useState(false);
   const [openRouterConnection, setOpenRouterConnection] = useState<CloudOpenRouterConnectionStatus>({
     provider: "openrouter",
@@ -3426,7 +3429,10 @@ export default function App() {
   });
 
   useEffect(() => {
-    if (activePage !== "community" || communityTab !== "ai_agent") return;
+    const shouldLoadCommunityApps =
+      (activePage === "community" && communityTab === "ai_agent") ||
+      activePage === "discover";
+    if (!shouldLoadCommunityApps) return;
     if (!session || !activeCommunityId || !canManageMembersActiveCommunity) {
       clearCommunityAppMounts();
       return;
@@ -3491,7 +3497,10 @@ export default function App() {
   ]);
 
   useEffect(() => {
-    if (activePage !== "community" || communityTab !== "ai_agent") return;
+    const shouldLoadCommunitySkills =
+      (activePage === "community" && communityTab === "ai_agent") ||
+      activePage === "discover";
+    if (!shouldLoadCommunitySkills) return;
     if (!session || !activeCommunityId || !canManageMembersActiveCommunity) {
       clearCommunitySkillAttachments();
       return;
@@ -3510,7 +3519,10 @@ export default function App() {
   ]);
 
   useEffect(() => {
-    if (activePage !== "community" || communityTab !== "ai_agent") return;
+    const shouldLoadOwnedSkillPackages =
+      (activePage === "community" && communityTab === "ai_agent") ||
+      activePage === "discover";
+    if (!shouldLoadOwnedSkillPackages) return;
     if (!session || !canManageMembersActiveCommunity) {
       clearCommunitySkillAttachments();
       return;
@@ -5255,6 +5267,15 @@ export default function App() {
       setActiveView("settings");
       setSettingsPage("integrations");
     };
+    const handleOpenActiveCommunityAiAgentTab = (tab: "apps" | "skills") => {
+      const nextCommunitySlug = String(
+        selectedActiveCommunitySlug ?? activeCommunity?.slug ?? "",
+      ).trim();
+      if (!nextCommunitySlug) return;
+      pushNavSnapshot();
+      setCommunityAiAgentPreferredTab(tab);
+      openCommunityTab(nextCommunitySlug, "ai_agent", { pushSnapshot: false });
+    };
     const {
       handleSelectMobileMode,
       openMobileAgentSettings,
@@ -5451,6 +5472,7 @@ export default function App() {
       canViewActiveCommunityPolynet,
       aiAgentHasSession: Boolean(session),
       canManageMembersActiveCommunity,
+      aiAgentPreferredTab: communityAiAgentPreferredTab,
       isLoadingCommunityAgentConfig,
       communityAgentConfigError,
       isActiveCommunityOwner,
@@ -6240,14 +6262,38 @@ export default function App() {
       userPlatformAppMutationError,
       isConnectingUserPlatformApp,
       onConnectUserPlatformApp: handleConnectUserPlatformApp,
+      manageableCommunityTargetName: canManageMembersActiveCommunity
+        ? (activeCommunity?.name ?? null)
+        : null,
+      communityAppMounts,
+      isLoadingCommunityAppMounts,
+      communityAppMountError,
+      communityAppMutationError,
+      isConnectingCommunityApp,
+      onConnectCommunityApp: handleConnectCommunityApp,
       userPlatformSkills,
       isLoadingUserPlatformSkills,
       userPlatformSkillError,
       userPlatformSkillMutationError,
       isCreatingUserPlatformSkill,
       onCreateUserPlatformSkill: handleCreateUserPlatformSkill,
+      communitySkillAttachments,
+      ownedSkillPackages,
+      isLoadingCommunitySkillAttachments,
+      isLoadingOwnedSkillPackages,
+      communitySkillAttachmentError,
+      ownedSkillPackagesError,
+      communitySkillMutationError,
+      isCreatingCommunitySkill: isCreatingSkill,
+      attachingCommunitySkillPackageId: attachingSkillPackageId,
+      onCreateCommunitySkill: handleCreateCommunitySkill,
+      onAttachSkillPackageToCommunity: handleAttachSkillPackageToCommunity,
       onOpenIntegrationsSettings: handleOpenIntegrationsSettings,
       onOpenCreateUserPlatformSkill: handleOpenCreatePersonalSkill,
+      onOpenActiveCommunityAiAgentApps: () =>
+        handleOpenActiveCommunityAiAgentTab("apps"),
+      onOpenActiveCommunityAiAgentSkills: () =>
+        handleOpenActiveCommunityAiAgentTab("skills"),
       onActivateCommunity: (community) => {
         activateDiscoverCommunityCard({
           canActivate: Boolean(community.slug),

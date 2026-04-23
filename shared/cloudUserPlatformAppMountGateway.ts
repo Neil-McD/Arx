@@ -47,6 +47,7 @@ export async function connectCloudUserPlatformApp<SessionT>(
     "userPlatformAppMounts:connectUserPlatformApp" as any,
     {
       authSubject,
+      catalogAppId: params.input.catalog_app_id,
       name: params.input.name,
       endpointUrl: params.input.endpoint_url,
       authType: params.input.auth_type,

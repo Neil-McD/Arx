@@ -130,6 +130,7 @@ type UserPlatformAppMountRow = {
 type RuntimeMountedUserPlatformAppTool = {
   user_platform_app_mount_id: any;
   developer_app_id: any;
+  catalog_app_id: string | null;
   app_name: string;
   endpoint_url: string;
   auth_type: string;
@@ -348,6 +349,7 @@ function resolveRuntimeMountedUserPlatformAppTools(args: {
     .map((tool) => ({
       user_platform_app_mount_id: args.mount._id,
       developer_app_id: args.app._id,
+      catalog_app_id: args.app.catalogAppId ?? null,
       app_name: args.app.name,
       endpoint_url: args.app.endpointUrl,
       auth_type: args.app.authType,
@@ -935,6 +937,7 @@ export const patchUserPlatformAppMountsForDeveloperAppSnapshotInternal =
 export const connectUserPlatformApp = action({
   args: {
     authSubject: v.optional(v.string()),
+    catalogAppId: v.optional(v.string()),
     name: v.string(),
     endpointUrl: v.string(),
     authType: v.union(
@@ -1153,6 +1156,7 @@ export const connectUserPlatformApp = action({
         internal.developerApps.createDeveloperAppInternal,
         {
           ownerUserId: userId,
+          catalogAppId: args.catalogAppId,
           name: args.name,
           slug: undefined,
           description: args.description,

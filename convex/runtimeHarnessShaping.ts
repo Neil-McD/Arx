@@ -2,18 +2,18 @@ import {
   type CommunityOverlayMountedTool,
   type CommunityOverlaySelectedSkill,
   type CommunityOverlaySkillInventory,
-} from "../shared/communityOverlayRuntime";
+} from "../shared/communityOverlayRuntime.ts";
 import {
   type PersonalOverlaySelectedSkill,
   type PersonalOverlaySkillInventory,
-} from "../shared/personalSkillOverlayRuntime";
+} from "../shared/personalSkillOverlayRuntime.ts";
 import {
   buildOpenAiFunctionTools,
   projectResponsesApiToolSchema,
   type ResponsesApiFunctionTool,
-} from "../shared/toolRegistry";
-import type { RuntimeMountedMcpTool } from "./runtimeMcpManager";
-import { decodeStoredMcpToolInputSchema } from "./mcpSnapshotCodec";
+} from "../shared/toolRegistry.ts";
+import type { RuntimeMountedMcpTool } from "./runtimeMcpManager.ts";
+import { decodeStoredMcpToolInputSchema } from "./mcpSnapshotCodec.ts";
 
 type OpenAiCompatibleFunctionTool = ReturnType<
   typeof buildOpenAiFunctionTools
@@ -22,6 +22,7 @@ type OpenAiCompatibleFunctionTool = ReturnType<
 export type RuntimeMountedCommunityAppTool = {
   community_app_mount_id: string;
   developer_app_id: string;
+  catalog_app_id: string | null;
   app_name: string;
   endpoint_url: string;
   auth_type: string;
@@ -35,6 +36,7 @@ export type RuntimeMountedCommunityAppTool = {
 export type RuntimeMountedUserPlatformAppTool = {
   user_platform_app_mount_id: string;
   developer_app_id: string;
+  catalog_app_id: string | null;
   app_name: string;
   endpoint_url: string;
   auth_type: string;
@@ -48,6 +50,7 @@ export type RuntimeMountedUserPlatformAppTool = {
 export type RuntimeCommunitySkillInventory = {
   community_skill_attachment_id: string;
   skill_package_id: string;
+  catalog_skill_id: string | null;
   name: string;
   mention_token: string;
   description: string | null;
@@ -61,6 +64,7 @@ export type RuntimeSelectedCommunitySkill = RuntimeCommunitySkillInventory & {
 export type RuntimeUserPlatformSkillInventory = {
   user_platform_skill_install_id: string;
   skill_package_id: string;
+  catalog_skill_id: string | null;
   name: string;
   mention_token: string;
   description: string | null;
@@ -126,6 +130,10 @@ export function normalizeRuntimeMountedCommunityAppTools(
     tools.push({
       community_app_mount_id: String(record.community_app_mount_id ?? "").trim(),
       developer_app_id: String(record.developer_app_id ?? "").trim(),
+      catalog_app_id:
+        typeof record.catalog_app_id === "string" && record.catalog_app_id.trim()
+          ? record.catalog_app_id.trim().toLowerCase()
+          : null,
       app_name: String(record.app_name ?? "").trim() || "Community app",
       endpoint_url: String(record.endpoint_url ?? "").trim(),
       auth_type: String(record.auth_type ?? "").trim(),
@@ -173,6 +181,10 @@ export function normalizeRuntimeMountedUserPlatformAppTools(
         record.user_platform_app_mount_id ?? "",
       ).trim(),
       developer_app_id: String(record.developer_app_id ?? "").trim(),
+      catalog_app_id:
+        typeof record.catalog_app_id === "string" && record.catalog_app_id.trim()
+          ? record.catalog_app_id.trim().toLowerCase()
+          : null,
       app_name: String(record.app_name ?? "").trim() || "My app",
       endpoint_url: String(record.endpoint_url ?? "").trim(),
       auth_type: String(record.auth_type ?? "").trim(),
@@ -211,6 +223,10 @@ export function normalizeRuntimeCommunitySkillInventory(
         record.community_skill_attachment_id ?? "",
       ).trim(),
       skill_package_id: String(record.skill_package_id ?? "").trim(),
+      catalog_skill_id:
+        typeof record.catalog_skill_id === "string" && record.catalog_skill_id.trim()
+          ? record.catalog_skill_id.trim().toLowerCase()
+          : null,
       name: String(record.name ?? "").trim() || mentionToken,
       mention_token: mentionToken,
       description:
@@ -246,6 +262,10 @@ export function normalizeRuntimeSelectedCommunitySkills(
         record.community_skill_attachment_id ?? "",
       ).trim(),
       skill_package_id: String(record.skill_package_id ?? "").trim(),
+      catalog_skill_id:
+        typeof record.catalog_skill_id === "string" && record.catalog_skill_id.trim()
+          ? record.catalog_skill_id.trim().toLowerCase()
+          : null,
       skill_revision_id:
         typeof record.skill_revision_id === "string" && record.skill_revision_id.trim()
           ? record.skill_revision_id.trim()
@@ -282,6 +302,10 @@ export function normalizeRuntimeUserPlatformSkillInventory(
         record.user_platform_skill_install_id ?? "",
       ).trim(),
       skill_package_id: String(record.skill_package_id ?? "").trim(),
+      catalog_skill_id:
+        typeof record.catalog_skill_id === "string" && record.catalog_skill_id.trim()
+          ? record.catalog_skill_id.trim().toLowerCase()
+          : null,
       name: String(record.name ?? "").trim() || mentionToken,
       mention_token: mentionToken,
       description:
@@ -317,6 +341,10 @@ export function normalizeRuntimeSelectedUserPlatformSkills(
         record.user_platform_skill_install_id ?? "",
       ).trim(),
       skill_package_id: String(record.skill_package_id ?? "").trim(),
+      catalog_skill_id:
+        typeof record.catalog_skill_id === "string" && record.catalog_skill_id.trim()
+          ? record.catalog_skill_id.trim().toLowerCase()
+          : null,
       skill_revision_id:
         typeof record.skill_revision_id === "string" && record.skill_revision_id.trim()
           ? record.skill_revision_id.trim()

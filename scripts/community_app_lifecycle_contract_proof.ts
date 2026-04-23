@@ -12,6 +12,12 @@ function assertIncludes(haystack: string, needle: string, label: string) {
 function main() {
   const communityAppMounts = readText("/Users/neilmcdevitt/code/arx/convex/communityAppMounts.ts");
   const httpDaytona = readText("/Users/neilmcdevitt/code/arx/convex/httpDaytona.ts");
+  const runtimeExecutionSession = readText(
+    "/Users/neilmcdevitt/code/arx/convex/runtimeExecutionSession.ts",
+  );
+  const runtimeMcpManager = readText(
+    "/Users/neilmcdevitt/code/arx/convex/runtimeMcpManager.ts",
+  );
   const appEditor = readText("/Users/neilmcdevitt/code/arx/apps/web/src/components/WebCommunityAiAgentAppsEditor.tsx");
 
   for (const exportedName of [
@@ -49,13 +55,43 @@ function main() {
   );
   assertIncludes(
     httpDaytona,
-    "executeCommunityMountedAppToolInternal",
-    "runtime mounted-tool execution",
+    "createPolyNetExecutionSession({",
+    "runtime mounted-tool execution session composition",
+  );
+  assertIncludes(
+    httpDaytona,
+    "executionSession.executeMountedTool({",
+    "runtime mounted-tool execution dispatch",
   );
   assertIncludes(
     httpDaytona,
     "community_app_tools_resolved",
     "runtime mounted-tool evidence event",
+  );
+  assertIncludes(
+    httpDaytona,
+    "mountedTool.scope === \"community\" && mountedTool.risk_level !== \"read\"",
+    "community mounted write/sensitive runtime guard",
+  );
+  assertIncludes(
+    httpDaytona,
+    "assertCommunityManagerAccessInternal",
+    "community mounted write/sensitive manager guard",
+  );
+  assertIncludes(
+    runtimeExecutionSession,
+    "createRuntimeMcpManager({",
+    "execution session owns MCP manager",
+  );
+  assertIncludes(
+    runtimeExecutionSession,
+    "async executeMountedTool(params:",
+    "execution session exposes mounted tool execution",
+  );
+  assertIncludes(
+    runtimeMcpManager,
+    "callTool:",
+    "runtime MCP manager calls remote mounted tools",
   );
 
   assertIncludes(appEditor, "Refresh", "apps editor refresh control");

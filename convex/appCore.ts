@@ -6,6 +6,7 @@ export type AppToolValidationStatus = "ok" | "error";
 export type DeveloperAppRow = {
   _id: any;
   ownerUserId: any;
+  catalogAppId?: string;
   name: string;
   slug: string;
   description?: string;
@@ -45,6 +46,7 @@ export type AppToolSnapshotRow = {
 };
 
 const MAX_APP_NAME_LENGTH = 120;
+const MAX_APP_CATALOG_ID_LENGTH = 120;
 const MAX_APP_SLUG_LENGTH = 80;
 const MAX_APP_DESCRIPTION_LENGTH = 2_000;
 const MAX_ENDPOINT_URL_LENGTH = 1_000;
@@ -100,6 +102,10 @@ export function normalizeDeveloperAppName(value: unknown): string {
   return normalizeString(value, MAX_APP_NAME_LENGTH);
 }
 
+export function normalizeDeveloperAppCatalogId(value: unknown): string {
+  return normalizeString(value, MAX_APP_CATALOG_ID_LENGTH).toLowerCase();
+}
+
 export function normalizeDeveloperAppDescription(value: unknown): string {
   return normalizeString(value, MAX_APP_DESCRIPTION_LENGTH);
 }
@@ -145,6 +151,7 @@ export function mapAppConnectionReadModel(app: DeveloperAppRow, row: AppConnecti
 
 export function mapDeveloperAppReadModel(app: DeveloperAppRow) {
   return {
+    catalog_app_id: app.catalogAppId ?? null,
     name: app.name,
     slug: app.slug,
     endpoint_url: app.endpointUrl,

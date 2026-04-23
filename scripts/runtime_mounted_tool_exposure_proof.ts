@@ -10,6 +10,7 @@ const mountedTools = [
     mount_id: "u1",
     runtime_tool_name: "me__notion_search",
     developer_app_id: "app-1",
+    catalog_app_id: null,
     app_name: "Notion",
     endpoint_url: "https://example.test/notion",
     auth_type: "bearer",
@@ -24,6 +25,7 @@ const mountedTools = [
     mount_id: "c1",
     runtime_tool_name: "drive__read_file",
     developer_app_id: "app-2",
+    catalog_app_id: null,
     app_name: "Drive",
     endpoint_url: "https://example.test/drive",
     auth_type: "none",
@@ -38,6 +40,7 @@ const mountedTools = [
     mount_id: "c2",
     runtime_tool_name: "github__create_issue",
     developer_app_id: "app-3",
+    catalog_app_id: null,
     app_name: "GitHub",
     endpoint_url: "https://example.test/github",
     auth_type: "bearer",
@@ -46,6 +49,36 @@ const mountedTools = [
     description: "Create a GitHub issue",
     input_schema: {},
     risk_level: "write" as const,
+  },
+  {
+    scope: "user" as const,
+    mount_id: "u2",
+    runtime_tool_name: "me__linear__search_issues",
+    developer_app_id: "app-4",
+    catalog_app_id: "linear",
+    app_name: "Linear",
+    endpoint_url: "https://example.test/linear",
+    auth_type: "bearer",
+    tool_name: "search_issues",
+    namespaced_tool_name: "linear__search_issues",
+    description: "Search my Linear issues",
+    input_schema: {},
+    risk_level: "read" as const,
+  },
+  {
+    scope: "community" as const,
+    mount_id: "c3",
+    runtime_tool_name: "linear__search_issues",
+    developer_app_id: "app-5",
+    catalog_app_id: "linear",
+    app_name: "Linear",
+    endpoint_url: "https://example.test/linear",
+    auth_type: "bearer",
+    tool_name: "search_issues",
+    namespaced_tool_name: "linear__search_issues",
+    description: "Search community Linear issues",
+    input_schema: {},
+    risk_level: "read" as const,
   },
 ];
 
@@ -116,6 +149,68 @@ async function proveScopeFilteringAndPersistence() {
   console.log("PASS: mounted tool exposure respects scope and persists within the run");
 }
 
+async function proveAnyScopeShadowsPersonalDuplicates() {
+  const state = createRuntimeMountedToolExposureState({
+    mountedTools,
+  });
+  const result = state.resolve(
+    normalizeResolveMountedToolsArguments({
+      query: "linear",
+      scope: "any",
+    }),
+  );
+  const payload = JSON.parse(result.outputText) as {
+    newlyExposedTools: Array<{
+      runtime_tool_name: string;
+      scope: "user" | "community";
+    }>;
+    totalCatalogCount: number;
+  };
+  assert.deepEqual(
+    payload.newlyExposedTools.map((tool) => tool.runtime_tool_name),
+    ["linear__search_issues"],
+  );
+  assert.equal(payload.newlyExposedTools[0]?.scope, "community");
+  assert.equal(payload.totalCatalogCount, 4);
+  console.log("PASS: any-scope resolution shadows duplicate personal mounted tools");
+}
+
+async function proveUserScopeCanStillReachShadowedPersonalDuplicate() {
+  const state = createRuntimeMountedToolExposureState({
+    mountedTools,
+  });
+  state.resolve(
+    normalizeResolveMountedToolsArguments({
+      query: "linear",
+      scope: "any",
+    }),
+  );
+  const explicitUserResult = state.resolve(
+    normalizeResolveMountedToolsArguments({
+      query: "linear",
+      scope: "user",
+    }),
+  );
+  const payload = JSON.parse(explicitUserResult.outputText) as {
+    newlyExposedTools: Array<{
+      runtime_tool_name: string;
+      scope: "user" | "community";
+    }>;
+  };
+  assert.deepEqual(
+    payload.newlyExposedTools.map((tool) => tool.runtime_tool_name),
+    ["me__linear__search_issues"],
+  );
+  assert.equal(payload.newlyExposedTools[0]?.scope, "user");
+  assert.deepEqual(
+    state.getExposedTools().map((tool) => tool.runtime_tool_name).sort(),
+    ["linear__search_issues", "me__linear__search_issues"],
+  );
+  console.log("PASS: explicit user scope can still expose a shadowed personal tool");
+}
+
 await proveInitialExposureIsEmpty();
 await proveResolutionExposesMatches();
 await proveScopeFilteringAndPersistence();
+await proveAnyScopeShadowsPersonalDuplicates();
+await proveUserScopeCanStillReachShadowedPersonalDuplicate();

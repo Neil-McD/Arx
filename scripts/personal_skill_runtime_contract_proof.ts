@@ -22,6 +22,9 @@ function main() {
   const httpDaytona = readText(
     "/Users/neilmcdevitt/code/arx/convex/httpDaytona.ts",
   );
+  const runtimeHarnessComposition = readText(
+    "/Users/neilmcdevitt/code/arx/convex/runtimeHarnessComposition.ts",
+  );
   const settingsSection = readText(
     "/Users/neilmcdevitt/code/arx/apps/web/src/components/WebIntegrationsSettingsSection.tsx",
   );
@@ -64,9 +67,14 @@ function main() {
     "personal create-and-install flow owned by personal skill authority",
   );
   assertIncludes(
-    httpDaytona,
+    runtimeHarnessComposition,
     "buildPersonalSkillOverlayRuntimeState({",
     "personal overlay runtime composition",
+  );
+  assertIncludes(
+    httpDaytona,
+    "composeResolvedRuntimeHarness({",
+    "personal overlay runtime composer usage",
   );
   assertIncludes(
     httpDaytona,

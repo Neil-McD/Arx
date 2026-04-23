@@ -167,6 +167,7 @@ export function createPolyNetExecutionSession(params: {
   threadId?: string | null;
   runId: string;
   mountedTools: RuntimeMountedMcpTool[];
+  mountedToolDiscoveryCatalog?: RuntimeMountedMcpTool[] | null;
   mountedPromptSuffix?: string | null;
   initialWorkspaceSession?: WorkspaceSandboxSession | null;
   appendRunEvent: (event: RuntimeExecutionSessionRunEvent) => Promise<void>;
@@ -183,6 +184,7 @@ export function createPolyNetExecutionSession(params: {
   });
   const mountedToolExposureState = createRuntimeMountedToolExposureState({
     mountedTools: params.mountedTools,
+    discoveryCatalog: params.mountedToolDiscoveryCatalog ?? null,
   });
   const mountedToolByName = new Map(
     params.mountedTools.map((tool) => [tool.runtime_tool_name, tool]),

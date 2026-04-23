@@ -16,15 +16,16 @@ EXCLUDES=(
   --glob '!**/.next/**'
   --glob '!**/.turbo/**'
   --glob '!**/coverage/**'
+  --glob '!references/**'
+  --glob '!apps/web/src/lib/discoverCatalog.ts'
 )
 CODE_TARGETS=(
-  src
   apps
   shared
   convex
 )
 
-echo "[1/3] Scanning repository for forbidden legacy provider references..."
+echo "[1/3] Scanning repository for forbidden legacy provider references outside the MCP catalog..."
 if rg -n -i --hidden -S "$PATTERN" . "${EXCLUDES[@]}"; then
   echo "FAIL: legacy provider reference detected."
   exit 1

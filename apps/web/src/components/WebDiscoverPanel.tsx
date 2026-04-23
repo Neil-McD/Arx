@@ -1,6 +1,14 @@
 import { useEffect, useMemo, useState, type ComponentProps } from "react";
 
 import type { DeveloperAppAuthType } from "../../../../shared/communityAppMountTypes";
+import type {
+  CommunityMountedApp,
+  ConnectCommunityAppInput,
+} from "../../../../shared/communityAppMountTypes";
+import type {
+  CommunityAttachedSkill,
+  SkillPackageSummary,
+} from "../../../../shared/communitySkillTypes";
 import { buildPlatformSwitcherStyle } from "../../../../shared/platformSwitcherUi";
 import type { DiscoverCommunitySnapshot } from "../../../../shared/communityTypes";
 import type { CreateSkillPackageInput } from "../../../../shared/skillPackageTypes";
@@ -74,6 +82,15 @@ type WebDiscoverPanelProps = {
   onConnectUserPlatformApp: (
     input: ConnectUserPlatformAppInput,
   ) => Promise<ConnectUserPlatformAppResult> | ConnectUserPlatformAppResult;
+  manageableCommunityTargetName: string | null;
+  communityAppMounts: CommunityMountedApp[];
+  isLoadingCommunityAppMounts: boolean;
+  communityAppMountError: string | null;
+  communityAppMutationError: string | null;
+  isConnectingCommunityApp: boolean;
+  onConnectCommunityApp: (
+    input: ConnectCommunityAppInput,
+  ) => Promise<boolean> | boolean;
   userPlatformSkills: UserPlatformInstalledSkill[];
   isLoadingUserPlatformSkills: boolean;
   userPlatformSkillError: string | null;
@@ -82,9 +99,26 @@ type WebDiscoverPanelProps = {
   onCreateUserPlatformSkill: (
     input: CreateSkillPackageInput,
   ) => Promise<boolean> | boolean;
+  communitySkillAttachments: CommunityAttachedSkill[];
+  ownedSkillPackages: SkillPackageSummary[];
+  isLoadingCommunitySkillAttachments: boolean;
+  isLoadingOwnedSkillPackages: boolean;
+  communitySkillAttachmentError: string | null;
+  ownedSkillPackagesError: string | null;
+  communitySkillMutationError: string | null;
+  isCreatingCommunitySkill: boolean;
+  attachingCommunitySkillPackageId: string | null;
+  onCreateCommunitySkill: (
+    input: CreateSkillPackageInput,
+  ) => Promise<boolean> | boolean;
+  onAttachSkillPackageToCommunity: (
+    skillPackageId: string,
+  ) => Promise<boolean> | boolean;
   onActivateCommunity: (community: DiscoverCommunitySnapshot) => void;
   onOpenIntegrationsSettings: () => void;
   onOpenCreateUserPlatformSkill: () => void;
+  onOpenActiveCommunityAiAgentApps: () => void;
+  onOpenActiveCommunityAiAgentSkills: () => void;
 };
 
 function renderValidationStageIcon(status: "ok" | "error" | "skipped") {
@@ -125,10 +159,33 @@ function buildMountStatusLabel(mount: UserPlatformMountedApp): string {
   return `${count} ${toolLabel} are mounted in your platform layer.`;
 }
 
+function buildCommunityMountStatusLabel(mount: CommunityMountedApp): string {
+  const count = mount.enabled_tools.length;
+  const toolLabel = count === 1 ? "tool" : "tools";
+  const connectionStatus = String(
+    mount.connection.connection_status ?? "",
+  ).trim();
+  if (connectionStatus === "connected") {
+    return `${count} ${toolLabel} are active in this community lens.`;
+  }
+  if (connectionStatus) {
+    return `${count} ${toolLabel} are mounted, but the connection status is ${connectionStatus.replace(
+      /_/g,
+      " ",
+    )}.`;
+  }
+  return `${count} ${toolLabel} are mounted in this community lens.`;
+}
+
 function findMatchingPersonalMount(
   app: DiscoverAppCatalogEntry,
   mounts: UserPlatformMountedApp[],
 ): UserPlatformMountedApp | null {
+  const byCatalogId =
+    app.personalConnect.connectionKind === "known"
+      ? mounts.find((mount) => mount.app.catalog_app_id === app.id) ?? null
+      : null;
+  if (byCatalogId) return byCatalogId;
   const catalogKnownMountKeys = DISCOVER_APP_CATALOG.filter(
     (entry) =>
       entry.personalConnect.connectionKind === "known" &&
@@ -157,6 +214,87 @@ function findMatchingPersonalMount(
         mount.app.endpoint_url === app.personalConnect.endpointUrl &&
         mount.app.auth_type === app.personalConnect.authType,
     ) ?? null
+  );
+}
+
+function findMatchingCommunityMount(
+  app: DiscoverAppCatalogEntry,
+  mounts: CommunityMountedApp[],
+): CommunityMountedApp | null {
+  const byCatalogId =
+    app.personalConnect.connectionKind === "known"
+      ? mounts.find((mount) => mount.app.catalog_app_id === app.id) ?? null
+      : null;
+  if (byCatalogId) return byCatalogId;
+  const catalogKnownMountKeys = DISCOVER_APP_CATALOG.filter(
+    (entry) =>
+      entry.personalConnect.connectionKind === "known" &&
+      entry.personalConnect.endpointUrl &&
+      entry.personalConnect.authType,
+  ).map(
+    (entry) =>
+      `${entry.personalConnect.endpointUrl}::${entry.personalConnect.authType}`,
+  );
+  if (!isDiscoverAppPersonallyConnectable(app)) {
+    return null;
+  }
+  if (app.personalConnect.connectionKind === "custom") {
+    return (
+      mounts.find(
+        (mount) =>
+          !catalogKnownMountKeys.includes(
+            `${mount.app.endpoint_url}::${mount.app.auth_type}`,
+          ),
+      ) ?? null
+    );
+  }
+  return (
+    mounts.find(
+      (mount) =>
+        mount.app.endpoint_url === app.personalConnect.endpointUrl &&
+        mount.app.auth_type === app.personalConnect.authType,
+    ) ?? null
+  );
+}
+
+function readDiscoverSkillInvocationToken(invocation: string): string | null {
+  const trimmed = invocation.trim();
+  if (!trimmed.startsWith("$")) return null;
+  const token = trimmed.slice(1).trim().toLowerCase();
+  return token || null;
+}
+
+function findMatchingOwnedSkillPackage(
+  skill: DiscoverSkillCatalogEntry,
+  packages: SkillPackageSummary[],
+): SkillPackageSummary | null {
+  if (skill.catalogSkillId) {
+    const catalogMatch =
+      packages.find((skillPackage) => skillPackage.catalogSkillId === skill.catalogSkillId) ??
+      null;
+    if (catalogMatch) return catalogMatch;
+  }
+  const token = readDiscoverSkillInvocationToken(skill.invocation);
+  if (!token) return null;
+  return (
+    packages.find(
+      (skillPackage) =>
+        String(skillPackage.mentionToken ?? "").trim().toLowerCase() === token,
+    ) ?? null
+  );
+}
+
+function findMatchingCommunitySkillAttachment(
+  skill: DiscoverSkillCatalogEntry,
+  attachments: CommunityAttachedSkill[],
+): CommunityAttachedSkill | null {
+  const matchingPackage = findMatchingOwnedSkillPackage(
+    skill,
+    attachments.map((attachment) => attachment.skill),
+  );
+  if (!matchingPackage) return null;
+  return (
+    attachments.find((attachment) => attachment.skill.id === matchingPackage.id) ?? null
   );
 }
 
@@ -218,15 +356,35 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
     userPlatformAppMutationError,
     isConnectingUserPlatformApp,
     onConnectUserPlatformApp,
+    manageableCommunityTargetName,
+    communityAppMounts,
+    isLoadingCommunityAppMounts,
+    communityAppMountError,
+    communityAppMutationError,
+    isConnectingCommunityApp,
+    onConnectCommunityApp,
     userPlatformSkills,
     isLoadingUserPlatformSkills,
     userPlatformSkillError,
     userPlatformSkillMutationError,
     isCreatingUserPlatformSkill,
     onCreateUserPlatformSkill,
+    communitySkillAttachments,
+    ownedSkillPackages,
+    isLoadingCommunitySkillAttachments,
+    isLoadingOwnedSkillPackages,
+    communitySkillAttachmentError,
+    ownedSkillPackagesError,
+    communitySkillMutationError,
+    isCreatingCommunitySkill,
+    attachingCommunitySkillPackageId,
+    onCreateCommunitySkill,
+    onAttachSkillPackageToCommunity,
     onActivateCommunity,
     onOpenIntegrationsSettings,
     onOpenCreateUserPlatformSkill,
+    onOpenActiveCommunityAiAgentApps,
+    onOpenActiveCommunityAiAgentSkills,
   } = props;
   const [selectedAppId, setSelectedAppId] = useState<string | null>(null);
   const [selectedSkillId, setSelectedSkillId] = useState<string | null>(null);
@@ -237,6 +395,9 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
   const [personalConnectError, setPersonalConnectError] = useState<string | null>(
     null,
   );
+  const [appConnectTarget, setAppConnectTarget] = useState<
+    "personal" | "community"
+  >("personal");
   const [isPersonalConnectModalOpen, setIsPersonalConnectModalOpen] =
     useState(false);
   const [personalConnectResult, setPersonalConnectResult] = useState<
@@ -244,6 +405,9 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
   >(null);
   const [personalConnectValidationReport, setPersonalConnectValidationReport] =
     useState<UserPlatformAppValidationReport | null>(null);
+  const [communityConnectResult, setCommunityConnectResult] = useState<
+    "passed" | "failed" | null
+  >(null);
   const [selectedSkillActionError, setSelectedSkillActionError] = useState<
     string | null
   >(null);
@@ -278,10 +442,28 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
     if (!selectedApp) return null;
     return findMatchingPersonalMount(selectedApp, userPlatformAppMounts);
   }, [selectedApp, userPlatformAppMounts]);
+  const selectedCommunityMount = useMemo(() => {
+    if (!selectedApp) return null;
+    return findMatchingCommunityMount(selectedApp, communityAppMounts);
+  }, [communityAppMounts, selectedApp]);
   const selectedPersonalSkillInstall = useMemo(() => {
     if (!selectedSkill) return null;
     return findMatchingDiscoverSkillInstall(selectedSkill, userPlatformSkills);
   }, [selectedSkill, userPlatformSkills]);
+  const selectedOwnedSkillPackage = useMemo(() => {
+    if (!selectedSkill) return null;
+    return findMatchingOwnedSkillPackage(selectedSkill, ownedSkillPackages);
+  }, [ownedSkillPackages, selectedSkill]);
+  const selectedCommunitySkillAttachment = useMemo(() => {
+    if (!selectedSkill) return null;
+    return findMatchingCommunitySkillAttachment(
+      selectedSkill,
+      communitySkillAttachments,
+    );
+  }, [communitySkillAttachments, selectedSkill]);
+  const hasManageableCommunityTarget = Boolean(
+    String(manageableCommunityTargetName ?? "").trim(),
+  );
 
   const isAppsTab = activeTab === "apps";
   const isSkillsTab = activeTab === "skills";
@@ -316,6 +498,8 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
     setPersonalConnectError(null);
     setPersonalConnectResult(null);
     setPersonalConnectValidationReport(null);
+    setCommunityConnectResult(null);
+    setAppConnectTarget("personal");
     setIsPersonalConnectModalOpen(false);
   }, [selectedApp]);
 
@@ -341,20 +525,36 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
       : isSkillsTab
         ? "Browse reusable skill packages here."
         : "Find focused crews to build, learn, and ship faster.";
-  const selectedAppActionLabel = selectedApp
+  const selectedAppPersonalActionLabel = selectedApp
     ? selectedPersonalMount
       ? "Manage"
       : isDiscoverAppPersonallyConnectable(selectedApp)
-        ? "Connect"
+        ? "Add"
         : null
     : null;
-  const selectedSkillActionLabel = selectedSkill
+  const selectedAppCommunityActionLabel =
+    selectedApp && hasManageableCommunityTarget
+      ? selectedCommunityMount
+        ? `Manage ${manageableCommunityTargetName}`
+        : isDiscoverAppPersonallyConnectable(selectedApp)
+          ? `Add to ${manageableCommunityTargetName}`
+          : null
+      : null;
+  const selectedSkillPersonalActionLabel = selectedSkill
     ? selectedPersonalSkillInstall
       ? "Manage"
       : selectedSkill.installInput
-        ? "Add skill"
+        ? "Add"
         : "Create custom skill"
     : null;
+  const selectedSkillCommunityActionLabel =
+    selectedSkill && hasManageableCommunityTarget
+      ? selectedCommunitySkillAttachment
+        ? `Manage ${manageableCommunityTargetName}`
+        : selectedSkill.installInput
+          ? `Add to ${manageableCommunityTargetName}`
+          : `Create in ${manageableCommunityTargetName}`
+      : null;
   const personalConnectModalCopy = selectedApp
     ? buildDiscoverAppPersonalConnectModalCopy(selectedApp)
     : null;
@@ -364,6 +564,21 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
         authType: personalConnectAuthType,
       })
     : [];
+  const communityTargetLabel =
+    String(manageableCommunityTargetName ?? "").trim() || "this community";
+
+  const resetAppConnectFeedback = () => {
+    setPersonalConnectError(null);
+    setPersonalConnectResult(null);
+    setPersonalConnectValidationReport(null);
+    setCommunityConnectResult(null);
+  };
+
+  const openAppConnectModal = (target: "personal" | "community") => {
+    setAppConnectTarget(target);
+    resetAppConnectFeedback();
+    setIsPersonalConnectModalOpen(true);
+  };
 
   const handleUsePersonally = async (
     app: DiscoverAppCatalogEntry,
@@ -383,7 +598,7 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
       setPersonalConnectResult("failed");
       setPersonalConnectValidationReport(null);
       setPersonalConnectError(
-        `Paste your ${app.personalConnect.secretLabel} to connect ${app.name}.`,
+        `Paste your ${app.personalConnect.secretLabel} to add ${app.name}.`,
       );
       return;
     }
@@ -393,7 +608,7 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
     ) {
       setPersonalConnectResult("failed");
       setPersonalConnectValidationReport(null);
-      setPersonalConnectError("Paste the MCP endpoint before connecting it.");
+      setPersonalConnectError("Paste the MCP endpoint before adding it.");
       return;
     }
     if (
@@ -414,7 +629,7 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
     });
     if (!connectInput) {
       setPersonalConnectResult("failed");
-      setPersonalConnectError("This app is not ready for direct connection yet.");
+      setPersonalConnectError("This app is not ready for direct installation yet.");
       return;
     }
     setPersonalConnectError(null);
@@ -434,7 +649,76 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
     setPersonalConnectError((current) =>
       current ??
       result.error_message ??
-      `Couldn't connect ${app.name}. Check the requirements and try again.`,
+      `Couldn't add ${app.name}. Check the requirements and try again.`,
+    );
+  };
+
+  const handleUseInCommunity = async (
+    app: DiscoverAppCatalogEntry,
+  ): Promise<void> => {
+    if (!isDiscoverAppPersonallyConnectable(app)) return;
+    if (isAuthRecoveringSignedIn || isLoadingCommunityAppMounts) return;
+    if (!hasSession) {
+      onRequireAuth();
+      return;
+    }
+    if (!hasManageableCommunityTarget) return;
+    if (selectedCommunityMount) return;
+    if (
+      app.personalConnect.connectionKind === "known" &&
+      app.personalConnect.authMethod === "token" &&
+      !personalConnectSecret.trim()
+    ) {
+      setCommunityConnectResult("failed");
+      setPersonalConnectValidationReport(null);
+      setPersonalConnectError(
+        `Paste your ${app.personalConnect.secretLabel} to add ${app.name} to ${communityTargetLabel}.`,
+      );
+      return;
+    }
+    if (
+      app.personalConnect.connectionKind === "custom" &&
+      !personalConnectEndpoint.trim()
+    ) {
+      setCommunityConnectResult("failed");
+      setPersonalConnectValidationReport(null);
+      setPersonalConnectError("Paste the MCP endpoint before adding it.");
+      return;
+    }
+    if (
+      app.personalConnect.connectionKind === "custom" &&
+      personalConnectAuthType !== "none" &&
+      !personalConnectSecret.trim()
+    ) {
+      setCommunityConnectResult("failed");
+      setPersonalConnectValidationReport(null);
+      setPersonalConnectError("Paste the secret required for this MCP connection.");
+      return;
+    }
+    const connectInput = buildDiscoverAppPersonalConnectInput(app, {
+      endpointUrl: personalConnectEndpoint,
+      authType: personalConnectAuthType,
+      description: app.description,
+      secret: personalConnectSecret.trim() || undefined,
+    });
+    if (!connectInput) {
+      setCommunityConnectResult("failed");
+      setPersonalConnectError("This app is not ready for direct installation yet.");
+      return;
+    }
+    setPersonalConnectError(null);
+    setPersonalConnectResult(null);
+    setPersonalConnectValidationReport(null);
+    const ok = await onConnectCommunityApp(connectInput);
+    if (ok) {
+      setCommunityConnectResult("passed");
+      setPersonalConnectSecret("");
+      return;
+    }
+    setCommunityConnectResult("failed");
+    setPersonalConnectError((current) =>
+      current ??
+      `Couldn't add ${app.name} to ${communityTargetLabel}. Check the requirements and try again.`,
     );
   };
 
@@ -468,6 +752,42 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
       return;
     }
     onOpenIntegrationsSettings();
+  };
+
+  const handleAddSkillToCommunity = async (
+    skill: DiscoverSkillCatalogEntry,
+  ): Promise<void> => {
+    if (isAuthRecoveringSignedIn) return;
+    if (
+      isLoadingCommunitySkillAttachments ||
+      isLoadingOwnedSkillPackages
+    ) {
+      return;
+    }
+    if (!hasSession) {
+      onRequireAuth();
+      return;
+    }
+    if (!hasManageableCommunityTarget) return;
+    if (selectedCommunitySkillAttachment) {
+      onOpenActiveCommunityAiAgentSkills();
+      return;
+    }
+    if (!skill.installInput) {
+      onOpenActiveCommunityAiAgentSkills();
+      return;
+    }
+    setSelectedSkillActionError(null);
+    const ok = selectedOwnedSkillPackage
+      ? await onAttachSkillPackageToCommunity(selectedOwnedSkillPackage.id)
+      : await onCreateCommunitySkill(skill.installInput);
+    if (!ok) {
+      setSelectedSkillActionError(
+        `Couldn't add ${skill.name} to ${communityTargetLabel} right now. Check the error and try again.`,
+      );
+      return;
+    }
+    onOpenActiveCommunityAiAgentSkills();
   };
 
   const renderSkillIcon = (icon: DiscoverSkillCatalogEntry["icon"]) => {
@@ -582,23 +902,41 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
                     <div className="discover-app-detail-name">
                       {selectedApp.name}
                     </div>
-                    {selectedAppActionLabel ? (
-                      <button
-                        type="button"
-                        className="settings-cta discover-app-detail-action"
-                        onClick={() => {
-                          if (selectedPersonalMount) {
-                            onOpenIntegrationsSettings();
-                            return;
-                          }
-                          setIsPersonalConnectModalOpen(true);
-                          setPersonalConnectError(null);
-                          setPersonalConnectResult(null);
-                        }}
-                      >
-                        {selectedAppActionLabel}
-                      </button>
-                    ) : null}
+                    <div className="agent-capability-toolbar-actions">
+                      {selectedAppPersonalActionLabel ? (
+                        <button
+                          type="button"
+                          className="settings-cta discover-app-detail-action"
+                          onClick={() => {
+                            if (selectedPersonalMount) {
+                              onOpenIntegrationsSettings();
+                              return;
+                            }
+                            openAppConnectModal("personal");
+                          }}
+                        >
+                          {selectedAppPersonalActionLabel}
+                        </button>
+                      ) : null}
+                      {selectedAppCommunityActionLabel ? (
+                        <button
+                          type="button"
+                          className="settings-cta discover-app-detail-action"
+                          onClick={() => {
+                            if (selectedCommunityMount) {
+                              onOpenActiveCommunityAiAgentApps();
+                              return;
+                            }
+                            openAppConnectModal("community");
+                          }}
+                          disabled={isLoadingCommunityAppMounts}
+                        >
+                          {isLoadingCommunityAppMounts && !selectedCommunityMount
+                            ? "Checking…"
+                            : selectedAppCommunityActionLabel}
+                        </button>
+                      ) : null}
+                    </div>
                   </div>
                   <div className="discover-app-detail-tagline">
                     {selectedApp.tagline}
@@ -626,7 +964,7 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
                 {selectedPersonalMount ? (
                   <div className="discover-connect-status">
                     <div className="discover-connect-status-title">
-                      Connected
+                      Added to you
                     </div>
                     <div className="discover-connect-status-body">
                       {buildMountStatusLabel(selectedPersonalMount)}
@@ -634,23 +972,49 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
                   </div>
                 ) : !isDiscoverAppPersonallyConnectable(selectedApp) ? (
                   <div className="discover-connect-status">
-                    <div className="discover-connect-status-title">
-                      Connect path coming soon
-                    </div>
+                    <div className="discover-connect-status-title">Add path coming soon</div>
                     <div className="discover-connect-status-body">
                       {selectedApp.supportNote}
                     </div>
                   </div>
                 ) : (
                   <div className="discover-connect-status">
-                    <div className="discover-connect-status-title">
-                      Ready to connect
-                    </div>
+                    <div className="discover-connect-status-title">Ready to add</div>
                     <div className="discover-connect-status-body">
-                      Use `Connect` to open the requirements modal and add {selectedApp.name} to your baseline platform tools.
+                      Use `Add` to open the requirements modal and mount {selectedApp.name} into your baseline platform tools.
                     </div>
                   </div>
                 )}
+                {hasManageableCommunityTarget ? (
+                  selectedCommunityMount ? (
+                    <div className="discover-connect-status">
+                    <div className="discover-connect-status-title">
+                      Added to {communityTargetLabel}
+                    </div>
+                    <div className="discover-connect-status-body">
+                      {buildCommunityMountStatusLabel(selectedCommunityMount)}
+                    </div>
+                  </div>
+                  ) : isLoadingCommunityAppMounts ? (
+                    <div className="discover-connect-status">
+                      <div className="discover-connect-status-title">
+                        Checking {communityTargetLabel}
+                      </div>
+                      <div className="discover-connect-status-body">
+                        Loading the current community app mounts for this target.
+                      </div>
+                    </div>
+                  ) : isDiscoverAppPersonallyConnectable(selectedApp) ? (
+                    <div className="discover-connect-status">
+                      <div className="discover-connect-status-title">
+                        Ready to add to {communityTargetLabel}
+                      </div>
+                      <div className="discover-connect-status-body">
+                        Add this app directly to the active community lens without leaving Discover.
+                      </div>
+                    </div>
+                  ) : null
+                ) : null}
               </section>
 
               <section className="discover-card discover-app-detail-section">
@@ -734,22 +1098,54 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
                     <div className="discover-app-detail-name">
                       {selectedSkill.name}
                     </div>
-                    {selectedSkillActionLabel ? (
-                      <button
-                        type="button"
-                        className="settings-cta discover-app-detail-action"
-                        onClick={() => void handleAddSkill(selectedSkill)}
-                        disabled={
-                          isCreatingUserPlatformSkill || isLoadingUserPlatformSkills
-                        }
-                      >
-                        {selectedPersonalSkillInstall
-                          ? selectedSkillActionLabel
-                          : isCreatingUserPlatformSkill
-                            ? "Adding…"
-                            : selectedSkillActionLabel}
-                      </button>
-                    ) : null}
+                    <div className="agent-capability-toolbar-actions">
+                      {selectedSkillPersonalActionLabel ? (
+                        <button
+                          type="button"
+                          className="settings-cta discover-app-detail-action"
+                          onClick={() => void handleAddSkill(selectedSkill)}
+                          disabled={
+                            isCreatingUserPlatformSkill ||
+                            isLoadingUserPlatformSkills
+                          }
+                        >
+                          {selectedPersonalSkillInstall
+                            ? selectedSkillPersonalActionLabel
+                            : isCreatingUserPlatformSkill
+                              ? "Adding…"
+                              : selectedSkillPersonalActionLabel}
+                        </button>
+                      ) : null}
+                      {selectedSkillCommunityActionLabel ? (
+                        <button
+                          type="button"
+                          className="settings-cta discover-app-detail-action"
+                          onClick={() => void handleAddSkillToCommunity(selectedSkill)}
+                          disabled={
+                            isLoadingCommunitySkillAttachments ||
+                            isLoadingOwnedSkillPackages ||
+                            isCreatingCommunitySkill ||
+                            (selectedOwnedSkillPackage
+                              ? attachingCommunitySkillPackageId ===
+                                selectedOwnedSkillPackage.id
+                              : false)
+                          }
+                        >
+                          {selectedCommunitySkillAttachment
+                            ? selectedSkillCommunityActionLabel
+                            : isLoadingCommunitySkillAttachments ||
+                                isLoadingOwnedSkillPackages
+                              ? "Checking…"
+                              : isCreatingCommunitySkill ||
+                                  (selectedOwnedSkillPackage
+                                    ? attachingCommunitySkillPackageId ===
+                                      selectedOwnedSkillPackage.id
+                                    : false)
+                                ? "Adding…"
+                                : selectedSkillCommunityActionLabel}
+                        </button>
+                      ) : null}
+                    </div>
                   </div>
                   <div className="discover-app-detail-tagline">
                     {selectedSkill.tagline}
@@ -771,6 +1167,15 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
                 {hasSession && userPlatformSkillMutationError ? (
                   <div className="auth-error">{userPlatformSkillMutationError}</div>
                 ) : null}
+                {hasSession && hasManageableCommunityTarget && communitySkillAttachmentError ? (
+                  <div className="auth-error">{communitySkillAttachmentError}</div>
+                ) : null}
+                {hasSession && hasManageableCommunityTarget && ownedSkillPackagesError ? (
+                  <div className="auth-error">{ownedSkillPackagesError}</div>
+                ) : null}
+                {hasSession && hasManageableCommunityTarget && communitySkillMutationError ? (
+                  <div className="auth-error">{communitySkillMutationError}</div>
+                ) : null}
                 {selectedSkillActionError ? (
                   <div className="auth-error">{selectedSkillActionError}</div>
                 ) : null}
@@ -786,7 +1191,7 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
                   </div>
                 ) : selectedPersonalSkillInstall ? (
                   <div className="discover-connect-status">
-                    <div className="discover-connect-status-title">Added</div>
+                    <div className="discover-connect-status-title">Added to you</div>
                     <div className="discover-connect-status-body">
                       This skill is already in your personal skills and can be
                       managed from Integrations.
@@ -813,6 +1218,49 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
                     </div>
                   </div>
                 )}
+                {hasManageableCommunityTarget ? (
+                  selectedCommunitySkillAttachment ? (
+                    <div className="discover-connect-status">
+                      <div className="discover-connect-status-title">
+                        Added to {communityTargetLabel}
+                      </div>
+                      <div className="discover-connect-status-body">
+                        This skill is attached to the active community lens and
+                        can be managed from AI Agent {">"} Skills.
+                      </div>
+                    </div>
+                  ) : isLoadingCommunitySkillAttachments || isLoadingOwnedSkillPackages ? (
+                    <div className="discover-connect-status">
+                      <div className="discover-connect-status-title">
+                        Checking {communityTargetLabel}
+                      </div>
+                      <div className="discover-connect-status-body">
+                        Loading this community&apos;s attached skills and your reusable
+                        skill packages.
+                      </div>
+                    </div>
+                  ) : selectedSkill.installInput ? (
+                    <div className="discover-connect-status">
+                      <div className="discover-connect-status-title">
+                        Ready to add to {communityTargetLabel}
+                      </div>
+                      <div className="discover-connect-status-body">
+                        Add this skill directly to the active community lens
+                        without leaving Discover.
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="discover-connect-status">
+                      <div className="discover-connect-status-title">
+                        Create in {communityTargetLabel}
+                      </div>
+                      <div className="discover-connect-status-body">
+                        Open the active community&apos;s AI Agent skills editor to
+                        create a custom skill and attach it there.
+                      </div>
+                    </div>
+                  )
+                ) : null}
               </section>
 
               <section className="discover-card discover-app-detail-section">
@@ -853,6 +1301,14 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
                       Settings {">"} Integrations {">"} My skills
                     </div>
                   </div>
+                  {hasManageableCommunityTarget ? (
+                    <div className="discover-info-row">
+                      <div className="discover-info-label">Community</div>
+                      <div className="discover-info-value">
+                        AI Agent {">"} Skills for {communityTargetLabel}
+                      </div>
+                    </div>
+                  ) : null}
                   <div className="discover-info-row">
                     <div className="discover-info-label">Status</div>
                     <div className="discover-info-value">
@@ -948,7 +1404,7 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
                         {findMatchingPersonalMount(app, userPlatformAppMounts)
                           ? "Manage"
                           : isDiscoverAppPersonallyConnectable(app)
-                            ? "Connect"
+                            ? "Add"
                             : "Catalog"}
                       </span>
                     </button>
@@ -1044,11 +1500,14 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
           className="modal-overlay"
           role="presentation"
           onClick={() => {
-            if (isConnectingUserPlatformApp) return;
+            if (
+              (appConnectTarget === "personal" && isConnectingUserPlatformApp) ||
+              (appConnectTarget === "community" && isConnectingCommunityApp)
+            ) {
+              return;
+            }
             setIsPersonalConnectModalOpen(false);
-            setPersonalConnectResult(null);
-            setPersonalConnectValidationReport(null);
-            setPersonalConnectError(null);
+            resetAppConnectFeedback();
           }}
         >
           <div
@@ -1060,7 +1519,9 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
           >
             <div className="modal-header">
               <div className="modal-title" id="discover-connect-modal-title">
-                Connect {selectedApp.name}
+                {appConnectTarget === "community"
+                  ? `Add ${selectedApp.name} to ${communityTargetLabel}`
+                  : `Add ${selectedApp.name}`}
               </div>
               <button
                 type="button"
@@ -1068,19 +1529,33 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
                 aria-label="Close"
                 onClick={() => {
                   setIsPersonalConnectModalOpen(false);
-                  setPersonalConnectResult(null);
-                  setPersonalConnectValidationReport(null);
-                  setPersonalConnectError(null);
+                  resetAppConnectFeedback();
                 }}
-                disabled={isConnectingUserPlatformApp}
+                disabled={
+                  appConnectTarget === "personal"
+                    ? isConnectingUserPlatformApp
+                    : isConnectingCommunityApp
+                }
               >
                 ×
               </button>
             </div>
             <div className="modal-body discover-connect-modal-body">
-              {personalConnectModalCopy ? (
+              {(appConnectTarget === "community"
+                ? selectedApp.personalConnect.connectionKind === "custom"
+                  ? `Enter a remote MCP endpoint and auth details to add it to ${communityTargetLabel}.`
+                  : selectedApp.personalConnect.authMethod === "token"
+                    ? `Paste your ${selectedApp.personalConnect.secretLabel} to add ${selectedApp.name} to ${communityTargetLabel}.`
+                    : `Review the connection requirements, then add ${selectedApp.name} to ${communityTargetLabel}.`
+                : personalConnectModalCopy) ? (
                 <div className="discover-connect-modal-copy">
-                  {personalConnectModalCopy}
+                  {appConnectTarget === "community"
+                    ? selectedApp.personalConnect.connectionKind === "custom"
+                      ? `Enter a remote MCP endpoint and auth details to add it to ${communityTargetLabel}.`
+                      : selectedApp.personalConnect.authMethod === "token"
+                        ? `Paste your ${selectedApp.personalConnect.secretLabel} to add ${selectedApp.name} to ${communityTargetLabel}.`
+                        : `Review the connection requirements, then add ${selectedApp.name} to ${communityTargetLabel}.`
+                    : personalConnectModalCopy}
                 </div>
               ) : null}
               <div className="agent-capability-field-grid discover-connect-grid">
@@ -1204,16 +1679,19 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
                       ),
                     )}
               </div>
-              {personalConnectLoadError ? (
+              {appConnectTarget === "personal" && personalConnectLoadError ? (
                 <div className="auth-error">{personalConnectLoadError}</div>
               ) : null}
-              {personalConnectMutationError ? (
+              {appConnectTarget === "personal" && personalConnectMutationError ? (
                 <div className="auth-error">{personalConnectMutationError}</div>
+              ) : null}
+              {appConnectTarget === "community" && communityAppMutationError ? (
+                <div className="auth-error">{communityAppMutationError}</div>
               ) : null}
               {personalConnectError ? (
                 <div className="auth-error">{personalConnectError}</div>
               ) : null}
-              {personalConnectValidationReport ? (
+              {appConnectTarget === "personal" && personalConnectValidationReport ? (
                 <div
                   className={`discover-connect-status${
                     personalConnectResult === "passed"
@@ -1254,12 +1732,28 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
                     ))}
                   </div>
                 </div>
+              ) : appConnectTarget === "community" &&
+                (communityConnectResult === "passed" || selectedCommunityMount) ? (
+                <div className="discover-connect-status is-success">
+                  <div className="discover-connect-status-title">Added</div>
+                  <div className="discover-connect-status-body">
+                    {`${selectedApp.name} is now mounted into ${communityTargetLabel}.`}
+                  </div>
+                </div>
+              ) : appConnectTarget === "community" &&
+                communityConnectResult === "failed" ? (
+                <div className="discover-connect-status is-error">
+                  <div className="discover-connect-status-title">Failed</div>
+                  <div className="discover-connect-status-body">
+                    {`We couldn't add ${selectedApp.name} to ${communityTargetLabel}. Check the requirements and try again.`}
+                  </div>
+                </div>
               ) : personalConnectResult === "passed" || selectedPersonalMount ? (
                 <div
                   className="discover-connect-status is-success"
                 >
                   <div className="discover-connect-status-title">
-                    Connected
+                    Added
                   </div>
                   <div className="discover-connect-status-body">
                     {`${selectedApp.name} is now mounted into your personal platform layer.`}
@@ -1273,7 +1767,7 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
                     Failed
                   </div>
                   <div className="discover-connect-status-body">
-                    {`We couldn't connect ${selectedApp.name}. Check the requirements and try again.`}
+                    {`We couldn't add ${selectedApp.name}. Check the requirements and try again.`}
                   </div>
                 </div>
               ) : null}
@@ -1284,22 +1778,32 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
                 className="settings-cta"
                   onClick={() => {
                     setIsPersonalConnectModalOpen(false);
-                    setPersonalConnectResult(null);
-                    setPersonalConnectValidationReport(null);
-                    setPersonalConnectError(null);
+                    resetAppConnectFeedback();
                   }}
-                disabled={isConnectingUserPlatformApp}
+                disabled={
+                  appConnectTarget === "personal"
+                    ? isConnectingUserPlatformApp
+                    : isConnectingCommunityApp
+                }
               >
-                {personalConnectResult === "passed" || selectedPersonalMount
+                {(appConnectTarget === "personal"
+                  ? personalConnectResult === "passed" || selectedPersonalMount
+                  : communityConnectResult === "passed" || selectedCommunityMount)
                   ? "Done"
                   : "Cancel"}
               </button>
-              {personalConnectResult === "passed" || selectedPersonalMount ? (
+              {(appConnectTarget === "personal"
+                ? personalConnectResult === "passed" || selectedPersonalMount
+                : communityConnectResult === "passed" || selectedCommunityMount) ? (
                 <button
                   type="button"
                   className="platform-save-button is-dirty"
                   onClick={() => {
                     setIsPersonalConnectModalOpen(false);
+                    if (appConnectTarget === "community") {
+                      onOpenActiveCommunityAiAgentApps();
+                      return;
+                    }
                     onOpenIntegrationsSettings();
                   }}
                 >
@@ -1309,20 +1813,30 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
                 <button
                   type="button"
                   className="platform-save-button is-dirty"
-                  onClick={() => void handleUsePersonally(selectedApp)}
+                  onClick={() =>
+                    void (appConnectTarget === "community"
+                      ? handleUseInCommunity(selectedApp)
+                      : handleUsePersonally(selectedApp))
+                  }
                   disabled={
                     isAuthRecoveringSignedIn ||
-                    isConnectingUserPlatformApp ||
-                    isLoadingUserPlatformAppMounts
+                    (appConnectTarget === "personal"
+                      ? isConnectingUserPlatformApp ||
+                        isLoadingUserPlatformAppMounts
+                      : isConnectingCommunityApp || isLoadingCommunityAppMounts)
                   }
                 >
                   {isAuthRecoveringSignedIn
                     ? "Restoring account…"
-                    : isConnectingUserPlatformApp
-                    ? "Connecting…"
-                    : hasSession
-                      ? "Connect"
-                      : "Sign in to connect"}
+                    : appConnectTarget === "personal" && isConnectingUserPlatformApp
+                      ? "Adding…"
+                      : appConnectTarget === "community" && isConnectingCommunityApp
+                        ? "Adding…"
+                        : hasSession
+                          ? appConnectTarget === "community"
+                            ? `Add to ${communityTargetLabel}`
+                            : "Add"
+                          : "Sign in to add"}
                 </button>
               )}
             </div>

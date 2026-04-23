@@ -257,7 +257,8 @@ export function buildDiscoverAppPersonalConnectInput(
     description?: string;
     secret?: string;
   },
-): {
+  ): {
+  catalog_app_id?: string;
   name: string;
   endpoint_url: string;
   auth_type: DeveloperAppAuthType;
@@ -280,6 +281,7 @@ export function buildDiscoverAppPersonalConnectInput(
       hostLabel = "Custom MCP";
     }
     return {
+      catalog_app_id: undefined,
       name: hostLabel,
       endpoint_url: endpointUrl,
       auth_type: authType,
@@ -288,6 +290,8 @@ export function buildDiscoverAppPersonalConnectInput(
     };
   }
   return {
+    catalog_app_id:
+      app.personalConnect.connectionKind === "known" ? app.id : undefined,
     name: app.name,
     endpoint_url: app.personalConnect.endpointUrl,
     auth_type: app.personalConnect.authType,

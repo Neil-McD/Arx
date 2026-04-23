@@ -53,13 +53,6 @@ import {
   type RuntimeKernelSuccess,
 } from "../shared/runtimeKernelTypes";
 import {
-  buildCommunityOverlayRuntimeState,
-  type CommunityOverlayMountedTool,
-  type CommunityOverlaySelectedSkill,
-  type CommunityOverlaySkillInventory,
-} from "../shared/communityOverlayRuntime";
-import { buildPersonalSkillOverlayRuntimeState } from "../shared/personalSkillOverlayRuntime";
-import {
   buildOpenAiFunctionTools,
   buildResponsesApiFunctionTools,
   projectResponsesApiToolSchema,
@@ -84,19 +77,14 @@ import {
 import {
   buildMountedAppOpenAiTools,
   buildMountedAppResponsesTools,
-  buildUserPlatformMountedAppsPromptBlock,
   formatJsonToolOutput,
-  mapCommunitySkillsToOverlayRuntime,
-  mapMountedToolsToOverlayRuntime,
-  mapSelectedUserPlatformSkillsToOverlayRuntime,
-  mapSelectedCommunitySkillsToOverlayRuntime,
-  mapUserPlatformSkillsToOverlayRuntime,
   normalizeRuntimeMountedCommunityAppTools,
   normalizeRuntimeMountedUserPlatformAppTools,
   normalizeRuntimeSkillResolution,
   readFailureOutputPreview,
   summarizeToolArgsForLog,
 } from "./runtimeHarnessShaping";
+import { composeResolvedRuntimeHarness } from "./runtimeHarnessComposition.ts";
 import {
   type RuntimeMountedMcpTool,
 } from "./runtimeMcpManager";
@@ -141,18 +129,6 @@ function readRuntimeBooleanFlag(name: string, defaultValue: boolean): boolean {
     // Convex runtime may not expose process.env; keep the safe default.
   }
   return defaultValue;
-}
-
-function buildAmbiguousSkillMentionsPromptBlock(
-  mentionTokens: string[],
-): string {
-  if (mentionTokens.length === 0) return "";
-  return [
-    "",
-    "Some explicitly mentioned skill tokens were ambiguous across active scopes, so no skill instructions were loaded for them this turn.",
-    `Ambiguous tokens: ${mentionTokens.map((token) => `$${token}`).join(", ")}`,
-    "If the user still wants one of these skills, ask them to clarify which scope they mean.",
-  ].join("\n");
 }
 
 function buildResolveMountedToolsOpenAiTool(): OpenAiCompatibleFunctionTool {
@@ -615,6 +591,7 @@ async function executeRetrievalAgentLoop(
       mount_id: tool.user_platform_app_mount_id,
       runtime_tool_name: `me__${tool.namespaced_tool_name}`,
       developer_app_id: tool.developer_app_id,
+      catalog_app_id: tool.catalog_app_id,
       app_name: tool.app_name,
       endpoint_url: tool.endpoint_url,
       auth_type: tool.auth_type,
@@ -641,6 +618,7 @@ async function executeRetrievalAgentLoop(
       mount_id: tool.community_app_mount_id,
       runtime_tool_name: tool.namespaced_tool_name,
       developer_app_id: tool.developer_app_id,
+      catalog_app_id: tool.catalog_app_id,
       app_name: tool.app_name,
       endpoint_url: tool.endpoint_url,
       auth_type: tool.auth_type,
@@ -650,10 +628,6 @@ async function executeRetrievalAgentLoop(
       input_schema: tool.input_schema,
       risk_level: tool.risk_level,
     }));
-  const runtimeMountedTools = [
-    ...runtimeMountedUserPlatformAppTools,
-    ...runtimeMountedCommunityAppTools,
-  ];
   const skillResolution = normalizeRuntimeSkillResolution(
     await params.ctx.runQuery(
       internal.runtimeSkillResolution.resolveRuntimeSkillSelectionInternal,
@@ -668,28 +642,18 @@ async function executeRetrievalAgentLoop(
       },
     ),
   );
-  const installedUserPlatformSkills =
-    skillResolution.user_platform_skill_inventory;
-  const selectedUserPlatformSkills =
-    skillResolution.selected_user_platform_skills;
-  const attachedCommunitySkills = skillResolution.community_skill_inventory;
+  const resolvedHarness = composeResolvedRuntimeHarness({
+    personalMountedTools: runtimeMountedUserPlatformAppTools,
+    communityMountedTools: mountedCommunityAppTools,
+    runtimeMountedCommunityTools: runtimeMountedCommunityAppTools,
+    skillResolution,
+  });
+  const installedUserPlatformSkills = resolvedHarness.personalSkillInventory;
+  const selectedUserPlatformSkills = resolvedHarness.selectedPersonalSkills;
+  const attachedCommunitySkills =
+    resolvedHarness.activeCommunityModule?.attachedSkills ?? [];
   const selectedCommunitySkills =
-    skillResolution.selected_community_skills;
-  const personalSkillRuntimeState = buildPersonalSkillOverlayRuntimeState({
-    installedSkills: mapUserPlatformSkillsToOverlayRuntime(
-      installedUserPlatformSkills,
-    ),
-    selectedSkills: mapSelectedUserPlatformSkillsToOverlayRuntime(
-      selectedUserPlatformSkills,
-    ),
-  });
-  const overlayRuntimeState = buildCommunityOverlayRuntimeState({
-    mountedTools: mapMountedToolsToOverlayRuntime(mountedCommunityAppTools),
-    attachedSkills: mapCommunitySkillsToOverlayRuntime(attachedCommunitySkills),
-    selectedSkills: mapSelectedCommunitySkillsToOverlayRuntime(
-      selectedCommunitySkills,
-    ),
-  });
+    resolvedHarness.activeCommunityModule?.selectedSkills ?? [];
   const executionSession = createPolyNetExecutionSession({
     ctx: params.ctx,
     userId: params.userId,
@@ -697,12 +661,9 @@ async function executeRetrievalAgentLoop(
     projectId: params.projectId,
     threadId: params.threadId,
     runId: params.runId,
-    mountedTools: runtimeMountedTools,
-    mountedPromptSuffix: `${buildUserPlatformMountedAppsPromptBlock(
-      runtimeMountedUserPlatformAppTools,
-    )}${personalSkillRuntimeState.systemPromptSuffix}${buildAmbiguousSkillMentionsPromptBlock(
-      skillResolution.ambiguous_mention_tokens,
-    )}${overlayRuntimeState.systemPromptSuffix}`,
+    mountedTools: resolvedHarness.runtimeMountedTools,
+    mountedToolDiscoveryCatalog: resolvedHarness.discoveryMountedTools,
+    mountedPromptSuffix: resolvedHarness.systemPromptSuffix,
     initialWorkspaceSession: params.workspaceSession ?? null,
     appendRunEvent: params.appendRunEvent,
     touchRunHeartbeat: params.touchRunHeartbeat,
@@ -978,6 +939,49 @@ async function executeRetrievalAgentLoop(
           selected_skill_mention_tokens: selectedCommunitySkills.map(
             (skill) => skill.mention_token,
           ),
+        },
+      });
+    } catch {
+      // Best-effort runtime evidence only.
+    }
+  }
+  if (
+    resolvedHarness.runtimeMountedTools.length > 0 ||
+    installedUserPlatformSkills.length > 0 ||
+    attachedCommunitySkills.length > 0
+  ) {
+    try {
+      await params.appendRunEvent({
+        eventType: "effective_harness_resolved",
+        eventKey: `${params.runId}:effective_harness_resolved:1`,
+        payload: {
+          run_id: params.runId,
+          user_scope_id: params.userId ?? null,
+          community_scope_id: params.communityId ?? null,
+          requested_skill_mention_tokens:
+            resolvedHarness.requestedSkillMentionTokens,
+          ambiguous_skill_mention_tokens:
+            resolvedHarness.ambiguousSkillMentionTokens,
+          personal_skill_mention_tokens: installedUserPlatformSkills.map(
+            (skill) => skill.mention_token,
+          ),
+          selected_personal_skill_mention_tokens:
+            selectedUserPlatformSkills.map((skill) => skill.mention_token),
+          community_skill_mention_tokens: attachedCommunitySkills.map(
+            (skill) => skill.mention_token,
+          ),
+          selected_community_skill_mention_tokens:
+            selectedCommunitySkills.map((skill) => skill.mention_token),
+          runtime_mounted_tool_names:
+            resolvedHarness.runtimeMountedTools.map(
+              (tool) => tool.runtime_tool_name,
+            ),
+          discovery_mounted_tool_names:
+            resolvedHarness.discoveryMountedTools.map(
+              (tool) => tool.runtime_tool_name,
+            ),
+          shadowed_mounted_tool_names:
+            resolvedHarness.shadowedRuntimeToolNames,
         },
       });
     } catch {

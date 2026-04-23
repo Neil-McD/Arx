@@ -1,4 +1,5 @@
 import type { RuntimeMountedMcpTool } from "./runtimeMcpManager.ts";
+import { buildEffectiveMountedToolDiscoveryCatalog } from "./runtimeHarnessComposition.ts";
 
 export const RESOLVE_MOUNTED_TOOLS_TOOL_NAME = "resolve_mounted_tools";
 export const RESOLVE_MOUNTED_TOOLS_INPUT_SCHEMA = {
@@ -79,8 +80,6 @@ function scoreMountedToolMatch(params: {
     if (appName.includes(token)) score += 10;
     if (description.includes(token)) score += 4;
   }
-
-  if (params.tool.scope === "user") score += 1;
   return score;
 }
 
@@ -114,11 +113,15 @@ export function normalizeResolveMountedToolsArguments(
 
 export function createRuntimeMountedToolExposureState(params: {
   mountedTools: RuntimeMountedMcpTool[];
+  discoveryCatalog?: RuntimeMountedMcpTool[] | null;
   maxExposedTools?: number;
 }) {
   const catalog = [...params.mountedTools].sort((left, right) =>
     left.runtime_tool_name.localeCompare(right.runtime_tool_name),
   );
+  const effectiveAnyScopeCatalog = Array.isArray(params.discoveryCatalog)
+    ? [...params.discoveryCatalog]
+    : buildEffectiveMountedToolDiscoveryCatalog(catalog).discoveryMountedTools;
   const exposedToolNames = new Set<string>();
   const maxExposedTools = Math.max(
     1,
@@ -155,8 +158,11 @@ export function createRuntimeMountedToolExposureState(params: {
       };
     } {
       const tokens = tokenize(args.query);
-      const matched = catalog
-        .filter((tool) => args.scope === "any" || tool.scope === args.scope)
+      const scopedCatalog =
+        args.scope === "any"
+          ? effectiveAnyScopeCatalog
+          : catalog.filter((tool) => tool.scope === args.scope);
+      const matched = scopedCatalog
         .map((tool) => ({
           tool,
           score: scoreMountedToolMatch({
@@ -195,7 +201,7 @@ export function createRuntimeMountedToolExposureState(params: {
         query: args.query,
         scope: args.scope,
         requestedLimit: args.limit,
-        totalCatalogCount: catalog.length,
+        totalCatalogCount: scopedCatalog.length,
         totalMatchedCount: matched.length,
         totalExposedCount: exposedToolNames.size,
         newlyExposedTools: newlyExposedTools.map(({ tool }) => ({
