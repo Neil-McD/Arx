@@ -14475,9 +14475,56 @@ button.message-citation-chip:hover {
 }
 
 .stripe-connect-btn {
+  --stripe-connect-bg: #635bff;
+  --stripe-connect-bg-hover: #746bff;
+  --stripe-connect-border: color-mix(in srgb, var(--stripe-connect-bg) 62%, white 18%);
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 10px;
+  min-height: 40px;
+  padding: 0 18px;
+  border-radius: 12px;
+  border: 1px solid var(--stripe-connect-border);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--stripe-connect-bg) 94%, white 6%),
+      var(--stripe-connect-bg)
+    );
+  color: #fff;
+  box-shadow: 0 12px 26px color-mix(in srgb, var(--stripe-connect-bg) 20%, transparent);
+  transition:
+    background 120ms ease,
+    border-color 120ms ease,
+    box-shadow 120ms ease,
+    transform 120ms ease;
+}
+
+button.secondary.stripe-connect-btn:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--stripe-connect-bg-hover) 72%, white 20%);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--stripe-connect-bg-hover) 94%, white 6%),
+      var(--stripe-connect-bg-hover)
+    );
+  color: #fff;
+  box-shadow: 0 14px 30px color-mix(in srgb, var(--stripe-connect-bg) 26%, transparent);
+  transform: translateY(-1px);
+}
+
+button.secondary.stripe-connect-btn:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--stripe-connect-bg) 62%, white 38%);
+  outline-offset: 2px;
+}
+
+button.secondary.stripe-connect-btn:disabled {
+  color: #fff;
+  opacity: 0.56;
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
 }
 
 .stripe-connect-icon {
@@ -14486,7 +14533,7 @@ button.message-citation-chip:hover {
   max-height: 14px;
   flex: 0 0 auto;
   display: block;
-  opacity: 0.92;
+  opacity: 0.98;
 }
 
 .auth-status {
