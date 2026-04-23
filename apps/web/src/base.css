@@ -14475,9 +14475,9 @@ button.message-citation-chip:hover {
 }
 
 .stripe-setup-button {
-  --stripe-setup-bg: #635bff;
-  --stripe-setup-bg-hover: #746bff;
-  --stripe-setup-border: color-mix(in srgb, var(--stripe-setup-bg) 72%, white 12%);
+  --stripe-setup-bg: #4f46e5;
+  --stripe-setup-bg-hover: #5a52ea;
+  --stripe-setup-border: color-mix(in srgb, var(--stripe-setup-bg) 78%, black 22%);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -14489,8 +14489,8 @@ button.message-citation-chip:hover {
   background: var(--stripe-setup-bg);
   color: #fff;
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.16),
-    0 1px 0 rgba(0, 0, 0, 0.22);
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 1px 0 rgba(0, 0, 0, 0.18);
   font-size: 13px;
   font-weight: 600;
   line-height: 1;
@@ -14502,16 +14502,16 @@ button.message-citation-chip:hover {
 }
 
 .stripe-setup-button:hover:not(:disabled) {
-  border-color: color-mix(in srgb, var(--stripe-setup-bg-hover) 72%, white 16%);
+  border-color: color-mix(in srgb, var(--stripe-setup-bg-hover) 78%, black 18%);
   background: var(--stripe-setup-bg-hover);
   color: #fff;
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.18),
-    0 1px 0 rgba(0, 0, 0, 0.24);
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 1px 0 rgba(0, 0, 0, 0.2);
 }
 
 .stripe-setup-button:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--stripe-setup-bg) 54%, white 42%);
+  outline: 2px solid color-mix(in srgb, var(--stripe-setup-bg) 72%, white 28%);
   outline-offset: 2px;
 }
 
