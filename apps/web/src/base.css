@@ -2454,18 +2454,16 @@ body {
 .public-funnel-avatar {
   position: relative;
   z-index: 2;
-  width: 72px;
-  height: 72px;
-  border-radius: 20px;
+  width: 84px;
+  height: 84px;
+  border-radius: 22px;
   overflow: hidden;
   display: grid;
   place-items: center;
   border: 0;
-  background: transparent;
-  box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--border-strong) 64%, transparent),
-    0 12px 24px rgba(0, 0, 0, 0.28);
-  margin-top: -34px;
+  background: var(--bg-card-alt);
+  box-shadow: none;
+  margin-top: -42px;
 }
 
 .public-funnel-avatar-image {
@@ -2473,7 +2471,7 @@ body {
   height: 100%;
   display: block;
   object-fit: cover;
-  border-radius: 20px;
+  border-radius: 22px;
   user-select: none;
   -webkit-user-drag: none;
 }
@@ -3099,10 +3097,10 @@ body {
   }
 
   .public-funnel-avatar {
-    width: 72px;
-    height: 72px;
-    border-radius: 20px;
-    margin-top: -34px;
+    width: 84px;
+    height: 84px;
+    border-radius: 22px;
+    margin-top: -42px;
   }
 
   .public-funnel-subtitle {
