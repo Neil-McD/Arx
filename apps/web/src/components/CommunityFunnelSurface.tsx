@@ -67,7 +67,7 @@ type CommunityFunnelSurfaceProps = {
   showPoweredBy?: boolean;
 };
 
-const FUNNEL_AVATAR_MIN_DISPLAY_ZOOM = 1.32;
+const FUNNEL_AVATAR_MIN_DISPLAY_ZOOM = 1.14;
 
 function getFunnelAvatarImageStyle(action: CommunityFunnelSurfaceAction): CSSProperties {
   const rawZoom = Number(action.avatarZoom);
