@@ -67,6 +67,20 @@ type CommunityFunnelSurfaceProps = {
   showPoweredBy?: boolean;
 };
 
+const FUNNEL_AVATAR_MIN_DISPLAY_ZOOM = 1.32;
+
+function getFunnelAvatarImageStyle(action: CommunityFunnelSurfaceAction): CSSProperties {
+  const rawZoom = Number(action.avatarZoom);
+  const zoom = Number.isFinite(rawZoom)
+    ? Math.max(rawZoom, FUNNEL_AVATAR_MIN_DISPLAY_ZOOM)
+    : FUNNEL_AVATAR_MIN_DISPLAY_ZOOM;
+  return getCommunityAvatarImageStyle({
+    focusX: action.avatarFocusX,
+    focusY: action.avatarFocusY,
+    zoom,
+  });
+}
+
 function normalizeHref(url: string): string {
   return /^https?:\/\//i.test(url) ? url : `https://${url}`;
 }
@@ -259,11 +273,7 @@ function CommunityFunnelActionModule(props: {
             action.avatarUrl,
             "public-funnel-avatar-image",
             "public-funnel-avatar-fallback",
-            getCommunityAvatarImageStyle({
-              focusX: action.avatarFocusX,
-              focusY: action.avatarFocusY,
-              zoom: action.avatarZoom,
-            }),
+            getFunnelAvatarImageStyle(action),
           )}
         </div>
 

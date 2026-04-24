@@ -3090,9 +3090,10 @@ body {
   }
 
   .public-funnel-avatar {
-    width: 64px;
-    height: 64px;
-    border-radius: 18px;
+    width: 72px;
+    height: 72px;
+    border-radius: 20px;
+    margin-top: -34px;
   }
 
   .public-funnel-subtitle {
