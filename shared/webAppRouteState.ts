@@ -154,6 +154,9 @@ export type CommunityFunnelPreviewRouteCommunity = {
   one_liner: string | null;
   about: string | null;
   avatar_url?: string | null;
+  avatar_focus_x?: number | null;
+  avatar_focus_y?: number | null;
+  avatar_zoom?: number | null;
   banner_url?: string | null;
   banner_focus_x?: number | null;
   banner_focus_y?: number | null;
