@@ -1,5 +1,9 @@
 type PreviewAccessGateModalState = {
   reason: "new_thread";
+} | {
+  reason: "preview_issue";
+  issueReason: "rate_limited" | "misconfigured" | "unavailable";
+  message: string;
 } | null;
 
 type WebPreviewAccessGateModalProps = {
@@ -24,11 +28,13 @@ export function WebPreviewAccessGateModal(props: WebPreviewAccessGateModalProps)
   const title =
     previewAccessGateModal.reason === "new_thread"
       ? "Create a free account to start more threads"
-      : "Create a free account";
+      : previewAccessGateModal.issueReason === "rate_limited"
+        ? "Preview is busy"
+        : "Preview is unavailable";
   const message =
     previewAccessGateModal.reason === "new_thread"
       ? "Preview supports one thread. Continue to sign in to save chats, unlock more models, use your ChatGPT Plus / Pro access on Polynet, and discover communities, agents, and apps across the network."
-      : "Continue to sign in to create your free account.";
+      : previewAccessGateModal.message;
 
   return (
     <div

@@ -56,9 +56,9 @@ type WebInferenceIssueModalProps = {
   onOpenSettings: (reason: InferenceIssueReason) => void;
 };
 
-type PreviewAccessGateModalState = {
-  reason: "new_thread";
-} | null;
+type PreviewAccessGateModalState = ComponentProps<
+  typeof WebPreviewAccessGateModal
+>["previewAccessGateModal"];
 
 type WebPreviewAccessGateModalProps = {
   previewAccessGateModal: PreviewAccessGateModalState;

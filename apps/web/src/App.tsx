@@ -326,7 +326,10 @@ import { confirmDiscardUnsavedCommunitySettingsWeb } from "../../../shared/commu
 import { markCloudThreadAgentAttentionSeen } from "../../../shared/cloudThreadsGateway";
 import type { WebSettingsPanelsProps } from "./components/WebSettingsPanels";
 import type { WorkspaceComposerApi, WorkspaceComposerDraft } from "./components/WebWorkspaceHost";
-import { WebGlobalOverlayHost } from "./components/WebGlobalOverlayHost";
+import {
+  WebGlobalOverlayHost,
+  type WebGlobalOverlayHostProps,
+} from "./components/WebGlobalOverlayHost";
 import { WebAppMainSurfaceHost } from "./components/WebAppMainSurfaceHost";
 import { WebStandalonePublicRouteShell } from "./components/WebStandalonePublicRouteShell";
 import { WebShellChromeHost } from "./components/WebShellChromeHost";
@@ -2129,10 +2132,11 @@ export default function App() {
   const [appToast, setAppToast] = useState<string | null>(null);
   const appToastTimeoutRef = useRef<number | null>(null);
   const lastShownAuthErrorRef = useRef<string | null>(null);
-  const [previewAccessGateModal, setPreviewAccessGateModal] = useState<{
-    reason: "new_thread";
-  } | null>(null);
+  const [previewAccessGateModal, setPreviewAccessGateModal] = useState<
+    NonNullable<WebGlobalOverlayHostProps["previewAccessGateModalProps"]>["previewAccessGateModal"]
+  >(null);
   const [isPreviewAccessGateRunning, setIsPreviewAccessGateRunning] = useState(false);
+  const lastShownGuestPreviewIssueModalRef = useRef<string | null>(null);
   const [inferenceIssueModal, setInferenceIssueModal] = useState<{
     reason:
       | "quota"
@@ -4979,6 +4983,28 @@ export default function App() {
     : null;
 
   useEffect(() => {
+    if (session || !guestInferenceIssue) {
+      lastShownGuestPreviewIssueModalRef.current = null;
+      return;
+    }
+
+    const issueKey = [
+      resolveThreadErrorKey(activeThreadId),
+      guestInferenceIssue.reason,
+      guestInferenceIssue.shortMessage,
+    ].join(":");
+    if (lastShownGuestPreviewIssueModalRef.current === issueKey) return;
+
+    lastShownGuestPreviewIssueModalRef.current = issueKey;
+    setPreviewAccessGateModal({
+      reason: "preview_issue",
+      issueReason: guestInferenceIssue.reason,
+      message: guestInferenceIssue.fullMessage,
+    });
+    setIsPreviewAccessGateRunning(false);
+  }, [activeThreadId, guestInferenceIssue, resolveThreadErrorKey, session]);
+
+  useEffect(() => {
     if (!session) return;
     setGuestInferenceIssueById({});
   }, [session]);
@@ -5104,6 +5130,7 @@ export default function App() {
       lastThreadUserMessageId,
   );
   const showGuestSignInAction = !session && guestInferenceIssue?.cta === "sign_in";
+  const inlineThreadError = guestInferenceIssue ? null : threadError;
   const displayedThreadError = guestInferenceIssue?.shortMessage ?? threadError;
 
   useEffect(() => {
@@ -6030,7 +6057,7 @@ export default function App() {
       showMobileShell={showMobileShell}
       mobileOverlay={mobileOverlay}
       setMobileOverlay={setMobileOverlay}
-      threadError={threadError}
+      threadError={inlineThreadError}
       displayedThreadError={displayedThreadError}
       showGuestSignInAction={showGuestSignInAction}
       session={session}
@@ -6138,7 +6165,7 @@ export default function App() {
     activeThreadStreamingRunId,
     activeThreadStreamingState,
     runtimeEventsByRunId,
-    threadError,
+    threadError: inlineThreadError,
     displayedThreadError,
     showGuestSignInAction,
     requireSignIn,
