@@ -1,8 +1,6 @@
 import type { KeyboardEvent } from "react";
-import { getCommunityAvatarImageStyle } from "./communityAvatarUi";
-import { StableAvatar } from "./StableAvatar";
+import { CommunityAvatar } from "./CommunityAvatar";
 import { getCommunityBannerImageStyle } from "./communityBannerUi";
-import { communityInitials } from "./messageMetadataUi";
 
 type DiscoverCommunityCardProps = {
   name: string;
@@ -101,18 +99,15 @@ export function DiscoverCommunityCard({
       </div>
       <div className="discover-card-body">
         <div className="discover-card-header">
-          <StableAvatar
+          <CommunityAvatar
             className="discover-card-avatar"
             readyClassName="has-image"
             fallbackClassName="fallback"
             imageUrl={avatarUrl}
-            imageStyle={getCommunityAvatarImageStyle({
-              focusX: avatarFocusX,
-              focusY: avatarFocusY,
-              zoom: avatarZoom,
-            })}
-            alt={name}
-            fallback={communityInitials(name)}
+            focusX={avatarFocusX}
+            focusY={avatarFocusY}
+            zoom={avatarZoom}
+            name={name}
           />
           <div className="discover-card-meta">
             <div className="discover-card-name-row">

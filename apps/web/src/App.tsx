@@ -25,8 +25,7 @@ import {
 import { resolveAuthSubject } from "../../../shared/authSession";
 import {
   buildContextFallbackThreadTitle, deriveThreadTitleFromUserText, isMissingThreadTitleValue, traceThreadContext, } from "../../../shared/threadTitleUi";
-import { StableAvatar } from "../../../shared/StableAvatar";
-import { getCommunityAvatarImageStyle } from "../../../shared/communityAvatarUi";
+import { CommunityAvatar } from "../../../shared/CommunityAvatar";
 import {
   formatProviderConnectionErrorMessage,
 } from "../../../shared/appErrorMappings";
@@ -5925,15 +5924,13 @@ export default function App() {
       title={activeCommunity.name}
       type="button"
     >
-      <StableAvatar
+      <CommunityAvatar
         className="community-btn-avatar"
         imageUrl={activeCommunity.avatar_url}
-        imageStyle={getCommunityAvatarImageStyle({
-          focusX: activeCommunity.avatar_focus_x,
-          focusY: activeCommunity.avatar_focus_y,
-          zoom: activeCommunity.avatar_zoom,
-        })}
-        alt={activeCommunity.name}
+        focusX={activeCommunity.avatar_focus_x}
+        focusY={activeCommunity.avatar_focus_y}
+        zoom={activeCommunity.avatar_zoom}
+        name={activeCommunity.name}
         fallback={communityInitials(activeCommunity.name)}
         fallbackClassName="community-btn-initials"
       />

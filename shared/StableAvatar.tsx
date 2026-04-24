@@ -1,4 +1,4 @@
-import type { CSSProperties, ReactNode } from "react";
+import type { CSSProperties, DragEventHandler, ReactNode } from "react";
 import { useImageUrlReady } from "./useImageUrlReady";
 
 type StableAvatarProps = {
@@ -13,6 +13,9 @@ type StableAvatarProps = {
   imageStyle?: CSSProperties;
   fallbackStyle?: CSSProperties;
   title?: string;
+  onDragOver?: DragEventHandler<HTMLDivElement>;
+  onDragLeave?: DragEventHandler<HTMLDivElement>;
+  onDrop?: DragEventHandler<HTMLDivElement>;
   "aria-hidden"?: boolean;
 };
 
@@ -29,6 +32,9 @@ export function StableAvatar(props: StableAvatarProps) {
     imageStyle,
     fallbackStyle,
     title,
+    onDragOver,
+    onDragLeave,
+    onDrop,
   } = props;
   const isReady = useImageUrlReady(imageUrl);
   const showImage = Boolean(imageUrl) && isReady;
@@ -44,6 +50,9 @@ export function StableAvatar(props: StableAvatarProps) {
       className={combinedClassName}
       style={showImage ? style : (fallbackStyle ?? style)}
       title={title}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
       aria-hidden={props["aria-hidden"]}
     >
       {showImage ? (

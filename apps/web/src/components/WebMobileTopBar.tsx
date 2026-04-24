@@ -1,5 +1,4 @@
-import { StableAvatar } from "../../../../shared/StableAvatar";
-import { getCommunityAvatarImageStyle } from "../../../../shared/communityAvatarUi";
+import { CommunityAvatar } from "../../../../shared/CommunityAvatar";
 
 type WebMobileTopBarProps = {
   mode: "agent" | "discover" | "community";
@@ -119,15 +118,13 @@ export function WebMobileTopBar({
         >
           {hasActiveCommunity ? (
             <>
-              <StableAvatar
+              <CommunityAvatar
                 className="mobile-community-trigger-avatar"
                 imageUrl={activeCommunityAvatarUrl}
-                imageStyle={getCommunityAvatarImageStyle({
-                  focusX: activeCommunityAvatarFocusX,
-                  focusY: activeCommunityAvatarFocusY,
-                  zoom: activeCommunityAvatarZoom,
-                })}
-                alt={communityLabel}
+                focusX={activeCommunityAvatarFocusX}
+                focusY={activeCommunityAvatarFocusY}
+                zoom={activeCommunityAvatarZoom}
+                name={communityLabel}
                 fallback={activeCommunityInitials}
                 fallbackClassName="mobile-community-trigger-initials"
               />

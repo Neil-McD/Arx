@@ -1,7 +1,5 @@
 import type { ReactNode } from "react";
-import { getCommunityAvatarImageStyle } from "../../../../shared/communityAvatarUi";
-import { StableAvatar } from "../../../../shared/StableAvatar";
-import { communityInitials } from "../../../../shared/messageMetadataUi";
+import { CommunityAvatar } from "../../../../shared/CommunityAvatar";
 import { WebChatgptEmptyStateCard } from "../components/WebChatgptEmptyStateCard";
 import { WebGuestSignupRail } from "../components/WebGuestSignupRail";
 
@@ -36,16 +34,13 @@ export function buildWebWorkspaceLandingProjection(
   ) : null;
 
   const emptyThreadAvatar = params.activeCommunity ? (
-    <StableAvatar
+    <CommunityAvatar
       className="web-empty-thread-avatar"
       imageUrl={params.activeCommunity.avatar_url}
-      imageStyle={getCommunityAvatarImageStyle({
-        focusX: params.activeCommunity.avatar_focus_x,
-        focusY: params.activeCommunity.avatar_focus_y,
-        zoom: params.activeCommunity.avatar_zoom,
-      })}
-      alt={params.activeCommunity.name}
-      fallback={communityInitials(params.activeCommunity.name)}
+      focusX={params.activeCommunity.avatar_focus_x}
+      focusY={params.activeCommunity.avatar_focus_y}
+      zoom={params.activeCommunity.avatar_zoom}
+      name={params.activeCommunity.name}
       fallbackClassName="web-empty-thread-avatar-fallback"
       imageClassName="web-empty-thread-avatar-image"
       aria-hidden

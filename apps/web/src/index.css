@@ -2665,7 +2665,7 @@
 .mobile-community-trigger-avatar img {
   width: 100%;
   height: 100%;
-  object-fit: contain;
+  object-fit: cover;
   display: block;
 }
 
@@ -3099,7 +3099,7 @@
 .mobile-community-selector-avatar img {
   width: 100%;
   height: 100%;
-  object-fit: contain;
+  object-fit: cover;
   display: block;
 }
 

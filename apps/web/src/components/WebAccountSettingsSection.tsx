@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { formatBuilderTierLabel, isBuilderTierFree } from "../../../../shared/builderBilling";
 import type { BuilderBillingStatus } from "../../../../shared/builderBillingStatusGateway";
-import { getCommunityAvatarImageStyle } from "../../../../shared/communityAvatarUi";
+import { CommunityAvatar } from "../../../../shared/CommunityAvatar";
 import { buildStripeConnectPresentation } from "../controllers/buildStripeConnectPresentation";
 import { StripeSetupButton } from "./StripeSetupButton";
 import { WebSignOutConfirmModal } from "./WebSignOutConfirmModal";
@@ -472,23 +472,19 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
                 {owned.map((community) => (
                   <div key={community.id} className="invite-row">
                     <div className="invite-main with-avatar">
-                      <div className="invite-avatar" aria-hidden="true">
-                        {community.avatar_url ? (
-                          <img
-                            className="invite-avatar-img"
-                            src={community.avatar_url}
-                            alt=""
-                            loading="lazy"
-                            style={getCommunityAvatarImageStyle({
-                              focusX: community.avatar_focus_x,
-                              focusY: community.avatar_focus_y,
-                              zoom: community.avatar_zoom,
-                            })}
-                          />
-                        ) : (
-                          <span className="invite-avatar-fallback">{communityInitials(community.name)}</span>
-                        )}
-                      </div>
+                      <CommunityAvatar
+                        className="invite-avatar"
+                        imageClassName="invite-avatar-img"
+                        fallbackClassName="invite-avatar-fallback"
+                        imageUrl={community.avatar_url}
+                        focusX={community.avatar_focus_x}
+                        focusY={community.avatar_focus_y}
+                        zoom={community.avatar_zoom}
+                        name={community.name}
+                        alt=""
+                        fallback={communityInitials(community.name)}
+                        aria-hidden
+                      />
                       <div className="invite-text">
                         <div className="invite-code">{community.name}</div>
                         <div className="invite-status">{`/c/${community.slug}`}</div>

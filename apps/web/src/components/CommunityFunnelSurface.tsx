@@ -1,11 +1,10 @@
 import { useState, type CSSProperties, type ReactNode } from "react";
 
-import { getCommunityAvatarImageStyle } from "../../../../shared/communityAvatarUi";
+import { CommunityAvatar } from "../../../../shared/CommunityAvatar";
 import type { CommunityFunnelHeroMediaKind } from "../../../../shared/communityTypes";
 import {
   formatCompactStat,
   formatMemberCount,
-  getCommunityInitials,
 } from "../../../../shared/communityFunnelUi";
 import { parseEmbedUrl, type ParsedEmbed } from "../../../../shared/linkEmbedUi";
 
@@ -67,20 +66,6 @@ type CommunityFunnelSurfaceProps = {
   showPoweredBy?: boolean;
 };
 
-const FUNNEL_AVATAR_MIN_DISPLAY_ZOOM = 1.14;
-
-function getFunnelAvatarImageStyle(action: CommunityFunnelSurfaceAction): CSSProperties {
-  const rawZoom = Number(action.avatarZoom);
-  const zoom = Number.isFinite(rawZoom)
-    ? Math.max(rawZoom, FUNNEL_AVATAR_MIN_DISPLAY_ZOOM)
-    : FUNNEL_AVATAR_MIN_DISPLAY_ZOOM;
-  return getCommunityAvatarImageStyle({
-    focusX: action.avatarFocusX,
-    focusY: action.avatarFocusY,
-    zoom,
-  });
-}
-
 function normalizeHref(url: string): string {
   return /^https?:\/\//i.test(url) ? url : `https://${url}`;
 }
@@ -135,19 +120,6 @@ function renderTextWithLinks(text: string): JSX.Element[] {
       </span>
     );
   });
-}
-
-function renderAvatar(
-  name: string,
-  imageUrl: string | null | undefined,
-  className: string,
-  fallbackClassName: string,
-  imageStyle?: CSSProperties,
-) {
-  if (imageUrl) {
-    return <img className={className} src={imageUrl} alt={`${name} avatar`} draggable={false} style={imageStyle} />;
-  }
-  return <span className={fallbackClassName}>{getCommunityInitials(name)}</span>;
 }
 
 function buildActivatedEmbedSrc(embed: ParsedEmbed): string {
@@ -267,15 +239,17 @@ function CommunityFunnelActionModule(props: {
       ) : null}
 
       <div className="public-funnel-action-content">
-        <div className="public-funnel-avatar">
-          {renderAvatar(
-            action.communityName,
-            action.avatarUrl,
-            "public-funnel-avatar-image",
-            "public-funnel-avatar-fallback",
-            getFunnelAvatarImageStyle(action),
-          )}
-        </div>
+        <CommunityAvatar
+          className="public-funnel-avatar"
+          imageUrl={action.avatarUrl}
+          focusX={action.avatarFocusX}
+          focusY={action.avatarFocusY}
+          zoom={action.avatarZoom}
+          name={action.communityName}
+          alt={`${action.communityName} avatar`}
+          imageClassName="public-funnel-avatar-image"
+          fallbackClassName="public-funnel-avatar-fallback"
+        />
 
         <div className="public-funnel-action-header">
           <div className="public-funnel-action-name">{action.communityName}</div>

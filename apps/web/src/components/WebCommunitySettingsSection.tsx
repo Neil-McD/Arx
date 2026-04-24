@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import type { DragEvent } from "react";
 import { hasBuilderTierPaidAccess } from "../../../../shared/builderBilling";
 import type { CommunitySettingsLayer } from "../../../../shared/communityAccessViewModel";
-import { getCommunityAvatarImageStyle } from "../../../../shared/communityAvatarUi";
+import { CommunityAvatar } from "../../../../shared/CommunityAvatar";
 import type { BuilderBillingStatus } from "../../../../shared/builderBillingStatusGateway";
 import { getCommunityBannerImageStyle } from "../../../../shared/communityBannerUi";
 import { buildPlatformSwitcherStyle } from "../../../../shared/platformSwitcherUi";
@@ -243,34 +243,24 @@ function CommunityBrandingSettingsSection({
         ) : null}
       </div>
       <div className="create-community-avatar-row">
-        <div
+        <CommunityAvatar
           className={`create-community-avatar${state.isSettingsAvatarDragOver ? " drag-over" : ""}`}
+          imageUrl={state.communitySettingsAvatarUrl}
+          focusX={state.communitySettingsAvatarFocusX}
+          focusY={state.communitySettingsAvatarFocusY}
+          zoom={state.communitySettingsAvatarZoom}
+          name={state.communitySettingsName || activeCommunity?.name || "Community"}
+          alt="Community avatar preview"
+          fallback={actions.communityInitials(
+            state.communitySettingsName || activeCommunity?.name || "Community",
+          )}
           onDragOver={(event) => {
             event.preventDefault();
             actions.setIsSettingsAvatarDragOver(true);
           }}
           onDragLeave={() => actions.setIsSettingsAvatarDragOver(false)}
           onDrop={actions.handleSettingsAvatarDrop}
-        >
-          {state.communitySettingsAvatarUrl ? (
-            <img
-              src={state.communitySettingsAvatarUrl}
-              alt="Community avatar preview"
-              draggable={false}
-              style={getCommunityAvatarImageStyle({
-                focusX: state.communitySettingsAvatarFocusX,
-                focusY: state.communitySettingsAvatarFocusY,
-                zoom: state.communitySettingsAvatarZoom,
-              })}
-            />
-          ) : (
-            <span>
-              {actions.communityInitials(
-                state.communitySettingsName || activeCommunity?.name || "Community",
-              )}
-            </span>
-          )}
-        </div>
+        />
         <div className="create-community-avatar-actions">
           <label className="create-avatar-btn">
             Upload avatar
