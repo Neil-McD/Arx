@@ -21,6 +21,9 @@ type PreviewCommunityLike = {
   one_liner: string | null;
   about?: string | null;
   avatar_url?: string | null;
+  avatar_focus_x?: number | null;
+  avatar_focus_y?: number | null;
+  avatar_zoom?: number | null;
   banner_url?: string | null;
   banner_focus_x?: number | null;
   banner_focus_y?: number | null;
@@ -145,6 +148,9 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
     communityLinkLabel: previewCommunity.slug ? `c/${previewCommunity.slug}` : null,
     communityLinkHref: null,
     avatarUrl: previewCommunity.avatar_url ?? null,
+    avatarFocusX: previewCommunity.avatar_focus_x ?? null,
+    avatarFocusY: previewCommunity.avatar_focus_y ?? null,
+    avatarZoom: previewCommunity.avatar_zoom ?? null,
     cardBlurb: cardOneLiner,
     memberCount: typeof previewMemberCount === "number" ? previewMemberCount : null,
     onlineCount: previewOnlineCount,
