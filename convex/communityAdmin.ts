@@ -1,5 +1,6 @@
-import { mutation, query } from "./_generated/server";
+import { action, internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
+import { internal } from "./_generated/api";
 import {
   COMMUNITY_JOIN_REAPPLY_COOLDOWN_MS,
   type CommunityJoinRequestLike,
@@ -39,6 +40,7 @@ import {
   isPlatformHomeCommunity,
   upsertPlatformHomeCommunityAutojoinOptOut,
 } from "./platformHomeCommunity";
+import { getStripeClient } from "./stripeCore";
 
 type CommunityMemberUserLike = {
   displayName?: string;
@@ -72,6 +74,18 @@ async function endCommunitySubscriptionsForMembership(args: {
       updatedAt: args.nowMs,
     });
   }
+}
+
+async function listCommunitySubscriptionRowsForMembership(args: {
+  ctx: any;
+  membershipId: any;
+}): Promise<CommunitySubscriptionLike[]> {
+  return (await args.ctx.db
+    .query("communitySubscriptions" as any)
+    .withIndex("by_membership", (q: any) =>
+      q.eq("membershipId", args.membershipId),
+    )
+    .collect()) as CommunitySubscriptionLike[];
 }
 
 async function runLoggedCommunityAdminMutation<T>(params: {
@@ -711,12 +725,68 @@ export const setCommunityMemberRole = mutation({
   },
 });
 
-export const removeCommunityMember = mutation({
+export const prepareCommunityMemberRemovalInternal = internalQuery({
   args: {
     userId: v.optional(v.id("users")),
     authSubject: v.optional(v.string()),
     communityId: v.id("communities"),
     targetMembershipId: v.id("communityMemberships"),
+  },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      userId: args.userId,
+      authSubject: args.authSubject ?? null,
+    });
+    const { community } = await requireCommunityManager({
+      ctx,
+      communityId: args.communityId,
+      userId,
+    });
+    const membership = (await ctx.db.get(
+      args.targetMembershipId,
+    )) as CommunityMembershipLike | null;
+    if (!membership) {
+      return {
+        ok: true,
+        noop: true,
+        provider_subscription_ids: [],
+      };
+    }
+    if (String(membership.communityId) !== String(args.communityId)) {
+      return {
+        ok: true,
+        noop: true,
+        provider_subscription_ids: [],
+      };
+    }
+    if (String(community.ownerId) === String(membership.userId)) {
+      throw new Error("community_owner_remove_forbidden");
+    }
+    const subscriptionRows = await listCommunitySubscriptionRowsForMembership({
+      ctx,
+      membershipId: membership._id,
+    });
+    const providerSubscriptionIds = subscriptionRows
+      .map((row) => String(row.providerSubscriptionId ?? "").trim())
+      .filter((value, index, list) => value.length > 0 && list.indexOf(value) === index);
+    return {
+      ok: true,
+      noop: false,
+      community_slug: community.slug,
+      target_user_id: String(membership.userId),
+      provider_subscription_ids: providerSubscriptionIds,
+    };
+  },
+});
+
+export const revokeCommunityMemberInternal = internalMutation({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+    targetMembershipId: v.id("communityMemberships"),
+    revokedReason: v.optional(v.string()),
     nowMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
@@ -725,11 +795,10 @@ export const removeCommunityMember = mutation({
       userId: args.userId,
       authSubject: args.authSubject ?? null,
     });
-    (args as { userId?: any }).userId = userId;
     return await runLoggedCommunityAdminMutation({
       operation: "remove_member",
       context: {
-        actorUserId: args.userId,
+        actorUserId: userId,
         communityId: String(args.communityId),
         targetMembershipId: String(args.targetMembershipId),
       },
@@ -738,7 +807,7 @@ export const removeCommunityMember = mutation({
         const { community } = await requireCommunityManager({
           ctx,
           communityId: args.communityId,
-          userId: args.userId,
+          userId,
         });
         const membership = (await ctx.db.get(
           args.targetMembershipId,
@@ -755,7 +824,12 @@ export const removeCommunityMember = mutation({
           membershipId: membership._id,
           nowMs,
         });
-        await ctx.db.delete(membership._id as any);
+        await ctx.db.patch(membership._id as any, {
+          active: false,
+          revokedAt: nowMs,
+          revokedReason: String(args.revokedReason ?? "").trim() || "removed_by_manager",
+          updatedAt: nowMs,
+        });
 
         const memberSettings = (await ctx.db
           .query("communityMemberSettings" as any)
@@ -797,6 +871,74 @@ export const removeCommunityMember = mutation({
         return { ok: true };
       },
     });
+  },
+});
+
+async function cancelStripeSubscriptionIfActive(providerSubscriptionId: string): Promise<void> {
+  const subscriptionId = providerSubscriptionId.trim();
+  if (!subscriptionId) return;
+  const stripe = getStripeClient();
+  let subscription: Awaited<ReturnType<typeof stripe.subscriptions.retrieve>>;
+  try {
+    subscription = await stripe.subscriptions.retrieve(subscriptionId);
+  } catch (error: any) {
+    if (error?.statusCode === 404 || error?.code === "resource_missing") return;
+    throw error;
+  }
+  const status = String((subscription as any)?.status ?? "").trim().toLowerCase();
+  if (!status || status === "canceled") return;
+  await stripe.subscriptions.cancel(subscriptionId);
+}
+
+export const removeCommunityMember = action({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+    targetMembershipId: v.id("communityMemberships"),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const prepared = (await ctx.runQuery(
+      internal.communityAdmin.prepareCommunityMemberRemovalInternal as any,
+      {
+        userId: args.userId,
+        authSubject: args.authSubject ?? undefined,
+        communityId: args.communityId,
+        targetMembershipId: args.targetMembershipId,
+      },
+    )) as {
+      noop?: boolean;
+      provider_subscription_ids?: string[];
+    } | null;
+    if (prepared?.noop) return { ok: true, stripe_canceled_count: 0 };
+
+    const providerSubscriptionIds = Array.isArray(prepared?.provider_subscription_ids)
+      ? prepared.provider_subscription_ids
+      : [];
+    let stripeCanceledCount = 0;
+    for (const providerSubscriptionId of providerSubscriptionIds) {
+      await cancelStripeSubscriptionIfActive(providerSubscriptionId);
+      stripeCanceledCount += 1;
+    }
+
+    await ctx.runMutation(
+      internal.communityAdmin.revokeCommunityMemberInternal as any,
+      {
+        userId: args.userId,
+        authSubject: args.authSubject ?? undefined,
+        communityId: args.communityId,
+        targetMembershipId: args.targetMembershipId,
+        revokedReason: providerSubscriptionIds.length > 0
+          ? "removed_by_manager_stripe_canceled"
+          : "removed_by_manager",
+        nowMs: args.nowMs ?? Date.now(),
+      },
+    );
+    return {
+      ok: true,
+      stripe_canceled_count: stripeCanceledCount,
+    };
   },
 });
 

@@ -116,5 +116,28 @@ if [[ ! -f "docs/auth-money-access-matrix.md" ]]; then
 fi
 echo "OK: canonical auth + funding contract doc present."
 
-echo "[9/9] Guard passed."
+echo "[9/10] Ensuring paid member removal cancels provider subscriptions and preserves revoked membership state..."
+require_multiline_match "$ADMIN_GATEWAY_FILE" \
+  'export async function removeCloudCommunityMember<[\s\S]*?client\.action\("community:removeCommunityMember" as any, \{\s*authSubject,\s*communityId:' \
+  "remove member gateway calls action for provider cancellation"
+require_multiline_match "$COMMUNITY_ADMIN_FILE" \
+  'export const removeCommunityMember = action\(' \
+  "removeCommunityMember is action-backed"
+require_multiline_match "$COMMUNITY_ADMIN_FILE" \
+  'stripe\.subscriptions\.cancel\(subscriptionId\)' \
+  "remove member cancels Stripe subscription"
+require_multiline_match "$COMMUNITY_ADMIN_FILE" \
+  'await ctx\.db\.patch\(membership\._id as any, \{\s*active: false,\s*revokedAt: nowMs,\s*revokedReason:' \
+  "remove member preserves revoked membership row"
+if awk '
+  /export const revokeCommunityMemberInternal = internalMutation\(/ { in_block = 1 }
+  /async function cancelStripeSubscriptionIfActive/ { in_block = 0 }
+  in_block { print }
+' "$COMMUNITY_ADMIN_FILE" | rg 'await ctx\.db\.delete\(membership\._id as any\)' >/dev/null; then
+  echo "FAIL: revokeCommunityMemberInternal must not delete paid membership audit rows"
+  exit 1
+fi
+echo "OK: revokeCommunityMemberInternal does not delete membership rows"
+
+echo "[10/10] Guard passed."
 echo "PASS: community admin contract markers are present and hardened."

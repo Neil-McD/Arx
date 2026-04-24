@@ -27,6 +27,7 @@
     "check:builder-billing-redirect-authority-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/builder_billing_redirect_authority_proof.ts",
     "check:community-admin-contract-guard": "bash scripts/community_admin_contract_guard.sh",
     "check:community-public-identity-guard": "bash scripts/community_public_identity_guard.sh",
+    "check:release-truth-docs-guard": "bash scripts/release_truth_docs_guard.sh",
     "check:daytona-runtime-sandbox-contract-guard": "bash scripts/daytona_runtime_sandbox_contract_guard.sh",
     "check:runtime-turn-contract-guard": "bash scripts/runtime_turn_contract_guard.sh",
     "check:runtime-router-loop-contract-guard": "bash scripts/runtime_router_loop_contract_check.sh",

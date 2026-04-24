@@ -1,5 +1,7 @@
 ## Alpha Builder-Only Posture
 
+> Historical evidence only. This note describes the March 2026 alpha builder-only posture and is not current release truth. Current release truth lives in `docs/alpha-release-workflow.md`.
+
 Date: 2026-03-19
 
 This is a temporary alpha-testing posture change, not a product-direction reversal.

@@ -259,7 +259,7 @@ export async function removeCloudCommunityMember<SessionT>(
   },
 ): Promise<void> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  await client.mutation("community:removeCommunityMember" as any, {
+  await client.action("community:removeCommunityMember" as any, {
     authSubject,
     communityId: params.communityId,
     targetMembershipId: params.membershipId,

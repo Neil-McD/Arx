@@ -1,5 +1,7 @@
 # Release Candidate Freeze 2026-04-02
 
+> Historical evidence only. This freeze note describes an older release-candidate process and is not current release truth. Current release truth lives in `docs/alpha-release-workflow.md`.
+
 ## Intent
 
 Freeze scope for the current release candidate so we can finish validation on the exact thing we intend to ship.

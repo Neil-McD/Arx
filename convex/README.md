@@ -1,6 +1,6 @@
 # Convex Runtime + Data Layer
 
-This folder is the canonical backend surface for Daytona. Runtime/product paths are now Convex-first (no legacy function/RPC transport in active code paths).
+This folder is the canonical Convex backend surface for Polynet. Runtime/product paths are Convex-first (no legacy function/RPC transport in active code paths). Daytona remains an infrastructure provider for workspace execution, not the release/worktree owner.
 
 ## Included
 

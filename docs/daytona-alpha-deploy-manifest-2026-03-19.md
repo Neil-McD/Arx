@@ -1,5 +1,7 @@
 # Daytona Alpha Deploy Manifest
 
+> Historical evidence only. This manifest documents the March 2026 Daytona alpha freeze/deploy process. It is not current release truth. Current release truth lives in `docs/alpha-release-workflow.md`.
+
 ## Canonical Source
 
 - Preserve branch: `codex/daytona-freeze-20260319`

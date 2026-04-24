@@ -1,5 +1,7 @@
 # Production Baseline Fingerprint Worksheet
 
+> Historical evidence only. This worksheet captured a past reconciliation state when production, Daytona, and `origin/main` were not aligned. It is not current release truth. Current release truth lives in `docs/alpha-release-workflow.md`.
+
 ## Purpose
 
 This worksheet exists to answer one question cleanly:
