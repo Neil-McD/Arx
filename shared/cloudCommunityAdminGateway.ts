@@ -266,6 +266,20 @@ export async function removeCloudCommunityMember<SessionT>(
   });
 }
 
+export async function banCloudCommunityMember<SessionT>(
+  params: CloudCommunityAdminGatewayParams<SessionT> & {
+    communityId: string;
+    membershipId: string;
+  },
+): Promise<void> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  await client.action("community:banCommunityMember" as any, {
+    authSubject,
+    communityId: params.communityId,
+    targetMembershipId: params.membershipId,
+  });
+}
+
 export async function countCloudCommunityResourceRows<SessionT>(
   params: CloudCommunityAdminGatewayParams<SessionT> & {
     communityId: string;

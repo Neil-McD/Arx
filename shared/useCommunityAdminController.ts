@@ -10,6 +10,7 @@ import {
   listCloudCommunityMembershipCreatedAtRows,
 } from "./cloudCommunityMembershipGateway";
 import {
+  banCloudCommunityMember,
   countCloudCommunityResourceRows,
   fetchCloudCommunityEntitledMemberCount,
   removeCloudCommunityMember,
@@ -422,6 +423,28 @@ export function useCommunityAdminController<
     }
   }, [refreshCommunityMembershipViews]);
 
+  const handleBanCommunityMember = useCallback(async (membershipId: string) => {
+    const current = argsRef.current;
+    const communityId = current.activeCommunityId;
+    const session = await resolveUsableSession(current.session, current.ensureSession);
+    if (!session || !communityId) return;
+    const confirmed = current.confirmAction
+      ? current.confirmAction("Ban this member? They will not be able to rejoin unless unbanned.")
+      : window.confirm("Ban this member? They will not be able to rejoin unless unbanned.");
+    if (!confirmed) return;
+    try {
+      await banCloudCommunityMember({
+        session,
+        communityId,
+        membershipId,
+      });
+    } catch (error) {
+      console.warn("Failed to ban member:", error);
+    } finally {
+      await refreshCommunityMembershipViews(communityId, session);
+    }
+  }, [refreshCommunityMembershipViews]);
+
   return {
     loadCommunityMembers,
     loadSelfProfile,
@@ -430,5 +453,6 @@ export function useCommunityAdminController<
     resetCommunityAnalytics,
     handleSetCommunityMemberRole,
     handleRemoveCommunityMember,
+    handleBanCommunityMember,
   };
 }

@@ -2295,6 +2295,7 @@ export default function App() {
     resetCommunityAnalytics,
     handleSetCommunityMemberRole,
     handleRemoveCommunityMember,
+    handleBanCommunityMember,
   } = useCommunityAdminController<
     AuthSession,
     CommunityMember,
@@ -5635,6 +5636,7 @@ export default function App() {
         handleSetCommunityFreeAccessMode,
         handleSetCommunityMemberRole,
         handleRemoveCommunityMember,
+        handleBanCommunityMember,
         handleApproveCommunityJoinRequest,
         handleDenyCommunityJoinRequest,
         copyTextToClipboard,

@@ -58,6 +58,7 @@ type WebCommunityMembersSectionProps = {
     handleSetCommunityFreeAccessMode: (mode: "open" | "approval") => Promise<void> | void;
     handleSetCommunityMemberRole: (membershipId: string, role: "admin" | "moderator" | "member") => Promise<void> | void;
     handleRemoveCommunityMember: (membershipId: string) => Promise<void> | void;
+    handleBanCommunityMember: (membershipId: string) => Promise<void> | void;
     handleApproveCommunityJoinRequest: (requestId: string) => Promise<void> | void;
     handleDenyCommunityJoinRequest: (requestId: string) => Promise<void> | void;
     copyTextToClipboard: (value: string) => Promise<void> | void;
@@ -606,6 +607,16 @@ export function WebCommunityMembersSection(props: WebCommunityMembersSectionProp
                       }}
                     >
                       Remove member
+                    </button>
+                    <button
+                      className="danger member-settings-remove"
+                      type="button"
+                      onClick={() => {
+                        closeMemberSettings();
+                        void actions.handleBanCommunityMember(selectedMember.id);
+                      }}
+                    >
+                      Ban member
                     </button>
                   </div>
                 </div>

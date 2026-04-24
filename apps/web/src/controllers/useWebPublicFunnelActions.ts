@@ -486,6 +486,17 @@ export function useWebPublicFunnelActions<
         const cancelUrl = `${origin}${cancelPath}`;
         const rawSession = current.getSession();
         const session = current.ensureSession ? await current.ensureSession(rawSession) : rawSession;
+        if (!session) {
+          current.requireSignIn({
+            reason: "join_public_community",
+            payload: {
+              community_id: null,
+              community_slug: communitySlug,
+            },
+          });
+          current.setCheckoutStatus("idle");
+          return;
+        }
         const data = await startCloudPublicFunnelCheckout<AuthSession>({
           session,
           communitySlug,

@@ -435,6 +435,19 @@ export default defineSchema({
     .index("by_community", ["communityId"])
     .index("by_community_user", ["communityId", "userId"]),
 
+  communityBlocks: defineTable({
+    communityId: v.id("communities"),
+    userId: v.id("users"),
+    createdByUserId: v.id("users"),
+    reason: v.optional(v.string()),
+    liftedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_community", ["communityId"])
+    .index("by_community_user", ["communityId", "userId"]),
+
   communityFunnels: defineTable({
     communityId: v.id("communities"),
     heroMediaUrl: v.optional(v.string()),

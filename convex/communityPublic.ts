@@ -16,6 +16,7 @@ import {
   pickMostRelevantCommunityMembership,
   pickPreferredActivePlan,
   requireCommunityChatAccess,
+  requireCommunityUserNotBlocked,
   resolveCommunityBrandingFields,
   resolveCommunityEntryPolicy,
   resolvePublicUserId,
@@ -384,25 +385,42 @@ async function joinPublicCommunityInternal(args: {
   community_id: string;
   reapply_at?: string | null;
 }> {
+  await requireCommunityUserNotBlocked({
+    ctx: args.ctx,
+    communityId: args.community._id,
+    userId: args.userId,
+  });
   const existingMembershipRows = (await args.ctx.db
     .query("communityMemberships")
     .withIndex("by_community_user", (q: any) => q.eq("communityId", args.community._id).eq("userId", args.userId))
     .collect()) as CommunityMembershipLike[];
   const existingMembership = pickMostRelevantCommunityMembership(existingMembershipRows);
   let grantedMembershipMarker: string | null = null;
-  if (existingMembership) {
-    if (!communityMembershipRowIsActive(existingMembership)) {
-      const role = normalizeCommunityRoleForOutput(existingMembership.role) || "member";
+
+  const grantFreeMembership = async () => {
+    if (existingMembership && !communityMembershipRowIsActive(existingMembership)) {
+      await args.ctx.db.patch(existingMembership._id as any, {
+        role: normalizeCommunityRoleForOutput(existingMembership.role) || "member",
+        accessSource: "free_grant",
+        active: true,
+        revokedAt: undefined,
+        revokedReason: undefined,
+        updatedAt: args.nowMs,
+      });
+      grantedMembershipMarker = `${String(existingMembership._id)}:${args.nowMs}`;
+    } else if (!existingMembership) {
       const membershipId = await args.ctx.db.insert("communityMemberships", {
         communityId: args.community._id,
         userId: args.userId,
-        role,
+        role: "member",
         accessSource: "free_grant",
         active: true,
         createdAt: args.nowMs,
         updatedAt: args.nowMs,
       });
       grantedMembershipMarker = `${String(membershipId)}:${args.nowMs}`;
+    }
+    if (grantedMembershipMarker) {
       await enqueueCommunityAccessGrantedEmailInternal({
         ctx: args.ctx,
         userId: args.userId,
@@ -411,6 +429,9 @@ async function joinPublicCommunityInternal(args: {
         nowMs: args.nowMs,
       });
     }
+  };
+
+  if (existingMembership && communityMembershipRowIsActive(existingMembership)) {
     if (isPlatformHomeCommunity({ communitySlug: args.community.slug })) {
       await clearPlatformHomeCommunityAutojoinOptOut({
         ctx: args.ctx,
@@ -424,6 +445,15 @@ async function joinPublicCommunityInternal(args: {
     };
   }
 
+  const joinRequestRows = (await args.ctx.db
+    .query("communityJoinRequests")
+    .withIndex("by_community_user", (q: any) => q.eq("communityId", args.community._id).eq("userId", args.userId))
+    .collect()) as CommunityJoinRequestLike[];
+  const joinRequest = pickMostRelevantCommunityJoinRequest(joinRequestRows);
+  const joinRequestStatus = String(joinRequest?.status ?? "")
+    .trim()
+    .toLowerCase();
+
   const platformHomeAutojoinOptOut = isPlatformHomeCommunity({
     communitySlug: args.community.slug,
   })
@@ -434,12 +464,6 @@ async function joinPublicCommunityInternal(args: {
       })
     : null;
   if (platformHomeAutojoinOptOut?.kind === "removed") {
-    const joinRequestRows = (await args.ctx.db
-      .query("communityJoinRequests")
-      .withIndex("by_community_user", (q: any) =>
-        q.eq("communityId", args.community._id).eq("userId", args.userId),
-      )
-      .collect()) as CommunityJoinRequestLike[];
     const explicitJoinRequest = pickMostRelevantCommunityJoinRequest(
       joinRequestRows.filter(
         (row) => !isPlatformHomeAutojoinOptOutRequest(row),
@@ -489,6 +513,16 @@ async function joinPublicCommunityInternal(args: {
   }
 
   const entryPolicy = resolveCommunityEntryPolicy(args.community);
+  if (joinRequestStatus === "denied" && !communityJoinRequestCanReapply(joinRequest, args.nowMs)) {
+    return {
+      outcome: "approval_denied",
+      community_id: String(args.community._id),
+      reapply_at:
+        typeof joinRequest?.reapplyAt === "number"
+          ? toIsoString(joinRequest.reapplyAt)
+          : null,
+    };
+  }
   if (entryPolicy === "paid_subscription") {
     return {
       outcome: "paid_plan_required",
@@ -496,22 +530,14 @@ async function joinPublicCommunityInternal(args: {
     };
   }
   if (entryPolicy === "approval") {
-    const joinRequestRows = (await args.ctx.db
-      .query("communityJoinRequests")
-      .withIndex("by_community_user", (q: any) => q.eq("communityId", args.community._id).eq("userId", args.userId))
-      .collect()) as CommunityJoinRequestLike[];
-    const joinRequest = pickMostRelevantCommunityJoinRequest(joinRequestRows);
-    const status = String(joinRequest?.status ?? "")
-      .trim()
-      .toLowerCase();
-    if (status === "approved") {
+    if (joinRequestStatus === "approved") {
       // approved requests may enter immediately
-    } else if (status === "pending") {
+    } else if (joinRequestStatus === "pending") {
       return {
         outcome: "approval_pending",
         community_id: String(args.community._id),
       };
-    } else if (status === "denied") {
+    } else if (joinRequestStatus === "denied") {
       if (communityJoinRequestCanReapply(joinRequest, args.nowMs)) {
         await ensurePendingCommunityJoinRequest({
           ctx: args.ctx,
@@ -546,23 +572,7 @@ async function joinPublicCommunityInternal(args: {
     }
   }
 
-  const membershipId = await args.ctx.db.insert("communityMemberships", {
-    communityId: args.community._id,
-    userId: args.userId,
-    role: "member",
-    accessSource: "free_grant",
-    active: true,
-    createdAt: args.nowMs,
-    updatedAt: args.nowMs,
-  });
-  grantedMembershipMarker = `${String(membershipId)}:${args.nowMs}`;
-  await enqueueCommunityAccessGrantedEmailInternal({
-    ctx: args.ctx,
-    userId: args.userId,
-    communityId: args.community._id,
-    grantMarker: grantedMembershipMarker,
-    nowMs: args.nowMs,
-  });
+  await grantFreeMembership();
   if (isPlatformHomeCommunity({ communitySlug: args.community.slug })) {
     await clearPlatformHomeCommunityAutojoinOptOut({
       ctx: args.ctx,

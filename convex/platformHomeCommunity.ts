@@ -2,7 +2,7 @@ import {
   type CommunityLike,
   type CommunityJoinRequestLike,
   type CommunityMembershipLike,
-  COMMUNITY_JOIN_REAPPLY_COOLDOWN_MS,
+  COMMUNITY_REMOVAL_REAPPLY_COOLDOWN_MS,
   communityMembershipRowIsActive,
   normalizeCommunityRoleForOutput,
   pickMostRelevantCommunityJoinRequest,
@@ -111,7 +111,7 @@ export async function upsertPlatformHomeCommunityAutojoinOptOut(args: {
           status: "denied",
           message: PLATFORM_HOME_AUTOJOIN_OPT_OUT_MESSAGE,
           deniedAt: args.nowMs,
-          reapplyAt: args.nowMs + COMMUNITY_JOIN_REAPPLY_COOLDOWN_MS,
+          reapplyAt: args.nowMs + COMMUNITY_REMOVAL_REAPPLY_COOLDOWN_MS,
           updatedAt: args.nowMs,
         }
       : {

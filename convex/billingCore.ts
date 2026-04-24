@@ -3,6 +3,7 @@ export { resolveUserIdForAuthenticatedRequest } from "./authActor";
 import {
   communitySubscriptionStatusGrantsAccess,
   normalizeCommunitySubscriptionStatus,
+  requireCommunityUserNotBlocked,
   resolveCommunityEntryPolicy,
 } from "./communityCore";
 import { enqueueCommunityAccessGrantedEmailInternal } from "./emailEvents";
@@ -368,6 +369,11 @@ export async function redeemClaimRow(args: {
       grantMarker: null,
     };
   }
+  await requireCommunityUserNotBlocked({
+    ctx: args.ctx,
+    communityId: args.claim.communityId,
+    userId: args.userId,
+  });
   const { membership, accessGranted } = await ensureCommunityMembership({
     ctx: args.ctx,
     community,

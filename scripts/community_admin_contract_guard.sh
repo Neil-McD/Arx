@@ -116,7 +116,7 @@ if [[ ! -f "docs/auth-money-access-matrix.md" ]]; then
 fi
 echo "OK: canonical auth + funding contract doc present."
 
-echo "[9/10] Ensuring paid member removal cancels provider subscriptions and preserves revoked membership state..."
+echo "[9/11] Ensuring paid member removal cancels provider subscriptions and preserves revoked membership state..."
 require_multiline_match "$ADMIN_GATEWAY_FILE" \
   'export async function removeCloudCommunityMember<[\s\S]*?client\.action\("community:removeCommunityMember" as any, \{\s*authSubject,\s*communityId:' \
   "remove member gateway calls action for provider cancellation"
@@ -139,5 +139,22 @@ if awk '
 fi
 echo "OK: revokeCommunityMemberInternal does not delete membership rows"
 
-echo "[10/10] Guard passed."
+echo "[10/11] Ensuring ban and unban are distinct from remove..."
+require_multiline_match "$ADMIN_GATEWAY_FILE" \
+  'export async function banCloudCommunityMember<[\s\S]*?client\.action\("community:banCommunityMember" as any, \{\s*authSubject,\s*communityId:' \
+  "ban member gateway calls action"
+require_multiline_match "$COMMUNITY_ADMIN_FILE" \
+  'export const banCommunityMember = action\(' \
+  "banCommunityMember is action-backed"
+require_multiline_match "$COMMUNITY_ADMIN_FILE" \
+  'export const blockCommunityUserInternal = internalMutation\(' \
+  "ban writes durable community block state"
+require_multiline_match "$COMMUNITY_ADMIN_FILE" \
+  'export const unbanCommunityUser = mutation\(' \
+  "unbanCommunityUser mutation exists"
+require_multiline_match "$COMMUNITY_CORE_FILE" \
+  'export const COMMUNITY_REMOVAL_REAPPLY_COOLDOWN_MS = 14 \* 24 \* 60 \* 60 \* 1000;' \
+  "removed member reapply cooldown is 14 days"
+
+echo "[11/11] Guard passed."
 echo "PASS: community admin contract markers are present and hardened."

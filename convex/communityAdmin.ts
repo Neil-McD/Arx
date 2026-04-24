@@ -3,6 +3,8 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import {
   COMMUNITY_JOIN_REAPPLY_COOLDOWN_MS,
+  COMMUNITY_REMOVAL_REAPPLY_COOLDOWN_MS,
+  type CommunityBlockLike,
   type CommunityJoinRequestLike,
   type CommunityLike,
   type CommunityMemberSettingsLike,
@@ -12,6 +14,7 @@ import {
   type UserEntitlementLike,
   communityMembershipRowIsActive,
   getCommunityAndMembership,
+  getActiveCommunityBlock,
   isActiveEntitlementWindow,
   listCommunityMembershipRowsForManager,
   mapCommunityMemberSettingsRow,
@@ -651,18 +654,6 @@ export const denyCommunityJoinRequest = mutation({
           reapplyAt: nowMs + COMMUNITY_JOIN_REAPPLY_COOLDOWN_MS,
           updatedAt: nowMs,
         });
-        const community = (await ctx.db.get(
-          request.communityId,
-        )) as CommunityLike | null;
-        if (isPlatformHomeCommunity({ communitySlug: community?.slug })) {
-          await upsertPlatformHomeCommunityAutojoinOptOut({
-            ctx,
-            communityId: request.communityId,
-            userId: request.userId,
-            nowMs,
-            kind: "removed",
-          });
-        }
         return { ok: true };
       },
     });
@@ -774,7 +765,7 @@ export const prepareCommunityMemberRemovalInternal = internalQuery({
       ok: true,
       noop: false,
       community_slug: community.slug,
-      target_user_id: String(membership.userId),
+      target_user_id: membership.userId,
       provider_subscription_ids: providerSubscriptionIds,
     };
   },
@@ -855,7 +846,17 @@ export const revokeCommunityMemberInternal = internalMutation({
           await ctx.db.patch(joinRequest._id as any, {
             status: "denied",
             deniedAt: nowMs,
-            reapplyAt: nowMs + COMMUNITY_JOIN_REAPPLY_COOLDOWN_MS,
+            reapplyAt: nowMs + COMMUNITY_REMOVAL_REAPPLY_COOLDOWN_MS,
+            updatedAt: nowMs,
+          });
+        } else {
+          await ctx.db.insert("communityJoinRequests", {
+            communityId: args.communityId,
+            userId: membership.userId,
+            status: "denied",
+            deniedAt: nowMs,
+            reapplyAt: nowMs + COMMUNITY_REMOVAL_REAPPLY_COOLDOWN_MS,
+            createdAt: nowMs,
             updatedAt: nowMs,
           });
         }
@@ -939,6 +940,155 @@ export const removeCommunityMember = action({
       ok: true,
       stripe_canceled_count: stripeCanceledCount,
     };
+  },
+});
+
+export const banCommunityMember = action({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+    targetMembershipId: v.id("communityMemberships"),
+    reason: v.optional(v.string()),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const prepared = (await ctx.runQuery(
+      internal.communityAdmin.prepareCommunityMemberRemovalInternal as any,
+      {
+        userId: args.userId,
+        authSubject: args.authSubject ?? undefined,
+        communityId: args.communityId,
+        targetMembershipId: args.targetMembershipId,
+      },
+    )) as {
+      noop?: boolean;
+      target_user_id?: any;
+      provider_subscription_ids?: string[];
+    } | null;
+    if (prepared?.noop || !prepared?.target_user_id) return { ok: true, stripe_canceled_count: 0 };
+
+    const providerSubscriptionIds = Array.isArray(prepared?.provider_subscription_ids)
+      ? prepared.provider_subscription_ids
+      : [];
+    let stripeCanceledCount = 0;
+    for (const providerSubscriptionId of providerSubscriptionIds) {
+      await cancelStripeSubscriptionIfActive(providerSubscriptionId);
+      stripeCanceledCount += 1;
+    }
+
+    const nowMs = args.nowMs ?? Date.now();
+    await ctx.runMutation(
+      internal.communityAdmin.revokeCommunityMemberInternal as any,
+      {
+        userId: args.userId,
+        authSubject: args.authSubject ?? undefined,
+        communityId: args.communityId,
+        targetMembershipId: args.targetMembershipId,
+        revokedReason: providerSubscriptionIds.length > 0
+          ? "banned_by_manager_stripe_canceled"
+          : "banned_by_manager",
+        nowMs,
+      },
+    );
+    await ctx.runMutation(
+      internal.communityAdmin.blockCommunityUserInternal as any,
+      {
+        userId: args.userId,
+        authSubject: args.authSubject ?? undefined,
+        communityId: args.communityId,
+        targetUserId: prepared.target_user_id,
+        reason: args.reason,
+        nowMs,
+      },
+    );
+    return {
+      ok: true,
+      stripe_canceled_count: stripeCanceledCount,
+    };
+  },
+});
+
+export const blockCommunityUserInternal = internalMutation({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+    targetUserId: v.id("users"),
+    reason: v.optional(v.string()),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      userId: args.userId,
+      authSubject: args.authSubject ?? null,
+    });
+    const nowMs = args.nowMs ?? Date.now();
+    const { community } = await requireCommunityManager({
+      ctx,
+      communityId: args.communityId,
+      userId,
+    });
+    if (String(community.ownerId) === String(args.targetUserId)) {
+      throw new Error("community_owner_ban_forbidden");
+    }
+    const existing = await getActiveCommunityBlock({
+      ctx,
+      communityId: args.communityId,
+      userId: args.targetUserId,
+    });
+    const reason = String(args.reason ?? "").trim().slice(0, 1000) || undefined;
+    if (existing) {
+      await ctx.db.patch(existing._id as any, {
+        reason,
+        updatedAt: nowMs,
+      });
+      return { ok: true };
+    }
+    await ctx.db.insert("communityBlocks" as any, {
+      communityId: args.communityId,
+      userId: args.targetUserId,
+      createdByUserId: userId,
+      reason,
+      createdAt: nowMs,
+      updatedAt: nowMs,
+    });
+    return { ok: true };
+  },
+});
+
+export const unbanCommunityUser = mutation({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+    targetUserId: v.id("users"),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      userId: args.userId,
+      authSubject: args.authSubject ?? null,
+    });
+    const nowMs = args.nowMs ?? Date.now();
+    await requireCommunityManager({
+      ctx,
+      communityId: args.communityId,
+      userId,
+    });
+    const block = (await getActiveCommunityBlock({
+      ctx,
+      communityId: args.communityId,
+      userId: args.targetUserId,
+    })) as CommunityBlockLike | null;
+    if (!block) return { ok: true };
+    await ctx.db.patch(block._id as any, {
+      liftedAt: nowMs,
+      updatedAt: nowMs,
+    });
+    return { ok: true };
   },
 });
 

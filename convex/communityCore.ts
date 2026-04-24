@@ -91,6 +91,17 @@ export type CommunityJoinRequestLike = {
   updatedAt: number;
 };
 
+export type CommunityBlockLike = {
+  _id: any;
+  communityId: any;
+  userId: any;
+  createdByUserId: any;
+  reason?: string;
+  liftedAt?: number;
+  createdAt: number;
+  updatedAt: number;
+};
+
 export type CommunityPricePointLike = {
   _id: any;
   communityId: any;
@@ -424,6 +435,43 @@ export function pickMostRelevantCommunityMembership(
 }
 
 export const COMMUNITY_JOIN_REAPPLY_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
+export const COMMUNITY_REMOVAL_REAPPLY_COOLDOWN_MS = 14 * 24 * 60 * 60 * 1000;
+
+export async function getActiveCommunityBlock(args: {
+  ctx: any;
+  communityId: any;
+  userId: any;
+}): Promise<CommunityBlockLike | null> {
+  const rows = (await args.ctx.db
+    .query("communityBlocks" as any)
+    .withIndex("by_community_user", (q: any) =>
+      q.eq("communityId", args.communityId).eq("userId", args.userId),
+    )
+    .collect()) as CommunityBlockLike[];
+  return (
+    rows
+      .filter((row) => !(typeof row.liftedAt === "number" && row.liftedAt > 0))
+      .sort((a, b) => b.updatedAt - a.updatedAt)[0] ?? null
+  );
+}
+
+export async function communityUserIsBlocked(args: {
+  ctx: any;
+  communityId: any;
+  userId: any;
+}): Promise<boolean> {
+  return (await getActiveCommunityBlock(args)) !== null;
+}
+
+export async function requireCommunityUserNotBlocked(args: {
+  ctx: any;
+  communityId: any;
+  userId: any;
+}): Promise<void> {
+  if (await communityUserIsBlocked(args)) {
+    throw new Error("community_user_blocked");
+  }
+}
 
 export function resolveCommunityJoinRequestReapplyAtMs(
   request: CommunityJoinRequestLike | null | undefined,
@@ -725,6 +773,13 @@ export async function resolveCommunityAccessBundle(args: {
 }) {
   const role = normalizeCommunityRoleForOutput(args.membership?.role);
   const isOwner = args.community.ownerId === args.userId;
+  const isBlocked = !isOwner
+    ? await communityUserIsBlocked({
+        ctx: args.ctx,
+        communityId: args.community._id,
+        userId: args.userId,
+      })
+    : false;
   const entryPolicy = resolveCommunityEntryPolicy(args.community);
   const entitlement = await resolveCommunityMembershipEntitlementState({
     ctx: args.ctx,
@@ -732,7 +787,7 @@ export async function resolveCommunityAccessBundle(args: {
     membership: args.membership,
     userId: args.userId,
   });
-  const isEntitled = entitlement.isEntitled;
+  const isEntitled = !isBlocked && entitlement.isEntitled;
   const isAdmin = !isOwner && isEntitled && role === "admin";
   const isModerator = !isOwner && isEntitled && role === "moderator";
   let joinRequestStatus: string | null = null;
@@ -756,6 +811,8 @@ export async function resolveCommunityAccessBundle(args: {
         ? "moderator"
       : isEntitled
         ? "member"
+      : isBlocked
+        ? "visitor"
         : joinRequestStatus === "pending"
           ? "pending"
           : "visitor";
@@ -785,6 +842,7 @@ export async function resolveCommunityAccessBundle(args: {
     primary_cta: primaryCta,
     is_owner: isOwner,
     is_entitled: isEntitled,
+    is_blocked: isBlocked,
     access_source: entitlement.accessSource,
     subscription_status: entitlement.subscriptionStatus,
     entitlement_role: isOwner ? "owner" : role || null,

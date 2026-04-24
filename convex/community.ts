@@ -11,10 +11,12 @@ import {
   listCommunityMemberships as listCommunityMembershipsImpl,
   listCommunityMembershipsAdmin as listCommunityMembershipsAdminImpl,
   listCommunityRevenueSeries as listCommunityRevenueSeriesImpl,
+  banCommunityMember as banCommunityMemberImpl,
   removeCommunityMember as removeCommunityMemberImpl,
   saveCommunityMemberSettings as saveCommunityMemberSettingsImpl,
   setCommunityFreeAccessMode as setCommunityFreeAccessModeImpl,
   setCommunityMemberRole as setCommunityMemberRoleImpl,
+  unbanCommunityUser as unbanCommunityUserImpl,
 } from "./communityAdmin";
 import {
   getActiveCommunityAgentLanding as getActiveCommunityAgentLandingImpl,
@@ -108,6 +110,8 @@ export const approveCommunityJoinRequest = approveCommunityJoinRequestImpl;
 export const denyCommunityJoinRequest = denyCommunityJoinRequestImpl;
 export const setCommunityMemberRole = setCommunityMemberRoleImpl;
 export const removeCommunityMember = removeCommunityMemberImpl;
+export const banCommunityMember = banCommunityMemberImpl;
+export const unbanCommunityUser = unbanCommunityUserImpl;
 export const getCommunityMemberSettings = getCommunityMemberSettingsImpl;
 export const saveCommunityMemberSettings = saveCommunityMemberSettingsImpl;
 export const listCommunityPricePoints = listCommunityPricePointsImpl;

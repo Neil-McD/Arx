@@ -22,8 +22,10 @@ import {
 } from "./billingCore";
 import {
   communitySubscriptionStatusGrantsAccess,
+  communityUserIsBlocked,
   normalizeCommunitySubscriptionStatus,
   parseIsoMs,
+  requireCommunityUserNotBlocked,
   resolveCommunityEntryPolicy,
 } from "./communityCore";
 import { enqueueCommunityBillingIssueEmailInternal } from "./emailEvents";
@@ -615,16 +617,19 @@ export const startPublicCommunityCheckout = action({
     const sessionId = newOpaqueToken("chk");
     const claimToken = newOpaqueToken("claim");
     const expiresAt = nowMs + 14 * 24 * 60 * 60 * 1000;
-    const actor: { dbUserId?: unknown; email?: string | null } | null = args.authSubject
-      ? ((await ctx.runQuery(internal.authActor.resolveAuthenticatedActorInternal as any, {
-          authSubject: args.authSubject,
-        })) as { dbUserId?: unknown; email?: string | null } | null)
-      : null;
-    const ownerUserId: unknown = actor?.dbUserId;
-    const ownerEmail: string | null = actor?.email ?? null;
-    if (!args.authSubject && args.userId) {
+    if (!args.authSubject) {
       throw new Error("auth_subject_required");
     }
+    const actor = (await ctx.runQuery(internal.authActor.resolveAuthenticatedActorInternal as any, {
+      authSubject: args.authSubject,
+    })) as { dbUserId?: unknown; email?: string | null } | null;
+    const ownerUserId: unknown = actor?.dbUserId;
+    const ownerEmail: string | null = actor?.email ?? null;
+    if (!ownerUserId) throw new Error("auth_subject_required");
+    await ctx.runQuery(internal.communityCommerce.requirePublicCommunityCheckoutNotBlockedInternal as any, {
+      communityId: checkoutConfig.communityId,
+      userId: ownerUserId,
+    });
     let providerPriceId = String(checkoutConfig.providerPriceId ?? "").trim() || null;
     if (!providerPriceId) {
       const existingProviderPrice = (await ctx.runQuery(
@@ -769,6 +774,21 @@ export const startPublicCommunityCheckout = action({
   },
 });
 
+export const requirePublicCommunityCheckoutNotBlockedInternal = internalQuery({
+  args: {
+    communityId: v.id("communities"),
+    userId: v.id("users"),
+  },
+  handler: async (ctx, args) => {
+    await requireCommunityUserNotBlocked({
+      ctx,
+      communityId: args.communityId,
+      userId: args.userId,
+    });
+    return { ok: true };
+  },
+});
+
 export const finalizeCheckoutSession = query({
   args: {
     sessionId: v.string(),
@@ -906,6 +926,16 @@ export const listPendingPurchaseClaims = query({
         }
       }
       const community = (await ctx.db.get(claim.communityId)) as CommunityLike | null;
+      if (
+        community &&
+        await communityUserIsBlocked({
+          ctx,
+          communityId: claim.communityId,
+          userId,
+        })
+      ) {
+        continue;
+      }
       const communityId = String(claim.communityId);
       out.push({
         community_id: communityId,
@@ -939,6 +969,15 @@ export const redeemPendingPurchaseClaims = mutation({
     const out: Array<{ community_id: string; community_slug: string | null }> = [];
     const seen = new Set<string>();
     for (const claim of rows) {
+      if (
+        await communityUserIsBlocked({
+          ctx,
+          communityId: claim.communityId,
+          userId,
+        })
+      ) {
+        continue;
+      }
       const redemption = await redeemClaimRow({
         ctx,
         claim,
