@@ -2,6 +2,7 @@ import {
   type NativeToolExecutionResult,
   type NativeToolResultEnvelope,
 } from "../shared/nativeToolLoop";
+import { getShellCommandAuditMetadataForToolCall } from "../shared/runtimeToolPolicy";
 
 export async function appendWorkspaceToolCallStarted(params: {
   appendRunEvent: (params: {
@@ -18,6 +19,10 @@ export async function appendWorkspaceToolCallStarted(params: {
   args: Record<string, unknown>;
 }): Promise<void> {
   const toolCallId = `runtime_tools:${params.runId}:${params.harnessName}:${params.iteration}`;
+  const shellCommandAuditMetadata = getShellCommandAuditMetadataForToolCall({
+    toolName: params.toolName,
+    normalizedArgs: params.args,
+  });
   await params.appendRunEvent({
     eventType: "tool_call_started",
     eventKey: `${params.runId}:${params.harnessName}_tool_call_started:${params.iteration}`,
@@ -27,6 +32,7 @@ export async function appendWorkspaceToolCallStarted(params: {
       provider_call_id: params.providerCallId,
       tool_name: params.toolName,
       args: params.args,
+      ...(shellCommandAuditMetadata ?? {}),
       attempt: 1,
       community_scope_id: params.communityId ?? null,
       harness: {
@@ -52,6 +58,10 @@ export async function appendWorkspaceToolCallFinished(params: {
   toolResultEnvelope: NativeToolResultEnvelope;
 }): Promise<void> {
   const toolCallId = `runtime_tools:${params.runId}:${params.harnessName}:${params.iteration}`;
+  const shellCommandAuditMetadata = getShellCommandAuditMetadataForToolCall({
+    toolName: params.toolName,
+    normalizedArgs: params.args,
+  });
   const webSources = Array.isArray(params.toolResult.details?.web_sources)
     ? params.toolResult.details?.web_sources
     : null;
@@ -63,6 +73,7 @@ export async function appendWorkspaceToolCallFinished(params: {
       tool_call_id: toolCallId,
       provider_call_id: params.providerCallId,
       args: params.args,
+      ...(shellCommandAuditMetadata ?? {}),
       attempt: 1,
       ...params.toolResultEnvelope,
       tool_name: params.toolName,

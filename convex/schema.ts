@@ -843,6 +843,8 @@ export default defineSchema({
     visibility: v.optional(v.union(v.literal("user_visible"), v.literal("internal_hidden"))),
     internalFollowupKind: v.optional(v.string()),
     projectId: v.optional(v.id("cloudProjects")),
+    communityId: v.optional(v.id("communities")),
+    communityContextVersion: v.optional(v.number()),
     modelId: v.optional(v.string()),
     engineId: v.optional(v.string()),
     executionMode: v.optional(v.string()),

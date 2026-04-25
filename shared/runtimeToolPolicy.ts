@@ -1,4 +1,9 @@
 import type { RetrievalToolName } from "./retrievalTools";
+import {
+  classifyShellCommand,
+  type ShellCommandAuditSeverity,
+  type ShellCommandEffect,
+} from "./shellCommandPolicy.ts";
 
 export type RuntimeToolSource = "fixed" | "mounted_mcp" | "resolver" | "unknown";
 export type RuntimeToolCategory =
@@ -80,6 +85,10 @@ export type RuntimeToolScheduleCall = {
   requiresCommunity: boolean;
   requiresMcpSession: boolean;
   requiresApproval: boolean;
+  shellCommandEffect?: ShellCommandEffect;
+  shellCommandAuditSeverity?: ShellCommandAuditSeverity;
+  shellCommandReasons?: string[];
+  shellCommandParsedCommands?: string[];
   reasons: RuntimeToolScheduleReason[];
 };
 
@@ -112,6 +121,14 @@ export type RuntimeToolScheduleInputCall = {
   providerCallId: string;
   toolName: string;
   index?: number;
+  normalizedArgs?: Record<string, unknown>;
+};
+
+export type RuntimeShellCommandAuditMetadata = {
+  shell_command_effect: ShellCommandEffect;
+  shell_command_audit_severity: ShellCommandAuditSeverity;
+  shell_command_reasons: string[];
+  shell_command_parsed_commands: string[];
 };
 
 const FIXED_TOOL_POLICIES: Record<RetrievalToolName, RuntimeToolPolicy> = {
@@ -141,7 +158,7 @@ const FIXED_TOOL_POLICIES: Record<RetrievalToolName, RuntimeToolPolicy> = {
     requiresWorkspace: false,
     requiresCommunity: true,
     requiresMcpSession: false,
-    requiresApproval: true,
+    requiresApproval: false,
   },
   web_research: {
     toolName: "web_research",
@@ -596,6 +613,59 @@ function getRuntimeToolScheduleReasons(
   return reasons;
 }
 
+function riskLevelForShellEffect(effect: ShellCommandEffect): RuntimeToolRiskLevel {
+  if (effect === "read_only") return "read";
+  if (effect === "writes_workspace") return "write";
+  return "sensitive";
+}
+
+export function getShellCommandAuditMetadataForToolCall(params: {
+  toolName: string;
+  normalizedArgs?: Record<string, unknown>;
+}): RuntimeShellCommandAuditMetadata | null {
+  if (String(params.toolName ?? "").trim() !== "bash") return null;
+  const command = String(params.normalizedArgs?.command ?? "").trim();
+  if (!command) return null;
+  const classification = classifyShellCommand(command);
+  return {
+    shell_command_effect: classification.effect,
+    shell_command_audit_severity: classification.auditSeverity,
+    shell_command_reasons: classification.reasons,
+    shell_command_parsed_commands: classification.parsedCommands,
+  };
+}
+
+function getEffectiveRuntimeToolPolicyForSchedule(params: {
+  toolName: string;
+  basePolicy: RuntimeToolPolicy;
+  normalizedArgs?: Record<string, unknown>;
+}): {
+  policy: RuntimeToolPolicy;
+  shellClassification?: ReturnType<typeof classifyShellCommand>;
+} {
+  if (params.toolName !== "bash") {
+    return { policy: params.basePolicy };
+  }
+  const command = String(params.normalizedArgs?.command ?? "").trim();
+  if (!command) {
+    return { policy: params.basePolicy };
+  }
+  const shellClassification = classifyShellCommand(command);
+  const isReadOnlyShell = shellClassification.effect === "read_only";
+  return {
+    policy: {
+      ...params.basePolicy,
+      riskLevel: riskLevelForShellEffect(shellClassification.effect),
+      readOnly: isReadOnlyShell,
+      mutatesState: !isReadOnlyShell,
+      parallelSafe: isReadOnlyShell,
+      exclusive: !isReadOnlyShell,
+      requiresApproval: false,
+    },
+    shellClassification,
+  };
+}
+
 export function classifyRuntimeToolSchedule(params: {
   toolCalls: readonly RuntimeToolScheduleInputCall[];
   policies: readonly RuntimeToolPolicy[];
@@ -610,8 +680,13 @@ export function classifyRuntimeToolSchedule(params: {
 
   const calls = params.toolCalls.map((toolCall, fallbackIndex) => {
     const toolName = String(toolCall.toolName ?? "").trim();
-    const policy =
+    const basePolicy =
       policiesByToolName.get(toolName) ?? getUnknownRuntimeToolPolicy(toolName);
+    const { policy, shellClassification } = getEffectiveRuntimeToolPolicyForSchedule({
+      toolName,
+      basePolicy,
+      normalizedArgs: toolCall.normalizedArgs,
+    });
     return {
       providerCallId: String(toolCall.providerCallId ?? "").trim(),
       toolName,
@@ -631,6 +706,14 @@ export function classifyRuntimeToolSchedule(params: {
       requiresCommunity: policy.requiresCommunity,
       requiresMcpSession: policy.requiresMcpSession,
       requiresApproval: policy.requiresApproval,
+      ...(shellClassification
+        ? {
+            shellCommandEffect: shellClassification.effect,
+            shellCommandAuditSeverity: shellClassification.auditSeverity,
+            shellCommandReasons: shellClassification.reasons,
+            shellCommandParsedCommands: shellClassification.parsedCommands,
+          }
+        : {}),
       reasons: getRuntimeToolScheduleReasons(policy),
     };
   });

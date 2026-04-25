@@ -13,6 +13,18 @@ function main() {
   const httpDaytona = readText(
     "/Users/neilmcdevitt/code/arx/convex/httpDaytona.ts",
   );
+  const threads = readText(
+    "/Users/neilmcdevitt/code/arx/convex/threads.ts",
+  );
+  const runtimeTurnResolution = readText(
+    "/Users/neilmcdevitt/code/arx/convex/runtimeTurnResolution.ts",
+  );
+  const runtimeTurnHandlers = readText(
+    "/Users/neilmcdevitt/code/arx/convex/runtimeTurnHandlers.ts",
+  );
+  const app = readText(
+    "/Users/neilmcdevitt/code/arx/apps/web/src/App.tsx",
+  );
   const runtimeSkillResolution = readText(
     "/Users/neilmcdevitt/code/arx/convex/runtimeSkillResolution.ts",
   );
@@ -79,6 +91,36 @@ function main() {
     httpDaytona,
     "effective_harness_resolved",
     "community-lens effective harness evidence event",
+  );
+  assertIncludes(
+    threads,
+    "validateThreadCommunityLensAccess",
+    "thread lens write authority helper",
+  );
+  assertIncludes(
+    threads,
+    "await requireCommunityChatAccess({",
+    "thread lens writes validate community access",
+  );
+  assertIncludes(
+    runtimeTurnResolution,
+    "community_lens_unavailable",
+    "runtime community lens fails closed",
+  );
+  assertIncludes(
+    runtimeTurnHandlers,
+    "runtime_context_resolved",
+    "runtime lens audit event",
+  );
+  assertIncludes(
+    runtimeTurnHandlers,
+    "communityContextVersion",
+    "runtime run snapshots community context version",
+  );
+  assertIncludes(
+    app,
+    "Community context was not confirmed.",
+    "workspace lens switch requires confirmed server state",
   );
 
   console.log("community_lens_runtime_contract_proof: ok");

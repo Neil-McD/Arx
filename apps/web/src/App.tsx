@@ -4093,7 +4093,10 @@ export default function App() {
 
   const workspaceLensController = useLastClickWinsController<WorkspaceLensTarget>({
     applyTarget: async (desired) => {
-      await setThreadCommunityLens(desired.threadId, desired.communityId, desired.session);
+      const result = await setThreadCommunityLens(desired.threadId, desired.communityId, desired.session);
+      if (!result || (result.community_id ?? null) !== desired.communityId) {
+        throw new Error("Community context was not confirmed.");
+      }
     },
     onWorkerStateChange: ({ inFlight, target }) => {
       if (!inFlight) {

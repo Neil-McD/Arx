@@ -83,6 +83,13 @@ function proveFixedPolicyBoundaries() {
   }
 
   assert.equal(getFixedRuntimeToolPolicy("terminal_read").readOnly, true);
+  assert.equal(getFixedRuntimeToolPolicy("community_write").mutatesState, true);
+  assert.equal(getFixedRuntimeToolPolicy("community_write").requiresCommunity, true);
+  assert.equal(
+    getFixedRuntimeToolPolicy("community_write").requiresApproval,
+    false,
+    "community_write is autonomous inside a validated community lens",
+  );
   assert.equal(
     getFixedRuntimeToolPolicy("terminal_read").exclusive,
     true,

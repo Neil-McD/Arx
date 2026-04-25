@@ -385,6 +385,9 @@ export async function handleRuntimeTurnRequest(args: {
     const latestUserText = String(
       conversationMessages[conversationMessages.length - 1]?.content ?? "",
     ).trim();
+    const runtimeCommunityContextVersion = Number.isFinite(Number(ownedThread.contextVersion ?? 0))
+      ? Math.max(0, Math.floor(Number(ownedThread.contextVersion ?? 0)))
+      : 0;
     const persistVisibleUserMessage = true;
     const persistVisibleAssistantMessage = true;
     const runVisibility = "user_visible";
@@ -410,6 +413,8 @@ export async function handleRuntimeTurnRequest(args: {
       lane,
       visibility: runVisibility,
       projectId: runtimeProjectId ?? undefined,
+      communityId: runtimeCommunityId ? (runtimeCommunityId as any) : undefined,
+      communityContextVersion: runtimeCommunityId ? runtimeCommunityContextVersion : undefined,
       modelId: requestedModelId,
       engineId: "runtime_turn",
       executionMode: runtimeExecutionMode,
@@ -579,6 +584,19 @@ export async function handleRuntimeTurnRequest(args: {
         return null;
       }
     };
+    await appendRunEvent({
+      eventType: "runtime_context_resolved",
+      eventKey: `${runId}:runtime_context_resolved:1`,
+      payload: {
+        run_id: runId,
+        thread_id: String(ownedThread._id),
+        project_id: runtimeProjectId ?? null,
+        community_id: runtimeCommunityId ?? null,
+        community_context_version: runtimeCommunityId ? runtimeCommunityContextVersion : null,
+        capability_families: resolvedRuntimeCapabilityFamilies,
+        harness_profile: resolvedRuntimeHarnessProfile,
+      },
+    });
     await appendRunEvent({
       eventType: "tool_policy_resolved",
       eventKey: `${runId}:tool_policy_resolved:1`,

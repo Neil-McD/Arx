@@ -74,6 +74,7 @@ export type RuntimeTurnResolution = {
   ownedThread: {
     _id: string;
     communityId?: unknown;
+    contextVersion?: unknown;
     projectId?: unknown;
     workingState?: ThreadWorkingStatePrompt | null;
   };
@@ -228,7 +229,7 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
       ownerId: actor.dbUserId,
       threadKey,
     },
-  )) as { _id?: string; communityId?: unknown; projectId?: unknown; workingState?: unknown } | null;
+  )) as { _id?: string; communityId?: unknown; contextVersion?: unknown; projectId?: unknown; workingState?: unknown } | null;
   if (!ownedThread?._id) {
     return {
       ok: false,
@@ -408,6 +409,9 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
         String(resolvedCommunity?.community_about ?? "").trim() || null;
       runtimeCommunitySystemPrompt =
         String(resolvedCommunity?.system_prompt ?? "").trim() || null;
+      if (!runtimeCommunityId) {
+        throw new Error("community_lens_unavailable");
+      }
     } catch (error) {
       console.warn("runtime_community_prompt_resolution_failed", {
         requestId,
@@ -415,6 +419,17 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
         communityId: threadCommunityId,
         message: error instanceof Error ? error.message : String(error),
       });
+      return {
+        ok: false,
+        response: fail(403, {
+          ok: false,
+          code: "community_lens_unavailable",
+          error: "community_lens_unavailable",
+          message:
+            "This thread's community context is no longer available. Clear the community context or rejoin the community and retry.",
+          community_id: threadCommunityId,
+        }),
+      };
     }
   }
 

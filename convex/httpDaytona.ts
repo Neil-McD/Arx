@@ -1155,6 +1155,7 @@ async function executeRetrievalAgentLoop(
             providerCallId: step.providerCallId,
             toolName: step.toolName,
             index,
+            normalizedArgs: step.normalizedArgs,
           })),
           policies: providerToolSurface.activeToolPolicies,
           enableParallelReadBatches: parallelReadToolsEnabled,

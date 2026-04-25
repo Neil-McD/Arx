@@ -80,7 +80,7 @@ function resolveScenarioAccess(scenario: AccessScenario): AccessProjection {
     canReadChat: isEntitled,
     canPostChat: isEntitled,
     canManageMembers: isOwner || isAdmin,
-    canManageResources: isOwner || isAdmin || isModerator,
+    canManageResources: isOwner || isAdmin,
     canReviewJoinRequests: isOwner || isAdmin || isModerator,
   };
 }
@@ -100,6 +100,7 @@ function assertScenario(
 function assertSourceAnchors() {
   const communityCore = readText(new URL("../convex/communityCore.ts", import.meta.url));
   const communityAdmin = readText(new URL("../convex/communityAdmin.ts", import.meta.url));
+  const communityResources = readText(new URL("../convex/communityResources.ts", import.meta.url));
 
   assertIncludes(
     communityCore,
@@ -123,8 +124,18 @@ function assertSourceAnchors() {
   );
   assertIncludes(
     communityCore,
-    "const canManageResources = isOwner || isAdmin || isModerator;",
-    "resource management capability policy",
+    "const canManageResources = isOwner || isAdmin;",
+    "resource management excludes moderators",
+  );
+  assertIncludes(
+    communityResources,
+    "await requireCommunityChatAccess({",
+    "resource listing uses community chat access",
+  );
+  assertIncludes(
+    communityResources,
+    "await requireCommunityManager({",
+    "resource mutations require community manager",
   );
   assertIncludes(
     communityAdmin,
@@ -249,11 +260,12 @@ function main() {
   );
 
   assertScenario(
-    { name: "moderator cannot manage members", role: "moderator", accessSource: "manual_grant" },
+    { name: "moderator can review joins but cannot manage resources", role: "moderator", accessSource: "manual_grant" },
     {
       relation: "moderator",
+      canReadChat: true,
       canManageMembers: false,
-      canManageResources: true,
+      canManageResources: false,
       canReviewJoinRequests: true,
     },
   );

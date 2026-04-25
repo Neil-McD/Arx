@@ -188,11 +188,10 @@ export function useWebThreadMutationController<SessionT>(
     ): Promise<{ thread_id: string; community_id: string | null; context_version: number; updated_at: string } | null> => {
       const current = argsRef.current;
       const usableSession = await resolveUsableSession(session, current.ensureSession);
-      if (!usableSession) return null;
+      if (!usableSession) throw new Error("Sign in to update community context.");
       const hasConvex = isConvexCloudThreadsEnabled();
       if (!hasConvex) {
-        console.warn("Convex is required for cloud thread context updates in this build.");
-        return null;
+        throw new Error("Cloud thread context updates are unavailable in this build.");
       }
 
       const applyObservedContext = (context: ThreadContextCloudState): void => {
@@ -214,7 +213,7 @@ export function useWebThreadMutationController<SessionT>(
         current.threads.find((thread) => thread.id === threadId)?.context_version ?? null;
 
       try {
-        return await syncThreadCommunityLensCloud({
+        const result = await syncThreadCommunityLensCloud({
           threadId,
           desiredCommunityId: communityId,
           initialExpectedContextVersion,
@@ -232,9 +231,11 @@ export function useWebThreadMutationController<SessionT>(
             }),
           onObservedContext: applyObservedContext,
         });
+        if (!result) throw new Error("Community context was not updated.");
+        return result;
       } catch (error) {
         console.warn("Failed to update Convex thread community lens:", error);
-        return null;
+        throw error;
       }
     },
     [],

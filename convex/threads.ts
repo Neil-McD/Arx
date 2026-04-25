@@ -18,6 +18,7 @@ import {
   createEmptyRuntimeHarnessTelemetrySummary,
   type RuntimeHarnessTelemetrySummary,
 } from "../shared/runtimeHarnessScorecard";
+import { requireCommunityChatAccess } from "./communityCore";
 
 type ThreadLike = {
   _id: any;
@@ -61,6 +62,8 @@ type RuntimeRunLike = {
   visibility?: "user_visible" | "internal_hidden";
   internalFollowupKind?: string;
   projectId?: any;
+  communityId?: any;
+  communityContextVersion?: number;
   modelId?: string;
   engineId?: string;
   executionMode?: string;
@@ -177,6 +180,21 @@ function normalizeThreadTitle(raw: unknown): string | undefined {
   const value = String(raw ?? "").trim().replace(/\s+/g, " ");
   if (!value) return undefined;
   return value.slice(0, 140);
+}
+
+async function validateThreadCommunityLensAccess(args: {
+  ctx: any;
+  communityId: string | null | undefined;
+  userId: any;
+}): Promise<string | undefined> {
+  const communityId = String(args.communityId ?? "").trim();
+  if (!communityId) return undefined;
+  await requireCommunityChatAccess({
+    ctx: args.ctx,
+    communityId,
+    userId: args.userId,
+  });
+  return communityId;
 }
 
 function normalizeOptionalSummaryText(raw: unknown, maxLen = 240): string | null {
@@ -736,7 +754,11 @@ export const setCloudThreadContext = mutation({
       updatedAt: nowMs,
     };
     if (args.updateCommunityId ?? true) {
-      const nextCommunityId = String(args.communityId ?? "").trim() || undefined;
+      const nextCommunityId = await validateThreadCommunityLensAccess({
+        ctx,
+        communityId: args.communityId,
+        userId: ownerId,
+      });
       patch.communityId = nextCommunityId;
     }
     await ctx.db.patch(existing._id, patch);
@@ -787,12 +809,6 @@ export const ensureCloudThread = mutation({
       if (typeof args.modelId === "string" && args.modelId.trim() && existing.modelId !== args.modelId.trim()) {
         patch.modelId = args.modelId.trim();
       }
-      if (typeof args.communityId === "string") {
-        const nextCommunityId = args.communityId.trim() || undefined;
-        if (existing.communityId !== nextCommunityId) {
-          patch.communityId = nextCommunityId;
-        }
-      }
       if (
         typeof args.contextVersion === "number" &&
         Number.isFinite(args.contextVersion) &&
@@ -815,13 +831,18 @@ export const ensureCloudThread = mutation({
         authSubject: args.authSubject ?? null,
         nowMs,
       }));
+    const initialCommunityId = await validateThreadCommunityLensAccess({
+      ctx,
+      communityId: args.communityId,
+      userId: ownerId,
+    });
     const id = await ctx.db.insert("threads", {
       ownerId,
       threadKey,
       title: normalizeThreadTitle(args.title) ?? "New thread",
       titleSource: args.titleSource ?? "auto",
       projectId,
-      communityId: String(args.communityId ?? "").trim() || undefined,
+      communityId: initialCommunityId,
       modelId: String(args.modelId ?? "").trim() || undefined,
       contextVersion:
         typeof args.contextVersion === "number" && Number.isFinite(args.contextVersion)
@@ -1399,6 +1420,8 @@ export const ensureCloudRuntimeRunStarted = mutation({
     visibility: v.optional(v.union(v.literal("user_visible"), v.literal("internal_hidden"))),
     internalFollowupKind: v.optional(v.string()),
     projectId: v.optional(v.id("cloudProjects")),
+    communityId: v.optional(v.id("communities")),
+    communityContextVersion: v.optional(v.number()),
     modelId: v.optional(v.string()),
     engineId: v.optional(v.string()),
     executionMode: v.optional(v.string()),
@@ -1472,6 +1495,11 @@ export const ensureCloudRuntimeRunStarted = mutation({
     const modelId = String(args.modelId ?? "").trim() || undefined;
     const engineId = String(args.engineId ?? "").trim() || undefined;
     const projectId = args.projectId;
+    const communityId = args.communityId;
+    const communityContextVersion =
+      typeof args.communityContextVersion === "number" && Number.isFinite(args.communityContextVersion)
+        ? Math.max(0, Math.floor(args.communityContextVersion))
+        : undefined;
     const sandboxMode = String(args.sandboxMode ?? "").trim() || undefined;
     const harnessProfile = String(args.harnessProfile ?? "").trim() || undefined;
     const harnessProfileSource = String(args.harnessProfileSource ?? "").trim() || undefined;
@@ -1489,6 +1517,8 @@ export const ensureCloudRuntimeRunStarted = mutation({
       visibility,
       internalFollowupKind,
       projectId,
+      communityId,
+      communityContextVersion,
       modelId,
       engineId,
       executionMode,
@@ -1521,6 +1551,8 @@ export const ensureCloudRuntimeRunStarted = mutation({
         visibility,
         internal_followup_kind: internalFollowupKind ?? null,
         project_id: projectId ?? null,
+        community_id: communityId ?? null,
+        community_context_version: communityContextVersion ?? null,
         model_id: modelId ?? null,
         engine_id: engineId ?? null,
         execution_mode: executionMode,
