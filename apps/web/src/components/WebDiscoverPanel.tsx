@@ -411,6 +411,7 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
   const selectedSkill = selectedSkillId
     ? discoverSkills.find((entry) => entry.id === selectedSkillId) ?? null
     : null;
+  const shouldShowHeroCopy = !selectedApp;
   const isReadyForPersonalConnection =
     selectedApp ? isDiscoverAppPersonallyConnectable(selectedApp) : false;
   const personalConnectLoadError =
@@ -832,10 +833,12 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
   return (
     <div className="community-panel discover-panel">
       <div className="discover-hero">
-        <div className="discover-hero-copy">
-          <div className="discover-title">{heroTitle}</div>
-          <div className="discover-subtitle">{heroSubtitle}</div>
-        </div>
+        {shouldShowHeroCopy ? (
+          <div className="discover-hero-copy">
+            <div className="discover-title">{heroTitle}</div>
+            <div className="discover-subtitle">{heroSubtitle}</div>
+          </div>
+        ) : null}
         <div className="discover-hero-actions">
           <div
             className="platform-switcher platform-switcher-compact community-ai-agent-tablist discover-tablist"

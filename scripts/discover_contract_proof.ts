@@ -271,6 +271,16 @@ function main() {
     '<span className="discover-app-action">View</span>',
     "Discover app rows use a neutral view action",
   );
+  assertIncludes(
+    discoverPanel,
+    "const shouldShowHeroCopy = !selectedApp;",
+    "Discover app detail removes the redundant page hero copy",
+  );
+  assertIncludes(
+    discoverPanel,
+    "{shouldShowHeroCopy ? (",
+    "Discover page hero copy is only rendered when useful",
+  );
   assertNotIncludes(
     discoverPanel,
     '? "Add"\n                            : "Catalog"',
