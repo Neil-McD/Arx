@@ -65,9 +65,6 @@ export function RuntimeLiveTimeline(props: {
 
   return (
     <div className="runtime-live-timeline" aria-live="polite">
-      <span className="streaming-placeholder shimmer-text streaming-thinking-footer runtime-activity-word">
-        {displayWord}
-      </span>
       {visibleToolSteps.length > 0 ? (
         <div className="runtime-tool-drawers" aria-label="Grouped tool activity">
           {olderDrawers.map((step) => (
@@ -87,6 +84,23 @@ export function RuntimeLiveTimeline(props: {
               </div>
             </details>
           ))}
+          {rollTargetStep ? (
+            <details key={rollTargetStep.id} className="runtime-tool-drawer">
+              <summary className="runtime-tool-drawer-summary streaming-placeholder">
+                <span className="runtime-tool-drawer-title">{rollTargetStep.title}</span>
+                <span className="runtime-tool-drawer-detail">{rollTargetStep.summary}</span>
+              </summary>
+              <div className="runtime-tool-drawer-body">
+                {rollTargetStep.items
+                  .filter((item) => Boolean(item.toolName))
+                  .map((item) => (
+                    <div key={item.id} className="runtime-tool-drawer-item">
+                      {toolItemLabel(item)}
+                    </div>
+                  ))}
+              </div>
+            </details>
+          ) : null}
           {rollingToolItems.length > 0 ? (
             <div className="runtime-tool-roll" aria-label="Recent tool activity">
               {rollingToolItems.map((item, index) => (
@@ -107,25 +121,11 @@ export function RuntimeLiveTimeline(props: {
               ))}
             </div>
           ) : null}
-          {rollTargetStep ? (
-            <details key={rollTargetStep.id} className="runtime-tool-drawer">
-              <summary className="runtime-tool-drawer-summary streaming-placeholder">
-                <span className="runtime-tool-drawer-title">{rollTargetStep.title}</span>
-                <span className="runtime-tool-drawer-detail">{rollTargetStep.summary}</span>
-              </summary>
-              <div className="runtime-tool-drawer-body">
-                {rollTargetStep.items
-                  .filter((item) => Boolean(item.toolName))
-                  .map((item) => (
-                    <div key={item.id} className="runtime-tool-drawer-item">
-                      {toolItemLabel(item)}
-                    </div>
-                  ))}
-              </div>
-            </details>
-          ) : null}
         </div>
       ) : null}
+      <span className="streaming-placeholder shimmer-text streaming-thinking-footer runtime-activity-word">
+        {displayWord}
+      </span>
     </div>
   );
 }
