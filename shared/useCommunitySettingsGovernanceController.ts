@@ -107,7 +107,6 @@ export function useCommunitySettingsGovernanceController<SessionT extends Sessio
       await saveCloudCommunityMemberSettings({
         session,
         communityId,
-        userId: session.user.id,
         muted: nextMuted,
         mutedUntil: null,
       });

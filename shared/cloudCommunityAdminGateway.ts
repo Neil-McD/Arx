@@ -317,15 +317,12 @@ export async function listCloudCommunityJoinRequestRows<SessionT, TJoinRequest =
 export async function fetchCloudCommunityMemberSettingsRow<SessionT, TRow = unknown>(
   params: CloudCommunityAdminGatewayParams<SessionT> & {
     communityId: string;
-    targetUserId?: string | null;
   },
 ): Promise<TRow | null> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const targetUserId = String(params.targetUserId ?? "").trim();
   const payload = await client.query("community:getCommunityMemberSettings" as any, {
     authSubject,
     communityId: params.communityId,
-    ...(targetUserId ? { targetUserId } : null),
   });
   return firstGatewayRow<TRow>(payload);
 }
@@ -549,7 +546,6 @@ export async function saveCloudCommunityOneLiner<SessionT>(
 export async function saveCloudCommunityMemberSettings<SessionT>(
   params: CloudCommunityAdminGatewayParams<SessionT> & {
     communityId: string;
-    userId: string;
     muted: boolean;
     mutedUntil?: string | null;
   },
@@ -558,7 +554,6 @@ export async function saveCloudCommunityMemberSettings<SessionT>(
   await client.mutation("community:saveCommunityMemberSettings" as any, {
     authSubject,
     communityId: params.communityId,
-    targetUserId: params.userId,
     muted: params.muted,
     mutedUntilIso: params.mutedUntil ?? null,
   });

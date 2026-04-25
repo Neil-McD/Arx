@@ -1090,7 +1090,6 @@ export const getCommunityMemberSettings = query({
     userId: v.optional(v.id("users")),
     authSubject: v.optional(v.string()),
     communityId: v.id("communities"),
-    targetUserId: v.optional(v.id("users")),
   },
   handler: async (ctx, args) => {
     const userId = await resolveUserIdForAuthenticatedRequest({
@@ -1099,24 +1098,15 @@ export const getCommunityMemberSettings = query({
       authSubject: args.authSubject ?? null,
     });
     (args as { userId?: any }).userId = userId;
-    const targetUserId = args.targetUserId ?? args.userId;
-    if (String(targetUserId) === String(args.userId)) {
-      await requireCommunityChatAccess({
-        ctx,
-        communityId: args.communityId,
-        userId: args.userId,
-      });
-    } else {
-      await requireCommunityModerator({
-        ctx,
-        communityId: args.communityId,
-        userId: args.userId,
-      });
-    }
+    await requireCommunityChatAccess({
+      ctx,
+      communityId: args.communityId,
+      userId: args.userId,
+    });
     const row = (await ctx.db
       .query("communityMemberSettings" as any)
       .withIndex("by_community_user", (q: any) =>
-        q.eq("communityId", args.communityId).eq("userId", targetUserId),
+        q.eq("communityId", args.communityId).eq("userId", args.userId),
       )
       .first()) as CommunityMemberSettingsLike | null;
     return row ? await mapCommunityMemberSettingsRow(ctx, row) : null;
@@ -1128,7 +1118,6 @@ export const saveCommunityMemberSettings = mutation({
     userId: v.optional(v.id("users")),
     authSubject: v.optional(v.string()),
     communityId: v.id("communities"),
-    targetUserId: v.optional(v.id("users")),
     muted: v.boolean(),
     mutedUntilIso: v.optional(v.union(v.string(), v.null())),
   },
@@ -1144,30 +1133,21 @@ export const saveCommunityMemberSettings = mutation({
       context: {
         actorUserId: args.userId,
         communityId: String(args.communityId),
-        targetUserId: String(args.targetUserId ?? args.userId),
+        targetUserId: String(args.userId),
         muted: Boolean(args.muted),
       },
       handler: async () => {
         const nowMs = Date.now();
-        const targetUserId = args.targetUserId ?? args.userId;
-        if (String(targetUserId) === String(args.userId)) {
-          await requireCommunityChatAccess({
-            ctx,
-            communityId: args.communityId,
-            userId: args.userId,
-          });
-        } else {
-          await requireCommunityModerator({
-            ctx,
-            communityId: args.communityId,
-            userId: args.userId,
-          });
-        }
+        await requireCommunityChatAccess({
+          ctx,
+          communityId: args.communityId,
+          userId: args.userId,
+        });
         const mutedUntil = parseIsoMs(args.mutedUntilIso);
         const existing = (await ctx.db
           .query("communityMemberSettings" as any)
           .withIndex("by_community_user", (q: any) =>
-            q.eq("communityId", args.communityId).eq("userId", targetUserId),
+            q.eq("communityId", args.communityId).eq("userId", args.userId),
           )
           .first()) as CommunityMemberSettingsLike | null;
         if (existing) {
@@ -1184,7 +1164,7 @@ export const saveCommunityMemberSettings = mutation({
         }
         const id = await ctx.db.insert("communityMemberSettings" as any, {
           communityId: args.communityId,
-          userId: targetUserId,
+          userId: args.userId,
           muted: Boolean(args.muted),
           mutedUntil: typeof mutedUntil === "number" ? mutedUntil : undefined,
           createdAt: nowMs,
