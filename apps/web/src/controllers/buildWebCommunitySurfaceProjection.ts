@@ -88,7 +88,7 @@ type BuildWebCommunitySurfaceProjectionParams = {
   communityMessages: WebCommunityChatPanelProps["communityMessages"];
   communityMessageById: WebCommunityChatPanelProps["communityMessageById"];
   messageReactions: WebCommunityChatPanelProps["messageReactions"];
-  typingUsers: WebCommunityChatPanelProps["typingUsers"];
+  typingPresence: WebCommunityChatPanelProps["typingPresence"];
   profilesByUserId: WebCommunityChatPanelProps["profilesByUserId"];
   editingMessageId: WebCommunityChatPanelProps["editingMessageId"];
   editingMessageText: WebCommunityChatPanelProps["editingMessageText"];
@@ -283,7 +283,7 @@ export function buildWebCommunitySurfaceProjection(
     communityMessages: params.communityMessages,
     communityMessageById: params.communityMessageById,
     messageReactions: params.messageReactions,
-    typingUsers: params.typingUsers,
+    typingPresence: params.typingPresence,
     profilesByUserId: params.profilesByUserId,
     editingMessageId: params.editingMessageId,
     editingMessageText: params.editingMessageText,

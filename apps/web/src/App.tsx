@@ -5675,7 +5675,7 @@ export default function App() {
       communityMessages,
       communityMessageById,
       messageReactions,
-      typingUsers: communityTypingUsers,
+      typingPresence: communityTypingUsers,
       profilesByUserId: savedProfilesByUserId,
       editingMessageId,
       editingMessageText,

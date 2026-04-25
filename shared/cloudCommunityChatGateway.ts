@@ -70,6 +70,20 @@ function emitLiveRows<TRow>(
   }
 }
 
+function emitLiveResult<TResult>(
+  watch: { localQueryResult(): unknown },
+  onUpdate: (result: TResult) => void,
+  onError?: (error: unknown) => void,
+) {
+  try {
+    const result = watch.localQueryResult();
+    if (typeof result === "undefined") return;
+    onUpdate(result as TResult);
+  } catch (error) {
+    onError?.(error);
+  }
+}
+
 export function subscribeCloudThreadMessages<TRow = unknown>(
   params: {
     liveClient: CloudCommunityChatLiveClient;
@@ -124,11 +138,11 @@ export function subscribeCloudMessageReactions<TRow = unknown>(
   return watch.onUpdate(publish);
 }
 
-export function subscribeCloudCommunityTyping<TRow = unknown>(
+export function subscribeCloudCommunityTyping<TResult = unknown>(
   params: {
     liveClient: CloudCommunityChatLiveClient;
     communityId: string;
-    onUpdate: (rows: TRow[]) => void;
+    onUpdate: (result: TResult) => void;
     onError?: (error: unknown) => void;
   },
 ): () => void {
@@ -140,7 +154,7 @@ export function subscribeCloudCommunityTyping<TRow = unknown>(
     } as any,
   );
   const publish = () => {
-    emitLiveRows<TRow>(watch as any, params.onUpdate, params.onError);
+    emitLiveResult<TResult>(watch as any, params.onUpdate, params.onError);
   };
   publish();
   return watch.onUpdate(publish);

@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import type { CommunityTypingPresenceUser } from "./communityTypes";
+import type {
+  CommunityTypingPresenceBundle,
+  CommunityTypingPresenceUser,
+} from "./communityTypes";
 import {
   createCloudCommunityChatLiveClient,
   setCloudCommunityTyping,
@@ -25,22 +28,46 @@ type UseCommunityTypingPresenceArgs<SessionT extends SessionLike> = {
 };
 
 const DEFAULT_TYPING_THROTTLE_MS = 2000;
+const EMPTY_TYPING_PRESENCE: CommunityTypingPresenceBundle = {
+  users: [],
+  total_count: 0,
+};
+
+function normalizeTypingPresencePayload(payload: unknown): CommunityTypingPresenceBundle {
+  if (Array.isArray(payload)) {
+    const users = payload as CommunityTypingPresenceUser[];
+    return {
+      users,
+      total_count: users.length,
+    };
+  }
+  if (payload && typeof payload === "object") {
+    const record = payload as Record<string, unknown>;
+    const users = Array.isArray(record.users) ? (record.users as CommunityTypingPresenceUser[]) : [];
+    const totalCount = Math.max(0, Math.floor(Number(record.total_count ?? users.length)));
+    return {
+      users,
+      total_count: Math.max(users.length, totalCount),
+    };
+  }
+  return EMPTY_TYPING_PRESENCE;
+}
 
 export function useCommunityTypingPresence<SessionT extends SessionLike>(
   args: UseCommunityTypingPresenceArgs<SessionT>,
-): CommunityTypingPresenceUser[] {
+): CommunityTypingPresenceBundle {
   const argsRef = useRef(args);
   argsRef.current = args;
   const liveClientRef = useRef<CloudCommunityChatLiveClient | null>(null);
   const lastSentAtRef = useRef(0);
-  const [rows, setRows] = useState<CommunityTypingPresenceUser[]>([]);
+  const [presence, setPresence] = useState<CommunityTypingPresenceBundle>(EMPTY_TYPING_PRESENCE);
   const [nowMs, setNowMs] = useState(() => Date.now());
 
   useEffect(() => {
     if (!args.isEnabled || !args.session || !args.activeCommunityId) {
       liveClientRef.current?.close();
       liveClientRef.current = null;
-      setRows([]);
+      setPresence(EMPTY_TYPING_PRESENCE);
       return;
     }
 
@@ -55,12 +82,12 @@ export function useCommunityTypingPresence<SessionT extends SessionLike>(
         const liveClient = createCloudCommunityChatLiveClient({ session: usableSession });
         liveClientRef.current?.close();
         liveClientRef.current = liveClient;
-        dispose = subscribeCloudCommunityTyping<CommunityTypingPresenceUser>({
+        dispose = subscribeCloudCommunityTyping<CommunityTypingPresenceBundle>({
           liveClient,
           communityId: args.activeCommunityId!,
-          onUpdate: (nextRows) => {
+          onUpdate: (nextPresence) => {
             if (cancelled) return;
-            setRows(nextRows);
+            setPresence(normalizeTypingPresencePayload(nextPresence));
             setNowMs(Date.now());
           },
         });
@@ -76,17 +103,17 @@ export function useCommunityTypingPresence<SessionT extends SessionLike>(
       dispose?.();
       liveClientRef.current?.close();
       liveClientRef.current = null;
-      setRows([]);
+      setPresence(EMPTY_TYPING_PRESENCE);
     };
   }, [args.activeCommunityId, args.ensureSession, args.isEnabled, args.session]);
 
   useEffect(() => {
-    if (rows.length === 0) return;
+    if (presence.users.length === 0) return;
     const intervalId = window.setInterval(() => {
       setNowMs(Date.now());
     }, 1000);
     return () => window.clearInterval(intervalId);
-  }, [rows.length]);
+  }, [presence.users.length]);
 
   useEffect(() => {
     if (
@@ -128,9 +155,16 @@ export function useCommunityTypingPresence<SessionT extends SessionLike>(
   ]);
 
   return useMemo(
-    () =>
-      rows
-        .filter((row) => Number.isFinite(row.display_until_ms) && row.display_until_ms > nowMs),
-    [nowMs, rows],
+    () => {
+      const users = presence.users.filter(
+        (row) => Number.isFinite(row.display_until_ms) && row.display_until_ms > nowMs,
+      );
+      if (users.length === 0) return EMPTY_TYPING_PRESENCE;
+      return {
+        users,
+        total_count: Math.max(users.length, presence.total_count),
+      };
+    },
+    [nowMs, presence],
   );
 }

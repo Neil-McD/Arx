@@ -33,7 +33,6 @@ type StoredCommunityChatAttachment = {
 type CommunityChatUserLike = {
   _id: any;
   authSubject?: string;
-  email?: string;
   displayName?: string;
   avatarUrl?: string;
 };
@@ -390,14 +389,19 @@ export const listCommunityTyping = query({
       userId: args.userId,
     });
 
+    const nowMs = Date.now();
     const rows = (await ctx.db
       .query("communityTypingPresence" as any)
       .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
       .collect()) as CommunityTypingPresenceLike[];
     const publicUserIdCache = new Map<string, string | null>();
+    const activeRows = rows
+      .filter((row) => row.displayUntil > nowMs)
+      .filter((row) => normalizeIdValue(row.userId) !== normalizeIdValue(args.userId))
+      .sort((a, b) => b.displayUntil - a.displayUntil);
     const mapped = await Promise.all(
-      rows
-        .filter((row) => normalizeIdValue(row.userId) !== normalizeIdValue(args.userId))
+      activeRows
+        .slice(0, 12)
         .map(async (row) => {
           const user = (await ctx.db.get(row.userId)) as CommunityChatUserLike | null;
           const publicUserId = await resolvePublicUserId(ctx, row.userId, publicUserIdCache);
@@ -411,7 +415,10 @@ export const listCommunityTyping = query({
           };
         }),
     );
-    return mapped.sort((a, b) => b.display_until_ms - a.display_until_ms).slice(0, 12);
+    return {
+      users: mapped,
+      total_count: activeRows.length,
+    };
   },
 });
 

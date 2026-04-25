@@ -71,6 +71,11 @@ export type CommunityTypingPresenceUser = {
   updated_at?: string | null;
 };
 
+export type CommunityTypingPresenceBundle = {
+  users: CommunityTypingPresenceUser[];
+  total_count: number;
+};
+
 export type CommunityAccess = {
   community_id: string;
   user_id: string;
