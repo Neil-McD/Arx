@@ -18,6 +18,7 @@ import {
   createEmptyRuntimeHarnessTelemetrySummary,
   type RuntimeHarnessTelemetrySummary,
 } from "../shared/runtimeHarnessScorecard";
+import { isVerificationShellCommand } from "../shared/runtimeWorkingStateLedger";
 import { requireCommunityChatAccess } from "./communityCore";
 
 type ThreadLike = {
@@ -103,11 +104,17 @@ type RuntimeRunEventLike = {
 };
 
 type ThreadWorkingStateLike = {
+  version?: number;
   goal?: string;
+  status?: "idle" | "in_progress" | "blocked" | "needs_verification" | "complete";
+  currentStep?: string;
   lastResult?: string;
   filesChanged: string[];
   verifiedFindings: string[];
+  recentActions?: string[];
   openIssue?: string;
+  blocker?: string;
+  nextAction?: string;
   updatedAt: number;
 };
 
@@ -222,6 +229,82 @@ function normalizeWorkingStateList(raw: string[], maxItems = 6, maxLen = 180): s
   return out;
 }
 
+function normalizePreviousWorkingState(raw: unknown): ThreadWorkingStateLike | null {
+  const record = asRecord(raw);
+  if (!record) return null;
+  const filesChanged = Array.isArray(record.filesChanged)
+    ? normalizeWorkingStateList(
+        record.filesChanged.map((value) => String(value ?? "")),
+        8,
+        180,
+      )
+    : [];
+  const verifiedFindings = Array.isArray(record.verifiedFindings)
+    ? normalizeWorkingStateList(
+        record.verifiedFindings.map((value) => String(value ?? "")),
+        4,
+        220,
+      )
+    : [];
+  const recentActions = Array.isArray(record.recentActions)
+    ? normalizeWorkingStateList(
+        record.recentActions.map((value) => String(value ?? "")),
+        6,
+        180,
+      )
+    : [];
+  const statusRaw = String(record.status ?? "").trim();
+  const status =
+    statusRaw === "idle" ||
+    statusRaw === "in_progress" ||
+    statusRaw === "blocked" ||
+    statusRaw === "needs_verification" ||
+    statusRaw === "complete"
+      ? statusRaw
+      : undefined;
+  return {
+    version: Number.isFinite(Number(record.version)) ? Math.max(1, Math.floor(Number(record.version))) : 1,
+    goal: normalizeWorkingStateText(record.goal, 240),
+    status,
+    currentStep: normalizeWorkingStateText(record.currentStep, 180),
+    lastResult: normalizeWorkingStateText(record.lastResult, 240),
+    filesChanged,
+    verifiedFindings,
+    recentActions,
+    openIssue: normalizeWorkingStateText(record.openIssue, 240),
+    blocker: normalizeWorkingStateText(record.blocker ?? record.openIssue, 240),
+    nextAction: normalizeWorkingStateText(record.nextAction, 200),
+    updatedAt: Number.isFinite(Number(record.updatedAt)) ? Math.floor(Number(record.updatedAt)) : Date.now(),
+  };
+}
+
+function buildRunStartedWorkingState(args: {
+  previous: unknown;
+  latestUserText?: string | null;
+  nowMs: number;
+}): ThreadWorkingStateLike {
+  const previous = normalizePreviousWorkingState(args.previous);
+  const goal = normalizeWorkingStateText(args.latestUserText, 240) ?? previous?.goal;
+  return {
+    version: 2,
+    goal,
+    status: "in_progress",
+    currentStep: "Run is in progress.",
+    lastResult: previous?.lastResult,
+    filesChanged: previous?.filesChanged ?? [],
+    verifiedFindings: previous?.verifiedFindings ?? [],
+    recentActions: normalizeWorkingStateList(
+      ["Started a new workspace run.", ...(previous?.recentActions ?? [])],
+      6,
+      180,
+    ),
+    openIssue: undefined,
+    blocker: undefined,
+    nextAction: "Wait for the current run to finish or inspect the latest runtime events.",
+    updatedAt: args.nowMs,
+  };
+}
+
 function extractThreadMessageText(contentJson: unknown): string | null {
   if (typeof contentJson === "string") {
     return normalizeOptionalSummaryText(contentJson, 400);
@@ -241,6 +324,12 @@ function extractToolArgsPath(payload: unknown): string | null {
   const payloadRecord = asRecord(payload);
   const argsRecord = asRecord(payloadRecord?.args);
   return normalizeOptionalSummaryText(argsRecord?.path, 180);
+}
+
+function extractToolArgsCommand(payload: unknown): string | null {
+  const payloadRecord = asRecord(payload);
+  const argsRecord = asRecord(payloadRecord?.args);
+  return normalizeOptionalSummaryText(argsRecord?.command, 180);
 }
 
 function extractToolName(payload: unknown): string | null {
@@ -271,8 +360,10 @@ function summarizeThreadWorkingState(args: {
 }): ThreadWorkingStateLike {
   const successfulReadPaths: string[] = [];
   const changedFiles: string[] = [];
+  const recentActionsRaw: string[] = [];
   let successfulSearchCount = 0;
-  let successfulShellCount = 0;
+  let successfulVerificationShellCount = 0;
+  let successfulOtherShellCount = 0;
   let firstFailedTool: { toolName: string; path: string | null; message: string | null } | null = null;
 
   for (const event of args.events) {
@@ -281,15 +372,26 @@ function summarizeThreadWorkingState(args: {
     if (!toolName) continue;
     const status = extractToolStatus(event.payload);
     const path = extractToolArgsPath(event.payload);
+    const command = toolName === "bash" ? extractToolArgsCommand(event.payload) : null;
     if (status === "ok") {
       if (toolName === "read" && path && path !== ".") {
         successfulReadPaths.push(path);
+        recentActionsRaw.push(`Read ${path}.`);
       } else if ((toolName === "write" || toolName === "edit") && path) {
         changedFiles.push(path);
+        recentActionsRaw.push(`${toolName === "write" ? "Wrote" : "Edited"} ${path}.`);
       } else if (toolName === "glob" || toolName === "grep") {
         successfulSearchCount += 1;
+        recentActionsRaw.push(`Ran ${toolName}.`);
       } else if (toolName === "bash") {
-        successfulShellCount += 1;
+        if (isVerificationShellCommand(command)) {
+          successfulVerificationShellCount += 1;
+        } else {
+          successfulOtherShellCount += 1;
+        }
+        recentActionsRaw.push(command ? `Ran bash: ${command}.` : "Ran bash.");
+      } else {
+        recentActionsRaw.push(`Ran ${toolName}.`);
       }
       continue;
     }
@@ -317,18 +419,26 @@ function summarizeThreadWorkingState(args: {
     verifiedFindingsRaw.push(
       `Changed ${filesChanged.length} workspace ${filesChanged.length === 1 ? "file" : "files"}.`,
     );
-  } else if (successfulShellCount > 0) {
+  }
+  if (successfulVerificationShellCount > 0) {
     verifiedFindingsRaw.push(
-      `Ran ${successfulShellCount} shell ${successfulShellCount === 1 ? "command" : "commands"} successfully.`,
+      `Completed ${successfulVerificationShellCount} verification ${successfulVerificationShellCount === 1 ? "command" : "commands"}.`,
+    );
+  } else if (filesChanged.length === 0 && successfulOtherShellCount > 0) {
+    verifiedFindingsRaw.push(
+      `Ran ${successfulOtherShellCount} shell ${successfulOtherShellCount === 1 ? "command" : "commands"} successfully.`,
     );
   }
   const verifiedFindings = normalizeWorkingStateList(verifiedFindingsRaw, 4, 220);
+  const hasVerificationEvidence = successfulVerificationShellCount > 0;
 
   let lastResult: string | undefined;
   if (args.runStatus === "ok") {
     if (filesChanged.length > 0) {
       lastResult = normalizeWorkingStateText(
-        `Completed the last workspace run and verified changes in ${filesChanged.join(", ")}.`,
+        hasVerificationEvidence
+          ? `Completed the last workspace run and verified changes in ${filesChanged.join(", ")}.`
+          : `Completed the last workspace run and changed ${filesChanged.join(", ")}; verification is still needed.`,
         240,
       );
     } else if (readPaths.length > 0) {
@@ -362,12 +472,43 @@ function summarizeThreadWorkingState(args: {
       ) ?? "The last workspace run did not complete successfully.";
   }
 
+  const runNeedsVerification =
+    args.runStatus === "ok" && filesChanged.length > 0 && !hasVerificationEvidence;
+  const ledgerStatus =
+    args.runStatus === "ok"
+      ? runNeedsVerification
+        ? "needs_verification"
+        : "complete"
+      : "blocked";
+  const currentStep =
+    ledgerStatus === "complete"
+      ? undefined
+      : ledgerStatus === "needs_verification"
+        ? "Verify the changed workspace files."
+        : "Resolve the blocker from the last run.";
+  const blocker = args.runStatus !== "ok" ? openIssue : undefined;
+  const nextAction =
+    ledgerStatus === "complete"
+      ? undefined
+      : ledgerStatus === "needs_verification"
+        ? "Run an appropriate build, test, preview, or targeted read before calling the task done."
+        : firstFailedTool
+          ? `Retry ${firstFailedTool.toolName} with a narrower or alternate path, or report the blocker if it is not recoverable.`
+          : "Inspect the latest runtime events and continue from the last verified state.";
+  const recentActions = normalizeWorkingStateList(recentActionsRaw, 6, 180);
+
   return {
+    version: 2,
     goal: normalizeWorkingStateText(args.latestUserText, 240),
+    status: ledgerStatus,
+    currentStep,
     lastResult,
     filesChanged,
     verifiedFindings,
+    recentActions,
     openIssue,
+    blocker,
+    nextAction,
     updatedAt: args.nowMs,
   };
 }
@@ -1431,6 +1572,7 @@ export const ensureCloudRuntimeRunStarted = mutation({
     harnessProfile: v.optional(v.string()),
     harnessProfileSource: v.optional(v.string()),
     capabilityFamilies: v.optional(v.array(v.string())),
+    latestUserText: v.optional(v.string()),
     startedAt: v.optional(v.number()),
     nowMs: v.optional(v.number()),
   },
@@ -1508,6 +1650,14 @@ export const ensureCloudRuntimeRunStarted = mutation({
           .map((value) => String(value ?? "").trim())
           .filter((value, index, list) => value.length > 0 && list.indexOf(value) === index)
       : undefined;
+    const startedWorkingState =
+      visibility === "internal_hidden"
+        ? null
+        : buildRunStartedWorkingState({
+            previous: thread.workingState,
+            latestUserText: args.latestUserText,
+            nowMs,
+          });
 
     const id = await ctx.db.insert("runtimeRuns", {
       ownerId,
@@ -1565,6 +1715,12 @@ export const ensureCloudRuntimeRunStarted = mutation({
       },
       createdAt: startedAt,
     });
+    if (startedWorkingState) {
+      await ctx.db.patch(thread._id, {
+        workingState: startedWorkingState,
+        updatedAt: nowMs,
+      });
+    }
 
     const created = (await ctx.db.get(id)) as RuntimeRunLike | null;
     if (!created) throw new Error("runtime_run_create_failed");

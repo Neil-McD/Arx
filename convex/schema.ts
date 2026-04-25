@@ -799,11 +799,25 @@ export default defineSchema({
     codingHandoff: v.optional(v.any()),
     workingState: v.optional(
       v.object({
+        version: v.optional(v.number()),
         goal: v.optional(v.string()),
+        status: v.optional(
+          v.union(
+            v.literal("idle"),
+            v.literal("in_progress"),
+            v.literal("blocked"),
+            v.literal("needs_verification"),
+            v.literal("complete"),
+          ),
+        ),
+        currentStep: v.optional(v.string()),
         lastResult: v.optional(v.string()),
         filesChanged: v.array(v.string()),
         verifiedFindings: v.array(v.string()),
+        recentActions: v.optional(v.array(v.string())),
         openIssue: v.optional(v.string()),
+        blocker: v.optional(v.string()),
+        nextAction: v.optional(v.string()),
         updatedAt: v.number(),
       }),
     ),

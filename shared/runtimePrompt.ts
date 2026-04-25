@@ -2,11 +2,17 @@ import { type RetrievalToolName } from "./retrievalTools";
 import type { RuntimeKernelBudget } from "./runtimeKernelTypes";
 
 export type ThreadWorkingStatePrompt = {
+  version?: number | null;
   goal?: string | null;
+  status?: "idle" | "in_progress" | "blocked" | "needs_verification" | "complete" | null;
+  currentStep?: string | null;
   lastResult?: string | null;
   filesChanged?: string[] | null;
   verifiedFindings?: string[] | null;
+  recentActions?: string[] | null;
   openIssue?: string | null;
+  blocker?: string | null;
+  nextAction?: string | null;
 };
 
 // Storage uses community.oneLiner and external/runtime payloads expose community_one_liner.
@@ -229,18 +235,36 @@ function buildToolContextPrompt(params: {
   const verifiedFindings = Array.isArray(params.threadWorkingState?.verifiedFindings)
     ? params.threadWorkingState?.verifiedFindings.filter((value) => typeof value === "string" && value.trim())
     : [];
+  const recentActions = Array.isArray(params.threadWorkingState?.recentActions)
+    ? params.threadWorkingState?.recentActions.filter((value) => typeof value === "string" && value.trim())
+    : [];
+  const status = String(params.threadWorkingState?.status ?? "").trim();
+  const currentStep = String(params.threadWorkingState?.currentStep ?? "").trim();
   const goal = String(params.threadWorkingState?.goal ?? "").trim();
   const lastResult = String(params.threadWorkingState?.lastResult ?? "").trim();
-  const openIssue = String(params.threadWorkingState?.openIssue ?? "").trim();
+  const openIssue = String(params.threadWorkingState?.blocker ?? params.threadWorkingState?.openIssue ?? "").trim();
+  const nextAction = String(params.threadWorkingState?.nextAction ?? "").trim();
   const workingStateBlock =
-    goal || lastResult || openIssue || filesChanged.length > 0 || verifiedFindings.length > 0
+    goal ||
+    status ||
+    currentStep ||
+    lastResult ||
+    openIssue ||
+    nextAction ||
+    filesChanged.length > 0 ||
+    verifiedFindings.length > 0 ||
+    recentActions.length > 0
       ? [
           "THREAD_WORKING_STATE",
           `Goal: ${goal || "(none)"}`,
+          `Status: ${status || "(none)"}`,
+          `Current step: ${currentStep || "(none)"}`,
           `Last verified result: ${lastResult || "(none)"}`,
           `Files changed: ${filesChanged.length > 0 ? filesChanged.join(", ") : "(none)"}`,
           `Verified findings: ${verifiedFindings.length > 0 ? verifiedFindings.join(" | ") : "(none)"}`,
-          `Open issue: ${openIssue || "(none)"}`,
+          `Recent actions: ${recentActions.length > 0 ? recentActions.join(" | ") : "(none)"}`,
+          `Blocker: ${openIssue || "(none)"}`,
+          `Next action: ${nextAction || "(none)"}`,
           "Treat this as compact continuity from prior verified work. Re-read files when exact current contents matter.",
         ].join("\n")
       : null;

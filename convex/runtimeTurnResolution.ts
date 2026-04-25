@@ -126,9 +126,22 @@ function stripSystemMessages(
 function normalizeThreadWorkingState(raw: unknown): ThreadWorkingStatePrompt | null {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
   const record = raw as Record<string, unknown>;
+  const version = Number(record.version);
+  const statusRaw = String(record.status ?? "").trim();
+  const status =
+    statusRaw === "idle" ||
+    statusRaw === "in_progress" ||
+    statusRaw === "blocked" ||
+    statusRaw === "needs_verification" ||
+    statusRaw === "complete"
+      ? statusRaw
+      : null;
   const goal = String(record.goal ?? "").trim() || null;
+  const currentStep = String(record.currentStep ?? "").trim() || null;
   const lastResult = String(record.lastResult ?? "").trim() || null;
-  const openIssue = String(record.openIssue ?? "").trim() || null;
+  const blocker = String(record.blocker ?? record.openIssue ?? "").trim() || null;
+  const openIssue = String(record.openIssue ?? blocker ?? "").trim() || null;
+  const nextAction = String(record.nextAction ?? "").trim() || null;
   const filesChanged = Array.isArray(record.filesChanged)
     ? record.filesChanged
         .map((value) => String(value ?? "").trim())
@@ -141,15 +154,37 @@ function normalizeThreadWorkingState(raw: unknown): ThreadWorkingStatePrompt | n
         .filter((value) => value.length > 0)
         .slice(0, 4)
     : [];
-  if (!goal && !lastResult && !openIssue && filesChanged.length === 0 && verifiedFindings.length === 0) {
+  const recentActions = Array.isArray(record.recentActions)
+    ? record.recentActions
+        .map((value) => String(value ?? "").trim())
+        .filter((value) => value.length > 0)
+        .slice(0, 6)
+    : [];
+  if (
+    !goal &&
+    !status &&
+    !currentStep &&
+    !lastResult &&
+    !openIssue &&
+    !nextAction &&
+    filesChanged.length === 0 &&
+    verifiedFindings.length === 0 &&
+    recentActions.length === 0
+  ) {
     return null;
   }
   return {
+    version: Number.isFinite(version) ? Math.max(1, Math.floor(version)) : 1,
     goal,
+    status,
+    currentStep,
     lastResult,
     filesChanged,
     verifiedFindings,
+    recentActions,
     openIssue,
+    blocker,
+    nextAction,
   };
 }
 

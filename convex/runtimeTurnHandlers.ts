@@ -2,6 +2,7 @@ import {
   runChatgptCompletion,
   runChatgptStreamingCompletion,
 } from "./httpChatgpt";
+import { internal } from "./_generated/api";
 import { loadPublicModelMap } from "./httpInferenceConfig";
 import {
   normalizeMaxTokens,
@@ -25,6 +26,8 @@ import {
   throwIfRuntimeRunCancelled,
 } from "./runtimeCancellation";
 import { composeCloudScopedRuntimeSystemPrompt } from "../shared/runtimePrompt";
+import { buildRuntimeFailureFinalAnswer } from "../shared/runtimeFailureFinalizer";
+import { summarizeRuntimeWorkingStateFromEvents } from "../shared/runtimeWorkingStateLedger";
 import {
   PublicTurnInput,
   RequireAuthenticatedActor,
@@ -427,6 +430,7 @@ export async function handleRuntimeTurnRequest(args: {
       harnessProfile: resolvedRuntimeHarnessProfile,
       harnessProfileSource: "runtime_capability_resolution_v1",
       capabilityFamilies: resolvedRuntimeCapabilityFamilies,
+      latestUserText,
       startedAt: runStartedAt,
       nowMs: runStartedAt,
     };
@@ -556,9 +560,37 @@ export async function handleRuntimeTurnRequest(args: {
       assistantMessageSeq: number | null;
     } | null> => {
       if (!persistVisibleAssistantMessage) return null;
-      const partialContent = String(params.content ?? "").trim();
-      const contentToPersist =
-        partialContent || "Run stopped before producing a final answer.";
+      const hasPartialContent = String(params.content ?? "").trim().length > 0;
+      let workingStateForFinalizer = ownedThread.workingState ?? null;
+      if (!hasPartialContent) {
+        try {
+          const runEvents = await ctx.runQuery(
+            internal.threads.listRuntimeRunEventsByOwnerRunIdInternal as any,
+            {
+              ownerId: actor.dbUserId,
+              runId,
+            },
+          );
+          workingStateForFinalizer = summarizeRuntimeWorkingStateFromEvents({
+            latestUserText,
+            runStatus: params.status,
+            runReason: params.reason ?? null,
+            runErrorMessage: params.errorMessage ?? null,
+            events: Array.isArray(runEvents) ? runEvents : [],
+            nowMs: Date.now(),
+          });
+        } catch {
+          workingStateForFinalizer = ownedThread.workingState ?? null;
+        }
+      }
+      const finalAnswer = buildRuntimeFailureFinalAnswer({
+        partialContent: params.content,
+        workingState: workingStateForFinalizer,
+        status: params.status,
+        reason: params.reason ?? null,
+        errorCode: params.errorCode ?? null,
+        errorMessage: params.errorMessage ?? null,
+      });
       try {
         return await persistRuntimeAssistantMessage({
           ctx,
@@ -572,7 +604,7 @@ export async function handleRuntimeTurnRequest(args: {
           inferenceLaneFallbacks:
             params.inferenceLaneFallbacksOverride ?? inferenceLaneFallbacks,
           runId,
-          content: contentToPersist,
+          content: finalAnswer.content,
           partialRun: {
             status: params.status,
             reason: params.reason ?? null,
