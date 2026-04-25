@@ -141,7 +141,7 @@ export function useWebTurnRunnerController<
     async (
       threadId: string,
       getSanitizedTargetContent: () => string,
-      maxDelayMs = 520,
+      maxDelayMs = 360,
     ): Promise<void> => {
       const targetContent = getSanitizedTargetContent();
       if (

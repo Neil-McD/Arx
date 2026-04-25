@@ -16,19 +16,19 @@ function splitGraphemes(value: string): string[] {
 
 function chooseRevealBudget(backlog: number, draining: boolean): number {
   if (draining) {
-    if (backlog > 1000) return 240;
-    if (backlog > 500) return 160;
-    if (backlog > 180) return 96;
-    if (backlog > 80) return 52;
-    return 24;
+    if (backlog > 1000) return 360;
+    if (backlog > 500) return 240;
+    if (backlog > 180) return 140;
+    if (backlog > 80) return 80;
+    return 40;
   }
-  if (backlog > 1000) return 96;
-  if (backlog > 500) return 64;
-  if (backlog > 180) return 38;
-  if (backlog > 80) return 22;
-  if (backlog > 24) return 12;
-  if (backlog > 8) return 6;
-  return 3;
+  if (backlog > 1000) return 140;
+  if (backlog > 500) return 90;
+  if (backlog > 180) return 56;
+  if (backlog > 80) return 34;
+  if (backlog > 24) return 18;
+  if (backlog > 8) return 9;
+  return 5;
 }
 
 function isSoftBoundary(segment: string): boolean {
