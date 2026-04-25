@@ -101,6 +101,335 @@ async function saveCommunityOneLinerInternal(
   return updated;
 }
 
+function normalizePlanAmount(value: unknown): number | null {
+  if (value === null || value === undefined) return null;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) return null;
+  return Math.max(1, Math.floor(parsed));
+}
+
+function sameOptionalId(left: unknown, right: unknown): boolean {
+  return String(left ?? "") === String(right ?? "");
+}
+
+function sameOptionalText(left: unknown, right: unknown): boolean {
+  return String(left ?? "") === String(right ?? "");
+}
+
+function sameNumber(left: number, right: number): boolean {
+  return Math.abs(left - right) < 0.0001;
+}
+
+async function getCurrentCommunityPriceAmounts(ctx: any, communityId: any): Promise<{
+  monthlyAmount: number | null;
+  annualAmount: number | null;
+}> {
+  const currentPricePointRows = (await ctx.db
+    .query("communityPricePoints" as any)
+    .withIndex("by_community", (q: any) => q.eq("communityId", communityId))
+    .collect()) as CommunityPricePointLike[];
+  const pickCurrentAmount = (billingPeriod: "monthly" | "annual"): number | null => {
+    const current =
+      currentPricePointRows
+        .filter((row) => row.billingPeriod === billingPeriod && row.isCurrent)
+        .sort((a, b) => b.updatedAt - a.updatedAt)[0] ?? null;
+    return current ? Math.max(1, Math.floor(Number(current.amountBaseUnits ?? 0))) : null;
+  };
+  return {
+    monthlyAmount: pickCurrentAmount("monthly"),
+    annualAmount: pickCurrentAmount("annual"),
+  };
+}
+
+function resolveCommunitySettingsState(args: any, community: CommunityLike, currentPricing: {
+  monthlyAmount: number | null;
+  annualAmount: number | null;
+}) {
+  const normalizedSlug = normalizeSlug(args.slug);
+  const monthlyAmount = normalizePlanAmount(args.monthlyAmountBaseUnits);
+  const annualAmount = normalizePlanAmount(args.annualAmountBaseUnits);
+  if (monthlyAmount !== null && annualAmount !== null) {
+    throw new Error("community_pricing_mode_invalid");
+  }
+
+  const monetizationChanged =
+    monthlyAmount !== currentPricing.monthlyAmount || annualAmount !== currentPricing.annualAmount;
+  const hasPaidPlan = monthlyAmount !== null || annualAmount !== null;
+  const currentEntryPolicy = resolveCommunityEntryPolicy(community);
+  const nextEntryPolicy: "open" | "approval" | "paid_subscription" = hasPaidPlan
+    ? "paid_subscription"
+    : currentEntryPolicy === "approval"
+      ? "approval"
+      : "open";
+  const currency = String(args.currency ?? "usd")
+    .trim()
+    .toLowerCase() || "usd";
+  const currencyDecimals = Math.max(0, Math.floor(args.currencyDecimals ?? 2));
+  const nextName = normalizeName(args.name);
+  const nextOneLiner = normalizeOptionalText(args.oneLiner);
+  const nextAbout = normalizeOptionalText(args.about, 8_000);
+  const nextAvatarStorageId =
+    args.avatarStorageId !== undefined
+      ? (args.avatarStorageId ?? undefined)
+      : args.avatarUrl !== undefined
+        ? undefined
+        : community.avatarStorageId;
+  const nextBannerStorageId =
+    args.bannerStorageId !== undefined
+      ? (args.bannerStorageId ?? undefined)
+      : args.bannerUrl !== undefined
+        ? undefined
+        : community.bannerStorageId;
+  const nextAvatarUrl =
+    nextAvatarStorageId
+      ? undefined
+      : args.avatarUrl !== undefined
+        ? normalizeOptionalCommunityImageUrl(args.avatarUrl)
+        : community.avatarUrl;
+  const nextAvatarFocusX =
+    args.avatarFocusX !== undefined ? normalizeAvatarFocus(args.avatarFocusX) : normalizeAvatarFocus(community.avatarFocusX);
+  const nextAvatarFocusY =
+    args.avatarFocusY !== undefined ? normalizeAvatarFocus(args.avatarFocusY) : normalizeAvatarFocus(community.avatarFocusY);
+  const nextAvatarZoom =
+    args.avatarZoom !== undefined ? normalizeAvatarZoom(args.avatarZoom) : normalizeAvatarZoom(community.avatarZoom);
+  const nextBannerUrl =
+    nextBannerStorageId
+      ? undefined
+      : args.bannerUrl !== undefined
+        ? normalizeOptionalCommunityImageUrl(args.bannerUrl)
+        : community.bannerUrl;
+  const nextBannerFocusX =
+    args.bannerFocusX !== undefined ? normalizeBannerFocus(args.bannerFocusX) : normalizeBannerFocus(community.bannerFocusX);
+  const nextBannerFocusY =
+    args.bannerFocusY !== undefined ? normalizeBannerFocus(args.bannerFocusY) : normalizeBannerFocus(community.bannerFocusY);
+  const nextBannerZoom =
+    args.bannerZoom !== undefined ? normalizeBannerZoom(args.bannerZoom) : normalizeBannerZoom(community.bannerZoom);
+  const nextVisibility = normalizeVisibility(args.visibility);
+
+  return {
+    normalizedSlug,
+    monthlyAmount,
+    annualAmount,
+    monetizationChanged,
+    nextEntryPolicy,
+    currency,
+    currencyDecimals,
+    nextName,
+    nextOneLiner,
+    nextAbout,
+    nextAvatarStorageId,
+    nextBannerStorageId,
+    nextAvatarUrl,
+    nextAvatarFocusX,
+    nextAvatarFocusY,
+    nextAvatarZoom,
+    nextBannerUrl,
+    nextBannerFocusX,
+    nextBannerFocusY,
+    nextBannerZoom,
+    nextVisibility,
+    identityChanged: nextName !== community.name || normalizedSlug !== community.slug,
+    brandingChanged:
+      !sameOptionalText(nextAvatarUrl, community.avatarUrl) ||
+      !sameOptionalId(nextAvatarStorageId, community.avatarStorageId) ||
+      !sameNumber(nextAvatarFocusX, normalizeAvatarFocus(community.avatarFocusX)) ||
+      !sameNumber(nextAvatarFocusY, normalizeAvatarFocus(community.avatarFocusY)) ||
+      !sameNumber(nextAvatarZoom, normalizeAvatarZoom(community.avatarZoom)) ||
+      !sameOptionalText(nextBannerUrl, community.bannerUrl) ||
+      !sameOptionalId(nextBannerStorageId, community.bannerStorageId) ||
+      !sameNumber(nextBannerFocusX, normalizeBannerFocus(community.bannerFocusX)) ||
+      !sameNumber(nextBannerFocusY, normalizeBannerFocus(community.bannerFocusY)) ||
+      !sameNumber(nextBannerZoom, normalizeBannerZoom(community.bannerZoom)),
+    visibilityChanged: nextVisibility !== community.visibility,
+  };
+}
+
+async function requirePaidCommunityPricingReady(args: {
+  ctx: any;
+  community: CommunityLike;
+  nowMs: number;
+}) {
+  const ownerBilling = (await args.ctx.runQuery(
+    internal.auth.getBuilderCommerceAccessForUserInternal as any,
+    {
+      userId: args.community.ownerId,
+      nowMs: args.nowMs,
+    },
+  )) as { builder_tier?: unknown } | null;
+  if (String(ownerBilling?.builder_tier ?? "").trim().toLowerCase() === "free") {
+    throw new Error("community_builder_plan_required");
+  }
+  const connectAccount = (await args.ctx.runQuery(
+    internal.builderCommerce.getUserStripeConnectAccountInternal as any,
+    {
+      userId: args.community.ownerId,
+    },
+  )) as {
+    status?: unknown;
+    chargesEnabled?: unknown;
+    payoutsEnabled?: unknown;
+  } | null;
+  if (!connectAccount) {
+    throw new Error("community_stripe_connect_required");
+  }
+  const connectStatus = String(connectAccount.status ?? "").trim().toLowerCase();
+  const canAcceptCharges =
+    connectStatus === "ready" &&
+    connectAccount.chargesEnabled === true &&
+    connectAccount.payoutsEnabled === true;
+  if (!canAcceptCharges) {
+    throw new Error("community_stripe_connect_not_ready");
+  }
+}
+
+async function requireCommunitySettingsPermissions(args: {
+  ctx: any;
+  communityId: any;
+  community: CommunityLike;
+  userId: any;
+  state: ReturnType<typeof resolveCommunitySettingsState>;
+  nowMs: number;
+}) {
+  if (args.state.identityChanged) {
+    await requireCommunityOwner({
+      ctx: args.ctx,
+      communityId: args.communityId,
+      userId: args.userId,
+    });
+  }
+  if (args.state.brandingChanged) {
+    await requireCommunityOwner({
+      ctx: args.ctx,
+      communityId: args.communityId,
+      userId: args.userId,
+    });
+  }
+  if (args.state.visibilityChanged) {
+    await requireCommunityOwner({
+      ctx: args.ctx,
+      communityId: args.communityId,
+      userId: args.userId,
+    });
+  }
+  if (args.state.monetizationChanged && (args.state.monthlyAmount !== null || args.state.annualAmount !== null)) {
+    await requirePaidCommunityPricingReady({
+      ctx: args.ctx,
+      community: args.community,
+      nowMs: args.nowMs,
+    });
+  }
+}
+
+async function upsertCommunityPricePoint(args: {
+  ctx: any;
+  communityId: any;
+  billingPeriod: "monthly" | "annual";
+  amountBaseUnits: number | null;
+  name: string;
+  description: string | null | undefined;
+  currency: string;
+  currencyDecimals: number;
+  nowMs: number;
+}): Promise<string | null> {
+  const rows = (await args.ctx.db
+    .query("communityPricePoints" as any)
+    .withIndex("by_community_billingPeriod", (q: any) =>
+      q.eq("communityId", args.communityId).eq("billingPeriod", args.billingPeriod),
+    )
+    .collect()) as CommunityPricePointLike[];
+  rows.sort((a, b) => b.updatedAt - a.updatedAt);
+  const currentRows = rows.filter((row) => Boolean(row.isCurrent)).sort((a, b) => b.updatedAt - a.updatedAt);
+  const current = currentRows[0] ?? null;
+
+  if (args.amountBaseUnits === null) {
+    for (const row of currentRows) {
+      await args.ctx.db.patch(row._id as any, {
+        isCurrent: false,
+        archivedAt: row.archivedAt ?? args.nowMs,
+        updatedAt: args.nowMs,
+      });
+    }
+    return null;
+  }
+
+  const hasMatchingCurrent = Boolean(
+    current &&
+      current.amountBaseUnits === args.amountBaseUnits &&
+      current.currency === args.currency &&
+      current.currencyDecimals === args.currencyDecimals,
+  );
+
+  if (hasMatchingCurrent && current) {
+    await args.ctx.db.patch(current._id as any, {
+      name: args.name,
+      description: args.description,
+      isCurrent: true,
+      archivedAt: undefined,
+      updatedAt: args.nowMs,
+    });
+    for (const extra of currentRows.slice(1)) {
+      await args.ctx.db.patch(extra._id as any, {
+        isCurrent: false,
+        archivedAt: extra.archivedAt ?? args.nowMs,
+        updatedAt: args.nowMs,
+      });
+    }
+    return String(current._id);
+  }
+
+  for (const row of currentRows) {
+    await args.ctx.db.patch(row._id as any, {
+      isCurrent: false,
+      archivedAt: row.archivedAt ?? args.nowMs,
+      updatedAt: args.nowMs,
+    });
+  }
+
+  const pricePointId = await args.ctx.db.insert("communityPricePoints" as any, {
+    communityId: args.communityId,
+    billingPeriod: args.billingPeriod,
+    name: args.name,
+    description: args.description,
+    amountBaseUnits: args.amountBaseUnits,
+    currency: args.currency,
+    currencyDecimals: args.currencyDecimals,
+    isCurrent: true,
+    createdAt: args.nowMs,
+    updatedAt: args.nowMs,
+  });
+  return String(pricePointId);
+}
+
+async function upsertCommunitySettingsPricePoints(args: {
+  ctx: any;
+  communityId: any;
+  state: ReturnType<typeof resolveCommunitySettingsState>;
+  nowMs: number;
+}) {
+  await upsertCommunityPricePoint({
+    ctx: args.ctx,
+    communityId: args.communityId,
+    billingPeriod: "monthly",
+    amountBaseUnits: args.state.monthlyAmount,
+    name: args.state.nextName,
+    description: args.state.nextOneLiner,
+    currency: args.state.currency,
+    currencyDecimals: args.state.currencyDecimals,
+    nowMs: args.nowMs,
+  });
+  await upsertCommunityPricePoint({
+    ctx: args.ctx,
+    communityId: args.communityId,
+    billingPeriod: "annual",
+    amountBaseUnits: args.state.annualAmount,
+    name: args.state.nextName,
+    description: args.state.nextOneLiner,
+    currency: args.state.currency,
+    currencyDecimals: args.state.currencyDecimals,
+    nowMs: args.nowMs,
+  });
+}
+
 export const createCommunity = mutation({
   args: {
     ownerId: v.optional(v.id("users")),
@@ -236,273 +565,61 @@ export const saveCommunitySettings = mutation({
       communityId: args.communityId,
       userId: args.userId,
     });
-    const normalizedSlug = normalizeSlug(args.slug);
+    const currentPricing = await getCurrentCommunityPriceAmounts(ctx, args.communityId);
+    const settingsState = resolveCommunitySettingsState(args, community, currentPricing);
     const existingBySlug = (await ctx.db
       .query("communities")
-      .withIndex("by_slug", (q: any) => q.eq("slug", normalizedSlug))
+      .withIndex("by_slug", (q: any) => q.eq("slug", settingsState.normalizedSlug))
       .first()) as CommunityLike | null;
     if (existingBySlug && String(existingBySlug._id) !== String(args.communityId)) {
       throw new Error("community_slug_taken");
     }
 
-    const currentPricePointRows = (await ctx.db
-      .query("communityPricePoints" as any)
-      .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
-      .collect()) as CommunityPricePointLike[];
-    const pickCurrentAmount = (billingPeriod: "monthly" | "annual"): number | null => {
-      const current = currentPricePointRows
-        .filter((row) => row.billingPeriod === billingPeriod && row.isCurrent)
-        .sort((a, b) => b.updatedAt - a.updatedAt)[0] ?? null;
-      return current ? Math.max(1, Math.floor(Number(current.amountBaseUnits ?? 0))) : null;
-    };
-    const currentMonthlyAmount = pickCurrentAmount("monthly");
-    const currentAnnualAmount = pickCurrentAmount("annual");
-
-    const normalizePlanAmount = (value: unknown): number | null => {
-      if (value === null || value === undefined) return null;
-      const parsed = Number(value);
-      if (!Number.isFinite(parsed) || parsed <= 0) return null;
-      return Math.max(1, Math.floor(parsed));
-    };
-    const monthlyAmount = normalizePlanAmount(args.monthlyAmountBaseUnits);
-    const annualAmount = normalizePlanAmount(args.annualAmountBaseUnits);
-    if (monthlyAmount !== null && annualAmount !== null) {
-      throw new Error("community_pricing_mode_invalid");
-    }
-    const monetizationChanged =
-      monthlyAmount !== currentMonthlyAmount || annualAmount !== currentAnnualAmount;
-    const hasPaidPlan = monthlyAmount !== null || annualAmount !== null;
-    const currentEntryPolicy = resolveCommunityEntryPolicy(community);
-    const nextEntryPolicy = hasPaidPlan
-      ? "paid_subscription"
-      : currentEntryPolicy === "approval"
-        ? "approval"
-        : "open";
-    const currency = String(args.currency ?? "usd")
-      .trim()
-      .toLowerCase() || "usd";
-    const currencyDecimals = Math.max(0, Math.floor(args.currencyDecimals ?? 2));
-    const nextName = normalizeName(args.name);
-    const nextOneLiner = normalizeOptionalText(args.oneLiner);
-    const nextAbout = normalizeOptionalText(args.about, 8_000);
-    const nextAvatarStorageId =
-      args.avatarStorageId !== undefined
-        ? (args.avatarStorageId ?? undefined)
-        : args.avatarUrl !== undefined
-          ? undefined
-          : community.avatarStorageId;
-    const nextBannerStorageId =
-      args.bannerStorageId !== undefined
-        ? (args.bannerStorageId ?? undefined)
-        : args.bannerUrl !== undefined
-          ? undefined
-          : community.bannerStorageId;
-    const nextAvatarUrl =
-      nextAvatarStorageId
-        ? undefined
-        : args.avatarUrl !== undefined
-          ? normalizeOptionalCommunityImageUrl(args.avatarUrl)
-          : community.avatarUrl;
-    const nextAvatarFocusX =
-      args.avatarFocusX !== undefined ? normalizeAvatarFocus(args.avatarFocusX) : normalizeAvatarFocus(community.avatarFocusX);
-    const nextAvatarFocusY =
-      args.avatarFocusY !== undefined ? normalizeAvatarFocus(args.avatarFocusY) : normalizeAvatarFocus(community.avatarFocusY);
-    const nextAvatarZoom =
-      args.avatarZoom !== undefined ? normalizeAvatarZoom(args.avatarZoom) : normalizeAvatarZoom(community.avatarZoom);
-    const nextBannerUrl =
-      nextBannerStorageId
-        ? undefined
-        : args.bannerUrl !== undefined
-          ? normalizeOptionalCommunityImageUrl(args.bannerUrl)
-          : community.bannerUrl;
-    const nextBannerFocusX =
-      args.bannerFocusX !== undefined ? normalizeBannerFocus(args.bannerFocusX) : normalizeBannerFocus(community.bannerFocusX);
-    const nextBannerFocusY =
-      args.bannerFocusY !== undefined ? normalizeBannerFocus(args.bannerFocusY) : normalizeBannerFocus(community.bannerFocusY);
-    const nextBannerZoom =
-      args.bannerZoom !== undefined ? normalizeBannerZoom(args.bannerZoom) : normalizeBannerZoom(community.bannerZoom);
-    const nextVisibility = normalizeVisibility(args.visibility);
-
-    const sameOptionalId = (left: unknown, right: unknown): boolean =>
-      String(left ?? "") === String(right ?? "");
-    const sameOptionalText = (left: unknown, right: unknown): boolean =>
-      String(left ?? "") === String(right ?? "");
-    const sameNumber = (left: number, right: number): boolean =>
-      Math.abs(left - right) < 0.0001;
-    const identityChanged = nextName !== community.name || normalizedSlug !== community.slug;
-    const brandingChanged =
-      !sameOptionalText(nextAvatarUrl, community.avatarUrl) ||
-      !sameOptionalId(nextAvatarStorageId, community.avatarStorageId) ||
-      !sameNumber(nextAvatarFocusX, normalizeAvatarFocus(community.avatarFocusX)) ||
-      !sameNumber(nextAvatarFocusY, normalizeAvatarFocus(community.avatarFocusY)) ||
-      !sameNumber(nextAvatarZoom, normalizeAvatarZoom(community.avatarZoom)) ||
-      !sameOptionalText(nextBannerUrl, community.bannerUrl) ||
-      !sameOptionalId(nextBannerStorageId, community.bannerStorageId) ||
-      !sameNumber(nextBannerFocusX, normalizeBannerFocus(community.bannerFocusX)) ||
-      !sameNumber(nextBannerFocusY, normalizeBannerFocus(community.bannerFocusY)) ||
-      !sameNumber(nextBannerZoom, normalizeBannerZoom(community.bannerZoom));
-    const visibilityChanged = nextVisibility !== community.visibility;
-
-    if (identityChanged) {
-      await requireCommunityOwner({
-        ctx,
-        communityId: args.communityId,
-        userId,
-      });
-    }
-    if (brandingChanged) {
-      await requireCommunityOwner({
-        ctx,
-        communityId: args.communityId,
-        userId,
-      });
-    }
-    if (visibilityChanged) {
-      await requireCommunityOwner({
-        ctx,
-        communityId: args.communityId,
-        userId,
-      });
-    }
-    if (monetizationChanged && (monthlyAmount !== null || annualAmount !== null)) {
-      const ownerBilling = (await ctx.runQuery(
-        internal.auth.getBuilderCommerceAccessForUserInternal as any,
-        {
-          userId: community.ownerId,
-          nowMs,
-        },
-      )) as { builder_tier?: unknown } | null;
-      if (String(ownerBilling?.builder_tier ?? "").trim().toLowerCase() === "free") {
-        throw new Error("community_builder_plan_required");
-      }
-      const connectAccount = (await ctx.runQuery(
-        internal.builderCommerce.getUserStripeConnectAccountInternal as any,
-        {
-          userId: community.ownerId,
-        },
-      )) as {
-        status?: unknown;
-        chargesEnabled?: unknown;
-        payoutsEnabled?: unknown;
-      } | null;
-      if (!connectAccount) {
-        throw new Error("community_stripe_connect_required");
-      }
-      const connectStatus = String(connectAccount.status ?? "").trim().toLowerCase();
-      const canAcceptCharges =
-        connectStatus === "ready" &&
-        connectAccount.chargesEnabled === true &&
-        connectAccount.payoutsEnabled === true;
-      if (!canAcceptCharges) {
-        throw new Error("community_stripe_connect_not_ready");
-      }
-    }
+    await requireCommunitySettingsPermissions({
+      ctx,
+      communityId: args.communityId,
+      community,
+      userId,
+      state: settingsState,
+      nowMs,
+    });
 
     const previousAvatarStorageId = community.avatarStorageId;
     const previousBannerStorageId = community.bannerStorageId;
 
     await ctx.db.patch(community._id as any, {
-      name: nextName,
-      slug: normalizedSlug,
-      oneLiner: nextOneLiner,
-      about: nextAbout,
-      avatarUrl: nextAvatarUrl,
-      avatarStorageId: nextAvatarStorageId,
-      avatarFocusX: nextAvatarFocusX,
-      avatarFocusY: nextAvatarFocusY,
-      avatarZoom: nextAvatarZoom,
-      bannerUrl: nextBannerUrl,
-      bannerStorageId: nextBannerStorageId,
-      bannerFocusX: nextBannerFocusX,
-      bannerFocusY: nextBannerFocusY,
-      bannerZoom: nextBannerZoom,
-      visibility: nextVisibility,
-      entryPolicy: nextEntryPolicy,
+      name: settingsState.nextName,
+      slug: settingsState.normalizedSlug,
+      oneLiner: settingsState.nextOneLiner,
+      about: settingsState.nextAbout,
+      avatarUrl: settingsState.nextAvatarUrl,
+      avatarStorageId: settingsState.nextAvatarStorageId,
+      avatarFocusX: settingsState.nextAvatarFocusX,
+      avatarFocusY: settingsState.nextAvatarFocusY,
+      avatarZoom: settingsState.nextAvatarZoom,
+      bannerUrl: settingsState.nextBannerUrl,
+      bannerStorageId: settingsState.nextBannerStorageId,
+      bannerFocusX: settingsState.nextBannerFocusX,
+      bannerFocusY: settingsState.nextBannerFocusY,
+      bannerZoom: settingsState.nextBannerZoom,
+      visibility: settingsState.nextVisibility,
+      entryPolicy: settingsState.nextEntryPolicy,
       updatedAt: nowMs,
     });
 
-    if (previousAvatarStorageId && String(previousAvatarStorageId) !== String(nextAvatarStorageId ?? "")) {
+    if (previousAvatarStorageId && String(previousAvatarStorageId) !== String(settingsState.nextAvatarStorageId ?? "")) {
       await maybeDeleteStorageAsset(ctx, previousAvatarStorageId);
     }
-    if (previousBannerStorageId && String(previousBannerStorageId) !== String(nextBannerStorageId ?? "")) {
+    if (previousBannerStorageId && String(previousBannerStorageId) !== String(settingsState.nextBannerStorageId ?? "")) {
       await maybeDeleteStorageAsset(ctx, previousBannerStorageId);
     }
 
-    const upsertPricePoint = async (
-      billingPeriod: "monthly" | "annual",
-      amountBaseUnits: number | null,
-    ): Promise<string | null> => {
-      const rows = (await ctx.db
-        .query("communityPricePoints" as any)
-        .withIndex("by_community_billingPeriod", (q: any) =>
-          q.eq("communityId", args.communityId).eq("billingPeriod", billingPeriod),
-        )
-        .collect()) as CommunityPricePointLike[];
-      rows.sort((a, b) => b.updatedAt - a.updatedAt);
-      const currentRows = rows.filter((row) => Boolean(row.isCurrent)).sort((a, b) => b.updatedAt - a.updatedAt);
-      const current = currentRows[0] ?? null;
-
-      if (amountBaseUnits === null) {
-        for (const row of currentRows) {
-          await ctx.db.patch(row._id as any, {
-            isCurrent: false,
-            archivedAt: row.archivedAt ?? nowMs,
-            updatedAt: nowMs,
-          });
-        }
-        return null;
-      }
-
-      const hasMatchingCurrent = Boolean(
-        current &&
-          current.amountBaseUnits === amountBaseUnits &&
-          current.currency === currency &&
-          current.currencyDecimals === currencyDecimals,
-      );
-
-      if (hasMatchingCurrent && current) {
-        await ctx.db.patch(current._id as any, {
-          name: nextName,
-          description: nextOneLiner,
-          isCurrent: true,
-          archivedAt: undefined,
-          updatedAt: nowMs,
-        });
-        for (const extra of currentRows.slice(1)) {
-          await ctx.db.patch(extra._id as any, {
-            isCurrent: false,
-            archivedAt: extra.archivedAt ?? nowMs,
-            updatedAt: nowMs,
-          });
-        }
-        return String(current._id);
-      }
-
-      for (const row of currentRows) {
-        await ctx.db.patch(row._id as any, {
-          isCurrent: false,
-          archivedAt: row.archivedAt ?? nowMs,
-          updatedAt: nowMs,
-        });
-      }
-
-      const pricePointId = await ctx.db.insert("communityPricePoints" as any, {
-        communityId: args.communityId,
-        billingPeriod,
-        name: nextName,
-        description: nextOneLiner,
-        amountBaseUnits,
-        currency,
-        currencyDecimals,
-        isCurrent: true,
-        createdAt: nowMs,
-        updatedAt: nowMs,
-      });
-      return String(pricePointId);
-    };
-
-    await upsertPricePoint("monthly", monthlyAmount);
-    await upsertPricePoint("annual", annualAmount);
+    await upsertCommunitySettingsPricePoints({
+      ctx,
+      communityId: args.communityId,
+      state: settingsState,
+      nowMs,
+    });
 
     const updated = (await ctx.db.get(community._id as any)) as CommunityLike | null;
     if (!updated) throw new Error("community_not_found");
