@@ -28,6 +28,12 @@ function main() {
     new URL("../apps/web/src/controllers/useWebPublicFunnelActions.ts", import.meta.url),
   );
   const discoverPanel = readText(new URL("../apps/web/src/components/WebDiscoverPanel.tsx", import.meta.url));
+  const baseCss = readText(new URL("../apps/web/src/base.css", import.meta.url));
+  const webAppRouteState = readText(new URL("../shared/webAppRouteState.ts", import.meta.url));
+  const appShellNavigation = readText(new URL("../shared/appShellNavigation.ts", import.meta.url));
+  const pathRouteLifecycle = readText(
+    new URL("../apps/web/src/controllers/useWebPathRouteLifecycle.ts", import.meta.url),
+  );
   const discoverMarketplace = readText(new URL("../convex/discoverMarketplace.ts", import.meta.url));
   const discoverController = readText(new URL("../shared/useWebDiscoverController.ts", import.meta.url));
   const discoverPreloadLifecycle = readText(
@@ -125,6 +131,21 @@ function main() {
     "onActivate: () => args.onActivateCommunity(community)",
     "Discover cards delegate activation through the funnel-aware app handler",
   );
+  assertNotIncludes(
+    discoverPanel,
+    "RefreshCw",
+    "Discover does not render a redundant in-app refresh icon",
+  );
+  assertNotIncludes(
+    discoverPanel,
+    "onRefreshDiscover",
+    "Discover panel does not carry a redundant manual refresh prop",
+  );
+  assertNotIncludes(
+    baseCss,
+    "discover-refresh-button",
+    "Discover refresh button styles are removed with the control",
+  );
   assertIncludes(
     publicFunnelActions,
     "fetchCloudMyCommunityAccessBySlug<AuthSession, CommunityAccessT>({",
@@ -189,6 +210,36 @@ function main() {
     discoverPreloadLifecycle,
     "if (!isStale) return;",
     "Discover preload lifecycle throttles both empty and failed load attempts",
+  );
+  assertIncludes(
+    appShellNavigation,
+    'export type DiscoverTab = "communities" | "apps" | "skills";',
+    "Discover tab identity is shared outside the panel",
+  );
+  assertIncludes(
+    webAppRouteState,
+    'if (tab === "apps") return "/discover/apps";',
+    "Discover Apps tab has a refresh-stable route",
+  );
+  assertIncludes(
+    webAppRouteState,
+    'if (tab === "skills") return "/discover/skills";',
+    "Discover Skills tab has a refresh-stable route",
+  );
+  assertIncludes(
+    pathRouteLifecycle,
+    "discoverTab: params.discoverTab,",
+    "route lifecycle preserves Discover tab while replacing app route",
+  );
+  assertIncludes(
+    app,
+    "() => initialAppRoute?.discoverTab ?? \"communities\"",
+    "App initializes Discover tab from the route",
+  );
+  assertIncludes(
+    app,
+    "discoverTab: discoverActiveTab,",
+    "App writes active Discover tab back to the app route",
   );
   assertNotIncludes(
     discoverPanel,

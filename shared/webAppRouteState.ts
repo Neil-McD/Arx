@@ -1,5 +1,13 @@
 import { isUuid } from "./appIdentity";
-import { parseCommunityTab, type AppPage, type AppView, type CommunityTab, type SettingsPage } from "./appShellNavigation";
+import {
+  parseCommunityTab,
+  parseDiscoverTab,
+  type AppPage,
+  type AppView,
+  type CommunityTab,
+  type DiscoverTab,
+  type SettingsPage,
+} from "./appShellNavigation";
 import type { CommunityFunnelConfig } from "./communityTypes";
 
 export type PublicRoute =
@@ -17,6 +25,7 @@ export type AppRouteState = {
   settingsPage: SettingsPage;
   communitySlug: string | null;
   communityTab: CommunityTab;
+  discoverTab?: DiscoverTab | null;
   threadId: string | null;
 };
 
@@ -26,6 +35,7 @@ export type AppRoutePathState = {
   settingsPage: SettingsPage;
   communitySlug: string | null;
   communityTab: CommunityTab;
+  discoverTab?: DiscoverTab | null;
   threadId: string | null;
 };
 
@@ -303,13 +313,14 @@ function parseAppRouteFromPathname(pathname: string): AppRoutePathState | null {
     };
   }
 
-  if (segments[0] === "discover" && segments.length === 1) {
+  if (segments[0] === "discover" && segments.length <= 2) {
     return {
       page: "discover",
       view: "home",
       settingsPage: "agent",
       communitySlug: null,
       communityTab: "chat",
+      discoverTab: parseDiscoverTab(segments[1] ?? null),
       threadId: null,
     };
   }
@@ -400,6 +411,7 @@ export function readAppRouteFromLocation(): AppRouteState {
       settingsPage: fromPath.settingsPage,
       communitySlug: fromPath.communitySlug,
       communityTab: fromPath.communityTab,
+      discoverTab: fromPath.discoverTab ?? "communities",
       threadId: fromPath.threadId,
     };
   }
@@ -410,6 +422,7 @@ export function readAppRouteFromLocation(): AppRouteState {
     settingsPage: "agent",
     communitySlug: null,
     communityTab: "chat",
+    discoverTab: "communities",
     threadId: null,
   };
 }
@@ -420,6 +433,9 @@ export function buildAppRoutePath(state: AppRoutePathState): string | null {
   }
 
   if (state.page === "discover") {
+    const tab = parseDiscoverTab(state.discoverTab);
+    if (tab === "apps") return "/discover/apps";
+    if (tab === "skills") return "/discover/skills";
     return "/discover";
   }
 

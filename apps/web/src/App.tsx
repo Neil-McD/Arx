@@ -108,6 +108,7 @@ import {
   type AppPage,
   type AppView,
   type CommunityTab,
+  type DiscoverTab,
   isCommunityRouteManagedTab,
   type SettingsGroup,
   type SettingsPage,
@@ -1091,9 +1092,9 @@ export default function App() {
   const [activePage, setActivePage] = useState<AppPage>(() => initialAppRoute?.page ?? "workspace");
   const [activeView, setActiveView] = useState<AppView>(() => initialAppRoute?.view ?? "home");
   const [settingsPage, setSettingsPage] = useState<SettingsPage>(() => initialAppRoute?.settingsPage ?? "account");
-  const [discoverActiveTab, setDiscoverActiveTab] = useState<
-    "communities" | "apps" | "skills"
-  >("communities");
+  const [discoverActiveTab, setDiscoverActiveTab] = useState<DiscoverTab>(
+    () => initialAppRoute?.discoverTab ?? "communities",
+  );
   const [shouldOpenCreatePersonalSkill, setShouldOpenCreatePersonalSkill] =
     useState(false);
   const settingsGroup = settingsGroupForPage(settingsPage);
@@ -1912,6 +1913,9 @@ export default function App() {
     setActivePage(nextAppRoute.page);
     setActiveView(nextAppRoute.page === "workspace" ? nextAppRoute.view : "home");
     setSettingsPage(nextAppRoute.settingsPage);
+    if (nextAppRoute.page === "discover") {
+      setDiscoverActiveTab(nextAppRoute.discoverTab ?? "communities");
+    }
     if (nextAppRoute.page === "community") {
       applyCommunityShellState({
         communitySlug: normalizedCommunitySlug,
@@ -2015,6 +2019,7 @@ export default function App() {
         settingsPage,
         communitySlug: selectedActiveCommunitySlug,
         communityTab,
+        discoverTab: discoverActiveTab,
         threadId: activePage === "workspace" && activeView === "home" ? activeThreadId : null,
       }) ?? "",
       shellVariant,
@@ -3120,6 +3125,7 @@ export default function App() {
     settingsPage,
     activeCommunitySlug: selectedActiveCommunitySlug,
     communityTab,
+    discoverTab: discoverActiveTab,
     activeThreadId,
     applyLocationToState,
     setBuilderConnectReturn,
@@ -6315,7 +6321,6 @@ export default function App() {
       isAuthRecoveringSignedIn: isAuthRecoveringSignedInAppShell,
       onRequireAuth: () => requireSignIn(),
       isLoadingDiscover,
-      onRefreshDiscover: () => void loadDiscoverCommunities(),
       discoverCommunitiesCount: discoverCommunities.length,
       discoverError,
       discoverCommunities,

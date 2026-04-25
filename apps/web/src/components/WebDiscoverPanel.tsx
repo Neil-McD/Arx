@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState, type ComponentProps } from "react";
-import { RefreshCw } from "lucide-react";
 
 import type { DeveloperAppAuthType } from "../../../../shared/communityAppMountTypes";
 import type {
@@ -13,6 +12,7 @@ import type {
 import { buildPlatformSwitcherStyle } from "../../../../shared/platformSwitcherUi";
 import type { DiscoverCommunitySnapshot } from "../../../../shared/communityTypes";
 import type { CreateSkillPackageInput } from "../../../../shared/skillPackageTypes";
+import type { DiscoverTab } from "../../../../shared/appShellNavigation";
 import type {
   ConnectUserPlatformAppResult,
   ConnectUserPlatformAppInput,
@@ -35,8 +35,6 @@ import {
   type DiscoverAppCatalogEntry,
 } from "../lib/discoverCatalog";
 import { DiscoverCatalogLogo } from "./DiscoverCatalogLogo";
-
-type DiscoverTab = "communities" | "apps" | "skills";
 
 const DISCOVER_TABS: Array<{ id: DiscoverTab; label: string }> = [
   { id: "communities", label: "Communities" },
@@ -62,7 +60,6 @@ type WebDiscoverPanelProps = {
   isAuthRecoveringSignedIn: boolean;
   onRequireAuth: () => void;
   isLoadingDiscover: boolean;
-  onRefreshDiscover: () => void;
   discoverCommunitiesCount: number;
   discoverError: string | null;
   discoverCommunities: DiscoverCommunitySnapshot[];
@@ -330,7 +327,6 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
     hasSession,
     isAuthRecoveringSignedIn,
     isLoadingDiscover,
-    onRefreshDiscover,
     discoverCommunitiesCount,
     discoverError,
     discoverCommunities,
@@ -838,18 +834,6 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
           <div className="discover-subtitle">{heroSubtitle}</div>
         </div>
         <div className="discover-hero-actions">
-          {!isAppsTab && !isSkillsTab ? (
-            <button
-              type="button"
-              className="discover-refresh-button"
-              onClick={onRefreshDiscover}
-              disabled={isLoadingDiscover}
-              aria-label="Refresh communities"
-              title="Refresh communities"
-            >
-              <RefreshCw aria-hidden="true" size={16} />
-            </button>
-          ) : null}
           <div
             className="platform-switcher platform-switcher-compact community-ai-agent-tablist discover-tablist"
             role="tablist"

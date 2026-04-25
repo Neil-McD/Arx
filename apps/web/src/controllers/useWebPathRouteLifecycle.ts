@@ -7,7 +7,7 @@ import {
   type BuilderConnectReturn,
   type BuilderBillingReturn,
 } from "../../../../shared/builderBilling";
-import type { AppPage, AppView, CommunityTab, SettingsPage } from "../../../../shared/appShellNavigation";
+import type { AppPage, AppView, CommunityTab, DiscoverTab, SettingsPage } from "../../../../shared/appShellNavigation";
 import type { PublicRoute } from "../../../../shared/webAppRouteState";
 
 function hasPendingOAuthCallbackParams(): boolean {
@@ -26,6 +26,7 @@ export function useWebPathRouteLifecycle(params: {
   settingsPage: SettingsPage;
   activeCommunitySlug: string | null;
   communityTab: CommunityTab;
+  discoverTab: DiscoverTab;
   activeThreadId: string | null;
   applyLocationToState: () => void;
   setBuilderConnectReturn: Dispatch<SetStateAction<BuilderConnectReturn | null>>;
@@ -36,6 +37,7 @@ export function useWebPathRouteLifecycle(params: {
     settingsPage: SettingsPage;
     communitySlug: string | null;
     communityTab: CommunityTab;
+    discoverTab: DiscoverTab;
     threadId: string | null;
   }) => string | null;
 }) {
@@ -77,6 +79,7 @@ export function useWebPathRouteLifecycle(params: {
       settingsPage: params.settingsPage,
       communitySlug: params.activeCommunitySlug,
       communityTab: params.communityTab,
+      discoverTab: params.discoverTab,
       threadId: params.activePage === "workspace" && params.activeView === "home" ? params.activeThreadId : null,
     });
     if (!nextPath) return;
@@ -91,6 +94,7 @@ export function useWebPathRouteLifecycle(params: {
     params.settingsPage,
     params.activeCommunitySlug,
     params.communityTab,
+    params.discoverTab,
     params.activeThreadId,
   ]);
 }

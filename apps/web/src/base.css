@@ -1171,34 +1171,9 @@ body {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 10px;
+  gap: 0;
   flex: 1;
   min-width: 0;
-}
-
-.discover-refresh-button {
-  width: 34px;
-  height: 34px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 8px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-muted);
-  background: rgba(255, 255, 255, 0.03);
-  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
-}
-
-.discover-refresh-button:hover:not(:disabled),
-.discover-refresh-button:focus-visible {
-  color: var(--text-primary);
-  border-color: var(--border-strong);
-  background: rgba(255, 255, 255, 0.06);
-}
-
-.discover-refresh-button:disabled {
-  cursor: default;
-  opacity: 0.55;
 }
 
 .discover-tablist {
@@ -18175,15 +18150,11 @@ button.message-citation-chip:hover {
 }
 
 .app-root.mobile-shell .discover-hero-actions {
-  display: flex;
-  gap: 8px;
-  align-items: center;
+  display: contents;
 }
 
 .app-root.mobile-shell .discover-tablist {
-  width: auto;
-  flex: 1;
-  min-width: 0;
+  width: 100%;
 }
 
 .app-root.mobile-shell .discover-title {
