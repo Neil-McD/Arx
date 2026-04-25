@@ -834,9 +834,75 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
     );
   };
 
+  const renderSelectedAppHeader = () => {
+    if (!selectedApp) return null;
+    return (
+      <div className="discover-app-detail-header">
+        <DiscoverCatalogLogo
+          name={selectedApp.name}
+          logoUrl={selectedApp.logoUrl}
+          logoUrlDark={selectedApp.logoUrlDark}
+          size="detail"
+        />
+        <div className="discover-app-detail-meta">
+          <div className="discover-app-detail-heading-row">
+            <div className="discover-app-detail-name">
+              {selectedApp.name}
+            </div>
+            <div className="agent-capability-toolbar-actions">
+              {selectedAppPersonalActionLabel ? (
+                <button
+                  type="button"
+                  className="settings-cta discover-app-detail-action"
+                  onClick={() => {
+                    if (selectedPersonalMount) {
+                      onOpenIntegrationsSettings();
+                      return;
+                    }
+                    openAppConnectModal("personal");
+                  }}
+                >
+                  {selectedAppPersonalActionLabel}
+                </button>
+              ) : null}
+              {selectedAppCommunityActionLabel ? (
+                <button
+                  type="button"
+                  className="settings-cta discover-app-detail-action"
+                  onClick={() => {
+                    if (selectedCommunityMount) {
+                      onOpenActiveCommunityAiAgentApps();
+                      return;
+                    }
+                    openAppConnectModal("community");
+                  }}
+                  disabled={isLoadingCommunityAppMounts}
+                >
+                  {isLoadingCommunityAppMounts && !selectedCommunityMount
+                    ? "Checking…"
+                    : selectedAppCommunityActionLabel}
+                </button>
+              ) : null}
+            </div>
+          </div>
+          <div className="discover-app-detail-tagline">
+            {selectedApp.tagline}
+          </div>
+          <div className="discover-card-desc">
+            {selectedApp.description}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="community-panel discover-panel">
-      <div className="discover-hero">
+      <div
+        className={`discover-hero${
+          selectedApp ? " discover-hero-with-app-detail" : ""
+        }`}
+      >
         {shouldShowHeroCopy ? (
           <div className="discover-hero-copy">
             <div className="discover-title">{heroTitle}</div>
@@ -895,68 +961,16 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
             </div>
           </div>
         ) : null}
+        {selectedApp ? (
+          <div className="discover-fixed-app-detail-header">
+            {renderSelectedAppHeader()}
+          </div>
+        ) : null}
       </div>
       <div className="workspace-body chat-feed">
         <div className="chat-messages discover-scroll">
           {isAppsTab && selectedApp ? (
             <div className="discover-app-detail-page">
-              <div className="discover-app-detail-header">
-                <DiscoverCatalogLogo
-                  name={selectedApp.name}
-                  logoUrl={selectedApp.logoUrl}
-                  logoUrlDark={selectedApp.logoUrlDark}
-                  size="detail"
-                />
-                <div className="discover-app-detail-meta">
-                  <div className="discover-app-detail-heading-row">
-                    <div className="discover-app-detail-name">
-                      {selectedApp.name}
-                    </div>
-                    <div className="agent-capability-toolbar-actions">
-                      {selectedAppPersonalActionLabel ? (
-                        <button
-                          type="button"
-                          className="settings-cta discover-app-detail-action"
-                          onClick={() => {
-                            if (selectedPersonalMount) {
-                              onOpenIntegrationsSettings();
-                              return;
-                            }
-                            openAppConnectModal("personal");
-                          }}
-                        >
-                          {selectedAppPersonalActionLabel}
-                        </button>
-                      ) : null}
-                      {selectedAppCommunityActionLabel ? (
-                        <button
-                          type="button"
-                          className="settings-cta discover-app-detail-action"
-                          onClick={() => {
-                            if (selectedCommunityMount) {
-                              onOpenActiveCommunityAiAgentApps();
-                              return;
-                            }
-                            openAppConnectModal("community");
-                          }}
-                          disabled={isLoadingCommunityAppMounts}
-                        >
-                          {isLoadingCommunityAppMounts && !selectedCommunityMount
-                            ? "Checking…"
-                            : selectedAppCommunityActionLabel}
-                        </button>
-                      ) : null}
-                    </div>
-                  </div>
-                  <div className="discover-app-detail-tagline">
-                    {selectedApp.tagline}
-                  </div>
-                  <div className="discover-card-desc">
-                    {selectedApp.description}
-                  </div>
-                </div>
-              </div>
-
               <div className="discover-app-spotlight">{selectedApp.heroNote}</div>
 
               <section className="discover-card discover-app-detail-section">

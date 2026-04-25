@@ -311,6 +311,16 @@ function main() {
     'className="discover-breadcrumb discover-hero-breadcrumb"',
     "Discover detail breadcrumb is rendered in the fixed header",
   );
+  assertIncludes(
+    discoverPanel,
+    'className="discover-fixed-app-detail-header"',
+    "Discover app identity header is rendered outside the scroll body",
+  );
+  assertIncludes(
+    discoverPanel,
+    "const renderSelectedAppHeader = () => {",
+    "Discover app detail header has one canonical renderer",
+  );
   assertNotIncludes(
     discoverPanel,
     '? "Add"\n                            : "Catalog"',

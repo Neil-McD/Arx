@@ -1161,6 +1161,13 @@ body {
   margin: 0 auto;
 }
 
+.discover-hero-with-app-detail {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 14px;
+  padding-bottom: 14px;
+}
+
 .discover-hero-copy {
   display: flex;
   flex-direction: column;
@@ -1619,6 +1626,14 @@ body {
 .discover-hero-breadcrumb {
   min-width: 0;
   padding-bottom: 7px;
+}
+
+.discover-hero-with-app-detail .discover-hero-breadcrumb {
+  padding-bottom: 0;
+}
+
+.discover-fixed-app-detail-header {
+  min-width: 0;
 }
 
 .discover-app-detail-header {
