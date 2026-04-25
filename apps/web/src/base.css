@@ -8725,11 +8725,11 @@ button.chat-reply-quote:hover {
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 3px;
   max-width: min(560px, 100%);
-  max-height: 72px;
+  max-height: 58px;
   overflow: hidden;
-  perspective: 560px;
+  perspective: 420px;
   mask-image: linear-gradient(to bottom, transparent 0%, #000 18%, #000 82%, transparent 100%);
 }
 
@@ -8739,9 +8739,9 @@ button.chat-reply-quote:hover {
   font-size: 13px;
   line-height: 1.35;
   opacity: 0;
-  transform: translateY(10px) rotateX(-26deg);
+  transform: translateY(7px) rotateX(-16deg);
   transform-origin: center top;
-  animation: runtime-tool-roll-in 360ms cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+  animation: runtime-tool-roll-in 240ms cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
   animation-delay: var(--runtime-tool-delay, 0ms);
 }
 
@@ -8816,7 +8816,7 @@ button.chat-reply-quote:hover {
 @keyframes runtime-tool-roll-in {
   0% {
     opacity: 0;
-    transform: translateY(10px) rotateX(-26deg);
+    transform: translateY(7px) rotateX(-16deg);
   }
   100% {
     opacity: 1;
