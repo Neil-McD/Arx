@@ -1,14 +1,22 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-  <rect width="24" height="24" rx="6" fill="#000" />
-  <g fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-    <circle cx="6" cy="7" r="2" />
-    <circle cx="6" cy="17" r="2" />
-    <circle cx="12" cy="12" r="2" />
-    <circle cx="18" cy="7" r="2" />
-    <circle cx="18" cy="17" r="2" />
-    <path d="M7.5 8.3L10.5 10.7" />
-    <path d="M7.5 15.7L10.5 13.3" />
-    <path d="M13.5 10.7L16.5 8.3" />
-    <path d="M13.5 13.3L16.5 15.7" />
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="18 48 476 416">
+  <defs>
+    <linearGradient id="pink" x1="160" y1="126" x2="352" y2="386" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ff62ad" />
+      <stop offset="1" stop-color="#ff1f78" />
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#000" flood-opacity=".38" />
+    </filter>
+  </defs>
+  <g filter="url(#shadow)" fill="none" stroke="url(#pink)" stroke-width="42" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M78 304 238 220 370 111 444 281 294 390 252 236 122 159Z" />
+  </g>
+  <g fill="url(#pink)">
+    <circle cx="78" cy="304" r="45" />
+    <circle cx="122" cy="159" r="45" />
+    <circle cx="252" cy="236" r="56" />
+    <circle cx="370" cy="111" r="45" />
+    <circle cx="444" cy="281" r="45" />
+    <circle cx="294" cy="390" r="45" />
   </g>
 </svg>
