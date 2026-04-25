@@ -263,7 +263,7 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
   setStage("gate");
   const publicMap = loadPublicModelMap();
   const platformMap = loadPlatformModelMap();
-  const requestedModelId = String(input.model_id ?? "").trim() || "gpt-5.4";
+  const requestedModelId = String(input.model_id ?? "").trim() || "gpt-5.5";
   const publicRef = publicMap[requestedModelId];
   const requestedAgenticTools = resolveRequestedAgenticTools(
     input.requested_agentic_tools,
@@ -311,7 +311,7 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
   );
   const fallbackPlatformRef =
     readEnv("ARX_PLATFORM_DEFAULT_MODEL") ||
-    platformMap["gpt-5.4"] ||
+    platformMap["gpt-5.5"] ||
     requestedModelId;
   const modelRef =
     lane === "public"

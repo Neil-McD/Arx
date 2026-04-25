@@ -38,7 +38,7 @@ type FreeModelEntry = {
   supportedFundingSources: readonly ModelFundingSource[];
 };
 
-export const DEFAULT_ACTIVE_MODEL_ID = "gpt-5.4";
+export const DEFAULT_ACTIVE_MODEL_ID = "gpt-5.5";
 
 const FREE_MODELS: readonly FreeModelEntry[] = [
   {
@@ -51,7 +51,7 @@ const FREE_MODELS: readonly FreeModelEntry[] = [
 ];
 
 const PREMIUM_MODELS: readonly CatalogModelEntry[] = [
-  { id: "gpt-5.4", label: "GPT 5.4", section: "openai", description: "OpenAI", supportedFundingSources: ["user_key", "user_chatgpt"], surfaces: ["web"], defaultEnabled: true },
+  { id: "gpt-5.5", label: "GPT 5.5", section: "openai", description: "OpenAI", supportedFundingSources: ["user_key", "user_chatgpt"], surfaces: ["web"], defaultEnabled: true },
   { id: "sonnet-4.6", label: "Sonnet 4.6", section: "anthropic", description: "Anthropic", supportedFundingSources: ["user_key"], surfaces: ["web"], defaultEnabled: true },
   { id: "opus-4.6", label: "Opus 4.6", section: "anthropic", description: "Anthropic", supportedFundingSources: ["user_key"], surfaces: ["web"], defaultEnabled: true },
   { id: "gemini-3-flash", label: "Gemini 3 Flash", section: "google", description: "Google", supportedFundingSources: ["user_key"], surfaces: ["web"], defaultEnabled: true },

@@ -58,7 +58,7 @@ export function WebAuthBootstrapShell(props: WebAuthBootstrapShellProps) {
                           </svg>
                         </button>
                         <button className="ask-model-btn workspace-bootstrap-model-btn" type="button" disabled>
-                          <span className="ask-model-label">GPT 5.4</span>
+                          <span className="ask-model-label">GPT 5.5</span>
                           <svg className="ask-model-chevron" viewBox="0 0 16 16" aria-hidden="true">
                             <path d="m4 6 4 4 4-4" />
                           </svg>
