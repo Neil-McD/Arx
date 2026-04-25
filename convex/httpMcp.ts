@@ -482,8 +482,13 @@ async function handleToolCall(args: {
         can_post_chat: access.can_post_chat === true,
         can_post_message: access.can_post_message === true,
         can_manage_resources: access.can_manage_resources === true,
+        can_moderate_content: access.can_moderate_content === true,
         can_manage_members: access.can_manage_members === true,
         can_review_join_requests: access.can_review_join_requests === true,
+        can_manage_pricing: access.can_manage_pricing === true,
+        can_manage_branding: access.can_manage_branding === true,
+        can_manage_publishing: access.can_manage_publishing === true,
+        can_manage_payouts: access.can_manage_payouts === true,
       },
     };
     return {

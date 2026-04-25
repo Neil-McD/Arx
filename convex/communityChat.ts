@@ -4,6 +4,7 @@ import {
   type CommunityChatMessageLike,
   type CommunityChatThreadLike,
   type CommunityMessageReactionLike,
+  type CommunityTypingPresenceLike,
   parseIsoMs,
   normalizeIdValue,
   requireCommunityChatAccess,
@@ -28,6 +29,16 @@ type StoredCommunityChatAttachment = {
   text?: string | null;
   truncated?: boolean | null;
 };
+
+type CommunityChatUserLike = {
+  _id: any;
+  authSubject?: string;
+  email?: string;
+  displayName?: string;
+  avatarUrl?: string;
+};
+
+const COMMUNITY_TYPING_DISPLAY_WINDOW_MS = 5000;
 
 async function listCommunityChatThreadsForCommunity(
   ctx: any,
@@ -221,7 +232,6 @@ export const ensureCommunityChatThread = mutation({
     userId: v.optional(v.id("users")),
     authSubject: v.optional(v.string()),
     communityId: v.id("communities"),
-    nowMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const userId = await resolveUserIdForAuthenticatedRequest({
@@ -230,7 +240,7 @@ export const ensureCommunityChatThread = mutation({
       authSubject: args.authSubject ?? null,
     });
     (args as { userId?: any }).userId = userId;
-    const nowMs = args.nowMs ?? Date.now();
+    const nowMs = Date.now();
     await requireCommunityChatAccess({
       ctx,
       communityId: args.communityId,
@@ -314,15 +324,11 @@ export const listThreadMessages = query({
   },
 });
 
-export const createThreadUserMessage = mutation({
+export const setCommunityTyping = mutation({
   args: {
     userId: v.optional(v.id("users")),
     authSubject: v.optional(v.string()),
-    threadId: v.id("communityChatThreads"),
-    text: v.string(),
-    attachments: v.optional(v.array(v.any())),
-    replyToId: v.optional(v.union(v.string(), v.null())),
-    nowMs: v.optional(v.number()),
+    communityId: v.id("communities"),
   },
   handler: async (ctx, args) => {
     const userId = await resolveUserIdForAuthenticatedRequest({
@@ -331,7 +337,101 @@ export const createThreadUserMessage = mutation({
       authSubject: args.authSubject ?? null,
     });
     (args as { userId?: any }).userId = userId;
-    const nowMs = args.nowMs ?? Date.now();
+    await requireCommunityChatAccess({
+      ctx,
+      communityId: args.communityId,
+      userId: args.userId,
+    });
+
+    const nowMs = Date.now();
+    const displayUntil = nowMs + COMMUNITY_TYPING_DISPLAY_WINDOW_MS;
+    const existing = (await ctx.db
+      .query("communityTypingPresence" as any)
+      .withIndex("by_community_user", (q: any) =>
+        q.eq("communityId", args.communityId).eq("userId", args.userId),
+      )
+      .unique()) as CommunityTypingPresenceLike | null;
+
+    if (existing) {
+      await ctx.db.patch(existing._id as any, {
+        displayUntil,
+        updatedAt: nowMs,
+      });
+      return { ok: true, display_until_ms: displayUntil };
+    }
+
+    await ctx.db.insert("communityTypingPresence" as any, {
+      communityId: args.communityId,
+      userId: args.userId,
+      displayUntil,
+      createdAt: nowMs,
+      updatedAt: nowMs,
+    });
+    return { ok: true, display_until_ms: displayUntil };
+  },
+});
+
+export const listCommunityTyping = query({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+  },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      userId: args.userId,
+      authSubject: args.authSubject ?? null,
+    });
+    (args as { userId?: any }).userId = userId;
+    await requireCommunityChatAccess({
+      ctx,
+      communityId: args.communityId,
+      userId: args.userId,
+    });
+
+    const rows = (await ctx.db
+      .query("communityTypingPresence" as any)
+      .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
+      .collect()) as CommunityTypingPresenceLike[];
+    const publicUserIdCache = new Map<string, string | null>();
+    const mapped = await Promise.all(
+      rows
+        .filter((row) => normalizeIdValue(row.userId) !== normalizeIdValue(args.userId))
+        .map(async (row) => {
+          const user = (await ctx.db.get(row.userId)) as CommunityChatUserLike | null;
+          const publicUserId = await resolvePublicUserId(ctx, row.userId, publicUserIdCache);
+          const displayName = String(user?.displayName ?? "").trim() || null;
+          return {
+            user_id: publicUserId ?? normalizeIdValue(row.userId),
+            display_name: displayName,
+            avatar_url: user?.avatarUrl ?? null,
+            display_until_ms: row.displayUntil,
+            updated_at: toIsoString(row.updatedAt),
+          };
+        }),
+    );
+    return mapped.sort((a, b) => b.display_until_ms - a.display_until_ms).slice(0, 12);
+  },
+});
+
+export const createThreadUserMessage = mutation({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    threadId: v.id("communityChatThreads"),
+    text: v.string(),
+    attachments: v.optional(v.array(v.any())),
+    replyToId: v.optional(v.union(v.string(), v.null())),
+  },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      userId: args.userId,
+      authSubject: args.authSubject ?? null,
+    });
+    (args as { userId?: any }).userId = userId;
+    const nowMs = Date.now();
     const thread = (await ctx.db.get(args.threadId)) as CommunityChatThreadLike | null;
     if (!thread) throw new Error("thread_not_found");
     await requireCommunityChatAccess({
@@ -386,7 +486,6 @@ export const patchOwnMessageContent = mutation({
     authSubject: v.optional(v.string()),
     messageId: v.string(),
     contentJson: v.any(),
-    nowMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const userId = await resolveUserIdForAuthenticatedRequest({
@@ -395,7 +494,7 @@ export const patchOwnMessageContent = mutation({
       authSubject: args.authSubject ?? null,
     });
     (args as { userId?: any }).userId = userId;
-    const nowMs = args.nowMs ?? Date.now();
+    const nowMs = Date.now();
     const message = (await ctx.db.get(args.messageId as any)) as CommunityChatMessageLike | null;
     if (!message) throw new Error("message_not_found");
     const thread = (await ctx.db.get(message.threadId)) as CommunityChatThreadLike | null;
@@ -441,7 +540,6 @@ export const deleteOwnMessage = mutation({
     userId: v.optional(v.id("users")),
     authSubject: v.optional(v.string()),
     messageId: v.string(),
-    nowMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const userId = await resolveUserIdForAuthenticatedRequest({
@@ -450,7 +548,7 @@ export const deleteOwnMessage = mutation({
       authSubject: args.authSubject ?? null,
     });
     (args as { userId?: any }).userId = userId;
-    const nowMs = args.nowMs ?? Date.now();
+    const nowMs = Date.now();
     const message = (await ctx.db.get(args.messageId as any)) as CommunityChatMessageLike | null;
     if (!message) return { ok: true, deleted: false };
     const thread = (await ctx.db.get(message.threadId)) as CommunityChatThreadLike | null;
@@ -496,7 +594,6 @@ export const createMessageReaction = mutation({
     authSubject: v.optional(v.string()),
     messageId: v.string(),
     emoji: v.string(),
-    nowMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const userId = await resolveUserIdForAuthenticatedRequest({
@@ -505,7 +602,7 @@ export const createMessageReaction = mutation({
       authSubject: args.authSubject ?? null,
     });
     (args as { userId?: any }).userId = userId;
-    const nowMs = args.nowMs ?? Date.now();
+    const nowMs = Date.now();
     const emoji = normalizeEmoji(args.emoji);
     const message = (await ctx.db.get(args.messageId as any)) as CommunityChatMessageLike | null;
     if (!message) throw new Error("message_not_found");

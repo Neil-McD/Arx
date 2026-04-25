@@ -336,7 +336,7 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
               <div className="chat-empty-text">
                 {capabilities.canOperateResources
                   ? "Share links, videos, and notes that members can come back to."
-                  : "Resources shared by the moderators will show up here."}
+                  : "Resources shared by the community team will show up here."}
               </div>
             </div>
           </div>

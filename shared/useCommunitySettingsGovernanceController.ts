@@ -76,7 +76,7 @@ function formatCommunitySettingsErrorMessage(error: unknown): string {
     message === "community_monetization_owner_required" ||
     message === "community_owner_required"
   ) {
-    return "Only the community owner can change pricing or paid access.";
+    return "Only the community owner can change identity, branding, publishing, or deletion settings.";
   }
   if (message === "community_builder_plan_required") {
     return "A paid creator plan is required before this community can charge for access.";

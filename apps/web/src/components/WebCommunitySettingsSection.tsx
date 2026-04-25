@@ -371,6 +371,8 @@ function CommunityMonetizationConfigSection({
   builderBillingError,
   startBuilderConnectOnboarding,
   isStartingBuilderConnectOnboarding,
+  canManagePublishing,
+  canManagePayoutAccount,
   state,
   actions,
 }: SharedSettingsProps & {
@@ -382,6 +384,8 @@ function CommunityMonetizationConfigSection({
     communitySlug?: string | null;
   }) => Promise<void> | void;
   isStartingBuilderConnectOnboarding: boolean;
+  canManagePublishing: boolean;
+  canManagePayoutAccount: boolean;
 }) {
   const pricingOptions = [
     { key: "free", label: "Free" },
@@ -403,25 +407,27 @@ function CommunityMonetizationConfigSection({
   return (
     <div className="settings-section">
       <div className="settings-section-title">Access & Pricing</div>
-      <label className="create-community-field">
-        <span>Visibility</span>
-        <select
-          className="select-styled"
-          value={state.communitySettingsVisibility}
-          onChange={(event) => {
-            actions.setCommunitySettingsVisibility(event.target.value);
-            actions.markCommunitySettingsDirty();
-          }}
-        >
-          <option value="published">Published</option>
-          <option value="unlisted">Unlisted</option>
-        </select>
-        <span className="create-community-hint">
-          {state.communitySettingsVisibility === "published"
-            ? "Discoverable. Anyone can join to participate."
-            : "Not listed in discovery. Share the link when you're ready."}
-        </span>
-      </label>
+      {canManagePublishing ? (
+        <label className="create-community-field">
+          <span>Visibility</span>
+          <select
+            className="select-styled"
+            value={state.communitySettingsVisibility}
+            onChange={(event) => {
+              actions.setCommunitySettingsVisibility(event.target.value);
+              actions.markCommunitySettingsDirty();
+            }}
+          >
+            <option value="published">Published</option>
+            <option value="unlisted">Unlisted</option>
+          </select>
+          <span className="create-community-hint">
+            {state.communitySettingsVisibility === "published"
+              ? "Discoverable. Anyone can join to participate."
+              : "Not listed in discovery. Share the link when you're ready."}
+          </span>
+        </label>
+      ) : null}
       <div className="create-community-field">
         <span>Pricing</span>
         <div
@@ -503,22 +509,28 @@ function CommunityMonetizationConfigSection({
               Stripe still needs: {stripeConnectPresentation.requirementsPreview.join(", ")}.
             </div>
           ) : null}
-          <div className="create-community-actions" style={{ marginTop: 12 }}>
-            <StripeSetupButton
-              label={
-                isStartingBuilderConnectOnboarding
-                  ? "Opening…"
-                  : stripeConnectPresentation.connectCtaLabel
-              }
-              onClick={() =>
-                void startBuilderConnectOnboarding({
-                  context: "community",
-                  communitySlug: activeCommunity.slug,
-                })
-              }
-              disabled={isStartingBuilderConnectOnboarding}
-            />
-          </div>
+          {canManagePayoutAccount ? (
+            <div className="create-community-actions" style={{ marginTop: 12 }}>
+              <StripeSetupButton
+                label={
+                  isStartingBuilderConnectOnboarding
+                    ? "Opening…"
+                    : stripeConnectPresentation.connectCtaLabel
+                }
+                onClick={() =>
+                  void startBuilderConnectOnboarding({
+                    context: "community",
+                    communitySlug: activeCommunity.slug,
+                  })
+                }
+                disabled={isStartingBuilderConnectOnboarding}
+              />
+            </div>
+          ) : canAcceptCharges ? null : (
+            <div className="auth-status" style={{ marginTop: 8 }}>
+              The community owner must finish Stripe setup before paid access can be changed.
+            </div>
+          )}
           {builderBillingError ? (
             <div className="auth-error" style={{ marginTop: 10 }}>
               {builderBillingError}
@@ -569,6 +581,7 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
     actions,
   } = props;
   const isMemberSettingsLayer = communitySettingsLayer === "member";
+  const isOwnerSettingsLayer = communitySettingsLayer === "owner";
   const canLeaveCommunity = communitySettingsLayer !== "owner";
 
   useEffect(() => {
@@ -604,11 +617,13 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
       ) : canManageCommunitySettings ? (
         <>
           <div className="create-community-form community-settings-form">
-            <CommunityBrandingSettingsSection
-              activeCommunity={activeCommunity}
-              state={state}
-              actions={actions}
-            />
+            {isOwnerSettingsLayer ? (
+              <CommunityBrandingSettingsSection
+                activeCommunity={activeCommunity}
+                state={state}
+                actions={actions}
+              />
+            ) : null}
             <CommunityProfileSettingsSection state={state} actions={actions} />
             <CommunityMonetizationConfigSection
               activeCommunity={activeCommunity}
@@ -616,6 +631,8 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
               builderBillingError={builderBillingError}
               startBuilderConnectOnboarding={startBuilderConnectOnboarding}
               isStartingBuilderConnectOnboarding={isStartingBuilderConnectOnboarding}
+              canManagePublishing={isOwnerSettingsLayer}
+              canManagePayoutAccount={isOwnerSettingsLayer}
               state={state}
               actions={actions}
             />

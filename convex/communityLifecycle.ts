@@ -120,7 +120,6 @@ export const createCommunity = mutation({
     bannerFocusY: v.optional(v.number()),
     bannerZoom: v.optional(v.number()),
     entryPolicy: v.optional(v.string()),
-    nowMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const ownerId = await resolveUserIdForAuthenticatedRequest({
@@ -128,7 +127,7 @@ export const createCommunity = mutation({
       userId: args.ownerId,
       authSubject: args.authSubject ?? null,
     });
-    const nowMs = args.nowMs ?? Date.now();
+    const nowMs = Date.now();
     const billingStatus = await ctx.runQuery(api.auth.getBuilderBillingStatus, {
       authSubject: args.authSubject ?? undefined,
       nowMs,
@@ -223,7 +222,6 @@ export const saveCommunitySettings = mutation({
     annualAmountBaseUnits: v.optional(v.union(v.number(), v.null())),
     currency: v.optional(v.string()),
     currencyDecimals: v.optional(v.number()),
-    nowMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const userId = await resolveUserIdForAuthenticatedRequest({
@@ -232,7 +230,7 @@ export const saveCommunitySettings = mutation({
       authSubject: args.authSubject ?? null,
     });
     (args as { userId?: any }).userId = userId;
-    const nowMs = args.nowMs ?? Date.now();
+    const nowMs = Date.now();
     const { community } = await requireCommunityManager({
       ctx,
       communityId: args.communityId,
@@ -273,46 +271,6 @@ export const saveCommunitySettings = mutation({
     }
     const monetizationChanged =
       monthlyAmount !== currentMonthlyAmount || annualAmount !== currentAnnualAmount;
-    if (monetizationChanged) {
-      await requireCommunityOwner({
-        ctx,
-        communityId: args.communityId,
-        userId,
-      });
-      if (monthlyAmount !== null || annualAmount !== null) {
-        const ownerBilling = (await ctx.runQuery(
-          internal.auth.getBuilderCommerceAccessForUserInternal as any,
-          {
-            userId: community.ownerId,
-            nowMs,
-          },
-        )) as { builder_tier?: unknown } | null;
-        if (String(ownerBilling?.builder_tier ?? "").trim().toLowerCase() === "free") {
-          throw new Error("community_builder_plan_required");
-        }
-        const connectAccount = (await ctx.runQuery(
-          internal.builderCommerce.getUserStripeConnectAccountInternal as any,
-          {
-            userId: community.ownerId,
-          },
-        )) as {
-          status?: unknown;
-          chargesEnabled?: unknown;
-          payoutsEnabled?: unknown;
-        } | null;
-        if (!connectAccount) {
-          throw new Error("community_stripe_connect_required");
-        }
-        const connectStatus = String(connectAccount.status ?? "").trim().toLowerCase();
-        const canAcceptCharges =
-          connectStatus === "ready" &&
-          connectAccount.chargesEnabled === true &&
-          connectAccount.payoutsEnabled === true;
-        if (!canAcceptCharges) {
-          throw new Error("community_stripe_connect_not_ready");
-        }
-      }
-    }
     const hasPaidPlan = monthlyAmount !== null || annualAmount !== null;
     const currentEntryPolicy = resolveCommunityEntryPolicy(community);
     const nextEntryPolicy = hasPaidPlan
@@ -364,6 +322,81 @@ export const saveCommunitySettings = mutation({
     const nextBannerZoom =
       args.bannerZoom !== undefined ? normalizeBannerZoom(args.bannerZoom) : normalizeBannerZoom(community.bannerZoom);
     const nextVisibility = normalizeVisibility(args.visibility);
+
+    const sameOptionalId = (left: unknown, right: unknown): boolean =>
+      String(left ?? "") === String(right ?? "");
+    const sameOptionalText = (left: unknown, right: unknown): boolean =>
+      String(left ?? "") === String(right ?? "");
+    const sameNumber = (left: number, right: number): boolean =>
+      Math.abs(left - right) < 0.0001;
+    const identityChanged = nextName !== community.name || normalizedSlug !== community.slug;
+    const brandingChanged =
+      !sameOptionalText(nextAvatarUrl, community.avatarUrl) ||
+      !sameOptionalId(nextAvatarStorageId, community.avatarStorageId) ||
+      !sameNumber(nextAvatarFocusX, normalizeAvatarFocus(community.avatarFocusX)) ||
+      !sameNumber(nextAvatarFocusY, normalizeAvatarFocus(community.avatarFocusY)) ||
+      !sameNumber(nextAvatarZoom, normalizeAvatarZoom(community.avatarZoom)) ||
+      !sameOptionalText(nextBannerUrl, community.bannerUrl) ||
+      !sameOptionalId(nextBannerStorageId, community.bannerStorageId) ||
+      !sameNumber(nextBannerFocusX, normalizeBannerFocus(community.bannerFocusX)) ||
+      !sameNumber(nextBannerFocusY, normalizeBannerFocus(community.bannerFocusY)) ||
+      !sameNumber(nextBannerZoom, normalizeBannerZoom(community.bannerZoom));
+    const visibilityChanged = nextVisibility !== community.visibility;
+
+    if (identityChanged) {
+      await requireCommunityOwner({
+        ctx,
+        communityId: args.communityId,
+        userId,
+      });
+    }
+    if (brandingChanged) {
+      await requireCommunityOwner({
+        ctx,
+        communityId: args.communityId,
+        userId,
+      });
+    }
+    if (visibilityChanged) {
+      await requireCommunityOwner({
+        ctx,
+        communityId: args.communityId,
+        userId,
+      });
+    }
+    if (monetizationChanged && (monthlyAmount !== null || annualAmount !== null)) {
+      const ownerBilling = (await ctx.runQuery(
+        internal.auth.getBuilderCommerceAccessForUserInternal as any,
+        {
+          userId: community.ownerId,
+          nowMs,
+        },
+      )) as { builder_tier?: unknown } | null;
+      if (String(ownerBilling?.builder_tier ?? "").trim().toLowerCase() === "free") {
+        throw new Error("community_builder_plan_required");
+      }
+      const connectAccount = (await ctx.runQuery(
+        internal.builderCommerce.getUserStripeConnectAccountInternal as any,
+        {
+          userId: community.ownerId,
+        },
+      )) as {
+        status?: unknown;
+        chargesEnabled?: unknown;
+        payoutsEnabled?: unknown;
+      } | null;
+      if (!connectAccount) {
+        throw new Error("community_stripe_connect_required");
+      }
+      const connectStatus = String(connectAccount.status ?? "").trim().toLowerCase();
+      const canAcceptCharges =
+        connectStatus === "ready" &&
+        connectAccount.chargesEnabled === true &&
+        connectAccount.payoutsEnabled === true;
+      if (!canAcceptCharges) {
+        throw new Error("community_stripe_connect_not_ready");
+      }
+    }
 
     const previousAvatarStorageId = community.avatarStorageId;
     const previousBannerStorageId = community.bannerStorageId;
@@ -503,7 +536,6 @@ export const saveCommunityOneLiner = mutation({
     authSubject: v.optional(v.string()),
     communityId: v.id("communities"),
     oneLiner: v.optional(v.union(v.string(), v.null())),
-    nowMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const userId = await resolveUserIdForAuthenticatedRequest({
@@ -512,7 +544,7 @@ export const saveCommunityOneLiner = mutation({
       authSubject: args.authSubject ?? null,
     });
     (args as { userId?: any }).userId = userId;
-    const nowMs = args.nowMs ?? Date.now();
+    const nowMs = Date.now();
     const { community } = await requireCommunityManager({
       ctx,
       communityId: args.communityId,
@@ -534,7 +566,6 @@ export const saveCommunityPublicPresentation = mutation({
     authSubject: v.optional(v.string()),
     communityId: v.id("communities"),
     config: v.any(),
-    nowMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const userId = await resolveUserIdForAuthenticatedRequest({
@@ -543,7 +574,7 @@ export const saveCommunityPublicPresentation = mutation({
       authSubject: args.authSubject ?? null,
     });
     (args as { userId?: any }).userId = userId;
-    const nowMs = args.nowMs ?? Date.now();
+    const nowMs = Date.now();
     const { community } = await requireCommunityManager({
       ctx,
       communityId: args.communityId,

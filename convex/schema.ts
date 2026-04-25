@@ -533,6 +533,16 @@ export default defineSchema({
     .index("by_message_user_emoji", ["messageId", "userId", "emoji"])
     .index("by_user", ["userId"]),
 
+  communityTypingPresence: defineTable({
+    communityId: v.id("communities"),
+    userId: v.id("users"),
+    displayUntil: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_community", ["communityId"])
+    .index("by_community_user", ["communityId", "userId"]),
+
   communityAgentConfigs: defineTable({
     communityId: v.id("communities"),
     landingJson: v.optional(v.any()),

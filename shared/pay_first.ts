@@ -158,7 +158,6 @@ export async function redeemPurchaseClaimRpc<S extends SessionLike>(opts: {
     ((await client.mutation("billing:redeemPurchaseClaim" as any, {
       authSubject,
       token: opts.token,
-      nowMs: Date.now(),
     })) as Array<{ community_id?: string; community_slug?: string | null }> | null) ?? [];
   const claim = rows[0] ?? null;
   const communityId = claim?.community_id;
@@ -175,7 +174,6 @@ export async function listPendingPurchaseClaimsRpc<S extends SessionLike>(opts: 
   const { client, authSubject } = await bootstrapConvexUserForPayFirst(opts.session);
   const rows = (await client.query("billing:listPendingPurchaseClaims" as any, {
     authSubject,
-    nowMs: Date.now(),
   })) as PendingPurchaseClaim[] | null;
   return Array.isArray(rows) ? rows : [];
 }
@@ -186,7 +184,6 @@ export async function redeemPendingPurchaseClaimsRpc<S extends SessionLike>(opts
   const { client, authSubject } = await bootstrapConvexUserForPayFirst(opts.session);
   const rows = (await client.mutation("billing:redeemPendingPurchaseClaims" as any, {
     authSubject,
-    nowMs: Date.now(),
   })) as Array<{ community_id: string; community_slug?: string | null }> | null;
   return Array.isArray(rows)
     ? rows.map((row) => ({
@@ -218,7 +215,6 @@ export async function joinPublicCommunityRpc<S extends SessionLike>(opts: {
   if (slug) {
     result = ((await client.mutation("community:joinPublicCommunityBySlug" as any, {
       communitySlug: slug,
-      nowMs: Date.now(),
     })) as {
       outcome: "joined" | "approval_pending" | "approval_denied" | "paid_plan_required";
       community_id: string;
@@ -227,7 +223,6 @@ export async function joinPublicCommunityRpc<S extends SessionLike>(opts: {
   } else if (id) {
     result = ((await client.mutation("community:joinPublicCommunity" as any, {
       communityId: id,
-      nowMs: Date.now(),
     })) as {
       outcome: "joined" | "approval_pending" | "approval_denied" | "paid_plan_required";
       community_id: string;

@@ -124,6 +124,40 @@ export function subscribeCloudMessageReactions<TRow = unknown>(
   return watch.onUpdate(publish);
 }
 
+export function subscribeCloudCommunityTyping<TRow = unknown>(
+  params: {
+    liveClient: CloudCommunityChatLiveClient;
+    communityId: string;
+    onUpdate: (rows: TRow[]) => void;
+    onError?: (error: unknown) => void;
+  },
+): () => void {
+  const watch = params.liveClient.client.watchQuery(
+    api.community.listCommunityTyping,
+    {
+      authSubject: params.liveClient.authSubject,
+      communityId: params.communityId as any,
+    } as any,
+  );
+  const publish = () => {
+    emitLiveRows<TRow>(watch as any, params.onUpdate, params.onError);
+  };
+  publish();
+  return watch.onUpdate(publish);
+}
+
+export async function setCloudCommunityTyping<SessionT>(
+  params: CloudCommunityChatGatewayParams<SessionT> & {
+    communityId: string;
+  },
+): Promise<void> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  await client.mutation("community:setCommunityTyping" as any, {
+    authSubject,
+    communityId: params.communityId,
+  });
+}
+
 export async function deleteCloudMessageReactionById<SessionT>(
   params: CloudCommunityChatGatewayParams<SessionT> & {
     reactionId: string;

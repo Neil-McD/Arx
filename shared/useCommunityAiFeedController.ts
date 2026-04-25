@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
+  hideCloudCommunityAiFeedPost,
   listCloudCommunityAiFeedBundle,
   reactToCloudCommunityAiFeedPost,
 } from "./cloudCommunityAiFeedGateway";
@@ -48,6 +49,7 @@ export function useCommunityAiFeedController<SessionT>(
     Record<string, CommunityAiFeedState>
   >({});
   const [reactingPostId, setReactingPostId] = useState<string | null>(null);
+  const [moderatingPostId, setModeratingPostId] = useState<string | null>(null);
   const viewerGenerationRef = useRef(0);
 
   const isRequestSnapshotStale = useCallback((snapshot: FeedRequestSnapshot): boolean => {
@@ -161,6 +163,46 @@ export function useCommunityAiFeedController<SessionT>(
     }
   }, [isRequestSnapshotStale, loadCommunityAiFeed]);
 
+  const hidePost = useCallback(async (postId: string) => {
+    const current = argsRef.current;
+    const activeCommunityId = current.activeCommunityId;
+    if (!activeCommunityId) return;
+    const requestSnapshot: FeedRequestSnapshot = {
+      generation: viewerGenerationRef.current,
+      viewerCacheKey: current.viewerCacheKey,
+      communityId: activeCommunityId,
+    };
+
+    const session = await resolveUsableSession(current.session, current.ensureSession);
+    if (isRequestSnapshotStale(requestSnapshot)) return;
+    if (!session) return;
+
+    setModeratingPostId(postId);
+    try {
+      await hideCloudCommunityAiFeedPost({
+        session,
+        postId,
+      });
+      if (isRequestSnapshotStale(requestSnapshot)) return;
+      await loadCommunityAiFeed(activeCommunityId);
+    } catch (error) {
+      if (isRequestSnapshotStale(requestSnapshot)) return;
+      setCommunityFeedByCommunityId((prev) => ({
+        ...prev,
+        [activeCommunityId]: {
+          live: prev[activeCommunityId]?.live ?? [],
+          ranked: prev[activeCommunityId]?.ranked ?? [],
+          isLoading: false,
+          error: error instanceof Error ? error.message : "Failed to moderate AI feed.",
+        },
+      }));
+    } finally {
+      if (!isRequestSnapshotStale(requestSnapshot)) {
+        setModeratingPostId(null);
+      }
+    }
+  }, [isRequestSnapshotStale, loadCommunityAiFeed]);
+
   const activeCommunityFeedState = useMemo(() => {
     if (!args.activeCommunityId) {
       return EMPTY_FEED_STATE;
@@ -183,6 +225,7 @@ export function useCommunityAiFeedController<SessionT>(
     viewerGenerationRef.current += 1;
     setCommunityFeedByCommunityId({});
     setReactingPostId(null);
+    setModeratingPostId(null);
   }, [args.viewerCacheKey]);
 
   useEffect(() => {
@@ -199,7 +242,9 @@ export function useCommunityAiFeedController<SessionT>(
   return {
     activeCommunityFeedState,
     reactingPostId,
+    moderatingPostId,
     reactToPost,
+    hidePost,
     retry,
   };
 }

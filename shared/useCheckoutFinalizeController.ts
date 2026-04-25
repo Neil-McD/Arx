@@ -83,7 +83,6 @@ export function useCheckoutFinalizeController(args: UseCheckoutFinalizeControlle
       try {
         const payload = (await client.query("billing:finalizeCheckoutSession" as any, {
           sessionId,
-          nowMs: Date.now(),
         })) as {
           ok?: boolean;
           status?: string;

@@ -6,6 +6,7 @@ import {
   normalizeName,
   normalizeOptionalText,
   requireCommunityChatAccess,
+  requireCommunityModerator,
   resolveUserIdForAuthenticatedRequest,
   toIsoString,
 } from "./communityCore";
@@ -629,6 +630,40 @@ export const reactToCommunityAiFeedPost = mutation({
   },
 });
 
+export const hideCommunityAiFeedPost = mutation({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    postId: v.id("communityAiFeedPosts"),
+  },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      userId: args.userId,
+      authSubject: args.authSubject ?? null,
+    });
+    const post = await getFeedPostOrThrow(ctx, normalizeIdValue(args.postId));
+    await requireCommunityModerator({
+      ctx,
+      communityId: post.communityId,
+      userId,
+    });
+    if (post.status === "hidden") return { ok: true };
+    const nowMs = Date.now();
+    await ctx.db.patch(post._id as any, {
+      status: "hidden",
+      hiddenAt: nowMs,
+      updatedAt: nowMs,
+    });
+    await deleteArchiveDocumentBySource(ctx, {
+      communityId: post.communityId,
+      sourceType: "ai_feed",
+      sourceId: normalizeIdValue(post._id),
+    });
+    return { ok: true };
+  },
+});
+
 export const publishCommunityAiFeedAgentPost = mutation({
   args: {
     userId: v.optional(v.id("users")),
@@ -638,7 +673,6 @@ export const publishCommunityAiFeedAgentPost = mutation({
     title: v.optional(v.union(v.string(), v.null())),
     body: v.string(),
     evidence: v.optional(v.union(v.array(v.string()), v.null())),
-    nowMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const userId = await resolveUserIdForAuthenticatedRequest({
@@ -651,7 +685,7 @@ export const publishCommunityAiFeedAgentPost = mutation({
       communityId: args.communityId,
       userId,
     });
-    const nowMs = args.nowMs ?? Date.now();
+    const nowMs = Date.now();
     return await insertFeedPost({
       ctx,
       communityId: args.communityId,

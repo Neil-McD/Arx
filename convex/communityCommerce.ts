@@ -583,13 +583,12 @@ export const startPublicCommunityCheckout = action({
     cancelUrl: v.string(),
     userId: v.optional(v.id("users")),
     authSubject: v.optional(v.string()),
-    nowMs: v.optional(v.number()),
   },
   handler: async (
     ctx,
     args,
   ): Promise<{ ok: true; session_id: string; checkout_url: string }> => {
-    const nowMs = args.nowMs ?? Date.now();
+    const nowMs = Date.now();
     const cancelUrl = String(args.cancelUrl ?? "").trim();
     if (!cancelUrl) throw new Error("checkout_cancel_url_required");
     const billingPeriod = normalizeBillingPeriod(args.billingPeriod);
@@ -792,10 +791,9 @@ export const requirePublicCommunityCheckoutNotBlockedInternal = internalQuery({
 export const finalizeCheckoutSession = query({
   args: {
     sessionId: v.string(),
-    nowMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    const nowMs = args.nowMs ?? Date.now();
+    const nowMs = Date.now();
     const sessionId = normalizeSessionId(args.sessionId);
     const session = await ctx.db
       .query("checkoutSessions")
@@ -845,7 +843,6 @@ export const redeemPurchaseClaim = mutation({
     userId: v.optional(v.id("users")),
     authSubject: v.optional(v.string()),
     token: v.string(),
-    nowMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const userId = await resolveUserIdForAuthenticatedRequest({
@@ -853,7 +850,7 @@ export const redeemPurchaseClaim = mutation({
       userId: args.userId,
       authSubject: args.authSubject ?? null,
     });
-    const nowMs = args.nowMs ?? Date.now();
+    const nowMs = Date.now();
     const token = normalizeClaimToken(args.token);
     const claim = (await ctx.db
       .query("purchaseClaims")
@@ -888,7 +885,6 @@ export const listPendingPurchaseClaims = query({
   args: {
     userId: v.optional(v.id("users")),
     authSubject: v.optional(v.string()),
-    nowMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const userId = await resolveUserIdForAuthenticatedRequest({
@@ -896,7 +892,7 @@ export const listPendingPurchaseClaims = query({
       userId: args.userId,
       authSubject: args.authSubject ?? null,
     });
-    const nowMs = args.nowMs ?? Date.now();
+    const nowMs = Date.now();
     const rows = (await ctx.db
       .query("purchaseClaims")
       .withIndex("by_owner_status", (q: any) => q.eq("ownerUserId", userId).eq("status", "pending"))
@@ -953,7 +949,6 @@ export const redeemPendingPurchaseClaims = mutation({
   args: {
     userId: v.optional(v.id("users")),
     authSubject: v.optional(v.string()),
-    nowMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const userId = await resolveUserIdForAuthenticatedRequest({
@@ -961,7 +956,7 @@ export const redeemPendingPurchaseClaims = mutation({
       userId: args.userId,
       authSubject: args.authSubject ?? null,
     });
-    const nowMs = args.nowMs ?? Date.now();
+    const nowMs = Date.now();
     const rows = (await ctx.db
       .query("purchaseClaims")
       .withIndex("by_owner_status", (q: any) => q.eq("ownerUserId", userId).eq("status", "pending"))

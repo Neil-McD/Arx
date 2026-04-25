@@ -11,6 +11,7 @@ type CommunityAiFeedPanelProps = {
     hasActiveCommunity: boolean;
     hasSession: boolean;
     activeCommunityName: string | null;
+    canModerateFeed: boolean;
   };
   state: {
     livePosts: CommunityAiFeedPost[];
@@ -18,9 +19,11 @@ type CommunityAiFeedPanelProps = {
     isLoading: boolean;
     error: string | null;
     reactingPostId: string | null;
+    moderatingPostId: string | null;
   };
   actions: {
     react: (postId: string, reactionType: CommunityAiFeedReactionType) => void;
+    hidePost: (postId: string) => void;
     retry: () => void;
   };
   className?: string;
@@ -154,6 +157,16 @@ export function CommunityAiFeedPanel(props: CommunityAiFeedPanelProps) {
                   <span>{post.author_label}</span>
                   <span>{formatPostTimestamp(post.created_at)}</span>
                   {post.pending ? <span className="feed-post-pending">pending sync</span> : null}
+                  {capabilities.canModerateFeed ? (
+                    <button
+                      className="secondary ai-feed-moderate-button"
+                      type="button"
+                      disabled={state.moderatingPostId === post.id}
+                      onClick={() => actions.hidePost(post.id)}
+                    >
+                      {state.moderatingPostId === post.id ? "Removing..." : "Remove"}
+                    </button>
+                  ) : null}
                 </div>
               </div>
               {post.title ? <h3 className="ai-feed-item-title">{post.title}</h3> : null}

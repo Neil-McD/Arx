@@ -419,7 +419,6 @@ export const communityOwnerHasArchitectAccess = query({
     userId: v.optional(v.id("users")),
     authSubject: v.optional(v.string()),
     communityId: v.id("communities"),
-    nowMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const userId = await resolveUserIdForAuthenticatedRequest({
@@ -428,7 +427,7 @@ export const communityOwnerHasArchitectAccess = query({
       authSubject: args.authSubject ?? null,
     });
     (args as { userId?: any }).userId = userId;
-    const nowMs = args.nowMs ?? Date.now();
+    const nowMs = Date.now();
     const { community } = await requireCommunityManager({
       ctx,
       communityId: args.communityId,
@@ -516,7 +515,6 @@ export const approveCommunityJoinRequest = mutation({
     userId: v.optional(v.id("users")),
     authSubject: v.optional(v.string()),
     requestId: v.string(),
-    nowMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const userId = await resolveUserIdForAuthenticatedRequest({
@@ -533,7 +531,7 @@ export const approveCommunityJoinRequest = mutation({
       operation: "approve_join_request",
       context: logContext,
       handler: async () => {
-        const nowMs = args.nowMs ?? Date.now();
+        const nowMs = Date.now();
         const request = (await ctx.db.get(
           args.requestId as any,
         )) as CommunityJoinRequestLike | null;
@@ -619,7 +617,6 @@ export const denyCommunityJoinRequest = mutation({
     userId: v.optional(v.id("users")),
     authSubject: v.optional(v.string()),
     requestId: v.string(),
-    nowMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const userId = await resolveUserIdForAuthenticatedRequest({
@@ -636,7 +633,7 @@ export const denyCommunityJoinRequest = mutation({
       operation: "deny_join_request",
       context: logContext,
       handler: async () => {
-        const nowMs = args.nowMs ?? Date.now();
+        const nowMs = Date.now();
         const request = (await ctx.db.get(
           args.requestId as any,
         )) as CommunityJoinRequestLike | null;
@@ -671,7 +668,6 @@ export const setCommunityMemberRole = mutation({
       v.literal("moderator"),
       v.literal("member"),
     ),
-    nowMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const userId = await resolveUserIdForAuthenticatedRequest({
@@ -689,7 +685,7 @@ export const setCommunityMemberRole = mutation({
         nextRole: args.role,
       },
       handler: async () => {
-        const nowMs = args.nowMs ?? Date.now();
+        const nowMs = Date.now();
         const role = normalizeRoleAssignment(args.role);
         const { community } = await requireCommunityManager({
           ctx,
@@ -897,7 +893,6 @@ export const removeCommunityMember = action({
     authSubject: v.optional(v.string()),
     communityId: v.id("communities"),
     targetMembershipId: v.id("communityMemberships"),
-    nowMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const prepared = (await ctx.runQuery(
@@ -933,7 +928,7 @@ export const removeCommunityMember = action({
         revokedReason: providerSubscriptionIds.length > 0
           ? "removed_by_manager_stripe_canceled"
           : "removed_by_manager",
-        nowMs: args.nowMs ?? Date.now(),
+        nowMs: Date.now(),
       },
     );
     return {
@@ -950,7 +945,6 @@ export const banCommunityMember = action({
     communityId: v.id("communities"),
     targetMembershipId: v.id("communityMemberships"),
     reason: v.optional(v.string()),
-    nowMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const prepared = (await ctx.runQuery(
@@ -977,7 +971,7 @@ export const banCommunityMember = action({
       stripeCanceledCount += 1;
     }
 
-    const nowMs = args.nowMs ?? Date.now();
+    const nowMs = Date.now();
     await ctx.runMutation(
       internal.communityAdmin.revokeCommunityMemberInternal as any,
       {
@@ -1064,7 +1058,6 @@ export const unbanCommunityUser = mutation({
     authSubject: v.optional(v.string()),
     communityId: v.id("communities"),
     targetUserId: v.id("users"),
-    nowMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const userId = await resolveUserIdForAuthenticatedRequest({
@@ -1072,7 +1065,7 @@ export const unbanCommunityUser = mutation({
       userId: args.userId,
       authSubject: args.authSubject ?? null,
     });
-    const nowMs = args.nowMs ?? Date.now();
+    const nowMs = Date.now();
     await requireCommunityManager({
       ctx,
       communityId: args.communityId,
@@ -1138,7 +1131,6 @@ export const saveCommunityMemberSettings = mutation({
     targetUserId: v.optional(v.id("users")),
     muted: v.boolean(),
     mutedUntilIso: v.optional(v.union(v.string(), v.null())),
-    nowMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const userId = await resolveUserIdForAuthenticatedRequest({
@@ -1156,7 +1148,7 @@ export const saveCommunityMemberSettings = mutation({
         muted: Boolean(args.muted),
       },
       handler: async () => {
-        const nowMs = args.nowMs ?? Date.now();
+        const nowMs = Date.now();
         const targetUserId = args.targetUserId ?? args.userId;
         if (String(targetUserId) === String(args.userId)) {
           await requireCommunityChatAccess({
@@ -1250,7 +1242,6 @@ export const setCommunityFreeAccessMode = mutation({
     authSubject: v.optional(v.string()),
     communityId: v.id("communities"),
     mode: v.string(),
-    nowMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const userId = await resolveUserIdForAuthenticatedRequest({
@@ -1269,7 +1260,7 @@ export const setCommunityFreeAccessMode = mutation({
           .toLowerCase(),
       },
       handler: async () => {
-        const nowMs = args.nowMs ?? Date.now();
+        const nowMs = Date.now();
         const { community } = await requireCommunityManager({
           ctx,
           communityId: args.communityId,
@@ -1310,7 +1301,6 @@ export const leaveCommunity = mutation({
     userId: v.optional(v.id("users")),
     authSubject: v.optional(v.string()),
     communityId: v.id("communities"),
-    nowMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const userId = await resolveUserIdForAuthenticatedRequest({
@@ -1326,7 +1316,7 @@ export const leaveCommunity = mutation({
         communityId: String(args.communityId),
       },
       handler: async () => {
-        const nowMs = args.nowMs ?? Date.now();
+        const nowMs = Date.now();
         const community = (await ctx.db.get(
           args.communityId,
         )) as CommunityLike | null;

@@ -70,6 +70,15 @@ export type CommunityMessageReactionLike = {
   createdAt: number;
 };
 
+export type CommunityTypingPresenceLike = {
+  _id: any;
+  communityId: any;
+  userId: any;
+  displayUntil: number;
+  createdAt: number;
+  updatedAt: number;
+};
+
 export type CommunityAgentConfigLike = {
   _id: any;
   communityId: any;
@@ -822,8 +831,13 @@ export async function resolveCommunityAccessBundle(args: {
   const canPostChat = isEntitled;
   const canView = isEntitled || args.community.visibility === "published";
   const canManageMembers = isOwner || isAdmin;
-  const canManageResources = isOwner || isAdmin || isModerator;
+  const canManageResources = isOwner || isAdmin;
+  const canModerateContent = isOwner || isAdmin || isModerator;
   const canReviewJoinRequests = isOwner || isAdmin || isModerator;
+  const canManagePricing = isOwner || isAdmin;
+  const canManageBranding = isOwner;
+  const canManagePublishing = isOwner;
+  const canManagePayouts = isOwner;
   const canPostMessage = isEntitled;
   const primaryCta: CommunityPrimaryCta = isEntitled
     ? "open_community"
@@ -858,8 +872,13 @@ export async function resolveCommunityAccessBundle(args: {
     can_view: canView,
     can_post_message: canPostMessage,
     can_manage_resources: canManageResources,
+    can_moderate_content: canModerateContent,
     can_manage_members: canManageMembers,
     can_review_join_requests: canReviewJoinRequests,
+    can_manage_pricing: canManagePricing,
+    can_manage_branding: canManageBranding,
+    can_manage_publishing: canManagePublishing,
+    can_manage_payouts: canManagePayouts,
   };
 }
 

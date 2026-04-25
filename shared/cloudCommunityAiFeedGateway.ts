@@ -60,3 +60,15 @@ export async function reactToCloudCommunityAiFeedPost<SessionT>(
     reactionType: params.reactionType,
   });
 }
+
+export async function hideCloudCommunityAiFeedPost<SessionT>(
+  params: CloudCommunityAiFeedGatewayParams<SessionT> & {
+    postId: string;
+  },
+): Promise<void> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  await client.mutation("community:hideCommunityAiFeedPost" as any, {
+    authSubject,
+    postId: params.postId,
+  });
+}

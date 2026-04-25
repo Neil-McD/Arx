@@ -73,6 +73,7 @@ type BuildWebCommunitySurfaceProjectionParams = {
   resourcesState: WebCommunitySecondaryPanelsProps["resources"]["state"];
   resourcesActions: WebCommunitySecondaryPanelsProps["resources"]["actions"];
   canManageResourcesActiveCommunity: boolean;
+  canModerateContentActiveCommunity: boolean;
   membersState: WebCommunitySecondaryPanelsProps["members"]["state"];
   membersActions: WebCommunitySecondaryPanelsProps["members"]["actions"];
   canReviewJoinRequestsActiveCommunity: WebCommunitySecondaryPanelsProps["members"]["capabilities"]["canReviewJoinRequests"];
@@ -87,6 +88,7 @@ type BuildWebCommunitySurfaceProjectionParams = {
   communityMessages: WebCommunityChatPanelProps["communityMessages"];
   communityMessageById: WebCommunityChatPanelProps["communityMessageById"];
   messageReactions: WebCommunityChatPanelProps["messageReactions"];
+  typingUsers: WebCommunityChatPanelProps["typingUsers"];
   profilesByUserId: WebCommunityChatPanelProps["profilesByUserId"];
   editingMessageId: WebCommunityChatPanelProps["editingMessageId"];
   editingMessageText: WebCommunityChatPanelProps["editingMessageText"];
@@ -193,6 +195,7 @@ export function buildWebCommunitySurfaceProjection(
         hasActiveCommunity: Boolean(params.activeCommunity),
         hasSession: params.hasAuthenticatedPresentation,
         activeCommunityName: params.activeCommunity?.name ?? null,
+        canModerateFeed: params.canModerateContentActiveCommunity,
       },
       state: params.feedState,
       actions: params.feedActions,
@@ -272,7 +275,7 @@ export function buildWebCommunitySurfaceProjection(
     hasSession: params.hasSession,
     sessionUserId: params.sessionUserId,
     canPostMessages: params.canPostMessagesActiveCommunity,
-    canModerateMessages: params.canManageResourcesActiveCommunity,
+    canModerateMessages: params.canModerateContentActiveCommunity,
     isLoadingChat: params.isLoadingChat,
     hasResolvedCommunityChat: params.hasResolvedCommunityChat,
     isLoadingMoreChat: params.isLoadingMoreChat,
@@ -280,6 +283,7 @@ export function buildWebCommunitySurfaceProjection(
     communityMessages: params.communityMessages,
     communityMessageById: params.communityMessageById,
     messageReactions: params.messageReactions,
+    typingUsers: params.typingUsers,
     profilesByUserId: params.profilesByUserId,
     editingMessageId: params.editingMessageId,
     editingMessageText: params.editingMessageText,

@@ -197,7 +197,6 @@ export const heartbeatCommunityPresence = mutation({
     userId: v.optional(v.id("users")),
     authSubject: v.optional(v.string()),
     communityId: v.id("communities"),
-    nowMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const userId = await resolveUserIdForAuthenticatedRequest({
@@ -205,7 +204,7 @@ export const heartbeatCommunityPresence = mutation({
       userId: args.userId,
       authSubject: args.authSubject ?? null,
     });
-    const nowMs = args.nowMs ?? Date.now();
+    const nowMs = Date.now();
     await requireCommunityChatAccess({
       ctx,
       communityId: args.communityId,
@@ -589,11 +588,10 @@ async function joinPublicCommunityInternal(args: {
 export const joinPublicCommunityBySlug = mutation({
   args: {
     communitySlug: v.string(),
-    nowMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const userId = await resolveUserIdForAuthenticatedRequest({ ctx });
-    const nowMs = args.nowMs ?? Date.now();
+    const nowMs = Date.now();
     const slug = normalizeSlug(args.communitySlug);
     const community = (await ctx.db
       .query("communities")
@@ -612,11 +610,10 @@ export const joinPublicCommunityBySlug = mutation({
 export const joinPublicCommunity = mutation({
   args: {
     communityId: v.id("communities"),
-    nowMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const userId = await resolveUserIdForAuthenticatedRequest({ ctx });
-    const nowMs = args.nowMs ?? Date.now();
+    const nowMs = Date.now();
     const community = (await ctx.db.get(args.communityId)) as CommunityLike | null;
     if (!community) throw new Error("community_not_found");
     return await joinPublicCommunityInternal({
@@ -631,11 +628,10 @@ export const joinPublicCommunity = mutation({
 export const cancelMyJoinRequestBySlug = mutation({
   args: {
     communitySlug: v.string(),
-    nowMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const userId = await resolveUserIdForAuthenticatedRequest({ ctx });
-    const nowMs = args.nowMs ?? Date.now();
+    const nowMs = Date.now();
     const slug = normalizeSlug(args.communitySlug);
     const community = (await ctx.db
       .query("communities")

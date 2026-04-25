@@ -33,7 +33,6 @@ export async function cancelCloudMyJoinRequestBySlug<SessionT>(
   const { client } = await bootstrapConvexAuthenticatedClient(params.session);
   return (await client.mutation("community:cancelMyJoinRequestBySlug" as any, {
     communitySlug: params.communitySlug,
-    nowMs: Date.now(),
   })) as { outcome?: "canceled" | "none" | "ignored"; status?: string };
 }
 
@@ -82,7 +81,6 @@ export async function heartbeatCloudCommunityPresence<SessionT>(
   await client.mutation("community:heartbeatCommunityPresence" as any, {
     authSubject,
     communityId: params.communityId,
-    nowMs: Date.now(),
   });
 }
 
@@ -121,7 +119,6 @@ export async function startCloudPublicFunnelCheckout<SessionT>(
     successUrl: params.successUrl,
     cancelUrl: params.cancelUrl,
     ...(authSubject ? { authSubject } : null),
-    nowMs: Date.now(),
   })) as {
     checkout_url?: unknown;
   };

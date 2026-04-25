@@ -218,6 +218,7 @@ import {
 } from "../../../shared/theme";
 import { useLastClickWinsController } from "../../../shared/useLastClickWinsController";
 import { useCommunityChatRealtime } from "../../../shared/useCommunityChatRealtime";
+import { useCommunityTypingPresence } from "../../../shared/useCommunityTypingPresence";
 import { useCommunityChatViewport } from "../../../shared/useCommunityChatViewport";
 import { useCommunityChatLightbox } from "../../../shared/useCommunityChatLightbox";
 import { useMessageAttachmentInputController } from "../../../shared/useMessageAttachmentInputController";
@@ -1563,6 +1564,7 @@ export default function App() {
     canViewActiveCommunitySettings,
     canPostMessagesActiveCommunity,
     canManageResourcesActiveCommunity,
+    canModerateContentActiveCommunity,
     canManageMembersActiveCommunity,
     canReviewJoinRequestsActiveCommunity,
     canViewActiveCommunityAnalytics,
@@ -1578,6 +1580,14 @@ export default function App() {
     communityMembers,
     session: session,
     ensureSession: ensureUsableAuthSession,
+  });
+  const communityTypingUsers = useCommunityTypingPresence({
+    isEnabled: activePage === "community" && communityTab === "chat" && hasResolvedCommunityChat,
+    session,
+    ensureSession: ensureUsableAuthSession,
+    activeCommunityId,
+    canPostMessages: canPostMessagesActiveCommunity,
+    inputValue: communityMessageInput,
   });
   const communityAttentionCommunityIds = useMemo(
     () => communities.map((community) => community.id),
@@ -3294,7 +3304,9 @@ export default function App() {
   const {
     activeCommunityFeedState,
     reactingPostId: communityFeedReactingPostId,
+    moderatingPostId: communityFeedModeratingPostId,
     reactToPost: handleReactToCommunityFeedPost,
+    hidePost: handleHideCommunityFeedPost,
     retry: retryCommunityAiFeed,
   } = useCommunityAiFeedController<AuthSession>({
     activeCommunityId,
@@ -5492,9 +5504,11 @@ export default function App() {
         isLoading: activeCommunityFeedState.isLoading,
         error: activeCommunityFeedState.error,
         reactingPostId: communityFeedReactingPostId,
+        moderatingPostId: communityFeedModeratingPostId,
       },
       feedActions: {
         react: handleReactToCommunityFeedPost,
+        hidePost: handleHideCommunityFeedPost,
         retry: retryCommunityAiFeed,
       },
       polynetState: communityPolynetController.state,
@@ -5617,6 +5631,7 @@ export default function App() {
         handleDeleteResource,
       },
       canManageResourcesActiveCommunity,
+      canModerateContentActiveCommunity,
       membersState: {
         communityMembers,
         isLoadingCommunityMembers,
@@ -5660,6 +5675,7 @@ export default function App() {
       communityMessages,
       communityMessageById,
       messageReactions,
+      typingUsers: communityTypingUsers,
       profilesByUserId: savedProfilesByUserId,
       editingMessageId,
       editingMessageText,

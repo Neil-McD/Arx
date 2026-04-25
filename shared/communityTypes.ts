@@ -63,6 +63,14 @@ export type MessageReaction = {
   created_at: string;
 };
 
+export type CommunityTypingPresenceUser = {
+  user_id: string;
+  display_name: string | null;
+  avatar_url: string | null;
+  display_until_ms: number;
+  updated_at?: string | null;
+};
+
 export type CommunityAccess = {
   community_id: string;
   user_id: string;
@@ -86,8 +94,13 @@ export type CommunityAccess = {
   can_view: boolean;
   can_post_message: boolean;
   can_manage_resources: boolean;
+  can_moderate_content?: boolean;
   can_manage_members: boolean;
   can_review_join_requests?: boolean;
+  can_manage_pricing?: boolean;
+  can_manage_branding?: boolean;
+  can_manage_publishing?: boolean;
+  can_manage_payouts?: boolean;
 };
 
 export type CommunityAgentConfig<TLanding = unknown> = {

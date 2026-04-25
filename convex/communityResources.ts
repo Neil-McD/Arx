@@ -13,7 +13,6 @@ import {
   parseIsoMs,
   requireCommunityChatAccess,
   requireCommunityManager,
-  requireCommunityModerator,
   resolveUserIdForAuthenticatedRequest,
 } from "./communityCore";
 import {
@@ -96,7 +95,6 @@ export const saveCommunityResource = mutation({
     isPatch: v.optional(v.boolean()),
     payload: v.optional(v.any()),
     communityId: v.optional(v.id("communities")),
-    nowMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const userId = await resolveUserIdForAuthenticatedRequest({
@@ -105,7 +103,7 @@ export const saveCommunityResource = mutation({
       authSubject: args.authSubject ?? null,
     });
     (args as { userId?: any }).userId = userId;
-    const nowMs = args.nowMs ?? Date.now();
+    const nowMs = Date.now();
     const payload =
       args.payload && typeof args.payload === "object" && !Array.isArray(args.payload)
         ? (args.payload as Record<string, unknown>)
@@ -117,7 +115,7 @@ export const saveCommunityResource = mutation({
       if (!resourceId) throw new Error("community_resource_id_required");
       const existing = (await ctx.db.get(resourceId as any)) as CommunityResourceLike | null;
       if (!existing) throw new Error("community_resource_not_found");
-      await requireCommunityModerator({
+      await requireCommunityManager({
         ctx,
         communityId: existing.communityId,
         userId: args.userId,
@@ -154,7 +152,7 @@ export const saveCommunityResource = mutation({
       communityId: communityIdRaw,
       userId: args.userId,
     });
-    await requireCommunityModerator({
+    await requireCommunityManager({
       ctx,
       communityId: community._id,
       userId: args.userId,
@@ -200,7 +198,7 @@ export const deleteCommunityResource = mutation({
     (args as { userId?: any }).userId = userId;
     const resource = (await ctx.db.get(args.resourceId as any)) as CommunityResourceLike | null;
     if (!resource) return { ok: true };
-    await requireCommunityModerator({
+    await requireCommunityManager({
       ctx,
       communityId: resource.communityId,
       userId: args.userId,

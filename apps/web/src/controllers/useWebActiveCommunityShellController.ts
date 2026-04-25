@@ -184,8 +184,13 @@ export function useWebActiveCommunityShellController<
   const canViewActiveCommunitySettings = communityNavVisibility.canViewSettings;
   const canPostMessagesActiveCommunity = communityActionGuards.canPostMessages;
   const canManageResourcesActiveCommunity = communityActionGuards.canManageResources;
+  const canModerateContentActiveCommunity = communityActionGuards.canModerateContent;
   const canManageMembersActiveCommunity = communityNavVisibility.canManageMembers;
   const canReviewJoinRequestsActiveCommunity = communityActionGuards.canReviewJoinRequests;
+  const canManagePricingActiveCommunity = communityActionGuards.canManagePricing;
+  const canManageBrandingActiveCommunity = communityActionGuards.canManageBranding;
+  const canManagePublishingActiveCommunity = communityActionGuards.canManagePublishing;
+  const canManagePayoutsActiveCommunity = communityActionGuards.canManagePayouts;
   const canViewActiveCommunityAnalytics = communityNavVisibility.canViewAnalytics;
 
   const funnelPreviewAdminCount = useMemo(() => {
@@ -235,8 +240,13 @@ export function useWebActiveCommunityShellController<
     canViewActiveCommunitySettings,
     canPostMessagesActiveCommunity,
     canManageResourcesActiveCommunity,
+    canModerateContentActiveCommunity,
     canManageMembersActiveCommunity,
     canReviewJoinRequestsActiveCommunity,
+    canManagePricingActiveCommunity,
+    canManageBrandingActiveCommunity,
+    canManagePublishingActiveCommunity,
+    canManagePayoutsActiveCommunity,
     canViewActiveCommunityAnalytics,
     funnelPreviewAdminCount,
     funnelPreviewOnlineCount,

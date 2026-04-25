@@ -10,6 +10,7 @@ import type { CommunityChatMediaImage } from "../../../../shared/CommunityChatMe
 import type {
   CommunityChatMessage as SharedCommunityChatMessage,
   MessageReaction as SharedMessageReaction,
+  CommunityTypingPresenceUser as SharedCommunityTypingPresenceUser,
   UserProfile as SharedUserProfile,
 } from "../../../../shared/communityTypes";
 import {
@@ -22,6 +23,7 @@ import { WebCommunityChatLightboxModal } from "./WebCommunityChatLightboxModal";
 
 type CommunityChatMessage = SharedCommunityChatMessage<CommunityMessageAttachment>;
 type MessageReaction = SharedMessageReaction;
+type CommunityTypingPresenceUser = SharedCommunityTypingPresenceUser;
 type UserProfile = SharedUserProfile;
 
 export type WebCommunityChatPanelProps = {
@@ -40,6 +42,7 @@ export type WebCommunityChatPanelProps = {
   communityMessages: CommunityChatMessage[];
   communityMessageById: Map<string, CommunityChatMessage>;
   messageReactions: MessageReaction[];
+  typingUsers: CommunityTypingPresenceUser[];
   profilesByUserId: Record<string, UserProfile>;
   editingMessageId: string | null;
   editingMessageText: string;
@@ -105,6 +108,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     communityMessages,
     communityMessageById,
     messageReactions,
+    typingUsers,
     profilesByUserId,
     editingMessageId,
     editingMessageText,
@@ -152,6 +156,15 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     voiceButtonProps,
     lightboxModalProps,
   } = props;
+
+  const typingLabel =
+    typingUsers.length === 0
+      ? null
+      : typingUsers.length === 1
+        ? `${typingUsers[0].display_name || displayName(typingUsers[0].user_id)} is typing...`
+        : typingUsers.length === 2
+          ? `${typingUsers[0].display_name || displayName(typingUsers[0].user_id)} and ${typingUsers[1].display_name || displayName(typingUsers[1].user_id)} are typing...`
+          : `${typingUsers[0].display_name || displayName(typingUsers[0].user_id)} and ${typingUsers.length - 1} others are typing...`;
 
   const showCommunityChatBootstrap =
     hasAuthenticatedPresentation &&
@@ -312,6 +325,11 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
                     />
                   );
                 })}
+              {activeCommunity && !isLoadingChat && typingLabel && (
+                <div className="chat-typing-indicator" aria-live="polite">
+                  {typingLabel}
+                </div>
+              )}
             </div>
           </div>
 
