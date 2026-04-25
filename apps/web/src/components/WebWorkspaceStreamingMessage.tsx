@@ -51,13 +51,15 @@ export function WebWorkspaceStreamingMessage(
             <span className="streaming-caret" aria-hidden="true" />
           </>
         ) : null}
-        <span
-          className="streaming-placeholder shimmer-text streaming-thinking-footer"
-          aria-live="polite"
-          aria-label="Thinking"
-        >
-          Thinking
-        </span>
+        {!hasTimeline ? (
+          <span
+            className="streaming-placeholder shimmer-text streaming-thinking-footer"
+            aria-live="polite"
+            aria-label="Thinking"
+          >
+            Thinking
+          </span>
+        ) : null}
       </div>
     </div>
   );
