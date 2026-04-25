@@ -339,8 +339,8 @@ function main() {
   );
   assertIncludes(
     appDetailView,
-    "What you can do",
-    "Discover app detail keeps the capability section",
+    "Description",
+    "Discover app detail labels the capability section as Description",
   );
   assertIncludes(
     appDetailView,

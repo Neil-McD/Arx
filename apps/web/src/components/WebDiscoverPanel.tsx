@@ -937,7 +937,7 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
             <div className="discover-app-detail-page">
               <section className="discover-card discover-app-detail-section">
                 <div className="discover-detail-section-title">
-                  What you can do
+                  Description
                 </div>
                 <ul className="discover-detail-list">
                   {selectedApp.capabilities.map((item) => (
