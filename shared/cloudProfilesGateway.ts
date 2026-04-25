@@ -17,9 +17,10 @@ export type CloudProfileDetailRow = CloudProfileBase & {
 
 async function bootstrapConvexUser(sessionRaw: unknown): Promise<{
   client: ConvexClient;
+  authSubject: string;
 }> {
-  const { client } = await bootstrapConvexAuthenticatedClient(sessionRaw);
-  return { client };
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(sessionRaw);
+  return { client, authSubject };
 }
 
 export async function listCloudProfileRowsByUserIds<SessionT, TProfile extends CloudProfileBase = CloudProfileBase>(
@@ -56,8 +57,9 @@ export async function upsertCloudProfileDetail<SessionT, TProfile extends CloudP
     bio: string | null;
   },
 ): Promise<TProfile | null> {
-  const { client } = await bootstrapConvexUser(params.session);
+  const { client, authSubject } = await bootstrapConvexUser(params.session);
   const payload = await client.mutation("profiles:upsertProfileDetail" as any, {
+    authSubject,
     userId: params.userId,
     displayName: params.displayName,
     avatarUrl: params.avatarUrl,

@@ -12,7 +12,6 @@ type WebProfileSettingsSectionProps = {
   cloudProfile: unknown | null;
   profileAvatarUrl: string | null;
   profileName: string;
-  profileUsername: string;
   profileBio: string;
   isProfileAvatarDragOver: boolean;
   profileNeedsSave: boolean;
@@ -26,7 +25,6 @@ type WebProfileSettingsSectionProps = {
   setProfileAvatarUrl: (value: string | null) => void;
   getInitials: (value: string) => string;
   setProfileName: (value: string) => void;
-  setProfileUsername: (value: string) => void;
   setProfileBio: (value: string) => void;
   saveProfileToCloud: () => Promise<void> | void;
 };
@@ -37,7 +35,6 @@ export function WebProfileSettingsSection(props: WebProfileSettingsSectionProps)
     cloudProfile,
     profileAvatarUrl,
     profileName,
-    profileUsername,
     profileBio,
     isProfileAvatarDragOver,
     profileNeedsSave,
@@ -51,7 +48,6 @@ export function WebProfileSettingsSection(props: WebProfileSettingsSectionProps)
     setProfileAvatarUrl,
     getInitials,
     setProfileName,
-    setProfileUsername,
     setProfileBio,
     saveProfileToCloud,
   } = props;
@@ -82,7 +78,7 @@ export function WebProfileSettingsSection(props: WebProfileSettingsSectionProps)
           ) : session ? (
             <span>
               {getInitials(
-                (profileName || profileUsername || session.user.email || "AR").replace(/^@/, ""),
+                (profileName || session.user.email || "AR").replace(/^@/, ""),
               )}
             </span>
           ) : (
@@ -116,12 +112,6 @@ export function WebProfileSettingsSection(props: WebProfileSettingsSectionProps)
           placeholder="Name"
           value={profileName}
           onChange={(event) => setProfileName(event.target.value)}
-        />
-        <input
-          type="text"
-          placeholder="Username"
-          value={profileUsername}
-          onChange={(event) => setProfileUsername(event.target.value)}
         />
       </div>
       <textarea

@@ -3133,7 +3133,6 @@ export default function App() {
     appTheme,
     profileStorageUserId,
     profileName: profileUi.profileName,
-    profileUsername: profileUi.profileUsername,
     profileBio: profileUi.profileBio,
     modelToggles,
     activeModelId,
@@ -3144,7 +3143,6 @@ export default function App() {
     writeProfileDraftForUser,
     storeGuestModelId,
     setProfileName: profileUi.setProfileName,
-    setProfileUsername: profileUi.setProfileUsername,
     setProfileBio: profileUi.setProfileBio,
   });
 

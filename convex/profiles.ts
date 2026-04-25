@@ -1,5 +1,6 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
+import { ensureAuthenticatedActor } from "./authActor";
 
 type UserRow = {
   _id: any;
@@ -31,29 +32,6 @@ async function findUserBySubject(ctx: any, authSubject: string): Promise<UserRow
     .withIndex("by_authSubject", (q: any) => q.eq("authSubject", normalized))
     .first()) as UserRow | null;
   return row;
-}
-
-async function findOrCreateUserBySubject(args: {
-  ctx: any;
-  authSubject: string;
-  nowMs: number;
-  displayName?: string | null;
-  avatarUrl?: string | null;
-}): Promise<UserRow> {
-  const subject = normalizeSubject(args.authSubject);
-  if (!subject) throw new Error("auth_subject_required");
-  const existing = await findUserBySubject(args.ctx, subject);
-  if (existing) return existing;
-  const id = await args.ctx.db.insert("users", {
-    authSubject: subject,
-    displayName: String(args.displayName ?? "").trim() || undefined,
-    avatarUrl: String(args.avatarUrl ?? "").trim() || undefined,
-    createdAt: args.nowMs,
-    updatedAt: args.nowMs,
-  });
-  const created = (await args.ctx.db.get(id)) as UserRow | null;
-  if (!created) throw new Error("user_create_failed");
-  return created;
 }
 
 function mapProfileBase(row: UserRow) {
@@ -106,7 +84,8 @@ export const getProfileDetailByUserId = query({
 
 export const upsertProfileDetail = mutation({
   args: {
-    userId: v.string(),
+    authSubject: v.optional(v.string()),
+    userId: v.optional(v.string()),
     displayName: v.optional(v.union(v.string(), v.null())),
     avatarUrl: v.optional(v.union(v.string(), v.null())),
     bio: v.optional(v.union(v.string(), v.null())),
@@ -114,13 +93,17 @@ export const upsertProfileDetail = mutation({
   },
   handler: async (ctx, args) => {
     const nowMs = args.nowMs ?? Date.now();
-    const user = await findOrCreateUserBySubject({
+    const actor = await ensureAuthenticatedActor({
       ctx,
-      authSubject: args.userId,
+      authSubject: args.authSubject ?? null,
       nowMs,
       displayName: args.displayName,
       avatarUrl: args.avatarUrl,
     });
+    const requestedSubject = normalizeSubject(args.userId ?? actor.authSubject);
+    if (requestedSubject !== actor.authSubject) {
+      throw new Error("profile_forbidden");
+    }
 
     const userPatch: Record<string, unknown> = { updatedAt: nowMs };
     if (args.displayName !== undefined) {
@@ -129,17 +112,17 @@ export const upsertProfileDetail = mutation({
     if (args.avatarUrl !== undefined) {
       userPatch.avatarUrl = String(args.avatarUrl ?? "").trim() || undefined;
     }
-    await ctx.db.patch(user._id, userPatch);
+    await ctx.db.patch(actor.dbUserId, userPatch);
 
     const existingDetail = (await ctx.db
       .query("userProfileDetails")
-      .withIndex("by_user", (q: any) => q.eq("userId", user._id))
+      .withIndex("by_user", (q: any) => q.eq("userId", actor.dbUserId))
       .first()) as ProfileDetailRow | null;
     const nextBio = args.bio !== undefined ? String(args.bio ?? "").trim() || undefined : existingDetail?.bio;
 
     if (!existingDetail) {
       await ctx.db.insert("userProfileDetails", {
-        userId: user._id,
+        userId: actor.dbUserId,
         bio: nextBio,
         createdAt: nowMs,
         updatedAt: nowMs,
@@ -151,10 +134,10 @@ export const upsertProfileDetail = mutation({
       });
     }
 
-    const refreshedUser = (await ctx.db.get(user._id)) as UserRow | null;
+    const refreshedUser = (await ctx.db.get(actor.dbUserId)) as UserRow | null;
     const detail = (await ctx.db
       .query("userProfileDetails")
-      .withIndex("by_user", (q: any) => q.eq("userId", user._id))
+      .withIndex("by_user", (q: any) => q.eq("userId", actor.dbUserId))
       .first()) as ProfileDetailRow | null;
 
     if (!refreshedUser) throw new Error("user_not_found");

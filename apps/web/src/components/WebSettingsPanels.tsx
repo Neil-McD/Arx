@@ -175,7 +175,6 @@ export function WebSettingsPanels(props: WebSettingsPanelsProps) {
     cloudProfile: profile.cloudProfile,
     profileAvatarUrl: profile.profileUi.profileAvatarUrl,
     profileName: profile.profileUi.profileName,
-    profileUsername: profile.profileUi.profileUsername,
     profileBio: profile.profileUi.profileBio,
     isProfileAvatarDragOver: profile.profileUi.isProfileAvatarDragOver,
     profileNeedsSave: profile.profileUi.profileNeedsSave,
@@ -189,7 +188,6 @@ export function WebSettingsPanels(props: WebSettingsPanelsProps) {
     setProfileAvatarUrl: profile.profileUi.setProfileAvatarUrl,
     getInitials: profile.getInitials,
     setProfileName: profile.profileUi.setProfileName,
-    setProfileUsername: profile.profileUi.setProfileUsername,
     setProfileBio: profile.profileUi.setProfileBio,
     saveProfileToCloud: profile.saveProfileToCloud,
   };

@@ -15,7 +15,6 @@ type CloudProfileLike = {
 
 type ProfileDraftLike = {
   name: string;
-  username: string;
   bio: string;
 };
 
@@ -32,7 +31,6 @@ export function useWebProfileSettingsUiController(
   const { profileStorageUserId, initialProfileDraft, session, cloudProfile } = params;
 
   const [profileName, setProfileName] = useState(() => initialProfileDraft.name);
-  const [profileUsername, setProfileUsername] = useState(() => initialProfileDraft.username);
   const [profileBio, setProfileBio] = useState(() => initialProfileDraft.bio);
   const [profileAvatarUrl, setProfileAvatarUrl] = useState<string | null>(null);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
@@ -52,12 +50,11 @@ export function useWebProfileSettingsUiController(
 
   useEffect(() => {
     if (session) return;
-    if (!profileName && !profileUsername && !profileBio && !profileAvatarUrl) return;
+    if (!profileName && !profileBio && !profileAvatarUrl) return;
     setProfileName("");
-    setProfileUsername("");
     setProfileBio("");
     setProfileAvatarUrl(null);
-  }, [profileAvatarUrl, profileBio, profileName, profileUsername, session]);
+  }, [profileAvatarUrl, profileBio, profileName, session]);
 
   const applyLoadedProfileToLocal = (profile: NonNullable<CloudProfileLike>) => {
     setProfileName((prev) => (prev.trim() ? prev : profile.display_name ?? ""));
@@ -84,8 +81,6 @@ export function useWebProfileSettingsUiController(
   return {
     profileName,
     setProfileName,
-    profileUsername,
-    setProfileUsername,
     profileBio,
     setProfileBio,
     profileAvatarUrl,
