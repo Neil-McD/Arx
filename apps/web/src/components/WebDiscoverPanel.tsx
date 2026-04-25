@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type ComponentProps } from "react";
+import { RefreshCw } from "lucide-react";
 
 import type { DeveloperAppAuthType } from "../../../../shared/communityAppMountTypes";
 import type {
@@ -21,7 +22,6 @@ import type {
 import type { UserPlatformInstalledSkill } from "../../../../shared/userPlatformSkillTypes";
 import { DiscoverCommunityCard } from "../../../../shared/DiscoverCommunityCard";
 import {
-  DISCOVER_SKILL_CATALOG,
   findMatchingDiscoverSkillInstall,
   type DiscoverSkillCatalogEntry,
 } from "../lib/discoverSkillCatalog";
@@ -31,7 +31,6 @@ import {
   buildDiscoverAppPersonalConnectModalCopy,
   buildDiscoverAppPersonalConnectRequirements,
   buildDiscoverAppSupportedModesLabel,
-  DISCOVER_APP_CATALOG,
   isDiscoverAppPersonallyConnectable,
   type DiscoverAppCatalogEntry,
 } from "../lib/discoverCatalog";
@@ -67,13 +66,9 @@ type WebDiscoverPanelProps = {
   discoverCommunitiesCount: number;
   discoverError: string | null;
   discoverCommunities: DiscoverCommunitySnapshot[];
+  discoverApps: DiscoverAppCatalogEntry[];
+  discoverSkills: DiscoverSkillCatalogEntry[];
   formatPlanPrice: (plan: DiscoverCommunitySnapshot["active_plan"]) => string;
-  formatCommunityVisibilityLabel: (
-    visibility: DiscoverCommunitySnapshot["visibility"],
-  ) => string;
-  isPublishedCommunityVisibility: (
-    visibility: DiscoverCommunitySnapshot["visibility"],
-  ) => boolean;
   userPlatformAppMounts: UserPlatformMountedApp[];
   isLoadingUserPlatformAppMounts: boolean;
   userPlatformAppMountError: string | null;
@@ -179,6 +174,7 @@ function buildCommunityMountStatusLabel(mount: CommunityMountedApp): string {
 
 function findMatchingPersonalMount(
   app: DiscoverAppCatalogEntry,
+  catalogApps: DiscoverAppCatalogEntry[],
   mounts: UserPlatformMountedApp[],
 ): UserPlatformMountedApp | null {
   const byCatalogId =
@@ -186,7 +182,7 @@ function findMatchingPersonalMount(
       ? mounts.find((mount) => mount.app.catalog_app_id === app.id) ?? null
       : null;
   if (byCatalogId) return byCatalogId;
-  const catalogKnownMountKeys = DISCOVER_APP_CATALOG.filter(
+  const catalogKnownMountKeys = catalogApps.filter(
     (entry) =>
       entry.personalConnect.connectionKind === "known" &&
       entry.personalConnect.endpointUrl &&
@@ -219,6 +215,7 @@ function findMatchingPersonalMount(
 
 function findMatchingCommunityMount(
   app: DiscoverAppCatalogEntry,
+  catalogApps: DiscoverAppCatalogEntry[],
   mounts: CommunityMountedApp[],
 ): CommunityMountedApp | null {
   const byCatalogId =
@@ -226,7 +223,7 @@ function findMatchingCommunityMount(
       ? mounts.find((mount) => mount.app.catalog_app_id === app.id) ?? null
       : null;
   if (byCatalogId) return byCatalogId;
-  const catalogKnownMountKeys = DISCOVER_APP_CATALOG.filter(
+  const catalogKnownMountKeys = catalogApps.filter(
     (entry) =>
       entry.personalConnect.connectionKind === "known" &&
       entry.personalConnect.endpointUrl &&
@@ -303,12 +300,6 @@ function buildDiscoverCommunityCardProps(args: {
   formatPlanPrice: (
     plan: DiscoverCommunitySnapshot["active_plan"],
   ) => string;
-  formatCommunityVisibilityLabel: (
-    visibility: DiscoverCommunitySnapshot["visibility"],
-  ) => string;
-  isPublishedCommunityVisibility: (
-    visibility: DiscoverCommunitySnapshot["visibility"],
-  ) => boolean;
   onActivateCommunity: (community: DiscoverCommunitySnapshot) => void;
 }): ComponentProps<typeof DiscoverCommunityCard> {
   const { community } = args;
@@ -325,11 +316,6 @@ function buildDiscoverCommunityCardProps(args: {
     bannerFocusY: community.banner_focus_y,
     bannerZoom: community.banner_zoom,
     priceLabel: args.formatPlanPrice(community.active_plan),
-    visibilityClass: community.visibility,
-    visibilityLabel: args.formatCommunityVisibilityLabel(community.visibility),
-    isPublishedVisibility: args.isPublishedCommunityVisibility(
-      community.visibility,
-    ),
     clickable: true,
     ariaLabel: `Open ${community.name}`,
     onActivate: () => args.onActivateCommunity(community),
@@ -344,12 +330,13 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
     hasSession,
     isAuthRecoveringSignedIn,
     isLoadingDiscover,
+    onRefreshDiscover,
     discoverCommunitiesCount,
     discoverError,
     discoverCommunities,
+    discoverApps,
+    discoverSkills,
     formatPlanPrice,
-    formatCommunityVisibilityLabel,
-    isPublishedCommunityVisibility,
     userPlatformAppMounts,
     isLoadingUserPlatformAppMounts,
     userPlatformAppMountError,
@@ -417,13 +404,13 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
     DISCOVER_TABS.length,
     activeTabIndex,
   );
-  const filteredApps = DISCOVER_APP_CATALOG;
-  const filteredSkills = DISCOVER_SKILL_CATALOG;
+  const filteredApps = discoverApps;
+  const filteredSkills = discoverSkills;
   const selectedApp = selectedAppId
-    ? DISCOVER_APP_CATALOG.find((entry) => entry.id === selectedAppId) ?? null
+    ? discoverApps.find((entry) => entry.id === selectedAppId) ?? null
     : null;
   const selectedSkill = selectedSkillId
-    ? DISCOVER_SKILL_CATALOG.find((entry) => entry.id === selectedSkillId) ?? null
+    ? discoverSkills.find((entry) => entry.id === selectedSkillId) ?? null
     : null;
   const isReadyForPersonalConnection =
     selectedApp ? isDiscoverAppPersonallyConnectable(selectedApp) : false;
@@ -440,12 +427,12 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
 
   const selectedPersonalMount = useMemo(() => {
     if (!selectedApp) return null;
-    return findMatchingPersonalMount(selectedApp, userPlatformAppMounts);
-  }, [selectedApp, userPlatformAppMounts]);
+    return findMatchingPersonalMount(selectedApp, discoverApps, userPlatformAppMounts);
+  }, [discoverApps, selectedApp, userPlatformAppMounts]);
   const selectedCommunityMount = useMemo(() => {
     if (!selectedApp) return null;
-    return findMatchingCommunityMount(selectedApp, communityAppMounts);
-  }, [communityAppMounts, selectedApp]);
+    return findMatchingCommunityMount(selectedApp, discoverApps, communityAppMounts);
+  }, [communityAppMounts, discoverApps, selectedApp]);
   const selectedPersonalSkillInstall = useMemo(() => {
     if (!selectedSkill) return null;
     return findMatchingDiscoverSkillInstall(selectedSkill, userPlatformSkills);
@@ -851,6 +838,18 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
           <div className="discover-subtitle">{heroSubtitle}</div>
         </div>
         <div className="discover-hero-actions">
+          {!isAppsTab && !isSkillsTab ? (
+            <button
+              type="button"
+              className="discover-refresh-button"
+              onClick={onRefreshDiscover}
+              disabled={isLoadingDiscover}
+              aria-label="Refresh communities"
+              title="Refresh communities"
+            >
+              <RefreshCw aria-hidden="true" size={16} />
+            </button>
+          ) : null}
           <div
             className="platform-switcher platform-switcher-compact community-ai-agent-tablist discover-tablist"
             role="tablist"
@@ -1339,8 +1338,6 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
                     const cardProps = buildDiscoverCommunityCardProps({
                       community,
                       formatPlanPrice,
-                      formatCommunityVisibilityLabel,
-                      isPublishedCommunityVisibility,
                       onActivateCommunity,
                     });
                     return (
@@ -1401,7 +1398,7 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
                         </div>
                       </div>
                       <span className="discover-app-action">
-                        {findMatchingPersonalMount(app, userPlatformAppMounts)
+                        {findMatchingPersonalMount(app, discoverApps, userPlatformAppMounts)
                           ? "Manage"
                           : isDiscoverAppPersonallyConnectable(app)
                             ? "Add"

@@ -55,6 +55,7 @@ import type * as daytonaToolboxFileSystem from "../daytonaToolboxFileSystem.js";
 import type * as daytonaWorkspaceSession from "../daytonaWorkspaceSession.js";
 import type * as daytonaWorkspaceTools from "../daytonaWorkspaceTools.js";
 import type * as developerApps from "../developerApps.js";
+import type * as discoverMarketplace from "../discoverMarketplace.js";
 import type * as email from "../email.js";
 import type * as emailCore from "../emailCore.js";
 import type * as emailDigests from "../emailDigests.js";
@@ -176,6 +177,7 @@ declare const fullApi: ApiFromModules<{
   daytonaWorkspaceSession: typeof daytonaWorkspaceSession;
   daytonaWorkspaceTools: typeof daytonaWorkspaceTools;
   developerApps: typeof developerApps;
+  discoverMarketplace: typeof discoverMarketplace;
   email: typeof email;
   emailCore: typeof emailCore;
   emailDigests: typeof emailDigests;

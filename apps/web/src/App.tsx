@@ -134,6 +134,14 @@ import type {
 import type { ConnectCommunityAppInput } from "../../../shared/communityAppMountTypes";
 import type { CreateSkillPackageInput } from "../../../shared/skillPackageTypes";
 import {
+  DISCOVER_APP_CATALOG,
+  type DiscoverAppCatalogEntry,
+} from "../../../shared/discoverCatalog";
+import {
+  DISCOVER_SKILL_CATALOG,
+  type DiscoverSkillCatalogEntry,
+} from "../../../shared/discoverSkillCatalog";
+import {
   deriveBackFromWorkspaceSettingsFallbackTransition,
   deriveBackToWorkspaceFallbackTransition,
   deriveOpenDiscoverTransition,
@@ -268,7 +276,6 @@ import {
 import { isValidCommunitySlug, slugifyCommunityName } from "../../../shared/communitySlug";
 import {
   formatCommunityVisibilityLabel,
-  isPublishedCommunityVisibility,
   toCanonicalCommunityVisibility,
 } from "../../../shared/communityVisibility";
 import {
@@ -2737,8 +2744,11 @@ export default function App() {
   const [isExporting, setIsExporting] = useState(false);
 
   const [discoverCommunities, setDiscoverCommunities] = useState<DiscoverCommunity[]>([]);
+  const [discoverApps, setDiscoverApps] = useState<DiscoverAppCatalogEntry[]>(DISCOVER_APP_CATALOG);
+  const [discoverSkills, setDiscoverSkills] = useState<DiscoverSkillCatalogEntry[]>(DISCOVER_SKILL_CATALOG);
   const [isLoadingDiscover, setIsLoadingDiscover] = useState(false);
   const [discoverError, setDiscoverError] = useState<string | null>(null);
+  const [lastDiscoverLoadAttemptedAt, setLastDiscoverLoadAttemptedAt] = useState(0);
 
   const { loadThreads, loadThreadMessages, loadModelRegistry } = useWebThreadDataController<
     AuthSession,
@@ -2814,6 +2824,9 @@ export default function App() {
     setIsLoadingDiscover,
     setDiscoverError,
     setDiscoverCommunities,
+    setDiscoverApps,
+    setDiscoverSkills,
+    setLastDiscoverLoadAttemptedAt,
   });
 
   const {
@@ -3272,7 +3285,8 @@ export default function App() {
 
   useWebDiscoverPreloadLifecycle({
     activePage,
-    discoverCommunitiesCount: discoverCommunities.length,
+    isLoadingDiscover,
+    lastDiscoverLoadAttemptedAt,
     loadDiscoverCommunities,
   });
   useWebCommunityChatPreloadLifecycle<AuthSession>({
@@ -6305,9 +6319,9 @@ export default function App() {
       discoverCommunitiesCount: discoverCommunities.length,
       discoverError,
       discoverCommunities,
+      discoverApps,
+      discoverSkills,
       formatPlanPrice: (plan) => (plan ? formatPlanPrice(plan) : "Free"),
-      formatCommunityVisibilityLabel,
-      isPublishedCommunityVisibility,
       userPlatformAppMounts,
       isLoadingUserPlatformAppMounts,
       userPlatformAppMountError,
