@@ -8673,7 +8673,7 @@ button.chat-reply-quote:hover {
 .runtime-live-timeline {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
   margin-bottom: 14px;
 }
 
@@ -8719,6 +8719,109 @@ button.chat-reply-quote:hover {
   width: fit-content;
   line-height: 1.35;
   letter-spacing: 0;
+}
+
+.runtime-tool-roll {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-width: min(560px, 100%);
+  max-height: 72px;
+  overflow: hidden;
+  perspective: 560px;
+  mask-image: linear-gradient(to bottom, transparent 0%, #000 18%, #000 82%, transparent 100%);
+}
+
+.runtime-tool-roll-item {
+  width: fit-content;
+  max-width: 100%;
+  font-size: 13px;
+  line-height: 1.35;
+  opacity: 0;
+  transform: translateY(10px) rotateX(-26deg);
+  transform-origin: center top;
+  animation: runtime-tool-roll-in 360ms cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+  animation-delay: var(--runtime-tool-delay, 0ms);
+}
+
+.runtime-tool-roll-kind {
+  color: var(--text-muted);
+}
+
+.runtime-tool-roll-label {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.runtime-tool-drawers {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  max-width: min(640px, 100%);
+  margin-top: 2px;
+}
+
+.runtime-tool-drawer {
+  width: fit-content;
+  max-width: 100%;
+}
+
+.runtime-tool-drawer-summary {
+  width: fit-content;
+  max-width: 100%;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1.35;
+  list-style: none;
+}
+
+.runtime-tool-drawer-summary::-webkit-details-marker {
+  display: none;
+}
+
+.runtime-tool-drawer-title {
+  color: var(--text-muted);
+}
+
+.runtime-tool-drawer-detail {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.runtime-tool-drawer-body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 5px 0 2px;
+  padding-left: 14px;
+  color: var(--text-faint, rgba(255, 255, 255, 0.3));
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.runtime-tool-drawer-item {
+  max-width: min(620px, 100%);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@keyframes runtime-tool-roll-in {
+  0% {
+    opacity: 0;
+    transform: translateY(10px) rotateX(-26deg);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) rotateX(0);
+  }
 }
 
 .streaming-thinking-footer {
