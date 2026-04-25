@@ -31,7 +31,7 @@ export function RuntimeLiveTimeline(props: {
 
   return (
     <div className="runtime-live-timeline" aria-live="polite">
-      <span className="runtime-activity-word shimmer-text">
+      <span className="streaming-placeholder shimmer-text streaming-thinking-footer runtime-activity-word">
         {displayWord}
       </span>
     </div>

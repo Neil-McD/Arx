@@ -8716,12 +8716,8 @@ button.chat-reply-quote:hover {
 }
 
 .runtime-activity-word {
-  display: inline-block;
   width: fit-content;
-  font-size: 13px;
-  font-weight: 650;
   line-height: 1.35;
-  color: color-mix(in srgb, var(--accent-gold) 68%, var(--text-secondary));
   letter-spacing: 0;
 }
 
