@@ -233,8 +233,13 @@ function main() {
   );
   assertIncludes(
     webAppRouteState,
-    'if (tab === "skills") return "/discover/skills";',
+    'return skillId ? `/discover/skills/${encodeURIComponent(skillId)}` : "/discover/skills";',
     "Discover Skills tab has a refresh-stable route",
+  );
+  assertIncludes(
+    webAppRouteState,
+    'discoverSkillId: discoverTab === "skills" ? String(segments[2] ?? "").trim() || null : null,',
+    "Discover skill detail route restores selected skill id",
   );
   assertIncludes(
     pathRouteLifecycle,
@@ -245,6 +250,11 @@ function main() {
     pathRouteLifecycle,
     "discoverAppId: params.discoverAppId,",
     "route lifecycle preserves selected Discover app while replacing app route",
+  );
+  assertIncludes(
+    pathRouteLifecycle,
+    "discoverSkillId: params.discoverSkillId,",
+    "route lifecycle preserves selected Discover skill while replacing app route",
   );
   assertIncludes(
     app,
@@ -258,6 +268,11 @@ function main() {
   );
   assertIncludes(
     app,
+    "() => initialAppRoute?.discoverSkillId ?? null",
+    "App initializes selected Discover skill from the route",
+  );
+  assertIncludes(
+    app,
     "discoverTab: discoverActiveTab,",
     "App writes active Discover tab back to the app route",
   );
@@ -267,24 +282,34 @@ function main() {
     "App writes selected Discover app back to the app route",
   );
   assertIncludes(
+    app,
+    "discoverSkillId: selectedDiscoverSkillId,",
+    "App writes selected Discover skill back to the app route",
+  );
+  assertIncludes(
+    app,
+    "selectedSkillId: selectedDiscoverSkillId,",
+    "App passes selected Discover skill into the Discover panel",
+  );
+  assertIncludes(
     discoverPanel,
     '<span className="discover-app-action">View</span>',
     "Discover app rows use a neutral view action",
   );
   assertIncludes(
     discoverPanel,
-    "const shouldShowHeroCopy = !selectedApp;",
-    "Discover app detail removes the redundant page hero copy",
+    "const isDetailView = Boolean(selectedApp || selectedSkill);",
+    "Discover detail pages share one detail-view predicate",
   );
   assertIncludes(
     discoverPanel,
-    "{shouldShowHeroCopy ? (",
-    "Discover page hero copy is only rendered when useful",
+    "{!isDetailView ? (",
+    "Discover selector is only rendered on collection pages",
   );
   assertIncludes(
     discoverPanel,
     'className="discover-breadcrumb discover-hero-breadcrumb"',
-    "Discover app detail breadcrumb is rendered in the fixed header",
+    "Discover detail breadcrumb is rendered in the fixed header",
   );
   assertNotIncludes(
     discoverPanel,

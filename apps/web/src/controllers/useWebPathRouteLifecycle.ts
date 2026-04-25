@@ -28,6 +28,7 @@ export function useWebPathRouteLifecycle(params: {
   communityTab: CommunityTab;
   discoverTab: DiscoverTab;
   discoverAppId: string | null;
+  discoverSkillId: string | null;
   activeThreadId: string | null;
   applyLocationToState: () => void;
   setBuilderConnectReturn: Dispatch<SetStateAction<BuilderConnectReturn | null>>;
@@ -40,6 +41,7 @@ export function useWebPathRouteLifecycle(params: {
     communityTab: CommunityTab;
     discoverTab: DiscoverTab;
     discoverAppId: string | null;
+    discoverSkillId: string | null;
     threadId: string | null;
   }) => string | null;
 }) {
@@ -83,6 +85,7 @@ export function useWebPathRouteLifecycle(params: {
       communityTab: params.communityTab,
       discoverTab: params.discoverTab,
       discoverAppId: params.discoverAppId,
+      discoverSkillId: params.discoverSkillId,
       threadId: params.activePage === "workspace" && params.activeView === "home" ? params.activeThreadId : null,
     });
     if (!nextPath) return;
@@ -99,6 +102,7 @@ export function useWebPathRouteLifecycle(params: {
     params.communityTab,
     params.discoverTab,
     params.discoverAppId,
+    params.discoverSkillId,
     params.activeThreadId,
   ]);
 }

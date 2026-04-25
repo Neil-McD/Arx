@@ -1098,6 +1098,9 @@ export default function App() {
   const [selectedDiscoverAppId, setSelectedDiscoverAppId] = useState<string | null>(
     () => initialAppRoute?.discoverAppId ?? null,
   );
+  const [selectedDiscoverSkillId, setSelectedDiscoverSkillId] = useState<string | null>(
+    () => initialAppRoute?.discoverSkillId ?? null,
+  );
   const [shouldOpenCreatePersonalSkill, setShouldOpenCreatePersonalSkill] =
     useState(false);
   const settingsGroup = settingsGroupForPage(settingsPage);
@@ -1919,6 +1922,7 @@ export default function App() {
     if (nextAppRoute.page === "discover") {
       setDiscoverActiveTab(nextAppRoute.discoverTab ?? "communities");
       setSelectedDiscoverAppId(nextAppRoute.discoverAppId ?? null);
+      setSelectedDiscoverSkillId(nextAppRoute.discoverSkillId ?? null);
     }
     if (nextAppRoute.page === "community") {
       applyCommunityShellState({
@@ -2025,6 +2029,7 @@ export default function App() {
         communityTab,
         discoverTab: discoverActiveTab,
         discoverAppId: selectedDiscoverAppId,
+        discoverSkillId: selectedDiscoverSkillId,
         threadId: activePage === "workspace" && activeView === "home" ? activeThreadId : null,
       }) ?? "",
       shellVariant,
@@ -3132,6 +3137,7 @@ export default function App() {
     communityTab,
     discoverTab: discoverActiveTab,
     discoverAppId: selectedDiscoverAppId,
+    discoverSkillId: selectedDiscoverSkillId,
     activeThreadId,
     applyLocationToState,
     setBuilderConnectReturn,
@@ -5306,6 +5312,7 @@ export default function App() {
 	    if (transition.shouldPushSnapshot) pushNavSnapshot();
       setDiscoverActiveTab("communities");
       setSelectedDiscoverAppId(null);
+      setSelectedDiscoverSkillId(null);
 	    setActiveView(transition.nextView);
 	    setActivePage(transition.nextPage);
 	  };
@@ -5314,6 +5321,7 @@ export default function App() {
       if (transition.shouldPushSnapshot) pushNavSnapshot();
       setDiscoverActiveTab("apps");
       setSelectedDiscoverAppId(null);
+      setSelectedDiscoverSkillId(null);
       setActiveView(transition.nextView);
       setActivePage(transition.nextPage);
     };
@@ -5322,6 +5330,7 @@ export default function App() {
       if (transition.shouldPushSnapshot) pushNavSnapshot();
       setDiscoverActiveTab("skills");
       setSelectedDiscoverAppId(null);
+      setSelectedDiscoverSkillId(null);
       setActiveView(transition.nextView);
       setActivePage(transition.nextPage);
     };
@@ -6326,13 +6335,18 @@ export default function App() {
       showMobileShell,
       activeTab: discoverActiveTab,
       selectedAppId: selectedDiscoverAppId,
+      selectedSkillId: selectedDiscoverSkillId,
       onSelectTab: (tab) => {
         setDiscoverActiveTab(tab);
         if (tab !== "apps") {
           setSelectedDiscoverAppId(null);
         }
+        if (tab !== "skills") {
+          setSelectedDiscoverSkillId(null);
+        }
       },
       onSelectApp: setSelectedDiscoverAppId,
+      onSelectSkill: setSelectedDiscoverSkillId,
       hasSession: Boolean(session),
       isAuthRecoveringSignedIn: isAuthRecoveringSignedInAppShell,
       onRequireAuth: () => requireSignIn(),

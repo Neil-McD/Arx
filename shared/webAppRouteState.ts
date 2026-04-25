@@ -27,6 +27,7 @@ export type AppRouteState = {
   communityTab: CommunityTab;
   discoverTab?: DiscoverTab | null;
   discoverAppId?: string | null;
+  discoverSkillId?: string | null;
   threadId: string | null;
 };
 
@@ -38,6 +39,7 @@ export type AppRoutePathState = {
   communityTab: CommunityTab;
   discoverTab?: DiscoverTab | null;
   discoverAppId?: string | null;
+  discoverSkillId?: string | null;
   threadId: string | null;
 };
 
@@ -325,6 +327,7 @@ function parseAppRouteFromPathname(pathname: string): AppRoutePathState | null {
       communityTab: "chat",
       discoverTab,
       discoverAppId: discoverTab === "apps" ? String(segments[2] ?? "").trim() || null : null,
+      discoverSkillId: discoverTab === "skills" ? String(segments[2] ?? "").trim() || null : null,
       threadId: null,
     };
   }
@@ -417,6 +420,7 @@ export function readAppRouteFromLocation(): AppRouteState {
       communityTab: fromPath.communityTab,
       discoverTab: fromPath.discoverTab ?? "communities",
       discoverAppId: fromPath.discoverAppId ?? null,
+      discoverSkillId: fromPath.discoverSkillId ?? null,
       threadId: fromPath.threadId,
     };
   }
@@ -429,6 +433,7 @@ export function readAppRouteFromLocation(): AppRouteState {
     communityTab: "chat",
     discoverTab: "communities",
     discoverAppId: null,
+    discoverSkillId: null,
     threadId: null,
   };
 }
@@ -444,7 +449,10 @@ export function buildAppRoutePath(state: AppRoutePathState): string | null {
       const appId = String(state.discoverAppId ?? "").trim();
       return appId ? `/discover/apps/${encodeURIComponent(appId)}` : "/discover/apps";
     }
-    if (tab === "skills") return "/discover/skills";
+    if (tab === "skills") {
+      const skillId = String(state.discoverSkillId ?? "").trim();
+      return skillId ? `/discover/skills/${encodeURIComponent(skillId)}` : "/discover/skills";
+    }
     return "/discover";
   }
 

@@ -56,8 +56,10 @@ type WebDiscoverPanelProps = {
   showMobileShell: boolean;
   activeTab: DiscoverTab;
   selectedAppId: string | null;
+  selectedSkillId: string | null;
   onSelectTab: (tab: DiscoverTab) => void;
   onSelectApp: (appId: string | null) => void;
+  onSelectSkill: (skillId: string | null) => void;
   hasSession: boolean;
   isAuthRecoveringSignedIn: boolean;
   onRequireAuth: () => void;
@@ -325,8 +327,10 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
   const {
     activeTab,
     selectedAppId,
+    selectedSkillId,
     onSelectTab,
     onSelectApp,
+    onSelectSkill,
     onRequireAuth,
     hasSession,
     isAuthRecoveringSignedIn,
@@ -373,7 +377,6 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
     onOpenActiveCommunityAiAgentApps,
     onOpenActiveCommunityAiAgentSkills,
   } = props;
-  const [selectedSkillId, setSelectedSkillId] = useState<string | null>(null);
   const [personalConnectEndpoint, setPersonalConnectEndpoint] = useState("");
   const [personalConnectAuthType, setPersonalConnectAuthType] =
     useState<DeveloperAppAuthType>("bearer");
@@ -411,7 +414,8 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
   const selectedSkill = selectedSkillId
     ? discoverSkills.find((entry) => entry.id === selectedSkillId) ?? null
     : null;
-  const shouldShowHeroCopy = !selectedApp;
+  const isDetailView = Boolean(selectedApp || selectedSkill);
+  const shouldShowHeroCopy = !isDetailView;
   const isReadyForPersonalConnection =
     selectedApp ? isDiscoverAppPersonallyConnectable(selectedApp) : false;
   const personalConnectLoadError =
@@ -463,10 +467,10 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
 
   useEffect(() => {
     if (!isSkillsTab && selectedSkillId) {
-      setSelectedSkillId(null);
+      onSelectSkill(null);
       setSelectedSkillActionError(null);
     }
-  }, [isSkillsTab, selectedSkillId]);
+  }, [isSkillsTab, onSelectSkill, selectedSkillId]);
 
   useEffect(() => {
     if (
@@ -850,30 +854,47 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
             <span className="discover-breadcrumb-separator">›</span>
             <span>{selectedApp.name}</span>
           </div>
-        ) : null}
-        <div className="discover-hero-actions">
-          <div
-            className="platform-switcher platform-switcher-compact community-ai-agent-tablist discover-tablist"
-            role="tablist"
-            aria-label="Discover sections"
-            style={tabSwitcherStyle}
-          >
-            {DISCOVER_TABS.map((tab) => (
-              <button
-                key={tab.id}
-                type="button"
-                role="tab"
-                className={`platform-switcher-btn community-ai-agent-tab discover-tab${
-                  activeTab === tab.id ? " is-active" : ""
-                }`}
-                aria-selected={activeTab === tab.id}
-                onClick={() => onSelectTab(tab.id)}
-              >
-                {tab.label}
-              </button>
-            ))}
+        ) : selectedSkill ? (
+          <div className="discover-breadcrumb discover-hero-breadcrumb">
+            <button
+              type="button"
+              className="discover-breadcrumb-button"
+              onClick={() => {
+                onSelectSkill(null);
+                setSelectedSkillActionError(null);
+              }}
+            >
+              Skills
+            </button>
+            <span className="discover-breadcrumb-separator">›</span>
+            <span>{selectedSkill.name}</span>
           </div>
-        </div>
+        ) : null}
+        {!isDetailView ? (
+          <div className="discover-hero-actions">
+            <div
+              className="platform-switcher platform-switcher-compact community-ai-agent-tablist discover-tablist"
+              role="tablist"
+              aria-label="Discover sections"
+              style={tabSwitcherStyle}
+            >
+              {DISCOVER_TABS.map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  role="tab"
+                  className={`platform-switcher-btn community-ai-agent-tab discover-tab${
+                    activeTab === tab.id ? " is-active" : ""
+                  }`}
+                  aria-selected={activeTab === tab.id}
+                  onClick={() => onSelectTab(tab.id)}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
       </div>
       <div className="workspace-body chat-feed">
         <div className="chat-messages discover-scroll">
@@ -1061,21 +1082,6 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
             </div>
           ) : isSkillsTab && selectedSkill ? (
             <div className="discover-app-detail-page">
-              <div className="discover-breadcrumb">
-                <button
-                  type="button"
-                  className="discover-breadcrumb-button"
-                  onClick={() => {
-                    setSelectedSkillId(null);
-                    setSelectedSkillActionError(null);
-                  }}
-                >
-                  Skills
-                </button>
-                <span className="discover-breadcrumb-separator">›</span>
-                <span>{selectedSkill.name}</span>
-              </div>
-
               <div className="discover-app-detail-header">
                 <div
                   className={`discover-app-icon discover-app-icon-${selectedSkill.icon} discover-app-icon-detail`}
@@ -1411,7 +1417,7 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
                             className="discover-app-row-button discover-skill-row-button"
                             role="listitem"
                             onClick={() => {
-                              setSelectedSkillId(skill.id);
+                              onSelectSkill(skill.id);
                               setSelectedSkillActionError(null);
                             }}
                             aria-label={`Open ${skill.name}`}
