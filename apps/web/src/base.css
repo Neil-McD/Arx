@@ -1616,6 +1616,11 @@ body {
   color: var(--text-faint);
 }
 
+.discover-hero-breadcrumb {
+  min-width: 0;
+  padding-bottom: 7px;
+}
+
 .discover-app-detail-header {
   display: flex;
   align-items: flex-start;

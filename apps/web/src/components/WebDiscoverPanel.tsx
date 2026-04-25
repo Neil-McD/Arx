@@ -838,6 +838,18 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
             <div className="discover-title">{heroTitle}</div>
             <div className="discover-subtitle">{heroSubtitle}</div>
           </div>
+        ) : selectedApp ? (
+          <div className="discover-breadcrumb discover-hero-breadcrumb">
+            <button
+              type="button"
+              className="discover-breadcrumb-button"
+              onClick={() => onSelectApp(null)}
+            >
+              Apps
+            </button>
+            <span className="discover-breadcrumb-separator">›</span>
+            <span>{selectedApp.name}</span>
+          </div>
         ) : null}
         <div className="discover-hero-actions">
           <div
@@ -867,18 +879,6 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
         <div className="chat-messages discover-scroll">
           {isAppsTab && selectedApp ? (
             <div className="discover-app-detail-page">
-              <div className="discover-breadcrumb">
-                <button
-                  type="button"
-                  className="discover-breadcrumb-button"
-                  onClick={() => onSelectApp(null)}
-                >
-                  Apps
-                </button>
-                <span className="discover-breadcrumb-separator">›</span>
-                <span>{selectedApp.name}</span>
-              </div>
-
               <div className="discover-app-detail-header">
                 <DiscoverCatalogLogo
                   name={selectedApp.name}

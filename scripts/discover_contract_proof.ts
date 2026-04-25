@@ -281,6 +281,11 @@ function main() {
     "{shouldShowHeroCopy ? (",
     "Discover page hero copy is only rendered when useful",
   );
+  assertIncludes(
+    discoverPanel,
+    'className="discover-breadcrumb discover-hero-breadcrumb"',
+    "Discover app detail breadcrumb is rendered in the fixed header",
+  );
   assertNotIncludes(
     discoverPanel,
     '? "Add"\n                            : "Catalog"',
