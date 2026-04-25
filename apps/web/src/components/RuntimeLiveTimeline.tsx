@@ -1,18 +1,11 @@
 import { useMemo, type ReactNode } from "react";
 import type { ThreadStreamingRuntimeEvent } from "../../../../shared/webTurnRunnerCore";
+import {
+  buildAgentActivityTimeline,
+  type AgentActivityStep,
+} from "../../../../shared/runtimeActivityTimeline";
 import { buildRuntimeLiveTimeline } from "../../../../shared/runtimeTimelineUi";
 import { useSmoothStreamingText } from "../../../../shared/useSmoothStreamingText";
-
-function splitTraceLinkTitle(title: string): { prefix: string | null; linkText: string } {
-  const separatorIndex = title.indexOf(": ");
-  if (separatorIndex < 0) {
-    return { prefix: null, linkText: title };
-  }
-  return {
-    prefix: title.slice(0, separatorIndex + 1),
-    linkText: title.slice(separatorIndex + 2),
-  };
-}
 
 function RuntimeReasoningEntry(props: {
   id: string;
@@ -37,79 +30,117 @@ function RuntimeReasoningEntry(props: {
   );
 }
 
+function formatStepDuration(durationMs: number | null): string | null {
+  if (durationMs === null) return null;
+  const totalSeconds = Math.max(0, Math.round(durationMs / 1000));
+  if (totalSeconds < 60) return `${totalSeconds}s`;
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return seconds > 0 ? `${minutes}m ${seconds}s` : `${minutes}m`;
+}
+
+function statusLabel(status: AgentActivityStep["status"]): string {
+  if (status === "running") return "Running";
+  if (status === "error") return "Issue";
+  return "Done";
+}
+
+function RuntimeActivityStepRow(props: {
+  step: AgentActivityStep;
+  showActiveIndicators: boolean;
+}): JSX.Element {
+  const { step } = props;
+  const isActive = props.showActiveIndicators && step.isActive;
+  const duration = formatStepDuration(step.durationMs);
+  const defaultOpen = isActive || step.status === "error";
+
+  return (
+    <details
+      key={`${step.id}:${isActive ? "active" : "settled"}:${step.status}`}
+      className={`runtime-live-timeline-entry runtime-activity-step runtime-activity-step-${step.kind} runtime-activity-step-${step.status}${isActive ? " active" : ""}`}
+      open={defaultOpen}
+    >
+      <summary className="runtime-activity-summary">
+        <span className="runtime-activity-status-dot" aria-hidden="true" />
+        <span className="runtime-activity-copy">
+          <span className="runtime-activity-title-row">
+            <span className="runtime-activity-title">{step.title}</span>
+            <span className="runtime-activity-state">{statusLabel(step.status)}</span>
+            {duration ? <span className="runtime-activity-duration">{duration}</span> : null}
+          </span>
+          <span className="runtime-activity-summary-text">
+            {step.summary}
+            {isActive ? (
+              <>
+                <span className="runtime-tool-trace-active-detail">
+                  {step.items[step.items.length - 1]?.title ?? "Working"}
+                </span>
+                <span className="streaming-caret" aria-hidden="true" />
+              </>
+            ) : null}
+          </span>
+        </span>
+      </summary>
+      {step.items.length > 0 ? (
+        <div className="runtime-activity-items">
+          {step.items.map((item) => {
+            const itemDuration = formatStepDuration(item.durationMs);
+            return (
+              <div
+                key={item.id}
+                className={`runtime-activity-item runtime-activity-item-${item.status}`}
+              >
+                <span className="runtime-activity-item-title">{item.title}</span>
+                {item.detail ? <span className="runtime-activity-item-detail">{item.detail}</span> : null}
+                {itemDuration ? <span className="runtime-activity-item-duration">{itemDuration}</span> : null}
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
+    </details>
+  );
+}
+
 export function RuntimeLiveTimeline(props: {
   events: ThreadStreamingRuntimeEvent[];
   renderReasoningMarkdown: (text: string) => ReactNode;
   showActiveIndicators?: boolean;
 }): JSX.Element | null {
-  const entries = useMemo(() => buildRuntimeLiveTimeline(props.events as any), [props.events]);
-  if (entries.length === 0) return null;
+  const reasoningEntries = useMemo(
+    () => buildRuntimeLiveTimeline(props.events as any).filter((entry) => entry.kind === "reasoning"),
+    [props.events],
+  );
+  const activitySteps = useMemo(
+    () => buildAgentActivityTimeline(props.events as any),
+    [props.events],
+  );
+  if (reasoningEntries.length === 0 && activitySteps.length === 0) return null;
   const showActiveIndicators = props.showActiveIndicators ?? false;
 
   return (
     <div className="runtime-live-timeline">
-      {entries.map((entry) =>
-        entry.kind === "reasoning" ? (
-          <RuntimeReasoningEntry
-            key={entry.id}
-            id={entry.id}
-            isActive={entry.isActive}
-            text={entry.text}
-            renderReasoningMarkdown={props.renderReasoningMarkdown}
-            showActiveIndicators={showActiveIndicators}
-          />
-        ) : (
-          <details
-            key={entry.id}
-            className={`runtime-live-timeline-entry runtime-tool-trace${showActiveIndicators && entry.isActive ? " active" : ""}`}
-          >
-            <summary className="runtime-tool-trace-summary">
-              <span className="runtime-tool-trace-toggle">
-                {entry.group.title}
-                {entry.group.status === "running" ? (
-                  <>
-                    <span className="runtime-tool-trace-active-detail">
-                      {entry.group.calls[entry.group.calls.length - 1]?.title ?? "Working"}
-                    </span>
-                    {showActiveIndicators && entry.isActive ? <span className="streaming-caret" aria-hidden="true" /> : null}
-                  </>
-                ) : null}
-              </span>
-            </summary>
-            <div className="runtime-tool-trace-stack">
-              {entry.group.calls.map((call) => (
-                <div key={call.id} className="runtime-tool-trace-item">
-                  <div className="runtime-tool-trace-item-row static">
-                    <span className="runtime-tool-trace-copy">
-                      {call.href ? (
-                        (() => {
-                          const { prefix, linkText } = splitTraceLinkTitle(call.title);
-                          return (
-                            <>
-                              {prefix ? <span className="runtime-tool-trace-title">{prefix} </span> : null}
-                              <a
-                                className="runtime-tool-trace-title runtime-tool-trace-link"
-                                href={call.href}
-                                target="_blank"
-                                rel="noreferrer noopener"
-                                title={call.href}
-                              >
-                                {linkText}
-                              </a>
-                            </>
-                          );
-                        })()
-                      ) : (
-                        <span className="runtime-tool-trace-title">{call.title}</span>
-                      )}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </details>
-        ),
-      )}
+      {reasoningEntries.map((entry) => (
+        <RuntimeReasoningEntry
+          key={entry.id}
+          id={entry.id}
+          isActive={entry.isActive}
+          text={entry.text}
+          renderReasoningMarkdown={props.renderReasoningMarkdown}
+          showActiveIndicators={showActiveIndicators}
+        />
+      ))}
+      {activitySteps.length > 0 ? (
+        <div className="runtime-activity-rail">
+          {activitySteps.map((step) => (
+            <RuntimeActivityStepRow
+              key={step.id}
+              step={step}
+              showActiveIndicators={showActiveIndicators}
+            />
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }

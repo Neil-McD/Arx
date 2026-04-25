@@ -321,6 +321,32 @@ function main() {
     "const renderSelectedAppHeader = () => {",
     "Discover app detail header has one canonical renderer",
   );
+  const appDetailView = extractSection(
+    discoverPanel,
+    "{isAppsTab && selectedApp ? (",
+    ") : isSkillsTab && selectedSkill ? (",
+    "Discover app detail view",
+  );
+  assertNotIncludes(
+    appDetailView,
+    "selectedApp.heroNote",
+    "Discover app detail does not render a promo spotlight banner",
+  );
+  assertNotIncludes(
+    appDetailView,
+    "discover-connect-status",
+    "Discover app detail does not render redundant setup/status cards",
+  );
+  assertIncludes(
+    appDetailView,
+    "What you can do",
+    "Discover app detail keeps the capability section",
+  );
+  assertIncludes(
+    appDetailView,
+    "Information",
+    "Discover app detail keeps the information section",
+  );
   assertNotIncludes(
     discoverPanel,
     '? "Add"\n                            : "Catalog"',

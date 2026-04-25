@@ -137,42 +137,6 @@ function renderInfoLink(href: string, label: string) {
   );
 }
 
-function buildMountStatusLabel(mount: UserPlatformMountedApp): string {
-  const count = mount.enabled_tools.length;
-  const toolLabel = count === 1 ? "tool" : "tools";
-  const connectionStatus = String(
-    mount.connection.connection_status ?? "",
-  ).trim();
-  if (connectionStatus === "connected") {
-    return `${count} ${toolLabel} are active in your platform layer.`;
-  }
-  if (connectionStatus) {
-    return `${count} ${toolLabel} are mounted, but the connection status is ${connectionStatus.replace(
-      /_/g,
-      " ",
-    )}.`;
-  }
-  return `${count} ${toolLabel} are mounted in your platform layer.`;
-}
-
-function buildCommunityMountStatusLabel(mount: CommunityMountedApp): string {
-  const count = mount.enabled_tools.length;
-  const toolLabel = count === 1 ? "tool" : "tools";
-  const connectionStatus = String(
-    mount.connection.connection_status ?? "",
-  ).trim();
-  if (connectionStatus === "connected") {
-    return `${count} ${toolLabel} are active in this community lens.`;
-  }
-  if (connectionStatus) {
-    return `${count} ${toolLabel} are mounted, but the connection status is ${connectionStatus.replace(
-      /_/g,
-      " ",
-    )}.`;
-  }
-  return `${count} ${toolLabel} are mounted in this community lens.`;
-}
-
 function findMatchingPersonalMount(
   app: DiscoverAppCatalogEntry,
   catalogApps: DiscoverAppCatalogEntry[],
@@ -971,76 +935,6 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
         <div className="chat-messages discover-scroll">
           {isAppsTab && selectedApp ? (
             <div className="discover-app-detail-page">
-              <div className="discover-app-spotlight">{selectedApp.heroNote}</div>
-
-              <section className="discover-card discover-app-detail-section">
-                <div className="model-note discover-connect-note">
-                  {selectedApp.personalConnect.note}
-                </div>
-                {personalConnectLoadError ? (
-                  <div className="auth-error">{personalConnectLoadError}</div>
-                ) : null}
-                {personalConnectMutationError ? (
-                  <div className="auth-error">
-                    {personalConnectMutationError}
-                  </div>
-                ) : null}
-                {selectedPersonalMount ? (
-                  <div className="discover-connect-status">
-                    <div className="discover-connect-status-title">
-                      Added to you
-                    </div>
-                    <div className="discover-connect-status-body">
-                      {buildMountStatusLabel(selectedPersonalMount)}
-                    </div>
-                  </div>
-                ) : !isDiscoverAppPersonallyConnectable(selectedApp) ? (
-                  <div className="discover-connect-status">
-                    <div className="discover-connect-status-title">Add path coming soon</div>
-                    <div className="discover-connect-status-body">
-                      {selectedApp.supportNote}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="discover-connect-status">
-                    <div className="discover-connect-status-title">Ready to add</div>
-                    <div className="discover-connect-status-body">
-                      Use `Add` to open the requirements modal and mount {selectedApp.name} into your baseline platform tools.
-                    </div>
-                  </div>
-                )}
-                {hasManageableCommunityTarget ? (
-                  selectedCommunityMount ? (
-                    <div className="discover-connect-status">
-                    <div className="discover-connect-status-title">
-                      Added to {communityTargetLabel}
-                    </div>
-                    <div className="discover-connect-status-body">
-                      {buildCommunityMountStatusLabel(selectedCommunityMount)}
-                    </div>
-                  </div>
-                  ) : isLoadingCommunityAppMounts ? (
-                    <div className="discover-connect-status">
-                      <div className="discover-connect-status-title">
-                        Checking {communityTargetLabel}
-                      </div>
-                      <div className="discover-connect-status-body">
-                        Loading the current community app mounts for this target.
-                      </div>
-                    </div>
-                  ) : isDiscoverAppPersonallyConnectable(selectedApp) ? (
-                    <div className="discover-connect-status">
-                      <div className="discover-connect-status-title">
-                        Ready to add to {communityTargetLabel}
-                      </div>
-                      <div className="discover-connect-status-body">
-                        Add this app directly to the active community lens without leaving Discover.
-                      </div>
-                    </div>
-                  ) : null
-                ) : null}
-              </section>
-
               <section className="discover-card discover-app-detail-section">
                 <div className="discover-detail-section-title">
                   What you can do
