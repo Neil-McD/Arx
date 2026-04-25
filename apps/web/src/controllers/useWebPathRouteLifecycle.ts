@@ -27,6 +27,7 @@ export function useWebPathRouteLifecycle(params: {
   activeCommunitySlug: string | null;
   communityTab: CommunityTab;
   discoverTab: DiscoverTab;
+  discoverAppId: string | null;
   activeThreadId: string | null;
   applyLocationToState: () => void;
   setBuilderConnectReturn: Dispatch<SetStateAction<BuilderConnectReturn | null>>;
@@ -38,6 +39,7 @@ export function useWebPathRouteLifecycle(params: {
     communitySlug: string | null;
     communityTab: CommunityTab;
     discoverTab: DiscoverTab;
+    discoverAppId: string | null;
     threadId: string | null;
   }) => string | null;
 }) {
@@ -80,6 +82,7 @@ export function useWebPathRouteLifecycle(params: {
       communitySlug: params.activeCommunitySlug,
       communityTab: params.communityTab,
       discoverTab: params.discoverTab,
+      discoverAppId: params.discoverAppId,
       threadId: params.activePage === "workspace" && params.activeView === "home" ? params.activeThreadId : null,
     });
     if (!nextPath) return;
@@ -95,6 +98,7 @@ export function useWebPathRouteLifecycle(params: {
     params.activeCommunitySlug,
     params.communityTab,
     params.discoverTab,
+    params.discoverAppId,
     params.activeThreadId,
   ]);
 }

@@ -26,6 +26,7 @@ export type AppRouteState = {
   communitySlug: string | null;
   communityTab: CommunityTab;
   discoverTab?: DiscoverTab | null;
+  discoverAppId?: string | null;
   threadId: string | null;
 };
 
@@ -36,6 +37,7 @@ export type AppRoutePathState = {
   communitySlug: string | null;
   communityTab: CommunityTab;
   discoverTab?: DiscoverTab | null;
+  discoverAppId?: string | null;
   threadId: string | null;
 };
 
@@ -313,14 +315,16 @@ function parseAppRouteFromPathname(pathname: string): AppRoutePathState | null {
     };
   }
 
-  if (segments[0] === "discover" && segments.length <= 2) {
+  if (segments[0] === "discover" && segments.length <= 3) {
+    const discoverTab = parseDiscoverTab(segments[1] ?? null);
     return {
       page: "discover",
       view: "home",
       settingsPage: "agent",
       communitySlug: null,
       communityTab: "chat",
-      discoverTab: parseDiscoverTab(segments[1] ?? null),
+      discoverTab,
+      discoverAppId: discoverTab === "apps" ? String(segments[2] ?? "").trim() || null : null,
       threadId: null,
     };
   }
@@ -412,6 +416,7 @@ export function readAppRouteFromLocation(): AppRouteState {
       communitySlug: fromPath.communitySlug,
       communityTab: fromPath.communityTab,
       discoverTab: fromPath.discoverTab ?? "communities",
+      discoverAppId: fromPath.discoverAppId ?? null,
       threadId: fromPath.threadId,
     };
   }
@@ -423,6 +428,7 @@ export function readAppRouteFromLocation(): AppRouteState {
     communitySlug: null,
     communityTab: "chat",
     discoverTab: "communities",
+    discoverAppId: null,
     threadId: null,
   };
 }
@@ -434,7 +440,10 @@ export function buildAppRoutePath(state: AppRoutePathState): string | null {
 
   if (state.page === "discover") {
     const tab = parseDiscoverTab(state.discoverTab);
-    if (tab === "apps") return "/discover/apps";
+    if (tab === "apps") {
+      const appId = String(state.discoverAppId ?? "").trim();
+      return appId ? `/discover/apps/${encodeURIComponent(appId)}` : "/discover/apps";
+    }
     if (tab === "skills") return "/discover/skills";
     return "/discover";
   }

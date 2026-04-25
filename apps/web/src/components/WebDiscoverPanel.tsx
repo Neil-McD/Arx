@@ -55,7 +55,9 @@ function createConnectAttemptId(): string {
 type WebDiscoverPanelProps = {
   showMobileShell: boolean;
   activeTab: DiscoverTab;
+  selectedAppId: string | null;
   onSelectTab: (tab: DiscoverTab) => void;
+  onSelectApp: (appId: string | null) => void;
   hasSession: boolean;
   isAuthRecoveringSignedIn: boolean;
   onRequireAuth: () => void;
@@ -322,7 +324,9 @@ function buildDiscoverCommunityCardProps(args: {
 export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
   const {
     activeTab,
+    selectedAppId,
     onSelectTab,
+    onSelectApp,
     onRequireAuth,
     hasSession,
     isAuthRecoveringSignedIn,
@@ -369,7 +373,6 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
     onOpenActiveCommunityAiAgentApps,
     onOpenActiveCommunityAiAgentSkills,
   } = props;
-  const [selectedAppId, setSelectedAppId] = useState<string | null>(null);
   const [selectedSkillId, setSelectedSkillId] = useState<string | null>(null);
   const [personalConnectEndpoint, setPersonalConnectEndpoint] = useState("");
   const [personalConnectAuthType, setPersonalConnectAuthType] =
@@ -453,9 +456,9 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
 
   useEffect(() => {
     if (!isAppsTab && selectedAppId) {
-      setSelectedAppId(null);
+      onSelectApp(null);
     }
-  }, [isAppsTab, selectedAppId]);
+  }, [isAppsTab, onSelectApp, selectedAppId]);
 
   useEffect(() => {
     if (!isSkillsTab && selectedSkillId) {
@@ -865,7 +868,7 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
                 <button
                   type="button"
                   className="discover-breadcrumb-button"
-                  onClick={() => setSelectedAppId(null)}
+                  onClick={() => onSelectApp(null)}
                 >
                   Apps
                 </button>
@@ -1367,7 +1370,7 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
                       type="button"
                       className="discover-app-row-button"
                       role="listitem"
-                      onClick={() => setSelectedAppId(app.id)}
+                      onClick={() => onSelectApp(app.id)}
                       aria-label={`Open ${app.name}`}
                     >
                       <DiscoverCatalogLogo
@@ -1381,13 +1384,7 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
                           {app.tagline}
                         </div>
                       </div>
-                      <span className="discover-app-action">
-                        {findMatchingPersonalMount(app, discoverApps, userPlatformAppMounts)
-                          ? "Manage"
-                          : isDiscoverAppPersonallyConnectable(app)
-                            ? "Add"
-                            : "Catalog"}
-                      </span>
+                      <span className="discover-app-action">View</span>
                     </button>
                   ))}
                 </div>

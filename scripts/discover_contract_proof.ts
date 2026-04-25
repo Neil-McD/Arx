@@ -218,8 +218,18 @@ function main() {
   );
   assertIncludes(
     webAppRouteState,
-    'if (tab === "apps") return "/discover/apps";',
+    'if (tab === "apps") {',
     "Discover Apps tab has a refresh-stable route",
+  );
+  assertIncludes(
+    webAppRouteState,
+    'return appId ? `/discover/apps/${encodeURIComponent(appId)}` : "/discover/apps";',
+    "Discover app detail has a refresh-stable route",
+  );
+  assertIncludes(
+    webAppRouteState,
+    'discoverAppId: discoverTab === "apps" ? String(segments[2] ?? "").trim() || null : null,',
+    "Discover app detail route restores selected app id",
   );
   assertIncludes(
     webAppRouteState,
@@ -232,14 +242,39 @@ function main() {
     "route lifecycle preserves Discover tab while replacing app route",
   );
   assertIncludes(
+    pathRouteLifecycle,
+    "discoverAppId: params.discoverAppId,",
+    "route lifecycle preserves selected Discover app while replacing app route",
+  );
+  assertIncludes(
     app,
     "() => initialAppRoute?.discoverTab ?? \"communities\"",
     "App initializes Discover tab from the route",
   );
   assertIncludes(
     app,
+    "() => initialAppRoute?.discoverAppId ?? null",
+    "App initializes selected Discover app from the route",
+  );
+  assertIncludes(
+    app,
     "discoverTab: discoverActiveTab,",
     "App writes active Discover tab back to the app route",
+  );
+  assertIncludes(
+    app,
+    "discoverAppId: selectedDiscoverAppId,",
+    "App writes selected Discover app back to the app route",
+  );
+  assertIncludes(
+    discoverPanel,
+    '<span className="discover-app-action">View</span>',
+    "Discover app rows use a neutral view action",
+  );
+  assertNotIncludes(
+    discoverPanel,
+    '? "Add"\n                            : "Catalog"',
+    "Discover app rows do not mix add/catalog labels into the row action",
   );
   assertNotIncludes(
     discoverPanel,
