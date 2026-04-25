@@ -8721,6 +8721,18 @@ button.chat-reply-quote:hover {
   letter-spacing: 0;
 }
 
+.runtime-thought-snippet {
+  width: fit-content;
+  max-width: min(620px, 100%);
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.45;
+  letter-spacing: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .runtime-tool-roll {
   position: relative;
   display: flex;

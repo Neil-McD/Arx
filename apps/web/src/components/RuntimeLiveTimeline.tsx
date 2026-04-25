@@ -10,13 +10,36 @@ import { useSmoothStreamingText } from "../../../../shared/useSmoothStreamingTex
 const TOOL_ROLL_LIMIT = 3;
 const DRAWER_STEP_LIMIT = 5;
 
+function latestWorkStep(steps: AgentActivityStep[]): AgentActivityStep | null {
+  return (
+    [...steps].reverse().find((step) => step.kind !== "completed") ??
+    steps[steps.length - 1] ??
+    null
+  );
+}
+
 function activityWordForSteps(steps: AgentActivityStep[]): string {
   const activeStep =
     steps.find((step) => step.isActive) ??
-    [...steps].reverse().find((step) => step.kind !== "completed") ??
+    latestWorkStep(steps) ??
     null;
   if (!activeStep) return "Thinking";
   return activeStep.title;
+}
+
+function narrationForStep(step: AgentActivityStep | null): string | null {
+  if (!step) return null;
+  if (step.kind === "planning") return "I’m setting up the run and deciding where to start.";
+  if (step.kind === "exploring") {
+    if (step.stats.searches) return "I’m searching for the relevant path before changing anything.";
+    if (step.stats.directoriesScanned) return "I’m mapping the workspace so I can work from the right place.";
+    return "I’m narrowing down where the answer should come from.";
+  }
+  if (step.kind === "reading") return "I’m reading the files that look relevant.";
+  if (step.kind === "editing") return "I’m applying the smallest change that fits what I found.";
+  if (step.kind === "verifying") return "I’m checking whether the change actually holds.";
+  if (step.kind === "blocked") return "I hit a blocker and I’m preserving what happened.";
+  return "I’m wrapping up the result.";
 }
 
 function isToolStep(step: AgentActivityStep): boolean {
@@ -50,6 +73,10 @@ export function RuntimeLiveTimeline(props: {
     [props.events],
   );
   const activityWord = useMemo(() => activityWordForSteps(steps), [steps]);
+  const narration = useMemo(
+    () => narrationForStep(latestWorkStep(steps)),
+    [steps],
+  );
   const visibleToolSteps = useMemo(() => toolStepsForDrawers(steps), [steps]);
   const rollTargetStep = visibleToolSteps[visibleToolSteps.length - 1] ?? null;
   const olderDrawers = rollTargetStep ? visibleToolSteps.slice(0, -1) : visibleToolSteps;
@@ -59,6 +86,9 @@ export function RuntimeLiveTimeline(props: {
   );
   const displayWord = useSmoothStreamingText(activityWord, {
     active: showActiveIndicators,
+  });
+  const displayNarration = useSmoothStreamingText(narration ?? "", {
+    active: showActiveIndicators && Boolean(narration),
   });
 
   if (!showActiveIndicators) return null;
@@ -122,6 +152,11 @@ export function RuntimeLiveTimeline(props: {
             </div>
           ) : null}
         </div>
+      ) : null}
+      {displayNarration ? (
+        <span className="runtime-thought-snippet streaming-placeholder">
+          {displayNarration}
+        </span>
       ) : null}
       <span className="streaming-placeholder shimmer-text streaming-thinking-footer runtime-activity-word">
         {displayWord}
