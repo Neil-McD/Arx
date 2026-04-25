@@ -521,6 +521,15 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
     : [];
   const communityTargetLabel =
     String(manageableCommunityTargetName ?? "").trim() || "this community";
+  const selectedSkillErrorMessage =
+    selectedSkillActionError ??
+    (hasSession
+      ? userPlatformSkillMutationError ??
+        communitySkillMutationError ??
+        userPlatformSkillError ??
+        communitySkillAttachmentError ??
+        ownedSkillPackagesError
+      : null);
 
   const resetAppConnectFeedback = () => {
     setPersonalConnectError(null);
@@ -860,11 +869,88 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
     );
   };
 
+  const renderSelectedSkillHeader = () => {
+    if (!selectedSkill) return null;
+    return (
+      <div className="discover-app-detail-header">
+        <div
+          className={`discover-app-icon discover-app-icon-${selectedSkill.icon} discover-app-icon-detail`}
+        >
+          {renderSkillIcon(selectedSkill.icon)}
+        </div>
+        <div className="discover-app-detail-meta">
+          <div className="discover-app-detail-heading-row">
+            <div className="discover-app-detail-name">
+              {selectedSkill.name}
+            </div>
+            <div className="agent-capability-toolbar-actions">
+              {selectedSkillPersonalActionLabel ? (
+                <button
+                  type="button"
+                  className="settings-cta discover-app-detail-action"
+                  onClick={() => void handleAddSkill(selectedSkill)}
+                  disabled={
+                    isCreatingUserPlatformSkill ||
+                    isLoadingUserPlatformSkills
+                  }
+                >
+                  {selectedPersonalSkillInstall
+                    ? selectedSkillPersonalActionLabel
+                    : isCreatingUserPlatformSkill
+                      ? "Adding…"
+                      : selectedSkillPersonalActionLabel}
+                </button>
+              ) : null}
+              {selectedSkillCommunityActionLabel ? (
+                <button
+                  type="button"
+                  className="settings-cta discover-app-detail-action"
+                  onClick={() => void handleAddSkillToCommunity(selectedSkill)}
+                  disabled={
+                    isLoadingCommunitySkillAttachments ||
+                    isLoadingOwnedSkillPackages ||
+                    isCreatingCommunitySkill ||
+                    (selectedOwnedSkillPackage
+                      ? attachingCommunitySkillPackageId ===
+                        selectedOwnedSkillPackage.id
+                      : false)
+                  }
+                >
+                  {selectedCommunitySkillAttachment
+                    ? selectedSkillCommunityActionLabel
+                    : isLoadingCommunitySkillAttachments ||
+                        isLoadingOwnedSkillPackages
+                      ? "Checking…"
+                      : isCreatingCommunitySkill ||
+                          (selectedOwnedSkillPackage
+                            ? attachingCommunitySkillPackageId ===
+                              selectedOwnedSkillPackage.id
+                            : false)
+                        ? "Adding…"
+                        : selectedSkillCommunityActionLabel}
+                </button>
+              ) : null}
+            </div>
+          </div>
+          <div className="discover-app-detail-tagline">
+            {selectedSkill.tagline}
+          </div>
+          <div className="discover-card-desc">
+            {selectedSkill.description}
+          </div>
+          {selectedSkillErrorMessage ? (
+            <div className="auth-error">{selectedSkillErrorMessage}</div>
+          ) : null}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="community-panel discover-panel">
       <div
         className={`discover-hero${
-          selectedApp ? " discover-hero-with-app-detail" : ""
+          selectedApp || selectedSkill ? " discover-hero-with-app-detail" : ""
         }`}
       >
         {shouldShowHeroCopy ? (
@@ -929,6 +1015,10 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
           <div className="discover-fixed-app-detail-header">
             {renderSelectedAppHeader()}
           </div>
+        ) : selectedSkill ? (
+          <div className="discover-fixed-app-detail-header">
+            {renderSelectedSkillHeader()}
+          </div>
         ) : null}
       </div>
       <div className="workspace-body chat-feed">
@@ -990,185 +1080,9 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
             </div>
           ) : isSkillsTab && selectedSkill ? (
             <div className="discover-app-detail-page">
-              <div className="discover-app-detail-header">
-                <div
-                  className={`discover-app-icon discover-app-icon-${selectedSkill.icon} discover-app-icon-detail`}
-                >
-                  {renderSkillIcon(selectedSkill.icon)}
-                </div>
-                <div className="discover-app-detail-meta">
-                  <div className="discover-app-detail-heading-row">
-                    <div className="discover-app-detail-name">
-                      {selectedSkill.name}
-                    </div>
-                    <div className="agent-capability-toolbar-actions">
-                      {selectedSkillPersonalActionLabel ? (
-                        <button
-                          type="button"
-                          className="settings-cta discover-app-detail-action"
-                          onClick={() => void handleAddSkill(selectedSkill)}
-                          disabled={
-                            isCreatingUserPlatformSkill ||
-                            isLoadingUserPlatformSkills
-                          }
-                        >
-                          {selectedPersonalSkillInstall
-                            ? selectedSkillPersonalActionLabel
-                            : isCreatingUserPlatformSkill
-                              ? "Adding…"
-                              : selectedSkillPersonalActionLabel}
-                        </button>
-                      ) : null}
-                      {selectedSkillCommunityActionLabel ? (
-                        <button
-                          type="button"
-                          className="settings-cta discover-app-detail-action"
-                          onClick={() => void handleAddSkillToCommunity(selectedSkill)}
-                          disabled={
-                            isLoadingCommunitySkillAttachments ||
-                            isLoadingOwnedSkillPackages ||
-                            isCreatingCommunitySkill ||
-                            (selectedOwnedSkillPackage
-                              ? attachingCommunitySkillPackageId ===
-                                selectedOwnedSkillPackage.id
-                              : false)
-                          }
-                        >
-                          {selectedCommunitySkillAttachment
-                            ? selectedSkillCommunityActionLabel
-                            : isLoadingCommunitySkillAttachments ||
-                                isLoadingOwnedSkillPackages
-                              ? "Checking…"
-                              : isCreatingCommunitySkill ||
-                                  (selectedOwnedSkillPackage
-                                    ? attachingCommunitySkillPackageId ===
-                                      selectedOwnedSkillPackage.id
-                                    : false)
-                                ? "Adding…"
-                                : selectedSkillCommunityActionLabel}
-                        </button>
-                      ) : null}
-                    </div>
-                  </div>
-                  <div className="discover-app-detail-tagline">
-                    {selectedSkill.tagline}
-                  </div>
-                  <div className="discover-card-desc">
-                    {selectedSkill.description}
-                  </div>
-                </div>
-              </div>
-
-              <div className="discover-app-spotlight">
-                {selectedSkill.heroNote}
-              </div>
-
-              <section className="discover-card discover-app-detail-section">
-                {hasSession && userPlatformSkillError ? (
-                  <div className="auth-error">{userPlatformSkillError}</div>
-                ) : null}
-                {hasSession && userPlatformSkillMutationError ? (
-                  <div className="auth-error">{userPlatformSkillMutationError}</div>
-                ) : null}
-                {hasSession && hasManageableCommunityTarget && communitySkillAttachmentError ? (
-                  <div className="auth-error">{communitySkillAttachmentError}</div>
-                ) : null}
-                {hasSession && hasManageableCommunityTarget && ownedSkillPackagesError ? (
-                  <div className="auth-error">{ownedSkillPackagesError}</div>
-                ) : null}
-                {hasSession && hasManageableCommunityTarget && communitySkillMutationError ? (
-                  <div className="auth-error">{communitySkillMutationError}</div>
-                ) : null}
-                {selectedSkillActionError ? (
-                  <div className="auth-error">{selectedSkillActionError}</div>
-                ) : null}
-                {!hasSession ? (
-                  <div className="discover-connect-status">
-                    <div className="discover-connect-status-title">
-                      Sign in required
-                    </div>
-                    <div className="discover-connect-status-body">
-                      Sign in first, then add this skill to your personal
-                      skills layer.
-                    </div>
-                  </div>
-                ) : selectedPersonalSkillInstall ? (
-                  <div className="discover-connect-status">
-                    <div className="discover-connect-status-title">Added to you</div>
-                    <div className="discover-connect-status-body">
-                      This skill is already in your personal skills and can be
-                      managed from Integrations.
-                    </div>
-                  </div>
-                ) : selectedSkill.installInput ? (
-                  <div className="discover-connect-status">
-                    <div className="discover-connect-status-title">
-                      Ready to add
-                    </div>
-                    <div className="discover-connect-status-body">
-                      Add this curated skill and it will appear in Settings{" "}
-                      {">"} Integrations {">"} My skills.
-                    </div>
-                  </div>
-                ) : (
-                  <div className="discover-connect-status">
-                    <div className="discover-connect-status-title">
-                      Manual skill
-                    </div>
-                    <div className="discover-connect-status-body">
-                      This is the custom path. Open Integrations with the skill
-                      creator already open.
-                    </div>
-                  </div>
-                )}
-                {hasManageableCommunityTarget ? (
-                  selectedCommunitySkillAttachment ? (
-                    <div className="discover-connect-status">
-                      <div className="discover-connect-status-title">
-                        Added to {communityTargetLabel}
-                      </div>
-                      <div className="discover-connect-status-body">
-                        This skill is attached to the active community lens and
-                        can be managed from AI Agent {">"} Skills.
-                      </div>
-                    </div>
-                  ) : isLoadingCommunitySkillAttachments || isLoadingOwnedSkillPackages ? (
-                    <div className="discover-connect-status">
-                      <div className="discover-connect-status-title">
-                        Checking {communityTargetLabel}
-                      </div>
-                      <div className="discover-connect-status-body">
-                        Loading this community&apos;s attached skills and your reusable
-                        skill packages.
-                      </div>
-                    </div>
-                  ) : selectedSkill.installInput ? (
-                    <div className="discover-connect-status">
-                      <div className="discover-connect-status-title">
-                        Ready to add to {communityTargetLabel}
-                      </div>
-                      <div className="discover-connect-status-body">
-                        Add this skill directly to the active community lens
-                        without leaving Discover.
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="discover-connect-status">
-                      <div className="discover-connect-status-title">
-                        Create in {communityTargetLabel}
-                      </div>
-                      <div className="discover-connect-status-body">
-                        Open the active community&apos;s AI Agent skills editor to
-                        create a custom skill and attach it there.
-                      </div>
-                    </div>
-                  )
-                ) : null}
-              </section>
-
               <section className="discover-card discover-app-detail-section">
                 <div className="discover-detail-section-title">
-                  What it does
+                  Description
                 </div>
                 <ul className="discover-detail-list">
                   {selectedSkill.detailBullets.map((item) => (

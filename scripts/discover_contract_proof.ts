@@ -321,6 +321,11 @@ function main() {
     "const renderSelectedAppHeader = () => {",
     "Discover app detail header has one canonical renderer",
   );
+  assertIncludes(
+    discoverPanel,
+    "const renderSelectedSkillHeader = () => {",
+    "Discover skill detail header has one canonical renderer",
+  );
   const appDetailView = extractSection(
     discoverPanel,
     "{isAppsTab && selectedApp ? (",
@@ -346,6 +351,32 @@ function main() {
     appDetailView,
     "Information",
     "Discover app detail keeps the information section",
+  );
+  const skillDetailView = extractSection(
+    discoverPanel,
+    ") : isSkillsTab && selectedSkill ? (",
+    "          ) : (\n            <div className=\"discover-grid\">",
+    "Discover skill detail view",
+  );
+  assertNotIncludes(
+    skillDetailView,
+    "selectedSkill.heroNote",
+    "Discover skill detail does not render a promo spotlight banner",
+  );
+  assertNotIncludes(
+    skillDetailView,
+    "discover-connect-status",
+    "Discover skill detail does not render redundant setup/status cards",
+  );
+  assertIncludes(
+    skillDetailView,
+    "Description",
+    "Discover skill detail labels the capability section as Description",
+  );
+  assertIncludes(
+    skillDetailView,
+    "Information",
+    "Discover skill detail keeps the information section",
   );
   assertNotIncludes(
     discoverPanel,
