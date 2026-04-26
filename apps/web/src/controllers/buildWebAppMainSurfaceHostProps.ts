@@ -9,6 +9,7 @@ export function buildWebAppMainSurfaceHostProps(params: {
   publicCommunityFunnelProps: WebAppMainSurfaceHostProps["publicCommunityFunnelProps"];
   communityHostProps: WebAppMainSurfaceHostProps["communityHostProps"];
   discoverPanelProps: WebAppMainSurfaceHostProps["discoverPanelProps"];
+  productDocsPanelProps: WebAppMainSurfaceHostProps["productDocsPanelProps"];
 }): WebAppMainSurfaceHostProps {
   return {
     activePage: params.activePage,
@@ -17,9 +18,12 @@ export function buildWebAppMainSurfaceHostProps(params: {
       params.publicRoute.kind === "app" && params.activePage === "community",
     showDiscoverPanel:
       params.publicRoute.kind === "app" && params.activePage === "discover",
+    showProductDocsPanel:
+      params.publicRoute.kind === "app" && params.activePage === "docs",
     workspaceSurfaceHostProps: params.workspaceSurfaceHostProps,
     publicCommunityFunnelProps: params.publicCommunityFunnelProps,
     communityHostProps: params.communityHostProps,
     discoverPanelProps: params.discoverPanelProps,
+    productDocsPanelProps: params.productDocsPanelProps,
   };
 }

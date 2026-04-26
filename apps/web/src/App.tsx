@@ -173,6 +173,7 @@ import {
   readPublicRouteFromLocation,
   readShellVariantFromPathname,
 } from "../../../shared/webAppRouteState";
+import { PRODUCT_DOCS_DEFAULT_SLUG } from "./docs/productDocsContent";
 import {
   formatBackTargetLabel as formatBackTargetLabelShared,
   type NavSnapshotBase,
@@ -1105,6 +1106,9 @@ export default function App() {
   const [selectedDiscoverSkillId, setSelectedDiscoverSkillId] = useState<string | null>(
     () => initialAppRoute?.discoverSkillId ?? null,
   );
+  const [selectedProductDocSlug, setSelectedProductDocSlug] = useState<string | null>(
+    () => initialAppRoute?.docsSlug ?? null,
+  );
   const [shouldOpenCreatePersonalSkill, setShouldOpenCreatePersonalSkill] =
     useState(false);
   const settingsGroup = settingsGroupForPage(settingsPage);
@@ -1928,6 +1932,9 @@ export default function App() {
       setSelectedDiscoverAppId(nextAppRoute.discoverAppId ?? null);
       setSelectedDiscoverSkillId(nextAppRoute.discoverSkillId ?? null);
     }
+    if (nextAppRoute.page === "docs") {
+      setSelectedProductDocSlug(nextAppRoute.docsSlug ?? null);
+    }
     if (nextAppRoute.page === "community") {
       applyCommunityShellState({
         communitySlug: normalizedCommunitySlug,
@@ -2034,6 +2041,7 @@ export default function App() {
         discoverTab: discoverActiveTab,
         discoverAppId: selectedDiscoverAppId,
         discoverSkillId: selectedDiscoverSkillId,
+        docsSlug: activePage === "docs" ? selectedProductDocSlug : null,
         threadId: activePage === "workspace" && activeView === "home" ? activeThreadId : null,
       }) ?? "",
       shellVariant,
@@ -3142,6 +3150,7 @@ export default function App() {
     discoverTab: discoverActiveTab,
     discoverAppId: selectedDiscoverAppId,
     discoverSkillId: selectedDiscoverSkillId,
+    docsSlug: activePage === "docs" ? selectedProductDocSlug : null,
     activeThreadId,
     applyLocationToState,
     setBuilderConnectReturn,
@@ -6508,6 +6517,26 @@ export default function App() {
           community,
         });
       },
+    },
+    productDocsPanelProps: {
+      activeSlug: selectedProductDocSlug,
+      onSelectSlug: (slug) => {
+        const nextSlug = String(slug || PRODUCT_DOCS_DEFAULT_SLUG).trim() || PRODUCT_DOCS_DEFAULT_SLUG;
+        setSelectedProductDocSlug(nextSlug);
+        navigateTo(buildAppRoutePath({
+          page: "docs",
+          view: "home",
+          settingsPage,
+          communitySlug: null,
+          communityTab: "chat",
+          discoverTab: discoverActiveTab,
+          discoverAppId: null,
+          discoverSkillId: null,
+          docsSlug: nextSlug,
+          threadId: null,
+        }) ?? "/docs");
+      },
+      renderMarkdown,
     },
   });
   const globalOverlays = <WebGlobalOverlayHost {...globalOverlayHostProps} />;

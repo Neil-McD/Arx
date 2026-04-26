@@ -1,0 +1,92 @@
+# Polynet LLM Full Context
+
+## 1. Platform Definition
+
+Polynet is an AI-native collective intelligence platform where builders can create custom AI agents, distribute them through communities, and monetize systems that become more valuable as the network learns and compounds.
+
+The agent is not an add-on to the community. The agent is part of the product. The community is not just an audience. It is the distribution, trust, retention, and feedback layer. Collective intelligence is the compounding asset created from shared activity, curated knowledge, resources, workflows, and intentionally configured systems.
+
+## 2. Builder Mental Model
+
+A builder uses Polynet to package expertise, workflows, and judgment into an AI-native community product. The builder configures the community, agent, access model, resources, apps/MCPs, skills, and billing. The community creates trust and recurring usage. The agent makes the product useful every day.
+
+## 3. Member Mental Model
+
+A member joins communities, participates in chat and resources, and uses the workspace for AI threads. When a member switches a thread into a community lens, future turns can use that community context if the backend validates access.
+
+## 4. Core Primitives
+
+Community: gated network around a builder, members, resources, chat, and agent context.
+
+Funnel: canonical public entry surface for community join, approval, checkout, or sign-in flows.
+
+Agent: AI product surface that uses platform rules, community configuration, user context, and allowed tools.
+
+Workspace: personal AI work surface where users run threads and switch lenses.
+
+Thread: durable conversation record. Thread history and lens changes must be auditable.
+
+Community lens: explicit community context attached to a thread. It affects subsequent turns only.
+
+Voice input: authenticated speech-to-text input for workspace and community message surfaces.
+
+App/MCP: external capability or tool surface connected to Polynet.
+
+Skill: reusable instruction/capability package that shapes agent behavior.
+
+Resource: community-owned knowledge item available to members and, where allowed, agent context.
+
+Entitlement: durable backend access truth.
+
+Role: community authority level. Role is not the same as payment status.
+
+Memory: explicit reusable context. Current alpha memory is personal global/workspace memory. Future community or system memory should not be described as alpha-current until the implementation and product flow are explicit.
+
+## 5. Access Rules
+
+Published visibility does not mean ungated access. Published communities can still require membership, payment, approval, or other entitlement checks.
+
+Access decisions must be entitlement-driven and evaluated on the backend. Frontend state is projection, not authority. Redirects are UX only. Payment provider/webhook verification is authoritative.
+
+## 6. Context Rules
+
+The platform context stack should follow the canonical workspace context contract:
+
+1. platform doctrine
+2. agent soul
+3. community lens, if server validated
+4. workspace context
+5. agent operating policy
+6. repo instruction docs, where relevant to the active runtime lane
+7. user message content
+
+Runtime inputs can include user/session state, thread history, resources, skills, connected apps/MCP tools, and runtime/tool policy. These inputs do not outrank the canonical context stack.
+
+Personal prompts are not part of the canonical context stack. Community intelligence evidence is not the same thing as community doctrine. Daytona snapshots are not the community lens.
+
+The community lens must fail closed if access is missing. Lens switching affects future turns only and does not rewrite earlier messages.
+
+## 7. Prompt Rules
+
+Prompts should reference documentation and structured context. Prompts should not become the hidden source of truth.
+
+Community owners can configure instructions for their community agent, but those instructions must sit below platform safety, access, and entitlement rules.
+
+## 8. Security Rules
+
+Cloud data is canonical for users, communities, memberships, entitlements, billing state, threads/messages, and memory records.
+
+The web runtime cannot execute local filesystem or shell tools. Workspace tools must be bounded, approved where required, and scoped to the correct environment.
+
+## 9. Non-Goals
+
+Do not frame Polynet as:
+
+- only a chat app
+- only a social network
+- only a course platform
+- only a community platform with an AI feature
+- only a standalone assistant
+- an IDE replacement
+
+Do not imply silent extraction from private member AI usage. The safer product truth is that collective intelligence compounds from shared community activity, curated resources, configured workflows, and intentional builder systems.

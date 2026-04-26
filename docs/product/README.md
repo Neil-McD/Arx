@@ -1,0 +1,93 @@
+---
+id: product.docs_index
+title: Product Documentation Index
+audience: builder, member, llm, operator
+status: alpha-current
+last_verified: 2026-04-26
+---
+
+# Product Documentation Index
+
+## Purpose
+
+This directory is the canonical product documentation source for Polynet.
+
+It is written for two readers:
+
+- humans who need to understand and use the platform
+- LLMs that need stable product truth for prompts, retrieval, and context assembly
+
+The existing `/docs` directory contains internal engineering contracts, release workflows, historical plans, and implementation notes. Those files are not user-facing documentation and should not be exposed directly as product docs.
+
+## Product Truth
+
+Polynet is an AI-native collective intelligence platform where builders can create custom AI agents, distribute them through communities, and monetize systems that become more valuable as the network learns and compounds.
+
+The product combines:
+
+- agents as product surfaces
+- communities as distribution, trust, retention, and feedback systems
+- collective intelligence as the compounding asset
+
+## Documentation Rules
+
+1. Use stable concept names.
+2. Prefer explicit rules over narrative ambiguity.
+3. Distinguish alpha-current behavior from future intent.
+4. Do not expose internal migration history as product truth.
+5. Do not overclaim capabilities that are not implemented.
+6. Keep docs modular so LLMs can ingest one concept at a time.
+7. Keep prompts downstream from docs; prompts should reference product truth, not replace it.
+
+## Status Values
+
+- `alpha-current`: implemented or intentionally part of the active alpha model
+- `planned`: intended direction, not guaranteed to be live
+- `internal-only`: useful for operators or agents, not for public product docs
+- `deprecated`: historical or superseded
+
+## Ingestion Order
+
+LLMs should read product docs in this order:
+
+1. `llms.txt`
+2. `llms-full.txt`
+3. `primitives/polynet.md`
+4. `primitives/community.md`
+5. `primitives/funnel.md`
+6. `primitives/agent.md`
+7. `primitives/workspace.md`
+8. `primitives/thread.md`
+9. `primitives/community-lens.md`
+10. `primitives/voice.md`
+11. `primitives/app-mcp.md`
+12. `primitives/skill.md`
+13. `primitives/resource.md`
+14. `primitives/entitlement.md`
+15. `primitives/role.md`
+16. `primitives/memory.md`
+17. `reference/access-model.md`
+18. `reference/context-model.md`
+19. `reference/prompt-context-model.md`
+20. `reference/security-privacy.md`
+21. `reference/glossary.md`
+
+## Human Reading Paths
+
+Builder path:
+
+1. `guides/builder-quickstart.md`
+2. `guides/launch-a-community.md`
+3. `guides/configure-community-agent.md`
+4. `guides/connect-apps-and-mcps.md`
+5. `guides/create-and-use-skills.md`
+6. `guides/manage-resources.md`
+7. `guides/manage-access-billing-and-roles.md`
+
+Member path:
+
+1. `guides/member-quickstart.md`
+2. `guides/joining-communities.md`
+3. `guides/workspace.md`
+4. `guides/community-lens.md`
+5. `guides/chat-and-resources.md`

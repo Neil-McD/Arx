@@ -1,0 +1,246 @@
+.product-docs-panel {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.product-docs-shell {
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  padding: 36px clamp(20px, 5vw, 72px);
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  overflow: hidden;
+}
+
+.product-docs-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  align-items: flex-start;
+  flex: 0 0 auto;
+}
+
+.product-docs-header h1 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 32px;
+  line-height: 1.08;
+  font-weight: 700;
+}
+
+.product-docs-header p {
+  margin: 8px 0 0;
+  max-width: 72ch;
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.product-docs-kicker {
+  margin: 0 0 6px !important;
+  color: var(--text-muted) !important;
+  font-size: 12px !important;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.product-docs-header-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.product-docs-header-meta span,
+.product-docs-audience span {
+  border: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--bg-card) 70%, transparent);
+  color: var(--text-secondary);
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.product-docs-layout {
+  min-height: 0;
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-columns: minmax(220px, 300px) minmax(0, 1fr);
+  gap: 28px;
+}
+
+.product-docs-nav,
+.product-docs-reader-shell {
+  min-height: 0;
+  overflow: auto;
+}
+
+.product-docs-nav {
+  padding: 4px 16px 24px 0;
+  border-right: 1px solid var(--border-subtle);
+}
+
+.product-docs-nav-section + .product-docs-nav-section {
+  margin-top: 24px;
+}
+
+.product-docs-nav-section h2 {
+  margin: 0 0 10px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.product-docs-nav-list {
+  display: grid;
+  gap: 6px;
+}
+
+.product-docs-nav-item {
+  appearance: none;
+  width: 100%;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-secondary);
+  text-align: left;
+  border-radius: 8px;
+  padding: 10px 11px;
+  cursor: pointer;
+}
+
+.product-docs-nav-item span,
+.product-docs-nav-item small {
+  display: block;
+}
+
+.product-docs-nav-item span {
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.product-docs-nav-item small {
+  margin-top: 3px;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.product-docs-nav-item:hover,
+.product-docs-nav-item.active {
+  border-color: var(--border-subtle);
+  background: color-mix(in srgb, var(--bg-card) 72%, transparent);
+}
+
+.product-docs-reader-shell {
+  padding: 2px 8px 40px 0;
+}
+
+.product-docs-reader-topline {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  align-items: flex-start;
+  margin-bottom: 22px;
+}
+
+.product-docs-reader-topline h2 {
+  margin: 3px 0 0;
+  color: var(--text-primary);
+  font-size: 28px;
+  line-height: 1.1;
+  font-weight: 750;
+}
+
+.product-docs-reader-section {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.product-docs-audience {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.product-docs-reader {
+  max-width: 86ch;
+  color: var(--text-secondary);
+}
+
+.product-docs-reader .md-header:first-child {
+  display: none;
+}
+
+.product-docs-reader .md-paragraph {
+  color: var(--text-secondary);
+  font-size: 15px;
+  line-height: 1.7;
+}
+
+.product-docs-reader .md-header {
+  color: var(--text-primary);
+}
+
+.product-docs-reader h2.md-header {
+  margin-top: 30px;
+  font-size: 21px;
+}
+
+.product-docs-reader h3.md-header {
+  margin-top: 22px;
+  font-size: 17px;
+}
+
+.product-docs-reader .md-list {
+  color: var(--text-secondary);
+  font-size: 15px;
+  line-height: 1.65;
+}
+
+@media (max-width: 900px) {
+  .product-docs-shell {
+    padding: 22px 16px;
+    overflow: auto;
+  }
+
+  .product-docs-header {
+    display: grid;
+  }
+
+  .product-docs-header-meta {
+    justify-content: flex-start;
+  }
+
+  .product-docs-layout {
+    display: flex;
+    flex-direction: column;
+    overflow: visible;
+  }
+
+  .product-docs-nav {
+    border-right: 0;
+    border-bottom: 1px solid var(--border-subtle);
+    padding: 0 0 16px;
+    overflow: visible;
+  }
+
+  .product-docs-nav-list {
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  }
+
+  .product-docs-reader-shell {
+    overflow: visible;
+    padding-right: 0;
+  }
+}

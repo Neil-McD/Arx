@@ -2,6 +2,7 @@ import type { ComponentProps } from "react";
 import type { AppPage } from "../../../../shared/appShellNavigation";
 import { WebCommunityHost } from "./WebCommunityHost";
 import { WebDiscoverPanel } from "./WebDiscoverPanel";
+import { WebProductDocsPanel } from "./WebProductDocsPanel";
 import { WebPublicCommunityFunnel } from "./WebPublicCommunityFunnel";
 import { WebWorkspaceSurfaceHost } from "./WebWorkspaceSurfaceHost";
 
@@ -10,10 +11,12 @@ export type WebAppMainSurfaceHostProps = {
   showPublicCommunityFunnel: boolean;
   showCommunitySurface: boolean;
   showDiscoverPanel: boolean;
+  showProductDocsPanel: boolean;
   workspaceSurfaceHostProps: ComponentProps<typeof WebWorkspaceSurfaceHost>;
   publicCommunityFunnelProps: ComponentProps<typeof WebPublicCommunityFunnel>;
   communityHostProps: ComponentProps<typeof WebCommunityHost>;
   discoverPanelProps: ComponentProps<typeof WebDiscoverPanel>;
+  productDocsPanelProps: ComponentProps<typeof WebProductDocsPanel>;
 };
 
 export function WebAppMainSurfaceHost(props: WebAppMainSurfaceHostProps) {
@@ -41,6 +44,8 @@ export function WebAppMainSurfaceHost(props: WebAppMainSurfaceHostProps) {
         <div className="community-body">
           {props.showDiscoverPanel ? (
             <WebDiscoverPanel {...props.discoverPanelProps} />
+          ) : props.showProductDocsPanel ? (
+            <WebProductDocsPanel {...props.productDocsPanelProps} />
           ) : null}
         </div>
       )}

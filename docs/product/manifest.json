@@ -1,0 +1,226 @@
+{
+  "version": 1,
+  "defaultSlug": "primitives/polynet",
+  "docs": [
+    {
+      "id": "product.polynet",
+      "slug": "primitives/polynet",
+      "title": "Polynet",
+      "section": "Primitives",
+      "summary": "What Polynet is, why it exists, and the alpha product model.",
+      "audience": ["builder", "member", "llm"],
+      "status": "alpha-current",
+      "source": "docs/product/primitives/polynet.md"
+    },
+    {
+      "id": "product.community",
+      "slug": "primitives/community",
+      "title": "Community",
+      "section": "Primitives",
+      "summary": "The community as the trust, access, and shared intelligence container.",
+      "audience": ["builder", "member", "llm"],
+      "status": "alpha-current",
+      "source": "docs/product/primitives/community.md"
+    },
+    {
+      "id": "product.agent",
+      "slug": "primitives/agent",
+      "title": "Agent",
+      "section": "Primitives",
+      "summary": "How the workspace agent uses platform, thread, and community context.",
+      "audience": ["builder", "llm"],
+      "status": "alpha-current",
+      "source": "docs/product/primitives/agent.md"
+    },
+    {
+      "id": "product.workspace",
+      "slug": "primitives/workspace",
+      "title": "Workspace",
+      "section": "Primitives",
+      "summary": "The member workspace, threads, and context switching model.",
+      "audience": ["builder", "member", "llm"],
+      "status": "alpha-current",
+      "source": "docs/product/primitives/workspace.md"
+    },
+    {
+      "id": "product.community_lens",
+      "slug": "primitives/community-lens",
+      "title": "Community Lens",
+      "section": "Primitives",
+      "summary": "The server-validated community context applied to future thread turns.",
+      "audience": ["builder", "member", "llm"],
+      "status": "alpha-current",
+      "source": "docs/product/primitives/community-lens.md"
+    },
+    {
+      "id": "product.memory",
+      "slug": "primitives/memory",
+      "title": "Memory",
+      "section": "Primitives",
+      "summary": "The current personal memory scope and future memory boundaries.",
+      "audience": ["builder", "member", "llm"],
+      "status": "alpha-current",
+      "source": "docs/product/primitives/memory.md"
+    },
+    {
+      "id": "product.funnel",
+      "slug": "primitives/funnel",
+      "title": "Funnel",
+      "section": "Primitives",
+      "summary": "The canonical public entry surface for community joining and access.",
+      "audience": ["builder", "member", "llm"],
+      "status": "alpha-current",
+      "source": "docs/product/primitives/funnel.md"
+    },
+    {
+      "id": "product.voice",
+      "slug": "primitives/voice",
+      "title": "Voice",
+      "section": "Primitives",
+      "summary": "Voice input as a core member interaction surface.",
+      "audience": ["builder", "member", "llm"],
+      "status": "alpha-current",
+      "source": "docs/product/primitives/voice.md"
+    },
+    {
+      "id": "product.guide.builder_quickstart",
+      "slug": "guides/builder-quickstart",
+      "title": "Builder Quickstart",
+      "section": "Builder Guides",
+      "summary": "A compact build order for launching a community intelligence system.",
+      "audience": ["builder", "llm"],
+      "status": "alpha-current",
+      "source": "docs/product/guides/builder-quickstart.md"
+    },
+    {
+      "id": "product.guide.launch_a_community",
+      "slug": "guides/launch-a-community",
+      "title": "Launch A Community",
+      "section": "Builder Guides",
+      "summary": "How to create, configure, gate, and share a community.",
+      "audience": ["builder", "llm"],
+      "status": "alpha-current",
+      "source": "docs/product/guides/launch-a-community.md"
+    },
+    {
+      "id": "product.guide.configure_community_agent",
+      "slug": "guides/configure-community-agent",
+      "title": "Configure Community Agent",
+      "section": "Builder Guides",
+      "summary": "How builders should shape the community agent and its context.",
+      "audience": ["builder", "llm"],
+      "status": "alpha-current",
+      "source": "docs/product/guides/configure-community-agent.md"
+    },
+    {
+      "id": "product.guide.connect_apps_and_mcps",
+      "slug": "guides/connect-apps-and-mcps",
+      "title": "Connect Apps And MCPs",
+      "section": "Builder Guides",
+      "summary": "How apps and MCP servers fit into capability and context.",
+      "audience": ["builder", "llm"],
+      "status": "alpha-current",
+      "source": "docs/product/guides/connect-apps-and-mcps.md"
+    },
+    {
+      "id": "product.guide.create_and_use_skills",
+      "slug": "guides/create-and-use-skills",
+      "title": "Create And Use Skills",
+      "section": "Builder Guides",
+      "summary": "How skills package repeatable agent behavior.",
+      "audience": ["builder", "llm"],
+      "status": "alpha-current",
+      "source": "docs/product/guides/create-and-use-skills.md"
+    },
+    {
+      "id": "product.guide.manage_access_billing_and_roles",
+      "slug": "guides/manage-access-billing-and-roles",
+      "title": "Manage Access, Billing, And Roles",
+      "section": "Builder Guides",
+      "summary": "The builder mental model for entitlements, payments, and roles.",
+      "audience": ["builder", "llm"],
+      "status": "alpha-current",
+      "source": "docs/product/guides/manage-access-billing-and-roles.md"
+    },
+    {
+      "id": "product.guide.member_quickstart",
+      "slug": "guides/member-quickstart",
+      "title": "Member Quickstart",
+      "section": "Member Guides",
+      "summary": "How members join, use communities, and work with the agent.",
+      "audience": ["member", "llm"],
+      "status": "alpha-current",
+      "source": "docs/product/guides/member-quickstart.md"
+    },
+    {
+      "id": "product.guide.chat_and_resources",
+      "slug": "guides/chat-and-resources",
+      "title": "Chat And Resources",
+      "section": "Member Guides",
+      "summary": "The member mental model for live chat and durable community knowledge.",
+      "audience": ["member", "builder", "llm"],
+      "status": "alpha-current",
+      "source": "docs/product/guides/chat-and-resources.md"
+    },
+    {
+      "id": "product.reference.context_model",
+      "slug": "reference/context-model",
+      "title": "Context Model",
+      "section": "Reference",
+      "summary": "The canonical context precedence and explicit exclusions.",
+      "audience": ["builder", "operator", "llm"],
+      "status": "alpha-current",
+      "source": "docs/product/reference/context-model.md"
+    },
+    {
+      "id": "product.reference.prompt_context_model",
+      "slug": "reference/prompt-context-model",
+      "title": "Prompt Context Model",
+      "section": "Reference",
+      "summary": "How documentation should feed prompt and context design.",
+      "audience": ["builder", "operator", "llm"],
+      "status": "alpha-current",
+      "source": "docs/product/reference/prompt-context-model.md"
+    },
+    {
+      "id": "product.reference.access_model",
+      "slug": "reference/access-model",
+      "title": "Access Model",
+      "section": "Reference",
+      "summary": "How access decisions are made from auth, membership, and entitlement.",
+      "audience": ["builder", "operator", "llm"],
+      "status": "alpha-current",
+      "source": "docs/product/reference/access-model.md"
+    },
+    {
+      "id": "product.reference.roles_permissions",
+      "slug": "reference/roles-permissions",
+      "title": "Roles And Permissions",
+      "section": "Reference",
+      "summary": "Owner, admin, moderator, and member authority boundaries.",
+      "audience": ["builder", "operator", "llm"],
+      "status": "alpha-current",
+      "source": "docs/product/reference/roles-permissions.md"
+    },
+    {
+      "id": "product.reference.billing_entitlements",
+      "slug": "reference/billing-entitlements",
+      "title": "Billing And Entitlements",
+      "section": "Reference",
+      "summary": "The authority model for paid access, checkout, and subscriptions.",
+      "audience": ["builder", "operator", "llm"],
+      "status": "alpha-current",
+      "source": "docs/product/reference/billing-entitlements.md"
+    },
+    {
+      "id": "product.reference.security_privacy",
+      "slug": "reference/security-privacy",
+      "title": "Security And Privacy",
+      "section": "Reference",
+      "summary": "Security and privacy boundaries for community and agent systems.",
+      "audience": ["builder", "operator", "llm"],
+      "status": "alpha-current",
+      "source": "docs/product/reference/security-privacy.md"
+    }
+  ]
+}

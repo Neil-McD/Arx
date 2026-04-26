@@ -41,7 +41,8 @@ export function buildWebShellProjection(params: {
     !params.isPublicCommunityFunnel &&
     (params.activePage === "workspace" ||
       params.activePage === "community" ||
-      params.activePage === "discover");
+      params.activePage === "discover" ||
+      params.activePage === "docs");
   const showMobileSettingsShell = showMobileAppShell && isWorkspaceSettings;
   const showMobileShell = showMobileAppShell && !isWorkspaceSettings;
   const showMobileSettingsIndex =
@@ -66,7 +67,9 @@ export function buildWebShellProjection(params: {
       ? "agent"
       : params.activePage === "discover"
         ? "discover"
-        : "community";
+        : params.activePage === "docs"
+          ? "discover"
+          : "community";
   const mobileSecondaryMode: MobileSecondaryMode = params.hasSelectedCommunity
     ? "community"
     : "discover";

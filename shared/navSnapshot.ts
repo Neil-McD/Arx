@@ -45,10 +45,11 @@ export function popNavSnapshot(stack: NavSnapshotBase[]): NavSnapshotBase | null
   return stack.pop() ?? null;
 }
 
-export type BackTargetLabel = "workspace" | "community" | "discover" | "settings";
+export type BackTargetLabel = "workspace" | "community" | "discover" | "docs" | "settings";
 
 export function formatBackTargetLabel(snapshot: Pick<NavSnapshotBase, "page" | "view">): BackTargetLabel {
   if (snapshot.page === "discover") return "discover";
+  if (snapshot.page === "docs") return "docs";
   if (snapshot.page === "community") return "community";
   if (snapshot.view === "settings") return "settings";
   return "workspace";

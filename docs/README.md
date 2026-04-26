@@ -1,5 +1,10 @@
 # Docs Index
 
+## Product Documentation
+1. `product/README.md`
+2. `product/llms.txt`
+3. `product/llms-full.txt`
+
 ## Current Release Truth
 1. `alpha-release-workflow.md`
 

@@ -12,7 +12,7 @@ export type SettingsGroup =
   | "integrations"
   | "appearance";
 
-export type AppPage = "workspace" | "community" | "discover";
+export type AppPage = "workspace" | "community" | "discover" | "docs";
 
 export type AppView = "home" | "settings";
 

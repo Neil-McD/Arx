@@ -1,6 +1,6 @@
 import type { ReactNode, TouchEventHandler } from "react";
 import type { BuilderUpgradeContext } from "../../../../shared/authResumeState";
-import type { SettingsGroup } from "../../../../shared/appShellNavigation";
+import type { AppPage, SettingsGroup } from "../../../../shared/appShellNavigation";
 import {
   finishProductLatencyTrace,
   markProductLatencyTrace,
@@ -37,7 +37,7 @@ export function buildWebShellChromeHostProps(params: {
   mobileShellMode: WebShellChromeHostProps["mobileTopBarProps"]["mode"];
   mobileSecondaryMode: WebShellChromeHostProps["mobileTopBarProps"]["secondaryMode"];
   showMobileSettingsIndex: boolean;
-  activePage: "workspace" | "community" | "discover";
+  activePage: AppPage;
   hasSelectedCommunity: boolean;
   activeCommunity: CommunityLike | null;
   activeCommunityAttentionCount: number;

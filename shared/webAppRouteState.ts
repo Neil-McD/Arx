@@ -28,6 +28,7 @@ export type AppRouteState = {
   discoverTab?: DiscoverTab | null;
   discoverAppId?: string | null;
   discoverSkillId?: string | null;
+  docsSlug?: string | null;
   threadId: string | null;
 };
 
@@ -40,6 +41,7 @@ export type AppRoutePathState = {
   discoverTab?: DiscoverTab | null;
   discoverAppId?: string | null;
   discoverSkillId?: string | null;
+  docsSlug?: string | null;
   threadId: string | null;
 };
 
@@ -278,6 +280,21 @@ function splitPathSegments(pathname: string): string[] {
     .filter(Boolean);
 }
 
+function normalizeDocsSlug(value: string | null | undefined): string | null {
+  const slug = String(value ?? "")
+    .split("/")
+    .map((segment) => segment.trim())
+    .filter(Boolean)
+    .join("/");
+  return slug || null;
+}
+
+function buildDocsPath(docsSlug: string | null | undefined): string {
+  const slug = normalizeDocsSlug(docsSlug);
+  if (!slug) return "/docs";
+  return `/docs/${slug.split("/").map(encodeURIComponent).join("/")}`;
+}
+
 function parseSettingsPage(value: string | null | undefined): SettingsPage {
   switch ((value ?? "").trim()) {
     case "profile":
@@ -328,6 +345,18 @@ function parseAppRouteFromPathname(pathname: string): AppRoutePathState | null {
       discoverTab,
       discoverAppId: discoverTab === "apps" ? String(segments[2] ?? "").trim() || null : null,
       discoverSkillId: discoverTab === "skills" ? String(segments[2] ?? "").trim() || null : null,
+      threadId: null,
+    };
+  }
+
+  if (segments[0] === "docs") {
+    return {
+      page: "docs",
+      view: "home",
+      settingsPage: "agent",
+      communitySlug: null,
+      communityTab: "chat",
+      docsSlug: normalizeDocsSlug(segments.slice(1).join("/")),
       threadId: null,
     };
   }
@@ -421,6 +450,7 @@ export function readAppRouteFromLocation(): AppRouteState {
       discoverTab: fromPath.discoverTab ?? "communities",
       discoverAppId: fromPath.discoverAppId ?? null,
       discoverSkillId: fromPath.discoverSkillId ?? null,
+      docsSlug: fromPath.docsSlug ?? null,
       threadId: fromPath.threadId,
     };
   }
@@ -434,6 +464,7 @@ export function readAppRouteFromLocation(): AppRouteState {
     discoverTab: "communities",
     discoverAppId: null,
     discoverSkillId: null,
+    docsSlug: null,
     threadId: null,
   };
 }
@@ -458,6 +489,10 @@ export function buildAppRoutePath(state: AppRoutePathState): string | null {
 
   if (state.page === "community") {
     return buildCommunityTabPath(state.communitySlug, state.communityTab);
+  }
+
+  if (state.page === "docs") {
+    return buildDocsPath(state.docsSlug);
   }
 
   return state.threadId ? buildWorkspaceThreadPath(state.threadId) : buildWorkspaceDraftPath();

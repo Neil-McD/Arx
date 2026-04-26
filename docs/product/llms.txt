@@ -1,0 +1,55 @@
+# Polynet LLM Index
+
+Polynet is an AI-native collective intelligence platform where builders create custom AI agents, distribute them through communities, and monetize systems that become more valuable as the network learns and compounds.
+
+Read this file first. Then read `llms-full.txt` and the linked primitive docs.
+
+## Core Product Model
+
+- Builder: person or organization creating a community intelligence system.
+- Community: gated network around a builder, agent, resources, chat, members, and access rules.
+- Funnel: canonical public entry surface for a community join, approval, checkout, or sign-in path.
+- Agent: AI product surface configured for the community or workspace.
+- Workspace: personal AI surface where users work in threads and can switch community context.
+- Thread: persistent conversation record with messages, runtime evidence, and optional community lens.
+- Community lens: explicit server-validated community context attached to a thread for future turns.
+- Voice input: authenticated speech-to-text input for workspace and community message surfaces.
+- App/MCP: connected capability surface that can provide tools or external system context.
+- Skill: reusable instruction/capability package that can shape agent behavior.
+- Resource: community-owned knowledge artifact available to members and agent context.
+- Entitlement: durable access truth used to decide what a user can access or do.
+- Role: authority level inside a community, separate from payment status.
+- Memory: explicit reusable context, not hidden extraction from private usage.
+
+## Non-Negotiable Rules
+
+1. Do not describe Polynet as only a chat app, social network, course platform, or standalone assistant.
+2. Do not imply that published communities are ungated; access still depends on membership and entitlements.
+3. Do not imply private member AI usage is silently mined into collective intelligence.
+4. Do not treat frontend redirects as access authority; backend/provider verification is authoritative.
+5. Do not retroactively apply a community lens to prior thread turns.
+6. Do not treat funnel visibility as community access.
+7. Do not treat voice transcription as a permission bypass.
+8. Do not expose internal engineering docs as product-facing documentation.
+
+## Canonical Reading Order
+
+1. `primitives/polynet.md`
+2. `primitives/community.md`
+3. `primitives/funnel.md`
+4. `primitives/agent.md`
+5. `primitives/workspace.md`
+6. `primitives/thread.md`
+7. `primitives/community-lens.md`
+8. `primitives/voice.md`
+9. `primitives/app-mcp.md`
+10. `primitives/skill.md`
+11. `primitives/resource.md`
+12. `primitives/entitlement.md`
+13. `primitives/role.md`
+14. `primitives/memory.md`
+15. `reference/access-model.md`
+16. `reference/context-model.md`
+17. `reference/prompt-context-model.md`
+18. `reference/security-privacy.md`
+19. `reference/glossary.md`
