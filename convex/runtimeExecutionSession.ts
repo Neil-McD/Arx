@@ -13,11 +13,9 @@ import {
   readWorkspaceToolFailureOutputPreview,
   resolveWorkspaceCwd,
   startWorkspaceTerminalProcess,
-  stopRuntimeSessionTerminalRow,
   stopWorkspaceTerminalProcess,
   summarizeWorkspaceTerminalRow,
   writeWorkspaceTerminalProcessInput,
-  writeRuntimeSessionTerminalRow,
 } from "./workspaceTerminalProcessCore";
 import {
   ensureProjectBackgroundSandbox,
@@ -676,7 +674,7 @@ export function createPolyNetExecutionSession(params: {
               );
               runtimeTerminalCountStopped = runtimeSessionRows.length;
               for (const row of runtimeSessionRows) {
-                await stopRuntimeSessionTerminalRow({
+                await stopWorkspaceTerminalProcess({
                   ctx: params.ctx,
                   row,
                   session: activeWorkspaceSession,
@@ -1064,7 +1062,7 @@ export function createPolyNetExecutionSession(params: {
                     "Runtime terminal input is only available while its workspace session is active.",
                 };
               } else if (access.runtimeSessionOwned && workspaceSession) {
-                const wrote = await writeRuntimeSessionTerminalRow({
+                const wrote = await writeWorkspaceTerminalProcessInput({
                   ctx: params.ctx,
                   row: access.row,
                   session: workspaceSession,
@@ -1115,7 +1113,7 @@ export function createPolyNetExecutionSession(params: {
               }
             } else {
               if (access.runtimeSessionOwned) {
-                const stopped = await stopRuntimeSessionTerminalRow({
+                const stopped = await stopWorkspaceTerminalProcess({
                   ctx: params.ctx,
                   row: access.row,
                   session: workspaceSession ?? null,

@@ -11,6 +11,10 @@ import {
 } from "./daytonaSandboxClient";
 import { isWorkspaceTerminalActiveStatus } from "./workspaceTerminalProcessCore";
 
+const PROJECT_BACKGROUND_SANDBOX_CREATE_LEASE_MS = 60_000;
+const PROJECT_BACKGROUND_SANDBOX_WAIT_MS = 65_000;
+const PROJECT_BACKGROUND_SANDBOX_WAIT_POLL_MS = 1_000;
+
 function normalizeString(value: unknown): string {
   return String(value ?? "").trim();
 }
@@ -27,6 +31,56 @@ function buildBackgroundSandboxRunId(
   const sandboxId = normalizeString(providerSandboxId ?? "");
   if (sandboxId) return `background_terminal:${projectId}:${sandboxId}`;
   return `background_terminal:${projectId}`;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function waitForProjectBackgroundSandboxRegistration(params: {
+  ctx: any;
+  authSubject: string | null | undefined;
+  userId: any;
+  projectId: string;
+}): Promise<Awaited<ReturnType<typeof resolveProjectBackgroundSandboxIfReady>> | null> {
+  const deadlineMs = Date.now() + PROJECT_BACKGROUND_SANDBOX_WAIT_MS;
+  while (Date.now() < deadlineMs) {
+    const resolved = await resolveProjectBackgroundSandboxIfReady({
+      ctx: params.ctx,
+      authSubject: params.authSubject,
+      userId: params.userId,
+      projectId: params.projectId,
+    });
+    if (resolved.ok) return resolved;
+
+    const project = await params.ctx.runQuery(
+      api.projects.getCloudProjectById as any,
+      {
+        authSubject: params.authSubject,
+        ownerId: params.userId,
+        projectId: params.projectId,
+      },
+    );
+    const state = normalizeOptionalString(project?.providerSandboxState);
+    const lastSeenAt = Number(project?.providerSandboxLastSeenAt ?? 0);
+    const leaseAgeMs =
+      Number.isFinite(lastSeenAt) && lastSeenAt > 0
+        ? Math.max(0, Date.now() - lastSeenAt)
+        : PROJECT_BACKGROUND_SANDBOX_CREATE_LEASE_MS + 1;
+    if (
+      state !== "creating" ||
+      leaseAgeMs >= PROJECT_BACKGROUND_SANDBOX_CREATE_LEASE_MS
+    ) {
+      return null;
+    }
+    await sleep(
+      Math.min(
+        PROJECT_BACKGROUND_SANDBOX_WAIT_POLL_MS,
+        Math.max(0, deadlineMs - Date.now()),
+      ),
+    );
+  }
+  return null;
 }
 
 export async function ensureProjectBackgroundSandbox(params: {
@@ -75,8 +129,56 @@ export async function ensureProjectBackgroundSandbox(params: {
     };
   }
 
+  let leaseAcquired = false;
+  for (let attempt = 0; attempt < 2 && !leaseAcquired; attempt += 1) {
+    const lease = await params.ctx.runMutation(
+      internal.workspaceTerminals.acquireProjectBackgroundSandboxLeaseInternal as any,
+      {
+        projectId: params.projectId,
+        ownerId: params.userId,
+        nowMs: Date.now(),
+      },
+    );
+    if (Boolean((lease as { acquired?: unknown } | null)?.acquired)) {
+      leaseAcquired = true;
+      break;
+    }
+    const waited = await waitForProjectBackgroundSandboxRegistration({
+      ctx: params.ctx,
+      authSubject: params.authSubject,
+      userId: params.userId,
+      projectId: params.projectId,
+    });
+    if (waited?.ok) return waited;
+  }
+  if (!leaseAcquired) {
+    return {
+      ok: false,
+      status: 409,
+      code: "background_sandbox_creation_in_progress",
+      message:
+        "A background workspace is already starting for this project. Retry once it finishes.",
+    };
+  }
+
+  const clearCreationLease = async () => {
+    try {
+      await params.ctx.runMutation(
+        internal.workspaceTerminals.clearProjectBackgroundSandboxLeaseInternal as any,
+        {
+          projectId: params.projectId,
+          ownerId: params.userId,
+          nowMs: Date.now(),
+        },
+      );
+    } catch {
+      // Best-effort lease cleanup; the short lease will expire if this fails.
+    }
+  };
+
   const loadedConfig = loadDaytonaConfig();
   if (!loadedConfig.ok) {
+    await clearCreationLease();
     return {
       ok: false,
       status: 503,
@@ -89,13 +191,27 @@ export async function ensureProjectBackgroundSandbox(params: {
     autoStopInterval: 0,
   };
 
-  const runtimeProject = await params.ctx.runAction(
-    api.projects.ensureCloudProjectVolume as any,
-    {
-      authSubject: params.authSubject,
-      projectId: params.projectId,
-    },
-  );
+  let runtimeProject: any;
+  try {
+    runtimeProject = await params.ctx.runAction(
+      api.projects.ensureCloudProjectVolume as any,
+      {
+        authSubject: params.authSubject,
+        projectId: params.projectId,
+      },
+    );
+  } catch (error) {
+    await clearCreationLease();
+    return {
+      ok: false,
+      status: 503,
+      code: "project_volume_unavailable",
+      message:
+        error instanceof Error && error.message
+          ? error.message
+          : "Project volume is unavailable.",
+    };
+  }
 
   const created = await createDaytonaSandbox({
     config,
@@ -106,10 +222,14 @@ export async function ensureProjectBackgroundSandbox(params: {
     projectVolumeId:
       String((runtimeProject as any)?.providerVolumeId ?? "").trim() || null,
   });
-  if (!created.ok) return created;
+  if (!created.ok) {
+    await clearCreationLease();
+    return created;
+  }
 
   const providerSandboxId = String(created.sandbox.id ?? "").trim();
   if (!providerSandboxId) {
+    await clearCreationLease();
     return {
       ok: false,
       status: 503,
@@ -122,23 +242,57 @@ export async function ensureProjectBackgroundSandbox(params: {
     config,
     sandboxId: providerSandboxId,
   });
-  if (!ready.ok) return ready;
+  if (!ready.ok) {
+    await clearCreationLease();
+    try {
+      await stopDaytonaSandbox({ config, sandboxId: providerSandboxId });
+      await deleteDaytonaSandbox({ config, sandboxId: providerSandboxId });
+    } catch {
+      // Orphan reconciliation will clean up if Daytona cleanup fails here.
+    }
+    return ready;
+  }
 
   const toolbox = await getDaytonaToolboxProxyUrl({
     config,
     sandboxId: providerSandboxId,
   });
-  if (!toolbox.ok) return toolbox;
+  if (!toolbox.ok) {
+    await clearCreationLease();
+    try {
+      await stopDaytonaSandbox({ config, sandboxId: providerSandboxId });
+      await deleteDaytonaSandbox({ config, sandboxId: providerSandboxId });
+    } catch {
+      // Orphan reconciliation will clean up if Daytona cleanup fails here.
+    }
+    return toolbox;
+  }
 
-  await params.ctx.runMutation(
-    internal.workspaceTerminals.setProjectBackgroundSandboxInternal as any,
-    {
-      projectId: params.projectId,
-      providerSandboxId,
-      providerSandboxState: String(ready.sandbox.state ?? "").trim() || "started",
-      providerSandboxLastSeenAt: Date.now(),
-    },
-  );
+  try {
+    await params.ctx.runMutation(
+      internal.workspaceTerminals.setProjectBackgroundSandboxInternal as any,
+      {
+        projectId: params.projectId,
+        providerSandboxId,
+        providerSandboxState: String(ready.sandbox.state ?? "").trim() || "started",
+        providerSandboxLastSeenAt: Date.now(),
+      },
+    );
+  } catch {
+    await clearCreationLease();
+    try {
+      await stopDaytonaSandbox({ config, sandboxId: providerSandboxId });
+      await deleteDaytonaSandbox({ config, sandboxId: providerSandboxId });
+    } catch {
+      // Orphan reconciliation will clean up if Daytona cleanup fails here.
+    }
+    return {
+      ok: false,
+      status: 500,
+      code: "background_sandbox_register_failed",
+      message: "Failed to register the background workspace.",
+    };
+  }
 
   return {
     ok: true,

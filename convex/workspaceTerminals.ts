@@ -39,6 +39,7 @@ import {
 const PROJECT_TERMINAL_RECONCILE_FRESH_MS = 8_000;
 const RECENT_TERMINAL_FAILURE_VISIBLE_MS = 5 * 60_000;
 const RECENT_TERMINAL_FAILURE_LIMIT = 4;
+const PROJECT_BACKGROUND_SANDBOX_CREATE_LEASE_MS = 60_000;
 
 type WorkspaceTerminalStatus = "starting" | "running" | "exited" | "failed" | "stopped";
 type WorkspaceTerminalSummary = {
@@ -276,6 +277,83 @@ export const createWorkspaceTerminalSessionInternal = internalMutation({
   handler: async (ctx, args) => {
     const id = await ctx.db.insert("workspaceTerminalSessions", args);
     return await ctx.db.get(id);
+  },
+});
+
+export const acquireProjectBackgroundSandboxLeaseInternal = internalMutation({
+  args: {
+    projectId: v.id("cloudProjects"),
+    ownerId: v.id("users"),
+    nowMs: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const project = await ctx.db.get(args.projectId);
+    if (!project || project.ownerId !== args.ownerId) {
+      throw new Error("project_not_found");
+    }
+    const existingSandboxId = normalizeOptionalString(project.providerSandboxId);
+    if (existingSandboxId) {
+      return {
+        acquired: false,
+        reason: "registered",
+        providerSandboxId: existingSandboxId,
+      };
+    }
+
+    const state = normalizeOptionalString(project.providerSandboxState);
+    const lastSeenAt = Number(project.providerSandboxLastSeenAt ?? 0);
+    const leaseAgeMs =
+      Number.isFinite(lastSeenAt) && lastSeenAt > 0
+        ? Math.max(0, args.nowMs - lastSeenAt)
+        : PROJECT_BACKGROUND_SANDBOX_CREATE_LEASE_MS + 1;
+    if (
+      state === "creating" &&
+      leaseAgeMs < PROJECT_BACKGROUND_SANDBOX_CREATE_LEASE_MS
+    ) {
+      return {
+        acquired: false,
+        reason: "creating",
+        retryAfterMs: Math.max(
+          250,
+          PROJECT_BACKGROUND_SANDBOX_CREATE_LEASE_MS - leaseAgeMs,
+        ),
+      };
+    }
+
+    await ctx.db.patch(project._id, {
+      providerSandboxState: "creating",
+      providerSandboxLastSeenAt: args.nowMs,
+      updatedAt: args.nowMs,
+    });
+    return {
+      acquired: true,
+      reason: "acquired",
+      leaseExpiresAt: args.nowMs + PROJECT_BACKGROUND_SANDBOX_CREATE_LEASE_MS,
+    };
+  },
+});
+
+export const clearProjectBackgroundSandboxLeaseInternal = internalMutation({
+  args: {
+    projectId: v.id("cloudProjects"),
+    ownerId: v.id("users"),
+    nowMs: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const project = await ctx.db.get(args.projectId);
+    if (!project || project.ownerId !== args.ownerId) return null;
+    if (
+      normalizeOptionalString(project.providerSandboxId) ||
+      normalizeOptionalString(project.providerSandboxState) !== "creating"
+    ) {
+      return await ctx.db.get(project._id);
+    }
+    await ctx.db.patch(project._id, {
+      providerSandboxState: undefined,
+      providerSandboxLastSeenAt: undefined,
+      updatedAt: args.nowMs,
+    });
+    return await ctx.db.get(project._id);
   },
 });
 

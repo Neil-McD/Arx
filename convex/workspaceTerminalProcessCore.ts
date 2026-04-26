@@ -42,11 +42,6 @@ export type WorkspaceTerminalProcessContext = {
 
 const ACTIVE_TERMINAL_STATUSES = new Set(["starting", "running"]);
 const TERMINAL_OUTPUT_TAIL_MAX_CHARS = 6000;
-const RUNTIME_TERMINAL_START_READINESS_MS = 1_500;
-
-async function sleep(ms: number): Promise<void> {
-  await new Promise((resolve) => setTimeout(resolve, ms));
-}
 
 function normalizeOptionalString(value: unknown): string | null {
   const normalized = String(value ?? "").trim();
@@ -541,79 +536,6 @@ export async function startWorkspaceTerminalProcess(params: {
   };
 }
 
-export async function startRuntimeSessionTerminal(params: {
-  ctx: any;
-  ownerId: any;
-  projectId: string;
-  runId: string;
-  session: WorkspaceSandboxSession;
-  terminal: WorkspaceTerminalStartArgs;
-}): Promise<Record<string, unknown>> {
-  const started = await startWorkspaceTerminalProcess({
-    ctx: params.ctx,
-    ownerId: params.ownerId,
-    projectId: params.projectId,
-    runIdStartedBy: params.runId,
-    session: params.session,
-    terminal: params.terminal,
-    providerSessionIdPrefix: "arx-run-term",
-  });
-  if (started.ok !== true) return started;
-
-  const terminalSessionId = String(started.terminal_session_id ?? "").trim();
-  if (!terminalSessionId) return started;
-
-  await sleep(RUNTIME_TERMINAL_START_READINESS_MS);
-
-  const row = await params.ctx.runQuery(
-    internal.workspaceTerminals.getWorkspaceTerminalSessionInternal as any,
-    {
-      terminalSessionId: terminalSessionId as any,
-    },
-  );
-  if (!row) {
-    return {
-      ok: false,
-      status: 404,
-      code: "terminal_not_found",
-      message: "Background terminal disappeared before it became ready.",
-      terminal_session_id: terminalSessionId,
-    };
-  }
-
-  const summary = await reconcileRuntimeSessionTerminalRow({
-    ctx: params.ctx,
-    row,
-    session: params.session,
-  });
-  const status = String(summary.status ?? "").trim().toLowerCase();
-  if (isWorkspaceTerminalActiveStatus(status)) {
-    return {
-      ...started,
-      ...summary,
-      ok: true,
-    };
-  }
-
-  const exitCode =
-    typeof summary.exit_code === "number" && Number.isFinite(summary.exit_code)
-      ? Math.floor(summary.exit_code)
-      : null;
-  const outputTail =
-    typeof summary.output_tail === "string" && summary.output_tail.trim()
-      ? summary.output_tail.trim()
-      : "";
-  return {
-    ...summary,
-    ok: false,
-    status: 409,
-    code: "terminal_exited_before_ready",
-    message: `Background terminal exited before it became ready${exitCode === null ? "" : ` (exit ${exitCode})`}.`,
-    terminal_session_id: terminalSessionId,
-    output_tail: outputTail || null,
-  };
-}
-
 export async function reconcileRuntimeSessionTerminalRow(params: {
   ctx: any;
   row: any;
@@ -754,15 +676,6 @@ export async function writeWorkspaceTerminalProcessInput(params: {
   };
 }
 
-export async function writeRuntimeSessionTerminalRow(params: {
-  ctx: any;
-  row: any;
-  session: WorkspaceSandboxSession;
-  input: string;
-}): Promise<Record<string, unknown>> {
-  return await writeWorkspaceTerminalProcessInput(params);
-}
-
 export async function stopWorkspaceTerminalProcess(params: {
   ctx: any;
   row: any;
@@ -807,14 +720,6 @@ export async function stopWorkspaceTerminalProcess(params: {
     },
   );
   return summarizeWorkspaceTerminalRow(patched ?? row);
-}
-
-export async function stopRuntimeSessionTerminalRow(params: {
-  ctx: any;
-  row: any;
-  session: WorkspaceSandboxSession | null;
-}): Promise<Record<string, unknown>> {
-  return await stopWorkspaceTerminalProcess(params);
 }
 
 export async function resolveWorkspaceTerminalPreview(params: {

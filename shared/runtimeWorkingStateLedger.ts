@@ -389,7 +389,7 @@ export function summarizeRuntimeWorkingStateFromEvents(
         : workspaceRuntimeNextAction
           ? workspaceRuntimeNextAction
         : firstFailedTool
-          ? `Retry ${firstFailedTool.toolName} with a narrower or alternate path, or report the blocker if it is not recoverable.`
+          ? `Inspect the ${firstFailedTool.toolName} failure details, preserve the last verified state, and continue only from a concrete recovery path.`
           : "Inspect the latest runtime events and continue from the last verified state.";
   const recentActions = normalizeSummaryList(recentActionsRaw, 6, 180);
   const goal = normalizeSummaryText(args.latestUserText, 240);

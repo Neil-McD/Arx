@@ -119,24 +119,24 @@ async function proveLazyWorkspaceCreationRules() {
     "expected shared terminal core to own low-level Daytona process creation",
   );
   assert.equal(
-    terminalProcessCoreSource.includes("runIdStartedBy: params.runId"),
-    true,
-    "expected runtime terminal core to support tying rows back to an owning runtime run",
+    terminalProcessCoreSource.includes("export async function startRuntimeSessionTerminal"),
+    false,
+    "expected the dead runtime-owned terminal start wrapper to stay removed",
   );
   assert.equal(
     terminalProcessCoreSource.includes("RUNTIME_TERMINAL_START_READINESS_MS"),
-    true,
-    "expected runtime terminal starts to include a short readiness window",
+    false,
+    "expected obsolete runtime-owned terminal start readiness polling to stay removed",
   );
   assert.equal(
     terminalProcessCoreSource.includes("terminal_exited_before_ready"),
-    true,
-    "expected runtime terminal starts to fail closed when the process exits immediately",
+    false,
+    "expected immediate-start failure handling to live on the project background terminal path, not a dead runtime wrapper",
   );
   assert.equal(
     terminalProcessCoreSource.includes("wrapTerminalCommandWithOutputLog"),
     true,
-    "expected runtime terminal starts to mirror output into a durable fallback log",
+    "expected terminal starts to mirror output into a durable fallback log",
   );
   assert.equal(
     terminalProcessCoreSource.includes("readTerminalFallbackOutputLog"),
@@ -174,11 +174,6 @@ async function proveLazyWorkspaceCreationRules() {
     "expected preview terminal starts to fail early with structured preflight errors",
   );
   assert.equal(
-    terminalProcessCoreSource.includes("await reconcileRuntimeSessionTerminalRow({"),
-    true,
-    "expected runtime terminal starts to reconcile before reporting success",
-  );
-  assert.equal(
     terminalBlock.includes("runIdStartedBy: null"),
     true,
     "expected agent terminal_start to create project-owned terminal rows",
@@ -195,13 +190,13 @@ async function proveLazyWorkspaceCreationRules() {
   );
   assert.equal(
     terminalBlock.includes("writeRuntimeSessionTerminalRow"),
-    true,
-    "expected runtime terminal write to use the runtime-session-owned terminal helper",
+    false,
+    "expected dead runtime terminal write wrapper to stay removed",
   );
   assert.equal(
     terminalBlock.includes("stopRuntimeSessionTerminalRow"),
-    true,
-    "expected runtime terminal stop to use the runtime-session-owned terminal helper",
+    false,
+    "expected dead runtime terminal stop wrapper to stay removed",
   );
   assert.equal(
     terminalBlock.includes("writeWorkspaceTerminalProcessInput"),
@@ -298,6 +293,48 @@ async function proveLazyWorkspaceCreationRules() {
     ),
     true,
     "expected background sandbox creation to live in the dedicated background service module",
+  );
+  assert.equal(
+    workspaceTerminalsSource.includes(
+      "export const acquireProjectBackgroundSandboxLeaseInternal",
+    ),
+    true,
+    "expected project background sandbox creation to use an atomic acquisition lease",
+  );
+  assert.equal(
+    workspaceTerminalsSource.includes(
+      "export const clearProjectBackgroundSandboxLeaseInternal",
+    ),
+    true,
+    "expected failed project background sandbox creation to clear its lease",
+  );
+  assert.equal(
+    workspaceTerminalBackgroundServiceSource.includes(
+      "acquireProjectBackgroundSandboxLeaseInternal",
+    ),
+    true,
+    "expected background sandbox service to acquire a lease before creating Daytona compute",
+  );
+  assert.equal(
+    workspaceTerminalBackgroundServiceSource.includes(
+      "waitForProjectBackgroundSandboxRegistration",
+    ),
+    true,
+    "expected competing background sandbox starts to wait for the in-flight registration instead of creating another sandbox",
+  );
+  const ensureProjectBackgroundSandboxBlock = extractFunctionBlock(
+    workspaceTerminalBackgroundServiceSource,
+    "export async function ensureProjectBackgroundSandbox",
+    "export async function resolveProjectBackgroundSandboxIfReady",
+  );
+  assert.ok(
+    ensureProjectBackgroundSandboxBlock.indexOf(
+      "acquireProjectBackgroundSandboxLeaseInternal",
+    ) >= 0 &&
+      ensureProjectBackgroundSandboxBlock.indexOf(
+        "acquireProjectBackgroundSandboxLeaseInternal",
+      ) < ensureProjectBackgroundSandboxBlock.indexOf("createDaytonaSandbox"),
+    "expected background sandbox lease acquisition to happen before Daytona sandbox creation",
   );
   assert.equal(
     workspaceTerminalBackgroundServiceSource.includes(
