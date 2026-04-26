@@ -142,6 +142,20 @@ function normalizeThreadWorkingState(raw: unknown): ThreadWorkingStatePrompt | n
   const blocker = String(record.blocker ?? record.openIssue ?? "").trim() || null;
   const openIssue = String(record.openIssue ?? blocker ?? "").trim() || null;
   const nextAction = String(record.nextAction ?? "").trim() || null;
+  const verificationStatusRaw = String(record.verificationStatus ?? "").trim();
+  const verificationStatus =
+    verificationStatusRaw === "not_needed" ||
+    verificationStatusRaw === "needed" ||
+    verificationStatusRaw === "passed" ||
+    verificationStatusRaw === "failed"
+      ? verificationStatusRaw
+      : null;
+  const filesTouched = Array.isArray(record.filesTouched)
+    ? record.filesTouched
+        .map((value) => String(value ?? "").trim())
+        .filter((value) => value.length > 0)
+        .slice(0, 10)
+    : [];
   const filesChanged = Array.isArray(record.filesChanged)
     ? record.filesChanged
         .map((value) => String(value ?? "").trim())
@@ -160,6 +174,7 @@ function normalizeThreadWorkingState(raw: unknown): ThreadWorkingStatePrompt | n
         .filter((value) => value.length > 0)
         .slice(0, 6)
     : [];
+  const lastDiagnostic = String(record.lastDiagnostic ?? "").trim() || null;
   if (
     !goal &&
     !status &&
@@ -167,6 +182,9 @@ function normalizeThreadWorkingState(raw: unknown): ThreadWorkingStatePrompt | n
     !lastResult &&
     !openIssue &&
     !nextAction &&
+    !verificationStatus &&
+    !lastDiagnostic &&
+    filesTouched.length === 0 &&
     filesChanged.length === 0 &&
     verifiedFindings.length === 0 &&
     recentActions.length === 0
@@ -179,9 +197,12 @@ function normalizeThreadWorkingState(raw: unknown): ThreadWorkingStatePrompt | n
     status,
     currentStep,
     lastResult,
+    verificationStatus,
+    filesTouched,
     filesChanged,
     verifiedFindings,
     recentActions,
+    lastDiagnostic,
     openIssue,
     blocker,
     nextAction,

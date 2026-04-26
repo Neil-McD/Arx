@@ -18,7 +18,7 @@ import {
   createEmptyRuntimeHarnessTelemetrySummary,
   type RuntimeHarnessTelemetrySummary,
 } from "../shared/runtimeHarnessScorecard";
-import { isVerificationShellCommand } from "../shared/runtimeWorkingStateLedger";
+import { summarizeRuntimeWorkingStateFromEvents } from "../shared/runtimeWorkingStateLedger";
 import { requireCommunityChatAccess } from "./communityCore";
 
 type ThreadLike = {
@@ -109,9 +109,12 @@ type ThreadWorkingStateLike = {
   status?: "idle" | "in_progress" | "blocked" | "needs_verification" | "complete";
   currentStep?: string;
   lastResult?: string;
+  verificationStatus?: "not_needed" | "needed" | "passed" | "failed";
+  filesTouched?: string[];
   filesChanged: string[];
   verifiedFindings: string[];
   recentActions?: string[];
+  lastDiagnostic?: string;
   openIssue?: string;
   blocker?: string;
   nextAction?: string;
@@ -239,6 +242,13 @@ function normalizePreviousWorkingState(raw: unknown): ThreadWorkingStateLike | n
         180,
       )
     : [];
+  const filesTouched = Array.isArray(record.filesTouched)
+    ? normalizeWorkingStateList(
+        record.filesTouched.map((value) => String(value ?? "")),
+        10,
+        180,
+      )
+    : filesChanged;
   const verifiedFindings = Array.isArray(record.verifiedFindings)
     ? normalizeWorkingStateList(
         record.verifiedFindings.map((value) => String(value ?? "")),
@@ -262,15 +272,26 @@ function normalizePreviousWorkingState(raw: unknown): ThreadWorkingStateLike | n
     statusRaw === "complete"
       ? statusRaw
       : undefined;
+  const verificationStatusRaw = String(record.verificationStatus ?? "").trim();
+  const verificationStatus =
+    verificationStatusRaw === "not_needed" ||
+    verificationStatusRaw === "needed" ||
+    verificationStatusRaw === "passed" ||
+    verificationStatusRaw === "failed"
+      ? verificationStatusRaw
+      : undefined;
   return {
     version: Number.isFinite(Number(record.version)) ? Math.max(1, Math.floor(Number(record.version))) : 1,
     goal: normalizeWorkingStateText(record.goal, 240),
     status,
     currentStep: normalizeWorkingStateText(record.currentStep, 180),
     lastResult: normalizeWorkingStateText(record.lastResult, 240),
+    verificationStatus,
+    filesTouched,
     filesChanged,
     verifiedFindings,
     recentActions,
+    lastDiagnostic: normalizeWorkingStateText(record.lastDiagnostic, 240),
     openIssue: normalizeWorkingStateText(record.openIssue, 240),
     blocker: normalizeWorkingStateText(record.blocker ?? record.openIssue, 240),
     nextAction: normalizeWorkingStateText(record.nextAction, 200),
@@ -291,8 +312,11 @@ function buildRunStartedWorkingState(args: {
     status: "in_progress",
     currentStep: "Run is in progress.",
     lastResult: previous?.lastResult,
-    filesChanged: previous?.filesChanged ?? [],
-    verifiedFindings: previous?.verifiedFindings ?? [],
+    verificationStatus: "not_needed",
+    filesTouched: [],
+    filesChanged: [],
+    verifiedFindings: [],
+    lastDiagnostic: undefined,
     recentActions: normalizeWorkingStateList(
       ["Started a new workspace run.", ...(previous?.recentActions ?? [])],
       6,
@@ -318,199 +342,6 @@ function extractThreadMessageText(contentJson: unknown): string | null {
         ? record.content
         : null;
   return normalizeOptionalSummaryText(textCandidate, 400);
-}
-
-function extractToolArgsPath(payload: unknown): string | null {
-  const payloadRecord = asRecord(payload);
-  const argsRecord = asRecord(payloadRecord?.args);
-  return normalizeOptionalSummaryText(argsRecord?.path, 180);
-}
-
-function extractToolArgsCommand(payload: unknown): string | null {
-  const payloadRecord = asRecord(payload);
-  const argsRecord = asRecord(payloadRecord?.args);
-  return normalizeOptionalSummaryText(argsRecord?.command, 180);
-}
-
-function extractToolName(payload: unknown): string | null {
-  const payloadRecord = asRecord(payload);
-  return normalizeOptionalSummaryText(payloadRecord?.tool_name, 64);
-}
-
-function extractToolStatus(payload: unknown): string | null {
-  const payloadRecord = asRecord(payload);
-  return normalizeOptionalSummaryText(payloadRecord?.status, 32);
-}
-
-function extractToolErrorMessage(payload: unknown): string | null {
-  const payloadRecord = asRecord(payload);
-  return (
-    normalizeOptionalSummaryText(payloadRecord?.error_message, 240) ??
-    normalizeOptionalSummaryText(payloadRecord?.error_code, 120)
-  );
-}
-
-function summarizeThreadWorkingState(args: {
-  latestUserText: string | null;
-  runStatus: "ok" | "error" | "cancelled";
-  runReason?: string;
-  runErrorMessage?: string;
-  events: RuntimeRunEventLike[];
-  nowMs: number;
-}): ThreadWorkingStateLike {
-  const successfulReadPaths: string[] = [];
-  const changedFiles: string[] = [];
-  const recentActionsRaw: string[] = [];
-  let successfulSearchCount = 0;
-  let successfulVerificationShellCount = 0;
-  let successfulOtherShellCount = 0;
-  let firstFailedTool: { toolName: string; path: string | null; message: string | null } | null = null;
-
-  for (const event of args.events) {
-    if (event.eventType !== "tool_call_finished") continue;
-    const toolName = extractToolName(event.payload);
-    if (!toolName) continue;
-    const status = extractToolStatus(event.payload);
-    const path = extractToolArgsPath(event.payload);
-    const command = toolName === "bash" ? extractToolArgsCommand(event.payload) : null;
-    if (status === "ok") {
-      if (toolName === "read" && path && path !== ".") {
-        successfulReadPaths.push(path);
-        recentActionsRaw.push(`Read ${path}.`);
-      } else if ((toolName === "write" || toolName === "edit") && path) {
-        changedFiles.push(path);
-        recentActionsRaw.push(`${toolName === "write" ? "Wrote" : "Edited"} ${path}.`);
-      } else if (toolName === "glob" || toolName === "grep") {
-        successfulSearchCount += 1;
-        recentActionsRaw.push(`Ran ${toolName}.`);
-      } else if (toolName === "bash") {
-        if (isVerificationShellCommand(command)) {
-          successfulVerificationShellCount += 1;
-        } else {
-          successfulOtherShellCount += 1;
-        }
-        recentActionsRaw.push(command ? `Ran bash: ${command}.` : "Ran bash.");
-      } else {
-        recentActionsRaw.push(`Ran ${toolName}.`);
-      }
-      continue;
-    }
-    if (!firstFailedTool) {
-      firstFailedTool = {
-        toolName,
-        path,
-        message: extractToolErrorMessage(event.payload),
-      };
-    }
-  }
-
-  const filesChanged = normalizeWorkingStateList(changedFiles, 8, 180);
-  const verifiedFindingsRaw: string[] = [];
-  const readPaths = normalizeWorkingStateList(successfulReadPaths, 3, 180);
-  for (const path of readPaths) {
-    verifiedFindingsRaw.push(`Inspected ${path}.`);
-  }
-  if (successfulSearchCount > 0) {
-    verifiedFindingsRaw.push(
-      `Completed ${successfulSearchCount} workspace ${successfulSearchCount === 1 ? "search" : "searches"}.`,
-    );
-  }
-  if (filesChanged.length > 0) {
-    verifiedFindingsRaw.push(
-      `Changed ${filesChanged.length} workspace ${filesChanged.length === 1 ? "file" : "files"}.`,
-    );
-  }
-  if (successfulVerificationShellCount > 0) {
-    verifiedFindingsRaw.push(
-      `Completed ${successfulVerificationShellCount} verification ${successfulVerificationShellCount === 1 ? "command" : "commands"}.`,
-    );
-  } else if (filesChanged.length === 0 && successfulOtherShellCount > 0) {
-    verifiedFindingsRaw.push(
-      `Ran ${successfulOtherShellCount} shell ${successfulOtherShellCount === 1 ? "command" : "commands"} successfully.`,
-    );
-  }
-  const verifiedFindings = normalizeWorkingStateList(verifiedFindingsRaw, 4, 220);
-  const hasVerificationEvidence = successfulVerificationShellCount > 0;
-
-  let lastResult: string | undefined;
-  if (args.runStatus === "ok") {
-    if (filesChanged.length > 0) {
-      lastResult = normalizeWorkingStateText(
-        hasVerificationEvidence
-          ? `Completed the last workspace run and verified changes in ${filesChanged.join(", ")}.`
-          : `Completed the last workspace run and changed ${filesChanged.join(", ")}; verification is still needed.`,
-        240,
-      );
-    } else if (readPaths.length > 0) {
-      lastResult = normalizeWorkingStateText(
-        `Completed the last workspace run after inspecting ${readPaths.join(", ")}.`,
-        240,
-      );
-    } else {
-      lastResult = "Completed the last workspace run successfully.";
-    }
-  } else if (firstFailedTool) {
-    lastResult = normalizeWorkingStateText(
-      `The last workspace run failed during ${firstFailedTool.toolName}${firstFailedTool.path ? ` on ${firstFailedTool.path}` : ""}.`,
-      240,
-    );
-  } else {
-    lastResult = normalizeWorkingStateText(
-      `The last workspace run ended with status ${args.runStatus}.`,
-      240,
-    );
-  }
-
-  let openIssue: string | undefined;
-  if (args.runStatus !== "ok") {
-    openIssue =
-      normalizeWorkingStateText(
-        firstFailedTool
-          ? `${firstFailedTool.toolName}${firstFailedTool.path ? ` on ${firstFailedTool.path}` : ""} failed${firstFailedTool.message ? `: ${firstFailedTool.message}` : "."}`
-          : args.runErrorMessage || args.runReason || "The last workspace run did not complete successfully.",
-        240,
-      ) ?? "The last workspace run did not complete successfully.";
-  }
-
-  const runNeedsVerification =
-    args.runStatus === "ok" && filesChanged.length > 0 && !hasVerificationEvidence;
-  const ledgerStatus =
-    args.runStatus === "ok"
-      ? runNeedsVerification
-        ? "needs_verification"
-        : "complete"
-      : "blocked";
-  const currentStep =
-    ledgerStatus === "complete"
-      ? undefined
-      : ledgerStatus === "needs_verification"
-        ? "Verify the changed workspace files."
-        : "Resolve the blocker from the last run.";
-  const blocker = args.runStatus !== "ok" ? openIssue : undefined;
-  const nextAction =
-    ledgerStatus === "complete"
-      ? undefined
-      : ledgerStatus === "needs_verification"
-        ? "Run an appropriate build, test, preview, or targeted read before calling the task done."
-        : firstFailedTool
-          ? `Retry ${firstFailedTool.toolName} with a narrower or alternate path, or report the blocker if it is not recoverable.`
-          : "Inspect the latest runtime events and continue from the last verified state.";
-  const recentActions = normalizeWorkingStateList(recentActionsRaw, 6, 180);
-
-  return {
-    version: 2,
-    goal: normalizeWorkingStateText(args.latestUserText, 240),
-    status: ledgerStatus,
-    currentStep,
-    lastResult,
-    filesChanged,
-    verifiedFindings,
-    recentActions,
-    openIssue,
-    blocker,
-    nextAction,
-    updatedAt: args.nowMs,
-  };
 }
 
 function normalizeRunId(raw: unknown): string {
@@ -699,7 +530,7 @@ async function finalizeRuntimeRunRecord(args: {
       q.eq("ownerId", args.ownerId).eq("runId", run.runId),
     )
     .collect()) as RuntimeRunEventLike[];
-  const workingState = summarizeThreadWorkingState({
+  const workingState = summarizeRuntimeWorkingStateFromEvents({
     latestUserText: extractThreadMessageText(latestRunUserMessage?.contentJson ?? null),
     runStatus: status,
     runReason: reason,

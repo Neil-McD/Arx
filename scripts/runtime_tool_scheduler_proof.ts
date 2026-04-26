@@ -85,7 +85,6 @@ assert.equal(readOnlyShellBatch.executionMode, "parallel_read_batch");
 assert.equal(readOnlyShellBatch.summary.parallelEligible, 3);
 assert.equal(readOnlyShellBatch.summary.exclusive, 0);
 assert.equal(readOnlyShellBatch.summary.mutating, 0);
-assert.equal(readOnlyShellBatch.summary.requiresApproval, 0);
 assert.deepEqual(
   readOnlyShellBatch.calls.map((call) => call.shellCommandEffect ?? null),
   ["read_only", "read_only", null],
@@ -146,13 +145,7 @@ assert.deepEqual(
 );
 assert.deepEqual(
   mutatingShellBatch.calls.find((call) => call.providerCallId === "call_shell_missing")?.reasons,
-  [
-    "exclusive_tool",
-    "mutates_state",
-    "not_read_only",
-    "not_parallel_safe",
-    "requires_approval",
-  ],
+  ["exclusive_tool", "mutates_state", "not_read_only", "not_parallel_safe"],
   "bash without normalized command falls back to static conservative policy",
 );
 
@@ -184,17 +177,10 @@ assert.equal(mixedBatch.summary.parallelEligible, 1);
 assert.equal(mixedBatch.summary.exclusive, 4);
 assert.equal(mixedBatch.summary.unknown, 1);
 assert.equal(mixedBatch.summary.mutating, 2);
-assert.equal(mixedBatch.summary.requiresApproval, 2);
 assert.equal(mixedBatch.summary.requiresWorkspace, 4);
 assert.deepEqual(
   mixedBatch.calls.find((call) => call.toolName === "write")?.reasons,
-  [
-    "exclusive_tool",
-    "mutates_state",
-    "not_read_only",
-    "not_parallel_safe",
-    "requires_approval",
-  ],
+  ["exclusive_tool", "mutates_state", "not_read_only", "not_parallel_safe"],
 );
 assert.deepEqual(
   mixedBatch.calls.find((call) => call.toolName === "terminal_read")?.reasons,
@@ -208,7 +194,6 @@ assert.deepEqual(
     "mutates_state",
     "not_read_only",
     "not_parallel_safe",
-    "requires_approval",
   ],
 );
 

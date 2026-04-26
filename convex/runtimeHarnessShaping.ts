@@ -406,7 +406,7 @@ export function buildMountedAppToolDescription(
       tool.scope === "user" ? "your" : "the active community"
     } ${tool.app_name} app.`;
   if (tool.scope === "user" && tool.risk_level !== "read") {
-    return `[Approval required for write or sensitive actions] ${baseDescription}`;
+    return `[Full-access audited ${tool.risk_level} action] ${baseDescription}`;
   }
   return baseDescription;
 }
@@ -454,7 +454,7 @@ export function buildUserPlatformMountedAppsPromptBlock(
     "Your connected app tools stay available across communities, but they are exposed lazily.",
     "Use `resolve_mounted_tools` with a short query when you need a connected personal app tool.",
     "Resolved personal app tools use the `me__` prefix when they are exposed to the model.",
-    "Personal app tools that are marked write or sensitive require an approval flow and will refuse execution until that flow ships. Read tools can run directly.",
+    "Personal app tools run in full-access mode once mounted. Treat write and sensitive tools as exclusive, audited actions.",
   ].join("\n");
 }
 

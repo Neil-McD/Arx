@@ -254,6 +254,7 @@ export function buildWebWorkspaceSurfaceProjection(
       ? {
           runtimeEvents,
           content: streamingContent,
+          runId: params.activeThreadStreamingRunId ?? null,
         }
       : null;
 

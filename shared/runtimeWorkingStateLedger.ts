@@ -1,4 +1,9 @@
 import type { ThreadWorkingStatePrompt } from "./runtimePrompt";
+import {
+  formatRuntimeDiagnosticSummary,
+  selectTopRuntimeDiagnostic,
+  type RuntimeDiagnostic,
+} from "./runtimeDiagnostics.ts";
 
 export type RuntimeWorkingStateRunEvent = {
   eventType: string;
@@ -18,9 +23,12 @@ export type RuntimeWorkingStateSummaryInput = {
 
 export type RuntimeWorkingStateSummary = ThreadWorkingStatePrompt & {
   version: number;
+  filesTouched: string[];
   filesChanged: string[];
   verifiedFindings: string[];
   recentActions: string[];
+  verificationStatus: "not_needed" | "needed" | "passed" | "failed";
+  lastDiagnostic: string | null;
   updatedAt: number;
 };
 
@@ -74,10 +82,44 @@ function extractToolStatus(payload: unknown): string | null {
 function extractToolErrorMessage(payload: unknown): string | null {
   const payloadRecord = asRecord(payload);
   return (
+    normalizeSummaryText(payloadRecord?.top_diagnostic_summary, 240) ??
     normalizeSummaryText(payloadRecord?.error_message, 240) ??
     normalizeSummaryText(payloadRecord?.error_code, 120) ??
     null
   );
+}
+
+function extractRuntimeDiagnostics(payload: unknown): RuntimeDiagnostic[] {
+  const payloadRecord = asRecord(payload);
+  const rawDiagnostics = Array.isArray(payloadRecord?.diagnostics)
+    ? payloadRecord?.diagnostics
+    : [];
+  const diagnostics: RuntimeDiagnostic[] = [];
+  for (const raw of rawDiagnostics) {
+    const record = asRecord(raw);
+    const message = normalizeSummaryText(record?.message, 600);
+    const source = normalizeSummaryText(record?.source, 80);
+    if (!message || !source) continue;
+    const severityRaw = normalizeSummaryText(record?.severity, 20);
+    const severity =
+      severityRaw === "warning" || severityRaw === "info" ? severityRaw : "error";
+    const diagnostic: RuntimeDiagnostic = {
+      source,
+      severity,
+      message,
+    };
+    const file = normalizeSummaryText(record?.file, 260);
+    const code = normalizeSummaryText(record?.code, 80);
+    const line = Number(record?.line);
+    const column = Number(record?.column);
+    if (file) diagnostic.file = file;
+    if (Number.isFinite(line) && line > 0) diagnostic.line = Math.floor(line);
+    if (Number.isFinite(column) && column > 0) diagnostic.column = Math.floor(column);
+    if (code) diagnostic.code = code;
+    diagnostics.push(diagnostic);
+    if (diagnostics.length >= 8) break;
+  }
+  return diagnostics;
 }
 
 export function isVerificationShellCommand(command: string | null | undefined): boolean {
@@ -98,26 +140,36 @@ export function summarizeRuntimeWorkingStateFromEvents(
   args: RuntimeWorkingStateSummaryInput,
 ): RuntimeWorkingStateSummary {
   const successfulReadPaths: string[] = [];
+  const touchedPaths: string[] = [];
   const changedFiles: string[] = [];
   const recentActionsRaw: string[] = [];
   let successfulSearchCount = 0;
   let successfulVerificationShellCount = 0;
+  let failedVerificationShellCount = 0;
   let successfulOtherShellCount = 0;
   let firstFailedTool: { toolName: string; path: string | null; message: string | null } | null = null;
+  const diagnostics: RuntimeDiagnostic[] = [];
 
   for (const event of args.events) {
+    if (event.eventType === "runtime_diagnostics_detected") {
+      diagnostics.push(...extractRuntimeDiagnostics(event.payload));
+      continue;
+    }
     if (event.eventType !== "tool_call_finished") continue;
     const toolName = extractToolName(event.payload);
     if (!toolName) continue;
+    diagnostics.push(...extractRuntimeDiagnostics(event.payload));
     const status = extractToolStatus(event.payload);
     const path = extractToolArgsPath(event.payload);
     const command = toolName === "bash" ? extractToolArgsCommand(event.payload) : null;
     if (status === "ok") {
       if (toolName === "read" && path && path !== ".") {
         successfulReadPaths.push(path);
+        touchedPaths.push(path);
         recentActionsRaw.push(`Read ${path}.`);
       } else if ((toolName === "write" || toolName === "edit") && path) {
         changedFiles.push(path);
+        touchedPaths.push(path);
         recentActionsRaw.push(`${toolName === "write" ? "Wrote" : "Edited"} ${path}.`);
       } else if (toolName === "glob" || toolName === "grep") {
         successfulSearchCount += 1;
@@ -134,6 +186,12 @@ export function summarizeRuntimeWorkingStateFromEvents(
       }
       continue;
     }
+    if (path && path !== ".") {
+      touchedPaths.push(path);
+    }
+    if (toolName === "bash" && isVerificationShellCommand(command)) {
+      failedVerificationShellCount += 1;
+    }
     if (!firstFailedTool) {
       firstFailedTool = {
         toolName,
@@ -143,6 +201,10 @@ export function summarizeRuntimeWorkingStateFromEvents(
     }
   }
 
+  const topDiagnostic = selectTopRuntimeDiagnostic(diagnostics);
+  const topDiagnosticSummary = formatRuntimeDiagnosticSummary(topDiagnostic);
+
+  const filesTouched = normalizeSummaryList(touchedPaths, 10, 180);
   const filesChanged = normalizeSummaryList(changedFiles, 8, 180);
   const verifiedFindingsRaw: string[] = [];
   const readPaths = normalizeSummaryList(successfulReadPaths, 3, 180);
@@ -168,9 +230,20 @@ export function summarizeRuntimeWorkingStateFromEvents(
       `Ran ${successfulOtherShellCount} shell ${successfulOtherShellCount === 1 ? "command" : "commands"} successfully.`,
     );
   }
+  if (topDiagnosticSummary) {
+    verifiedFindingsRaw.push(`Found diagnostic: ${topDiagnosticSummary}`);
+  }
   const verifiedFindings = normalizeSummaryList(verifiedFindingsRaw, 4, 220);
 
   const hasVerificationEvidence = successfulVerificationShellCount > 0;
+  const verificationStatus =
+    failedVerificationShellCount > 0 || (args.runStatus !== "ok" && Boolean(topDiagnosticSummary))
+      ? "failed"
+      : filesChanged.length === 0
+        ? "not_needed"
+        : hasVerificationEvidence
+          ? "passed"
+          : "needed";
 
   let lastResult: string | undefined;
   if (args.runStatus === "ok") {
@@ -191,7 +264,9 @@ export function summarizeRuntimeWorkingStateFromEvents(
     }
   } else if (firstFailedTool) {
     lastResult = normalizeSummaryText(
-      `The last workspace run failed during ${firstFailedTool.toolName}${firstFailedTool.path ? ` on ${firstFailedTool.path}` : ""}.`,
+      topDiagnosticSummary
+        ? `The last workspace run failed with diagnostic ${topDiagnosticSummary}.`
+        : `The last workspace run failed during ${firstFailedTool.toolName}${firstFailedTool.path ? ` on ${firstFailedTool.path}` : ""}.`,
       240,
     );
   } else {
@@ -206,7 +281,9 @@ export function summarizeRuntimeWorkingStateFromEvents(
     openIssue =
       normalizeSummaryText(
         firstFailedTool
-          ? `${firstFailedTool.toolName}${firstFailedTool.path ? ` on ${firstFailedTool.path}` : ""} failed${firstFailedTool.message ? `: ${firstFailedTool.message}` : "."}`
+          ? topDiagnosticSummary
+            ? `Verification failed: ${topDiagnosticSummary}`
+            : `${firstFailedTool.toolName}${firstFailedTool.path ? ` on ${firstFailedTool.path}` : ""} failed${firstFailedTool.message ? `: ${firstFailedTool.message}` : "."}`
           : args.runErrorMessage || args.runReason || "The last workspace run did not complete successfully.",
         240,
       ) ?? "The last workspace run did not complete successfully.";
@@ -223,7 +300,9 @@ export function summarizeRuntimeWorkingStateFromEvents(
   const currentStep =
     ledgerStatus === "complete"
       ? undefined
-      : ledgerStatus === "needs_verification"
+      : verificationStatus === "failed"
+        ? "Fix the failed verification diagnostic."
+        : ledgerStatus === "needs_verification"
         ? "Verify the changed workspace files."
         : "Resolve the blocker from the last run.";
   const blocker = args.runStatus !== "ok" ? openIssue : undefined;
@@ -232,6 +311,8 @@ export function summarizeRuntimeWorkingStateFromEvents(
       ? undefined
       : ledgerStatus === "needs_verification"
         ? "Run an appropriate build, test, preview, or targeted read before calling the task done."
+        : topDiagnosticSummary
+          ? `Fix ${topDiagnosticSummary}`
         : firstFailedTool
           ? `Retry ${firstFailedTool.toolName} with a narrower or alternate path, or report the blocker if it is not recoverable.`
           : "Inspect the latest runtime events and continue from the last verified state.";
@@ -243,8 +324,11 @@ export function summarizeRuntimeWorkingStateFromEvents(
     status: ledgerStatus,
     currentStep: currentStep ?? null,
     lastResult: lastResult ?? null,
+    verificationStatus,
+    filesTouched,
     filesChanged,
     verifiedFindings,
+    lastDiagnostic: topDiagnosticSummary ?? null,
     recentActions,
     openIssue: openIssue ?? null,
     blocker: blocker ?? null,

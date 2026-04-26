@@ -769,31 +769,6 @@ export const executeUserPlatformMountedAppToolInternal = internalAction({
       };
     }
 
-    if (mountedTool.risk_level !== "read") {
-      const message =
-        "Personal write and sensitive app tools still require the upcoming approval flow. This tool was not executed.";
-      return {
-        status: "error" as const,
-        exitCode: null,
-        outputText: message,
-        errorCode: "user_platform_app_tool_approval_required",
-        errorMessage: message,
-        details: {
-          approval_required: true,
-          user_platform_app: {
-            user_platform_app_mount_id: String(
-              mountedTool.user_platform_app_mount_id,
-            ),
-            developer_app_id: String(mountedTool.developer_app_id),
-            app_name: mountedTool.app_name,
-            tool_name: mountedTool.tool_name,
-            namespaced_tool_name: mountedTool.namespaced_tool_name,
-            risk_level: mountedTool.risk_level,
-          },
-        },
-      };
-    }
-
     const connectionBundle = (await ctx.runQuery(
       internal.appConnections.getDecryptedDeveloperAppConnectionBundleInternal,
       {

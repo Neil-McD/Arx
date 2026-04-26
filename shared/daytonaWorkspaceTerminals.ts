@@ -29,6 +29,7 @@ export type DaytonaWorkspaceTerminalPreview = {
 
 export type DaytonaWorkspaceTerminalSnapshot = {
   active: DaytonaWorkspaceTerminalRecord[];
+  recent: DaytonaWorkspaceTerminalRecord[];
 };
 
 function mapWorkspaceTerminalRow(
@@ -65,9 +66,13 @@ export async function listProjectWorkspaceTerminalSnapshot<TSession>(params: {
   const payload = (await client.action("workspaceTerminals:listProjectWorkspaceTerminalSnapshot" as any, {
     authSubject,
     projectId: params.projectId,
-  })) as { active?: Array<Record<string, unknown>> | null } | null;
+  })) as {
+    active?: Array<Record<string, unknown>> | null;
+    recent?: Array<Record<string, unknown>> | null;
+  } | null;
   return {
     active: Array.isArray(payload?.active) ? payload.active.map((row) => mapWorkspaceTerminalRow(row)) : [],
+    recent: Array.isArray(payload?.recent) ? payload.recent.map((row) => mapWorkspaceTerminalRow(row)) : [],
   };
 }
 

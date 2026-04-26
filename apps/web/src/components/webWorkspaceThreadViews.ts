@@ -46,4 +46,5 @@ export type WorkspaceThreadMessageView = {
 export type WorkspaceStreamingMessageView = {
   runtimeEvents: ThreadStreamingRuntimeEvent[];
   content: string;
+  runId: string | null;
 };

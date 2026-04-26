@@ -81,6 +81,16 @@ function formatTerminalStartToolOutput(value: unknown): string {
     value && typeof value === "object" && !Array.isArray(value)
       ? (value as Record<string, unknown>)
       : null;
+  if (record?.ok === false) {
+    const message = String(record.message ?? "Background terminal failed to start.").trim();
+    const outputTail = String(record.output_tail ?? "").trim();
+    return [
+      message || "Background terminal failed to start.",
+      outputTail ? `Output:\n${outputTail}` : null,
+    ]
+      .filter(Boolean)
+      .join("\n");
+  }
   const status =
     typeof record?.status === "string" && record.status.trim()
       ? record.status.trim()

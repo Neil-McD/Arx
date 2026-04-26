@@ -46,6 +46,10 @@ export const WORKSPACE_SANDBOX_TOOL_NAMES: readonly RetrievalToolName[] = [
   "write",
   "edit",
   "bash",
+  "terminal_start",
+  "terminal_read",
+  "terminal_write",
+  "terminal_stop",
   ...COMPUTER_USE_TOOL_NAMES,
 ];
 

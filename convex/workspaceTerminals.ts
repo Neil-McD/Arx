@@ -37,6 +37,8 @@ import {
 } from "./workspaceTerminalProcessCore";
 
 const PROJECT_TERMINAL_RECONCILE_FRESH_MS = 8_000;
+const RECENT_TERMINAL_FAILURE_VISIBLE_MS = 5 * 60_000;
+const RECENT_TERMINAL_FAILURE_LIMIT = 4;
 
 type WorkspaceTerminalStatus = "starting" | "running" | "exited" | "failed" | "stopped";
 type WorkspaceTerminalSummary = {
@@ -70,12 +72,29 @@ function summarizeTerminalRow(row: any): WorkspaceTerminalSummary {
 
 function buildTerminalSnapshot(rows: any[]): {
   active: WorkspaceTerminalSummary[];
+  recent: WorkspaceTerminalSummary[];
 } {
+  const nowMs = Date.now();
   const summaries = rows.map((row) => summarizeTerminalRow(row));
   const active = summaries
     .filter((row) => isTerminalActiveStatus(row.status))
     .sort((a, b) => b.updated_at - a.updated_at);
-  return { active };
+  const activeIds = new Set(active.map((row) => row.id));
+  const recent = summaries
+    .filter((row) => {
+      if (activeIds.has(row.id)) return false;
+      const isRecentFailure = row.status === "failed" || row.status === "exited";
+      const lastSeenAt = row.finished_at ?? row.updated_at;
+      return (
+        isRecentFailure &&
+        Number.isFinite(lastSeenAt) &&
+        lastSeenAt > 0 &&
+        nowMs - lastSeenAt <= RECENT_TERMINAL_FAILURE_VISIBLE_MS
+      );
+    })
+    .sort((a, b) => b.updated_at - a.updated_at)
+    .slice(0, RECENT_TERMINAL_FAILURE_LIMIT);
+  return { active, recent };
 }
 
 async function resolveAuthenticatedActorForActionContext(params: {
@@ -564,7 +583,7 @@ export const listProjectWorkspaceTerminalSnapshot = action({
       ownerId: actor.dbUserId,
       projectId: args.projectId,
     });
-    if (!project) return { active: [] };
+    if (!project) return { active: [], recent: [] };
     const snapshot: any = await ctx.runAction(
       internal.workspaceTerminals.reconcileProjectWorkspaceTerminalsInternal as any,
       {
@@ -574,6 +593,7 @@ export const listProjectWorkspaceTerminalSnapshot = action({
     );
     return {
       active: Array.isArray(snapshot?.active) ? snapshot.active : [],
+      recent: Array.isArray(snapshot?.recent) ? snapshot.recent : [],
     };
   },
 });

@@ -118,6 +118,21 @@ async function proveLazyWorkspaceCreationRules() {
     "expected runtime terminal core to support tying rows back to an owning runtime run",
   );
   assert.equal(
+    terminalProcessCoreSource.includes("RUNTIME_TERMINAL_START_READINESS_MS"),
+    true,
+    "expected runtime terminal starts to include a short readiness window",
+  );
+  assert.equal(
+    terminalProcessCoreSource.includes("terminal_exited_before_ready"),
+    true,
+    "expected runtime terminal starts to fail closed when the process exits immediately",
+  );
+  assert.equal(
+    terminalProcessCoreSource.includes("await reconcileRuntimeSessionTerminalRow({"),
+    true,
+    "expected runtime terminal starts to reconcile before reporting success",
+  );
+  assert.equal(
     terminalBlock.includes("startRuntimeSessionTerminal"),
     true,
     "expected agent terminal_start to create runtime-session-owned terminal rows",
@@ -295,6 +310,16 @@ async function proveLazyWorkspaceCreationRules() {
     workspaceTerminalsSource.includes("resolveRuntimeSessionTerminalPreview"),
     true,
     "expected runtime preview lookup to use the runtime-session preview helper",
+  );
+  assert.equal(
+    workspaceTerminalsSource.includes("recent: WorkspaceTerminalSummary[]"),
+    true,
+    "expected terminal snapshots to expose recent non-active terminal attempts",
+  );
+  assert.equal(
+    workspaceTerminalsSource.includes("RECENT_TERMINAL_FAILURE_VISIBLE_MS"),
+    true,
+    "expected failed preview terminals to remain visible briefly for debugging",
   );
   assert.equal(
     workspaceTerminalsSource.includes("run_id_required"),

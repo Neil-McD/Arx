@@ -125,13 +125,11 @@ async function getEmailPreferencesByUserId(ctx: any, userId: any): Promise<Recor
         weeklyDigestEnabled: Boolean(row.weeklyDigestEnabled),
         founderDigestEnabled: Boolean(row.founderDigestEnabled),
         eventReminderEnabled: Boolean(row.eventReminderEnabled),
-        founderAdminEmailsEnabled: Boolean(row.founderAdminEmailsEnabled),
       }
     : {
         weeklyDigestEnabled: true,
         founderDigestEnabled: true,
         eventReminderEnabled: true,
-        founderAdminEmailsEnabled: true,
       };
 }
 

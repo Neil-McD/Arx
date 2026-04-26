@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
-import { RETRIEVAL_TOOL_NAMES, type RetrievalToolName } from "../shared/retrievalTools.ts";
+import {
+  RETRIEVAL_TOOL_NAMES,
+  requiresWorkspaceSandbox,
+  type RetrievalToolName,
+} from "../shared/retrievalTools.ts";
 import {
   buildRuntimeToolPolicySurface,
   getFixedRuntimeToolPolicy,
@@ -37,9 +41,8 @@ function proveDefensiveMutationDefaults() {
   assert.equal(unknown.mutatesState, true);
   assert.equal(unknown.parallelSafe, false);
   assert.equal(unknown.exclusive, true);
-  assert.equal(unknown.requiresApproval, true);
   assert.equal(unknown.riskLevel, "sensitive");
-  console.log("PASS: unknown tools default to mutating, exclusive, approval-required");
+  console.log("PASS: unknown tools default to mutating, exclusive, full-access audit");
 }
 
 function proveFixedPolicyBoundaries() {
@@ -86,11 +89,6 @@ function proveFixedPolicyBoundaries() {
   assert.equal(getFixedRuntimeToolPolicy("community_write").mutatesState, true);
   assert.equal(getFixedRuntimeToolPolicy("community_write").requiresCommunity, true);
   assert.equal(
-    getFixedRuntimeToolPolicy("community_write").requiresApproval,
-    false,
-    "community_write is autonomous inside a validated community lens",
-  );
-  assert.equal(
     getFixedRuntimeToolPolicy("terminal_read").exclusive,
     true,
     "terminal reads are stateful and remain exclusive despite being read-only",
@@ -101,6 +99,18 @@ function proveFixedPolicyBoundaries() {
     true,
     "computer screenshots are stateful and remain exclusive despite being read-only",
   );
+  for (const toolName of [
+    "terminal_start",
+    "terminal_read",
+    "terminal_write",
+    "terminal_stop",
+  ] as const satisfies readonly RetrievalToolName[]) {
+    assert.equal(
+      requiresWorkspaceSandbox(toolName),
+      true,
+      `${toolName} should be classified as workspace-bound`,
+    );
+  }
   console.log("PASS: fixed tool policies separate parallel reads from stateful exclusives");
 }
 
@@ -115,7 +125,6 @@ function proveMountedPolicyBoundaries() {
   assert.equal(readMounted.requiresMcpSession, true);
   assert.equal(readMounted.parallelSafe, false);
   assert.equal(readMounted.exclusive, true);
-  assert.equal(readMounted.requiresApproval, false);
 
   const writeMounted = getMountedRuntimeToolPolicy({
     scope: "user",
@@ -128,7 +137,6 @@ function proveMountedPolicyBoundaries() {
   assert.equal(writeMounted.requiresMcpSession, true);
   assert.equal(writeMounted.parallelSafe, false);
   assert.equal(writeMounted.exclusive, true);
-  assert.equal(writeMounted.requiresApproval, true);
   console.log("PASS: mounted MCP tools stay session-bound and exclusive");
 }
 
@@ -156,7 +164,6 @@ function provePolicySurfaceSummary() {
   assert.equal(surface.summary.exclusive, 4);
   assert.equal(surface.summary.requiresMcpSession, 2);
   assert.equal(surface.summary.requiresCommunity, 2);
-  assert.equal(surface.summary.requiresApproval, 2);
   assert.equal(surface.summary.byRiskLevel.read, 4);
   assert.equal(surface.summary.byRiskLevel.write, 1);
   assert.equal(surface.summary.byRiskLevel.sensitive, 1);
@@ -188,8 +195,8 @@ async function provePolicySurfaceIsWiredIntoRuntimeEvidence() {
   );
   assert.match(
     daytonaSource,
-    /tool_policy_enforcement: "metadata_only"/,
-    "expected provider tool surface events to state that policy metadata is not yet enforcement",
+    /tool_policy_enforcement: "full_access_audit"/,
+    "expected provider tool surface events to state that full-access execution is audited",
   );
   assert.match(
     daytonaSource,
@@ -199,9 +206,42 @@ async function provePolicySurfaceIsWiredIntoRuntimeEvidence() {
   console.log("PASS: runtime tool policy metadata is wired into run evidence");
 }
 
+async function proveApprovalBlocksAreRemovedFromRuntimeHarness() {
+  const policySource = await readRepoFile("shared/runtimeToolPolicy.ts");
+  const daytonaSource = await readRepoFile("convex/httpDaytona.ts");
+  const personalMountSource = await readRepoFile("convex/userPlatformAppMounts.ts");
+  const promptSource = await readRepoFile("convex/runtimeHarnessShaping.ts");
+  const integrationSettingsSource = await readRepoFile(
+    "apps/web/src/components/WebIntegrationsSettingsSection.tsx",
+  );
+  const runtimeSources = [
+    daytonaSource,
+    personalMountSource,
+    promptSource,
+    integrationSettingsSource,
+  ].join("\n");
+  assert.doesNotMatch(
+    runtimeSources,
+    /approval|approval_required|user_platform_app_tool_approval_required|blocked until/i,
+    "runtime harness should not contain approval-era mounted tool blockers or copy",
+  );
+  assert.doesNotMatch(
+    policySource,
+    /requiresApproval|requires_approval/i,
+    "runtime tool policy should not carry approval metadata",
+  );
+  assert.match(
+    runtimeSources,
+    /full-access mode|full_access_audit/,
+    "runtime harness should describe mounted tool execution as full-access with audit",
+  );
+  console.log("PASS: mounted runtime tools use full-access execution, not approvals");
+}
+
 proveFixedPolicyCoverage();
 proveDefensiveMutationDefaults();
 proveFixedPolicyBoundaries();
 proveMountedPolicyBoundaries();
 provePolicySurfaceSummary();
 await provePolicySurfaceIsWiredIntoRuntimeEvidence();
+await proveApprovalBlocksAreRemovedFromRuntimeHarness();

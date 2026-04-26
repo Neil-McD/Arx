@@ -109,7 +109,7 @@ function buildMountStatusLabel(mount: UserPlatformMountedApp): string {
     return `Reconnect required · ${pluralizeTools(count)}`;
   }
   if (gatedCount > 0) {
-    return `${pluralizeTools(count)} active · ${gatedCount} need approval`;
+    return `${pluralizeTools(count)} active · ${gatedCount} audited`;
   }
   return `${pluralizeTools(count)} active`;
 }
@@ -129,7 +129,7 @@ function buildMountDetail(mount: UserPlatformMountedApp): string {
     return "Reconnect this app to restore its platform tools.";
   }
   if (gatedCount > 0) {
-    return `${pluralizeTools(enabledCount)} mounted. ${gatedCount} write or sensitive tools stay blocked until the personal approval flow ships.`;
+    return `${pluralizeTools(enabledCount)} mounted. ${gatedCount} write or sensitive tools run in full-access mode with audit logging.`;
   }
   return `${pluralizeTools(enabledCount)} mounted in your baseline platform layer.`;
 }

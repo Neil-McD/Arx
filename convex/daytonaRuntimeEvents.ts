@@ -2,7 +2,18 @@ import {
   type NativeToolExecutionResult,
   type NativeToolResultEnvelope,
 } from "../shared/nativeToolLoop";
+import {
+  formatRuntimeDiagnosticSummary,
+  parseRuntimeDiagnosticsFromText,
+  selectTopRuntimeDiagnostic,
+} from "../shared/runtimeDiagnostics";
 import { getShellCommandAuditMetadataForToolCall } from "../shared/runtimeToolPolicy";
+import { isVerificationShellCommand } from "../shared/runtimeWorkingStateLedger";
+
+function normalizeCommand(args: Record<string, unknown>): string | null {
+  const command = String(args.command ?? "").replace(/\s+/g, " ").trim();
+  return command || null;
+}
 
 export async function appendWorkspaceToolCallStarted(params: {
   appendRunEvent: (params: {
@@ -62,6 +73,24 @@ export async function appendWorkspaceToolCallFinished(params: {
     toolName: params.toolName,
     normalizedArgs: params.args,
   });
+  const command = params.toolName === "bash" ? normalizeCommand(params.args) : null;
+  const diagnostics =
+    params.toolName === "bash" &&
+    params.toolResult.status !== "ok" &&
+    isVerificationShellCommand(command)
+      ? parseRuntimeDiagnosticsFromText({
+          command,
+          outputText: [
+            params.toolResult.errorMessage,
+            params.toolResult.outputText,
+          ]
+            .filter(Boolean)
+            .join("\n"),
+        })
+      : [];
+  const topDiagnosticSummary = formatRuntimeDiagnosticSummary(
+    selectTopRuntimeDiagnostic(diagnostics),
+  );
   const webSources = Array.isArray(params.toolResult.details?.web_sources)
     ? params.toolResult.details?.web_sources
     : null;
@@ -80,8 +109,36 @@ export async function appendWorkspaceToolCallFinished(params: {
       ...(params.toolResult.details && typeof params.toolResult.details === "object"
         ? { details: params.toolResult.details }
         : null),
+      ...(diagnostics.length > 0
+        ? {
+            diagnostics,
+            diagnostic_count: diagnostics.length,
+            top_diagnostic_summary: topDiagnosticSummary,
+          }
+        : null),
       output_preview: params.toolResult.outputText.slice(0, 2000),
       ...(webSources ? { web_sources: webSources } : null),
     },
   });
+  if (diagnostics.length > 0) {
+    try {
+      await params.appendRunEvent({
+        eventType: "runtime_diagnostics_detected",
+        eventKey: `${params.runId}:${params.harnessName}_runtime_diagnostics:${params.iteration}`,
+        payload: {
+          run_id: params.runId,
+          tool_call_id: toolCallId,
+          provider_call_id: params.providerCallId,
+          tool_name: params.toolName,
+          command,
+          diagnostic_source: diagnostics[0]?.source ?? "shell",
+          diagnostic_count: diagnostics.length,
+          diagnostics,
+          top_diagnostic_summary: topDiagnosticSummary,
+        },
+      });
+    } catch {
+      // Best-effort diagnostics sidecar only; the primary tool event already carries diagnostics.
+    }
+  }
 }

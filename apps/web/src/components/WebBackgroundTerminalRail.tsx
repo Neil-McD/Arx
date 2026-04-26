@@ -13,6 +13,10 @@ function formatTerminalCount(count: number): string {
   return `${count} background terminal${count === 1 ? "" : "s"} running`;
 }
 
+function isTerminalActive(status: DaytonaWorkspaceTerminalRecord["status"]): boolean {
+  return status === "starting" || status === "running";
+}
+
 function formatCommandLabel(command: string): string {
   const normalized = String(command ?? "").replace(/\s+/g, " ").trim();
   if (normalized.length <= 68) return normalized;
@@ -39,8 +43,18 @@ export function WebBackgroundTerminalRail(props: {
 
   if (props.terminals.length === 0) return null;
 
-  const title = formatTerminalCount(props.terminals.length);
-  const subtitle = "The agent still has background terminals running in this workspace.";
+  const activeCount = props.terminals.filter((terminal) => isTerminalActive(terminal.status)).length;
+  const failedCount = props.terminals.length - activeCount;
+  const title =
+    activeCount > 0
+      ? formatTerminalCount(activeCount)
+      : `${failedCount} recent terminal ${failedCount === 1 ? "issue" : "issues"}`;
+  const subtitle =
+    activeCount > 0
+      ? failedCount > 0
+        ? "The agent has running terminals and recent terminal issues in this workspace."
+        : "The agent still has background terminals running in this workspace."
+      : "A background terminal exited before it became ready.";
 
   return (
     <div className="background-terminal-rail">
@@ -62,7 +76,7 @@ export function WebBackgroundTerminalRail(props: {
               </svg>
             </span>
           </button>
-          {props.terminals.length > 0 ? (
+          {activeCount > 0 ? (
             <button
               type="button"
               className="background-terminal-stop-all"
@@ -84,9 +98,10 @@ export function WebBackgroundTerminalRail(props: {
             {props.terminals.length > 0 ? (
               <div className="background-terminal-list">
                 {props.terminals.map((terminal) => {
+                  const isActive = isTerminalActive(terminal.status);
                   const isBusy = props.isStoppingAll || busySet.has(terminal.id);
                   return (
-                    <div key={terminal.id} className="background-terminal-item">
+                    <div key={terminal.id} className={`background-terminal-item${isActive ? "" : " recent"}`}>
                       <div className="background-terminal-item-copy">
                         <div className="background-terminal-item-command" title={terminal.command}>
                           {formatCommandLabel(terminal.command)}
@@ -100,18 +115,28 @@ export function WebBackgroundTerminalRail(props: {
                               {terminal.cwd}
                             </span>
                           ) : null}
+                          {!isActive && typeof terminal.exit_code === "number" ? (
+                            <span className="background-terminal-cwd">exit {terminal.exit_code}</span>
+                          ) : null}
                         </div>
+                        {!isActive && terminal.output_tail ? (
+                          <div className="background-terminal-item-output" title={terminal.output_tail}>
+                            {terminal.output_tail}
+                          </div>
+                        ) : null}
                       </div>
-                      <button
-                        type="button"
-                        className="background-terminal-stop icon-only"
-                        onClick={() => props.onStopTerminal(terminal.id)}
-                        disabled={isBusy}
-                        aria-label={isBusy ? "Stopping background terminal" : "Stop background terminal"}
-                        title={isBusy ? "Stopping..." : "Stop"}
-                      >
-                        <StopGlyph />
-                      </button>
+                      {isActive ? (
+                        <button
+                          type="button"
+                          className="background-terminal-stop icon-only"
+                          onClick={() => props.onStopTerminal(terminal.id)}
+                          disabled={isBusy}
+                          aria-label={isBusy ? "Stopping background terminal" : "Stop background terminal"}
+                          title={isBusy ? "Stopping..." : "Stop"}
+                        >
+                          <StopGlyph />
+                        </button>
+                      ) : null}
                     </div>
                   );
                 })}

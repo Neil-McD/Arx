@@ -1,4 +1,4 @@
-import { type RetrievalToolName } from "./retrievalTools";
+import { type RetrievalToolName } from "./retrievalTools.ts";
 import type { RuntimeKernelBudget } from "./runtimeKernelTypes";
 
 export type ThreadWorkingStatePrompt = {
@@ -7,9 +7,12 @@ export type ThreadWorkingStatePrompt = {
   status?: "idle" | "in_progress" | "blocked" | "needs_verification" | "complete" | null;
   currentStep?: string | null;
   lastResult?: string | null;
+  verificationStatus?: "not_needed" | "needed" | "passed" | "failed" | null;
+  filesTouched?: string[] | null;
   filesChanged?: string[] | null;
   verifiedFindings?: string[] | null;
   recentActions?: string[] | null;
+  lastDiagnostic?: string | null;
   openIssue?: string | null;
   blocker?: string | null;
   nextAction?: string | null;
@@ -227,47 +230,7 @@ function buildToolContextPrompt(params: {
   allowedToolNames: readonly RetrievalToolName[];
   projectLabel?: string | null;
   projectDescription?: string | null;
-  threadWorkingState?: ThreadWorkingStatePrompt | null;
 }): string {
-  const filesChanged = Array.isArray(params.threadWorkingState?.filesChanged)
-    ? params.threadWorkingState?.filesChanged.filter((value) => typeof value === "string" && value.trim())
-    : [];
-  const verifiedFindings = Array.isArray(params.threadWorkingState?.verifiedFindings)
-    ? params.threadWorkingState?.verifiedFindings.filter((value) => typeof value === "string" && value.trim())
-    : [];
-  const recentActions = Array.isArray(params.threadWorkingState?.recentActions)
-    ? params.threadWorkingState?.recentActions.filter((value) => typeof value === "string" && value.trim())
-    : [];
-  const status = String(params.threadWorkingState?.status ?? "").trim();
-  const currentStep = String(params.threadWorkingState?.currentStep ?? "").trim();
-  const goal = String(params.threadWorkingState?.goal ?? "").trim();
-  const lastResult = String(params.threadWorkingState?.lastResult ?? "").trim();
-  const openIssue = String(params.threadWorkingState?.blocker ?? params.threadWorkingState?.openIssue ?? "").trim();
-  const nextAction = String(params.threadWorkingState?.nextAction ?? "").trim();
-  const workingStateBlock =
-    goal ||
-    status ||
-    currentStep ||
-    lastResult ||
-    openIssue ||
-    nextAction ||
-    filesChanged.length > 0 ||
-    verifiedFindings.length > 0 ||
-    recentActions.length > 0
-      ? [
-          "THREAD_WORKING_STATE",
-          `Goal: ${goal || "(none)"}`,
-          `Status: ${status || "(none)"}`,
-          `Current step: ${currentStep || "(none)"}`,
-          `Last verified result: ${lastResult || "(none)"}`,
-          `Files changed: ${filesChanged.length > 0 ? filesChanged.join(", ") : "(none)"}`,
-          `Verified findings: ${verifiedFindings.length > 0 ? verifiedFindings.join(" | ") : "(none)"}`,
-          `Recent actions: ${recentActions.length > 0 ? recentActions.join(" | ") : "(none)"}`,
-          `Blocker: ${openIssue || "(none)"}`,
-          `Next action: ${nextAction || "(none)"}`,
-          "Treat this as compact continuity from prior verified work. Re-read files when exact current contents matter.",
-        ].join("\n")
-      : null;
   const hasWorkspaceTools = params.allowedToolNames.some((toolName) =>
     [
       "list_dir",
@@ -296,10 +259,66 @@ function buildToolContextPrompt(params: {
     `Allowed tools: ${params.allowedToolNames.join(",") || "(none)"}.`,
     hasWorkspaceTools ? "All file paths are relative to the project root." : null,
     "Only the listed tools are available in this run.",
-    workingStateBlock,
   ]
     .filter(Boolean)
     .join("\n");
+}
+
+function buildThreadWorkingStatePrompt(params: {
+  threadWorkingState?: ThreadWorkingStatePrompt | null;
+}): string | null {
+  const filesChanged = Array.isArray(params.threadWorkingState?.filesChanged)
+    ? params.threadWorkingState?.filesChanged.filter((value) => typeof value === "string" && value.trim())
+    : [];
+  const filesTouched = Array.isArray(params.threadWorkingState?.filesTouched)
+    ? params.threadWorkingState?.filesTouched.filter((value) => typeof value === "string" && value.trim())
+    : [];
+  const verifiedFindings = Array.isArray(params.threadWorkingState?.verifiedFindings)
+    ? params.threadWorkingState?.verifiedFindings.filter((value) => typeof value === "string" && value.trim())
+    : [];
+  const recentActions = Array.isArray(params.threadWorkingState?.recentActions)
+    ? params.threadWorkingState?.recentActions.filter((value) => typeof value === "string" && value.trim())
+    : [];
+  const status = String(params.threadWorkingState?.status ?? "").trim();
+  const currentStep = String(params.threadWorkingState?.currentStep ?? "").trim();
+  const goal = String(params.threadWorkingState?.goal ?? "").trim();
+  const lastResult = String(params.threadWorkingState?.lastResult ?? "").trim();
+  const openIssue = String(params.threadWorkingState?.blocker ?? params.threadWorkingState?.openIssue ?? "").trim();
+  const nextAction = String(params.threadWorkingState?.nextAction ?? "").trim();
+  const verificationStatus = String(params.threadWorkingState?.verificationStatus ?? "").trim();
+  const lastDiagnostic = String(params.threadWorkingState?.lastDiagnostic ?? "").trim();
+  if (
+    !goal &&
+    !status &&
+    !currentStep &&
+    !lastResult &&
+    !openIssue &&
+    !nextAction &&
+    !verificationStatus &&
+    !lastDiagnostic &&
+    filesTouched.length === 0 &&
+    filesChanged.length === 0 &&
+    verifiedFindings.length === 0 &&
+    recentActions.length === 0
+  ) {
+    return null;
+  }
+  return [
+    "THREAD_WORKING_STATE",
+    `Goal: ${goal || "(none)"}`,
+    `Status: ${status || "(none)"}`,
+    `Current step: ${currentStep || "(none)"}`,
+    `Last verified result: ${lastResult || "(none)"}`,
+    `Verification: ${verificationStatus || "(none)"}`,
+    `Files touched: ${filesTouched.length > 0 ? filesTouched.join(", ") : "(none)"}`,
+    `Files changed: ${filesChanged.length > 0 ? filesChanged.join(", ") : "(none)"}`,
+    `Verified findings: ${verifiedFindings.length > 0 ? verifiedFindings.join(" | ") : "(none)"}`,
+    `Last diagnostic: ${lastDiagnostic || "(none)"}`,
+    `Recent actions: ${recentActions.length > 0 ? recentActions.join(" | ") : "(none)"}`,
+    `Blocker: ${openIssue || "(none)"}`,
+    `Next action: ${nextAction || "(none)"}`,
+    "Treat this as compact continuity from prior verified work. Re-read files when exact current contents matter.",
+  ].join("\n");
 }
 
 function buildBackgroundTerminalStatePrompt(params: {
@@ -593,9 +612,16 @@ export function buildWorkspaceRuntimeSystemPrompt(params: RuntimeCommunityPrompt
   currentDateLabel?: string | null;
   currentTimeZone?: string | null;
 }): string {
-  return joinPromptBlocks([
+  const stablePromptBlocks = [
     buildPlatformDoctrinePrompt(),
     buildAgentSoulPrompt(),
+    buildExplanationContractPrompt(),
+    buildWorkspaceOperatingPolicyPrompt({
+      loopBudget: params.loopBudget,
+      allowedToolNames: params.allowedToolNames,
+    }),
+  ];
+  const semiStablePromptBlocks = [
     buildCommunityLensPrompt({
       communityId: params.communityId,
       communityName: params.communityName,
@@ -612,6 +638,10 @@ export function buildWorkspaceRuntimeSystemPrompt(params: RuntimeCommunityPrompt
       allowedToolNames: params.allowedToolNames,
       projectLabel: params.projectLabel,
       projectDescription: params.projectDescription,
+    }),
+  ];
+  const volatilePromptBlocks = [
+    buildThreadWorkingStatePrompt({
       threadWorkingState: params.threadWorkingState,
     }),
     buildBackgroundTerminalStatePrompt({
@@ -622,11 +652,11 @@ export function buildWorkspaceRuntimeSystemPrompt(params: RuntimeCommunityPrompt
       currentDateLabel: params.currentDateLabel,
       currentTimeZone: params.currentTimeZone,
     }),
-    buildExplanationContractPrompt(),
-    buildWorkspaceOperatingPolicyPrompt({
-      loopBudget: params.loopBudget,
-      allowedToolNames: params.allowedToolNames,
-    }),
+  ];
+  return joinPromptBlocks([
+    ...stablePromptBlocks,
+    ...semiStablePromptBlocks,
+    ...volatilePromptBlocks,
   ]);
 }
 

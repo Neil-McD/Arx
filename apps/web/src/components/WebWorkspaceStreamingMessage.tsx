@@ -1,4 +1,5 @@
 import type { AuthSessionLike } from "../../../../shared/authSession";
+import type { ReactNode } from "react";
 import { RuntimeComputerUseViewer } from "./RuntimeComputerUseViewer";
 import { RuntimeLiveTimeline } from "./RuntimeLiveTimeline";
 import type {
@@ -11,6 +12,7 @@ type WebWorkspaceStreamingMessageProps = {
   session: AuthSessionLike | null;
   renderMarkdown: WorkspaceMarkdownRenderer;
   copyTextToClipboard: (text: string) => Promise<void> | void;
+  renderPreviewForRun: (runId: string | null) => ReactNode;
 };
 
 export function WebWorkspaceStreamingMessage(
@@ -61,6 +63,7 @@ export function WebWorkspaceStreamingMessage(
           </span>
         ) : null}
       </div>
+      {props.renderPreviewForRun(view.runId)}
     </div>
   );
 }

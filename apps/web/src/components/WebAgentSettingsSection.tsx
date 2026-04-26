@@ -101,10 +101,7 @@ export function WebAgentSettingsSection(props: WebAgentSettingsSectionProps) {
     <>
       <div className="panel-title">Agent</div>
       <div className="memory-panel">
-        {personalMemoryError &&
-          !hasBuilderTierPaidAccess(builderBillingStatus?.builder_tier ?? "free") && (
-            <div className="memory-error">{personalMemoryError}</div>
-          )}
+        {personalMemoryError && <div className="memory-error">{personalMemoryError}</div>}
         {exportError && <div className="auth-error">{exportError}</div>}
 
         <div className="settings-section">
@@ -145,7 +142,7 @@ export function WebAgentSettingsSection(props: WebAgentSettingsSectionProps) {
 
         {(() => {
           const tier = builderBillingStatus?.builder_tier ?? "free";
-          const hasPersonalMemoryAccess = hasBuilderTierPaidAccess(tier);
+          const hasWorkspaceCreditAccess = hasBuilderTierPaidAccess(tier);
           if (!session) return null;
 
           return (
@@ -158,7 +155,7 @@ export function WebAgentSettingsSection(props: WebAgentSettingsSectionProps) {
                 <div className="settings-section-desc">
                   Credits are only used when Builder tools spin up a Daytona sandbox. Community tools and web research do not consume them.
                 </div>
-                {!hasPersonalMemoryAccess ? (
+                {!hasWorkspaceCreditAccess ? (
                   <div className="auth-actions" style={{ paddingLeft: 0 }}>
                     <button type="button" onClick={() => openBuilderUpgrade("builder")}>
                       Upgrade to Builder
@@ -220,23 +217,7 @@ export function WebAgentSettingsSection(props: WebAgentSettingsSectionProps) {
                 {workspaceCreditTopupError && <div className="auth-error">{workspaceCreditTopupError}</div>}
               </div>
 
-              {!hasPersonalMemoryAccess ? (
-                <div className="settings-section">
-                  <div className="settings-section-title">
-                    <svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 10 10H12V2z" /><path d="M20 2a10 10 0 0 1 0 10" /></svg>
-                    Personal memory
-                  </div>
-                  <div className="settings-section-desc">
-                    Personal memory is included with Builder.
-                  </div>
-                  <div className="auth-actions" style={{ paddingLeft: 0 }}>
-                    <button type="button" onClick={() => openBuilderUpgrade("builder")}>
-                      Upgrade plan
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <>
+              <>
               <div className="memory-editor">
                 <div className="memory-editor-header">
                   <div className="memory-editor-title">Personal memory</div>
@@ -347,8 +328,7 @@ export function WebAgentSettingsSection(props: WebAgentSettingsSectionProps) {
                   </button>
                 </div>
               </div>
-                </>
-              )}
+              </>
             </>
           );
         })()}

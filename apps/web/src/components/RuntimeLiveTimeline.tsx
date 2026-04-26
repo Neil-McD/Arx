@@ -172,6 +172,14 @@ export function RuntimeLiveTimeline(props: {
 
   return (
     <div className="runtime-live-timeline">
+      {timerLabel ? (
+        <span className="runtime-turn-timer">
+          {timerLabel}
+          <span className="runtime-turn-timer-chevron" aria-hidden="true">
+            ›
+          </span>
+        </span>
+      ) : null}
       {visibleToolSteps.length > 0 ? (
         <div className="runtime-tool-drawers" aria-label="Grouped tool activity">
           {olderDrawers.map((step) => (
@@ -233,14 +241,6 @@ export function RuntimeLiveTimeline(props: {
       {displayNarration ? (
         <span className="runtime-thought-snippet streaming-placeholder">
           {displayNarration}
-        </span>
-      ) : null}
-      {timerLabel ? (
-        <span className="runtime-turn-timer" aria-hidden="true">
-          {timerLabel}
-          <span className="runtime-turn-timer-chevron" aria-hidden="true">
-            ›
-          </span>
         </span>
       ) : null}
       <span

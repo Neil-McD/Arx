@@ -112,6 +112,22 @@ function getPreviewLoadingCopy(
   terminal: DaytonaWorkspaceTerminalRecord,
   state: WorkspacePreviewLifecycleState,
 ): { title: string; body: string } {
+  if (terminal.status === "failed") {
+    const exitSuffix = typeof terminal.exit_code === "number" ? ` Exit code ${terminal.exit_code}.` : "";
+    const output = String(terminal.output_tail ?? "").trim();
+    return {
+      title: "Preview failed to start",
+      body: output
+        ? `${exitSuffix.trim()} ${output}`.trim()
+        : `The background terminal exited before the preview became available.${exitSuffix}`,
+    };
+  }
+  if (terminal.status === "exited" || terminal.status === "stopped") {
+    return {
+      title: "Preview is no longer running",
+      body: `The background terminal ${terminal.status === "exited" ? "exited" : "stopped"} before a live preview was attached.`,
+    };
+  }
   if (state.phase === "error") {
     return {
       title: "Preview unavailable",
@@ -271,6 +287,7 @@ export function WebWorkspaceAppPreview(props: {
 
   useEffect(() => {
     for (const terminal of previewTerminals) {
+      if (!isRetryablePreviewStatus(terminal.status)) continue;
       const state = previewStateByTerminalId[terminal.id];
       if (!state || state.phase === "idle") {
         onEnsurePreview(terminal.id);
@@ -299,6 +316,7 @@ export function WebWorkspaceAppPreview(props: {
           error: null,
         };
         const isBusy = busySet.has(terminal.id);
+        const canAttachPreview = isRetryablePreviewStatus(terminal.status);
         const previewUrl = state.preview ? buildWorkspaceAppPreviewUrl(state.preview, mode) : null;
         return (
           <article key={terminal.id} className={`workspace-app-preview-card${mode === "expanded" ? " expanded" : ""}`}>
@@ -314,9 +332,15 @@ export function WebWorkspaceAppPreview(props: {
                   type="button"
                   className="workspace-app-preview-button icon-only"
                   onClick={() => props.onEnsurePreview(terminal.id, { force: true })}
-                  disabled={state.phase === "resolving"}
+                  disabled={!canAttachPreview || state.phase === "resolving"}
                   aria-label={state.phase === "resolving" ? "Refreshing preview" : "Refresh preview"}
-                  title={state.phase === "resolving" ? "Refreshing..." : "Refresh"}
+                  title={
+                    !canAttachPreview
+                      ? "Preview terminal is not running"
+                      : state.phase === "resolving"
+                        ? "Refreshing..."
+                        : "Refresh"
+                  }
                 >
                   <RefreshGlyph />
                 </button>
@@ -341,16 +365,18 @@ export function WebWorkspaceAppPreview(props: {
                     <ExpandGlyph />
                   </button>
                 ) : null}
-                <button
-                  type="button"
-                  className="workspace-app-preview-button stop icon-only"
-                  onClick={() => props.onStopTerminal(terminal.id)}
-                  disabled={isBusy}
-                  aria-label={isBusy ? "Stopping app preview" : "Stop app preview"}
-                  title={isBusy ? "Stopping..." : "Stop"}
-                >
-                  <StopGlyph />
-                </button>
+                {canAttachPreview ? (
+                  <button
+                    type="button"
+                    className="workspace-app-preview-button stop icon-only"
+                    onClick={() => props.onStopTerminal(terminal.id)}
+                    disabled={isBusy}
+                    aria-label={isBusy ? "Stopping app preview" : "Stop app preview"}
+                    title={isBusy ? "Stopping..." : "Stop"}
+                  >
+                    <StopGlyph />
+                  </button>
+                ) : null}
               </div>
             </div>
             {previewUrl ? (

@@ -33,9 +33,6 @@ function toPublicPreferences(row: any) {
     weekly_digest_enabled: Boolean(row?.weeklyDigestEnabled ?? DEFAULT_EMAIL_PREFERENCES.weeklyDigestEnabled),
     founder_digest_enabled: Boolean(row?.founderDigestEnabled ?? DEFAULT_EMAIL_PREFERENCES.founderDigestEnabled),
     event_reminder_enabled: Boolean(row?.eventReminderEnabled ?? DEFAULT_EMAIL_PREFERENCES.eventReminderEnabled),
-    founder_admin_emails_enabled: Boolean(
-      row?.founderAdminEmailsEnabled ?? DEFAULT_EMAIL_PREFERENCES.founderAdminEmailsEnabled,
-    ),
     updated_at: typeof row?.updatedAt === "number" ? row.updatedAt : null,
   };
 }
@@ -60,7 +57,6 @@ export const updateMyEmailPreferences = mutation({
     weeklyDigestEnabled: v.optional(v.boolean()),
     founderDigestEnabled: v.optional(v.boolean()),
     eventReminderEnabled: v.optional(v.boolean()),
-    founderAdminEmailsEnabled: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const actor = await ensureAuthenticatedActor({
@@ -73,9 +69,6 @@ export const updateMyEmailPreferences = mutation({
     if (typeof args.weeklyDigestEnabled === "boolean") patch.weeklyDigestEnabled = args.weeklyDigestEnabled;
     if (typeof args.founderDigestEnabled === "boolean") patch.founderDigestEnabled = args.founderDigestEnabled;
     if (typeof args.eventReminderEnabled === "boolean") patch.eventReminderEnabled = args.eventReminderEnabled;
-    if (typeof args.founderAdminEmailsEnabled === "boolean") {
-      patch.founderAdminEmailsEnabled = args.founderAdminEmailsEnabled;
-    }
     if (Object.keys(patch).length === 0) return toPublicPreferences(existing);
     patch.updatedAt = nowMs;
     await ctx.db.patch(existing._id, patch);

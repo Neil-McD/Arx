@@ -24,7 +24,10 @@ for (const field of [
   'v.literal("in_progress")',
   'v.literal("needs_verification")',
   "currentStep: v.optional(v.string())",
+  "verificationStatus: v.optional(",
+  "filesTouched: v.optional(v.array(v.string()))",
   "recentActions: v.optional(v.array(v.string()))",
+  "lastDiagnostic: v.optional(v.string())",
   "blocker: v.optional(v.string())",
   "nextAction: v.optional(v.string())",
 ]) {
@@ -53,38 +56,55 @@ assertContains(
 );
 assertContains(
   threads,
-  'const ledgerStatus =',
-  "run finish derives compact ledger status",
+  "summarizeRuntimeWorkingStateFromEvents",
+  "run finish uses shared working state ledger",
+);
+assert.ok(
+  !threads.includes("function summarizeThreadWorkingState"),
+  "convex thread finalization should not keep a duplicate ledger summarizer",
 );
 assertContains(
   threads,
-  '"needs_verification"',
-  "run finish can mark changed work as needing verification",
+  'verificationStatus: "not_needed"',
+  "run start resets current-run verification status",
 );
 assertContains(
   threads,
-  "recentActions",
-  "run finish records compact recent actions",
+  "filesTouched: []",
+  "run start resets current-run touched files",
 );
 assertContains(
   threads,
-  "blocker",
-  "run finish records blocker",
+  "filesChanged: []",
+  "run start resets current-run changed files",
 );
 assertContains(
   threads,
-  "nextAction",
-  "run finish records next action",
+  "verifiedFindings: []",
+  "run start resets current-run verified findings",
 );
 assertContains(
   threads,
-  "isVerificationShellCommand(command)",
-  "run finish distinguishes verification shell commands",
+  "lastDiagnostic: undefined",
+  "run start resets current-run diagnostic",
+);
+assertContains(
+  threads,
+  "lastResult: previous?.lastResult",
+  "run start keeps previous result as continuity only",
+);
+assertContains(
+  threads,
+  '"Started a new workspace run.", ...(previous?.recentActions ?? [])',
+  "run start keeps previous recent actions as continuity only",
 );
 
 for (const field of [
   "const statusRaw = String(record.status",
+  "verificationStatus",
+  "filesTouched",
   "currentStep",
+  "lastDiagnostic",
   "recentActions",
   "blocker",
   "nextAction",
@@ -95,6 +115,9 @@ for (const field of [
 for (const promptLine of [
   "Status:",
   "Current step:",
+  "Verification:",
+  "Files touched:",
+  "Last diagnostic:",
   "Recent actions:",
   "Blocker:",
   "Next action:",
@@ -126,7 +149,9 @@ const writeThenPwd = summarizeRuntimeWorkingStateFromEvents({
   nowMs: 1,
 });
 assert.equal(writeThenPwd.status, "needs_verification");
+assert.equal(writeThenPwd.verificationStatus, "needed");
 assert.deepEqual(writeThenPwd.filesChanged, ["src/App.tsx"]);
+assert.deepEqual(writeThenPwd.filesTouched, ["src/App.tsx"]);
 
 const writeThenBuild = summarizeRuntimeWorkingStateFromEvents({
   latestUserText: "Update the app",
@@ -144,8 +169,65 @@ const writeThenBuild = summarizeRuntimeWorkingStateFromEvents({
   nowMs: 1,
 });
 assert.equal(writeThenBuild.status, "complete");
+assert.equal(writeThenBuild.verificationStatus, "passed");
 assert.ok(
   writeThenBuild.verifiedFindings.some((finding) => finding.includes("verification command")),
 );
+
+const readOnlyRun = summarizeRuntimeWorkingStateFromEvents({
+  latestUserText: "Inspect the app",
+  runStatus: "ok",
+  events: [
+    {
+      eventType: "tool_call_finished",
+      payload: { tool_name: "read", status: "ok", args: { path: "src/App.tsx" } },
+    },
+    {
+      eventType: "tool_call_finished",
+      payload: { tool_name: "grep", status: "ok", args: { pattern: "App" } },
+    },
+  ],
+  nowMs: 1,
+});
+assert.equal(readOnlyRun.status, "complete");
+assert.equal(readOnlyRun.verificationStatus, "not_needed");
+assert.deepEqual(readOnlyRun.filesTouched, ["src/App.tsx"]);
+assert.deepEqual(readOnlyRun.filesChanged, []);
+
+const failedTypecheck = summarizeRuntimeWorkingStateFromEvents({
+  latestUserText: "Fix types",
+  runStatus: "error",
+  events: [
+    {
+      eventType: "tool_call_finished",
+      payload: {
+        tool_name: "bash",
+        status: "error",
+        args: { command: "npm run check:web-typecheck" },
+        diagnostics: [
+          {
+            source: "typescript",
+            severity: "error",
+            file: "src/App.tsx",
+            line: 12,
+            column: 34,
+            code: "TS2322",
+            message: "Type 'string' is not assignable to type 'number'.",
+          },
+        ],
+        top_diagnostic_summary:
+          "src/App.tsx:12:34 TS2322: Type 'string' is not assignable to type 'number'.",
+      },
+    },
+  ],
+  nowMs: 1,
+});
+assert.equal(failedTypecheck.status, "blocked");
+assert.equal(failedTypecheck.verificationStatus, "failed");
+assert.equal(
+  failedTypecheck.lastDiagnostic,
+  "src/App.tsx:12:34 TS2322: Type 'string' is not assignable to type 'number'.",
+);
+assert.ok(failedTypecheck.nextAction?.includes("src/App.tsx:12:34 TS2322"));
 
 console.log("runtime_working_state_ledger_proof: ok");

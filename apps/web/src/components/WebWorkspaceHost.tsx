@@ -256,10 +256,14 @@ function areTerminalRecordsEqual(
 }
 
 function applyTerminalSnapshotIfChanged(
-  next: { active: DaytonaWorkspaceTerminalRecord[] },
+  next: {
+    active: DaytonaWorkspaceTerminalRecord[];
+    recent?: DaytonaWorkspaceTerminalRecord[];
+  },
   setActive: Dispatch<SetStateAction<DaytonaWorkspaceTerminalRecord[]>>,
 ): void {
-  setActive((prev) => (areTerminalRecordsEqual(prev, next.active) ? prev : next.active));
+  const combined = [...next.active, ...(next.recent ?? [])];
+  setActive((prev) => (areTerminalRecordsEqual(prev, combined) ? prev : combined));
 }
 
 function isPreviewCapableTerminal(terminal: DaytonaWorkspaceTerminalRecord): boolean {
@@ -486,6 +490,7 @@ const WorkspaceTimelinePane = memo(function WorkspaceTimelinePane(props: {
         session={props.session}
         renderMarkdown={props.renderMarkdown}
         copyTextToClipboard={props.copyTextToClipboard}
+        renderPreviewForRun={props.renderPreviewForRun}
       />
     </>
   );
@@ -597,7 +602,11 @@ function areWorkspaceStreamingMessageViewsEqual(
 ): boolean {
   if (left === right) return true;
   if (!left || !right) return false;
-  return left.content === right.content && left.runtimeEvents === right.runtimeEvents;
+  return (
+    left.content === right.content &&
+    left.runId === right.runId &&
+    left.runtimeEvents === right.runtimeEvents
+  );
 }
 
 function WorkspaceAttachmentPreview(props: {
@@ -905,11 +914,10 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
       ),
     [activeWorkspaceTerminals],
   );
-  const activeBackgroundWorkspaceTerminals = useMemo(
+  const visibleBackgroundWorkspaceTerminals = useMemo(
     () =>
       activeWorkspaceTerminals.filter(
         (terminal) =>
-          isTerminalSnapshotStatusActive(terminal.status) &&
           !isRuntimeOwnedTerminalRecord(terminal, latestPreviewRunIdByTerminalId),
       ),
     [activeWorkspaceTerminals, latestPreviewRunIdByTerminalId],
@@ -1478,7 +1486,7 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
       if (!normalizedRunId) return null;
       const runTerminals = activeWorkspaceTerminals.filter(
         (terminal) =>
-          isTerminalSnapshotStatusActive(terminal.status) &&
+          isPreviewCapableTerminal(terminal) &&
           resolvePreviewOwningRunId(terminal, latestPreviewRunIdByTerminalId) === normalizedRunId,
       );
       if (runTerminals.length === 0) return null;
@@ -1651,7 +1659,7 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
                   : props.authedWorkspaceComposerPlaceholder
                 : props.guestWorkspaceComposerPlaceholder
             }
-              terminals={activeBackgroundWorkspaceTerminals}
+            terminals={visibleBackgroundWorkspaceTerminals}
             busyTerminalIds={busyWorkspaceTerminalIds}
             isStoppingAllTerminals={isStoppingAllWorkspaceTerminals}
             guestSignupRail={props.guestSignupRail}

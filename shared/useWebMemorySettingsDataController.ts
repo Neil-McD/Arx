@@ -38,6 +38,11 @@ function sortPersonalMemory(items: PersonalMemoryItem[]): PersonalMemoryItem[] {
   });
 }
 
+function normalizeMemoryMode(value: unknown): UserMemorySettings["memory_mode"] {
+  if (value === "off" || value === "suggest" || value === "auto") return value;
+  return "auto";
+}
+
 export function useWebMemorySettingsDataController<SessionT>(
   args: UseWebMemorySettingsDataControllerArgs<SessionT>,
 ) {
@@ -74,7 +79,7 @@ export function useWebMemorySettingsDataController<SessionT>(
         session: usableSession,
       })) as Partial<UserMemorySettings> | null;
       current.setUserMemorySettings({
-        memory_mode: "auto",
+        memory_mode: normalizeMemoryMode(row?.memory_mode),
         remember_intent_enabled: row?.remember_intent_enabled !== false,
       });
     } catch {

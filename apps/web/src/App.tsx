@@ -4569,7 +4569,8 @@ export default function App() {
     threads,
     activeModelId,
     modelToggles,
-    userMemoryRememberEnabled: userMemorySettings.remember_intent_enabled !== false,
+    userMemoryRememberEnabled:
+      userMemorySettings.memory_mode !== "off" && userMemorySettings.remember_intent_enabled !== false,
     builderTier: builderBillingStatus?.builder_tier ?? null,
     hasPaidAccess:
       Boolean(session) &&

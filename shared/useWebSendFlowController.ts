@@ -210,9 +210,6 @@ export function useWebSendFlowController<
     let createdThreadId: string | null = null;
     let runThreadId: string | null = null;
     let postedUserMessage = false;
-    const hasPersonalMemoryAccess =
-      current.builderTier === "builder" || current.builderTier === "architect";
-
     setErrorForThread(current.activeThreadId ?? null, null);
     if (startedInDraft) current.setIsSendingMessage(true);
     pinToBottom();
@@ -263,7 +260,7 @@ export function useWebSendFlowController<
       markProductLatencyTrace(trace, "memory_intent_extract_start");
       const remembered = current.userMemoryRememberEnabled ? current.extractRememberIntent(text) : null;
       markProductLatencyTrace(trace, "memory_intent_extract_end", { hasRemembered: Boolean(remembered) });
-      if (remembered && hasPersonalMemoryAccess) {
+      if (remembered) {
         try {
           markProductLatencyTrace(trace, "memory_write_start");
           await current.createPersonalMemoryItemDirect({ content: remembered, pinned: false });

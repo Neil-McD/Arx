@@ -1012,7 +1012,7 @@ async function executeRetrievalAgentLoop(
         resolver_enabled: initialProviderTools.activeToolNames.includes(
           RESOLVE_MOUNTED_TOOLS_TOOL_NAME,
         ),
-        tool_policy_enforcement: "metadata_only",
+        tool_policy_enforcement: "full_access_audit",
         tool_policy_summary: initialProviderTools.activeToolPolicySummary,
       },
     });
@@ -1247,7 +1247,7 @@ async function executeRetrievalAgentLoop(
                   resolution.resolution.remainingExposureCapacity,
                 active_provider_tool_count:
                   providerToolSurface.activeToolNames.length,
-                tool_policy_enforcement: "metadata_only",
+                tool_policy_enforcement: "full_access_audit",
                 tool_policy_summary:
                   providerToolSurface.activeToolPolicySummary,
               },
@@ -1278,28 +1278,6 @@ async function executeRetrievalAgentLoop(
               outputText: "",
               errorCode: "mounted_app_tool_not_found",
               errorMessage: `${toolName} is not active for this runtime.`,
-            };
-          }
-          if (mountedTool.scope === "user" && mountedTool.risk_level !== "read") {
-            const message =
-              "Personal write and sensitive app tools still require the upcoming approval flow. This tool was not executed.";
-            return {
-              status: "error" as const,
-              exitCode: null,
-              outputText: message,
-              errorCode: "user_platform_app_tool_approval_required",
-              errorMessage: message,
-              details: {
-                approval_required: true,
-                user_platform_app: {
-                  user_platform_app_mount_id: String(mountedTool.mount_id),
-                  developer_app_id: String(mountedTool.developer_app_id),
-                  app_name: mountedTool.app_name,
-                  tool_name: mountedTool.tool_name,
-                  namespaced_tool_name: mountedTool.namespaced_tool_name,
-                  risk_level: mountedTool.risk_level,
-                },
-              },
             };
           }
           if (mountedTool.scope === "community" && mountedTool.risk_level !== "read") {
