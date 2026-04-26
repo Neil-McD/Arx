@@ -22,6 +22,10 @@ import {
 } from "../../../../shared/daytonaWorkspaceTerminals";
 import type { AuthSessionLike } from "../../../../shared/authSession";
 import type { ModelSectionId, ModelToggle } from "../../../../shared/modelCatalog";
+import {
+  finishProductLatencyTrace,
+  startProductLatencyTrace,
+} from "../../../../shared/productLatencyTrace";
 import { useMessageAttachmentInputController } from "../../../../shared/useMessageAttachmentInputController";
 import { useWorkspaceAutoScroll } from "../../../../shared/useWorkspaceAutoScroll";
 import { useModelPickerController } from "../../../../shared/useModelPickerController";
@@ -184,12 +188,21 @@ function buildLatestPreviewRunIdByTerminalId(params: {
   activeThreadRuntimeEvents?: readonly ThreadStreamingRuntimeEvent[] | null;
   runtimeEventsByRunId?: Record<string, ThreadStreamingRuntimeEvent[]>;
 }): Record<string, string> {
+  const runtimeEventBatches = Object.values(params.runtimeEventsByRunId ?? {});
+  const trace = startProductLatencyTrace("workspace.preview_run_map_build", {
+    runtimeEventRunCount: runtimeEventBatches.length,
+    activeRuntimeEventCount: params.activeThreadRuntimeEvents?.length ?? 0,
+  });
   const next = new Map<string, { runId: string; updatedAt: number }>();
+  let scannedRuntimeEventCount = 0;
+  let previewAnchorCount = 0;
   const ingest = (events: readonly ThreadStreamingRuntimeEvent[] | null | undefined) => {
     if (!Array.isArray(events)) return;
     for (const event of events) {
+      scannedRuntimeEventCount += 1;
       const anchor = parsePreviewRunAnchor(event);
       if (!anchor) continue;
+      previewAnchorCount += 1;
       const current = next.get(anchor.terminalId);
       if (!current || anchor.updatedAt >= current.updatedAt) {
         next.set(anchor.terminalId, { runId: anchor.runId, updatedAt: anchor.updatedAt });
@@ -197,13 +210,25 @@ function buildLatestPreviewRunIdByTerminalId(params: {
     }
   };
 
-  for (const events of Object.values(params.runtimeEventsByRunId ?? {})) ingest(events);
+  for (const events of runtimeEventBatches) ingest(events);
   if (params.activeThreadStreamingRunId) ingest(params.activeThreadRuntimeEvents);
 
   const byTerminalId: Record<string, string> = {};
   for (const [terminalId, value] of next.entries()) {
     byTerminalId[terminalId] = value.runId;
   }
+  finishProductLatencyTrace(
+    trace,
+    "ok",
+    {
+      runtimeEventRunCount: runtimeEventBatches.length,
+      activeRuntimeEventCount: params.activeThreadRuntimeEvents?.length ?? 0,
+      scannedRuntimeEventCount,
+      previewAnchorCount,
+      terminalCount: next.size,
+    },
+    { minDurationMs: 2 },
+  );
   return byTerminalId;
 }
 

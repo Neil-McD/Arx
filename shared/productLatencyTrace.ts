@@ -23,7 +23,7 @@ type ProductLatencyWindow = Window & {
   __POLYNET_LATENCY_TRACES__?: ProductLatencyTrace[];
 };
 
-const TRACE_LIMIT = 100;
+const TRACE_LIMIT = 200;
 
 function hasWindow(): boolean {
   return typeof window !== "undefined";
@@ -54,6 +54,10 @@ function compactDetails(details: ProductLatencyDetails | undefined): ProductLate
 }
 
 export function isProductLatencyTraceEnabled(): boolean {
+  return hasWindow();
+}
+
+export function isProductLatencyConsoleLoggingEnabled(): boolean {
   const env = (import.meta as { env?: { DEV?: boolean } }).env;
   if (env?.DEV) return true;
   if (!hasWindow()) return false;
@@ -101,6 +105,7 @@ export function finishProductLatencyTrace(
   trace: ProductLatencyTrace | null,
   status: "ok" | "cancelled" | "error" = "ok",
   details?: ProductLatencyDetails,
+  options?: { minDurationMs?: number },
 ): void {
   if (!trace) return;
   const endedAtMs = getNowMs();
@@ -114,12 +119,23 @@ export function finishProductLatencyTrace(
       ...finalDetails,
     };
   }
+  const minDurationMs =
+    typeof options?.minDurationMs === "number" && Number.isFinite(options.minDurationMs)
+      ? Math.max(0, options.minDurationMs)
+      : null;
+  const shouldRecord =
+    minDurationMs === null ||
+    status !== "ok" ||
+    (trace.durationMs ?? 0) >= minDurationMs ||
+    isProductLatencyConsoleLoggingEnabled();
+  if (!shouldRecord) return;
   if (hasWindow()) {
     const latencyWindow = window as ProductLatencyWindow;
     const traces = latencyWindow.__POLYNET_LATENCY_TRACES__ ?? [];
     traces.push(trace);
     latencyWindow.__POLYNET_LATENCY_TRACES__ = traces.slice(-TRACE_LIMIT);
   }
+  if (!isProductLatencyConsoleLoggingEnabled()) return;
   if (typeof console === "undefined") return;
   const duration = typeof trace.durationMs === "number" ? `${Math.round(trace.durationMs)}ms` : "unknown";
   console.groupCollapsed(`[polynet latency] ${trace.label} ${status} ${duration}`);

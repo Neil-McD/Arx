@@ -2,6 +2,10 @@ import type { ReactNode } from "react";
 import type { AuthSessionLike } from "../../../../shared/authSession";
 import { AttachmentChipButton } from "../../../../shared/AttachmentChipButton";
 import {
+  finishProductLatencyTrace,
+  startProductLatencyTrace,
+} from "../../../../shared/productLatencyTrace";
+import {
   MessageCopyAction,
   MessageFooter,
   MessageSourcesAction,
@@ -29,96 +33,123 @@ type WebWorkspaceThreadMessageListProps = {
 export function WebWorkspaceThreadMessageList(
   props: WebWorkspaceThreadMessageListProps,
 ) {
+  const renderTrace = startProductLatencyTrace("workspace.thread_message_list_render", {
+    messageCount: props.messages.length,
+  });
+  let assistantMessageCount = 0;
+  let messagesWithRuntimeEvents = 0;
+  let totalRuntimeEventCount = 0;
+  let attachmentCount = 0;
+  const messageItems = props.messages.map((message) => {
+    const isUser = message.role === "user";
+    const contextPayload = message.contextPayload;
+    if (!isUser) assistantMessageCount += 1;
+    attachmentCount += message.attachments.length;
+    if (message.runtimeEvents.length > 0) {
+      messagesWithRuntimeEvents += 1;
+      totalRuntimeEventCount += message.runtimeEvents.length;
+    }
+
+    return (
+      <div
+        key={message.id}
+        className={isUser ? "message-item user" : "message-item assistant"}
+      >
+        <div className="message-text">
+          {!isUser && message.runtimeEvents.length > 0 ? (
+            <RuntimeLiveTimeline
+              events={message.runtimeEvents}
+              renderReasoningMarkdown={(text) =>
+                props.renderMarkdown(text, {
+                  onCopyCode: props.copyTextToClipboard,
+                })
+              }
+              showActiveIndicators={false}
+            />
+          ) : null}
+          {!isUser && message.runtimeEvents.length > 0 ? (
+            <RuntimeComputerUseViewer
+              events={message.runtimeEvents}
+              session={props.session}
+              requireLiveDesktop={message.requireLiveDesktop}
+            />
+          ) : null}
+          {isUser
+            ? message.textContent
+            : props.renderMarkdown(message.textContent, {
+                onCopyCode: props.copyTextToClipboard,
+              })}
+        </div>
+        {message.attachments.length > 0 ? (
+          <div className="attachments-preview message-attachments-preview">
+            {message.attachments.map((attachment) => {
+              const openUrl = attachment.openUrl;
+              return (
+                <AttachmentChipButton
+                  key={attachment.id}
+                  name={attachment.name}
+                  imageUrl={attachment.imageUrl}
+                  onClick={
+                    openUrl
+                      ? () => {
+                          window.open(
+                            openUrl,
+                            "_blank",
+                            "noopener,noreferrer",
+                          );
+                        }
+                      : null
+                  }
+                  disabled={!openUrl}
+                />
+              );
+            })}
+          </div>
+        ) : null}
+        {!isUser ? (
+          <MessageFooter metaLabel={message.modelLabel}>
+            <MessageCopyAction
+              copied={props.copiedMessageId === message.id}
+              onClick={() => {
+                void props.handleCopyMessage(message.id, message.textContent);
+              }}
+              title="Copy"
+              ariaLabel="Copy"
+            />
+            {contextPayload ? (
+              <MessageSourcesAction
+                onClick={() => {
+                  props.openMessageContextModal(contextPayload);
+                }}
+                title="Sources used"
+                ariaLabel="Sources used"
+              />
+            ) : null}
+          </MessageFooter>
+        ) : null}
+        {!isUser ? props.renderPreviewForRun(message.runId) : null}
+        {!isUser && message.runtimeEvents.length > 0 ? (
+          <RuntimeWebSources events={message.runtimeEvents} />
+        ) : null}
+      </div>
+    );
+  });
+  finishProductLatencyTrace(
+    renderTrace,
+    "ok",
+    {
+      messageCount: props.messages.length,
+      assistantMessageCount,
+      attachmentCount,
+      messagesWithRuntimeEvents,
+      totalRuntimeEventCount,
+    },
+    { minDurationMs: 3 },
+  );
+
   return (
     <>
-      {props.messages.map((message) => {
-        const isUser = message.role === "user";
-        const contextPayload = message.contextPayload;
-
-        return (
-          <div
-            key={message.id}
-            className={isUser ? "message-item user" : "message-item assistant"}
-          >
-            <div className="message-text">
-              {!isUser && message.runtimeEvents.length > 0 ? (
-                <RuntimeLiveTimeline
-                  events={message.runtimeEvents}
-                  renderReasoningMarkdown={(text) =>
-                    props.renderMarkdown(text, {
-                      onCopyCode: props.copyTextToClipboard,
-                    })
-                  }
-                  showActiveIndicators={false}
-                />
-              ) : null}
-              {!isUser && message.runtimeEvents.length > 0 ? (
-                <RuntimeComputerUseViewer
-                  events={message.runtimeEvents}
-                  session={props.session}
-                  requireLiveDesktop={message.requireLiveDesktop}
-                />
-              ) : null}
-              {isUser
-                ? message.textContent
-                : props.renderMarkdown(message.textContent, {
-                    onCopyCode: props.copyTextToClipboard,
-                  })}
-            </div>
-            {message.attachments.length > 0 ? (
-              <div className="attachments-preview message-attachments-preview">
-                {message.attachments.map((attachment) => {
-                  const openUrl = attachment.openUrl;
-                  return (
-                    <AttachmentChipButton
-                      key={attachment.id}
-                      name={attachment.name}
-                      imageUrl={attachment.imageUrl}
-                      onClick={
-                        openUrl
-                          ? () => {
-                              window.open(
-                                openUrl,
-                                "_blank",
-                                "noopener,noreferrer",
-                              );
-                            }
-                          : null
-                      }
-                      disabled={!openUrl}
-                    />
-                  );
-                })}
-              </div>
-            ) : null}
-            {!isUser ? (
-              <MessageFooter metaLabel={message.modelLabel}>
-                <MessageCopyAction
-                  copied={props.copiedMessageId === message.id}
-                  onClick={() => {
-                    void props.handleCopyMessage(message.id, message.textContent);
-                  }}
-                  title="Copy"
-                  ariaLabel="Copy"
-                />
-                {contextPayload ? (
-                  <MessageSourcesAction
-                    onClick={() => {
-                      props.openMessageContextModal(contextPayload);
-                    }}
-                    title="Sources used"
-                    ariaLabel="Sources used"
-                  />
-                ) : null}
-              </MessageFooter>
-            ) : null}
-            {!isUser ? props.renderPreviewForRun(message.runId) : null}
-            {!isUser && message.runtimeEvents.length > 0 ? (
-              <RuntimeWebSources events={message.runtimeEvents} />
-            ) : null}
-          </div>
-        );
-      })}
+      {messageItems}
     </>
   );
 }
