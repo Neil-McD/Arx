@@ -82,10 +82,11 @@ function extractMissingExecutable(params: {
 function buildDiagnostic(params: {
   kind: RuntimeToolFailureKind;
   summary: string;
+  source: string;
   raw?: string;
 }): RuntimeDiagnostic {
   return {
-    source: "shell",
+    source: params.source,
     severity: "error",
     code: params.kind,
     message: params.summary,
@@ -105,10 +106,11 @@ export function inferRuntimeToolFailureSemantics(
   const errorMessage = normalizeText(input.errorMessage, 500);
   const outputText = normalizeText(input.outputText, 1000);
   const raw = [errorMessage, outputText].filter(Boolean).join("\n");
+  const diagnosticSource = toolName === "bash" ? "shell" : toolName;
   let kind: RuntimeToolFailureKind = "tool_failure";
   let summary =
     errorMessage ??
-    (typeof exitCode === "number"
+    (typeof exitCode === "number" && exitCode !== 0
       ? `${toolName} failed with exit code ${exitCode}.`
       : `${toolName} failed.`);
   let suggestedRecovery =
@@ -158,18 +160,23 @@ export function inferRuntimeToolFailureSemantics(
       summary = "Command failed because a module or import could not be resolved.";
       suggestedRecovery =
         "Inspect the import path/package dependency and fix the missing module before retrying.";
-    } else if (typeof exitCode === "number") {
+    } else if (typeof exitCode === "number" && exitCode !== 0) {
       kind = "nonzero_exit";
       summary = `Command exited with code ${exitCode}.`;
       suggestedRecovery =
         "Inspect the command output and fix the reported runtime/build issue before retrying.";
     }
-  } else if (typeof exitCode === "number") {
+  } else if (typeof exitCode === "number" && exitCode !== 0) {
     kind = "nonzero_exit";
     summary = `${toolName} exited with code ${exitCode}.`;
   }
 
-  const diagnostic = buildDiagnostic({ kind, summary, raw: raw || undefined });
+  const diagnostic = buildDiagnostic({
+    kind,
+    summary,
+    source: diagnosticSource,
+    raw: raw || undefined,
+  });
   return {
     kind,
     summary,

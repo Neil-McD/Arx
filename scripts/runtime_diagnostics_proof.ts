@@ -80,6 +80,22 @@ const missingScript = inferRuntimeToolFailureSemantics({
 assert.equal(missingScript?.kind, "missing_package_script");
 assert.equal(missingScript?.summary, "Missing package script: preview.");
 
+const readErrorWithZeroExit = inferRuntimeToolFailureSemantics({
+  toolName: "read",
+  exitCode: 0,
+  errorMessage: "Read failed because the path was invalid.",
+  outputText: "",
+});
+assert.equal(readErrorWithZeroExit?.kind, "tool_failure");
+assert.equal(readErrorWithZeroExit?.summary, "Read failed because the path was invalid.");
+assert.equal(readErrorWithZeroExit?.diagnostic.code, "tool_failure");
+assert.equal(readErrorWithZeroExit?.diagnostic.source, "read");
+assert.notEqual(readErrorWithZeroExit?.diagnostic.code, "nonzero_exit");
+assert.notEqual(
+  formatRuntimeDiagnosticSummary(readErrorWithZeroExit?.diagnostic),
+  "shell nonzero_exit: read exited with code 0.",
+);
+
 const eventSource = readText("/Users/neilmcdevitt/code/arx/convex/daytonaRuntimeEvents.ts");
 assert.ok(
   eventSource.includes('eventType: "runtime_diagnostics_detected"'),
