@@ -95,6 +95,18 @@ assert.match(prompt, /Files touched: src\/App\.tsx, src\/main\.tsx/);
 assert.match(prompt, /Last diagnostic: src\/App\.tsx:12:34 TS2322/);
 assert.match(prompt, /Preview: blank; port=3000/);
 assert.match(prompt, /If the terminal is still running but preview is blank/);
+assert.match(prompt, /Core value prop: the agent can be the product/);
+assert.match(prompt, /Detailed product truth lives in product docs/);
+assert.doesNotMatch(
+  prompt,
+  /## Core Mechanism/,
+  "runtime prompt should not inline long product-doc doctrine now that docs tools exist",
+);
+assert.doesNotMatch(
+  prompt,
+  /Examples of signal include:/,
+  "runtime prompt should avoid duplicating product docs content",
+);
 
 const runtimePromptSource = readFileSync(
   "/Users/neilmcdevitt/code/arx/shared/runtimePrompt.ts",
