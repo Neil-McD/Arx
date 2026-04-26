@@ -46,6 +46,10 @@ import {
   normalizeGuestInferenceError,
 } from "./webTurnRunnerCore";
 
+function estimateRuntimeMessageTextSize(messages: Array<{ content?: string | null }>): number {
+  return messages.reduce((total, message) => total + String(message.content ?? "").length, 0);
+}
+
 export function useWebTurnRunnerController<
   SessionT,
   ThreadMessageT extends PublicTurnThreadMessage,
@@ -420,6 +424,10 @@ export function useWebTurnRunnerController<
         fetchPublic: current.fetchCloudPublic,
         fetchAuth: current.fetchAuth,
       };
+      const trace = startProductLatencyTrace("runtime.public_turn", {
+        threadId: params.threadId,
+        modelId: params.modelId,
+      });
 
       threadStreamingAbortRefById.current[params.threadId]?.abort();
       const abort = new AbortController();
@@ -464,16 +472,17 @@ export function useWebTurnRunnerController<
       let firstEventSeen = false;
       let lastEventName: string | null = null;
       try {
+        const publicMessages = buildPublicTurnMessages({
+          messages: params.messages,
+          systemPrompt: params.systemPrompt,
+          extractTextFromContentJson: current.extractTextFromContentJson,
+        });
         const turn = await invokeCloudPublicTurn({
           transport,
           payload: {
             model_id: params.modelId,
             stream: true,
-            messages: buildPublicTurnMessages({
-              messages: params.messages,
-              systemPrompt: params.systemPrompt,
-              extractTextFromContentJson: current.extractTextFromContentJson,
-            }),
+            messages: publicMessages,
           },
           signal: abort.signal,
         });
@@ -640,6 +649,7 @@ export function useWebTurnRunnerController<
         const guestIssue = buildGuestInferenceIssue("unavailable");
         return { cancelled: false, error: guestIssue.fullMessage, content: "", runId: null, guestIssue };
       } finally {
+        finishProductLatencyTrace(trace);
         resetThreadStreamingState(params.threadId);
       }
     },
@@ -733,6 +743,11 @@ export function useWebTurnRunnerController<
               extractTextFromContentJson: current.extractTextFromContentJson,
             })
           : [];
+        markProductLatencyTrace(trace, "runtime_messages_built", {
+          threadId,
+          messageCount: laneMessages.length,
+          textSize: estimateRuntimeMessageTextSize(laneMessages),
+        });
         const createRuntimeTurnRequest = (): Promise<Response> => {
           return invokeCloudRuntimeTurn({
             transport,

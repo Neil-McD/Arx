@@ -207,6 +207,68 @@ async function validateThreadCommunityLensAccess(args: {
   return communityId;
 }
 
+function normalizeContextVersion(value: unknown): number {
+  return Number.isFinite(Number(value ?? 0)) ? Number(value ?? 0) : 0;
+}
+
+function buildThreadContextResponse(row: ThreadLike, fallbackContextVersion: number): {
+  thread_id: string;
+  community_id: string | null;
+  context_version: number;
+  updated_at: string;
+} {
+  return {
+    thread_id: String(row._id),
+    community_id: row.communityId ?? null,
+    context_version: Number.isFinite(Number(row.contextVersion ?? fallbackContextVersion))
+      ? Number(row.contextVersion ?? fallbackContextVersion)
+      : fallbackContextVersion,
+    updated_at: new Date(row.updatedAt).toISOString(),
+  };
+}
+
+async function setCloudThreadContextForOwnedThread(args: {
+  ctx: any;
+  ownerId: any;
+  existing: ThreadLike;
+  expectedContextVersion: number;
+  communityId?: string | null;
+  updateCommunityId?: boolean;
+  nowMs: number;
+}): Promise<{
+  thread_id: string;
+  community_id: string | null;
+  context_version: number;
+  updated_at: string;
+} | null> {
+  const existing = args.existing;
+  if (typeof existing.archivedAt === "number") return null;
+
+  const currentContextVersion = normalizeContextVersion(existing.contextVersion);
+  const expectedContextVersion = Math.max(0, Math.floor(args.expectedContextVersion));
+  if (currentContextVersion !== expectedContextVersion) {
+    throw new Error("thread_context_version_conflict");
+  }
+
+  const nextContextVersion = currentContextVersion + 1;
+  const patch: Record<string, unknown> = {
+    contextVersion: nextContextVersion,
+    updatedAt: args.nowMs,
+  };
+  if (args.updateCommunityId ?? true) {
+    const nextCommunityId = await validateThreadCommunityLensAccess({
+      ctx: args.ctx,
+      communityId: args.communityId,
+      userId: args.ownerId,
+    });
+    patch.communityId = nextCommunityId;
+  }
+  await args.ctx.db.patch(existing._id, patch);
+  const updated = (await args.ctx.db.get(existing._id)) as ThreadLike | null;
+  if (!updated) return null;
+  return buildThreadContextResponse(updated, nextContextVersion);
+}
+
 function normalizeOptionalSummaryText(raw: unknown, maxLen = 240): string | null {
   const value = String(raw ?? "")
     .replace(/\s+/g, " ")
@@ -299,6 +361,37 @@ function normalizePreviousWorkingState(raw: unknown): ThreadWorkingStateLike | n
   };
 }
 
+function compactThreadWorkingState(state: ThreadWorkingStateLike): ThreadWorkingStateLike {
+  const out: Partial<ThreadWorkingStateLike> = {
+    version: Number.isFinite(Number(state.version)) ? Math.floor(Number(state.version)) : undefined,
+    status: state.status,
+    verificationStatus: state.verificationStatus,
+    filesTouched: Array.isArray(state.filesTouched) ? state.filesTouched : undefined,
+    filesChanged: Array.isArray(state.filesChanged) ? state.filesChanged : [],
+    verifiedFindings: Array.isArray(state.verifiedFindings) ? state.verifiedFindings : [],
+    recentActions: Array.isArray(state.recentActions) ? state.recentActions : undefined,
+    updatedAt: Number.isFinite(Number(state.updatedAt)) ? Math.floor(Number(state.updatedAt)) : Date.now(),
+  };
+  for (const key of [
+    "goal",
+    "currentStep",
+    "lastResult",
+    "lastDiagnostic",
+    "openIssue",
+    "blocker",
+    "nextAction",
+  ] as const) {
+    const value = normalizeWorkingStateText(state[key], key === "goal" ? 240 : 260);
+    if (value) out[key] = value;
+  }
+  for (const key of Object.keys(out) as Array<keyof ThreadWorkingStateLike>) {
+    if (out[key] === undefined || out[key] === null) {
+      delete out[key];
+    }
+  }
+  return out as ThreadWorkingStateLike;
+}
+
 function buildRunStartedWorkingState(args: {
   previous: unknown;
   latestUserText?: string | null;
@@ -306,7 +399,7 @@ function buildRunStartedWorkingState(args: {
 }): ThreadWorkingStateLike {
   const previous = normalizePreviousWorkingState(args.previous);
   const goal = normalizeWorkingStateText(args.latestUserText, 240) ?? previous?.goal;
-  return {
+  return compactThreadWorkingState({
     version: 2,
     goal,
     status: "in_progress",
@@ -326,7 +419,7 @@ function buildRunStartedWorkingState(args: {
     blocker: undefined,
     nextAction: "Wait for the current run to finish or inspect the latest runtime events.",
     updatedAt: args.nowMs,
-  };
+  });
 }
 
 function extractThreadMessageText(contentJson: unknown): string | null {
@@ -530,14 +623,14 @@ async function finalizeRuntimeRunRecord(args: {
       q.eq("ownerId", args.ownerId).eq("runId", run.runId),
     )
     .collect()) as RuntimeRunEventLike[];
-  const workingState = summarizeRuntimeWorkingStateFromEvents({
+  const workingState = compactThreadWorkingState(summarizeRuntimeWorkingStateFromEvents({
     latestUserText: extractThreadMessageText(latestRunUserMessage?.contentJson ?? null),
     runStatus: status,
     runReason: reason,
     runErrorMessage: errorMessage,
     events: runEvents,
     nowMs: args.nowMs,
-  });
+  }));
 
   await args.ctx.db.insert("runtimeRunEvents", {
     ownerId: args.ownerId,
@@ -679,12 +772,7 @@ export const getCloudThreadContext = query({
     if (!row) return null;
     if (row.ownerId !== ownerId) return null;
     if (typeof row.archivedAt === "number") return null;
-    return {
-      thread_id: String(row._id),
-      community_id: row.communityId ?? null,
-      context_version: Number.isFinite(Number(row.contextVersion ?? 0)) ? Number(row.contextVersion ?? 0) : 0,
-      updated_at: new Date(row.updatedAt).toISOString(),
-    };
+    return buildThreadContextResponse(row, 0);
   },
 });
 
@@ -710,40 +798,49 @@ export const setCloudThreadContext = mutation({
       ownerId,
       threadId: args.threadId,
     });
-    if (typeof existing.archivedAt === "number") return null;
+    return await setCloudThreadContextForOwnedThread({
+      ctx,
+      ownerId,
+      existing,
+      expectedContextVersion: args.expectedContextVersion,
+      communityId: args.communityId,
+      updateCommunityId: args.updateCommunityId,
+      nowMs,
+    });
+  },
+});
 
-    const currentContextVersion = Number.isFinite(Number(existing.contextVersion ?? 0))
-      ? Number(existing.contextVersion ?? 0)
-      : 0;
-    const expectedContextVersion = Math.max(0, Math.floor(args.expectedContextVersion));
-    if (currentContextVersion !== expectedContextVersion) {
-      throw new Error("thread_context_version_conflict");
-    }
-
-    const nextContextVersion = currentContextVersion + 1;
-    const patch: Record<string, unknown> = {
-      contextVersion: nextContextVersion,
-      updatedAt: nowMs,
-    };
-    if (args.updateCommunityId ?? true) {
-      const nextCommunityId = await validateThreadCommunityLensAccess({
-        ctx,
-        communityId: args.communityId,
-        userId: ownerId,
-      });
-      patch.communityId = nextCommunityId;
-    }
-    await ctx.db.patch(existing._id, patch);
-    const updated = (await ctx.db.get(existing._id)) as ThreadLike | null;
-    if (!updated) return null;
-    return {
-      thread_id: String(updated._id),
-      community_id: updated.communityId ?? null,
-      context_version: Number.isFinite(Number(updated.contextVersion ?? nextContextVersion))
-        ? Number(updated.contextVersion ?? nextContextVersion)
-        : nextContextVersion,
-      updated_at: new Date(updated.updatedAt).toISOString(),
-    };
+export const setCloudThreadContextByThreadKey = mutation({
+  args: {
+    ownerId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    threadKey: v.string(),
+    expectedContextVersion: v.number(),
+    communityId: v.optional(v.union(v.string(), v.null())),
+    updateCommunityId: v.optional(v.boolean()),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const ownerId = await resolveOwnerIdForAuthenticatedRequest({
+      ctx,
+      ownerId: args.ownerId,
+      authSubject: args.authSubject ?? null,
+    });
+    const existing = await getCloudThreadByThreadKeyInternal({
+      ctx,
+      ownerId,
+      threadKey: normalizeThreadKey(args.threadKey),
+    });
+    if (!existing) return null;
+    return await setCloudThreadContextForOwnedThread({
+      ctx,
+      ownerId,
+      existing,
+      expectedContextVersion: args.expectedContextVersion,
+      communityId: args.communityId,
+      updateCommunityId: args.updateCommunityId,
+      nowMs: args.nowMs ?? Date.now(),
+    });
   },
 });
 

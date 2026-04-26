@@ -1,4 +1,3 @@
-import type { ThreadWorkingStatePrompt } from "./runtimePrompt";
 import {
   formatRuntimeDiagnosticSummary,
   selectTopRuntimeDiagnostic,
@@ -21,14 +20,21 @@ export type RuntimeWorkingStateSummaryInput = {
   nowMs: number;
 };
 
-export type RuntimeWorkingStateSummary = ThreadWorkingStatePrompt & {
+export type RuntimeWorkingStateSummary = {
   version: number;
+  goal?: string;
+  status: "idle" | "in_progress" | "blocked" | "needs_verification" | "complete";
+  currentStep?: string;
+  lastResult?: string;
+  openIssue?: string;
+  blocker?: string;
+  nextAction?: string;
   filesTouched: string[];
   filesChanged: string[];
   verifiedFindings: string[];
   recentActions: string[];
   verificationStatus: "not_needed" | "needed" | "passed" | "failed";
-  lastDiagnostic: string | null;
+  lastDiagnostic?: string;
   updatedAt: number;
 };
 
@@ -317,22 +323,23 @@ export function summarizeRuntimeWorkingStateFromEvents(
           ? `Retry ${firstFailedTool.toolName} with a narrower or alternate path, or report the blocker if it is not recoverable.`
           : "Inspect the latest runtime events and continue from the last verified state.";
   const recentActions = normalizeSummaryList(recentActionsRaw, 6, 180);
+  const goal = normalizeSummaryText(args.latestUserText, 240);
 
   return {
     version: 2,
-    goal: normalizeSummaryText(args.latestUserText, 240) ?? null,
+    ...(goal ? { goal } : null),
     status: ledgerStatus,
-    currentStep: currentStep ?? null,
-    lastResult: lastResult ?? null,
+    ...(currentStep ? { currentStep } : null),
+    ...(lastResult ? { lastResult } : null),
     verificationStatus,
     filesTouched,
     filesChanged,
     verifiedFindings,
-    lastDiagnostic: topDiagnosticSummary ?? null,
+    ...(topDiagnosticSummary ? { lastDiagnostic: topDiagnosticSummary } : null),
     recentActions,
-    openIssue: openIssue ?? null,
-    blocker: blocker ?? null,
-    nextAction: nextAction ?? null,
+    ...(openIssue ? { openIssue } : null),
+    ...(blocker ? { blocker } : null),
+    ...(nextAction ? { nextAction } : null),
     updatedAt: args.nowMs,
   };
 }

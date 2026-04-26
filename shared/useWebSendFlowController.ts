@@ -345,6 +345,7 @@ export function useWebSendFlowController<
         threadId,
         modelId: preferredModelId,
         inferenceSource,
+        messagesForTurnCount: optimisticThreadMessages.length,
       });
       const turnResult = await current.runAgentTurn(usableSession, threadId, {
         preferredModelId,

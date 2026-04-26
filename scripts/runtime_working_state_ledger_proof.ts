@@ -41,6 +41,11 @@ assertContains(
 );
 assertContains(
   threads,
+  "function compactThreadWorkingState",
+  "thread working state is compacted before storage",
+);
+assertContains(
+  threads,
   'status: "in_progress"',
   "run start marks working state in progress",
 );
@@ -58,6 +63,11 @@ assertContains(
   threads,
   "summarizeRuntimeWorkingStateFromEvents",
   "run finish uses shared working state ledger",
+);
+assertContains(
+  threads,
+  "compactThreadWorkingState(summarizeRuntimeWorkingStateFromEvents",
+  "run finish compacts shared working state before storage",
 );
 assert.ok(
   !threads.includes("function summarizeThreadWorkingState"),
@@ -229,5 +239,17 @@ assert.equal(
   "src/App.tsx:12:34 TS2322: Type 'string' is not assignable to type 'number'.",
 );
 assert.ok(failedTypecheck.nextAction?.includes("src/App.tsx:12:34 TS2322"));
+
+const emptyFailure = summarizeRuntimeWorkingStateFromEvents({
+  latestUserText: null,
+  runStatus: "error",
+  events: [],
+  nowMs: 1,
+});
+for (const [key, value] of Object.entries(emptyFailure)) {
+  assert.notEqual(value, null, `workingState should omit ${key} instead of storing null`);
+}
+assert.equal(Object.hasOwn(emptyFailure, "goal"), false);
+assert.equal(Object.hasOwn(emptyFailure, "lastDiagnostic"), false);
 
 console.log("runtime_working_state_ledger_proof: ok");

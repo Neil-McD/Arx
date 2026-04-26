@@ -4126,6 +4126,7 @@ export default function App() {
     inFlight: false,
     targetName: null,
   });
+  const workspaceLensPendingByThreadIdRef = useRef<Record<string, Promise<void> | undefined>>({});
 
   const workspaceLensController = useLastClickWinsController<WorkspaceLensTarget>({
     applyTarget: async (desired) => {
@@ -4199,24 +4200,85 @@ export default function App() {
       communityName: target.communityName,
       inFlight: workspaceLensController.isInFlight(),
     });
-    const currentLens = threads.find((t) => t.id === target.threadId)?.community_id ?? null;
+    const currentThread = threads.find((t) => t.id === target.threadId) ?? null;
+    const currentLens = currentThread?.community_id ?? null;
+    const existingPending = workspaceLensPendingByThreadIdRef.current[target.threadId] ?? null;
+    if (currentLens === target.communityId && existingPending) {
+      markProductLatencyTrace(trace, "lens_request_pending_match", { currentLens });
+      return existingPending.then(
+        () => {
+          finishProductLatencyTrace(trace, "ok", { reason: "already_pending" });
+        },
+        (error) => {
+          finishProductLatencyTrace(trace, "error", {
+            error: error instanceof Error ? error.message : String(error),
+          });
+          throw error;
+        },
+      );
+    }
     if (currentLens === target.communityId && !workspaceLensController.isInFlight()) {
       markProductLatencyTrace(trace, "lens_request_noop", { currentLens });
       finishProductLatencyTrace(trace, "ok", { reason: "already_current" });
       return Promise.resolve();
     }
     markProductLatencyTrace(trace, "lens_request_enqueued", { currentLens });
-    return workspaceLensController.requestTarget(target).then(
+    const previousContext = currentThread
+      ? {
+          communityId: currentThread.community_id ?? null,
+          contextVersion: currentThread.context_version,
+          updatedAt: currentThread.updated_at,
+        }
+      : null;
+    if (currentThread && currentLens !== target.communityId) {
+      setThreads((prev) =>
+        prev.map((thread) =>
+          thread.id === target.threadId
+            ? {
+                ...thread,
+                community_id: target.communityId,
+                updated_at: Math.floor(Date.now() / 1000),
+              }
+            : thread,
+        ),
+      );
+      markProductLatencyTrace(trace, "lens_request_optimistic_visible", {
+        fromCommunityId: currentLens,
+        toCommunityId: target.communityId,
+      });
+    }
+    const requestPromise = workspaceLensController.requestTarget(target).then(
       () => {
         finishProductLatencyTrace(trace, "ok");
       },
       (error) => {
+        if (previousContext) {
+          setThreads((prev) =>
+            prev.map((thread) =>
+              thread.id === target.threadId && (thread.community_id ?? null) === target.communityId
+                ? {
+                    ...thread,
+                    community_id: previousContext.communityId,
+                    context_version: previousContext.contextVersion,
+                    updated_at: previousContext.updatedAt,
+                  }
+                : thread,
+            ),
+          );
+        }
         finishProductLatencyTrace(trace, "error", {
           error: error instanceof Error ? error.message : String(error),
         });
         throw error;
       },
     );
+    workspaceLensPendingByThreadIdRef.current[target.threadId] = requestPromise;
+    void requestPromise.finally(() => {
+      if (workspaceLensPendingByThreadIdRef.current[target.threadId] === requestPromise) {
+        delete workspaceLensPendingByThreadIdRef.current[target.threadId];
+      }
+    });
+    return requestPromise;
   };
 
   const syncWorkspaceThreadCommunityLens = (
@@ -4277,6 +4339,10 @@ export default function App() {
     session: AuthSession,
   ): Promise<void> => {
     void session;
+    const pendingLensSync = workspaceLensPendingByThreadIdRef.current[threadId] ?? null;
+    if (pendingLensSync) {
+      await pendingLensSync;
+    }
     return webThreadContextController.ensureLensBeforeSend(threadId);
   };
 
