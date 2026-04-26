@@ -92,6 +92,13 @@ function validateLlmsFiles(index: ProductDocsIndex, llmsTxt: string, llmsFullTxt
 }
 
 function validateSearch(index: ProductDocsIndex): void {
+  type GoldenQuery = {
+    query: string;
+    expectedTopSlugs?: string[];
+    expectedFirstSlug?: string;
+    topN?: number;
+  };
+
   function assertTopSlug(query: string, expectedSlug: string, limit = 5): void {
     const results = searchProductDocsIndex(index, query, { limit });
     assert(results[0]?.slug === expectedSlug, `Search "${query}" should rank ${expectedSlug} first, got ${results[0]?.slug ?? "no result"}.`);
@@ -102,6 +109,48 @@ function validateSearch(index: ProductDocsIndex): void {
     assert(
       results.slice(0, topN).some((result) => result.slug === expectedSlug),
       `Search "${query}" should rank ${expectedSlug} in the top ${topN}; got ${results.map((result) => result.slug).join(", ")}.`,
+    );
+  }
+
+  function assertGoldenQuery(goldenQuery: GoldenQuery): void {
+    const topN = goldenQuery.topN ?? 3;
+    const expectedTopSlugs = goldenQuery.expectedTopSlugs ?? [];
+    const results = searchProductDocsIndex(index, goldenQuery.query, { limit: Math.max(8, topN) });
+    const resultSlugs = results.map((result) => result.slug);
+    assert(resultSlugs.length > 0, `Search "${goldenQuery.query}" should return results.`);
+    if (goldenQuery.expectedFirstSlug) {
+      assert(
+        resultSlugs[0] === goldenQuery.expectedFirstSlug,
+        `Search "${goldenQuery.query}" should rank ${goldenQuery.expectedFirstSlug} first; got ${resultSlugs[0] ?? "no result"}.`,
+      );
+    }
+    for (const expectedSlug of expectedTopSlugs) {
+      assert(
+        resultSlugs.slice(0, topN).includes(expectedSlug),
+        `Search "${goldenQuery.query}" should rank ${expectedSlug} in the top ${topN}; got ${resultSlugs.join(", ")}.`,
+      );
+    }
+  }
+
+  function assertExplainableSearchResult(query: string, expectedTerms: string[], expectedFields: string[]): void {
+    const [result] = searchProductDocsIndex(index, query, { limit: 1 });
+    assert(result, `Search "${query}" should return an explainable result.`);
+    for (const term of expectedTerms) {
+      assert(
+        result.matched_terms.includes(term),
+        `Search "${query}" should explain matched term "${term}"; got ${result.matched_terms.join(", ")}.`,
+      );
+    }
+    for (const field of expectedFields) {
+      assert(
+        result.matched_fields.includes(field),
+        `Search "${query}" should explain matched field "${field}"; got ${result.matched_fields.join(", ")}.`,
+      );
+    }
+    assert(result.reason.length > 0, `Search "${query}" should include a short match reason.`);
+    assert(
+      !result.matched_terms.includes("what") && !result.matched_terms.includes("can"),
+      `Search "${query}" should not expose low-signal stop words as matched terms.`,
     );
   }
 
@@ -128,6 +177,57 @@ function validateSearch(index: ProductDocsIndex): void {
   assertTopSlugsInclude("community lens context switching", "primitives/community-lens", 2);
   assertTopSlug("memory across threads", "primitives/memory");
   assertTopSlug("what is polynet value prop", "primitives/polynet");
+
+  const goldenQueries: GoldenQuery[] = [
+    {
+      query: "how does community lens work",
+      expectedTopSlugs: ["primitives/community-lens", "guides/community-lens"],
+    },
+    {
+      query: "builder payouts monetize community cash",
+      expectedTopSlugs: ["reference/billing-entitlements", "guides/manage-access-billing-and-roles"],
+    },
+    {
+      query: "what can admins do",
+      expectedTopSlugs: ["reference/roles-permissions", "primitives/role"],
+    },
+    {
+      query: "how do apps and MCPs connect",
+      expectedTopSlugs: ["guides/connect-apps-and-mcps", "primitives/app-mcp"],
+    },
+    {
+      query: "where should community instructions go",
+      expectedTopSlugs: ["guides/configure-community-agent", "reference/prompt-context-model"],
+    },
+    {
+      query: "how does memory work",
+      expectedFirstSlug: "primitives/memory",
+    },
+    {
+      query: "join a paid community",
+      expectedTopSlugs: ["guides/joining-communities", "reference/billing-entitlements"],
+    },
+    {
+      query: "resources in a community",
+      expectedTopSlugs: ["guides/manage-resources", "primitives/resource"],
+    },
+    {
+      query: "voice chat",
+      expectedFirstSlug: "primitives/voice",
+    },
+    {
+      query: "what is Polynet",
+      expectedFirstSlug: "primitives/polynet",
+    },
+  ];
+
+  for (const goldenQuery of goldenQueries) {
+    assertGoldenQuery(goldenQuery);
+  }
+
+  assertExplainableSearchResult("what can admins do", ["admins"], ["queries", "keywords"]);
+  assertExplainableSearchResult("resources in a community", ["resources", "community"], ["queries", "title"]);
+  assertExplainableSearchResult("community lens server validated", ["community", "lens"], ["slug", "summary"]);
 }
 
 const artifacts = buildProductDocsArtifacts();

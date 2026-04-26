@@ -86,6 +86,18 @@ function proveDocsToolExecution() {
     search.results.some((result) => result.slug === "primitives/community-lens"),
     "expected community lens query to find the community lens primitive",
   );
+  assert.ok(
+    search.results[0]?.matched_terms.includes("community"),
+    "expected docs search results to explain matched query terms",
+  );
+  assert.ok(
+    search.results[0]?.matched_fields.length > 0,
+    "expected docs search results to explain matched fields",
+  );
+  assert.ok(
+    search.results[0]?.reason.length > 0,
+    "expected docs search results to include a concise match reason",
+  );
 
   const cashPathSearch = executeSearchProductDocsTool({
     index: productDocsIndex,

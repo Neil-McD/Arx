@@ -141,7 +141,14 @@
       "summary": "Community-owned durable knowledge available to members and agents where allowed.",
       "audience": ["builder", "member", "llm"],
       "status": "alpha-current",
-      "source": "docs/product/primitives/resource.md"
+      "source": "docs/product/primitives/resource.md",
+      "search": {
+        "aliases": ["community resource", "community resources", "resource library", "durable community knowledge"],
+        "keywords": ["resources", "community knowledge", "curated knowledge", "durable knowledge", "agent context"],
+        "queries": ["resources in a community", "what are community resources", "how do resources help the agent"],
+        "relatedSlugs": ["guides/manage-resources", "guides/chat-and-resources"],
+        "boost": 1.15
+      }
     },
     {
       "id": "product.entitlement",
@@ -161,7 +168,14 @@
       "summary": "Community authority level, separate from entitlement and payment state.",
       "audience": ["builder", "member", "llm"],
       "status": "alpha-current",
-      "source": "docs/product/primitives/role.md"
+      "source": "docs/product/primitives/role.md",
+      "search": {
+        "aliases": ["community role", "owner admin moderator member", "admin permissions", "moderator permissions"],
+        "keywords": ["owner", "admin", "moderator", "member", "permissions", "authority", "role boundaries"],
+        "queries": ["what can admins do", "what can moderators do", "owner admin moderator member roles"],
+        "relatedSlugs": ["reference/roles-permissions", "reference/access-model"],
+        "boost": 1.15
+      }
     },
     {
       "id": "product.guide.builder_quickstart",
@@ -191,7 +205,14 @@
       "summary": "How builders should curate community knowledge without confusing it with private memory.",
       "audience": ["builder", "llm"],
       "status": "alpha-current",
-      "source": "docs/product/guides/manage-resources.md"
+      "source": "docs/product/guides/manage-resources.md",
+      "search": {
+        "aliases": ["community resources", "manage community resources", "resource library", "curated knowledge"],
+        "keywords": ["resources", "community knowledge", "curated knowledge", "durable knowledge", "resource write access"],
+        "queries": ["resources in a community", "how do community resources work", "who can edit community resources"],
+        "relatedSlugs": ["primitives/resource", "guides/chat-and-resources"],
+        "boost": 1.2
+      }
     },
     {
       "id": "product.guide.configure_community_agent",
@@ -265,7 +286,14 @@
       "summary": "How members should understand funnels, access, and joining.",
       "audience": ["member", "llm"],
       "status": "alpha-current",
-      "source": "docs/product/guides/joining-communities.md"
+      "source": "docs/product/guides/joining-communities.md",
+      "search": {
+        "aliases": ["join community", "join paid community", "community funnel", "membership access"],
+        "keywords": ["join", "joining", "paid community", "funnel", "membership", "approval", "payment", "grant"],
+        "queries": ["join a paid community", "how do members join communities", "community access funnel"],
+        "relatedSlugs": ["primitives/funnel", "reference/access-model", "reference/billing-entitlements"],
+        "boost": 1.25
+      }
     },
     {
       "id": "product.guide.workspace",
@@ -285,7 +313,14 @@
       "summary": "How a member should understand thread-level community context switching.",
       "audience": ["member", "builder", "llm"],
       "status": "alpha-current",
-      "source": "docs/product/guides/community-lens.md"
+      "source": "docs/product/guides/community-lens.md",
+      "search": {
+        "aliases": ["use community lens", "community context switching", "thread community context"],
+        "keywords": ["community lens", "context switching", "thread lens", "active community", "future turns"],
+        "queries": ["how does community lens work", "use a community lens", "switch community context in a thread"],
+        "relatedSlugs": ["primitives/community-lens", "reference/context-model"],
+        "boost": 1.2
+      }
     },
     {
       "id": "product.guide.chat_and_resources",
@@ -349,7 +384,14 @@
       "summary": "Owner, admin, moderator, and member authority boundaries.",
       "audience": ["builder", "operator", "llm"],
       "status": "alpha-current",
-      "source": "docs/product/reference/roles-permissions.md"
+      "source": "docs/product/reference/roles-permissions.md",
+      "search": {
+        "aliases": ["admin permissions", "moderator permissions", "role permissions", "owner admin moderator member"],
+        "keywords": ["owner", "admin", "moderator", "member", "permissions", "authority", "role boundaries", "manage roles"],
+        "queries": ["what can admins do", "what can moderators do", "roles and permissions", "owner admin moderator permissions"],
+        "relatedSlugs": ["primitives/role", "reference/access-model"],
+        "boost": 1.3
+      }
     },
     {
       "id": "product.reference.billing_entitlements",

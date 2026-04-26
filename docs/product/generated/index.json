@@ -1,8 +1,8 @@
 {
   "version": 1,
   "source_manifest": "docs/product/manifest.json",
-  "manifest_hash": "78f6cdcf2aef0ceeb7d5d8cb4707a84eb3938dce58275195d90e9be2dfcee618",
-  "source_hash": "78d60105e2ff2b091b353b7fa5a5dc17c652e6a418e5e0e6d85c0ac48d8032a9",
+  "manifest_hash": "9a5038ea1960679ee991e827207ed9601d0efea48f7aef3ee2aae787528cc36b",
+  "source_hash": "43f548d3f9abfa153b0fcae69ef66da3e681b2c322e36e75ac478ef615478741",
   "default_slug": "primitives/polynet",
   "docs": [
     {
@@ -1907,11 +1907,29 @@
       "status": "alpha-current",
       "source": "docs/product/primitives/resource.md",
       "search": {
-        "aliases": [],
-        "keywords": [],
-        "queries": [],
-        "related_slugs": [],
-        "boost": 1
+        "aliases": [
+          "community resource",
+          "community resources",
+          "resource library",
+          "durable community knowledge"
+        ],
+        "keywords": [
+          "resources",
+          "community knowledge",
+          "curated knowledge",
+          "durable knowledge",
+          "agent context"
+        ],
+        "queries": [
+          "resources in a community",
+          "what are community resources",
+          "how do resources help the agent"
+        ],
+        "related_slugs": [
+          "guides/manage-resources",
+          "guides/chat-and-resources"
+        ],
+        "boost": 1.15
       },
       "frontmatter": {
         "id": "product.resource",
@@ -1935,20 +1953,30 @@
         "Related Concepts"
       ],
       "keywords": [
+        "agent",
         "agents",
         "allowed",
         "alpha",
         "and",
+        "are",
         "available",
         "builder",
+        "chat",
         "community",
         "concepts",
+        "context",
+        "curated",
         "current",
         "definition",
         "durable",
         "exists",
+        "guides",
+        "help",
+        "how",
         "knowledge",
+        "library",
         "llm",
+        "manage",
         "member",
         "members",
         "mental",
@@ -1958,9 +1986,12 @@
         "product",
         "related",
         "resource",
+        "resources",
         "rules",
         "system",
+        "the",
         "user",
+        "what",
         "where",
         "why"
       ],
@@ -2030,7 +2061,7 @@
         }
       ],
       "word_count": 134,
-      "search_text": "primitives resource resource primitives community owned durable knowledge available to members and agents where allowed alpha current builder member llm agents allowed alpha and available builder community concepts current definition durable exists knowledge llm member members mental model owned primitives product related resource rules system user where why resource definition why it exists user mental model system mental model rules related concepts resource definition a resource is a community owned knowledge item that can be shared with members and where allowed used as agent context why it exists resources let communities store reusable knowledge instead of relying only on chat history or ad hoc prompts user mental model members see resources as useful community materials builders see resources as the durable knowledge base of the community system mental model resources are community scoped artifacts access to resources should follow community membership and role rules rules 1 resource visibility should follow community access 2 resource write access should be role gated 3 resources should not become a dumping ground for private user data 4 resource context should be explicitly selected retrieved or bounded 5 resources should be easier to audit than hidden prompt text related concepts community agent skill memory"
+      "search_text": "primitives resource resource primitives community owned durable knowledge available to members and agents where allowed alpha current builder member llm community resource community resources resource library durable community knowledge resources community knowledge curated knowledge durable knowledge agent context resources in a community what are community resources how do resources help the agent guides manage resources guides chat and resources agent agents allowed alpha and are available builder chat community concepts context curated current definition durable exists guides help how knowledge library llm manage member members mental model owned primitives product related resource resources rules system the user what where why resource definition why it exists user mental model system mental model rules related concepts resource definition a resource is a community owned knowledge item that can be shared with members and where allowed used as agent context why it exists resources let communities store reusable knowledge instead of relying only on chat history or ad hoc prompts user mental model members see resources as useful community materials builders see resources as the durable knowledge base of the community system mental model resources are community scoped artifacts access to resources should follow community membership and role rules rules 1 resource visibility should follow community access 2 resource write access should be role gated 3 resources should not become a dumping ground for private user data 4 resource context should be explicitly selected retrieved or bounded 5 resources should be easier to audit than hidden prompt text related concepts community agent skill memory"
     },
     {
       "id": "product.entitlement",
@@ -2188,11 +2219,31 @@
       "status": "alpha-current",
       "source": "docs/product/primitives/role.md",
       "search": {
-        "aliases": [],
-        "keywords": [],
-        "queries": [],
-        "related_slugs": [],
-        "boost": 1
+        "aliases": [
+          "community role",
+          "owner admin moderator member",
+          "admin permissions",
+          "moderator permissions"
+        ],
+        "keywords": [
+          "owner",
+          "admin",
+          "moderator",
+          "member",
+          "permissions",
+          "authority",
+          "role boundaries"
+        ],
+        "queries": [
+          "what can admins do",
+          "what can moderators do",
+          "owner admin moderator member roles"
+        ],
+        "related_slugs": [
+          "reference/roles-permissions",
+          "reference/access-model"
+        ],
+        "boost": 1.15
       },
       "frontmatter": {
         "id": "product.role",
@@ -2216,10 +2267,15 @@
         "Related Concepts"
       ],
       "keywords": [
+        "access",
+        "admin",
+        "admins",
         "alpha",
         "and",
         "authority",
+        "boundaries",
         "builder",
+        "can",
         "community",
         "concepts",
         "current",
@@ -2232,16 +2288,23 @@
         "member",
         "mental",
         "model",
+        "moderator",
+        "moderators",
+        "owner",
         "payment",
+        "permissions",
         "primitives",
         "product",
+        "reference",
         "related",
         "role",
+        "roles",
         "rules",
         "separate",
         "state",
         "system",
         "user",
+        "what",
         "why"
       ],
       "chunks": [
@@ -2310,7 +2373,7 @@
         }
       ],
       "word_count": 129,
-      "search_text": "primitives role role primitives community authority level separate from entitlement and payment state alpha current builder member llm alpha and authority builder community concepts current definition entitlement exists from level llm member mental model payment primitives product related role rules separate state system user why role definition why it exists user mental model system mental model rules related concepts role definition a role is a community authority level that controls what a person can manage or moderate inside a community why it exists roles let communities delegate operational work without giving every member owner level power user mental model owners control the community admins help run it moderators help with limited moderation members participate system mental model role controls authority entitlement controls access payment state controls commercial access these are related but not the same rules 1 owner authority should remain highest and hardest to delegate 2 admin authority can manage operational settings where allowed 3 moderator authority should be limited to moderation flows 4 member authority should not include management actions 5 role checks must happen on the backend for protected actions related concepts community entitlement roles permissions access model"
+      "search_text": "primitives role role primitives community authority level separate from entitlement and payment state alpha current builder member llm community role owner admin moderator member admin permissions moderator permissions owner admin moderator member permissions authority role boundaries what can admins do what can moderators do owner admin moderator member roles reference roles permissions reference access model access admin admins alpha and authority boundaries builder can community concepts current definition entitlement exists from level llm member mental model moderator moderators owner payment permissions primitives product reference related role roles rules separate state system user what why role definition why it exists user mental model system mental model rules related concepts role definition a role is a community authority level that controls what a person can manage or moderate inside a community why it exists roles let communities delegate operational work without giving every member owner level power user mental model owners control the community admins help run it moderators help with limited moderation members participate system mental model role controls authority entitlement controls access payment state controls commercial access these are related but not the same rules 1 owner authority should remain highest and hardest to delegate 2 admin authority can manage operational settings where allowed 3 moderator authority should be limited to moderation flows 4 member authority should not include management actions 5 role checks must happen on the backend for protected actions related concepts community entitlement roles permissions access model"
     },
     {
       "id": "product.guide.builder_quickstart",
@@ -2694,11 +2757,29 @@
       "status": "alpha-current",
       "source": "docs/product/guides/manage-resources.md",
       "search": {
-        "aliases": [],
-        "keywords": [],
-        "queries": [],
-        "related_slugs": [],
-        "boost": 1
+        "aliases": [
+          "community resources",
+          "manage community resources",
+          "resource library",
+          "curated knowledge"
+        ],
+        "keywords": [
+          "resources",
+          "community knowledge",
+          "curated knowledge",
+          "durable knowledge",
+          "resource write access"
+        ],
+        "queries": [
+          "resources in a community",
+          "how do community resources work",
+          "who can edit community resources"
+        ],
+        "related_slugs": [
+          "primitives/resource",
+          "guides/chat-and-resources"
+        ],
+        "boost": 1.2
       },
       "frontmatter": {
         "id": "product.guide.manage_resources",
@@ -2725,29 +2806,38 @@
         "Related Concepts"
       ],
       "keywords": [
+        "access",
         "alpha",
+        "and",
         "behavior",
         "belongs",
         "builder",
         "builders",
+        "can",
+        "chat",
         "checklist",
         "common",
         "community",
         "concepts",
         "confusing",
         "curate",
+        "curated",
         "current",
+        "durable",
+        "edit",
         "goal",
         "guide",
         "guides",
         "how",
         "knowledge",
+        "library",
         "llm",
         "manage",
         "memory",
         "mental",
         "mistakes",
         "model",
+        "primitives",
         "private",
         "product",
         "quality",
@@ -2758,8 +2848,11 @@
         "should",
         "types",
         "what",
+        "who",
         "with",
-        "without"
+        "without",
+        "work",
+        "write"
       ],
       "chunks": [
         {
@@ -2854,7 +2947,7 @@
         }
       ],
       "word_count": 314,
-      "search_text": "guides manage resources manage resources builder guides how builders should curate community knowledge without confusing it with private memory alpha current builder llm alpha behavior belongs builder builders checklist common community concepts confusing curate current goal guide guides how knowledge llm manage memory mental mistakes model private product quality related resource resources rules should types what with without manage resources goal resource types mental model current alpha behavior what belongs in resources resource quality checklist rules common mistakes related concepts manage resources goal maintain durable community knowledge that members and agents can use resources are the community s curated knowledge layer they should be easier to understand audit and reuse than scattered chat history resource types resources can represent documents links instructions reference material playbooks curated knowledge mental model chat is live participation resources are durable knowledge use resources for information that should remain useful after the original conversation is over current alpha behavior community resources are scoped to a community members with access can read resources resource write actions are manager gated which currently means owner admin authority resources can also feed community archive retrieval paths where the backend supports it but resources should still be treated as curated community knowledge not private memory what belongs in resources good resource candidates canonical methods onboarding instructions playbooks reference links decision frameworks policies frequently reused examples poor resource candidates private member data temporary chat noise raw unreviewed conversation dumps secrets billing records vague motivational copy resource quality checklist 1 clear title 2 clear purpose 3 useful body or link 4 correct community scope 5 no private data 6 no stale promise of unavailable capability 7 updated when product behavior changes rules 1 keep resources scoped to the community 2 give write access only to trusted manager roles 3 do not store private user data as shared community knowledge 4 keep resource titles and descriptions clear 5 prefer fewer high signal resources over many low signal resources 6 do not treat resources as personal memory 7 do not let resources override platform access safety or entitlement rules common mistakes treating every useful chat message as a resource storing sensitive user specific context in a shared resource letting resources become stale while prompts keep referencing them giving moderators edit authority when the current product policy is owner admin using resources for app secrets or integration credentials related concepts resource community agent memory"
+      "search_text": "guides manage resources manage resources builder guides how builders should curate community knowledge without confusing it with private memory alpha current builder llm community resources manage community resources resource library curated knowledge resources community knowledge curated knowledge durable knowledge resource write access resources in a community how do community resources work who can edit community resources primitives resource guides chat and resources access alpha and behavior belongs builder builders can chat checklist common community concepts confusing curate curated current durable edit goal guide guides how knowledge library llm manage memory mental mistakes model primitives private product quality related resource resources rules should types what who with without work write manage resources goal resource types mental model current alpha behavior what belongs in resources resource quality checklist rules common mistakes related concepts manage resources goal maintain durable community knowledge that members and agents can use resources are the community s curated knowledge layer they should be easier to understand audit and reuse than scattered chat history resource types resources can represent documents links instructions reference material playbooks curated knowledge mental model chat is live participation resources are durable knowledge use resources for information that should remain useful after the original conversation is over current alpha behavior community resources are scoped to a community members with access can read resources resource write actions are manager gated which currently means owner admin authority resources can also feed community archive retrieval paths where the backend supports it but resources should still be treated as curated community knowledge not private memory what belongs in resources good resource candidates canonical methods onboarding instructions playbooks reference links decision frameworks policies frequently reused examples poor resource candidates private member data temporary chat noise raw unreviewed conversation dumps secrets billing records vague motivational copy resource quality checklist 1 clear title 2 clear purpose 3 useful body or link 4 correct community scope 5 no private data 6 no stale promise of unavailable capability 7 updated when product behavior changes rules 1 keep resources scoped to the community 2 give write access only to trusted manager roles 3 do not store private user data as shared community knowledge 4 keep resource titles and descriptions clear 5 prefer fewer high signal resources over many low signal resources 6 do not treat resources as personal memory 7 do not let resources override platform access safety or entitlement rules common mistakes treating every useful chat message as a resource storing sensitive user specific context in a shared resource letting resources become stale while prompts keep referencing them giving moderators edit authority when the current product policy is owner admin using resources for app secrets or integration credentials related concepts resource community agent memory"
     },
     {
       "id": "product.guide.configure_community_agent",
@@ -3741,11 +3834,33 @@
       "status": "alpha-current",
       "source": "docs/product/guides/joining-communities.md",
       "search": {
-        "aliases": [],
-        "keywords": [],
-        "queries": [],
-        "related_slugs": [],
-        "boost": 1
+        "aliases": [
+          "join community",
+          "join paid community",
+          "community funnel",
+          "membership access"
+        ],
+        "keywords": [
+          "join",
+          "joining",
+          "paid community",
+          "funnel",
+          "membership",
+          "approval",
+          "payment",
+          "grant"
+        ],
+        "queries": [
+          "join a paid community",
+          "how do members join communities",
+          "community access funnel"
+        ],
+        "related_slugs": [
+          "primitives/funnel",
+          "reference/access-model",
+          "reference/billing-entitlements"
+        ],
+        "boost": 1.25
       },
       "frontmatter": {
         "id": "product.guide.joining_communities",
@@ -3769,21 +3884,33 @@
         "access",
         "alpha",
         "and",
+        "approval",
+        "billing",
         "communities",
+        "community",
         "concepts",
         "current",
+        "entitlements",
+        "funnel",
         "funnels",
         "goal",
+        "grant",
         "guide",
         "guides",
         "how",
+        "join",
         "joining",
         "llm",
         "member",
         "members",
+        "membership",
         "mental",
         "model",
+        "paid",
+        "payment",
+        "primitives",
         "product",
+        "reference",
         "related",
         "rules",
         "should",
@@ -3837,7 +3964,7 @@
         }
       ],
       "word_count": 94,
-      "search_text": "guides joining communities joining communities member guides how members should understand funnels access and joining alpha current member llm access alpha and communities concepts current funnels goal guide guides how joining llm member members mental model product related rules should understand joining communities goal mental model rules related concepts joining communities goal help members understand how community access works mental model a community may be public to view but gated to join or use access can depend on membership approval payment or a grant rules 1 published does not mean free access 2 unlisted does not mean impossible to join 3 the funnel is the main public entry path 4 real access begins when the backend grants membership or entitlement 5 if access is removed or blocked the user should not be able to use the community lens related concepts community entitlement access model"
+      "search_text": "guides joining communities joining communities member guides how members should understand funnels access and joining alpha current member llm join community join paid community community funnel membership access join joining paid community funnel membership approval payment grant join a paid community how do members join communities community access funnel primitives funnel reference access model reference billing entitlements access alpha and approval billing communities community concepts current entitlements funnel funnels goal grant guide guides how join joining llm member members membership mental model paid payment primitives product reference related rules should understand joining communities goal mental model rules related concepts joining communities goal help members understand how community access works mental model a community may be public to view but gated to join or use access can depend on membership approval payment or a grant rules 1 published does not mean free access 2 unlisted does not mean impossible to join 3 the funnel is the main public entry path 4 real access begins when the backend grants membership or entitlement 5 if access is removed or blocked the user should not be able to use the community lens related concepts community entitlement access model"
     },
     {
       "id": "product.guide.workspace",
@@ -3964,11 +4091,28 @@
       "status": "alpha-current",
       "source": "docs/product/guides/community-lens.md",
       "search": {
-        "aliases": [],
-        "keywords": [],
-        "queries": [],
-        "related_slugs": [],
-        "boost": 1
+        "aliases": [
+          "use community lens",
+          "community context switching",
+          "thread community context"
+        ],
+        "keywords": [
+          "community lens",
+          "context switching",
+          "thread lens",
+          "active community",
+          "future turns"
+        ],
+        "queries": [
+          "how does community lens work",
+          "use a community lens",
+          "switch community context in a thread"
+        ],
+        "related_slugs": [
+          "primitives/community-lens",
+          "reference/context-model"
+        ],
+        "boost": 1.2
       },
       "frontmatter": {
         "id": "product.guide.community_lens",
@@ -3990,12 +4134,15 @@
         "Related Concepts"
       ],
       "keywords": [
+        "active",
         "alpha",
         "builder",
         "community",
         "concepts",
         "context",
         "current",
+        "does",
+        "future",
         "goal",
         "guide",
         "guides",
@@ -4006,14 +4153,19 @@
         "member",
         "mental",
         "model",
+        "primitives",
         "product",
+        "reference",
         "related",
         "rules",
         "should",
+        "switch",
         "switching",
         "thread",
+        "turns",
         "understand",
-        "use"
+        "use",
+        "work"
       ],
       "chunks": [
         {
@@ -4063,7 +4215,7 @@
         }
       ],
       "word_count": 93,
-      "search_text": "guides community lens community lens member guides how a member should understand thread level community context switching alpha current member builder llm alpha builder community concepts context current goal guide guides how lens level llm member mental model product related rules should switching thread understand use use a community lens goal mental model rules related concepts use a community lens goal use the right community context inside a workspace thread mental model the lens is the community context for the next agent turn it is like telling the agent use this community s knowledge and rules for what i ask next rules 1 lens changes affect future turns only 2 the backend must validate access 3 the ui should show which lens is active 4 if access is missing the lens should not provide community context 5 switching lenses should be fast and deterministic related concepts community lens thread workspace entitlement"
+      "search_text": "guides community lens community lens member guides how a member should understand thread level community context switching alpha current member builder llm use community lens community context switching thread community context community lens context switching thread lens active community future turns how does community lens work use a community lens switch community context in a thread primitives community lens reference context model active alpha builder community concepts context current does future goal guide guides how lens level llm member mental model primitives product reference related rules should switch switching thread turns understand use work use a community lens goal mental model rules related concepts use a community lens goal use the right community context inside a workspace thread mental model the lens is the community context for the next agent turn it is like telling the agent use this community s knowledge and rules for what i ask next rules 1 lens changes affect future turns only 2 the backend must validate access 3 the ui should show which lens is active 4 if access is missing the lens should not provide community context 5 switching lenses should be fast and deterministic related concepts community lens thread workspace entitlement"
     },
     {
       "id": "product.guide.chat_and_resources",
@@ -4626,11 +4778,33 @@
       "status": "alpha-current",
       "source": "docs/product/reference/roles-permissions.md",
       "search": {
-        "aliases": [],
-        "keywords": [],
-        "queries": [],
-        "related_slugs": [],
-        "boost": 1
+        "aliases": [
+          "admin permissions",
+          "moderator permissions",
+          "role permissions",
+          "owner admin moderator member"
+        ],
+        "keywords": [
+          "owner",
+          "admin",
+          "moderator",
+          "member",
+          "permissions",
+          "authority",
+          "role boundaries",
+          "manage roles"
+        ],
+        "queries": [
+          "what can admins do",
+          "what can moderators do",
+          "roles and permissions",
+          "owner admin moderator permissions"
+        ],
+        "related_slugs": [
+          "primitives/role",
+          "reference/access-model"
+        ],
+        "boost": 1.3
       },
       "frontmatter": {
         "id": "product.reference.roles_permissions",
@@ -4651,27 +4825,34 @@
         "Related Concepts"
       ],
       "keywords": [
+        "access",
         "admin",
+        "admins",
         "alpha",
         "and",
         "authority",
         "boundaries",
         "builder",
+        "can",
         "concepts",
         "current",
         "llm",
+        "manage",
         "member",
         "model",
         "moderator",
+        "moderators",
         "operator",
         "owner",
         "permissions",
+        "primitives",
         "product",
         "reference",
         "related",
         "role",
         "roles",
-        "rules"
+        "rules",
+        "what"
       ],
       "chunks": [
         {
@@ -4712,7 +4893,7 @@
         }
       ],
       "word_count": 117,
-      "search_text": "reference roles permissions roles and permissions reference owner admin moderator and member authority boundaries alpha current builder operator llm admin alpha and authority boundaries builder concepts current llm member model moderator operator owner permissions product reference related role roles rules roles and permissions role model rules related concepts roles and permissions role model owner highest community authority controls identity branding publishing deletion and ownership sensitive settings admin helps operate the community can manage operational settings where policy allows should not rename rebrand delete or unpublish the community moderator handles limited moderation flows should not control paid access should not remove or ban active members unless explicitly promoted by policy member participates in the community uses resources chat and allowed agent surfaces rules 1 protected writes must check role on the backend 2 owner only actions should stay owner only 3 admin authority should be useful but bounded 4 moderator authority should be narrow 5 ui should reflect the same permissions the backend enforces related concepts role access model security privacy"
+      "search_text": "reference roles permissions roles and permissions reference owner admin moderator and member authority boundaries alpha current builder operator llm admin permissions moderator permissions role permissions owner admin moderator member owner admin moderator member permissions authority role boundaries manage roles what can admins do what can moderators do roles and permissions owner admin moderator permissions primitives role reference access model access admin admins alpha and authority boundaries builder can concepts current llm manage member model moderator moderators operator owner permissions primitives product reference related role roles rules what roles and permissions role model rules related concepts roles and permissions role model owner highest community authority controls identity branding publishing deletion and ownership sensitive settings admin helps operate the community can manage operational settings where policy allows should not rename rebrand delete or unpublish the community moderator handles limited moderation flows should not control paid access should not remove or ban active members unless explicitly promoted by policy member participates in the community uses resources chat and allowed agent surfaces rules 1 protected writes must check role on the backend 2 owner only actions should stay owner only 3 admin authority should be useful but bounded 4 moderator authority should be narrow 5 ui should reflect the same permissions the backend enforces related concepts role access model security privacy"
     },
     {
       "id": "product.reference.billing_entitlements",

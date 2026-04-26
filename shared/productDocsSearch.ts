@@ -48,6 +48,9 @@ export type ProductDocsSearchResult = {
   chunk_id: string;
   heading: string | null;
   score: number;
+  matched_terms: string[];
+  matched_fields: string[];
+  reason: string;
   excerpt: string;
 };
 
@@ -56,6 +59,28 @@ export type ProductDocsSearchOptions = {
   section?: string;
   audience?: string;
 };
+
+const MATCH_EVIDENCE_STOP_TERMS = new Set([
+  "a",
+  "an",
+  "and",
+  "are",
+  "can",
+  "do",
+  "does",
+  "for",
+  "how",
+  "in",
+  "is",
+  "of",
+  "on",
+  "or",
+  "the",
+  "to",
+  "what",
+  "where",
+  "with",
+]);
 
 function normalizeSearchText(value: string): string {
   return value
@@ -124,6 +149,93 @@ function listTermScore(fields: readonly string[] | undefined, terms: string[], w
 function phraseScore(fields: readonly string[] | undefined, queryPhrase: string, weight: number): number {
   if (!queryPhrase) return 0;
   return (fields ?? []).some((field) => phraseIncludes(field, queryPhrase)) ? weight : 0;
+}
+
+function pushUnique(values: string[], value: string): void {
+  if (!values.includes(value)) values.push(value);
+}
+
+function fieldMatchesTerm(value: string, term: string): boolean {
+  const normalized = normalizeSearchText(value);
+  return tokenSet(normalized).has(term) || normalized.includes(term);
+}
+
+function listMatchesTerm(values: readonly string[] | undefined, term: string): boolean {
+  return (values ?? []).some((value) => fieldMatchesTerm(value, term));
+}
+
+function buildMatchEvidence(
+  doc: ProductDocsSearchEntry,
+  chunk: ProductDocsSearchChunk,
+  terms: string[],
+  queryPhrase: string,
+): {
+  matchedTerms: string[];
+  matchedFields: string[];
+  reason: string;
+} {
+  const search = doc.search ?? {
+    aliases: [],
+    keywords: [],
+    queries: [],
+    related_slugs: [],
+    boost: 1,
+  };
+  const matchedTerms: string[] = [];
+  const matchedFields: string[] = [];
+  const phraseFields: Array<[field: string, value: string | readonly string[] | undefined]> = [
+    ["slug", doc.slug],
+    ["title", doc.title],
+    ["summary", doc.summary],
+    ["heading", chunk.heading ?? ""],
+    ["queries", search.queries],
+    ["aliases", search.aliases],
+    ["keywords", search.keywords],
+  ];
+
+  if (queryPhrase) {
+    for (const [field, value] of phraseFields) {
+      const matches = Array.isArray(value)
+        ? value.some((entry) => phraseIncludes(entry, queryPhrase))
+        : typeof value === "string" && phraseIncludes(value, queryPhrase);
+      if (matches) pushUnique(matchedFields, field);
+    }
+  }
+
+  const termFields: Array<[field: string, matches: (term: string) => boolean]> = [
+    ["slug", (term) => fieldMatchesTerm(doc.slug, term)],
+    ["title", (term) => fieldMatchesTerm(doc.title, term)],
+    ["summary", (term) => fieldMatchesTerm(doc.summary, term)],
+    ["section", (term) => fieldMatchesTerm(doc.section, term)],
+    ["heading", (term) => fieldMatchesTerm(chunk.heading ?? "", term)],
+    ["queries", (term) => listMatchesTerm(search.queries, term)],
+    ["aliases", (term) => listMatchesTerm(search.aliases, term)],
+    ["keywords", (term) => doc.keywords.includes(term) || listMatchesTerm(search.keywords, term)],
+    ["body", (term) => fieldMatchesTerm(chunk.search_text, term)],
+  ];
+
+  for (const term of terms.filter((candidate) => !MATCH_EVIDENCE_STOP_TERMS.has(candidate))) {
+    let matched = false;
+    for (const [field, matches] of termFields) {
+      if (!matches(term)) continue;
+      matched = true;
+      pushUnique(matchedFields, field);
+    }
+    if (matched) pushUnique(matchedTerms, term);
+  }
+
+  const prioritizedFields = matchedFields.filter((field) => field !== "body").slice(0, 3);
+  const reasonFields = prioritizedFields.length > 0 ? prioritizedFields : matchedFields.slice(0, 2);
+  const reason =
+    reasonFields.length > 0
+      ? `Matched ${reasonFields.join(", ")}`
+      : "Ranked by product documentation metadata";
+
+  return {
+    matchedTerms,
+    matchedFields,
+    reason,
+  };
 }
 
 function scoreChunk(
@@ -233,6 +345,7 @@ export function searchProductDocsIndex(
     for (const chunk of doc.chunks) {
       const score = scoreChunk(doc, chunk, terms, queryPhrase, idf);
       if (score <= 0) continue;
+      const evidence = buildMatchEvidence(doc, chunk, terms, queryPhrase);
       const result = {
         slug: doc.slug,
         title: doc.title,
@@ -241,6 +354,9 @@ export function searchProductDocsIndex(
         chunk_id: chunk.id,
         heading: chunk.heading,
         score,
+        matched_terms: evidence.matchedTerms,
+        matched_fields: evidence.matchedFields,
+        reason: evidence.reason,
         excerpt: buildExcerpt(chunk.text, terms),
       };
       if (
