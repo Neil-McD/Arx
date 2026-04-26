@@ -29,10 +29,13 @@ Each indexed document includes:
 - `slug`: stable lookup key, such as `primitives/community`.
 - `title`, `section`, `summary`, `audience`, `status`, `source`: manifest
   metadata.
+- `search`: curated retrieval metadata from the manifest, including aliases,
+  keywords, queries, related slugs, and an optional page boost.
 - `frontmatter`: parsed source frontmatter for auditability.
 - `content`: frontmatter-stripped Markdown content.
 - `headings`: extracted headings in source order.
-- `keywords`: deterministic search terms from metadata and headings.
+- `keywords`: deterministic search terms from metadata, curated search
+  metadata, and headings.
 - `chunks`: heading-based retrieval units.
 - `word_count`: full document word count.
 - `search_text`: normalized text for simple lexical search.
@@ -65,7 +68,10 @@ to choose the next lookup, not the entire docs corpus.
 The first implementation should be deterministic lexical search:
 
 - exact slug/title matches rank highest;
+- exact curated query and alias matches rank alongside slug/title matches;
 - title, summary, section, and heading matches rank above body matches;
+- curated aliases, keywords, and queries rank above body matches;
+- common terms across many docs contribute less than rare terms;
 - chunk matches rank above full-document fallback matches;
 - return top five results by default.
 
@@ -81,4 +87,3 @@ directory contract.
 - Generated files must be reproducible from source docs.
 - The web docs surface must read from the generated directory, not a separate
   hand-maintained document map.
-

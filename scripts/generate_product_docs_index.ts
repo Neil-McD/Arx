@@ -5,6 +5,22 @@ import { pathToFileURL } from "node:url";
 
 type ProductDocAudience = "builder" | "member" | "llm" | "operator";
 
+type ProductDocSearchMetadataInput = {
+  aliases?: string[];
+  keywords?: string[];
+  queries?: string[];
+  relatedSlugs?: string[];
+  boost?: number;
+};
+
+type ProductDocSearchMetadata = {
+  aliases: string[];
+  keywords: string[];
+  queries: string[];
+  related_slugs: string[];
+  boost: number;
+};
+
 type ProductDocManifestEntry = {
   id: string;
   slug: string;
@@ -14,6 +30,7 @@ type ProductDocManifestEntry = {
   audience: ProductDocAudience[];
   status: string;
   source: string;
+  search?: ProductDocSearchMetadataInput;
 };
 
 type ProductDocsManifest = {
@@ -35,6 +52,7 @@ type ProductDocChunk = {
 };
 
 type ProductDocIndexEntry = ProductDocManifestEntry & {
+  search: ProductDocSearchMetadata;
   frontmatter: ParsedFrontmatter;
   content: string;
   headings: string[];
@@ -235,6 +253,36 @@ function keywordTokens(values: string[]): string[] {
   return Array.from(keywords).sort();
 }
 
+function normalizeMetadataStringList(raw: unknown, maxItems: number): string[] {
+  if (!Array.isArray(raw)) return [];
+  const values: string[] = [];
+  const seen = new Set<string>();
+  for (const item of raw) {
+    const value = String(item ?? "").replace(/\s+/g, " ").trim();
+    if (!value) continue;
+    const key = value.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    values.push(value);
+    if (values.length >= maxItems) break;
+  }
+  return values;
+}
+
+function normalizeSearchMetadata(raw: ProductDocSearchMetadataInput | undefined): ProductDocSearchMetadata {
+  const boostRaw = Number(raw?.boost ?? 1);
+  const boost = Number.isFinite(boostRaw)
+    ? Math.max(0.5, Math.min(boostRaw, 3))
+    : 1;
+  return {
+    aliases: normalizeMetadataStringList(raw?.aliases, 16),
+    keywords: normalizeMetadataStringList(raw?.keywords, 32),
+    queries: normalizeMetadataStringList(raw?.queries, 16),
+    related_slugs: normalizeMetadataStringList(raw?.relatedSlugs, 16),
+    boost,
+  };
+}
+
 function buildIndex(manifest: ProductDocsManifest, manifestRaw: string): ProductDocsIndex {
   const docs: ProductDocIndexEntry[] = manifest.docs.map((doc) => {
     if (!existsSync(repoPath(doc.source))) {
@@ -245,6 +293,7 @@ function buildIndex(manifest: ProductDocsManifest, manifestRaw: string): Product
     if (!parsed.hasFrontmatter) {
       throw new Error(`Missing frontmatter in product doc source: ${doc.source}`);
     }
+    const search = normalizeSearchMetadata(doc.search);
     const headings = extractHeadings(parsed.content).map((heading) => heading.title);
     const chunks = buildChunks(doc.slug, parsed.content);
     const keywords = keywordTokens([
@@ -255,6 +304,10 @@ function buildIndex(manifest: ProductDocsManifest, manifestRaw: string): Product
       doc.summary,
       doc.status,
       ...doc.audience,
+      ...search.aliases,
+      ...search.keywords,
+      ...search.queries,
+      ...search.related_slugs,
       ...headings,
     ]);
     const searchText = normalizeSearchText([
@@ -264,6 +317,10 @@ function buildIndex(manifest: ProductDocsManifest, manifestRaw: string): Product
       doc.summary,
       doc.status,
       ...doc.audience,
+      ...search.aliases,
+      ...search.keywords,
+      ...search.queries,
+      ...search.related_slugs,
       ...keywords,
       ...headings,
       parsed.content,
@@ -271,6 +328,7 @@ function buildIndex(manifest: ProductDocsManifest, manifestRaw: string): Product
 
     return {
       ...doc,
+      search,
       frontmatter: parsed.frontmatter,
       content: parsed.content,
       headings,
@@ -282,7 +340,7 @@ function buildIndex(manifest: ProductDocsManifest, manifestRaw: string): Product
   });
 
   const sourceHashInput = docs
-    .map((doc) => `${doc.source}\0${doc.content}\0${JSON.stringify(doc.frontmatter)}`)
+    .map((doc) => `${doc.source}\0${doc.content}\0${JSON.stringify(doc.frontmatter)}\0${JSON.stringify(doc.search)}`)
     .join("\0");
 
   return {
@@ -399,4 +457,3 @@ const invokedPath = process.argv[1] ? pathToFileURL(path.resolve(process.argv[1]
 if (import.meta.url === invokedPath) {
   writeProductDocsArtifacts();
 }
-

@@ -87,6 +87,37 @@ function proveDocsToolExecution() {
     "expected community lens query to find the community lens primitive",
   );
 
+  const cashPathSearch = executeSearchProductDocsTool({
+    index: productDocsIndex,
+    query: "cash path paid community checkout payouts",
+    limit: 5,
+  });
+  assert.equal(cashPathSearch.ok, true);
+  assert.equal(
+    cashPathSearch.results[0]?.slug,
+    "reference/billing-entitlements",
+    "expected payout/cash-path query to rank billing entitlements first",
+  );
+  assert.ok(
+    cashPathSearch.results.slice(0, 3).some((result) => result.slug === "guides/manage-access-billing-and-roles"),
+    "expected payout/cash-path query to surface the access and billing guide near the top",
+  );
+
+  const promptSearch = executeSearchProductDocsTool({
+    index: productDocsIndex,
+    query: "system prompts community owner instructions",
+    limit: 5,
+  });
+  assert.equal(promptSearch.ok, true);
+  assert.ok(
+    promptSearch.results.slice(0, 3).some((result) => result.slug === "reference/prompt-context-model"),
+    "expected prompt query to surface the prompt context reference near the top",
+  );
+  assert.ok(
+    promptSearch.results.slice(0, 3).some((result) => result.slug === "guides/configure-community-agent"),
+    "expected prompt query to surface the community agent configuration guide near the top",
+  );
+
   const doc = executeGetProductDocTool({
     index: productDocsIndex,
     slug: "primitives/polynet",

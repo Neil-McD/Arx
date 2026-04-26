@@ -56,6 +56,16 @@ function validateIndex(index: ProductDocsIndex): void {
     assert(doc.chunks.length > 0, `Missing chunks for ${doc.slug}`);
     assert(doc.keywords.length > 0, `Missing keywords for ${doc.slug}`);
     assert(Object.keys(doc.frontmatter).length > 0, `Missing parsed frontmatter for ${doc.slug}`);
+    if (doc.search) {
+      assert(Array.isArray(doc.search.aliases), `Search aliases must be an array for ${doc.slug}`);
+      assert(Array.isArray(doc.search.keywords), `Search keywords must be an array for ${doc.slug}`);
+      assert(Array.isArray(doc.search.queries), `Search queries must be an array for ${doc.slug}`);
+      assert(Array.isArray(doc.search.related_slugs), `Search related slugs must be an array for ${doc.slug}`);
+      assert(
+        Number.isFinite(doc.search.boost) && doc.search.boost >= 0.5 && doc.search.boost <= 3,
+        `Search boost must stay within the supported ranking range for ${doc.slug}`,
+      );
+    }
 
     const chunkIds = new Set<string>();
     for (const chunk of doc.chunks) {
@@ -82,6 +92,19 @@ function validateLlmsFiles(index: ProductDocsIndex, llmsTxt: string, llmsFullTxt
 }
 
 function validateSearch(index: ProductDocsIndex): void {
+  function assertTopSlug(query: string, expectedSlug: string, limit = 5): void {
+    const results = searchProductDocsIndex(index, query, { limit });
+    assert(results[0]?.slug === expectedSlug, `Search "${query}" should rank ${expectedSlug} first, got ${results[0]?.slug ?? "no result"}.`);
+  }
+
+  function assertTopSlugsInclude(query: string, expectedSlug: string, topN: number, limit = 8): void {
+    const results = searchProductDocsIndex(index, query, { limit });
+    assert(
+      results.slice(0, topN).some((result) => result.slug === expectedSlug),
+      `Search "${query}" should rank ${expectedSlug} in the top ${topN}; got ${results.map((result) => result.slug).join(", ")}.`,
+    );
+  }
+
   const lensResults = searchProductDocsIndex(index, "community lens server validated context", { limit: 5 });
   assert(
     lensResults.some((result) => result.slug === "primitives/community-lens"),
@@ -96,6 +119,15 @@ function validateSearch(index: ProductDocsIndex): void {
 
   const defaultDoc = getProductDocFromIndex(index, index.default_slug);
   assert(defaultDoc?.slug === index.default_slug, "Default product doc must be retrievable by slug.");
+
+  assertTopSlug("payout readiness", "reference/billing-entitlements");
+  assertTopSlugsInclude("cash path paid community checkout payouts", "reference/billing-entitlements", 3);
+  assertTopSlugsInclude("cash path paid community checkout payouts", "guides/manage-access-billing-and-roles", 3);
+  assertTopSlugsInclude("system prompts community owner instructions", "reference/prompt-context-model", 3);
+  assertTopSlugsInclude("system prompts community owner instructions", "guides/configure-community-agent", 3);
+  assertTopSlugsInclude("community lens context switching", "primitives/community-lens", 2);
+  assertTopSlug("memory across threads", "primitives/memory");
+  assertTopSlug("what is polynet value prop", "primitives/polynet");
 }
 
 const artifacts = buildProductDocsArtifacts();

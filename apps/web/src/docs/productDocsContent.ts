@@ -14,6 +14,13 @@ export type ProductDocEntry = {
   audience: ProductDocAudience[];
   status: string;
   source: string;
+  search?: {
+    aliases: string[];
+    keywords: string[];
+    queries: string[];
+    related_slugs: string[];
+    boost: number;
+  };
   content: string;
   headings: string[];
   keywords: string[];

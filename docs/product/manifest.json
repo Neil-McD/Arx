@@ -10,7 +10,14 @@
       "summary": "What Polynet is, why it exists, and the alpha product model.",
       "audience": ["builder", "member", "llm"],
       "status": "alpha-current",
-      "source": "docs/product/primitives/polynet.md"
+      "source": "docs/product/primitives/polynet.md",
+      "search": {
+        "aliases": ["platform value prop", "services as software", "collective intelligence platform"],
+        "keywords": ["value prop", "business model", "builders", "communities", "agents", "monetization"],
+        "queries": ["what is polynet", "what is polynet value prop", "services as software platform"],
+        "relatedSlugs": ["guides/builder-quickstart", "reference/billing-entitlements"],
+        "boost": 1.15
+      }
     },
     {
       "id": "product.community",
@@ -50,7 +57,14 @@
       "summary": "The server-validated community context applied to future thread turns.",
       "audience": ["builder", "member", "llm"],
       "status": "alpha-current",
-      "source": "docs/product/primitives/community-lens.md"
+      "source": "docs/product/primitives/community-lens.md",
+      "search": {
+        "aliases": ["community context", "thread lens", "context switching", "server validated lens"],
+        "keywords": ["lens switch", "validated context", "future turns", "thread context"],
+        "queries": ["community lens context switching", "switch community context", "server validated community lens"],
+        "relatedSlugs": ["guides/community-lens", "reference/context-model"],
+        "boost": 1.2
+      }
     },
     {
       "id": "product.thread",
@@ -70,7 +84,14 @@
       "summary": "The current personal memory scope and future memory boundaries.",
       "audience": ["builder", "member", "llm"],
       "status": "alpha-current",
-      "source": "docs/product/primitives/memory.md"
+      "source": "docs/product/primitives/memory.md",
+      "search": {
+        "aliases": ["personal memory", "memory across threads", "agent memory"],
+        "keywords": ["remember", "recall", "workspace memory", "personal scope"],
+        "queries": ["memory across threads", "agent memory across sessions", "what does memory remember"],
+        "relatedSlugs": ["primitives/workspace", "reference/context-model"],
+        "boost": 1.15
+      }
     },
     {
       "id": "product.funnel",
@@ -180,7 +201,14 @@
       "summary": "How builders should shape the community agent and its context.",
       "audience": ["builder", "llm"],
       "status": "alpha-current",
-      "source": "docs/product/guides/configure-community-agent.md"
+      "source": "docs/product/guides/configure-community-agent.md",
+      "search": {
+        "aliases": ["community agent prompt", "owner instructions", "agent configuration"],
+        "keywords": ["community prompt", "system prompt", "owner instructions", "resources", "skills"],
+        "queries": ["configure community agent", "community owner instructions", "system prompts community owner instructions"],
+        "relatedSlugs": ["reference/prompt-context-model", "reference/context-model"],
+        "boost": 1.1
+      }
     },
     {
       "id": "product.guide.connect_apps_and_mcps",
@@ -210,7 +238,14 @@
       "summary": "The builder mental model for entitlements, payments, and roles.",
       "audience": ["builder", "llm"],
       "status": "alpha-current",
-      "source": "docs/product/guides/manage-access-billing-and-roles.md"
+      "source": "docs/product/guides/manage-access-billing-and-roles.md",
+      "search": {
+        "aliases": ["cash path", "collect cash", "paid community setup", "billing roles"],
+        "keywords": ["paid access", "checkout", "subscription", "payouts", "stripe", "revenue", "roles"],
+        "queries": ["cash path paid community checkout payouts", "access billing roles payouts", "how builders collect cash"],
+        "relatedSlugs": ["reference/billing-entitlements", "reference/roles-permissions"],
+        "boost": 1.2
+      }
     },
     {
       "id": "product.guide.member_quickstart",
@@ -270,7 +305,14 @@
       "summary": "The canonical context precedence and explicit exclusions.",
       "audience": ["builder", "operator", "llm"],
       "status": "alpha-current",
-      "source": "docs/product/reference/context-model.md"
+      "source": "docs/product/reference/context-model.md",
+      "search": {
+        "aliases": ["context stack", "context precedence", "canonical context"],
+        "keywords": ["platform doctrine", "agent soul", "community lens", "workspace context", "prompt context"],
+        "queries": ["context stack", "canonical context precedence", "what context does the agent use"],
+        "relatedSlugs": ["reference/prompt-context-model", "primitives/community-lens"],
+        "boost": 1.1
+      }
     },
     {
       "id": "product.reference.prompt_context_model",
@@ -280,7 +322,14 @@
       "summary": "How documentation should feed prompt and context design.",
       "audience": ["builder", "operator", "llm"],
       "status": "alpha-current",
-      "source": "docs/product/reference/prompt-context-model.md"
+      "source": "docs/product/reference/prompt-context-model.md",
+      "search": {
+        "aliases": ["system prompt", "prompt context", "prompt precedence", "community owner instructions"],
+        "keywords": ["system prompts", "owner instructions", "skills", "resources", "context stack", "prompt rules"],
+        "queries": ["system prompts community owner instructions", "prompt context model", "how should prompts use docs"],
+        "relatedSlugs": ["guides/configure-community-agent", "reference/context-model"],
+        "boost": 1.25
+      }
     },
     {
       "id": "product.reference.access_model",
@@ -310,7 +359,14 @@
       "summary": "The authority model for paid access, checkout, and subscriptions.",
       "audience": ["builder", "operator", "llm"],
       "status": "alpha-current",
-      "source": "docs/product/reference/billing-entitlements.md"
+      "source": "docs/product/reference/billing-entitlements.md",
+      "search": {
+        "aliases": ["payout readiness", "cash path", "paid access", "billing entitlements", "builder revenue"],
+        "keywords": ["checkout", "subscription", "stripe", "payouts", "payments", "revenue", "collect cash", "paid community"],
+        "queries": ["payout readiness", "cash path paid community checkout payouts", "billing entitlements payouts", "stripe connect payouts community revenue"],
+        "relatedSlugs": ["guides/manage-access-billing-and-roles", "primitives/entitlement"],
+        "boost": 1.3
+      }
     },
     {
       "id": "product.reference.security_privacy",
