@@ -15912,9 +15912,9 @@ button.message-citation-chip:hover {
 }
 
 .background-terminal-rail {
-  width: calc(100% - 12px);
-  max-width: calc(100% - 12px);
-  margin: 0 auto 0 0;
+  width: 100%;
+  max-width: 100%;
+  margin: 0;
   position: relative;
   box-sizing: border-box;
 }
@@ -15931,6 +15931,7 @@ button.message-citation-chip:hover {
 .background-terminal-rail-header {
   display: flex;
   align-items: center;
+  flex-wrap: nowrap;
   gap: 10px;
 }
 
@@ -16044,6 +16045,7 @@ button.message-citation-chip:hover {
 
 .background-terminal-stop-all {
   flex: 0 0 auto;
+  margin-left: auto;
   min-width: 64px;
   padding-inline: 12px;
   border-radius: 18px;
@@ -16200,6 +16202,10 @@ button.message-citation-chip:hover {
   line-height: 1.35;
   font-weight: 700;
   color: var(--text-primary);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .workspace-app-preview-status {
@@ -16228,6 +16234,7 @@ button.message-citation-chip:hover {
   gap: 5px;
   flex-wrap: nowrap;
   justify-content: flex-end;
+  margin-left: auto;
   flex: 0 0 auto;
 }
 
@@ -16417,24 +16424,15 @@ button.message-citation-chip:hover {
     max-width: 100%;
   }
 
-  .background-terminal-rail-header {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .background-terminal-stop-all {
-    width: 100%;
-  }
-
   .workspace-app-preview-header {
-    flex-direction: column;
-    align-items: stretch;
+    flex-direction: row;
+    align-items: center;
   }
 
   .workspace-app-preview-actions {
-    width: 100%;
-    justify-content: flex-start;
-    flex-wrap: wrap;
+    width: auto;
+    justify-content: flex-end;
+    flex-wrap: nowrap;
   }
 
   .workspace-app-preview-frame-shell {
@@ -16446,6 +16444,18 @@ button.message-citation-chip:hover {
     width: auto;
     max-width: none;
     padding: 0;
+  }
+}
+
+@media (max-width: 520px) {
+  .background-terminal-rail-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .background-terminal-stop-all {
+    width: 100%;
+    margin-left: 0;
   }
 }
 
