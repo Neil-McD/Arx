@@ -384,7 +384,7 @@ The current workspace supports:
 - voice input
 - personal memory controls
 - runtime/tool policy surfaces
-- latency instrumentation for thread, lens, and render flows
+- runtime evidence for thread, lens, and agent execution flows
 
 ## Rules
 
@@ -550,7 +550,7 @@ The current thread model includes:
 - route-addressable thread URLs
 - optional active community lens
 - runtime evidence and activity metadata
-- thread rendering and latency instrumentation
+- thread rendering and runtime evidence
 
 ## Rules
 
