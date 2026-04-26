@@ -22,6 +22,7 @@ import {
 import {
   ensureProjectBackgroundSandbox,
   releaseProjectBackgroundSandboxIfIdle,
+  resolveProjectBackgroundSandboxIfReady,
   resolveTerminalSandboxContext,
 } from "./workspaceTerminalBackgroundService";
 import { reconcileWorkspaceTerminalRow } from "./workspaceTerminalReconciliation";
@@ -250,7 +251,7 @@ export function createPolyNetExecutionSession(params: {
   const mountedToolByName = new Map(
     params.mountedTools.map((tool) => [tool.runtime_tool_name, tool]),
   );
-  const ownsWorkspaceSession = !params.initialWorkspaceSession;
+  let ownsWorkspaceSession = !params.initialWorkspaceSession;
   let workspaceSession = params.initialWorkspaceSession ?? null;
   let workspaceSessionFailure: {
     status: number;
@@ -447,6 +448,78 @@ export function createPolyNetExecutionSession(params: {
         },
         `${params.runId}:workspace_session_create_started:1`,
       );
+      const backgroundSandbox = await resolveProjectBackgroundSandboxIfReady({
+        ctx: params.ctx,
+        authSubject,
+        userId: params.userId,
+        projectId,
+      });
+      if (backgroundSandbox.ok) {
+        workspaceSessionFailure = null;
+        ownsWorkspaceSession = false;
+        workspaceSession = {
+          config: backgroundSandbox.config,
+          projectId,
+          projectVolumeId: backgroundSandbox.projectVolumeId,
+          providerSandboxId: backgroundSandbox.providerSandboxId,
+          toolboxProxyUrl: backgroundSandbox.toolboxProxyUrl,
+          region: null,
+          sandboxCpu: backgroundSandbox.sandboxCpu,
+          sandboxMemoryGiB: backgroundSandbox.sandboxMemoryGiB,
+          sandboxDiskGiB: backgroundSandbox.sandboxDiskGiB,
+          startedAt: Date.now(),
+          lifecycleMode: "native_stop_delete",
+        };
+        ensureWorkspaceHeartbeat();
+        await emitRunEvent(
+          "workspace_session_adopted",
+          {
+            run_id: params.runId,
+            sandbox_id: backgroundSandbox.providerSandboxId,
+            project_id: projectId,
+            source: "project_background",
+            toolbox_proxy_url: backgroundSandbox.toolboxProxyUrl,
+          },
+          `${params.runId}:workspace_session_adopted:project_background`,
+        );
+        const persisted = await persistWorkspaceSessionState({
+          state: "active",
+          session: workspaceSession,
+          projectId,
+          phase: "create",
+        });
+        if (!persisted.ok) {
+          workspaceSessionFailure = {
+            status: 500,
+            code: "workspace_session_persist_failed",
+            message: "Failed to persist workspace session metadata.",
+          };
+          return {
+            ok: false as const,
+            status: workspaceSessionFailure.status,
+            code: workspaceSessionFailure.code,
+            message: workspaceSessionFailure.message,
+          };
+        }
+        await emitRunEvent(
+          "workspace_session_create_completed",
+          {
+            run_id: params.runId,
+            project_id: projectId,
+            tool_name: String(paramsForCreate?.toolName ?? "").trim() || null,
+            latency_ms: Date.now() - createStartedAt,
+            status: "ok",
+            sandbox_id: backgroundSandbox.providerSandboxId,
+            region: null,
+            source: "project_background",
+          },
+          `${params.runId}:workspace_session_create_completed:ok`,
+        );
+        return {
+          ok: true as const,
+          session: workspaceSession,
+        };
+      }
       const created = await createWorkspaceSandboxSession({
         ctx: params.ctx,
         userId: params.userId,

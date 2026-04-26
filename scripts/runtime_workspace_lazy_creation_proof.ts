@@ -308,6 +308,28 @@ async function proveLazyWorkspaceCreationRules() {
   );
   assert.equal(
     workspaceTerminalBackgroundServiceSource.includes(
+      "export async function resolveProjectBackgroundSandboxIfReady",
+    ),
+    true,
+    "expected reusable project background sandbox resolution to be explicit",
+  );
+  assert.equal(
+    executionSessionSource.includes("resolveProjectBackgroundSandboxIfReady"),
+    true,
+    "expected regular workspace tools to reuse an already-live project background sandbox",
+  );
+  assert.equal(
+    executionSessionSource.includes("ownsWorkspaceSession = false"),
+    true,
+    "expected borrowed project background sandboxes not to be cleaned up as run-owned sandboxes",
+  );
+  assert.equal(
+    executionSessionSource.includes("workspace_session_adopted"),
+    true,
+    "expected background sandbox adoption to leave runtime evidence",
+  );
+  assert.equal(
+    workspaceTerminalBackgroundServiceSource.includes(
       "export async function releaseProjectBackgroundSandboxIfIdle",
     ),
     true,

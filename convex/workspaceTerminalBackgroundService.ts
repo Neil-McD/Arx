@@ -40,6 +40,7 @@ export async function ensureProjectBackgroundSandbox(params: {
       config: DaytonaConfig;
       providerSandboxId: string;
       toolboxProxyUrl: string;
+      projectVolumeId: string | null;
       sandboxCpu: number;
       sandboxMemoryGiB: number;
       sandboxDiskGiB: number;
@@ -52,6 +53,14 @@ export async function ensureProjectBackgroundSandbox(params: {
       details?: Record<string, unknown>;
     }
 > {
+  const existing = await resolveProjectBackgroundSandboxIfReady({
+    ctx: params.ctx,
+    authSubject: params.authSubject,
+    userId: params.userId,
+    projectId: params.projectId,
+  });
+  if (existing.ok) return existing;
+
   const project = await params.ctx.runQuery(api.projects.getCloudProjectById as any, {
     authSubject: params.authSubject,
     ownerId: params.userId,
@@ -79,48 +88,6 @@ export async function ensureProjectBackgroundSandbox(params: {
     ...loadedConfig.config,
     autoStopInterval: 0,
   };
-
-  const existingSandboxId = normalizeOptionalString(project.providerSandboxId);
-  if (existingSandboxId) {
-    const ready = await waitForDaytonaSandboxReady({
-      config,
-      sandboxId: existingSandboxId,
-      timeoutMs: 10_000,
-    });
-    if (ready.ok) {
-      const toolbox = await getDaytonaToolboxProxyUrl({
-        config,
-        sandboxId: existingSandboxId,
-      });
-      if (toolbox.ok) {
-        await params.ctx.runMutation(
-          internal.workspaceTerminals.setProjectBackgroundSandboxInternal as any,
-          {
-            projectId: params.projectId,
-            providerSandboxId: existingSandboxId,
-            providerSandboxState: String(ready.sandbox.state ?? "").trim() || "started",
-            providerSandboxLastSeenAt: Date.now(),
-          },
-        );
-        return {
-          ok: true,
-          config,
-          providerSandboxId: existingSandboxId,
-          toolboxProxyUrl: toolbox.toolboxProxyUrl,
-          sandboxCpu: config.sandboxCpu,
-          sandboxMemoryGiB: config.sandboxMemoryGiB,
-          sandboxDiskGiB: config.sandboxDiskGiB,
-        };
-      }
-    }
-
-    await params.ctx.runMutation(
-      internal.workspaceTerminals.clearProjectBackgroundSandboxInternal as any,
-      {
-        projectId: params.projectId,
-      },
-    );
-  }
 
   const runtimeProject = await params.ctx.runAction(
     api.projects.ensureCloudProjectVolume as any,
@@ -178,6 +145,130 @@ export async function ensureProjectBackgroundSandbox(params: {
     config,
     providerSandboxId,
     toolboxProxyUrl: toolbox.toolboxProxyUrl,
+    projectVolumeId:
+      String((runtimeProject as any)?.providerVolumeId ?? "").trim() || null,
+    sandboxCpu: config.sandboxCpu,
+    sandboxMemoryGiB: config.sandboxMemoryGiB,
+    sandboxDiskGiB: config.sandboxDiskGiB,
+  };
+}
+
+export async function resolveProjectBackgroundSandboxIfReady(params: {
+  ctx: any;
+  authSubject: string | null | undefined;
+  userId: any;
+  projectId: string;
+}): Promise<
+  | {
+      ok: true;
+      config: DaytonaConfig;
+      providerSandboxId: string;
+      toolboxProxyUrl: string;
+      projectVolumeId: string | null;
+      sandboxCpu: number;
+      sandboxMemoryGiB: number;
+      sandboxDiskGiB: number;
+    }
+  | {
+      ok: false;
+      status: number;
+      code: string;
+      message: string;
+    }
+> {
+  const project = await params.ctx.runQuery(api.projects.getCloudProjectById as any, {
+    authSubject: params.authSubject,
+    ownerId: params.userId,
+    projectId: params.projectId,
+  });
+  if (!project) {
+    return {
+      ok: false,
+      status: 404,
+      code: "project_not_found",
+      message: "Project not found.",
+    };
+  }
+
+  const existingSandboxId = normalizeOptionalString(project.providerSandboxId);
+  if (!existingSandboxId) {
+    return {
+      ok: false,
+      status: 404,
+      code: "background_sandbox_not_found",
+      message: "No active project background sandbox is registered.",
+    };
+  }
+
+  const loadedConfig = loadDaytonaConfig();
+  if (!loadedConfig.ok) {
+    return {
+      ok: false,
+      status: 503,
+      code: loadedConfig.code,
+      message: loadedConfig.message,
+    };
+  }
+  const config: DaytonaConfig = {
+    ...loadedConfig.config,
+    autoStopInterval: 0,
+  };
+
+  const ready = await waitForDaytonaSandboxReady({
+    config,
+    sandboxId: existingSandboxId,
+    timeoutMs: 10_000,
+  });
+  if (!ready.ok) {
+    await params.ctx.runMutation(
+      internal.workspaceTerminals.clearProjectBackgroundSandboxInternal as any,
+      {
+        projectId: params.projectId,
+      },
+    );
+    return {
+      ok: false,
+      status: ready.status,
+      code: ready.code,
+      message: ready.message,
+    };
+  }
+
+  const toolbox = await getDaytonaToolboxProxyUrl({
+    config,
+    sandboxId: existingSandboxId,
+  });
+  if (!toolbox.ok) {
+    await params.ctx.runMutation(
+      internal.workspaceTerminals.clearProjectBackgroundSandboxInternal as any,
+      {
+        projectId: params.projectId,
+      },
+    );
+    return {
+      ok: false,
+      status: toolbox.status,
+      code: toolbox.code,
+      message: toolbox.message,
+    };
+  }
+
+  await params.ctx.runMutation(
+    internal.workspaceTerminals.setProjectBackgroundSandboxInternal as any,
+    {
+      projectId: params.projectId,
+      providerSandboxId: existingSandboxId,
+      providerSandboxState: String(ready.sandbox.state ?? "").trim() || "started",
+      providerSandboxLastSeenAt: Date.now(),
+    },
+  );
+
+  return {
+    ok: true,
+    config,
+    providerSandboxId: existingSandboxId,
+    toolboxProxyUrl: toolbox.toolboxProxyUrl,
+    projectVolumeId: normalizeOptionalString(project.providerVolumeId),
     sandboxCpu: config.sandboxCpu,
     sandboxMemoryGiB: config.sandboxMemoryGiB,
     sandboxDiskGiB: config.sandboxDiskGiB,
