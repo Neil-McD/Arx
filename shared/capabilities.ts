@@ -15,6 +15,7 @@ export type UserAccessPolicy = {
   threadMode: ThreadMode;
   allowMultipleThreads: boolean;
   allowGuestInference: boolean;
+  allowProductDocs: boolean;
   allowCommunityTools: boolean;
   allowWebResearch: boolean;
   allowWorkspaceTools: boolean;
@@ -71,6 +72,7 @@ function resolveUserAccessPolicyViaCanonicalGate(input: {
     threadMode,
     allowMultipleThreads: threadMode !== "single_guest",
     allowGuestInference: true,
+    allowProductDocs: entitledCapabilityFamilies.includes("product_docs"),
     allowCommunityTools: entitledCapabilityFamilies.includes("community_tools"),
     allowWebResearch: entitledCapabilityFamilies.includes("web_research"),
     allowWorkspaceTools: entitledCapabilityFamilies.includes("workspace_tools"),

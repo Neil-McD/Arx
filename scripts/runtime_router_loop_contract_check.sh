@@ -132,6 +132,10 @@ require_match_in_file "$TOOL_TYPES_FILE" 'export type RetrievalToolName' \
   "tool name type lives in neutral shared module"
 require_match_in_file "$TOOL_TYPES_FILE" '"community_search"' \
   "tool name type includes community_search"
+require_match_in_file "$TOOL_TYPES_FILE" '"search_product_docs"' \
+  "tool name type includes search_product_docs"
+require_match_in_file "$TOOL_TYPES_FILE" '"get_product_doc"' \
+  "tool name type includes get_product_doc"
 require_match_in_file "$TOOL_TYPES_FILE" '"community_write"' \
   "tool name type includes community_write"
 require_match_in_file "$TOOL_TYPES_FILE" '"list_dir"' \
@@ -160,6 +164,8 @@ require_match_in_file "$NATIVE_LOOP_FILE" 'buildToolResultEnvelope' \
   "native tool loop uses a canonical tool result envelope"
 require_match_in_file "$RESOLUTION_FILE" 'toolNames.push\("community_search", "community_write"\)' \
   "runtime capability resolution includes community tools"
+require_match_in_file "$RESOLUTION_FILE" 'toolNames.push\("search_product_docs", "get_product_doc"\)' \
+  "runtime capability resolution includes product docs tools"
 require_match_in_file "$RESOLUTION_FILE" 'toolNames.push\("web_research"\)' \
   "runtime capability resolution includes web research tools"
 require_match_in_file "$RESOLUTION_FILE" 'if \(params.activeCapabilityFamilies.includes\("workspace_tools"\)\)' \

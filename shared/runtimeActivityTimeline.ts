@@ -180,7 +180,12 @@ function classifyTool(toolName: string, args: Record<string, unknown> | null): A
   if (toolName === "read") return "reading";
   if (toolName === "write" || toolName === "edit") return "editing";
   if (toolName === "bash") return classifyBashCommand(toStringValue(args?.command));
-  if (toolName === "web_research" || toolName.startsWith("community_")) return "exploring";
+  if (
+    toolName === "web_research" ||
+    toolName === "search_product_docs" ||
+    toolName === "get_product_doc" ||
+    toolName.startsWith("community_")
+  ) return "exploring";
   if (toolName === "terminal_start" || toolName === "terminal_read" || toolName === "terminal_write") {
     return classifyBashCommand(toStringValue(args?.command));
   }
@@ -212,6 +217,7 @@ function buildToolTitle(toolName: string, args: Record<string, unknown> | null):
   const command = toStringValue(args?.command);
   const pattern = toStringValue(args?.pattern);
   const query = toStringValue(args?.query);
+  const slug = toStringValue(args?.slug);
   const url = toStringValue(args?.url);
   const action = toStringValue(args?.action);
 
@@ -232,6 +238,8 @@ function buildToolTitle(toolName: string, args: Record<string, unknown> | null):
     if (action === "find_in_page") return `Searched page${query ? ` for ${truncateLabel(query, 48)}` : ""}`;
     return "Used web research";
   }
+  if (toolName === "search_product_docs") return `Searched docs${query ? ` for ${truncateLabel(query, 48)}` : ""}`;
+  if (toolName === "get_product_doc") return `Read docs${slug ? ` ${truncateLabel(slug, 48)}` : ""}`;
   if (toolName === "community_search") return `Searched community${query ? ` for ${truncateLabel(query, 48)}` : ""}`;
   if (toolName === "community_write") return "Updated community";
   return toolName;
@@ -257,7 +265,13 @@ function statsForTool(toolName: string, kind: AgentActivityKind, payload: Record
   const stats: AgentActivityStats = {};
 
   if (toolName === "list_dir") stats.directoriesScanned = 1;
-  if (toolName === "glob" || toolName === "grep" || toolName === "web_research" || toolName === "community_search") {
+  if (
+    toolName === "glob" ||
+    toolName === "grep" ||
+    toolName === "web_research" ||
+    toolName === "search_product_docs" ||
+    toolName === "community_search"
+  ) {
     stats.searches = 1;
   }
   if (toolName === "read" || kind === "reading") stats.filesRead = toolName === "read" ? 1 : undefined;

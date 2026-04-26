@@ -91,6 +91,52 @@ const COMMUNITY_SEARCH_TOOL_SCHEMA: JsonSchema = {
   },
 };
 
+const SEARCH_PRODUCT_DOCS_TOOL_SCHEMA: JsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["query"],
+  properties: {
+    query: {
+      type: "string",
+      minLength: 1,
+      maxLength: 240,
+    },
+    limit: {
+      type: "integer",
+      minimum: 1,
+      maximum: 10,
+    },
+    section: {
+      type: "string",
+      minLength: 1,
+      maxLength: 80,
+    },
+    audience: {
+      type: "string",
+      minLength: 1,
+      maxLength: 40,
+    },
+  },
+};
+
+const GET_PRODUCT_DOC_TOOL_SCHEMA: JsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["slug"],
+  properties: {
+    slug: {
+      type: "string",
+      minLength: 1,
+      maxLength: 160,
+    },
+    heading: {
+      type: "string",
+      minLength: 1,
+      maxLength: 160,
+    },
+  },
+};
+
 const COMMUNITY_WRITE_TOOL_SCHEMA: JsonSchema = {
   type: "object",
   additionalProperties: false,
@@ -411,6 +457,16 @@ const COMPUTER_STOP_TOOL_SCHEMA: JsonSchema = {
 };
 
 const TOOL_REGISTRY: Record<RetrievalToolName, ToolRegistryEntry> = {
+  search_product_docs: {
+    name: "search_product_docs",
+    description: "Search canonical Polynet product documentation and return small ranked snippets with slugs for follow-up lookup.",
+    inputSchema: SEARCH_PRODUCT_DOCS_TOOL_SCHEMA,
+  },
+  get_product_doc: {
+    name: "get_product_doc",
+    description: "Read one canonical Polynet product documentation page, or one heading section from that page.",
+    inputSchema: GET_PRODUCT_DOC_TOOL_SCHEMA,
+  },
   community_search: {
     name: "community_search",
     description: "Search the active community's recent context and archived memory for relevant chat, AI feed, resource, and PDF-linked knowledge.",
@@ -825,6 +881,28 @@ export function normalizeToolArguments(
     const query = normalizeString(args.query);
     if (!query) throw new Error("community_search requires query.");
     return { query: query.slice(0, 240) };
+  }
+  if (toolName === "search_product_docs") {
+    const query = normalizeString(args.query);
+    if (!query) throw new Error("search_product_docs requires query.");
+    const limit = normalizeBoundedInteger(args.limit, "search_product_docs limit", 1, 10);
+    const section = normalizeString(args.section);
+    const audience = normalizeString(args.audience);
+    return {
+      query: query.slice(0, 240),
+      ...(limit ? { limit } : null),
+      ...(section ? { section: section.slice(0, 80) } : null),
+      ...(audience ? { audience: audience.slice(0, 40) } : null),
+    };
+  }
+  if (toolName === "get_product_doc") {
+    const slug = normalizeString(args.slug);
+    if (!slug) throw new Error("get_product_doc requires slug.");
+    const heading = normalizeString(args.heading);
+    return {
+      slug: slug.slice(0, 160),
+      ...(heading ? { heading: heading.slice(0, 160) } : null),
+    };
   }
   if (toolName === "community_write") {
     const body = normalizeString(args.body);

@@ -35,8 +35,14 @@ function assertStrictObjectSchema(value: unknown): asserts value is Record<strin
 }
 
 function proveFixedToolSchemasAreStrictSafe() {
-  const tools = buildResponsesApiFunctionTools(["read", "web_research", "bash"]);
-  assert.equal(tools.length, 3);
+  const tools = buildResponsesApiFunctionTools([
+    "search_product_docs",
+    "get_product_doc",
+    "read",
+    "web_research",
+    "bash",
+  ]);
+  assert.equal(tools.length, 5);
   for (const tool of tools) {
     assert.equal(tool.strict, true, `expected ${tool.name} to stay strict`);
     assertStrictObjectSchema(tool.parameters);

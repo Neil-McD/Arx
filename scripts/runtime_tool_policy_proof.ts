@@ -47,6 +47,8 @@ function proveDefensiveMutationDefaults() {
 
 function proveFixedPolicyBoundaries() {
   const parallelReadTools: RetrievalToolName[] = [
+    "search_product_docs",
+    "get_product_doc",
     "community_search",
     "web_research",
     "list_dir",
@@ -86,6 +88,10 @@ function proveFixedPolicyBoundaries() {
   }
 
   assert.equal(getFixedRuntimeToolPolicy("terminal_read").readOnly, true);
+  assert.equal(getFixedRuntimeToolPolicy("search_product_docs").category, "docs");
+  assert.equal(getFixedRuntimeToolPolicy("search_product_docs").requiresWorkspace, false);
+  assert.equal(getFixedRuntimeToolPolicy("get_product_doc").category, "docs");
+  assert.equal(getFixedRuntimeToolPolicy("get_product_doc").requiresCommunity, false);
   assert.equal(getFixedRuntimeToolPolicy("community_write").mutatesState, true);
   assert.equal(getFixedRuntimeToolPolicy("community_write").requiresCommunity, true);
   assert.equal(

@@ -10,7 +10,7 @@ export type RequestedFundingSource =
   | "user_chatgpt"
   | "platform"
   | "auto";
-export type CapabilityFamily = "community_tools" | "web_research" | "workspace_tools";
+export type CapabilityFamily = "product_docs" | "community_tools" | "web_research" | "workspace_tools";
 export type RuntimeLane = "public" | "platform" | "chatgpt";
 export type GateCode =
   | "ok"
@@ -64,6 +64,7 @@ const VALID_REQUESTED_FUNDING_SOURCE = new Set<RequestedFundingSource>([
   "auto",
 ]);
 const VALID_CAPABILITY_FAMILY = new Set<CapabilityFamily>([
+  "product_docs",
   "community_tools",
   "web_research",
   "workspace_tools",
@@ -147,6 +148,9 @@ export function resolveActiveCapabilityFamiliesFromEntitlements(input: {
     ? input.entitledCapabilityFamilies
     : [];
   const active: CapabilityFamily[] = [];
+  if (entitled.includes("product_docs")) {
+    active.push("product_docs");
+  }
   if (hasCommunityContext && entitled.includes("community_tools")) {
     active.push("community_tools");
   }
@@ -182,8 +186,8 @@ export function resolveEntitledCapabilityFamiliesForGate(input: {
     tier: input?.tier,
   });
   if (effectiveTier === "anon_free") return [];
-  if (effectiveTier === "auth_free") return ["community_tools", "web_research"];
-  return ["community_tools", "web_research", "workspace_tools"];
+  if (effectiveTier === "auth_free") return ["product_docs", "community_tools", "web_research"];
+  return ["product_docs", "community_tools", "web_research", "workspace_tools"];
 }
 
 export function resolveActiveCapabilityFamiliesForGate(

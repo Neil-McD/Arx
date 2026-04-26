@@ -1,38 +1,7 @@
-import productDocsManifest from "../../../../docs/product/manifest.json";
+import productDocsIndex from "../../../../docs/product/generated/index.json";
+import { PRODUCT_DOCS_DEFAULT_SLUG } from "./productDocsMeta";
 
-import agentDoc from "../../../../docs/product/primitives/agent.md?raw";
-import appMcpDoc from "../../../../docs/product/primitives/app-mcp.md?raw";
-import communityDoc from "../../../../docs/product/primitives/community.md?raw";
-import communityLensDoc from "../../../../docs/product/primitives/community-lens.md?raw";
-import entitlementDoc from "../../../../docs/product/primitives/entitlement.md?raw";
-import funnelDoc from "../../../../docs/product/primitives/funnel.md?raw";
-import memoryDoc from "../../../../docs/product/primitives/memory.md?raw";
-import polynetDoc from "../../../../docs/product/primitives/polynet.md?raw";
-import resourceDoc from "../../../../docs/product/primitives/resource.md?raw";
-import roleDoc from "../../../../docs/product/primitives/role.md?raw";
-import skillDoc from "../../../../docs/product/primitives/skill.md?raw";
-import threadDoc from "../../../../docs/product/primitives/thread.md?raw";
-import voiceDoc from "../../../../docs/product/primitives/voice.md?raw";
-import workspaceDoc from "../../../../docs/product/primitives/workspace.md?raw";
-import builderQuickstartDoc from "../../../../docs/product/guides/builder-quickstart.md?raw";
-import chatAndResourcesDoc from "../../../../docs/product/guides/chat-and-resources.md?raw";
-import communityLensGuideDoc from "../../../../docs/product/guides/community-lens.md?raw";
-import configureCommunityAgentDoc from "../../../../docs/product/guides/configure-community-agent.md?raw";
-import connectAppsAndMcpsDoc from "../../../../docs/product/guides/connect-apps-and-mcps.md?raw";
-import createAndUseSkillsDoc from "../../../../docs/product/guides/create-and-use-skills.md?raw";
-import joiningCommunitiesDoc from "../../../../docs/product/guides/joining-communities.md?raw";
-import launchACommunityDoc from "../../../../docs/product/guides/launch-a-community.md?raw";
-import manageAccessBillingAndRolesDoc from "../../../../docs/product/guides/manage-access-billing-and-roles.md?raw";
-import manageResourcesDoc from "../../../../docs/product/guides/manage-resources.md?raw";
-import memberQuickstartDoc from "../../../../docs/product/guides/member-quickstart.md?raw";
-import workspaceGuideDoc from "../../../../docs/product/guides/workspace.md?raw";
-import accessModelDoc from "../../../../docs/product/reference/access-model.md?raw";
-import billingEntitlementsDoc from "../../../../docs/product/reference/billing-entitlements.md?raw";
-import contextModelDoc from "../../../../docs/product/reference/context-model.md?raw";
-import glossaryDoc from "../../../../docs/product/reference/glossary.md?raw";
-import promptContextModelDoc from "../../../../docs/product/reference/prompt-context-model.md?raw";
-import rolesPermissionsDoc from "../../../../docs/product/reference/roles-permissions.md?raw";
-import securityPrivacyDoc from "../../../../docs/product/reference/security-privacy.md?raw";
+export { PRODUCT_DOCS_DEFAULT_SLUG };
 
 export type ProductDocAudience = "builder" | "member" | "llm" | "operator";
 
@@ -46,70 +15,30 @@ export type ProductDocEntry = {
   status: string;
   source: string;
   content: string;
+  headings: string[];
+  keywords: string[];
+  chunks: Array<{
+    id: string;
+    slug: string;
+    heading: string | null;
+    level: number | null;
+    text: string;
+    word_count: number;
+    search_text: string;
+  }>;
+  word_count: number;
+  search_text: string;
 };
 
-type ProductDocManifestEntry = Omit<ProductDocEntry, "content">;
-
-type ProductDocsManifest = {
+type ProductDocsIndex = {
   version: number;
-  defaultSlug: string;
-  docs: ProductDocManifestEntry[];
+  default_slug: string;
+  docs: ProductDocEntry[];
 };
 
-const PRODUCT_DOC_CONTENT_BY_SOURCE: Record<string, string> = {
-  "docs/product/primitives/agent.md": agentDoc,
-  "docs/product/primitives/app-mcp.md": appMcpDoc,
-  "docs/product/primitives/community.md": communityDoc,
-  "docs/product/primitives/community-lens.md": communityLensDoc,
-  "docs/product/primitives/entitlement.md": entitlementDoc,
-  "docs/product/primitives/funnel.md": funnelDoc,
-  "docs/product/primitives/memory.md": memoryDoc,
-  "docs/product/primitives/polynet.md": polynetDoc,
-  "docs/product/primitives/resource.md": resourceDoc,
-  "docs/product/primitives/role.md": roleDoc,
-  "docs/product/primitives/skill.md": skillDoc,
-  "docs/product/primitives/thread.md": threadDoc,
-  "docs/product/primitives/voice.md": voiceDoc,
-  "docs/product/primitives/workspace.md": workspaceDoc,
-  "docs/product/guides/builder-quickstart.md": builderQuickstartDoc,
-  "docs/product/guides/chat-and-resources.md": chatAndResourcesDoc,
-  "docs/product/guides/community-lens.md": communityLensGuideDoc,
-  "docs/product/guides/configure-community-agent.md": configureCommunityAgentDoc,
-  "docs/product/guides/connect-apps-and-mcps.md": connectAppsAndMcpsDoc,
-  "docs/product/guides/create-and-use-skills.md": createAndUseSkillsDoc,
-  "docs/product/guides/joining-communities.md": joiningCommunitiesDoc,
-  "docs/product/guides/launch-a-community.md": launchACommunityDoc,
-  "docs/product/guides/manage-access-billing-and-roles.md": manageAccessBillingAndRolesDoc,
-  "docs/product/guides/manage-resources.md": manageResourcesDoc,
-  "docs/product/guides/member-quickstart.md": memberQuickstartDoc,
-  "docs/product/guides/workspace.md": workspaceGuideDoc,
-  "docs/product/reference/access-model.md": accessModelDoc,
-  "docs/product/reference/billing-entitlements.md": billingEntitlementsDoc,
-  "docs/product/reference/context-model.md": contextModelDoc,
-  "docs/product/reference/glossary.md": glossaryDoc,
-  "docs/product/reference/prompt-context-model.md": promptContextModelDoc,
-  "docs/product/reference/roles-permissions.md": rolesPermissionsDoc,
-  "docs/product/reference/security-privacy.md": securityPrivacyDoc,
-};
+const index = productDocsIndex as ProductDocsIndex;
 
-function normalizeDocContent(raw: string): string {
-  return raw.replace(/^---[\s\S]*?---\s*/, "").trim();
-}
-
-const manifest = productDocsManifest as ProductDocsManifest;
-
-export const PRODUCT_DOCS_DEFAULT_SLUG = manifest.defaultSlug;
-
-export const PRODUCT_DOCS: ProductDocEntry[] = manifest.docs.map((doc) => {
-  const content = PRODUCT_DOC_CONTENT_BY_SOURCE[doc.source];
-  if (!content) {
-    throw new Error(`Missing product docs content for ${doc.source}`);
-  }
-  return {
-    ...doc,
-    content: normalizeDocContent(content),
-  };
-});
+export const PRODUCT_DOCS: ProductDocEntry[] = index.docs;
 
 export function findProductDocBySlug(slug: string | null | undefined): ProductDocEntry | null {
   const normalized = String(slug ?? "").trim();

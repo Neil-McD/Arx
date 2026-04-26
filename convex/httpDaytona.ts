@@ -36,6 +36,12 @@ import {
   isComputerUseToolName,
   requiresWorkspaceSandbox,
 } from "../shared/retrievalTools";
+import productDocsIndexJson from "../docs/product/generated/index.json";
+import {
+  executeGetProductDocTool,
+  executeSearchProductDocsTool,
+} from "../shared/productDocsRuntime.ts";
+import type { ProductDocsSearchIndex } from "../shared/productDocsSearch.ts";
 import {
   getNativeToolCompletionToolCalls,
   type NativeToolAwareCompletionSuccess,
@@ -112,6 +118,7 @@ type OpenAiCompatibleFunctionTool = ReturnType<
   typeof buildOpenAiFunctionTools
 >[number];
 type ChatgptCompatibleFunctionTool = ChatgptFunctionTool;
+const productDocsIndex = productDocsIndexJson as ProductDocsSearchIndex;
 
 type RuntimeInferenceSource = "free" | "platform" | "chatgpt" | "user_key";
 const CHAT_TOOLS_RUNTIME_KERNEL_BUDGET: RuntimeKernelBudget =
@@ -182,6 +189,56 @@ async function executeRetrievalHarnessTool(params: {
       outputText: "",
       errorCode: "invalid_tool_args",
       errorMessage: message || "Invalid tool arguments.",
+    };
+  }
+
+  if (params.toolName === "search_product_docs") {
+    const payload = executeSearchProductDocsTool({
+      index: productDocsIndex,
+      query: String(normalizedArgs.query ?? ""),
+      limit: typeof normalizedArgs.limit === "number" ? normalizedArgs.limit : undefined,
+      section:
+        typeof normalizedArgs.section === "string"
+          ? normalizedArgs.section
+          : undefined,
+      audience:
+        typeof normalizedArgs.audience === "string"
+          ? normalizedArgs.audience
+          : undefined,
+    });
+    return {
+      status: "ok",
+      exitCode: 0,
+      outputText: formatJsonToolOutput(payload),
+      errorCode: null,
+      errorMessage: null,
+    };
+  }
+
+  if (params.toolName === "get_product_doc") {
+    const payload = executeGetProductDocTool({
+      index: productDocsIndex,
+      slug: String(normalizedArgs.slug ?? ""),
+      heading:
+        typeof normalizedArgs.heading === "string"
+          ? normalizedArgs.heading
+          : undefined,
+    });
+    if (!payload.ok) {
+      return {
+        status: "error",
+        exitCode: null,
+        outputText: formatJsonToolOutput(payload),
+        errorCode: payload.code,
+        errorMessage: payload.message,
+      };
+    }
+    return {
+      status: "ok",
+      exitCode: 0,
+      outputText: formatJsonToolOutput(payload),
+      errorCode: null,
+      errorMessage: null,
     };
   }
 

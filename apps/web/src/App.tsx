@@ -173,7 +173,7 @@ import {
   readPublicRouteFromLocation,
   readShellVariantFromPathname,
 } from "../../../shared/webAppRouteState";
-import { PRODUCT_DOCS_DEFAULT_SLUG } from "./docs/productDocsContent";
+import { PRODUCT_DOCS_DEFAULT_SLUG } from "./docs/productDocsMeta";
 import {
   formatBackTargetLabel as formatBackTargetLabelShared,
   type NavSnapshotBase,

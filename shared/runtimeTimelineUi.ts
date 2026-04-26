@@ -7,6 +7,7 @@ export type RuntimeToolCategory =
   | "writes"
   | "shell"
   | "computer"
+  | "docs"
   | "web"
   | "community"
   | "other";
@@ -257,6 +258,7 @@ function categoryForTool(toolName: string): RuntimeToolCategory {
   if (isComputerUseToolName(toolName)) {
     return "computer";
   }
+  if (toolName === "search_product_docs" || toolName === "get_product_doc") return "docs";
   if (toolName === "web_research") return "web";
   if (toolName.startsWith("community_")) return "community";
   return "other";
@@ -266,9 +268,12 @@ function buildCallTitle(toolName: string, args: Record<string, unknown> | null):
   const path = toStringValue(args?.path);
   const pattern = toStringValue(args?.pattern);
   const query = toStringValue(args?.query);
+  const slug = toStringValue(args?.slug);
   const url = toStringValue(args?.url);
   const action = toStringValue(args?.action);
   const shortPath = path ? path.split("/").filter(Boolean).pop() || path : null;
+  if (toolName === "search_product_docs") return `Docs search${query ? `: ${query}` : ""}`;
+  if (toolName === "get_product_doc") return `Read docs${slug ? `: ${slug}` : ""}`;
   if (toolName === "community_search") return `Community search${query ? `: ${query}` : ""}`;
   if (toolName === "community_write") return "Community write";
   if (toolName === "list_dir") return `Listed ${path || "."}`;
@@ -336,6 +341,7 @@ function buildGroupTitle(category: RuntimeToolCategory, calls: RuntimeTimelineTo
   const writes = calls.filter((call) => call.toolName === "write" || call.toolName === "edit").length;
   const commands = calls.filter((call) => call.toolName === "bash").length;
   const computerCalls = calls.filter((call) => call.category === "computer").length;
+  const docsCalls = calls.filter((call) => call.category === "docs").length;
   const webCalls = calls.filter((call) => call.toolName === "web_research").length;
   const communityCalls = calls.filter((call) => call.toolName.startsWith("community_")).length;
   const prefix =
@@ -363,6 +369,10 @@ function buildGroupTitle(category: RuntimeToolCategory, calls: RuntimeTimelineTo
                 ? running
                   ? "Researching"
                   : "Researched"
+                : category === "docs"
+                  ? running
+                    ? "Reading"
+                    : "Read"
                 : category === "community"
                   ? running
                     ? "Working"
@@ -384,6 +394,8 @@ function buildGroupTitle(category: RuntimeToolCategory, calls: RuntimeTimelineTo
     if (commands > 0) parts.push(formatCount(commands, "command"));
   } else if (category === "computer") {
     if (computerCalls > 0) parts.push(formatCount(computerCalls, "computer step"));
+  } else if (category === "docs") {
+    if (docsCalls > 0) parts.push(formatCount(docsCalls, "docs step"));
   } else if (category === "web") {
     if (webCalls > 0) parts.push(formatCount(webCalls, "web step"));
   } else if (category === "community") {

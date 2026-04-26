@@ -7,6 +7,7 @@ import {
 
 export type RuntimeToolSource = "fixed" | "mounted_mcp" | "resolver" | "unknown";
 export type RuntimeToolCategory =
+  | "docs"
   | "community"
   | "web"
   | "workspace_fs"
@@ -127,6 +128,32 @@ export type RuntimeShellCommandAuditMetadata = {
 };
 
 const FIXED_TOOL_POLICIES: Record<RetrievalToolName, RuntimeToolPolicy> = {
+  search_product_docs: {
+    toolName: "search_product_docs",
+    source: "fixed",
+    category: "docs",
+    riskLevel: "read",
+    readOnly: true,
+    mutatesState: false,
+    parallelSafe: true,
+    exclusive: false,
+    requiresWorkspace: false,
+    requiresCommunity: false,
+    requiresMcpSession: false,
+  },
+  get_product_doc: {
+    toolName: "get_product_doc",
+    source: "fixed",
+    category: "docs",
+    riskLevel: "read",
+    readOnly: true,
+    mutatesState: false,
+    parallelSafe: true,
+    exclusive: false,
+    requiresWorkspace: false,
+    requiresCommunity: false,
+    requiresMcpSession: false,
+  },
   community_search: {
     toolName: "community_search",
     source: "fixed",
@@ -426,6 +453,7 @@ function emptyRiskCounts(): Record<RuntimeToolRiskLevel, number> {
 
 function emptyCategoryCounts(): Record<RuntimeToolCategory, number> {
   return {
+    docs: 0,
     community: 0,
     web: 0,
     workspace_fs: 0,
