@@ -97,6 +97,14 @@ assert.match(prompt, /Preview: blank; port=3000/);
 assert.match(prompt, /If the terminal is still running but preview is blank/);
 assert.match(prompt, /Core value prop: the agent can be the product/);
 assert.match(prompt, /Detailed product truth lives in product docs/);
+assert.match(prompt, /You are the agent of Polynet: a sharp little intelligence/);
+assert.match(prompt, /Use this lens as background context/);
+assert.match(prompt, /Use community_search when community activity, archive memory, resources, or learned context matter/);
+assert.doesNotMatch(
+  prompt,
+  /When community_search returns recent_context/,
+  "community lens should not duplicate detailed community_search result handling",
+);
 assert.doesNotMatch(
   prompt,
   /## Core Mechanism/,

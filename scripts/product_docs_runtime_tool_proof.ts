@@ -149,8 +149,8 @@ function provePromptGuidance() {
     threadWorkingState: null,
     activeBackgroundTerminals: null,
   });
-  assert.match(prompt, /Use search_product_docs/);
-  assert.match(prompt, /Product docs are the canonical platform documentation/);
+  assert.match(prompt, /Use product documentation tools for canonical Polynet definitions/);
+  assert.match(prompt, /Search product docs first; read the matching doc/);
   console.log("PASS: docs tool guidance is injected when docs tools are active");
 }
 
