@@ -38,6 +38,30 @@ Redirects are UX. Checkout finalization and webhook/provider verification are th
 
 When a paid community member is removed or banned, paid access should be ended through the appropriate backend/provider path.
 
+## Collecting Cash
+
+For a builder, the revenue path should be understandable:
+
+1. Define what members are paying for: the agent, community, resources, workflow, expertise, or access to a specialized system.
+2. Configure the community and paid access model.
+3. Connect payout readiness through the supported provider path.
+4. Share the funnel link where prospects already are.
+5. The member signs in, checks out, and receives access only after backend verification.
+6. The builder can see whether revenue collection and payouts are ready, pending, or blocked.
+
+The value proposition should be direct: builders are not just charging for a chat room. They are charging for access to a community intelligence system that combines expertise, people, resources, and an agent surface.
+
+## Payout Model
+
+Payout readiness belongs to the builder and provider account. Member access belongs to entitlement. Community authority belongs to role.
+
+Keep those separate:
+
+- a connected payout account does not make a member entitled
+- a paid member does not become an admin
+- an admin does not own payout identity unless policy explicitly grants it
+- a payout issue should not silently create or remove member entitlement
+
 ## Role Model
 
 Owner:
@@ -72,6 +96,9 @@ Before launch, verify:
 5. removed member cannot immediately bypass the rejoin policy
 6. banned user cannot rejoin
 7. paid access is ended when removal/ban policy requires it
+8. paid community checkout reaches backend entitlement
+9. payout readiness is visible to the builder
+10. member-facing funnel copy matches the paid value actually delivered
 
 ## Rules
 
@@ -85,6 +112,8 @@ Before launch, verify:
 8. Access should be evaluated per request.
 9. Protected writes must be role-checked on the backend.
 10. Access should fail closed when entitlement evidence is missing.
+11. Payout readiness should be explicit before builders rely on paid access.
+12. Community monetization should explain the direct member value, not just the price.
 
 ## Common Mistakes
 

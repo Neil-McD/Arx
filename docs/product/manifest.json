@@ -53,6 +53,16 @@
       "source": "docs/product/primitives/community-lens.md"
     },
     {
+      "id": "product.thread",
+      "slug": "primitives/thread",
+      "title": "Thread",
+      "section": "Primitives",
+      "summary": "The durable workspace conversation record and lens audit boundary.",
+      "audience": ["builder", "member", "llm"],
+      "status": "alpha-current",
+      "source": "docs/product/primitives/thread.md"
+    },
+    {
       "id": "product.memory",
       "slug": "primitives/memory",
       "title": "Memory",
@@ -83,6 +93,56 @@
       "source": "docs/product/primitives/voice.md"
     },
     {
+      "id": "product.app_mcp",
+      "slug": "primitives/app-mcp",
+      "title": "Apps And MCPs",
+      "section": "Primitives",
+      "summary": "External capability and context surfaces for agents.",
+      "audience": ["builder", "llm", "operator"],
+      "status": "alpha-current",
+      "source": "docs/product/primitives/app-mcp.md"
+    },
+    {
+      "id": "product.skill",
+      "slug": "primitives/skill",
+      "title": "Skill",
+      "section": "Primitives",
+      "summary": "Reusable instruction or capability packages for repeated behavior.",
+      "audience": ["builder", "llm"],
+      "status": "alpha-current",
+      "source": "docs/product/primitives/skill.md"
+    },
+    {
+      "id": "product.resource",
+      "slug": "primitives/resource",
+      "title": "Resource",
+      "section": "Primitives",
+      "summary": "Community-owned durable knowledge available to members and agents where allowed.",
+      "audience": ["builder", "member", "llm"],
+      "status": "alpha-current",
+      "source": "docs/product/primitives/resource.md"
+    },
+    {
+      "id": "product.entitlement",
+      "slug": "primitives/entitlement",
+      "title": "Entitlement",
+      "section": "Primitives",
+      "summary": "Durable backend access truth for products, communities, plans, and capabilities.",
+      "audience": ["builder", "member", "llm", "operator"],
+      "status": "alpha-current",
+      "source": "docs/product/primitives/entitlement.md"
+    },
+    {
+      "id": "product.role",
+      "slug": "primitives/role",
+      "title": "Role",
+      "section": "Primitives",
+      "summary": "Community authority level, separate from entitlement and payment state.",
+      "audience": ["builder", "member", "llm"],
+      "status": "alpha-current",
+      "source": "docs/product/primitives/role.md"
+    },
+    {
       "id": "product.guide.builder_quickstart",
       "slug": "guides/builder-quickstart",
       "title": "Builder Quickstart",
@@ -101,6 +161,16 @@
       "audience": ["builder", "llm"],
       "status": "alpha-current",
       "source": "docs/product/guides/launch-a-community.md"
+    },
+    {
+      "id": "product.guide.manage_resources",
+      "slug": "guides/manage-resources",
+      "title": "Manage Resources",
+      "section": "Builder Guides",
+      "summary": "How builders should curate community knowledge without confusing it with private memory.",
+      "audience": ["builder", "llm"],
+      "status": "alpha-current",
+      "source": "docs/product/guides/manage-resources.md"
     },
     {
       "id": "product.guide.configure_community_agent",
@@ -151,6 +221,36 @@
       "audience": ["member", "llm"],
       "status": "alpha-current",
       "source": "docs/product/guides/member-quickstart.md"
+    },
+    {
+      "id": "product.guide.joining_communities",
+      "slug": "guides/joining-communities",
+      "title": "Joining Communities",
+      "section": "Member Guides",
+      "summary": "How members should understand funnels, access, and joining.",
+      "audience": ["member", "llm"],
+      "status": "alpha-current",
+      "source": "docs/product/guides/joining-communities.md"
+    },
+    {
+      "id": "product.guide.workspace",
+      "slug": "guides/workspace",
+      "title": "Workspace",
+      "section": "Member Guides",
+      "summary": "How members use workspace threads and community lenses.",
+      "audience": ["member", "llm"],
+      "status": "alpha-current",
+      "source": "docs/product/guides/workspace.md"
+    },
+    {
+      "id": "product.guide.community_lens",
+      "slug": "guides/community-lens",
+      "title": "Community Lens",
+      "section": "Member Guides",
+      "summary": "How a member should understand thread-level community context switching.",
+      "audience": ["member", "builder", "llm"],
+      "status": "alpha-current",
+      "source": "docs/product/guides/community-lens.md"
     },
     {
       "id": "product.guide.chat_and_resources",
@@ -221,6 +321,16 @@
       "audience": ["builder", "operator", "llm"],
       "status": "alpha-current",
       "source": "docs/product/reference/security-privacy.md"
+    },
+    {
+      "id": "product.reference.glossary",
+      "slug": "reference/glossary",
+      "title": "Glossary",
+      "section": "Reference",
+      "summary": "Stable terms for product, builder, member, and agent docs.",
+      "audience": ["builder", "member", "operator", "llm"],
+      "status": "alpha-current",
+      "source": "docs/product/reference/glossary.md"
     }
   ]
 }

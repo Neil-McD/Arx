@@ -6,21 +6,21 @@ This file locks the canonical context precedence for the web-native project-boun
 
 It exists to prevent drift between:
 
-- [`PLATFORM.md`](/Users/neilmcdevitt/code/arx/.worktrees/daytona/PLATFORM.md)
-- [`SOUL.md`](/Users/neilmcdevitt/code/arx/.worktrees/daytona/SOUL.md)
-- [`shared/runtimePrompt.ts`](/Users/neilmcdevitt/code/arx/.worktrees/daytona/shared/runtimePrompt.ts)
-- the workspace runtime assembly paths in [`convex/httpDaytona.ts`](/Users/neilmcdevitt/code/arx/.worktrees/daytona/convex/httpDaytona.ts) and the web send flow
+- [`PLATFORM.md`](/Users/neilmcdevitt/code/arx/PLATFORM.md)
+- [`SOUL.md`](/Users/neilmcdevitt/code/arx/SOUL.md)
+- [`shared/runtimePrompt.ts`](/Users/neilmcdevitt/code/arx/shared/runtimePrompt.ts)
+- the workspace runtime assembly paths in [`convex/httpDaytona.ts`](/Users/neilmcdevitt/code/arx/convex/httpDaytona.ts), [`convex/runtimeTurnHandlers.ts`](/Users/neilmcdevitt/code/arx/convex/runtimeTurnHandlers.ts), and the web send flow
 
 ## Source Of Truth
 
 The canonical human/source doctrine is:
 
-1. [`PLATFORM.md`](/Users/neilmcdevitt/code/arx/.worktrees/daytona/PLATFORM.md)
-2. [`SOUL.md`](/Users/neilmcdevitt/code/arx/.worktrees/daytona/SOUL.md)
+1. [`PLATFORM.md`](/Users/neilmcdevitt/code/arx/PLATFORM.md)
+2. [`SOUL.md`](/Users/neilmcdevitt/code/arx/SOUL.md)
 
 The canonical runtime projection is:
 
-- [`shared/runtimePrompt.ts`](/Users/neilmcdevitt/code/arx/.worktrees/daytona/shared/runtimePrompt.ts)
+- [`shared/runtimePrompt.ts`](/Users/neilmcdevitt/code/arx/shared/runtimePrompt.ts)
 
 `runtimePrompt.ts` is not an independent doctrine authoring surface. It is the runtime encoding of the markdown doctrine above plus the prompt-composition rules for the active runtime lanes.
 
@@ -103,6 +103,6 @@ For Daytona tool turns, the server is the canonical doctrine owner. The browser 
 
 When doctrine changes:
 
-1. update [`PLATFORM.md`](/Users/neilmcdevitt/code/arx/.worktrees/daytona/PLATFORM.md) or [`SOUL.md`](/Users/neilmcdevitt/code/arx/.worktrees/daytona/SOUL.md) first
-2. then update [`shared/runtimePrompt.ts`](/Users/neilmcdevitt/code/arx/.worktrees/daytona/shared/runtimePrompt.ts) to match
+1. update [`PLATFORM.md`](/Users/neilmcdevitt/code/arx/PLATFORM.md) or [`SOUL.md`](/Users/neilmcdevitt/code/arx/SOUL.md) first
+2. then update [`shared/runtimePrompt.ts`](/Users/neilmcdevitt/code/arx/shared/runtimePrompt.ts) to match
 3. do not add a second independent doctrine surface

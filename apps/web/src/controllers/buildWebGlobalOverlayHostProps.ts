@@ -1,4 +1,3 @@
-import { isBuilderTierFree } from "../../../../shared/builderBilling";
 import { EXTERNAL_MEMORY_IMPORT_PROMPT } from "../../../../shared/externalMemoryImport";
 import type { AppView, SettingsPage } from "../../../../shared/appShellNavigation";
 import type { BuilderCheckoutTier, BuilderUpgradeContext } from "../../../../shared/authResumeState";
@@ -79,15 +78,6 @@ export function buildWebGlobalOverlayHostProps(params: {
       onSaveSuggestion: (item) => {
         if (!params.session) {
           params.requireSignIn();
-          return;
-        }
-        const tier = params.builderBillingStatus?.builder_tier ?? "free";
-        if (isBuilderTierFree(tier)) {
-          params.setBuilderUpgradeContext("builder");
-          params.setBuilderBillingError(
-            "Upgrade to Builder to use personal memory.",
-          );
-          params.setIsBuilderUpgradeOpen(true);
           return;
         }
         void params.createPersonalMemoryItemDirect({

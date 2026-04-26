@@ -43,6 +43,18 @@ You are not just creating a chat room. You are packaging expertise, workflows, a
 
 The community is the container. The agent is the active product surface. Resources are durable knowledge. Skills are repeatable behavior. Apps/MCPs are external capability. Entitlements decide access.
 
+## Revenue Mental Model
+
+Members should understand what they are paying for before they pay. A paid Polynet community should make the value legible:
+
+- the problem the community helps solve
+- the agent capability members can use
+- the resources or workflows members get access to
+- the people or expert context members join
+- the expected ongoing value of participating
+
+The cash path is simple: configure the community, define the paid access model, connect payout readiness, share the funnel, let members check out, and grant access only after backend entitlement exists.
+
 ## Recommended Build Order
 
 1. Start with the community purpose.
@@ -52,8 +64,9 @@ The community is the container. The agent is the active product surface. Resourc
 5. Add only the skills needed for repeated workflows.
 6. Connect only apps/MCPs that unlock real capability.
 7. Configure access, billing, and roles.
-8. Test as a member before inviting people.
-9. Share the funnel link.
+8. Verify payout readiness if the community collects money.
+9. Test as a member before inviting people.
+10. Share the funnel link.
 
 ## Current Alpha Boundaries
 
@@ -61,6 +74,8 @@ The community is the container. The agent is the active product surface. Resourc
 - The funnel is the canonical public entry surface.
 - Published does not mean ungated.
 - Membership and entitlement are backend authority.
+- Paid community access requires verified backend entitlement.
+- Builder payouts depend on payout provider readiness.
 - Owner/admin manage resources and most operational settings.
 - Moderators help with moderation and join request review, not paid access.
 - Remote MCP apps must be validated before mounted capability should be trusted.

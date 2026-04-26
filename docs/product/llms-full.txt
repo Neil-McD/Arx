@@ -40,13 +40,17 @@ Entitlement: durable backend access truth.
 
 Role: community authority level. Role is not the same as payment status.
 
-Memory: explicit reusable context. Current alpha memory is personal global/workspace memory. Future community or system memory should not be described as alpha-current until the implementation and product flow are explicit.
+Memory: explicit reusable context. Current alpha memory is signed-in user-owned personal global/workspace memory, not a Builder-only feature. Community archive/retrieval evidence is scoped community knowledge retrieved through explicit context paths, not private personal memory. Future community or system memory should not be described as alpha-current until the implementation and product flow are explicit.
 
 ## 5. Access Rules
 
 Published visibility does not mean ungated access. Published communities can still require membership, payment, approval, or other entitlement checks.
 
 Access decisions must be entitlement-driven and evaluated on the backend. Frontend state is projection, not authority. Redirects are UX only. Payment provider/webhook verification is authoritative.
+
+Paid communities should make the value path clear: a builder packages expertise, agent capability, community context, resources, and workflows into a community intelligence system; members pay through checkout; backend verification creates entitlement; payout readiness determines whether builder revenue can be collected and paid out through the supported provider path.
+
+Payout readiness, member entitlement, and community role are separate concepts. A payout-ready builder account does not grant member access. A paid member does not gain management authority. An admin does not own payout identity unless policy explicitly grants it.
 
 ## 6. Context Rules
 

@@ -31,6 +31,8 @@ Read this file first. Then read `llms-full.txt` and the linked primitive docs.
 6. Do not treat funnel visibility as community access.
 7. Do not treat voice transcription as a permission bypass.
 8. Do not expose internal engineering docs as product-facing documentation.
+9. Do not confuse payout readiness, member entitlement, and community role.
+10. Do not describe paid communities as just paid chat rooms; the paid value is the packaged agent, community context, resources, workflows, and member surface.
 
 ## Canonical Reading Order
 

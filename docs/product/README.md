@@ -10,7 +10,7 @@ last_verified: 2026-04-26
 
 ## Purpose
 
-This directory is the canonical product documentation source for Polynet.
+This directory is the canonical user-facing and LLM-ingestible product documentation source for Polynet.
 
 It is written for two readers:
 
@@ -18,6 +18,8 @@ It is written for two readers:
 - LLMs that need stable product truth for prompts, retrieval, and context assembly
 
 The existing `/docs` directory contains internal engineering contracts, release workflows, historical plans, and implementation notes. Those files are not user-facing documentation and should not be exposed directly as product docs.
+
+Product docs are downstream from platform doctrine and runtime contracts. If there is tension between this directory and `PLATFORM.md`, `SOUL.md`, `AGENTS.md`, or runtime enforcement, treat the product docs as the public distillation that needs to be corrected, not as a second authority plane.
 
 ## Product Truth
 

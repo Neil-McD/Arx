@@ -72,6 +72,22 @@ Access should be understandable before launch:
 
 Do not mix multiple access stories unless the product flow clearly supports them.
 
+## Paid Launch Setup
+
+If the community collects money, the builder should be able to explain the offer in one sentence:
+
+Members pay for access to `specific agent capability + community context + resources/workflows + member surface`.
+
+Before sharing a paid funnel:
+
+1. confirm the paid member promise is concrete
+2. configure the plan or paid access path
+3. confirm checkout can create backend entitlement
+4. confirm payout readiness is visible and provider setup is not blocked
+5. confirm the funnel copy matches the actual member experience
+
+Do not launch paid access if the community cannot explain what members get after checkout.
+
 ## Launch Test
 
 Before sharing the funnel, test:
@@ -84,6 +100,8 @@ Before sharing the funnel, test:
 6. member can read/post chat
 7. member can view resources
 8. member can use the community lens in workspace
+9. paid access creates entitlement after provider verification
+10. payout readiness is clear for the builder
 
 ## Rules
 
@@ -94,6 +112,7 @@ Before sharing the funnel, test:
 5. Keep the initial setup narrow and useful.
 6. Do not describe an unlisted community as a separate private visibility state.
 7. Keep branding and public copy aligned with what the community actually offers.
+8. If charging money, make the paid outcome obvious before checkout.
 
 ## Common Mistakes
 
