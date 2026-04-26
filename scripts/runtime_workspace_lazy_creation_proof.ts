@@ -128,6 +128,21 @@ async function proveLazyWorkspaceCreationRules() {
     "expected runtime terminal starts to fail closed when the process exits immediately",
   );
   assert.equal(
+    terminalProcessCoreSource.includes("wrapTerminalCommandWithOutputLog"),
+    true,
+    "expected runtime terminal starts to mirror output into a durable fallback log",
+  );
+  assert.equal(
+    terminalProcessCoreSource.includes("readTerminalFallbackOutputLog"),
+    true,
+    "expected runtime terminal reconciliation to read fallback logs when provider logs are empty",
+  );
+  assert.equal(
+    terminalProcessCoreSource.includes("preview_preflight_failed"),
+    true,
+    "expected preview terminal starts to fail early with structured preflight errors",
+  );
+  assert.equal(
     terminalProcessCoreSource.includes("await reconcileRuntimeSessionTerminalRow({"),
     true,
     "expected runtime terminal starts to reconcile before reporting success",

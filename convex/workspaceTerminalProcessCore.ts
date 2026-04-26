@@ -5,6 +5,8 @@ import {
   getDaytonaSignedPreviewUrl,
   type DaytonaConfig,
 } from "./daytonaSandboxClient";
+import { downloadDaytonaToolboxFileText } from "./daytonaToolboxFileSystem";
+import { executeDaytonaCommand } from "./daytonaToolboxExecutor";
 import {
   createDaytonaProcessSession,
   deleteDaytonaProcessSession,
@@ -119,6 +121,46 @@ function shellQuote(value: string): string {
   return `'${String(value).replace(/'/g, `'\"'\"'`)}'`;
 }
 
+function sanitizeTerminalLogId(value: string): string {
+  return String(value ?? "")
+    .trim()
+    .replace(/[^a-zA-Z0-9_.-]/g, "_")
+    .slice(0, 160);
+}
+
+function buildTerminalOutputLogPath(providerSessionId: string): string {
+  const normalized = sanitizeTerminalLogId(providerSessionId) || "unknown";
+  return `/tmp/polynet-terminal-${normalized}.log`;
+}
+
+function wrapTerminalCommandWithOutputLog(command: string, logPath: string): string {
+  const inner = [
+    "set -o pipefail",
+    `: > ${shellQuote(logPath)}`,
+    `${command} 2>&1 | tee -a ${shellQuote(logPath)}`,
+  ].join("\n");
+  return `bash -lc ${shellQuote(inner)}`;
+}
+
+function parseNpmRunScriptName(command: string): string | null {
+  const match = /^\s*npm\s+(?:run\s+)?([A-Za-z0-9:_@./-]+)(?:\s|$)/.exec(
+    command,
+  );
+  if (!match) return null;
+  const script = match[1]?.trim() ?? "";
+  if (!script || script === "install" || script === "i") return null;
+  return script;
+}
+
+function isPreviewCommandWorthPreflighting(command: string): boolean {
+  const normalized = command.trim();
+  return (
+    parseNpmRunScriptName(normalized) !== null ||
+    /\bnode_modules\/(?:\.bin\/vite|vite\/bin\/vite\.js)\b/.test(normalized) ||
+    /(^|\s)(vite|npx\s+vite)(\s|$)/.test(normalized)
+  );
+}
+
 export function normalizeWorkspaceTerminalCommand(
   command: string,
   workspaceCwd: string,
@@ -149,6 +191,140 @@ export function truncateTerminalOutputTail(value: string): string {
   const normalized = String(value ?? "");
   if (normalized.length <= TERMINAL_OUTPUT_TAIL_MAX_CHARS) return normalized;
   return normalized.slice(normalized.length - TERMINAL_OUTPUT_TAIL_MAX_CHARS);
+}
+
+async function readTerminalFallbackOutputLog(params: {
+  config: DaytonaConfig;
+  toolboxProxyUrl: string;
+  sandboxId: string;
+  providerSessionId: string;
+}): Promise<string> {
+  const result = await downloadDaytonaToolboxFileText({
+    config: params.config,
+    toolboxProxyUrl: params.toolboxProxyUrl,
+    sandboxId: params.sandboxId,
+    path: buildTerminalOutputLogPath(params.providerSessionId),
+  });
+  if (!result.ok) return "";
+  return String(result.value ?? "");
+}
+
+async function runPreviewStartPreflight(params: {
+  session: WorkspaceTerminalProcessContext;
+  command: string;
+  workspaceCwd: string;
+}): Promise<{ ok: true } | { ok: false; message: string; output: string }> {
+  const normalizedCommand = params.command.trim();
+  if (!isPreviewCommandWorthPreflighting(normalizedCommand)) return { ok: true };
+
+  const scriptName = parseNpmRunScriptName(normalizedCommand);
+  const nodeScript = `
+const fs = require("fs");
+const scriptName = process.argv[1] || "";
+function fail(message) {
+  console.error(message);
+  process.exit(1);
+}
+if (!fs.existsSync("package.json")) fail("package.json was not found in the preview working directory.");
+let pkg;
+try {
+  pkg = JSON.parse(fs.readFileSync("package.json", "utf8"));
+} catch (error) {
+  fail("package.json could not be parsed: " + (error && error.message ? error.message : String(error)));
+}
+const scripts = pkg && typeof pkg === "object" && pkg.scripts && typeof pkg.scripts === "object" ? pkg.scripts : {};
+const scriptCommand = scriptName ? String(scripts[scriptName] || "") : "";
+if (scriptName && !scriptCommand) fail("package.json does not define an npm script named '" + scriptName + "'.");
+const launchCommand = [scriptCommand, ${JSON.stringify(normalizedCommand)}].join(" ");
+if (/\\bvite\\b/.test(launchCommand) || /node_modules\\/vite\\/bin\\/vite\\.js/.test(launchCommand)) {
+  const hasVite =
+    fs.existsSync("node_modules/.bin/vite") ||
+    fs.existsSync("node_modules/vite/bin/vite.js");
+  if (!hasVite) fail("Vite is required for this preview, but node_modules/.bin/vite is missing. Install or repair dependencies before starting the preview.");
+}
+console.log("preview preflight ok");
+`.trim();
+  const result = await executeDaytonaCommand({
+    config: params.session.config,
+    toolboxProxyUrl: params.session.toolboxProxyUrl,
+    sandboxId: params.session.providerSandboxId,
+    command: `node -e ${shellQuote(nodeScript)}${scriptName ? ` ${shellQuote(scriptName)}` : ""}`,
+    cwd: params.workspaceCwd,
+    timeoutSeconds: 15,
+    allowNonZero: true,
+  });
+  if (!result.ok) {
+    return {
+      ok: false,
+      message: result.message,
+      output: readWorkspaceToolFailureOutputPreview(result.details),
+    };
+  }
+  if (result.exitCode !== 0) {
+    const output = String(result.stdout ?? "").trim();
+    return {
+      ok: false,
+      message: output || `Preview preflight failed with exit code ${result.exitCode}.`,
+      output,
+    };
+  }
+  return { ok: true };
+}
+
+async function createFailedWorkspaceTerminalStartRow(params: {
+  ctx: any;
+  ownerId: any;
+  projectId: string;
+  threadId?: any;
+  runIdStartedBy?: string | null;
+  session: WorkspaceTerminalProcessContext;
+  terminal: WorkspaceTerminalStartArgs;
+  providerSessionIdPrefix: string;
+  code: string;
+  message: string;
+  output: string;
+}): Promise<Record<string, unknown>> {
+  const providerSessionId = buildWorkspaceTerminalSessionId(
+    `${params.providerSessionIdPrefix}-preflight`,
+  );
+  const nowMs = Date.now();
+  const createdRow = await params.ctx.runMutation(
+    internal.workspaceTerminals.createWorkspaceTerminalSessionInternal as any,
+    {
+      ownerId: params.ownerId,
+      projectId: params.projectId,
+      threadId: params.threadId ?? undefined,
+      runIdStartedBy: params.runIdStartedBy ?? undefined,
+      providerSandboxId: params.session.providerSandboxId,
+      providerSessionId,
+      providerCommandId: "preflight",
+      command: params.terminal.command,
+      cwd: params.terminal.cwd ?? undefined,
+      previewPort: params.terminal.previewPort ?? undefined,
+      previewPath: params.terminal.previewPath ?? undefined,
+      previewLabel: params.terminal.previewLabel ?? undefined,
+      status: "failed",
+      startedAt: nowMs,
+      updatedAt: nowMs,
+      finishedAt: nowMs,
+      exitCode: 1,
+      lastOutputTail: truncateTerminalOutputTail(
+        [params.message, params.output].filter(Boolean).join("\n"),
+      ),
+    },
+  );
+  return {
+    ok: false,
+    status: 409,
+    code: params.code,
+    message: params.message,
+    terminal_session_id: String(createdRow?._id ?? "").trim(),
+    output_tail:
+      typeof createdRow?.lastOutputTail === "string"
+        ? createdRow.lastOutputTail
+        : null,
+    ...summarizeWorkspaceTerminalRow(createdRow),
+  };
 }
 
 export function isWorkspaceTerminalActiveStatus(status: unknown): boolean {
@@ -275,14 +451,45 @@ export async function startWorkspaceTerminalProcess(params: {
   }
 
   const workspaceCwd = resolveWorkspaceCwd(params.terminal.cwd);
+  if (params.terminal.previewPort !== null) {
+    const preflight = await runPreviewStartPreflight({
+      session: params.session,
+      command: params.terminal.command,
+      workspaceCwd,
+    });
+    if (!preflight.ok) {
+      await deleteDaytonaProcessSession({
+        config: params.session.config,
+        toolboxProxyUrl: params.session.toolboxProxyUrl,
+        sandboxId: params.session.providerSandboxId,
+        sessionId: processSession.sessionId,
+      });
+      return await createFailedWorkspaceTerminalStartRow({
+        ctx: params.ctx,
+        ownerId: params.ownerId,
+        projectId: params.projectId,
+        threadId: params.threadId,
+        runIdStartedBy: params.runIdStartedBy,
+        session: params.session,
+        terminal: params.terminal,
+        providerSessionIdPrefix: params.providerSessionIdPrefix,
+        code: "preview_preflight_failed",
+        message: preflight.message || "Preview preflight failed.",
+        output: preflight.output,
+      });
+    }
+  }
+  const terminalOutputLogPath = buildTerminalOutputLogPath(
+    processSession.sessionId,
+  );
   const executed = await executeDaytonaProcessSessionCommand({
     config: params.session.config,
     toolboxProxyUrl: params.session.toolboxProxyUrl,
     sandboxId: params.session.providerSandboxId,
     sessionId: processSession.sessionId,
-    command: normalizeWorkspaceTerminalCommand(
-      params.terminal.command,
-      workspaceCwd,
+    command: wrapTerminalCommandWithOutputLog(
+      normalizeWorkspaceTerminalCommand(params.terminal.command, workspaceCwd),
+      terminalOutputLogPath,
     ),
     cwd: workspaceCwd,
     runAsync: true,
@@ -466,6 +673,16 @@ export async function reconcileRuntimeSessionTerminalRow(params: {
   });
   const exitCode = readDaytonaProcessSessionCommandExitCode(command);
   if (!logs.ok && exitCode === null) return summarizeWorkspaceTerminalRow(row);
+  let output = logs.ok ? logs.output : "";
+  if (!output.trim()) {
+    const fallbackOutput = await readTerminalFallbackOutputLog({
+      config: params.session.config,
+      toolboxProxyUrl: params.session.toolboxProxyUrl,
+      sandboxId: params.session.providerSandboxId,
+      providerSessionId,
+    });
+    if (fallbackOutput.trim()) output = fallbackOutput;
+  }
 
   const nextStatus: WorkspaceTerminalStatus =
     exitCode === null ? "running" : exitCode === 0 ? "exited" : "failed";
@@ -476,8 +693,8 @@ export async function reconcileRuntimeSessionTerminalRow(params: {
       status: nextStatus,
       updatedAt: nowMs,
       ...(exitCode === null ? null : { finishedAt: nowMs, exitCode }),
-      ...(logs.ok
-        ? { lastOutputTail: truncateTerminalOutputTail(logs.output) }
+      ...(output.trim()
+        ? { lastOutputTail: truncateTerminalOutputTail(output) }
         : null),
     },
   );

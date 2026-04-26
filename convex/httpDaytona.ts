@@ -436,9 +436,14 @@ async function executeRetrievalHarnessTool(params: {
                         signal: params.signal,
                       });
     if (!result.ok) {
+      const detailsExitCode =
+        typeof result.details?.exit_code === "number" &&
+        Number.isFinite(result.details.exit_code)
+          ? Math.floor(result.details.exit_code)
+          : null;
       return {
         status: "error",
-        exitCode: null,
+        exitCode: detailsExitCode,
         outputText: String(result.details?.output_preview ?? ""),
         errorCode: result.code,
         errorMessage: result.message,

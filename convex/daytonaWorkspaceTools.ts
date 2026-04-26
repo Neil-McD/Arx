@@ -807,6 +807,18 @@ export async function runDaytonaWorkspaceBash(params: {
     signal: params.signal,
   });
   if (!result.ok) return result;
+  if (result.exitCode !== 0) {
+    return {
+      ok: false,
+      status: 502,
+      code: "daytona_command_failed",
+      message: `Daytona command failed with exit code ${result.exitCode}.`,
+      details: {
+        output_preview: String(result.stdout ?? "").trim().slice(0, 2000),
+        exit_code: result.exitCode,
+      },
+    };
+  }
   return {
     ok: true,
     relPath: normalizedPath,

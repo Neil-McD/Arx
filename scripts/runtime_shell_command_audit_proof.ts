@@ -47,6 +47,7 @@ async function proveRuntimeEventsCarryShellAuditMetadata() {
   const runtimeToolPolicy = await readRepoFile("shared/runtimeToolPolicy.ts");
   const daytonaRuntimeEvents = await readRepoFile("convex/daytonaRuntimeEvents.ts");
   const httpDaytona = await readRepoFile("convex/httpDaytona.ts");
+  const daytonaWorkspaceTools = await readRepoFile("convex/daytonaWorkspaceTools.ts");
 
   assert.match(
     runtimeToolPolicy,
@@ -82,6 +83,16 @@ async function proveRuntimeEventsCarryShellAuditMetadata() {
     daytonaRuntimeEvents,
     /eventType: "tool_call_finished"/,
     "expected finished event helper to remain wired",
+  );
+  assert.match(
+    daytonaWorkspaceTools,
+    /result\.exitCode !== 0/,
+    "expected bash workspace tool failures to treat nonzero exit codes as failed tool results",
+  );
+  assert.match(
+    httpDaytona,
+    /detailsExitCode/,
+    "expected bash failure envelopes to preserve nonzero exit codes for runtime evidence",
   );
   console.log("PASS: runtime bash tool events carry shell audit metadata");
 }
