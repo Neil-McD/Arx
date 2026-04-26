@@ -242,11 +242,17 @@ function resolvePreviewOwningRunId(
   return persistedRunId || null;
 }
 
+function resolveTerminalAccessRunId(
+  terminal: DaytonaWorkspaceTerminalRecord,
+): string | null {
+  const persistedRunId = String(terminal.run_id_started_by ?? "").trim();
+  return persistedRunId || null;
+}
+
 function isRuntimeOwnedTerminalRecord(
   terminal: DaytonaWorkspaceTerminalRecord,
-  latestPreviewRunIdByTerminalId: Record<string, string>,
 ): boolean {
-  return Boolean(resolvePreviewOwningRunId(terminal, latestPreviewRunIdByTerminalId));
+  return Boolean(resolveTerminalAccessRunId(terminal));
 }
 
 function isTerminalSnapshotStatusActive(status: DaytonaWorkspaceTerminalRecord["status"]): boolean {
@@ -942,10 +948,9 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
   const visibleBackgroundWorkspaceTerminals = useMemo(
     () =>
       activeWorkspaceTerminals.filter(
-        (terminal) =>
-          !isRuntimeOwnedTerminalRecord(terminal, latestPreviewRunIdByTerminalId),
+        (terminal) => !isRuntimeOwnedTerminalRecord(terminal),
       ),
-    [activeWorkspaceTerminals, latestPreviewRunIdByTerminalId],
+    [activeWorkspaceTerminals],
   );
 
   const {
@@ -1170,6 +1175,9 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
     const owningRunId = targetTerminal
       ? resolvePreviewOwningRunId(targetTerminal, latestPreviewRunIdByTerminalId)
       : null;
+    const accessRunId = targetTerminal
+      ? resolveTerminalAccessRunId(targetTerminal)
+      : null;
     emitWorkspaceEvent({
       scope: "preview",
       name: "terminal_stop",
@@ -1195,7 +1203,7 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
         stopProjectWorkspaceTerminal({
           session,
           terminalSessionId,
-          runId: owningRunId,
+          runId: accessRunId,
         }),
         PREVIEW_RESOLUTION_TIMEOUT_MS,
         "Stopping terminal timed out.",
@@ -1317,6 +1325,7 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
         terminal,
         latestPreviewRunIdByTerminalId,
       );
+      const accessRunId = resolveTerminalAccessRunId(terminal);
       const existing = previewStateByTerminalId[terminalSessionId] ?? null;
       if (!opts?.force && existing) {
         if (existing.phase === "resolving" || existing.phase === "loading" || existing.phase === "ready") {
@@ -1356,7 +1365,7 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
           getProjectWorkspaceTerminalPreviewUrl({
             session,
             terminalSessionId,
-            runId: owningRunId,
+            runId: accessRunId,
           }),
           PREVIEW_RESOLUTION_TIMEOUT_MS,
           "Preview connection timed out.",

@@ -100,5 +100,10 @@ assert.match(
   /const volatilePromptBlocks = \[/,
   "prompt source should name volatile blocks explicitly",
 );
+assert.match(
+  runtimePromptSource,
+  /Do not start the same long-running server command with both terminal_start and bash/,
+  "terminal guidance should prevent duplicate long-running server launches",
+);
 
 console.log("runtime_prompt_layout_proof: ok");

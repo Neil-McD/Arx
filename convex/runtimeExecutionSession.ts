@@ -11,13 +11,20 @@ import {
   normalizeWorkspaceTerminalStartArgs,
   reconcileRuntimeSessionTerminalRow,
   readWorkspaceToolFailureOutputPreview,
-  requireRuntimeSessionOwnedTerminalRow,
   resolveWorkspaceCwd,
-  startRuntimeSessionTerminal,
+  startWorkspaceTerminalProcess,
   stopRuntimeSessionTerminalRow,
+  stopWorkspaceTerminalProcess,
   summarizeWorkspaceTerminalRow,
+  writeWorkspaceTerminalProcessInput,
   writeRuntimeSessionTerminalRow,
 } from "./workspaceTerminalProcessCore";
+import {
+  ensureProjectBackgroundSandbox,
+  releaseProjectBackgroundSandboxIfIdle,
+  resolveTerminalSandboxContext,
+} from "./workspaceTerminalBackgroundService";
+import { reconcileWorkspaceTerminalRow } from "./workspaceTerminalReconciliation";
 import {
   createRuntimeMcpManager,
   type RuntimeMcpConnectionBundle,
@@ -121,6 +128,50 @@ function normalizeRuntimeTerminalIdentityCommand(
   return normalizeWorkspaceTerminalCommand(command, resolveWorkspaceCwd(cwd))
     .replace(/\s+/g, " ")
     .trim();
+}
+
+async function requireRuntimeAccessibleTerminalRow(params: {
+  ctx: any;
+  ownerId: any;
+  projectId: string;
+  runId: string;
+  terminalSessionId: string;
+}): Promise<
+  | { ok: true; row: any; runtimeSessionOwned: boolean }
+  | { ok: false; status: number; code: string; message: string }
+> {
+  const row = await params.ctx.runQuery(
+    internal.workspaceTerminals.getWorkspaceTerminalSessionInternal as any,
+    {
+      terminalSessionId: params.terminalSessionId as any,
+    },
+  );
+  if (
+    !row ||
+    String(row.ownerId ?? "") !== String(params.ownerId ?? "") ||
+    String(row.projectId ?? "") !== params.projectId
+  ) {
+    return {
+      ok: false,
+      status: 404,
+      code: "terminal_not_found",
+      message: "Terminal session not found.",
+    };
+  }
+  const rowRunId = String(row.runIdStartedBy ?? "").trim();
+  if (rowRunId && rowRunId !== params.runId) {
+    return {
+      ok: false,
+      status: 404,
+      code: "terminal_not_found",
+      message: "Runtime terminal session not found.",
+    };
+  }
+  return {
+    ok: true,
+    row,
+    runtimeSessionOwned: Boolean(rowRunId),
+  };
 }
 
 function isInlineImageDataUrl(value: unknown): value is string {
@@ -748,19 +799,21 @@ export function createPolyNetExecutionSession(params: {
             };
           }
           if (!payload && terminalStartArgs) {
-            const ensuredWorkspace = await this.ensureWorkspaceForTool({
-              toolName: paramsForTool.toolName,
+            const backgroundSandbox = await ensureProjectBackgroundSandbox({
+              ctx: params.ctx,
+              authSubject,
+              userId: params.userId,
+              projectId,
             });
-            if (!ensuredWorkspace.ok) {
+            if (!backgroundSandbox.ok) {
               payload = {
                 ok: false,
-                status: ensuredWorkspace.status,
-                code: ensuredWorkspace.code,
-                message: ensuredWorkspace.message,
-                details: (ensuredWorkspace as { details?: unknown }).details ?? null,
+                status: backgroundSandbox.status,
+                code: backgroundSandbox.code,
+                message: backgroundSandbox.message,
+                details: (backgroundSandbox as { details?: unknown }).details ?? null,
               };
             } else {
-              const activeWorkspaceSession = ensuredWorkspace.session;
               const rows = (await params.ctx.runQuery(
                 internal.workspaceTerminals
                   .listProjectWorkspaceTerminalSessionsInternal as any,
@@ -776,16 +829,17 @@ export function createPolyNetExecutionSession(params: {
                 );
               for (const row of rows) {
                 if (
-                  String(row?.runIdStartedBy ?? "").trim() !== params.runId ||
+                  String(row?.runIdStartedBy ?? "").trim() ||
                   String(row?.providerSandboxId ?? "").trim() !==
-                    activeWorkspaceSession.providerSandboxId
+                    backgroundSandbox.providerSandboxId
                 ) {
                   continue;
                 }
-                const summary = await reconcileRuntimeSessionTerminalRow({
+                const summary = await reconcileWorkspaceTerminalRow({
                   ctx: params.ctx,
+                  ownerId: params.userId,
                   row,
-                  session: activeWorkspaceSession,
+                  lifecycleOwner: "project_background",
                 });
                 if (
                   !isWorkspaceTerminalActiveStatus(
@@ -838,13 +892,19 @@ export function createPolyNetExecutionSession(params: {
                 break;
               }
               if (!payload) {
-                payload = await startRuntimeSessionTerminal({
+                payload = await startWorkspaceTerminalProcess({
                   ctx: params.ctx,
                   ownerId: params.userId,
                   projectId,
-                  runId: params.runId,
-                  session: activeWorkspaceSession,
+                  threadId: params.threadId as any,
+                  runIdStartedBy: null,
+                  session: {
+                    config: backgroundSandbox.config,
+                    toolboxProxyUrl: backgroundSandbox.toolboxProxyUrl,
+                    providerSandboxId: backgroundSandbox.providerSandboxId,
+                  },
                   terminal: terminalStartArgs,
+                  providerSessionIdPrefix: "arx-bg-term",
                 });
               }
             }
@@ -861,22 +921,30 @@ export function createPolyNetExecutionSession(params: {
               message: "terminal_session_id is required.",
             };
           } else {
-            const access = await requireRuntimeSessionOwnedTerminalRow({
+            const access = await requireRuntimeAccessibleTerminalRow({
               ctx: params.ctx,
               ownerId: params.userId,
+              projectId,
               runId: params.runId,
               terminalSessionId,
             });
             if (!access.ok) {
               payload = access;
             } else if (paramsForTool.toolName === "terminal_read") {
-              const summary = workspaceSession
-                ? await reconcileRuntimeSessionTerminalRow({
+              const summary = access.runtimeSessionOwned
+                ? workspaceSession
+                  ? await reconcileRuntimeSessionTerminalRow({
+                      ctx: params.ctx,
+                      row: access.row,
+                      session: workspaceSession,
+                    })
+                  : summarizeWorkspaceTerminalRow(access.row)
+                : await reconcileWorkspaceTerminalRow({
                     ctx: params.ctx,
+                    ownerId: params.userId,
                     row: access.row,
-                    session: workspaceSession,
-                  })
-                : summarizeWorkspaceTerminalRow(access.row);
+                    lifecycleOwner: "project_background",
+                  });
               payload = {
                 ok: true,
                 terminal_session_id: String(access.row?._id ?? "").trim(),
@@ -887,7 +955,7 @@ export function createPolyNetExecutionSession(params: {
                   : {}),
               };
             } else if (paramsForTool.toolName === "terminal_write") {
-              if (!workspaceSession) {
+              if (access.runtimeSessionOwned && !workspaceSession) {
                 payload = {
                   ok: false,
                   status: 409,
@@ -895,7 +963,7 @@ export function createPolyNetExecutionSession(params: {
                   message:
                     "Runtime terminal input is only available while its workspace session is active.",
                 };
-              } else {
+              } else if (access.runtimeSessionOwned && workspaceSession) {
                 const wrote = await writeRuntimeSessionTerminalRow({
                   ctx: params.ctx,
                   row: access.row,
@@ -911,22 +979,94 @@ export function createPolyNetExecutionSession(params: {
                     ? wrote
                     : {}),
                 };
+              } else {
+                const providerSandboxId = String(
+                  access.row?.providerSandboxId ?? "",
+                ).trim();
+                const sandbox = await resolveTerminalSandboxContext({
+                  ctx: params.ctx,
+                  projectId,
+                  providerSandboxId,
+                  touchProjectBackground: true,
+                });
+                if (!sandbox.ok) {
+                  payload = sandbox;
+                } else {
+                  const wrote = await writeWorkspaceTerminalProcessInput({
+                    ctx: params.ctx,
+                    row: access.row,
+                    session: {
+                      config: sandbox.config,
+                      toolboxProxyUrl: sandbox.toolboxProxyUrl,
+                      providerSandboxId,
+                    },
+                    input: String(paramsForTool.normalizedArgs.input ?? ""),
+                  });
+                  payload = {
+                    ok: Boolean((wrote as { ok?: boolean } | null)?.ok),
+                    terminal_session_id: String(access.row?._id ?? "").trim(),
+                    ...(wrote &&
+                    typeof wrote === "object" &&
+                    !Array.isArray(wrote)
+                      ? wrote
+                      : {}),
+                  };
+                }
               }
             } else {
-              const stopped = await stopRuntimeSessionTerminalRow({
-                ctx: params.ctx,
-                row: access.row,
-                session: workspaceSession ?? null,
-              });
-              payload = {
-                ok: true,
-                terminal_session_id: String(access.row?._id ?? "").trim(),
-                ...(stopped &&
-                typeof stopped === "object" &&
-                !Array.isArray(stopped)
-                  ? stopped
-                  : {}),
-              };
+              if (access.runtimeSessionOwned) {
+                const stopped = await stopRuntimeSessionTerminalRow({
+                  ctx: params.ctx,
+                  row: access.row,
+                  session: workspaceSession ?? null,
+                });
+                payload = {
+                  ok: true,
+                  terminal_session_id: String(access.row?._id ?? "").trim(),
+                  ...(stopped &&
+                  typeof stopped === "object" &&
+                  !Array.isArray(stopped)
+                    ? stopped
+                    : {}),
+                };
+              } else {
+                const providerSandboxId = String(
+                  access.row?.providerSandboxId ?? "",
+                ).trim();
+                const sandbox = await resolveTerminalSandboxContext({
+                  ctx: params.ctx,
+                  projectId,
+                  providerSandboxId,
+                  touchProjectBackground: true,
+                });
+                const stopped = await stopWorkspaceTerminalProcess({
+                  ctx: params.ctx,
+                  row: access.row,
+                  session: sandbox.ok
+                    ? {
+                        config: sandbox.config,
+                        toolboxProxyUrl: sandbox.toolboxProxyUrl,
+                        providerSandboxId,
+                      }
+                    : null,
+                  forceStoppedStatus: true,
+                });
+                await releaseProjectBackgroundSandboxIfIdle({
+                  ctx: params.ctx,
+                  ownerId: params.userId,
+                  projectId,
+                  providerSandboxId,
+                });
+                payload = {
+                  ok: true,
+                  terminal_session_id: String(access.row?._id ?? "").trim(),
+                  ...(stopped &&
+                  typeof stopped === "object" &&
+                  !Array.isArray(stopped)
+                    ? stopped
+                    : {}),
+                };
+              }
             }
           }
         }

@@ -24,6 +24,9 @@ async function proveLazyWorkspaceCreationRules() {
   const terminalProcessCoreSource = await readRepoFile(
     "convex/workspaceTerminalProcessCore.ts",
   );
+  const daytonaProcessSessionsSource = await readRepoFile(
+    "convex/daytonaProcessSessions.ts",
+  );
   const workspaceTerminalsSource = await readRepoFile(
     "convex/workspaceTerminals.ts",
   );
@@ -35,6 +38,9 @@ async function proveLazyWorkspaceCreationRules() {
   );
   const workspaceTerminalRuntimeAccessSource = await readRepoFile(
     "convex/workspaceTerminalRuntimeAccess.ts",
+  );
+  const webWorkspaceHostSource = await readRepoFile(
+    "apps/web/src/components/WebWorkspaceHost.tsx",
   );
 
   const mountedToolBranchIndex = daytonaSource.indexOf(
@@ -71,36 +77,36 @@ async function proveLazyWorkspaceCreationRules() {
   const terminalArgValidationIndex = terminalBlock.indexOf(
     "normalizeWorkspaceTerminalStartArgs",
   );
-  const terminalStartIndex = terminalBlock.indexOf("startRuntimeSessionTerminal");
+  const terminalStartIndex = terminalBlock.indexOf("startWorkspaceTerminalProcess");
   assert.ok(
     terminalArgValidationIndex >= 0 &&
       terminalStartIndex > terminalArgValidationIndex,
-    "expected terminal_start args to validate before runtime-session terminal creation",
+    "expected terminal_start args to validate before project background terminal creation",
   );
   assert.equal(
     terminalBlock.includes("ensureWorkspaceForTool"),
-    true,
-    "expected terminal_start to lazily create the execution-session workspace when needed",
+    false,
+    "expected terminal_start not to create a run-owned workspace just to launch a background terminal",
   );
   assert.equal(
-    terminalBlock.includes("startWorkspaceTerminalInternal"),
-    false,
-    "expected terminal_start not to use the project background-terminal Daytona path",
+    terminalBlock.includes("ensureProjectBackgroundSandbox"),
+    true,
+    "expected terminal_start to use the durable project background sandbox",
   );
   assert.equal(
     terminalBlock.includes("readWorkspaceTerminalInternal"),
     false,
-    "expected terminal_read not to use the project background-terminal Daytona path",
+    "expected terminal_read not to bounce through project terminal public actions",
   );
   assert.equal(
     terminalBlock.includes("writeWorkspaceTerminalInternal"),
     false,
-    "expected terminal_write not to use the project background-terminal Daytona path",
+    "expected terminal_write not to bounce through project terminal public actions",
   );
   assert.equal(
     terminalBlock.includes("stopWorkspaceTerminalInternal"),
     false,
-    "expected terminal_stop not to use the project background-terminal Daytona path",
+    "expected terminal_stop not to bounce through project terminal public actions",
   );
   assert.equal(
     terminalBlock.includes("createDaytonaProcessSession"),
@@ -138,6 +144,31 @@ async function proveLazyWorkspaceCreationRules() {
     "expected runtime terminal reconciliation to read fallback logs when provider logs are empty",
   );
   assert.equal(
+    terminalProcessCoreSource.includes("readDaytonaProcessSessionCommandExitCode(command)"),
+    true,
+    "expected terminal reconciliation to delegate provider command exit semantics",
+  );
+  assert.equal(
+    daytonaProcessSessionsSource.includes("function isCommandStatusActive"),
+    true,
+    "expected Daytona command status to be checked before trusting exitCode",
+  );
+  assert.equal(
+    daytonaProcessSessionsSource.includes("if (isCommandStatusActive(status))"),
+    true,
+    "expected running Daytona commands not to be treated as exited",
+  );
+  assert.equal(
+    daytonaProcessSessionsSource.includes("exitCode === 254"),
+    true,
+    "expected Daytona exit 254 without terminal status not to kill preview terminals",
+  );
+  assert.equal(
+    daytonaProcessSessionsSource.includes("function isCommandStatusTerminal"),
+    true,
+    "expected completed Daytona process-session commands to preserve real failures",
+  );
+  assert.equal(
     terminalProcessCoreSource.includes("preview_preflight_failed"),
     true,
     "expected preview terminal starts to fail early with structured preflight errors",
@@ -148,14 +179,14 @@ async function proveLazyWorkspaceCreationRules() {
     "expected runtime terminal starts to reconcile before reporting success",
   );
   assert.equal(
-    terminalBlock.includes("startRuntimeSessionTerminal"),
+    terminalBlock.includes("runIdStartedBy: null"),
     true,
-    "expected agent terminal_start to create runtime-session-owned terminal rows",
+    "expected agent terminal_start to create project-owned terminal rows",
   );
   assert.equal(
-    terminalBlock.includes("requireRuntimeSessionOwnedTerminalRow"),
+    terminalBlock.includes("requireRuntimeAccessibleTerminalRow"),
     true,
-    "expected runtime terminal read/write/stop to enforce owning run identity directly",
+    "expected terminal read/write/stop to allow project terminals while preserving run-owned terminal scoping",
   );
   assert.equal(
     terminalBlock.includes("reconcileRuntimeSessionTerminalRow"),
@@ -171,6 +202,26 @@ async function proveLazyWorkspaceCreationRules() {
     terminalBlock.includes("stopRuntimeSessionTerminalRow"),
     true,
     "expected runtime terminal stop to use the runtime-session-owned terminal helper",
+  );
+  assert.equal(
+    terminalBlock.includes("writeWorkspaceTerminalProcessInput"),
+    true,
+    "expected project background terminal writes to use the shared process helper",
+  );
+  assert.equal(
+    terminalBlock.includes("stopWorkspaceTerminalProcess"),
+    true,
+    "expected project background terminal stops to use the shared process helper",
+  );
+  assert.equal(
+    webWorkspaceHostSource.includes("function resolveTerminalAccessRunId"),
+    true,
+    "expected web preview access to distinguish render anchoring from terminal ownership",
+  );
+  assert.equal(
+    webWorkspaceHostSource.includes("runId: accessRunId"),
+    true,
+    "expected preview URL lookup to pass only the persisted run-owned terminal scope",
   );
   assert.equal(
     terminalProcessCoreSource.includes("getDaytonaSignedPreviewUrl"),

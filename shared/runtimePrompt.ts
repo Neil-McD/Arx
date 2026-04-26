@@ -519,6 +519,7 @@ function buildWorkspaceOperatingPolicyPrompt(params: {
     toolGuidance.push(
       "- Prefer bash for short-lived commands and one-off checks. Use a background terminal only when continuity across turns is materially useful.",
       "- If the user asks to run, launch, open, preview, or see a likely web app working, prefer a preview-capable background terminal run over a plain shell command.",
+      "- Do not start the same long-running server command with both terminal_start and bash. After terminal_start, use terminal_read for status and logs instead of rerunning the server command in bash.",
       "- For a user-viewable app run, include preview metadata by default so the app can appear inline for the user while the terminal keeps running in the background.",
       "- Before starting a preview for a Node/Vite app, make sure dependencies are actually installed. If npm install fails with an ENOSYS rename error under node_modules, remove node_modules and retry once with a fresh npm cache before starting the preview.",
       "- When building a user-facing web app that will likely be previewed, build to the Polynet preview surface contract instead of inventing a fresh page layout each time. Treat the inline preview as a compact live glance and the expanded preview as the deeper working surface.",

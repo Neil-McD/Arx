@@ -53,6 +53,39 @@ function toExitCode(value: unknown): number | null {
   return Number.isFinite(parsed) ? Math.floor(parsed) : null;
 }
 
+function normalizeCommandStatus(value: unknown): string | null {
+  const normalized = String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replaceAll("_", "-");
+  return normalized || null;
+}
+
+function isCommandStatusActive(status: string | null): boolean {
+  return (
+    status === "created" ||
+    status === "queued" ||
+    status === "pending" ||
+    status === "starting" ||
+    status === "started" ||
+    status === "running" ||
+    status === "in-progress"
+  );
+}
+
+function isCommandStatusTerminal(status: string | null): boolean {
+  return (
+    status === "done" ||
+    status === "complete" ||
+    status === "completed" ||
+    status === "exited" ||
+    status === "failed" ||
+    status === "error" ||
+    status === "cancelled" ||
+    status === "canceled"
+  );
+}
+
 function normalizeSessionListPayload(payload: unknown): DaytonaProcessSessionDto[] {
   if (Array.isArray(payload)) {
     return payload.filter((row): row is DaytonaProcessSessionDto => !!row && typeof row === "object");
@@ -436,5 +469,13 @@ export function readDaytonaProcessSessionCommandExitCode(
   command: DaytonaProcessSessionCommandDto | null,
 ): number | null {
   if (!command) return null;
-  return toExitCode(command.exitCode);
+  const status = normalizeCommandStatus(command.status);
+  if (isCommandStatusActive(status)) {
+    return null;
+  }
+  const exitCode = toExitCode(command.exitCode);
+  if (exitCode === 254 && !isCommandStatusTerminal(status)) {
+    return null;
+  }
+  return exitCode;
 }
