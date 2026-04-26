@@ -10384,17 +10384,12 @@ button.message-citation-chip:hover {
 }
 
 .tool-group .tool-status.running,
-.tool-group .tool-status.requested,
-.tool-group .tool-status.approved {
+.tool-group .tool-status.requested {
   color: var(--text-secondary);
 }
 
 .tool-status.proposed {
   color: #f0ad4e;
-}
-
-.tool-status.approved {
-  color: #5bc0de;
 }
 
 .tool-status.executed {
@@ -10472,166 +10467,6 @@ button.message-citation-chip:hover {
 
 .tool-action.primary:hover {
   opacity: 0.9;
-}
-
-/* Inline Tool Approval Card */
-.tool-approval-card {
-  margin: 12px 0;
-  padding: 14px 16px 12px;
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--bg-card-alt) 82%, transparent), var(--bg-card));
-  border: 1px solid color-mix(in srgb, var(--border-strong) 88%, transparent);
-  border-radius: 14px;
-  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.14);
-}
-
-.tool-approval-header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 10px;
-}
-
-.tool-approval-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 68px;
-  padding: 5px 10px;
-  border-radius: 999px;
-  border: 1px solid var(--border-default);
-  background: color-mix(in srgb, var(--bg-workspace) 75%, transparent);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--text-secondary);
-  line-height: 1;
-  flex-shrink: 0;
-}
-
-.tool-approval-title {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  min-width: 0;
-}
-
-.tool-approval-kicker {
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--text-faint);
-}
-
-.tool-approval-name {
-  font-weight: 600;
-  font-size: 14px;
-  color: var(--text-primary);
-  letter-spacing: 0.01em;
-}
-
-.tool-approval-path {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--text-secondary);
-  word-break: break-word;
-}
-
-.tool-approval-preview {
-  margin-bottom: 12px;
-  border-radius: 8px;
-  overflow: hidden;
-}
-
-.tool-approval-preview pre {
-  margin: 0;
-  padding: 12px;
-  background: color-mix(in srgb, var(--bg-workspace) 86%, transparent);
-  border: 1px solid color-mix(in srgb, var(--border-muted) 86%, transparent);
-  border-radius: 8px;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  line-height: 1.5;
-  color: var(--text-primary);
-  white-space: pre-wrap;
-  word-break: break-word;
-  max-height: 280px;
-  overflow-y: auto;
-}
-
-.tool-approval-preview.diff pre {
-  background: var(--bg-terminal);
-  color: var(--text-terminal);
-}
-
-.tool-approval-actions {
-  display: flex;
-  justify-content: flex-end;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.tool-approval-button {
-  padding: 8px 14px;
-  min-height: 34px;
-  border-radius: 9px;
-  border: 1px solid var(--border-default);
-  background: color-mix(in srgb, var(--bg-workspace) 78%, transparent);
-  color: var(--text-primary);
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.01em;
-  transition: background 120ms ease, border-color 120ms ease, transform 120ms ease;
-}
-
-.tool-approval-button:hover:not(:disabled) {
-  transform: translateY(-1px);
-  border-color: var(--border-active);
-  background: color-mix(in srgb, var(--bg-card-hover) 88%, transparent);
-}
-
-.tool-approval-button:disabled {
-  opacity: 0.55;
-}
-
-.tool-approval-button-deny {
-  border-color: rgba(210, 80, 80, 0.42);
-  background: rgba(210, 80, 80, 0.14);
-  color: #f1a3a3;
-}
-
-.tool-approval-button-deny:hover:not(:disabled) {
-  border-color: rgba(210, 80, 80, 0.58);
-  background: rgba(210, 80, 80, 0.2);
-}
-
-.tool-approval-button-once {
-  border-color: var(--border-default);
-}
-
-.tool-approval-button-session {
-  border-color: color-mix(in srgb, var(--accent-gold) 60%, var(--border-default));
-  background: color-mix(in srgb, var(--accent-gold) 14%, transparent);
-  color: var(--text-primary);
-}
-
-.tool-approval-button-session:hover:not(:disabled) {
-  border-color: var(--accent-gold);
-  background: color-mix(in srgb, var(--accent-gold) 22%, transparent);
-}
-
-.tool-approval-note {
-  margin-top: 10px;
-  font-size: 11px;
-  color: var(--text-muted);
-}
-
-.tool-approval-note code {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  color: var(--text-secondary);
 }
 
 .runtime-tool-message {
