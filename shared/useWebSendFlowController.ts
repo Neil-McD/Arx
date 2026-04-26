@@ -3,6 +3,11 @@ import { formatSendFlowErrorMessage } from "./appErrorMappings";
 import { buildCloudCommunityContextEnvelope } from "./communityContextEnvelope";
 import { resolveUsableSession } from "./ensureUsableSession";
 import {
+  finishProductLatencyTrace,
+  markProductLatencyTrace,
+  startProductLatencyTrace,
+} from "./productLatencyTrace";
+import {
   type ThreadRecord,
   type ThreadMessage,
   type UseWebSendFlowControllerArgs,
@@ -75,12 +80,24 @@ export function useWebSendFlowController<
     const clearComposer = opts?.clearComposer ?? current.clearWorkspaceComposer;
     const pinToBottom = opts?.pinToBottom ?? current.pinWorkspaceToBottom;
     if (!text && !hasAttachments) return;
+    const trace = startProductLatencyTrace("workspace.send", {
+      hasAttachments,
+      textLength: text.length,
+      activeThreadId: current.activeThreadId,
+      workspaceWantsNewChat: current.workspaceWantsNewChat === true,
+    });
+    let traceStatus: "ok" | "cancelled" | "error" = "ok";
+    const finishTrace = (status: "ok" | "cancelled" | "error" = traceStatus, details?: Record<string, unknown>) => {
+      finishProductLatencyTrace(trace, status, details);
+    };
 
     const session = current.getSession();
+    markProductLatencyTrace(trace, "session_snapshot", { hasSession: Boolean(session) });
     if (!session) {
       if (hasAttachments) {
         current.setThreadError(null);
         current.requireSignIn();
+        finishTrace("cancelled", { reason: "signin_required_for_attachments" });
         return;
       }
       const now = new Date().toISOString();
@@ -107,9 +124,11 @@ export function useWebSendFlowController<
         current.setWorkspaceWantsNewChatMode(false);
         if (current.activeThreadId !== current.guestThreadId) current.setActiveThreadId(current.guestThreadId);
         current.setThreadMessages(baseMessages);
+        markProductLatencyTrace(trace, "guest_user_message_visible", { messageCount: baseMessages.length });
         clearComposer();
         persistGuestFromMessages(baseMessages);
 
+        markProductLatencyTrace(trace, "guest_runtime_start", { modelId: current.guestModelId });
         const turnResult = await current.runPublicTurn({
           modelId: current.guestModelId,
           threadId: current.guestThreadId,
@@ -117,9 +136,17 @@ export function useWebSendFlowController<
           messages: baseMessages,
           systemPrompt: buildCloudCommunityContextEnvelope({}).scopedSystemPrompt,
         });
+        markProductLatencyTrace(trace, "guest_runtime_end", {
+          cancelled: turnResult.cancelled,
+          hasError: Boolean(turnResult.error),
+          hasContent: Boolean((turnResult.content ?? "").trim()),
+        });
         setGuestIssueForThread(current.guestThreadId, turnResult.guestIssue ?? null);
         if (turnResult.error) throw new Error(turnResult.error);
-        if (turnResult.cancelled) return;
+        if (turnResult.cancelled) {
+          traceStatus = "cancelled";
+          return;
+        }
         const assistantContent = (turnResult.content ?? "").trim();
         if (!assistantContent) return;
         const assistantMsg: ThreadMessageT = {
@@ -137,6 +164,7 @@ export function useWebSendFlowController<
         current.setThreadMessages(nextMessages);
         persistGuestFromMessages(nextMessages);
       } catch (error) {
+        traceStatus = "error";
         setErrorForThread(
           current.guestThreadId,
           formatSendFlowErrorMessage(error, "Failed to send message."),
@@ -144,13 +172,26 @@ export function useWebSendFlowController<
       } finally {
         current.setThreadRunSending(current.guestThreadId, false);
         current.setIsSendingMessage(false);
+        finishTrace();
       }
       return;
     }
 
-    const usableSession = await resolveUsableSession(session, current.ensureSession);
+    markProductLatencyTrace(trace, "resolve_session_start");
+    let usableSession: SessionT | null;
+    try {
+      usableSession = await resolveUsableSession(session, current.ensureSession);
+      markProductLatencyTrace(trace, "resolve_session_end", { hasUsableSession: Boolean(usableSession) });
+    } catch (error) {
+      finishTrace("error", {
+        reason: "resolve_session_failed",
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
     if (!usableSession) {
       current.requireSignIn();
+      finishTrace("cancelled", { reason: "signin_required_after_session_resolve" });
       return;
     }
 
@@ -162,6 +203,7 @@ export function useWebSendFlowController<
       );
     if (hasActiveThreadInState && isThreadBusy(current.activeThreadId)) {
       setErrorForThread(current.activeThreadId, "This thread already has a turn in progress. Wait for it to finish before sending another.");
+      finishTrace("cancelled", { reason: "thread_busy", threadId: current.activeThreadId });
       return;
     }
     const startedInDraft = !hasActiveThreadInState;
@@ -178,16 +220,19 @@ export function useWebSendFlowController<
       let threadId = hasActiveThreadInState ? current.activeThreadId : null;
       let createdThreadRecord: ThreadRecordT | null = null;
       if (!threadId) {
+        markProductLatencyTrace(trace, "create_thread_start");
         const created = await current.createThread(usableSession);
         createdThreadRecord = created;
         threadId = created?.id ?? null;
         createdThreadId = threadId;
         if (!threadId) {
+          markProductLatencyTrace(trace, "create_thread_retry_start");
           const retryCreated = await current.createThread(usableSession);
           if (!createdThreadRecord) createdThreadRecord = retryCreated;
           threadId = retryCreated?.id ?? null;
           if (!createdThreadId) createdThreadId = threadId;
         }
+        markProductLatencyTrace(trace, "create_thread_end", { threadId, retried: !created?.id });
       }
       if (!threadId) {
         throw new Error("No thread available. Failed to create a cloud thread; please retry.");
@@ -208,15 +253,24 @@ export function useWebSendFlowController<
         syncThreadModelSelection(threadId, preferredModelId, usableSession);
       }
 
+      markProductLatencyTrace(trace, "ensure_lens_start", { threadId });
       await current.ensureWorkspaceThreadLensBeforeSend(threadId, usableSession);
+      markProductLatencyTrace(trace, "ensure_lens_end", { threadId });
+      markProductLatencyTrace(trace, "title_sync_start", { threadId });
       await current.maybeSetThreadTitleFromText(threadId, text, usableSession);
+      markProductLatencyTrace(trace, "title_sync_end", { threadId });
 
+      markProductLatencyTrace(trace, "memory_intent_extract_start");
       const remembered = current.userMemoryRememberEnabled ? current.extractRememberIntent(text) : null;
+      markProductLatencyTrace(trace, "memory_intent_extract_end", { hasRemembered: Boolean(remembered) });
       if (remembered && hasPersonalMemoryAccess) {
         try {
+          markProductLatencyTrace(trace, "memory_write_start");
           await current.createPersonalMemoryItemDirect({ content: remembered, pinned: false });
+          markProductLatencyTrace(trace, "memory_write_end");
           current.showMemoryToastMessage("Memory updated");
         } catch (error) {
+          markProductLatencyTrace(trace, "memory_write_error");
           console.warn("Failed to save memory intent:", error);
         }
       }
@@ -227,6 +281,7 @@ export function useWebSendFlowController<
         throw new Error("Attachments are not available with free-tier models. Choose a paid model to send files.");
       }
 
+      markProductLatencyTrace(trace, "persist_user_message_start", { threadId, messageId });
       await current.createThreadMessage(usableSession, {
         id: messageId,
         threadId,
@@ -237,6 +292,7 @@ export function useWebSendFlowController<
         },
       });
       postedUserMessage = true;
+      markProductLatencyTrace(trace, "persist_user_message_end", { threadId, messageId });
 
       if (startedInDraft) {
         const nowSec = Math.floor(Date.now() / 1000);
@@ -267,6 +323,10 @@ export function useWebSendFlowController<
       } as ThreadMessageT;
       const optimisticThreadMessages = [...priorThreadMessages, syntheticUserMessage];
       current.setThreadMessages(optimisticThreadMessages);
+      markProductLatencyTrace(trace, "user_message_visible", {
+        threadId,
+        messageCount: optimisticThreadMessages.length,
+      });
 
       const runtimeFlags = resolveAuthenticatedTurnRuntimeFlags();
       const inferenceSource = mapRequestedFundingSourceToInferenceSource(
@@ -284,6 +344,11 @@ export function useWebSendFlowController<
         startedInDraft,
         hasAttachments,
       });
+      markProductLatencyTrace(trace, "runtime_turn_start", {
+        threadId,
+        modelId: preferredModelId,
+        inferenceSource,
+      });
       const turnResult = await current.runAgentTurn(usableSession, threadId, {
         preferredModelId,
         mode: "respond",
@@ -296,6 +361,11 @@ export function useWebSendFlowController<
         replyToId: messageId,
         messages: optimisticThreadMessages,
       });
+      markProductLatencyTrace(trace, "runtime_turn_end", {
+        cancelled: turnResult.cancelled,
+        hasError: Boolean(turnResult.error),
+      });
+      if (turnResult.cancelled) traceStatus = "cancelled";
       if (turnResult.error) throw new Error(turnResult.error);
       current.onWorkspaceRunSucceeded?.({
         threadId,
@@ -307,8 +377,11 @@ export function useWebSendFlowController<
         startedInDraft,
         hasAttachments,
       });
+      markProductLatencyTrace(trace, "post_run_messages_reload_start", { threadId });
       await current.loadThreadMessages(threadId, usableSession);
+      markProductLatencyTrace(trace, "post_run_messages_reload_end", { threadId });
     } catch (error) {
+      traceStatus = "error";
       const message = formatSendFlowErrorMessage(error, "Failed to send message.");
       setErrorForThread(runThreadId ?? current.activeThreadId ?? null, message);
       if (startedInDraft && createdThreadId && !postedUserMessage) {
@@ -322,6 +395,7 @@ export function useWebSendFlowController<
       if (runThreadId) {
         current.setThreadRunSending(runThreadId, false);
       }
+      finishTrace(traceStatus, { threadId: runThreadId });
     }
   }, [
     isThreadBusy,

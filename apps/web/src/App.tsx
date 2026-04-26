@@ -25,6 +25,11 @@ import {
 import { resolveAuthSubject } from "../../../shared/authSession";
 import {
   buildContextFallbackThreadTitle, deriveThreadTitleFromUserText, isMissingThreadTitleValue, traceThreadContext, } from "../../../shared/threadTitleUi";
+import {
+  finishProductLatencyTrace,
+  markProductLatencyTrace,
+  startProductLatencyTrace,
+} from "../../../shared/productLatencyTrace";
 import { CommunityAvatar } from "../../../shared/CommunityAvatar";
 import {
   formatProviderConnectionErrorMessage,
@@ -4124,9 +4129,26 @@ export default function App() {
 
   const workspaceLensController = useLastClickWinsController<WorkspaceLensTarget>({
     applyTarget: async (desired) => {
-      const result = await setThreadCommunityLens(desired.threadId, desired.communityId, desired.session);
-      if (!result || (result.community_id ?? null) !== desired.communityId) {
-        throw new Error("Community context was not confirmed.");
+      const trace = startProductLatencyTrace("workspace.lens_mutation", {
+        threadId: desired.threadId,
+        toCommunityId: desired.communityId,
+        communityName: desired.communityName,
+      });
+      try {
+        markProductLatencyTrace(trace, "set_thread_lens_start");
+        const result = await setThreadCommunityLens(desired.threadId, desired.communityId, desired.session);
+        markProductLatencyTrace(trace, "set_thread_lens_end", {
+          confirmedCommunityId: result?.community_id ?? null,
+        });
+        if (!result || (result.community_id ?? null) !== desired.communityId) {
+          throw new Error("Community context was not confirmed.");
+        }
+        finishProductLatencyTrace(trace, "ok");
+      } catch (error) {
+        finishProductLatencyTrace(trace, "error", {
+          error: error instanceof Error ? error.message : String(error),
+        });
+        throw error;
       }
     },
     onWorkerStateChange: ({ inFlight, target }) => {
@@ -4171,11 +4193,30 @@ export default function App() {
   });
 
   const requestWorkspaceThreadLens = (target: WorkspaceLensTarget): Promise<void> => {
+    const trace = startProductLatencyTrace("workspace.lens_request", {
+      threadId: target.threadId,
+      toCommunityId: target.communityId,
+      communityName: target.communityName,
+      inFlight: workspaceLensController.isInFlight(),
+    });
     const currentLens = threads.find((t) => t.id === target.threadId)?.community_id ?? null;
     if (currentLens === target.communityId && !workspaceLensController.isInFlight()) {
+      markProductLatencyTrace(trace, "lens_request_noop", { currentLens });
+      finishProductLatencyTrace(trace, "ok", { reason: "already_current" });
       return Promise.resolve();
     }
-    return workspaceLensController.requestTarget(target);
+    markProductLatencyTrace(trace, "lens_request_enqueued", { currentLens });
+    return workspaceLensController.requestTarget(target).then(
+      () => {
+        finishProductLatencyTrace(trace, "ok");
+      },
+      (error) => {
+        finishProductLatencyTrace(trace, "error", {
+          error: error instanceof Error ? error.message : String(error),
+        });
+        throw error;
+      },
+    );
   };
 
   const syncWorkspaceThreadCommunityLens = (

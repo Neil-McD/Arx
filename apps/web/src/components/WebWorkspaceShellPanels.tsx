@@ -1,4 +1,9 @@
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
+import {
+  finishProductLatencyTrace,
+  markProductLatencyTrace,
+  startProductLatencyTrace,
+} from "../../../../shared/productLatencyTrace";
 import { WebMobileDrawer } from "./WebMobileDrawer";
 import { WebThreadSidebarPanel } from "./WebThreadSidebarPanel";
 import type { WorkspaceSidebarState } from "./WebWorkspaceSidebarStateHost";
@@ -45,6 +50,33 @@ export type WebWorkspaceShellPanelsProps<TThread extends ThreadLike, TProject ex
 export function WebWorkspaceShellPanels<TThread extends ThreadLike, TProject extends ProjectLike>(
   props: WebWorkspaceShellPanelsProps<TThread, TProject>,
 ) {
+  useEffect(() => {
+    if (!props.sessionsDrawerEnabled || props.showMobileAppShell) return;
+    const trace = startProductLatencyTrace("workspace.threads_drawer_render", {
+      open: props.isSessionsDrawerOpen,
+      hasSession: Boolean(props.session),
+      visibleThreadsCount: props.sidebar.visibleThreadsCount,
+      projectsCount: props.sidebar.projectThreadGroups.length,
+      generalThreadsCount: props.sidebar.generalThreads.length,
+    });
+    markProductLatencyTrace(trace, "drawer_state_committed");
+    if (typeof window !== "undefined" && typeof window.requestAnimationFrame === "function") {
+      window.requestAnimationFrame(() => {
+        finishProductLatencyTrace(trace, "ok");
+      });
+      return;
+    }
+    finishProductLatencyTrace(trace, "ok");
+  }, [
+    props.isSessionsDrawerOpen,
+    props.sessionsDrawerEnabled,
+    props.showMobileAppShell,
+    props.session,
+    props.sidebar.visibleThreadsCount,
+    props.sidebar.projectThreadGroups.length,
+    props.sidebar.generalThreads.length,
+  ]);
+
   const renderCloudSidebar = (closeOverlay?: () => void, showWorkspaceToolbar = false) => (
     <WebThreadSidebarPanel<TThread, TProject>
       showThreadLaneSwitch={false}
