@@ -1,4 +1,4 @@
-import { useEffect, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
+import { useEffect, useRef, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
 
 export function useWebThreadMessagesLifecycle<SessionT, ThreadMessageT>(params: {
   session: SessionT | null;
@@ -12,6 +12,7 @@ export function useWebThreadMessagesLifecycle<SessionT, ThreadMessageT>(params: 
   loadThreadMessages: (threadId: string, session: SessionT) => Promise<void>;
 }) {
   const session = params.session;
+  const displayedThreadIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!session) {
@@ -20,21 +21,29 @@ export function useWebThreadMessagesLifecycle<SessionT, ThreadMessageT>(params: 
     }
     if (!params.activeThreadId || params.activeThreadId === params.guestThreadId) {
       params.setLoadingThreadMessagesThreadId(null);
-      params.setThreadMessages([]);
+      if (displayedThreadIdRef.current !== null) {
+        displayedThreadIdRef.current = null;
+        params.setThreadMessages([]);
+      }
       return;
     }
     const targetThreadId = params.activeThreadId;
+    const isSameDisplayedThread = displayedThreadIdRef.current === targetThreadId;
     let cancelled = false;
     params.isLoadingThreadRef.current = true;
-    params.workspacePinnedToBottomRef.current = true;
-    params.setIsWorkspaceAtBottom(true);
+    if (!isSameDisplayedThread) {
+      displayedThreadIdRef.current = targetThreadId;
+      params.workspacePinnedToBottomRef.current = true;
+      params.setIsWorkspaceAtBottom(true);
+      params.setThreadMessages([]);
+    }
     params.setLoadingThreadMessagesThreadId(targetThreadId);
-    params.setThreadMessages([]);
     void (async () => {
       try {
         await params.loadThreadMessages(targetThreadId, session);
       } finally {
         if (!cancelled) {
+          params.isLoadingThreadRef.current = false;
           params.setLoadingThreadMessagesThreadId((current) => (current === targetThreadId ? null : current));
         }
       }

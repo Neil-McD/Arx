@@ -171,17 +171,11 @@ export function useWebThreadDataController<SessionT, ThreadMessageT extends Thre
     const current = argsRef.current;
     const usableSession = await resolveUsableSession(session, current.ensureSession);
     if (!usableSession) {
-      if (current.activeThreadId === threadId) {
-        current.setThreadMessages([]);
-      }
       return;
     }
     const hasConvex = isConvexCloudThreadsEnabled();
     if (!hasConvex) {
       current.setThreadError("Convex is required for cloud threads in this build.");
-      if (current.activeThreadId === threadId) {
-        current.setThreadMessages([]);
-      }
       return;
     }
 
@@ -199,9 +193,6 @@ export function useWebThreadDataController<SessionT, ThreadMessageT extends Thre
       current.setThreadMessages(fetchedRows);
     } catch (error) {
       console.warn("Failed to load Convex thread messages:", error);
-      if (argsRef.current.activeThreadId === threadId) {
-        current.setThreadMessages([]);
-      }
     }
   }, []);
 
