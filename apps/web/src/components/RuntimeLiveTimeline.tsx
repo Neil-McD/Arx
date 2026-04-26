@@ -4,10 +4,6 @@ import {
   type AgentActivityItem,
   type AgentActivityStep,
 } from "../../../../shared/runtimeActivityTimeline";
-import {
-  finishProductLatencyTrace,
-  startProductLatencyTrace,
-} from "../../../../shared/productLatencyTrace";
 import type { ThreadStreamingRuntimeEvent } from "../../../../shared/webTurnRunnerCore";
 import { useSmoothStreamingText } from "../../../../shared/useSmoothStreamingText";
 
@@ -110,47 +106,12 @@ export function RuntimeLiveTimeline(props: {
 }): JSX.Element | null {
   const showActiveIndicators = props.showActiveIndicators ?? false;
   const steps = useMemo(
-    () => {
-      const trace = startProductLatencyTrace("runtime.timeline_build", {
-        eventCount: props.events.length,
-        active: showActiveIndicators,
-      });
-      const next = buildAgentActivityTimeline(props.events as any);
-      finishProductLatencyTrace(
-        trace,
-        "ok",
-        {
-          eventCount: props.events.length,
-          stepCount: next.length,
-          active: showActiveIndicators,
-        },
-        { minDurationMs: 2 },
-      );
-      return next;
-    },
-    [props.events, showActiveIndicators],
+    () => buildAgentActivityTimeline(props.events as any),
+    [props.events],
   );
   const runTiming = useMemo(
-    () => {
-      const trace = startProductLatencyTrace("runtime.timeline_timing_build", {
-        eventCount: props.events.length,
-        active: showActiveIndicators,
-      });
-      const next = runTimingForEvents(props.events);
-      finishProductLatencyTrace(
-        trace,
-        "ok",
-        {
-          eventCount: props.events.length,
-          active: showActiveIndicators,
-          hasStartedAt: next.startedAtMs !== null,
-          hasFinishedAt: next.finishedAtMs !== null,
-        },
-        { minDurationMs: 2 },
-      );
-      return next;
-    },
-    [props.events, showActiveIndicators],
+    () => runTimingForEvents(props.events),
+    [props.events],
   );
   const [nowMs, setNowMs] = useState(() => Date.now());
   const activityWord = useMemo(() => activityWordForSteps(steps), [steps]);

@@ -42,7 +42,7 @@ The current workspace supports:
 - voice input
 - personal memory controls
 - runtime/tool policy surfaces
-- latency instrumentation for thread, lens, and render flows
+- runtime evidence for thread, lens, and agent execution flows
 
 ## Rules
 

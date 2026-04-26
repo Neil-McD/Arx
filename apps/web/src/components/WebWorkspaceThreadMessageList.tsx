@@ -2,10 +2,6 @@ import type { ReactNode } from "react";
 import type { AuthSessionLike } from "../../../../shared/authSession";
 import { AttachmentChipButton } from "../../../../shared/AttachmentChipButton";
 import {
-  finishProductLatencyTrace,
-  startProductLatencyTrace,
-} from "../../../../shared/productLatencyTrace";
-import {
   MessageCopyAction,
   MessageFooter,
   MessageSourcesAction,
@@ -33,22 +29,9 @@ type WebWorkspaceThreadMessageListProps = {
 export function WebWorkspaceThreadMessageList(
   props: WebWorkspaceThreadMessageListProps,
 ) {
-  const renderTrace = startProductLatencyTrace("workspace.thread_message_list_render", {
-    messageCount: props.messages.length,
-  });
-  let assistantMessageCount = 0;
-  let messagesWithRuntimeEvents = 0;
-  let totalRuntimeEventCount = 0;
-  let attachmentCount = 0;
   const messageItems = props.messages.map((message) => {
     const isUser = message.role === "user";
     const contextPayload = message.contextPayload;
-    if (!isUser) assistantMessageCount += 1;
-    attachmentCount += message.attachments.length;
-    if (message.runtimeEvents.length > 0) {
-      messagesWithRuntimeEvents += 1;
-      totalRuntimeEventCount += message.runtimeEvents.length;
-    }
 
     return (
       <div
@@ -134,18 +117,6 @@ export function WebWorkspaceThreadMessageList(
       </div>
     );
   });
-  finishProductLatencyTrace(
-    renderTrace,
-    "ok",
-    {
-      messageCount: props.messages.length,
-      assistantMessageCount,
-      attachmentCount,
-      messagesWithRuntimeEvents,
-      totalRuntimeEventCount,
-    },
-    { minDurationMs: 3 },
-  );
 
   return (
     <>

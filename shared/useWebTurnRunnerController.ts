@@ -25,11 +25,6 @@ import {
   shouldDisableStreamingSmoothing,
 } from "./smoothStreamingText";
 import {
-  finishProductLatencyTrace,
-  markProductLatencyTrace,
-  startProductLatencyTrace,
-} from "./productLatencyTrace";
-import {
   type CreateAssistantMessageParams,
   type CreateThreadMessageParams,
   type GuestInferenceIssue,
@@ -45,10 +40,6 @@ import {
   mapInferenceIssueReason,
   normalizeGuestInferenceError,
 } from "./webTurnRunnerCore";
-
-function estimateRuntimeMessageTextSize(messages: Array<{ content?: string | null }>): number {
-  return messages.reduce((total, message) => total + String(message.content ?? "").length, 0);
-}
 
 export function useWebTurnRunnerController<
   SessionT,
@@ -424,11 +415,6 @@ export function useWebTurnRunnerController<
         fetchPublic: current.fetchCloudPublic,
         fetchAuth: current.fetchAuth,
       };
-      const trace = startProductLatencyTrace("runtime.public_turn", {
-        threadId: params.threadId,
-        modelId: params.modelId,
-      });
-
       threadStreamingAbortRefById.current[params.threadId]?.abort();
       const abort = new AbortController();
       threadStreamingAbortRefById.current[params.threadId] = abort;
@@ -649,7 +635,6 @@ export function useWebTurnRunnerController<
         const guestIssue = buildGuestInferenceIssue("unavailable");
         return { cancelled: false, error: guestIssue.fullMessage, content: "", runId: null, guestIssue };
       } finally {
-        finishProductLatencyTrace(trace);
         resetThreadStreamingState(params.threadId);
       }
     },
@@ -671,20 +656,9 @@ export function useWebTurnRunnerController<
         fetchPublic: current.fetchCloudPublic,
         fetchAuth: current.fetchAuth,
       };
-      const trace = startProductLatencyTrace("runtime.agent_turn", {
-        threadId,
-        mode: params.mode ?? "respond",
-        modelId: params.preferredModelId,
-        inferenceSource: params.inferenceSource ?? null,
-        suppressStreamingUi: params.suppressStreamingUi === true,
-      });
-      let traceStatus: "ok" | "cancelled" | "error" = "ok";
       try {
-        markProductLatencyTrace(trace, "ensure_cloud_thread_start", { threadId });
         await ensureCloudThreadRecordForRuntime(session, threadId);
-        markProductLatencyTrace(trace, "ensure_cloud_thread_end", { threadId });
       } catch (error) {
-        markProductLatencyTrace(trace, "ensure_cloud_thread_error", { threadId });
         console.warn("Non-fatal: ensure cloud thread record failed:", error);
       }
 
@@ -711,7 +685,6 @@ export function useWebTurnRunnerController<
           runtimeEvents: [],
           lastRuntimeEventSeq: 0,
         }));
-        markProductLatencyTrace(trace, "streaming_ui_initialized", { threadId });
       }
       let runIdFromServer: string | null = null;
       let runtimeRequestId: string | null = null;
@@ -743,11 +716,6 @@ export function useWebTurnRunnerController<
               extractTextFromContentJson: current.extractTextFromContentJson,
             })
           : [];
-        markProductLatencyTrace(trace, "runtime_messages_built", {
-          threadId,
-          messageCount: laneMessages.length,
-          textSize: estimateRuntimeMessageTextSize(laneMessages),
-        });
         const createRuntimeTurnRequest = (): Promise<Response> => {
           return invokeCloudRuntimeTurn({
             transport,
@@ -767,16 +735,10 @@ export function useWebTurnRunnerController<
           });
         };
 
-        markProductLatencyTrace(trace, "runtime_request_start", { threadId });
         let runtimeTurn = await createRuntimeTurnRequest();
         responseStarted = true;
         runtimeRequestId = (runtimeTurn.headers.get("x-arx-request-id") ?? "").trim() || null;
         runtimeStage = (runtimeTurn.headers.get("x-arx-runtime-stage") ?? "").trim() || null;
-        markProductLatencyTrace(trace, "runtime_response_headers", {
-          status: runtimeTurn.status,
-          requestId: runtimeRequestId,
-          stage: runtimeStage,
-        });
         if (!runtimeTurn.ok) {
           let failure = await readCloudFunctionError(runtimeTurn);
           runtimeRequestId = failure.requestId ?? runtimeRequestId;
@@ -787,17 +749,11 @@ export function useWebTurnRunnerController<
             (failureMessage.includes("thread_not_found") || String(failure.code ?? "").toLowerCase() === "thread_not_found");
           if (canRetryThreadMirror) {
             try {
-              markProductLatencyTrace(trace, "runtime_thread_mirror_retry_start", { threadId });
               await ensureCloudThreadRecordForRuntime(session, threadId);
               runtimeTurn = await createRuntimeTurnRequest();
               responseStarted = true;
               runtimeRequestId = (runtimeTurn.headers.get("x-arx-request-id") ?? "").trim() || runtimeRequestId;
               runtimeStage = (runtimeTurn.headers.get("x-arx-runtime-stage") ?? "").trim() || runtimeStage;
-              markProductLatencyTrace(trace, "runtime_thread_mirror_retry_end", {
-                status: runtimeTurn.status,
-                requestId: runtimeRequestId,
-                stage: runtimeStage,
-              });
               if (!runtimeTurn.ok) {
                 failure = await readCloudFunctionError(runtimeTurn);
                 runtimeRequestId = failure.requestId ?? runtimeRequestId;
@@ -808,7 +764,6 @@ export function useWebTurnRunnerController<
             }
           }
           if (!runtimeTurn.ok) {
-            traceStatus = "error";
             if (failure.category === "rate_limited") {
               return {
                 cancelled: false,
@@ -870,14 +825,7 @@ export function useWebTurnRunnerController<
           }
           firstEventSeen = true;
           lastEventName = eventName;
-          if (trace && trace.marks.every((mark) => mark.name !== "runtime_first_sse_event")) {
-            markProductLatencyTrace(trace, "runtime_first_sse_event", { eventName });
-          }
           if (eventName === "start") {
-            markProductLatencyTrace(trace, "runtime_start_event", {
-              requestId: runtimeRequestId,
-              stage: runtimeStage,
-            });
             if (typeof parsed?.run_id === "string") {
               runIdFromServer = parsed.run_id;
               if (exposeStreamingUi) {
@@ -897,12 +845,6 @@ export function useWebTurnRunnerController<
               eventName = "message";
               return;
             }
-            if (trace && trace.marks.every((mark) => mark.name !== "runtime_first_delta")) {
-              markProductLatencyTrace(trace, "runtime_first_delta", {
-                requestId: runtimeRequestId,
-                stage: runtimeStage,
-              });
-            }
             const full = typeof parsed?.full_content === "string" ? parsed.full_content : null;
             const delta = typeof parsed?.delta === "string" ? parsed.delta : "";
             if (full !== null) {
@@ -914,12 +856,6 @@ export function useWebTurnRunnerController<
             }
             scheduleStreamingFlush();
           } else if (eventName === "done") {
-            markProductLatencyTrace(trace, "runtime_done_event", {
-              requestId: runtimeRequestId,
-              stage: runtimeStage,
-              hasAssistantMessageId:
-                typeof parsed?.assistant_message_id === "string" && parsed.assistant_message_id.trim().length > 0,
-            });
             if (!params.suppressStreamingUi && typeof parsed?.full_content === "string") {
               finalContent = parsed.full_content;
               threadStreamingContentRefById.current[threadId] = parsed.full_content;
@@ -1052,16 +988,10 @@ export function useWebTurnRunnerController<
             throw new Error("Runtime turn did not persist assistant message.");
           }
           if (exposeStreamingUi) {
-            markProductLatencyTrace(trace, "streaming_display_drain_start", { threadId });
             await drainThreadStreamingDisplay(threadId, getSanitizedStreamingContent);
-            markProductLatencyTrace(trace, "streaming_display_drain_end", { threadId });
           }
-          markProductLatencyTrace(trace, "runtime_post_load_messages_start", { threadId });
           await current.loadThreadMessages(threadId, session);
-          markProductLatencyTrace(trace, "runtime_post_load_messages_end", { threadId });
-          markProductLatencyTrace(trace, "runtime_post_load_threads_start");
           await current.loadThreads(session);
-          markProductLatencyTrace(trace, "runtime_post_load_threads_end");
           return { cancelled: false, error: null };
       } catch (error) {
         const cancelled =
@@ -1069,14 +999,12 @@ export function useWebTurnRunnerController<
           abort.signal.aborted ||
           isAbortError(error);
         if (cancelled) {
-          traceStatus = "cancelled";
           window.setTimeout(() => {
             void current.loadThreadMessages(threadId, session).catch(() => null);
             void current.loadThreads(session).catch(() => null);
           }, 350);
           return { cancelled: true, error: null };
         }
-        traceStatus = "error";
         const rawMessage =
           typeof error === "string" ? error : error instanceof Error ? error.message : "Failed to run model.";
         const details: string[] = [];
@@ -1113,14 +1041,6 @@ export function useWebTurnRunnerController<
       } finally {
         resetThreadStreamingState(threadId, {
           preserveStreamingState: preserveStreamingStateForRecovery,
-        });
-        finishProductLatencyTrace(trace, traceStatus, {
-          threadId,
-          requestId: runtimeRequestId,
-          stage: runtimeStage,
-          lastEventName,
-          firstEventSeen,
-          responseStarted,
         });
       }
     },

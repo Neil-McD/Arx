@@ -1,29 +1,12 @@
 import { useMemo } from "react";
 import type { ThreadStreamingRuntimeEvent } from "../../../../shared/webTurnRunnerCore";
-import {
-  finishProductLatencyTrace,
-  startProductLatencyTrace,
-} from "../../../../shared/productLatencyTrace";
 import { extractRuntimeWebSources } from "../../../../shared/runtimeTimelineUi";
 
 export function RuntimeWebSources(props: {
   events: ThreadStreamingRuntimeEvent[];
 }): JSX.Element | null {
   const sources = useMemo(() => {
-    const trace = startProductLatencyTrace("runtime.web_sources_build", {
-      eventCount: props.events.length,
-    });
-    const next = extractRuntimeWebSources(props.events as any);
-    finishProductLatencyTrace(
-      trace,
-      "ok",
-      {
-        eventCount: props.events.length,
-        sourceCount: next.length,
-      },
-      { minDurationMs: 2 },
-    );
-    return next;
+    return extractRuntimeWebSources(props.events as any);
   }, [props.events]);
   if (sources.length === 0) return null;
 

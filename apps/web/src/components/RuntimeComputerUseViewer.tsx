@@ -1,10 +1,6 @@
 import { useEffect, useMemo, useReducer } from "react";
 import type { AuthSessionLike } from "../../../../shared/authSession";
 import { getConvexCloudRuntimeRunComputerUseLiveSession } from "../../../../shared/daytonaCloudThreadsRead";
-import {
-  finishProductLatencyTrace,
-  startProductLatencyTrace,
-} from "../../../../shared/productLatencyTrace";
 import type { ThreadStreamingRuntimeEvent } from "../../../../shared/webTurnRunnerCore";
 import { buildRuntimeComputerUseViewer } from "../../../../shared/runtimeTimelineUi";
 import {
@@ -193,23 +189,7 @@ export function RuntimeComputerUseViewer(props: {
   requireLiveDesktop?: boolean;
 }): JSX.Element | null {
   const viewer = useMemo(() => {
-    const trace = startProductLatencyTrace("runtime.computer_viewer_build", {
-      eventCount: props.events.length,
-      requireLiveDesktop: Boolean(props.requireLiveDesktop),
-    });
-    const next = buildRuntimeComputerUseViewer(props.events as any);
-    finishProductLatencyTrace(
-      trace,
-      "ok",
-      {
-        eventCount: props.events.length,
-        requireLiveDesktop: Boolean(props.requireLiveDesktop),
-        hasViewer: Boolean(next),
-        recentStepCount: next?.recentSteps.length ?? 0,
-      },
-      { minDurationMs: 2 },
-    );
-    return next;
+    return buildRuntimeComputerUseViewer(props.events as any);
   }, [props.events, props.requireLiveDesktop]);
   const activeRunId = useMemo(() => {
     for (let index = props.events.length - 1; index >= 0; index -= 1) {

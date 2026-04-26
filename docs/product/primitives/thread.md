@@ -41,7 +41,7 @@ The current thread model includes:
 - route-addressable thread URLs
 - optional active community lens
 - runtime evidence and activity metadata
-- thread rendering and latency instrumentation
+- thread rendering and runtime evidence
 
 ## Rules
 

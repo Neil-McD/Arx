@@ -1,11 +1,6 @@
 import type { ReactNode, TouchEventHandler } from "react";
 import type { BuilderUpgradeContext } from "../../../../shared/authResumeState";
 import type { AppPage, SettingsGroup } from "../../../../shared/appShellNavigation";
-import {
-  finishProductLatencyTrace,
-  markProductLatencyTrace,
-  startProductLatencyTrace,
-} from "../../../../shared/productLatencyTrace";
 import type { WebShellChromeHostProps } from "../components/WebShellChromeHost";
 import type { MobileOverlay } from "../components/webShellChromeShared";
 
@@ -156,23 +151,7 @@ export function buildWebShellChromeHostProps(params: {
       onBackFromPublicFunnel: params.handleTopbarBackFromPublicFunnel,
       onBackFromWorkspaceSettings: params.handleTopbarBackFromWorkspaceSettings,
       onToggleSessions: () => {
-        const trace = startProductLatencyTrace("workspace.threads_drawer_toggle", {
-          fromOpen: params.userWantsSessions,
-          toOpen: !params.userWantsSessions,
-          sessionsDrawerOpen: params.isSessionsDrawerOpen,
-        });
-        markProductLatencyTrace(trace, "toggle_click");
         params.setUserWantsSessions((prev: boolean) => !prev);
-        if (typeof window !== "undefined" && typeof window.requestAnimationFrame === "function") {
-          window.requestAnimationFrame(() => {
-            markProductLatencyTrace(trace, "first_animation_frame");
-            window.requestAnimationFrame(() => {
-              finishProductLatencyTrace(trace, "ok");
-            });
-          });
-        } else {
-          finishProductLatencyTrace(trace, "ok");
-        }
       },
       onStartNewThread: params.handleStartNewWorkspaceThreadFromShell,
       onBackToWorkspace: params.handleTopbarBackToWorkspace,

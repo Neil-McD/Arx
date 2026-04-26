@@ -13,10 +13,6 @@ import {
   fetchCloudThreadContextById,
   setCloudThreadContext,
 } from "./cloudThreadContextGateway";
-import {
-  finishProductLatencyTrace,
-  startProductLatencyTrace,
-} from "./productLatencyTrace";
 import { syncThreadCommunityLensCloud, type ThreadContextCloudState } from "./threadContextCloudSync";
 
 type ThreadRecord = {
@@ -191,17 +187,7 @@ export function useWebThreadMutationController<SessionT>(
       session: SessionT,
     ): Promise<{ thread_id: string; community_id: string | null; context_version: number; updated_at: string } | null> => {
       const current = argsRef.current;
-      const resolveSessionTrace = startProductLatencyTrace("lens.resolve_session", {
-        threadId,
-        toCommunityId: communityId,
-      });
       const usableSession = await resolveUsableSession(session, current.ensureSession);
-      finishProductLatencyTrace(
-        resolveSessionTrace,
-        usableSession ? "ok" : "error",
-        { hasSession: Boolean(usableSession) },
-        { minDurationMs: 1 },
-      );
       if (!usableSession) throw new Error("Sign in to update community context.");
       const hasConvex = isConvexCloudThreadsEnabled();
       if (!hasConvex) {
@@ -209,11 +195,6 @@ export function useWebThreadMutationController<SessionT>(
       }
 
       const applyObservedContext = (context: ThreadContextCloudState): void => {
-        const applyTrace = startProductLatencyTrace("lens.apply_local_context", {
-          threadId,
-          communityId: context.community_id,
-          contextVersion: context.context_version,
-        });
         current.setThreads((prev) =>
           prev.map((thread) =>
             thread.id === threadId
@@ -226,55 +207,30 @@ export function useWebThreadMutationController<SessionT>(
               : thread,
           ),
         );
-        finishProductLatencyTrace(applyTrace, "ok", undefined, { minDurationMs: 1 });
       };
 
       const initialExpectedContextVersion =
         current.threads.find((thread) => thread.id === threadId)?.context_version ?? null;
 
       try {
-        const syncTrace = startProductLatencyTrace("lens.sync_cloud_context", {
+        const result = await syncThreadCommunityLensCloud({
           threadId,
-          toCommunityId: communityId,
+          desiredCommunityId: communityId,
           initialExpectedContextVersion,
+          fetchLatestContext: () =>
+            fetchCloudThreadContextById({
+              session: usableSession as any,
+              threadId,
+            }),
+          setThreadContext: (expectedContextVersion) =>
+            setCloudThreadContext({
+              session: usableSession as any,
+              threadId,
+              expectedContextVersion,
+              communityId,
+            }),
+          onObservedContext: applyObservedContext,
         });
-        let result: ThreadContextCloudState | null = null;
-        try {
-          result = await syncThreadCommunityLensCloud({
-            threadId,
-            desiredCommunityId: communityId,
-            initialExpectedContextVersion,
-            fetchLatestContext: () =>
-              fetchCloudThreadContextById({
-                session: usableSession as any,
-                threadId,
-              }),
-            setThreadContext: (expectedContextVersion) =>
-              setCloudThreadContext({
-                session: usableSession as any,
-                threadId,
-                expectedContextVersion,
-                communityId,
-              }),
-            onObservedContext: applyObservedContext,
-          });
-          finishProductLatencyTrace(
-            syncTrace,
-            result ? "ok" : "error",
-            {
-              communityId: result?.community_id ?? null,
-              contextVersion: result?.context_version ?? null,
-            },
-            { minDurationMs: 1 },
-          );
-        } catch (error) {
-          finishProductLatencyTrace(
-            syncTrace,
-            "error",
-            { error: error instanceof Error ? error.message : String(error) },
-          );
-          throw error;
-        }
         if (!result) throw new Error("Community context was not updated.");
         return result;
       } catch (error) {

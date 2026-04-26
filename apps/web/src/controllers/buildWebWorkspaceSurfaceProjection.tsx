@@ -1,9 +1,5 @@
 import type { Dispatch, ReactNode, SetStateAction } from "react";
 import type { AuthSession } from "../auth";
-import {
-  finishProductLatencyTrace,
-  startProductLatencyTrace,
-} from "../../../../shared/productLatencyTrace";
 import type { ModelToggle } from "../../../../shared/modelCatalog";
 import type { MessageContextModalPayload } from "../../../../shared/messageContextUi";
 import type { WorkspacePickerModel } from "./useWebWorkspaceModelStateController";
@@ -137,17 +133,6 @@ type BuildWebWorkspaceSurfaceProjectionParams = {
 export function buildWebWorkspaceSurfaceProjection(
   params: BuildWebWorkspaceSurfaceProjectionParams,
 ): { workspaceHostProps: WebWorkspaceHostProps } {
-  const projectionTrace = startProductLatencyTrace("workspace.surface_projection", {
-    activeThreadId: params.activeThreadId,
-    threadMessageCount: params.threadMessages.length,
-  });
-  let visibleMessageCount = 0;
-  let userMessageCount = 0;
-  let assistantMessageCount = 0;
-  let attachmentCount = 0;
-  let contextPayloadCount = 0;
-  let messagesWithRuntimeEvents = 0;
-  let totalRuntimeEventCount = 0;
   const threadErrorView: WorkspaceThreadErrorView | null = params.threadError
       ? {
         displayedError: params.displayedThreadError,
@@ -161,12 +146,6 @@ export function buildWebWorkspaceSurfaceProjection(
       if (message.role === "system") return [];
 
       const isUser = message.role === "user";
-      visibleMessageCount += 1;
-      if (isUser) {
-        userMessageCount += 1;
-      } else {
-        assistantMessageCount += 1;
-      }
       const textContent = params.parseMessageText(message.content_json);
       const attachments = params.parseMessageAttachments(message.content_json).map(
         (attachment) => {
@@ -185,7 +164,6 @@ export function buildWebWorkspaceSurfaceProjection(
           };
         },
       );
-      attachmentCount += attachments.length;
       const memoryUsed = !isUser ? params.parseMessageMemoryUsed(message.content_json) : [];
       const historyUsed = !isUser
         ? params.parseMessageHistoryUsed(message.content_json)
@@ -207,7 +185,6 @@ export function buildWebWorkspaceSurfaceProjection(
           })
         : null;
       const hasContext = params.hasContextPayload(contextPayload);
-      if (hasContext) contextPayloadCount += 1;
       const inferenceSource = !isUser
         ? params.extractInferenceSourceFromMessageContent(message.content_json)
         : null;
@@ -222,10 +199,6 @@ export function buildWebWorkspaceSurfaceProjection(
             ? params.activeThreadStreamingState.runtimeEvents
             : params.runtimeEventsByRunId[message.run_id] ?? []
           : [];
-      if (runtimeEvents.length > 0) {
-        messagesWithRuntimeEvents += 1;
-        totalRuntimeEventCount += runtimeEvents.length;
-      }
       const modelLabel = !isUser
         ? params.formatModelSignature(
             messageModelId,
@@ -349,25 +322,6 @@ export function buildWebWorkspaceSurfaceProjection(
     renderMarkdown: params.renderMarkdown,
     copyTextToClipboard: params.copyTextToClipboard,
   };
-
-  finishProductLatencyTrace(
-    projectionTrace,
-    "ok",
-    {
-      activeThreadId: params.activeThreadId,
-      threadMessageCount: params.threadMessages.length,
-      visibleMessageCount,
-      userMessageCount,
-      assistantMessageCount,
-      attachmentCount,
-      contextPayloadCount,
-      messagesWithRuntimeEvents,
-      totalRuntimeEventCount,
-      streamingRuntimeEventCount: runtimeEvents.length,
-      shouldRenderStreamingMessage,
-    },
-    { minDurationMs: 3 },
-  );
 
   return { workspaceHostProps };
 }
