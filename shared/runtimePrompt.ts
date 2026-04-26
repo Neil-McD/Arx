@@ -1,5 +1,6 @@
 import { type RetrievalToolName } from "./retrievalTools.ts";
 import type { RuntimeKernelBudget } from "./runtimeKernelTypes";
+import type { RuntimeWorkspaceStateSummary } from "./runtimeWorkspaceState.ts";
 
 export type ThreadWorkingStatePrompt = {
   version?: number | null;
@@ -13,6 +14,7 @@ export type ThreadWorkingStatePrompt = {
   verifiedFindings?: string[] | null;
   recentActions?: string[] | null;
   lastDiagnostic?: string | null;
+  workspaceRuntime?: RuntimeWorkspaceStateSummary | null;
   openIssue?: string | null;
   blocker?: string | null;
   nextAction?: string | null;
@@ -348,6 +350,36 @@ function buildBackgroundTerminalStatePrompt(params: {
   return lines.join("\n");
 }
 
+function buildWorkspaceRuntimeStatePrompt(params: {
+  workspaceRuntime?: RuntimeWorkspaceStateSummary | null;
+}): string | null {
+  const state = params.workspaceRuntime;
+  if (!state) return null;
+  const terminalStatus = truncatePromptSnippet(state.terminalStatus, 60);
+  const previewStatus = truncatePromptSnippet(state.previewStatus, 80);
+  const command = truncatePromptSnippet(state.command, 120);
+  const cwd = truncatePromptSnippet(state.cwd, 80);
+  const issue = truncatePromptSnippet(state.issue, 180);
+  const nextAction = truncatePromptSnippet(state.nextAction, 180);
+  const outputTail = truncatePromptSnippet(state.outputTail, 160);
+  const previewParts = [
+    state.previewPort ? `port=${state.previewPort}` : null,
+    state.previewPath ? `path=${truncatePromptSnippet(state.previewPath, 80)}` : null,
+    state.previewLabel ? `label=${truncatePromptSnippet(state.previewLabel, 80)}` : null,
+  ].filter(Boolean);
+  return [
+    "WORKSPACE_RUNTIME_STATE",
+    `Terminal: ${terminalStatus || "(unknown)"}${command ? `; command=${command}` : ""}${cwd ? `; cwd=${cwd}` : ""}${typeof state.exitCode === "number" ? `; exit=${state.exitCode}` : ""}`,
+    `Preview: ${previewStatus || "(unknown)"}${previewParts.length > 0 ? `; ${previewParts.join("; ")}` : ""}`,
+    `Runtime issue: ${issue || "(none)"}`,
+    `Runtime next action: ${nextAction || "(none)"}`,
+    outputTail ? `Recent terminal output: ${outputTail}` : null,
+    "If the terminal is still running but preview is blank or render_error_suspected, inspect frontend render/console/root-mount/import/CSS causes before restarting the terminal.",
+  ]
+    .filter((line): line is string => Boolean(line))
+    .join("\n");
+}
+
 function buildExplanationContractPrompt(): string {
   return [
     "EXPLANATION_CONTRACT",
@@ -420,6 +452,18 @@ function buildWorkspaceOperatingPolicyPrompt(params: {
   allowedToolNames: readonly RetrievalToolName[];
 }): string {
   const toolGuidance: string[] = [];
+  if (
+    params.allowedToolNames.includes("search_product_docs") ||
+    params.allowedToolNames.includes("get_product_doc")
+  ) {
+    toolGuidance.push(
+      "- Use search_product_docs when the user asks what Polynet is, how the platform works, how a product concept is defined, or when canonical product truth matters.",
+      "- Use get_product_doc with a slug returned by search_product_docs when you need the full canonical page or a specific heading.",
+      "- Product docs are the canonical platform documentation. Prefer them over stale memory or guessing when explaining Polynet product behavior.",
+      '- search_product_docs arguments should use {"query":"specific platform concept or workflow"} and may include {"limit":5,"section":"Primitives","audience":"builder"}.',
+      '- get_product_doc arguments should use {"slug":"primitives/polynet"} and may include {"heading":"Definition"}.',
+    );
+  }
   if (params.allowedToolNames.includes("community_search")) {
     toolGuidance.push(
       "- Use community_search to inspect the active community's recent context and archived memory when the user asks about community-specific knowledge, signal, resources, recent activity, or older community learning.",
@@ -645,6 +689,9 @@ export function buildWorkspaceRuntimeSystemPrompt(params: RuntimeCommunityPrompt
   const volatilePromptBlocks = [
     buildThreadWorkingStatePrompt({
       threadWorkingState: params.threadWorkingState,
+    }),
+    buildWorkspaceRuntimeStatePrompt({
+      workspaceRuntime: params.threadWorkingState?.workspaceRuntime,
     }),
     buildBackgroundTerminalStatePrompt({
       activeBackgroundTerminals: params.activeBackgroundTerminals,

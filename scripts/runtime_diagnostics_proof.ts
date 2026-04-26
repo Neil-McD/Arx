@@ -5,6 +5,7 @@ import {
   formatRuntimeDiagnosticSummary,
   parseRuntimeDiagnosticsFromText,
 } from "../shared/runtimeDiagnostics.ts";
+import { inferRuntimeToolFailureSemantics } from "../shared/runtimeToolFailureSemantics.ts";
 import { summarizeRuntimeWorkingStateFromEvents } from "../shared/runtimeWorkingStateLedger.ts";
 
 function readText(path: string): string {
@@ -54,6 +55,31 @@ assert.equal(buildDiagnostics[0]?.source, "build");
 assert.equal(buildDiagnostics[0]?.code, "module_resolution");
 assert.equal(buildDiagnostics[0]?.file, "src/App.tsx");
 
+const commandNotFound = inferRuntimeToolFailureSemantics({
+  toolName: "bash",
+  command: "vite --host 0.0.0.0",
+  cwd: "/workspace",
+  exitCode: 127,
+  outputText: "bash: vite: command not found",
+});
+assert.equal(commandNotFound?.kind, "command_not_found");
+assert.equal(commandNotFound?.failedExecutable, "vite");
+assert.equal(commandNotFound?.summary, "Command not found: vite.");
+assert.equal(commandNotFound?.diagnostic.code, "command_not_found");
+assert.ok(
+  commandNotFound?.suggestedRecovery.includes("package.json"),
+  "command-not-found recovery points at package scripts/PATH truth",
+);
+
+const missingScript = inferRuntimeToolFailureSemantics({
+  toolName: "bash",
+  command: "npm run preview",
+  exitCode: 1,
+  outputText: "npm ERR! Missing script: \"preview\"",
+});
+assert.equal(missingScript?.kind, "missing_package_script");
+assert.equal(missingScript?.summary, "Missing package script: preview.");
+
 const eventSource = readText("/Users/neilmcdevitt/code/arx/convex/daytonaRuntimeEvents.ts");
 assert.ok(
   eventSource.includes('eventType: "runtime_diagnostics_detected"'),
@@ -62,6 +88,14 @@ assert.ok(
 assert.ok(
   eventSource.includes("parseRuntimeDiagnosticsFromText"),
   "runtime tool finish path parses diagnostics",
+);
+assert.ok(
+  eventSource.includes("inferRuntimeToolFailureSemantics"),
+  "runtime tool finish path persists semantic shell failures",
+);
+assert.ok(
+  eventSource.includes("failure_semantics"),
+  "runtime tool finish event carries failure semantics",
 );
 
 const appendedEvents = [
@@ -124,6 +158,43 @@ assert.ok(
   workingState.verifiedFindings.some((finding) =>
     finding.includes("Found diagnostic: src/App.tsx:12:34 TS2322"),
   ),
+);
+
+const commandNotFoundState = summarizeRuntimeWorkingStateFromEvents({
+  latestUserText: "Run the app",
+  runStatus: "error",
+  events: [
+    {
+      eventType: "tool_call_finished",
+      payload: {
+        tool_name: "bash",
+        status: "error",
+        args: { command: "vite --host 0.0.0.0" },
+        failure_semantics: {
+          kind: "command_not_found",
+          summary: "Command not found: vite.",
+          suggested_recovery:
+            "Inspect package.json and the sandbox PATH, then use an available script/binary or install the missing command before retrying.",
+        },
+        diagnostics: [commandNotFound?.diagnostic],
+        top_diagnostic_summary: formatRuntimeDiagnosticSummary(commandNotFound?.diagnostic),
+      },
+    },
+  ],
+  nowMs: 2,
+});
+assert.equal(commandNotFoundState.status, "blocked");
+assert.equal(
+  commandNotFoundState.lastDiagnostic,
+  "shell command_not_found: Command not found: vite.",
+);
+assert.equal(
+  commandNotFoundState.nextAction,
+  "Inspect package.json and the sandbox PATH, then use an available script/binary or install the missing command before retrying.",
+);
+assert.ok(
+  !commandNotFoundState.nextAction?.includes("narrower or alternate path"),
+  "semantic shell failures should not fall back to misleading path retry guidance",
 );
 
 console.log("runtime_diagnostics_proof: ok");

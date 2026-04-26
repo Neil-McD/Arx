@@ -43,6 +43,7 @@
     "check:runtime-shell-command-audit-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_shell_command_audit_proof.ts",
     "check:runtime-diagnostics-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_diagnostics_proof.ts",
     "check:runtime-working-state-ledger-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_working_state_ledger_proof.ts",
+    "check:runtime-workspace-state-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_workspace_state_proof.ts",
     "check:runtime-prompt-layout-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_prompt_layout_proof.ts",
     "check:runtime-failure-finalization-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_failure_finalization_proof.ts",
     "check:runtime-activity-timeline-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_activity_timeline_proof.ts",

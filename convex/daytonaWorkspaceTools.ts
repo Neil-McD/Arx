@@ -2,6 +2,7 @@ import {
   DAYTONA_WORKSPACE_ROOT,
   type DaytonaConfig,
 } from "./daytonaSandboxClient";
+import { inferRuntimeToolFailureSemantics } from "../shared/runtimeToolFailureSemantics";
 import {
   createDaytonaToolboxFolder,
   downloadDaytonaToolboxFileText,
@@ -796,26 +797,50 @@ export async function runDaytonaWorkspaceBash(params: {
   signal?: AbortSignal;
 }): Promise<DaytonaWorkspaceToolResult> {
   const normalizedPath = normalizeOptionalRelativeWorkspacePath(params.relPath);
+  const cwd = resolveWorkspaceCwd(normalizedPath);
   const result = await executeDaytonaCommand({
     config: params.config,
     toolboxProxyUrl: params.toolboxProxyUrl,
     sandboxId: params.sandboxId,
     command: String(params.command ?? ""),
-    cwd: resolveWorkspaceCwd(normalizedPath),
+    cwd,
     timeoutSeconds: 60,
     allowNonZero: true,
     signal: params.signal,
   });
   if (!result.ok) return result;
   if (result.exitCode !== 0) {
+    const outputPreview = String(result.stdout ?? "").trim().slice(0, 2000);
+    const failureSemantics = inferRuntimeToolFailureSemantics({
+      toolName: "bash",
+      command: params.command,
+      cwd,
+      exitCode: result.exitCode,
+      errorCode: "daytona_command_failed",
+      outputText: outputPreview,
+    });
     return {
       ok: false,
       status: 502,
       code: "daytona_command_failed",
-      message: `Daytona command failed with exit code ${result.exitCode}.`,
+      message:
+        failureSemantics?.summary ??
+        `Daytona command failed with exit code ${result.exitCode}.`,
       details: {
-        output_preview: String(result.stdout ?? "").trim().slice(0, 2000),
+        output_preview: outputPreview,
         exit_code: result.exitCode,
+        command: String(params.command ?? ""),
+        cwd,
+        ...(failureSemantics
+          ? {
+              failure_kind: failureSemantics.kind,
+              failure_summary: failureSemantics.summary,
+              suggested_recovery: failureSemantics.suggestedRecovery,
+              ...(failureSemantics.failedExecutable
+                ? { failed_executable: failureSemantics.failedExecutable }
+                : null),
+            }
+          : null),
       },
     };
   }

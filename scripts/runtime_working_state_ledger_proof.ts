@@ -28,6 +28,7 @@ for (const field of [
   "filesTouched: v.optional(v.array(v.string()))",
   "recentActions: v.optional(v.array(v.string()))",
   "lastDiagnostic: v.optional(v.string())",
+  "workspaceRuntime: v.optional(",
   "blocker: v.optional(v.string())",
   "nextAction: v.optional(v.string())",
 ]) {
@@ -115,6 +116,7 @@ for (const field of [
   "filesTouched",
   "currentStep",
   "lastDiagnostic",
+  "workspaceRuntime",
   "recentActions",
   "blocker",
   "nextAction",
@@ -239,6 +241,32 @@ assert.equal(
   "src/App.tsx:12:34 TS2322: Type 'string' is not assignable to type 'number'.",
 );
 assert.ok(failedTypecheck.nextAction?.includes("src/App.tsx:12:34 TS2322"));
+
+const blankPreviewFailure = summarizeRuntimeWorkingStateFromEvents({
+  latestUserText: "why is preview blank?",
+  runStatus: "error",
+  events: [
+    {
+      eventType: "tool_call_finished",
+      payload: {
+        tool_name: "terminal_read",
+        status: "ok",
+        details: {
+          terminal_session_id: "term_1",
+          status: "running",
+          command: "npm run dev",
+          preview_port: 3000,
+          preview_status: "blank",
+        },
+      },
+    },
+  ],
+  nowMs: 1,
+});
+assert.equal(blankPreviewFailure.workspaceRuntime?.terminalStatus, "running");
+assert.equal(blankPreviewFailure.workspaceRuntime?.previewStatus, "blank");
+assert.ok(blankPreviewFailure.nextAction?.includes("frontend render path"));
+assert.ok(!blankPreviewFailure.nextAction?.includes("narrower or alternate path"));
 
 const emptyFailure = summarizeRuntimeWorkingStateFromEvents({
   latestUserText: null,

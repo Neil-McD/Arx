@@ -38,6 +38,17 @@ const prompt = buildWorkspaceRuntimeSystemPrompt({
     verifiedFindings: ["Inspected src/App.tsx."],
     recentActions: ["Edited src/App.tsx."],
     lastDiagnostic: "src/App.tsx:12:34 TS2322: Example diagnostic.",
+    workspaceRuntime: {
+      terminalStatus: "running",
+      previewStatus: "blank",
+      terminalSessionId: "terminal_1",
+      command: "npm run dev",
+      cwd: ".",
+      previewPort: 3000,
+      issue: "Preview is blank while the server is running.",
+      nextAction: "Inspect frontend render path.",
+      updatedAt: 1,
+    },
     nextAction: "Run npm run build.",
   },
   activeBackgroundTerminals: [
@@ -61,6 +72,7 @@ const policyIndex = indexOfBlock(prompt, "AGENT_OPERATING_POLICY");
 const communityIndex = indexOfBlock(prompt, "COMMUNITY_LENS");
 const workspaceIndex = indexOfBlock(prompt, "WORKSPACE_CONTEXT");
 const workingStateIndex = indexOfBlock(prompt, "THREAD_WORKING_STATE");
+const workspaceRuntimeIndex = indexOfBlock(prompt, "WORKSPACE_RUNTIME_STATE");
 const terminalIndex = indexOfBlock(prompt, "BACKGROUND_TERMINAL_STATE");
 const temporalIndex = indexOfBlock(prompt, "TEMPORAL_CONTEXT");
 
@@ -70,7 +82,8 @@ assert.ok(explanationIndex < policyIndex, "explanation contract should precede o
 assert.ok(policyIndex < communityIndex, "stable policy should precede semi-stable context");
 assert.ok(communityIndex < workspaceIndex, "community identity should precede workspace identity");
 assert.ok(workspaceIndex < workingStateIndex, "working state should be volatile after workspace identity");
-assert.ok(workingStateIndex < terminalIndex, "terminal state should follow thread working state");
+assert.ok(workingStateIndex < workspaceRuntimeIndex, "workspace runtime state should follow thread working state");
+assert.ok(workspaceRuntimeIndex < terminalIndex, "terminal state should follow persisted runtime state");
 assert.ok(terminalIndex < temporalIndex, "temporal context should remain in volatile tail");
 assert.equal(
   prompt.match(/THREAD_WORKING_STATE/g)?.length ?? 0,
@@ -80,6 +93,8 @@ assert.equal(
 assert.match(prompt, /Verification: needed/);
 assert.match(prompt, /Files touched: src\/App\.tsx, src\/main\.tsx/);
 assert.match(prompt, /Last diagnostic: src\/App\.tsx:12:34 TS2322/);
+assert.match(prompt, /Preview: blank; port=3000/);
+assert.match(prompt, /If the terminal is still running but preview is blank/);
 
 const runtimePromptSource = readFileSync(
   "/Users/neilmcdevitt/code/arx/shared/runtimePrompt.ts",

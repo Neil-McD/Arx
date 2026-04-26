@@ -3,6 +3,10 @@ import {
   selectTopRuntimeDiagnostic,
   type RuntimeDiagnostic,
 } from "./runtimeDiagnostics.ts";
+import {
+  summarizeWorkspaceRuntimeStateFromEvents,
+  type RuntimeWorkspaceStateSummary,
+} from "./runtimeWorkspaceState.ts";
 
 export type RuntimeWorkingStateRunEvent = {
   eventType: string;
@@ -35,6 +39,7 @@ export type RuntimeWorkingStateSummary = {
   recentActions: string[];
   verificationStatus: "not_needed" | "needed" | "passed" | "failed";
   lastDiagnostic?: string;
+  workspaceRuntime?: RuntimeWorkspaceStateSummary;
   updatedAt: number;
 };
 
@@ -95,6 +100,22 @@ function extractToolErrorMessage(payload: unknown): string | null {
   );
 }
 
+function extractFailureSemantics(payload: unknown): {
+  kind: string | null;
+  summary: string | null;
+  suggestedRecovery: string | null;
+} | null {
+  const payloadRecord = asRecord(payload);
+  const failureRecord = asRecord(payloadRecord?.failure_semantics);
+  if (!failureRecord) return null;
+  const kind = normalizeSummaryText(failureRecord.kind, 80) ?? null;
+  const summary = normalizeSummaryText(failureRecord.summary, 220) ?? null;
+  const suggestedRecovery =
+    normalizeSummaryText(failureRecord.suggested_recovery, 240) ?? null;
+  if (!kind && !summary && !suggestedRecovery) return null;
+  return { kind, summary, suggestedRecovery };
+}
+
 function extractRuntimeDiagnostics(payload: unknown): RuntimeDiagnostic[] {
   const payloadRecord = asRecord(payload);
   const rawDiagnostics = Array.isArray(payloadRecord?.diagnostics)
@@ -153,7 +174,12 @@ export function summarizeRuntimeWorkingStateFromEvents(
   let successfulVerificationShellCount = 0;
   let failedVerificationShellCount = 0;
   let successfulOtherShellCount = 0;
-  let firstFailedTool: { toolName: string; path: string | null; message: string | null } | null = null;
+  let firstFailedTool: {
+    toolName: string;
+    path: string | null;
+    message: string | null;
+    failureSemantics: ReturnType<typeof extractFailureSemantics>;
+  } | null = null;
   const diagnostics: RuntimeDiagnostic[] = [];
 
   for (const event of args.events) {
@@ -203,12 +229,22 @@ export function summarizeRuntimeWorkingStateFromEvents(
         toolName,
         path,
         message: extractToolErrorMessage(event.payload),
+        failureSemantics: extractFailureSemantics(event.payload),
       };
     }
   }
 
   const topDiagnostic = selectTopRuntimeDiagnostic(diagnostics);
   const topDiagnosticSummary = formatRuntimeDiagnosticSummary(topDiagnostic);
+  const workspaceRuntime = summarizeWorkspaceRuntimeStateFromEvents({
+    events: args.events,
+    nowMs: args.nowMs,
+  });
+  const workspaceRuntimeIssue = normalizeSummaryText(workspaceRuntime?.issue, 240);
+  const workspaceRuntimeNextAction = normalizeSummaryText(
+    workspaceRuntime?.nextAction,
+    240,
+  );
 
   const filesTouched = normalizeSummaryList(touchedPaths, 10, 180);
   const filesChanged = normalizeSummaryList(changedFiles, 8, 180);
@@ -238,6 +274,12 @@ export function summarizeRuntimeWorkingStateFromEvents(
   }
   if (topDiagnosticSummary) {
     verifiedFindingsRaw.push(`Found diagnostic: ${topDiagnosticSummary}`);
+  }
+  if (
+    workspaceRuntime?.terminalStatus === "running" &&
+    workspaceRuntime.previewStatus === "running"
+  ) {
+    verifiedFindingsRaw.push("Workspace preview server is running.");
   }
   const verifiedFindings = normalizeSummaryList(verifiedFindingsRaw, 4, 220);
 
@@ -272,7 +314,16 @@ export function summarizeRuntimeWorkingStateFromEvents(
     lastResult = normalizeSummaryText(
       topDiagnosticSummary
         ? `The last workspace run failed with diagnostic ${topDiagnosticSummary}.`
+        : firstFailedTool.failureSemantics?.summary
+          ? `The last workspace run failed: ${firstFailedTool.failureSemantics.summary}`
+        : workspaceRuntimeIssue
+          ? `The last workspace runtime issue was: ${workspaceRuntimeIssue}`
         : `The last workspace run failed during ${firstFailedTool.toolName}${firstFailedTool.path ? ` on ${firstFailedTool.path}` : ""}.`,
+      240,
+    );
+  } else if (workspaceRuntimeIssue) {
+    lastResult = normalizeSummaryText(
+      `The last workspace runtime issue was: ${workspaceRuntimeIssue}`,
       240,
     );
   } else {
@@ -289,8 +340,15 @@ export function summarizeRuntimeWorkingStateFromEvents(
         firstFailedTool
           ? topDiagnosticSummary
             ? `Verification failed: ${topDiagnosticSummary}`
+            : firstFailedTool.failureSemantics?.summary
+              ? `${firstFailedTool.toolName} failed: ${firstFailedTool.failureSemantics.summary}`
+            : workspaceRuntimeIssue
+              ? workspaceRuntimeIssue
             : `${firstFailedTool.toolName}${firstFailedTool.path ? ` on ${firstFailedTool.path}` : ""} failed${firstFailedTool.message ? `: ${firstFailedTool.message}` : "."}`
-          : args.runErrorMessage || args.runReason || "The last workspace run did not complete successfully.",
+          : workspaceRuntimeIssue ||
+            args.runErrorMessage ||
+            args.runReason ||
+            "The last workspace run did not complete successfully.",
         240,
       ) ?? "The last workspace run did not complete successfully.";
   }
@@ -312,13 +370,24 @@ export function summarizeRuntimeWorkingStateFromEvents(
         ? "Verify the changed workspace files."
         : "Resolve the blocker from the last run.";
   const blocker = args.runStatus !== "ok" ? openIssue : undefined;
+  const topDiagnosticIsFailureSemantic =
+    Boolean(firstFailedTool?.failureSemantics?.kind) &&
+    topDiagnostic?.source === "shell" &&
+    topDiagnostic?.code === firstFailedTool?.failureSemantics?.kind;
   const nextAction =
     ledgerStatus === "complete"
       ? undefined
       : ledgerStatus === "needs_verification"
         ? "Run an appropriate build, test, preview, or targeted read before calling the task done."
+        : topDiagnosticIsFailureSemantic &&
+            firstFailedTool?.failureSemantics?.suggestedRecovery
+          ? firstFailedTool.failureSemantics.suggestedRecovery
         : topDiagnosticSummary
           ? `Fix ${topDiagnosticSummary}`
+        : firstFailedTool?.failureSemantics?.suggestedRecovery
+          ? firstFailedTool.failureSemantics.suggestedRecovery
+        : workspaceRuntimeNextAction
+          ? workspaceRuntimeNextAction
         : firstFailedTool
           ? `Retry ${firstFailedTool.toolName} with a narrower or alternate path, or report the blocker if it is not recoverable.`
           : "Inspect the latest runtime events and continue from the last verified state.";
@@ -340,6 +409,7 @@ export function summarizeRuntimeWorkingStateFromEvents(
     ...(openIssue ? { openIssue } : null),
     ...(blocker ? { blocker } : null),
     ...(nextAction ? { nextAction } : null),
+    ...(workspaceRuntime ? { workspaceRuntime } : null),
     updatedAt: args.nowMs,
   };
 }

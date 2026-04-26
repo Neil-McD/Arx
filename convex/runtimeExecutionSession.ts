@@ -122,6 +122,33 @@ function formatToolOutput(toolName: string, value: unknown): string {
   return formatJsonToolOutput(value);
 }
 
+function buildTerminalToolResultDetails(
+  payload: Record<string, unknown> | null,
+): Record<string, unknown> | null {
+  if (!payload) return null;
+  const details: Record<string, unknown> = {};
+  for (const key of [
+    "terminal_session_id",
+    "status",
+    "command",
+    "cwd",
+    "preview_port",
+    "preview_path",
+    "preview_label",
+    "preview_status",
+    "exit_code",
+    "output_tail",
+    "code",
+    "message",
+  ]) {
+    const value = payload[key];
+    if (value !== undefined && value !== null && value !== "") {
+      details[key] = value;
+    }
+  }
+  return Object.keys(details).length > 0 ? details : null;
+}
+
 function normalizeRuntimeTerminalIdentityCommand(
   command: string,
   cwd: string | null,
@@ -1153,6 +1180,10 @@ export function createPolyNetExecutionSession(params: {
         }
         const ok = Boolean((payload as { ok?: boolean } | null)?.ok);
         if (!ok) {
+          const payloadRecord =
+            payload && typeof payload === "object" && !Array.isArray(payload)
+              ? (payload as Record<string, unknown>)
+              : null;
           await emitRunEvent("terminal_tool_completed", {
             run_id: params.runId,
             tool_name: paramsForTool.toolName,
@@ -1176,8 +1207,13 @@ export function createPolyNetExecutionSession(params: {
               (payload as { message?: unknown } | null)?.message ??
                 "Terminal operation failed.",
             ),
+            details: buildTerminalToolResultDetails(payloadRecord),
           };
         }
+        const payloadRecord =
+          payload && typeof payload === "object" && !Array.isArray(payload)
+            ? (payload as Record<string, unknown>)
+            : null;
         await emitRunEvent("terminal_tool_completed", {
           run_id: params.runId,
           tool_name: paramsForTool.toolName,
@@ -1198,53 +1234,7 @@ export function createPolyNetExecutionSession(params: {
           outputText: formatToolOutput(paramsForTool.toolName, payload),
           errorCode: null,
           errorMessage: null,
-          details:
-            paramsForTool.toolName === "terminal_start" &&
-            payload &&
-            typeof payload === "object" &&
-            !Array.isArray(payload)
-              ? {
-                  terminal_session_id:
-                    typeof (payload as Record<string, unknown>)
-                      .terminal_session_id === "string"
-                      ? (payload as Record<string, unknown>).terminal_session_id
-                      : null,
-                  status:
-                    typeof (payload as Record<string, unknown>).status ===
-                    "string"
-                      ? (payload as Record<string, unknown>).status
-                      : null,
-                  command:
-                    typeof (payload as Record<string, unknown>).command ===
-                    "string"
-                      ? (payload as Record<string, unknown>).command
-                      : null,
-                  cwd:
-                    typeof (payload as Record<string, unknown>).cwd === "string"
-                      ? (payload as Record<string, unknown>).cwd
-                      : null,
-                  preview_port:
-                    typeof (payload as Record<string, unknown>)
-                      .preview_port === "number"
-                      ? (payload as Record<string, unknown>).preview_port
-                      : null,
-                  preview_path:
-                    typeof (payload as Record<string, unknown>)
-                      .preview_path === "string"
-                      ? (payload as Record<string, unknown>).preview_path
-                      : null,
-                  preview_label:
-                    typeof (payload as Record<string, unknown>)
-                      .preview_label === "string"
-                      ? (payload as Record<string, unknown>).preview_label
-                      : null,
-                  output_tail:
-                    typeof (payload as Record<string, unknown>).output_tail ===
-                    "string"
-                      ? (payload as Record<string, unknown>).output_tail
-                      : null,
-                }
-              : null,
+          details: buildTerminalToolResultDetails(payloadRecord),
         };
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
