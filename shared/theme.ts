@@ -1,7 +1,7 @@
-const APP_THEME_IDS = ["light", "dark", "dark-warm", "polynet"] as const;
+const APP_THEME_IDS = ["dark", "polynet"] as const;
 
 export type AppTheme = (typeof APP_THEME_IDS)[number];
-export type AppThemeFamily = "dark" | "lightlike";
+export type AppThemeFamily = "dark";
 
 export type AppThemeOption = {
   id: AppTheme;
@@ -11,9 +11,7 @@ export type AppThemeOption = {
 };
 
 export const APP_THEME_OPTIONS: readonly AppThemeOption[] = [
-  { id: "light", label: "Light", description: "Default light theme", disabled: false },
   { id: "dark", label: "Dark", description: "Default dark theme", disabled: false },
-  { id: "dark-warm", label: "Dark (Warm)", description: "Warm obsidian + champagne gold", disabled: false },
   { id: "polynet", label: "Polynet Dark", description: "Monolithic surface + violet", disabled: false },
 ] as const;
 
@@ -25,9 +23,8 @@ export function parseAppTheme(input: string | null | undefined): AppTheme | null
   return APP_THEME_ID_SET.has(raw) ? (raw as AppTheme) : null;
 }
 
-function themeFamilyForTheme(theme: AppTheme): AppThemeFamily {
-  if (theme === "dark" || theme === "dark-warm" || theme === "polynet") return "dark";
-  return "lightlike";
+function themeFamilyForTheme(_theme: AppTheme): AppThemeFamily {
+  return "dark";
 }
 
 export function applyAppThemeAttributes(theme: AppTheme, root: HTMLElement | null | undefined): void {

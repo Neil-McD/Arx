@@ -56,13 +56,11 @@
    so we override per-theme here too. */
 :root,
 :root[data-theme="dark"],
-:root[data-theme="dark-warm"],
 :root[data-theme="polynet"] {
   --header-border: none;
 }
 
 :root[data-theme="dark"],
-:root[data-theme="dark-warm"],
 :root[data-theme="polynet"] {
   --web-floating-chrome-bg: rgba(12, 12, 12, 0.22);
   --web-floating-chrome-border: rgba(255, 255, 255, 0.08);
@@ -74,7 +72,6 @@
 @supports (background: color-mix(in srgb, #000 50%, transparent)) {
   :root,
   :root[data-theme="dark"],
-  :root[data-theme="dark-warm"],
   :root[data-theme="polynet"] {
     --web-floating-chrome-bg: color-mix(in srgb, var(--bg-workspace, var(--bg-app)) 84%, transparent);
     --web-floating-chrome-border: color-mix(in srgb, var(--text-primary) 9%, transparent);
@@ -93,29 +90,6 @@
   --bg-workspace: rgba(18, 18, 20, 0.94);
   --surface-workspace: rgba(18, 18, 20, 0.94);
   --surface-rail: rgba(18, 18, 20, 0.94);
-}
-
-/* Web light themes: add enough contrast so the selection lip + buttons read on white rails. */
-:root[data-theme="light"] .community-rail-button {
-  border: 1px solid var(--border-default);
-  background: var(--bg-card);
-}
-
-:root[data-theme="light"] .community-rail-button.community-rail-community {
-  background: var(--bg-card);
-}
-
-:root[data-theme="light"] .community-rail-button.community-rail-community::before {
-  background: var(--text-primary);
-}
-
-:root[data-theme="light"] .community-rail-button:focus-visible {
-  outline: 2px solid rgba(0, 0, 0, 0.25);
-}
-
-/* If we show initials, don't paint the full tile white in light mode. */
-:root[data-theme="light"] .community-rail-initials {
-  background: transparent;
 }
 
 /* Web: keep topbar content aligned with the left rail. */
@@ -749,7 +723,6 @@
 }
 
 :root[data-theme="dark"] .web-download-logo.monochrome,
-:root[data-theme="dark-warm"] .web-download-logo.monochrome,
 :root[data-theme="polynet"] .web-download-logo.monochrome {
   filter: invert(1);
 }
@@ -1014,15 +987,6 @@
   margin-bottom: 0;
 }
 
-:root[data-theme="light"] .message-item.user {
-  background: var(--bg-terminal);
-  border-color: var(--bg-terminal);
-}
-
-:root[data-theme="light"] .message-item.user .message-text {
-  color: var(--text-terminal);
-}
-
 /* Web readability pass: increase assistant output size versus the old shell default. */
 .message-item.assistant .message-text {
   font-size: 16px;
@@ -1031,14 +995,12 @@
 
 /* Dark web themes: push assistant text a little brighter for readability. */
 :root[data-theme="dark"] .message-item.assistant .message-text,
-:root[data-theme="dark-warm"] .message-item.assistant .message-text,
 :root[data-theme="polynet"] .message-item.assistant .message-text {
   color: #f3f5f7;
 }
 
 @supports (color: color-mix(in srgb, #fff 50%, #000 50%)) {
   :root[data-theme="dark"] .message-item.assistant .message-text,
-  :root[data-theme="dark-warm"] .message-item.assistant .message-text,
   :root[data-theme="polynet"] .message-item.assistant .message-text {
     color: color-mix(in srgb, var(--text-primary) 78%, #ffffff 22%);
   }
@@ -1723,7 +1685,6 @@
 }
 
 :root[data-theme="dark"] .model-picker-nav-logo-img.monochrome,
-:root[data-theme="dark-warm"] .model-picker-nav-logo-img.monochrome,
 :root[data-theme="polynet"] .model-picker-nav-logo-img.monochrome {
   filter: invert(1);
 }
@@ -2459,7 +2420,6 @@
 }
 
 :root[data-theme="dark"] .auth-gate-google-button,
-:root[data-theme="dark-warm"] .auth-gate-google-button,
 :root[data-theme="polynet"] .auth-gate-google-button {
   border-color: rgba(255, 255, 255, 0.18);
   background: rgba(255, 255, 255, 0.92);

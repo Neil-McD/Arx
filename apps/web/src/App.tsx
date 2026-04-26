@@ -221,7 +221,6 @@ import {
   type ModelToggle,
 } from "../../../shared/modelCatalog";
 import {
-  APP_THEME_OPTIONS,
   parseAppTheme,
   type AppTheme,
 } from "../../../shared/theme";

@@ -1,7 +1,7 @@
 :root {
   font-family: "IBM Plex Sans", system-ui, -apple-system, sans-serif;
   --font-mono: "IBM Plex Mono", "SF Mono", "Fira Code", monospace;
-  color-scheme: light dark;
+  color-scheme: dark;
 
   /* Radius */
   --radius-sm: 8px;
@@ -12,58 +12,65 @@
   --web-chat-max-width: 760px;
   --web-chat-gutter: clamp(12px, 3vw, 20px);
 
-  /* Light mode (default) - Clean, minimal, ChatGPT-style */
-  --bg-app: #ffffff;
-  --bg-header: #ffffff;
-  --bg-panel: #ffffff;
-  --bg-modal: #ffffff;
-  --bg-workspace: #f7f7f8;
-  --bg-card: #ffffff;
-  --bg-card-alt: #fafafa;
-  --bg-card-hover: #f5f5f5;
-  --bg-input: #ffffff;
-  --bg-button: #5bc0eb;
-  --bg-button-hover: #38bdf8;
-  --bg-button-text: #0b1320;
-  --bg-terminal: #171717;
+  /* Base fallback tokens mirror Polynet so the shell never flashes light. */
+  --bg-app: #121214;
+  --bg-header: rgba(18, 18, 20, 0.94);
+  --bg-panel: rgba(21, 21, 24, 0.9);
+  --bg-modal: #17171a;
+  --bg-workspace: rgba(18, 18, 20, 0.94);
+  --bg-card: rgba(23, 23, 26, 0.9);
+  --bg-card-solid: #17171a;
+  --bg-card-alt: rgba(32, 32, 37, 0.9);
+  --bg-card-hover: #1c1c20;
+  --bg-input: rgba(24, 24, 28, 0.95);
+  --bg-button: #efeff2;
+  --bg-button-hover: #ffffff;
+  --bg-button-text: #101114;
+  --bg-terminal: #0d0d10;
 
-  /* Accent color (light cyan) */
-  --accent-gold: #5bc0eb;
-  --accent-gold-subtle: #38bdf8;
-  --accent-gold-glow: rgba(91, 192, 235, 0.18);
+  /* Accent color */
+  --accent-gold: #d66a8a;
+  --accent-gold-subtle: #b75874;
+  --accent-gold-glow: rgba(214, 106, 138, 0.18);
   --text-link: var(--accent-gold);
   --text-link-hover: var(--accent-gold-subtle);
 
-  /* Text - neutral grays */
-  --text-primary: #0f0f0f;
-  --text-secondary: #2f2f2f;
-  --text-muted: #4d4d4d;
-  --text-faint: #6a6a6a;
-  --text-terminal: #f5f5f5;
+  /* Secondary accent */
+  --accent-cyan: #4285f4;
+  --accent-cyan-subtle: #2d6de0;
+  --accent-cyan-glow: rgba(66, 133, 244, 0.16);
 
-  /* Borders - subtle */
-  --border-default: #e5e5e5;
-  --border-strong: #d9d9d9;
-  --border-muted: #ececec;
-  --border-active: #38bdf8;
+  /* Text */
+  --text-primary: #e8e8ea;
+  --text-secondary: #a1a1aa;
+  --text-muted: #71717a;
+  --text-faint: #52525b;
+  --text-terminal: #ececef;
+
+  /* Borders */
+  --border-default: #26262b;
+  --border-strong: #2d2d33;
+  --border-muted: #1f1f24;
+  --border-active: #d66a8a;
+  --divider-accent: rgba(255, 255, 255, 0.06);
 
   /* Icons */
-  --icon-default: #2f2f2f;
-  --icon-hover: #1c1c1c;
+  --icon-default: #71717a;
+  --icon-hover: #a1a1aa;
   --icon-active: var(--border-active);
 
   /* Overlays */
-  --hover-overlay: rgba(0, 0, 0, 0.04);
-  --active-overlay: rgba(0, 0, 0, 0.08);
+  --hover-overlay: rgba(255, 255, 255, 0.04);
+  --active-overlay: rgba(255, 255, 255, 0.08);
 
-  /* No panel shadows in light mode */
+  /* No panel shadows */
   --panel-shadow: none;
 
   /* Status colors - muted */
-  --status-default: #f5f5f5;
-  --status-proposed: #fef3cd;
-  --status-approved: #d4edda;
-  --status-executed: #d6e9f8;
+  --status-default: #17171a;
+  --status-proposed: #372730;
+  --status-approved: #223229;
+  --status-executed: #202d3f;
 
   /* Semantic aliases (no-visual-delta compatibility layer) */
   --surface-app: var(--bg-app);
@@ -102,9 +109,13 @@
   background: var(--surface-app);
 }
 
-:root[data-theme="light"] {
-  --scrollbar-thumb: #171717;
-  --scrollbar-thumb-hover: #000000;
+/* No-attribute startup fallback should behave like Polynet, not the alternate dark theme. */
+:root:not([data-theme]) {
+  --surface-nav: rgba(21, 21, 24, 0.9);
+  --workspace-composer-bg: var(--surface-nav, var(--surface-panel));
+  --workspace-landing-action-bg: var(--surface-nav, var(--surface-panel));
+  --workspace-landing-action-hover-bg: color-mix(in srgb, var(--surface-nav, var(--surface-panel)) 88%, var(--bg-card-hover) 12%);
+  --community-rail-button-border: 0;
 }
 
 /* Dark theme */
@@ -152,86 +163,6 @@
 
   --status-default: #2a2a2a;
   --status-proposed: #4a4230;
-  --status-approved: #2a3d2e;
-  --status-executed: #2e3040;
-  --community-rail-button-border: 0;
-}
-
-/* Dark (Warm) theme - "Warm Obsidian + Champagne Gold + Stellar Cyan" */
-:root[data-theme="dark-warm"] {
-  /*
-   * ARCS Signature Palette
-   * Philosophy: Warm darkness + noble light + restrained energy
-   * Archetype: Rolls-Royce interior, private observatory, cathedral for intelligence
-   */
-
-  /* === FOUNDATION: Warm Obsidian === */
-  /* Not blue-black, not pitch black. Charcoal with warmth. */
-  --bg-app: #1a1714;
-  --bg-header: rgba(20, 18, 15, 0.95);
-  --bg-panel: rgba(28, 25, 21, 0.9);
-  --bg-modal: rgba(20, 18, 15, 0.98);
-  --bg-workspace: rgba(32, 29, 25, 0.95);
-  --bg-card: rgba(42, 38, 34, 0.9);
-  --bg-card-solid: #2a2622;
-  --bg-card-alt: rgba(36, 33, 28, 0.9);
-  --bg-card-hover: rgba(50, 46, 40, 0.95);
-  --bg-input: rgba(24, 21, 17, 0.95);
-  --bg-terminal: #0c0a08;
-
-  /* === PRIMARY ACCENT: Champagne Gold === */
-  /* Subtle, soft, almost accidental. Signals permanence + trust. */
-  /* Rule: Scarcity of gold - if everywhere, it becomes cheap. */
-  --bg-button: #c9a962;
-  --bg-button-text: #14120f;
-  --accent-gold: #c9a962;
-  --accent-gold-subtle: #a8904f;
-  --accent-gold-glow: rgba(201, 169, 98, 0.15);
-  --text-link: var(--accent-gold);
-  --text-link-hover: var(--accent-gold-subtle);
-
-  /* === SECONDARY ENERGY: Stellar Cyan === */
-  /* Only for active states, live systems, intelligence in motion. */
-  /* Rule: Cyan = state, not brand. Never decorative, never dominant. */
-  --accent-cyan: #6ed4d8;
-  --accent-cyan-subtle: #4fb8bc;
-  --accent-cyan-glow: rgba(110, 212, 216, 0.12);
-
-  /* === TYPOGRAPHY: Ivory + Ash === */
-  /* Warm off-white for primary, cool ash for secondary. Never pure white. */
-  --text-primary: #fffaf2;
-  --text-secondary: #d8d0c2;
-  --text-muted: #b7af9f;
-  --text-faint: #9c958a;
-  --text-terminal: #fffaf2;
-
-  /* === BORDERS: Warm grays === */
-  --border-default: #3a3632;
-  --border-strong: #4a4540;
-  --border-muted: #2a2723;
-  --border-active: #c9a962;
-
-  /* === DIVIDERS: Subtle gold accent lines === */
-  --divider-accent: rgba(201, 169, 98, 0.15);
-
-  /* === HEADER: No divider in dark mode === */
-  --header-border: none;
-
-  /* === ICONS === */
-  --icon-default: #8a847a;
-  --icon-hover: #b5aea1;
-  --icon-active: var(--border-active);
-
-  /* === OVERLAYS: Subtle gold tint === */
-  --hover-overlay: rgba(201, 169, 98, 0.06);
-  --active-overlay: rgba(201, 169, 98, 0.12);
-
-  /* === SHADOWS: None in dark mode === */
-  --panel-shadow: none;
-
-  /* === STATUS: Warm-tinted semantic colors === */
-  --status-default: #2a2622;
-  --status-proposed: #3d3425;
   --status-approved: #2a3d2e;
   --status-executed: #2e3040;
   --community-rail-button-border: 0;
@@ -690,7 +621,6 @@ body {
 
 /* Theme-level rail surface assignment (component rule stays generic). */
 :root[data-theme="dark"],
-:root[data-theme="dark-warm"],
 :root[data-theme="polynet"] {
   --surface-rail: var(--bg-workspace, var(--bg-app));
 }
@@ -8393,7 +8323,6 @@ button.chat-reply-quote:hover {
 }
 
 :root[data-theme="dark"] .model-picker-nav-logo-img.monochrome,
-:root[data-theme="dark-warm"] .model-picker-nav-logo-img.monochrome,
 :root[data-theme="polynet"] .model-picker-nav-logo-img.monochrome {
   filter: invert(1);
 }
@@ -9392,7 +9321,6 @@ button.message-citation-chip:hover {
 }
 
 :root[data-theme="dark"] .auth-gate-google-button,
-:root[data-theme="dark-warm"] .auth-gate-google-button,
 :root[data-theme="polynet"] .auth-gate-google-button {
   border-color: rgba(255, 255, 255, 0.18);
   background: rgba(255, 255, 255, 0.92);
@@ -10260,10 +10188,6 @@ button.message-citation-chip:hover {
   opacity: 0.7;
 }
 
-:root[data-theme-family="lightlike"] .tool-group-inline-summary {
-  opacity: 0.6;
-}
-
 .tool-command-full {
   margin-top: 4px;
   margin-left: 14px;
@@ -10288,28 +10212,6 @@ button.message-citation-chip:hover {
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid var(--border-muted);
   color: var(--text-muted);
-}
-
-/* Light modes: make tool traces readable. */
-:root[data-theme-family="lightlike"] .tool-inline {
-  border-bottom-color: rgba(0, 0, 0, 0.06);
-  border-left-color: rgba(0, 0, 0, 0.08);
-}
-
-:root[data-theme-family="lightlike"] .tool-group-inline-summary {
-  opacity: 0.6;
-}
-
-:root[data-theme-family="lightlike"] .tool-command-full {
-  background: var(--bg-workspace);
-  border-color: var(--border-default);
-  color: var(--text-secondary);
-}
-
-:root[data-theme-family="lightlike"] .tool-policy {
-  background: rgba(0, 0, 0, 0.03);
-  border-color: var(--border-default);
-  color: var(--text-secondary);
 }
 
 /* Expanded tool items inside inline group */
@@ -12404,16 +12306,6 @@ button.message-citation-chip:hover {
   background: #ececec;
 }
 
-:root[data-theme-family="lightlike"] .modal.modal-upgrade .plan-cta {
-  background: #141414;
-  color: #ffffff;
-}
-
-:root[data-theme-family="lightlike"] .modal.modal-upgrade .plan-cta:hover {
-  background: #000000;
-  color: #ffffff;
-}
-
 .modal.modal-upgrade .plan-card.free.current {
   opacity: 0.82;
 }
@@ -12931,10 +12823,6 @@ button.message-citation-chip:hover {
   stroke-linecap: round;
   stroke-linejoin: round;
   fill: none;
-}
-
-:root[data-theme-family="lightlike"] .settings-section {
-  border-bottom-color: rgba(0, 0, 0, 0.06);
 }
 
 .export-actions {
@@ -13716,16 +13604,6 @@ button.message-citation-chip:hover {
   border-color: rgba(120, 120, 120, 0.4);
 }
 
-/* Light modes: avoid dark gray slabs inside the modal. */
-:root[data-theme-family="lightlike"] .memory-block {
-  background: var(--bg-card-alt);
-  border-color: var(--border-default);
-}
-
-:root[data-theme-family="lightlike"] .memory-block.read-only {
-  border-color: var(--border-default);
-}
-
 .memory-block-header {
   display: flex;
   align-items: center;
@@ -14157,16 +14035,6 @@ button.message-citation-chip:hover {
   background: var(--accent-gold);
   color: var(--bg-button-text);
   filter: brightness(1.08);
-}
-
-:root[data-theme-family="lightlike"] .settings-panel button.primary:not(.platform-save-button):hover:not(:disabled),
-:root[data-theme-family="lightlike"] .settings-panel button[type="submit"]:not(.platform-save-button):hover:not(:disabled),
-:root[data-theme-family="lightlike"] .exec-policy-actions button:not(.secondary):not(.platform-save-button):hover:not(:disabled),
-:root[data-theme-family="lightlike"] .key-row button:not(.secondary):hover {
-  background: var(--bg-card-hover);
-  border-color: var(--border-default);
-  color: var(--text-primary);
-  filter: none;
 }
 
 .key-row button.secondary {
@@ -15708,41 +15576,6 @@ button.message-citation-chip:hover {
 }
 
 /* Theme preview colors */
-.appearance-option-preview[data-preview-theme="light"] {
-  background: #f6f4f0;
-}
-
-.appearance-option-preview[data-preview-theme="light"] .preview-header {
-  background: #eeebe5;
-  grid-column: 1 / -1;
-  border-radius: 3px;
-}
-
-.appearance-option-preview[data-preview-theme="light"] .preview-sidebar {
-  background: #eeebe5;
-  border-radius: 3px;
-}
-
-.appearance-option-preview[data-preview-theme="light"] .preview-content {
-  background: #ffffff;
-  border-radius: 3px;
-  padding: 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.appearance-option-preview[data-preview-theme="light"] .preview-line {
-  background: #dedad3;
-  height: 4px;
-  border-radius: 2px;
-}
-
-.appearance-option-preview[data-preview-theme="light"] .preview-line.short {
-  width: 60%;
-  background: #5bc0eb;
-}
-
 .appearance-option-preview[data-preview-theme="dark"] {
   background: #1a1a1a;
 }
@@ -15775,44 +15608,6 @@ button.message-citation-chip:hover {
 
 .appearance-option-preview[data-preview-theme="dark"] .preview-line.short {
   width: 60%;
-}
-
-.appearance-option-preview[data-preview-theme="dark-warm"] {
-  background: #1a1714;
-}
-
-.appearance-option-preview[data-preview-theme="dark-warm"] .preview-header {
-  background: #14120f;
-  grid-column: 1 / -1;
-  border-radius: 3px;
-  /* Subtle gold accent line */
-  border-bottom: 1px solid rgba(201, 169, 98, 0.2);
-}
-
-.appearance-option-preview[data-preview-theme="dark-warm"] .preview-sidebar {
-  background: #1c1915;
-  border-radius: 3px;
-}
-
-.appearance-option-preview[data-preview-theme="dark-warm"] .preview-content {
-  background: #2a2622;
-  border-radius: 3px;
-  padding: 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.appearance-option-preview[data-preview-theme="dark-warm"] .preview-line {
-  background: #3a3632;
-  height: 4px;
-  border-radius: 2px;
-}
-
-.appearance-option-preview[data-preview-theme="dark-warm"] .preview-line.short {
-  width: 60%;
-  background: #c9a962;
-  /* Champagne gold accent */
 }
 
 .appearance-option-preview[data-preview-theme="polynet"] {
@@ -17207,30 +17002,6 @@ button.message-citation-chip:hover {
   cursor: default;
 }
 
-:root[data-theme-family="lightlike"] .platform-save-button {
-  background: #141414;
-  color: #ffffff;
-}
-
-:root[data-theme-family="lightlike"] .platform-save-button.is-dirty,
-:root[data-theme-family="lightlike"] .platform-save-button.needs-save {
-  background: #141414;
-  color: #ffffff;
-}
-
-:root[data-theme-family="lightlike"] .platform-save-button:hover:not(:disabled),
-:root[data-theme-family="lightlike"] .platform-save-button.is-dirty:hover:not(:disabled),
-:root[data-theme-family="lightlike"] .platform-save-button.needs-save:hover:not(:disabled) {
-  background: #000000;
-  color: #ffffff;
-}
-
-:root[data-theme-family="lightlike"] .platform-save-button.is-saved,
-:root[data-theme-family="lightlike"] .platform-save-button.synced {
-  background: color-mix(in srgb, var(--bg-workspace, var(--bg-app)) 70%, transparent);
-  color: var(--text-faint);
-}
-
 .agent-landing-preview-pill {
   min-height: 58px;
   padding: 0 18px;
@@ -17556,17 +17327,6 @@ button.message-citation-chip:hover {
   font-size: 16px;
   font-weight: 600;
   color: var(--text-primary);
-}
-
-:root[data-theme-family="lightlike"] .premium-gate-cta {
-  background: #0f0f0f;
-  border-color: #0f0f0f;
-  color: #ffffff;
-}
-
-:root[data-theme-family="lightlike"] .premium-gate-cta:hover:not(:disabled) {
-  background: #000000;
-  border-color: #000000;
 }
 
 .agent-preview-shell {
