@@ -12,8 +12,12 @@ import {
   resolveTerminalSandboxContext,
 } from "./workspaceTerminalBackgroundService";
 import {
+  normalizeWorkspaceTerminalLifecycleOwner,
   summarizeWorkspaceTerminalRow,
   truncateTerminalOutputTail,
+  type WorkspaceTerminalHealthStatus,
+  type WorkspaceTerminalLifecycleOwner,
+  type WorkspaceTerminalPreviewStatus,
 } from "./workspaceTerminalProcessCore";
 
 function readFailureText(value: unknown): string {
@@ -77,10 +81,12 @@ export async function reconcileWorkspaceTerminalRow(params: {
   ctx: any;
   ownerId: any;
   row: any;
-  lifecycleOwner?: "project_background" | "runtime_session";
+  lifecycleOwner?: WorkspaceTerminalLifecycleOwner;
 }): Promise<ReturnType<typeof summarizeWorkspaceTerminalRow>> {
   const row = params.row;
-  const lifecycleOwner = params.lifecycleOwner ?? "project_background";
+  const lifecycleOwner = normalizeWorkspaceTerminalLifecycleOwner(
+    params.lifecycleOwner ?? row?.lifecycleOwner,
+  );
   const normalizedStatus = String(row?.status ?? "").trim().toLowerCase();
   if (
     normalizedStatus !== "starting" &&
@@ -98,6 +104,21 @@ export async function reconcileWorkspaceTerminalRow(params: {
   const failAndRelease = async (
     status: "failed" | "stopped" | "exited" | "running" | "starting" = "failed",
   ): Promise<ReturnType<typeof summarizeWorkspaceTerminalRow>> => {
+    const healthStatus: WorkspaceTerminalHealthStatus =
+      status === "running"
+        ? "healthy"
+        : status === "starting"
+          ? "starting"
+          : status === "failed"
+            ? "unhealthy"
+            : "exited";
+    const previewStatus: WorkspaceTerminalPreviewStatus = row.previewPort
+      ? status === "running"
+        ? "running"
+        : status === "starting"
+          ? "starting"
+          : "server_exited"
+      : "none";
     const patched = await params.ctx.runMutation(
       internal.workspaceTerminals.updateWorkspaceTerminalSessionInternal as any,
       {
@@ -105,6 +126,17 @@ export async function reconcileWorkspaceTerminalRow(params: {
         status,
         finishedAt: nowMs,
         updatedAt: nowMs,
+        lastHeartbeatAt: nowMs,
+        healthStatus,
+        healthSummary:
+          healthStatus === "healthy"
+            ? "Process is running."
+            : healthStatus === "starting"
+              ? "Process is starting."
+              : healthStatus === "unhealthy"
+                ? "Process session is no longer available."
+                : "Process is no longer running.",
+        previewStatus,
       },
     );
     if (lifecycleOwner === "project_background") {
@@ -166,12 +198,33 @@ export async function reconcileWorkspaceTerminalRow(params: {
   }
 
   const nextStatus = exitCode === null ? "running" : exitCode === 0 ? "exited" : "failed";
+  const healthStatus: WorkspaceTerminalHealthStatus =
+    nextStatus === "running"
+      ? "healthy"
+      : nextStatus === "exited"
+        ? "exited"
+        : "unhealthy";
+  const healthSummary =
+    nextStatus === "running"
+      ? "Process is running."
+      : nextStatus === "exited"
+        ? `Process exited with code ${exitCode}.`
+        : `Process failed with exit code ${exitCode}.`;
+  const previewStatus: WorkspaceTerminalPreviewStatus = row.previewPort
+    ? nextStatus === "running"
+      ? "running"
+      : "server_exited"
+    : "none";
   const patched = await params.ctx.runMutation(
     internal.workspaceTerminals.updateWorkspaceTerminalSessionInternal as any,
     {
       terminalSessionId: row._id,
       status: nextStatus,
       updatedAt: nowMs,
+      lastHeartbeatAt: nowMs,
+      healthStatus,
+      healthSummary,
+      previewStatus,
       ...(exitCode === null ? null : { finishedAt: nowMs, exitCode }),
       ...(logs.ok ? { lastOutputTail: truncateTerminalOutputTail(logs.output) } : null),
     },

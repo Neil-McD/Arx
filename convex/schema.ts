@@ -333,7 +333,11 @@ export default defineSchema({
     ownerId: v.id("users"),
     projectId: v.id("cloudProjects"),
     threadId: v.optional(v.id("threads")),
-    runIdStartedBy: v.optional(v.string()),
+    lifecycleOwner: v.optional(
+      v.literal("project_background"),
+    ),
+    startedByThreadId: v.optional(v.string()),
+    startedByRunId: v.optional(v.string()),
     providerSandboxId: v.string(),
     providerSessionId: v.string(),
     providerCommandId: v.string(),
@@ -354,6 +358,33 @@ export default defineSchema({
     finishedAt: v.optional(v.number()),
     exitCode: v.optional(v.number()),
     lastOutputTail: v.optional(v.string()),
+    lastHeartbeatAt: v.optional(v.number()),
+    healthStatus: v.optional(
+      v.union(
+        v.literal("unknown"),
+        v.literal("starting"),
+        v.literal("healthy"),
+        v.literal("unhealthy"),
+        v.literal("exited"),
+        v.literal("stale"),
+      ),
+    ),
+    healthSummary: v.optional(v.string()),
+    previewStatus: v.optional(
+      v.union(
+        v.literal("none"),
+        v.literal("starting"),
+        v.literal("running"),
+        v.literal("blank"),
+        v.literal("render_error_suspected"),
+        v.literal("unreachable"),
+        v.literal("server_exited"),
+      ),
+    ),
+    lastPreviewProbeAt: v.optional(v.number()),
+    lastPreviewProbeSummary: v.optional(v.string()),
+    lastBrowserObservationAt: v.optional(v.number()),
+    lastBrowserObservationSummary: v.optional(v.string()),
   })
     .index("by_owner_project", ["ownerId", "projectId"])
     .index("by_providerSessionId", ["providerSessionId"])

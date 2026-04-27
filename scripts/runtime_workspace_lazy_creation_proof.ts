@@ -36,11 +36,12 @@ async function proveLazyWorkspaceCreationRules() {
   const workspaceTerminalReconciliationSource = await readRepoFile(
     "convex/workspaceTerminalReconciliation.ts",
   );
-  const workspaceTerminalRuntimeAccessSource = await readRepoFile(
-    "convex/workspaceTerminalRuntimeAccess.ts",
-  );
+  const schemaSource = await readRepoFile("convex/schema.ts");
   const webWorkspaceHostSource = await readRepoFile(
     "apps/web/src/components/WebWorkspaceHost.tsx",
+  );
+  const daytonaWorkspaceTerminalsSource = await readRepoFile(
+    "shared/daytonaWorkspaceTerminals.ts",
   );
 
   const mountedToolBranchIndex = daytonaSource.indexOf(
@@ -144,7 +145,9 @@ async function proveLazyWorkspaceCreationRules() {
     "expected runtime terminal reconciliation to read fallback logs when provider logs are empty",
   );
   assert.equal(
-    terminalProcessCoreSource.includes("readDaytonaProcessSessionCommandExitCode(command)"),
+    workspaceTerminalReconciliationSource.includes(
+      "readDaytonaProcessSessionCommandExitCode(command)",
+    ),
     true,
     "expected terminal reconciliation to delegate provider command exit semantics",
   );
@@ -174,19 +177,19 @@ async function proveLazyWorkspaceCreationRules() {
     "expected preview terminal starts to fail early with structured preflight errors",
   );
   assert.equal(
-    terminalBlock.includes("runIdStartedBy: null"),
-    true,
-    "expected agent terminal_start to create project-owned terminal rows",
+    terminalBlock.includes("runIdStartedBy"),
+    false,
+    "expected agent terminal_start not to write legacy runIdStartedBy terminal ownership",
   );
   assert.equal(
     terminalBlock.includes("requireRuntimeAccessibleTerminalRow"),
     true,
-    "expected terminal read/write/stop to allow project terminals while preserving run-owned terminal scoping",
+    "expected terminal read/write/stop to use the project terminal access helper",
   );
   assert.equal(
     terminalBlock.includes("reconcileRuntimeSessionTerminalRow"),
-    true,
-    "expected runtime terminal read to reconcile against the execution-session sandbox directly",
+    false,
+    "expected runtime-session terminal reconciliation to be deleted",
   );
   assert.equal(
     terminalBlock.includes("writeRuntimeSessionTerminalRow"),
@@ -351,14 +354,29 @@ async function proveLazyWorkspaceCreationRules() {
     "expected reusable project background sandbox resolution to be explicit",
   );
   assert.equal(
-    executionSessionSource.includes("resolveProjectBackgroundSandboxIfReady"),
+    executionSessionSource.includes("ensureProjectBackgroundSandbox"),
     true,
-    "expected regular workspace tools to reuse an already-live project background sandbox",
+    "expected regular workspace tools to adopt or create the project background sandbox through the shared lifecycle service",
   );
   assert.equal(
-    executionSessionSource.includes("ownsWorkspaceSession = false"),
-    true,
-    "expected borrowed project background sandboxes not to be cleaned up as run-owned sandboxes",
+    executionSessionSource.includes("createWorkspaceSandboxSession"),
+    false,
+    "expected regular workspace tools not to create separate run-owned Daytona sandboxes",
+  );
+  assert.equal(
+    executionSessionSource.includes("resolveProjectBackgroundSandboxIfReady"),
+    false,
+    "expected regular workspace tools to wait/adopt through ensureProjectBackgroundSandbox instead of one-shot ready checks",
+  );
+  assert.equal(
+    executionSessionSource.includes("ownsWorkspaceSession"),
+    false,
+    "expected runtime execution not to preserve run-owned workspace session cleanup state",
+  );
+  assert.equal(
+    executionSessionSource.includes("cleanupWorkspaceSandboxSession"),
+    false,
+    "expected runtime execution not to clean up project background sandboxes as run-owned sandboxes",
   );
   assert.equal(
     executionSessionSource.includes("workspace_session_adopted"),
@@ -389,52 +407,83 @@ async function proveLazyWorkspaceCreationRules() {
   );
   assert.equal(
     workspaceTerminalsSource.includes('./workspaceTerminalRuntimeAccess'),
-    true,
-    "expected workspace terminal actions to depend on a dedicated runtime terminal access module",
+    false,
+    "expected obsolete runtime terminal access module to stay removed",
   );
   assert.equal(
-    workspaceTerminalRuntimeAccessSource.includes(
-      "export async function isRuntimeSessionOwnedTerminalRow",
-    ),
+    terminalProcessCoreSource.includes("export type WorkspaceTerminalLifecycleOwner = \"project_background\""),
     true,
-    "expected runtime terminal ownership detection to live in the dedicated runtime access module",
-  );
-  assert.equal(
-    workspaceTerminalRuntimeAccessSource.includes(
-      "export async function resolveRuntimeOwnedTerminalSession",
-    ),
-    true,
-    "expected runtime preview session reconstruction to live in the dedicated runtime access module",
+    "expected project background to be the only terminal lifecycle owner",
   );
   assert.equal(
     workspaceTerminalsSource.includes("requireRuntimeSessionOwnedTerminalRow"),
-    true,
-    "expected shared terminal actions to support strict runtime-session ownership checks",
+    false,
+    "expected shared terminal actions not to support run-owned terminal checks",
   );
   assert.equal(
     workspaceTerminalsSource.includes("isRuntimeSessionOwnedTerminalRow"),
-    true,
-    "expected shared terminal actions to detect runtime-session-owned terminal rows",
+    false,
+    "expected shared terminal actions not to detect runtime-session-owned rows",
   );
   assert.equal(
-    workspaceTerminalsSource.includes('lifecycleOwner: "runtime_session"'),
+    workspaceTerminalsSource.includes("getWorkspaceTerminalLifecycleOwner"),
+    false,
+    "expected shared terminal reconciliation not to classify runtime-owned rows",
+  );
+  assert.equal(
+    executionSessionSource.includes("getWorkspaceTerminalLifecycleOwner"),
+    false,
+    "expected runtime execution not to branch on runtime-owned terminal lifecycle",
+  );
+  assert.equal(
+    workspaceTerminalsSource.includes('lifecycleOwner: "runtime_ephemeral"') ||
+      schemaSource.includes('v.literal("runtime_ephemeral")') ||
+      terminalProcessCoreSource.includes("runtime_ephemeral") ||
+      executionSessionSource.includes("runtime_ephemeral") ||
+      webWorkspaceHostSource.includes("runtime_ephemeral") ||
+      daytonaWorkspaceTerminalsSource.includes("runtime_ephemeral"),
+    false,
+    "expected runtime_ephemeral to be deleted from the active terminal model",
+  );
+  assert.equal(
+    schemaSource.includes("lifecycleOwner: v.optional(") &&
+      schemaSource.includes('v.literal("project_background")') &&
+      schemaSource.includes("healthStatus: v.optional(") &&
+      schemaSource.includes("previewStatus: v.optional(") &&
+      schemaSource.includes("lastBrowserObservationSummary"),
     true,
-    "expected shared terminal reconciliation to preserve runtime-session ownership",
+    "expected workspace terminal rows to store durable lifecycle, health, preview, and observation ledger fields",
+  );
+  assert.equal(
+    terminalProcessCoreSource.includes("lifecycle_owner: normalizeWorkspaceTerminalLifecycleOwner") &&
+      terminalProcessCoreSource.includes("health_status: deriveWorkspaceTerminalHealthStatus") &&
+      terminalProcessCoreSource.includes("preview_status: deriveWorkspaceTerminalPreviewStatus") &&
+      terminalProcessCoreSource.includes("last_browser_observation_summary"),
+    true,
+    "expected terminal summaries to expose safe process ledger fields",
+  );
+  assert.equal(
+    terminalProcessCoreSource.includes("runIdStartedBy") ||
+      workspaceTerminalsSource.includes("runIdStartedBy") ||
+      webWorkspaceHostSource.includes("run_id_started_by") ||
+      daytonaWorkspaceTerminalsSource.includes("run_id_started_by"),
+    false,
+    "expected runtime terminal ownership to use startedByRunId without legacy runIdStartedBy compatibility",
   );
   assert.equal(
     workspaceTerminalsSource.includes("touchProjectBackground: !runtimeSessionOwned"),
-    true,
-    "expected shared terminal preview/read/write paths not to touch project background state for runtime terminals",
+    false,
+    "expected shared terminal preview/read/write paths to always touch project background state",
   );
   assert.equal(
     workspaceTerminalsSource.includes("resolveRuntimeOwnedTerminalSession"),
-    true,
-    "expected runtime preview lookup to reconstruct session-owned sandbox context from runtime run state",
+    false,
+    "expected runtime-owned preview reconstruction to be deleted",
   );
   assert.equal(
     workspaceTerminalsSource.includes("resolveRuntimeSessionTerminalPreview"),
-    true,
-    "expected runtime preview lookup to use the runtime-session preview helper",
+    false,
+    "expected runtime-session preview helper to be deleted",
   );
   assert.equal(
     workspaceTerminalsSource.includes("recent: WorkspaceTerminalSummary[]"),
@@ -448,13 +497,13 @@ async function proveLazyWorkspaceCreationRules() {
   );
   assert.equal(
     workspaceTerminalsSource.includes("run_id_required"),
-    true,
-    "expected shared terminal actions to fail closed for runtime-owned rows when the owning run id is missing",
+    false,
+    "expected runtime-owned run id requirement to be deleted",
   );
   assert.equal(
     workspaceTerminalsSource.includes("const backgroundRows: any[] = []"),
-    true,
-    "expected stop-all background terminal controls to exclude runtime-session-owned rows",
+    false,
+    "expected stop-all controls to operate on the single project-background lifecycle",
   );
   assert.equal(
     workspaceTerminalsSource.includes("startWorkspaceTerminalProcess"),

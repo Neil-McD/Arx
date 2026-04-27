@@ -88,6 +88,18 @@ export type WorkspacePreviewLifecycleState = {
   error: string | null;
 };
 
+export type WorkspacePreviewMetricsObservation = {
+  width: number | null;
+  height: number | null;
+  viewportWidth: number | null;
+  viewportHeight: number | null;
+  overflowX: boolean | null;
+  overflowY: boolean | null;
+  visibleTextLength: number | null;
+  elementCount: number | null;
+  mediaElementCount: number | null;
+};
+
 function formatTerminalStatus(status: DaytonaWorkspaceTerminalRecord["status"]): string {
   if (status === "starting") return "Starting";
   if (status === "running") return "Running";
@@ -187,18 +199,25 @@ function PreviewFrame({
   title,
   mode,
   onLifecyclePhaseChange,
+  onMetricsObservation,
 }: {
   previewUrl: string;
   title: string;
   mode: "inline" | "expanded";
   onLifecyclePhaseChange?: (phase: "loading" | "ready" | "error") => void;
+  onMetricsObservation?: (metrics: WorkspacePreviewMetricsObservation) => void;
 }): JSX.Element {
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const lifecycleCallbackRef = useRef(onLifecyclePhaseChange);
+  const metricsCallbackRef = useRef(onMetricsObservation);
 
   useEffect(() => {
     lifecycleCallbackRef.current = onLifecyclePhaseChange;
   }, [onLifecyclePhaseChange]);
+
+  useEffect(() => {
+    metricsCallbackRef.current = onMetricsObservation;
+  }, [onMetricsObservation]);
 
   useEffect(() => {
     lifecycleCallbackRef.current?.("loading");
@@ -217,8 +236,21 @@ function PreviewFrame({
       if (!iframeRef.current || event.source !== iframeRef.current.contentWindow) return;
       const payload = event.data;
       if (!payload || payload.type !== "polynet_preview_metrics") return;
-      // Preview metrics are intentionally passive here. They should not resize,
-      // remount, or trigger hidden repair turns while the user is inspecting the app.
+      const numeric = (value: unknown): number | null => {
+        const parsed = Number(value);
+        return Number.isFinite(parsed) ? Math.floor(parsed) : null;
+      };
+      metricsCallbackRef.current?.({
+        width: numeric(payload.width),
+        height: numeric(payload.height),
+        viewportWidth: numeric(payload.viewportWidth),
+        viewportHeight: numeric(payload.viewportHeight),
+        overflowX: typeof payload.overflowX === "boolean" ? payload.overflowX : null,
+        overflowY: typeof payload.overflowY === "boolean" ? payload.overflowY : null,
+        visibleTextLength: numeric(payload.visibleTextLength),
+        elementCount: numeric(payload.elementCount),
+        mediaElementCount: numeric(payload.mediaElementCount),
+      });
     };
 
     window.addEventListener("message", handleMessage);
@@ -261,6 +293,10 @@ export function WebWorkspaceAppPreview(props: {
   onPreviewLifecyclePhaseChange?: (params: {
     terminal: DaytonaWorkspaceTerminalRecord;
     phase: "loading" | "ready" | "error";
+  }) => void;
+  onPreviewMetricsObservation?: (params: {
+    terminal: DaytonaWorkspaceTerminalRecord;
+    metrics: WorkspacePreviewMetricsObservation;
   }) => void;
   onStopTerminal: (terminalSessionId: string) => void;
   mode?: "inline" | "expanded";
@@ -386,6 +422,9 @@ export function WebWorkspaceAppPreview(props: {
                 mode={mode}
                 onLifecyclePhaseChange={(phase) => {
                   props.onPreviewLifecyclePhaseChange?.({ terminal, phase });
+                }}
+                onMetricsObservation={(metrics) => {
+                  props.onPreviewMetricsObservation?.({ terminal, metrics });
                 }}
               />
             ) : (

@@ -3,10 +3,6 @@ import {
   selectTopRuntimeDiagnostic,
   type RuntimeDiagnostic,
 } from "./runtimeDiagnostics.ts";
-import {
-  summarizeWorkspaceRuntimeStateFromEvents,
-  type RuntimeWorkspaceStateSummary,
-} from "./runtimeWorkspaceState.ts";
 
 export type RuntimeWorkingStateRunEvent = {
   eventType: string;
@@ -39,7 +35,6 @@ export type RuntimeWorkingStateSummary = {
   recentActions: string[];
   verificationStatus: "not_needed" | "needed" | "passed" | "failed";
   lastDiagnostic?: string;
-  workspaceRuntime?: RuntimeWorkspaceStateSummary;
   updatedAt: number;
 };
 
@@ -236,15 +231,6 @@ export function summarizeRuntimeWorkingStateFromEvents(
 
   const topDiagnostic = selectTopRuntimeDiagnostic(diagnostics);
   const topDiagnosticSummary = formatRuntimeDiagnosticSummary(topDiagnostic);
-  const workspaceRuntime = summarizeWorkspaceRuntimeStateFromEvents({
-    events: args.events,
-    nowMs: args.nowMs,
-  });
-  const workspaceRuntimeIssue = normalizeSummaryText(workspaceRuntime?.issue, 240);
-  const workspaceRuntimeNextAction = normalizeSummaryText(
-    workspaceRuntime?.nextAction,
-    240,
-  );
 
   const filesTouched = normalizeSummaryList(touchedPaths, 10, 180);
   const filesChanged = normalizeSummaryList(changedFiles, 8, 180);
@@ -274,12 +260,6 @@ export function summarizeRuntimeWorkingStateFromEvents(
   }
   if (topDiagnosticSummary) {
     verifiedFindingsRaw.push(`Found diagnostic: ${topDiagnosticSummary}`);
-  }
-  if (
-    workspaceRuntime?.terminalStatus === "running" &&
-    workspaceRuntime.previewStatus === "running"
-  ) {
-    verifiedFindingsRaw.push("Workspace preview server is running.");
   }
   const verifiedFindings = normalizeSummaryList(verifiedFindingsRaw, 4, 220);
 
@@ -316,14 +296,7 @@ export function summarizeRuntimeWorkingStateFromEvents(
         ? `The last workspace run failed with diagnostic ${topDiagnosticSummary}.`
         : firstFailedTool.failureSemantics?.summary
           ? `The last workspace run failed: ${firstFailedTool.failureSemantics.summary}`
-        : workspaceRuntimeIssue
-          ? `The last workspace runtime issue was: ${workspaceRuntimeIssue}`
         : `The last workspace run failed during ${firstFailedTool.toolName}${firstFailedTool.path ? ` on ${firstFailedTool.path}` : ""}.`,
-      240,
-    );
-  } else if (workspaceRuntimeIssue) {
-    lastResult = normalizeSummaryText(
-      `The last workspace runtime issue was: ${workspaceRuntimeIssue}`,
       240,
     );
   } else {
@@ -339,14 +312,11 @@ export function summarizeRuntimeWorkingStateFromEvents(
       normalizeSummaryText(
         firstFailedTool
           ? topDiagnosticSummary
-            ? `Verification failed: ${topDiagnosticSummary}`
-            : firstFailedTool.failureSemantics?.summary
-              ? `${firstFailedTool.toolName} failed: ${firstFailedTool.failureSemantics.summary}`
-            : workspaceRuntimeIssue
-              ? workspaceRuntimeIssue
+          ? `Verification failed: ${topDiagnosticSummary}`
+          : firstFailedTool.failureSemantics?.summary
+            ? `${firstFailedTool.toolName} failed: ${firstFailedTool.failureSemantics.summary}`
             : `${firstFailedTool.toolName}${firstFailedTool.path ? ` on ${firstFailedTool.path}` : ""} failed${firstFailedTool.message ? `: ${firstFailedTool.message}` : "."}`
-          : workspaceRuntimeIssue ||
-            args.runErrorMessage ||
+          : args.runErrorMessage ||
             args.runReason ||
             "The last workspace run did not complete successfully.",
         240,
@@ -386,8 +356,6 @@ export function summarizeRuntimeWorkingStateFromEvents(
           ? `Fix ${topDiagnosticSummary}`
         : firstFailedTool?.failureSemantics?.suggestedRecovery
           ? firstFailedTool.failureSemantics.suggestedRecovery
-        : workspaceRuntimeNextAction
-          ? workspaceRuntimeNextAction
         : firstFailedTool
           ? `Inspect the ${firstFailedTool.toolName} failure details, preserve the last verified state, and continue only from a concrete recovery path.`
           : "Inspect the latest runtime events and continue from the last verified state.";
@@ -409,7 +377,6 @@ export function summarizeRuntimeWorkingStateFromEvents(
     ...(openIssue ? { openIssue } : null),
     ...(blocker ? { blocker } : null),
     ...(nextAction ? { nextAction } : null),
-    ...(workspaceRuntime ? { workspaceRuntime } : null),
     updatedAt: args.nowMs,
   };
 }

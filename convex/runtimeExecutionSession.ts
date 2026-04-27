@@ -1,15 +1,10 @@
 import { internal } from "./_generated/api";
-import {
-  cleanupWorkspaceSandboxSession,
-  createWorkspaceSandboxSession,
-  type WorkspaceSandboxSession,
-} from "./daytonaWorkspaceSession";
+import type { WorkspaceSandboxSession } from "./daytonaWorkspaceSession";
 import { runDaytonaComputerUseTool } from "./daytonaComputerUse";
 import {
   isWorkspaceTerminalActiveStatus,
   normalizeWorkspaceTerminalCommand,
   normalizeWorkspaceTerminalStartArgs,
-  reconcileRuntimeSessionTerminalRow,
   readWorkspaceToolFailureOutputPreview,
   resolveWorkspaceCwd,
   startWorkspaceTerminalProcess,
@@ -20,7 +15,6 @@ import {
 import {
   ensureProjectBackgroundSandbox,
   releaseProjectBackgroundSandboxIfIdle,
-  resolveProjectBackgroundSandboxIfReady,
   resolveTerminalSandboxContext,
 } from "./workspaceTerminalBackgroundService";
 import { reconcileWorkspaceTerminalRow } from "./workspaceTerminalReconciliation";
@@ -128,12 +122,18 @@ function buildTerminalToolResultDetails(
   for (const key of [
     "terminal_session_id",
     "status",
+    "lifecycle_owner",
     "command",
     "cwd",
     "preview_port",
     "preview_path",
     "preview_label",
     "preview_status",
+    "health_status",
+    "health_summary",
+    "last_heartbeat_at",
+    "last_preview_probe_summary",
+    "last_browser_observation_summary",
     "exit_code",
     "output_tail",
     "code",
@@ -163,7 +163,7 @@ async function requireRuntimeAccessibleTerminalRow(params: {
   runId: string;
   terminalSessionId: string;
 }): Promise<
-  | { ok: true; row: any; runtimeSessionOwned: boolean }
+  | { ok: true; row: any }
   | { ok: false; status: number; code: string; message: string }
 > {
   const row = await params.ctx.runQuery(
@@ -184,19 +184,9 @@ async function requireRuntimeAccessibleTerminalRow(params: {
       message: "Terminal session not found.",
     };
   }
-  const rowRunId = String(row.runIdStartedBy ?? "").trim();
-  if (rowRunId && rowRunId !== params.runId) {
-    return {
-      ok: false,
-      status: 404,
-      code: "terminal_not_found",
-      message: "Runtime terminal session not found.",
-    };
-  }
   return {
     ok: true,
     row,
-    runtimeSessionOwned: Boolean(rowRunId),
   };
 }
 
@@ -276,7 +266,6 @@ export function createPolyNetExecutionSession(params: {
   const mountedToolByName = new Map(
     params.mountedTools.map((tool) => [tool.runtime_tool_name, tool]),
   );
-  let ownsWorkspaceSession = !params.initialWorkspaceSession;
   let workspaceSession = params.initialWorkspaceSession ?? null;
   let workspaceSessionFailure: {
     status: number;
@@ -473,59 +462,13 @@ export function createPolyNetExecutionSession(params: {
         },
         `${params.runId}:workspace_session_create_started:1`,
       );
-      const backgroundSandbox = await resolveProjectBackgroundSandboxIfReady({
+      const backgroundSandbox = await ensureProjectBackgroundSandbox({
         ctx: params.ctx,
         authSubject,
         userId: params.userId,
         projectId,
       });
-      if (backgroundSandbox.ok) {
-        workspaceSessionFailure = null;
-        ownsWorkspaceSession = false;
-        workspaceSession = {
-          config: backgroundSandbox.config,
-          projectId,
-          projectVolumeId: backgroundSandbox.projectVolumeId,
-          providerSandboxId: backgroundSandbox.providerSandboxId,
-          toolboxProxyUrl: backgroundSandbox.toolboxProxyUrl,
-          region: null,
-          sandboxCpu: backgroundSandbox.sandboxCpu,
-          sandboxMemoryGiB: backgroundSandbox.sandboxMemoryGiB,
-          sandboxDiskGiB: backgroundSandbox.sandboxDiskGiB,
-          startedAt: Date.now(),
-          lifecycleMode: "native_stop_delete",
-        };
-        ensureWorkspaceHeartbeat();
-        await emitRunEvent(
-          "workspace_session_adopted",
-          {
-            run_id: params.runId,
-            sandbox_id: backgroundSandbox.providerSandboxId,
-            project_id: projectId,
-            source: "project_background",
-            toolbox_proxy_url: backgroundSandbox.toolboxProxyUrl,
-          },
-          `${params.runId}:workspace_session_adopted:project_background`,
-        );
-        const persisted = await persistWorkspaceSessionState({
-          state: "active",
-          session: workspaceSession,
-          projectId,
-          phase: "create",
-        });
-        if (!persisted.ok) {
-          workspaceSessionFailure = {
-            status: 500,
-            code: "workspace_session_persist_failed",
-            message: "Failed to persist workspace session metadata.",
-          };
-          return {
-            ok: false as const,
-            status: workspaceSessionFailure.status,
-            code: workspaceSessionFailure.code,
-            message: workspaceSessionFailure.message,
-          };
-        }
+      if (!backgroundSandbox.ok) {
         await emitRunEvent(
           "workspace_session_create_completed",
           {
@@ -533,106 +476,89 @@ export function createPolyNetExecutionSession(params: {
             project_id: projectId,
             tool_name: String(paramsForCreate?.toolName ?? "").trim() || null,
             latency_ms: Date.now() - createStartedAt,
-            status: "ok",
-            sandbox_id: backgroundSandbox.providerSandboxId,
-            region: null,
+            status: "error",
+            code: backgroundSandbox.code,
             source: "project_background",
           },
-          `${params.runId}:workspace_session_create_completed:ok`,
+          `${params.runId}:workspace_session_create_completed:error`,
         );
+        workspaceSessionFailure = {
+          status: backgroundSandbox.status,
+          code: backgroundSandbox.code,
+          message: backgroundSandbox.message,
+        };
         return {
-          ok: true as const,
-          session: workspaceSession,
+          ok: false as const,
+          status: backgroundSandbox.status,
+          code: backgroundSandbox.code,
+          message: backgroundSandbox.message,
+          details: (backgroundSandbox as { details?: unknown }).details,
         };
       }
-      const created = await createWorkspaceSandboxSession({
-        ctx: params.ctx,
-        userId: params.userId,
-        authSubject,
+
+      workspaceSessionFailure = null;
+      workspaceSession = {
+        config: backgroundSandbox.config,
         projectId,
-        runId: params.runId,
+        projectVolumeId: backgroundSandbox.projectVolumeId,
+        providerSandboxId: backgroundSandbox.providerSandboxId,
+        toolboxProxyUrl: backgroundSandbox.toolboxProxyUrl,
+        region: null,
+        sandboxCpu: backgroundSandbox.sandboxCpu,
+        sandboxMemoryGiB: backgroundSandbox.sandboxMemoryGiB,
+        sandboxDiskGiB: backgroundSandbox.sandboxDiskGiB,
+        startedAt: Date.now(),
+        lifecycleMode: "native_stop_delete",
+      };
+      ensureWorkspaceHeartbeat();
+      await emitRunEvent(
+        "workspace_session_adopted",
+        {
+          run_id: params.runId,
+          sandbox_id: backgroundSandbox.providerSandboxId,
+          project_id: projectId,
+          source: "project_background",
+          toolbox_proxy_url: backgroundSandbox.toolboxProxyUrl,
+        },
+        `${params.runId}:workspace_session_adopted:project_background`,
+      );
+      const persisted = await persistWorkspaceSessionState({
+        state: "active",
+        session: workspaceSession,
+        projectId,
+        phase: "create",
       });
-      if (created.ok) {
-        workspaceSessionFailure = null;
-        workspaceSession = created.session;
-        ensureWorkspaceHeartbeat();
-        try {
-          await params.appendRunEvent({
-            eventType: "workspace_session_created",
-            eventKey: `${params.runId}:workspace_session_created:1`,
-            payload: {
-              run_id: params.runId,
-              sandbox_id: created.session.providerSandboxId,
-              region: created.session.region,
-              project_id: projectId,
-              toolbox_proxy_url: created.session.toolboxProxyUrl,
-            },
-          });
-          await params.appendRunEvent({
-            eventType: "sandbox_started",
-            eventKey: `${params.runId}:workspace_sandbox_started:1`,
-            payload: {
-              run_id: params.runId,
-              sandbox_id: created.session.providerSandboxId,
-              region: created.session.region,
-              project_id: projectId,
-            },
-          });
-          const persisted = await persistWorkspaceSessionState({
-            state: "active",
-            session: created.session,
-            projectId,
-            phase: "create",
-          });
-          if (!persisted.ok) {
-            throw new Error("workspace_session_persist_failed");
-          }
-        } catch {
-          if (heartbeatTimer) {
-            clearInterval(heartbeatTimer);
-            heartbeatTimer = null;
-          }
-          workspaceSessionFailure = {
-            status: 500,
-            code: "workspace_session_persist_failed",
-            message:
-              "Failed to persist workspace session metadata.",
-          };
-          await emitRunEvent(
-            "workspace_session_create_completed",
-            {
-              run_id: params.runId,
-              project_id: projectId,
-              tool_name: String(paramsForCreate?.toolName ?? "").trim() || null,
-              latency_ms: Date.now() - createStartedAt,
-              status: "error",
-              code: workspaceSessionFailure.code,
-              sandbox_id: created.session.providerSandboxId,
-            },
-            `${params.runId}:workspace_session_create_completed:error`,
-          );
-          return {
-            ok: false as const,
-            status: workspaceSessionFailure.status,
-            code: workspaceSessionFailure.code,
-            message: workspaceSessionFailure.message,
-          };
-        }
-        await emitRunEvent(
-          "workspace_session_create_completed",
-          {
-            run_id: params.runId,
-            project_id: projectId,
-            tool_name: String(paramsForCreate?.toolName ?? "").trim() || null,
-            latency_ms: Date.now() - createStartedAt,
-            status: "ok",
-            sandbox_id: created.session.providerSandboxId,
-            region: created.session.region ?? null,
-          },
-          `${params.runId}:workspace_session_create_completed:ok`,
-        );
+      if (!persisted.ok) {
+        workspaceSessionFailure = {
+          status: 500,
+          code: "workspace_session_persist_failed",
+          message: "Failed to persist workspace session metadata.",
+        };
+        return {
+          ok: false as const,
+          status: workspaceSessionFailure.status,
+          code: workspaceSessionFailure.code,
+          message: workspaceSessionFailure.message,
+        };
       }
-      return created;
+      await emitRunEvent(
+        "workspace_session_create_completed",
+        {
+          run_id: params.runId,
+          project_id: projectId,
+          tool_name: String(paramsForCreate?.toolName ?? "").trim() || null,
+          latency_ms: Date.now() - createStartedAt,
+          status: "ok",
+          sandbox_id: backgroundSandbox.providerSandboxId,
+          region: null,
+          source: "project_background",
+        },
+        `${params.runId}:workspace_session_create_completed:ok`,
+      );
+      return {
+        ok: true as const,
+        session: workspaceSession,
+      };
     },
     async ensureWorkspaceForTool(paramsForEnsure?: {
       toolName?: RetrievalToolName | string | null;
@@ -646,81 +572,9 @@ export function createPolyNetExecutionSession(params: {
         clearInterval(heartbeatTimer);
         heartbeatTimer = null;
       }
-      let finalWorkspaceState: "released" | "failed" =
+      const finalWorkspaceState: "released" | "failed" =
         workspaceSessionFailure ? "failed" : "released";
       if (workspaceSession) {
-        if (ownsWorkspaceSession) {
-          const activeWorkspaceSession = workspaceSession;
-          const projectId = String(
-            params.projectId ?? activeWorkspaceSession.projectId ?? "",
-          ).trim();
-          let runtimeTerminalCountStopped = 0;
-          if (projectId) {
-            try {
-              const rows = (await params.ctx.runQuery(
-                internal.workspaceTerminals
-                  .listProjectWorkspaceTerminalSessionsInternal as any,
-                {
-                  ownerId: params.userId,
-                  projectId: projectId as any,
-                },
-              )) as any[];
-              const runtimeSessionRows = rows.filter(
-                (row) =>
-                  String(row?.runIdStartedBy ?? "").trim() === params.runId &&
-                  isWorkspaceTerminalActiveStatus(row?.status) &&
-                  String(row?.providerSandboxId ?? "").trim() ===
-                    activeWorkspaceSession.providerSandboxId,
-              );
-              runtimeTerminalCountStopped = runtimeSessionRows.length;
-              for (const row of runtimeSessionRows) {
-                await stopWorkspaceTerminalProcess({
-                  ctx: params.ctx,
-                  row,
-                  session: activeWorkspaceSession,
-                });
-              }
-            } catch {
-              finalWorkspaceState = "failed";
-            }
-          }
-          const cleanupStartedAt = Date.now();
-          let cleanupResult:
-            | Awaited<ReturnType<typeof cleanupWorkspaceSandboxSession>>
-            | null = null;
-          try {
-            cleanupResult = await cleanupWorkspaceSandboxSession({
-              ctx: params.ctx,
-              userId: params.userId,
-              session: activeWorkspaceSession,
-              runId: params.runId,
-              projectId,
-              appendRunEvent: params.appendRunEvent,
-            });
-            if (!cleanupResult.ok) {
-              finalWorkspaceState = "failed";
-            }
-          } catch {
-            finalWorkspaceState = "failed";
-          }
-          await emitRunEvent(
-            "workspace_session_cleanup_completed",
-            {
-              run_id: params.runId,
-              sandbox_id: activeWorkspaceSession.providerSandboxId,
-              project_id: projectId,
-              latency_ms: Date.now() - cleanupStartedAt,
-              final_state: finalWorkspaceState,
-              stop_status: cleanupResult?.stopStatus ?? "error",
-              stop_code: cleanupResult?.stopCode ?? "cleanup_failed",
-              delete_status: cleanupResult?.deleteStatus ?? "error",
-              delete_code: cleanupResult?.deleteCode ?? "cleanup_failed",
-              charge_recorded: cleanupResult?.chargeRecorded ?? false,
-              runtime_terminal_count_stopped: runtimeTerminalCountStopped,
-            },
-            `${params.runId}:workspace_session_cleanup_completed:1`,
-          );
-        }
         try {
           await persistWorkspaceSessionState({
             state: finalWorkspaceState,
@@ -927,9 +781,8 @@ export function createPolyNetExecutionSession(params: {
                 );
               for (const row of rows) {
                 if (
-                  String(row?.runIdStartedBy ?? "").trim() ||
                   String(row?.providerSandboxId ?? "").trim() !==
-                    backgroundSandbox.providerSandboxId
+                  backgroundSandbox.providerSandboxId
                 ) {
                   continue;
                 }
@@ -995,7 +848,6 @@ export function createPolyNetExecutionSession(params: {
                   ownerId: params.userId,
                   projectId,
                   threadId: params.threadId as any,
-                  runIdStartedBy: null,
                   session: {
                     config: backgroundSandbox.config,
                     toolboxProxyUrl: backgroundSandbox.toolboxProxyUrl,
@@ -1029,43 +881,42 @@ export function createPolyNetExecutionSession(params: {
             if (!access.ok) {
               payload = access;
             } else if (paramsForTool.toolName === "terminal_read") {
-              const summary = access.runtimeSessionOwned
-                ? workspaceSession
-                  ? await reconcileRuntimeSessionTerminalRow({
-                      ctx: params.ctx,
-                      row: access.row,
-                      session: workspaceSession,
-                    })
-                  : summarizeWorkspaceTerminalRow(access.row)
-                : await reconcileWorkspaceTerminalRow({
-                    ctx: params.ctx,
-                    ownerId: params.userId,
-                    row: access.row,
-                    lifecycleOwner: "project_background",
-                  });
+              const summary = await reconcileWorkspaceTerminalRow({
+                ctx: params.ctx,
+                ownerId: params.userId,
+                row: access.row,
+                lifecycleOwner: "project_background",
+              });
               payload = {
                 ok: true,
                 terminal_session_id: String(access.row?._id ?? "").trim(),
                 ...(summary &&
                 typeof summary === "object" &&
                 !Array.isArray(summary)
-                  ? summary
-                  : {}),
+                ? summary
+                : {}),
               };
             } else if (paramsForTool.toolName === "terminal_write") {
-              if (access.runtimeSessionOwned && !workspaceSession) {
-                payload = {
-                  ok: false,
-                  status: 409,
-                  code: "workspace_session_required",
-                  message:
-                    "Runtime terminal input is only available while its workspace session is active.",
-                };
-              } else if (access.runtimeSessionOwned && workspaceSession) {
+              const providerSandboxId = String(
+                access.row?.providerSandboxId ?? "",
+              ).trim();
+              const sandbox = await resolveTerminalSandboxContext({
+                ctx: params.ctx,
+                projectId,
+                providerSandboxId,
+                touchProjectBackground: true,
+              });
+              if (!sandbox.ok) {
+                payload = sandbox;
+              } else {
                 const wrote = await writeWorkspaceTerminalProcessInput({
                   ctx: params.ctx,
                   row: access.row,
-                  session: workspaceSession,
+                  session: {
+                    config: sandbox.config,
+                    toolboxProxyUrl: sandbox.toolboxProxyUrl,
+                    providerSandboxId,
+                  },
                   input: String(paramsForTool.normalizedArgs.input ?? ""),
                 });
                 payload = {
@@ -1077,94 +928,44 @@ export function createPolyNetExecutionSession(params: {
                     ? wrote
                     : {}),
                 };
-              } else {
-                const providerSandboxId = String(
-                  access.row?.providerSandboxId ?? "",
-                ).trim();
-                const sandbox = await resolveTerminalSandboxContext({
-                  ctx: params.ctx,
-                  projectId,
-                  providerSandboxId,
-                  touchProjectBackground: true,
-                });
-                if (!sandbox.ok) {
-                  payload = sandbox;
-                } else {
-                  const wrote = await writeWorkspaceTerminalProcessInput({
-                    ctx: params.ctx,
-                    row: access.row,
-                    session: {
+              }
+            } else {
+              const providerSandboxId = String(
+                access.row?.providerSandboxId ?? "",
+              ).trim();
+              const sandbox = await resolveTerminalSandboxContext({
+                ctx: params.ctx,
+                projectId,
+                providerSandboxId,
+                touchProjectBackground: true,
+              });
+              const stopped = await stopWorkspaceTerminalProcess({
+                ctx: params.ctx,
+                row: access.row,
+                session: sandbox.ok
+                  ? {
                       config: sandbox.config,
                       toolboxProxyUrl: sandbox.toolboxProxyUrl,
                       providerSandboxId,
-                    },
-                    input: String(paramsForTool.normalizedArgs.input ?? ""),
-                  });
-                  payload = {
-                    ok: Boolean((wrote as { ok?: boolean } | null)?.ok),
-                    terminal_session_id: String(access.row?._id ?? "").trim(),
-                    ...(wrote &&
-                    typeof wrote === "object" &&
-                    !Array.isArray(wrote)
-                      ? wrote
-                      : {}),
-                  };
-                }
-              }
-            } else {
-              if (access.runtimeSessionOwned) {
-                const stopped = await stopWorkspaceTerminalProcess({
-                  ctx: params.ctx,
-                  row: access.row,
-                  session: workspaceSession ?? null,
-                });
-                payload = {
-                  ok: true,
-                  terminal_session_id: String(access.row?._id ?? "").trim(),
+                    }
+                  : null,
+                forceStoppedStatus: true,
+              });
+              await releaseProjectBackgroundSandboxIfIdle({
+                ctx: params.ctx,
+                ownerId: params.userId,
+                projectId,
+                providerSandboxId,
+              });
+              payload = {
+                ok: true,
+                terminal_session_id: String(access.row?._id ?? "").trim(),
                   ...(stopped &&
                   typeof stopped === "object" &&
                   !Array.isArray(stopped)
                     ? stopped
                     : {}),
                 };
-              } else {
-                const providerSandboxId = String(
-                  access.row?.providerSandboxId ?? "",
-                ).trim();
-                const sandbox = await resolveTerminalSandboxContext({
-                  ctx: params.ctx,
-                  projectId,
-                  providerSandboxId,
-                  touchProjectBackground: true,
-                });
-                const stopped = await stopWorkspaceTerminalProcess({
-                  ctx: params.ctx,
-                  row: access.row,
-                  session: sandbox.ok
-                    ? {
-                        config: sandbox.config,
-                        toolboxProxyUrl: sandbox.toolboxProxyUrl,
-                        providerSandboxId,
-                      }
-                    : null,
-                  forceStoppedStatus: true,
-                });
-                await releaseProjectBackgroundSandboxIfIdle({
-                  ctx: params.ctx,
-                  ownerId: params.userId,
-                  projectId,
-                  providerSandboxId,
-                });
-                payload = {
-                  ok: true,
-                  terminal_session_id: String(access.row?._id ?? "").trim(),
-                  ...(stopped &&
-                  typeof stopped === "object" &&
-                  !Array.isArray(stopped)
-                    ? stopped
-                    : {}),
-                };
-              }
             }
           }
         }

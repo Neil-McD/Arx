@@ -15,10 +15,12 @@ import {
 import {
   getProjectWorkspaceTerminalPreviewUrl,
   listProjectWorkspaceTerminalSnapshot,
+  recordProjectWorkspaceTerminalPreviewObservation,
   stopAllProjectWorkspaceTerminals,
   stopProjectWorkspaceTerminal,
   type DaytonaWorkspaceTerminalPreview,
   type DaytonaWorkspaceTerminalRecord,
+  type DaytonaWorkspaceTerminalPreviewStatus,
 } from "../../../../shared/daytonaWorkspaceTerminals";
 import type { AuthSessionLike } from "../../../../shared/authSession";
 import type { ModelSectionId, ModelToggle } from "../../../../shared/modelCatalog";
@@ -36,6 +38,7 @@ import type { WorkspacePickerModel } from "../controllers/useWebWorkspaceModelSt
 import {
   WebWorkspaceAppPreview,
   isRetryablePreviewStatus,
+  type WorkspacePreviewMetricsObservation,
   type WorkspacePreviewLifecycleState,
 } from "./WebWorkspaceAppPreview";
 import { WebBackgroundTerminalRail } from "./WebBackgroundTerminalRail";
@@ -214,14 +217,14 @@ function resolvePreviewOwningRunId(
 ): string | null {
   const anchoredRunId = String(latestPreviewRunIdByTerminalId[terminal.id] ?? "").trim();
   if (anchoredRunId) return anchoredRunId;
-  const persistedRunId = String(terminal.run_id_started_by ?? "").trim();
+  const persistedRunId = String(terminal.started_by_run_id ?? "").trim();
   return persistedRunId || null;
 }
 
 function resolveTerminalAccessRunId(
   terminal: DaytonaWorkspaceTerminalRecord,
 ): string | null {
-  const persistedRunId = String(terminal.run_id_started_by ?? "").trim();
+  const persistedRunId = String(terminal.started_by_run_id ?? "").trim();
   return persistedRunId || null;
 }
 
@@ -246,13 +249,18 @@ function areTerminalRecordsEqual(
     if (!a || !b) return false;
     if (
       a.id !== b.id ||
-      a.run_id_started_by !== b.run_id_started_by ||
+      a.started_by_run_id !== b.started_by_run_id ||
       a.status !== b.status ||
       a.command !== b.command ||
       a.cwd !== b.cwd ||
       a.preview_label !== b.preview_label ||
       a.preview_path !== b.preview_path ||
       a.preview_port !== b.preview_port ||
+      a.preview_status !== b.preview_status ||
+      a.last_preview_probe_summary !== b.last_preview_probe_summary ||
+      a.last_browser_observation_summary !== b.last_browser_observation_summary ||
+      a.health_status !== b.health_status ||
+      a.health_summary !== b.health_summary ||
       a.exit_code !== b.exit_code ||
       a.output_tail !== b.output_tail
     ) {
@@ -326,6 +334,75 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: s
       },
     );
   });
+}
+
+function previewObservationForLifecyclePhase(
+  phase: "loading" | "ready" | "error",
+): {
+  previewStatus: DaytonaWorkspaceTerminalPreviewStatus;
+  previewProbeSummary: string;
+  browserObservationSummary: string | null;
+} {
+  if (phase === "error") {
+    return {
+      previewStatus: "unreachable",
+      previewProbeSummary: "Preview iframe failed to load.",
+      browserObservationSummary: "The inline preview iframe reported a load error.",
+    };
+  }
+  if (phase === "ready") {
+    return {
+      previewStatus: "running",
+      previewProbeSummary: "Preview iframe loaded.",
+      browserObservationSummary: "The inline preview iframe loaded successfully.",
+    };
+  }
+  return {
+    previewStatus: "starting",
+    previewProbeSummary: "Preview iframe is loading.",
+    browserObservationSummary: null,
+  };
+}
+
+function previewObservationForMetrics(
+  metrics: WorkspacePreviewMetricsObservation,
+): {
+  previewStatus: DaytonaWorkspaceTerminalPreviewStatus;
+  previewProbeSummary: string;
+  browserObservationSummary: string;
+} {
+  const width = metrics.width ?? 0;
+  const height = metrics.height ?? 0;
+  const viewportWidth = metrics.viewportWidth ?? 0;
+  const viewportHeight = metrics.viewportHeight ?? 0;
+  const visibleTextLength = metrics.visibleTextLength ?? 0;
+  const elementCount = metrics.elementCount ?? 0;
+  const mediaElementCount = metrics.mediaElementCount ?? 0;
+  const looksBlank =
+    width <= 2 ||
+    height <= 2 ||
+    (visibleTextLength === 0 && mediaElementCount === 0 && elementCount <= 5);
+  const sizeSummary =
+    width > 0 && height > 0
+      ? `${width}x${height} in ${viewportWidth || "unknown"}x${viewportHeight || "unknown"} viewport`
+      : "unknown preview dimensions";
+  if (looksBlank) {
+    return {
+      previewStatus: "blank",
+      previewProbeSummary: `Preview metrics look blank (${sizeSummary}; text=${visibleTextLength}; elements=${elementCount}; media=${mediaElementCount}).`,
+      browserObservationSummary:
+        "The inline preview loaded but reported little or no visible content, so it may be rendering a blank page.",
+    };
+  }
+  const overflowSummary =
+    metrics.overflowX === true || metrics.overflowY === true
+      ? `; overflow=${metrics.overflowX ? "x" : ""}${metrics.overflowY ? "y" : ""}`
+      : "";
+  return {
+    previewStatus: "running",
+    previewProbeSummary: `Preview metrics are healthy (${sizeSummary}; text=${visibleTextLength}; elements=${elementCount}; media=${mediaElementCount}${overflowSummary}).`,
+    browserObservationSummary: "The inline preview is loaded and reporting render metrics.",
+  };
 }
 
 const WorkspaceTimelinePane = memo(function WorkspaceTimelinePane(props: {
@@ -905,6 +982,7 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
   const pendingRestoreThreadScrollTopRef = useRef<number | null>(null);
   const lastTerminalSnapshotSignatureRef = useRef<string | null>(null);
   const inflightPreviewIdsRef = useRef<Set<string>>(new Set());
+  const lastPreviewObservationSignatureRef = useRef<Map<string, string>>(new Map());
   const latestPreviewRunIdByTerminalId = useMemo(
     () =>
       buildLatestPreviewRunIdByTerminalId({
@@ -1126,7 +1204,7 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
         id: terminal.id,
         status: terminal.status,
         previewPort: terminal.preview_port ?? null,
-        runId: terminal.run_id_started_by ?? null,
+        runId: terminal.started_by_run_id ?? null,
       })),
     });
     if (signature === lastTerminalSnapshotSignatureRef.current) return;
@@ -1412,6 +1490,56 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
     ],
   );
 
+  const recordPreviewObservation = useCallback(
+    (params: {
+      terminal: DaytonaWorkspaceTerminalRecord;
+      previewStatus: DaytonaWorkspaceTerminalPreviewStatus;
+      previewProbeSummary: string;
+      browserObservationSummary?: string | null;
+    }) => {
+      const signature = [
+        params.previewStatus,
+        params.previewProbeSummary,
+        params.browserObservationSummary ?? "",
+      ].join("\n");
+      const previous = lastPreviewObservationSignatureRef.current.get(params.terminal.id);
+      if (previous === signature) return;
+      lastPreviewObservationSignatureRef.current.set(params.terminal.id, signature);
+      void (async () => {
+        try {
+          const session = await resolveWorkspaceSessionRef.current();
+          if (!session) return;
+          await recordProjectWorkspaceTerminalPreviewObservation({
+            session,
+            terminalSessionId: params.terminal.id,
+            runId: resolveTerminalAccessRunId(params.terminal),
+            previewStatus: params.previewStatus,
+            previewProbeSummary: params.previewProbeSummary,
+            browserObservationSummary: params.browserObservationSummary ?? null,
+          });
+        } catch (error) {
+          lastPreviewObservationSignatureRef.current.delete(params.terminal.id);
+          emitWorkspaceEvent({
+            scope: "preview",
+            name: "preview_observation",
+            status: "failure",
+            projectId: props.activeProjectId,
+            runId: resolvePreviewOwningRunId(
+              params.terminal,
+              latestPreviewRunIdByTerminalId,
+            ),
+            detail: {
+              terminalSessionId: params.terminal.id,
+              previewStatus: params.previewStatus,
+            },
+            error: formatWorkspaceInstrumentationError(error),
+          });
+        }
+      })();
+    },
+    [latestPreviewRunIdByTerminalId, props.activeProjectId],
+  );
+
   const handlePreviewLifecyclePhaseChange = useCallback((params: {
     terminal: DaytonaWorkspaceTerminalRecord;
     phase: "loading" | "ready" | "error";
@@ -1446,7 +1574,21 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
         [params.terminal.id]: next,
       };
     });
-  }, []);
+    recordPreviewObservation({
+      terminal: params.terminal,
+      ...previewObservationForLifecyclePhase(params.phase),
+    });
+  }, [recordPreviewObservation]);
+
+  const handlePreviewMetricsObservation = useCallback((params: {
+    terminal: DaytonaWorkspaceTerminalRecord;
+    metrics: WorkspacePreviewMetricsObservation;
+  }) => {
+    recordPreviewObservation({
+      terminal: params.terminal,
+      ...previewObservationForMetrics(params.metrics),
+    });
+  }, [recordPreviewObservation]);
 
   const expandedPreviewTerminal = useMemo(() => {
     if (!expandedPreviewTerminalId || !isDesktopViewport) return null;
@@ -1510,6 +1652,7 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
           onEnsurePreview={handleEnsurePreview}
           onExpandPreview={handleExpandPreview}
           onPreviewLifecyclePhaseChange={handlePreviewLifecyclePhaseChange}
+          onPreviewMetricsObservation={handlePreviewMetricsObservation}
           onStopTerminal={(terminalSessionId) => {
             void handleStopWorkspaceTerminal(terminalSessionId);
           }}
@@ -1520,6 +1663,7 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
       handleExpandPreview,
       handleEnsurePreview,
       handlePreviewLifecyclePhaseChange,
+      handlePreviewMetricsObservation,
       isDesktopViewport,
       activeWorkspaceTerminals,
       latestPreviewRunIdByTerminalId,
@@ -1546,6 +1690,7 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
               onEnsurePreview={handleEnsurePreview}
               onCollapsePreview={handleCollapsePreview}
               onPreviewLifecyclePhaseChange={handlePreviewLifecyclePhaseChange}
+              onPreviewMetricsObservation={handlePreviewMetricsObservation}
               onStopTerminal={(terminalSessionId) => {
                 void handleStopWorkspaceTerminal(terminalSessionId);
               }}

@@ -1,6 +1,5 @@
 import { type RetrievalToolName } from "./retrievalTools.ts";
 import type { RuntimeKernelBudget } from "./runtimeKernelTypes";
-import type { RuntimeWorkspaceStateSummary } from "./runtimeWorkspaceState.ts";
 
 export type ThreadWorkingStatePrompt = {
   version?: number | null;
@@ -14,7 +13,6 @@ export type ThreadWorkingStatePrompt = {
   verifiedFindings?: string[] | null;
   recentActions?: string[] | null;
   lastDiagnostic?: string | null;
-  workspaceRuntime?: RuntimeWorkspaceStateSummary | null;
   openIssue?: string | null;
   blocker?: string | null;
   nextAction?: string | null;
@@ -43,8 +41,25 @@ export type RuntimeTemporalContextPromptFields = {
 export type RuntimeWorkspaceTerminalPrompt = {
   id: string;
   status: "starting" | "running" | "exited" | "failed" | "stopped";
+  lifecycleOwner?: "project_background" | null;
   command: string;
   cwd?: string | null;
+  previewPort?: number | null;
+  previewPath?: string | null;
+  previewLabel?: string | null;
+  previewStatus?:
+    | "none"
+    | "starting"
+    | "running"
+    | "blank"
+    | "render_error_suspected"
+    | "unreachable"
+    | "server_exited"
+    | null;
+  healthStatus?: "unknown" | "starting" | "healthy" | "unhealthy" | "exited" | "stale" | null;
+  healthSummary?: string | null;
+  lastPreviewProbeSummary?: string | null;
+  lastBrowserObservationSummary?: string | null;
   exitCode?: number | null;
   outputTail?: string | null;
 };
@@ -240,61 +255,43 @@ function buildThreadWorkingStatePrompt(params: {
   ].join("\n");
 }
 
-function buildBackgroundTerminalStatePrompt(params: {
+function buildWorkspaceProcessContextPrompt(params: {
   activeBackgroundTerminals?: RuntimeWorkspaceTerminalPrompt[] | null;
 }): string | null {
   const active = Array.isArray(params.activeBackgroundTerminals)
     ? params.activeBackgroundTerminals.filter((row) => row && typeof row.command === "string")
     : [];
   if (active.length === 0) return null;
-  const lines: string[] = ["BACKGROUND_TERMINAL_STATE"];
+  const lines: string[] = ["WORKSPACE_PROCESS_CONTEXT"];
   if (active.length > 0) {
-    lines.push("Active background terminals:");
+    lines.push("Active background processes:");
     for (const terminal of active.slice(0, 3)) {
       const command = truncatePromptSnippet(terminal.command, 120) ?? "(unknown command)";
       const cwd = truncatePromptSnippet(terminal.cwd, 80);
       const tail = truncatePromptSnippet(terminal.outputTail, 140);
+      const lifecycleOwner = truncatePromptSnippet(terminal.lifecycleOwner, 40);
+      const healthStatus = truncatePromptSnippet(terminal.healthStatus, 40);
+      const healthSummary = truncatePromptSnippet(terminal.healthSummary, 120);
+      const previewStatus = truncatePromptSnippet(terminal.previewStatus, 60);
+      const previewParts = [
+        typeof terminal.previewPort === "number" ? `port=${terminal.previewPort}` : null,
+        terminal.previewPath ? `path=${truncatePromptSnippet(terminal.previewPath, 80)}` : null,
+        terminal.previewLabel ? `label=${truncatePromptSnippet(terminal.previewLabel, 80)}` : null,
+      ].filter(Boolean);
+      const previewProbe = truncatePromptSnippet(terminal.lastPreviewProbeSummary, 120);
+      const browserObservation = truncatePromptSnippet(terminal.lastBrowserObservationSummary, 120);
       lines.push(
-        `- ${terminal.id}: ${terminal.status}; command=${command}${cwd ? `; cwd=${cwd}` : ""}${tail ? `; recent_output=${tail}` : ""}`,
+        `- ${terminal.id}: ${terminal.status}${lifecycleOwner ? `; lifecycle=${lifecycleOwner}` : ""}${healthStatus ? `; health=${healthStatus}` : ""}${healthSummary ? `; health_summary=${healthSummary}` : ""}; command=${command}${cwd ? `; cwd=${cwd}` : ""}${previewStatus ? `; preview=${previewStatus}` : ""}${previewParts.length > 0 ? `; ${previewParts.join("; ")}` : ""}${browserObservation ? `; browser_observation=${browserObservation}` : ""}${previewProbe ? `; preview_probe=${previewProbe}` : ""}${tail ? `; recent_output=${tail}` : ""}`,
       );
     }
   } else {
-    lines.push("Active background terminals: none.");
+    lines.push("Active background processes: none.");
   }
   lines.push(
-    "Treat this as fresh workspace terminal truth for the current turn. Reuse an existing terminal when it is still relevant, and stop idle terminals when the task no longer needs them.",
+    "Treat active background process rows as canonical live workspace truth. Reuse an existing process when it is still relevant, and stop idle processes when the task no longer needs them.",
+    "If the process is still running but preview is blank or render_error_suspected, inspect frontend render/console/root-mount/import/CSS causes before restarting the terminal.",
   );
   return lines.join("\n");
-}
-
-function buildWorkspaceRuntimeStatePrompt(params: {
-  workspaceRuntime?: RuntimeWorkspaceStateSummary | null;
-}): string | null {
-  const state = params.workspaceRuntime;
-  if (!state) return null;
-  const terminalStatus = truncatePromptSnippet(state.terminalStatus, 60);
-  const previewStatus = truncatePromptSnippet(state.previewStatus, 80);
-  const command = truncatePromptSnippet(state.command, 120);
-  const cwd = truncatePromptSnippet(state.cwd, 80);
-  const issue = truncatePromptSnippet(state.issue, 180);
-  const nextAction = truncatePromptSnippet(state.nextAction, 180);
-  const outputTail = truncatePromptSnippet(state.outputTail, 160);
-  const previewParts = [
-    state.previewPort ? `port=${state.previewPort}` : null,
-    state.previewPath ? `path=${truncatePromptSnippet(state.previewPath, 80)}` : null,
-    state.previewLabel ? `label=${truncatePromptSnippet(state.previewLabel, 80)}` : null,
-  ].filter(Boolean);
-  return [
-    "WORKSPACE_RUNTIME_STATE",
-    `Terminal: ${terminalStatus || "(unknown)"}${command ? `; command=${command}` : ""}${cwd ? `; cwd=${cwd}` : ""}${typeof state.exitCode === "number" ? `; exit=${state.exitCode}` : ""}`,
-    `Preview: ${previewStatus || "(unknown)"}${previewParts.length > 0 ? `; ${previewParts.join("; ")}` : ""}`,
-    `Runtime issue: ${issue || "(none)"}`,
-    `Runtime next action: ${nextAction || "(none)"}`,
-    outputTail ? `Recent terminal output: ${outputTail}` : null,
-    "If the terminal is still running but preview is blank or render_error_suspected, inspect frontend render/console/root-mount/import/CSS causes before restarting the terminal.",
-  ]
-    .filter((line): line is string => Boolean(line))
-    .join("\n");
 }
 
 function buildExplanationContractPrompt(): string {
@@ -504,10 +501,7 @@ export function buildWorkspaceRuntimeSystemPrompt(params: RuntimeCommunityPrompt
     buildThreadWorkingStatePrompt({
       threadWorkingState: params.threadWorkingState,
     }),
-    buildWorkspaceRuntimeStatePrompt({
-      workspaceRuntime: params.threadWorkingState?.workspaceRuntime,
-    }),
-    buildBackgroundTerminalStatePrompt({
+    buildWorkspaceProcessContextPrompt({
       activeBackgroundTerminals: params.activeBackgroundTerminals,
     }),
     buildRuntimeTemporalContextPrompt({

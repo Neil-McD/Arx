@@ -40,6 +40,16 @@ assertContains(
 );
 assertContains(
   handler,
+  "reconcileProjectWorkspaceTerminalsInternal",
+  "runtime handler reads terminal ledger before fallback finalization",
+);
+assertContains(
+  handler,
+  "activeBackgroundTerminals: activeBackgroundTerminalsForFinalizer",
+  "runtime handler passes terminal ledger truth to finalizer",
+);
+assertContains(
+  handler,
   "workingState: workingStateForFinalizer",
   "runtime handler passes current failure working state to finalizer",
 );
@@ -64,6 +74,9 @@ for (const token of [
   "filesChanged",
   "recentActions",
   "nextAction",
+  "activeBackgroundTerminals",
+  "selectLiveTerminal",
+  "buildLiveTerminalBlocker",
 ]) {
   assertContains(finalizer, token, `failure finalizer uses ${token}`);
 }
@@ -105,7 +118,42 @@ assertContains(output.content, "What happened:", "rendered what happened section
 assertContains(output.content, "Verified so far:", "rendered verified section");
 assertContains(output.content, "src/App.tsx", "rendered touched file");
 assertContains(output.content, "Daytona toolbox command failed (408)", "rendered blocker");
-assertContains(output.content, "Retry bash", "rendered next action");
+assertContains(output.content, "Inspect the bash failure", "rendered next action");
+
+const processAwareOutput = buildRuntimeFailureFinalAnswer({
+  status: "error",
+  reason: "tool_failed",
+  errorCode: "workspace_tool_execute_failed",
+  errorMessage: "Daytona command failed with exit code 127.",
+  workingState: currentRunState,
+  activeBackgroundTerminals: [
+    {
+      id: "terminal_1",
+      status: "running",
+      lifecycleOwner: "project_background",
+      command: "npm run dev -- --port 3000",
+      previewPort: 3000,
+      previewStatus: "blank",
+      healthStatus: "healthy",
+      lastBrowserObservationSummary: "Preview iframe loaded a blank white document.",
+    },
+  ],
+});
+assertContains(
+  processAwareOutput.content,
+  "background terminal is still running",
+  "finalizer prefers live terminal truth",
+);
+assertContains(
+  processAwareOutput.content,
+  "preview needs browser/render inspection",
+  "finalizer avoids generic bash failure blocker when process is live",
+);
+assertContains(
+  processAwareOutput.content,
+  "Inspect the active preview",
+  "finalizer recommends preview/browser loop",
+);
 
 const partial = buildRuntimeFailureFinalAnswer({
   status: "cancelled",

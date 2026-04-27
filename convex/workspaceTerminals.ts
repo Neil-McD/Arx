@@ -14,10 +14,6 @@ import {
   readDaytonaProcessSessionCommandExitCode,
 } from "./daytonaProcessSessions";
 import {
-  isRuntimeSessionOwnedTerminalRow,
-  resolveRuntimeOwnedTerminalSession,
-} from "./workspaceTerminalRuntimeAccess";
-import {
   releaseProjectBackgroundSandboxIfIdle,
   resolveTerminalSandboxContext,
 } from "./workspaceTerminalBackgroundService";
@@ -28,12 +24,13 @@ import {
   reconcileWorkspaceTerminalRow,
 } from "./workspaceTerminalReconciliation";
 import {
-  requireRuntimeSessionOwnedTerminalRow,
   isWorkspaceTerminalActiveStatus,
-  resolveRuntimeSessionTerminalPreview,
   resolveWorkspaceTerminalPreview,
   stopWorkspaceTerminalProcess,
   summarizeWorkspaceTerminalRow,
+  type WorkspaceTerminalHealthStatus,
+  type WorkspaceTerminalLifecycleOwner,
+  type WorkspaceTerminalPreviewStatus,
 } from "./workspaceTerminalProcessCore";
 
 const PROJECT_TERMINAL_RECONCILE_FRESH_MS = 8_000;
@@ -44,7 +41,9 @@ const PROJECT_BACKGROUND_SANDBOX_CREATE_LEASE_MS = 60_000;
 type WorkspaceTerminalStatus = "starting" | "running" | "exited" | "failed" | "stopped";
 type WorkspaceTerminalSummary = {
   id: string;
-  run_id_started_by: string | null;
+  lifecycle_owner: WorkspaceTerminalLifecycleOwner;
+  started_by_thread_id: string | null;
+  started_by_run_id: string | null;
   status: WorkspaceTerminalStatus;
   command: string;
   cwd: string | null;
@@ -56,11 +55,50 @@ type WorkspaceTerminalSummary = {
   finished_at: number | null;
   exit_code: number | null;
   output_tail: string | null;
+  last_heartbeat_at: number | null;
+  health_status: WorkspaceTerminalHealthStatus;
+  health_summary: string | null;
+  preview_status: WorkspaceTerminalPreviewStatus;
+  last_preview_probe_at: number | null;
+  last_preview_probe_summary: string | null;
+  last_browser_observation_at: number | null;
+  last_browser_observation_summary: string | null;
 };
+
+const workspaceTerminalLifecycleOwnerValidator = v.union(
+  v.literal("project_background"),
+);
+
+const workspaceTerminalHealthStatusValidator = v.union(
+  v.literal("unknown"),
+  v.literal("starting"),
+  v.literal("healthy"),
+  v.literal("unhealthy"),
+  v.literal("exited"),
+  v.literal("stale"),
+);
+
+const workspaceTerminalPreviewStatusValidator = v.union(
+  v.literal("none"),
+  v.literal("starting"),
+  v.literal("running"),
+  v.literal("blank"),
+  v.literal("render_error_suspected"),
+  v.literal("unreachable"),
+  v.literal("server_exited"),
+);
 
 function normalizeOptionalString(value: unknown): string | null {
   const normalized = String(value ?? "").trim();
   return normalized || null;
+}
+
+function normalizeObservationSummary(value: unknown, maxLen = 240): string | null {
+  const normalized = String(value ?? "").replace(/\s+/g, " ").trim();
+  if (!normalized) return null;
+  return normalized.length > maxLen
+    ? `${normalized.slice(0, maxLen - 1).trimEnd()}…`
+    : normalized;
 }
 
 function isTerminalActiveStatus(status: string | null | undefined): boolean {
@@ -143,7 +181,6 @@ async function resolveTerminalAccess(params: {
       ok: true;
       actor: { dbUserId: string; authSubject: string | null };
       row: any;
-      runtimeSessionOwned: boolean;
     }
   | {
       ok: false;
@@ -156,29 +193,6 @@ async function resolveTerminalAccess(params: {
     ctx: params.ctx,
     authSubject: params.authSubject,
   });
-  const normalizedRunId = normalizeOptionalString(params.runId);
-  if (normalizedRunId) {
-    const scoped = await requireRuntimeSessionOwnedTerminalRow({
-      ctx: params.ctx,
-      ownerId: actor.dbUserId,
-      runId: normalizedRunId,
-      terminalSessionId: String(params.terminalSessionId ?? ""),
-    });
-    if (scoped.ok === false) {
-      return {
-        ok: false,
-        status: scoped.status,
-        code: scoped.code,
-        message: scoped.message,
-      };
-    }
-    return {
-      ok: true,
-      actor,
-      row: scoped.row,
-      runtimeSessionOwned: true,
-    };
-  }
   const row: any = await params.ctx.runQuery(
     internal.workspaceTerminals.getWorkspaceTerminalSessionInternal as any,
     {
@@ -193,23 +207,10 @@ async function resolveTerminalAccess(params: {
       message: "Terminal session not found.",
     };
   }
-  const runtimeSessionOwned = await isRuntimeSessionOwnedTerminalRow({
-    ctx: params.ctx,
-    row,
-  });
-  if (runtimeSessionOwned && !normalizedRunId) {
-    return {
-      ok: false,
-      status: 409,
-      code: "run_id_required",
-      message: "Runtime terminal operations require the owning run context.",
-    };
-  }
   return {
     ok: true,
     actor,
     row,
-    runtimeSessionOwned,
   };
 }
 
@@ -252,7 +253,9 @@ export const createWorkspaceTerminalSessionInternal = internalMutation({
     ownerId: v.id("users"),
     projectId: v.id("cloudProjects"),
     threadId: v.optional(v.id("threads")),
-    runIdStartedBy: v.optional(v.string()),
+    lifecycleOwner: v.optional(workspaceTerminalLifecycleOwnerValidator),
+    startedByThreadId: v.optional(v.string()),
+    startedByRunId: v.optional(v.string()),
     providerSandboxId: v.string(),
     providerSessionId: v.string(),
     providerCommandId: v.string(),
@@ -273,6 +276,14 @@ export const createWorkspaceTerminalSessionInternal = internalMutation({
     finishedAt: v.optional(v.number()),
     exitCode: v.optional(v.number()),
     lastOutputTail: v.optional(v.string()),
+    lastHeartbeatAt: v.optional(v.number()),
+    healthStatus: v.optional(workspaceTerminalHealthStatusValidator),
+    healthSummary: v.optional(v.string()),
+    previewStatus: v.optional(workspaceTerminalPreviewStatusValidator),
+    lastPreviewProbeAt: v.optional(v.number()),
+    lastPreviewProbeSummary: v.optional(v.string()),
+    lastBrowserObservationAt: v.optional(v.number()),
+    lastBrowserObservationSummary: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const id = await ctx.db.insert("workspaceTerminalSessions", args);
@@ -373,6 +384,17 @@ export const updateWorkspaceTerminalSessionInternal = internalMutation({
     finishedAt: v.optional(v.number()),
     exitCode: v.optional(v.number()),
     lastOutputTail: v.optional(v.string()),
+    lifecycleOwner: v.optional(workspaceTerminalLifecycleOwnerValidator),
+    startedByThreadId: v.optional(v.string()),
+    startedByRunId: v.optional(v.string()),
+    lastHeartbeatAt: v.optional(v.number()),
+    healthStatus: v.optional(workspaceTerminalHealthStatusValidator),
+    healthSummary: v.optional(v.string()),
+    previewStatus: v.optional(workspaceTerminalPreviewStatusValidator),
+    lastPreviewProbeAt: v.optional(v.number()),
+    lastPreviewProbeSummary: v.optional(v.string()),
+    lastBrowserObservationAt: v.optional(v.number()),
+    lastBrowserObservationSummary: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const row = await ctx.db.get(args.terminalSessionId);
@@ -383,6 +405,17 @@ export const updateWorkspaceTerminalSessionInternal = internalMutation({
     if (args.finishedAt !== undefined) patch.finishedAt = args.finishedAt;
     if (args.exitCode !== undefined) patch.exitCode = args.exitCode;
     if (args.lastOutputTail !== undefined) patch.lastOutputTail = args.lastOutputTail;
+    if (args.lifecycleOwner !== undefined) patch.lifecycleOwner = args.lifecycleOwner;
+    if (args.startedByThreadId !== undefined) patch.startedByThreadId = args.startedByThreadId;
+    if (args.startedByRunId !== undefined) patch.startedByRunId = args.startedByRunId;
+    if (args.lastHeartbeatAt !== undefined) patch.lastHeartbeatAt = args.lastHeartbeatAt;
+    if (args.healthStatus !== undefined) patch.healthStatus = args.healthStatus;
+    if (args.healthSummary !== undefined) patch.healthSummary = args.healthSummary;
+    if (args.previewStatus !== undefined) patch.previewStatus = args.previewStatus;
+    if (args.lastPreviewProbeAt !== undefined) patch.lastPreviewProbeAt = args.lastPreviewProbeAt;
+    if (args.lastPreviewProbeSummary !== undefined) patch.lastPreviewProbeSummary = args.lastPreviewProbeSummary;
+    if (args.lastBrowserObservationAt !== undefined) patch.lastBrowserObservationAt = args.lastBrowserObservationAt;
+    if (args.lastBrowserObservationSummary !== undefined) patch.lastBrowserObservationSummary = args.lastBrowserObservationSummary;
     await ctx.db.patch(args.terminalSessionId, patch);
     return await ctx.db.get(args.terminalSessionId);
   },
@@ -444,41 +477,9 @@ export const reconcileProjectWorkspaceTerminalsInternal = internalAction({
       projectId: args.projectId,
     });
     const projectProviderSandboxId = normalizeOptionalString(project?.providerSandboxId);
-    const runtimeSessionRows = activeRows.filter((row) => {
-      const runIdStartedBy = normalizeOptionalString(row.runIdStartedBy);
-      const rowSandboxId = normalizeOptionalString(row.providerSandboxId);
-      return Boolean(
-        runIdStartedBy &&
-          rowSandboxId &&
-          (!projectProviderSandboxId || rowSandboxId !== projectProviderSandboxId),
-      );
-    });
-    for (const row of runtimeSessionRows) {
-      await reconcileWorkspaceTerminalRow({
-        ctx,
-        ownerId: args.ownerId,
-        row,
-        lifecycleOwner: "runtime_session",
-      });
-    }
-    if (runtimeSessionRows.length > 0) {
-      rows = (await ctx.runQuery(
-        internal.workspaceTerminals.listProjectWorkspaceTerminalSessionsInternal as any,
-        {
-          ownerId: args.ownerId,
-          projectId: args.projectId,
-        },
-      )) as any[];
-      activeRows = rows.filter((row) => isTerminalActiveStatus(row.status));
-    }
     activeRows = activeRows.filter((row) => {
-      const runIdStartedBy = normalizeOptionalString(row.runIdStartedBy);
-      const rowSandboxId = normalizeOptionalString(row.providerSandboxId);
-      return !(
-        runIdStartedBy &&
-        rowSandboxId &&
-        (!projectProviderSandboxId || rowSandboxId !== projectProviderSandboxId)
-      );
+      const rowSandboxId = normalizeOptionalString(row?.providerSandboxId);
+      return !projectProviderSandboxId || rowSandboxId === projectProviderSandboxId;
     });
     if (activeRows.length === 0) {
       return buildTerminalSnapshot(rows);
@@ -507,6 +508,10 @@ export const reconcileProjectWorkspaceTerminalsInternal = internalAction({
           status: "failed",
           finishedAt: nowMs,
           updatedAt: nowMs,
+          lastHeartbeatAt: nowMs,
+          healthStatus: "unhealthy",
+          healthSummary: "Process session is no longer available.",
+          previewStatus: row.previewPort ? "server_exited" : "none",
         });
       }
       await releaseProjectBackgroundSandboxIfIdle({
@@ -559,6 +564,10 @@ export const reconcileProjectWorkspaceTerminalsInternal = internalAction({
           status: "failed",
           finishedAt: nowMs,
           updatedAt: nowMs,
+          lastHeartbeatAt: nowMs,
+          healthStatus: "unhealthy",
+          healthSummary: "Process session is no longer available.",
+          previewStatus: row.previewPort ? "server_exited" : "none",
         });
         continue;
       }
@@ -581,6 +590,10 @@ export const reconcileProjectWorkspaceTerminalsInternal = internalAction({
             terminalSessionId: row._id,
             status: "running",
             updatedAt: nowMs,
+            lastHeartbeatAt: nowMs,
+            healthStatus: "healthy",
+            healthSummary: "Process is running.",
+            previewStatus: row.previewPort ? "running" : "none",
           });
         }
         continue;
@@ -592,6 +605,13 @@ export const reconcileProjectWorkspaceTerminalsInternal = internalAction({
         finishedAt: nowMs,
         exitCode,
         updatedAt: nowMs,
+        lastHeartbeatAt: nowMs,
+        healthStatus: exitCode === 0 ? "exited" : "unhealthy",
+        healthSummary:
+          exitCode === 0
+            ? `Process exited with code ${exitCode}.`
+            : `Process failed with exit code ${exitCode}.`,
+        previewStatus: row.previewPort ? "server_exited" : "none",
       });
       await deleteDaytonaProcessSession({
         config: sandbox.config,
@@ -615,16 +635,17 @@ export const reconcileProjectWorkspaceTerminalsInternal = internalAction({
         projectId: args.projectId,
       },
     )) as any[];
-    const hasActiveProjectBackgroundRows = nextRows.some((row) => {
-      if (!isTerminalActiveStatus(row.status)) return false;
-      const runIdStartedBy = normalizeOptionalString(row.runIdStartedBy);
-      const rowSandboxId = normalizeOptionalString(row.providerSandboxId);
-      return !(
-        runIdStartedBy &&
-        rowSandboxId &&
-        (!projectProviderSandboxId || rowSandboxId !== projectProviderSandboxId)
-      );
-    });
+    let hasActiveProjectBackgroundRows = false;
+    for (const row of nextRows) {
+      if (!isTerminalActiveStatus(row.status)) continue;
+      if (
+        !projectProviderSandboxId ||
+        normalizeOptionalString(row?.providerSandboxId) === projectProviderSandboxId
+      ) {
+        hasActiveProjectBackgroundRows = true;
+        break;
+      }
+    }
     if (!hasActiveProjectBackgroundRows) {
       await releaseProjectBackgroundSandboxIfIdle({
         ctx,
@@ -711,17 +732,7 @@ export const stopAllProjectWorkspaceTerminals = action({
       },
     )) as any[];
     const activeRows = rows.filter((row) => isTerminalActiveStatus(row.status));
-    const backgroundRows: any[] = [];
     for (const row of activeRows) {
-      const runtimeSessionOwned = await isRuntimeSessionOwnedTerminalRow({
-        ctx,
-        row,
-      });
-      if (!runtimeSessionOwned) {
-        backgroundRows.push(row);
-      }
-    }
-    for (const row of backgroundRows) {
       await ctx.runAction(internal.workspaceTerminals.stopWorkspaceTerminalInternal as any, {
         authSubject: args.authSubject ?? null,
         terminalSessionId: row._id,
@@ -729,7 +740,7 @@ export const stopAllProjectWorkspaceTerminals = action({
     }
     return {
       ok: true,
-      stopped_count: backgroundRows.length,
+      stopped_count: activeRows.length,
     };
   },
 });
@@ -748,13 +759,13 @@ export const stopWorkspaceTerminalInternal = internalAction({
       runId: args.runId ?? null,
     });
     if (!access.ok) return access;
-    const { actor, row, runtimeSessionOwned } = access;
+    const { actor, row } = access;
 
     const sandbox = await resolveTerminalSandboxContext({
       ctx,
       projectId: String(row.projectId ?? "").trim(),
       providerSandboxId: String(row.providerSandboxId ?? "").trim(),
-      touchProjectBackground: !runtimeSessionOwned,
+      touchProjectBackground: true,
     });
     const result = await stopWorkspaceTerminalProcess({
       ctx,
@@ -769,14 +780,12 @@ export const stopWorkspaceTerminalInternal = internalAction({
       forceStoppedStatus: true,
     });
 
-    if (!runtimeSessionOwned) {
-      await releaseProjectBackgroundSandboxIfIdle({
-        ctx,
-        ownerId: actor.dbUserId,
-        projectId: String(row.projectId ?? "").trim(),
-        providerSandboxId: String(row.providerSandboxId ?? "").trim(),
-      });
-    }
+    await releaseProjectBackgroundSandboxIfIdle({
+      ctx,
+      ownerId: actor.dbUserId,
+      projectId: String(row.projectId ?? "").trim(),
+      providerSandboxId: String(row.providerSandboxId ?? "").trim(),
+    });
 
     return {
       ok: true,
@@ -800,26 +809,12 @@ export const getWorkspaceTerminalPreviewUrl = action({
       runId: args.runId ?? null,
     });
     if (!access.ok) return access;
-    const { row, runtimeSessionOwned } = access;
-    const normalizedRunId = normalizeOptionalString(args.runId);
-    if (runtimeSessionOwned && normalizedRunId) {
-      const runtimeSession = await resolveRuntimeOwnedTerminalSession({
-        ctx,
-        ownerId: access.actor.dbUserId,
-        row,
-        runId: normalizedRunId,
-      });
-      if (!runtimeSession.ok) return runtimeSession;
-      return await resolveRuntimeSessionTerminalPreview({
-        row,
-        session: runtimeSession.session,
-      });
-    }
+    const { row } = access;
     const sandbox = await resolveTerminalSandboxContext({
       ctx,
       projectId: String(row.projectId ?? "").trim(),
       providerSandboxId: String(row.providerSandboxId ?? "").trim(),
-      touchProjectBackground: !runtimeSessionOwned,
+      touchProjectBackground: true,
     });
     if (!sandbox.ok) return sandbox;
     return await resolveWorkspaceTerminalPreview({
@@ -835,5 +830,67 @@ export const getWorkspaceTerminalPreviewUrl = action({
       workspaceMismatchMessage:
         "Preview terminal is not attached to this workspace session.",
     });
+  },
+});
+
+export const recordWorkspaceTerminalPreviewObservation = action({
+  args: {
+    authSubject: v.optional(v.string()),
+    terminalSessionId: v.id("workspaceTerminalSessions"),
+    runId: v.optional(v.string()),
+    previewStatus: v.optional(workspaceTerminalPreviewStatusValidator),
+    previewProbeSummary: v.optional(v.string()),
+    browserObservationSummary: v.optional(v.string()),
+  },
+  handler: async (ctx, args): Promise<unknown> => {
+    const access = await resolveTerminalAccess({
+      ctx,
+      authSubject: args.authSubject ?? null,
+      terminalSessionId: args.terminalSessionId,
+      runId: args.runId ?? null,
+    });
+    if (!access.ok) return access;
+
+    const nowMs = Date.now();
+    const patch: {
+      terminalSessionId: any;
+      updatedAt: number;
+      previewStatus?: WorkspaceTerminalPreviewStatus;
+      lastPreviewProbeAt?: number;
+      lastPreviewProbeSummary?: string;
+      lastBrowserObservationAt?: number;
+      lastBrowserObservationSummary?: string;
+    } = {
+      terminalSessionId: args.terminalSessionId,
+      updatedAt: nowMs,
+    };
+
+    if (args.previewStatus !== undefined) {
+      patch.previewStatus = args.previewStatus;
+    }
+    const previewProbeSummary = normalizeObservationSummary(
+      args.previewProbeSummary,
+    );
+    if (previewProbeSummary) {
+      patch.lastPreviewProbeAt = nowMs;
+      patch.lastPreviewProbeSummary = previewProbeSummary;
+    }
+    const browserObservationSummary = normalizeObservationSummary(
+      args.browserObservationSummary,
+    );
+    if (browserObservationSummary) {
+      patch.lastBrowserObservationAt = nowMs;
+      patch.lastBrowserObservationSummary = browserObservationSummary;
+    }
+
+    const updated: any = await ctx.runMutation(
+      internal.workspaceTerminals.updateWorkspaceTerminalSessionInternal as any,
+      patch,
+    );
+    return {
+      ok: true,
+      terminal_session_id: String(args.terminalSessionId ?? "").trim(),
+      ...(updated ? summarizeTerminalRow(updated) : {}),
+    };
   },
 });

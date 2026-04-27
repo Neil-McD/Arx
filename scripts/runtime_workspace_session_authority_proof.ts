@@ -58,15 +58,17 @@ async function proveWorkspaceSessionAuthorityModel() {
     /target_state: paramsForPersist\.state/,
     "expected persistence failure evidence to record the target workspace-session state",
   );
-  const cleanupInvocationIndex = executionSessionSource.indexOf(
-    "cleanupWorkspaceSandboxSession({",
-  );
   const persistReleasedIndex = executionSessionSource.indexOf(
     'phase: "dispose"',
   );
   assert.ok(
-    cleanupInvocationIndex >= 0 && persistReleasedIndex > cleanupInvocationIndex,
-    "expected runtime run state to be patched after cleanup is attempted",
+    persistReleasedIndex >= 0,
+    "expected runtime run state to be patched when borrowed workspace context is released",
+  );
+  assert.doesNotMatch(
+    executionSessionSource,
+    /cleanupWorkspaceSandboxSession|ownsWorkspaceSession/,
+    "expected runtime execution not to own or clean up project background sandboxes",
   );
 
   assert.match(

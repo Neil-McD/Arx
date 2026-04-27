@@ -19,7 +19,6 @@ import {
   type RuntimeHarnessTelemetrySummary,
 } from "../shared/runtimeHarnessScorecard";
 import { summarizeRuntimeWorkingStateFromEvents } from "../shared/runtimeWorkingStateLedger";
-import type { RuntimeWorkspaceStateSummary } from "../shared/runtimeWorkspaceState";
 import { requireCommunityChatAccess } from "./communityCore";
 
 type ThreadLike = {
@@ -116,7 +115,6 @@ type ThreadWorkingStateLike = {
   verifiedFindings: string[];
   recentActions?: string[];
   lastDiagnostic?: string;
-  workspaceRuntime?: RuntimeWorkspaceStateSummary;
   openIssue?: string;
   blocker?: string;
   nextAction?: string;
@@ -284,59 +282,6 @@ function normalizeWorkingStateText(raw: unknown, maxLen = 240): string | undefin
   return value ?? undefined;
 }
 
-function normalizeWorkspaceRuntimeState(raw: unknown): RuntimeWorkspaceStateSummary | undefined {
-  const record = asRecord(raw);
-  if (!record) return undefined;
-  const terminalStatusRaw = String(record.terminalStatus ?? "").trim();
-  const terminalStatus =
-    terminalStatusRaw === "none" ||
-    terminalStatusRaw === "starting" ||
-    terminalStatusRaw === "running" ||
-    terminalStatusRaw === "exited" ||
-    terminalStatusRaw === "failed" ||
-    terminalStatusRaw === "stopped" ||
-    terminalStatusRaw === "stale"
-      ? terminalStatusRaw
-      : undefined;
-  const previewStatusRaw = String(record.previewStatus ?? "").trim();
-  const previewStatus =
-    previewStatusRaw === "none" ||
-    previewStatusRaw === "starting" ||
-    previewStatusRaw === "running" ||
-    previewStatusRaw === "blank" ||
-    previewStatusRaw === "render_error_suspected" ||
-    previewStatusRaw === "unreachable" ||
-    previewStatusRaw === "server_exited"
-      ? previewStatusRaw
-      : undefined;
-  if (!terminalStatus || !previewStatus) return undefined;
-  const exitCode = Number(record.exitCode);
-  const previewPort = Number(record.previewPort);
-  const out: Partial<RuntimeWorkspaceStateSummary> = {
-    terminalStatus,
-    previewStatus,
-    terminalSessionId: normalizeWorkingStateText(record.terminalSessionId, 120),
-    command: normalizeWorkingStateText(record.command, 220),
-    cwd: normalizeWorkingStateText(record.cwd, 160),
-    ...(Number.isFinite(exitCode) ? { exitCode: Math.floor(exitCode) } : null),
-    outputTail: normalizeWorkingStateText(record.outputTail, 500),
-    ...(Number.isFinite(previewPort) ? { previewPort: Math.floor(previewPort) } : null),
-    previewPath: normalizeWorkingStateText(record.previewPath, 120),
-    previewLabel: normalizeWorkingStateText(record.previewLabel, 80),
-    issue: normalizeWorkingStateText(record.issue, 240),
-    nextAction: normalizeWorkingStateText(record.nextAction, 240),
-    updatedAt: Number.isFinite(Number(record.updatedAt))
-      ? Math.floor(Number(record.updatedAt))
-      : Date.now(),
-  };
-  for (const key of Object.keys(out) as Array<keyof RuntimeWorkspaceStateSummary>) {
-    if (out[key] === undefined || out[key] === null) {
-      delete out[key];
-    }
-  }
-  return out as RuntimeWorkspaceStateSummary;
-}
-
 function normalizeWorkingStateList(raw: string[], maxItems = 6, maxLen = 180): string[] {
   const out: string[] = [];
   for (const value of raw) {
@@ -409,7 +354,6 @@ function normalizePreviousWorkingState(raw: unknown): ThreadWorkingStateLike | n
     verifiedFindings,
     recentActions,
     lastDiagnostic: normalizeWorkingStateText(record.lastDiagnostic, 240),
-    workspaceRuntime: normalizeWorkspaceRuntimeState(record.workspaceRuntime),
     openIssue: normalizeWorkingStateText(record.openIssue, 240),
     blocker: normalizeWorkingStateText(record.blocker ?? record.openIssue, 240),
     nextAction: normalizeWorkingStateText(record.nextAction, 200),
@@ -426,7 +370,6 @@ function compactThreadWorkingState(state: ThreadWorkingStateLike): ThreadWorking
     filesChanged: Array.isArray(state.filesChanged) ? state.filesChanged : [],
     verifiedFindings: Array.isArray(state.verifiedFindings) ? state.verifiedFindings : [],
     recentActions: Array.isArray(state.recentActions) ? state.recentActions : undefined,
-    workspaceRuntime: normalizeWorkspaceRuntimeState(state.workspaceRuntime),
     updatedAt: Number.isFinite(Number(state.updatedAt)) ? Math.floor(Number(state.updatedAt)) : Date.now(),
   };
   for (const key of [

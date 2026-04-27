@@ -25,7 +25,10 @@ import {
   runAbortableWithRuntimeCancellation,
   throwIfRuntimeRunCancelled,
 } from "./runtimeCancellation";
-import { composeCloudScopedRuntimeSystemPrompt } from "../shared/runtimePrompt";
+import {
+  composeCloudScopedRuntimeSystemPrompt,
+  type RuntimeWorkspaceTerminalPrompt,
+} from "../shared/runtimePrompt";
 import { buildRuntimeFailureFinalAnswer } from "../shared/runtimeFailureFinalizer";
 import { summarizeRuntimeWorkingStateFromEvents } from "../shared/runtimeWorkingStateLedger";
 import {
@@ -81,6 +84,58 @@ function emitBufferedAssistantText(params: {
   for (let index = 0; index < content.length; index += chunkSize) {
     params.emitDelta(content.slice(index, index + chunkSize));
   }
+}
+
+function mapRuntimeWorkspaceTerminalPrompt(
+  terminal: any,
+): RuntimeWorkspaceTerminalPrompt | null {
+  const id = String(terminal?.id ?? "").trim();
+  const command = String(terminal?.command ?? "").trim();
+  const status = String(terminal?.status ?? "").trim();
+  if (!id || !command) return null;
+  if (
+    status !== "starting" &&
+    status !== "running" &&
+    status !== "exited" &&
+    status !== "failed" &&
+    status !== "stopped"
+  ) {
+    return null;
+  }
+  return {
+    id,
+    status,
+    lifecycleOwner: "project_background",
+    command,
+    cwd: typeof terminal?.cwd === "string" ? terminal.cwd : null,
+    previewPort:
+      typeof terminal?.preview_port === "number" ? terminal.preview_port : null,
+    previewPath:
+      typeof terminal?.preview_path === "string" ? terminal.preview_path : null,
+    previewLabel:
+      typeof terminal?.preview_label === "string" ? terminal.preview_label : null,
+    previewStatus:
+      typeof terminal?.preview_status === "string"
+        ? (terminal.preview_status as RuntimeWorkspaceTerminalPrompt["previewStatus"])
+        : null,
+    healthStatus:
+      typeof terminal?.health_status === "string"
+        ? (terminal.health_status as RuntimeWorkspaceTerminalPrompt["healthStatus"])
+        : null,
+    healthSummary:
+      typeof terminal?.health_summary === "string" ? terminal.health_summary : null,
+    lastPreviewProbeSummary:
+      typeof terminal?.last_preview_probe_summary === "string"
+        ? terminal.last_preview_probe_summary
+        : null,
+    lastBrowserObservationSummary:
+      typeof terminal?.last_browser_observation_summary === "string"
+        ? terminal.last_browser_observation_summary
+        : null,
+    outputTail:
+      typeof terminal?.output_tail === "string" ? terminal.output_tail : null,
+    exitCode: typeof terminal?.exit_code === "number" ? terminal.exit_code : null,
+  };
 }
 
 export type JsonResponseFn = (
@@ -542,6 +597,32 @@ export async function handleRuntimeTurnRequest(args: {
       to: "chatgpt" | "platform" | "public";
       reason: string;
     }> | null = null;
+    const loadActiveBackgroundTerminalsForFinalizer = async (): Promise<
+      RuntimeWorkspaceTerminalPrompt[]
+    > => {
+      if (!runtimeProjectId) return [];
+      try {
+        const terminalSnapshot = await ctx.runAction(
+          internal.workspaceTerminals
+            .reconcileProjectWorkspaceTerminalsInternal as any,
+          {
+            ownerId: actor.dbUserId,
+            projectId: runtimeProjectId,
+          },
+        );
+        const active = Array.isArray((terminalSnapshot as any)?.active)
+          ? (terminalSnapshot as any).active
+          : [];
+        return active
+          .map((terminal: any) => mapRuntimeWorkspaceTerminalPrompt(terminal))
+          .filter(
+            (terminal: RuntimeWorkspaceTerminalPrompt | null): terminal is RuntimeWorkspaceTerminalPrompt =>
+              Boolean(terminal),
+          );
+      } catch {
+        return [];
+      }
+    };
     const persistPartialAssistantMessageBestEffort = async (params: {
       content: string;
       status: "error" | "cancelled";
@@ -562,7 +643,10 @@ export async function handleRuntimeTurnRequest(args: {
       if (!persistVisibleAssistantMessage) return null;
       const hasPartialContent = String(params.content ?? "").trim().length > 0;
       let workingStateForFinalizer = ownedThread.workingState ?? null;
+      let activeBackgroundTerminalsForFinalizer: RuntimeWorkspaceTerminalPrompt[] = [];
       if (!hasPartialContent) {
+        activeBackgroundTerminalsForFinalizer =
+          await loadActiveBackgroundTerminalsForFinalizer();
         try {
           const runEvents = await ctx.runQuery(
             internal.threads.listRuntimeRunEventsByOwnerRunIdInternal as any,
@@ -586,6 +670,7 @@ export async function handleRuntimeTurnRequest(args: {
       const finalAnswer = buildRuntimeFailureFinalAnswer({
         partialContent: params.content,
         workingState: workingStateForFinalizer,
+        activeBackgroundTerminals: activeBackgroundTerminalsForFinalizer,
         status: params.status,
         reason: params.reason ?? null,
         errorCode: params.errorCode ?? null,

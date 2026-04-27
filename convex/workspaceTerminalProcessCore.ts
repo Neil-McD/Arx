@@ -1,5 +1,4 @@
 import { internal } from "./_generated/api";
-import type { WorkspaceSandboxSession } from "./daytonaWorkspaceSession";
 import {
   DAYTONA_WORKSPACE_ROOT,
   getDaytonaSignedPreviewUrl,
@@ -11,10 +10,6 @@ import {
   createDaytonaProcessSession,
   deleteDaytonaProcessSession,
   executeDaytonaProcessSessionCommand,
-  findDaytonaProcessSessionCommand,
-  getDaytonaProcessSession,
-  getDaytonaProcessSessionCommandLogs,
-  readDaytonaProcessSessionCommandExitCode,
   sendDaytonaProcessSessionCommandInput,
 } from "./daytonaProcessSessions";
 import { mintPreviewProxySessionToken } from "./previewProxySessionToken";
@@ -25,6 +20,25 @@ export type WorkspaceTerminalStatus =
   | "exited"
   | "failed"
   | "stopped";
+
+export type WorkspaceTerminalLifecycleOwner = "project_background";
+
+export type WorkspaceTerminalHealthStatus =
+  | "unknown"
+  | "starting"
+  | "healthy"
+  | "unhealthy"
+  | "exited"
+  | "stale";
+
+export type WorkspaceTerminalPreviewStatus =
+  | "none"
+  | "starting"
+  | "running"
+  | "blank"
+  | "render_error_suspected"
+  | "unreachable"
+  | "server_exited";
 
 export type WorkspaceTerminalStartArgs = {
   command: string;
@@ -42,10 +56,125 @@ export type WorkspaceTerminalProcessContext = {
 
 const ACTIVE_TERMINAL_STATUSES = new Set(["starting", "running"]);
 const TERMINAL_OUTPUT_TAIL_MAX_CHARS = 6000;
+const TERMINAL_SUMMARY_MAX_CHARS = 500;
 
 function normalizeOptionalString(value: unknown): string | null {
   const normalized = String(value ?? "").trim();
   return normalized || null;
+}
+
+function normalizeSummaryString(value: unknown): string | null {
+  const normalized = String(value ?? "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!normalized) return null;
+  return normalized.length > TERMINAL_SUMMARY_MAX_CHARS
+    ? `${normalized.slice(0, TERMINAL_SUMMARY_MAX_CHARS - 1).trimEnd()}…`
+    : normalized;
+}
+
+export function normalizeWorkspaceTerminalLifecycleOwner(
+  value: unknown,
+): WorkspaceTerminalLifecycleOwner {
+  const normalized = String(value ?? "").trim();
+  if (normalized === "project_background") return "project_background";
+  return "project_background";
+}
+
+function normalizeWorkspaceTerminalHealthStatus(
+  value: unknown,
+): WorkspaceTerminalHealthStatus | null {
+  const normalized = String(value ?? "").trim();
+  return normalized === "unknown" ||
+    normalized === "starting" ||
+    normalized === "healthy" ||
+    normalized === "unhealthy" ||
+    normalized === "exited" ||
+    normalized === "stale"
+    ? normalized
+    : null;
+}
+
+export function deriveWorkspaceTerminalHealthStatus(row: any): WorkspaceTerminalHealthStatus {
+  const explicit = normalizeWorkspaceTerminalHealthStatus(row?.healthStatus);
+  if (explicit) return explicit;
+  const status = String(row?.status ?? "").trim().toLowerCase();
+  if (status === "starting") return "starting";
+  if (status === "running") return "healthy";
+  if (status === "failed") return "unhealthy";
+  if (status === "exited" || status === "stopped") return "exited";
+  return "unknown";
+}
+
+function normalizeWorkspaceTerminalPreviewStatus(
+  value: unknown,
+): WorkspaceTerminalPreviewStatus | null {
+  const normalized = String(value ?? "").trim();
+  return normalized === "none" ||
+    normalized === "starting" ||
+    normalized === "running" ||
+    normalized === "blank" ||
+    normalized === "render_error_suspected" ||
+    normalized === "unreachable" ||
+    normalized === "server_exited"
+    ? normalized
+    : null;
+}
+
+export function deriveWorkspaceTerminalPreviewStatus(row: any): WorkspaceTerminalPreviewStatus {
+  const explicit = normalizeWorkspaceTerminalPreviewStatus(row?.previewStatus);
+  if (explicit) return explicit;
+  const previewPort = typeof row?.previewPort === "number" ? row.previewPort : null;
+  if (!previewPort) return "none";
+  const status = String(row?.status ?? "").trim().toLowerCase();
+  if (status === "starting") return "starting";
+  if (status === "running") return "running";
+  if (status === "failed" || status === "exited") return "server_exited";
+  return "none";
+}
+
+export function deriveWorkspaceTerminalHealthSummary(row: any): string | null {
+  const explicit = normalizeSummaryString(row?.healthSummary);
+  if (explicit) return explicit;
+  const healthStatus = deriveWorkspaceTerminalHealthStatus(row);
+  const exitCode = typeof row?.exitCode === "number" ? row.exitCode : null;
+  if (healthStatus === "healthy") return "Process is running.";
+  if (healthStatus === "starting") return "Process is starting.";
+  if (healthStatus === "unhealthy") {
+    return exitCode === null
+      ? "Process failed."
+      : `Process failed with exit code ${exitCode}.`;
+  }
+  if (healthStatus === "exited") {
+    return exitCode === null
+      ? "Process is no longer running."
+      : `Process exited with code ${exitCode}.`;
+  }
+  if (healthStatus === "stale") return "Process state is stale.";
+  return null;
+}
+
+function workspaceTerminalHasPreview(row: any): boolean {
+  return typeof row?.previewPort === "number" && Number.isFinite(row.previewPort);
+}
+
+function previewStatusForTerminalStatus(
+  status: WorkspaceTerminalStatus,
+  hasPreview: boolean,
+): WorkspaceTerminalPreviewStatus {
+  if (!hasPreview) return "none";
+  if (status === "starting") return "starting";
+  if (status === "running") return "running";
+  return "server_exited";
+}
+
+function healthStatusForTerminalStatus(
+  status: WorkspaceTerminalStatus,
+): WorkspaceTerminalHealthStatus {
+  if (status === "starting") return "starting";
+  if (status === "running") return "healthy";
+  if (status === "failed") return "unhealthy";
+  return "exited";
 }
 
 export function normalizeRelativeWorkspaceCwd(raw: unknown): string | null {
@@ -271,7 +400,7 @@ async function createFailedWorkspaceTerminalStartRow(params: {
   ownerId: any;
   projectId: string;
   threadId?: any;
-  runIdStartedBy?: string | null;
+  startedByRunId?: string | null;
   session: WorkspaceTerminalProcessContext;
   terminal: WorkspaceTerminalStartArgs;
   providerSessionIdPrefix: string;
@@ -289,7 +418,11 @@ async function createFailedWorkspaceTerminalStartRow(params: {
       ownerId: params.ownerId,
       projectId: params.projectId,
       threadId: params.threadId ?? undefined,
-      runIdStartedBy: params.runIdStartedBy ?? undefined,
+      lifecycleOwner: "project_background",
+      startedByThreadId: params.threadId
+        ? String(params.threadId)
+        : undefined,
+      startedByRunId: params.startedByRunId ?? undefined,
       providerSandboxId: params.session.providerSandboxId,
       providerSessionId,
       providerCommandId: "preflight",
@@ -303,6 +436,11 @@ async function createFailedWorkspaceTerminalStartRow(params: {
       updatedAt: nowMs,
       finishedAt: nowMs,
       exitCode: 1,
+      lastHeartbeatAt: nowMs,
+      healthStatus: "unhealthy",
+      healthSummary: params.message || "Preview preflight failed.",
+      previewStatus:
+        params.terminal.previewPort !== null ? "server_exited" : "none",
       lastOutputTail: truncateTerminalOutputTail(
         [params.message, params.output].filter(Boolean).join("\n"),
       ),
@@ -332,7 +470,6 @@ export function summarizeWorkspaceTerminalRow(row: any): Record<string, unknown>
   return {
     terminal_session_id: String(row?._id ?? "").trim(),
     id: String(row?._id ?? "").trim(),
-    run_id_started_by: normalizeOptionalString(row?.runIdStartedBy),
     status:
       (String(row?.status ?? "stopped").trim().toLowerCase() || "stopped") as
         | WorkspaceTerminalStatus
@@ -348,21 +485,31 @@ export function summarizeWorkspaceTerminalRow(row: any): Record<string, unknown>
     finished_at: typeof row?.finishedAt === "number" ? row.finishedAt : null,
     output_tail: normalizeOptionalString(row?.lastOutputTail),
     exit_code: typeof row?.exitCode === "number" ? row.exitCode : null,
+    lifecycle_owner: normalizeWorkspaceTerminalLifecycleOwner(row?.lifecycleOwner),
+    started_by_thread_id: normalizeOptionalString(
+      row?.startedByThreadId ?? row?.threadId,
+    ),
+    started_by_run_id: normalizeOptionalString(row?.startedByRunId),
+    last_heartbeat_at:
+      typeof row?.lastHeartbeatAt === "number" ? row.lastHeartbeatAt : null,
+    health_status: deriveWorkspaceTerminalHealthStatus(row),
+    health_summary: deriveWorkspaceTerminalHealthSummary(row),
+    preview_status: deriveWorkspaceTerminalPreviewStatus(row),
+    last_preview_probe_at:
+      typeof row?.lastPreviewProbeAt === "number"
+        ? row.lastPreviewProbeAt
+        : null,
+    last_preview_probe_summary: normalizeSummaryString(
+      row?.lastPreviewProbeSummary,
+    ),
+    last_browser_observation_at:
+      typeof row?.lastBrowserObservationAt === "number"
+        ? row.lastBrowserObservationAt
+        : null,
+    last_browser_observation_summary: normalizeSummaryString(
+      row?.lastBrowserObservationSummary,
+    ),
   };
-}
-
-function isConfirmedProcessSessionGone(value: unknown): boolean {
-  const record =
-    value && typeof value === "object" && !Array.isArray(value)
-      ? (value as Record<string, unknown>)
-      : null;
-  const code = String(record?.code ?? "").trim().toLowerCase();
-  const details =
-    record?.details && typeof record.details === "object" && !Array.isArray(record.details)
-      ? (record.details as Record<string, unknown>)
-      : null;
-  const responseText = String(details?.response_text ?? "").toLowerCase();
-  return code === "terminal_not_found" || responseText.includes("not found");
 }
 
 export function readWorkspaceToolFailureOutputPreview(details: unknown): string {
@@ -378,51 +525,12 @@ export function readWorkspaceToolFailureOutputPreview(details: unknown): string 
   return "";
 }
 
-export async function requireRuntimeSessionOwnedTerminalRow(params: {
-  ctx: any;
-  ownerId: any;
-  runId: string;
-  terminalSessionId: string;
-}): Promise<
-  | { ok: true; row: any }
-  | { ok: false; status: number; code: string; message: string }
-> {
-  const normalizedTerminalSessionId = String(params.terminalSessionId ?? "").trim();
-  if (!normalizedTerminalSessionId) {
-    return {
-      ok: false,
-      status: 400,
-      code: "invalid_tool_args",
-      message: "terminal_session_id is required.",
-    };
-  }
-  const row = await params.ctx.runQuery(
-    internal.workspaceTerminals.getWorkspaceTerminalSessionInternal as any,
-    {
-      terminalSessionId: normalizedTerminalSessionId as any,
-    },
-  );
-  if (
-    !row ||
-    String(row.ownerId ?? "") !== String(params.ownerId ?? "") ||
-    String(row.runIdStartedBy ?? "").trim() !== params.runId
-  ) {
-    return {
-      ok: false,
-      status: 404,
-      code: "terminal_not_found",
-      message: "Runtime terminal session not found.",
-    };
-  }
-  return { ok: true, row };
-}
-
 export async function startWorkspaceTerminalProcess(params: {
   ctx: any;
   ownerId: any;
   projectId: string;
   threadId?: any;
-  runIdStartedBy?: string | null;
+  startedByRunId?: string | null;
   session: WorkspaceTerminalProcessContext;
   terminal: WorkspaceTerminalStartArgs;
   providerSessionIdPrefix: string;
@@ -464,7 +572,7 @@ export async function startWorkspaceTerminalProcess(params: {
         ownerId: params.ownerId,
         projectId: params.projectId,
         threadId: params.threadId,
-        runIdStartedBy: params.runIdStartedBy,
+        startedByRunId: params.startedByRunId,
         session: params.session,
         terminal: params.terminal,
         providerSessionIdPrefix: params.providerSessionIdPrefix,
@@ -511,7 +619,11 @@ export async function startWorkspaceTerminalProcess(params: {
       ownerId: params.ownerId,
       projectId: params.projectId,
       threadId: params.threadId ?? undefined,
-      runIdStartedBy: params.runIdStartedBy ?? undefined,
+      lifecycleOwner: "project_background",
+      startedByThreadId: params.threadId
+        ? String(params.threadId)
+        : undefined,
+      startedByRunId: params.startedByRunId ?? undefined,
       providerSandboxId: params.session.providerSandboxId,
       providerSessionId: processSession.sessionId,
       providerCommandId: executed.commandId,
@@ -523,6 +635,11 @@ export async function startWorkspaceTerminalProcess(params: {
       status: "running",
       startedAt: nowMs,
       updatedAt: nowMs,
+      lastHeartbeatAt: nowMs,
+      healthStatus: "healthy",
+      healthSummary: "Process is running.",
+      previewStatus:
+        params.terminal.previewPort !== null ? "running" : "none",
       lastOutputTail: truncateTerminalOutputTail(executed.outputText || ""),
     },
   );
@@ -534,103 +651,6 @@ export async function startWorkspaceTerminalProcess(params: {
     reused_existing: false,
     ...summarizeWorkspaceTerminalRow(createdRow),
   };
-}
-
-export async function reconcileRuntimeSessionTerminalRow(params: {
-  ctx: any;
-  row: any;
-  session: WorkspaceSandboxSession;
-}): Promise<Record<string, unknown>> {
-  const row = params.row;
-  if (!isWorkspaceTerminalActiveStatus(row.status)) {
-    return summarizeWorkspaceTerminalRow(row);
-  }
-  if (
-    String(row.providerSandboxId ?? "").trim() !==
-    params.session.providerSandboxId
-  ) {
-    return summarizeWorkspaceTerminalRow(row);
-  }
-
-  const nowMs = Date.now();
-  const markFailed = async (): Promise<Record<string, unknown>> => {
-    const patched = await params.ctx.runMutation(
-      internal.workspaceTerminals.updateWorkspaceTerminalSessionInternal as any,
-      {
-        terminalSessionId: row._id,
-        status: "failed",
-        finishedAt: nowMs,
-        updatedAt: nowMs,
-      },
-    );
-    return summarizeWorkspaceTerminalRow(patched ?? row);
-  };
-
-  const providerSessionId = String(row.providerSessionId ?? "").trim();
-  const providerCommandId = String(row.providerCommandId ?? "").trim();
-  const processSession = await getDaytonaProcessSession({
-    config: params.session.config,
-    toolboxProxyUrl: params.session.toolboxProxyUrl,
-    sandboxId: params.session.providerSandboxId,
-    sessionId: providerSessionId,
-  });
-  if (!processSession.ok) {
-    return isConfirmedProcessSessionGone(processSession)
-      ? await markFailed()
-      : summarizeWorkspaceTerminalRow(row);
-  }
-
-  const command = findDaytonaProcessSessionCommand(
-    processSession.session,
-    providerCommandId,
-  );
-  if (!command) return await markFailed();
-
-  const logs = await getDaytonaProcessSessionCommandLogs({
-    config: params.session.config,
-    toolboxProxyUrl: params.session.toolboxProxyUrl,
-    sandboxId: params.session.providerSandboxId,
-    sessionId: providerSessionId,
-    commandId: providerCommandId,
-  });
-  const exitCode = readDaytonaProcessSessionCommandExitCode(command);
-  if (!logs.ok && exitCode === null) return summarizeWorkspaceTerminalRow(row);
-  let output = logs.ok ? logs.output : "";
-  if (!output.trim()) {
-    const fallbackOutput = await readTerminalFallbackOutputLog({
-      config: params.session.config,
-      toolboxProxyUrl: params.session.toolboxProxyUrl,
-      sandboxId: params.session.providerSandboxId,
-      providerSessionId,
-    });
-    if (fallbackOutput.trim()) output = fallbackOutput;
-  }
-
-  const nextStatus: WorkspaceTerminalStatus =
-    exitCode === null ? "running" : exitCode === 0 ? "exited" : "failed";
-  const patched = await params.ctx.runMutation(
-    internal.workspaceTerminals.updateWorkspaceTerminalSessionInternal as any,
-    {
-      terminalSessionId: row._id,
-      status: nextStatus,
-      updatedAt: nowMs,
-      ...(exitCode === null ? null : { finishedAt: nowMs, exitCode }),
-      ...(output.trim()
-        ? { lastOutputTail: truncateTerminalOutputTail(output) }
-        : null),
-    },
-  );
-
-  if (exitCode !== null) {
-    await deleteDaytonaProcessSession({
-      config: params.session.config,
-      toolboxProxyUrl: params.session.toolboxProxyUrl,
-      sandboxId: params.session.providerSandboxId,
-      sessionId: providerSessionId,
-    });
-  }
-
-  return summarizeWorkspaceTerminalRow(patched ?? row);
 }
 
 export async function writeWorkspaceTerminalProcessInput(params: {
@@ -668,6 +688,7 @@ export async function writeWorkspaceTerminalProcessInput(params: {
     {
       terminalSessionId: params.row._id,
       updatedAt: Date.now(),
+      lastHeartbeatAt: Date.now(),
     },
   );
   return {
@@ -692,6 +713,11 @@ export async function stopWorkspaceTerminalProcess(params: {
           status: "stopped",
           updatedAt: Date.now(),
           finishedAt: Date.now(),
+          healthStatus: "exited",
+          healthSummary: "Process was stopped.",
+          previewStatus: workspaceTerminalHasPreview(row)
+            ? "server_exited"
+            : "none",
         },
       );
       return summarizeWorkspaceTerminalRow(patched ?? row);
@@ -717,6 +743,11 @@ export async function stopWorkspaceTerminalProcess(params: {
       status: "stopped",
       updatedAt: Date.now(),
       finishedAt: Date.now(),
+      healthStatus: "exited",
+      healthSummary: "Process was stopped.",
+      previewStatus: workspaceTerminalHasPreview(row)
+        ? "server_exited"
+        : "none",
     },
   );
   return summarizeWorkspaceTerminalRow(patched ?? row);
@@ -794,20 +825,4 @@ export async function resolveWorkspaceTerminalPreview(params: {
     preview_label: normalizeOptionalString(params.row.previewLabel),
     expires_in_seconds: 3600,
   };
-}
-
-export async function resolveRuntimeSessionTerminalPreview(params: {
-  row: any;
-  session: WorkspaceSandboxSession | null;
-}): Promise<Record<string, unknown>> {
-  return await resolveWorkspaceTerminalPreview({
-    row: params.row,
-    session: params.session,
-    workspaceRequiredMessage:
-      "Runtime preview is only available while its workspace session is active.",
-    previewNotEnabledMessage:
-      "This runtime terminal does not expose an app preview.",
-    workspaceMismatchMessage:
-      "Preview terminal is not attached to this workspace session.",
-  });
 }

@@ -415,6 +415,9 @@ function injectPreviewMetricsReporter(html) {
       );
       const overflowX = width > viewportWidth + 2;
       const overflowY = height > viewportHeight + 2;
+      const visibleTextLength = String(body?.innerText || "").replace(/\\s+/g, " ").trim().length;
+      const elementCount = document.querySelectorAll("body *").length;
+      const mediaElementCount = document.querySelectorAll("img,svg,canvas,video,picture,iframe").length;
       window.parent?.postMessage(
         {
           type: "polynet_preview_metrics",
@@ -426,6 +429,9 @@ function injectPreviewMetricsReporter(html) {
           viewportHeight,
           overflowX,
           overflowY,
+          visibleTextLength,
+          elementCount,
+          mediaElementCount,
         },
         "*",
       );

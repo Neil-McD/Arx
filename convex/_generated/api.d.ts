@@ -119,7 +119,6 @@ import type * as workspaceCredits from "../workspaceCredits.js";
 import type * as workspaceTerminalBackgroundService from "../workspaceTerminalBackgroundService.js";
 import type * as workspaceTerminalProcessCore from "../workspaceTerminalProcessCore.js";
 import type * as workspaceTerminalReconciliation from "../workspaceTerminalReconciliation.js";
-import type * as workspaceTerminalRuntimeAccess from "../workspaceTerminalRuntimeAccess.js";
 import type * as workspaceTerminals from "../workspaceTerminals.js";
 import type * as xAiSearchTransport from "../xAiSearchTransport.js";
 
@@ -241,7 +240,6 @@ declare const fullApi: ApiFromModules<{
   workspaceTerminalBackgroundService: typeof workspaceTerminalBackgroundService;
   workspaceTerminalProcessCore: typeof workspaceTerminalProcessCore;
   workspaceTerminalReconciliation: typeof workspaceTerminalReconciliation;
-  workspaceTerminalRuntimeAccess: typeof workspaceTerminalRuntimeAccess;
   workspaceTerminals: typeof workspaceTerminals;
   xAiSearchTransport: typeof xAiSearchTransport;
 }>;

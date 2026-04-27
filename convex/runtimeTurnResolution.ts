@@ -3,7 +3,6 @@ import { decryptStoredSecret } from "./providerConnections";
 import { loadPlatformModelMap, loadPublicModelMap } from "./httpInferenceConfig";
 import type { RetrievalToolName } from "../shared/retrievalTools";
 import type { ThreadWorkingStatePrompt } from "../shared/runtimePrompt";
-import type { RuntimeWorkspaceStateSummary } from "../shared/runtimeWorkspaceState";
 import {
   resolveActiveCapabilityFamiliesFromEntitlements,
   resolveHarnessProfileFromActiveCapabilities,
@@ -176,7 +175,6 @@ function normalizeThreadWorkingState(raw: unknown): ThreadWorkingStatePrompt | n
         .slice(0, 6)
     : [];
   const lastDiagnostic = String(record.lastDiagnostic ?? "").trim() || null;
-  const workspaceRuntime = normalizeWorkspaceRuntimePromptState(record.workspaceRuntime);
   if (
     !goal &&
     !status &&
@@ -186,7 +184,6 @@ function normalizeThreadWorkingState(raw: unknown): ThreadWorkingStatePrompt | n
     !nextAction &&
     !verificationStatus &&
     !lastDiagnostic &&
-    !workspaceRuntime &&
     filesTouched.length === 0 &&
     filesChanged.length === 0 &&
     verifiedFindings.length === 0 &&
@@ -206,58 +203,9 @@ function normalizeThreadWorkingState(raw: unknown): ThreadWorkingStatePrompt | n
     verifiedFindings,
     recentActions,
     lastDiagnostic,
-    workspaceRuntime,
     openIssue,
     blocker,
     nextAction,
-  };
-}
-
-function normalizeWorkspaceRuntimePromptState(
-  raw: unknown,
-): RuntimeWorkspaceStateSummary | null {
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
-  const record = raw as Record<string, unknown>;
-  const terminalStatusRaw = String(record.terminalStatus ?? "").trim();
-  const terminalStatus =
-    terminalStatusRaw === "none" ||
-    terminalStatusRaw === "starting" ||
-    terminalStatusRaw === "running" ||
-    terminalStatusRaw === "exited" ||
-    terminalStatusRaw === "failed" ||
-    terminalStatusRaw === "stopped" ||
-    terminalStatusRaw === "stale"
-      ? terminalStatusRaw
-      : null;
-  const previewStatusRaw = String(record.previewStatus ?? "").trim();
-  const previewStatus =
-    previewStatusRaw === "none" ||
-    previewStatusRaw === "starting" ||
-    previewStatusRaw === "running" ||
-    previewStatusRaw === "blank" ||
-    previewStatusRaw === "render_error_suspected" ||
-    previewStatusRaw === "unreachable" ||
-    previewStatusRaw === "server_exited"
-      ? previewStatusRaw
-      : null;
-  if (!terminalStatus || !previewStatus) return null;
-  const exitCode = Number(record.exitCode);
-  const previewPort = Number(record.previewPort);
-  const updatedAt = Number(record.updatedAt);
-  return {
-    terminalStatus,
-    previewStatus,
-    terminalSessionId: String(record.terminalSessionId ?? "").trim() || undefined,
-    command: String(record.command ?? "").trim() || undefined,
-    cwd: String(record.cwd ?? "").trim() || undefined,
-    ...(Number.isFinite(exitCode) ? { exitCode: Math.floor(exitCode) } : null),
-    outputTail: String(record.outputTail ?? "").trim() || undefined,
-    ...(Number.isFinite(previewPort) ? { previewPort: Math.floor(previewPort) } : null),
-    previewPath: String(record.previewPath ?? "").trim() || undefined,
-    previewLabel: String(record.previewLabel ?? "").trim() || undefined,
-    issue: String(record.issue ?? "").trim() || undefined,
-    nextAction: String(record.nextAction ?? "").trim() || undefined,
-    updatedAt: Number.isFinite(updatedAt) ? Math.floor(updatedAt) : Date.now(),
   };
 }
 
