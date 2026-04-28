@@ -41,6 +41,28 @@ function formatList(values: string[], fallback: string): string {
   return values.map((value) => `- ${value}`).join("\n");
 }
 
+function buildTinyEmergencyFallback(
+  input: RuntimeFailureFinalizerInput,
+): string {
+  const terminal = selectLiveTerminal(input.activeBackgroundTerminals);
+  const terminalCopy = terminal
+    ? " The background process still appears to be running."
+    : "";
+  const reason =
+    normalizeLine(input.errorMessage, 180) ??
+    normalizeLine(input.errorCode, 120) ??
+    normalizeLine(input.reason, 120);
+  const reasonCopy = reason ? ` Runtime note: ${reason}` : "";
+  return [
+    input.status === "cancelled"
+      ? "I stopped before I could finish."
+      : "I hit a runtime stop before I could finish.",
+    `${terminalCopy}${reasonCopy}`.trim(),
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
 function selectLiveTerminal(
   terminals: RuntimeWorkspaceTerminalPrompt[] | null | undefined,
 ): RuntimeWorkspaceTerminalPrompt | null {
@@ -114,6 +136,13 @@ export function buildRuntimeFailureFinalAnswer(
   const partialContent = String(input.partialContent ?? "").trim();
   if (partialContent) {
     return { content: partialContent, usedFallback: false };
+  }
+
+  if (input.errorCode !== "legacy_detailed_runtime_failure") {
+    return {
+      usedFallback: true,
+      content: buildTinyEmergencyFallback(input),
+    };
   }
 
   const workingState = input.workingState ?? null;

@@ -98,6 +98,9 @@ export type WorkspacePreviewMetricsObservation = {
   visibleTextLength: number | null;
   elementCount: number | null;
   mediaElementCount: number | null;
+  rootChildCount: number | null;
+  bodyChildCount: number | null;
+  probeAccess: "same_origin" | "cross_origin_uninspectable" | "unavailable";
 };
 
 function formatTerminalStatus(status: DaytonaWorkspaceTerminalRecord["status"]): string {
@@ -194,6 +197,106 @@ function buildPreviewFrameUrl(
   return url.toString();
 }
 
+function readPreviewDocumentMetrics(
+  iframe: HTMLIFrameElement | null,
+): WorkspacePreviewMetricsObservation {
+  if (!iframe) {
+    return {
+      width: null,
+      height: null,
+      viewportWidth: null,
+      viewportHeight: null,
+      overflowX: null,
+      overflowY: null,
+      visibleTextLength: null,
+      elementCount: null,
+      mediaElementCount: null,
+      rootChildCount: null,
+      bodyChildCount: null,
+      probeAccess: "unavailable",
+    };
+  }
+  try {
+    const document = iframe.contentDocument ?? iframe.contentWindow?.document ?? null;
+    if (!document) {
+      return {
+        width: null,
+        height: null,
+        viewportWidth: null,
+        viewportHeight: null,
+        overflowX: null,
+        overflowY: null,
+        visibleTextLength: null,
+        elementCount: null,
+        mediaElementCount: null,
+        rootChildCount: null,
+        bodyChildCount: null,
+        probeAccess: "unavailable",
+      };
+    }
+    const body = document.body;
+    const root = document.getElementById("root");
+    const documentElement = document.documentElement;
+    const width = Math.max(
+      body?.scrollWidth ?? 0,
+      body?.offsetWidth ?? 0,
+      documentElement?.clientWidth ?? 0,
+    );
+    const height = Math.max(
+      body?.scrollHeight ?? 0,
+      body?.offsetHeight ?? 0,
+      documentElement?.clientHeight ?? 0,
+    );
+    const viewportWidth = iframe.contentWindow?.innerWidth ?? documentElement?.clientWidth ?? null;
+    const viewportHeight = iframe.contentWindow?.innerHeight ?? documentElement?.clientHeight ?? null;
+    const visibleTextLength = String(body?.innerText ?? "").trim().length;
+    const elementCount = body?.querySelectorAll("*").length ?? 0;
+    const mediaElementCount =
+      body?.querySelectorAll("img,video,canvas,svg,picture,iframe").length ?? 0;
+    return {
+      width: Number.isFinite(width) ? Math.floor(width) : null,
+      height: Number.isFinite(height) ? Math.floor(height) : null,
+      viewportWidth:
+        typeof viewportWidth === "number" && Number.isFinite(viewportWidth)
+          ? Math.floor(viewportWidth)
+          : null,
+      viewportHeight:
+        typeof viewportHeight === "number" && Number.isFinite(viewportHeight)
+          ? Math.floor(viewportHeight)
+          : null,
+      overflowX:
+        typeof viewportWidth === "number" && Number.isFinite(viewportWidth)
+          ? width > viewportWidth + 2
+          : null,
+      overflowY:
+        typeof viewportHeight === "number" && Number.isFinite(viewportHeight)
+          ? height > viewportHeight + 2
+          : null,
+      visibleTextLength,
+      elementCount,
+      mediaElementCount,
+      rootChildCount: root?.children.length ?? null,
+      bodyChildCount: body?.children.length ?? null,
+      probeAccess: "same_origin",
+    };
+  } catch {
+    return {
+      width: null,
+      height: null,
+      viewportWidth: null,
+      viewportHeight: null,
+      overflowX: null,
+      overflowY: null,
+      visibleTextLength: null,
+      elementCount: null,
+      mediaElementCount: null,
+      rootChildCount: null,
+      bodyChildCount: null,
+      probeAccess: "cross_origin_uninspectable",
+    };
+  }
+}
+
 function PreviewFrame({
   previewUrl,
   title,
@@ -250,6 +353,9 @@ function PreviewFrame({
         visibleTextLength: numeric(payload.visibleTextLength),
         elementCount: numeric(payload.elementCount),
         mediaElementCount: numeric(payload.mediaElementCount),
+        rootChildCount: numeric(payload.rootChildCount),
+        bodyChildCount: numeric(payload.bodyChildCount),
+        probeAccess: "same_origin",
       });
     };
 
@@ -276,7 +382,14 @@ function PreviewFrame({
             title={title}
             loading="eager"
             referrerPolicy="no-referrer"
-            onLoad={() => lifecycleCallbackRef.current?.("ready")}
+            onLoad={() => {
+              lifecycleCallbackRef.current?.("ready");
+              window.setTimeout(() => {
+                metricsCallbackRef.current?.(
+                  readPreviewDocumentMetrics(iframeRef.current),
+                );
+              }, 250);
+            }}
             onError={() => lifecycleCallbackRef.current?.("error")}
           />
         </div>

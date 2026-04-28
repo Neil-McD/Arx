@@ -362,8 +362,9 @@ function previewObservationForLifecyclePhase(
   if (phase === "ready") {
     return {
       previewStatus: "running",
-      previewProbeSummary: "Preview iframe loaded.",
-      browserObservationSummary: "The inline preview iframe loaded successfully.",
+      previewProbeSummary: "Preview transport loaded; app render is not yet verified.",
+      browserObservationSummary:
+        "The inline preview iframe loaded, but visible app content has not been verified yet.",
     };
   }
   return {
@@ -387,20 +388,43 @@ function previewObservationForMetrics(
   const visibleTextLength = metrics.visibleTextLength ?? 0;
   const elementCount = metrics.elementCount ?? 0;
   const mediaElementCount = metrics.mediaElementCount ?? 0;
+  const rootChildCount = metrics.rootChildCount;
+  const bodyChildCount = metrics.bodyChildCount;
+  if (metrics.probeAccess === "cross_origin_uninspectable") {
+    return {
+      previewStatus: "running",
+      previewProbeSummary:
+        "Preview transport loaded, but iframe DOM could not be inspected from this origin.",
+      browserObservationSummary:
+        "The inline preview attached successfully, but render health is unverified because the iframe document is cross-origin.",
+    };
+  }
+  if (metrics.probeAccess === "unavailable") {
+    return {
+      previewStatus: "running",
+      previewProbeSummary:
+        "Preview transport loaded, but iframe DOM was unavailable during the render probe.",
+      browserObservationSummary:
+        "The inline preview attached successfully, but render health is still unverified.",
+    };
+  }
   const looksBlank =
     width <= 2 ||
     height <= 2 ||
-    (visibleTextLength === 0 && mediaElementCount === 0 && elementCount <= 5);
+    (visibleTextLength === 0 &&
+      mediaElementCount === 0 &&
+      elementCount <= 5 &&
+      (rootChildCount === null || rootChildCount === 0));
   const sizeSummary =
     width > 0 && height > 0
       ? `${width}x${height} in ${viewportWidth || "unknown"}x${viewportHeight || "unknown"} viewport`
       : "unknown preview dimensions";
+  const domSummary = `text=${visibleTextLength}; elements=${elementCount}; media=${mediaElementCount}; root_children=${rootChildCount ?? "unknown"}; body_children=${bodyChildCount ?? "unknown"}`;
   if (looksBlank) {
     return {
       previewStatus: "blank",
-      previewProbeSummary: `Preview metrics look blank (${sizeSummary}; text=${visibleTextLength}; elements=${elementCount}; media=${mediaElementCount}).`,
-      browserObservationSummary:
-        "The inline preview loaded but reported little or no visible content, so it may be rendering a blank page.",
+      previewProbeSummary: `Preview loaded but rendered blank (${sizeSummary}; ${domSummary}).`,
+      browserObservationSummary: `The preview iframe loaded, but the app render appears blank (${domSummary}).`,
     };
   }
   const overflowSummary =
@@ -409,8 +433,8 @@ function previewObservationForMetrics(
       : "";
   return {
     previewStatus: "running",
-    previewProbeSummary: `Preview metrics are healthy (${sizeSummary}; text=${visibleTextLength}; elements=${elementCount}; media=${mediaElementCount}${overflowSummary}).`,
-    browserObservationSummary: "The inline preview is loaded and reporting render metrics.",
+    previewProbeSummary: `Preview rendered visible content (${sizeSummary}; ${domSummary}${overflowSummary}).`,
+    browserObservationSummary: `The preview iframe loaded and visible app content was detected (${domSummary}).`,
   };
 }
 

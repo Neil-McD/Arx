@@ -138,6 +138,94 @@ function mapRuntimeWorkspaceTerminalPrompt(
   };
 }
 
+function normalizeFailureFinalizerSnippet(value: unknown, maxLen = 900): string {
+  const normalized = String(value ?? "").replace(/\s+/g, " ").trim();
+  if (!normalized) return "";
+  return normalized.length > maxLen
+    ? `${normalized.slice(0, maxLen - 1).trimEnd()}…`
+    : normalized;
+}
+
+function buildAdaptiveFailureFinalizationMessages(params: {
+  latestUserText: string;
+  status: "error" | "cancelled";
+  reason?: string | null;
+  errorCode?: string | null;
+  errorMessage?: string | null;
+  workingState?: unknown;
+  activeBackgroundTerminals?: RuntimeWorkspaceTerminalPrompt[] | null;
+}): Array<{ role: "system" | "user"; content: string }> {
+  const terminalLines = Array.isArray(params.activeBackgroundTerminals)
+    ? params.activeBackgroundTerminals.slice(0, 3).map((terminal) =>
+        [
+          `id=${normalizeFailureFinalizerSnippet(terminal.id, 80)}`,
+          `status=${normalizeFailureFinalizerSnippet(terminal.status, 60)}`,
+          `command=${normalizeFailureFinalizerSnippet(terminal.command, 180)}`,
+          terminal.cwd ? `cwd=${normalizeFailureFinalizerSnippet(terminal.cwd, 120)}` : null,
+          terminal.healthStatus ? `health=${normalizeFailureFinalizerSnippet(terminal.healthStatus, 80)}` : null,
+          terminal.healthSummary ? `health_summary=${normalizeFailureFinalizerSnippet(terminal.healthSummary, 180)}` : null,
+          terminal.previewStatus ? `preview=${normalizeFailureFinalizerSnippet(terminal.previewStatus, 80)}` : null,
+          typeof terminal.previewPort === "number" ? `preview_port=${terminal.previewPort}` : null,
+          terminal.lastPreviewProbeSummary
+            ? `preview_probe=${normalizeFailureFinalizerSnippet(terminal.lastPreviewProbeSummary, 220)}`
+            : null,
+          terminal.lastBrowserObservationSummary
+            ? `browser_observation=${normalizeFailureFinalizerSnippet(terminal.lastBrowserObservationSummary, 220)}`
+            : null,
+          terminal.outputTail ? `output_tail=${normalizeFailureFinalizerSnippet(terminal.outputTail, 260)}` : null,
+        ]
+          .filter(Boolean)
+          .join("; "),
+      )
+    : [];
+  let workingStateJson = "";
+  try {
+    workingStateJson = JSON.stringify(params.workingState ?? null, null, 2);
+  } catch {
+    workingStateJson = "";
+  }
+  const userContent = [
+    `Latest user message: ${normalizeFailureFinalizerSnippet(params.latestUserText, 500) || "(not available)"}`,
+    `Runtime stop status: ${params.status}`,
+    `Runtime reason: ${normalizeFailureFinalizerSnippet(params.reason, 160) || "(none)"}`,
+    `Runtime error code: ${normalizeFailureFinalizerSnippet(params.errorCode, 160) || "(none)"}`,
+    `Runtime error message: ${normalizeFailureFinalizerSnippet(params.errorMessage, 260) || "(none)"}`,
+    "",
+    "Current deterministic workspace/process evidence:",
+    terminalLines.length > 0 ? terminalLines.map((line) => `- ${line}`).join("\n") : "- No active background terminal evidence.",
+    "",
+    "Current working-state/event summary:",
+    normalizeFailureFinalizerSnippet(workingStateJson, 1800) || "(none)",
+  ].join("\n");
+  return [
+    {
+      role: "system",
+      content: [
+        "You are writing the final user-facing response after an agent runtime stopped before a normal final answer.",
+        "Do not output a fixed ledger template. Answer the user's latest message directly and naturally.",
+        "Use the evidence provided, but separate verified facts from unknowns.",
+        "If a dev server or background terminal is running but the preview is blank, explicitly distinguish server/process health from app render health.",
+        "Do not claim the app is working just because an iframe or server loaded.",
+        "Keep it concise. Usually 2-5 short paragraphs or a few bullets.",
+        "Do not mention hidden implementation names unless they help the user debug.",
+      ].join("\n"),
+    },
+    {
+      role: "user",
+      content: userContent,
+    },
+  ];
+}
+
+function normalizeAdaptiveFailureAnswer(value: unknown): string | null {
+  const normalized = String(value ?? "").trim();
+  if (!normalized) return null;
+  if (/^run stopped before completing\.?/i.test(normalized)) return null;
+  return normalized.length > 2400
+    ? `${normalized.slice(0, 2399).trimEnd()}…`
+    : normalized;
+}
+
 export type JsonResponseFn = (
   req: Request,
   status: number,
@@ -644,6 +732,7 @@ export async function handleRuntimeTurnRequest(args: {
       const hasPartialContent = String(params.content ?? "").trim().length > 0;
       let workingStateForFinalizer = ownedThread.workingState ?? null;
       let activeBackgroundTerminalsForFinalizer: RuntimeWorkspaceTerminalPrompt[] = [];
+      let adaptiveFinalizerContent: string | null = null;
       if (!hasPartialContent) {
         activeBackgroundTerminalsForFinalizer =
           await loadActiveBackgroundTerminalsForFinalizer();
@@ -666,9 +755,60 @@ export async function handleRuntimeTurnRequest(args: {
         } catch {
           workingStateForFinalizer = ownedThread.workingState ?? null;
         }
+        if (params.status === "error") {
+          try {
+            const finalizationMessages = buildAdaptiveFailureFinalizationMessages({
+              latestUserText,
+              status: params.status,
+              reason: params.reason ?? null,
+              errorCode: params.errorCode ?? null,
+              errorMessage: params.errorMessage ?? null,
+              workingState: workingStateForFinalizer,
+              activeBackgroundTerminals: activeBackgroundTerminalsForFinalizer,
+            });
+            const finalizationMaxTokens = 700;
+            const completion =
+              inferenceSource === "chatgpt"
+                ? await runAbortableWithRuntimeCancellation({
+                    ctx,
+                    ownerId: actor.dbUserId,
+                    runId,
+                    operation: async (signal) =>
+                      await runChatgptCompletion({
+                        ctx,
+                        userId: actor.dbUserId,
+                        modelId: requestedModelId,
+                        messages: finalizationMessages,
+                        maxTokens: finalizationMaxTokens,
+                        signal,
+                      }),
+                  })
+                : await runAbortableWithRuntimeCancellation({
+                    ctx,
+                    ownerId: actor.dbUserId,
+                    runId,
+                    operation: async (signal) =>
+                      await runOpenRouterCompletion({
+                        req,
+                        modelRef,
+                        messages: finalizationMessages,
+                        maxTokens: finalizationMaxTokens,
+                        apiKeyOverride: openRouterApiKeyOverride,
+                        signal,
+                      }),
+                  });
+            if (!isRuntimeCompletionFailure(completion)) {
+              adaptiveFinalizerContent = normalizeAdaptiveFailureAnswer(
+                completion.content,
+              );
+            }
+          } catch {
+            adaptiveFinalizerContent = null;
+          }
+        }
       }
       const finalAnswer = buildRuntimeFailureFinalAnswer({
-        partialContent: params.content,
+        partialContent: adaptiveFinalizerContent ?? params.content,
         workingState: workingStateForFinalizer,
         activeBackgroundTerminals: activeBackgroundTerminalsForFinalizer,
         status: params.status,
