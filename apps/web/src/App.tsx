@@ -345,8 +345,6 @@ import { WebAppMainSurfaceHost } from "./components/WebAppMainSurfaceHost";
 import { WebStandalonePublicRouteShell } from "./components/WebStandalonePublicRouteShell";
 import { WebShellChromeHost } from "./components/WebShellChromeHost";
 import { WebWorkspaceShellPanelsHost } from "./components/WebWorkspaceShellPanelsHost";
-import { preloadWebCommunitySecondaryPanels } from "./components/WebCommunityHost";
-import { preloadWebSettingsPanels } from "./components/WebWorkspaceSurfaceHost";
 import { buildWebStandalonePublicRouteViewProps } from "./controllers/buildWebStandalonePublicRouteViewProps";
 import { buildWebGlobalOverlayHostProps } from "./controllers/buildWebGlobalOverlayHostProps";
 import { buildWebAppMainSurfaceHostProps } from "./controllers/buildWebAppMainSurfaceHostProps";
@@ -1902,14 +1900,6 @@ export default function App() {
       /Android|webOS|iPhone|iPod|BlackBerry|IEMobile|Opera Mini|Mobile/i.test(userAgent) ||
       (/iPad|Macintosh/i.test(platform) && navigator.maxTouchPoints > 1)
     );
-  }, []);
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      preloadWebSettingsPanels();
-      preloadWebCommunitySecondaryPanels();
-    }, 600);
-    return () => window.clearTimeout(timer);
   }, []);
 
   function navigateTo(path: string, opts: { replace?: boolean; state?: unknown } = {}) {

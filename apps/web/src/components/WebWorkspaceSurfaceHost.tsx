@@ -1,4 +1,3 @@
-import { Suspense, lazy } from "react";
 import type {
   AppView,
   SettingsGroup,
@@ -10,16 +9,7 @@ import {
   WebWorkspaceHost,
   type WebWorkspaceHostProps,
 } from "./WebWorkspaceHost";
-import type { WebSettingsPanelsProps } from "./WebSettingsPanels";
-
-const loadWebSettingsPanels = () =>
-  import("./WebSettingsPanels");
-
-const WebSettingsPanels = lazy(() =>
-  loadWebSettingsPanels().then((module) => ({
-    default: module.WebSettingsPanels,
-  })),
-);
+import { WebSettingsPanels, type WebSettingsPanelsProps } from "./WebSettingsPanels";
 
 type WebWorkspaceSurfaceHostProps = {
   activeView: AppView;
@@ -92,23 +82,8 @@ export function WebWorkspaceSurfaceHost(props: WebWorkspaceSurfaceHostProps) {
   );
 }
 
-export function preloadWebSettingsPanels(): void {
-  void loadWebSettingsPanels();
-}
-
 function SettingsPanelsContent(props: { settingsPanelsProps: WebSettingsPanelsProps }) {
-  return (
-    <Suspense
-      fallback={
-        <div className="chat-loading">
-          <div className="loading-spinner" />
-          <span>Loading settings...</span>
-        </div>
-      }
-    >
-      <WebSettingsPanels {...props.settingsPanelsProps} />
-    </Suspense>
-  );
+  return <WebSettingsPanels {...props.settingsPanelsProps} />;
 }
 
 function SettingsNavListProxy(props: { onSelectPage: (page: SettingsPage) => void }) {

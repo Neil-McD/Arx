@@ -5,7 +5,6 @@ import ReactDOM from "react-dom/client";
 import App from "./App";
 import "./index.css";
 import { isLoginTrampolinePathname, LoginTrampolineRoute } from "./auth/loginTrampoline";
-import { WebAuthBootstrapShell } from "./components/WebAuthBootstrapShell";
 import { applyAppThemeAttributes, parseAppTheme } from "../../../shared/theme";
 import { bootConvexProbe } from "../../../shared/convexRuntime";
 import { bootstrapConvexAnonymousActor } from "../../../shared/convexAuthBootstrap";
@@ -150,12 +149,13 @@ class ErrorBoundary extends React.Component<
 
     if (this.state.isRecoveringModuleLoad) {
       return (
-        <div style={{ minHeight: "100vh" }}>
-          <WebAuthBootstrapShell
-            showCommunityChatBootstrapShell={false}
-            isCommunityMode={false}
-          />
-        </div>
+        <div
+          aria-hidden="true"
+          style={{
+            minHeight: "100vh",
+            background: "#111113",
+          }}
+        />
       );
     }
 

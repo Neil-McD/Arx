@@ -1,22 +1,12 @@
-import { Suspense, lazy, type ComponentProps } from "react";
+import type { ComponentProps } from "react";
 import { BuilderUpgradeModal } from "../../../../shared/BuilderUpgradeModal";
 import { WebCommunityModalHost } from "./WebCommunityModalHost";
+import { WebInferenceIssueModal } from "./WebInferenceIssueModal";
+import { WebMemoryImportModal } from "./WebMemoryImportModal";
 import { WebMessageContextModal } from "./WebMessageContextModal";
 import { WebPreviewAccessGateModal } from "./WebPreviewAccessGateModal";
 import { WebProjectModalHost } from "./WebProjectModalHost";
 import { WebProviderConnectionModalHost } from "./WebProviderConnectionModalHost";
-
-const WebMemoryImportModal = lazy(() =>
-  import("./WebMemoryImportModal").then((module) => ({
-    default: module.WebMemoryImportModal,
-  })),
-);
-
-const WebInferenceIssueModal = lazy(() =>
-  import("./WebInferenceIssueModal").then((module) => ({
-    default: module.WebInferenceIssueModal,
-  })),
-);
 
 type InferenceIssueReason =
   | "quota"
@@ -88,9 +78,7 @@ export function WebGlobalOverlayHost(props: WebGlobalOverlayHostProps) {
       <WebMessageContextModal {...props.messageContextModalProps} />
 
       {props.memoryImportModalProps ? (
-        <Suspense fallback={null}>
-          <WebMemoryImportModal {...props.memoryImportModalProps} />
-        </Suspense>
+        <WebMemoryImportModal {...props.memoryImportModalProps} />
       ) : null}
 
       <WebProjectModalHost {...props.projectModalHostProps} />
@@ -104,9 +92,7 @@ export function WebGlobalOverlayHost(props: WebGlobalOverlayHostProps) {
       ) : null}
 
       {props.inferenceIssueModalProps ? (
-        <Suspense fallback={null}>
-          <WebInferenceIssueModal {...props.inferenceIssueModalProps} />
-        </Suspense>
+        <WebInferenceIssueModal {...props.inferenceIssueModalProps} />
       ) : null}
 
       <BuilderUpgradeModal {...props.builderUpgradeModalProps} />
