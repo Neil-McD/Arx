@@ -7759,6 +7759,12 @@ button.chat-reply-quote:hover {
   border-style: dashed;
 }
 
+.workspace-attachment-drop-surface.drag-over,
+.community-attachment-drop-surface.drag-over {
+  outline: 1px dashed color-mix(in srgb, var(--accent) 72%, transparent);
+  outline-offset: -8px;
+}
+
 .drop-overlay {
   position: absolute;
   inset: 0;
@@ -7771,6 +7777,12 @@ button.chat-reply-quote:hover {
   gap: 8px;
   z-index: 10;
   pointer-events: none;
+}
+
+.workspace-drop-overlay,
+.community-drop-overlay {
+  border-radius: 0;
+  z-index: 30;
 }
 
 .drop-overlay svg {

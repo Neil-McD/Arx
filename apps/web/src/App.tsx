@@ -1356,6 +1356,7 @@ export default function App() {
   const {
     handleAttachmentFileInputChange: handleCommunityFileInputChange,
     handleAttachmentDrop: handleCommunityAttachmentDrop,
+    handleAttachmentDragEnter: handleCommunityAttachmentDragEnter,
     handleAttachmentDragOver: handleCommunityAttachmentDragOver,
     handleAttachmentDragLeave: handleCommunityAttachmentDragLeave,
     handleAttachmentPaste: handleCommunityAttachmentPaste,
@@ -5854,6 +5855,7 @@ export default function App() {
       onRemoveCommunityAttachment: removeCommunityAttachment,
       onCommunityFileInputChange: handleCommunityFileInputChange,
       onCommunityAttachmentDrop: handleCommunityAttachmentDrop,
+      onCommunityAttachmentDragEnter: handleCommunityAttachmentDragEnter,
       onCommunityAttachmentDragOver: handleCommunityAttachmentDragOver,
       onCommunityAttachmentDragLeave: handleCommunityAttachmentDragLeave,
       onCommunityAttachmentPaste: handleCommunityAttachmentPaste,

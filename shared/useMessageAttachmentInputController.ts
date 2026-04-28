@@ -1,5 +1,6 @@
 import {
   useCallback,
+  useRef,
   useState,
   type ChangeEvent,
   type ClipboardEvent,
@@ -56,6 +57,7 @@ export function useMessageAttachmentInputController<AttachmentT extends { id: st
 ): {
   handleAttachmentFileInputChange: (event: ChangeEvent<HTMLInputElement>) => Promise<void>;
   handleAttachmentDrop: (event: DragEvent<HTMLElement>) => Promise<void>;
+  handleAttachmentDragEnter: (event: DragEvent<HTMLElement>) => void;
   handleAttachmentDragOver: (event: DragEvent<HTMLElement>) => void;
   handleAttachmentDragLeave: (event: DragEvent<HTMLElement>) => void;
   handleAttachmentPaste: (event: ClipboardEvent<HTMLElement>) => Promise<void>;
@@ -69,6 +71,7 @@ export function useMessageAttachmentInputController<AttachmentT extends { id: st
     ingestAttachmentsFromFileList,
   } = args;
   const [isAttachmentDragOver, setIsAttachmentDragOver] = useState(false);
+  const dragDepthRef = useRef(0);
 
   const ingestFiles = useCallback(
     async (files: AttachmentFileInput) => {
@@ -96,6 +99,14 @@ export function useMessageAttachmentInputController<AttachmentT extends { id: st
     [ingestFiles],
   );
 
+  const handleAttachmentDragEnter = useCallback((event: DragEvent<HTMLElement>) => {
+    if (!hasTransferFiles(event.dataTransfer)) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+    dragDepthRef.current += 1;
+    setIsAttachmentDragOver(true);
+  }, []);
+
   const handleAttachmentDragOver = useCallback((event: DragEvent<HTMLElement>) => {
     if (!hasTransferFiles(event.dataTransfer)) return;
     event.preventDefault();
@@ -104,14 +115,18 @@ export function useMessageAttachmentInputController<AttachmentT extends { id: st
   }, []);
 
   const handleAttachmentDragLeave = useCallback((event: DragEvent<HTMLElement>) => {
-    if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
-    setIsAttachmentDragOver(false);
+    event.preventDefault();
+    dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+    if (dragDepthRef.current === 0) {
+      setIsAttachmentDragOver(false);
+    }
   }, []);
 
   const handleAttachmentDrop = useCallback(
     async (event: DragEvent<HTMLElement>) => {
       if (!hasTransferFiles(event.dataTransfer)) return;
       event.preventDefault();
+      dragDepthRef.current = 0;
       setIsAttachmentDragOver(false);
       await ingestFiles(filesFromDataTransfer(event.dataTransfer));
     },
@@ -138,6 +153,7 @@ export function useMessageAttachmentInputController<AttachmentT extends { id: st
   return {
     handleAttachmentFileInputChange,
     handleAttachmentDrop,
+    handleAttachmentDragEnter,
     handleAttachmentDragOver,
     handleAttachmentDragLeave,
     handleAttachmentPaste,

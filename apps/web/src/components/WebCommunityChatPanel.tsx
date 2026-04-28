@@ -70,6 +70,7 @@ export type WebCommunityChatPanelProps = {
   onRemoveCommunityAttachment: (id: string) => void;
   onCommunityFileInputChange: ChangeEventHandler<HTMLInputElement>;
   onCommunityAttachmentDrop: DragEventHandler<HTMLDivElement>;
+  onCommunityAttachmentDragEnter: DragEventHandler<HTMLDivElement>;
   onCommunityAttachmentDragOver: DragEventHandler<HTMLDivElement>;
   onCommunityAttachmentDragLeave: DragEventHandler<HTMLDivElement>;
   onCommunityAttachmentPaste: ClipboardEventHandler<HTMLTextAreaElement>;
@@ -141,6 +142,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     onRemoveCommunityAttachment,
     onCommunityFileInputChange,
     onCommunityAttachmentDrop,
+    onCommunityAttachmentDragEnter,
     onCommunityAttachmentDragOver,
     onCommunityAttachmentDragLeave,
     onCommunityAttachmentPaste,
@@ -220,7 +222,22 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
 
   return (
     <>
-      <div className="community-chat">
+      <div
+        className={`community-chat community-attachment-drop-surface${isCommunityAttachmentDragOver ? " drag-over" : ""}`}
+        onDrop={onCommunityAttachmentDrop}
+        onDragEnter={onCommunityAttachmentDragEnter}
+        onDragOver={onCommunityAttachmentDragOver}
+        onDragLeave={onCommunityAttachmentDragLeave}
+      >
+        {isCommunityAttachmentDragOver ? (
+          <div className="drop-overlay community-drop-overlay" aria-hidden="true">
+            <svg viewBox="0 0 24 24">
+              <path d="M12 5v14" />
+              <path d="M5 12h14" />
+            </svg>
+            <span>Drop files to attach</span>
+          </div>
+        ) : null}
         <div className="workspace-body chat-feed">
           <div
             className="chat-messages"
@@ -449,21 +466,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
           );
         })()}
 
-        <div
-          className={`chat-input-bar${isCommunityAttachmentDragOver ? " drag-over" : ""}`}
-          onDrop={onCommunityAttachmentDrop}
-          onDragOver={onCommunityAttachmentDragOver}
-          onDragLeave={onCommunityAttachmentDragLeave}
-        >
-          {isCommunityAttachmentDragOver ? (
-            <div className="drop-overlay" aria-hidden="true">
-              <svg viewBox="0 0 24 24">
-                <path d="M12 5v14" />
-                <path d="M5 12h14" />
-              </svg>
-              <span>Drop files to attach</span>
-            </div>
-          ) : null}
+        <div className="chat-input-bar">
           <button
             className="ask-icon-btn ask-plus"
             type="button"

@@ -2300,6 +2300,12 @@
   border-style: dashed;
 }
 
+.workspace-attachment-drop-surface.drag-over,
+.community-attachment-drop-surface.drag-over {
+  outline: 1px dashed color-mix(in srgb, var(--accent) 72%, transparent);
+  outline-offset: -8px;
+}
+
 .community-chat .chat-input {
   padding: 2px 0;
   font-size: 14px;

@@ -111,6 +111,7 @@ type BuildWebCommunitySurfaceProjectionParams = {
   onRemoveCommunityAttachment: WebCommunityChatPanelProps["onRemoveCommunityAttachment"];
   onCommunityFileInputChange: WebCommunityChatPanelProps["onCommunityFileInputChange"];
   onCommunityAttachmentDrop: WebCommunityChatPanelProps["onCommunityAttachmentDrop"];
+  onCommunityAttachmentDragEnter: WebCommunityChatPanelProps["onCommunityAttachmentDragEnter"];
   onCommunityAttachmentDragOver: WebCommunityChatPanelProps["onCommunityAttachmentDragOver"];
   onCommunityAttachmentDragLeave: WebCommunityChatPanelProps["onCommunityAttachmentDragLeave"];
   onCommunityAttachmentPaste: WebCommunityChatPanelProps["onCommunityAttachmentPaste"];
@@ -312,6 +313,7 @@ export function buildWebCommunitySurfaceProjection(
     onRemoveCommunityAttachment: params.onRemoveCommunityAttachment,
     onCommunityFileInputChange: params.onCommunityFileInputChange,
     onCommunityAttachmentDrop: params.onCommunityAttachmentDrop,
+    onCommunityAttachmentDragEnter: params.onCommunityAttachmentDragEnter,
     onCommunityAttachmentDragOver: params.onCommunityAttachmentDragOver,
     onCommunityAttachmentDragLeave: params.onCommunityAttachmentDragLeave,
     onCommunityAttachmentPaste: params.onCommunityAttachmentPaste,
