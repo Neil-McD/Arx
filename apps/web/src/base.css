@@ -7781,8 +7781,10 @@ button.chat-reply-quote:hover {
 
 .workspace-drop-overlay,
 .community-drop-overlay {
+  position: fixed;
+  inset: 0;
   border-radius: 0;
-  z-index: 30;
+  z-index: 1000;
 }
 
 .drop-overlay svg {

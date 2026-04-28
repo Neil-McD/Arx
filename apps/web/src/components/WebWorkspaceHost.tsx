@@ -859,6 +859,10 @@ function WorkspaceComposer(props: {
 
   const askBar = (
     <div className={`ask-bar ask-bar-v2${props.landing ? " ask-bar-landing" : ""}`}>
+      <WorkspaceAttachmentPreview
+        attachments={props.workspaceAttachments}
+        onRemove={props.onRemoveWorkspaceAttachment}
+      />
       <textarea
         ref={(node) => {
           props.workspaceAskInputRef.current = node;
@@ -877,10 +881,6 @@ function WorkspaceComposer(props: {
         }}
         disabled={disableComposerInput}
         rows={1}
-      />
-      <WorkspaceAttachmentPreview
-        attachments={props.workspaceAttachments}
-        onRemove={props.onRemoveWorkspaceAttachment}
       />
       <div className={`ask-footer${props.landing ? " ask-footer-landing" : ""}`}>
         <div className="ask-footer-left">
