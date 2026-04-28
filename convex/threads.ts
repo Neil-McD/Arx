@@ -54,6 +54,18 @@ type CloudMessageLike = {
   createdAt: number;
 };
 
+type StoredCloudMessageAttachment = {
+  id: string;
+  name: string;
+  type: "image" | "file";
+  mime: string | null;
+  size: number;
+  storageId?: string | null;
+  dataUrl?: string | null;
+  text?: string | null;
+  truncated?: boolean | null;
+};
+
 type RuntimeRunLike = {
   _id: any;
   ownerId: any;
@@ -90,6 +102,90 @@ type RuntimeRunLike = {
   createdAt: number;
   updatedAt: number;
 };
+
+function createAttachmentId(): string {
+  return `attachment-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+async function maybeResolveCloudMessageStorageUrl(ctx: any, storageId: unknown): Promise<string | null> {
+  const resolvedStorageId = String(storageId ?? "").trim();
+  if (!resolvedStorageId) return null;
+  const resolved = await ctx.storage.getUrl(resolvedStorageId as any);
+  return typeof resolved === "string" && resolved.trim() ? resolved.trim() : null;
+}
+
+function normalizeStoredCloudMessageAttachment(raw: unknown): StoredCloudMessageAttachment | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const record = raw as Record<string, unknown>;
+  const id = typeof record.id === "string" && record.id.trim() ? record.id.trim() : createAttachmentId();
+  const name = typeof record.name === "string" && record.name.trim() ? record.name.trim().slice(0, 256) : "attachment";
+  const type = record.type === "image" ? "image" : "file";
+  const mime = typeof record.mime === "string" && record.mime.trim() ? record.mime.trim().slice(0, 160) : null;
+  const sizeRaw = Number(record.size);
+  const size = Number.isFinite(sizeRaw) ? Math.max(0, Math.floor(sizeRaw)) : 0;
+  const storageIdRaw =
+    typeof record.storageId === "string"
+      ? record.storageId
+      : typeof record.storage_id === "string"
+        ? record.storage_id
+        : "";
+  const storageId = storageIdRaw.trim() ? storageIdRaw.trim() : null;
+  const dataUrl =
+    typeof record.data_url === "string" && record.data_url.trim().startsWith("data:")
+      ? record.data_url.trim()
+      : null;
+  const text = typeof record.text === "string" && record.text.trim() ? record.text.slice(0, 20_000) : null;
+  const truncated = typeof record.truncated === "boolean" ? record.truncated : null;
+  if (!storageId && !dataUrl && !text) return null;
+  return {
+    id,
+    name,
+    type,
+    mime,
+    size,
+    ...(storageId ? { storageId } : null),
+    ...(dataUrl ? { dataUrl } : null),
+    ...(text ? { text } : null),
+    ...(truncated !== null ? { truncated } : null),
+  };
+}
+
+function normalizeStoredCloudMessageAttachments(raw: unknown): StoredCloudMessageAttachment[] {
+  if (!Array.isArray(raw)) return [];
+  const out: StoredCloudMessageAttachment[] = [];
+  for (const item of raw) {
+    const normalized = normalizeStoredCloudMessageAttachment(item);
+    if (normalized) out.push(normalized);
+  }
+  return out;
+}
+
+async function mapCloudMessageContentJsonForRead(ctx: any, contentJson: unknown): Promise<unknown> {
+  if (!contentJson || typeof contentJson !== "object" || Array.isArray(contentJson)) return contentJson;
+  const record = contentJson as Record<string, unknown>;
+  const attachments = normalizeStoredCloudMessageAttachments(record.attachments);
+  if (attachments.length === 0) return contentJson;
+  const resolvedAttachments = await Promise.all(
+    attachments.map(async (attachment) => ({
+      id: attachment.id,
+      name: attachment.name,
+      type: attachment.type,
+      mime: attachment.mime,
+      size: attachment.size,
+      ...(attachment.storageId ? { storage_id: attachment.storageId } : null),
+      ...(attachment.storageId ? { url: await maybeResolveCloudMessageStorageUrl(ctx, attachment.storageId) } : null),
+      ...(attachment.dataUrl ? { data_url: attachment.dataUrl } : null),
+      ...(attachment.text ? { text: attachment.text } : null),
+      ...(attachment.truncated !== null && typeof attachment.truncated !== "undefined"
+        ? { truncated: attachment.truncated }
+        : null),
+    })),
+  );
+  return {
+    ...record,
+    attachments: resolvedAttachments,
+  };
+}
 
 type RuntimeRunEventLike = {
   _id: any;
@@ -1031,7 +1127,36 @@ export const listCloudThreadMessages = query({
         afterSeq === null ? q.eq("threadId", args.threadId) : q.eq("threadId", args.threadId).gt("seq", afterSeq),
       )
       .take(safeLimit);
-    return rows.sort((a, b) => a.seq - b.seq);
+    const sorted = rows.sort((a, b) => a.seq - b.seq);
+    return await Promise.all(
+      sorted.map(async (row) => ({
+        ...row,
+        contentJson: await mapCloudMessageContentJsonForRead(ctx, row.contentJson),
+      })),
+    );
+  },
+});
+
+export const generateCloudThreadAttachmentUploadUrl = mutation({
+  args: {
+    ownerId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    threadId: v.id("threads"),
+  },
+  handler: async (ctx, args) => {
+    const ownerId = await resolveOwnerIdForAuthenticatedRequest({
+      ctx,
+      ownerId: args.ownerId,
+      authSubject: args.authSubject ?? null,
+    });
+    await requireOwnedCloudThread({
+      ctx,
+      ownerId,
+      threadId: args.threadId,
+    });
+    return {
+      uploadUrl: await ctx.storage.generateUploadUrl(),
+    };
   },
 });
 

@@ -1,6 +1,8 @@
 import type {
   ChangeEventHandler,
+  ClipboardEventHandler,
   ComponentProps,
+  DragEventHandler,
   MutableRefObject,
   ReactNode,
   UIEventHandler,
@@ -67,6 +69,11 @@ export type WebCommunityChatPanelProps = {
   onSetReplyingToMessage: (message: CommunityChatMessage | null) => void;
   onRemoveCommunityAttachment: (id: string) => void;
   onCommunityFileInputChange: ChangeEventHandler<HTMLInputElement>;
+  onCommunityAttachmentDrop: DragEventHandler<HTMLDivElement>;
+  onCommunityAttachmentDragOver: DragEventHandler<HTMLDivElement>;
+  onCommunityAttachmentDragLeave: DragEventHandler<HTMLDivElement>;
+  onCommunityAttachmentPaste: ClipboardEventHandler<HTMLTextAreaElement>;
+  isCommunityAttachmentDragOver: boolean;
   onCommunityMessageInputChange: (value: string, textarea: HTMLTextAreaElement) => void;
   onSendCommunityMessage: () => void | Promise<void>;
   displayName: (userId: string) => string;
@@ -133,6 +140,11 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     onSetReplyingToMessage,
     onRemoveCommunityAttachment,
     onCommunityFileInputChange,
+    onCommunityAttachmentDrop,
+    onCommunityAttachmentDragOver,
+    onCommunityAttachmentDragLeave,
+    onCommunityAttachmentPaste,
+    isCommunityAttachmentDragOver,
     onCommunityMessageInputChange,
     onSendCommunityMessage,
     displayName,
@@ -437,7 +449,21 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
           );
         })()}
 
-        <div className="chat-input-bar">
+        <div
+          className={`chat-input-bar${isCommunityAttachmentDragOver ? " drag-over" : ""}`}
+          onDrop={onCommunityAttachmentDrop}
+          onDragOver={onCommunityAttachmentDragOver}
+          onDragLeave={onCommunityAttachmentDragLeave}
+        >
+          {isCommunityAttachmentDragOver ? (
+            <div className="drop-overlay" aria-hidden="true">
+              <svg viewBox="0 0 24 24">
+                <path d="M12 5v14" />
+                <path d="M5 12h14" />
+              </svg>
+              <span>Drop files to attach</span>
+            </div>
+          ) : null}
           <button
             className="ask-icon-btn ask-plus"
             type="button"
@@ -486,6 +512,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
             }
             value={communityMessageInput}
             onChange={(event) => onCommunityMessageInputChange(event.target.value, event.target)}
+            onPaste={onCommunityAttachmentPaste}
             onKeyDown={(event) => {
               if (event.key === "Enter" && !event.shiftKey) {
                 event.preventDefault();

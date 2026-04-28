@@ -2292,6 +2292,12 @@
   background: var(--bg-card-solid, var(--bg-card));
   border: 1px solid var(--border-default);
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.22);
+  position: relative;
+}
+
+.community-chat .chat-input-bar.drag-over {
+  border-color: var(--accent);
+  border-style: dashed;
 }
 
 .community-chat .chat-input {

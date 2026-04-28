@@ -110,6 +110,11 @@ type BuildWebCommunitySurfaceProjectionParams = {
   onSetReplyingToMessage: WebCommunityChatPanelProps["onSetReplyingToMessage"];
   onRemoveCommunityAttachment: WebCommunityChatPanelProps["onRemoveCommunityAttachment"];
   onCommunityFileInputChange: WebCommunityChatPanelProps["onCommunityFileInputChange"];
+  onCommunityAttachmentDrop: WebCommunityChatPanelProps["onCommunityAttachmentDrop"];
+  onCommunityAttachmentDragOver: WebCommunityChatPanelProps["onCommunityAttachmentDragOver"];
+  onCommunityAttachmentDragLeave: WebCommunityChatPanelProps["onCommunityAttachmentDragLeave"];
+  onCommunityAttachmentPaste: WebCommunityChatPanelProps["onCommunityAttachmentPaste"];
+  isCommunityAttachmentDragOver: WebCommunityChatPanelProps["isCommunityAttachmentDragOver"];
   onCommunityMessageInputChange: WebCommunityChatPanelProps["onCommunityMessageInputChange"];
   onSendCommunityMessage: WebCommunityChatPanelProps["onSendCommunityMessage"];
   displayName: WebCommunityChatPanelProps["displayName"];
@@ -306,6 +311,11 @@ export function buildWebCommunitySurfaceProjection(
     onSetReplyingToMessage: params.onSetReplyingToMessage,
     onRemoveCommunityAttachment: params.onRemoveCommunityAttachment,
     onCommunityFileInputChange: params.onCommunityFileInputChange,
+    onCommunityAttachmentDrop: params.onCommunityAttachmentDrop,
+    onCommunityAttachmentDragOver: params.onCommunityAttachmentDragOver,
+    onCommunityAttachmentDragLeave: params.onCommunityAttachmentDragLeave,
+    onCommunityAttachmentPaste: params.onCommunityAttachmentPaste,
+    isCommunityAttachmentDragOver: params.isCommunityAttachmentDragOver,
     onCommunityMessageInputChange: params.onCommunityMessageInputChange,
     onSendCommunityMessage: params.onSendCommunityMessage,
     displayName: params.displayName,

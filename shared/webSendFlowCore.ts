@@ -118,6 +118,12 @@ export type UseWebSendFlowControllerArgs<
     params: { id?: string; threadId: string; role: "user" | "assistant" | "system"; content_json: unknown },
   ) => Promise<string>;
   deleteThreadMessagesByIds: (session: SessionT, messageIds: string[]) => Promise<void>;
+  prepareAttachmentsForSend?: (
+    attachments: AttachmentT[],
+    session: SessionT,
+    threadId: string,
+  ) => Promise<AttachmentT[]>;
+  serializeAttachmentsForWrite?: (attachments: AttachmentT[]) => unknown[];
 
   extractRememberIntent: (input: string) => string | null;
   extractTextFromContentJson: (value: unknown) => string;

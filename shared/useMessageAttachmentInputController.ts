@@ -1,20 +1,65 @@
-import { useCallback, type ChangeEvent, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
+import {
+  useCallback,
+  useState,
+  type ChangeEvent,
+  type ClipboardEvent,
+  type Dispatch,
+  type DragEvent,
+  type MutableRefObject,
+  type SetStateAction,
+} from "react";
+
+type AttachmentFileInput = FileList | readonly File[];
 
 type UseMessageAttachmentInputControllerArgs<AttachmentT extends { id: string }> = {
   attachmentsRef: MutableRefObject<AttachmentT[]>;
   setAttachments: Dispatch<SetStateAction<AttachmentT[]>>;
   setError: Dispatch<SetStateAction<string | null>>;
   ingestAttachmentsFromFileList: (
-    files: FileList,
+    files: AttachmentFileInput,
     existing: AttachmentT[],
     onError: (message: string) => void,
   ) => Promise<AttachmentT[]>;
 };
 
+function hasTransferFiles(dataTransfer: DataTransfer | null | undefined): boolean {
+  if (!dataTransfer) return false;
+  if (dataTransfer.files && dataTransfer.files.length > 0) return true;
+  return Array.from(dataTransfer.items ?? []).some((item) => item.kind === "file");
+}
+
+function filesFromDataTransfer(dataTransfer: DataTransfer | null | undefined): File[] {
+  if (!dataTransfer) return [];
+  const direct = Array.from(dataTransfer.files ?? []).filter((file): file is File => file instanceof File);
+  if (direct.length > 0) return direct;
+  return Array.from(dataTransfer.items ?? [])
+    .filter((item) => item.kind === "file")
+    .map((item) => item.getAsFile())
+    .filter((file): file is File => file instanceof File);
+}
+
+function filesFromClipboard(data: DataTransfer | null | undefined): File[] {
+  if (!data) return [];
+  const direct = Array.from(data.files ?? []).filter((file): file is File => file instanceof File);
+  const fromItems = Array.from(data.items ?? [])
+    .filter((item) => item.kind === "file")
+    .map((item) => item.getAsFile())
+    .filter((file): file is File => file instanceof File);
+  return [...direct, ...fromItems].filter(
+    (file, index, list) =>
+      list.findIndex((candidate) => candidate.name === file.name && candidate.size === file.size && candidate.type === file.type) === index,
+  );
+}
+
 export function useMessageAttachmentInputController<AttachmentT extends { id: string }>(
   args: UseMessageAttachmentInputControllerArgs<AttachmentT>,
 ): {
   handleAttachmentFileInputChange: (event: ChangeEvent<HTMLInputElement>) => Promise<void>;
+  handleAttachmentDrop: (event: DragEvent<HTMLElement>) => Promise<void>;
+  handleAttachmentDragOver: (event: DragEvent<HTMLElement>) => void;
+  handleAttachmentDragLeave: (event: DragEvent<HTMLElement>) => void;
+  handleAttachmentPaste: (event: ClipboardEvent<HTMLElement>) => Promise<void>;
+  isAttachmentDragOver: boolean;
   removeAttachment: (id: string) => void;
 } {
   const {
@@ -23,6 +68,19 @@ export function useMessageAttachmentInputController<AttachmentT extends { id: st
     setError,
     ingestAttachmentsFromFileList,
   } = args;
+  const [isAttachmentDragOver, setIsAttachmentDragOver] = useState(false);
+
+  const ingestFiles = useCallback(
+    async (files: AttachmentFileInput) => {
+      if (files.length === 0) return;
+      setError(null);
+      const updated = await ingestAttachmentsFromFileList(files, attachmentsRef.current, (message) => {
+        setError(message);
+      });
+      setAttachments(updated);
+    },
+    [attachmentsRef, ingestAttachmentsFromFileList, setAttachments, setError],
+  );
 
   const handleAttachmentFileInputChange = useCallback(
     async (event: ChangeEvent<HTMLInputElement>) => {
@@ -32,14 +90,42 @@ export function useMessageAttachmentInputController<AttachmentT extends { id: st
         input.value = "";
         return;
       }
-      setError(null);
-      const updated = await ingestAttachmentsFromFileList(files, attachmentsRef.current, (message) => {
-        setError(message);
-      });
-      setAttachments(updated);
+      await ingestFiles(files);
       input.value = "";
     },
-    [attachmentsRef, ingestAttachmentsFromFileList, setAttachments, setError],
+    [ingestFiles],
+  );
+
+  const handleAttachmentDragOver = useCallback((event: DragEvent<HTMLElement>) => {
+    if (!hasTransferFiles(event.dataTransfer)) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+    setIsAttachmentDragOver(true);
+  }, []);
+
+  const handleAttachmentDragLeave = useCallback((event: DragEvent<HTMLElement>) => {
+    if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+    setIsAttachmentDragOver(false);
+  }, []);
+
+  const handleAttachmentDrop = useCallback(
+    async (event: DragEvent<HTMLElement>) => {
+      if (!hasTransferFiles(event.dataTransfer)) return;
+      event.preventDefault();
+      setIsAttachmentDragOver(false);
+      await ingestFiles(filesFromDataTransfer(event.dataTransfer));
+    },
+    [ingestFiles],
+  );
+
+  const handleAttachmentPaste = useCallback(
+    async (event: ClipboardEvent<HTMLElement>) => {
+      const files = filesFromClipboard(event.clipboardData);
+      if (files.length === 0) return;
+      event.preventDefault();
+      await ingestFiles(files);
+    },
+    [ingestFiles],
   );
 
   const removeAttachment = useCallback(
@@ -51,6 +137,11 @@ export function useMessageAttachmentInputController<AttachmentT extends { id: st
 
   return {
     handleAttachmentFileInputChange,
+    handleAttachmentDrop,
+    handleAttachmentDragOver,
+    handleAttachmentDragLeave,
+    handleAttachmentPaste,
+    isAttachmentDragOver,
     removeAttachment,
   };
 }

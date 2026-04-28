@@ -149,18 +149,26 @@ export function buildWebWorkspaceSurfaceProjection(
       const textContent = params.parseMessageText(message.content_json);
       const attachments = params.parseMessageAttachments(message.content_json).map(
         (attachment) => {
-          const openUrl =
+          const resolvedUrl =
+            typeof attachment.url === "string" && attachment.url.trim()
+              ? attachment.url.trim()
+              : typeof attachment.data_url === "string" && attachment.data_url.startsWith("data:")
+                ? attachment.data_url
+                : null;
+          const imageUrl =
             attachment.type === "image" &&
             typeof attachment.data_url === "string" &&
             attachment.data_url.startsWith("data:image/")
               ? attachment.data_url
+              : attachment.type === "image" && resolvedUrl
+                ? resolvedUrl
               : null;
 
           return {
             id: attachment.id,
             name: attachment.name,
-            imageUrl: openUrl,
-            openUrl,
+            imageUrl,
+            openUrl: resolvedUrl,
           };
         },
       );

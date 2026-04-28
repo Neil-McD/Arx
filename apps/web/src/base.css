@@ -7754,6 +7754,11 @@ button.chat-reply-quote:hover {
   border-style: dashed;
 }
 
+.chat-input-bar.drag-over {
+  border-color: var(--accent);
+  border-style: dashed;
+}
+
 .drop-overlay {
   position: absolute;
   inset: 0;

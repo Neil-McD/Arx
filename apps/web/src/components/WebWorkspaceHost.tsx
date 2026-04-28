@@ -7,7 +7,9 @@ import {
   useRef,
   useState,
   ChangeEventHandler,
+  ClipboardEventHandler,
   Dispatch,
+  DragEventHandler,
   MutableRefObject,
   ReactNode,
   SetStateAction,
@@ -59,7 +61,14 @@ type WorkspaceAttachmentView = {
   id: string;
   name: string;
   type: string;
+  mime?: string | null;
+  size?: number;
+  storage_id?: string | null;
+  url?: string | null;
   data_url?: string | null;
+  text?: string | null;
+  truncated?: boolean | null;
+  file?: File | null;
 };
 
 type LandingActionButton = {
@@ -110,7 +119,7 @@ export type WebWorkspaceHostProps = {
   guestWorkspaceComposerPlaceholder: string;
   setWorkspaceError: Dispatch<SetStateAction<string | null>>;
   ingestWorkspaceAttachmentsFromFileList: (
-    files: FileList,
+    files: FileList | readonly File[],
     existing: WorkspaceAttachmentView[],
     onError: (message: string) => void,
   ) => Promise<WorkspaceAttachmentView[]>;
@@ -439,6 +448,11 @@ const WorkspaceTimelinePane = memo(function WorkspaceTimelinePane(props: {
   workspaceVoiceUiState: "idle" | "recording" | "transcribing";
   workspaceVoiceTitle: string;
   onWorkspaceFileInputChange: ChangeEventHandler<HTMLInputElement>;
+  onWorkspaceAttachmentDrop: DragEventHandler<HTMLDivElement>;
+  onWorkspaceAttachmentDragOver: DragEventHandler<HTMLDivElement>;
+  onWorkspaceAttachmentDragLeave: DragEventHandler<HTMLDivElement>;
+  onWorkspaceAttachmentPaste: ClipboardEventHandler<HTMLTextAreaElement>;
+  isWorkspaceAttachmentDragOver: boolean;
   onRemoveWorkspaceAttachment: (attachmentId: string) => void;
   onSendMessage: () => void;
   onSendLandingAction: (prompt: string) => void;
@@ -518,6 +532,11 @@ const WorkspaceTimelinePane = memo(function WorkspaceTimelinePane(props: {
                   workspaceVoiceUiState={props.workspaceVoiceUiState}
                   workspaceVoiceTitle={props.workspaceVoiceTitle}
                   onWorkspaceFileInputChange={props.onWorkspaceFileInputChange}
+                  onWorkspaceAttachmentDrop={props.onWorkspaceAttachmentDrop}
+                  onWorkspaceAttachmentDragOver={props.onWorkspaceAttachmentDragOver}
+                  onWorkspaceAttachmentDragLeave={props.onWorkspaceAttachmentDragLeave}
+                  onWorkspaceAttachmentPaste={props.onWorkspaceAttachmentPaste}
+                  isWorkspaceAttachmentDragOver={props.isWorkspaceAttachmentDragOver}
                   onRemoveWorkspaceAttachment={props.onRemoveWorkspaceAttachment}
                   onSendMessage={props.onSendMessage}
                   onStopStreamingTurn={props.onStopStreamingTurn}
@@ -764,6 +783,11 @@ function WorkspaceComposer(props: {
   workspaceVoiceUiState: "idle" | "recording" | "transcribing";
   workspaceVoiceTitle: string;
   onWorkspaceFileInputChange: ChangeEventHandler<HTMLInputElement>;
+  onWorkspaceAttachmentDrop: DragEventHandler<HTMLDivElement>;
+  onWorkspaceAttachmentDragOver: DragEventHandler<HTMLDivElement>;
+  onWorkspaceAttachmentDragLeave: DragEventHandler<HTMLDivElement>;
+  onWorkspaceAttachmentPaste: ClipboardEventHandler<HTMLTextAreaElement>;
+  isWorkspaceAttachmentDragOver: boolean;
   onRemoveWorkspaceAttachment: (attachmentId: string) => void;
   onSendMessage: () => void;
   onStopStreamingTurn: () => void;
@@ -822,7 +846,21 @@ function WorkspaceComposer(props: {
     : props.workspaceComposerPlaceholder;
 
   const askBar = (
-    <div className={`ask-bar ask-bar-v2${props.landing ? " ask-bar-landing" : ""}`}>
+    <div
+      className={`ask-bar ask-bar-v2${props.landing ? " ask-bar-landing" : ""}${props.isWorkspaceAttachmentDragOver ? " drag-over" : ""}`}
+      onDrop={props.onWorkspaceAttachmentDrop}
+      onDragOver={props.onWorkspaceAttachmentDragOver}
+      onDragLeave={props.onWorkspaceAttachmentDragLeave}
+    >
+      {props.isWorkspaceAttachmentDragOver ? (
+        <div className="drop-overlay" aria-hidden="true">
+          <svg viewBox="0 0 24 24">
+            <path d="M12 5v14" />
+            <path d="M5 12h14" />
+          </svg>
+          <span>Drop files to attach</span>
+        </div>
+      ) : null}
       <textarea
         ref={(node) => {
           props.workspaceAskInputRef.current = node;
@@ -831,6 +869,7 @@ function WorkspaceComposer(props: {
         placeholder={composerPlaceholder}
         value={props.messageInput}
         onChange={(event) => props.setMessageInput(event.target.value)}
+        onPaste={props.onWorkspaceAttachmentPaste}
         onKeyDown={(event) => {
           if (event.key === "Enter" && !event.shiftKey) {
             event.preventDefault();
@@ -1009,6 +1048,11 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
 
   const {
     handleAttachmentFileInputChange: handleWorkspaceFileInputChange,
+    handleAttachmentDrop: handleWorkspaceAttachmentDrop,
+    handleAttachmentDragOver: handleWorkspaceAttachmentDragOver,
+    handleAttachmentDragLeave: handleWorkspaceAttachmentDragLeave,
+    handleAttachmentPaste: handleWorkspaceAttachmentPaste,
+    isAttachmentDragOver: isWorkspaceAttachmentDragOver,
     removeAttachment: removeWorkspaceAttachment,
   } = useMessageAttachmentInputController<WorkspaceAttachmentView>({
     attachmentsRef: workspaceAttachmentsRef,
@@ -1737,6 +1781,11 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
                 workspaceVoiceUiState={props.workspaceVoiceUiState}
                 workspaceVoiceTitle={props.workspaceVoiceTitle}
                 onWorkspaceFileInputChange={handleWorkspaceFileInputChange}
+                onWorkspaceAttachmentDrop={handleWorkspaceAttachmentDrop}
+                onWorkspaceAttachmentDragOver={handleWorkspaceAttachmentDragOver}
+                onWorkspaceAttachmentDragLeave={handleWorkspaceAttachmentDragLeave}
+                onWorkspaceAttachmentPaste={handleWorkspaceAttachmentPaste}
+                isWorkspaceAttachmentDragOver={isWorkspaceAttachmentDragOver}
                 onRemoveWorkspaceAttachment={removeWorkspaceAttachment}
                 onSendMessage={() =>
                   props.onSendMessage({
@@ -1829,6 +1878,11 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
             workspaceVoiceUiState={props.workspaceVoiceUiState}
             workspaceVoiceTitle={props.workspaceVoiceTitle}
             onWorkspaceFileInputChange={handleWorkspaceFileInputChange}
+            onWorkspaceAttachmentDrop={handleWorkspaceAttachmentDrop}
+            onWorkspaceAttachmentDragOver={handleWorkspaceAttachmentDragOver}
+            onWorkspaceAttachmentDragLeave={handleWorkspaceAttachmentDragLeave}
+            onWorkspaceAttachmentPaste={handleWorkspaceAttachmentPaste}
+            isWorkspaceAttachmentDragOver={isWorkspaceAttachmentDragOver}
             onRemoveWorkspaceAttachment={removeWorkspaceAttachment}
             onSendMessage={() =>
               props.onSendMessage({

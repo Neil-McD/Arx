@@ -225,6 +225,12 @@ export function useWebSendFlowController<
       if (usePublicModel && attachmentsToSend.length > 0) {
         throw new Error("Attachments are not available with free-tier models. Choose a paid model to send files.");
       }
+      const preparedAttachments = current.prepareAttachmentsForSend
+        ? await current.prepareAttachmentsForSend(attachmentsToSend, usableSession, threadId)
+        : attachmentsToSend;
+      const serializedAttachments = current.serializeAttachmentsForWrite
+        ? current.serializeAttachmentsForWrite(preparedAttachments)
+        : preparedAttachments;
 
       await current.createThreadMessage(usableSession, {
         id: messageId,
@@ -232,7 +238,7 @@ export function useWebSendFlowController<
         role: "user",
         content_json: {
           text,
-          ...(attachmentsToSend.length > 0 ? { attachments: attachmentsToSend } : {}),
+          ...(serializedAttachments.length > 0 ? { attachments: serializedAttachments } : {}),
         },
       });
       postedUserMessage = true;
@@ -257,7 +263,7 @@ export function useWebSendFlowController<
         role: "user",
         content_json: {
           text,
-          ...(attachmentsToSend.length > 0 ? { attachments: attachmentsToSend } : {}),
+          ...(serializedAttachments.length > 0 ? { attachments: serializedAttachments } : {}),
         },
         created_at: new Date().toISOString(),
         engine_id: null,

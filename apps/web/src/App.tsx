@@ -331,7 +331,10 @@ import { useCommunityMemberRosterLifecycle } from "../../../shared/useCommunityM
 import { useCommunityResourcesTabLifecycle } from "../../../shared/useCommunityResourcesTabLifecycle";
 import { useCommunitySettingsAccessLifecycle } from "../../../shared/useCommunitySettingsAccessLifecycle";
 import { confirmDiscardUnsavedCommunitySettingsWeb } from "../../../shared/communityUnsavedGuard";
-import { markCloudThreadAgentAttentionSeen } from "../../../shared/cloudThreadsGateway";
+import {
+  markCloudThreadAgentAttentionSeen,
+  uploadCloudThreadAttachmentFile,
+} from "../../../shared/cloudThreadsGateway";
 import type { WebSettingsPanelsProps } from "./components/WebSettingsPanels";
 import type { WorkspaceComposerApi, WorkspaceComposerDraft } from "./components/WebWorkspaceHost";
 import {
@@ -1354,6 +1357,11 @@ export default function App() {
   } = useCommunityChatLightbox<ChatLightboxImage>();
   const {
     handleAttachmentFileInputChange: handleCommunityFileInputChange,
+    handleAttachmentDrop: handleCommunityAttachmentDrop,
+    handleAttachmentDragOver: handleCommunityAttachmentDragOver,
+    handleAttachmentDragLeave: handleCommunityAttachmentDragLeave,
+    handleAttachmentPaste: handleCommunityAttachmentPaste,
+    isAttachmentDragOver: isCommunityAttachmentDragOver,
     removeAttachment: removeCommunityAttachment,
   } = useMessageAttachmentInputController<MessageAttachment>({
     attachmentsRef: communityAttachmentsRef,
@@ -4323,8 +4331,27 @@ export default function App() {
     return null;
   }
 
+  function displayNameForAttachmentFile(file: File, fallbackIndex: number): string {
+    const existingName = (file.name ?? "").trim();
+    if (existingName) return existingName;
+    const mime = (file.type ?? "").toLowerCase();
+    const extension =
+      mime === "image/png"
+        ? "png"
+        : mime === "image/jpeg"
+          ? "jpg"
+          : mime === "image/webp"
+            ? "webp"
+            : mime === "image/gif"
+              ? "gif"
+              : mime === "application/pdf"
+                ? "pdf"
+                : "bin";
+    return `${mime.startsWith("image/") ? "Pasted image" : "Attachment"} ${fallbackIndex + 1}.${extension}`;
+  }
+
   async function ingestWorkspaceAttachmentsFromFileList(
-    files: FileList,
+    files: FileList | readonly File[],
     existing: MessageAttachment[],
     onError: (message: string) => void,
   ): Promise<MessageAttachment[]> {
@@ -4337,9 +4364,9 @@ export default function App() {
 
     const picked = Array.from(files).slice(0, remaining);
     const next: MessageAttachment[] = [];
-    for (const file of picked) {
+    for (const [index, file] of picked.entries()) {
       if (!file) continue;
-      const name = (file.name ?? "").trim() || "attachment";
+      const name = displayNameForAttachmentFile(file, index);
       const isImage = isLikelyImageFile(file);
       const maxBytes = isImage ? MAX_WEB_IMAGE_UPLOAD_BYTES : MAX_WEB_FILE_UPLOAD_BYTES;
       if (file.size > maxBytes) {
@@ -4352,6 +4379,7 @@ export default function App() {
         type: "file",
         mime: (file.type ?? "").trim() || null,
         size: file.size,
+        file,
       };
       try {
         if (isImage) {
@@ -4380,7 +4408,6 @@ export default function App() {
         onError(`${name}: ${message}`);
         continue;
       }
-      // Fallback: allow unknown files to be attached as name-only (no preview yet).
       next.push(base);
     }
 
@@ -4388,7 +4415,7 @@ export default function App() {
   }
 
   async function ingestCommunityAttachmentsFromFileList(
-    files: FileList,
+    files: FileList | readonly File[],
     existing: MessageAttachment[],
     onError: (message: string) => void,
   ): Promise<MessageAttachment[]> {
@@ -4401,9 +4428,9 @@ export default function App() {
 
     const picked = Array.from(files).slice(0, remaining);
     const next: MessageAttachment[] = [];
-    for (const file of picked) {
+    for (const [index, file] of picked.entries()) {
       if (!file) continue;
-      const name = (file.name ?? "").trim() || "attachment";
+      const name = displayNameForAttachmentFile(file, index);
       const isImage = isLikelyImageFile(file);
       const maxBytes = isImage ? MAX_WEB_IMAGE_UPLOAD_BYTES : MAX_WEB_FILE_UPLOAD_BYTES;
       if (file.size > maxBytes) {
@@ -4465,6 +4492,31 @@ export default function App() {
         nextStorageId = await uploadCloudCommunityChatAttachmentFile({
           session,
           communityId,
+          file: attachment.file,
+        });
+      }
+      prepared.push({
+        ...attachment,
+        storage_id: nextStorageId,
+        file: null,
+      });
+    }
+    return prepared;
+  }
+
+  async function prepareWorkspaceAttachmentsForSend(
+    attachments: MessageAttachment[],
+    session: AuthSession,
+    threadId: string,
+  ): Promise<MessageAttachment[]> {
+    const prepared: MessageAttachment[] = [];
+    for (const attachment of attachments) {
+      const currentStorageId = String(attachment.storage_id ?? "").trim();
+      let nextStorageId = currentStorageId || null;
+      if (!nextStorageId && attachment.file instanceof File) {
+        nextStorageId = await uploadCloudThreadAttachmentFile({
+          session,
+          threadId,
           file: attachment.file,
         });
       }
@@ -4582,6 +4634,8 @@ export default function App() {
     runAgentTurn,
     createThreadMessage,
     deleteThreadMessagesByIds,
+    prepareAttachmentsForSend: prepareWorkspaceAttachmentsForSend,
+    serializeAttachmentsForWrite: serializeCommunityAttachmentsForWrite,
     extractRememberIntent,
     extractTextFromContentJson,
     storeGuestThreadStorage,
@@ -5809,6 +5863,11 @@ export default function App() {
       onSetReplyingToMessage: setReplyingToMessage,
       onRemoveCommunityAttachment: removeCommunityAttachment,
       onCommunityFileInputChange: handleCommunityFileInputChange,
+      onCommunityAttachmentDrop: handleCommunityAttachmentDrop,
+      onCommunityAttachmentDragOver: handleCommunityAttachmentDragOver,
+      onCommunityAttachmentDragLeave: handleCommunityAttachmentDragLeave,
+      onCommunityAttachmentPaste: handleCommunityAttachmentPaste,
+      isCommunityAttachmentDragOver,
       onCommunityMessageInputChange: (value: string, textarea: HTMLTextAreaElement) => {
         setCommunityMessageInput(value);
         textarea.style.height = "auto";

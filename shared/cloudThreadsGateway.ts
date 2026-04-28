@@ -141,6 +141,55 @@ export async function addCloudThreadMessage(params: {
   });
 }
 
+export async function requestCloudThreadAttachmentUploadUrl(params: {
+  session: AuthSessionLike;
+  threadId: string;
+}): Promise<string> {
+  const bootstrapped = await bootstrapGatewayAuthContextIfAvailable(params.session);
+  if (!bootstrapped) throw new Error("Failed to start thread attachment upload.");
+  const { client, authSubject } = bootstrapped;
+  const threadKey = String(params.threadId ?? "").trim();
+  if (!threadKey) throw new Error("Failed to start thread attachment upload.");
+  const internalThreadId = await resolveInternalThreadId({
+    client,
+    authSubject,
+    threadKey,
+  });
+  if (!internalThreadId) throw new Error("Failed to start thread attachment upload.");
+  const payload = (await client.mutation("threads:generateCloudThreadAttachmentUploadUrl" as any, {
+    authSubject,
+    threadId: internalThreadId,
+  })) as { uploadUrl?: string | null } | null;
+  const uploadUrl = String(payload?.uploadUrl ?? "").trim();
+  if (!uploadUrl) throw new Error("Failed to start thread attachment upload.");
+  return uploadUrl;
+}
+
+export async function uploadCloudThreadAttachmentFile(params: {
+  session: AuthSessionLike;
+  threadId: string;
+  file: File | Blob;
+}): Promise<string> {
+  const uploadUrl = await requestCloudThreadAttachmentUploadUrl({
+    session: params.session,
+    threadId: params.threadId,
+  });
+  const contentType =
+    params.file && typeof params.file === "object" && "type" in params.file
+      ? String((params.file as File | Blob).type ?? "").trim() || "application/octet-stream"
+      : "application/octet-stream";
+  const response = await fetch(uploadUrl, {
+    method: "POST",
+    headers: { "Content-Type": contentType },
+    body: params.file as BodyInit,
+  });
+  if (!response.ok) throw new Error("Failed to upload attachment.");
+  const payload = (await response.json()) as { storageId?: string | null };
+  const storageId = String(payload?.storageId ?? "").trim();
+  if (!storageId) throw new Error("Failed to upload attachment.");
+  return storageId;
+}
+
 export async function deleteCloudThreadMessage(params: {
   session: AuthSessionLike;
   threadId: string;
