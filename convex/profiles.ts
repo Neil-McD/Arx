@@ -16,6 +16,7 @@ type ProfileDetailRow = {
   _id: any;
   userId: any;
   bio?: string;
+  onboardingCompletedAt?: number;
   createdAt: number;
   updatedAt: number;
 };
@@ -78,6 +79,10 @@ export const getProfileDetailByUserId = query({
     return {
       ...mapProfileBase(user),
       bio: detail?.bio ?? null,
+      onboarding_completed_at:
+        typeof detail?.onboardingCompletedAt === "number"
+          ? new Date(detail.onboardingCompletedAt).toISOString()
+          : null,
     };
   },
 });
@@ -89,6 +94,7 @@ export const upsertProfileDetail = mutation({
     displayName: v.optional(v.union(v.string(), v.null())),
     avatarUrl: v.optional(v.union(v.string(), v.null())),
     bio: v.optional(v.union(v.string(), v.null())),
+    completeOnboarding: v.optional(v.boolean()),
     nowMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
@@ -124,12 +130,16 @@ export const upsertProfileDetail = mutation({
       await ctx.db.insert("userProfileDetails", {
         userId: actor.dbUserId,
         bio: nextBio,
+        ...(args.completeOnboarding ? { onboardingCompletedAt: nowMs } : null),
         createdAt: nowMs,
         updatedAt: nowMs,
       });
     } else {
       await ctx.db.patch(existingDetail._id, {
         bio: nextBio,
+        ...(args.completeOnboarding && !existingDetail.onboardingCompletedAt
+          ? { onboardingCompletedAt: nowMs }
+          : null),
         updatedAt: nowMs,
       });
     }
@@ -145,6 +155,10 @@ export const upsertProfileDetail = mutation({
     return {
       ...mapProfileBase(refreshedUser),
       bio: detail?.bio ?? null,
+      onboarding_completed_at:
+        typeof detail?.onboardingCompletedAt === "number"
+          ? new Date(detail.onboardingCompletedAt).toISOString()
+          : null,
     };
   },
 });

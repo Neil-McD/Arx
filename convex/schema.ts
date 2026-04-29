@@ -243,6 +243,7 @@ export default defineSchema({
   userProfileDetails: defineTable({
     userId: v.id("users"),
     bio: v.optional(v.string()),
+    onboardingCompletedAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   }).index("by_user", ["userId"]),

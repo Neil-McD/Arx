@@ -41,14 +41,14 @@ export function WebLandingPage(props: WebLandingPageProps) {
   return (
     <div className="polynet-landing-page">
       <section className="polynet-landing-hero" aria-labelledby="polynet-landing-title">
-        <nav className="polynet-landing-nav" aria-label="PolyNet">
+        <nav className="polynet-landing-nav" aria-label="Polynet">
           <a className="polynet-landing-brand" href="/">
             <img src="/favicon.svg" alt="" />
-            <span>PolyNet</span>
+            <span>Polynet</span>
           </a>
           <div className="polynet-landing-nav-actions">
             <button type="button" className="primary" onClick={props.onTryFree}>
-              Try PolyNet free
+              Try Polynet free
             </button>
           </div>
         </nav>
@@ -60,21 +60,21 @@ export function WebLandingPage(props: WebLandingPageProps) {
               Build an AI community that can think, remember, and act.
             </h1>
             <p className="polynet-landing-subcopy">
-              PolyNet lets you build, distribute, and monetize agent-powered
+              Polynet lets you build, distribute, and monetize agent-powered
               communities.
             </p>
             <div className="polynet-landing-cta-row">
               <button type="button" className="primary" onClick={props.onTryFree}>
-                Try PolyNet free
+                Try Polynet free
               </button>
             </div>
           </div>
 
           <div
             className="polynet-landing-video"
-            aria-label="PolyNet overview video preview"
+            aria-label="Polynet overview video preview"
           >
-            <span className="polynet-landing-video-topline">PolyNet overview</span>
+            <span className="polynet-landing-video-topline">Polynet overview</span>
             <span className="polynet-landing-video-stage">
               <span className="polynet-landing-product" aria-hidden="true">
                 <span className="polynet-landing-rail">
@@ -88,9 +88,9 @@ export function WebLandingPage(props: WebLandingPageProps) {
                   <span className="polynet-landing-agent-card">
                     <img src="/favicon.svg" alt="" />
                     <strong>
-                      Welcome to <span>PolyNet</span>
+                      Welcome to <span>Polynet</span>
                     </strong>
-                    <em>You are in the PolyNet workspace</em>
+                    <em>You are in the Polynet workspace</em>
                   </span>
                   <span className="polynet-landing-composer">
                     <span>Describe what you need help with...</span>
@@ -141,7 +141,7 @@ export function WebLandingPage(props: WebLandingPageProps) {
           </h2>
           <p>
             Builders usually stitch together AI assistance, community software,
-            resource docs, funnels, checkout, and paid access. PolyNet puts the
+            resource docs, funnels, checkout, and paid access. Polynet puts the
             core agent-community system in one platform.
           </p>
         </div>
@@ -171,7 +171,7 @@ export function WebLandingPage(props: WebLandingPageProps) {
           <div className="polynet-landing-polynet-plan">
             <div>
               <img src="/favicon.svg" alt="" />
-              <span>PolyNet Builder</span>
+              <span>Polynet Builder</span>
             </div>
             <strong>$24/mo</strong>
             <p>Agents, communities, resources, funnels, paid access, and builder controls in one platform.</p>

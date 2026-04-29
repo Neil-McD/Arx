@@ -41,6 +41,10 @@ export type PendingAuthIntent =
   | {
       reason: "redeem_pending_purchases";
       payload: { navigate: boolean; silent_noop: boolean };
+    }
+  | {
+      reason: "try_polynet_free";
+      payload: Record<string, never>;
     };
 
 export type PendingAuthIntentInput = PendingAuthIntent;
@@ -120,6 +124,10 @@ function normalizePendingAuthIntent(
     if (typeof navigate !== "boolean") return null;
     if (typeof silent_noop !== "boolean") return null;
     return { reason, payload: { navigate, silent_noop } };
+  }
+
+  if (reason === "try_polynet_free") {
+    return { reason, payload: {} };
   }
 
   return null;

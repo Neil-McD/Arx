@@ -1511,6 +1511,142 @@ body {
   font-weight: 700;
 }
 
+.polynet-onboarding-page {
+  min-height: 100%;
+  display: grid;
+  place-items: center;
+  padding: 48px 20px;
+  color: var(--text-primary);
+  background:
+    radial-gradient(circle at 50% 0%, rgba(255, 60, 142, 0.14), transparent 32%),
+    var(--bg-app);
+}
+
+.polynet-onboarding-panel {
+  width: min(100%, 620px);
+  display: grid;
+  gap: 24px;
+}
+
+.polynet-onboarding-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 800;
+}
+
+.polynet-onboarding-brand img {
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+}
+
+.polynet-onboarding-header {
+  display: grid;
+  gap: 10px;
+}
+
+.polynet-onboarding-header h1 {
+  margin: 0;
+  font-size: clamp(38px, 6vw, 64px);
+  line-height: 0.98;
+}
+
+.polynet-onboarding-header p,
+.polynet-onboarding-email {
+  margin: 0;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.polynet-onboarding-profile {
+  display: grid;
+  gap: 14px;
+  border: 1px solid var(--border-muted);
+  border-radius: 20px;
+  padding: 18px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.polynet-onboarding-avatar {
+  width: 74px;
+  height: 74px;
+  border-radius: 18px;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--accent);
+  font-size: 28px;
+  font-weight: 800;
+}
+
+.polynet-onboarding-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.polynet-onboarding-profile label {
+  display: grid;
+  gap: 7px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.polynet-onboarding-profile input,
+.polynet-onboarding-profile textarea {
+  width: 100%;
+  border: 1px solid var(--border-muted);
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.2);
+  color: var(--text-primary);
+  font: inherit;
+  padding: 12px 13px;
+  resize: vertical;
+}
+
+.polynet-onboarding-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.polynet-onboarding-actions button,
+.polynet-onboarding-learn {
+  border: 1px solid var(--border-muted);
+  border-radius: 12px;
+  min-height: 46px;
+  background: rgba(255, 255, 255, 0.045);
+  color: var(--text-primary);
+  font: inherit;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.polynet-onboarding-actions button.primary {
+  background: var(--accent);
+  color: white;
+}
+
+.polynet-onboarding-learn {
+  justify-self: end;
+  min-height: 0;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--text-tertiary);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.polynet-onboarding-error {
+  margin: 0;
+  color: var(--accent-error, #c75a4a);
+  font-size: 13px;
+}
+
 @media (max-width: 980px) {
   .polynet-landing-hero-grid,
   .polynet-landing-offer,
@@ -1559,7 +1695,8 @@ body {
   }
 
   .polynet-landing-actions,
-  .polynet-landing-flow {
+  .polynet-landing-flow,
+  .polynet-onboarding-actions {
     grid-template-columns: 1fr;
   }
 }

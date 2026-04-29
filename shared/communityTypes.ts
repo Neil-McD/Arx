@@ -217,4 +217,5 @@ export type UserProfile = {
 
 export type UserProfileDetail = UserProfile & {
   bio: string | null;
+  onboarding_completed_at?: string | null;
 };

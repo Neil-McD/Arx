@@ -22,7 +22,12 @@ import {
 } from "../../../shared/pay_first";
 import {
   readProfileDraftForUser, writeProfileDraftForUser, } from "../../../shared/profileDraftStorage";
-import { resolveAuthSubject } from "../../../shared/authSession";
+import {
+  resolveAuthSessionAvatarUrl,
+  resolveAuthSessionDisplayName,
+  resolveAuthSessionEmail,
+  resolveAuthSubject,
+} from "../../../shared/authSession";
 import {
   buildContextFallbackThreadTitle, deriveThreadTitleFromUserText, isMissingThreadTitleValue, traceThreadContext, } from "../../../shared/threadTitleUi";
 import { CommunityAvatar } from "../../../shared/CommunityAvatar";
@@ -88,6 +93,10 @@ import { uploadCloudCommunityChatAttachmentFile } from "../../../shared/cloudCom
 import {
   saveCloudCommunityPublicPresentation,
 } from "../../../shared/cloudCommunityFunnelGateway";
+import {
+  fetchCloudProfileDetailByUserId,
+  upsertCloudProfileDetail,
+} from "../../../shared/cloudProfilesGateway";
 import { listEnabledCloudModelRegistryRows } from "../../../shared/cloudModelRegistryGateway";
 import {
   loadCloudProviderConnections,
@@ -445,7 +454,7 @@ type CommunityFunnelConfig = SharedCommunityFunnelConfig;
 const GUEST_THREAD_ID = "__guest__";
 const WORKSPACE_DRAFT_THREAD_ERROR_KEY = "__workspace_draft__";
 const WORKSPACE_PLATFORM_STARTER_PROMPT =
-  "Tell me what PolyNet is, what I can build here, and how I should get started.";
+  "Tell me what Polynet is, what I can build here, and how I should get started.";
 const GUEST_THREAD_STORAGE_KEY = "polynet_guest_thread_v1";
 const LEGACY_GUEST_THREAD_STORAGE_KEY = "arx_guest_thread_v1";
 const GUEST_MODEL_STORAGE_KEY = "polynet_guest_model_id_v1";
@@ -1133,6 +1142,38 @@ export default function App() {
     session: session,
     cloudProfile,
   });
+  const [isSavingOnboarding, setIsSavingOnboarding] = useState(false);
+  const [onboardingError, setOnboardingError] = useState<string | null>(null);
+  const authProfileEmail = useMemo(() => resolveAuthSessionEmail(session) ?? null, [session]);
+  const authProfileDisplayName = useMemo(
+    () => resolveAuthSessionDisplayName(session) ?? "",
+    [session],
+  );
+  const authProfileAvatarUrl = useMemo(
+    () => resolveAuthSessionAvatarUrl(session) ?? null,
+    [session],
+  );
+
+  useEffect(() => {
+    if (!session) return;
+    if (cloudProfile) return;
+    if (!authProfileDisplayName && !authProfileAvatarUrl) return;
+    if (!profileUi.profileName.trim() && authProfileDisplayName) {
+      profileUi.setProfileName(authProfileDisplayName);
+    }
+    if (!profileUi.profileAvatarUrl && authProfileAvatarUrl) {
+      profileUi.setProfileAvatarUrl(authProfileAvatarUrl);
+    }
+  }, [
+    authProfileAvatarUrl,
+    authProfileDisplayName,
+    cloudProfile,
+    profileUi.profileAvatarUrl,
+    profileUi.profileName,
+    profileUi.setProfileAvatarUrl,
+    profileUi.setProfileName,
+    session,
+  ]);
 
   const publicCommunityUi = useWebPublicCommunityUiController<
     PublicCommunityRecord,
@@ -1921,6 +1962,90 @@ export default function App() {
     applyLocationToState();
   }
 
+  async function loadProfileForOnboarding(activeSession: AuthSession): Promise<UserProfileDetail | null> {
+    const userId = resolveAuthSubject(activeSession);
+    if (!userId) return null;
+    const row = await fetchCloudProfileDetailByUserId<AuthSession, UserProfileDetail>({
+      session: activeSession,
+      userId,
+    });
+    if (row) {
+      setCloudProfile(row);
+      profileUi.applyLoadedProfileToLocal(row);
+    }
+    return row;
+  }
+
+  async function routeTryPolynetFree(activeSession: AuthSession | null = sessionRef.current ?? session): Promise<void> {
+    if (!activeSession) {
+      requireSignIn({ reason: "try_polynet_free", payload: {} });
+      return;
+    }
+
+    try {
+      const row = await loadProfileForOnboarding(activeSession);
+      navigateTo(row?.onboarding_completed_at ? "/workspace" : "/onboarding");
+    } catch {
+      navigateTo("/onboarding");
+    }
+  }
+
+  async function completeOnboarding(
+    destination: "build_community" | "discover_community" | "learn_about_polynet",
+  ): Promise<void> {
+    const activeSession = await ensureUsableAuthSession();
+    if (!activeSession) {
+      requireSignIn({ reason: "try_polynet_free", payload: {} });
+      return;
+    }
+
+    const userId = resolveAuthSubject(activeSession);
+    if (!userId) {
+      setOnboardingError("We could not verify your account. Sign in again to continue.");
+      return;
+    }
+
+    const displayName = profileUi.profileName.trim() || authProfileDisplayName.trim() || null;
+    const bio = profileUi.profileBio.trim() || null;
+    const avatarUrl = profileUi.profileAvatarUrl?.trim() || authProfileAvatarUrl || null;
+
+    setIsSavingOnboarding(true);
+    setOnboardingError(null);
+    try {
+      const saved = await upsertCloudProfileDetail<AuthSession, UserProfileDetail>({
+        session: activeSession,
+        userId,
+        displayName,
+        avatarUrl,
+        bio,
+        completeOnboarding: true,
+      });
+      if (saved) {
+        setCloudProfile(saved);
+        profileUi.applyLoadedProfileToLocal(saved);
+      }
+
+      if (destination === "discover_community") {
+        navigateTo("/discover");
+        return;
+      }
+
+      if (destination === "learn_about_polynet") {
+        navigateTo("/workspace?starter=platform");
+        return;
+      }
+
+      setBuilderUpgradeContext("create_community");
+      setIsBuilderUpgradeOpen(true);
+      navigateTo("/workspace");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to save onboarding.";
+      setOnboardingError(message);
+    } finally {
+      setIsSavingOnboarding(false);
+    }
+  }
+
   const applyAppRouteState = useCallback((nextAppRoute: AppRouteState) => {
     const normalizedCommunitySlug = String(nextAppRoute.communitySlug ?? "").trim() || null;
     const nextThreadId =
@@ -2009,6 +2134,22 @@ export default function App() {
     isAuthBootstrapComplete,
     publicRoute,
   ]);
+
+  useEffect(() => {
+    if (activePage !== "onboarding") return;
+    if (!isAuthBootstrapComplete) return;
+    if (session) return;
+    if (hasRecentAuthFlowPending()) return;
+    requireSignIn({ reason: "try_polynet_free", payload: {} });
+  }, [activePage, isAuthBootstrapComplete, requireSignIn, session]);
+
+  useEffect(() => {
+    if (activePage !== "onboarding") return;
+    if (!session) return;
+    if (cloudProfile) return;
+    void loadProfileForOnboarding(session);
+  }, [activePage, cloudProfile, session]);
+
   const isInitialStandaloneFunnelRoute =
     initialPublicRoute.kind === "community_funnel" || initialPublicRoute.kind === "community_funnel_preview";
   const matchesInitialStandaloneFunnelRoute =
@@ -3710,6 +3851,9 @@ export default function App() {
       },
       redeem_pending_purchases: (payload) => {
         void redeemPendingPurchases({ navigate: payload.navigate, silentNoop: payload.silent_noop });
+      },
+      try_polynet_free: () => {
+        void routeTryPolynetFree(session);
       },
     });
   }
@@ -6400,7 +6544,29 @@ export default function App() {
     isPublicCommunityFunnel,
     publicRoute: shellPublicRoute,
     landingPageProps: {
-      onTryFree: () => navigateTo("/workspace"),
+      onTryFree: () => {
+        void routeTryPolynetFree();
+      },
+    },
+    onboardingPageProps: {
+      email: authProfileEmail,
+      displayName: profileUi.profileName,
+      avatarUrl: profileUi.profileAvatarUrl,
+      bio: profileUi.profileBio,
+      isSaving: isSavingOnboarding,
+      error: onboardingError,
+      onDisplayNameChange: profileUi.setProfileName,
+      onAvatarUrlChange: (value) => profileUi.setProfileAvatarUrl(value.trim() || null),
+      onBioChange: profileUi.setProfileBio,
+      onBuildCommunity: () => {
+        void completeOnboarding("build_community");
+      },
+      onDiscoverCommunity: () => {
+        void completeOnboarding("discover_community");
+      },
+      onLearnAboutPolynet: () => {
+        void completeOnboarding("learn_about_polynet");
+      },
     },
     workspaceSurfaceHostProps: {
       activeView,

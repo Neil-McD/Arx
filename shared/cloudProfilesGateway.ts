@@ -13,6 +13,7 @@ type CloudProfileBase = {
 
 export type CloudProfileDetailRow = CloudProfileBase & {
   bio: string | null;
+  onboarding_completed_at?: string | null;
 };
 
 async function bootstrapConvexUser(sessionRaw: unknown): Promise<{
@@ -55,6 +56,7 @@ export async function upsertCloudProfileDetail<SessionT, TProfile extends CloudP
     displayName: string | null;
     avatarUrl: string | null;
     bio: string | null;
+    completeOnboarding?: boolean;
   },
 ): Promise<TProfile | null> {
   const { client, authSubject } = await bootstrapConvexUser(params.session);
@@ -64,6 +66,7 @@ export async function upsertCloudProfileDetail<SessionT, TProfile extends CloudP
     displayName: params.displayName,
     avatarUrl: params.avatarUrl,
     bio: params.bio,
+    completeOnboarding: params.completeOnboarding,
   });
   return firstGatewayRow<TProfile>(payload);
 }
