@@ -1,6 +1,5 @@
 type WebLandingPageProps = {
   onTryFree: () => void;
-  onAskPolynet: () => void;
 };
 
 const stackItems = [
@@ -48,9 +47,6 @@ export function WebLandingPage(props: WebLandingPageProps) {
             <span>PolyNet</span>
           </a>
           <div className="polynet-landing-nav-actions">
-            <button type="button" onClick={props.onAskPolynet}>
-              Ask PolyNet
-            </button>
             <button type="button" className="primary" onClick={props.onTryFree}>
               Try PolyNet free
             </button>
@@ -71,17 +67,12 @@ export function WebLandingPage(props: WebLandingPageProps) {
               <button type="button" className="primary" onClick={props.onTryFree}>
                 Try PolyNet free
               </button>
-              <button type="button" onClick={props.onAskPolynet}>
-                Ask PolyNet
-              </button>
             </div>
           </div>
 
-          <button
-            type="button"
+          <div
             className="polynet-landing-video"
-            onClick={props.onAskPolynet}
-            aria-label="Ask PolyNet to explain the platform"
+            aria-label="PolyNet overview video preview"
           >
             <span className="polynet-landing-video-topline">PolyNet overview</span>
             <span className="polynet-landing-video-stage">
@@ -121,7 +112,7 @@ export function WebLandingPage(props: WebLandingPageProps) {
             <span className="polynet-landing-video-caption">
               Watch how an agent-powered community comes together.
             </span>
-          </button>
+          </div>
         </div>
       </section>
 
@@ -154,35 +145,36 @@ export function WebLandingPage(props: WebLandingPageProps) {
             core agent-community system in one platform.
           </p>
         </div>
-        <div className="polynet-landing-stack-list">
-          <div className="polynet-landing-stack-header">
-            <span>Example monthly stack</span>
-            <strong>{stackTotal}/mo</strong>
-          </div>
-          {stackItems.map((item) => (
-            <div key={`${item.category}-${item.vendor}`} className="polynet-landing-stack-row">
-              <span className="polynet-landing-stack-vendor">
-                <img
-                  src={`https://www.google.com/s2/favicons?domain=${item.domain}&sz=64`}
-                  alt=""
-                />
-                <span>
-                  <strong>{item.vendor}</strong>
-                  <em>{item.category}</em>
-                </span>
-              </span>
-              <strong>{item.cost}/mo</strong>
+        <div className="polynet-landing-comparison">
+          <div className="polynet-landing-stack-list">
+            <div className="polynet-landing-stack-header">
+              <span>Example monthly stack</span>
+              <strong>{stackTotal}/mo</strong>
             </div>
-          ))}
-          <div className="polynet-landing-stack-total">
-            <span>
+            {stackItems.map((item) => (
+              <div key={`${item.category}-${item.vendor}`} className="polynet-landing-stack-row">
+                <span className="polynet-landing-stack-vendor">
+                  <img
+                    src={`https://www.google.com/s2/favicons?domain=${item.domain}&sz=64`}
+                    alt=""
+                  />
+                  <span>
+                    <strong>{item.vendor}</strong>
+                    <em>{item.category}</em>
+                  </span>
+                </span>
+                <strong>{item.cost}/mo</strong>
+              </div>
+            ))}
+          </div>
+
+          <div className="polynet-landing-polynet-plan">
+            <div>
               <img src="/favicon.svg" alt="" />
-              <span>
-                <strong>PolyNet Builder</strong>
-                <em>Agents, communities, resources, funnels, and access</em>
-              </span>
-            </span>
+              <span>PolyNet Builder</span>
+            </div>
             <strong>$24/mo</strong>
+            <p>Agents, communities, resources, funnels, paid access, and builder controls in one platform.</p>
           </div>
         </div>
       </section>

@@ -1118,7 +1118,7 @@ body {
   color: white;
 }
 
-.polynet-landing-page button.polynet-landing-video {
+.polynet-landing-video {
   min-height: 0;
   padding: 0;
   display: grid;
@@ -1128,10 +1128,6 @@ body {
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.025));
   overflow: hidden;
   box-shadow: 0 24px 80px rgba(0, 0, 0, 0.35);
-}
-
-.polynet-landing-page button.polynet-landing-video:hover {
-  transform: translateY(-2px);
 }
 
 .polynet-landing-video-topline,
@@ -1406,9 +1402,15 @@ body {
   background: rgba(255, 255, 255, 0.03);
 }
 
+.polynet-landing-comparison {
+  display: grid;
+  grid-template-columns: minmax(0, 1.12fr) minmax(240px, 0.88fr);
+  gap: 14px;
+  align-items: stretch;
+}
+
 .polynet-landing-stack-header,
-.polynet-landing-stack-row,
-.polynet-landing-stack-total {
+.polynet-landing-stack-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1428,7 +1430,7 @@ body {
 }
 
 .polynet-landing-stack-vendor,
-.polynet-landing-stack-total > span {
+.polynet-landing-polynet-plan > div {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -1436,37 +1438,59 @@ body {
 }
 
 .polynet-landing-stack-vendor img,
-.polynet-landing-stack-total img {
+.polynet-landing-polynet-plan img {
   width: 28px;
   height: 28px;
   border-radius: 8px;
   background: white;
 }
 
-.polynet-landing-stack-vendor span,
-.polynet-landing-stack-total > span > span {
+.polynet-landing-stack-vendor span {
   min-width: 0;
   display: grid;
   gap: 2px;
 }
 
-.polynet-landing-stack-vendor strong,
-.polynet-landing-stack-total strong {
+.polynet-landing-stack-vendor strong {
   color: var(--text-primary);
 }
 
-.polynet-landing-stack-vendor em,
-.polynet-landing-stack-total em {
+.polynet-landing-stack-vendor em {
   color: var(--text-tertiary);
   font-size: 12px;
   font-style: normal;
   font-weight: 600;
 }
 
-.polynet-landing-stack-total {
-  border-bottom: 0;
+.polynet-landing-polynet-plan {
+  min-height: 100%;
+  border: 1px solid rgba(255, 72, 153, 0.35);
+  border-radius: 18px;
+  padding: 20px;
+  display: grid;
+  align-content: center;
+  gap: 18px;
   color: var(--text-primary);
-  background: rgba(255, 72, 153, 0.12);
+  background:
+    linear-gradient(180deg, rgba(255, 72, 153, 0.18), rgba(255, 72, 153, 0.055)),
+    rgba(255, 255, 255, 0.03);
+}
+
+.polynet-landing-polynet-plan > div {
+  font-weight: 800;
+}
+
+.polynet-landing-polynet-plan strong {
+  color: var(--text-primary);
+  font-size: clamp(42px, 5vw, 62px);
+  line-height: 0.95;
+}
+
+.polynet-landing-polynet-plan p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 15px;
+  line-height: 1.45;
 }
 
 .polynet-landing-flow {
@@ -1490,6 +1514,7 @@ body {
 @media (max-width: 980px) {
   .polynet-landing-hero-grid,
   .polynet-landing-offer,
+  .polynet-landing-comparison,
   .polynet-landing-section,
   .polynet-landing-section.compact {
     grid-template-columns: 1fr;

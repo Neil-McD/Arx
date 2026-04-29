@@ -6401,7 +6401,6 @@ export default function App() {
     publicRoute: shellPublicRoute,
     landingPageProps: {
       onTryFree: () => navigateTo("/workspace"),
-      onAskPolynet: () => navigateTo("/workspace?starter=platform"),
     },
     workspaceSurfaceHostProps: {
       activeView,
