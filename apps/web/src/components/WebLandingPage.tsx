@@ -5,15 +5,9 @@ type WebLandingPageProps = {
 const stackItems = [
   {
     category: "AI assistance",
-    vendor: "Perplexity Pro",
+    vendor: "Perplexity Computer",
     domain: "perplexity.ai",
-    cost: "$20",
-  },
-  {
-    category: "Community",
-    vendor: "Circle Professional",
-    domain: "circle.so",
-    cost: "$89",
+    cost: "$200",
   },
   {
     category: "Community",
@@ -35,7 +29,7 @@ const stackItems = [
   },
 ];
 
-const stackTotal = "$425+";
+const stackTotal = "$516+";
 
 export function WebLandingPage(props: WebLandingPageProps) {
   return (
@@ -133,11 +127,11 @@ export function WebLandingPage(props: WebLandingPageProps) {
         </div>
       </section>
 
-      <section className="polynet-landing-section" aria-labelledby="polynet-landing-stack">
-        <div>
+      <section className="polynet-landing-section comparison" aria-labelledby="polynet-landing-stack">
+        <div className="polynet-landing-comparison-copy">
           <p className="polynet-landing-kicker">Stack comparison</p>
           <h2 id="polynet-landing-stack">
-            A creator stack gets expensive before it gets coherent.
+            The stack gets expensive before it gets coherent.
           </h2>
           <p>
             Builders usually stitch together AI assistance, community software,
@@ -168,14 +162,14 @@ export function WebLandingPage(props: WebLandingPageProps) {
             ))}
           </div>
 
-          <div className="polynet-landing-polynet-plan">
+          <button type="button" className="polynet-landing-polynet-plan" onClick={props.onTryFree}>
             <div>
               <img src="/favicon.svg" alt="" />
               <span>Polynet Builder</span>
             </div>
             <strong>$24/mo</strong>
             <p>Agents, communities, resources, funnels, paid access, and builder controls in one platform.</p>
-          </div>
+          </button>
         </div>
       </section>
 

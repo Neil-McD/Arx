@@ -1384,6 +1384,12 @@ body {
   border-top: 1px solid var(--border-muted);
 }
 
+.polynet-landing-section.comparison {
+  grid-template-columns: minmax(220px, 0.52fr) minmax(520px, 1.18fr);
+  gap: 44px;
+  align-items: center;
+}
+
 .polynet-landing-section.compact {
   grid-template-columns: 0.7fr 1fr;
   padding-bottom: 110px;
@@ -1395,6 +1401,15 @@ body {
   line-height: 1.04;
 }
 
+.polynet-landing-comparison-copy h2 {
+  font-size: clamp(28px, 3.1vw, 44px);
+}
+
+.polynet-landing-comparison-copy p {
+  font-size: 16px;
+  line-height: 1.5;
+}
+
 .polynet-landing-stack-list {
   border: 1px solid var(--border-muted);
   border-radius: 18px;
@@ -1404,9 +1419,10 @@ body {
 
 .polynet-landing-comparison {
   display: grid;
-  grid-template-columns: minmax(0, 1.12fr) minmax(240px, 0.88fr);
-  gap: 14px;
+  grid-template-columns: minmax(270px, 1fr) minmax(260px, 0.95fr);
+  gap: 16px;
   align-items: stretch;
+  min-width: 0;
 }
 
 .polynet-landing-stack-header,
@@ -1414,8 +1430,8 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 18px;
-  padding: 15px 18px;
+  gap: 14px;
+  padding: 14px 16px;
   border-bottom: 1px solid var(--border-muted);
   color: var(--text-secondary);
 }
@@ -1426,7 +1442,8 @@ body {
 }
 
 .polynet-landing-stack-header strong {
-  font-size: 20px;
+  font-size: 18px;
+  white-space: nowrap;
 }
 
 .polynet-landing-stack-vendor,
@@ -1453,6 +1470,8 @@ body {
 
 .polynet-landing-stack-vendor strong {
   color: var(--text-primary);
+  font-size: 14px;
+  line-height: 1.05;
 }
 
 .polynet-landing-stack-vendor em {
@@ -1474,6 +1493,21 @@ body {
   background:
     linear-gradient(180deg, rgba(255, 72, 153, 0.18), rgba(255, 72, 153, 0.055)),
     rgba(255, 255, 255, 0.03);
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    transform 160ms ease;
+}
+
+.polynet-landing-polynet-plan:hover {
+  border-color: rgba(255, 72, 153, 0.62);
+  background:
+    linear-gradient(180deg, rgba(255, 72, 153, 0.24), rgba(255, 72, 153, 0.07)),
+    rgba(255, 255, 255, 0.04);
+  transform: translateY(-1px);
 }
 
 .polynet-landing-polynet-plan > div {
@@ -1482,7 +1516,7 @@ body {
 
 .polynet-landing-polynet-plan strong {
   color: var(--text-primary);
-  font-size: clamp(42px, 5vw, 62px);
+  font-size: clamp(42px, 4.6vw, 62px);
   line-height: 0.95;
 }
 
