@@ -27,10 +27,15 @@ import {
 } from "./runtimeCancellation";
 import {
   composeCloudScopedRuntimeSystemPrompt,
-  type RuntimeWorkspaceTerminalPrompt,
 } from "../shared/runtimePrompt";
+import {
+  buildRuntimeTurnContextSnapshot,
+  renderRuntimeTurnContextForFailureFinalizer,
+  type RuntimeTurnContextSnapshotV1,
+  type RuntimeTurnContextPacket,
+} from "../shared/runtimeTurnContextPacket";
 import { buildRuntimeFailureFinalAnswer } from "../shared/runtimeFailureFinalizer";
-import { summarizeRuntimeWorkingStateFromEvents } from "../shared/runtimeWorkingStateLedger";
+import { loadRuntimeTurnContextPacketForRun } from "./runtimeTurnContext";
 import {
   PublicTurnInput,
   RequireAuthenticatedActor,
@@ -86,116 +91,12 @@ function emitBufferedAssistantText(params: {
   }
 }
 
-function mapRuntimeWorkspaceTerminalPrompt(
-  terminal: any,
-): RuntimeWorkspaceTerminalPrompt | null {
-  const id = String(terminal?.id ?? "").trim();
-  const command = String(terminal?.command ?? "").trim();
-  const status = String(terminal?.status ?? "").trim();
-  if (!id || !command) return null;
-  if (
-    status !== "starting" &&
-    status !== "running" &&
-    status !== "exited" &&
-    status !== "failed" &&
-    status !== "stopped"
-  ) {
-    return null;
-  }
-  return {
-    id,
-    status,
-    lifecycleOwner: "project_background",
-    command,
-    cwd: typeof terminal?.cwd === "string" ? terminal.cwd : null,
-    previewPort:
-      typeof terminal?.preview_port === "number" ? terminal.preview_port : null,
-    previewPath:
-      typeof terminal?.preview_path === "string" ? terminal.preview_path : null,
-    previewLabel:
-      typeof terminal?.preview_label === "string" ? terminal.preview_label : null,
-    previewStatus:
-      typeof terminal?.preview_status === "string"
-        ? (terminal.preview_status as RuntimeWorkspaceTerminalPrompt["previewStatus"])
-        : null,
-    healthStatus:
-      typeof terminal?.health_status === "string"
-        ? (terminal.health_status as RuntimeWorkspaceTerminalPrompt["healthStatus"])
-        : null,
-    healthSummary:
-      typeof terminal?.health_summary === "string" ? terminal.health_summary : null,
-    lastPreviewProbeSummary:
-      typeof terminal?.last_preview_probe_summary === "string"
-        ? terminal.last_preview_probe_summary
-        : null,
-    lastBrowserObservationSummary:
-      typeof terminal?.last_browser_observation_summary === "string"
-        ? terminal.last_browser_observation_summary
-        : null,
-    outputTail:
-      typeof terminal?.output_tail === "string" ? terminal.output_tail : null,
-    exitCode: typeof terminal?.exit_code === "number" ? terminal.exit_code : null,
-  };
-}
-
-function normalizeFailureFinalizerSnippet(value: unknown, maxLen = 900): string {
-  const normalized = String(value ?? "").replace(/\s+/g, " ").trim();
-  if (!normalized) return "";
-  return normalized.length > maxLen
-    ? `${normalized.slice(0, maxLen - 1).trimEnd()}…`
-    : normalized;
-}
-
 function buildAdaptiveFailureFinalizationMessages(params: {
-  latestUserText: string;
-  status: "error" | "cancelled";
-  reason?: string | null;
-  errorCode?: string | null;
-  errorMessage?: string | null;
-  workingState?: unknown;
-  activeBackgroundTerminals?: RuntimeWorkspaceTerminalPrompt[] | null;
+  runtimeTurnContext: RuntimeTurnContextPacket;
 }): Array<{ role: "system" | "user"; content: string }> {
-  const terminalLines = Array.isArray(params.activeBackgroundTerminals)
-    ? params.activeBackgroundTerminals.slice(0, 3).map((terminal) =>
-        [
-          `id=${normalizeFailureFinalizerSnippet(terminal.id, 80)}`,
-          `status=${normalizeFailureFinalizerSnippet(terminal.status, 60)}`,
-          `command=${normalizeFailureFinalizerSnippet(terminal.command, 180)}`,
-          terminal.cwd ? `cwd=${normalizeFailureFinalizerSnippet(terminal.cwd, 120)}` : null,
-          terminal.healthStatus ? `health=${normalizeFailureFinalizerSnippet(terminal.healthStatus, 80)}` : null,
-          terminal.healthSummary ? `health_summary=${normalizeFailureFinalizerSnippet(terminal.healthSummary, 180)}` : null,
-          terminal.previewStatus ? `preview=${normalizeFailureFinalizerSnippet(terminal.previewStatus, 80)}` : null,
-          typeof terminal.previewPort === "number" ? `preview_port=${terminal.previewPort}` : null,
-          terminal.lastPreviewProbeSummary
-            ? `preview_probe=${normalizeFailureFinalizerSnippet(terminal.lastPreviewProbeSummary, 220)}`
-            : null,
-          terminal.lastBrowserObservationSummary
-            ? `browser_observation=${normalizeFailureFinalizerSnippet(terminal.lastBrowserObservationSummary, 220)}`
-            : null,
-          terminal.outputTail ? `output_tail=${normalizeFailureFinalizerSnippet(terminal.outputTail, 260)}` : null,
-        ]
-          .filter(Boolean)
-          .join("; "),
-      )
-    : [];
-  let workingStateJson = "";
-  try {
-    workingStateJson = JSON.stringify(params.workingState ?? null, null, 2);
-  } catch {
-    workingStateJson = "";
-  }
   const userContent = [
-    `Latest user message: ${normalizeFailureFinalizerSnippet(params.latestUserText, 500) || "(not available)"}`,
-    `Runtime stop status: ${params.status}`,
-    `Runtime reason: ${normalizeFailureFinalizerSnippet(params.reason, 160) || "(none)"}`,
-    `Runtime error code: ${normalizeFailureFinalizerSnippet(params.errorCode, 160) || "(none)"}`,
-    `Runtime error message: ${normalizeFailureFinalizerSnippet(params.errorMessage, 260) || "(none)"}`,
-    "",
-    "Current deterministic workspace/process evidence:",
-    terminalLines.length > 0 ? terminalLines.map((line) => `- ${line}`).join("\n") : "- No active background terminal evidence.",
-    "",
-    "Current working-state/event summary:",
-    normalizeFailureFinalizerSnippet(workingStateJson, 1800) || "(none)",
+    "Current runtime turn context:",
+    renderRuntimeTurnContextForFailureFinalizer(params.runtimeTurnContext),
   ].join("\n");
   return [
     {
@@ -204,7 +105,7 @@ function buildAdaptiveFailureFinalizationMessages(params: {
         "You are writing the final user-facing response after an agent runtime stopped before a normal final answer.",
         "Do not output a fixed ledger template. Answer the user's latest message directly and naturally.",
         "Use the evidence provided, but separate verified facts from unknowns.",
-        "If a dev server or background terminal is running but the preview is blank, explicitly distinguish server/process health from app render health.",
+        "If a dev server or background terminal is running but render evidence says the preview is blank, explicitly distinguish server/process health from app render health.",
         "Do not claim the app is working just because an iframe or server loaded.",
         "Keep it concise. Usually 2-5 short paragraphs or a few bullets.",
         "Do not mention hidden implementation names unless they help the user debug.",
@@ -465,6 +366,7 @@ export async function handleRuntimeTurnRequest(args: {
         reason?: string;
         errorCode?: string;
         errorMessage?: string;
+        contextSnapshot?: RuntimeTurnContextSnapshotV1 | null;
       }) => Promise<void>)
     | null = null;
 
@@ -588,7 +490,7 @@ export async function handleRuntimeTurnRequest(args: {
 
     const {
       appendRunEvent,
-      finishRunBestEffort: finishRunBestEffortForRun,
+      finishRunBestEffort: finishRunBestEffortRaw,
       touchRunHeartbeatBestEffort,
     } = buildRuntimeRunPersistenceHelpers({
       ctx,
@@ -596,7 +498,101 @@ export async function handleRuntimeTurnRequest(args: {
       threadId: String(ownedThread._id),
       runId,
     });
+    const persistContextSnapshotBestEffort = async (phase: "started" | "active" | "finished"): Promise<void> => {
+      try {
+        const nowMs = Date.now();
+        const loadedContext = await loadRuntimeTurnContextPacketForRun({
+          ctx,
+          ownerId: actor.dbUserId,
+          projectId: runtimeProjectId,
+          runId,
+          latestUserText,
+          threadWorkingState: ownedThread.workingState ?? null,
+          summarizeCurrentRunEvents: phase !== "started",
+          runtimeStop: null,
+        });
+        await ctx.runMutation(
+          (internal as any).threads.setCloudRuntimeRunContextSnapshotInternal as any,
+          {
+            ownerId: actor.dbUserId,
+            threadId: ownedThread._id,
+            runId,
+            phase,
+            snapshot: buildRuntimeTurnContextSnapshot({
+              packet: loadedContext.packet,
+              capturedAt: nowMs,
+            }),
+            nowMs,
+          },
+        );
+      } catch {
+        // Best-effort audit snapshot; prompt/runtime execution should not depend on it.
+      }
+    };
+    let activeSnapshotEventCount = 0;
+    let activeSnapshotUpdatedAt = 0;
+    const refreshActiveContextSnapshotAfterEventBestEffort = async (eventType: string): Promise<void> => {
+      if (
+        eventType !== "tool_call_finished" &&
+        eventType !== "runtime_diagnostics_detected" &&
+        eventType !== "workspace_terminal_status" &&
+        eventType !== "workspace_preview_observed"
+      ) {
+        return;
+      }
+      activeSnapshotEventCount += 1;
+      const nowMs = Date.now();
+      if (
+        activeSnapshotUpdatedAt > 0 &&
+        nowMs - activeSnapshotUpdatedAt < 1500 &&
+        activeSnapshotEventCount < 3
+      ) {
+        return;
+      }
+      activeSnapshotEventCount = 0;
+      activeSnapshotUpdatedAt = nowMs;
+      await persistContextSnapshotBestEffort("active");
+    };
+    type FinishRunBestEffortParams = Parameters<typeof finishRunBestEffortRaw>[0];
+    const finishRunBestEffortForRun = async (
+      params: FinishRunBestEffortParams,
+    ): Promise<void> => {
+      let contextSnapshot = params.contextSnapshot ?? null;
+      if (!contextSnapshot) {
+        try {
+          const loadedContext = await loadRuntimeTurnContextPacketForRun({
+            ctx,
+            ownerId: actor.dbUserId,
+            projectId: runtimeProjectId,
+            runId,
+            latestUserText,
+            threadWorkingState: ownedThread.workingState ?? null,
+            summarizeCurrentRunEvents: params.status !== "ok",
+            runtimeStop:
+              params.status === "ok"
+                ? null
+                : {
+                    status: params.status,
+                    reason: params.reason ?? null,
+                    errorCode: params.errorCode ?? null,
+                    errorMessage: params.errorMessage ?? null,
+                  },
+          });
+          contextSnapshot = buildRuntimeTurnContextSnapshot({
+            packet: loadedContext.packet,
+            capturedAt: Date.now(),
+          });
+        } catch {
+          contextSnapshot = null;
+        }
+      }
+      await finishRunBestEffortRaw({
+        ...params,
+        contextSnapshot,
+      });
+    };
     finishRunBestEffort = finishRunBestEffortForRun;
+    await persistContextSnapshotBestEffort("started");
     const finishCancelledRun = async (): Promise<void> => {
       await finishRunBestEffortForRun({
         status: "cancelled",
@@ -685,32 +681,6 @@ export async function handleRuntimeTurnRequest(args: {
       to: "chatgpt" | "platform" | "public";
       reason: string;
     }> | null = null;
-    const loadActiveBackgroundTerminalsForFinalizer = async (): Promise<
-      RuntimeWorkspaceTerminalPrompt[]
-    > => {
-      if (!runtimeProjectId) return [];
-      try {
-        const terminalSnapshot = await ctx.runAction(
-          internal.workspaceTerminals
-            .reconcileProjectWorkspaceTerminalsInternal as any,
-          {
-            ownerId: actor.dbUserId,
-            projectId: runtimeProjectId,
-          },
-        );
-        const active = Array.isArray((terminalSnapshot as any)?.active)
-          ? (terminalSnapshot as any).active
-          : [];
-        return active
-          .map((terminal: any) => mapRuntimeWorkspaceTerminalPrompt(terminal))
-          .filter(
-            (terminal: RuntimeWorkspaceTerminalPrompt | null): terminal is RuntimeWorkspaceTerminalPrompt =>
-              Boolean(terminal),
-          );
-      } catch {
-        return [];
-      }
-    };
     const persistPartialAssistantMessageBestEffort = async (params: {
       content: string;
       status: "error" | "cancelled";
@@ -730,41 +700,29 @@ export async function handleRuntimeTurnRequest(args: {
     } | null> => {
       if (!persistVisibleAssistantMessage) return null;
       const hasPartialContent = String(params.content ?? "").trim().length > 0;
-      let workingStateForFinalizer = ownedThread.workingState ?? null;
-      let activeBackgroundTerminalsForFinalizer: RuntimeWorkspaceTerminalPrompt[] = [];
+      let failureContextPacket: RuntimeTurnContextPacket | null = null;
       let adaptiveFinalizerContent: string | null = null;
       if (!hasPartialContent) {
-        activeBackgroundTerminalsForFinalizer =
-          await loadActiveBackgroundTerminalsForFinalizer();
-        try {
-          const runEvents = await ctx.runQuery(
-            internal.threads.listRuntimeRunEventsByOwnerRunIdInternal as any,
-            {
-              ownerId: actor.dbUserId,
-              runId,
-            },
-          );
-          workingStateForFinalizer = summarizeRuntimeWorkingStateFromEvents({
-            latestUserText,
-            runStatus: params.status,
-            runReason: params.reason ?? null,
-            runErrorMessage: params.errorMessage ?? null,
-            events: Array.isArray(runEvents) ? runEvents : [],
-            nowMs: Date.now(),
-          });
-        } catch {
-          workingStateForFinalizer = ownedThread.workingState ?? null;
-        }
+        const loadedFailureContext = await loadRuntimeTurnContextPacketForRun({
+          ctx,
+          ownerId: actor.dbUserId,
+          projectId: runtimeProjectId,
+          runId,
+          latestUserText,
+          threadWorkingState: ownedThread.workingState ?? null,
+          summarizeCurrentRunEvents: true,
+          runtimeStop: {
+            status: params.status,
+            reason: params.reason ?? null,
+            errorCode: params.errorCode ?? null,
+            errorMessage: params.errorMessage ?? null,
+          },
+        });
+        failureContextPacket = loadedFailureContext.packet;
         if (params.status === "error") {
           try {
             const finalizationMessages = buildAdaptiveFailureFinalizationMessages({
-              latestUserText,
-              status: params.status,
-              reason: params.reason ?? null,
-              errorCode: params.errorCode ?? null,
-              errorMessage: params.errorMessage ?? null,
-              workingState: workingStateForFinalizer,
-              activeBackgroundTerminals: activeBackgroundTerminalsForFinalizer,
+              runtimeTurnContext: failureContextPacket,
             });
             const finalizationMaxTokens = 700;
             const completion =
@@ -809,8 +767,7 @@ export async function handleRuntimeTurnRequest(args: {
       }
       const finalAnswer = buildRuntimeFailureFinalAnswer({
         partialContent: adaptiveFinalizerContent ?? params.content,
-        workingState: workingStateForFinalizer,
-        activeBackgroundTerminals: activeBackgroundTerminalsForFinalizer,
+        runtimeTurnContext: failureContextPacket,
         status: params.status,
         reason: params.reason ?? null,
         errorCode: params.errorCode ?? null,
@@ -893,6 +850,7 @@ export async function handleRuntimeTurnRequest(args: {
             payload: Record<string, unknown>;
           }): Promise<void> => {
             const created = await appendRunEvent(event);
+            await refreshActiveContextSnapshotAfterEventBestEffort(event.eventType);
             const mapped = mapPersistedRuntimeEventRow(created);
             if (!mapped) return;
             writer.send({
@@ -1144,6 +1102,7 @@ export async function handleRuntimeTurnRequest(args: {
           apiKeyOverride: openRouterApiKeyOverride,
           appendRunEvent: async (event): Promise<void> => {
             await appendRunEvent(event);
+            await refreshActiveContextSnapshotAfterEventBestEffort(event.eventType);
           },
           touchRunHeartbeat: touchRunHeartbeatBestEffort,
         });

@@ -32,6 +32,24 @@ export type DaytonaWorkspaceTerminalRecord = {
   last_preview_probe_summary: string | null;
   last_browser_observation_at: number | null;
   last_browser_observation_summary: string | null;
+  preview_transport_status:
+    | "not_started"
+    | "loading"
+    | "loaded"
+    | "failed"
+    | null;
+  preview_inspection_status:
+    | "not_attempted"
+    | "same_origin_dom"
+    | "cross_origin_uninspectable"
+    | "dom_unavailable"
+    | null;
+  preview_render_status:
+    | "unknown"
+    | "visible_content"
+    | "blank_suspected"
+    | "transport_error"
+    | null;
 };
 
 export type DaytonaWorkspaceTerminalPreview = {
@@ -102,6 +120,18 @@ function mapWorkspaceTerminalRow(
     last_browser_observation_summary:
       typeof row?.last_browser_observation_summary === "string" && row.last_browser_observation_summary.trim()
         ? row.last_browser_observation_summary.trim()
+        : null,
+    preview_transport_status:
+      typeof row?.preview_transport_status === "string" && row.preview_transport_status.trim()
+        ? (row.preview_transport_status.trim() as DaytonaWorkspaceTerminalRecord["preview_transport_status"])
+        : null,
+    preview_inspection_status:
+      typeof row?.preview_inspection_status === "string" && row.preview_inspection_status.trim()
+        ? (row.preview_inspection_status.trim() as DaytonaWorkspaceTerminalRecord["preview_inspection_status"])
+        : null,
+    preview_render_status:
+      typeof row?.preview_render_status === "string" && row.preview_render_status.trim()
+        ? (row.preview_render_status.trim() as DaytonaWorkspaceTerminalRecord["preview_render_status"])
         : null,
   };
 }
@@ -182,6 +212,18 @@ export async function recordProjectWorkspaceTerminalPreviewObservation<TSession>
   previewStatus?: DaytonaWorkspaceTerminalPreviewStatus | null;
   previewProbeSummary?: string | null;
   browserObservationSummary?: string | null;
+  previewTransportStatus?: Exclude<
+    DaytonaWorkspaceTerminalRecord["preview_transport_status"],
+    null
+  > | null;
+  previewInspectionStatus?: Exclude<
+    DaytonaWorkspaceTerminalRecord["preview_inspection_status"],
+    null
+  > | null;
+  previewRenderStatus?: Exclude<
+    DaytonaWorkspaceTerminalRecord["preview_render_status"],
+    null
+  > | null;
 }): Promise<void> {
   const { client, authSubject } = await bootstrapGatewayAuthContext(params.session as AuthSessionLike);
   await client.action("workspaceTerminals:recordWorkspaceTerminalPreviewObservation" as any, {
@@ -191,5 +233,8 @@ export async function recordProjectWorkspaceTerminalPreviewObservation<TSession>
     previewStatus: params.previewStatus ?? undefined,
     previewProbeSummary: params.previewProbeSummary ?? undefined,
     browserObservationSummary: params.browserObservationSummary ?? undefined,
+    previewTransportStatus: params.previewTransportStatus ?? undefined,
+    previewInspectionStatus: params.previewInspectionStatus ?? undefined,
+    previewRenderStatus: params.previewRenderStatus ?? undefined,
   });
 }

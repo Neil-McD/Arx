@@ -18,7 +18,10 @@ import {
   createEmptyRuntimeHarnessTelemetrySummary,
   type RuntimeHarnessTelemetrySummary,
 } from "../shared/runtimeHarnessScorecard";
-import { summarizeRuntimeWorkingStateFromEvents } from "../shared/runtimeWorkingStateLedger";
+import {
+  mergeRuntimeWorkingStateTaskLedger,
+  summarizeRuntimeWorkingStateFromEvents,
+} from "../shared/runtimeWorkingStateLedger";
 import { requireCommunityChatAccess } from "./communityCore";
 
 type ThreadLike = {
@@ -92,6 +95,17 @@ type RuntimeRunLike = {
   workspaceSessionRegion?: string;
   workspaceSessionUpdatedAt?: number;
   runtimeHarnessTelemetrySummary?: RuntimeHarnessTelemetrySummary;
+  startedContextSnapshot?: unknown;
+  activeContextSnapshot?: unknown;
+  activeContextSnapshotUpdatedAt?: number;
+  finishedContextSnapshot?: unknown;
+  pendingUserSteering?: Array<{
+    text: string;
+    receivedAt: number;
+    messageKey?: string;
+  }>;
+  stopRequestedAt?: number;
+  stopReason?: string;
   status: "running" | "ok" | "error" | "cancelled";
   reason?: string;
   errorCode?: string;
@@ -204,6 +218,11 @@ type ThreadWorkingStateLike = {
   goal?: string;
   status?: "idle" | "in_progress" | "blocked" | "needs_verification" | "complete";
   currentStep?: string;
+  plan?: string[];
+  completedSteps?: string[];
+  decisions?: string[];
+  openQuestions?: string[];
+  focusFiles?: string[];
   lastResult?: string;
   verificationStatus?: "not_needed" | "needed" | "passed" | "failed";
   filesTouched?: string[];
@@ -390,6 +409,67 @@ function normalizeWorkingStateList(raw: string[], maxItems = 6, maxLen = 180): s
   return out;
 }
 
+const TASK_PIVOT_PATTERN =
+  /^(new task|new topic|switch(ing)? to|change topic|different task|ignore that|forget that|now let's|let's move to|moving on|separate question|unrelated|actually|instead)\b/i;
+
+const TASK_PIVOT_STOP_WORDS = new Set([
+  "the",
+  "and",
+  "for",
+  "with",
+  "that",
+  "this",
+  "from",
+  "have",
+  "what",
+  "when",
+  "where",
+  "into",
+  "onto",
+  "then",
+  "than",
+  "your",
+  "our",
+  "can",
+  "you",
+  "lets",
+  "let",
+  "now",
+]);
+
+function tokenizeTaskGoal(value: unknown): string[] {
+  return String(value ?? "")
+    .toLowerCase()
+    .replace(/[^a-z0-9_./-]+/g, " ")
+    .split(/\s+/)
+    .map((token) => token.trim())
+    .filter((token) => token.length >= 3 && !TASK_PIVOT_STOP_WORDS.has(token));
+}
+
+function shouldPreserveActiveTaskLedger(args: {
+  previous: ThreadWorkingStateLike | null;
+  latestUserText?: string | null;
+}): boolean {
+  const previous = args.previous;
+  if (!previous || previous.status === "complete") return false;
+  const latest = normalizeWorkingStateText(args.latestUserText, 240);
+  const previousGoal = normalizeWorkingStateText(previous.goal, 240);
+  if (!latest || !previousGoal) return true;
+  if (TASK_PIVOT_PATTERN.test(latest)) return false;
+  if (latest.length < 28) return true;
+  const latestLower = latest.toLowerCase();
+  const previousLower = previousGoal.toLowerCase();
+  if (latestLower.includes(previousLower) || previousLower.includes(latestLower)) {
+    return true;
+  }
+  const latestTokens = tokenizeTaskGoal(latest);
+  const previousTokens = new Set(tokenizeTaskGoal(previousGoal));
+  if (latestTokens.length < 4 || previousTokens.size < 4) return true;
+  const overlap = latestTokens.filter((token) => previousTokens.has(token)).length;
+  const overlapRatio = overlap / Math.min(latestTokens.length, previousTokens.size);
+  return overlapRatio >= 0.25;
+}
+
 function normalizePreviousWorkingState(raw: unknown): ThreadWorkingStateLike | null {
   const record = asRecord(raw);
   if (!record) return null;
@@ -421,6 +501,41 @@ function normalizePreviousWorkingState(raw: unknown): ThreadWorkingStateLike | n
         180,
       )
     : [];
+  const plan = Array.isArray(record.plan)
+    ? normalizeWorkingStateList(
+        record.plan.map((value) => String(value ?? "")),
+        5,
+        180,
+      )
+    : [];
+  const completedSteps = Array.isArray(record.completedSteps)
+    ? normalizeWorkingStateList(
+        record.completedSteps.map((value) => String(value ?? "")),
+        8,
+        180,
+      )
+    : [];
+  const decisions = Array.isArray(record.decisions)
+    ? normalizeWorkingStateList(
+        record.decisions.map((value) => String(value ?? "")),
+        5,
+        200,
+      )
+    : [];
+  const openQuestions = Array.isArray(record.openQuestions)
+    ? normalizeWorkingStateList(
+        record.openQuestions.map((value) => String(value ?? "")),
+        4,
+        200,
+      )
+    : [];
+  const focusFiles = Array.isArray(record.focusFiles)
+    ? normalizeWorkingStateList(
+        record.focusFiles.map((value) => String(value ?? "")),
+        8,
+        180,
+      )
+    : [];
   const statusRaw = String(record.status ?? "").trim();
   const status =
     statusRaw === "idle" ||
@@ -443,6 +558,11 @@ function normalizePreviousWorkingState(raw: unknown): ThreadWorkingStateLike | n
     goal: normalizeWorkingStateText(record.goal, 240),
     status,
     currentStep: normalizeWorkingStateText(record.currentStep, 180),
+    plan,
+    completedSteps,
+    decisions,
+    openQuestions,
+    focusFiles,
     lastResult: normalizeWorkingStateText(record.lastResult, 240),
     verificationStatus,
     filesTouched,
@@ -462,6 +582,11 @@ function compactThreadWorkingState(state: ThreadWorkingStateLike): ThreadWorking
     version: Number.isFinite(Number(state.version)) ? Math.floor(Number(state.version)) : undefined,
     status: state.status,
     verificationStatus: state.verificationStatus,
+    plan: Array.isArray(state.plan) && state.plan.length > 0 ? state.plan : undefined,
+    completedSteps: Array.isArray(state.completedSteps) && state.completedSteps.length > 0 ? state.completedSteps : undefined,
+    decisions: Array.isArray(state.decisions) && state.decisions.length > 0 ? state.decisions : undefined,
+    openQuestions: Array.isArray(state.openQuestions) && state.openQuestions.length > 0 ? state.openQuestions : undefined,
+    focusFiles: Array.isArray(state.focusFiles) && state.focusFiles.length > 0 ? state.focusFiles : undefined,
     filesTouched: Array.isArray(state.filesTouched) ? state.filesTouched : undefined,
     filesChanged: Array.isArray(state.filesChanged) ? state.filesChanged : [],
     verifiedFindings: Array.isArray(state.verifiedFindings) ? state.verifiedFindings : [],
@@ -495,11 +620,20 @@ function buildRunStartedWorkingState(args: {
 }): ThreadWorkingStateLike {
   const previous = normalizePreviousWorkingState(args.previous);
   const goal = normalizeWorkingStateText(args.latestUserText, 240) ?? previous?.goal;
+  const taskStillActive = shouldPreserveActiveTaskLedger({
+    previous,
+    latestUserText: args.latestUserText,
+  });
   return compactThreadWorkingState({
-    version: 2,
+    version: 3,
     goal,
     status: "in_progress",
     currentStep: "Run is in progress.",
+    plan: taskStillActive ? previous?.plan : undefined,
+    completedSteps: taskStillActive ? previous?.completedSteps : undefined,
+    decisions: taskStillActive ? previous?.decisions : undefined,
+    openQuestions: taskStillActive ? previous?.openQuestions : undefined,
+    focusFiles: taskStillActive ? previous?.focusFiles : undefined,
     lastResult: previous?.lastResult,
     verificationStatus: "not_needed",
     filesTouched: [],
@@ -719,14 +853,19 @@ async function finalizeRuntimeRunRecord(args: {
       q.eq("ownerId", args.ownerId).eq("runId", run.runId),
     )
     .collect()) as RuntimeRunEventLike[];
-  const workingState = compactThreadWorkingState(summarizeRuntimeWorkingStateFromEvents({
-    latestUserText: extractThreadMessageText(latestRunUserMessage?.contentJson ?? null),
-    runStatus: status,
-    runReason: reason,
-    runErrorMessage: errorMessage,
-    events: runEvents,
-    nowMs: args.nowMs,
-  }));
+  const workingState = compactThreadWorkingState(
+    mergeRuntimeWorkingStateTaskLedger({
+      previous: args.thread.workingState,
+      current: summarizeRuntimeWorkingStateFromEvents({
+        latestUserText: extractThreadMessageText(latestRunUserMessage?.contentJson ?? null),
+        runStatus: status,
+        runReason: reason,
+        runErrorMessage: errorMessage,
+        events: runEvents,
+        nowMs: args.nowMs,
+      }),
+    }),
+  );
 
   await args.ctx.db.insert("runtimeRunEvents", {
     ownerId: args.ownerId,
@@ -749,6 +888,12 @@ async function finalizeRuntimeRunRecord(args: {
     reason,
     errorCode,
     errorMessage,
+    ...(status === "cancelled"
+      ? {
+          stopRequestedAt: run.stopRequestedAt ?? args.nowMs,
+          stopReason: reason ?? errorCode ?? "cancelled",
+        }
+      : {}),
     finishedAt,
     lastEventSeq: seq,
     updatedAt: args.nowMs,
@@ -1902,6 +2047,138 @@ export const finishCloudRuntimeRun = mutation({
       nowMs,
       finishedAt: args.finishedAt,
     });
+  },
+});
+
+export const setCloudRuntimeRunContextSnapshotInternal = internalMutation({
+  args: {
+    ownerId: v.id("users"),
+    threadId: v.id("threads"),
+    runId: v.string(),
+    phase: v.union(v.literal("started"), v.literal("active"), v.literal("finished")),
+    snapshot: v.any(),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const nowMs = args.nowMs ?? Date.now();
+    const thread = await requireOwnedCloudThread({
+      ctx,
+      ownerId: args.ownerId,
+      threadId: args.threadId,
+    });
+    const runId = normalizeRunId(args.runId);
+    const run = await getRuntimeRunByOwnerRunId({
+      ctx,
+      ownerId: args.ownerId,
+      runId,
+    });
+    if (!run) return null;
+    if (run.threadId !== thread._id) throw new Error("run_thread_conflict");
+    const patch =
+      args.phase === "started"
+        ? {
+            startedContextSnapshot: args.snapshot,
+            activeContextSnapshot: args.snapshot,
+            activeContextSnapshotUpdatedAt: nowMs,
+            updatedAt: nowMs,
+          }
+        : args.phase === "finished"
+          ? {
+              finishedContextSnapshot: args.snapshot,
+              activeContextSnapshot: args.snapshot,
+              activeContextSnapshotUpdatedAt: nowMs,
+              updatedAt: nowMs,
+            }
+          : {
+              activeContextSnapshot: args.snapshot,
+              activeContextSnapshotUpdatedAt: nowMs,
+              updatedAt: nowMs,
+            };
+    await ctx.db.patch(run._id, patch);
+    return (await ctx.db.get(run._id)) as RuntimeRunLike | null;
+  },
+});
+
+export const appendCloudRuntimeRunPendingSteeringInternal = internalMutation({
+  args: {
+    ownerId: v.id("users"),
+    threadId: v.id("threads"),
+    runId: v.string(),
+    text: v.string(),
+    messageKey: v.optional(v.string()),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const text = String(args.text ?? "").trim();
+    if (!text) return null;
+    const nowMs = args.nowMs ?? Date.now();
+    const thread = await requireOwnedCloudThread({
+      ctx,
+      ownerId: args.ownerId,
+      threadId: args.threadId,
+    });
+    const runId = normalizeRunId(args.runId);
+    const run = await getRuntimeRunByOwnerRunId({
+      ctx,
+      ownerId: args.ownerId,
+      runId,
+    });
+    if (!run) return null;
+    if (run.threadId !== thread._id) throw new Error("run_thread_conflict");
+    if (run.status !== "running") return run;
+    const existing = Array.isArray(run.pendingUserSteering)
+      ? run.pendingUserSteering
+      : [];
+    const pendingUserSteering = [
+      ...existing,
+      {
+        text,
+        receivedAt: nowMs,
+        messageKey: String(args.messageKey ?? "").trim() || undefined,
+      },
+    ].slice(-8);
+    await ctx.db.patch(run._id, {
+      pendingUserSteering,
+      updatedAt: nowMs,
+    });
+    return (await ctx.db.get(run._id)) as RuntimeRunLike | null;
+  },
+});
+
+export const getActiveRuntimeTurnStateInternal = internalQuery({
+  args: {
+    ownerId: v.id("users"),
+    threadId: v.id("threads"),
+  },
+  handler: async (ctx, args) => {
+    const thread = await requireOwnedCloudThread({
+      ctx,
+      ownerId: args.ownerId,
+      threadId: args.threadId,
+    });
+    const run = await getRunningRuntimeRunByThread({
+      ctx,
+      threadId: thread._id,
+    });
+    if (!run || run.ownerId !== args.ownerId) return null;
+    return {
+      runId: run.runId,
+      threadId: String(run.threadId),
+      projectId: run.projectId ? String(run.projectId) : null,
+      status: run.status,
+      reason: run.reason ?? null,
+      errorCode: run.errorCode ?? null,
+      errorMessage: run.errorMessage ?? null,
+      pendingUserSteering: Array.isArray(run.pendingUserSteering)
+        ? run.pendingUserSteering.slice(-8)
+        : [],
+      stopRequestedAt: run.stopRequestedAt ?? null,
+      stopReason: run.stopReason ?? null,
+      activeContextSnapshot: run.activeContextSnapshot ?? null,
+      activeContextSnapshotUpdatedAt: run.activeContextSnapshotUpdatedAt ?? null,
+      startedAt: run.startedAt,
+      updatedAt: run.updatedAt,
+    };
   },
 });
 

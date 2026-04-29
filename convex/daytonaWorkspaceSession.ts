@@ -316,32 +316,16 @@ export async function createWorkspaceSandboxSession(params: {
   };
 }
 
-export async function cleanupWorkspaceSandboxSession(params: {
+export async function cleanupTemporaryWorkspaceSandboxSession(params: {
   ctx: any;
   userId: any;
   session: WorkspaceSandboxSession;
   runId: string;
   projectId: string;
-  appendRunEvent: (params: {
-    eventType: string;
-    eventKey?: string;
-    payload: Record<string, unknown>;
-  }) => Promise<void>;
 }): Promise<WorkspaceSandboxCleanupResult> {
   const stopped = await stopDaytonaSandbox({
     config: params.session.config,
     sandboxId: params.session.providerSandboxId,
-  });
-  await params.appendRunEvent({
-    eventType: "sandbox_stopped",
-    eventKey: `${params.runId}:workspace_sandbox_stopped:1`,
-    payload: {
-      run_id: params.runId,
-      sandbox_id: params.session.providerSandboxId,
-      status: stopped.ok ? "ok" : "error",
-      error_code: stopped.ok ? null : stopped.code,
-      error_message: stopped.ok ? null : stopped.message,
-    },
   });
 
   const stopSettled = stopped.ok
@@ -367,19 +351,6 @@ export async function cleanupWorkspaceSandboxSession(params: {
           details: stopSettled.details,
         });
 
-  await params.appendRunEvent({
-    eventType: "sandbox_deleted",
-    eventKey: `${params.runId}:workspace_sandbox_deleted:1`,
-    payload: {
-      run_id: params.runId,
-      sandbox_id: params.session.providerSandboxId,
-      status: deleted.ok ? "ok" : "error",
-      error_code: deleted.ok ? null : deleted.code,
-      error_message: deleted.ok ? null : deleted.message,
-      lifecycle_mode: "explicit_stop_then_delete",
-    },
-  });
-
   const computeTerminated = stopSettled.ok || deleted.ok;
   let chargeRecorded = false;
   let chargeErrorMessage: string | null = null;
@@ -403,16 +374,6 @@ export async function cleanupWorkspaceSandboxSession(params: {
       const message = error instanceof Error ? error.message : String(error);
       chargeErrorMessage =
         message || "Failed to record workspace compute charge.";
-      await params.appendRunEvent({
-        eventType: "sandbox_charge_failed",
-        eventKey: `${params.runId}:workspace_sandbox_charge_failed:1`,
-        payload: {
-          run_id: params.runId,
-          sandbox_id: params.session.providerSandboxId,
-          error_message: chargeErrorMessage,
-          cleanup_status: deleted.ok ? "sandbox_deleted" : "sandbox_delete_failed",
-        },
-      });
     }
   }
   return {

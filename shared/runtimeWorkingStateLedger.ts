@@ -25,6 +25,11 @@ export type RuntimeWorkingStateSummary = {
   goal?: string;
   status: "idle" | "in_progress" | "blocked" | "needs_verification" | "complete";
   currentStep?: string;
+  plan?: string[];
+  completedSteps?: string[];
+  decisions?: string[];
+  openQuestions?: string[];
+  focusFiles?: string[];
   lastResult?: string;
   openIssue?: string;
   blocker?: string;
@@ -37,6 +42,11 @@ export type RuntimeWorkingStateSummary = {
   lastDiagnostic?: string;
   updatedAt: number;
 };
+
+type RuntimeWorkingStateTaskLedgerFields = Pick<
+  RuntimeWorkingStateSummary,
+  "plan" | "completedSteps" | "decisions" | "openQuestions" | "focusFiles"
+>;
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -61,6 +71,73 @@ function normalizeSummaryList(raw: string[], maxItems = 6, maxLen = 180): string
     if (out.length >= maxItems) break;
   }
   return out;
+}
+
+function readSummaryList(
+  record: Record<string, unknown>,
+  key: keyof RuntimeWorkingStateTaskLedgerFields,
+  maxItems: number,
+  maxLen: number,
+): string[] {
+  const raw = record[key];
+  return Array.isArray(raw)
+    ? normalizeSummaryList(
+        raw.map((value) => String(value ?? "")),
+        maxItems,
+        maxLen,
+      )
+    : [];
+}
+
+export function mergeRuntimeWorkingStateTaskLedger(args: {
+  previous: unknown;
+  current: RuntimeWorkingStateSummary;
+}): RuntimeWorkingStateSummary {
+  const previousRecord = asRecord(args.previous);
+  if (!previousRecord) return args.current;
+  return {
+    ...args.current,
+    plan: normalizeSummaryList(
+      [
+        ...(args.current.plan ?? []),
+        ...readSummaryList(previousRecord, "plan", 5, 180),
+      ],
+      5,
+      180,
+    ),
+    completedSteps: normalizeSummaryList(
+      [
+        ...(args.current.completedSteps ?? []),
+        ...readSummaryList(previousRecord, "completedSteps", 8, 180),
+      ],
+      8,
+      180,
+    ),
+    decisions: normalizeSummaryList(
+      [
+        ...(args.current.decisions ?? []),
+        ...readSummaryList(previousRecord, "decisions", 5, 200),
+      ],
+      5,
+      200,
+    ),
+    openQuestions: normalizeSummaryList(
+      [
+        ...(args.current.openQuestions ?? []),
+        ...readSummaryList(previousRecord, "openQuestions", 4, 200),
+      ],
+      4,
+      200,
+    ),
+    focusFiles: normalizeSummaryList(
+      [
+        ...(args.current.focusFiles ?? []),
+        ...readSummaryList(previousRecord, "focusFiles", 8, 180),
+      ],
+      8,
+      180,
+    ),
+  };
 }
 
 function extractToolArgsPath(payload: unknown): string | null {
@@ -165,6 +242,7 @@ export function summarizeRuntimeWorkingStateFromEvents(
   const touchedPaths: string[] = [];
   const changedFiles: string[] = [];
   const recentActionsRaw: string[] = [];
+  const completedStepsRaw: string[] = [];
   let successfulSearchCount = 0;
   let successfulVerificationShellCount = 0;
   let failedVerificationShellCount = 0;
@@ -234,6 +312,7 @@ export function summarizeRuntimeWorkingStateFromEvents(
 
   const filesTouched = normalizeSummaryList(touchedPaths, 10, 180);
   const filesChanged = normalizeSummaryList(changedFiles, 8, 180);
+  const focusFiles = normalizeSummaryList([...changedFiles, ...successfulReadPaths], 8, 180);
   const verifiedFindingsRaw: string[] = [];
   const readPaths = normalizeSummaryList(successfulReadPaths, 3, 180);
   for (const path of readPaths) {
@@ -243,9 +322,15 @@ export function summarizeRuntimeWorkingStateFromEvents(
     verifiedFindingsRaw.push(
       `Completed ${successfulSearchCount} workspace ${successfulSearchCount === 1 ? "search" : "searches"}.`,
     );
+    completedStepsRaw.push(
+      `Searched the workspace ${successfulSearchCount === 1 ? "once" : `${successfulSearchCount} times`}.`,
+    );
   }
   if (filesChanged.length > 0) {
     verifiedFindingsRaw.push(
+      `Changed ${filesChanged.length} workspace ${filesChanged.length === 1 ? "file" : "files"}.`,
+    );
+    completedStepsRaw.push(
       `Changed ${filesChanged.length} workspace ${filesChanged.length === 1 ? "file" : "files"}.`,
     );
   }
@@ -253,15 +338,22 @@ export function summarizeRuntimeWorkingStateFromEvents(
     verifiedFindingsRaw.push(
       `Completed ${successfulVerificationShellCount} verification ${successfulVerificationShellCount === 1 ? "command" : "commands"}.`,
     );
+    completedStepsRaw.push(
+      `Ran ${successfulVerificationShellCount} verification ${successfulVerificationShellCount === 1 ? "command" : "commands"}.`,
+    );
   } else if (filesChanged.length === 0 && successfulOtherShellCount > 0) {
     verifiedFindingsRaw.push(
       `Ran ${successfulOtherShellCount} shell ${successfulOtherShellCount === 1 ? "command" : "commands"} successfully.`,
     );
   }
+  if (readPaths.length > 0) {
+    completedStepsRaw.unshift(`Inspected ${readPaths.join(", ")}.`);
+  }
   if (topDiagnosticSummary) {
     verifiedFindingsRaw.push(`Found diagnostic: ${topDiagnosticSummary}`);
   }
   const verifiedFindings = normalizeSummaryList(verifiedFindingsRaw, 4, 220);
+  const completedSteps = normalizeSummaryList(completedStepsRaw, 6, 180);
 
   const hasVerificationEvidence = successfulVerificationShellCount > 0;
   const verificationStatus =
@@ -359,14 +451,25 @@ export function summarizeRuntimeWorkingStateFromEvents(
         : firstFailedTool
           ? `Inspect the ${firstFailedTool.toolName} failure details, preserve the last verified state, and continue only from a concrete recovery path.`
           : "Inspect the latest runtime events and continue from the last verified state.";
+  const plan =
+    ledgerStatus === "complete"
+      ? []
+      : normalizeSummaryList(
+          [currentStep, nextAction].filter((value): value is string => Boolean(value)),
+          5,
+          180,
+        );
   const recentActions = normalizeSummaryList(recentActionsRaw, 6, 180);
   const goal = normalizeSummaryText(args.latestUserText, 240);
 
   return {
-    version: 2,
+    version: 3,
     ...(goal ? { goal } : null),
     status: ledgerStatus,
     ...(currentStep ? { currentStep } : null),
+    ...(plan.length > 0 ? { plan } : null),
+    ...(completedSteps.length > 0 ? { completedSteps } : null),
+    ...(focusFiles.length > 0 ? { focusFiles } : null),
     ...(lastResult ? { lastResult } : null),
     verificationStatus,
     filesTouched,

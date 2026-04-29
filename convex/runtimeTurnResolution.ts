@@ -138,6 +138,18 @@ function normalizeThreadWorkingState(raw: unknown): ThreadWorkingStatePrompt | n
       : null;
   const goal = String(record.goal ?? "").trim() || null;
   const currentStep = String(record.currentStep ?? "").trim() || null;
+  const normalizeStringList = (raw: unknown, maxItems: number): string[] =>
+    Array.isArray(raw)
+      ? raw
+          .map((value) => String(value ?? "").trim())
+          .filter((value) => value.length > 0)
+          .slice(0, maxItems)
+      : [];
+  const plan = normalizeStringList(record.plan, 5);
+  const completedSteps = normalizeStringList(record.completedSteps, 8);
+  const decisions = normalizeStringList(record.decisions, 5);
+  const openQuestions = normalizeStringList(record.openQuestions, 4);
+  const focusFiles = normalizeStringList(record.focusFiles, 8);
   const lastResult = String(record.lastResult ?? "").trim() || null;
   const blocker = String(record.blocker ?? record.openIssue ?? "").trim() || null;
   const openIssue = String(record.openIssue ?? blocker ?? "").trim() || null;
@@ -151,34 +163,27 @@ function normalizeThreadWorkingState(raw: unknown): ThreadWorkingStatePrompt | n
       ? verificationStatusRaw
       : null;
   const filesTouched = Array.isArray(record.filesTouched)
-    ? record.filesTouched
-        .map((value) => String(value ?? "").trim())
-        .filter((value) => value.length > 0)
-        .slice(0, 10)
+    ? normalizeStringList(record.filesTouched, 10)
     : [];
   const filesChanged = Array.isArray(record.filesChanged)
-    ? record.filesChanged
-        .map((value) => String(value ?? "").trim())
-        .filter((value) => value.length > 0)
-        .slice(0, 8)
+    ? normalizeStringList(record.filesChanged, 8)
     : [];
   const verifiedFindings = Array.isArray(record.verifiedFindings)
-    ? record.verifiedFindings
-        .map((value) => String(value ?? "").trim())
-        .filter((value) => value.length > 0)
-        .slice(0, 4)
+    ? normalizeStringList(record.verifiedFindings, 4)
     : [];
   const recentActions = Array.isArray(record.recentActions)
-    ? record.recentActions
-        .map((value) => String(value ?? "").trim())
-        .filter((value) => value.length > 0)
-        .slice(0, 6)
+    ? normalizeStringList(record.recentActions, 6)
     : [];
   const lastDiagnostic = String(record.lastDiagnostic ?? "").trim() || null;
   if (
     !goal &&
     !status &&
     !currentStep &&
+    plan.length === 0 &&
+    completedSteps.length === 0 &&
+    decisions.length === 0 &&
+    openQuestions.length === 0 &&
+    focusFiles.length === 0 &&
     !lastResult &&
     !openIssue &&
     !nextAction &&
@@ -196,6 +201,11 @@ function normalizeThreadWorkingState(raw: unknown): ThreadWorkingStatePrompt | n
     goal,
     status,
     currentStep,
+    plan,
+    completedSteps,
+    decisions,
+    openQuestions,
+    focusFiles,
     lastResult,
     verificationStatus,
     filesTouched,

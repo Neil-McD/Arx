@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
   isVerificationShellCommand,
+  mergeRuntimeWorkingStateTaskLedger,
   summarizeRuntimeWorkingStateFromEvents,
 } from "../shared/runtimeWorkingStateLedger.ts";
 
@@ -18,12 +19,18 @@ const threads = readText("/Users/neilmcdevitt/code/arx/convex/threads.ts");
 const resolution = readText("/Users/neilmcdevitt/code/arx/convex/runtimeTurnResolution.ts");
 const handlers = readText("/Users/neilmcdevitt/code/arx/convex/runtimeTurnHandlers.ts");
 const prompt = readText("/Users/neilmcdevitt/code/arx/shared/runtimePrompt.ts");
+const contextPacket = readText("/Users/neilmcdevitt/code/arx/shared/runtimeTurnContextPacket.ts");
 
 for (const field of [
   "version: v.optional(v.number())",
   'v.literal("in_progress")',
   'v.literal("needs_verification")',
   "currentStep: v.optional(v.string())",
+  "plan: v.optional(v.array(v.string()))",
+  "completedSteps: v.optional(v.array(v.string()))",
+  "decisions: v.optional(v.array(v.string()))",
+  "openQuestions: v.optional(v.array(v.string()))",
+  "focusFiles: v.optional(v.array(v.string()))",
   "verificationStatus: v.optional(",
   "filesTouched: v.optional(v.array(v.string()))",
   "recentActions: v.optional(v.array(v.string()))",
@@ -34,10 +41,84 @@ for (const field of [
   assertContains(schema, field, `workingState schema field ${field}`);
 }
 
+assert.ok(
+  !schema.includes("codingHandoff"),
+  "thread schema should not keep legacy coding-era handoff state",
+);
+assert.ok(
+  !schema.includes("workspaceRuntime"),
+  "workingState schema should not keep duplicate workspaceRuntime process truth",
+);
+assertContains(
+  schema,
+  "startedContextSnapshot: v.optional(v.any())",
+  "runtime run schema should store run-start context snapshots",
+);
+assertContains(
+  schema,
+  "activeContextSnapshot: v.optional(v.any())",
+  "runtime run schema should store live active-turn context snapshots",
+);
+assertContains(
+  schema,
+  "activeContextSnapshotUpdatedAt: v.optional(v.number())",
+  "runtime run schema should timestamp live active-turn context snapshots",
+);
+assertContains(
+  schema,
+  "finishedContextSnapshot: v.optional(v.any())",
+  "runtime run schema should store run-finish context snapshots",
+);
+assertContains(
+  schema,
+  "pendingUserSteering: v.optional(",
+  "runtime run schema should keep pending steering on the active turn",
+);
+assertContains(
+  schema,
+  "stopRequestedAt: v.optional(v.number())",
+  "runtime run schema should keep active-turn stop request time",
+);
+assertContains(
+  schema,
+  "stopReason: v.optional(v.string())",
+  "runtime run schema should keep active-turn stop reason",
+);
+
 assertContains(
   threads,
   "function buildRunStartedWorkingState",
   "run-start workingState builder",
+);
+assertContains(
+  threads,
+  "getRunningRuntimeRunByThread",
+  "runtime runs remain the active-turn authority",
+);
+assertContains(
+  threads,
+  "export const getActiveRuntimeTurnStateInternal",
+  "threads expose one canonical active-turn state loader",
+);
+assertContains(
+  threads,
+  "activeContextSnapshot: args.snapshot",
+  "context snapshot writes update live active-turn context",
+);
+assertContains(
+  threads,
+  'v.union(v.literal("started"), v.literal("active"), v.literal("finished"))',
+  "context snapshot writer should support active in-run refreshes",
+);
+assertContains(
+  threads,
+  "export const appendCloudRuntimeRunPendingSteeringInternal",
+  "pending steering is stored on the active run instead of a second queue table",
+);
+assertContains(
+  threads,
+  "pendingUserSteering = [",
+  "pending steering appends to a bounded active-run queue",
 );
 assertContains(
   threads,
@@ -66,8 +147,13 @@ assertContains(
 );
 assertContains(
   threads,
-  "compactThreadWorkingState(summarizeRuntimeWorkingStateFromEvents",
-  "run finish compacts shared working state before storage",
+  "compactThreadWorkingState(",
+  "run finish compacts working state before storage",
+);
+assertContains(
+  threads,
+  "current: summarizeRuntimeWorkingStateFromEvents",
+  "run finish summarizes current run with shared working state ledger",
 );
 assert.ok(
   !threads.includes("function summarizeThreadWorkingState"),
@@ -108,10 +194,46 @@ assertContains(
   '"Started a new workspace run.", ...(previous?.recentActions ?? [])',
   "run start keeps previous recent actions as continuity only",
 );
+for (const field of [
+  "plan: taskStillActive ? previous?.plan : undefined",
+  "completedSteps: taskStillActive ? previous?.completedSteps : undefined",
+  "decisions: taskStillActive ? previous?.decisions : undefined",
+  "openQuestions: taskStillActive ? previous?.openQuestions : undefined",
+  "focusFiles: taskStillActive ? previous?.focusFiles : undefined",
+]) {
+  assertContains(threads, field, `run start preserves active ledger field ${field}`);
+}
+assertContains(
+  threads,
+  "mergeRuntimeWorkingStateTaskLedger({",
+  "run finish merges current-run evidence with active task ledger",
+);
+assertContains(
+  threads,
+  "shouldPreserveActiveTaskLedger({",
+  "run start uses a goal-pivot guard before preserving active task ledger",
+);
+assertContains(
+  threads,
+  "TASK_PIVOT_PATTERN",
+  "run start has an explicit goal-pivot reset rule",
+);
+assert.ok(
+  !threads.includes("function mergeWorkingStateTaskLedger"),
+  "threads should use the shared task-ledger merge helper",
+);
+assertContains(
+  readText("/Users/neilmcdevitt/code/arx/shared/runtimeWorkingStateLedger.ts"),
+  "export function mergeRuntimeWorkingStateTaskLedger",
+  "shared runtime working state exports task-ledger merge helper",
+);
 
 for (const field of [
   "const statusRaw = String(record.status",
   "verificationStatus",
+  "completedSteps",
+  "openQuestions",
+  "focusFiles",
   "filesTouched",
   "currentStep",
   "lastDiagnostic",
@@ -125,6 +247,11 @@ for (const field of [
 for (const promptLine of [
   "Status:",
   "Current step:",
+  "Plan:",
+  "Completed steps:",
+  "Decisions:",
+  "Open questions:",
+  "Focus files:",
   "Verification:",
   "Files touched:",
   "Last diagnostic:",
@@ -132,8 +259,13 @@ for (const promptLine of [
   "Blocker:",
   "Next action:",
 ]) {
-  assertContains(prompt, promptLine, `prompt projects ${promptLine}`);
+  assertContains(contextPacket, promptLine, `prompt projects ${promptLine}`);
 }
+assertContains(
+  prompt,
+  "type RuntimeTurnContextPacket",
+  "runtime prompt uses canonical runtime turn packet type",
+);
 
 assert.equal(isVerificationShellCommand("npm run build"), true);
 assert.equal(isVerificationShellCommand("npm run check:web-typecheck"), true);
@@ -158,10 +290,40 @@ const writeThenPwd = summarizeRuntimeWorkingStateFromEvents({
   ],
   nowMs: 1,
 });
+assert.equal(writeThenPwd.version, 3);
 assert.equal(writeThenPwd.status, "needs_verification");
 assert.equal(writeThenPwd.verificationStatus, "needed");
 assert.deepEqual(writeThenPwd.filesChanged, ["src/App.tsx"]);
 assert.deepEqual(writeThenPwd.filesTouched, ["src/App.tsx"]);
+assert.ok(writeThenPwd.plan?.some((step) => step.includes("Verify the changed workspace files")));
+assert.deepEqual(writeThenPwd.focusFiles, ["src/App.tsx"]);
+assert.ok(
+  writeThenPwd.completedSteps?.some((step) => step.includes("Changed 1 workspace file")),
+);
+
+const mergedTaskLedger = mergeRuntimeWorkingStateTaskLedger({
+  previous: {
+    plan: ["Keep the existing preview server running."],
+    completedSteps: ["Started the preview server."],
+    decisions: ["Do not restart a healthy background terminal."],
+    openQuestions: ["Is the preview blank because of the app or the transport?"],
+    focusFiles: ["src/main.tsx"],
+  },
+  current: writeThenPwd,
+});
+assert.ok(
+  mergedTaskLedger.plan?.some((step) => step.includes("existing preview server")),
+);
+assert.ok(
+  mergedTaskLedger.completedSteps?.some((step) => step.includes("Started the preview server")),
+);
+assert.ok(
+  mergedTaskLedger.decisions?.some((decision) => decision.includes("healthy background terminal")),
+);
+assert.ok(
+  mergedTaskLedger.openQuestions?.some((question) => question.includes("app or the transport")),
+);
+assert.ok(mergedTaskLedger.focusFiles?.includes("src/main.tsx"));
 
 const writeThenBuild = summarizeRuntimeWorkingStateFromEvents({
   latestUserText: "Update the app",
@@ -180,8 +342,12 @@ const writeThenBuild = summarizeRuntimeWorkingStateFromEvents({
 });
 assert.equal(writeThenBuild.status, "complete");
 assert.equal(writeThenBuild.verificationStatus, "passed");
+assert.equal(writeThenBuild.plan, undefined);
 assert.ok(
   writeThenBuild.verifiedFindings.some((finding) => finding.includes("verification command")),
+);
+assert.ok(
+  writeThenBuild.completedSteps?.some((step) => step.includes("verification command")),
 );
 
 const readOnlyRun = summarizeRuntimeWorkingStateFromEvents({
@@ -203,6 +369,7 @@ assert.equal(readOnlyRun.status, "complete");
 assert.equal(readOnlyRun.verificationStatus, "not_needed");
 assert.deepEqual(readOnlyRun.filesTouched, ["src/App.tsx"]);
 assert.deepEqual(readOnlyRun.filesChanged, []);
+assert.deepEqual(readOnlyRun.focusFiles, ["src/App.tsx"]);
 
 const failedTypecheck = summarizeRuntimeWorkingStateFromEvents({
   latestUserText: "Fix types",

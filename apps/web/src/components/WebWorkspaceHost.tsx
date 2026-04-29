@@ -266,6 +266,9 @@ function areTerminalRecordsEqual(
       a.preview_path !== b.preview_path ||
       a.preview_port !== b.preview_port ||
       a.preview_status !== b.preview_status ||
+      a.preview_transport_status !== b.preview_transport_status ||
+      a.preview_inspection_status !== b.preview_inspection_status ||
+      a.preview_render_status !== b.preview_render_status ||
       a.last_preview_probe_summary !== b.last_preview_probe_summary ||
       a.last_browser_observation_summary !== b.last_browser_observation_summary ||
       a.health_status !== b.health_status ||
@@ -349,12 +352,18 @@ function previewObservationForLifecyclePhase(
   phase: "loading" | "ready" | "error",
 ): {
   previewStatus: DaytonaWorkspaceTerminalPreviewStatus;
+  previewTransportStatus: Exclude<DaytonaWorkspaceTerminalRecord["preview_transport_status"], null>;
+  previewInspectionStatus: Exclude<DaytonaWorkspaceTerminalRecord["preview_inspection_status"], null>;
+  previewRenderStatus: Exclude<DaytonaWorkspaceTerminalRecord["preview_render_status"], null>;
   previewProbeSummary: string;
   browserObservationSummary: string | null;
 } {
   if (phase === "error") {
     return {
       previewStatus: "unreachable",
+      previewTransportStatus: "failed",
+      previewInspectionStatus: "not_attempted",
+      previewRenderStatus: "transport_error",
       previewProbeSummary: "Preview iframe failed to load.",
       browserObservationSummary: "The inline preview iframe reported a load error.",
     };
@@ -362,6 +371,9 @@ function previewObservationForLifecyclePhase(
   if (phase === "ready") {
     return {
       previewStatus: "running",
+      previewTransportStatus: "loaded",
+      previewInspectionStatus: "not_attempted",
+      previewRenderStatus: "unknown",
       previewProbeSummary: "Preview transport loaded; app render is not yet verified.",
       browserObservationSummary:
         "The inline preview iframe loaded, but visible app content has not been verified yet.",
@@ -369,6 +381,9 @@ function previewObservationForLifecyclePhase(
   }
   return {
     previewStatus: "starting",
+    previewTransportStatus: "loading",
+    previewInspectionStatus: "not_attempted",
+    previewRenderStatus: "unknown",
     previewProbeSummary: "Preview iframe is loading.",
     browserObservationSummary: null,
   };
@@ -378,6 +393,9 @@ function previewObservationForMetrics(
   metrics: WorkspacePreviewMetricsObservation,
 ): {
   previewStatus: DaytonaWorkspaceTerminalPreviewStatus;
+  previewTransportStatus: Exclude<DaytonaWorkspaceTerminalRecord["preview_transport_status"], null>;
+  previewInspectionStatus: Exclude<DaytonaWorkspaceTerminalRecord["preview_inspection_status"], null>;
+  previewRenderStatus: Exclude<DaytonaWorkspaceTerminalRecord["preview_render_status"], null>;
   previewProbeSummary: string;
   browserObservationSummary: string;
 } {
@@ -393,6 +411,9 @@ function previewObservationForMetrics(
   if (metrics.probeAccess === "cross_origin_uninspectable") {
     return {
       previewStatus: "running",
+      previewTransportStatus: "loaded",
+      previewInspectionStatus: "cross_origin_uninspectable",
+      previewRenderStatus: "unknown",
       previewProbeSummary:
         "Preview transport loaded, but iframe DOM could not be inspected from this origin.",
       browserObservationSummary:
@@ -402,6 +423,9 @@ function previewObservationForMetrics(
   if (metrics.probeAccess === "unavailable") {
     return {
       previewStatus: "running",
+      previewTransportStatus: "loaded",
+      previewInspectionStatus: "dom_unavailable",
+      previewRenderStatus: "unknown",
       previewProbeSummary:
         "Preview transport loaded, but iframe DOM was unavailable during the render probe.",
       browserObservationSummary:
@@ -423,6 +447,9 @@ function previewObservationForMetrics(
   if (looksBlank) {
     return {
       previewStatus: "blank",
+      previewTransportStatus: "loaded",
+      previewInspectionStatus: "same_origin_dom",
+      previewRenderStatus: "blank_suspected",
       previewProbeSummary: `Preview loaded but rendered blank (${sizeSummary}; ${domSummary}).`,
       browserObservationSummary: `The preview iframe loaded, but the app render appears blank (${domSummary}).`,
     };
@@ -433,6 +460,9 @@ function previewObservationForMetrics(
       : "";
   return {
     previewStatus: "running",
+    previewTransportStatus: "loaded",
+    previewInspectionStatus: "same_origin_dom",
+    previewRenderStatus: "visible_content",
     previewProbeSummary: `Preview rendered visible content (${sizeSummary}; ${domSummary}${overflowSummary}).`,
     browserObservationSummary: `The preview iframe loaded and visible app content was detected (${domSummary}).`,
   };
@@ -1537,11 +1567,17 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
     (params: {
       terminal: DaytonaWorkspaceTerminalRecord;
       previewStatus: DaytonaWorkspaceTerminalPreviewStatus;
+      previewTransportStatus: Exclude<DaytonaWorkspaceTerminalRecord["preview_transport_status"], null>;
+      previewInspectionStatus: Exclude<DaytonaWorkspaceTerminalRecord["preview_inspection_status"], null>;
+      previewRenderStatus: Exclude<DaytonaWorkspaceTerminalRecord["preview_render_status"], null>;
       previewProbeSummary: string;
       browserObservationSummary?: string | null;
     }) => {
       const signature = [
         params.previewStatus,
+        params.previewTransportStatus,
+        params.previewInspectionStatus,
+        params.previewRenderStatus,
         params.previewProbeSummary,
         params.browserObservationSummary ?? "",
       ].join("\n");
@@ -1557,6 +1593,9 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
             terminalSessionId: params.terminal.id,
             runId: resolveTerminalAccessRunId(params.terminal),
             previewStatus: params.previewStatus,
+            previewTransportStatus: params.previewTransportStatus,
+            previewInspectionStatus: params.previewInspectionStatus,
+            previewRenderStatus: params.previewRenderStatus,
             previewProbeSummary: params.previewProbeSummary,
             browserObservationSummary: params.browserObservationSummary ?? null,
           });
@@ -1574,6 +1613,9 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
             detail: {
               terminalSessionId: params.terminal.id,
               previewStatus: params.previewStatus,
+              previewTransportStatus: params.previewTransportStatus,
+              previewInspectionStatus: params.previewInspectionStatus,
+              previewRenderStatus: params.previewRenderStatus,
             },
             error: formatWorkspaceInstrumentationError(error),
           });

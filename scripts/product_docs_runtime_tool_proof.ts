@@ -11,6 +11,7 @@ import {
 } from "../shared/productDocsRuntime.ts";
 import type { ProductDocsSearchIndex } from "../shared/productDocsSearch.ts";
 import { buildWorkspaceRuntimeSystemPrompt } from "../shared/runtimePrompt.ts";
+import { buildRuntimeTurnContextPacket } from "../shared/runtimeTurnContextPacket.ts";
 import {
   DEFAULT_RUNTIME_KERNEL_BUDGET,
 } from "../shared/runtimeKernelTypes.ts";
@@ -158,8 +159,7 @@ function provePromptGuidance() {
     customCommunitySystemPrompt: null,
     projectLabel: null,
     projectDescription: null,
-    threadWorkingState: null,
-    activeBackgroundTerminals: null,
+    runtimeTurnContext: buildRuntimeTurnContextPacket({}),
   });
   assert.match(prompt, /Use product documentation tools for canonical Polynet definitions/);
   assert.match(prompt, /Search product docs first; read the matching doc/);

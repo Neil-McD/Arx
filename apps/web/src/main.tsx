@@ -14,6 +14,7 @@ type ErrorBoundaryState = {
   isRecoveringModuleLoad: boolean;
 };
 
+const APP_BUILD_ID = String(__POLYNET_BUILD_ID__ ?? "unknown").trim() || "unknown";
 const MODULE_LOAD_RECOVERY_KEY = "polynet-module-load-recovery";
 const MODULE_LOAD_RECOVERY_WINDOW_MS = 30_000;
 const MODULE_LOAD_ERROR_PATTERNS = [
@@ -24,6 +25,16 @@ const MODULE_LOAD_ERROR_PATTERNS = [
   "unable to preload css",
   "chunkloaderror",
 ];
+
+type ModuleLoadRecoveryMarker = {
+  target?: unknown;
+  at?: unknown;
+  buildId?: unknown;
+};
+
+type ServedVersionPayload = {
+  buildId?: unknown;
+};
 
 function readErrorMessage(error: unknown): string {
   if (error instanceof Error) {
@@ -50,6 +61,7 @@ function currentRecoveryTarget(): string {
 function buildModuleLoadRecoveryExtras(error: unknown): Record<string, unknown> {
   return {
     recoveryTarget: currentRecoveryTarget(),
+    appBuildId: APP_BUILD_ID,
     errorMessage: readErrorMessage(error) || null,
   };
 }
@@ -58,10 +70,12 @@ function shouldAttemptModuleReload(): boolean {
   try {
     const raw = sessionStorage.getItem(MODULE_LOAD_RECOVERY_KEY);
     if (!raw) return true;
-    const parsed = JSON.parse(raw) as { target?: unknown; at?: unknown } | null;
+    const parsed = JSON.parse(raw) as ModuleLoadRecoveryMarker | null;
     const target = String(parsed?.target ?? "").trim();
+    const buildId = String(parsed?.buildId ?? "").trim();
     const at = Number(parsed?.at ?? 0);
     if (!target || !Number.isFinite(at)) return true;
+    if (buildId !== APP_BUILD_ID) return true;
     if (target !== currentRecoveryTarget()) return true;
     return Math.max(0, Date.now() - at) > MODULE_LOAD_RECOVERY_WINDOW_MS;
   } catch {
@@ -76,6 +90,7 @@ function markModuleReloadAttempt(): void {
       JSON.stringify({
         target: currentRecoveryTarget(),
         at: Date.now(),
+        buildId: APP_BUILD_ID,
       }),
     );
   } catch {
@@ -91,14 +106,42 @@ function clearModuleReloadAttempt(): void {
   }
 }
 
+function buildVersionProbeUrl(): string {
+  const base = String(import.meta.env.BASE_URL ?? "/").replace(/\/?$/, "/");
+  const url = new URL(`${base}version.json`, window.location.origin);
+  url.searchParams.set("t", String(Date.now()));
+  return url.toString();
+}
+
+async function readServedBuildId(): Promise<string | null> {
+  try {
+    const response = await fetch(buildVersionProbeUrl(), {
+      cache: "no-store",
+      credentials: "same-origin",
+    });
+    if (!response.ok) return null;
+    const payload = (await response.json()) as ServedVersionPayload;
+    const buildId = String(payload?.buildId ?? "").trim();
+    return buildId || null;
+  } catch {
+    return null;
+  }
+}
+
+async function reloadAfterVersionProbe(): Promise<void> {
+  const servedBuildId = await readServedBuildId();
+  const delayMs = servedBuildId && servedBuildId !== APP_BUILD_ID ? 0 : 100;
+  window.setTimeout(() => {
+    window.location.reload();
+  }, delayMs);
+}
+
 function attemptModuleLoadRecovery(error: unknown): boolean {
   if (typeof window === "undefined") return false;
   if (!isLikelyModuleLoadFailure(error)) return false;
   if (!shouldAttemptModuleReload()) return false;
   markModuleReloadAttempt();
-  window.setTimeout(() => {
-    window.location.reload();
-  }, 0);
+  void reloadAfterVersionProbe();
   return true;
 }
 
@@ -150,12 +193,38 @@ class ErrorBoundary extends React.Component<
     if (this.state.isRecoveringModuleLoad) {
       return (
         <div
-          aria-hidden="true"
           style={{
+            display: "grid",
+            placeItems: "center",
             minHeight: "100vh",
             background: "#111113",
+            color: "rgba(245,245,247,0.92)",
+            fontFamily: "ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif",
+            padding: 24,
           }}
-        />
+        >
+          <div style={{ maxWidth: 360 }}>
+            <div style={{ fontSize: 15, fontWeight: 650 }}>Updating Polynet</div>
+            <p style={{ margin: "8px 0 0", color: "rgba(245,245,247,0.62)", lineHeight: 1.45 }}>
+              The app loaded stale files from a previous deploy. Refreshing should restore the latest version.
+            </p>
+            <button
+              style={{
+                marginTop: 16,
+                padding: "8px 12px",
+                borderRadius: 10,
+                border: "1px solid rgba(255,255,255,0.12)",
+                background: "rgba(255,255,255,0.08)",
+                color: "rgba(245,245,247,0.92)",
+                cursor: "pointer",
+              }}
+              onClick={() => window.location.reload()}
+              type="button"
+            >
+              Refresh
+            </button>
+          </div>
+        </div>
       );
     }
 

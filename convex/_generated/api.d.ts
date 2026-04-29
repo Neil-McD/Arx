@@ -102,6 +102,7 @@ import type * as runtimeMcpManager from "../runtimeMcpManager.js";
 import type * as runtimeMountedToolExposure from "../runtimeMountedToolExposure.js";
 import type * as runtimeReasoningSummaryEvents from "../runtimeReasoningSummaryEvents.js";
 import type * as runtimeSkillResolution from "../runtimeSkillResolution.js";
+import type * as runtimeTurnContext from "../runtimeTurnContext.js";
 import type * as runtimeTurnHandlers from "../runtimeTurnHandlers.js";
 import type * as runtimeTurnPersistence from "../runtimeTurnPersistence.js";
 import type * as runtimeTurnResolution from "../runtimeTurnResolution.js";
@@ -223,6 +224,7 @@ declare const fullApi: ApiFromModules<{
   runtimeMountedToolExposure: typeof runtimeMountedToolExposure;
   runtimeReasoningSummaryEvents: typeof runtimeReasoningSummaryEvents;
   runtimeSkillResolution: typeof runtimeSkillResolution;
+  runtimeTurnContext: typeof runtimeTurnContext;
   runtimeTurnHandlers: typeof runtimeTurnHandlers;
   runtimeTurnPersistence: typeof runtimeTurnPersistence;
   runtimeTurnResolution: typeof runtimeTurnResolution;

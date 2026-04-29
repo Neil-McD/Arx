@@ -1,4 +1,5 @@
 import { api, internal } from "./_generated/api";
+import type { RuntimeTurnContextSnapshotV1 } from "../shared/runtimeTurnContextPacket";
 
 type RuntimeLane = "public" | "platform" | "daytona" | "chatgpt";
 type RuntimeInferenceSource = "free" | "platform" | "user_key" | "chatgpt";
@@ -149,6 +150,7 @@ export function buildRuntimeRunPersistenceHelpers(params: {
     reason?: string;
     errorCode?: string;
     errorMessage?: string;
+    contextSnapshot?: RuntimeTurnContextSnapshotV1 | null;
   }) => Promise<void>;
   touchRunHeartbeatBestEffort: () => Promise<void>;
 } {
@@ -173,7 +175,25 @@ export function buildRuntimeRunPersistenceHelpers(params: {
     reason?: string;
     errorCode?: string;
     errorMessage?: string;
+    contextSnapshot?: RuntimeTurnContextSnapshotV1 | null;
   }): Promise<void> => {
+    if (finish.contextSnapshot) {
+      try {
+        await params.ctx.runMutation(
+          (internal as any).threads.setCloudRuntimeRunContextSnapshotInternal as any,
+          {
+            ownerId: params.userId,
+            threadId: params.threadId,
+            runId: params.runId,
+            phase: "finished",
+            snapshot: finish.contextSnapshot,
+            nowMs: Date.now(),
+          },
+        );
+      } catch {
+        // Best-effort audit snapshot; finishing the run is the primary state transition.
+      }
+    }
     try {
       await params.ctx.runMutation((api as any).threads.finishCloudRuntimeRun as any, {
         ownerId: params.userId,

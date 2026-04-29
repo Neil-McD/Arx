@@ -29,9 +29,13 @@ import {
   stopWorkspaceTerminalProcess,
   summarizeWorkspaceTerminalRow,
   type WorkspaceTerminalHealthStatus,
+  type WorkspaceTerminalPreviewInspectionStatus,
+  type WorkspaceTerminalPreviewRenderStatus,
   type WorkspaceTerminalLifecycleOwner,
   type WorkspaceTerminalPreviewStatus,
+  type WorkspaceTerminalPreviewTransportStatus,
 } from "./workspaceTerminalProcessCore";
+import { classifyRuntimePreviewProbe } from "../shared/runtimePreviewProbe";
 
 const PROJECT_TERMINAL_RECONCILE_FRESH_MS = 8_000;
 const RECENT_TERMINAL_FAILURE_VISIBLE_MS = 5 * 60_000;
@@ -63,6 +67,9 @@ type WorkspaceTerminalSummary = {
   last_preview_probe_summary: string | null;
   last_browser_observation_at: number | null;
   last_browser_observation_summary: string | null;
+  preview_transport_status: WorkspaceTerminalPreviewTransportStatus | null;
+  preview_inspection_status: WorkspaceTerminalPreviewInspectionStatus | null;
+  preview_render_status: WorkspaceTerminalPreviewRenderStatus | null;
 };
 
 const workspaceTerminalLifecycleOwnerValidator = v.union(
@@ -88,6 +95,27 @@ const workspaceTerminalPreviewStatusValidator = v.union(
   v.literal("server_exited"),
 );
 
+const workspaceTerminalPreviewTransportStatusValidator = v.union(
+  v.literal("not_started"),
+  v.literal("loading"),
+  v.literal("loaded"),
+  v.literal("failed"),
+);
+
+const workspaceTerminalPreviewInspectionStatusValidator = v.union(
+  v.literal("not_attempted"),
+  v.literal("same_origin_dom"),
+  v.literal("cross_origin_uninspectable"),
+  v.literal("dom_unavailable"),
+);
+
+const workspaceTerminalPreviewRenderStatusValidator = v.union(
+  v.literal("unknown"),
+  v.literal("visible_content"),
+  v.literal("blank_suspected"),
+  v.literal("transport_error"),
+);
+
 function normalizeOptionalString(value: unknown): string | null {
   const normalized = String(value ?? "").trim();
   return normalized || null;
@@ -107,6 +135,61 @@ function isTerminalActiveStatus(status: string | null | undefined): boolean {
 
 function summarizeTerminalRow(row: any): WorkspaceTerminalSummary {
   return summarizeWorkspaceTerminalRow(row) as WorkspaceTerminalSummary;
+}
+
+async function probeWorkspaceTerminalPreviewUrl(
+  previewUrl: string,
+): Promise<{
+  previewStatus: WorkspaceTerminalPreviewStatus;
+  previewTransportStatus: WorkspaceTerminalPreviewTransportStatus;
+  previewRenderStatus: WorkspaceTerminalPreviewRenderStatus;
+  previewProbeSummary: string;
+}> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 3_000);
+  try {
+    const response = await fetch(previewUrl, {
+      method: "GET",
+      redirect: "follow",
+      signal: controller.signal,
+      headers: {
+        accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+      },
+    });
+    const contentType = response.headers.get("content-type");
+    const bodySnippet = await response.text().then(
+      (text) => text.slice(0, 2_000),
+      () => "",
+    );
+    const classified = classifyRuntimePreviewProbe({
+      ok: response.ok,
+      status: response.status,
+      finalUrl: response.url,
+      contentType,
+      bodySnippet,
+    });
+    return {
+      previewStatus: classified.previewStatus,
+      previewTransportStatus: classified.transportStatus,
+      previewRenderStatus: classified.renderStatus,
+      previewProbeSummary: classified.summary,
+    };
+  } catch (error) {
+    const classified = classifyRuntimePreviewProbe({
+      ok: false,
+      status: null,
+      error: error instanceof Error ? error.message : String(error),
+      timedOut: error instanceof Error && error.name === "AbortError",
+    });
+    return {
+      previewStatus: classified.previewStatus,
+      previewTransportStatus: classified.transportStatus,
+      previewRenderStatus: classified.renderStatus,
+      previewProbeSummary: classified.summary,
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 function buildTerminalSnapshot(rows: any[]): {
@@ -284,6 +367,9 @@ export const createWorkspaceTerminalSessionInternal = internalMutation({
     lastPreviewProbeSummary: v.optional(v.string()),
     lastBrowserObservationAt: v.optional(v.number()),
     lastBrowserObservationSummary: v.optional(v.string()),
+    previewTransportStatus: v.optional(workspaceTerminalPreviewTransportStatusValidator),
+    previewInspectionStatus: v.optional(workspaceTerminalPreviewInspectionStatusValidator),
+    previewRenderStatus: v.optional(workspaceTerminalPreviewRenderStatusValidator),
   },
   handler: async (ctx, args) => {
     const id = await ctx.db.insert("workspaceTerminalSessions", args);
@@ -395,6 +481,9 @@ export const updateWorkspaceTerminalSessionInternal = internalMutation({
     lastPreviewProbeSummary: v.optional(v.string()),
     lastBrowserObservationAt: v.optional(v.number()),
     lastBrowserObservationSummary: v.optional(v.string()),
+    previewTransportStatus: v.optional(workspaceTerminalPreviewTransportStatusValidator),
+    previewInspectionStatus: v.optional(workspaceTerminalPreviewInspectionStatusValidator),
+    previewRenderStatus: v.optional(workspaceTerminalPreviewRenderStatusValidator),
   },
   handler: async (ctx, args) => {
     const row = await ctx.db.get(args.terminalSessionId);
@@ -416,6 +505,9 @@ export const updateWorkspaceTerminalSessionInternal = internalMutation({
     if (args.lastPreviewProbeSummary !== undefined) patch.lastPreviewProbeSummary = args.lastPreviewProbeSummary;
     if (args.lastBrowserObservationAt !== undefined) patch.lastBrowserObservationAt = args.lastBrowserObservationAt;
     if (args.lastBrowserObservationSummary !== undefined) patch.lastBrowserObservationSummary = args.lastBrowserObservationSummary;
+    if (args.previewTransportStatus !== undefined) patch.previewTransportStatus = args.previewTransportStatus;
+    if (args.previewInspectionStatus !== undefined) patch.previewInspectionStatus = args.previewInspectionStatus;
+    if (args.previewRenderStatus !== undefined) patch.previewRenderStatus = args.previewRenderStatus;
     await ctx.db.patch(args.terminalSessionId, patch);
     return await ctx.db.get(args.terminalSessionId);
   },
@@ -817,7 +909,7 @@ export const getWorkspaceTerminalPreviewUrl = action({
       touchProjectBackground: true,
     });
     if (!sandbox.ok) return sandbox;
-    return await resolveWorkspaceTerminalPreview({
+    const preview = await resolveWorkspaceTerminalPreview({
       row,
       session: {
         config: sandbox.config,
@@ -830,6 +922,32 @@ export const getWorkspaceTerminalPreviewUrl = action({
       workspaceMismatchMessage:
         "Preview terminal is not attached to this workspace session.",
     });
+    if (preview.ok === true) {
+      const previewUrl = String(preview.preview_url ?? "").trim();
+      if (previewUrl) {
+        const probe = await probeWorkspaceTerminalPreviewUrl(previewUrl);
+        const nowMs = Date.now();
+        await ctx.runMutation(
+          internal.workspaceTerminals.updateWorkspaceTerminalSessionInternal as any,
+          {
+            terminalSessionId: row._id,
+            updatedAt: nowMs,
+            previewStatus: probe.previewStatus,
+            lastPreviewProbeAt: nowMs,
+            lastPreviewProbeSummary: probe.previewProbeSummary,
+            previewTransportStatus: probe.previewTransportStatus,
+            previewRenderStatus: probe.previewRenderStatus,
+          },
+        );
+        return {
+          ...preview,
+          preview_probe_summary: probe.previewProbeSummary,
+          preview_transport_status: probe.previewTransportStatus,
+          preview_render_status: probe.previewRenderStatus,
+        };
+      }
+    }
+    return preview;
   },
 });
 
@@ -841,6 +959,9 @@ export const recordWorkspaceTerminalPreviewObservation = action({
     previewStatus: v.optional(workspaceTerminalPreviewStatusValidator),
     previewProbeSummary: v.optional(v.string()),
     browserObservationSummary: v.optional(v.string()),
+    previewTransportStatus: v.optional(workspaceTerminalPreviewTransportStatusValidator),
+    previewInspectionStatus: v.optional(workspaceTerminalPreviewInspectionStatusValidator),
+    previewRenderStatus: v.optional(workspaceTerminalPreviewRenderStatusValidator),
   },
   handler: async (ctx, args): Promise<unknown> => {
     const access = await resolveTerminalAccess({
@@ -860,6 +981,9 @@ export const recordWorkspaceTerminalPreviewObservation = action({
       lastPreviewProbeSummary?: string;
       lastBrowserObservationAt?: number;
       lastBrowserObservationSummary?: string;
+      previewTransportStatus?: WorkspaceTerminalPreviewTransportStatus;
+      previewInspectionStatus?: WorkspaceTerminalPreviewInspectionStatus;
+      previewRenderStatus?: WorkspaceTerminalPreviewRenderStatus;
     } = {
       terminalSessionId: args.terminalSessionId,
       updatedAt: nowMs,
@@ -881,6 +1005,15 @@ export const recordWorkspaceTerminalPreviewObservation = action({
     if (browserObservationSummary) {
       patch.lastBrowserObservationAt = nowMs;
       patch.lastBrowserObservationSummary = browserObservationSummary;
+    }
+    if (args.previewTransportStatus !== undefined) {
+      patch.previewTransportStatus = args.previewTransportStatus;
+    }
+    if (args.previewInspectionStatus !== undefined) {
+      patch.previewInspectionStatus = args.previewInspectionStatus;
+    }
+    if (args.previewRenderStatus !== undefined) {
+      patch.previewRenderStatus = args.previewRenderStatus;
     }
 
     const updated: any = await ctx.runMutation(

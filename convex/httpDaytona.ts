@@ -70,6 +70,7 @@ import {
   type RuntimeCommunityPromptFields,
   type ThreadWorkingStatePrompt,
 } from "../shared/runtimePrompt";
+import { loadRuntimeTurnContextPacketForRun } from "./runtimeTurnContext";
 import { createRuntimeReasoningSummaryEmitter } from "./runtimeReasoningSummaryEvents";
 import { parseProviderModelRef } from "./httpInferenceConfig";
 import { runOpenAiNativeToolCompletion } from "./openAiNativeToolCompletion";
@@ -627,18 +628,6 @@ async function executeRetrievalAgentLoop(
     timeStyle: "long",
     timeZone: runtimeTimeZone,
   }).format(now);
-  const terminalSnapshot =
-    params.projectId && params.allowedToolNames.includes("terminal_start")
-      ? await params.ctx.runAction(
-          internal.workspaceTerminals
-            .reconcileProjectWorkspaceTerminalsInternal as any,
-          {
-            ownerId: params.userId,
-            projectId: params.projectId,
-          },
-        )
-      : { active: [] };
-
   const mountedUserPlatformAppTools = normalizeRuntimeMountedUserPlatformAppTools(
     await params.ctx.runQuery(
       internal.userPlatformAppMounts.listRuntimeUserPlatformMountedToolsInternal,
@@ -742,6 +731,19 @@ async function executeRetrievalAgentLoop(
       } | null,
   });
 
+  const latestUserTextForRuntimeContext =
+    [...params.messages].reverse().find((message) => message.role === "user")
+      ?.content ?? null;
+  const runtimeTurnContext = (
+    await loadRuntimeTurnContextPacketForRun({
+      ctx: params.ctx,
+      ownerId: params.userId,
+      projectId: params.projectId ?? null,
+      runId: params.runId,
+      latestUserText: latestUserTextForRuntimeContext,
+      threadWorkingState: params.threadWorkingState,
+    })
+  ).packet;
   const baseSystemPrompt = buildWorkspaceRuntimeSystemPrompt({
     loopBudget: params.loopBudget,
     allowedToolNames: params.allowedToolNames,
@@ -754,54 +756,7 @@ async function executeRetrievalAgentLoop(
     customCommunitySystemPrompt: params.communitySystemPrompt,
     projectLabel: projectContext.label,
     projectDescription: projectContext.description,
-    threadWorkingState: params.threadWorkingState,
-    activeBackgroundTerminals: Array.isArray(terminalSnapshot?.active)
-      ? terminalSnapshot.active.map((terminal: any) => ({
-          id: String(terminal?.id ?? "").trim(),
-          status: terminal?.status,
-          lifecycleOwner: "project_background",
-          command: String(terminal?.command ?? "").trim(),
-          cwd: typeof terminal?.cwd === "string" ? terminal.cwd : null,
-          previewPort:
-            typeof terminal?.preview_port === "number"
-              ? terminal.preview_port
-              : null,
-          previewPath:
-            typeof terminal?.preview_path === "string"
-              ? terminal.preview_path
-              : null,
-          previewLabel:
-            typeof terminal?.preview_label === "string"
-              ? terminal.preview_label
-              : null,
-          previewStatus:
-            typeof terminal?.preview_status === "string"
-              ? terminal.preview_status
-              : null,
-          healthStatus:
-            typeof terminal?.health_status === "string"
-              ? terminal.health_status
-              : null,
-          healthSummary:
-            typeof terminal?.health_summary === "string"
-              ? terminal.health_summary
-              : null,
-          lastPreviewProbeSummary:
-            typeof terminal?.last_preview_probe_summary === "string"
-              ? terminal.last_preview_probe_summary
-              : null,
-          lastBrowserObservationSummary:
-            typeof terminal?.last_browser_observation_summary === "string"
-              ? terminal.last_browser_observation_summary
-              : null,
-          outputTail:
-            typeof terminal?.output_tail === "string"
-              ? terminal.output_tail
-              : null,
-          exitCode:
-            typeof terminal?.exit_code === "number" ? terminal.exit_code : null,
-        }))
-      : [],
+    runtimeTurnContext,
     currentDateTimeIso: runtimeDateTimeIso,
     currentDateLabel: runtimeDateLabel,
     currentTimeZone: runtimeTimeZone,

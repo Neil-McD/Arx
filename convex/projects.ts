@@ -14,7 +14,7 @@ import {
 } from "./daytonaSandboxClient";
 import {
   createWorkspaceSandboxSession,
-  cleanupWorkspaceSandboxSession,
+  cleanupTemporaryWorkspaceSandboxSession,
   type WorkspaceSandboxSession,
 } from "./daytonaWorkspaceSession";
 import { executeDaytonaCommand } from "./daytonaToolboxExecutor";
@@ -1222,13 +1222,12 @@ export const importCloudProjectZipForOwner = action({
       };
     } finally {
       if (session) {
-        await cleanupWorkspaceSandboxSession({
+        await cleanupTemporaryWorkspaceSandboxSession({
           ctx,
           userId,
           session,
           runId,
           projectId: args.projectId,
-          appendRunEvent: async () => {},
         });
       }
       try {

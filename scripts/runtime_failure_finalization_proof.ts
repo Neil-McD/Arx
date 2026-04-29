@@ -16,6 +16,12 @@ function assertNotContains(haystack: string, needle: string, label: string): voi
 }
 
 const handler = readText("/Users/neilmcdevitt/code/arx/convex/runtimeTurnHandlers.ts");
+const runtimeTurnContextLoader = readText(
+  "/Users/neilmcdevitt/code/arx/convex/runtimeTurnContext.ts",
+);
+const runtimeTurnState = readText(
+  "/Users/neilmcdevitt/code/arx/convex/httpRuntimeTurnState.ts",
+);
 const finalizer = readText("/Users/neilmcdevitt/code/arx/shared/runtimeFailureFinalizer.ts");
 
 assertContains(
@@ -30,28 +36,78 @@ assertContains(
 );
 assertContains(
   handler,
-  "internal.threads.listRuntimeRunEventsByOwnerRunIdInternal",
-  "runtime handler loads current run events before fallback finalization",
+  'import { loadRuntimeTurnContextPacketForRun } from "./runtimeTurnContext";',
+  "runtime handler imports canonical context loader",
 );
 assertContains(
   handler,
-  "summarizeRuntimeWorkingStateFromEvents({",
-  "runtime handler summarizes current run events for fallback finalization",
+  "const loadedFailureContext = await loadRuntimeTurnContextPacketForRun({",
+  "runtime handler loads canonical failure context",
 );
 assertContains(
   handler,
-  "reconcileProjectWorkspaceTerminalsInternal",
-  "runtime handler reads terminal ledger before fallback finalization",
+  "buildRuntimeTurnContextSnapshot({",
+  "runtime handler snapshots canonical context at run finish",
 );
 assertContains(
   handler,
-  "activeBackgroundTerminals: activeBackgroundTerminalsForFinalizer",
-  "runtime handler passes terminal ledger truth to finalizer",
+  'phase: "started"',
+  "runtime handler persists run-start context snapshot",
 );
 assertContains(
   handler,
-  "workingState: workingStateForFinalizer",
-  "runtime handler passes current failure working state to finalizer",
+  'persistContextSnapshotBestEffort("active")',
+  "runtime handler can refresh active-turn context snapshots during a run",
+);
+assertContains(
+  runtimeTurnState,
+  'phase: "finished"',
+  "runtime handler persists run-finish context snapshot",
+);
+assertContains(
+  handler,
+  "refreshActiveContextSnapshotAfterEventBestEffort",
+  "runtime handler refreshes active context from meaningful run events",
+);
+assertContains(
+  handler,
+  'eventType !== "tool_call_finished"',
+  "runtime handler limits active context refresh to meaningful event types",
+);
+assertContains(
+  handler,
+  "contextSnapshot",
+  "runtime handler passes context snapshot through finish persistence",
+);
+assertContains(
+  handler,
+  "summarizeCurrentRunEvents: true",
+  "runtime handler asks loader to summarize current run evidence",
+);
+assertContains(
+  handler,
+  "failureContextPacket = loadedFailureContext.packet",
+  "runtime handler uses loader-built packet",
+);
+assertContains(
+  handler,
+  "runtimeTurnContext: failureContextPacket",
+  "runtime handler passes canonical packet to emergency fallback",
+);
+assertNotContains(
+  handler,
+  "const failureContextPacket = buildRuntimeTurnContextPacket({",
+  "runtime handler should not hand-build failure packets",
+);
+assertContains(
+  handler,
+  "runtimeTurnContext: failureContextPacket",
+  "runtime handler passes canonical packet to adaptive finalizer",
+);
+assertContains(
+  handler,
+  "renderRuntimeTurnContextForFailureFinalizer(params.runtimeTurnContext)",
+  "adaptive finalizer renders the canonical packet",
 );
 assertContains(
   handler,
@@ -64,21 +120,88 @@ assertNotContains(
   "generic stopped fallback in runtime handler",
 );
 
+assertContains(
+  runtimeTurnContextLoader,
+  "internal.threads.listRuntimeRunEventsByOwnerRunIdInternal",
+  "canonical loader loads current run events",
+);
+assertContains(
+  runtimeTurnContextLoader,
+  "summarizeRuntimeWorkingStateFromEvents({",
+  "canonical loader summarizes current run events",
+);
+assertContains(
+  runtimeTurnContextLoader,
+  "mergeRuntimeWorkingStateTaskLedger({",
+  "canonical loader preserves active task ledger while adding current-run evidence",
+);
+assertContains(
+  runtimeTurnContextLoader,
+  "previous: params.fallbackWorkingState",
+  "canonical loader uses thread working state as task-ledger continuity",
+);
+assertContains(
+  runtimeTurnContextLoader,
+  "reconcileProjectWorkspaceTerminalsInternal",
+  "canonical loader reads terminal ledger",
+);
+assertContains(
+  runtimeTurnContextLoader,
+  "mapRuntimeWorkspaceTerminalPrompt",
+  "canonical loader maps terminal rows for prompt/finalizer context",
+);
+
+assertContains(
+  finalizer,
+  "buildTinyEmergencyFallback",
+  "failure finalizer keeps a tiny emergency fallback",
+);
+assertContains(
+  finalizer,
+  "selectLiveTerminal",
+  "failure finalizer still preserves live-process awareness in emergency fallback",
+);
+assertContains(
+  finalizer,
+  "runtimeTurnContext?: RuntimeTurnContextPacket | null",
+  "failure finalizer accepts canonical runtime context packet",
+);
+assertContains(
+  finalizer,
+  "input.runtimeTurnContext",
+  "failure finalizer derives terminal truth from packet",
+);
+assertNotContains(
+  finalizer,
+  "activeBackgroundTerminals?:",
+  "failure finalizer should not accept direct terminal arrays",
+);
+assertNotContains(
+  handler,
+  "activeBackgroundTerminals:",
+  "runtime handler should not pass direct terminal arrays to finalizer",
+);
+assertNotContains(
+  finalizer,
+  "legacy_detailed_runtime_failure",
+  "legacy detailed failure mode",
+);
+assertNotContains(
+  finalizer,
+  "Run stopped before completing.",
+  "legacy fixed failure title",
+);
 for (const token of [
   "What happened:",
   "Verified so far:",
   "Changed/touched:",
   "Blocker:",
   "Next action:",
-  "verifiedFindings",
-  "filesChanged",
-  "recentActions",
-  "nextAction",
-  "activeBackgroundTerminals",
-  "selectLiveTerminal",
+  "formatLiveTerminalResult",
   "buildLiveTerminalBlocker",
+  "buildLiveTerminalNextAction",
 ]) {
-  assertContains(finalizer, token, `failure finalizer uses ${token}`);
+  assertNotContains(finalizer, token, `legacy deterministic finalizer token ${token}`);
 }
 
 const currentRunState = summarizeRuntimeWorkingStateFromEvents({
@@ -110,55 +233,56 @@ const output = buildRuntimeFailureFinalAnswer({
   reason: "tool_failed",
   errorCode: "workspace_tool_execute_failed",
   errorMessage: "Daytona toolbox command failed (408)",
-  workingState: currentRunState,
 });
 
 assert.equal(output.usedFallback, true);
-assertContains(output.content, "What happened:", "rendered what happened section");
-assertContains(output.content, "Verified so far:", "rendered verified section");
-assertContains(output.content, "src/App.tsx", "rendered touched file");
-assertContains(output.content, "Daytona toolbox command failed (408)", "rendered blocker");
-assertContains(output.content, "Inspect the bash failure", "rendered next action");
+assert.equal(
+  output.content,
+  "I hit a runtime stop before I could finish. Runtime note: Daytona toolbox command failed (408)",
+);
 
 const processAwareOutput = buildRuntimeFailureFinalAnswer({
   status: "error",
   reason: "tool_failed",
   errorCode: "workspace_tool_execute_failed",
   errorMessage: "Daytona command failed with exit code 127.",
-  workingState: currentRunState,
-  activeBackgroundTerminals: [
-    {
-      id: "terminal_1",
-      status: "running",
-      lifecycleOwner: "project_background",
-      command: "npm run dev -- --port 3000",
-      previewPort: 3000,
-      previewStatus: "blank",
-      healthStatus: "healthy",
-      lastBrowserObservationSummary: "Preview iframe loaded a blank white document.",
-    },
-  ],
+  runtimeTurnContext: {
+    activeBackgroundTerminals: [
+      {
+        id: "terminal_1",
+        status: "running",
+        lifecycleOwner: "project_background",
+        command: "npm run dev -- --port 3000",
+        previewPort: 3000,
+        previewStatus: "blank",
+        previewTransportStatus: "loaded",
+        previewInspectionStatus: "same_origin_dom",
+        previewRenderStatus: "blank_suspected",
+        healthStatus: "healthy",
+        lastBrowserObservationSummary: "Preview iframe loaded a blank white document.",
+      },
+    ],
+  },
 });
 assertContains(
   processAwareOutput.content,
-  "background terminal is still running",
-  "finalizer prefers live terminal truth",
+  "background process still appears to be running",
+  "emergency fallback preserves live terminal truth",
 );
 assertContains(
   processAwareOutput.content,
-  "preview needs browser/render inspection",
-  "finalizer avoids generic bash failure blocker when process is live",
+  "render=blank_suspected",
+  "emergency fallback preserves packet preview render truth",
 );
-assertContains(
+assertNotContains(
   processAwareOutput.content,
-  "Inspect the active preview",
-  "finalizer recommends preview/browser loop",
+  "What happened:",
+  "emergency fallback does not resurrect deterministic ledger sections",
 );
 
 const partial = buildRuntimeFailureFinalAnswer({
   status: "cancelled",
   partialContent: "Already explained partial state.",
-  workingState: null,
 });
 assert.equal(partial.usedFallback, false);
 assert.equal(partial.content, "Already explained partial state.");

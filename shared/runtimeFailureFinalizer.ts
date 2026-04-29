@@ -1,12 +1,9 @@
-import type {
-  RuntimeWorkspaceTerminalPrompt,
-  ThreadWorkingStatePrompt,
-} from "./runtimePrompt";
+import type { RuntimeWorkspaceTerminalPrompt } from "./runtimePrompt";
+import type { RuntimeTurnContextPacket } from "./runtimeTurnContextPacket";
 
 export type RuntimeFailureFinalizerInput = {
   partialContent?: string | null;
-  workingState?: ThreadWorkingStatePrompt | null;
-  activeBackgroundTerminals?: RuntimeWorkspaceTerminalPrompt[] | null;
+  runtimeTurnContext?: RuntimeTurnContextPacket | null;
   status: "error" | "cancelled";
   reason?: string | null;
   errorCode?: string | null;
@@ -24,30 +21,14 @@ function normalizeLine(value: unknown, maxLen = 260): string | null {
   return normalized.length > maxLen ? `${normalized.slice(0, maxLen - 1).trimEnd()}...` : normalized;
 }
 
-function normalizeList(values: unknown, maxItems: number, maxLen = 220): string[] {
-  if (!Array.isArray(values)) return [];
-  const out: string[] = [];
-  for (const value of values) {
-    const normalized = normalizeLine(value, maxLen);
-    if (!normalized || out.includes(normalized)) continue;
-    out.push(normalized);
-    if (out.length >= maxItems) break;
-  }
-  return out;
-}
-
-function formatList(values: string[], fallback: string): string {
-  if (values.length === 0) return `- ${fallback}`;
-  return values.map((value) => `- ${value}`).join("\n");
-}
-
 function buildTinyEmergencyFallback(
   input: RuntimeFailureFinalizerInput,
 ): string {
-  const terminal = selectLiveTerminal(input.activeBackgroundTerminals);
+  const terminal = selectLiveTerminal(input.runtimeTurnContext);
   const terminalCopy = terminal
     ? " The background process still appears to be running."
     : "";
+  const previewCopy = buildPreviewTruthCopy(terminal);
   const reason =
     normalizeLine(input.errorMessage, 180) ??
     normalizeLine(input.errorCode, 120) ??
@@ -57,15 +38,16 @@ function buildTinyEmergencyFallback(
     input.status === "cancelled"
       ? "I stopped before I could finish."
       : "I hit a runtime stop before I could finish.",
-    `${terminalCopy}${reasonCopy}`.trim(),
+    `${terminalCopy}${previewCopy}${reasonCopy}`.trim(),
   ]
     .filter(Boolean)
     .join(" ");
 }
 
 function selectLiveTerminal(
-  terminals: RuntimeWorkspaceTerminalPrompt[] | null | undefined,
+  runtimeTurnContext: RuntimeTurnContextPacket | null | undefined,
 ): RuntimeWorkspaceTerminalPrompt | null {
+  const terminals = runtimeTurnContext?.activeBackgroundTerminals;
   if (!Array.isArray(terminals)) return null;
   return (
     terminals.find((terminal) => terminal?.status === "running") ??
@@ -74,60 +56,19 @@ function selectLiveTerminal(
   );
 }
 
-function formatLiveTerminalResult(
+function buildPreviewTruthCopy(
   terminal: RuntimeWorkspaceTerminalPrompt | null,
-): string | null {
-  if (!terminal) return null;
-  const command = normalizeLine(terminal.command, 140);
-  const health = normalizeLine(terminal.healthStatus, 80);
-  const preview = normalizeLine(terminal.previewStatus, 80);
-  const browserObservation = normalizeLine(
-    terminal.lastBrowserObservationSummary,
-    180,
-  );
-  const previewProbe = normalizeLine(terminal.lastPreviewProbeSummary, 180);
+): string {
+  if (!terminal) return "";
+  const previewProcessStatus = normalizeLine(terminal.previewStatus, 80);
+  const renderStatus = normalizeLine(terminal.previewRenderStatus, 80);
+  const inspectionStatus = normalizeLine(terminal.previewInspectionStatus, 100);
   const parts = [
-    `A background terminal is still ${terminal.status}`,
-    command ? `command: ${command}` : null,
-    health ? `health: ${health}` : null,
-    preview ? `preview: ${preview}` : null,
-    browserObservation ? `browser observation: ${browserObservation}` : null,
-    previewProbe ? `preview probe: ${previewProbe}` : null,
+    previewProcessStatus ? `preview_process=${previewProcessStatus}` : null,
+    renderStatus ? `render=${renderStatus}` : null,
+    inspectionStatus ? `inspection=${inspectionStatus}` : null,
   ].filter(Boolean);
-  return parts.join("; ") + ".";
-}
-
-function buildLiveTerminalBlocker(
-  terminal: RuntimeWorkspaceTerminalPrompt | null,
-  runStatus: RuntimeFailureFinalizerInput["status"],
-): string | null {
-  if (!terminal) return null;
-  const prefix =
-    runStatus === "cancelled"
-      ? "The run was cancelled"
-      : "The foreground diagnostic failed";
-  const preview = normalizeLine(terminal.previewStatus, 80);
-  if (preview === "blank" || preview === "render_error_suspected") {
-    return `${prefix}, but the background terminal is still running and the preview needs browser/render inspection.`;
-  }
-  if (preview === "running") {
-    return `${prefix}, but the background terminal and preview are still running.`;
-  }
-  return `${prefix}, but a background terminal is still running.`;
-}
-
-function buildLiveTerminalNextAction(
-  terminal: RuntimeWorkspaceTerminalPrompt | null,
-): string | null {
-  if (!terminal) return null;
-  const preview = normalizeLine(terminal.previewStatus, 80);
-  if (preview === "blank" || preview === "render_error_suspected") {
-    return "Inspect the active preview with browser/computer-use evidence, then debug frontend render, console, root mount, imports, or CSS before restarting the terminal.";
-  }
-  if (preview === "running") {
-    return "Keep the running background terminal, inspect the preview/browser state, and only rerun diagnostics that answer a specific remaining question.";
-  }
-  return "Read the running terminal output and process health before retrying or starting another terminal.";
+  return parts.length > 0 ? ` Preview truth: ${parts.join("; ")}.` : "";
 }
 
 export function buildRuntimeFailureFinalAnswer(
@@ -138,70 +79,8 @@ export function buildRuntimeFailureFinalAnswer(
     return { content: partialContent, usedFallback: false };
   }
 
-  if (input.errorCode !== "legacy_detailed_runtime_failure") {
-    return {
-      usedFallback: true,
-      content: buildTinyEmergencyFallback(input),
-    };
-  }
-
-  const workingState = input.workingState ?? null;
-  const liveTerminal = selectLiveTerminal(input.activeBackgroundTerminals);
-  const liveTerminalResult = formatLiveTerminalResult(liveTerminal);
-  const goal = normalizeLine(workingState?.goal, 180);
-  const status = normalizeLine(workingState?.status, 80);
-  const lastResult =
-    liveTerminalResult ?? normalizeLine(workingState?.lastResult, 260);
-  const blocker =
-    buildLiveTerminalBlocker(liveTerminal, input.status) ??
-    normalizeLine(workingState?.blocker, 260) ??
-    normalizeLine(workingState?.openIssue, 260) ??
-    normalizeLine(input.errorMessage, 260) ??
-    normalizeLine(input.errorCode, 160) ??
-    normalizeLine(input.reason, 160) ??
-    "The run stopped before it could complete.";
-  const nextAction =
-    buildLiveTerminalNextAction(liveTerminal) ??
-    normalizeLine(workingState?.nextAction, 240) ??
-    "Continue from the last verified state and retry the failed step if it is still needed.";
-  const verifiedFindings = normalizeList(workingState?.verifiedFindings, 4, 220);
-  const filesChanged = normalizeList(workingState?.filesChanged, 8, 180);
-  const recentActions = normalizeList(workingState?.recentActions, 6, 180);
-  const changedOrTouched =
-    filesChanged.length > 0
-      ? filesChanged
-      : recentActions.filter((action) => /read|wrote|edited|ran/i.test(action));
-
-  const whatHappened = [
-    input.status === "cancelled"
-      ? "The run was cancelled before it completed."
-      : "The run stopped before it completed.",
-    goal ? `Goal: ${goal}.` : null,
-    status ? `Ledger status: ${status}.` : null,
-    lastResult ? `Last result: ${lastResult}` : null,
-  ]
-    .filter(Boolean)
-    .join(" ");
-
   return {
     usedFallback: true,
-    content: [
-      "Run stopped before completing.",
-      "",
-      "What happened:",
-      `- ${whatHappened || "The runtime stopped before producing a final answer."}`,
-      "",
-      "Verified so far:",
-      formatList(verifiedFindings, "No verified findings were recorded before the stop."),
-      "",
-      "Changed/touched:",
-      formatList(changedOrTouched, "No changed or touched files were recorded before the stop."),
-      "",
-      "Blocker:",
-      `- ${blocker}`,
-      "",
-      "Next action:",
-      `- ${nextAction}`,
-    ].join("\n"),
+    content: buildTinyEmergencyFallback(input),
   };
 }

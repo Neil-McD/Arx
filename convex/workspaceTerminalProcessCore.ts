@@ -40,6 +40,24 @@ export type WorkspaceTerminalPreviewStatus =
   | "unreachable"
   | "server_exited";
 
+export type WorkspaceTerminalPreviewTransportStatus =
+  | "not_started"
+  | "loading"
+  | "loaded"
+  | "failed";
+
+export type WorkspaceTerminalPreviewInspectionStatus =
+  | "not_attempted"
+  | "same_origin_dom"
+  | "cross_origin_uninspectable"
+  | "dom_unavailable";
+
+export type WorkspaceTerminalPreviewRenderStatus =
+  | "unknown"
+  | "visible_content"
+  | "blank_suspected"
+  | "transport_error";
+
 export type WorkspaceTerminalStartArgs = {
   command: string;
   cwd: string | null;
@@ -509,6 +527,9 @@ export function summarizeWorkspaceTerminalRow(row: any): Record<string, unknown>
     last_browser_observation_summary: normalizeSummaryString(
       row?.lastBrowserObservationSummary,
     ),
+    preview_transport_status: normalizeOptionalString(row?.previewTransportStatus),
+    preview_inspection_status: normalizeOptionalString(row?.previewInspectionStatus),
+    preview_render_status: normalizeOptionalString(row?.previewRenderStatus),
   };
 }
 

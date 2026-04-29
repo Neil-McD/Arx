@@ -8,7 +8,7 @@
     "typecheck": "tsc --noEmit",
     "build": "vite build",
     "preview": "vite preview",
-    "check:bundle-budget": "bash ../../scripts/web_bundle_budget_check.sh apps/web"
+    "check:bundle-budget": "node ../../scripts/web_bundle_budget_check.mjs ."
   },
   "dependencies": {
     "@sentry/react": "^10.48.0",

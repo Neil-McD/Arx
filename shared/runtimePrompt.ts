@@ -1,11 +1,20 @@
 import { type RetrievalToolName } from "./retrievalTools.ts";
 import type { RuntimeKernelBudget } from "./runtimeKernelTypes";
+import {
+  renderRuntimeTurnContextForPrompt,
+  type RuntimeTurnContextPacket,
+} from "./runtimeTurnContextPacket.ts";
 
 export type ThreadWorkingStatePrompt = {
   version?: number | null;
   goal?: string | null;
   status?: "idle" | "in_progress" | "blocked" | "needs_verification" | "complete" | null;
   currentStep?: string | null;
+  plan?: string[] | null;
+  completedSteps?: string[] | null;
+  decisions?: string[] | null;
+  openQuestions?: string[] | null;
+  focusFiles?: string[] | null;
   lastResult?: string | null;
   verificationStatus?: "not_needed" | "needed" | "passed" | "failed" | null;
   filesTouched?: string[] | null;
@@ -60,6 +69,29 @@ export type RuntimeWorkspaceTerminalPrompt = {
   healthSummary?: string | null;
   lastPreviewProbeSummary?: string | null;
   lastBrowserObservationSummary?: string | null;
+  previewTransportStatus?: "not_started" | "loading" | "loaded" | "failed" | null;
+  previewInspectionStatus?:
+    | "not_attempted"
+    | "same_origin_dom"
+    | "cross_origin_uninspectable"
+    | "dom_unavailable"
+    | null;
+  previewRenderStatus?:
+    | "unknown"
+    | "visible_content"
+    | "blank_suspected"
+    | "transport_error"
+    | null;
+  previewDiagnosis?:
+    | "process_dead"
+    | "preview_unreachable"
+    | "transport_loaded_render_unknown"
+    | "cross_origin_uninspectable"
+    | "blank_suspected"
+    | "visible_content"
+    | "runtime_error_suspected"
+    | null;
+  recommendedPreviewDebugAction?: string | null;
   exitCode?: number | null;
   outputTail?: string | null;
 };
@@ -198,102 +230,6 @@ function buildToolContextPrompt(params: {
     .join("\n");
 }
 
-function buildThreadWorkingStatePrompt(params: {
-  threadWorkingState?: ThreadWorkingStatePrompt | null;
-}): string | null {
-  const filesChanged = Array.isArray(params.threadWorkingState?.filesChanged)
-    ? params.threadWorkingState?.filesChanged.filter((value) => typeof value === "string" && value.trim())
-    : [];
-  const filesTouched = Array.isArray(params.threadWorkingState?.filesTouched)
-    ? params.threadWorkingState?.filesTouched.filter((value) => typeof value === "string" && value.trim())
-    : [];
-  const verifiedFindings = Array.isArray(params.threadWorkingState?.verifiedFindings)
-    ? params.threadWorkingState?.verifiedFindings.filter((value) => typeof value === "string" && value.trim())
-    : [];
-  const recentActions = Array.isArray(params.threadWorkingState?.recentActions)
-    ? params.threadWorkingState?.recentActions.filter((value) => typeof value === "string" && value.trim())
-    : [];
-  const status = String(params.threadWorkingState?.status ?? "").trim();
-  const currentStep = String(params.threadWorkingState?.currentStep ?? "").trim();
-  const goal = String(params.threadWorkingState?.goal ?? "").trim();
-  const lastResult = String(params.threadWorkingState?.lastResult ?? "").trim();
-  const openIssue = String(params.threadWorkingState?.blocker ?? params.threadWorkingState?.openIssue ?? "").trim();
-  const nextAction = String(params.threadWorkingState?.nextAction ?? "").trim();
-  const verificationStatus = String(params.threadWorkingState?.verificationStatus ?? "").trim();
-  const lastDiagnostic = String(params.threadWorkingState?.lastDiagnostic ?? "").trim();
-  if (
-    !goal &&
-    !status &&
-    !currentStep &&
-    !lastResult &&
-    !openIssue &&
-    !nextAction &&
-    !verificationStatus &&
-    !lastDiagnostic &&
-    filesTouched.length === 0 &&
-    filesChanged.length === 0 &&
-    verifiedFindings.length === 0 &&
-    recentActions.length === 0
-  ) {
-    return null;
-  }
-  return [
-    "THREAD_WORKING_STATE",
-    `Goal: ${goal || "(none)"}`,
-    `Status: ${status || "(none)"}`,
-    `Current step: ${currentStep || "(none)"}`,
-    `Last verified result: ${lastResult || "(none)"}`,
-    `Verification: ${verificationStatus || "(none)"}`,
-    `Files touched: ${filesTouched.length > 0 ? filesTouched.join(", ") : "(none)"}`,
-    `Files changed: ${filesChanged.length > 0 ? filesChanged.join(", ") : "(none)"}`,
-    `Verified findings: ${verifiedFindings.length > 0 ? verifiedFindings.join(" | ") : "(none)"}`,
-    `Last diagnostic: ${lastDiagnostic || "(none)"}`,
-    `Recent actions: ${recentActions.length > 0 ? recentActions.join(" | ") : "(none)"}`,
-    `Blocker: ${openIssue || "(none)"}`,
-    `Next action: ${nextAction || "(none)"}`,
-    "Treat this as compact continuity from prior verified work. Re-read files when exact current contents matter.",
-  ].join("\n");
-}
-
-function buildWorkspaceProcessContextPrompt(params: {
-  activeBackgroundTerminals?: RuntimeWorkspaceTerminalPrompt[] | null;
-}): string | null {
-  const active = Array.isArray(params.activeBackgroundTerminals)
-    ? params.activeBackgroundTerminals.filter((row) => row && typeof row.command === "string")
-    : [];
-  if (active.length === 0) return null;
-  const lines: string[] = ["WORKSPACE_PROCESS_CONTEXT"];
-  if (active.length > 0) {
-    lines.push("Active background processes:");
-    for (const terminal of active.slice(0, 3)) {
-      const command = truncatePromptSnippet(terminal.command, 120) ?? "(unknown command)";
-      const cwd = truncatePromptSnippet(terminal.cwd, 80);
-      const tail = truncatePromptSnippet(terminal.outputTail, 140);
-      const lifecycleOwner = truncatePromptSnippet(terminal.lifecycleOwner, 40);
-      const healthStatus = truncatePromptSnippet(terminal.healthStatus, 40);
-      const healthSummary = truncatePromptSnippet(terminal.healthSummary, 120);
-      const previewStatus = truncatePromptSnippet(terminal.previewStatus, 60);
-      const previewParts = [
-        typeof terminal.previewPort === "number" ? `port=${terminal.previewPort}` : null,
-        terminal.previewPath ? `path=${truncatePromptSnippet(terminal.previewPath, 80)}` : null,
-        terminal.previewLabel ? `label=${truncatePromptSnippet(terminal.previewLabel, 80)}` : null,
-      ].filter(Boolean);
-      const previewProbe = truncatePromptSnippet(terminal.lastPreviewProbeSummary, 120);
-      const browserObservation = truncatePromptSnippet(terminal.lastBrowserObservationSummary, 120);
-      lines.push(
-        `- ${terminal.id}: ${terminal.status}${lifecycleOwner ? `; lifecycle=${lifecycleOwner}` : ""}${healthStatus ? `; health=${healthStatus}` : ""}${healthSummary ? `; health_summary=${healthSummary}` : ""}; command=${command}${cwd ? `; cwd=${cwd}` : ""}${previewStatus ? `; preview=${previewStatus}` : ""}${previewParts.length > 0 ? `; ${previewParts.join("; ")}` : ""}${browserObservation ? `; browser_observation=${browserObservation}` : ""}${previewProbe ? `; preview_probe=${previewProbe}` : ""}${tail ? `; recent_output=${tail}` : ""}`,
-      );
-    }
-  } else {
-    lines.push("Active background processes: none.");
-  }
-  lines.push(
-    "Treat active background process rows as canonical live workspace truth. Reuse an existing process when it is still relevant, and stop idle processes when the task no longer needs them.",
-    "If the process is still running but preview is blank or render_error_suspected, inspect frontend render/console/root-mount/import/CSS causes before restarting the terminal.",
-  );
-  return lines.join("\n");
-}
-
 function buildExplanationContractPrompt(): string {
   return [
     "EXPLANATION_CONTRACT",
@@ -420,6 +356,7 @@ function buildWorkspaceOperatingPolicyPrompt(params: {
       "- For a user-viewable app run, include preview metadata by default so the app can appear inline for the user while the terminal keeps running in the background.",
       "- For previewable apps, use one dense app shell that fits inline and expanded preview modes without page-level overflow.",
       "- Prefer one active background terminal. Reuse or stop terminals based on fresh terminal state.",
+      "- For blank or unknown previews, follow the process evidence loop: terminal health, preview probe, browser/computer observation, then app diagnosis. Do not restart a healthy background terminal before proving the process or command is wrong.",
       "- After a successful background terminal start, do not echo the returned preview/session fields back to the user unless they asked for operational detail or you are actively debugging a launch problem.",
     );
   }
@@ -463,8 +400,7 @@ export function buildWorkspaceRuntimeSystemPrompt(params: RuntimeCommunityPrompt
   harnessName: "chat_tools";
   projectLabel?: string | null;
   projectDescription?: string | null;
-  threadWorkingState?: ThreadWorkingStatePrompt | null;
-  activeBackgroundTerminals?: RuntimeWorkspaceTerminalPrompt[] | null;
+  runtimeTurnContext: RuntimeTurnContextPacket;
   currentDateTimeIso?: string | null;
   currentDateLabel?: string | null;
   currentTimeZone?: string | null;
@@ -498,12 +434,7 @@ export function buildWorkspaceRuntimeSystemPrompt(params: RuntimeCommunityPrompt
     }),
   ];
   const volatilePromptBlocks = [
-    buildThreadWorkingStatePrompt({
-      threadWorkingState: params.threadWorkingState,
-    }),
-    buildWorkspaceProcessContextPrompt({
-      activeBackgroundTerminals: params.activeBackgroundTerminals,
-    }),
+    renderRuntimeTurnContextForPrompt(params.runtimeTurnContext),
     buildRuntimeTemporalContextPrompt({
       currentDateTimeIso: params.currentDateTimeIso,
       currentDateLabel: params.currentDateLabel,

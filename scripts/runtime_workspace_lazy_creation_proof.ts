@@ -463,7 +463,8 @@ async function proveLazyWorkspaceCreationRules() {
     "expected terminal summaries to expose safe process ledger fields",
   );
   assert.equal(
-    terminalProcessCoreSource.includes("runIdStartedBy") ||
+    schemaSource.includes("runIdStartedBy") ||
+      terminalProcessCoreSource.includes("runIdStartedBy") ||
       workspaceTerminalsSource.includes("runIdStartedBy") ||
       webWorkspaceHostSource.includes("run_id_started_by") ||
       daytonaWorkspaceTerminalsSource.includes("run_id_started_by"),

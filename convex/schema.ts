@@ -333,9 +333,6 @@ export default defineSchema({
     ownerId: v.id("users"),
     projectId: v.id("cloudProjects"),
     threadId: v.optional(v.id("threads")),
-    // Deprecated compatibility tombstone for old terminal rows. Active code uses
-    // lifecycleOwner plus startedByRunId and never writes this field.
-    runIdStartedBy: v.optional(v.string()),
     lifecycleOwner: v.optional(
       v.literal("project_background"),
     ),
@@ -388,6 +385,30 @@ export default defineSchema({
     lastPreviewProbeSummary: v.optional(v.string()),
     lastBrowserObservationAt: v.optional(v.number()),
     lastBrowserObservationSummary: v.optional(v.string()),
+    previewTransportStatus: v.optional(
+      v.union(
+        v.literal("not_started"),
+        v.literal("loading"),
+        v.literal("loaded"),
+        v.literal("failed"),
+      ),
+    ),
+    previewInspectionStatus: v.optional(
+      v.union(
+        v.literal("not_attempted"),
+        v.literal("same_origin_dom"),
+        v.literal("cross_origin_uninspectable"),
+        v.literal("dom_unavailable"),
+      ),
+    ),
+    previewRenderStatus: v.optional(
+      v.union(
+        v.literal("unknown"),
+        v.literal("visible_content"),
+        v.literal("blank_suspected"),
+        v.literal("transport_error"),
+      ),
+    ),
   })
     .index("by_owner_project", ["ownerId", "projectId"])
     .index("by_providerSessionId", ["providerSessionId"])
@@ -828,9 +849,6 @@ export default defineSchema({
     communityId: v.optional(v.string()),
     modelId: v.optional(v.string()),
     contextVersion: v.optional(v.number()),
-    // Legacy coding-era continuity kept temporarily so the reduced runtime can deploy
-    // against existing rows while we finish migrating old thread documents.
-    codingHandoff: v.optional(v.any()),
     workingState: v.optional(
       v.object({
         version: v.optional(v.number()),
@@ -845,6 +863,11 @@ export default defineSchema({
           ),
         ),
         currentStep: v.optional(v.string()),
+        plan: v.optional(v.array(v.string())),
+        completedSteps: v.optional(v.array(v.string())),
+        decisions: v.optional(v.array(v.string())),
+        openQuestions: v.optional(v.array(v.string())),
+        focusFiles: v.optional(v.array(v.string())),
         lastResult: v.optional(v.string()),
         verificationStatus: v.optional(
           v.union(
@@ -859,39 +882,6 @@ export default defineSchema({
         verifiedFindings: v.array(v.string()),
         recentActions: v.optional(v.array(v.string())),
         lastDiagnostic: v.optional(v.string()),
-        workspaceRuntime: v.optional(
-          v.object({
-            terminalStatus: v.union(
-              v.literal("none"),
-              v.literal("starting"),
-              v.literal("running"),
-              v.literal("exited"),
-              v.literal("failed"),
-              v.literal("stopped"),
-              v.literal("stale"),
-            ),
-            previewStatus: v.union(
-              v.literal("none"),
-              v.literal("starting"),
-              v.literal("running"),
-              v.literal("blank"),
-              v.literal("render_error_suspected"),
-              v.literal("unreachable"),
-              v.literal("server_exited"),
-            ),
-            terminalSessionId: v.optional(v.string()),
-            command: v.optional(v.string()),
-            cwd: v.optional(v.string()),
-            exitCode: v.optional(v.number()),
-            outputTail: v.optional(v.string()),
-            previewPort: v.optional(v.number()),
-            previewPath: v.optional(v.string()),
-            previewLabel: v.optional(v.string()),
-            issue: v.optional(v.string()),
-            nextAction: v.optional(v.string()),
-            updatedAt: v.number(),
-          }),
-        ),
         openIssue: v.optional(v.string()),
         blocker: v.optional(v.string()),
         nextAction: v.optional(v.string()),
@@ -951,6 +941,21 @@ export default defineSchema({
     workspaceToolboxProxyUrl: v.optional(v.string()),
     workspaceSessionRegion: v.optional(v.string()),
     workspaceSessionUpdatedAt: v.optional(v.number()),
+    startedContextSnapshot: v.optional(v.any()),
+    activeContextSnapshot: v.optional(v.any()),
+    activeContextSnapshotUpdatedAt: v.optional(v.number()),
+    finishedContextSnapshot: v.optional(v.any()),
+    pendingUserSteering: v.optional(
+      v.array(
+        v.object({
+          text: v.string(),
+          receivedAt: v.number(),
+          messageKey: v.optional(v.string()),
+        }),
+      ),
+    ),
+    stopRequestedAt: v.optional(v.number()),
+    stopReason: v.optional(v.string()),
     status: v.union(v.literal("running"), v.literal("ok"), v.literal("error"), v.literal("cancelled")),
     reason: v.optional(v.string()),
     errorCode: v.optional(v.string()),
