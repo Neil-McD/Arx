@@ -5,6 +5,7 @@ import { WebDiscoverPanel } from "./WebDiscoverPanel";
 import { WebProductDocsPanel } from "./WebProductDocsPanel";
 import { WebPublicCommunityFunnel } from "./WebPublicCommunityFunnel";
 import { WebWorkspaceSurfaceHost } from "./WebWorkspaceSurfaceHost";
+import { WebLandingPage } from "./WebLandingPage";
 
 export type WebAppMainSurfaceHostProps = {
   activePage: AppPage;
@@ -12,6 +13,7 @@ export type WebAppMainSurfaceHostProps = {
   showCommunitySurface: boolean;
   showDiscoverPanel: boolean;
   showProductDocsPanel: boolean;
+  landingPageProps: ComponentProps<typeof WebLandingPage>;
   workspaceSurfaceHostProps: ComponentProps<typeof WebWorkspaceSurfaceHost>;
   publicCommunityFunnelProps: ComponentProps<typeof WebPublicCommunityFunnel>;
   communityHostProps: ComponentProps<typeof WebCommunityHost>;
@@ -28,7 +30,9 @@ export function WebAppMainSurfaceHost(props: WebAppMainSurfaceHostProps) {
           : ""
       }`}
     >
-      {props.showPublicCommunityFunnel ? (
+      {props.activePage === "landing" ? (
+        <WebLandingPage {...props.landingPageProps} />
+      ) : props.showPublicCommunityFunnel ? (
         <div className="community-body">
           <div className="community-panel public-route-panel public-community-funnel-panel">
             <div className="workspace-body public-route-body public-community-funnel-body">

@@ -45,6 +45,7 @@ type UseWebAppAuthControllerParams = {
   onSessionFocusReady: (session: AuthSession) => AsyncVoid;
   onDidJustSignIn: () => void;
   onBeforeSignOut?: () => AsyncVoid;
+  onAfterSignOut?: () => AsyncVoid;
 };
 
 type UseWebAppAuthControllerResult = {
@@ -144,6 +145,7 @@ export function useWebAppAuthController(
   const onSessionFocusReadyRef = useLatestRef(params.onSessionFocusReady);
   const onDidJustSignInRef = useLatestRef(params.onDidJustSignIn);
   const onBeforeSignOutRef = useLatestRef(params.onBeforeSignOut);
+  const onAfterSignOutRef = useLatestRef(params.onAfterSignOut);
 
   useEffect(() => {
     const callbackError = readAuthCallbackErrorFromLocation();
@@ -380,10 +382,11 @@ export function useWebAppAuthController(
       await onBeforeSignOutRef.current?.();
       await clearSessionLocally();
       await logoutAuthSessionRemote({ scope: "local" });
+      await onAfterSignOutRef.current?.();
     } finally {
       setIsAuthSigningOut(false);
     }
-  }, [clearSessionLocally, onBeforeSignOutRef]);
+  }, [clearSessionLocally, onAfterSignOutRef, onBeforeSignOutRef]);
 
   const fetchWithPublic = useCallback(async (url: string, init: RequestInit = {}): Promise<Response> => {
     return await fetchWithPublicShared(url, init);

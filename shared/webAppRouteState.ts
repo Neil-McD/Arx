@@ -325,7 +325,7 @@ function parseAppRouteFromPathname(pathname: string): AppRoutePathState | null {
   const segments = splitPathSegments(pathname);
   if (segments.length === 0) {
     return {
-      page: "workspace",
+      page: "landing",
       view: "home",
       settingsPage: "agent",
       communitySlug: null,
@@ -456,7 +456,7 @@ export function readAppRouteFromLocation(): AppRouteState {
   }
 
   return {
-    page: "workspace",
+    page: "landing",
     view: "home",
     settingsPage: "agent",
     communitySlug: null,
@@ -493,6 +493,10 @@ export function buildAppRoutePath(state: AppRoutePathState): string | null {
 
   if (state.page === "docs") {
     return buildDocsPath(state.docsSlug);
+  }
+
+  if (state.page === "landing") {
+    return "/";
   }
 
   return state.threadId ? buildWorkspaceThreadPath(state.threadId) : buildWorkspaceDraftPath();

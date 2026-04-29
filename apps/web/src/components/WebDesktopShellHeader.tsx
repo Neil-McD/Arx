@@ -1,6 +1,8 @@
 import type { WebDesktopShellHeaderProps } from "./webShellChromeShared";
 
 export function WebDesktopShellHeader(props: WebDesktopShellHeaderProps) {
+  if (props.activePage === "landing") return null;
+
   return (
     <header className="app-topbar">
       <div className="topbar-left">

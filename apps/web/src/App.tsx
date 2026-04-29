@@ -444,6 +444,8 @@ type CommunityFunnelConfig = SharedCommunityFunnelConfig;
 
 const GUEST_THREAD_ID = "__guest__";
 const WORKSPACE_DRAFT_THREAD_ERROR_KEY = "__workspace_draft__";
+const WORKSPACE_PLATFORM_STARTER_PROMPT =
+  "Tell me what PolyNet is, what I can build here, and how I should get started.";
 const GUEST_THREAD_STORAGE_KEY = "polynet_guest_thread_v1";
 const LEGACY_GUEST_THREAD_STORAGE_KEY = "arx_guest_thread_v1";
 const GUEST_MODEL_STORAGE_KEY = "polynet_guest_model_id_v1";
@@ -1074,6 +1076,10 @@ export default function App() {
     onBeforeSignOut: async () => {
       stopAllStreamingTurns();
     },
+    onAfterSignOut: () => {
+      if (window.location.pathname === "/") return;
+      window.location.assign("/");
+    },
   });
   const canonicalSessionUserId = useMemo(
     () => resolveAuthSubject(session),
@@ -1262,6 +1268,7 @@ export default function App() {
   const [communityMessages, setCommunityMessages] = useState<CommunityChatMessage[]>([]);
   const [communityMessageInput, setCommunityMessageInput] = useState("");
   const workspaceComposerApiRef = useRef<WorkspaceComposerApi | null>(null);
+  const workspaceStarterPromptConsumedRef = useRef(false);
   const workspaceComposerDraftRef = useRef<WorkspaceComposerDraft>({
     text: "",
     attachments: [],
@@ -2228,6 +2235,16 @@ export default function App() {
   }, []);
   const handleRegisterWorkspaceComposerApi = useCallback((api: WorkspaceComposerApi | null) => {
     workspaceComposerApiRef.current = api;
+    if (!api || workspaceStarterPromptConsumedRef.current) return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("starter") !== "platform") return;
+    workspaceStarterPromptConsumedRef.current = true;
+    api.appendTranscript(WORKSPACE_PLATFORM_STARTER_PROMPT);
+    api.focus();
+    params.delete("starter");
+    const nextSearch = params.toString();
+    const nextPath = `${window.location.pathname}${nextSearch ? `?${nextSearch}` : ""}${window.location.hash}`;
+    window.history.replaceState(window.history.state ?? {}, document.title, nextPath);
   }, []);
 
   const persistCreateCommunityIntent = useCallback((draft: CreateCommunityIntentDraft): void => {
@@ -6382,6 +6399,10 @@ export default function App() {
     activePage,
     isPublicCommunityFunnel,
     publicRoute: shellPublicRoute,
+    landingPageProps: {
+      onTryFree: () => navigateTo("/workspace"),
+      onAskPolynet: () => navigateTo("/workspace?starter=platform"),
+    },
     workspaceSurfaceHostProps: {
       activeView,
       settingsGroup: settingsGroup as SettingsGroup,

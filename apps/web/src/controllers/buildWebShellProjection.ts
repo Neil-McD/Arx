@@ -35,9 +35,11 @@ export function buildWebShellProjection(params: {
   const isAppRoute = params.publicRouteKind === "app";
   const isWorkspaceSettings =
     isAppRoute && params.activePage === "workspace" && params.activeView === "settings";
+  const isLandingPage = isAppRoute && params.activePage === "landing";
   const showMobileAppShell =
     params.shellVariant === "mobile" &&
     isAppRoute &&
+    !isLandingPage &&
     !params.isPublicCommunityFunnel &&
     (params.activePage === "workspace" ||
       params.activePage === "community" ||
@@ -60,6 +62,8 @@ export function buildWebShellProjection(params: {
     !showMobileAppShell &&
     !showMobilePublicFunnel;
   const showDesktopCommunityRail = isAppRoute && !showMobileAppShell && !showMobilePublicFunnel;
+  const shouldShowDesktopCommunityRail =
+    showDesktopCommunityRail && !isLandingPage;
   const hasLeftPanel =
     (isWorkspaceSettings && !showMobileSettingsShell) || showDesktopCommunityNav;
   const mobileShellMode: MobileShellMode =
@@ -87,7 +91,7 @@ export function buildWebShellProjection(params: {
     showMobilePublicFunnel,
     sessionsDrawerEnabled,
     isSessionsDrawerOpen,
-    showDesktopCommunityRail,
+    showDesktopCommunityRail: shouldShowDesktopCommunityRail,
     showDesktopCommunityNav,
     hasLeftPanel,
     mobileShellMode,
