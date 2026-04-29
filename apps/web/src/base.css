@@ -9466,7 +9466,7 @@ button.message-citation-chip:hover {
   line-height: 1.6;
   color: var(--text-primary);
   white-space: normal;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
   word-break: break-word;
 }
 
@@ -9531,7 +9531,7 @@ button.message-citation-chip:hover {
 
 /* Markdown rendering */
 .message-text .md-paragraph {
-  margin: 0.42em 0;
+  margin: 0.62em 0;
   line-height: inherit;
 }
 
@@ -9542,27 +9542,27 @@ button.message-citation-chip:hover {
 .message-text .md-header {
   font-weight: 600;
   color: var(--text-primary);
-  margin: 0.9em 0 0.3em 0;
-  line-height: 1.22;
+  margin: 1.18em 0 0.42em 0;
+  line-height: 1.24;
 }
 
 .message-text h1.md-header {
   font-size: 1.4em;
-  margin-top: 1em;
-  margin-bottom: 0.38em;
+  margin-top: 1.22em;
+  margin-bottom: 0.5em;
 }
 
 .message-text h2.md-header {
   font-size: 1.24em;
-  margin-top: 1.05em;
-  margin-bottom: 0.34em;
+  margin-top: 1.24em;
+  margin-bottom: 0.46em;
 }
 
 .message-text h3.md-header {
   font-size: 1.1em;
   font-weight: 650;
-  margin-top: 0.92em;
-  margin-bottom: 0.24em;
+  margin-top: 1.04em;
+  margin-bottom: 0.36em;
 }
 
 .message-text h4.md-header,
@@ -9570,8 +9570,8 @@ button.message-citation-chip:hover {
 .message-text h6.md-header {
   font-size: 1em;
   font-weight: 650;
-  margin-top: 0.72em;
-  margin-bottom: 0.2em;
+  margin-top: 0.9em;
+  margin-bottom: 0.3em;
 }
 
 .message-text h2.md-header + h3.md-header,
@@ -9584,21 +9584,21 @@ button.message-citation-chip:hover {
 }
 
 .message-text .md-list {
-  margin: 0.24em 0;
-  padding-left: 1.25em;
+  margin: 0.58em 0;
+  padding-left: 1.42em;
 }
 
 .message-text .md-list li {
-  margin: 0.08em 0;
+  margin: 0.24em 0;
   line-height: inherit;
 }
 
 .message-text .md-list .md-list {
-  margin: 0.12em 0 0.14em;
+  margin: 0.28em 0 0.34em;
 }
 
 .message-text .md-list li > .md-paragraph {
-  margin: 0.18em 0;
+  margin: 0.26em 0;
 }
 
 .message-text .md-list li > .md-paragraph:first-child {
@@ -9630,8 +9630,8 @@ button.message-citation-chip:hover {
 }
 
 .message-text .md-blockquote {
-  margin: 0.62em 0;
-  padding: 0.64em 0.84em;
+  margin: 0.9em 0;
+  padding: 0.74em 0.92em;
   border-left: 3px solid var(--border-default);
   background: rgba(255, 255, 255, 0.03);
   border-radius: 10px;
@@ -9663,15 +9663,15 @@ button.message-citation-chip:hover {
 
 .md-inline-code {
   font-family: var(--font-mono);
-  font-size: 0.9em;
-  background: rgba(255, 255, 255, 0.08);
-  padding: 0.15em 0.4em;
+  font-size: 0.88em;
+  background: rgba(255, 255, 255, 0.055);
+  padding: 0.1em 0.34em;
   border-radius: 4px;
-  color: var(--text-primary);
+  color: color-mix(in srgb, var(--text-primary) 92%, var(--text-secondary) 8%);
 }
 
 .md-table-block {
-  margin: 0.72em 0;
+  margin: 0.95em 0;
   max-width: 100%;
 }
 
@@ -9758,7 +9758,7 @@ button.message-citation-chip:hover {
 }
 
 .md-artifact-block {
-  margin: 0.62em 0;
+  margin: 0.9em 0;
   max-width: 100%;
 }
 
@@ -9782,8 +9782,8 @@ button.message-citation-chip:hover {
 }
 
 .md-plain-block {
-  margin: 0.42em 0;
-  padding: 0.48em 0.64em;
+  margin: 0.72em 0;
+  padding: 0.58em 0.72em;
   overflow-x: auto;
   border-left: 2px solid var(--border-muted);
   background: rgba(255, 255, 255, 0.035);
@@ -9801,38 +9801,34 @@ button.message-citation-chip:hover {
 }
 
 .code-block-wrapper {
-  margin: 0.5em 0;
-  border-radius: 12px;
+  margin: 0.82em 0;
+  border-radius: 10px;
   overflow: hidden;
   border: 1px solid var(--snippet-code-border);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0)),
-    var(--snippet-code-bg);
-  box-shadow:
-    inset 0 1px 0 color-mix(in srgb, var(--text-primary) 4%, transparent),
-    inset 0 0 0 1px color-mix(in srgb, var(--snippet-code-border) 22%, transparent);
+  background: var(--snippet-code-bg);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text-primary) 3%, transparent);
 }
 
 .message-text .md-list li .code-block-wrapper {
-  margin: 0.28em 0 0.26em;
+  margin: 0.48em 0 0.42em;
 }
 
 .message-text .code-block-wrapper + .md-header,
 .message-text .md-list + .md-header,
 .message-text .md-blockquote + .md-header {
-  margin-top: 0.34em;
+  margin-top: 1em;
 }
 
 .message-text .md-header + .md-paragraph,
 .message-text .md-header + .md-list,
 .message-text .md-header + .code-block-wrapper,
 .message-text .md-header + .md-blockquote {
-  margin-top: 0.22em;
+  margin-top: 0.36em;
 }
 
 .message-text .md-paragraph + .md-header,
 .message-text .md-list + .md-paragraph {
-  margin-top: 0.42em;
+  margin-top: 0.68em;
 }
 
 .message-text .md-paragraph + h2.md-header,
@@ -9852,7 +9848,7 @@ button.message-citation-chip:hover {
 }
 
 .message-text .md-list li > .md-paragraph + .code-block-wrapper {
-  margin-top: 0.32em;
+  margin-top: 0.5em;
 }
 
 .message-text.runtime-live-timeline-reasoning-text {
@@ -9860,7 +9856,7 @@ button.message-citation-chip:hover {
 }
 
 .message-text.runtime-live-timeline-reasoning-text .md-paragraph {
-  margin: 0.34em 0;
+  margin: 0.5em 0;
 }
 
 .message-text.runtime-live-timeline-reasoning-text .md-header {
@@ -9892,12 +9888,12 @@ button.message-citation-chip:hover {
 }
 
 .message-text.runtime-live-timeline-reasoning-text .md-list {
-  margin: 0.2em 0;
-  padding-left: 1.18em;
+  margin: 0.42em 0;
+  padding-left: 1.32em;
 }
 
 .message-text.runtime-live-timeline-reasoning-text .md-list li {
-  margin: 0.06em 0;
+  margin: 0.18em 0;
 }
 
 .message-text.runtime-live-timeline-reasoning-text .md-list .md-list {
@@ -9931,7 +9927,7 @@ button.message-citation-chip:hover {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 8px 14px;
+  padding: 6px 12px;
   background: var(--snippet-code-header-bg);
   border-bottom: 1px solid color-mix(in srgb, var(--snippet-code-border) 72%, transparent);
 }
@@ -9966,13 +9962,13 @@ button.message-citation-chip:hover {
 .md-code-block {
   font-family: var(--font-mono);
   font-size: 13px;
-  line-height: 1.68;
+  line-height: 1.58;
   background: transparent;
-  padding: 16px 18px 18px;
+  padding: 13px 14px 15px;
   margin: 0;
   overflow-x: auto;
   color: var(--snippet-code-text);
-  text-wrap: pretty;
+  white-space: pre;
 }
 
 .md-code-block code {

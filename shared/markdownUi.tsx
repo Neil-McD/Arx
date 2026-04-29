@@ -181,6 +181,8 @@ function looksLikeCode(text: string): boolean {
 
 function shouldRenderCodeCard(code: string, language?: string): boolean {
   if (hasExplicitCodeLanguage(language)) return true;
+  const lines = code.trim().split("\n").filter((line) => line.trim());
+  if (lines.length <= 1 && code.trim().length <= 120) return false;
   return looksLikeCode(code);
 }
 
