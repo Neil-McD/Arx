@@ -463,13 +463,17 @@ async function proveLazyWorkspaceCreationRules() {
     "expected terminal summaries to expose safe process ledger fields",
   );
   assert.equal(
-    schemaSource.includes("runIdStartedBy") ||
-      terminalProcessCoreSource.includes("runIdStartedBy") ||
+    terminalProcessCoreSource.includes("runIdStartedBy") ||
       workspaceTerminalsSource.includes("runIdStartedBy") ||
       webWorkspaceHostSource.includes("run_id_started_by") ||
       daytonaWorkspaceTerminalsSource.includes("run_id_started_by"),
     false,
-    "expected runtime terminal ownership to use startedByRunId without legacy runIdStartedBy compatibility",
+    "expected runtime terminal ownership to use startedByRunId without active legacy runIdStartedBy usage",
+  );
+  assert.equal(
+    schemaSource.includes("runIdStartedBy: v.optional(v.string())"),
+    true,
+    "expected schema to keep the runIdStartedBy compatibility tombstone for old production terminal rows",
   );
   assert.equal(
     workspaceTerminalsSource.includes("touchProjectBackground: !runtimeSessionOwned"),

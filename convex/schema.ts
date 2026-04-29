@@ -333,6 +333,10 @@ export default defineSchema({
     ownerId: v.id("users"),
     projectId: v.id("cloudProjects"),
     threadId: v.optional(v.id("threads")),
+    // Compatibility tombstone for production rows written before terminal
+    // ownership moved to lifecycleOwner + startedByRunId. Active code must not
+    // write or read this field.
+    runIdStartedBy: v.optional(v.string()),
     lifecycleOwner: v.optional(
       v.literal("project_background"),
     ),
