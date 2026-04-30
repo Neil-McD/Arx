@@ -141,10 +141,6 @@ export function WebLandingPage(props: WebLandingPageProps) {
                   </span>
                 </span>
               </span>
-              <span className="polynet-landing-play">▶</span>
-            </span>
-            <span className="polynet-landing-video-caption">
-              Watch how an agent-powered community comes together.
             </span>
           </div>
         </div>
@@ -228,12 +224,28 @@ export function WebLandingPage(props: WebLandingPageProps) {
           </h2>
         </div>
         <div className="polynet-landing-offer-actions">
-          <button type="button" onClick={props.onTryFree}>
-            Continue free
-          </button>
-          <button type="button" className="primary" onClick={props.onTryFree}>
-            Become a builder - $24/mo
-          </button>
+          <div className="polynet-landing-offer-plan">
+            <span>Free</span>
+            <ul>
+              <li>Explore the platform</li>
+              <li>Join communities</li>
+              <li>Use community agents</li>
+            </ul>
+            <button type="button" onClick={props.onTryFree}>
+              Continue free
+            </button>
+          </div>
+          <div className="polynet-landing-offer-plan builder">
+            <span>Builder - $24/mo</span>
+            <ul>
+              <li>Build your agent</li>
+              <li>Launch a community</li>
+              <li>Gate access and monetize</li>
+            </ul>
+            <button type="button" className="primary" onClick={props.onTryFree}>
+              Become a builder
+            </button>
+          </div>
         </div>
       </section>
     </div>
