@@ -95,11 +95,16 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
               </label>
               {props.email ? <p className="polynet-onboarding-email">{props.email}</p> : null}
               {props.error ? <p className="polynet-onboarding-error">{props.error}</p> : null}
-            </div>
-            <div className="polynet-onboarding-actions one">
-              <button type="button" className="primary" disabled={props.isSaving} onClick={() => void handleNextProfile()}>
-                {props.isSaving ? "Saving..." : "Next"}
-              </button>
+              <div className="polynet-onboarding-profile-footer">
+                <button
+                  type="button"
+                  className="polynet-onboarding-next"
+                  disabled={props.isSaving}
+                  onClick={() => void handleNextProfile()}
+                >
+                  {props.isSaving ? "Saving..." : "Next"}
+                </button>
+              </div>
             </div>
           </>
         ) : (

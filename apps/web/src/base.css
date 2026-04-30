@@ -1789,6 +1789,39 @@ body {
   grid-template-columns: minmax(0, 1fr);
 }
 
+.polynet-onboarding-profile-footer {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.polynet-onboarding-next {
+  min-height: 38px;
+  min-width: 88px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.42);
+  color: #ffffff;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    transform 160ms ease;
+}
+
+.polynet-onboarding-next:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.09);
+  border-color: rgba(255, 255, 255, 0.34);
+  transform: translateY(-1px);
+}
+
+.polynet-onboarding-next:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
 .polynet-onboarding-choice {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
