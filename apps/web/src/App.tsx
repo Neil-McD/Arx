@@ -174,6 +174,7 @@ import {
   buildCommunityFunnelPreviewPath,
   buildCommunityFunnelPreviewHistoryState,
   buildWorkspaceDraftPath,
+  isRootAppRoutePath,
   readAppRouteFromLocation,
   readPublicRouteFromLocation,
   readShellVariantFromPathname,
@@ -2164,6 +2165,15 @@ export default function App() {
     workspaceProject.actions.setActiveProjectId(null);
     applyLocationToState();
   }, [applyCommunityShellState, applyLocationToState, workspaceProject.actions]);
+
+  useEffect(() => {
+    if (!isAuthBootstrapComplete) return;
+    if (!session) return;
+    if (publicRoute.kind !== "app") return;
+    if (activePage !== "landing") return;
+    if (!isRootAppRoutePath(window.location.pathname || "/")) return;
+    navigateTo(buildWorkspaceDraftPath(), { replace: true });
+  }, [activePage, isAuthBootstrapComplete, publicRoute.kind, session]);
 
   useEffect(() => {
     if (!isStandaloneWebApp()) return;

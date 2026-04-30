@@ -76,6 +76,13 @@ export function stripShellVariantFromPathname(pathname: string): string {
   return joinPathWithQueryAndHash(normalizedPathname, parsed.search, parsed.hash);
 }
 
+export function isRootAppRoutePath(pathname: string): boolean {
+  const parsed = new URL(String(pathname || "/"), "http://local.arx");
+  const stripped = stripShellVariantFromPathname(parsed.pathname || "/");
+  const strippedParsed = new URL(stripped, "http://local.arx");
+  return (strippedParsed.pathname || "/") === "/";
+}
+
 export function applyShellVariantToAppPath(path: string, shellVariant: AppShellVariant): string {
   const raw = String(path ?? "").trim();
   if (!raw.startsWith("/")) return raw;
