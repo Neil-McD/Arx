@@ -1791,16 +1791,18 @@ body {
 
 .polynet-onboarding-profile-footer {
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
 }
 
 .polynet-onboarding-next {
   min-height: 38px;
   min-width: 88px;
-  border: 1px solid rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.86);
   border-radius: 10px;
-  background: rgba(0, 0, 0, 0.42);
-  color: #ffffff;
+  background: #ffffff;
+  color: #111113;
   font: inherit;
   font-size: 13px;
   font-weight: 800;
@@ -1812,8 +1814,8 @@ body {
 }
 
 .polynet-onboarding-next:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.09);
-  border-color: rgba(255, 255, 255, 0.34);
+  background: rgba(255, 255, 255, 0.88);
+  border-color: #ffffff;
   transform: translateY(-1px);
 }
 

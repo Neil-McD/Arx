@@ -93,9 +93,9 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
                   rows={4}
                 />
               </label>
-              {props.email ? <p className="polynet-onboarding-email">{props.email}</p> : null}
               {props.error ? <p className="polynet-onboarding-error">{props.error}</p> : null}
               <div className="polynet-onboarding-profile-footer">
+                {props.email ? <p className="polynet-onboarding-email">{props.email}</p> : <span />}
                 <button
                   type="button"
                   className="polynet-onboarding-next"
