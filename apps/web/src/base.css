@@ -1582,17 +1582,9 @@ body {
 
 .polynet-community-ring .connection {
   fill: none;
-  stroke: rgba(255, 255, 255, 0.42);
+  stroke: rgba(255, 255, 255, 0.36);
   stroke-width: 2;
   stroke-linecap: round;
-}
-
-.polynet-community-ring .person {
-  fill: none;
-  stroke: rgba(255, 255, 255, 0.82);
-  stroke-width: 2.2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
 }
 
 .polynet-community-brain {
@@ -1603,6 +1595,30 @@ body {
   height: 32px !important;
   transform: translate(-50%, -42%);
   stroke-width: 1.8 !important;
+}
+
+.polynet-community-person {
+  position: absolute;
+  width: 20px !important;
+  height: 20px !important;
+  color: rgba(255, 255, 255, 0.82);
+  stroke-width: 2 !important;
+}
+
+.polynet-community-person.top {
+  left: 50%;
+  top: 0;
+  transform: translateX(-50%);
+}
+
+.polynet-community-person.left {
+  left: 4px;
+  bottom: 5px;
+}
+
+.polynet-community-person.right {
+  right: 4px;
+  bottom: 5px;
 }
 
 .polynet-landing-flow strong {
