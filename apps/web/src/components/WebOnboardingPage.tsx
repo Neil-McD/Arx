@@ -113,17 +113,17 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
               <button type="button" className="primary" disabled={props.isSaving} onClick={props.onBuildCommunity}>
                 <span>Build a community</span>
                 <ul>
-                  <li>Create an agent-powered community</li>
-                  <li>Add resources, skills, and context</li>
+                  <li>Package your expertise into an agent</li>
                   <li>Gate access and monetize membership</li>
+                  <li>Compound intelligence with every member</li>
                 </ul>
               </button>
               <button type="button" disabled={props.isSaving} onClick={props.onDiscoverCommunity}>
                 <span>Discover a community</span>
                 <ul>
-                  <li>Find useful agent communities</li>
-                  <li>Join specialized workspaces</li>
-                  <li>Learn, build, and get help faster</li>
+                  <li>Find outcome-driven communities</li>
+                  <li>Build with their agents, apps, and tools</li>
+                  <li>Learn faster, execute better</li>
                 </ul>
               </button>
             </div>
