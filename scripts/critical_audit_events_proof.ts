@@ -19,6 +19,7 @@ const communityCommerce = await readRepoFile("convex/communityCommerce.ts");
 const billingCore = await readRepoFile("convex/billingCore.ts");
 const httpBilling = await readRepoFile("convex/httpBilling.ts");
 const account = await readRepoFile("convex/account.ts");
+const stripeWebhookHandler = httpBilling.split('path: "/billing/stripe_webhook"')[1] ?? "";
 
 assertContains(schema, /criticalAuditEvents: defineTable/, "critical audit table must exist");
 for (const indexName of [
@@ -51,6 +52,11 @@ assertContains(
   criticalAudit,
   /listCriticalAuditEventsInternal = internalQuery/,
   "critical audit internal read model must exist",
+);
+assert.equal(
+  (stripeWebhookHandler.match(/return jsonResponse\(req, 200/g) ?? []).length,
+  1,
+  "verified Stripe webhook 200 responses must go through processedResponse; only the helper may call jsonResponse(req, 200)",
 );
 
 const requiredEvents = [
