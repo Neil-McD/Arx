@@ -1,4 +1,4 @@
-import { Brain, LockKeyhole, RefreshCw, UserRound } from "lucide-react";
+import { Brain, DollarSign, RefreshCw, UserRound } from "lucide-react";
 
 type WebLandingPageProps = {
   onTryFree: () => void;
@@ -51,22 +51,22 @@ function LandingFlowVisual(props: { kind: "agent" | "community" | "gate" | "loop
 
   if (props.kind === "gate") {
     return (
-      <span className="polynet-landing-flow-visual" aria-hidden="true">
-        <LockKeyhole />
+      <span className="polynet-landing-flow-visual monetize" aria-hidden="true">
+        <DollarSign />
       </span>
     );
   }
 
   if (props.kind === "loop") {
     return (
-      <span className="polynet-landing-flow-visual" aria-hidden="true">
+      <span className="polynet-landing-flow-visual loop" aria-hidden="true">
         <RefreshCw />
       </span>
     );
   }
 
   return (
-    <span className="polynet-landing-flow-visual" aria-hidden="true">
+    <span className="polynet-landing-flow-visual agent" aria-hidden="true">
       <Brain />
     </span>
   );
@@ -228,7 +228,7 @@ export function WebLandingPage(props: WebLandingPageProps) {
           </span>
           <span>
             <LandingFlowVisual kind="gate" />
-            <strong>Gate access</strong>
+            <strong>Monetize</strong>
           </span>
           <span>
             <LandingFlowVisual kind="loop" />

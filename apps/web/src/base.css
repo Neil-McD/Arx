@@ -1566,6 +1566,15 @@ body {
   stroke-width: 1.65;
 }
 
+.polynet-landing-flow-visual.agent,
+.polynet-community-brain {
+  color: var(--accent-gold);
+}
+
+.polynet-landing-flow-visual.loop {
+  color: var(--accent-cyan);
+}
+
 .polynet-landing-flow-visual.community {
   position: relative;
   width: 76px;
