@@ -95,6 +95,28 @@ type WebAccountSettingsSectionProps = {
   pendingPurchasesSuccess: string | null;
 };
 
+function formatDeleteAccountError(message: string): string {
+  if (message.includes("account_delete_owned_communities_blocked")) {
+    return "Delete or transfer owned communities before deleting your account.";
+  }
+  if (message.includes("account_delete_active_builder_subscription_blocked")) {
+    return "Cancel your active Builder plan before deleting your account.";
+  }
+  if (message.includes("account_delete_active_community_subscription_blocked")) {
+    return "Cancel active community memberships before deleting your account.";
+  }
+  if (message.includes("account_delete_active_payout_account_blocked")) {
+    return "Resolve active payout setup before deleting your account.";
+  }
+  if (message.includes("account_delete_mounted_apps_blocked")) {
+    return "Remove your apps from communities before deleting your account.";
+  }
+  if (message.includes("account_delete_attached_skills_blocked")) {
+    return "Remove your skills from communities before deleting your account.";
+  }
+  return "Account could not be deleted. Please try again.";
+}
+
 export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps) {
   const [isSignOutConfirmOpen, setIsSignOutConfirmOpen] = useState(false);
   const [isSubmittingSignOut, setIsSubmittingSignOut] = useState(false);
@@ -179,11 +201,7 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
       await deleteAccount();
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error ?? "");
-      setDeleteAccountError(
-        message.includes("account_delete_owned_communities_blocked")
-          ? "Delete or transfer owned communities before deleting your account."
-          : "Account could not be deleted. Please try again.",
-      );
+      setDeleteAccountError(formatDeleteAccountError(message));
       setIsDeletingAccount(false);
     }
   };
@@ -591,7 +609,7 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
             Delete account
           </div>
           <div className="settings-section-desc">
-            Permanently delete your account, profile, sessions, provider connections, personal memory, workspace threads, and personal workspace data. Owned communities must be deleted or transferred first.
+            Delete your Polynet account data, including your profile, sessions, provider connections, personal memory, workspace threads, and personal workspace data. Active subscriptions, payout setup, owned communities, and community-mounted apps or skills must be resolved first.
           </div>
           <div className="provider-connection-stack">
             <input

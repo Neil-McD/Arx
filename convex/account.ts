@@ -13,13 +13,95 @@ async function deleteRowsByIndex(ctx: any, tableName: string, indexName: string,
   return rows.length;
 }
 
-async function deleteRowsByFieldScan(ctx: any, tableName: string, fieldName: string, value: any) {
-  const rows = await ctx.db.query(tableName).collect();
-  const matches = rows.filter((row: any) => row[fieldName] === value);
-  for (const row of matches) {
-    await ctx.db.delete(row._id);
+function isActiveBuilderEntitlement(row: any, nowMs: number): boolean {
+  if (!row || row.source !== "stripe") return false;
+  if (row.tier !== "builder" && row.tier !== "architect") return false;
+  if (typeof row.endsAt === "number" && row.endsAt <= nowMs) return false;
+  return true;
+}
+
+function isActiveCommunitySubscription(row: any): boolean {
+  return row?.status === "active" || row?.status === "past_due" || row?.status === "cancel_at_period_end";
+}
+
+function hasPayoutAccountState(row: any): boolean {
+  return Boolean(row);
+}
+
+async function assertAccountDeletionAllowed(ctx: any, userId: any, nowMs: number) {
+  const ownedCommunity = await ctx.db
+    .query("communities")
+    .withIndex("by_owner", (q: any) => q.eq("ownerId", userId))
+    .first();
+  if (ownedCommunity) {
+    throw new Error("account_delete_owned_communities_blocked");
   }
-  return matches.length;
+
+  const entitlements = await ctx.db
+    .query("userEntitlements")
+    .withIndex("by_user", (q: any) => q.eq("userId", userId))
+    .collect();
+  if (entitlements.some((row: any) => isActiveBuilderEntitlement(row, nowMs))) {
+    throw new Error("account_delete_active_builder_subscription_blocked");
+  }
+
+  const communitySubscriptions = await ctx.db
+    .query("communitySubscriptions" as any)
+    .withIndex("by_user", (q: any) => q.eq("userId", userId))
+    .collect();
+  if (communitySubscriptions.some(isActiveCommunitySubscription)) {
+    throw new Error("account_delete_active_community_subscription_blocked");
+  }
+
+  const stripeConnectAccounts = await ctx.db
+    .query("userStripeConnectAccounts")
+    .withIndex("by_user", (q: any) => q.eq("userId", userId))
+    .collect();
+  if (stripeConnectAccounts.some(hasPayoutAccountState)) {
+    throw new Error("account_delete_active_payout_account_blocked");
+  }
+
+  const developerApps = await ctx.db
+    .query("developerApps")
+    .withIndex("by_owner", (q: any) => q.eq("ownerUserId", userId))
+    .collect();
+  for (const app of developerApps) {
+    const communityMount = await ctx.db
+      .query("communityAppMounts")
+      .withIndex("by_app", (q: any) => q.eq("developerAppId", app._id))
+      .first();
+    if (communityMount) {
+      throw new Error("account_delete_mounted_apps_blocked");
+    }
+    const otherUserMounts = await ctx.db
+      .query("userPlatformAppMounts")
+      .withIndex("by_app", (q: any) => q.eq("developerAppId", app._id))
+      .collect();
+    if (otherUserMounts.some((mount: any) => mount.userId !== userId)) {
+      throw new Error("account_delete_mounted_apps_blocked");
+    }
+  }
+
+  const skillPackages = await ctx.db
+    .query("skillPackages")
+    .withIndex("by_owner", (q: any) => q.eq("ownerUserId", userId))
+    .collect();
+  for (const skill of skillPackages) {
+    const communityAttachment = await ctx.db
+      .query("communitySkillAttachments")
+      .withIndex("by_skill", (q: any) => q.eq("skillPackageId", skill._id))
+      .first();
+    if (communityAttachment) {
+      throw new Error("account_delete_attached_skills_blocked");
+    }
+    const otherUserInstalls = await ctx.db
+      .query("userPlatformSkillInstalls")
+      .withIndex("by_skill", (q: any) => q.eq("skillPackageId", skill._id))
+      .collect();
+    if (otherUserInstalls.some((install: any) => install.userId !== userId)) {
+      throw new Error("account_delete_attached_skills_blocked");
+    }
+  }
 }
 
 export const deleteOwnAccount = mutation({
@@ -27,20 +109,15 @@ export const deleteOwnAccount = mutation({
     authSubject: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    const nowMs = Date.now();
     const actor = await ensureAuthenticatedActor({
       ctx,
       authSubject: args.authSubject ?? null,
-      nowMs: Date.now(),
+      nowMs,
     });
     const userId = actor.dbUserId;
 
-    const ownedCommunity = await ctx.db
-      .query("communities")
-      .withIndex("by_owner", (q) => q.eq("ownerId", userId))
-      .first();
-    if (ownedCommunity) {
-      throw new Error("account_delete_owned_communities_blocked");
-    }
+    await assertAccountDeletionAllowed(ctx, userId, nowMs);
 
     const deleted: Record<string, number> = {};
     const record = async (tableName: string, count: number) => {
@@ -68,12 +145,12 @@ export const deleteOwnAccount = mutation({
     await record("communityBlocks", await deleteRowsByIndex(ctx, "communityBlocks", "by_user", "userId", userId));
     await record("communitySubscriptions", await deleteRowsByIndex(ctx, "communitySubscriptions", "by_user", "userId", userId));
     await record("communityMessageReactions", await deleteRowsByIndex(ctx, "communityMessageReactions", "by_user", "userId", userId));
-    await record("communityTypingPresence", await deleteRowsByFieldScan(ctx, "communityTypingPresence", "userId", userId));
+    await record("communityTypingPresence", await deleteRowsByIndex(ctx, "communityTypingPresence", "by_user", "userId", userId));
     await record("communityMemberSettings", await deleteRowsByIndex(ctx, "communityMemberSettings", "by_user", "userId", userId));
     await record("communityResources", await deleteRowsByIndex(ctx, "communityResources", "by_createdBy", "createdByUserId", userId));
     await record("userPlatformAppMounts", await deleteRowsByIndex(ctx, "userPlatformAppMounts", "by_user", "userId", userId));
     await record("userPlatformSkillInstalls", await deleteRowsByIndex(ctx, "userPlatformSkillInstalls", "by_user", "userId", userId));
-    await record("communityAiFeedReactions", await deleteRowsByFieldScan(ctx, "communityAiFeedReactions", "actorUserId", userId));
+    await record("communityAiFeedReactions", await deleteRowsByIndex(ctx, "communityAiFeedReactions", "by_actorUser", "actorUserId", userId));
 
     const developerApps = await ctx.db
       .query("developerApps")

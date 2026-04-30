@@ -189,6 +189,7 @@ export default defineSchema({
     userId: v.id("users"),
     memoryMode: v.union(v.literal("off"), v.literal("suggest"), v.literal("auto")),
     rememberIntentEnabled: v.boolean(),
+    agentSoul: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
   }).index("by_user", ["userId"]),
@@ -362,6 +363,18 @@ export default defineSchema({
     updatedAt: v.number(),
     finishedAt: v.optional(v.number()),
     exitCode: v.optional(v.number()),
+    completionRecordedAt: v.optional(v.number()),
+    completionReason: v.optional(
+      v.union(
+        v.literal("exited"),
+        v.literal("failed"),
+        v.literal("stopped"),
+        v.literal("sandbox_missing"),
+        v.literal("session_missing"),
+        v.literal("command_missing"),
+        v.literal("preflight_failed"),
+      ),
+    ),
     lastOutputTail: v.optional(v.string()),
     lastHeartbeatAt: v.optional(v.number()),
     healthStatus: v.optional(
@@ -601,6 +614,7 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_community", ["communityId"])
+    .index("by_user", ["userId"])
     .index("by_community_user", ["communityId", "userId"]),
 
   communityAgentConfigs: defineTable({
@@ -777,6 +791,7 @@ export default defineSchema({
     .index("by_post", ["postId"])
     .index("by_post_actorKey", ["postId", "actorKey"])
     .index("by_community", ["communityId"])
+    .index("by_actorUser", ["actorUserId"])
     .index("by_actorKey", ["actorKey"]),
 
   communityMemberSettings: defineTable({
