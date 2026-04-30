@@ -1538,15 +1538,33 @@ body {
 }
 
 .polynet-landing-flow span {
-  min-height: 96px;
+  min-height: 132px;
   border: 1px solid var(--border-muted);
   border-radius: 16px;
   padding: 18px;
   display: flex;
+  flex-direction: column;
+  justify-content: space-between;
   align-items: flex-end;
   color: var(--text-primary);
   background: rgba(255, 255, 255, 0.03);
   font-weight: 700;
+}
+
+.polynet-landing-flow svg {
+  width: 46px;
+  height: 46px;
+  color: var(--accent);
+  opacity: 0.9;
+  stroke-width: 1.7;
+  align-self: flex-start;
+}
+
+.polynet-landing-flow strong {
+  align-self: flex-start;
+  max-width: 160px;
+  font: inherit;
+  line-height: 1.15;
 }
 
 .polynet-onboarding-page {

@@ -1,3 +1,5 @@
+import { Bot, LockKeyhole, RefreshCw, UsersRound } from "lucide-react";
+
 type WebLandingPageProps = {
   onTryFree: () => void;
 };
@@ -177,10 +179,22 @@ export function WebLandingPage(props: WebLandingPageProps) {
           <h2 id="polynet-landing-flow">Turn expertise into a useful system.</h2>
         </div>
         <div className="polynet-landing-flow">
-          <span>Build the agent</span>
-          <span>Wrap it in a community</span>
-          <span>Gate access</span>
-          <span>Improve with usage</span>
+          <span>
+            <Bot aria-hidden="true" />
+            <strong>Build the agent</strong>
+          </span>
+          <span>
+            <UsersRound aria-hidden="true" />
+            <strong>Wrap it in a community</strong>
+          </span>
+          <span>
+            <LockKeyhole aria-hidden="true" />
+            <strong>Gate access</strong>
+          </span>
+          <span>
+            <RefreshCw aria-hidden="true" />
+            <strong>Improve with usage</strong>
+          </span>
         </div>
       </section>
     </div>
