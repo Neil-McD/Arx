@@ -102,7 +102,6 @@ import { listEnabledCloudModelRegistryRows } from "../../../shared/cloudModelReg
 import {
   loadCloudProviderConnections,
   type CloudChatgptConnectionStatus,
-  type CloudOpenRouterConnectionStatus,
 } from "../../../shared/cloudProviderConnectionsGateway";
 import { AnalyticsLineChart } from "../../../shared/AnalyticsLineChart";
 import {
@@ -1263,6 +1262,16 @@ export default function App() {
 
   const [modelToggles, setModelToggles] = useState<ModelToggle[]>(DEFAULT_MODEL_TOGGLES);
   const [modelProviderById, setModelProviderById] = useState<Record<string, string>>({});
+  const platformModelToggles = useMemo<ModelToggle[]>(() => {
+    const gpt55 = modelToggles.find((toggle) => toggle.id === DEFAULT_ACTIVE_MODEL_ID);
+    return [
+      {
+        id: DEFAULT_ACTIVE_MODEL_ID,
+        label: gpt55?.label ?? "GPT 5.5",
+        enabled: true,
+      },
+    ];
+  }, [modelToggles]);
   const [activeModelId, setActiveModelId] = useState<string | null>(() => {
     try {
       const stored = (
@@ -2352,8 +2361,8 @@ export default function App() {
     isMissingThreadTitleValue,
     toEpochSeconds,
     activeCommunityId,
-    activeModelId,
-    modelToggles,
+    activeModelId: DEFAULT_ACTIVE_MODEL_ID,
+    modelToggles: platformModelToggles,
     defaultActiveModelId: DEFAULT_ACTIVE_MODEL_ID,
   });
   const {
@@ -2455,15 +2464,6 @@ export default function App() {
     "workspace" | "apps" | "skills"
   >("workspace");
   const [isLoadingUserMemorySettings, setIsLoadingUserMemorySettings] = useState(false);
-  const [openRouterConnection, setOpenRouterConnection] = useState<CloudOpenRouterConnectionStatus>({
-    provider: "openrouter",
-    auth_kind: "api_key",
-    connected: false,
-    key_last_four: null,
-    validated_at: null,
-    updated_at: null,
-  });
-  const [isLoadingOpenRouterConnection, setIsLoadingOpenRouterConnection] = useState(false);
   const [chatgptConnection, setChatgptConnection] = useState<CloudChatgptConnectionStatus>({
     provider: "chatgpt",
     auth_kind: "oauth_tokens",
@@ -3527,12 +3527,6 @@ export default function App() {
   const workspaceThreadKey = isSignedOutAppPresentation ? GUEST_THREAD_ID : activeThreadId;
 
   useEffect(() => {
-    if (!activeThreadId) return;
-    const threadModelId = threads.find((t) => t.id === activeThreadId)?.model_id ?? null;
-    if (threadModelId) setActiveModelId(threadModelId);
-  }, [activeThreadId, threads]);
-
-  useEffect(() => {
     if (!session || activePage !== "workspace") return;
     const refreshThreads = () => {
       void loadThreads(session).catch(() => null);
@@ -3928,9 +3922,7 @@ export default function App() {
     clearAuthResumeState();
     routePendingAuthIntent(intent, {
       select_model: (payload) => {
-        const modelId = payload.model_id.trim();
-        if (!modelId) return;
-        setActiveModelId(modelId);
+        void payload;
       },
       open_workspace_draft: (payload) => {
         openWorkspaceDraft({
@@ -3944,9 +3936,7 @@ export default function App() {
           void providerConnectionUi.handleConnectChatgpt();
           return;
         }
-        setActiveView("settings");
-        setSettingsPage("account");
-        showAppToastMessage("Add your OpenRouter key in Settings to finish connecting.");
+        showAppToastMessage("Provider connection is not available.");
       },
       create_community: (payload) => {
         openCreateCommunityModal(payload.draft ?? null);
@@ -3979,7 +3969,6 @@ export default function App() {
     requireSignIn: (intent) => requireSignIn(intent),
     chatgptConnection,
     onConnectionsUpdated: (connections) => {
-      setOpenRouterConnection(connections.openrouter);
       setChatgptConnection(connections.chatgpt);
     },
     chatgptSecuritySettingsUrl: CHATGPT_SECURITY_SETTINGS_URL,
@@ -3987,23 +3976,20 @@ export default function App() {
   });
   const { applyProviderConnectionLoadError } = providerConnectionUi;
 
-  const loadOpenRouterConnection = useCallback(async (session: AuthSession): Promise<void> => {
+  const loadProviderConnections = useCallback(async (session: AuthSession): Promise<void> => {
     const usableSession = await ensureUsableAuthSession(session);
     if (!usableSession) return;
-    setIsLoadingOpenRouterConnection(true);
     setIsLoadingChatgptConnection(true);
     try {
       const result = await loadCloudProviderConnections({
         session: usableSession,
       });
-      setOpenRouterConnection(result.openrouter);
       setChatgptConnection(result.chatgpt);
       applyProviderConnectionLoadError(null);
     } catch (error) {
       const message = formatProviderConnectionErrorMessage(error, "Failed to load provider connections.");
       applyProviderConnectionLoadError(message);
     } finally {
-      setIsLoadingOpenRouterConnection(false);
       setIsLoadingChatgptConnection(false);
     }
   }, [applyProviderConnectionLoadError, ensureUsableAuthSession]);
@@ -4012,14 +3998,6 @@ export default function App() {
     if (!session) {
       navStackRef.current = [];
       setUserMemorySettings({ memory_mode: "auto", remember_intent_enabled: true, agent_soul: "" });
-      setOpenRouterConnection({
-        provider: "openrouter",
-        auth_kind: "api_key",
-        connected: false,
-        key_last_four: null,
-        validated_at: null,
-        updated_at: null,
-      });
       setChatgptConnection({
         provider: "chatgpt",
         auth_kind: "oauth_tokens",
@@ -4030,7 +4008,6 @@ export default function App() {
         validated_at: null,
         updated_at: null,
       });
-      setIsLoadingOpenRouterConnection(false);
       setIsLoadingChatgptConnection(false);
       setHasResolvedProviderConnections(false);
       return;
@@ -4042,13 +4019,13 @@ export default function App() {
       try {
         await Promise.all([
           loadUserMemorySettings(usableSession),
-          loadOpenRouterConnection(usableSession),
+          loadProviderConnections(usableSession),
         ]);
       } finally {
         setHasResolvedProviderConnections(true);
       }
     })();
-  }, [session, loadOpenRouterConnection]);
+  }, [session, loadProviderConnections]);
 
   const {
     cancelMyPendingJoinRequest,
@@ -4819,7 +4796,6 @@ export default function App() {
   }
 
   const hasPaidAccess = Boolean(session) && hasBuilderTierPaidAccess(builderBillingStatus?.builder_tier ?? "free");
-  const hasUserKeyConnection = Boolean(session) && openRouterConnection.connected;
   const hasUserChatgptConnection = Boolean(session) && chatgptConnection.connected;
   const hasPendingChatgptAuth = providerConnectionUi.hasPendingChatgptAuth;
   const shouldShowEmptyThreadChatgptCard =
@@ -4910,8 +4886,8 @@ export default function App() {
     activeThreadId,
     threadMessages,
     threads,
-    activeModelId,
-    modelToggles,
+    activeModelId: DEFAULT_ACTIVE_MODEL_ID,
+    modelToggles: platformModelToggles,
     userMemoryRememberEnabled:
       userMemorySettings.memory_mode !== "off" && userMemorySettings.remember_intent_enabled !== false,
     builderTier: builderBillingStatus?.builder_tier ?? null,
@@ -4919,7 +4895,7 @@ export default function App() {
       Boolean(session) &&
       hasBuilderTierPaidAccess(builderBillingStatus?.builder_tier ?? "free"),
     loadBuilderBillingStatus,
-    hasUserKeyConnection,
+    hasUserKeyConnection: false,
     hasUserChatgptConnection,
     guestThreadId: GUEST_THREAD_ID,
     guestModelId,
@@ -5084,34 +5060,8 @@ export default function App() {
     if (!activeThreadId) return null;
     return threads.find((t) => t.id === activeThreadId) ?? null;
   }, [activeThreadId, threads]);
-  const workspaceModelState = useWebWorkspaceModelStateController<AuthSession>({
-    session: session,
-    activeThreadId,
-    activeThreadModelId: activeThread?.model_id,
-    activeModelId,
-    setActiveModelId,
-    guestModelId,
-    setGuestModelId,
-    modelToggles,
-    modelProviderById,
-    hasPaidAccess,
-    hasUserKeyConnection,
-    hasUserChatgptConnection,
-    updateThreadModel,
-    showAppToastMessage,
-    requireSignIn,
-    openModelProviderSettings: (message) => {
-      setActiveView("settings");
-      setSettingsPage("account");
-      showAppToastMessage(message);
-    },
-    connectChatgpt: () => {
-      void providerConnectionUi.handleConnectChatgpt();
-    },
-    loadGuestThreadStorage,
-    storeGuestThreadStorage: (storage) => {
-      storeGuestThreadStorage(storage as GuestThreadStorageV1);
-    },
+  const workspaceModelState = useWebWorkspaceModelStateController({
+    modelToggles: platformModelToggles,
   });
   const workspace = useWebWorkspaceSurfaceController<
     AuthSession,
@@ -6252,8 +6202,6 @@ export default function App() {
       isLoadingChatgptConnection,
       chatgptConnection,
       hasPendingChatgptAuth,
-      isLoadingOpenRouterConnection,
-      openRouterConnection,
       formatRelativeTime,
       communities,
       communityRoleById,
@@ -6489,9 +6437,6 @@ export default function App() {
     setInferenceIssueModal,
     setActiveView,
     setSettingsPage,
-    threads,
-    enterWorkspaceThread,
-    requestModelPickerOpen: workspace.actions.requestModelPickerOpen,
     isBuilderUpgradeOpen,
     builderUpgradeContext,
     isStartingBuilderCheckout,
@@ -6608,17 +6553,10 @@ export default function App() {
     activeProjectId: workspace.derived.resolvedActiveProjectId,
     showAppToastMessage,
     activeModelLabel: workspace.derived.activeModelLabel,
-    curatedPickerModels: workspace.derived.curatedPickerModels,
-    selectedPickerModelId: workspace.derived.selectedPickerModelId,
-    modelToggles,
-    hasUserKeyConnection: workspace.derived.hasUserKeyConnection,
-    hasUserChatgptConnection: workspace.derived.hasUserChatgptConnection,
-    canSelectPickerModel: workspace.derived.canSelectPickerModel,
-    onSelectPickerModel: workspace.actions.selectPickerModel,
+    modelToggles: platformModelToggles,
     workspaceVoiceUiState,
     workspaceVoiceTitle: workspaceVoiceIntent.title,
     onWorkspaceVoiceClick: () => void handleVoiceInputClick("workspace"),
-    modelPickerOpenRequestKey: workspace.state.modelPickerOpenRequestKey,
     activeThreadStreamingRunId,
     activeThreadStreamingState,
     runtimeEventsByRunId,

@@ -5,17 +5,14 @@ import {
   beginChatgptConnect,
   beginChatgptManualConnect,
   completeCloudChatgptConnect,
-  connectCloudOpenRouterApiKey,
   disconnectCloudChatgpt,
-  disconnectCloudOpenRouterApiKey,
   pollCloudChatgptConnect,
   type CloudChatgptConnectionStatus,
-  type CloudOpenRouterConnectionStatus,
 } from "../../../../shared/cloudProviderConnectionsGateway";
 
 type SignInIntent = {
   reason: "connect_provider";
-  payload: { provider: "chatgpt" | "openrouter" };
+  payload: { provider: "chatgpt" };
 };
 
 type UseWebProviderConnectionUiControllerParams<TSession> = {
@@ -24,10 +21,7 @@ type UseWebProviderConnectionUiControllerParams<TSession> = {
   ensureSession: (session?: TSession | null) => Promise<TSession | null>;
   requireSignIn: (intent?: SignInIntent) => void;
   chatgptConnection: CloudChatgptConnectionStatus;
-  onConnectionsUpdated: (connections: {
-    openrouter: CloudOpenRouterConnectionStatus;
-    chatgpt: CloudChatgptConnectionStatus;
-  }) => void;
+  onConnectionsUpdated: (connections: { chatgpt: CloudChatgptConnectionStatus }) => void;
   chatgptSecuritySettingsUrl: string;
   getReturnToPath: () => string;
 };
@@ -56,13 +50,6 @@ type ProviderConnectionModalHostProps = {
 
 export type UseWebProviderConnectionUiControllerResult = {
   applyProviderConnectionLoadError: (message: string | null) => void;
-  openRouterApiKeyDraft: string;
-  setOpenRouterApiKeyDraft: (value: string) => void;
-  isSavingOpenRouterConnection: boolean;
-  openRouterConnectionError: string | null;
-  openRouterConnectionSuccess: string | null;
-  handleConnectOpenRouter: () => Promise<void>;
-  handleDisconnectOpenRouter: () => Promise<void>;
   isConnectingChatgpt: boolean;
   isPollingChatgptConnection: boolean;
   isCompletingChatgptConnection: boolean;
@@ -96,10 +83,6 @@ export function useWebProviderConnectionUiController<TSession>(
   const [chatgptDevicePollIntervalSeconds, setChatgptDevicePollIntervalSeconds] = useState(5);
   const [chatgptManualAuthorizeUrl, setChatgptManualAuthorizeUrl] = useState<string | null>(null);
   const [chatgptManualCallbackInput, setChatgptManualCallbackInput] = useState("");
-  const [openRouterApiKeyDraft, setOpenRouterApiKeyDraftState] = useState("");
-  const [isSavingOpenRouterConnection, setIsSavingOpenRouterConnection] = useState(false);
-  const [openRouterConnectionError, setOpenRouterConnectionError] = useState<string | null>(null);
-  const [openRouterConnectionSuccess, setOpenRouterConnectionSuccess] = useState<string | null>(null);
   const [isConnectingChatgpt, setIsConnectingChatgpt] = useState(false);
   const [isPollingChatgptConnection, setIsPollingChatgptConnection] = useState(false);
   const [isCompletingChatgptConnection, setIsCompletingChatgptConnection] = useState(false);
@@ -126,10 +109,6 @@ export function useWebProviderConnectionUiController<TSession>(
     setIsPollingChatgptConnection(false);
     setIsCompletingChatgptConnection(false);
     setIsChatgptConnectModalOpen(false);
-    setOpenRouterApiKeyDraftState("");
-    setIsSavingOpenRouterConnection(false);
-    setOpenRouterConnectionError(null);
-    setOpenRouterConnectionSuccess(null);
     setChatgptConnectionError(null);
     setChatgptConnectionSuccess(null);
   }, [resetChatgptConnectFlowState]);
@@ -139,73 +118,17 @@ export function useWebProviderConnectionUiController<TSession>(
     resetProviderConnectionUiState();
   }, [resetProviderConnectionUiState, session]);
 
-  const setOpenRouterApiKeyDraft = useCallback((value: string) => {
-    setOpenRouterApiKeyDraftState(value);
-    setOpenRouterConnectionError(null);
-  }, []);
-
   const ensureProviderSession = useCallback(
-    async (provider: "chatgpt" | "openrouter"): Promise<TSession | null> => {
+    async (): Promise<TSession | null> => {
       const usableSession = await ensureSession(getSession());
       if (!usableSession) {
-        requireSignIn({ reason: "connect_provider", payload: { provider } });
+        requireSignIn({ reason: "connect_provider", payload: { provider: "chatgpt" } });
         return null;
       }
       return usableSession;
     },
     [ensureSession, getSession, requireSignIn],
   );
-
-  const handleConnectOpenRouter = useCallback(async (): Promise<void> => {
-    const session = await ensureProviderSession("openrouter");
-    if (!session) return;
-    const apiKey = openRouterApiKeyDraft.trim();
-    if (!apiKey) {
-      setOpenRouterConnectionError("OpenRouter API key is required.");
-      setOpenRouterConnectionSuccess(null);
-      return;
-    }
-    setIsSavingOpenRouterConnection(true);
-    setOpenRouterConnectionError(null);
-    setOpenRouterConnectionSuccess(null);
-    try {
-      const result = await connectCloudOpenRouterApiKey({
-        session,
-        apiKey,
-      });
-      onConnectionsUpdated(result);
-      setOpenRouterApiKeyDraftState("");
-      setOpenRouterConnectionSuccess(result.openrouter.connected ? "OpenRouter connected." : "OpenRouter disconnected.");
-    } catch (error) {
-      setOpenRouterConnectionError(
-        formatProviderConnectionErrorMessage(error, "Failed to connect OpenRouter."),
-      );
-    } finally {
-      setIsSavingOpenRouterConnection(false);
-    }
-  }, [ensureProviderSession, onConnectionsUpdated, openRouterApiKeyDraft]);
-
-  const handleDisconnectOpenRouter = useCallback(async (): Promise<void> => {
-    const session = await ensureProviderSession("openrouter");
-    if (!session) return;
-    setIsSavingOpenRouterConnection(true);
-    setOpenRouterConnectionError(null);
-    setOpenRouterConnectionSuccess(null);
-    try {
-      const result = await disconnectCloudOpenRouterApiKey({
-        session,
-      });
-      onConnectionsUpdated(result);
-      setOpenRouterApiKeyDraftState("");
-      setOpenRouterConnectionSuccess("OpenRouter disconnected.");
-    } catch (error) {
-      setOpenRouterConnectionError(
-        formatProviderConnectionErrorMessage(error, "Failed to disconnect OpenRouter."),
-      );
-    } finally {
-      setIsSavingOpenRouterConnection(false);
-    }
-  }, [ensureProviderSession, onConnectionsUpdated]);
 
   const handleConnectChatgpt = useCallback((): void => {
     if (!getSession()) {
@@ -221,7 +144,7 @@ export function useWebProviderConnectionUiController<TSession>(
   }, [chatgptDeviceLoginId, chatgptManualAuthorizeUrl, getSession, requireSignIn, resetChatgptConnectFlowState]);
 
   const handleStartChatgptDeviceConnect = useCallback(async (): Promise<void> => {
-    const session = await ensureProviderSession("chatgpt");
+    const session = await ensureProviderSession();
     if (!session) return;
     resetChatgptConnectFlowState();
     setIsConnectingChatgpt(true);
@@ -252,7 +175,7 @@ export function useWebProviderConnectionUiController<TSession>(
   }, [chatgptDeviceVerificationUrl]);
 
   const handleStartChatgptManualConnect = useCallback(async (): Promise<void> => {
-    const session = await ensureProviderSession("chatgpt");
+    const session = await ensureProviderSession();
     if (!session) return;
     setIsConnectingChatgpt(true);
     setChatgptConnectionError(null);
@@ -280,7 +203,7 @@ export function useWebProviderConnectionUiController<TSession>(
   }, [chatgptManualAuthorizeUrl]);
 
   const handlePollChatgptConnect = useCallback(async (): Promise<boolean> => {
-    const session = await ensureProviderSession("chatgpt");
+    const session = await ensureProviderSession();
     if (!session) return false;
     const loginId = String(chatgptDeviceLoginId ?? "").trim();
     if (!loginId) {
@@ -315,7 +238,7 @@ export function useWebProviderConnectionUiController<TSession>(
   }, [chatgptDeviceLoginId, ensureProviderSession, onConnectionsUpdated, resetChatgptConnectFlowState]);
 
   const handleCompleteChatgptManualConnect = useCallback(async (): Promise<void> => {
-    const session = await ensureProviderSession("chatgpt");
+    const session = await ensureProviderSession();
     if (!session) return;
     const callbackInput = chatgptManualCallbackInput.trim();
     if (!callbackInput) {
@@ -344,7 +267,7 @@ export function useWebProviderConnectionUiController<TSession>(
   }, [chatgptManualCallbackInput, ensureProviderSession, onConnectionsUpdated, resetChatgptConnectFlowState]);
 
   const handleDisconnectChatgpt = useCallback(async (): Promise<void> => {
-    const session = await ensureProviderSession("chatgpt");
+    const session = await ensureProviderSession();
     if (!session) return;
     setIsConnectingChatgpt(true);
     setChatgptConnectionError(null);
@@ -406,19 +329,11 @@ export function useWebProviderConnectionUiController<TSession>(
   ]);
 
   const applyProviderConnectionLoadError = useCallback((message: string | null): void => {
-    setOpenRouterConnectionError(message);
     setChatgptConnectionError(message);
   }, []);
 
   return {
     applyProviderConnectionLoadError,
-    openRouterApiKeyDraft,
-    setOpenRouterApiKeyDraft,
-    isSavingOpenRouterConnection,
-    openRouterConnectionError,
-    openRouterConnectionSuccess,
-    handleConnectOpenRouter,
-    handleDisconnectOpenRouter,
     isConnectingChatgpt,
     isPollingChatgptConnection,
     isCompletingChatgptConnection,

@@ -42,7 +42,6 @@ type WebInferenceIssueModalProps = {
   inferenceIssueModal: InferenceIssueModalState;
   isInferenceIssueModalRunning: boolean;
   onClose: () => void;
-  onChangeModel: (threadId: string) => void;
   onOpenSettings: (reason: InferenceIssueReason) => void;
 };
 

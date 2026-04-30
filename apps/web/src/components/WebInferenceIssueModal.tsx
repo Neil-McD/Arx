@@ -19,7 +19,6 @@ type WebInferenceIssueModalProps = {
   inferenceIssueModal: InferenceIssueModalState;
   isInferenceIssueModalRunning: boolean;
   onClose: () => void;
-  onChangeModel: (threadId: string) => void;
   onOpenSettings: (reason: InferenceIssueReason) => void;
 };
 
@@ -29,7 +28,6 @@ export function WebInferenceIssueModal(props: WebInferenceIssueModalProps) {
     inferenceIssueModal,
     isInferenceIssueModalRunning,
     onClose,
-    onChangeModel,
     onOpenSettings,
   } = props;
 
@@ -52,7 +50,7 @@ export function WebInferenceIssueModal(props: WebInferenceIssueModalProps) {
 
   const primaryMessage =
     inferenceIssueModal.reason === "provider_connection_required"
-      ? inferenceIssueModal.message || "Connect ChatGPT or add your OpenRouter key to use this model."
+      ? inferenceIssueModal.message || "Connect ChatGPT to use agent runs."
       : inferenceIssueModal.reason === "workspace_credits"
         ? inferenceIssueModal.message || "You've used your included workspace compute credits for this billing cycle."
       : inferenceIssueModal.reason === "quota"
@@ -67,14 +65,14 @@ export function WebInferenceIssueModal(props: WebInferenceIssueModalProps) {
 
   const followupMessage =
     inferenceIssueModal.reason === "provider_connection_required"
-      ? "To continue, open Account Settings to connect ChatGPT or OpenRouter, or choose another available model."
+      ? "To continue, open Account Settings to connect ChatGPT."
       : inferenceIssueModal.reason === "workspace_credits"
         ? "To continue, open Agent Settings to review or top up your workspace credits. Community tools and web research still work without Daytona compute."
       : inferenceIssueModal.reason === "quota"
-        ? "To continue, choose another available model or switch providers in Account Settings."
+        ? "To continue, check your connected provider in Account Settings."
         : inferenceIssueModal.reason === "plan"
-          ? "To continue, choose another available model or upgrade to a plan that includes this model."
-          : "To continue, choose another available model or switch providers in Account Settings.";
+          ? "To continue, upgrade to a plan that includes agent runs."
+          : "To continue, check your provider in Account Settings.";
 
   return (
     <div
@@ -130,16 +128,6 @@ export function WebInferenceIssueModal(props: WebInferenceIssueModalProps) {
                 {inferenceIssueModal.reason === "workspace_credits"
                   ? "Open agent settings"
                   : "Open account settings"}
-              </button>
-            )}
-            {inferenceIssueModal.reason !== "workspace_credits" && (
-              <button
-                type="button"
-                className="secondary"
-                onClick={() => onChangeModel(inferenceIssueModal.threadId)}
-                disabled={isInferenceIssueModalRunning}
-              >
-                Change model
               </button>
             )}
           </div>

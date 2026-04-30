@@ -2,7 +2,6 @@ import type { Dispatch, ReactNode, SetStateAction } from "react";
 import type { AuthSession } from "../auth";
 import type { ModelToggle } from "../../../../shared/modelCatalog";
 import type { MessageContextModalPayload } from "../../../../shared/messageContextUi";
-import type { WorkspacePickerModel } from "./useWebWorkspaceModelStateController";
 import type {
   WebWorkspaceHostProps,
   WorkspaceComposerDraft,
@@ -73,17 +72,10 @@ type BuildWebWorkspaceSurfaceProjectionParams = {
   activeProjectId: string | null;
   showAppToastMessage: (message: string) => void;
   activeModelLabel: string;
-  curatedPickerModels: WorkspacePickerModel[];
-  selectedPickerModelId: string | null;
   modelToggles: ModelToggle[];
-  hasUserKeyConnection: boolean;
-  hasUserChatgptConnection: boolean;
-  canSelectPickerModel: (model: WorkspacePickerModel) => boolean;
-  onSelectPickerModel: (model: WorkspacePickerModel) => void;
   workspaceVoiceUiState: "idle" | "recording" | "transcribing";
   workspaceVoiceTitle: string;
   onWorkspaceVoiceClick: () => void;
-  modelPickerOpenRequestKey: number;
   activeThreadStreamingRunId: string | null;
   activeThreadStreamingState: ThreadStreamingState<MemoryUsedItem, HistoryUsedItem, CommunityEvidenceUsedV1> | null;
   runtimeEventsByRunId: Record<string, ThreadStreamingRuntimeEvent[]>;
@@ -304,17 +296,10 @@ export function buildWebWorkspaceSurfaceProjection(
     activeProjectId: params.activeProjectId,
     showAppToastMessage: params.showAppToastMessage,
     activeModelLabel: params.activeModelLabel,
-    curatedPickerModels: params.curatedPickerModels,
-    selectedPickerModelId: params.selectedPickerModelId,
     modelToggles: params.modelToggles,
-    hasUserKeyConnection: params.hasUserKeyConnection,
-    hasUserChatgptConnection: params.hasUserChatgptConnection,
-    canSelectPickerModel: params.canSelectPickerModel,
-    onSelectPickerModel: params.onSelectPickerModel,
     workspaceVoiceUiState: params.workspaceVoiceUiState,
     workspaceVoiceTitle: params.workspaceVoiceTitle,
     onWorkspaceVoiceClick: params.onWorkspaceVoiceClick,
-    modelPickerOpenRequestKey: params.modelPickerOpenRequestKey,
     activeThreadStreamingRunId: params.activeThreadStreamingRunId,
     activeThreadRuntimeEvents: params.activeThreadStreamingState?.runtimeEvents ?? null,
     runtimeEventsByRunId: params.runtimeEventsByRunId,

@@ -26,12 +26,6 @@ type ChatgptConnection = {
   updated_at?: string | null;
 };
 
-type OpenRouterConnection = {
-  connected: boolean;
-  key_last_four?: string | null;
-  updated_at?: string | null;
-};
-
 type OwnedCommunity = {
   id: string;
   slug: string;
@@ -58,15 +52,6 @@ type WebAccountSettingsSectionProps = {
   chatgptDeviceUserCode: string | null;
   chatgptConnectionError: string | null;
   chatgptConnectionSuccess: string | null;
-  isLoadingOpenRouterConnection: boolean;
-  openRouterConnection: OpenRouterConnection;
-  openRouterApiKeyDraft: string;
-  setOpenRouterApiKeyDraft: (value: string) => void;
-  isSavingOpenRouterConnection: boolean;
-  handleConnectOpenRouter: () => Promise<void> | void;
-  handleDisconnectOpenRouter: () => Promise<void> | void;
-  openRouterConnectionError: string | null;
-  openRouterConnectionSuccess: string | null;
   formatRelativeTime: (value: string) => string;
   builderBillingStatus: BuilderBillingStatus | null;
   communities: OwnedCommunity[];
@@ -139,15 +124,6 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
     chatgptDeviceUserCode,
     chatgptConnectionError,
     chatgptConnectionSuccess,
-    isLoadingOpenRouterConnection,
-    openRouterConnection,
-    openRouterApiKeyDraft,
-    setOpenRouterApiKeyDraft,
-    isSavingOpenRouterConnection,
-    handleConnectOpenRouter,
-    handleDisconnectOpenRouter,
-    openRouterConnectionError,
-    openRouterConnectionSuccess,
     formatRelativeTime,
     builderBillingStatus,
     communities,
@@ -257,7 +233,7 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
           Inference connections
         </div>
         <div className="settings-section-desc">
-          Bring your own inference with ChatGPT auth or an OpenRouter key. Builder unlocks the private workbench and workspace tools.
+          Connect ChatGPT for personal inference. Builder unlocks the private workbench and workspace tools.
         </div>
         {!session ? (
           <div className="model-note">Sign in to connect a personal provider.</div>
@@ -310,59 +286,6 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
             )}
             {chatgptConnectionError && <div className="auth-error">{chatgptConnectionError}</div>}
             {chatgptConnectionSuccess && <div className="auth-success">{chatgptConnectionSuccess}</div>}
-
-            <div className="account-row">
-              <div className="account-identity">
-                <span>OpenRouter</span>
-                <strong>
-                  {isLoadingOpenRouterConnection
-                    ? "Checking…"
-                    : openRouterConnection.connected
-                      ? `Connected${openRouterConnection.key_last_four ? ` ·••••${openRouterConnection.key_last_four}` : ""}`
-                      : "Not connected"}
-                </strong>
-              </div>
-            </div>
-            <div className="provider-connection-stack">
-              <input
-                className="provider-connection-input"
-                type="password"
-                placeholder="Paste OpenRouter API key"
-                value={openRouterApiKeyDraft}
-                onChange={(event) => setOpenRouterApiKeyDraft(event.target.value)}
-                autoComplete="off"
-                spellCheck={false}
-              />
-              <div className="provider-connection-actions">
-                <button
-                  className="platform-save-button"
-                  type="button"
-                  onClick={() => void handleConnectOpenRouter()}
-                  disabled={isSavingOpenRouterConnection || openRouterApiKeyDraft.trim().length === 0}
-                >
-                  {isSavingOpenRouterConnection
-                    ? (openRouterConnection.connected ? "Updating…" : "Connecting…")
-                    : (openRouterConnection.connected ? "Update key" : "Connect key")}
-                </button>
-                {openRouterConnection.connected && (
-                  <button
-                    className="secondary provider-disconnect-btn"
-                    type="button"
-                    onClick={() => void handleDisconnectOpenRouter()}
-                    disabled={isSavingOpenRouterConnection}
-                  >
-                    {isSavingOpenRouterConnection ? "Disconnecting…" : "Disconnect"}
-                  </button>
-                )}
-              </div>
-            </div>
-            {openRouterConnection.connected && openRouterConnection.updated_at && (
-              <div className="auth-status">
-                Last validated {formatRelativeTime(openRouterConnection.updated_at)}.
-              </div>
-            )}
-            {openRouterConnectionError && <div className="auth-error">{openRouterConnectionError}</div>}
-            {openRouterConnectionSuccess && <div className="auth-success">{openRouterConnectionSuccess}</div>}
           </>
         )}
       </div>
@@ -406,7 +329,7 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
                       </button>
                     ) : (
                       <>
-                        <span className="auth-status">Builder includes 500 monthly workspace credits. Connect ChatGPT or OpenRouter to bring your own inference.</span>
+                        <span className="auth-status">Builder includes 500 monthly workspace credits. Connect ChatGPT to bring your own inference.</span>
                         {canManagePlan ? (
                           <button
                             type="button"

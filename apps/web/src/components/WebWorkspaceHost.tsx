@@ -25,18 +25,15 @@ import {
   type DaytonaWorkspaceTerminalPreviewStatus,
 } from "../../../../shared/daytonaWorkspaceTerminals";
 import type { AuthSessionLike } from "../../../../shared/authSession";
-import type { ModelSectionId, ModelToggle } from "../../../../shared/modelCatalog";
+import type { ModelToggle } from "../../../../shared/modelCatalog";
 import { useMessageAttachmentInputController } from "../../../../shared/useMessageAttachmentInputController";
 import { useWorkspaceAutoScroll } from "../../../../shared/useWorkspaceAutoScroll";
-import { useModelPickerController } from "../../../../shared/useModelPickerController";
-import { useModelPickerLifecycleEffects } from "../../../../shared/useModelPickerLifecycleEffects";
 import { VoiceInputButton } from "../../../../shared/VoiceInputButton";
 import {
   emitWorkspaceEvent,
   formatWorkspaceInstrumentationError,
 } from "../lib/workspaceInstrumentation";
 import { useWebThreadMessagesLifecycle } from "../controllers/useWebThreadMessagesLifecycle";
-import type { WorkspacePickerModel } from "../controllers/useWebWorkspaceModelStateController";
 import {
   WebWorkspaceAppPreview,
   isRetryablePreviewStatus,
@@ -44,7 +41,6 @@ import {
   type WorkspacePreviewLifecycleState,
 } from "./WebWorkspaceAppPreview";
 import { WebBackgroundTerminalRail } from "./WebBackgroundTerminalRail";
-import { WebModelPickerPopover } from "./WebModelPickerPopover";
 import type { ThreadStreamingRuntimeEvent } from "../../../../shared/webTurnRunnerCore";
 import { WebWorkspaceThreadError } from "./WebWorkspaceThreadError";
 import { WebWorkspaceThreadMessageList } from "./WebWorkspaceThreadMessageList";
@@ -136,17 +132,10 @@ export type WebWorkspaceHostProps = {
   activeProjectId: string | null;
   showAppToastMessage: (message: string) => void;
   activeModelLabel: string;
-  curatedPickerModels: WorkspacePickerModel[];
-  selectedPickerModelId: string | null;
   modelToggles: ModelToggle[];
-  hasUserKeyConnection: boolean;
-  hasUserChatgptConnection: boolean;
-  canSelectPickerModel: (model: WorkspacePickerModel) => boolean;
-  onSelectPickerModel: (model: WorkspacePickerModel) => void;
   workspaceVoiceUiState: "idle" | "recording" | "transcribing";
   workspaceVoiceTitle: string;
   onWorkspaceVoiceClick: () => void;
-  modelPickerOpenRequestKey: number;
   activeThreadStreamingRunId?: string | null;
   activeThreadRuntimeEvents?: ThreadStreamingRuntimeEvent[] | null;
   runtimeEventsByRunId?: Record<string, ThreadStreamingRuntimeEvent[]>;
@@ -492,13 +481,7 @@ const WorkspaceTimelinePane = memo(function WorkspaceTimelinePane(props: {
   authedWorkspaceComposerPlaceholder: string;
   guestWorkspaceComposerPlaceholder: string;
   activeModelLabel: string;
-  curatedPickerModels: WorkspacePickerModel[];
-  selectedPickerModelId: string | null;
   modelToggles: ModelToggle[];
-  hasUserKeyConnection: boolean;
-  hasUserChatgptConnection: boolean;
-  canSelectPickerModel: (model: WorkspacePickerModel) => boolean;
-  onSelectPickerModel: (model: WorkspacePickerModel) => void;
   workspaceVoiceUiState: "idle" | "recording" | "transcribing";
   workspaceVoiceTitle: string;
   onWorkspaceFileInputChange: ChangeEventHandler<HTMLInputElement>;
@@ -508,7 +491,6 @@ const WorkspaceTimelinePane = memo(function WorkspaceTimelinePane(props: {
   onSendLandingAction: (prompt: string) => void;
   onStopStreamingTurn: () => void;
   onWorkspaceVoiceClick: () => void;
-  modelPickerOpenRequestKey: number;
   guestSignupRail: ReactNode;
   session: AuthSessionLike | null;
   threadErrorView: WorkspaceThreadErrorView | null;
@@ -572,13 +554,7 @@ const WorkspaceTimelinePane = memo(function WorkspaceTimelinePane(props: {
                   isStoppingAllTerminals={false}
                   guestSignupRail={props.guestSignupRail}
                   activeModelLabel={props.activeModelLabel}
-                  curatedPickerModels={props.curatedPickerModels}
-                  selectedPickerModelId={props.selectedPickerModelId}
                   modelToggles={props.modelToggles}
-                  hasUserKeyConnection={props.hasUserKeyConnection}
-                  hasUserChatgptConnection={props.hasUserChatgptConnection}
-                  canSelectPickerModel={props.canSelectPickerModel}
-                  onSelectPickerModel={props.onSelectPickerModel}
                   workspaceVoiceUiState={props.workspaceVoiceUiState}
                   workspaceVoiceTitle={props.workspaceVoiceTitle}
                   onWorkspaceFileInputChange={props.onWorkspaceFileInputChange}
@@ -589,7 +565,6 @@ const WorkspaceTimelinePane = memo(function WorkspaceTimelinePane(props: {
                   onStopTerminal={() => {}}
                   onStopAllTerminals={() => {}}
                   onWorkspaceVoiceClick={props.onWorkspaceVoiceClick}
-                  modelPickerOpenRequestKey={props.modelPickerOpenRequestKey}
                 />
               </div>
               <div className="web-empty-thread-actions" role="list">
@@ -819,13 +794,7 @@ function WorkspaceComposer(props: {
   isStoppingAllTerminals: boolean;
   guestSignupRail: ReactNode;
   activeModelLabel: string;
-  curatedPickerModels: WorkspacePickerModel[];
-  selectedPickerModelId: string | null;
   modelToggles: ModelToggle[];
-  hasUserKeyConnection: boolean;
-  hasUserChatgptConnection: boolean;
-  canSelectPickerModel: (model: WorkspacePickerModel) => boolean;
-  onSelectPickerModel: (model: WorkspacePickerModel) => void;
   workspaceVoiceUiState: "idle" | "recording" | "transcribing";
   workspaceVoiceTitle: string;
   onWorkspaceFileInputChange: ChangeEventHandler<HTMLInputElement>;
@@ -836,45 +805,8 @@ function WorkspaceComposer(props: {
   onStopTerminal: (terminalSessionId: string) => void;
   onStopAllTerminals: () => void;
   onWorkspaceVoiceClick: () => void;
-  modelPickerOpenRequestKey: number;
   showTerminalRail?: boolean;
 }) {
-  const [isModelPickerOpen, setIsModelPickerOpen] = useState(false);
-  const [modelPickerQuery, setModelPickerQuery] = useState("");
-  const [modelPickerSection, setModelPickerSection] = useState<ModelSectionId>("all");
-  const modelPickerRef = useRef<HTMLDivElement>(null);
-  const modelPickerSearchRef = useRef<HTMLInputElement>(null);
-  const pickerModels = props.isAuthRecoveringSignedIn ? [] : props.curatedPickerModels;
-  const { visiblePickerModels, openModelPicker, closeModelPicker } = useModelPickerController<
-    WorkspacePickerModel,
-    ModelSectionId
-  >({
-    curatedPickerModels: pickerModels,
-    modelPickerQuery,
-    modelPickerSection,
-    setModelPickerQuery,
-    setModelPickerSection,
-    setIsModelPickerOpen,
-    allSectionId: "all",
-  });
-
-  useModelPickerLifecycleEffects({
-    isModelPickerOpen,
-    modelPickerRef,
-    modelPickerSearchRef,
-    closeModelPicker,
-  });
-
-  useEffect(() => {
-    if (props.modelPickerOpenRequestKey <= 0) return;
-    openModelPicker();
-    window.setTimeout(() => {
-      const root = modelPickerRef.current;
-      const btn = root?.querySelector<HTMLButtonElement>(".ask-model-btn");
-      btn?.focus();
-    }, 60);
-  }, [openModelPicker, props.modelPickerOpenRequestKey]);
-
   const disableComposerActions =
     props.isAuthRecoveringSignedIn ||
     props.isAccountGraphHydratingCritical ||
@@ -936,30 +868,9 @@ function WorkspaceComposer(props: {
             style={{ display: "none" }}
             onChange={props.onWorkspaceFileInputChange}
           />
-          <WebModelPickerPopover
-            modelPickerRef={modelPickerRef}
-            modelPickerSearchRef={modelPickerSearchRef}
-            isOpen={isModelPickerOpen}
-            activeModelLabel={props.activeModelLabel}
-            curatedPickerModels={pickerModels}
-            modelPickerQuery={modelPickerQuery}
-            setModelPickerQuery={setModelPickerQuery}
-            modelPickerSection={modelPickerSection}
-            setModelPickerSection={setModelPickerSection}
-            visiblePickerModels={visiblePickerModels}
-            selectedPickerModelId={props.selectedPickerModelId}
-            modelToggles={props.modelToggles}
-            hasUserKeyConnection={props.hasUserKeyConnection}
-            hasUserChatgptConnection={props.hasUserChatgptConnection}
-            hasSession={props.hasSession}
-            canSelectPickerModel={props.canSelectPickerModel}
-            onSelectModel={(model) => {
-              props.onSelectPickerModel(model);
-              closeModelPicker();
-            }}
-            onOpen={openModelPicker}
-            onClose={closeModelPicker}
-          />
+          <div className="ask-model ask-model-static" aria-label={`Model: ${props.activeModelLabel}`}>
+            <span className="ask-model-label">{props.activeModelLabel}</span>
+          </div>
         </div>
         <div className={`ask-actions${props.landing ? " ask-actions-landing" : ""}`}>
           <VoiceInputButton
@@ -1827,13 +1738,7 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
                 authedWorkspaceComposerPlaceholder={props.authedWorkspaceComposerPlaceholder}
                 guestWorkspaceComposerPlaceholder={props.guestWorkspaceComposerPlaceholder}
                 activeModelLabel={props.activeModelLabel}
-                curatedPickerModels={props.curatedPickerModels}
-                selectedPickerModelId={props.selectedPickerModelId}
                 modelToggles={props.modelToggles}
-                hasUserKeyConnection={props.hasUserKeyConnection}
-                hasUserChatgptConnection={props.hasUserChatgptConnection}
-                canSelectPickerModel={props.canSelectPickerModel}
-                onSelectPickerModel={props.onSelectPickerModel}
                 workspaceVoiceUiState={props.workspaceVoiceUiState}
                 workspaceVoiceTitle={props.workspaceVoiceTitle}
                 onWorkspaceFileInputChange={handleWorkspaceFileInputChange}
@@ -1855,7 +1760,6 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
                 }
                 onStopStreamingTurn={props.onStopStreamingTurn}
                 onWorkspaceVoiceClick={props.onWorkspaceVoiceClick}
-                modelPickerOpenRequestKey={props.modelPickerOpenRequestKey}
                 guestSignupRail={props.guestSignupRail}
                 session={props.session}
                 threadErrorView={props.threadErrorView}
@@ -1926,13 +1830,7 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
             isStoppingAllTerminals={isStoppingAllWorkspaceTerminals}
             guestSignupRail={props.guestSignupRail}
             activeModelLabel={props.activeModelLabel}
-            curatedPickerModels={props.curatedPickerModels}
-            selectedPickerModelId={props.selectedPickerModelId}
             modelToggles={props.modelToggles}
-            hasUserKeyConnection={props.hasUserKeyConnection}
-            hasUserChatgptConnection={props.hasUserChatgptConnection}
-            canSelectPickerModel={props.canSelectPickerModel}
-            onSelectPickerModel={props.onSelectPickerModel}
             workspaceVoiceUiState={props.workspaceVoiceUiState}
             workspaceVoiceTitle={props.workspaceVoiceTitle}
             onWorkspaceFileInputChange={handleWorkspaceFileInputChange}
@@ -1953,7 +1851,6 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
               void handleStopAllWorkspaceTerminals();
             }}
             onWorkspaceVoiceClick={props.onWorkspaceVoiceClick}
-            modelPickerOpenRequestKey={props.modelPickerOpenRequestKey}
             showTerminalRail={!isDesktopExpandedPreview}
           />
         </div>

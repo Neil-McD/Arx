@@ -55,12 +55,6 @@ export type WebSettingsPanelsProps = {
       updated_at?: string | null;
     };
     hasPendingChatgptAuth: boolean;
-    isLoadingOpenRouterConnection: boolean;
-    openRouterConnection: {
-      connected: boolean;
-      key_last_four?: string | null;
-      updated_at?: string | null;
-    };
     formatRelativeTime: (value: string) => string;
     communities: OwnedCommunity[];
     communityRoleById: Record<string, string>;
@@ -220,15 +214,6 @@ export function WebSettingsPanels(props: WebSettingsPanelsProps) {
     chatgptDeviceUserCode: account.providerConnectionUi.chatgptDeviceUserCode,
     chatgptConnectionError: account.providerConnectionUi.chatgptConnectionError,
     chatgptConnectionSuccess: account.providerConnectionUi.chatgptConnectionSuccess,
-    isLoadingOpenRouterConnection: account.isLoadingOpenRouterConnection,
-    openRouterConnection: account.openRouterConnection,
-    openRouterApiKeyDraft: account.providerConnectionUi.openRouterApiKeyDraft,
-    setOpenRouterApiKeyDraft: account.providerConnectionUi.setOpenRouterApiKeyDraft,
-    isSavingOpenRouterConnection: account.providerConnectionUi.isSavingOpenRouterConnection,
-    handleConnectOpenRouter: account.providerConnectionUi.handleConnectOpenRouter,
-    handleDisconnectOpenRouter: account.providerConnectionUi.handleDisconnectOpenRouter,
-    openRouterConnectionError: account.providerConnectionUi.openRouterConnectionError,
-    openRouterConnectionSuccess: account.providerConnectionUi.openRouterConnectionSuccess,
     formatRelativeTime: account.formatRelativeTime,
     builderBillingStatus: account.billingUi.builderBillingStatus,
     communities: account.communities,

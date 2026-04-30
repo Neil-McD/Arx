@@ -48,17 +48,6 @@ export function buildWebGlobalOverlayHostProps(params: {
   setInferenceIssueModal: (value: InferenceIssueModalState) => void;
   setActiveView: (value: AppView) => void;
   setSettingsPage: (value: SettingsPage) => void;
-  threads: Array<{
-    id: string;
-    project_id?: string | null;
-    community_id?: string | null;
-  }>;
-  enterWorkspaceThread: (args: {
-    threadId: string;
-    projectId: string | null;
-    communityId: string | null;
-  }) => void;
-  requestModelPickerOpen: () => void;
   isBuilderUpgradeOpen: boolean;
   builderUpgradeContext: BuilderUpgradeContext;
   isStartingBuilderCheckout: boolean;
@@ -132,18 +121,6 @@ export function buildWebGlobalOverlayHostProps(params: {
             params.setSettingsPage(
               reason === "workspace_credits" ? "agent" : "account",
             );
-          },
-          onChangeModel: (threadId) => {
-            params.setInferenceIssueModal(null);
-            const thread =
-              params.threads.find((candidate) => candidate.id === threadId) ?? null;
-            const projectId = (thread?.project_id ?? "").trim();
-            params.enterWorkspaceThread({
-              threadId,
-              projectId: projectId || null,
-              communityId: thread?.community_id ?? null,
-            });
-            params.requestModelPickerOpen();
           },
         }
       : null,

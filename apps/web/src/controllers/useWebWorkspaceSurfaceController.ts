@@ -7,7 +7,6 @@ import {
   resetWorkspaceSurfaceState,
   resumeWorkspaceSurfaceState,
 } from "./workspaceSurfaceLifecycle";
-import type { WorkspacePickerModel } from "./useWebWorkspaceModelStateController";
 import type { WebCloudProjectRecord } from "./useWebProjectUiController";
 
 type ThreadLike = {
@@ -38,23 +37,10 @@ type WorkspaceProjectController<SessionT, ThreadT extends ThreadLike> = {
 };
 
 type WorkspaceModelController = {
-  state: {
-    guestModelId: string;
-    modelPickerOpenRequestKey: number;
-  };
   derived: {
     activeModelLabel: string;
-    curatedPickerModels: WorkspacePickerModel[];
     selectedModelId: string;
-    selectedPickerModelId: string | null;
     modelToggles: ModelToggle[];
-    hasUserKeyConnection: boolean;
-    hasUserChatgptConnection: boolean;
-    canSelectPickerModel: (model: WorkspacePickerModel) => boolean;
-  };
-  actions: {
-    selectPickerModel: (model: WorkspacePickerModel) => void;
-    requestModelPickerOpen: () => void;
   };
 };
 
@@ -157,8 +143,6 @@ export function useWebWorkspaceSurfaceController<
         workspaceWantsNewChat: params.workspaceWantsNewChat,
       },
       projects: params.project.state.projects,
-      guestModelId: params.model.state.guestModelId,
-      modelPickerOpenRequestKey: params.model.state.modelPickerOpenRequestKey,
     },
     derived: {
       resolvedActiveProjectId: params.project.derived.resolvedActiveProjectId,
@@ -167,13 +151,8 @@ export function useWebWorkspaceSurfaceController<
       defaultProjectId: params.project.derived.defaultProjectId,
       resolveThreadProjectId: params.project.derived.resolveThreadProjectId,
       activeModelLabel: params.model.derived.activeModelLabel,
-      curatedPickerModels: params.model.derived.curatedPickerModels,
       selectedModelId: params.model.derived.selectedModelId,
-      selectedPickerModelId: params.model.derived.selectedPickerModelId,
       modelToggles: params.model.derived.modelToggles,
-      hasUserKeyConnection: params.model.derived.hasUserKeyConnection,
-      hasUserChatgptConnection: params.model.derived.hasUserChatgptConnection,
-      canSelectPickerModel: params.model.derived.canSelectPickerModel,
     },
     actions: {
       setActiveProjectId: params.project.actions.setActiveProjectId,
@@ -181,8 +160,6 @@ export function useWebWorkspaceSurfaceController<
       handleProjectCreated: params.project.actions.handleProjectCreated,
       handleProjectUpdated: params.project.actions.handleProjectUpdated,
       handleProjectDeleted: params.project.actions.handleProjectDeleted,
-      selectPickerModel: params.model.actions.selectPickerModel,
-      requestModelPickerOpen: params.model.actions.requestModelPickerOpen,
       resetWorkspaceSurfaceState: resetSurfaceState,
       hydrateWorkspaceSurfaceState: hydrateSurfaceState,
       resumeWorkspaceSurfaceState: resumeSurfaceState,
