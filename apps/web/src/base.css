@@ -1827,7 +1827,7 @@ body {
 .polynet-onboarding-choice {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  gap: 16px;
 }
 
 .polynet-onboarding-actions button,
@@ -1843,10 +1843,48 @@ body {
   cursor: pointer;
 }
 
+.polynet-onboarding-choice button {
+  min-height: 210px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: 18px;
+  padding: 24px;
+  text-align: left;
+  background: rgba(255, 255, 255, 0.045);
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    transform 160ms ease;
+}
+
+.polynet-onboarding-choice button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.075);
+  border-color: rgba(255, 255, 255, 0.24);
+  transform: translateY(-1px);
+}
+
+.polynet-onboarding-choice button span {
+  color: var(--text-primary);
+  font-size: 24px;
+  line-height: 1.05;
+  font-weight: 850;
+}
+
+.polynet-onboarding-choice button small {
+  max-width: 28ch;
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.45;
+  font-weight: 650;
+}
+
 .polynet-onboarding-actions button.primary,
 .polynet-onboarding-choice button.primary {
-  background: var(--accent);
-  color: white;
+  background: rgba(255, 60, 142, 0.13);
+  border-color: rgba(255, 60, 142, 0.34);
+  color: var(--text-primary);
 }
 
 .polynet-onboarding-learn {

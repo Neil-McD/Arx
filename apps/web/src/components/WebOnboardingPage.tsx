@@ -31,22 +31,22 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
   return (
     <main className="polynet-onboarding-page" aria-labelledby="polynet-onboarding-title">
       <section className="polynet-onboarding-panel">
-        <div className="polynet-onboarding-brand">
-          <img src="/favicon.svg" alt="" />
-          <span>Polynet</span>
-        </div>
-
-        <div className="polynet-onboarding-header">
-          <p className="polynet-landing-kicker">Set up your account</p>
-          <h1 id="polynet-onboarding-title">Welcome to Polynet.</h1>
-          <p>
-            Confirm your profile so people know who they are talking to across
-            communities.
-          </p>
-        </div>
-
         {step === "profile" ? (
           <>
+            <div className="polynet-onboarding-brand">
+              <img src="/favicon.svg" alt="" />
+              <span>Polynet</span>
+            </div>
+
+            <div className="polynet-onboarding-header">
+              <p className="polynet-landing-kicker">Set up your account</p>
+              <h1 id="polynet-onboarding-title">Welcome to Polynet.</h1>
+              <p>
+                Confirm your profile so people know who they are talking to across
+                communities.
+              </p>
+            </div>
+
             <div className="polynet-onboarding-profile">
               <div className="polynet-onboarding-avatar-row">
                 <div
@@ -111,10 +111,12 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
           <>
             <div className="polynet-onboarding-choice">
               <button type="button" className="primary" disabled={props.isSaving} onClick={props.onBuildCommunity}>
-                Build a community
+                <span>Build a community</span>
+                <small>Create a paid agent-powered community, configure resources, gate access, and start turning expertise into a useful product.</small>
               </button>
               <button type="button" disabled={props.isSaving} onClick={props.onDiscoverCommunity}>
-                Discover a community
+                <span>Discover a community</span>
+                <small>Find communities with specialized agents, resources, and workflows you can use to learn, build, and get work done.</small>
               </button>
             </div>
             {props.error ? <p className="polynet-onboarding-error">{props.error}</p> : null}
@@ -124,7 +126,7 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
               disabled={props.isSaving}
               onClick={props.onLearnAboutPolynet}
             >
-              Learn about Polynet
+              Learn about Polynet <span aria-hidden="true">→</span>
             </button>
           </>
         )}
