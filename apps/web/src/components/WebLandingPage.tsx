@@ -131,12 +131,11 @@ export function WebLandingPage(props: WebLandingPageProps) {
         <div className="polynet-landing-comparison-copy">
           <p className="polynet-landing-kicker">Stack comparison</p>
           <h2 id="polynet-landing-stack">
-            The stack gets expensive before it gets coherent.
+            The Agentic Collective Intelligence Platform
           </h2>
           <p>
-            Builders usually stitch together AI assistance, community software,
-            resource docs, funnels, checkout, and paid access. Polynet puts the
-            core agent-community system in one platform.
+            Polynet compresses agents, community, resources, funnels, and paid
+            access into one clean product.
           </p>
         </div>
         <div className="polynet-landing-comparison">
