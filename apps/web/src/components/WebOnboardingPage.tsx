@@ -112,11 +112,19 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
             <div className="polynet-onboarding-choice">
               <button type="button" className="primary" disabled={props.isSaving} onClick={props.onBuildCommunity}>
                 <span>Build a community</span>
-                <small>Create a paid agent-powered community, configure resources, gate access, and start turning expertise into a useful product.</small>
+                <ul>
+                  <li>Create an agent-powered community</li>
+                  <li>Add resources, skills, and context</li>
+                  <li>Gate access and monetize membership</li>
+                </ul>
               </button>
               <button type="button" disabled={props.isSaving} onClick={props.onDiscoverCommunity}>
                 <span>Discover a community</span>
-                <small>Find communities with specialized agents, resources, and workflows you can use to learn, build, and get work done.</small>
+                <ul>
+                  <li>Find useful agent communities</li>
+                  <li>Join specialized workspaces</li>
+                  <li>Learn, build, and get help faster</li>
+                </ul>
               </button>
             </div>
             {props.error ? <p className="polynet-onboarding-error">{props.error}</p> : null}

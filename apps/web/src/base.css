@@ -1844,13 +1844,13 @@ body {
 }
 
 .polynet-onboarding-choice button {
-  min-height: 210px;
+  min-height: 260px;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   justify-content: flex-start;
-  gap: 18px;
-  padding: 24px;
+  gap: 22px;
+  padding: 28px;
   text-align: left;
   background: rgba(255, 255, 255, 0.045);
   transition:
@@ -1872,12 +1872,34 @@ body {
   font-weight: 850;
 }
 
-.polynet-onboarding-choice button small {
-  max-width: 28ch;
+.polynet-onboarding-choice button ul {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.polynet-onboarding-choice button li {
+  position: relative;
+  max-width: 30ch;
+  padding-left: 18px;
   color: var(--text-secondary);
   font-size: 14px;
-  line-height: 1.45;
+  line-height: 1.35;
   font-weight: 650;
+}
+
+.polynet-onboarding-choice button li::before {
+  content: "";
+  position: absolute;
+  top: 0.55em;
+  left: 0;
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: currentColor;
+  opacity: 0.82;
 }
 
 .polynet-onboarding-actions button.primary,
