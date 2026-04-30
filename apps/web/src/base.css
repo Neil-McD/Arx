@@ -1203,9 +1203,13 @@ body {
 }
 
 .polynet-landing-copy h1 {
-  max-width: 760px;
-  font-size: clamp(44px, 7vw, 84px);
-  line-height: 0.96;
+  max-width: 700px;
+  font-size: clamp(42px, 6.2vw, 76px);
+  line-height: 0.98;
+}
+
+.polynet-landing-copy h1 span {
+  color: var(--accent);
 }
 
 .polynet-landing-subcopy,

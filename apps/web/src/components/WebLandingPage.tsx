@@ -51,11 +51,10 @@ export function WebLandingPage(props: WebLandingPageProps) {
           <div className="polynet-landing-copy">
             <p className="polynet-landing-kicker">Services as software</p>
             <h1 id="polynet-landing-title">
-              Build an AI community that can think, remember, and act.
+              Build an <span>AI community</span> that <span>thinks</span>, <span>remembers</span>, and <span>acts</span>.
             </h1>
             <p className="polynet-landing-subcopy">
-              Polynet lets you build, distribute, and monetize agent-powered
-              communities.
+              Build, distribute, and monetize agent-powered communities.
             </p>
             <div className="polynet-landing-cta-row">
               <button type="button" className="primary" onClick={props.onTryFree}>
@@ -131,7 +130,7 @@ export function WebLandingPage(props: WebLandingPageProps) {
         <div className="polynet-landing-comparison-copy">
           <p className="polynet-landing-kicker">Stack comparison</p>
           <h2 id="polynet-landing-stack">
-            The Agentic Collective Intelligence Platform
+            The Collective Intelligence Platform
           </h2>
           <p>
             Polynet compresses agents, community, resources, funnels, and paid
