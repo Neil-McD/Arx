@@ -50,6 +50,19 @@ export async function fetchCloudProfileDetailByUserId<SessionT, TProfile extends
   return firstGatewayRow<TProfile>(payload);
 }
 
+export async function resolveCloudOnboardingProfileDetail<SessionT, TProfile extends CloudProfileDetailRow = CloudProfileDetailRow>(
+  params: CloudProfilesGatewayParams<SessionT> & {
+    userId: string;
+  },
+): Promise<TProfile | null> {
+  const { client, authSubject } = await bootstrapConvexUser(params.session);
+  const payload = await client.mutation("profiles:resolveOnboardingProfileDetail" as any, {
+    authSubject,
+    userId: params.userId,
+  });
+  return firstGatewayRow<TProfile>(payload);
+}
+
 export async function upsertCloudProfileDetail<SessionT, TProfile extends CloudProfileDetailRow = CloudProfileDetailRow>(
   params: CloudProfilesGatewayParams<SessionT> & {
     userId: string;

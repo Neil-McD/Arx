@@ -94,7 +94,7 @@ import {
   saveCloudCommunityPublicPresentation,
 } from "../../../shared/cloudCommunityFunnelGateway";
 import {
-  fetchCloudProfileDetailByUserId,
+  resolveCloudOnboardingProfileDetail,
   upsertCloudProfileDetail,
 } from "../../../shared/cloudProfilesGateway";
 import { listEnabledCloudModelRegistryRows } from "../../../shared/cloudModelRegistryGateway";
@@ -1969,7 +1969,7 @@ export default function App() {
   async function loadProfileForOnboarding(activeSession: AuthSession): Promise<UserProfileDetail | null> {
     const userId = resolveAuthSubject(activeSession);
     if (!userId) return null;
-    const row = await fetchCloudProfileDetailByUserId<AuthSession, UserProfileDetail>({
+    const row = await resolveCloudOnboardingProfileDetail<AuthSession, UserProfileDetail>({
       session: activeSession,
       userId,
     });

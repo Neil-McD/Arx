@@ -43,6 +43,31 @@ function mapProfileBase(row: UserRow) {
   };
 }
 
+async function hasEstablishedAccountEvidence(ctx: any, userId: any): Promise<boolean> {
+  const checks = [
+    ctx.db.query("threads").withIndex("by_owner", (q: any) => q.eq("ownerId", userId)).first(),
+    ctx.db.query("communityMemberships").withIndex("by_user", (q: any) => q.eq("userId", userId)).first(),
+    ctx.db.query("communities").withIndex("by_owner", (q: any) => q.eq("ownerId", userId)).first(),
+    ctx.db.query("checkoutSessions").withIndex("by_owner", (q: any) => q.eq("ownerUserId", userId)).first(),
+    ctx.db.query("userProviderConnections").withIndex("by_user", (q: any) => q.eq("userId", userId)).first(),
+    ctx.db.query("personalMemoryItems").withIndex("by_user", (q: any) => q.eq("userId", userId)).first(),
+    ctx.db.query("cloudProjects").withIndex("by_owner", (q: any) => q.eq("ownerId", userId)).first(),
+  ];
+  const rows = await Promise.all(checks);
+  return rows.some(Boolean);
+}
+
+function mapProfileDetail(user: UserRow, detail: ProfileDetailRow | null) {
+  return {
+    ...mapProfileBase(user),
+    bio: detail?.bio ?? null,
+    onboarding_completed_at:
+      typeof detail?.onboardingCompletedAt === "number"
+        ? new Date(detail.onboardingCompletedAt).toISOString()
+        : null,
+  };
+}
+
 export const listProfilesByUserIds = query({
   args: {
     userIds: v.array(v.string()),
@@ -76,14 +101,61 @@ export const getProfileDetailByUserId = query({
       .query("userProfileDetails")
       .withIndex("by_user", (q: any) => q.eq("userId", user._id))
       .first()) as ProfileDetailRow | null;
-    return {
-      ...mapProfileBase(user),
-      bio: detail?.bio ?? null,
-      onboarding_completed_at:
-        typeof detail?.onboardingCompletedAt === "number"
-          ? new Date(detail.onboardingCompletedAt).toISOString()
-          : null,
-    };
+    return mapProfileDetail(user, detail);
+  },
+});
+
+export const resolveOnboardingProfileDetail = mutation({
+  args: {
+    authSubject: v.optional(v.string()),
+    userId: v.optional(v.string()),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const nowMs = args.nowMs ?? Date.now();
+    const actor = await ensureAuthenticatedActor({
+      ctx,
+      authSubject: args.authSubject ?? null,
+      nowMs,
+    });
+    const requestedSubject = normalizeSubject(args.userId ?? actor.authSubject);
+    if (requestedSubject !== actor.authSubject) {
+      throw new Error("profile_forbidden");
+    }
+
+    const user = (await ctx.db.get(actor.dbUserId)) as UserRow | null;
+    if (!user) throw new Error("user_not_found");
+
+    const existingDetail = (await ctx.db
+      .query("userProfileDetails")
+      .withIndex("by_user", (q: any) => q.eq("userId", actor.dbUserId))
+      .first()) as ProfileDetailRow | null;
+
+    if (existingDetail?.onboardingCompletedAt) {
+      return mapProfileDetail(user, existingDetail);
+    }
+
+    if (await hasEstablishedAccountEvidence(ctx, actor.dbUserId)) {
+      if (existingDetail) {
+        await ctx.db.patch(existingDetail._id, {
+          onboardingCompletedAt: nowMs,
+          updatedAt: nowMs,
+        });
+      } else {
+        await ctx.db.insert("userProfileDetails", {
+          userId: actor.dbUserId,
+          onboardingCompletedAt: nowMs,
+          createdAt: nowMs,
+          updatedAt: nowMs,
+        });
+      }
+    }
+
+    const detail = (await ctx.db
+      .query("userProfileDetails")
+      .withIndex("by_user", (q: any) => q.eq("userId", actor.dbUserId))
+      .first()) as ProfileDetailRow | null;
+    return mapProfileDetail(user, detail);
   },
 });
 
@@ -152,13 +224,6 @@ export const upsertProfileDetail = mutation({
 
     if (!refreshedUser) throw new Error("user_not_found");
 
-    return {
-      ...mapProfileBase(refreshedUser),
-      bio: detail?.bio ?? null,
-      onboarding_completed_at:
-        typeof detail?.onboardingCompletedAt === "number"
-          ? new Date(detail.onboardingCompletedAt).toISOString()
-          : null,
-    };
+    return mapProfileDetail(refreshedUser, detail);
   },
 });
