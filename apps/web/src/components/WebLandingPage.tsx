@@ -36,11 +36,6 @@ const stackTotal = "$516+";
 function CommunityFlowVisual() {
   return (
     <span className="polynet-landing-flow-visual community" aria-hidden="true">
-      <svg className="polynet-community-ring" viewBox="0 0 72 72">
-        <path className="connection" d="M29 14C21 17 15 25 14 34" />
-        <path className="connection" d="M43 14C51 17 57 25 58 34" />
-        <path className="connection" d="M21 52C30 60 42 60 51 52" />
-      </svg>
       <UserRound className="polynet-community-person top" />
       <UserRound className="polynet-community-person left" />
       <UserRound className="polynet-community-person right" />

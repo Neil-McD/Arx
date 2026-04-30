@@ -1572,21 +1572,6 @@ body {
   height: 70px;
 }
 
-.polynet-community-ring {
-  position: absolute;
-  inset: 0;
-  width: 76px !important;
-  height: 70px !important;
-  overflow: visible;
-}
-
-.polynet-community-ring .connection {
-  fill: none;
-  stroke: rgba(255, 255, 255, 0.36);
-  stroke-width: 2;
-  stroke-linecap: round;
-}
-
 .polynet-community-brain {
   position: absolute;
   left: 50%;
