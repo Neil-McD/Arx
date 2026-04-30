@@ -78,6 +78,18 @@ function isRuntimeCompletionFailure(
   return "ok" in completion && completion.ok === false;
 }
 
+async function loadUserAgentSoulForRuntime(ctx: any, userId: string): Promise<string | null> {
+  try {
+    const row = (await ctx.runQuery(internal.settings.getUserAgentSoulInternal as any, {
+      userId: userId as any,
+    })) as { agent_soul?: unknown } | null;
+    const agentSoul = String(row?.agent_soul ?? "").trim();
+    return agentSoul || null;
+  } catch {
+    return null;
+  }
+}
+
 function emitBufferedAssistantText(params: {
   content: string;
   emitDelta: (delta: string) => void;
@@ -421,6 +433,7 @@ export async function handleRuntimeTurnRequest(args: {
       resolvedRuntimeHarnessProfile,
       runtimeExecutionMode,
     } = resolved.value;
+    const runtimeAgentSoul = await loadUserAgentSoulForRuntime(ctx, actor.dbUserId);
     const runId =
       String(input.idempotency_key ?? "").trim() ||
       `convex_runtime:${crypto.randomUUID()}`;
@@ -504,6 +517,7 @@ export async function handleRuntimeTurnRequest(args: {
         const loadedContext = await loadRuntimeTurnContextPacketForRun({
           ctx,
           ownerId: actor.dbUserId,
+          threadId: ownedThread._id,
           projectId: runtimeProjectId,
           runId,
           latestUserText,
@@ -563,6 +577,7 @@ export async function handleRuntimeTurnRequest(args: {
           const loadedContext = await loadRuntimeTurnContextPacketForRun({
             ctx,
             ownerId: actor.dbUserId,
+            threadId: ownedThread._id,
             projectId: runtimeProjectId,
             runId,
             latestUserText,
@@ -706,6 +721,7 @@ export async function handleRuntimeTurnRequest(args: {
         const loadedFailureContext = await loadRuntimeTurnContextPacketForRun({
           ctx,
           ownerId: actor.dbUserId,
+          threadId: ownedThread._id,
           projectId: runtimeProjectId,
           runId,
           latestUserText,
@@ -891,6 +907,7 @@ export async function handleRuntimeTurnRequest(args: {
               communityOneLiner: runtimeCommunityOneLiner,
               communityAbout: runtimeCommunityAbout,
               communitySystemPrompt: runtimeCommunitySystemPrompt,
+              agentSoul: runtimeAgentSoul,
               threadWorkingState: ownedThread.workingState ?? null,
               allowedToolNames,
               apiKeyOverride: openRouterApiKeyOverride,
@@ -1097,6 +1114,7 @@ export async function handleRuntimeTurnRequest(args: {
           communityOneLiner: runtimeCommunityOneLiner,
           communityAbout: runtimeCommunityAbout,
           communitySystemPrompt: runtimeCommunitySystemPrompt,
+          agentSoul: runtimeAgentSoul,
           threadWorkingState: ownedThread.workingState ?? null,
           allowedToolNames,
           apiKeyOverride: openRouterApiKeyOverride,
@@ -1198,7 +1216,8 @@ export async function handleRuntimeTurnRequest(args: {
           communitySlug: runtimeCommunitySlug,
           communityOneLiner: runtimeCommunityOneLiner,
           communityAbout: runtimeCommunityAbout,
-          customCommunitySystemPrompt: runtimeCommunitySystemPrompt,
+          communitySystemPrompt: runtimeCommunitySystemPrompt,
+          agentSoul: runtimeAgentSoul,
           currentDateTimeIso: now.toISOString(),
           currentDateLabel: new Intl.DateTimeFormat("en-US", {
             dateStyle: "full",

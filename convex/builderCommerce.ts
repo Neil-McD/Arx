@@ -14,6 +14,7 @@ import {
   normalizeOptionalStripeConnectString,
   normalizeStripeConnectRequirementList,
 } from "./stripeConnectAccountCore";
+import { recordCriticalAuditEventBestEffort } from "./criticalAudit";
 
 function isActiveWindow(nowMs: number, startsAt: number, endsAt?: number): boolean {
   if (startsAt > nowMs) return false;
@@ -136,6 +137,21 @@ export const createPendingBuilderCheckoutSessionInternal = internalMutation({
       createdAt: nowMs,
       updatedAt: nowMs,
     });
+    await recordCriticalAuditEventBestEffort(ctx, {
+      eventKey: `builder_checkout_created:${args.sessionId}`,
+      eventType: "builder_checkout_created",
+      status: "started",
+      actorUserId: args.ownerUserId,
+      subjectUserId: args.ownerUserId,
+      checkoutSessionId: args.sessionId,
+      provider: "stripe",
+      providerObjectId: args.providerPriceId,
+      metadata: {
+        targetTier: args.targetTier,
+        expiresAt: args.expiresAt,
+      },
+      createdAt: nowMs,
+    });
   },
 });
 
@@ -162,6 +178,22 @@ export const attachBuilderStripeCheckoutSessionInternal = internalMutation({
       providerSubscriptionId: String(args.providerSubscriptionId ?? "").trim() || undefined,
       providerPriceId: String(args.providerPriceId ?? "").trim() || row.providerPriceId,
       updatedAt: nowMs,
+    });
+    await recordCriticalAuditEventBestEffort(ctx, {
+      eventKey: `builder_checkout_attached_to_stripe:${args.sessionId}`,
+      eventType: "builder_checkout_attached_to_stripe",
+      status: "succeeded",
+      actorUserId: row.ownerUserId,
+      subjectUserId: row.ownerUserId,
+      checkoutSessionId: args.sessionId,
+      provider: "stripe",
+      providerObjectId: args.providerCheckoutSessionId,
+      metadata: {
+        providerCustomerId: args.providerCustomerId ?? null,
+        providerSubscriptionId: args.providerSubscriptionId ?? null,
+        providerPriceId: args.providerPriceId ?? row.providerPriceId ?? null,
+      },
+      createdAt: nowMs,
     });
   },
 });
@@ -265,6 +297,22 @@ export const syncBuilderStripeSubscriptionInternal = internalMutation({
           createdAt: nowMs,
           updatedAt: nowMs,
         });
+        await recordCriticalAuditEventBestEffort(ctx, {
+          eventKey: `builder_entitlement_granted:${ownerUserId}:${targetTier}:${args.providerSubscriptionId ?? row.providerSubscriptionId ?? args.localSessionId}`,
+          eventType: "builder_entitlement_granted",
+          status: "succeeded",
+          actorUserId: ownerUserId,
+          subjectUserId: ownerUserId,
+          checkoutSessionId: args.localSessionId,
+          provider: "stripe",
+          providerObjectId: String(args.providerSubscriptionId ?? row.providerSubscriptionId ?? "").trim() || undefined,
+          metadata: {
+            targetTier,
+            subscriptionStatus: args.subscriptionStatus,
+            providerPriceId: args.providerPriceId ?? row.providerPriceId ?? null,
+          },
+          createdAt: nowMs,
+        });
       }
     } else if (args.grantsAccess === false) {
       for (const entitlement of activeStripeRows) {
@@ -273,7 +321,40 @@ export const syncBuilderStripeSubscriptionInternal = internalMutation({
           updatedAt: nowMs,
         });
       }
+      await recordCriticalAuditEventBestEffort(ctx, {
+        eventKey: `builder_entitlement_revoked:${ownerUserId}:${args.providerSubscriptionId ?? row.providerSubscriptionId ?? args.localSessionId}:${nowMs}`,
+        eventType: "builder_entitlement_revoked",
+        status: "succeeded",
+        actorUserId: ownerUserId,
+        subjectUserId: ownerUserId,
+        checkoutSessionId: args.localSessionId,
+        provider: "stripe",
+        providerObjectId: String(args.providerSubscriptionId ?? row.providerSubscriptionId ?? "").trim() || undefined,
+        metadata: {
+          subscriptionStatus: args.subscriptionStatus,
+          revokedCount: activeStripeRows.length,
+        },
+        createdAt: nowMs,
+      });
     }
+    await recordCriticalAuditEventBestEffort(ctx, {
+      eventKey: `builder_subscription_synced:${args.providerSubscriptionId ?? row.providerSubscriptionId ?? args.localSessionId}:${args.subscriptionStatus}:${nowMs}`,
+      eventType: "builder_subscription_synced",
+      status: "succeeded",
+      actorUserId: ownerUserId,
+      subjectUserId: ownerUserId,
+      checkoutSessionId: args.localSessionId,
+      provider: "stripe",
+      providerObjectId: String(args.providerSubscriptionId ?? row.providerSubscriptionId ?? "").trim() || undefined,
+      metadata: {
+        targetTier,
+        subscriptionStatus: args.subscriptionStatus,
+        grantsAccess: args.grantsAccess ?? null,
+        currentPeriodStartAt: args.currentPeriodStartAt ?? row.currentPeriodStartAt ?? null,
+        currentPeriodEndAt: args.currentPeriodEndAt ?? row.currentPeriodEndAt ?? null,
+      },
+      createdAt: nowMs,
+    });
     const nextTier = args.grantsAccess === true ? targetTier : "free";
     if (args.grantsAccess === true || args.grantsAccess === false) {
       await enqueueBuilderSubscriptionStateEmailInternal({
@@ -465,6 +546,22 @@ export const syncUserStripeConnectAccountInternal = internalMutation({
     };
     if (existing) {
       await ctx.db.patch(existing._id, patch);
+      await recordCriticalAuditEventBestEffort(ctx, {
+        eventKey: `stripe_connect_account_synced:${patch.stripeAccountId}:${nowMs}`,
+        eventType: "stripe_connect_account_synced",
+        status: "succeeded",
+        actorUserId: args.userId,
+        subjectUserId: args.userId,
+        provider: "stripe",
+        providerObjectId: patch.stripeAccountId,
+        metadata: {
+          connectStatus: patch.status,
+          chargesEnabled: patch.chargesEnabled,
+          payoutsEnabled: patch.payoutsEnabled,
+          detailsSubmitted: patch.detailsSubmitted,
+        },
+        createdAt: nowMs,
+      });
       return {
         userId: String(args.userId),
         stripeAccountId: patch.stripeAccountId,
@@ -473,6 +570,22 @@ export const syncUserStripeConnectAccountInternal = internalMutation({
     }
     await ctx.db.insert("userStripeConnectAccounts", {
       ...patch,
+      createdAt: nowMs,
+    });
+    await recordCriticalAuditEventBestEffort(ctx, {
+      eventKey: `stripe_connect_account_synced:${patch.stripeAccountId}:${nowMs}`,
+      eventType: "stripe_connect_account_synced",
+      status: "succeeded",
+      actorUserId: args.userId,
+      subjectUserId: args.userId,
+      provider: "stripe",
+      providerObjectId: patch.stripeAccountId,
+      metadata: {
+        connectStatus: patch.status,
+        chargesEnabled: patch.chargesEnabled,
+        payoutsEnabled: patch.payoutsEnabled,
+        detailsSubmitted: patch.detailsSubmitted,
+      },
       createdAt: nowMs,
     });
     return {

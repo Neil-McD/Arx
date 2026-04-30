@@ -16,6 +16,16 @@ export type DaytonaWorkspaceTerminalRecord = {
   updated_at: number;
   finished_at: number | null;
   exit_code: number | null;
+  completion_recorded_at: number | null;
+  completion_reason:
+    | "exited"
+    | "failed"
+    | "stopped"
+    | "sandbox_missing"
+    | "session_missing"
+    | "command_missing"
+    | "preflight_failed"
+    | null;
   output_tail: string | null;
   last_heartbeat_at: number | null;
   health_status: "unknown" | "starting" | "healthy" | "unhealthy" | "exited" | "stale";
@@ -94,6 +104,14 @@ function mapWorkspaceTerminalRow(
     updated_at: Number(row?.updated_at ?? 0) || 0,
     finished_at: typeof row?.finished_at === "number" ? row.finished_at : null,
     exit_code: typeof row?.exit_code === "number" ? row.exit_code : null,
+    completion_recorded_at:
+      typeof row?.completion_recorded_at === "number"
+        ? row.completion_recorded_at
+        : null,
+    completion_reason:
+      typeof row?.completion_reason === "string" && row.completion_reason.trim()
+        ? (row.completion_reason.trim() as DaytonaWorkspaceTerminalRecord["completion_reason"])
+        : null,
     output_tail:
       typeof row?.output_tail === "string" && row.output_tail.trim()
         ? row.output_tail

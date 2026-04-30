@@ -8,6 +8,7 @@ type CloudUserSettingsGatewayParams<SessionT> = {
 export type CloudUserMemorySettingsRow = {
   memory_mode?: unknown;
   remember_intent_enabled?: unknown;
+  agent_soul?: unknown;
 };
 
 async function bootstrapConvexUser(sessionRaw: unknown): Promise<{
@@ -30,6 +31,7 @@ export async function loadCloudUserMemorySettings<SessionT>(
   return {
     memory_mode: row.memory_mode,
     remember_intent_enabled: row.remember_intent_enabled,
+    agent_soul: row.agent_soul,
   };
 }
 
@@ -37,6 +39,7 @@ export async function saveCloudUserMemorySettings<SessionT>(
   params: CloudUserSettingsGatewayParams<SessionT> & {
     memoryMode: "off" | "suggest" | "auto";
     rememberIntentEnabled: boolean;
+    agentSoul?: string;
   },
 ): Promise<void> {
   const { client, authSubject } = await bootstrapConvexUser(params.session);
@@ -44,5 +47,6 @@ export async function saveCloudUserMemorySettings<SessionT>(
     authSubject,
     memoryMode: params.memoryMode,
     rememberIntentEnabled: Boolean(params.rememberIntentEnabled),
+    agentSoul: params.agentSoul,
   });
 }

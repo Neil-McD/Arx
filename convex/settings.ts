@@ -1,6 +1,10 @@
-import { mutation, query } from "./_generated/server";
+import { internalQuery, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { resolveUserIdForAuthenticatedRequest } from "./authActor";
+
+function normalizeAgentSoul(raw: unknown): string {
+  return String(raw ?? "").trim().slice(0, 40_000);
+}
 
 function firstIsoOrNull(value: number | null | undefined): string | null {
   if (typeof value !== "number" || !Number.isFinite(value)) return null;
@@ -26,8 +30,24 @@ export const getUserMemorySettings = query({
     return {
       memory_mode: row.memoryMode,
       remember_intent_enabled: row.rememberIntentEnabled,
+      agent_soul: row.agentSoul ?? "",
       created_at: firstIsoOrNull(row.createdAt),
       updated_at: firstIsoOrNull(row.updatedAt),
+    };
+  },
+});
+
+export const getUserAgentSoulInternal = internalQuery({
+  args: {
+    userId: v.id("users"),
+  },
+  handler: async (ctx, args) => {
+    const row = await ctx.db
+      .query("userMemorySettings")
+      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .first();
+    return {
+      agent_soul: row?.agentSoul ?? "",
     };
   },
 });
@@ -38,6 +58,7 @@ export const saveUserMemorySettings = mutation({
     authSubject: v.optional(v.string()),
     memoryMode: v.union(v.literal("off"), v.literal("suggest"), v.literal("auto")),
     rememberIntentEnabled: v.boolean(),
+    agentSoul: v.optional(v.string()),
     nowMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
@@ -51,12 +72,17 @@ export const saveUserMemorySettings = mutation({
       .query("userMemorySettings")
       .withIndex("by_user", (q) => q.eq("userId", userId))
       .first();
+    const nextAgentSoul =
+      args.agentSoul === undefined
+        ? existing?.agentSoul ?? ""
+        : normalizeAgentSoul(args.agentSoul);
 
     if (!existing) {
       const id = await ctx.db.insert("userMemorySettings", {
         userId,
         memoryMode: args.memoryMode,
         rememberIntentEnabled: args.rememberIntentEnabled,
+        agentSoul: nextAgentSoul,
         createdAt: nowMs,
         updatedAt: nowMs,
       });
@@ -64,12 +90,14 @@ export const saveUserMemorySettings = mutation({
         id,
         memory_mode: args.memoryMode,
         remember_intent_enabled: args.rememberIntentEnabled,
+        agent_soul: nextAgentSoul,
       };
     }
 
     await ctx.db.patch(existing._id, {
       memoryMode: args.memoryMode,
       rememberIntentEnabled: args.rememberIntentEnabled,
+      agentSoul: nextAgentSoul,
       updatedAt: nowMs,
     });
 
@@ -77,6 +105,7 @@ export const saveUserMemorySettings = mutation({
       id: existing._id,
       memory_mode: args.memoryMode,
       remember_intent_enabled: args.rememberIntentEnabled,
+      agent_soul: nextAgentSoul,
     };
   },
 });

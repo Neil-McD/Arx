@@ -738,6 +738,7 @@ async function executeRetrievalAgentLoop(
     await loadRuntimeTurnContextPacketForRun({
       ctx: params.ctx,
       ownerId: params.userId,
+      threadId: params.threadId ?? undefined,
       projectId: params.projectId ?? null,
       runId: params.runId,
       latestUserText: latestUserTextForRuntimeContext,
@@ -753,7 +754,8 @@ async function executeRetrievalAgentLoop(
     communitySlug: params.communitySlug,
     communityOneLiner: params.communityOneLiner,
     communityAbout: params.communityAbout,
-    customCommunitySystemPrompt: params.communitySystemPrompt,
+    communitySystemPrompt: params.communitySystemPrompt,
+    agentSoul: params.agentSoul,
     projectLabel: projectContext.label,
     projectDescription: projectContext.description,
     runtimeTurnContext,

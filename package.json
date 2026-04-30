@@ -25,6 +25,7 @@
     "check:convex-verified-identity-guard": "bash scripts/convex_verified_identity_guard.sh",
     "check:auth-bootstrap-public-identity-guard": "bash scripts/auth_bootstrap_public_identity_guard.sh",
     "check:auth-billing-public-identity-guard": "bash scripts/auth_billing_public_identity_guard.sh",
+    "check:critical-audit-events-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/critical_audit_events_proof.ts",
     "check:builder-billing-redirect-authority-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/builder_billing_redirect_authority_proof.ts",
     "check:community-admin-contract-guard": "bash scripts/community_admin_contract_guard.sh",
     "check:community-public-identity-guard": "bash scripts/community_public_identity_guard.sh",

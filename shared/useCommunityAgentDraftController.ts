@@ -16,6 +16,7 @@ type CommunityAgentConfigLike<LandingT> = {
   id: string;
   community_id: string;
   landing_json: LandingT | null;
+  community_system_prompt?: string | null;
   system_prompt: string | null;
   updated_at: string;
 };
@@ -29,7 +30,7 @@ type UseCommunityAgentConfigControllerArgs<
   session: SessionT | null;
   ensureSession?: EnsureSessionFn<SessionT>;
   communityAgentConfigLanding: LandingT;
-  communityAgentConfigSystemPrompt: string;
+  communityAgentConfigCommunitySystemPrompt: string;
   normalizeConfigForSave: (config: LandingT) => LandingT | null;
   hydrateConfigEditor: (config: ConfigT | null) => void;
   setLoadedCommunityId: (communityId: string | null) => void;
@@ -104,14 +105,15 @@ export function useCommunityAgentConfigController<
         session,
         communityId,
         landingJson: normalized,
-        systemPrompt: current.communityAgentConfigSystemPrompt,
+        communitySystemPrompt: current.communityAgentConfigCommunitySystemPrompt,
       })) as UpsertConfigResponseRow | null;
       if (!row) return false;
       current.hydrateConfigEditor({
         id: row.id,
         community_id: communityId,
         landing_json: normalized,
-        system_prompt: current.communityAgentConfigSystemPrompt,
+        community_system_prompt: current.communityAgentConfigCommunitySystemPrompt,
+        system_prompt: current.communityAgentConfigCommunitySystemPrompt,
         updated_at: row.updated_at,
       } as ConfigT);
       current.markConfigClean();

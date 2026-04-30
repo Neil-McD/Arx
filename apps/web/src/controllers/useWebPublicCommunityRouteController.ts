@@ -10,7 +10,7 @@ import {
   formatCommunityVisibilityLabel,
   toCanonicalCommunityVisibility,
 } from "../../../../shared/communityVisibility";
-import { deriveCommunityJoinMode, type CommunityJoinMode } from "../communityJoinPolicy";
+import { deriveCommunityFunnelAction, type CommunityFunnelAction } from "../communityJoinPolicy";
 
 type NavigateFn = (path: string, opts?: { replace?: boolean; state?: unknown }) => void;
 
@@ -115,16 +115,16 @@ export function useWebPublicCommunityRouteController<
       funnel: publicFunnelPreviewDraft.funnel,
     } as TPublicCommunity;
   }, [publicCommunityForSurface, publicFunnelPreviewDraft]);
-  const publicJoinMode: CommunityJoinMode | null = isPublicFunnelPreviewRoute
-    ? publicFunnelPreviewDraft?.joinMode ?? null
+  const publicFunnelAction: CommunityFunnelAction | null = isPublicFunnelPreviewRoute
+    ? publicFunnelPreviewDraft?.funnelAction ?? null
     : params.publicCommunity
-      ? deriveCommunityJoinMode({
+      ? deriveCommunityFunnelAction({
           entry_policy: params.publicCommunity.entry_policy,
         })
       : null;
-  const canJoinForFree = publicJoinMode === "join_free";
-  const canJoinWithApproval = publicJoinMode === "join_approval";
-  const canJoinWithCheckout = publicJoinMode === "checkout";
+  const canJoinForFree = publicFunnelAction === "join";
+  const canJoinWithApproval = publicFunnelAction === "request_access";
+  const canJoinWithCheckout = publicFunnelAction === "checkout";
   const canEnterPublicCommunity = Boolean(
     params.publicCommunityAccess && (params.publicCommunityAccess.can_enter_community || params.publicCommunityAccess.is_owner),
   );
@@ -163,7 +163,6 @@ export function useWebPublicCommunityRouteController<
     selectedPublicCommunityPlan,
     publicVisibilityLabel,
     resolvedPublicCommunity,
-    publicJoinMode,
     canEnterPublicCommunity,
     canJoinForFree,
     canJoinWithApproval,

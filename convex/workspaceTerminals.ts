@@ -43,6 +43,14 @@ const RECENT_TERMINAL_FAILURE_LIMIT = 4;
 const PROJECT_BACKGROUND_SANDBOX_CREATE_LEASE_MS = 60_000;
 
 type WorkspaceTerminalStatus = "starting" | "running" | "exited" | "failed" | "stopped";
+type WorkspaceTerminalCompletionReason =
+  | "exited"
+  | "failed"
+  | "stopped"
+  | "sandbox_missing"
+  | "session_missing"
+  | "command_missing"
+  | "preflight_failed";
 type WorkspaceTerminalSummary = {
   id: string;
   lifecycle_owner: WorkspaceTerminalLifecycleOwner;
@@ -58,6 +66,8 @@ type WorkspaceTerminalSummary = {
   updated_at: number;
   finished_at: number | null;
   exit_code: number | null;
+  completion_recorded_at: number | null;
+  completion_reason: WorkspaceTerminalCompletionReason | null;
   output_tail: string | null;
   last_heartbeat_at: number | null;
   health_status: WorkspaceTerminalHealthStatus;
@@ -114,6 +124,16 @@ const workspaceTerminalPreviewRenderStatusValidator = v.union(
   v.literal("visible_content"),
   v.literal("blank_suspected"),
   v.literal("transport_error"),
+);
+
+const workspaceTerminalCompletionReasonValidator = v.union(
+  v.literal("exited"),
+  v.literal("failed"),
+  v.literal("stopped"),
+  v.literal("sandbox_missing"),
+  v.literal("session_missing"),
+  v.literal("command_missing"),
+  v.literal("preflight_failed"),
 );
 
 function normalizeOptionalString(value: unknown): string | null {
@@ -205,10 +225,11 @@ function buildTerminalSnapshot(rows: any[]): {
   const recent = summaries
     .filter((row) => {
       if (activeIds.has(row.id)) return false;
-      const isRecentFailure = row.status === "failed" || row.status === "exited";
+      const isRecentCompletion =
+        row.status === "failed" || row.status === "exited" || row.status === "stopped";
       const lastSeenAt = row.finished_at ?? row.updated_at;
       return (
-        isRecentFailure &&
+        isRecentCompletion &&
         Number.isFinite(lastSeenAt) &&
         lastSeenAt > 0 &&
         nowMs - lastSeenAt <= RECENT_TERMINAL_FAILURE_VISIBLE_MS
@@ -358,6 +379,8 @@ export const createWorkspaceTerminalSessionInternal = internalMutation({
     updatedAt: v.number(),
     finishedAt: v.optional(v.number()),
     exitCode: v.optional(v.number()),
+    completionRecordedAt: v.optional(v.number()),
+    completionReason: v.optional(workspaceTerminalCompletionReasonValidator),
     lastOutputTail: v.optional(v.string()),
     lastHeartbeatAt: v.optional(v.number()),
     healthStatus: v.optional(workspaceTerminalHealthStatusValidator),
@@ -469,6 +492,8 @@ export const updateWorkspaceTerminalSessionInternal = internalMutation({
     updatedAt: v.optional(v.number()),
     finishedAt: v.optional(v.number()),
     exitCode: v.optional(v.number()),
+    completionRecordedAt: v.optional(v.number()),
+    completionReason: v.optional(workspaceTerminalCompletionReasonValidator),
     lastOutputTail: v.optional(v.string()),
     lifecycleOwner: v.optional(workspaceTerminalLifecycleOwnerValidator),
     startedByThreadId: v.optional(v.string()),
@@ -493,6 +518,8 @@ export const updateWorkspaceTerminalSessionInternal = internalMutation({
     if (args.updatedAt !== undefined) patch.updatedAt = args.updatedAt;
     if (args.finishedAt !== undefined) patch.finishedAt = args.finishedAt;
     if (args.exitCode !== undefined) patch.exitCode = args.exitCode;
+    if (args.completionRecordedAt !== undefined) patch.completionRecordedAt = args.completionRecordedAt;
+    if (args.completionReason !== undefined) patch.completionReason = args.completionReason;
     if (args.lastOutputTail !== undefined) patch.lastOutputTail = args.lastOutputTail;
     if (args.lifecycleOwner !== undefined) patch.lifecycleOwner = args.lifecycleOwner;
     if (args.startedByThreadId !== undefined) patch.startedByThreadId = args.startedByThreadId;
@@ -593,12 +620,14 @@ export const reconcileProjectWorkspaceTerminalsInternal = internalAction({
       return buildTerminalSnapshot(rows);
     }
 
-    const markRowsFailed = async () => {
+    const markRowsFailed = async (completionReason: WorkspaceTerminalCompletionReason) => {
       for (const row of activeRows) {
         await ctx.runMutation(internal.workspaceTerminals.updateWorkspaceTerminalSessionInternal as any, {
           terminalSessionId: row._id,
           status: "failed",
           finishedAt: nowMs,
+          completionRecordedAt: row.completionRecordedAt ?? nowMs,
+          completionReason: row.completionReason ?? completionReason,
           updatedAt: nowMs,
           lastHeartbeatAt: nowMs,
           healthStatus: "unhealthy",
@@ -629,7 +658,7 @@ export const reconcileProjectWorkspaceTerminalsInternal = internalAction({
     });
     if (!sandbox.ok) {
       if (isConfirmedSandboxGoneFailure(sandbox)) {
-        return await markRowsFailed();
+        return await markRowsFailed("sandbox_missing");
       }
       return buildTerminalSnapshot(rows);
     }
@@ -641,7 +670,7 @@ export const reconcileProjectWorkspaceTerminalsInternal = internalAction({
     });
     if (!sessions.ok) {
       if (isConfirmedSessionGoneFailure(sessions)) {
-        return await markRowsFailed();
+        return await markRowsFailed("session_missing");
       }
       return buildTerminalSnapshot(rows);
     }
@@ -655,6 +684,8 @@ export const reconcileProjectWorkspaceTerminalsInternal = internalAction({
           terminalSessionId: row._id,
           status: "failed",
           finishedAt: nowMs,
+          completionRecordedAt: row.completionRecordedAt ?? nowMs,
+          completionReason: row.completionReason ?? "session_missing",
           updatedAt: nowMs,
           lastHeartbeatAt: nowMs,
           healthStatus: "unhealthy",
@@ -670,6 +701,8 @@ export const reconcileProjectWorkspaceTerminalsInternal = internalAction({
           terminalSessionId: row._id,
           status: "failed",
           finishedAt: nowMs,
+          completionRecordedAt: row.completionRecordedAt ?? nowMs,
+          completionReason: row.completionReason ?? "command_missing",
           updatedAt: nowMs,
         });
         continue;
@@ -696,6 +729,8 @@ export const reconcileProjectWorkspaceTerminalsInternal = internalAction({
         status: exitCode === 0 ? "exited" : "failed",
         finishedAt: nowMs,
         exitCode,
+        completionRecordedAt: row.completionRecordedAt ?? nowMs,
+        completionReason: row.completionReason ?? (exitCode === 0 ? "exited" : "failed"),
         updatedAt: nowMs,
         lastHeartbeatAt: nowMs,
         healthStatus: exitCode === 0 ? "exited" : "unhealthy",

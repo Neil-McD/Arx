@@ -103,6 +103,13 @@ export async function reconcileWorkspaceTerminalRow(params: {
 
   const failAndRelease = async (
     status: "failed" | "stopped" | "exited" | "running" | "starting" = "failed",
+    completionReason?:
+      | "exited"
+      | "failed"
+      | "stopped"
+      | "sandbox_missing"
+      | "session_missing"
+      | "command_missing",
   ): Promise<ReturnType<typeof summarizeWorkspaceTerminalRow>> => {
     const healthStatus: WorkspaceTerminalHealthStatus =
       status === "running"
@@ -125,6 +132,11 @@ export async function reconcileWorkspaceTerminalRow(params: {
         terminalSessionId: row._id,
         status,
         finishedAt: nowMs,
+        completionRecordedAt: row.completionRecordedAt ?? nowMs,
+        completionReason:
+          row.completionReason ??
+          completionReason ??
+          (status === "exited" ? "exited" : status === "stopped" ? "stopped" : "failed"),
         updatedAt: nowMs,
         lastHeartbeatAt: nowMs,
         healthStatus,
@@ -158,7 +170,7 @@ export async function reconcileWorkspaceTerminalRow(params: {
   });
   if (!sandbox.ok) {
     if (isConfirmedSandboxGoneFailure(sandbox)) {
-      return await failAndRelease("failed");
+      return await failAndRelease("failed", "sandbox_missing");
     }
     return summarizeWorkspaceTerminalRow(row);
   }
@@ -171,7 +183,7 @@ export async function reconcileWorkspaceTerminalRow(params: {
   });
   if (!session.ok) {
     if (isConfirmedSessionGoneFailure(session)) {
-      return await failAndRelease("failed");
+      return await failAndRelease("failed", "session_missing");
     }
     return summarizeWorkspaceTerminalRow(row);
   }
@@ -181,7 +193,7 @@ export async function reconcileWorkspaceTerminalRow(params: {
     providerCommandId,
   );
   if (!command) {
-    return await failAndRelease("failed");
+    return await failAndRelease("failed", "command_missing");
   }
 
   const logs = await getDaytonaProcessSessionCommandLogs({
@@ -225,7 +237,15 @@ export async function reconcileWorkspaceTerminalRow(params: {
       healthStatus,
       healthSummary,
       previewStatus,
-      ...(exitCode === null ? null : { finishedAt: nowMs, exitCode }),
+      ...(exitCode === null
+        ? null
+        : {
+            finishedAt: nowMs,
+            exitCode,
+            completionRecordedAt: row.completionRecordedAt ?? nowMs,
+            completionReason:
+              row.completionReason ?? (exitCode === 0 ? "exited" : "failed"),
+          }),
       ...(logs.ok ? { lastOutputTail: truncateTerminalOutputTail(logs.output) } : null),
     },
   );

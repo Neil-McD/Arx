@@ -1,4 +1,4 @@
-export type CommunityJoinMode = "join_free" | "join_approval" | "checkout";
+export type CommunityFunnelAction = "join" | "request_access" | "checkout";
 export type CommunityEntryPolicy = "open" | "approval" | "paid_subscription";
 export type CommunityMembersJoinReviewMode = "paid" | "free_auto" | "free_approval";
 
@@ -6,15 +6,15 @@ export function isCommunityEntryPolicy(value: unknown): value is CommunityEntryP
   return value === "open" || value === "approval" || value === "paid_subscription";
 }
 
-export function deriveCommunityJoinMode(args: {
+export function deriveCommunityFunnelAction(args: {
   entry_policy?: unknown;
-}): CommunityJoinMode {
+}): CommunityFunnelAction {
   if (isCommunityEntryPolicy(args.entry_policy)) {
     if (args.entry_policy === "paid_subscription") return "checkout";
-    if (args.entry_policy === "approval") return "join_approval";
-    return "join_free";
+    if (args.entry_policy === "approval") return "request_access";
+    return "join";
   }
-  return "join_approval";
+  return "request_access";
 }
 
 export function deriveCommunityMembersJoinReviewMode(args: {

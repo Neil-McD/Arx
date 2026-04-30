@@ -309,8 +309,12 @@ import { startCloudWorkspaceCreditTopupCheckout } from "../../../shared/cloudBui
 import { loadWorkspaceCreditBalanceCanonical, type WorkspaceCreditBalance } from "../../../shared/workspaceCreditsGateway";
 import { formatUsdCents, toEpochSeconds } from "../../../shared/displayFormatting";
 import { WORKSPACE_CREDIT_TOPUP_CREDITS, WORKSPACE_CREDIT_TOPUP_PRICE_USD } from "../../../shared/workspaceCredits";
-import { deriveCommunityJoinMode, type CommunityJoinMode } from "./communityJoinPolicy";
-import { deriveCommunityMembersJoinReviewMode, type CommunityMembersJoinReviewMode } from "./communityJoinPolicy";
+import {
+  deriveCommunityFunnelAction,
+  deriveCommunityMembersJoinReviewMode,
+  type CommunityFunnelAction,
+  type CommunityMembersJoinReviewMode,
+} from "./communityJoinPolicy";
 import { useWebBuilderBillingActions } from "./controllers/useWebBuilderBillingActions";
 import { useWebCommerceAffiliateActions } from "./controllers/useWebCommerceAffiliateActions";
 import { useWebPublicFunnelActions } from "./controllers/useWebPublicFunnelActions";
@@ -439,6 +443,7 @@ type ThreadMessage = {
 type UserMemorySettings = {
   memory_mode: "off" | "suggest" | "auto";
   remember_intent_enabled: boolean;
+  agent_soul: string;
 };
 
 type MobileOverlay = "agent" | "community" | "community_selector";
@@ -1791,8 +1796,8 @@ export default function App() {
     communityAgentConfigLoadedCommunityIdRef,
     communityAgentConfigLanding,
     setCommunityAgentConfigLanding,
-    communityAgentConfigSystemPrompt,
-    setCommunityAgentConfigSystemPrompt,
+    communityAgentConfigCommunitySystemPrompt,
+    setCommunityAgentConfigCommunitySystemPrompt,
     isSavingCommunityAgentConfig,
     setIsSavingCommunityAgentConfig,
     communityAgentConfigSaveError,
@@ -2434,11 +2439,12 @@ export default function App() {
   const [userMemorySettings, setUserMemorySettings] = useState<UserMemorySettings>({
     memory_mode: "auto",
     remember_intent_enabled: true,
+    agent_soul: "",
   });
   const [communityAiAgentPreferredTab, setCommunityAiAgentPreferredTab] = useState<
     "workspace" | "apps" | "skills"
   >("workspace");
-  const [, setIsLoadingUserMemorySettings] = useState(false);
+  const [isLoadingUserMemorySettings, setIsLoadingUserMemorySettings] = useState(false);
   const [openRouterConnection, setOpenRouterConnection] = useState<CloudOpenRouterConnectionStatus>({
     provider: "openrouter",
     auth_kind: "api_key",
@@ -2636,7 +2642,7 @@ export default function App() {
     activeCommunityId,
     ...authenticatedSessionArg,
     communityAgentConfigLanding,
-    communityAgentConfigSystemPrompt,
+    communityAgentConfigCommunitySystemPrompt,
     normalizeConfigForSave: normalizeCommunityAgentDraftForSave,
     hydrateConfigEditor: hydrateCommunityAgentEditor,
     setLoadedCommunityId: (communityId) => {
@@ -3071,6 +3077,7 @@ export default function App() {
   });
 
   const {
+    saveUserMemorySettings,
     createPersonalMemoryItemDirect,
     handleCreatePersonalMemoryItem,
     handleTogglePersonalMemoryPinned,
@@ -3994,7 +4001,7 @@ export default function App() {
   useEffect(() => {
     if (!session) {
       navStackRef.current = [];
-      setUserMemorySettings({ memory_mode: "auto", remember_intent_enabled: true });
+      setUserMemorySettings({ memory_mode: "auto", remember_intent_enabled: true, agent_soul: "" });
       setOpenRouterConnection({
         provider: "openrouter",
         auth_kind: "api_key",
@@ -4286,7 +4293,6 @@ export default function App() {
     selectedPublicCommunityPlan,
     publicVisibilityLabel,
     resolvedPublicCommunity,
-    publicJoinMode,
     canEnterPublicCommunity,
     canJoinForFree,
     canJoinWithApproval,
@@ -5008,12 +5014,12 @@ export default function App() {
     [session, builderBillingStatus?.builder_tier],
   );
 
-		  const activeCommunityJoinMode = useMemo<CommunityJoinMode | null>(() => {
-		    if (!activeCommunity) return null;
-        return deriveCommunityJoinMode({
-          entry_policy: activeCommunity.entry_policy,
-        });
-		  }, [activeCommunity]);
+  const activeCommunityFunnelAction = useMemo<CommunityFunnelAction | null>(() => {
+    if (!activeCommunity) return null;
+    return deriveCommunityFunnelAction({
+      entry_policy: activeCommunity.entry_policy,
+    });
+  }, [activeCommunity]);
 
   const {
     workspaceVoiceIntent,
@@ -5025,7 +5031,7 @@ export default function App() {
     ...authenticatedSessionArg,
     sessionRef: sessionRef,
     activeCommunity,
-    activeCommunityJoinMode,
+    activeCommunityFunnelAction,
     canPostMessagesActiveCommunity,
     normalizedBuilderTier,
     requireSignIn: () => requireSignIn(),
@@ -5304,7 +5310,7 @@ export default function App() {
     });
   const funnelPreviewVisibility = toCanonicalCommunityVisibility(activeCommunity?.visibility, "unlisted");
   const funnelPreviewVisibilityLabel = formatCommunityVisibilityLabel(funnelPreviewVisibility);
-  const funnelPreviewJoinMode = deriveCommunityJoinMode({
+  const funnelPreviewAction = deriveCommunityFunnelAction({
     entry_policy: activeCommunity?.entry_policy,
   });
   const handlePreviewCommunityFunnel = useCallback(() => {
@@ -5339,7 +5345,7 @@ export default function App() {
       },
       visibilityLabel: funnelPreviewVisibilityLabel,
       memberCount: activeCommunity ? communityMembers.length : null,
-      joinMode: funnelPreviewJoinMode,
+      funnelAction: funnelPreviewAction,
       one_liner: activeCommunity?.one_liner ?? null,
       funnel: communityFunnelConfig,
       savedAt: Date.now(),
@@ -5351,7 +5357,7 @@ export default function App() {
     communityMembers.length,
     communityFunnelConfig,
     funnelPreviewAdminCount,
-    funnelPreviewJoinMode,
+    funnelPreviewAction,
     funnelPreviewOnlineCount,
     funnelPreviewOnlineFaces,
     funnelPreviewVisibilityLabel,
@@ -5936,8 +5942,8 @@ export default function App() {
         communityAgentConfigLanding,
         setCommunityAgentConfigLanding,
         markCommunityAgentConfigDirty,
-        communityAgentConfigSystemPrompt,
-        setCommunityAgentConfigSystemPrompt,
+        communityAgentConfigCommunitySystemPrompt,
+        setCommunityAgentConfigCommunitySystemPrompt,
         previewCommunityName: activeCommunity?.name ?? "Community",
         previewProjectName: workspace.derived.resolvedActiveProjectName,
       },
@@ -6012,7 +6018,7 @@ export default function App() {
         },
         previewVisibilityLabel: funnelPreviewVisibilityLabel,
         previewMemberCount: activeCommunity ? communityMembers.length : null,
-        previewJoinMode: funnelPreviewJoinMode,
+        previewFunnelAction: funnelPreviewAction,
       },
       canViewActiveCommunityAnalytics,
       analyticsState: {
@@ -6294,6 +6300,9 @@ export default function App() {
       exportMessagesCsv,
       exportMemoryCsv,
       isExporting,
+      userMemorySettings,
+      isLoadingUserMemorySettings,
+      saveUserMemorySettings,
       openBuilderUpgrade: (context) => {
         setBuilderUpgradeContext(context);
         setIsBuilderUpgradeOpen(true);

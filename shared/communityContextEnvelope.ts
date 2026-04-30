@@ -26,12 +26,12 @@ export function buildCloudCommunityContextEnvelope(params: RuntimeCommunityPromp
   const communitySlugRaw = normalizeTrimmed(params.communitySlug);
   const communityOneLinerRaw = normalizeTrimmed(params.communityOneLiner);
   const communityAboutRaw = normalizeTrimmed(params.communityAbout);
-  const customCommunitySystemPrompt = normalizeTrimmed(params.customCommunitySystemPrompt);
+  const communitySystemPrompt = normalizeTrimmed(params.communitySystemPrompt);
   const communityPromptDraftIdRaw = normalizeTrimmed(params.communityPromptDraftId);
 
   const hasCommunityScope = communityIdRaw.length > 0;
   const communitySystemPromptSource: CloudCommunityContextPromptSource | null = hasCommunityScope
-    ? customCommunitySystemPrompt
+    ? communitySystemPrompt
       ? "community_draft"
       : "default_template"
     : null;
@@ -48,7 +48,7 @@ export function buildCloudCommunityContextEnvelope(params: RuntimeCommunityPromp
       communitySlug: hasCommunityScope ? communitySlugRaw || null : null,
       communityOneLiner: hasCommunityScope ? communityOneLinerRaw || null : null,
       communityAbout: hasCommunityScope ? communityAboutRaw || null : null,
-      customCommunitySystemPrompt,
+      communitySystemPrompt,
     }),
   };
 }

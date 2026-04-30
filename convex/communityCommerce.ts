@@ -29,6 +29,7 @@ import {
   resolveCommunityEntryPolicy,
 } from "./communityCore";
 import { enqueueCommunityBillingIssueEmailInternal } from "./emailEvents";
+import { recordCriticalAuditEventBestEffort } from "./criticalAudit";
 
 type CommunityCheckoutSessionRow = {
   _id: any;
@@ -407,6 +408,26 @@ export const createPendingPublicCommunityCheckoutSessionInternal = internalMutat
       createdAt: nowMs,
       updatedAt: nowMs,
     });
+    await recordCriticalAuditEventBestEffort(ctx, {
+      eventKey: `community_checkout_created:${args.sessionId}`,
+      eventType: "community_checkout_created",
+      status: "started",
+      actorUserId: args.ownerUserId,
+      subjectUserId: args.ownerUserId,
+      communityId: args.communityId,
+      checkoutSessionId: args.sessionId,
+      provider: "stripe",
+      providerObjectId: args.providerPriceId,
+      metadata: {
+        billingPeriod: args.billingPeriod,
+        pricePointId: String(args.pricePointId),
+        amountBaseUnits: args.amountBaseUnits,
+        currency: args.currency,
+        currencyDecimals: args.currencyDecimals,
+        expiresAt: args.expiresAt,
+      },
+      createdAt: nowMs,
+    });
     await ctx.db.insert("purchaseClaims", {
       claimToken: args.claimToken,
       communityId: args.communityId,
@@ -421,6 +442,24 @@ export const createPendingPublicCommunityCheckoutSessionInternal = internalMutat
       expiresAt: args.expiresAt,
       createdAt: nowMs,
       updatedAt: nowMs,
+    });
+    await recordCriticalAuditEventBestEffort(ctx, {
+      eventKey: `community_purchase_claim_created:${args.claimToken}`,
+      eventType: "community_purchase_claim_created",
+      status: "started",
+      actorUserId: args.ownerUserId,
+      subjectUserId: args.ownerUserId,
+      communityId: args.communityId,
+      checkoutSessionId: args.sessionId,
+      provider: "stripe",
+      providerObjectId: args.providerPriceId,
+      metadata: {
+        billingPeriod: args.billingPeriod,
+        pricePointId: String(args.pricePointId),
+        amountBaseUnits: args.amountBaseUnits,
+        currency: args.currency,
+      },
+      createdAt: nowMs,
     });
   },
 });
@@ -450,6 +489,23 @@ export const attachCommunityStripeCheckoutSessionInternal = internalMutation({
         String(args.providerSubscriptionId ?? "").trim() || row.providerSubscriptionId,
       providerPriceId: String(args.providerPriceId ?? "").trim() || row.providerPriceId,
       updatedAt: nowMs,
+    });
+    await recordCriticalAuditEventBestEffort(ctx, {
+      eventKey: `community_checkout_attached_to_stripe:${args.sessionId}`,
+      eventType: "community_checkout_attached_to_stripe",
+      status: "succeeded",
+      actorUserId: row.ownerUserId,
+      subjectUserId: row.ownerUserId,
+      communityId: row.communityId,
+      checkoutSessionId: args.sessionId,
+      provider: "stripe",
+      providerObjectId: args.providerCheckoutSessionId,
+      metadata: {
+        providerCustomerId: args.providerCustomerId ?? null,
+        providerSubscriptionId: args.providerSubscriptionId ?? null,
+        providerPriceId: args.providerPriceId ?? row.providerPriceId ?? null,
+      },
+      createdAt: nowMs,
     });
   },
 });
@@ -500,6 +556,26 @@ export const syncPendingCommunityCheckoutSubscriptionInternal = internalMutation
       cancelAtPeriodEnd: Boolean(args.cancelAtPeriodEnd ?? communitySubscriptionStatus === "cancel_at_period_end"),
       status: args.markComplete ? "complete" : row.status,
       updatedAt: nowMs,
+    });
+    await recordCriticalAuditEventBestEffort(ctx, {
+      eventKey: `community_subscription_synced:${args.providerSubscriptionId ?? row.providerSubscriptionId ?? args.sessionId}:${communitySubscriptionStatus}:${nowMs}`,
+      eventType: "community_subscription_synced",
+      status: "succeeded",
+      actorUserId: row.ownerUserId,
+      subjectUserId: row.ownerUserId,
+      communityId: row.communityId,
+      checkoutSessionId: args.sessionId,
+      provider: "stripe",
+      providerObjectId: String(args.providerSubscriptionId ?? row.providerSubscriptionId ?? "").trim() || undefined,
+      metadata: {
+        communitySubscriptionStatus,
+        cancelAtPeriodEnd: Boolean(args.cancelAtPeriodEnd ?? communitySubscriptionStatus === "cancel_at_period_end"),
+        markComplete: Boolean(args.markComplete),
+        providerPriceId: args.providerPriceId ?? row.providerPriceId ?? null,
+        currentPeriodStartAt: args.currentPeriodStartAt ?? row.currentPeriodStartAt ?? null,
+        currentPeriodEndAt: args.currentPeriodEndAt ?? row.currentPeriodEndAt ?? null,
+      },
+      createdAt: nowMs,
     });
   },
 });
@@ -873,6 +949,23 @@ export const redeemPurchaseClaim = mutation({
       claim,
       userId,
       nowMs,
+    });
+    await recordCriticalAuditEventBestEffort(ctx, {
+      eventKey: `community_purchase_claim_redeemed:${token}:${userId}`,
+      eventType: "community_purchase_claim_redeemed",
+      status: redemption.accessGranted ? "succeeded" : "ignored",
+      actorUserId: userId,
+      subjectUserId: userId,
+      communityId: claim.communityId,
+      checkoutSessionId: claim.sourceSessionId ?? undefined,
+      provider: "polynet",
+      providerObjectId: claim.claimToken,
+      metadata: {
+        accessGranted: redemption.accessGranted,
+        grantMarker: redemption.grantMarker,
+        pricePointId: claim.pricePointId ? String(claim.pricePointId) : null,
+      },
+      createdAt: nowMs,
     });
     const communityId = redemption.communityId;
     if (!communityId) throw new Error("claim_not_redeemable");

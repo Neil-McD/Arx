@@ -33,7 +33,7 @@ type UseWebVoiceInputControllerArgs<SessionT> = {
   sessionRef: MutableRefObject<SessionT | null>;
   ensureSession?: (session: SessionT | null) => Promise<SessionT | null>;
   activeCommunity: unknown | null;
-  activeCommunityJoinMode: "checkout" | "join_approval" | "join_free" | null;
+  activeCommunityFunnelAction: "checkout" | "request_access" | "join" | null;
   canPostMessagesActiveCommunity: boolean;
   normalizedBuilderTier: "free" | "builder" | "architect";
   requireSignIn: () => void;
@@ -72,9 +72,9 @@ export function useWebVoiceInputController<SessionT>(args: UseWebVoiceInputContr
       }
       if (!args.canPostMessagesActiveCommunity) {
         const joinMessage =
-          args.activeCommunityJoinMode === "checkout"
+          args.activeCommunityFunnelAction === "checkout"
             ? "Pick a plan to use voice input in this community."
-            : args.activeCommunityJoinMode === "join_approval"
+            : args.activeCommunityFunnelAction === "request_access"
               ? "Join and wait for approval to use voice input in this community."
               : "Join this community to use voice input.";
         return {

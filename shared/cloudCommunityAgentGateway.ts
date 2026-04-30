@@ -5,6 +5,7 @@ type CloudCommunityAgentGatewayParams<SessionT> = {
 };
 
 type RawCloudCommunityAgentPromptRow = {
+  community_system_prompt?: unknown;
   system_prompt?: unknown;
 };
 
@@ -46,7 +47,7 @@ function coerceObjectRows<TRow>(payload: unknown): TRow[] {
 }
 
 export type CloudCommunityAgentSystemPromptResult = {
-  systemPrompt: string;
+  communitySystemPrompt: string;
 };
 
 export type CloudCommunityAgentConfigMutationResult = {
@@ -65,10 +66,11 @@ export async function fetchActiveCloudCommunityAgentSystemPrompt<SessionT>(
     communityId: params.communityId,
   })) as RawCloudCommunityAgentPromptRow | null;
   const row = firstObjectRow(payload) as RawCloudCommunityAgentPromptRow | null;
-  const systemPrompt = toOptionalString(row?.system_prompt);
-  if (!systemPrompt) return null;
+  const communitySystemPrompt =
+    toOptionalString(row?.community_system_prompt) ?? toOptionalString(row?.system_prompt);
+  if (!communitySystemPrompt) return null;
   return {
-    systemPrompt,
+    communitySystemPrompt,
   };
 }
 
@@ -115,7 +117,7 @@ export async function saveCloudCommunityAgentConfig<SessionT>(
   params: CloudCommunityAgentGatewayParams<SessionT> & {
     communityId: string;
     landingJson: unknown;
-    systemPrompt: string;
+    communitySystemPrompt: string;
   },
 ): Promise<CloudCommunityAgentConfigMutationResult | null> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
@@ -123,7 +125,7 @@ export async function saveCloudCommunityAgentConfig<SessionT>(
     authSubject,
     communityId: params.communityId,
     landingJson: params.landingJson,
-    systemPrompt: params.systemPrompt,
+    communitySystemPrompt: params.communitySystemPrompt,
   });
   return parseConfigMutationResult(payload);
 }

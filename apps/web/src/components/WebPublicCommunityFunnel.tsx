@@ -8,7 +8,7 @@ import {
 } from "../../../../shared/communityFunnelUi";
 import { CommunityFunnelSurface } from "./CommunityFunnelSurface";
 
-type FunnelMode = "enter" | "join_free" | "join_approval" | "checkout" | "private";
+type FunnelMode = "enter" | "join" | "request_access" | "checkout" | "private";
 type CheckoutStatus = "idle" | "loading" | "pending" | "succeeded" | "error";
 type MagicLinkStatus = "idle" | "sending" | "sent";
 
@@ -78,8 +78,8 @@ function deriveFunnelMode(args: {
 }): FunnelMode {
   if (args.canEnterCommunity) return "enter";
   if (args.canJoinWithCheckout) return "checkout";
-  if (args.canJoinWithApproval) return "join_approval";
-  if (args.canJoinForFree) return "join_free";
+  if (args.canJoinWithApproval) return "request_access";
+  if (args.canJoinForFree) return "join";
   return "private";
 }
 
@@ -93,13 +93,13 @@ function buildPrimaryActionLabel(args: {
 }): string {
   if (args.mode === "enter") return "Enter community";
   if (args.mode === "checkout") return args.priceLabel ? `Join now · ${formatCtaPriceLabel(args.priceLabel)}` : "Join now";
-  if (args.mode === "join_approval") {
+  if (args.mode === "request_access") {
     if (args.isJoiningPublicCommunity) return "Joining…";
     if (args.approvalPending) return "Request pending";
     if (args.approvalDenied) return args.canRequestAgain ? "Request again" : "Request denied";
     return "Join now";
   }
-  if (args.mode === "join_free") return args.isJoiningPublicCommunity ? "Joining…" : "Join now";
+  if (args.mode === "join") return args.isJoiningPublicCommunity ? "Joining…" : "Join now";
   return "Private community";
 }
 

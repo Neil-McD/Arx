@@ -60,19 +60,11 @@ These are core and should remain:
 
 ### Delete Next
 
-These are legacy mirrors or redundant semantics and should be removed once the last consumer is migrated:
+These are legacy mirrors or redundant semantics. Active UI/controller behavior now derives a semantic `funnelAction` from `entry_policy`; remaining work is backend/schema cleanup plus route-history compatibility removal when safe.
 
 - `communities.joinMode`
 - `communities.freeJoinRequiresApproval`
-- UI dependence on `join_mode`
-- UI dependence on `free_join_requires_approval`
-- fallback join-mode derivation once all consumers use `entry_policy` directly
-
-### Delete After Price-Point Backfill Is Run
-
-- `communityPlans`
-- pricing reads that prefer legacy `communityPlans`
-- billing fallbacks that lazily create `communityPricePoints` from legacy plans
+- route-history compatibility for old preview `joinMode` state
 
 ### Delete After Owner Model Is Unified
 
@@ -96,8 +88,8 @@ Target:
 
 Action:
 
-- move all remaining frontend/controller code to treat `entry_policy` as primary truth
-- stop threading `join_mode` and `free_join_requires_approval` except as temporary compatibility output
+- keep frontend/controller code treating `entry_policy` as primary truth
+- stop adding new `join_mode` or `free_join_requires_approval` compatibility output
 
 ### 2. Membership Surface
 
@@ -164,16 +156,13 @@ Action:
 1. Community entry policy:
    - canonical: `entryPolicy`
    - redundant: `joinMode`, `freeJoinRequiresApproval`
+   - projection: `funnelAction`
 
-2. Community price model:
-   - canonical: `communityPricePoints`
-   - redundant: `communityPlans`
-
-3. Owner truth:
+2. Owner truth:
    - canonical candidate: `communities.ownerId`
    - redundant: owner membership row + synthetic owner projection
 
-4. Membership visibility:
+3. Membership visibility:
    - canonical: access bundle
    - redundant risk: direct membership-row checks in individual features
 
@@ -190,8 +179,8 @@ Before deleting a redundant surface, verify:
 
 ### Phase 1: Finish Consumer Migration
 
-- move remaining UI/controller consumers to `entry_policy`
-- stop preferring `join_mode` and `free_join_requires_approval`
+- keep UI/controller consumers on `entry_policy`-derived `funnelAction`
+- keep old preview `joinMode` reads as route-history compatibility only
 
 ### Phase 2: Run Data Backfill
 
@@ -204,12 +193,7 @@ Before deleting a redundant surface, verify:
 - remove `freeJoinRequiresApproval`
 - remove compatibility helpers that only exist for those fields
 
-### Phase 4: Remove Legacy Pricing Mirrors
-
-- remove `communityPlans`
-- remove legacy plan fallback reads from billing/discovery/settings
-
-### Phase 5: Unify Owner Truth
+### Phase 4: Unify Owner Truth
 
 - make `communities.ownerId` the only canonical owner truth
 - stop storing owner as a normal membership row, or treat owner membership rows as purely derived/migrated compatibility
@@ -218,17 +202,15 @@ Before deleting a redundant surface, verify:
 ## Risks
 
 1. Deleting policy mirrors before all consumers move will break public/community routing.
-2. Deleting `communityPlans` before price-point backfill will break older paid communities.
-3. Unifying owner truth too early can break members/admin projections.
-4. Subscription status changes must not silently rug-pull grandfathered cohorts.
+2. Unifying owner truth too early can break members/admin projections.
+3. Subscription status changes must not silently rug-pull grandfathered cohorts.
 
 ## Best Next Steps
 
 1. Run the owned-community backfills.
-2. Migrate the last UI/controller consumers off `join_mode` / `free_join_requires_approval`.
-3. Delete the legacy policy fields.
-4. Then delete legacy pricing fields and fallbacks.
-5. Then unify owner truth.
+2. Delete the legacy policy fields after data verification.
+3. Remove route-history `joinMode` compatibility once old preview state can be ignored.
+4. Then unify owner truth.
 
 ## Final Aim
 

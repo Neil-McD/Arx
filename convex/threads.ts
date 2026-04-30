@@ -1749,6 +1749,53 @@ export const listRuntimeRunEventsByOwnerRunIdInternal = internalQuery({
   },
 });
 
+export const listRecentRuntimeToolFinishedEventsByOwnerThreadIdInternal = internalQuery({
+  args: {
+    ownerId: v.id("users"),
+    threadId: v.id("threads"),
+    currentRunId: v.optional(v.string()),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const safeLimit = Math.max(1, Math.min(80, Math.floor(args.limit ?? 40)));
+    const currentRunId = String(args.currentRunId ?? "").trim();
+    const runs = (await ctx.db
+      .query("runtimeRuns")
+      .withIndex("by_thread_startedAt", (q: any) => q.eq("threadId", args.threadId))
+      .order("desc")
+      .take(6)) as RuntimeRunLike[];
+    const candidateRunIds = [
+      currentRunId,
+      ...runs
+        .filter((run) => run.ownerId === args.ownerId)
+        .map((run) => run.runId),
+    ].filter((runId): runId is string => Boolean(runId));
+    const uniqueRunIds = Array.from(new Set(candidateRunIds)).slice(0, 6);
+    const events: RuntimeRunEventLike[] = [];
+    for (const runId of uniqueRunIds) {
+      const rows = (await ctx.db
+        .query("runtimeRunEvents")
+        .withIndex("by_owner_run_seq", (q: any) =>
+          q.eq("ownerId", args.ownerId).eq("runId", runId),
+        )
+        .collect()) as RuntimeRunEventLike[];
+      for (const row of rows) {
+        if (row.threadId !== args.threadId) continue;
+        if (row.eventType !== "tool_call_finished") continue;
+        events.push(row);
+      }
+    }
+    return events
+      .sort((a, b) => b.createdAt - a.createdAt || b.seq - a.seq)
+      .slice(0, safeLimit)
+      .map((row) => ({
+        eventType: row.eventType,
+        payload: row.payload,
+        createdAt: row.createdAt,
+      }));
+  },
+});
+
 export const ensureCloudRuntimeRunStarted = mutation({
   args: {
     ownerId: v.optional(v.id("users")),

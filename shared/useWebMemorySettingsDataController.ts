@@ -7,6 +7,7 @@ import { loadCloudUserMemorySettings } from "./cloudUserSettingsGateway";
 type UserMemorySettings = {
   memory_mode: "off" | "suggest" | "auto";
   remember_intent_enabled: boolean;
+  agent_soul: string;
 };
 
 type PersonalMemoryItem = {
@@ -72,7 +73,7 @@ export function useWebMemorySettingsDataController<SessionT>(
     try {
       const usableSession = await resolveCurrentSession(() => session, current.ensureSession);
       if (!usableSession) {
-        current.setUserMemorySettings({ memory_mode: "auto", remember_intent_enabled: true });
+        current.setUserMemorySettings({ memory_mode: "auto", remember_intent_enabled: true, agent_soul: "" });
         return;
       }
       const row = (await loadCloudUserMemorySettings({
@@ -81,9 +82,10 @@ export function useWebMemorySettingsDataController<SessionT>(
       current.setUserMemorySettings({
         memory_mode: normalizeMemoryMode(row?.memory_mode),
         remember_intent_enabled: row?.remember_intent_enabled !== false,
+        agent_soul: String(row?.agent_soul ?? ""),
       });
     } catch {
-      current.setUserMemorySettings({ memory_mode: "auto", remember_intent_enabled: true });
+      current.setUserMemorySettings({ memory_mode: "auto", remember_intent_enabled: true, agent_soul: "" });
     } finally {
       current.setIsLoadingUserMemorySettings(false);
     }

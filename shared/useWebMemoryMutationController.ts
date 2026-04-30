@@ -11,6 +11,7 @@ import { saveCloudUserMemorySettings } from "./cloudUserSettingsGateway";
 type UserMemorySettings = {
   memory_mode: "off" | "suggest" | "auto";
   remember_intent_enabled: boolean;
+  agent_soul: string;
 };
 
 type PersonalMemoryItem = {
@@ -51,14 +52,19 @@ export function useWebMemoryMutationController<SessionT>(
     const current = argsRef.current;
     const session = await resolveCurrentSession(current.getSession, current.ensureSession);
     if (!session) return;
+    const normalizedNext = {
+      ...next,
+      agent_soul: String(next.agent_soul ?? "").trim(),
+    };
     current.setIsLoadingUserMemorySettings(true);
     try {
       await saveCloudUserMemorySettings({
         session,
-        memoryMode: next.memory_mode,
-        rememberIntentEnabled: Boolean(next.remember_intent_enabled),
+        memoryMode: normalizedNext.memory_mode,
+        rememberIntentEnabled: Boolean(normalizedNext.remember_intent_enabled),
+        agentSoul: normalizedNext.agent_soul,
       });
-      current.setUserMemorySettings(next);
+      current.setUserMemorySettings(normalizedNext);
     } catch (error) {
       console.warn("Failed to save memory settings:", error);
     } finally {

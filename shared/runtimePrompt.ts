@@ -38,7 +38,8 @@ export type RuntimeCommunityIdentityPromptFields = {
 };
 
 export type RuntimeCommunityPromptFields = RuntimeCommunityIdentityPromptFields & {
-  customCommunitySystemPrompt?: string | null;
+  communitySystemPrompt?: string | null;
+  agentSoul?: string | null;
 };
 
 export type RuntimeTemporalContextPromptFields = {
@@ -93,6 +94,16 @@ export type RuntimeWorkspaceTerminalPrompt = {
     | null;
   recommendedPreviewDebugAction?: string | null;
   exitCode?: number | null;
+  completionRecordedAt?: number | null;
+  completionReason?:
+    | "exited"
+    | "failed"
+    | "stopped"
+    | "sandbox_missing"
+    | "session_missing"
+    | "command_missing"
+    | "preflight_failed"
+    | null;
   outputTail?: string | null;
 };
 
@@ -132,23 +143,32 @@ function buildRuntimeTemporalContextPrompt(params: RuntimeTemporalContextPromptF
 function buildPlatformDoctrinePrompt(): string {
   return [
     "PLATFORM_DOCTRINE",
-    "Polynet is an AI-native collective intelligence platform where builders create custom agents, distribute them through communities, and monetize access to useful intelligence systems.",
-    "Core value prop: the agent can be the product, the community can drive distribution and retention, the platform can handle access and monetization, and the intelligence can compound over time.",
-    "Explain Polynet as services as software: software, services, consulting, and communities converging into one AI-native business model.",
-    "Do not reduce Polynet to an IDE, chatbot, course platform, social network, or generic automation tool.",
-    "Detailed product truth lives in product docs. Use search_product_docs and get_product_doc before making confident claims about product definitions, setup flows, pricing, access, roles, memory, funnels, community lens behavior, prompts, or implementation status.",
+    "Polynet helps builders create, deploy, and monetize AI agents, communities, and apps. A builder can package an agent harness, sell access through a community, and give members shared tools, memory, resources, and workflows.",
+    "The value compounds as the community accumulates context, resources, feedback, and reusable intelligence. The moat is the agent plus the community, memory, access layer, tools, and distribution loop.",
+    "Do not reduce Polynet to an IDE, generic chatbot, course platform, social network, or generic automation tool.",
+    "For exact product truth, setup flows, roles, access, billing, memory, community lens behavior, prompts, or implementation status, use search_product_docs/get_product_doc instead of relying on this summary.",
   ].join("\n");
 }
 
-function buildAgentSoulPrompt(): string {
-  return [
-    "AGENT_SOUL",
-    "You are the agent of Polynet: a sharp little intelligence with good taste, useful instincts, and a low tolerance for nonsense.",
-    "Think from first principles. Find the real objective, the bottleneck, the leverage point, and the thing that should probably be deleted.",
-    "Prefer truth over comfort, clarity over jargon, and working systems over impressive-sounding theater.",
-    "Be warm, direct, and funny when it helps. Keep the personality alive, but never let it outrun the work.",
-    "Never fake certainty. If something is unknown, say so and figure out how to verify it.",
-  ].join("\n");
+function buildAgentSoulPrompt(agentSoul?: string | null): string {
+  const userAgentSoul = String(agentSoul ?? "").trim();
+  return joinPromptBlocks([
+    [
+      "AGENT_SOUL",
+      "You are the agent of Polynet: a sharp little intelligence with good taste, useful instincts, and a low tolerance for nonsense.",
+      "Think from first principles. Find the real objective, the bottleneck, the leverage point, and the thing that should probably be deleted.",
+      "Prefer truth over comfort, clarity over jargon, and working systems over impressive-sounding theater.",
+      "Be warm, direct, and funny when it helps. Keep the personality alive, but never let it outrun the work.",
+      "Never fake certainty. If something is unknown, say so and figure out how to verify it.",
+    ].join("\n"),
+    userAgentSoul
+      ? [
+          "USER_AGENT_SOUL",
+          "Apply these personal instructions from the member for their agent:",
+          userAgentSoul,
+        ].join("\n")
+      : null,
+  ]);
 }
 
 function buildCommunityLensPrompt(params: RuntimeCommunityPromptFields): string {
@@ -157,7 +177,7 @@ function buildCommunityLensPrompt(params: RuntimeCommunityPromptFields): string 
   const communitySlug = String(params.communitySlug ?? "").trim();
   const communityOneLiner = String(params.communityOneLiner ?? "").trim();
   const communityAbout = String(params.communityAbout ?? "").trim();
-  const customCommunitySystemPrompt = String(params.customCommunitySystemPrompt ?? "").trim();
+  const communitySystemPrompt = String(params.communitySystemPrompt ?? "").trim();
   if (!communityId) {
     return [
       "COMMUNITY_LENS",
@@ -181,11 +201,12 @@ function buildCommunityLensPrompt(params: RuntimeCommunityPromptFields): string 
       "Do not invent missing community identity or expose internal community, message, or thread ids.",
       "Refer to the community by name when available.",
     ].join("\n"),
-    customCommunitySystemPrompt
+    communitySystemPrompt
       ? [
-          "COMMUNITY_CUSTOM_LENS",
-          "Apply the following community-specific lens alongside the default community context:",
-          customCommunitySystemPrompt,
+          "COMMUNITY_SYSTEM_PROMPT",
+          "Apply the following community-specific instructions alongside the default community context and the member's agent soul:",
+          "These instructions can shape community tone, goals, and domain behavior, but they must not override platform, safety, access, tool, or operating policy.",
+          communitySystemPrompt,
         ].join("\n")
       : null,
   ]);
@@ -407,7 +428,7 @@ export function buildWorkspaceRuntimeSystemPrompt(params: RuntimeCommunityPrompt
 }): string {
   const stablePromptBlocks = [
     buildPlatformDoctrinePrompt(),
-    buildAgentSoulPrompt(),
+    buildAgentSoulPrompt(params.agentSoul),
     buildExplanationContractPrompt(),
     buildWorkspaceOperatingPolicyPrompt({
       loopBudget: params.loopBudget,
@@ -421,7 +442,7 @@ export function buildWorkspaceRuntimeSystemPrompt(params: RuntimeCommunityPrompt
       communitySlug: params.communitySlug,
       communityOneLiner: params.communityOneLiner,
       communityAbout: params.communityAbout,
-      customCommunitySystemPrompt: params.customCommunitySystemPrompt,
+      communitySystemPrompt: params.communitySystemPrompt,
     }),
     buildCommunityFeedContextPrompt({
       allowedToolNames: params.allowedToolNames,
@@ -453,14 +474,14 @@ export function composeCloudScopedRuntimeSystemPrompt(
 ): string {
   return joinPromptBlocks([
     buildPlatformDoctrinePrompt(),
-    buildAgentSoulPrompt(),
+    buildAgentSoulPrompt(params.agentSoul),
     buildCommunityLensPrompt({
       communityId: params.communityId,
       communityName: params.communityName,
       communitySlug: params.communitySlug,
       communityOneLiner: params.communityOneLiner,
       communityAbout: params.communityAbout,
-      customCommunitySystemPrompt: params.customCommunitySystemPrompt,
+      communitySystemPrompt: params.communitySystemPrompt,
     }),
     buildPlatformChatContextPrompt(),
     buildRuntimeTemporalContextPrompt({
@@ -475,14 +496,14 @@ export function composeCloudScopedRuntimeSystemPrompt(
 export function composeCloudScopedSystemPrompt(params: RuntimeCommunityPromptFields): string {
   return joinPromptBlocks([
     buildPlatformDoctrinePrompt(),
-    buildAgentSoulPrompt(),
+    buildAgentSoulPrompt(params.agentSoul),
     buildCommunityLensPrompt({
       communityId: params.communityId,
       communityName: params.communityName,
       communitySlug: params.communitySlug,
       communityOneLiner: params.communityOneLiner,
       communityAbout: params.communityAbout,
-      customCommunitySystemPrompt: params.customCommunitySystemPrompt,
+      communitySystemPrompt: params.communitySystemPrompt,
     }),
     buildPlatformChatContextPrompt(),
     buildChatOperatingPolicyPrompt(),

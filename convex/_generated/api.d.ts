@@ -43,6 +43,7 @@ import type * as communityPublic from "../communityPublic.js";
 import type * as communityRecentContext from "../communityRecentContext.js";
 import type * as communityResources from "../communityResources.js";
 import type * as communitySkillAttachments from "../communitySkillAttachments.js";
+import type * as criticalAudit from "../criticalAudit.js";
 import type * as crons from "../crons.js";
 import type * as daytonaBrowserNavigation from "../daytonaBrowserNavigation.js";
 import type * as daytonaComputerUse from "../daytonaComputerUse.js";
@@ -166,6 +167,7 @@ declare const fullApi: ApiFromModules<{
   communityRecentContext: typeof communityRecentContext;
   communityResources: typeof communityResources;
   communitySkillAttachments: typeof communitySkillAttachments;
+  criticalAudit: typeof criticalAudit;
   crons: typeof crons;
   daytonaBrowserNavigation: typeof daytonaBrowserNavigation;
   daytonaComputerUse: typeof daytonaComputerUse;

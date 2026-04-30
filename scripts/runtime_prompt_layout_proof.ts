@@ -26,7 +26,7 @@ const prompt = buildWorkspaceRuntimeSystemPrompt({
   communitySlug: "prompt-community",
   communityOneLiner: "A proof community.",
   communityAbout: "Used to prove prompt layout.",
-  customCommunitySystemPrompt: "Prefer proof-grounded answers.",
+  communitySystemPrompt: "Prefer proof-grounded answers.",
   runtimeTurnContext: buildRuntimeTurnContextPacket({
     threadWorkingState: {
       version: 3,
@@ -66,6 +66,48 @@ const prompt = buildWorkspaceRuntimeSystemPrompt({
         outputTail: "ready",
       },
     ],
+    recentBackgroundProcessEvents: [
+      {
+        terminalId: "terminal_failed_1",
+        status: "failed",
+        completionReason: "failed",
+        command: "npm run dev",
+        cwd: ".",
+        previewPort: 3000,
+        previewStatus: "server_exited",
+        healthSummary: "Process failed with exit code 127.",
+        exitCode: 127,
+        outputTail: "sh: vite: not found",
+        finishedAt: 1_774_000_000_000,
+        completionRecordedAt: 1_774_000_000_000,
+      },
+    ],
+    recentToolAttempts: [
+      {
+        toolCallId: "runtime_tools:run_1:chat_tools:4",
+        providerCallId: "call_4",
+        toolName: "bash",
+        status: "error",
+        commandOrTarget: "npm run build",
+        cwd: ".",
+        exitCode: 127,
+        errorCode: "shell_nonzero_exit",
+        errorMessage: "Command exited with code 127.",
+        outputPreview: "sh: vite: not found",
+        failureSummary: "The shell command failed because vite was not found.",
+        suggestedRecovery: "Inspect package scripts and node_modules/.bin before retrying.",
+      },
+      {
+        toolCallId: "runtime_tools:run_1:chat_tools:5",
+        providerCallId: "call_5",
+        toolName: "computer_open_url",
+        status: "error",
+        commandOrTarget: "http://localhost:3000/",
+        errorCode: "navigation_blocked",
+        errorMessage: "The sandbox browser could not reach localhost.",
+        outputPreview: "curl: (7) Failed to connect to localhost port 3000",
+      },
+    ],
   }),
   currentDateTimeIso: "2026-04-25T20:00:00.000Z",
   currentDateLabel: "April 25, 2026",
@@ -80,6 +122,8 @@ const communityIndex = indexOfBlock(prompt, "COMMUNITY_LENS");
 const workspaceIndex = indexOfBlock(prompt, "WORKSPACE_CONTEXT");
 const workingStateIndex = indexOfBlock(prompt, "THREAD_WORKING_STATE");
 const processContextIndex = indexOfBlock(prompt, "WORKSPACE_PROCESS_CONTEXT");
+const recentProcessEventsIndex = indexOfBlock(prompt, "RECENT_BACKGROUND_PROCESS_EVENTS");
+const recentToolAttemptsIndex = indexOfBlock(prompt, "RECENT_TOOL_ATTEMPTS");
 const temporalIndex = indexOfBlock(prompt, "TEMPORAL_CONTEXT");
 
 assert.ok(platformIndex < soulIndex, "platform doctrine should lead stable prompt");
@@ -89,7 +133,9 @@ assert.ok(policyIndex < communityIndex, "stable policy should precede semi-stabl
 assert.ok(communityIndex < workspaceIndex, "community identity should precede workspace identity");
 assert.ok(workspaceIndex < workingStateIndex, "working state should be volatile after workspace identity");
 assert.ok(workingStateIndex < processContextIndex, "process context should follow thread working state");
-assert.ok(processContextIndex < temporalIndex, "temporal context should remain in volatile tail");
+assert.ok(processContextIndex < recentProcessEventsIndex, "recent process events should follow process context");
+assert.ok(recentProcessEventsIndex < recentToolAttemptsIndex, "tool attempts should follow process lifecycle events");
+assert.ok(recentToolAttemptsIndex < temporalIndex, "temporal context should remain in volatile tail");
 assert.equal(
   prompt.match(/THREAD_WORKING_STATE/g)?.length ?? 0,
   1,
@@ -117,10 +163,21 @@ assert.match(prompt, /browser_observation=Preview iframe rendered a blank white 
 assert.match(prompt, /terminal health, preview transport\/render probe, browser\/computer observation/);
 assert.match(prompt, /preview_process as process\/transport availability only/);
 assert.match(prompt, /If the process is still running but render is blank_suspected/);
+assert.match(prompt, /RECENT_BACKGROUND_PROCESS_EVENTS/);
+assert.match(prompt, /terminal_failed_1: failed; command=npm run dev; reason=failed/);
+assert.match(prompt, /preview=server_exited/);
+assert.match(prompt, /output=sh: vite: not found/);
+assert.match(prompt, /A completed preview server invalidates older live-preview assumptions/);
+assert.match(prompt, /RECENT_TOOL_ATTEMPTS/);
+assert.match(prompt, /bash error; target=npm run build; cwd=\.; exit=127/);
+assert.match(prompt, /error_code=shell_nonzero_exit/);
+assert.match(prompt, /output=sh: vite: not found/);
+assert.match(prompt, /computer_open_url error; target=http:\/\/localhost:3000\//);
+assert.match(prompt, /Do not say exact failed tool calls are unavailable when they are listed here/);
 assert.doesNotMatch(prompt, /WORKSPACE_RUNTIME_STATE/);
 assert.doesNotMatch(prompt, /BACKGROUND_TERMINAL_STATE/);
-assert.match(prompt, /Core value prop: the agent can be the product/);
-assert.match(prompt, /Detailed product truth lives in product docs/);
+assert.match(prompt, /Polynet helps builders create, deploy, and monetize AI agents, communities, and apps/);
+assert.match(prompt, /For exact product truth, setup flows, roles, access, billing, memory/);
 assert.match(prompt, /You are the agent of Polynet: a sharp little intelligence/);
 assert.match(prompt, /Use this lens as background context/);
 assert.match(prompt, /Use community_search when community activity, archive memory, resources, or learned context matter/);
@@ -179,12 +236,12 @@ assert.match(
 assert.doesNotMatch(
   runtimePromptSource,
   /threadWorkingState\?: ThreadWorkingStatePrompt/,
-  "workspace runtime prompt should not accept direct working-state compatibility params",
+  "workspace runtime prompt should not accept direct working-state params outside the canonical packet",
 );
 assert.doesNotMatch(
   runtimePromptSource,
   /activeBackgroundTerminals\?: RuntimeWorkspaceTerminalPrompt/,
-  "workspace runtime prompt should not accept direct terminal compatibility params",
+  "workspace runtime prompt should not accept direct terminal params outside the canonical packet",
 );
 assert.match(
   runtimeTurnContextPacketSource,
@@ -208,8 +265,28 @@ assert.match(
 );
 assert.match(
   runtimeTurnContextPacketSource,
+  /recentToolAttempts: RuntimeRecentToolAttemptPrompt\[\]/,
+  "runtime context packet should carry recent tool attempts",
+);
+assert.match(
+  runtimeTurnContextPacketSource,
+  /recentBackgroundProcessEvents: RuntimeBackgroundProcessEventPrompt\[\]/,
+  "runtime context packet should carry recent background process lifecycle events",
+);
+assert.match(
+  runtimeTurnContextPacketSource,
+  /RECENT_BACKGROUND_PROCESS_EVENTS/,
+  "runtime context prompt should render recent process lifecycle events",
+);
+assert.match(
+  runtimeTurnContextPacketSource,
   /export function buildRuntimeTurnContextSnapshot/,
   "runtime context snapshot should be built from the canonical packet",
+);
+assert.match(
+  runtimeTurnContextPacketSource,
+  /buildRuntimeRecentToolAttemptsFromEvents/,
+  "runtime context packet should normalize recent tool attempts from run events",
 );
 assert.match(
   httpDaytonaSource,
@@ -225,6 +302,11 @@ assert.match(
   runtimeTurnContextLoaderSource,
   /buildRuntimeTurnContextPacket\(\{/,
   "canonical context loader should be the server-side packet builder",
+);
+assert.match(
+  runtimeTurnContextLoaderSource,
+  /listRecentRuntimeToolFinishedEventsByOwnerThreadIdInternal/,
+  "canonical context loader should include recent finished tool calls across thread runs",
 );
 assert.match(
   runtimeTurnContextLoaderSource,

@@ -117,6 +117,33 @@ export default defineSchema({
     .index("by_run", ["runId"])
     .index("by_providerSandboxId", ["providerSandboxId"]),
 
+  criticalAuditEvents: defineTable({
+    eventKey: v.string(),
+    eventType: v.string(),
+    severity: v.union(v.literal("info"), v.literal("warning"), v.literal("error")),
+    status: v.union(
+      v.literal("started"),
+      v.literal("succeeded"),
+      v.literal("failed"),
+      v.literal("blocked"),
+      v.literal("ignored"),
+    ),
+    actorUserId: v.optional(v.id("users")),
+    subjectUserId: v.optional(v.id("users")),
+    communityId: v.optional(v.id("communities")),
+    checkoutSessionId: v.optional(v.string()),
+    provider: v.union(v.literal("polynet"), v.literal("stripe"), v.literal("convex")),
+    providerObjectId: v.optional(v.string()),
+    metadata: v.optional(v.any()),
+    createdAt: v.number(),
+  })
+    .index("by_eventKey", ["eventKey"])
+    .index("by_type_createdAt", ["eventType", "createdAt"])
+    .index("by_severity_createdAt", ["severity", "createdAt"])
+    .index("by_actor_createdAt", ["actorUserId", "createdAt"])
+    .index("by_community_createdAt", ["communityId", "createdAt"])
+    .index("by_providerObject", ["provider", "providerObjectId"]),
+
   checkoutSessions: defineTable({
     sessionId: v.string(),
     mode: v.union(

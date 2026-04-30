@@ -156,7 +156,7 @@ function provePromptGuidance() {
     communitySlug: null,
     communityOneLiner: null,
     communityAbout: null,
-    customCommunitySystemPrompt: null,
+    communitySystemPrompt: null,
     projectLabel: null,
     projectDescription: null,
     runtimeTurnContext: buildRuntimeTurnContextPacket({}),

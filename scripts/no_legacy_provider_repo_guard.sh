@@ -18,6 +18,7 @@ EXCLUDES=(
   --glob '!**/coverage/**'
   --glob '!references/**'
   --glob '!apps/web/src/lib/discoverCatalog.ts'
+  --glob '!shared/discoverCatalog.ts'
 )
 CODE_TARGETS=(
   apps

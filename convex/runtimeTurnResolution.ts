@@ -464,6 +464,7 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
         community_slug?: unknown;
         community_one_liner?: unknown;
         community_about?: unknown;
+        community_system_prompt?: unknown;
         system_prompt?: unknown;
       } | null;
       runtimeCommunityId =
@@ -477,7 +478,11 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
       runtimeCommunityAbout =
         String(resolvedCommunity?.community_about ?? "").trim() || null;
       runtimeCommunitySystemPrompt =
-        String(resolvedCommunity?.system_prompt ?? "").trim() || null;
+        String(
+          resolvedCommunity?.community_system_prompt ??
+            resolvedCommunity?.system_prompt ??
+            "",
+        ).trim() || null;
       if (!runtimeCommunityId) {
         throw new Error("community_lens_unavailable");
       }

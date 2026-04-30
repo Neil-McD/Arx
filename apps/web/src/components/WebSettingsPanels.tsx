@@ -87,6 +87,17 @@ export type WebSettingsPanelsProps = {
     exportMessagesCsv: () => Promise<void> | void;
     exportMemoryCsv: () => Promise<void> | void;
     isExporting: boolean;
+    userMemorySettings: {
+      memory_mode: "off" | "suggest" | "auto";
+      remember_intent_enabled: boolean;
+      agent_soul: string;
+    };
+    isLoadingUserMemorySettings: boolean;
+    saveUserMemorySettings: (next: {
+      memory_mode: "off" | "suggest" | "auto";
+      remember_intent_enabled: boolean;
+      agent_soul: string;
+    }) => Promise<void> | void;
     formatRelativeTime: (value: string) => string;
     handleTogglePersonalMemoryPinned: (item: {
       id: string;
@@ -254,6 +265,9 @@ export function WebSettingsPanels(props: WebSettingsPanelsProps) {
     exportMessagesCsv: agent.exportMessagesCsv,
     exportMemoryCsv: agent.exportMemoryCsv,
     isExporting: agent.isExporting,
+    userMemorySettings: agent.userMemorySettings,
+    isLoadingUserMemorySettings: agent.isLoadingUserMemorySettings,
+    saveUserMemorySettings: agent.saveUserMemorySettings,
     personalMemoryError: agent.personalMemoryUi.personalMemoryError,
     builderBillingStatus: agent.billingUi.builderBillingStatus,
     openBuilderUpgrade: agent.openBuilderUpgrade,

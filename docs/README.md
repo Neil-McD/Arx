@@ -25,8 +25,7 @@
 1. `convex-web3-posture-execution-plan-v1.md`
 2. `convex-schema-skeleton-v1.md`
 3. `community-app-registration-mounting-plan-v1.md`
-4. `community-recurring-membership-grandfathering-plan-v1.md`
-5. `system-surface-reduction-plan-v1.md`
+4. `system-surface-reduction-plan-v1.md`
 
 ## Historical evidence
 1. `production-baseline-fingerprint-worksheet.md`
@@ -41,10 +40,9 @@
 4. `archive/convex-gate-matrix-v1.md`
 5. `archive/daytona-project-sandbox-migration-spec.md`
 6. `archive/convex-track-a-execution-board-v1.md`
-7. `bounded-workspace-loop-v1.md`
-8. `convex-hardening-plan-v1.md`
-9. `community-membership-access-rearchitecture-plan-v1.md`
-10. `community-chat-execution-plan-v1.md`
+7. `convex-hardening-plan-v1.md`
+8. `community-membership-access-rearchitecture-plan-v1.md`
+9. `community-chat-execution-plan-v1.md`
 
 ## Archived superseded contracts
 1. `auth-foundation-plan-v1.md`

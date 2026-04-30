@@ -22,8 +22,8 @@ export type WebCommunityAiAgentLandingEditorProps = {
   communityAgentConfigLanding: CommunityAgentLanding;
   setCommunityAgentConfigLanding: Dispatch<SetStateAction<CommunityAgentLanding>>;
   markCommunityAgentConfigDirty: () => void;
-  communityAgentConfigSystemPrompt: string;
-  setCommunityAgentConfigSystemPrompt: Dispatch<SetStateAction<string>>;
+  communityAgentConfigCommunitySystemPrompt: string;
+  setCommunityAgentConfigCommunitySystemPrompt: Dispatch<SetStateAction<string>>;
   previewCommunityName: string;
   previewProjectName: string;
 };
@@ -53,8 +53,8 @@ export function WebCommunityAiAgentLandingEditor(props: WebCommunityAiAgentLandi
     communityAgentConfigLanding,
     setCommunityAgentConfigLanding,
     markCommunityAgentConfigDirty,
-    communityAgentConfigSystemPrompt,
-    setCommunityAgentConfigSystemPrompt,
+    communityAgentConfigCommunitySystemPrompt,
+    setCommunityAgentConfigCommunitySystemPrompt,
     previewCommunityName,
     previewProjectName,
   } = props;
@@ -84,7 +84,7 @@ export function WebCommunityAiAgentLandingEditor(props: WebCommunityAiAgentLandi
   return (
     <div className="settings-section">
       <div className="model-note agent-editor-intro">
-        Configure the community-wide behavior and the first-run landing surface directly. Click into Agent Soul or any starter action and type in place.
+        Configure the community-wide system prompt and the first-run landing surface directly. Click into Community System Prompt or any starter action and type in place.
       </div>
 
       <div className="agent-preview-actions">
@@ -111,19 +111,19 @@ export function WebCommunityAiAgentLandingEditor(props: WebCommunityAiAgentLandi
 
       <div className="agent-editor-canvas agent-editor-canvas--full">
         <div className={`agent-canvas-target-card agent-canvas-target-card-editable ${isSystemPromptActive ? "is-active" : ""}`}>
-          <div className="agent-canvas-target-kicker">Agent Soul</div>
-          <div className="agent-canvas-target-title">Community-wide behavior</div>
+          <div className="agent-canvas-target-kicker">Community System Prompt</div>
+          <div className="agent-canvas-target-title">Community-wide instructions</div>
           <div className="model-note">
-            This applies to every chat in the community after the onboarding prompt is injected.
+            This adds community-specific instructions on top of each member's agent soul.
           </div>
           <textarea
             className="system-prompt-input"
             placeholder="Optional. This applies to every chat in this community."
-            value={communityAgentConfigSystemPrompt}
+            value={communityAgentConfigCommunitySystemPrompt}
             onFocus={() => setIsSystemPromptActive(true)}
             onBlur={() => setIsSystemPromptActive(false)}
             onChange={(event) => {
-              setCommunityAgentConfigSystemPrompt(event.target.value);
+              setCommunityAgentConfigCommunitySystemPrompt(event.target.value);
               markCommunityAgentConfigDirty();
             }}
             rows={6}

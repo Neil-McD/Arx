@@ -27,6 +27,9 @@ function main() {
   const publicFunnelActions = readText(
     new URL("../apps/web/src/controllers/useWebPublicFunnelActions.ts", import.meta.url),
   );
+  const communityJoinPolicy = readText(new URL("../apps/web/src/communityJoinPolicy.ts", import.meta.url));
+  const publicFunnel = readText(new URL("../apps/web/src/components/WebPublicCommunityFunnel.tsx", import.meta.url));
+  const communityFunnelUi = readText(new URL("../shared/communityFunnelUi.ts", import.meta.url));
   const discoverPanel = readText(new URL("../apps/web/src/components/WebDiscoverPanel.tsx", import.meta.url));
   const baseCss = readText(new URL("../apps/web/src/base.css", import.meta.url));
   const webAppRouteState = readText(new URL("../shared/webAppRouteState.ts", import.meta.url));
@@ -150,6 +153,51 @@ function main() {
     publicFunnelActions,
     "fetchCloudMyCommunityAccessBySlug<AuthSession, CommunityAccessT>({",
     "public funnel verifies signed-in access separately from Discover state",
+  );
+  assertIncludes(
+    communityJoinPolicy,
+    "export function deriveCommunityFunnelAction",
+    "community funnel action is derived from canonical entry policy",
+  );
+  assertNotIncludes(
+    communityJoinPolicy,
+    "CommunityJoinMode",
+    "community policy no longer exposes legacy join mode as a first-class type",
+  );
+  assertIncludes(
+    publicFunnelActions,
+    "deriveCommunityFunnelAction(payload.community as { entry_policy?: unknown }) === \"request_access\"",
+    "public funnel actions use semantic funnel action instead of legacy join mode",
+  );
+  assertNotIncludes(
+    app,
+    "deriveCommunityJoinMode",
+    "App does not derive behavior from legacy join mode",
+  );
+  assertNotIncludes(
+    publicFunnelActions,
+    "deriveCommunityJoinMode",
+    "public funnel actions do not derive behavior from legacy join mode",
+  );
+  assertNotIncludes(
+    publicFunnel,
+    "join_free",
+    "public funnel component does not render legacy free-join mode",
+  );
+  assertNotIncludes(
+    publicFunnel,
+    "join_approval",
+    "public funnel component does not render legacy approval-join mode",
+  );
+  assertNotIncludes(
+    communityFunnelUi,
+    "join_free",
+    "shared funnel copy does not use legacy free-join mode",
+  );
+  assertNotIncludes(
+    communityFunnelUi,
+    "join_approval",
+    "shared funnel copy does not use legacy approval-join mode",
   );
   assertIncludes(
     publicFunnelActions,

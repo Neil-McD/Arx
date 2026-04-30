@@ -192,7 +192,7 @@ export type CommunityFunnelPreviewRouteState = {
   community: CommunityFunnelPreviewRouteCommunity;
   visibilityLabel: string;
   memberCount: number | null;
-  joinMode: "join_free" | "join_approval" | "checkout";
+  funnelAction: "join" | "request_access" | "checkout";
   one_liner: string | null;
   funnel: CommunityFunnelConfig;
   savedAt: number;
@@ -214,11 +214,11 @@ function normalizePreviewAbout(raw: unknown): string | null {
   return trimmed ? trimmed : null;
 }
 
-function normalizePreviewJoinMode(raw: unknown): CommunityFunnelPreviewRouteState["joinMode"] {
+function normalizePreviewFunnelAction(raw: unknown): CommunityFunnelPreviewRouteState["funnelAction"] {
   const value = String(raw ?? "").trim().toLowerCase();
   if (value === "checkout") return "checkout";
-  if (value === "join_approval" || value === "request_access") return "join_approval";
-  return "join_free";
+  if (value === "join_approval" || value === "request_access") return "request_access";
+  return "join";
 }
 
 export function buildCommunityFunnelPreviewHistoryState(
@@ -238,7 +238,9 @@ export function buildCommunityFunnelPreviewHistoryState(
       },
       visibilityLabel: String(draft.visibilityLabel ?? "").trim() || "Unlisted",
       memberCount: typeof draft.memberCount === "number" ? draft.memberCount : null,
-      joinMode: normalizePreviewJoinMode(draft.joinMode),
+      funnelAction: normalizePreviewFunnelAction(
+        draft.funnelAction ?? (draft as unknown as { joinMode?: unknown }).joinMode,
+      ),
       one_liner: normalizePreviewOneLiner(draft.one_liner),
       savedAt: Number.isFinite(Number(draft.savedAt)) ? Number(draft.savedAt) : Date.now(),
     },
@@ -267,7 +269,9 @@ export function readCommunityFunnelPreviewHistoryState(
     },
     visibilityLabel: String(draft.visibilityLabel ?? "").trim() || "Unlisted",
     memberCount: typeof draft.memberCount === "number" ? draft.memberCount : null,
-    joinMode: normalizePreviewJoinMode(draft.joinMode),
+    funnelAction: normalizePreviewFunnelAction(
+      draft.funnelAction ?? (draft as unknown as { joinMode?: unknown }).joinMode,
+    ),
     one_liner: normalizePreviewOneLiner(draft.one_liner),
     savedAt: Number.isFinite(Number(draft.savedAt)) ? Number(draft.savedAt) : Date.now(),
   };

@@ -39,7 +39,7 @@ And 7 outputs:
 3. Workspace tool entitlement: allowed/denied
 4. Platform inference entitlement: allowed/denied
 5. Entitled capability families: `[]` | `["community_tools","web_research"]` | `["community_tools","web_research","workspace_tools"]`
-6. Community action mode: `join_free` | `join_approval` | `checkout`
+6. Community funnel action: `join` | `request_access` | `checkout`
 7. Community create entitlement: allowed/denied
 
 ## 2) Canonical Routing + Gating Rules
@@ -89,7 +89,7 @@ Notes:
 - `runtimeRuns` persist active capability families and harness profile as runtime truth.
 - Phase 2 runtime detail: the unified tool loop provisions a Daytona sandbox lazily when a workspace tool is actually called.
 - Assistant response generation uses the Convex runtime endpoints (`/runtime/public_turn`, `/runtime/runtime_turn`).
-- Community join mode remains server-authored (`join_free` / `join_approval` / `checkout`).
+- Community funnel action is a client projection from server-authored `entry_policy`; access remains server-authoritative.
 
 ## 4) Canonical Files (Source of Truth)
 

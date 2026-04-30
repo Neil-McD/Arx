@@ -8,7 +8,7 @@ import {
   toIsoString,
 } from "./communityCore";
 
-function normalizeSystemPrompt(raw: unknown): string {
+function normalizeCommunitySystemPrompt(raw: unknown): string {
   const prompt = String(raw ?? "").trim();
   return prompt.slice(0, 40_000);
 }
@@ -18,6 +18,7 @@ function mapCommunityAgentConfigRow(row: CommunityAgentConfigLike) {
     id: String(row._id),
     community_id: String(row.communityId),
     landing_json: row.landingJson ?? null,
+    community_system_prompt: row.systemPrompt,
     system_prompt: row.systemPrompt,
     updated_at: toIsoString(row.updatedAt),
   };
@@ -75,7 +76,8 @@ export const saveCommunityAgentConfig = mutation({
     authSubject: v.optional(v.string()),
     communityId: v.id("communities"),
     landingJson: v.optional(v.any()),
-    systemPrompt: v.string(),
+    communitySystemPrompt: v.optional(v.string()),
+    systemPrompt: v.optional(v.string()),
     nowMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
@@ -87,14 +89,16 @@ export const saveCommunityAgentConfig = mutation({
     (args as { userId?: any }).userId = userId;
     const nowMs = args.nowMs ?? Date.now();
     await requireCommunityManager({ ctx, communityId: args.communityId, userId: args.userId });
-    const nextSystemPrompt = normalizeSystemPrompt(args.systemPrompt);
+    const nextCommunitySystemPrompt = normalizeCommunitySystemPrompt(
+      args.communitySystemPrompt ?? args.systemPrompt,
+    );
     const rows = await listCommunityAgentConfigRows(ctx, args.communityId);
     const existing = selectPrimaryCommunityAgentConfigRow(rows);
 
     if (existing) {
       await ctx.db.patch(existing._id as any, {
         landingJson: args.landingJson ?? null,
-        systemPrompt: nextSystemPrompt,
+        systemPrompt: nextCommunitySystemPrompt,
         updatedAt: nowMs,
       });
       await pruneCommunityAgentConfigRows(ctx, rows, existing._id);
@@ -106,7 +110,7 @@ export const saveCommunityAgentConfig = mutation({
     const id = await ctx.db.insert("communityAgentConfigs" as any, {
       communityId: args.communityId,
       landingJson: args.landingJson ?? null,
-      systemPrompt: nextSystemPrompt,
+      systemPrompt: nextCommunitySystemPrompt,
       createdAt: nowMs,
       updatedAt: nowMs,
     });
@@ -137,6 +141,7 @@ export const getActiveCommunityAgentSystemPrompt = query({
     const config = selectPrimaryCommunityAgentConfigRow(await listCommunityAgentConfigRows(ctx, args.communityId));
     if (!config) return null;
     return {
+      community_system_prompt: config.systemPrompt,
       system_prompt: config.systemPrompt,
     };
   },
@@ -170,6 +175,7 @@ export const resolveRuntimeCommunityPromptContextInternal = internalQuery({
       community_slug: communitySlug,
       community_one_liner: communityOneLiner,
       community_about: communityAbout,
+      community_system_prompt: config?.systemPrompt ?? null,
       system_prompt: config?.systemPrompt ?? null,
     };
   },

@@ -112,6 +112,7 @@ export type CommunityAgentConfig<TLanding = unknown> = {
   id: string;
   community_id: string;
   landing_json: TLanding | null;
+  community_system_prompt?: string;
   system_prompt: string;
   updated_at: string;
 };

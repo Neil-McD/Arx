@@ -91,7 +91,7 @@ for (const token of [
 assertContains(
   runtimeTimelineUi,
   "buildRuntimeLiveTimeline",
-  "existing runtime timeline projection remains intact for compatibility",
+  "runtime timeline UI projection remains intact",
 );
 
 const happyPath = [

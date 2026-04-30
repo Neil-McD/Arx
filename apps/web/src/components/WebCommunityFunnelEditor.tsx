@@ -51,7 +51,7 @@ export type WebCommunityFunnelEditorProps = {
   previewCommunity: PreviewCommunityLike;
   previewVisibilityLabel: string;
   previewMemberCount: number | null;
-  previewJoinMode: "join_free" | "join_approval" | "checkout";
+  previewFunnelAction: "join" | "request_access" | "checkout";
 };
 
 export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
@@ -68,11 +68,11 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
     previewCommunity,
     previewVisibilityLabel,
     previewMemberCount,
-    previewJoinMode,
+    previewFunnelAction,
   } = props;
 
   const isDirty = communityFunnelDirtyRef.current;
-  const funnelCopy = buildCommunityFunnelCopy(previewJoinMode);
+  const funnelCopy = buildCommunityFunnelCopy(previewFunnelAction);
   const mediaPreviewUrl = communityFunnelConfig.hero_media_url ?? null;
   const mediaPreviewEmbed = mediaPreviewUrl ? parseEmbedUrl(mediaPreviewUrl) : null;
   const cardOneLiner = previewCommunity.one_liner?.trim() || funnelCopy.body;
@@ -84,7 +84,7 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
     heroMediaUrlOverride: mediaPreviewUrl,
   });
   const isPublishedVisibility = previewVisibilityLabel === "Published";
-  const isFreePricing = previewJoinMode !== "checkout";
+  const isFreePricing = previewFunnelAction !== "checkout";
   const pricingLabel = isFreePricing ? "FREE" : "Paid";
   const previewAdminCount =
     typeof previewCommunity.admin_count === "number" ? previewCommunity.admin_count : null;

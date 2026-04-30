@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { hasBuilderTierPaidAccess } from "../../../../shared/builderBilling";
 import {
   WORKSPACE_CREDIT_LOW_BALANCE_THRESHOLD,
@@ -34,6 +35,17 @@ type WebAgentSettingsSectionProps = {
   exportMessagesCsv: () => Promise<void> | void;
   exportMemoryCsv: () => Promise<void> | void;
   isExporting: boolean;
+  userMemorySettings: {
+    memory_mode: "off" | "suggest" | "auto";
+    remember_intent_enabled: boolean;
+    agent_soul: string;
+  };
+  isLoadingUserMemorySettings: boolean;
+  saveUserMemorySettings: (next: {
+    memory_mode: "off" | "suggest" | "auto";
+    remember_intent_enabled: boolean;
+    agent_soul: string;
+  }) => Promise<void> | void;
   personalMemoryError: string | null;
   builderBillingStatus: BuilderBillingStatus;
   openBuilderUpgrade: (context: "builder") => void;
@@ -72,6 +84,9 @@ export function WebAgentSettingsSection(props: WebAgentSettingsSectionProps) {
     exportMessagesCsv,
     exportMemoryCsv,
     isExporting,
+    userMemorySettings,
+    isLoadingUserMemorySettings,
+    saveUserMemorySettings,
     personalMemoryError,
     builderBillingStatus,
     openBuilderUpgrade,
@@ -96,6 +111,11 @@ export function WebAgentSettingsSection(props: WebAgentSettingsSectionProps) {
     workspaceCreditTopupError,
     startWorkspaceCreditTopupCheckout,
   } = props;
+  const [agentSoulDraft, setAgentSoulDraft] = useState(userMemorySettings.agent_soul);
+  useEffect(() => {
+    setAgentSoulDraft(userMemorySettings.agent_soul);
+  }, [userMemorySettings.agent_soul]);
+  const agentSoulNeedsSave = agentSoulDraft !== userMemorySettings.agent_soul;
 
   return (
     <>
@@ -103,6 +123,42 @@ export function WebAgentSettingsSection(props: WebAgentSettingsSectionProps) {
       <div className="memory-panel">
         {personalMemoryError && <div className="memory-error">{personalMemoryError}</div>}
         {exportError && <div className="auth-error">{exportError}</div>}
+
+        <div className="settings-section">
+          <div className="settings-section-title">
+            <svg viewBox="0 0 24 24"><path d="M12 3v18" /><path d="M5 8h14" /><path d="M7 16h10" /></svg>
+            Agent Soul
+          </div>
+          <div className="settings-section-desc">
+            Personal instructions for your agent. Community system prompts add on top when a community lens is active.
+          </div>
+          <textarea
+            className="profile-bio"
+            value={agentSoulDraft}
+            onChange={(event) => setAgentSoulDraft(event.target.value)}
+            placeholder="Tell your agent how to think, collaborate, and behave for you."
+            disabled={!session || isLoadingUserMemorySettings}
+            rows={6}
+          />
+          <div className="auth-actions" style={{ paddingLeft: 0, marginTop: 12 }}>
+            <button
+              className={agentSoulNeedsSave ? "platform-save-button needs-save" : "platform-save-button synced"}
+              type="button"
+              onClick={() =>
+                void saveUserMemorySettings({
+                  ...userMemorySettings,
+                  agent_soul: agentSoulDraft,
+                })
+              }
+              disabled={!session || isLoadingUserMemorySettings || !agentSoulNeedsSave}
+            >
+              {isLoadingUserMemorySettings ? "Saving…" : agentSoulNeedsSave ? "Save soul" : "Saved"}
+            </button>
+          </div>
+          {!session ? (
+            <div className="model-note">Sign in to save a personal agent soul.</div>
+          ) : null}
+        </div>
 
         <div className="settings-section">
           <div className="settings-section-title">

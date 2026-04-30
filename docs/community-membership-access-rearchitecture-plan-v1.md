@@ -152,11 +152,11 @@ Delete `mod` unless you define real powers for it now.
 
 Recommendation:
 
-Replace the split `joinMode + freeJoinRequiresApproval + inferred paid plan behavior` with one canonical policy:
+Replace the split `joinMode + freeJoinRequiresApproval + inferred paid plan behavior` with one canonical policy plus a derived UI funnel action:
 
 1. `open`
 2. `approval`
-3. `paid_unlock`
+3. `paid_subscription`
 
 Visibility stays separate from entry policy.
 
@@ -266,7 +266,7 @@ Suggested shape:
 11. `primary_cta`
    - `sign_in`
    - `join`
-   - `join_approval`
+   - `request_access`
    - `checkout`
    - `open_community`
 

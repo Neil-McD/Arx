@@ -15,7 +15,7 @@ import {
 import { preloadImageUrls } from "../../../../shared/preloadImageUrls";
 import { applyShellVariantToPublicPath, readShellVariantFromPathname } from "../../../../shared/webAppRouteState";
 import type { AuthSession } from "../auth";
-import { deriveCommunityJoinMode } from "../communityJoinPolicy";
+import { deriveCommunityFunnelAction } from "../communityJoinPolicy";
 import type { CommunityBillingPeriod } from "../../../../shared/communityTypes";
 
 type UseWebPublicFunnelActionsArgs<
@@ -448,7 +448,7 @@ export function useWebPublicFunnelActions<
 
           if (
             session &&
-            deriveCommunityJoinMode(payload.community as { entry_policy?: unknown }) === "join_approval" &&
+            deriveCommunityFunnelAction(payload.community as { entry_policy?: unknown }) === "request_access" &&
             !hasEnterAccess &&
             !accessLookupFailed &&
             current.getCurrentPublicCommunitySlug() === resolvedSlug

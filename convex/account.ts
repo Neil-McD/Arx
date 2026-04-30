@@ -1,6 +1,7 @@
 import { mutation } from "./_generated/server";
 import { v } from "convex/values";
 import { ensureAuthenticatedActor } from "./authActor";
+import { recordCriticalAuditEventBestEffort } from "./criticalAudit";
 
 async function deleteRowsByIndex(ctx: any, tableName: string, indexName: string, fieldName: string, value: any) {
   const rows = await ctx.db
@@ -117,7 +118,24 @@ export const deleteOwnAccount = mutation({
     });
     const userId = actor.dbUserId;
 
-    await assertAccountDeletionAllowed(ctx, userId, nowMs);
+    try {
+      await assertAccountDeletionAllowed(ctx, userId, nowMs);
+    } catch (error) {
+      await recordCriticalAuditEventBestEffort(ctx, {
+        eventKey: `account_delete_blocked:${userId}:${error instanceof Error ? error.message : String(error)}:${nowMs}`,
+        eventType: "account_delete_blocked",
+        severity: "warning",
+        status: "blocked",
+        actorUserId: userId,
+        subjectUserId: userId,
+        provider: "polynet",
+        metadata: {
+          reason: error instanceof Error ? error.message : String(error),
+        },
+        createdAt: nowMs,
+      });
+      throw error;
+    }
 
     const deleted: Record<string, number> = {};
     const record = async (tableName: string, count: number) => {
@@ -228,6 +246,17 @@ export const deleteOwnAccount = mutation({
       await ctx.db.delete(row._id);
     }
     await record("communityChatMessages", communityMessages.length);
+
+    await recordCriticalAuditEventBestEffort(ctx, {
+      eventKey: `account_delete_completed:${userId}:${nowMs}`,
+      eventType: "account_delete_completed",
+      status: "succeeded",
+      actorUserId: userId,
+      subjectUserId: userId,
+      provider: "polynet",
+      metadata: { deleted },
+      createdAt: nowMs,
+    });
 
     await ctx.db.delete(userId);
 

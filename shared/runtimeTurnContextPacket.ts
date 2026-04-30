@@ -8,6 +8,8 @@ export type RuntimeTurnContextPacket = {
   latestUserText?: string | null;
   threadWorkingState?: ThreadWorkingStatePrompt | null;
   activeBackgroundTerminals: RuntimeWorkspaceTerminalPrompt[];
+  recentBackgroundProcessEvents: RuntimeBackgroundProcessEventPrompt[];
+  recentToolAttempts: RuntimeRecentToolAttemptPrompt[];
   runtimeStop?: {
     status: "error" | "cancelled";
     reason?: string | null;
@@ -22,7 +24,46 @@ export type RuntimeTurnContextSnapshotV1 = {
   latestUserText: string | null;
   threadWorkingState: ThreadWorkingStatePrompt | null;
   activeBackgroundTerminals: RuntimeWorkspaceTerminalPrompt[];
+  recentBackgroundProcessEvents: RuntimeBackgroundProcessEventPrompt[];
+  recentToolAttempts: RuntimeRecentToolAttemptPrompt[];
   runtimeStop: RuntimeTurnContextPacket["runtimeStop"];
+};
+
+export type RuntimeBackgroundProcessEventPrompt = {
+  terminalId: string;
+  status: "exited" | "failed" | "stopped";
+  completionReason?: RuntimeWorkspaceTerminalPrompt["completionReason"];
+  command: string;
+  cwd?: string | null;
+  previewPort?: number | null;
+  previewStatus?: RuntimeWorkspaceTerminalPrompt["previewStatus"];
+  healthSummary?: string | null;
+  exitCode?: number | null;
+  outputTail?: string | null;
+  finishedAt?: number | null;
+  completionRecordedAt?: number | null;
+};
+
+export type RuntimeRecentToolAttemptPrompt = {
+  toolCallId?: string | null;
+  providerCallId?: string | null;
+  toolName: string;
+  status: "ok" | "error";
+  commandOrTarget?: string | null;
+  cwd?: string | null;
+  exitCode?: number | null;
+  errorCode?: string | null;
+  errorMessage?: string | null;
+  outputPreview?: string | null;
+  failureSummary?: string | null;
+  suggestedRecovery?: string | null;
+  createdAt?: number | null;
+};
+
+export type RuntimeRecentToolAttemptEvent = {
+  eventType: string;
+  payload: unknown;
+  createdAt?: number;
 };
 
 function normalizePromptBlock(value: string | null | undefined): string | null {
@@ -76,6 +117,170 @@ function readOptionalNumber(record: Record<string, unknown>, ...keys: string[]):
   return null;
 }
 
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function readNestedRecord(record: Record<string, unknown>, key: string): Record<string, unknown> | null {
+  return asRecord(record[key]);
+}
+
+function readAttemptString(record: Record<string, unknown> | null, ...keys: string[]): string | null {
+  if (!record) return null;
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "string" && value.trim()) return truncatePromptSnippet(value, 500);
+  }
+  return null;
+}
+
+function readAttemptNumber(record: Record<string, unknown> | null, ...keys: string[]): number | null {
+  if (!record) return null;
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "number" && Number.isFinite(value)) return Math.floor(value);
+  }
+  return null;
+}
+
+function normalizeAttemptStatus(value: unknown): "ok" | "error" | null {
+  const status = String(value ?? "").trim();
+  if (status === "ok" || status === "error") return status;
+  if (value === true) return "ok";
+  if (value === false) return "error";
+  return null;
+}
+
+function readToolAttemptCommandOrTarget(params: {
+  toolName: string;
+  payload: Record<string, unknown>;
+  args: Record<string, unknown> | null;
+  details: Record<string, unknown> | null;
+  failureSemantics: Record<string, unknown> | null;
+}): string | null {
+  const toolName = params.toolName;
+  if (toolName === "bash") {
+    return (
+      readAttemptString(params.failureSemantics, "command") ??
+      readAttemptString(params.args, "command") ??
+      readAttemptString(params.details, "command")
+    );
+  }
+  if (toolName === "read" || toolName === "write" || toolName === "edit" || toolName === "sha256") {
+    return readAttemptString(params.args, "path");
+  }
+  if (toolName === "glob" || toolName === "grep") {
+    return readAttemptString(params.args, "pattern", "query", "path");
+  }
+  if (toolName === "terminal_start") {
+    return readAttemptString(params.args, "command") ?? readAttemptString(params.details, "command");
+  }
+  if (toolName === "terminal_read" || toolName === "terminal_stop") {
+    return readAttemptString(params.args, "terminal_session_id", "terminalId", "id");
+  }
+  if (toolName === "computer_open_url") {
+    return readAttemptString(params.args, "url") ?? readAttemptString(params.details, "url", "target_url");
+  }
+  if (toolName.startsWith("computer_")) {
+    return readAttemptString(params.details, "summary", "browser_window_title");
+  }
+  return readAttemptString(params.args, "path", "url", "query", "command");
+}
+
+function normalizeRuntimeRecentToolAttempt(
+  event: RuntimeRecentToolAttemptEvent,
+): RuntimeRecentToolAttemptPrompt | null {
+  if (event.eventType !== "tool_call_finished") return null;
+  const payload = asRecord(event.payload);
+  if (!payload) return null;
+  const toolName = readAttemptString(payload, "tool_name", "toolName", "tool") ?? "";
+  if (!toolName) return null;
+  const status =
+    normalizeAttemptStatus(payload.status) ??
+    normalizeAttemptStatus(payload.success) ??
+    (readAttemptString(payload, "error_code", "error_message") ? "error" : "ok");
+  const args = readNestedRecord(payload, "args");
+  const details = readNestedRecord(payload, "details");
+  const failureSemantics = readNestedRecord(payload, "failure_semantics");
+  const outputPreview =
+    readAttemptString(payload, "output_preview", "output") ??
+    readAttemptString(details, "output_preview", "stdout_preview", "stderr_preview");
+  const attempt: RuntimeRecentToolAttemptPrompt = {
+    toolCallId: readAttemptString(payload, "tool_call_id", "toolCallId"),
+    providerCallId: readAttemptString(payload, "provider_call_id", "providerCallId"),
+    toolName,
+    status,
+    commandOrTarget: readToolAttemptCommandOrTarget({
+      toolName,
+      payload,
+      args,
+      details,
+      failureSemantics,
+    }),
+    cwd:
+      readAttemptString(failureSemantics, "cwd") ??
+      readAttemptString(details, "cwd") ??
+      readAttemptString(args, "cwd"),
+    exitCode:
+      readAttemptNumber(payload, "exit_code", "exitCode") ??
+      readAttemptNumber(details, "exit_code", "exitCode") ??
+      readAttemptNumber(failureSemantics, "exit_code", "exitCode"),
+    errorCode: readAttemptString(payload, "error_code", "errorCode"),
+    errorMessage: readAttemptString(payload, "error_message", "errorMessage"),
+    outputPreview,
+    failureSummary:
+      readAttemptString(failureSemantics, "summary") ??
+      readAttemptString(payload, "top_diagnostic_summary"),
+    suggestedRecovery: readAttemptString(failureSemantics, "suggested_recovery", "suggestedRecovery"),
+    createdAt:
+      typeof event.createdAt === "number" && Number.isFinite(event.createdAt)
+        ? Math.floor(event.createdAt)
+        : null,
+  };
+  return attempt;
+}
+
+export function buildRuntimeRecentToolAttemptsFromEvents(params: {
+  events: RuntimeRecentToolAttemptEvent[];
+  limit?: number | null;
+}): RuntimeRecentToolAttemptPrompt[] {
+  const limit = Math.max(1, Math.min(12, Math.floor(params.limit ?? 8)));
+  const attempts = params.events
+    .map(normalizeRuntimeRecentToolAttempt)
+    .filter((attempt): attempt is RuntimeRecentToolAttemptPrompt => Boolean(attempt));
+  const failed = attempts.filter((attempt) => attempt.status === "error");
+  const priorityNames = new Set(["bash", "terminal_start", "terminal_read", "computer_open_url", "computer_screenshot"]);
+  const diagnostic = attempts.filter(
+    (attempt) => attempt.status === "ok" && priorityNames.has(attempt.toolName),
+  );
+  const other = attempts.filter(
+    (attempt) => attempt.status === "ok" && !priorityNames.has(attempt.toolName),
+  );
+  const ordered = [...failed, ...diagnostic, ...other].sort(
+    (a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0),
+  );
+  const seen = new Set<string>();
+  const out: RuntimeRecentToolAttemptPrompt[] = [];
+  for (const attempt of ordered) {
+    const key = [
+      attempt.toolCallId,
+      attempt.providerCallId,
+      attempt.toolName,
+      attempt.status,
+      attempt.commandOrTarget,
+      attempt.errorCode,
+      attempt.exitCode,
+    ].join(":");
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(attempt);
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
 export function mapRuntimeWorkspaceTerminalPrompt(
   terminal: unknown,
 ): RuntimeWorkspaceTerminalPrompt | null {
@@ -126,6 +331,16 @@ export function mapRuntimeWorkspaceTerminalPrompt(
     ) as RuntimeWorkspaceTerminalPrompt["previewRenderStatus"],
     outputTail: readOptionalString(record, "output_tail", "outputTail"),
     exitCode: readOptionalNumber(record, "exit_code", "exitCode"),
+    completionRecordedAt: readOptionalNumber(
+      record,
+      "completion_recorded_at",
+      "completionRecordedAt",
+    ),
+    completionReason: readOptionalString(
+      record,
+      "completion_reason",
+      "completionReason",
+    ) as RuntimeWorkspaceTerminalPrompt["completionReason"],
   };
   const previewDiagnosis = deriveRuntimePreviewDiagnosis(mapped);
   if (previewDiagnosis) {
@@ -133,6 +348,40 @@ export function mapRuntimeWorkspaceTerminalPrompt(
     mapped.recommendedPreviewDebugAction = previewDiagnosis.recommendedNextAction;
   }
   return mapped;
+}
+
+export function mapRuntimeBackgroundProcessEventPrompt(
+  terminal: unknown,
+): RuntimeBackgroundProcessEventPrompt | null {
+  const mapped = mapRuntimeWorkspaceTerminalPrompt(terminal);
+  if (!mapped || !mapped.command) return null;
+  if (
+    mapped.status !== "exited" &&
+    mapped.status !== "failed" &&
+    mapped.status !== "stopped"
+  ) {
+    return null;
+  }
+  return {
+    terminalId: mapped.id,
+    status: mapped.status,
+    completionReason: mapped.completionReason ?? null,
+    command: mapped.command,
+    cwd: mapped.cwd ?? null,
+    previewPort: mapped.previewPort ?? null,
+    previewStatus: mapped.previewStatus ?? null,
+    healthSummary: mapped.healthSummary ?? null,
+    exitCode: mapped.exitCode ?? null,
+    outputTail: mapped.outputTail ?? null,
+    finishedAt: readOptionalNumber(
+      (terminal && typeof terminal === "object" && !Array.isArray(terminal)
+        ? (terminal as Record<string, unknown>)
+        : {}) as Record<string, unknown>,
+      "finished_at",
+      "finishedAt",
+    ),
+    completionRecordedAt: mapped.completionRecordedAt ?? null,
+  };
 }
 
 function withRuntimePreviewDiagnosis(
@@ -154,6 +403,8 @@ export function buildRuntimeTurnContextPacket(params: {
   latestUserText?: string | null;
   threadWorkingState?: ThreadWorkingStatePrompt | null;
   activeBackgroundTerminals?: Array<RuntimeWorkspaceTerminalPrompt | null | undefined> | null;
+  recentBackgroundProcessEvents?: Array<RuntimeBackgroundProcessEventPrompt | null | undefined> | null;
+  recentToolAttempts?: Array<RuntimeRecentToolAttemptPrompt | null | undefined> | null;
   runtimeStop?: RuntimeTurnContextPacket["runtimeStop"];
 }): RuntimeTurnContextPacket {
   return {
@@ -164,6 +415,22 @@ export function buildRuntimeTurnContextPacket(params: {
           (terminal): terminal is RuntimeWorkspaceTerminalPrompt =>
             Boolean(terminal && terminal.command),
         ).map((terminal) => withRuntimePreviewDiagnosis(terminal))
+      : [],
+    recentBackgroundProcessEvents: Array.isArray(params.recentBackgroundProcessEvents)
+      ? params.recentBackgroundProcessEvents
+          .filter(
+            (event): event is RuntimeBackgroundProcessEventPrompt =>
+              Boolean(event && event.terminalId && event.command),
+          )
+          .slice(0, 6)
+      : [],
+    recentToolAttempts: Array.isArray(params.recentToolAttempts)
+      ? params.recentToolAttempts
+          .filter(
+            (attempt): attempt is RuntimeRecentToolAttemptPrompt =>
+              Boolean(attempt && attempt.toolName),
+          )
+          .slice(0, 8)
       : [],
     runtimeStop: params.runtimeStop ?? null,
   };
@@ -251,6 +518,27 @@ function compactTerminalSnapshot(
     ),
     outputTail: compactSnapshotString(terminal.outputTail, 240),
     exitCode: terminal.exitCode,
+    completionRecordedAt: terminal.completionRecordedAt,
+    completionReason: terminal.completionReason,
+  };
+}
+
+function compactBackgroundProcessEventSnapshot(
+  event: RuntimeBackgroundProcessEventPrompt,
+): RuntimeBackgroundProcessEventPrompt {
+  return {
+    terminalId: compactSnapshotString(event.terminalId, 120) ?? event.terminalId,
+    status: event.status,
+    completionReason: event.completionReason,
+    command: compactSnapshotString(event.command, 180) ?? event.command,
+    cwd: compactSnapshotString(event.cwd, 120),
+    previewPort: event.previewPort,
+    previewStatus: event.previewStatus,
+    healthSummary: compactSnapshotString(event.healthSummary, 180),
+    exitCode: event.exitCode,
+    outputTail: compactSnapshotString(event.outputTail, 240),
+    finishedAt: event.finishedAt,
+    completionRecordedAt: event.completionRecordedAt,
   };
 }
 
@@ -272,6 +560,18 @@ export function buildRuntimeTurnContextSnapshot(params: {
     activeBackgroundTerminals: params.packet.activeBackgroundTerminals
       .slice(0, 3)
       .map(compactTerminalSnapshot),
+    recentBackgroundProcessEvents: params.packet.recentBackgroundProcessEvents
+      .slice(0, 4)
+      .map(compactBackgroundProcessEventSnapshot),
+    recentToolAttempts: params.packet.recentToolAttempts.slice(0, 6).map((attempt) => ({
+      ...attempt,
+      commandOrTarget: compactSnapshotString(attempt.commandOrTarget, 180),
+      cwd: compactSnapshotString(attempt.cwd, 120),
+      errorMessage: compactSnapshotString(attempt.errorMessage, 180),
+      outputPreview: compactSnapshotString(attempt.outputPreview, 240),
+      failureSummary: compactSnapshotString(attempt.failureSummary, 200),
+      suggestedRecovery: compactSnapshotString(attempt.suggestedRecovery, 200),
+    })),
     runtimeStop: params.packet.runtimeStop ?? null,
   };
 }
@@ -412,6 +712,75 @@ function buildWorkspaceProcessContextPrompt(packet: RuntimeTurnContextPacket): s
   return lines.join("\n");
 }
 
+function buildRecentToolAttemptsPrompt(packet: RuntimeTurnContextPacket): string | null {
+  const attempts = packet.recentToolAttempts.filter((attempt) => attempt.toolName);
+  if (attempts.length === 0) return null;
+  const lines = ["RECENT_TOOL_ATTEMPTS"];
+  for (const attempt of attempts.slice(0, 8)) {
+    const parts = [
+      attempt.commandOrTarget
+        ? `target=${truncatePromptSnippet(attempt.commandOrTarget, 140)}`
+        : null,
+      attempt.cwd ? `cwd=${truncatePromptSnippet(attempt.cwd, 80)}` : null,
+      typeof attempt.exitCode === "number" ? `exit=${attempt.exitCode}` : null,
+      attempt.errorCode ? `error_code=${truncatePromptSnippet(attempt.errorCode, 80)}` : null,
+      attempt.errorMessage
+        ? `error=${truncatePromptSnippet(attempt.errorMessage, 140)}`
+        : null,
+      attempt.failureSummary
+        ? `failure=${truncatePromptSnippet(attempt.failureSummary, 180)}`
+        : null,
+      attempt.suggestedRecovery
+        ? `recovery=${truncatePromptSnippet(attempt.suggestedRecovery, 180)}`
+        : null,
+      attempt.outputPreview
+        ? `output=${truncatePromptSnippet(attempt.outputPreview, 220)}`
+        : null,
+    ].filter(Boolean);
+    lines.push(
+      `- ${attempt.toolName} ${attempt.status}${parts.length > 0 ? `; ${parts.join("; ")}` : ""}`,
+    );
+  }
+  lines.push(
+    "Treat these as recent operational evidence from actual tool calls. Do not say exact failed tool calls are unavailable when they are listed here.",
+  );
+  return lines.join("\n");
+}
+
+function buildRecentBackgroundProcessEventsPrompt(
+  packet: RuntimeTurnContextPacket,
+): string | null {
+  const events = packet.recentBackgroundProcessEvents.filter(
+    (event) => event.terminalId && event.command,
+  );
+  if (events.length === 0) return null;
+  const lines = ["RECENT_BACKGROUND_PROCESS_EVENTS"];
+  for (const event of events.slice(0, 6)) {
+    const parts = [
+      event.completionReason
+        ? `reason=${truncatePromptSnippet(event.completionReason, 80)}`
+        : null,
+      event.cwd ? `cwd=${truncatePromptSnippet(event.cwd, 80)}` : null,
+      typeof event.previewPort === "number" ? `port=${event.previewPort}` : null,
+      event.previewStatus
+        ? `preview=${truncatePromptSnippet(event.previewStatus, 80)}`
+        : null,
+      typeof event.exitCode === "number" ? `exit=${event.exitCode}` : null,
+      event.healthSummary
+        ? `health=${truncatePromptSnippet(event.healthSummary, 140)}`
+        : null,
+      event.outputTail ? `output=${truncatePromptSnippet(event.outputTail, 220)}` : null,
+    ].filter(Boolean);
+    lines.push(
+      `- ${event.terminalId}: ${event.status}; command=${truncatePromptSnippet(event.command, 140) ?? "(unknown command)"}${parts.length > 0 ? `; ${parts.join("; ")}` : ""}`,
+    );
+  }
+  lines.push(
+    "Treat these as recent lifecycle events from managed background terminals. A completed preview server invalidates older live-preview assumptions unless a newer active process for the same app exists.",
+  );
+  return lines.join("\n");
+}
+
 export function renderRuntimeTurnContextForPrompt(
   packet: RuntimeTurnContextPacket | null | undefined,
 ): string | null {
@@ -419,6 +788,8 @@ export function renderRuntimeTurnContextForPrompt(
   return joinPromptBlocks([
     buildThreadWorkingStatePrompt(packet),
     buildWorkspaceProcessContextPrompt(packet),
+    buildRecentBackgroundProcessEventsPrompt(packet),
+    buildRecentToolAttemptsPrompt(packet),
   ]);
 }
 

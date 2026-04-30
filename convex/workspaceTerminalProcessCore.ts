@@ -454,6 +454,8 @@ async function createFailedWorkspaceTerminalStartRow(params: {
       updatedAt: nowMs,
       finishedAt: nowMs,
       exitCode: 1,
+      completionRecordedAt: nowMs,
+      completionReason: "preflight_failed",
       lastHeartbeatAt: nowMs,
       healthStatus: "unhealthy",
       healthSummary: params.message || "Preview preflight failed.",
@@ -503,6 +505,11 @@ export function summarizeWorkspaceTerminalRow(row: any): Record<string, unknown>
     finished_at: typeof row?.finishedAt === "number" ? row.finishedAt : null,
     output_tail: normalizeOptionalString(row?.lastOutputTail),
     exit_code: typeof row?.exitCode === "number" ? row.exitCode : null,
+    completion_recorded_at:
+      typeof row?.completionRecordedAt === "number"
+        ? row.completionRecordedAt
+        : null,
+    completion_reason: normalizeOptionalString(row?.completionReason),
     lifecycle_owner: normalizeWorkspaceTerminalLifecycleOwner(row?.lifecycleOwner),
     started_by_thread_id: normalizeOptionalString(
       row?.startedByThreadId ?? row?.threadId,
@@ -727,13 +734,16 @@ export async function stopWorkspaceTerminalProcess(params: {
   const row = params.row;
   if (!isWorkspaceTerminalActiveStatus(row.status)) {
     if (params.forceStoppedStatus) {
+      const nowMs = Date.now();
       const patched = await params.ctx.runMutation(
         internal.workspaceTerminals.updateWorkspaceTerminalSessionInternal as any,
         {
           terminalSessionId: row._id,
           status: "stopped",
-          updatedAt: Date.now(),
-          finishedAt: Date.now(),
+          updatedAt: nowMs,
+          finishedAt: nowMs,
+          completionRecordedAt: row.completionRecordedAt ?? nowMs,
+          completionReason: row.completionReason ?? "stopped",
           healthStatus: "exited",
           healthSummary: "Process was stopped.",
           previewStatus: workspaceTerminalHasPreview(row)
@@ -757,13 +767,16 @@ export async function stopWorkspaceTerminalProcess(params: {
       sessionId: String(row.providerSessionId ?? "").trim(),
     });
   }
+  const nowMs = Date.now();
   const patched = await params.ctx.runMutation(
     internal.workspaceTerminals.updateWorkspaceTerminalSessionInternal as any,
     {
       terminalSessionId: row._id,
       status: "stopped",
-      updatedAt: Date.now(),
-      finishedAt: Date.now(),
+      updatedAt: nowMs,
+      finishedAt: nowMs,
+      completionRecordedAt: row.completionRecordedAt ?? nowMs,
+      completionReason: row.completionReason ?? "stopped",
       healthStatus: "exited",
       healthSummary: "Process was stopped.",
       previewStatus: workspaceTerminalHasPreview(row)

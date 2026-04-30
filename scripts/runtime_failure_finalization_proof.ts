@@ -184,12 +184,12 @@ assertNotContains(
 assertNotContains(
   finalizer,
   "legacy_detailed_runtime_failure",
-  "legacy detailed failure mode",
+  "removed fixed-template failure mode",
 );
 assertNotContains(
   finalizer,
   "Run stopped before completing.",
-  "legacy fixed failure title",
+  "removed fixed failure title",
 );
 for (const token of [
   "What happened:",
@@ -201,7 +201,7 @@ for (const token of [
   "buildLiveTerminalBlocker",
   "buildLiveTerminalNextAction",
 ]) {
-  assertNotContains(finalizer, token, `legacy deterministic finalizer token ${token}`);
+  assertNotContains(finalizer, token, `removed deterministic finalizer token ${token}`);
 }
 
 const currentRunState = summarizeRuntimeWorkingStateFromEvents({

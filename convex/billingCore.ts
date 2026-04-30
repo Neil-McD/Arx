@@ -7,6 +7,7 @@ import {
   resolveCommunityEntryPolicy,
 } from "./communityCore";
 import { enqueueCommunityAccessGrantedEmailInternal } from "./emailEvents";
+import { recordCriticalAuditEventBestEffort } from "./criticalAudit";
 
 export type CommunityLike = {
   _id: any;
@@ -218,6 +219,24 @@ export async function createCommunitySubscriptionForMembership(args: {
       endedAt,
       updatedAt: args.nowMs,
     });
+    await recordCriticalAuditEventBestEffort(args.ctx, {
+      eventKey: `community_subscription_synced:${args.providerSubscriptionId ?? existing.providerSubscriptionId ?? args.membershipId}:${status}:${args.nowMs}`,
+      eventType: "community_subscription_synced",
+      status: "succeeded",
+      actorUserId: args.userId,
+      subjectUserId: args.userId,
+      communityId: args.communityId,
+      provider: source === "stripe" ? "stripe" : "polynet",
+      providerObjectId: String(args.providerSubscriptionId ?? existing.providerSubscriptionId ?? "").trim() || undefined,
+      metadata: {
+        membershipId: String(args.membershipId),
+        pricePointId: String(args.pricePointId),
+        subscriptionStatus: status,
+        source,
+        cancelAtPeriodEnd,
+      },
+      createdAt: args.nowMs,
+    });
     return;
   }
   await args.ctx.db.insert("communitySubscriptions" as any, {
@@ -237,6 +256,24 @@ export async function createCommunitySubscriptionForMembership(args: {
     endedAt,
     createdAt: args.nowMs,
     updatedAt: args.nowMs,
+  });
+  await recordCriticalAuditEventBestEffort(args.ctx, {
+    eventKey: `community_subscription_synced:${args.providerSubscriptionId ?? args.membershipId}:${status}:${args.nowMs}`,
+    eventType: "community_subscription_synced",
+    status: "succeeded",
+    actorUserId: args.userId,
+    subjectUserId: args.userId,
+    communityId: args.communityId,
+    provider: source === "stripe" ? "stripe" : "polynet",
+    providerObjectId: String(args.providerSubscriptionId ?? "").trim() || undefined,
+    metadata: {
+      membershipId: String(args.membershipId),
+      pricePointId: String(args.pricePointId),
+      subscriptionStatus: status,
+      source,
+      cancelAtPeriodEnd,
+    },
+    createdAt: args.nowMs,
   });
 }
 

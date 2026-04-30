@@ -30,6 +30,44 @@ type RegisterRuntimeBillingRoutesArgs = {
   optionsResponse: (req: Request) => Response;
 };
 
+async function recordStripeWebhookAudit(
+  ctx: any,
+  args: {
+    eventKey: string;
+    eventType: "stripe_webhook_received" | "stripe_webhook_processed" | "stripe_webhook_failed";
+    severity?: "info" | "warning" | "error";
+    status: "started" | "succeeded" | "failed" | "ignored";
+    stripeEventType?: string | null;
+    stripeEventId?: string | null;
+    providerObjectId?: string | null;
+    metadata?: Record<string, unknown>;
+  },
+): Promise<void> {
+  try {
+    await ctx.runMutation(internal.criticalAudit.recordCriticalAuditEventInternal as any, {
+      eventKey: args.eventKey,
+      eventType: args.eventType,
+      severity: args.severity ?? "info",
+      status: args.status,
+      provider: "stripe",
+      providerObjectId: args.providerObjectId ?? args.stripeEventId ?? null,
+      metadata: {
+        stripeEventType: args.stripeEventType ?? null,
+        stripeEventId: args.stripeEventId ?? null,
+        ...(args.metadata ?? {}),
+      },
+      createdAt: Date.now(),
+    });
+  } catch (error) {
+    console.error("stripe_webhook_audit_record_failed", {
+      eventType: args.eventType,
+      stripeEventType: args.stripeEventType,
+      stripeEventId: args.stripeEventId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
 type BillingSubscriptionSyncInput = {
   community_id?: unknown;
   communityId?: unknown;
@@ -377,6 +415,13 @@ export function registerRuntimeBillingRoutes(
         event = await verifyStripeWebhookSignature({ payload, signature });
         stripeEventType = event.type;
         stripeEventId = event.id;
+        await recordStripeWebhookAudit(ctx, {
+          eventKey: `stripe_webhook_received:${event.id}`,
+          eventType: "stripe_webhook_received",
+          status: "started",
+          stripeEventType,
+          stripeEventId,
+        });
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         logStructuredError("stripe_webhook_signature_invalid", {
@@ -393,6 +438,23 @@ export function registerRuntimeBillingRoutes(
       }
 
       try {
+        const processedResponse = async (
+          responsePayload: Record<string, unknown>,
+          status: "succeeded" | "ignored" = "succeeded",
+        ) => {
+          await recordStripeWebhookAudit(ctx, {
+            eventKey: `stripe_webhook_processed:${stripeEventId ?? "unknown"}:${status}:${String(responsePayload.reason ?? responsePayload.event ?? "received")}`,
+            eventType: "stripe_webhook_processed",
+            status,
+            stripeEventType,
+            stripeEventId,
+            metadata: {
+              response: responsePayload,
+            },
+          });
+          return jsonResponse(req, 200, responsePayload);
+        };
+
         if (
           event.type === "checkout.session.completed" ||
           event.type === "checkout.session.async_payment_succeeded"
@@ -417,12 +479,12 @@ export function registerRuntimeBillingRoutes(
                 paymentStatus !== "paid" &&
                 paymentStatus !== "no_payment_required"
               ) {
-                return jsonResponse(req, 200, {
+                return processedResponse({
                   ok: true,
                   ignored: true,
                   event: event.type,
                   reason: "workspace_credit_topup_payment_pending",
-                });
+                }, "ignored");
               }
               const metadataCreditsAmount = parseOptionalNumber(
                 readStripeMetadataString(
@@ -448,7 +510,7 @@ export function registerRuntimeBillingRoutes(
                       : Date.now(),
                 },
               );
-              return jsonResponse(req, 200, {
+              return processedResponse({
                 ok: true,
                 received: true,
                 event: event.type,
@@ -463,12 +525,12 @@ export function registerRuntimeBillingRoutes(
           const localSessionId =
             readStripeLocalSessionIdFromCheckoutSession(session);
           if (!localSessionId) {
-            return jsonResponse(req, 200, {
+            return processedResponse({
               ok: true,
               ignored: true,
               event: event.type,
               reason: "builder_local_session_id_missing",
-            });
+            }, "ignored");
           }
           const communityCheckoutSession = await (ctx as any).runQuery(
             internal.communityCommerce.getCommunityJoinCheckoutSessionInternal as any,
@@ -478,24 +540,24 @@ export function registerRuntimeBillingRoutes(
           );
           if (communityCheckoutSession) {
             if (!readStripePaymentReady(session.payment_status)) {
-              return jsonResponse(req, 200, {
+              return processedResponse({
                 ok: true,
                 ignored: true,
                 event: event.type,
                 reason: "community_checkout_payment_pending",
-              });
+              }, "ignored");
             }
             const subscriptionId =
               typeof session.subscription === "string"
                 ? session.subscription
                 : null;
             if (!subscriptionId) {
-              return jsonResponse(req, 200, {
+              return processedResponse({
                 ok: true,
                 ignored: true,
                 event: event.type,
                 reason: "community_subscription_missing",
-              });
+              }, "ignored");
             }
             const stripe = getStripeClient();
             const subscription =
@@ -531,7 +593,7 @@ export function registerRuntimeBillingRoutes(
                     : Date.now(),
               },
             );
-            return jsonResponse(req, 200, {
+            return processedResponse({
               ok: true,
               received: true,
               event: event.type,
@@ -593,12 +655,12 @@ export function registerRuntimeBillingRoutes(
               },
             );
             if (!cycleStartedAt || !cycleEndsAt) {
-              return jsonResponse(req, 200, {
+              return processedResponse({
                 ok: true,
                 ignored: true,
                 event: event.type,
                 reason: "builder_cycle_missing",
-              });
+              }, "ignored");
             }
             if (syncResult?.ownerUserId && grantsAccess === true) {
               await (ctx as any).runMutation(
@@ -642,7 +704,7 @@ export function registerRuntimeBillingRoutes(
               },
             );
           }
-          return jsonResponse(req, 200, {
+          return processedResponse({
             ok: true,
             received: true,
             event: event.type,
@@ -658,12 +720,12 @@ export function registerRuntimeBillingRoutes(
               ? invoice.subscription
               : null;
           if (!subscriptionId) {
-            return jsonResponse(req, 200, {
+            return processedResponse({
               ok: true,
               ignored: true,
               event: event.type,
               reason: "invoice_subscription_missing",
-            });
+            }, "ignored");
           }
           const stripe = getStripeClient();
           const subscription =
@@ -673,21 +735,21 @@ export function registerRuntimeBillingRoutes(
             "local_session_id",
           );
           if (!localSessionId) {
-            return jsonResponse(req, 200, {
+            return processedResponse({
               ok: true,
               ignored: true,
               event: event.type,
               reason: "builder_local_session_id_missing",
-            });
+            }, "ignored");
           }
           const providerPriceId = subscription.items.data[0]?.price?.id ?? null;
           if (!isBuilderStripePriceId(providerPriceId)) {
-            return jsonResponse(req, 200, {
+            return processedResponse({
               ok: true,
               ignored: true,
               event: event.type,
               reason: "non_builder_price",
-            });
+            }, "ignored");
           }
           const subscriptionStatus = normalizeStripeSubscriptionStatus(
             subscription.status,
@@ -720,12 +782,12 @@ export function registerRuntimeBillingRoutes(
             },
           );
           if (!cycleStartedAt || !cycleEndsAt) {
-            return jsonResponse(req, 200, {
+            return processedResponse({
               ok: true,
               ignored: true,
               event: event.type,
               reason: "builder_cycle_missing",
-            });
+            }, "ignored");
           }
           if (syncResult?.ownerUserId) {
             await (ctx as any).runMutation(
@@ -745,7 +807,7 @@ export function registerRuntimeBillingRoutes(
               },
             );
           }
-          return jsonResponse(req, 200, {
+          return processedResponse({
             ok: true,
             received: true,
             event: event.type,
@@ -762,12 +824,12 @@ export function registerRuntimeBillingRoutes(
             "local_session_id",
           );
           if (!localSessionId) {
-            return jsonResponse(req, 200, {
+            return processedResponse({
               ok: true,
               ignored: true,
               event: event.type,
               reason: "builder_local_session_id_missing",
-            });
+            }, "ignored");
           }
           const communityCheckoutSession = await (ctx as any).runQuery(
             internal.communityCommerce.getCommunityJoinCheckoutSessionInternal as any,
@@ -844,7 +906,7 @@ export function registerRuntimeBillingRoutes(
                 },
               );
             }
-            return jsonResponse(req, 200, {
+            return processedResponse({
               ok: true,
               received: true,
               event: event.type,
@@ -852,12 +914,12 @@ export function registerRuntimeBillingRoutes(
           }
           const providerPriceId = subscription.items.data[0]?.price?.id ?? null;
           if (!isBuilderStripePriceId(providerPriceId)) {
-            return jsonResponse(req, 200, {
+            return processedResponse({
               ok: true,
               ignored: true,
               event: event.type,
               reason: "non_builder_price",
-            });
+            }, "ignored");
           }
           const subscriptionStatus = normalizeStripeSubscriptionStatus(
             subscription.status,
@@ -889,7 +951,7 @@ export function registerRuntimeBillingRoutes(
                   : Date.now(),
             },
           );
-          return jsonResponse(req, 200, {
+          return processedResponse({
             ok: true,
             received: true,
             event: event.type,
@@ -909,12 +971,12 @@ export function registerRuntimeBillingRoutes(
           const metadataUserId = readStripeMetadataString(account.metadata, "user_id");
           const userId = existingConnectAccount?.userId ?? metadataUserId ?? null;
           if (!userId) {
-            return jsonResponse(req, 200, {
+            return processedResponse({
               ok: true,
               ignored: true,
               event: event.type,
               reason: "stripe_connect_user_missing",
-            });
+            }, "ignored");
           }
           const snapshot = buildStripeConnectAccountSnapshot(account, { readyAtMs: nowMs });
           await (ctx as any).runMutation(
@@ -934,18 +996,18 @@ export function registerRuntimeBillingRoutes(
               nowMs,
             },
           );
-          return jsonResponse(req, 200, {
+          return processedResponse({
             ok: true,
             received: true,
             event: event.type,
           });
         }
 
-        return jsonResponse(req, 200, {
+        return processedResponse({
           ok: true,
           ignored: true,
           event: event.type,
-        });
+        }, "ignored");
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         logStructuredError("stripe_webhook_failed", {
@@ -953,6 +1015,18 @@ export function registerRuntimeBillingRoutes(
           requestPath,
           stripeEventType: stripeEventType ?? undefined,
           stripeEventId: stripeEventId ?? undefined,
+        });
+        await recordStripeWebhookAudit(ctx, {
+          eventKey: `stripe_webhook_failed:${stripeEventId ?? "unknown"}:${message || "stripe_webhook_failed"}`,
+          eventType: "stripe_webhook_failed",
+          severity: "error",
+          status: "failed",
+          stripeEventType,
+          stripeEventId,
+          metadata: {
+            requestPath,
+            errorMessage: message || "Stripe webhook failed.",
+          },
         });
         return jsonResponse(req, 400, {
           ok: false,
