@@ -1566,6 +1566,45 @@ body {
   stroke-width: 1.65;
 }
 
+.polynet-landing-flow-visual.community {
+  position: relative;
+  width: 76px;
+  height: 70px;
+}
+
+.polynet-community-ring {
+  position: absolute;
+  inset: 0;
+  width: 76px !important;
+  height: 70px !important;
+  overflow: visible;
+}
+
+.polynet-community-ring .connection {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.42);
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.polynet-community-ring .person {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.82);
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.polynet-community-brain {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 32px !important;
+  height: 32px !important;
+  transform: translate(-50%, -42%);
+  stroke-width: 1.8 !important;
+}
+
 .polynet-landing-flow strong {
   align-self: flex-start;
   max-width: 160px;

@@ -1,4 +1,4 @@
-import { Brain, LockKeyhole, RefreshCw, UsersRound } from "lucide-react";
+import { Brain, LockKeyhole, RefreshCw } from "lucide-react";
 
 type WebLandingPageProps = {
   onTryFree: () => void;
@@ -33,13 +33,34 @@ const stackItems = [
 
 const stackTotal = "$516+";
 
+function CommunityFlowVisual() {
+  return (
+    <span className="polynet-landing-flow-visual community" aria-hidden="true">
+      <svg className="polynet-community-ring" viewBox="0 0 72 72">
+        <path className="connection" d="M30 12C24 14 19 19 16 25" />
+        <path className="connection" d="M56 25C53 19 48 14 42 12" />
+        <path className="connection" d="M22 54C31 61 41 61 50 54" />
+        <g className="person" transform="translate(36 9)">
+          <circle cx="0" cy="0" r="4.5" />
+          <path d="M-8 12C-6 6 6 6 8 12" />
+        </g>
+        <g className="person" transform="translate(14 52)">
+          <circle cx="0" cy="0" r="4.5" />
+          <path d="M-8 12C-6 6 6 6 8 12" />
+        </g>
+        <g className="person" transform="translate(58 52)">
+          <circle cx="0" cy="0" r="4.5" />
+          <path d="M-8 12C-6 6 6 6 8 12" />
+        </g>
+      </svg>
+      <Brain className="polynet-community-brain" />
+    </span>
+  );
+}
+
 function LandingFlowVisual(props: { kind: "agent" | "community" | "gate" | "loop" }) {
   if (props.kind === "community") {
-    return (
-      <span className="polynet-landing-flow-visual" aria-hidden="true">
-        <UsersRound />
-      </span>
-    );
+    return <CommunityFlowVisual />;
   }
 
   if (props.kind === "gate") {
