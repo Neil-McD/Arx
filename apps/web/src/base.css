@@ -1730,12 +1730,33 @@ body {
   color: var(--accent);
   font-size: 28px;
   font-weight: 800;
+  border: 1px solid var(--border-muted);
+  transition:
+    border-color 160ms ease,
+    background 160ms ease;
+}
+
+.polynet-onboarding-avatar.drag-over {
+  border-color: var(--accent);
+  background: rgba(255, 60, 142, 0.14);
 }
 
 .polynet-onboarding-avatar img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+.polynet-onboarding-avatar-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.polynet-onboarding-avatar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
 .polynet-onboarding-profile label {
@@ -1764,7 +1785,18 @@ body {
   gap: 12px;
 }
 
+.polynet-onboarding-actions.one {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.polynet-onboarding-choice {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
 .polynet-onboarding-actions button,
+.polynet-onboarding-choice button,
 .polynet-onboarding-learn {
   border: 1px solid var(--border-muted);
   border-radius: 12px;
@@ -1776,7 +1808,8 @@ body {
   cursor: pointer;
 }
 
-.polynet-onboarding-actions button.primary {
+.polynet-onboarding-actions button.primary,
+.polynet-onboarding-choice button.primary {
   background: var(--accent);
   color: white;
 }

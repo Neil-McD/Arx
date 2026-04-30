@@ -2007,7 +2007,7 @@ export default function App() {
 
     const displayName = profileUi.profileName.trim() || authProfileDisplayName.trim() || null;
     const bio = profileUi.profileBio.trim() || null;
-    const avatarUrl = profileUi.profileAvatarUrl?.trim() || authProfileAvatarUrl || null;
+    const avatarUrl = profileUi.profileAvatarUrl?.trim() || null;
 
     setIsSavingOnboarding(true);
     setOnboardingError(null);
@@ -2041,6 +2041,48 @@ export default function App() {
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to save onboarding.";
       setOnboardingError(message);
+    } finally {
+      setIsSavingOnboarding(false);
+    }
+  }
+
+  async function saveOnboardingProfile(): Promise<boolean> {
+    const activeSession = await ensureUsableAuthSession();
+    if (!activeSession) {
+      requireSignIn({ reason: "try_polynet_free", payload: {} });
+      return false;
+    }
+
+    const userId = resolveAuthSubject(activeSession);
+    if (!userId) {
+      setOnboardingError("We could not verify your account. Sign in again to continue.");
+      return false;
+    }
+
+    const displayName = profileUi.profileName.trim() || authProfileDisplayName.trim() || null;
+    const bio = profileUi.profileBio.trim() || null;
+    const avatarUrl = profileUi.profileAvatarUrl?.trim() || null;
+
+    setIsSavingOnboarding(true);
+    setOnboardingError(null);
+    try {
+      const saved = await upsertCloudProfileDetail<AuthSession, UserProfileDetail>({
+        session: activeSession,
+        userId,
+        displayName,
+        avatarUrl,
+        bio,
+        completeOnboarding: false,
+      });
+      if (saved) {
+        setCloudProfile(saved);
+        profileUi.applyLoadedProfileToLocal(saved);
+      }
+      return true;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to save your profile.";
+      setOnboardingError(message);
+      return false;
     } finally {
       setIsSavingOnboarding(false);
     }
@@ -6553,11 +6595,16 @@ export default function App() {
       displayName: profileUi.profileName,
       avatarUrl: profileUi.profileAvatarUrl,
       bio: profileUi.profileBio,
+      isAvatarDragOver: profileUi.isProfileAvatarDragOver,
       isSaving: isSavingOnboarding,
       error: onboardingError,
+      setIsAvatarDragOver: profileUi.setIsProfileAvatarDragOver,
+      onAvatarDrop: handleProfileAvatarDrop,
+      onAvatarUpload: handleProfileAvatarUpload,
+      onRemoveAvatar: () => profileUi.setProfileAvatarUrl(null),
       onDisplayNameChange: profileUi.setProfileName,
-      onAvatarUrlChange: (value) => profileUi.setProfileAvatarUrl(value.trim() || null),
       onBioChange: profileUi.setProfileBio,
+      onNextProfile: saveOnboardingProfile,
       onBuildCommunity: () => {
         void completeOnboarding("build_community");
       },
