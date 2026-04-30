@@ -16,6 +16,7 @@ export type WebAppMainSurfaceHostProps = {
   showProductDocsPanel: boolean;
   landingPageProps: ComponentProps<typeof WebLandingPage>;
   onboardingPageProps: ComponentProps<typeof WebOnboardingPage>;
+  showOnboardingModal: boolean;
   workspaceSurfaceHostProps: ComponentProps<typeof WebWorkspaceSurfaceHost>;
   publicCommunityFunnelProps: ComponentProps<typeof WebPublicCommunityFunnel>;
   communityHostProps: ComponentProps<typeof WebCommunityHost>;
@@ -34,8 +35,6 @@ export function WebAppMainSurfaceHost(props: WebAppMainSurfaceHostProps) {
     >
       {props.activePage === "landing" ? (
         <WebLandingPage {...props.landingPageProps} />
-      ) : props.activePage === "onboarding" ? (
-        <WebOnboardingPage {...props.onboardingPageProps} />
       ) : props.showPublicCommunityFunnel ? (
         <div className="community-body">
           <div className="community-panel public-route-panel public-community-funnel-panel">
@@ -44,8 +43,13 @@ export function WebAppMainSurfaceHost(props: WebAppMainSurfaceHostProps) {
             </div>
           </div>
         </div>
-      ) : props.activePage === "workspace" ? (
-        <WebWorkspaceSurfaceHost {...props.workspaceSurfaceHostProps} />
+      ) : props.activePage === "workspace" || props.activePage === "onboarding" ? (
+        <>
+          <WebWorkspaceSurfaceHost {...props.workspaceSurfaceHostProps} />
+          {props.showOnboardingModal ? (
+            <WebOnboardingPage {...props.onboardingPageProps} variant="modal" />
+          ) : null}
+        </>
       ) : props.showCommunitySurface ? (
         <WebCommunityHost {...props.communityHostProps} />
       ) : (

@@ -7,6 +7,7 @@ export function buildWebAppMainSurfaceHostProps(params: {
   publicRoute: PublicRoute;
   landingPageProps: WebAppMainSurfaceHostProps["landingPageProps"];
   onboardingPageProps: WebAppMainSurfaceHostProps["onboardingPageProps"];
+  showOnboardingModal: WebAppMainSurfaceHostProps["showOnboardingModal"];
   workspaceSurfaceHostProps: WebAppMainSurfaceHostProps["workspaceSurfaceHostProps"];
   publicCommunityFunnelProps: WebAppMainSurfaceHostProps["publicCommunityFunnelProps"];
   communityHostProps: WebAppMainSurfaceHostProps["communityHostProps"];
@@ -24,6 +25,7 @@ export function buildWebAppMainSurfaceHostProps(params: {
       params.publicRoute.kind === "app" && params.activePage === "docs",
     landingPageProps: params.landingPageProps,
     onboardingPageProps: params.onboardingPageProps,
+    showOnboardingModal: params.showOnboardingModal,
     workspaceSurfaceHostProps: params.workspaceSurfaceHostProps,
     publicCommunityFunnelProps: params.publicCommunityFunnelProps,
     communityHostProps: params.communityHostProps,

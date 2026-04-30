@@ -904,6 +904,8 @@ export default function App() {
       setPendingPurchasesError(null);
       setPendingPurchasesSuccess(null);
       setCloudProfile(null);
+      setHasLoadedOnboardingProfile(false);
+      setIsOnboardingModalOpen(false);
       setWorkspaceCreditBalance(null);
       setWorkspaceCreditBalanceError(null);
       profileUi.setProfileSaveError(null);
@@ -1136,6 +1138,8 @@ export default function App() {
     }
   });
   const [cloudProfile, setCloudProfile] = useState<UserProfileDetail | null>(null);
+  const [hasLoadedOnboardingProfile, setHasLoadedOnboardingProfile] = useState(false);
+  const [isOnboardingModalOpen, setIsOnboardingModalOpen] = useState(false);
   const profileUi = useWebProfileSettingsUiController({
     profileStorageUserId,
     initialProfileDraft,
@@ -1969,6 +1973,7 @@ export default function App() {
       session: activeSession,
       userId,
     });
+    setHasLoadedOnboardingProfile(true);
     if (row) {
       setCloudProfile(row);
       profileUi.applyLoadedProfileToLocal(row);
@@ -1984,9 +1989,11 @@ export default function App() {
 
     try {
       const row = await loadProfileForOnboarding(activeSession);
-      navigateTo(row?.onboarding_completed_at ? "/workspace" : "/onboarding");
+      setIsOnboardingModalOpen(!row?.onboarding_completed_at);
+      navigateTo("/workspace");
     } catch {
-      navigateTo("/onboarding");
+      setIsOnboardingModalOpen(true);
+      navigateTo("/workspace");
     }
   }
 
@@ -2022,6 +2029,8 @@ export default function App() {
       });
       if (saved) {
         setCloudProfile(saved);
+        setHasLoadedOnboardingProfile(true);
+        setIsOnboardingModalOpen(false);
         profileUi.applyLoadedProfileToLocal(saved);
       }
 
@@ -2076,6 +2085,7 @@ export default function App() {
       });
       if (saved) {
         setCloudProfile(saved);
+        setHasLoadedOnboardingProfile(true);
         profileUi.applyLoadedProfileToLocal(saved);
       }
       return true;
@@ -2188,9 +2198,40 @@ export default function App() {
   useEffect(() => {
     if (activePage !== "onboarding") return;
     if (!session) return;
-    if (cloudProfile) return;
-    void loadProfileForOnboarding(session);
+    void (async () => {
+      const row = cloudProfile ?? (await loadProfileForOnboarding(session));
+      if (row?.onboarding_completed_at) {
+        setIsOnboardingModalOpen(false);
+      } else {
+        setIsOnboardingModalOpen(true);
+      }
+      navigateTo("/workspace");
+    })();
   }, [activePage, cloudProfile, session]);
+
+  useEffect(() => {
+    if (activePage !== "workspace") return;
+    if (!isAuthBootstrapComplete) return;
+    if (!session) return;
+    if (cloudProfile) {
+      setHasLoadedOnboardingProfile(true);
+      setIsOnboardingModalOpen(!cloudProfile.onboarding_completed_at);
+      return;
+    }
+    if (hasLoadedOnboardingProfile) {
+      setIsOnboardingModalOpen(true);
+      return;
+    }
+    void loadProfileForOnboarding(session).then((row) => {
+      if (!row?.onboarding_completed_at) setIsOnboardingModalOpen(true);
+    });
+  }, [
+    activePage,
+    cloudProfile,
+    hasLoadedOnboardingProfile,
+    isAuthBootstrapComplete,
+    session,
+  ]);
 
   const isInitialStandaloneFunnelRoute =
     initialPublicRoute.kind === "community_funnel" || initialPublicRoute.kind === "community_funnel_preview";
@@ -3388,6 +3429,8 @@ export default function App() {
 
   useEffect(() => {
     setCloudProfile(null);
+    setHasLoadedOnboardingProfile(false);
+    setIsOnboardingModalOpen(false);
   }, [profileStorageUserId]);
 
   const visibleCommunityProfileIds = useMemo(() => {
@@ -6615,6 +6658,7 @@ export default function App() {
         void completeOnboarding("learn_about_polynet");
       },
     },
+    showOnboardingModal: (activePage === "workspace" || activePage === "onboarding") && isOnboardingModalOpen,
     workspaceSurfaceHostProps: {
       activeView,
       settingsGroup: settingsGroup as SettingsGroup,
