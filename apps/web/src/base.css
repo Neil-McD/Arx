@@ -1575,6 +1575,10 @@ body {
   color: var(--accent-cyan);
 }
 
+.polynet-landing-flow-visual.monetize {
+  color: #52d273;
+}
+
 .polynet-landing-flow-visual.community {
   position: relative;
   width: 76px;

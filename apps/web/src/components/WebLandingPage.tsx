@@ -150,20 +150,28 @@ export function WebLandingPage(props: WebLandingPageProps) {
         </div>
       </section>
 
-      <section className="polynet-landing-offer" aria-labelledby="polynet-landing-offer">
+      <section className="polynet-landing-section compact" aria-labelledby="polynet-landing-flow">
         <div>
-          <p className="polynet-landing-kicker">One builder system</p>
-          <h2 id="polynet-landing-offer">
-            One place to build, distribute, and monetize useful agents.
-          </h2>
+          <p className="polynet-landing-kicker">How it works</p>
+          <h2 id="polynet-landing-flow">Turn expertise into a useful system.</h2>
         </div>
-        <div className="polynet-landing-offer-actions">
-          <button type="button" onClick={props.onTryFree}>
-            Continue free
-          </button>
-          <button type="button" className="primary" onClick={props.onTryFree}>
-            Become a builder - $24/mo
-          </button>
+        <div className="polynet-landing-flow">
+          <span>
+            <LandingFlowVisual kind="agent" />
+            <strong>Build the agent</strong>
+          </span>
+          <span>
+            <LandingFlowVisual kind="community" />
+            <strong>Wrap it in a community</strong>
+          </span>
+          <span>
+            <LandingFlowVisual kind="gate" />
+            <strong>Monetize</strong>
+          </span>
+          <span>
+            <LandingFlowVisual kind="loop" />
+            <strong>Improve with usage</strong>
+          </span>
         </div>
       </section>
 
@@ -212,28 +220,20 @@ export function WebLandingPage(props: WebLandingPageProps) {
         </div>
       </section>
 
-      <section className="polynet-landing-section compact" aria-labelledby="polynet-landing-flow">
+      <section className="polynet-landing-offer" aria-labelledby="polynet-landing-offer">
         <div>
-          <p className="polynet-landing-kicker">How it works</p>
-          <h2 id="polynet-landing-flow">Turn expertise into a useful system.</h2>
+          <p className="polynet-landing-kicker">One builder system</p>
+          <h2 id="polynet-landing-offer">
+            One place to build, distribute, and monetize useful agents.
+          </h2>
         </div>
-        <div className="polynet-landing-flow">
-          <span>
-            <LandingFlowVisual kind="agent" />
-            <strong>Build the agent</strong>
-          </span>
-          <span>
-            <LandingFlowVisual kind="community" />
-            <strong>Wrap it in a community</strong>
-          </span>
-          <span>
-            <LandingFlowVisual kind="gate" />
-            <strong>Monetize</strong>
-          </span>
-          <span>
-            <LandingFlowVisual kind="loop" />
-            <strong>Improve with usage</strong>
-          </span>
+        <div className="polynet-landing-offer-actions">
+          <button type="button" onClick={props.onTryFree}>
+            Continue free
+          </button>
+          <button type="button" className="primary" onClick={props.onTryFree}>
+            Become a builder - $24/mo
+          </button>
         </div>
       </section>
     </div>
