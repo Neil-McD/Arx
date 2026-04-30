@@ -188,7 +188,9 @@ export default defineSchema({
     .index("by_providerCheckoutSessionId", ["providerCheckoutSessionId"])
     .index("by_providerSubscriptionId", ["providerSubscriptionId"])
     .index("by_owner", ["ownerUserId"])
-    .index("by_owner_status", ["ownerUserId", "status"]),
+    .index("by_owner_status", ["ownerUserId", "status"])
+    .index("by_mode_status", ["mode", "status"])
+    .index("by_community_status", ["communityId", "status"]),
 
   purchaseClaims: defineTable({
     claimToken: v.string(),
@@ -600,7 +602,9 @@ export default defineSchema({
     .index("by_membership", ["membershipId"])
     .index("by_pricePoint", ["pricePointId"])
     .index("by_community_user", ["communityId", "userId"])
-    .index("by_providerSubscriptionId", ["providerSubscriptionId"]),
+    .index("by_providerSubscriptionId", ["providerSubscriptionId"])
+    .index("by_status", ["status"])
+    .index("by_community_status", ["communityId", "status"]),
 
   communityChatThreads: defineTable({
     communityId: v.id("communities"),
