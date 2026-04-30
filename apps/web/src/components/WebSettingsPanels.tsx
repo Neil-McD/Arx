@@ -47,6 +47,7 @@ export type WebSettingsPanelsProps = {
     authError: string | null;
     requireSignIn: () => void;
     handleSignOut: () => Promise<void> | void;
+    deleteAccount: () => Promise<void> | void;
     isLoadingChatgptConnection: boolean;
     chatgptConnection: {
       connected: boolean;
@@ -197,6 +198,7 @@ export function WebSettingsPanels(props: WebSettingsPanelsProps) {
     authError: account.authError,
     requireSignIn: account.requireSignIn,
     handleSignOut: account.handleSignOut,
+    deleteAccount: account.deleteAccount,
     isLoadingChatgptConnection: account.isLoadingChatgptConnection,
     chatgptConnection: account.chatgptConnection,
     isConnectingChatgpt: account.providerConnectionUi.isConnectingChatgpt,

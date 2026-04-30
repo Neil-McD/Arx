@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as account from "../account.js";
 import type * as appConnections from "../appConnections.js";
 import type * as appCore from "../appCore.js";
 import type * as appValidation from "../appValidation.js";
@@ -130,6 +131,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  account: typeof account;
   appConnections: typeof appConnections;
   appCore: typeof appCore;
   appValidation: typeof appValidation;

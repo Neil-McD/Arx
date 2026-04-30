@@ -97,6 +97,7 @@ import {
   resolveCloudOnboardingProfileDetail,
   upsertCloudProfileDetail,
 } from "../../../shared/cloudProfilesGateway";
+import { deleteCloudOwnAccount } from "../../../shared/cloudAccountGateway";
 import { listEnabledCloudModelRegistryRows } from "../../../shared/cloudModelRegistryGateway";
 import {
   loadCloudProviderConnections,
@@ -2096,6 +2097,17 @@ export default function App() {
     } finally {
       setIsSavingOnboarding(false);
     }
+  }
+
+  async function deleteOwnAccountFromSettings(): Promise<void> {
+    const activeSession = await ensureUsableAuthSession();
+    if (!activeSession) {
+      requireSignIn();
+      return;
+    }
+    await deleteCloudOwnAccount<AuthSession>({ session: activeSession });
+    await handleSignOut();
+    navigateTo("/");
   }
 
   const applyAppRouteState = useCallback((nextAppRoute: AppRouteState) => {
@@ -6220,6 +6232,7 @@ export default function App() {
       authError,
       requireSignIn,
       handleSignOut,
+      deleteAccount: deleteOwnAccountFromSettings,
       isLoadingChatgptConnection,
       chatgptConnection,
       hasPendingChatgptAuth,

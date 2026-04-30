@@ -47,6 +47,7 @@ type WebAccountSettingsSectionProps = {
   authError: string | null;
   requireSignIn: () => void;
   handleSignOut: () => Promise<void> | void;
+  deleteAccount: () => Promise<void> | void;
   isLoadingChatgptConnection: boolean;
   chatgptConnection: ChatgptConnection;
   isConnectingChatgpt: boolean;
@@ -97,11 +98,15 @@ type WebAccountSettingsSectionProps = {
 export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps) {
   const [isSignOutConfirmOpen, setIsSignOutConfirmOpen] = useState(false);
   const [isSubmittingSignOut, setIsSubmittingSignOut] = useState(false);
+  const [deleteConfirmation, setDeleteConfirmation] = useState("");
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+  const [deleteAccountError, setDeleteAccountError] = useState<string | null>(null);
   const {
     session,
     authError,
     requireSignIn,
     handleSignOut,
+    deleteAccount,
     isLoadingChatgptConnection,
     chatgptConnection,
     isConnectingChatgpt,
@@ -150,6 +155,9 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
     if (session) return;
     setIsSignOutConfirmOpen(false);
     setIsSubmittingSignOut(false);
+    setDeleteConfirmation("");
+    setIsDeletingAccount(false);
+    setDeleteAccountError(null);
   }, [session]);
 
   const handleConfirmSignOut = async (): Promise<void> => {
@@ -160,6 +168,23 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
       setIsSignOutConfirmOpen(false);
     } finally {
       setIsSubmittingSignOut(false);
+    }
+  };
+
+  const handleDeleteAccount = async (): Promise<void> => {
+    if (!session || isDeletingAccount || deleteConfirmation !== "DELETE") return;
+    setIsDeletingAccount(true);
+    setDeleteAccountError(null);
+    try {
+      await deleteAccount();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error ?? "");
+      setDeleteAccountError(
+        message.includes("account_delete_owned_communities_blocked")
+          ? "Delete or transfer owned communities before deleting your account."
+          : "Account could not be deleted. Please try again.",
+      );
+      setIsDeletingAccount(false);
     }
   };
 
@@ -558,6 +583,40 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
             {pendingPurchasesError && <div className="auth-error">{pendingPurchasesError}</div>}
           </div>
         )}
+
+      {session && (
+        <div className="settings-section">
+          <div className="settings-section-title">
+            <svg viewBox="0 0 24 24"><path d="M3 6h18" /><path d="M8 6V4h8v2" /><path d="M19 6l-1 14H6L5 6" /><path d="M10 11v5" /><path d="M14 11v5" /></svg>
+            Delete account
+          </div>
+          <div className="settings-section-desc">
+            Permanently delete your account, profile, sessions, provider connections, personal memory, workspace threads, and personal workspace data. Owned communities must be deleted or transferred first.
+          </div>
+          <div className="provider-connection-stack">
+            <input
+              className="provider-connection-input"
+              value={deleteConfirmation}
+              onChange={(event) => setDeleteConfirmation(event.target.value)}
+              placeholder="Type DELETE to confirm"
+              autoComplete="off"
+              spellCheck={false}
+              disabled={isDeletingAccount}
+            />
+            <div className="auth-actions">
+              <button
+                className="danger"
+                type="button"
+                onClick={() => void handleDeleteAccount()}
+                disabled={isDeletingAccount || deleteConfirmation !== "DELETE"}
+              >
+                {isDeletingAccount ? "Deleting…" : "Delete account"}
+              </button>
+            </div>
+          </div>
+          {deleteAccountError ? <div className="auth-error">{deleteAccountError}</div> : null}
+        </div>
+      )}
     </>
   );
 }
