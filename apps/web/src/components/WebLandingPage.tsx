@@ -1,5 +1,3 @@
-import { Bot, LockKeyhole, RefreshCw, UsersRound } from "lucide-react";
-
 type WebLandingPageProps = {
   onTryFree: () => void;
 };
@@ -32,6 +30,63 @@ const stackItems = [
 ];
 
 const stackTotal = "$516+";
+
+function LandingIntelligenceCore() {
+  return (
+    <span className="polynet-landing-flow-core" aria-hidden="true">
+      <i />
+      <i />
+      <i />
+      <i />
+      <i />
+    </span>
+  );
+}
+
+function LandingFlowVisual(props: { kind: "agent" | "community" | "gate" | "loop" }) {
+  if (props.kind === "community") {
+    return (
+      <span className="polynet-landing-flow-visual community" aria-hidden="true">
+        <LandingIntelligenceCore />
+        <span className="polynet-landing-flow-orbit">
+          <i />
+          <i />
+          <i />
+          <i />
+          <i />
+          <i />
+        </span>
+      </span>
+    );
+  }
+
+  if (props.kind === "gate") {
+    return (
+      <span className="polynet-landing-flow-visual gate" aria-hidden="true">
+        <span className="polynet-landing-flow-gate-frame" />
+        <LandingIntelligenceCore />
+      </span>
+    );
+  }
+
+  if (props.kind === "loop") {
+    return (
+      <span className="polynet-landing-flow-visual loop" aria-hidden="true">
+        <span className="polynet-landing-flow-loop-ring" />
+        <span className="polynet-landing-flow-memory one" />
+        <span className="polynet-landing-flow-memory two" />
+        <span className="polynet-landing-flow-memory three" />
+        <LandingIntelligenceCore />
+      </span>
+    );
+  }
+
+  return (
+    <span className="polynet-landing-flow-visual agent" aria-hidden="true">
+      <LandingIntelligenceCore />
+    </span>
+  );
+}
 
 export function WebLandingPage(props: WebLandingPageProps) {
   return (
@@ -180,19 +235,19 @@ export function WebLandingPage(props: WebLandingPageProps) {
         </div>
         <div className="polynet-landing-flow">
           <span>
-            <Bot aria-hidden="true" />
+            <LandingFlowVisual kind="agent" />
             <strong>Build the agent</strong>
           </span>
           <span>
-            <UsersRound aria-hidden="true" />
+            <LandingFlowVisual kind="community" />
             <strong>Wrap it in a community</strong>
           </span>
           <span>
-            <LockKeyhole aria-hidden="true" />
+            <LandingFlowVisual kind="gate" />
             <strong>Gate access</strong>
           </span>
           <span>
-            <RefreshCw aria-hidden="true" />
+            <LandingFlowVisual kind="loop" />
             <strong>Improve with usage</strong>
           </span>
         </div>
