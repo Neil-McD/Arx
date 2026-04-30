@@ -1537,7 +1537,7 @@ body {
   gap: 10px;
 }
 
-.polynet-landing-flow span {
+.polynet-landing-flow > span {
   min-height: 132px;
   border: 1px solid var(--border-muted);
   border-radius: 16px;
@@ -1552,57 +1552,18 @@ body {
 }
 
 .polynet-landing-flow-visual {
-  width: 92px;
-  height: 72px;
+  width: 54px;
+  height: 54px;
   align-self: flex-start;
-  display: block;
-  overflow: visible;
+  display: grid;
+  place-items: center;
+  color: rgba(255, 255, 255, 0.82);
 }
 
-.polynet-flow-core-mark path {
-  fill: none;
-  stroke: rgba(255, 255, 255, 0.72);
-  stroke-width: 3;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-.polynet-flow-core-mark circle {
-  fill: var(--accent);
-  stroke: rgba(255, 255, 255, 0.78);
-  stroke-width: 1.5;
-}
-
-.polynet-flow-muted {
-  fill: none;
-  stroke: rgba(255, 255, 255, 0.22);
-  stroke-width: 2;
-}
-
-.polynet-flow-muted.fill {
-  fill: rgba(255, 255, 255, 0.045);
-}
-
-.polynet-flow-line {
-  fill: none;
-  stroke: rgba(255, 255, 255, 0.72);
-  stroke-width: 3;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-.polynet-flow-line.fill {
-  fill: rgba(255, 255, 255, 0.72);
-  stroke: none;
-}
-
-.polynet-flow-person,
-.polynet-flow-memory {
-  fill: rgba(255, 255, 255, 0.78);
-}
-
-.polynet-flow-memory {
-  opacity: 0.8;
+.polynet-landing-flow-visual svg {
+  width: 52px;
+  height: 52px;
+  stroke-width: 1.65;
 }
 
 .polynet-landing-flow strong {
