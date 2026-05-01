@@ -1,33 +1,31 @@
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { query } from "./_generated/server";
-import { resolveAuthenticatedActor } from "./authActor";
-import { isCreatorDevTierOverrideEmail } from "../shared/devTierOverride";
+import { requireOperatorRole } from "./operatorAccess";
 
 const operatorRange = v.optional(v.union(v.literal("7d"), v.literal("30d"), v.literal("90d"), v.literal("all")));
 const operatorSeverity = v.optional(v.union(v.literal("info"), v.literal("warning"), v.literal("error")));
 
 async function requireOperatorAccess(ctx: any, authSubject: string | null | undefined) {
-  const actor = await resolveAuthenticatedActor({
-    ctx,
-    authSubject: authSubject ?? null,
-  });
-  if (!isCreatorDevTierOverrideEmail(actor.email)) {
-    throw new Error("operator_access_forbidden");
-  }
-  return {
-    userId: String(actor.dbUserId),
-    email: actor.email ?? null,
-    displayName: actor.displayName ?? null,
-  };
+  return await requireOperatorRole(ctx, authSubject, "readonly");
 }
 
 export const getOperatorAccess = query({
   args: {
     authSubject: v.optional(v.string()),
   },
-  handler: async (ctx, args): Promise<{ userId: string; email: string | null; displayName: string | null }> => {
-    return await requireOperatorAccess(ctx, args.authSubject);
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{ userId: string; email: string | null; displayName: string | null; role: string; source: string }> => {
+    const operator = await requireOperatorAccess(ctx, args.authSubject);
+    return {
+      userId: operator.userId,
+      email: operator.email,
+      displayName: operator.displayName,
+      role: operator.role,
+      source: operator.source,
+    };
   },
 });
 

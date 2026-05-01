@@ -61,6 +61,20 @@ export default defineSchema({
     .index("by_user", ["userId"])
     .index("by_user_startsAt", ["userId", "startsAt"]),
 
+  operatorRoles: defineTable({
+    userId: v.id("users"),
+    email: v.optional(v.string()),
+    normalizedEmail: v.optional(v.string()),
+    role: v.union(v.literal("owner"), v.literal("operator"), v.literal("readonly")),
+    active: v.boolean(),
+    createdBy: v.optional(v.id("users")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_normalizedEmail", ["normalizedEmail"])
+    .index("by_active_role", ["active", "role"]),
+
   userStripeConnectAccounts: defineTable({
     userId: v.id("users"),
     stripeAccountId: v.string(),

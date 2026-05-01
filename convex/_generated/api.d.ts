@@ -87,6 +87,7 @@ import type * as modelRegistry from "../modelRegistry.js";
 import type * as openAiNativeToolCompletion from "../openAiNativeToolCompletion.js";
 import type * as openAiWebSearchTransport from "../openAiWebSearchTransport.js";
 import type * as openRouterNativeTransport from "../openRouterNativeTransport.js";
+import type * as operatorAccess from "../operatorAccess.js";
 import type * as operatorDashboard from "../operatorDashboard.js";
 import type * as operatorIntelligence from "../operatorIntelligence.js";
 import type * as personalMemory from "../personalMemory.js";
@@ -213,6 +214,7 @@ declare const fullApi: ApiFromModules<{
   openAiNativeToolCompletion: typeof openAiNativeToolCompletion;
   openAiWebSearchTransport: typeof openAiWebSearchTransport;
   openRouterNativeTransport: typeof openRouterNativeTransport;
+  operatorAccess: typeof operatorAccess;
   operatorDashboard: typeof operatorDashboard;
   operatorIntelligence: typeof operatorIntelligence;
   personalMemory: typeof personalMemory;

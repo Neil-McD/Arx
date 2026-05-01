@@ -6,6 +6,7 @@ import {
   loadOperatorMonetizationCanonical,
   loadOperatorOverviewCanonical,
   loadOperatorRisksCanonical,
+  recordOperatorDashboardAccessCanonical,
 } from "../../../../shared/cloudOperatorDashboardGateway";
 import type {
   OperatorBuilderRecord,
@@ -68,13 +69,18 @@ export function WebOperatorDashboard(props: WebOperatorDashboardProps) {
     setState(createEmptyOperatorDashboardState());
     setIsLoading(true);
     setError(null);
-    Promise.all([
-      loadOperatorOverviewCanonical({ session: props.session, range: "30d" }),
-      loadOperatorMonetizationCanonical({ session: props.session, range: "30d" }),
-      loadOperatorBuildersCanonical({ session: props.session, limit: 12 }),
-      loadOperatorRisksCanonical({ session: props.session, limit: 12 }),
-      loadOperatorEventsCanonical({ session: props.session, limit: 12 }),
-    ]).then(
+    const session = props.session;
+    recordOperatorDashboardAccessCanonical({ session })
+      .then(() =>
+        Promise.all([
+          loadOperatorOverviewCanonical({ session, range: "30d" }),
+          loadOperatorMonetizationCanonical({ session, range: "30d" }),
+          loadOperatorBuildersCanonical({ session, limit: 12 }),
+          loadOperatorRisksCanonical({ session, limit: 12 }),
+          loadOperatorEventsCanonical({ session, limit: 12 }),
+        ]),
+      )
+      .then(
       ([overview, monetization, builders, risks, events]) => {
         if (!isAlive) return;
         setState({ overview, monetization, builders, risks, events });

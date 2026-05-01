@@ -6,30 +6,47 @@ function read(relativePath: string): string {
 }
 
 const operatorDashboard = read("convex/operatorDashboard.ts");
+const operatorAccess = read("convex/operatorAccess.ts");
 const operatorGateway = read("shared/cloudOperatorDashboardGateway.ts");
+const schema = read("convex/schema.ts");
 const appShellNavigation = read("shared/appShellNavigation.ts");
 const webRouteState = read("shared/webAppRouteState.ts");
 const appMainSurfaceHost = read("apps/web/src/components/WebAppMainSurfaceHost.tsx");
 
 assert.match(
-  operatorDashboard,
-  /async function requireOperatorAccess/,
-  "operator dashboard must centralize access checking",
+  schema,
+  /operatorRoles: defineTable[\s\S]*\.index\("by_user", \["userId"\]\)[\s\S]*\.index\("by_normalizedEmail", \["normalizedEmail"\]\)/,
+  "operator roles table must exist with user and email lookup indexes",
 );
 assert.match(
-  operatorDashboard,
+  operatorAccess,
   /resolveAuthenticatedActor/,
-  "operator dashboard must resolve the authenticated actor server-side",
+  "operator access must resolve the authenticated actor server-side",
 );
 assert.match(
-  operatorDashboard,
+  operatorAccess,
+  /query\("operatorRoles"\)[\s\S]*withIndex\("by_user"/,
+  "operator access must check real operator role rows",
+);
+assert.match(
+  operatorAccess,
   /isCreatorDevTierOverrideEmail\(actor\.email\)/,
-  "operator dashboard must be allowlisted before a real operator role table exists",
+  "operator access must retain creator bootstrap fallback",
 );
 assert.match(
-  operatorDashboard,
+  operatorAccess,
   /throw new Error\("operator_access_forbidden"\)/,
-  "operator dashboard must fail closed when access is missing",
+  "operator access must fail closed when access is missing",
+);
+assert.match(
+  operatorAccess,
+  /recordOperatorDashboardAccess = mutation[\s\S]*operator_dashboard_accessed/,
+  "operator dashboard access must be auditable through a gated mutation",
+);
+assert.match(
+  operatorAccess,
+  /upsertOperatorRole = mutation[\s\S]*requireOperatorRole\(ctx, args\.authSubject, "owner"\)/,
+  "operator role writes must require owner access",
 );
 
 for (const queryName of [
@@ -58,6 +75,11 @@ assert.match(
   operatorGateway,
   /operatorDashboard:getOperatorOverview/,
   "operator gateway must call the gated operator dashboard surface",
+);
+assert.match(
+  operatorGateway,
+  /operatorAccess:recordOperatorDashboardAccess/,
+  "operator gateway must record dashboard access before loading operator data",
 );
 assert.doesNotMatch(
   operatorGateway,

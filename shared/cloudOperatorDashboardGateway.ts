@@ -14,6 +14,17 @@ async function withOperatorAuth(session: AuthSessionLike) {
   return await bootstrapConvexAuthenticatedClient(session);
 }
 
+export async function recordOperatorDashboardAccessCanonical(params: {
+  session: AuthSessionLike;
+  surface?: string;
+}): Promise<void> {
+  const { client, authSubject } = await withOperatorAuth(params.session);
+  await client.mutation("operatorAccess:recordOperatorDashboardAccess" as any, {
+    authSubject,
+    surface: params.surface ?? "operator_dashboard",
+  });
+}
+
 export async function loadOperatorOverviewCanonical(params: {
   session: AuthSessionLike;
   range?: OperatorRange;
