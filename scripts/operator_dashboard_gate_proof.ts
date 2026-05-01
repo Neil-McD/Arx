@@ -12,6 +12,8 @@ const schema = read("convex/schema.ts");
 const webRouteState = read("shared/webAppRouteState.ts");
 const app = read("apps/web/src/App.tsx");
 const workspaceHost = read("apps/web/src/components/WebWorkspaceHost.tsx");
+const packageJson = read("package.json");
+const seedScript = read("scripts/seed_operator_owner.ts");
 
 assert.match(
   schema,
@@ -48,6 +50,15 @@ assert.match(
   /upsertOperatorRole = mutation[\s\S]*requireOperatorRole\(ctx, args\.authSubject, "owner"\)/,
   "operator role writes must require owner access",
 );
+assert.match(
+  packageJson,
+  /"operator:seed-owner": "node --experimental-strip-types --experimental-specifier-resolution=node scripts\/seed_operator_owner\.ts"/,
+  "operator owner recovery must have one explicit local seed command",
+);
+assert.match(seedScript, /refusing to run without explicit --prod/, "operator seed must require explicit production intent");
+assert.match(seedScript, /multiple matching users found/, "operator seed must fail closed on ambiguous identity");
+assert.match(seedScript, /runConvexImport\("criticalAuditEvents"/, "operator seed must write an audit event");
+assert.doesNotMatch(seedScript, /first owner|bootstrap/i, "operator seed must not implement runtime bootstrap authority");
 
 for (const queryName of [
   "getOperatorAccess",
