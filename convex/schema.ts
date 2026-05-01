@@ -225,7 +225,7 @@ export default defineSchema({
 
   userProviderConnections: defineTable({
     userId: v.id("users"),
-    provider: v.union(v.literal("openrouter"), v.literal("chatgpt")),
+    provider: v.union(v.literal("openrouter"), v.literal("openai"), v.literal("chatgpt")),
     authKind: v.union(v.literal("api_key"), v.literal("oauth_tokens")),
     encryptedSecretHex: v.string(),
     secretIvHex: v.string(),

@@ -26,6 +26,12 @@ type ChatgptConnection = {
   updated_at?: string | null;
 };
 
+type OpenAiConnection = {
+  connected: boolean;
+  key_last_four?: string | null;
+  updated_at?: string | null;
+};
+
 type OwnedCommunity = {
   id: string;
   slug: string;
@@ -43,7 +49,15 @@ type WebAccountSettingsSectionProps = {
   handleSignOut: () => Promise<void> | void;
   deleteAccount: () => Promise<void> | void;
   isLoadingChatgptConnection: boolean;
+  openAiConnection: OpenAiConnection;
   chatgptConnection: ChatgptConnection;
+  openAiApiKeyDraft: string;
+  setOpenAiApiKeyDraft: (value: string) => void;
+  isSavingOpenAiConnection: boolean;
+  openAiConnectionError: string | null;
+  openAiConnectionSuccess: string | null;
+  handleConnectOpenAi: () => Promise<void> | void;
+  handleDisconnectOpenAi: () => Promise<void> | void;
   isConnectingChatgpt: boolean;
   isPollingChatgptConnection: boolean;
   hasPendingChatgptAuth: boolean;
@@ -115,7 +129,15 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
     handleSignOut,
     deleteAccount,
     isLoadingChatgptConnection,
+    openAiConnection,
     chatgptConnection,
+    openAiApiKeyDraft,
+    setOpenAiApiKeyDraft,
+    isSavingOpenAiConnection,
+    openAiConnectionError,
+    openAiConnectionSuccess,
+    handleConnectOpenAi,
+    handleDisconnectOpenAi,
     isConnectingChatgpt,
     isPollingChatgptConnection,
     hasPendingChatgptAuth,
@@ -233,7 +255,7 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
           Inference connections
         </div>
         <div className="settings-section-desc">
-          Connect ChatGPT for personal inference. Builder unlocks the private workbench and workspace tools.
+          Connect ChatGPT or an OpenAI API key for personal inference. Builder unlocks the private workbench and workspace tools.
         </div>
         {!session ? (
           <div className="model-note">Sign in to connect a personal provider.</div>
@@ -286,6 +308,56 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
             )}
             {chatgptConnectionError && <div className="auth-error">{chatgptConnectionError}</div>}
             {chatgptConnectionSuccess && <div className="auth-success">{chatgptConnectionSuccess}</div>}
+            <div className="account-row">
+              <div className="account-identity">
+                <span>OpenAI API key</span>
+                <strong>
+                  {isLoadingChatgptConnection
+                    ? "Checking…"
+                    : openAiConnection.connected
+                      ? `Connected${openAiConnection.key_last_four ? ` · ••••${openAiConnection.key_last_four}` : ""}`
+                      : "Not connected"}
+                </strong>
+              </div>
+              {openAiConnection.connected ? (
+                <button
+                  className="secondary"
+                  type="button"
+                  onClick={() => void handleDisconnectOpenAi()}
+                  disabled={isSavingOpenAiConnection}
+                >
+                  {isSavingOpenAiConnection ? "Disconnecting…" : "Disconnect"}
+                </button>
+              ) : null}
+            </div>
+            <div className="provider-connection-actions">
+              <input
+                className="provider-connection-input"
+                type="password"
+                value={openAiApiKeyDraft}
+                onChange={(event) => setOpenAiApiKeyDraft(event.target.value)}
+                placeholder="Paste OpenAI API key"
+                autoComplete="off"
+                disabled={isSavingOpenAiConnection}
+              />
+              <button
+                className="secondary"
+                type="button"
+                onClick={() => void handleConnectOpenAi()}
+                disabled={isSavingOpenAiConnection || openAiApiKeyDraft.trim().length === 0}
+              >
+                {isSavingOpenAiConnection ? "Saving…" : openAiConnection.connected ? "Update key" : "Connect key"}
+              </button>
+            </div>
+            {openAiConnection.connected && (
+              <div className="auth-status">
+                {openAiConnection.updated_at
+                  ? `Last validated ${formatRelativeTime(openAiConnection.updated_at)}.`
+                  : "Ready for OpenAI API inference."}
+              </div>
+            )}
+            {openAiConnectionError && <div className="auth-error">{openAiConnectionError}</div>}
+            {openAiConnectionSuccess && <div className="auth-success">{openAiConnectionSuccess}</div>}
           </>
         )}
       </div>
@@ -329,7 +401,7 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
                       </button>
                     ) : (
                       <>
-                        <span className="auth-status">Builder includes 500 monthly workspace credits. Connect ChatGPT to bring your own inference.</span>
+                        <span className="auth-status">Builder includes 500 monthly workspace credits. Connect ChatGPT or an OpenAI API key to bring your own inference.</span>
                         {canManagePlan ? (
                           <button
                             type="button"

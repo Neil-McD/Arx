@@ -57,12 +57,6 @@ export function WebAuthBootstrapShell(props: WebAuthBootstrapShellProps) {
                             <path d="M12 5v14M5 12h14" />
                           </svg>
                         </button>
-                        <button className="ask-model-btn workspace-bootstrap-model-btn" type="button" disabled>
-                          <span className="ask-model-label">GPT 5.5</span>
-                          <svg className="ask-model-chevron" viewBox="0 0 16 16" aria-hidden="true">
-                            <path d="m4 6 4 4 4-4" />
-                          </svg>
-                        </button>
                       </div>
                       <div className="ask-actions">
                         <button className="ask-icon-btn ask-mic" type="button" disabled>

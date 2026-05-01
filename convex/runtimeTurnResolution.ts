@@ -12,7 +12,7 @@ import {
   asRuntimeMessages,
   gateDeniedResponse,
   hasChatgptConnectionForUser,
-  hasOpenRouterConnectionForUser,
+  hasOpenAiConnectionForUser,
   mapGateLaneToRuntimeLane,
   normalizeMaxTokens,
   normalizeSurface,
@@ -85,7 +85,7 @@ export type RuntimeTurnResolution = {
   maxTokens: number;
   stream: boolean;
   inferenceSource: "free" | "platform" | "user_key" | "chatgpt";
-  openRouterApiKeyOverride: string | null;
+  providerApiKeyOverride: string | null;
   runtimeCommunityId: string | null;
   runtimeCommunityName: string | null;
   runtimeCommunitySlug: string | null;
@@ -342,7 +342,7 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
     publicRef ? "demo_public" : "platform",
   );
   const [hasUserKeyConnection, hasUserChatgptConnection] = await Promise.all([
-    hasOpenRouterConnectionForUser({
+    hasOpenAiConnectionForUser({
       ctx,
       userId: actor.dbUserId,
     }),
@@ -396,10 +396,10 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
         : lane === "public"
           ? "free"
           : "platform";
-  let openRouterApiKeyOverride: string | null = null;
+  let providerApiKeyOverride: string | null = null;
   if (gateDecision.fundingSource === "user_key") {
     const connectionRow = (await ctx.runQuery(
-      internal.providerConnections.getOpenRouterConnectionForUserInternal as any,
+      internal.providerConnections.getOpenAiConnectionForUserInternal as any,
       {
         userId: actor.dbUserId,
       },
@@ -420,7 +420,7 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
       };
     }
     try {
-      openRouterApiKeyOverride = await decryptStoredSecret({
+      providerApiKeyOverride = await decryptStoredSecret({
         encryptedSecretHex: String(connectionRow.encryptedSecretHex),
         secretIvHex: String(connectionRow.secretIvHex),
       });
@@ -538,7 +538,7 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
       maxTokens,
       stream,
       inferenceSource,
-      openRouterApiKeyOverride,
+      providerApiKeyOverride,
       runtimeCommunityId,
       runtimeCommunityName,
       runtimeCommunitySlug,

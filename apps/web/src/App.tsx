@@ -102,6 +102,7 @@ import { listEnabledCloudModelRegistryRows } from "../../../shared/cloudModelReg
 import {
   loadCloudProviderConnections,
   type CloudChatgptConnectionStatus,
+  type CloudOpenAiConnectionStatus,
 } from "../../../shared/cloudProviderConnectionsGateway";
 import { AnalyticsLineChart } from "../../../shared/AnalyticsLineChart";
 import {
@@ -2474,6 +2475,14 @@ export default function App() {
     validated_at: null,
     updated_at: null,
   });
+  const [openAiConnection, setOpenAiConnection] = useState<CloudOpenAiConnectionStatus>({
+    provider: "openai",
+    auth_kind: "api_key",
+    connected: false,
+    key_last_four: null,
+    validated_at: null,
+    updated_at: null,
+  });
   const [isLoadingChatgptConnection, setIsLoadingChatgptConnection] = useState(false);
   const [hasResolvedProviderConnections, setHasResolvedProviderConnections] = useState(false);
   const [contextModal, setContextModal] = useState<
@@ -3936,6 +3945,12 @@ export default function App() {
           void providerConnectionUi.handleConnectChatgpt();
           return;
         }
+        if (payload.provider === "openai") {
+          setActiveView("settings");
+          setSettingsPage("account");
+          showAppToastMessage("Paste your OpenAI API key in Account settings.");
+          return;
+        }
         showAppToastMessage("Provider connection is not available.");
       },
       create_community: (payload) => {
@@ -3969,6 +3984,7 @@ export default function App() {
     requireSignIn: (intent) => requireSignIn(intent),
     chatgptConnection,
     onConnectionsUpdated: (connections) => {
+      setOpenAiConnection(connections.openai);
       setChatgptConnection(connections.chatgpt);
     },
     chatgptSecuritySettingsUrl: CHATGPT_SECURITY_SETTINGS_URL,
@@ -3984,6 +4000,7 @@ export default function App() {
       const result = await loadCloudProviderConnections({
         session: usableSession,
       });
+      setOpenAiConnection(result.openai);
       setChatgptConnection(result.chatgpt);
       applyProviderConnectionLoadError(null);
     } catch (error) {
@@ -4005,6 +4022,14 @@ export default function App() {
         email: null,
         account_id: null,
         access_token_expires_at: null,
+        validated_at: null,
+        updated_at: null,
+      });
+      setOpenAiConnection({
+        provider: "openai",
+        auth_kind: "api_key",
+        connected: false,
+        key_last_four: null,
         validated_at: null,
         updated_at: null,
       });
@@ -4796,6 +4821,7 @@ export default function App() {
   }
 
   const hasPaidAccess = Boolean(session) && hasBuilderTierPaidAccess(builderBillingStatus?.builder_tier ?? "free");
+  const hasUserKeyConnection = Boolean(session) && openAiConnection.connected;
   const hasUserChatgptConnection = Boolean(session) && chatgptConnection.connected;
   const hasPendingChatgptAuth = providerConnectionUi.hasPendingChatgptAuth;
   const shouldShowEmptyThreadChatgptCard =
@@ -4895,7 +4921,7 @@ export default function App() {
       Boolean(session) &&
       hasBuilderTierPaidAccess(builderBillingStatus?.builder_tier ?? "free"),
     loadBuilderBillingStatus,
-    hasUserKeyConnection: false,
+    hasUserKeyConnection,
     hasUserChatgptConnection,
     guestThreadId: GUEST_THREAD_ID,
     guestModelId,
@@ -6200,6 +6226,7 @@ export default function App() {
       handleSignOut,
       deleteAccount: deleteOwnAccountFromSettings,
       isLoadingChatgptConnection,
+      openAiConnection,
       chatgptConnection,
       hasPendingChatgptAuth,
       formatRelativeTime,

@@ -49,6 +49,11 @@ export type WebSettingsPanelsProps = {
     handleSignOut: () => Promise<void> | void;
     deleteAccount: () => Promise<void> | void;
     isLoadingChatgptConnection: boolean;
+    openAiConnection: {
+      connected: boolean;
+      key_last_four?: string | null;
+      updated_at?: string | null;
+    };
     chatgptConnection: {
       connected: boolean;
       email?: string | null;
@@ -205,7 +210,15 @@ export function WebSettingsPanels(props: WebSettingsPanelsProps) {
     handleSignOut: account.handleSignOut,
     deleteAccount: account.deleteAccount,
     isLoadingChatgptConnection: account.isLoadingChatgptConnection,
+    openAiConnection: account.openAiConnection,
     chatgptConnection: account.chatgptConnection,
+    openAiApiKeyDraft: account.providerConnectionUi.openAiApiKeyDraft,
+    setOpenAiApiKeyDraft: account.providerConnectionUi.setOpenAiApiKeyDraft,
+    isSavingOpenAiConnection: account.providerConnectionUi.isSavingOpenAiConnection,
+    openAiConnectionError: account.providerConnectionUi.openAiConnectionError,
+    openAiConnectionSuccess: account.providerConnectionUi.openAiConnectionSuccess,
+    handleConnectOpenAi: account.providerConnectionUi.handleConnectOpenAi,
+    handleDisconnectOpenAi: account.providerConnectionUi.handleDisconnectOpenAi,
     isConnectingChatgpt: account.providerConnectionUi.isConnectingChatgpt,
     isPollingChatgptConnection: account.providerConnectionUi.isPollingChatgptConnection,
     hasPendingChatgptAuth: account.hasPendingChatgptAuth,

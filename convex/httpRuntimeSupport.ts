@@ -158,6 +158,16 @@ export async function hasOpenRouterConnectionForUser(params: {
   return Boolean(row);
 }
 
+export async function hasOpenAiConnectionForUser(params: {
+  ctx: any;
+  userId: any;
+}): Promise<boolean> {
+  const row = await params.ctx.runQuery(internal.providerConnections.getOpenAiConnectionForUserInternal as any, {
+    userId: params.userId,
+  });
+  return Boolean(row);
+}
+
 export async function hasChatgptConnectionForUser(params: {
   ctx: any;
   userId: any;
@@ -306,6 +316,150 @@ export function parseOpenRouterError(rawBody: string): { message: string; code: 
     };
   } catch {
     return { message: raw, code: "" };
+  }
+}
+
+function normalizeOpenAiMessagesForResponses(messages: InferenceMessage[]): {
+  instructions: string | null;
+  input: unknown[];
+} {
+  const instructions: string[] = [];
+  const input: unknown[] = [];
+  for (const message of messages) {
+    const content = String(message.content ?? "").trim();
+    if (!content) continue;
+    if (message.role === "system") {
+      instructions.push(content);
+      continue;
+    }
+    input.push({
+      role: message.role === "assistant" ? "assistant" : "user",
+      content: [
+        {
+          type: message.role === "assistant" ? "output_text" : "input_text",
+          text: content,
+        },
+      ],
+    });
+  }
+  return {
+    instructions: instructions.length > 0 ? instructions.join("\n\n") : null,
+    input,
+  };
+}
+
+function parseOpenAiResponsesText(payload: Record<string, any>): string {
+  if (typeof payload.output_text === "string" && payload.output_text.trim()) {
+    return payload.output_text.trim();
+  }
+  const outputItems = Array.isArray(payload.output) ? payload.output : [];
+  let text = "";
+  for (const item of outputItems) {
+    if (!item || typeof item !== "object" || !Array.isArray(item.content)) continue;
+    for (const part of item.content) {
+      if (!part || typeof part !== "object") continue;
+      if (part.type === "output_text" && typeof part.text === "string") text += part.text;
+    }
+  }
+  return text.trim();
+}
+
+function parseOpenAiUsage(payload: Record<string, any>): {
+  promptTokens: number | null;
+  completionTokens: number | null;
+} {
+  const usage = payload?.usage && typeof payload.usage === "object" ? payload.usage : null;
+  const promptTokens = Number(usage?.input_tokens ?? usage?.prompt_tokens);
+  const completionTokens = Number(usage?.output_tokens ?? usage?.completion_tokens);
+  return {
+    promptTokens: Number.isFinite(promptTokens) ? Math.floor(promptTokens) : null,
+    completionTokens: Number.isFinite(completionTokens) ? Math.floor(completionTokens) : null,
+  };
+}
+
+export async function runOpenAiCompletion(params: {
+  req: Request;
+  modelId: string;
+  messages: InferenceMessage[];
+  maxTokens: number;
+  apiKeyOverride?: string | null;
+  signal?: AbortSignal;
+}): Promise<OpenRouterSuccess | OpenRouterFailure> {
+  const apiKey = String(params.apiKeyOverride ?? "").trim() || readEnv("OPENAI_API_KEY");
+  if (!apiKey) {
+    return {
+      ok: false,
+      status: 503,
+      code: "provider_inference_misconfigured",
+      message: params.apiKeyOverride ? "User OpenAI API key is unavailable." : "OPENAI_API_KEY is not configured.",
+    };
+  }
+  const normalized = normalizeOpenAiMessagesForResponses(params.messages);
+  if (normalized.input.length === 0) {
+    return {
+      ok: false,
+      status: 400,
+      code: "invalid_request",
+      message: "At least one user or assistant message is required.",
+    };
+  }
+
+  let response: Response;
+  try {
+    response = await fetch("https://api.openai.com/v1/responses", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      signal: params.signal,
+      body: JSON.stringify({
+        model: params.modelId,
+        input: normalized.input,
+        ...(normalized.instructions ? { instructions: normalized.instructions } : null),
+        max_output_tokens: params.maxTokens,
+      }),
+    });
+  } catch {
+    return {
+      ok: false,
+      status: 503,
+      code: "provider_inference_unavailable",
+      message: "OpenAI inference is temporarily unavailable.",
+    };
+  }
+
+  const raw = await response.text();
+  if (!response.ok) {
+    const parsed = parseOpenRouterError(raw);
+    return {
+      ok: false,
+      status: response.status,
+      code:
+        response.status === 401 || response.status === 403
+          ? "provider_inference_misconfigured"
+          : response.status === 429
+            ? "rate_limited"
+            : parsed.code || "provider_inference_error",
+      message: parsed.message || `OpenAI error (${response.status})`,
+    };
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as Record<string, any>;
+    const tokenUsage = parseOpenAiUsage(parsed);
+    return {
+      content: parseOpenAiResponsesText(parsed),
+      promptTokens: tokenUsage.promptTokens,
+      completionTokens: tokenUsage.completionTokens,
+    };
+  } catch {
+    return {
+      ok: false,
+      status: 502,
+      code: "provider_inference_error",
+      message: "OpenAI returned invalid JSON.",
+    };
   }
 }
 

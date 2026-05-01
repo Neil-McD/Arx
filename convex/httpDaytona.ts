@@ -563,7 +563,7 @@ async function runProviderNativeToolCompletion(params: {
   }
   const parsedProviderRef = parseProviderModelRef(params.modelRef);
   if (
-    params.inferenceSource === "platform" &&
+    (params.inferenceSource === "platform" || params.inferenceSource === "user_key") &&
     parsedProviderRef?.provider === "openai"
   ) {
     return runOpenAiNativeToolCompletion({
@@ -571,6 +571,7 @@ async function runProviderNativeToolCompletion(params: {
       messages: params.messages,
       maxTokens: params.maxTokens,
       tools: params.responsesApiTools,
+      apiKeyOverride: params.inferenceSource === "user_key" ? params.apiKeyOverride : null,
       parallelToolCalls: params.parallelToolCalls,
       signal: params.signal,
     });

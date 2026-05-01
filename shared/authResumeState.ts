@@ -20,7 +20,7 @@ export type PendingAuthIntent =
     }
   | {
       reason: "connect_provider";
-      payload: { provider: "chatgpt" | "openrouter" };
+      payload: { provider: "chatgpt" | "openai" | "openrouter" };
     }
   | {
       reason: "create_community";
@@ -83,7 +83,7 @@ function normalizePendingAuthIntent(
 
   if (reason === "connect_provider") {
     const provider = payload.provider;
-    if (provider !== "chatgpt" && provider !== "openrouter") return null;
+    if (provider !== "chatgpt" && provider !== "openai" && provider !== "openrouter") return null;
     return { reason, payload: { provider } };
   }
 

@@ -7,6 +7,7 @@ import { loadPublicModelMap } from "./httpInferenceConfig";
 import {
   normalizeMaxTokens,
   normalizeMessages,
+  runOpenAiCompletion,
   runOpenRouterCompletion,
   runOpenRouterStreamingCompletion,
 } from "./httpRuntimeSupport";
@@ -71,6 +72,13 @@ type RuntimeCompletionFailure = {
   code: string;
   message: string;
 };
+
+function openAiModelIdFromRef(modelRef: string): string | null {
+  const trimmed = String(modelRef ?? "").trim();
+  if (!trimmed.toLowerCase().startsWith("openai/")) return null;
+  const modelId = trimmed.slice("openai/".length).trim();
+  return modelId || null;
+}
 
 function isRuntimeCompletionFailure(
   completion: RuntimeCompletionSuccess | RuntimeCompletionFailure,
@@ -419,7 +427,7 @@ export async function handleRuntimeTurnRequest(args: {
       maxTokens,
       stream,
       inferenceSource,
-      openRouterApiKeyOverride,
+      providerApiKeyOverride,
       runtimeCommunityId,
       runtimeCommunityName,
       runtimeCommunitySlug,
@@ -741,36 +749,42 @@ export async function handleRuntimeTurnRequest(args: {
               runtimeTurnContext: failureContextPacket,
             });
             const finalizationMaxTokens = 700;
-            const completion =
-              inferenceSource === "chatgpt"
-                ? await runAbortableWithRuntimeCancellation({
+            const openAiFinalizerModelId = openAiModelIdFromRef(modelRef);
+            const completion = await runAbortableWithRuntimeCancellation({
+              ctx,
+              ownerId: actor.dbUserId,
+              runId,
+              operation: async (signal) => {
+                if (inferenceSource === "chatgpt") {
+                  return await runChatgptCompletion({
                     ctx,
-                    ownerId: actor.dbUserId,
-                    runId,
-                    operation: async (signal) =>
-                      await runChatgptCompletion({
-                        ctx,
-                        userId: actor.dbUserId,
-                        modelId: requestedModelId,
-                        messages: finalizationMessages,
-                        maxTokens: finalizationMaxTokens,
-                        signal,
-                      }),
-                  })
-                : await runAbortableWithRuntimeCancellation({
-                    ctx,
-                    ownerId: actor.dbUserId,
-                    runId,
-                    operation: async (signal) =>
-                      await runOpenRouterCompletion({
-                        req,
-                        modelRef,
-                        messages: finalizationMessages,
-                        maxTokens: finalizationMaxTokens,
-                        apiKeyOverride: openRouterApiKeyOverride,
-                        signal,
-                      }),
+                    userId: actor.dbUserId,
+                    modelId: requestedModelId,
+                    messages: finalizationMessages,
+                    maxTokens: finalizationMaxTokens,
+                    signal,
                   });
+                }
+                if (inferenceSource === "user_key" && openAiFinalizerModelId) {
+                  return await runOpenAiCompletion({
+                    req,
+                    modelId: openAiFinalizerModelId,
+                    messages: finalizationMessages,
+                    maxTokens: finalizationMaxTokens,
+                    apiKeyOverride: providerApiKeyOverride,
+                    signal,
+                  });
+                }
+                return await runOpenRouterCompletion({
+                  req,
+                  modelRef,
+                  messages: finalizationMessages,
+                  maxTokens: finalizationMaxTokens,
+                  apiKeyOverride: providerApiKeyOverride,
+                  signal,
+                });
+              },
+            });
             if (!isRuntimeCompletionFailure(completion)) {
               adaptiveFinalizerContent = normalizeAdaptiveFailureAnswer(
                 completion.content,
@@ -910,7 +924,7 @@ export async function handleRuntimeTurnRequest(args: {
               agentSoul: runtimeAgentSoul,
               threadWorkingState: ownedThread.workingState ?? null,
               allowedToolNames,
-              apiKeyOverride: openRouterApiKeyOverride,
+              apiKeyOverride: providerApiKeyOverride,
               appendRunEvent: streamAppendRunEvent,
               touchRunHeartbeat: touchRunHeartbeatBestEffort,
             });
@@ -1117,7 +1131,7 @@ export async function handleRuntimeTurnRequest(args: {
           agentSoul: runtimeAgentSoul,
           threadWorkingState: ownedThread.workingState ?? null,
           allowedToolNames,
-          apiKeyOverride: openRouterApiKeyOverride,
+          apiKeyOverride: providerApiKeyOverride,
           appendRunEvent: async (event): Promise<void> => {
             await appendRunEvent(event);
             await refreshActiveContextSnapshotAfterEventBestEffort(event.eventType);
@@ -1284,6 +1298,7 @@ export async function handleRuntimeTurnRequest(args: {
 
           let completion:
             | Awaited<ReturnType<typeof runChatgptStreamingCompletion>>
+            | Awaited<ReturnType<typeof runOpenAiCompletion>>
             | Awaited<ReturnType<typeof runOpenRouterStreamingCompletion>>;
           try {
             if (inferenceSource === "chatgpt") {
@@ -1307,6 +1322,25 @@ export async function handleRuntimeTurnRequest(args: {
                     signal,
                   }),
               });
+            } else if (inferenceSource === "user_key" && openAiModelIdFromRef(modelRef)) {
+              runtimeTurnStage = "openai_completion";
+              completion = await runAbortableWithRuntimeCancellation({
+                ctx,
+                ownerId: actor.dbUserId,
+                runId,
+                operation: async (signal) =>
+                  await runOpenAiCompletion({
+                    req,
+                    modelId: openAiModelIdFromRef(modelRef) || requestedModelId,
+                    messages: chatMessages,
+                    maxTokens,
+                    apiKeyOverride: providerApiKeyOverride,
+                    signal,
+                  }),
+              });
+              if (!isRuntimeCompletionFailure(completion) && completion.content) {
+                emitDelta(completion.content);
+              }
             } else {
               runtimeTurnStage = "openrouter_completion";
               completion = await runAbortableWithRuntimeCancellation({
@@ -1319,7 +1353,7 @@ export async function handleRuntimeTurnRequest(args: {
                     modelRef,
                     messages: chatMessages,
                     maxTokens,
-                    apiKeyOverride: openRouterApiKeyOverride,
+                    apiKeyOverride: providerApiKeyOverride,
                     onDelta: emitDelta,
                     signal,
                   }),
@@ -1490,6 +1524,7 @@ export async function handleRuntimeTurnRequest(args: {
       }
       let completion:
         | Awaited<ReturnType<typeof runChatgptCompletion>>
+        | Awaited<ReturnType<typeof runOpenAiCompletion>>
         | Awaited<ReturnType<typeof runOpenRouterCompletion>>;
       try {
         if (inferenceSource === "chatgpt") {
@@ -1508,6 +1543,22 @@ export async function handleRuntimeTurnRequest(args: {
                 signal,
               }),
           });
+        } else if (inferenceSource === "user_key" && openAiModelIdFromRef(modelRef)) {
+          runtimeTurnStage = "openai_completion";
+          completion = await runAbortableWithRuntimeCancellation({
+            ctx,
+            ownerId: actor.dbUserId,
+            runId,
+            operation: async (signal) =>
+              await runOpenAiCompletion({
+                req,
+                modelId: openAiModelIdFromRef(modelRef) || requestedModelId,
+                messages: chatMessages,
+                maxTokens,
+                apiKeyOverride: providerApiKeyOverride,
+                signal,
+              }),
+          });
         } else {
           runtimeTurnStage = "openrouter_completion";
           completion = await runAbortableWithRuntimeCancellation({
@@ -1520,7 +1571,7 @@ export async function handleRuntimeTurnRequest(args: {
                 modelRef,
                 messages: chatMessages,
                 maxTokens,
-                apiKeyOverride: openRouterApiKeyOverride,
+                apiKeyOverride: providerApiKeyOverride,
                 signal,
               }),
           });

@@ -18,6 +18,15 @@ export type CloudOpenRouterConnectionStatus = {
   updated_at: string | null;
 };
 
+export type CloudOpenAiConnectionStatus = {
+  provider: "openai";
+  auth_kind: "api_key";
+  connected: boolean;
+  key_last_four: string | null;
+  validated_at: string | null;
+  updated_at: string | null;
+};
+
 export type CloudChatgptConnectionStatus = {
   provider: "chatgpt";
   auth_kind: "oauth_tokens";
@@ -31,6 +40,14 @@ export type CloudChatgptConnectionStatus = {
 
 type CloudProviderConnectionsPayload = {
   openrouter?: {
+    provider?: unknown;
+    auth_kind?: unknown;
+    connected?: unknown;
+    key_last_four?: unknown;
+    validated_at?: unknown;
+    updated_at?: unknown;
+  } | null;
+  openai?: {
     provider?: unknown;
     auth_kind?: unknown;
     connected?: unknown;
@@ -68,6 +85,7 @@ export type CloudChatgptConnectPollResult =
   | {
       status: "connected";
       openrouter: CloudOpenRouterConnectionStatus;
+      openai: CloudOpenAiConnectionStatus;
       chatgpt: CloudChatgptConnectionStatus;
     };
 
@@ -101,6 +119,18 @@ function normalizeOpenRouterConnection(payload: unknown): CloudOpenRouterConnect
   };
 }
 
+function normalizeOpenAiConnection(payload: unknown): CloudOpenAiConnectionStatus {
+  const row = (payload ?? null) as CloudProviderConnectionsPayload["openai"];
+  return {
+    provider: "openai",
+    auth_kind: "api_key",
+    connected: row?.connected === true,
+    key_last_four: normalizeGatewayNullableString(row?.key_last_four),
+    validated_at: normalizeGatewayNullableString(row?.validated_at),
+    updated_at: normalizeGatewayNullableString(row?.updated_at),
+  };
+}
+
 function normalizeChatgptConnection(payload: unknown): CloudChatgptConnectionStatus {
   const row = (payload ?? null) as CloudProviderConnectionsPayload["chatgpt"];
   return {
@@ -117,13 +147,18 @@ function normalizeChatgptConnection(payload: unknown): CloudChatgptConnectionSta
 
 export async function loadCloudProviderConnections<SessionT>(
   params: CloudProviderConnectionsGatewayParams<SessionT>,
-): Promise<{ openrouter: CloudOpenRouterConnectionStatus; chatgpt: CloudChatgptConnectionStatus }> {
+): Promise<{
+  openrouter: CloudOpenRouterConnectionStatus;
+  openai: CloudOpenAiConnectionStatus;
+  chatgpt: CloudChatgptConnectionStatus;
+}> {
   const { client, authSubject } = await bootstrapGatewayAuthContext(params.session);
   const payload = (await client.query("providerConnections:getCurrentUserProviderConnections" as any, {
     authSubject,
   })) as CloudProviderConnectionsPayload | null;
   return {
     openrouter: normalizeOpenRouterConnection(payload?.openrouter ?? null),
+    openai: normalizeOpenAiConnection(payload?.openai ?? null),
     chatgpt: normalizeChatgptConnection(payload?.chatgpt ?? null),
   };
 }
@@ -132,7 +167,11 @@ export async function connectCloudOpenRouterApiKey<SessionT>(
   params: CloudProviderConnectionsGatewayParams<SessionT> & {
     apiKey: string;
   },
-): Promise<{ openrouter: CloudOpenRouterConnectionStatus; chatgpt: CloudChatgptConnectionStatus }> {
+): Promise<{
+  openrouter: CloudOpenRouterConnectionStatus;
+  openai: CloudOpenAiConnectionStatus;
+  chatgpt: CloudChatgptConnectionStatus;
+}> {
   const { client, authSubject } = await bootstrapGatewayAuthContext(params.session);
   const payload = (await client.action("providerConnections:connectOpenRouterApiKey" as any, {
     authSubject,
@@ -140,19 +179,64 @@ export async function connectCloudOpenRouterApiKey<SessionT>(
   })) as CloudProviderConnectionsPayload | null;
   return {
     openrouter: normalizeOpenRouterConnection(payload?.openrouter ?? null),
+    openai: normalizeOpenAiConnection(payload?.openai ?? null),
     chatgpt: normalizeChatgptConnection(payload?.chatgpt ?? null),
   };
 }
 
 export async function disconnectCloudOpenRouterApiKey<SessionT>(
   params: CloudProviderConnectionsGatewayParams<SessionT>,
-): Promise<{ openrouter: CloudOpenRouterConnectionStatus; chatgpt: CloudChatgptConnectionStatus }> {
+): Promise<{
+  openrouter: CloudOpenRouterConnectionStatus;
+  openai: CloudOpenAiConnectionStatus;
+  chatgpt: CloudChatgptConnectionStatus;
+}> {
   const { client, authSubject } = await bootstrapGatewayAuthContext(params.session);
   const payload = (await client.action("providerConnections:disconnectOpenRouterApiKey" as any, {
     authSubject,
   })) as CloudProviderConnectionsPayload | null;
   return {
     openrouter: normalizeOpenRouterConnection(payload?.openrouter ?? null),
+    openai: normalizeOpenAiConnection(payload?.openai ?? null),
+    chatgpt: normalizeChatgptConnection(payload?.chatgpt ?? null),
+  };
+}
+
+export async function connectCloudOpenAiApiKey<SessionT>(
+  params: CloudProviderConnectionsGatewayParams<SessionT> & {
+    apiKey: string;
+  },
+): Promise<{
+  openrouter: CloudOpenRouterConnectionStatus;
+  openai: CloudOpenAiConnectionStatus;
+  chatgpt: CloudChatgptConnectionStatus;
+}> {
+  const { client, authSubject } = await bootstrapGatewayAuthContext(params.session);
+  const payload = (await client.action("providerConnections:connectOpenAiApiKey" as any, {
+    authSubject,
+    apiKey: String(params.apiKey ?? ""),
+  })) as CloudProviderConnectionsPayload | null;
+  return {
+    openrouter: normalizeOpenRouterConnection(payload?.openrouter ?? null),
+    openai: normalizeOpenAiConnection(payload?.openai ?? null),
+    chatgpt: normalizeChatgptConnection(payload?.chatgpt ?? null),
+  };
+}
+
+export async function disconnectCloudOpenAiApiKey<SessionT>(
+  params: CloudProviderConnectionsGatewayParams<SessionT>,
+): Promise<{
+  openrouter: CloudOpenRouterConnectionStatus;
+  openai: CloudOpenAiConnectionStatus;
+  chatgpt: CloudChatgptConnectionStatus;
+}> {
+  const { client, authSubject } = await bootstrapGatewayAuthContext(params.session);
+  const payload = (await client.action("providerConnections:disconnectOpenAiApiKey" as any, {
+    authSubject,
+  })) as CloudProviderConnectionsPayload | null;
+  return {
+    openrouter: normalizeOpenRouterConnection(payload?.openrouter ?? null),
+    openai: normalizeOpenAiConnection(payload?.openai ?? null),
     chatgpt: normalizeChatgptConnection(payload?.chatgpt ?? null),
   };
 }
@@ -228,6 +312,7 @@ export async function pollCloudChatgptConnect<SessionT>(
   return {
     status: "connected",
     openrouter: normalizeOpenRouterConnection(payload?.openrouter ?? null),
+    openai: normalizeOpenAiConnection(payload?.openai ?? null),
     chatgpt: normalizeChatgptConnection(payload?.chatgpt ?? null),
   };
 }
@@ -236,7 +321,11 @@ export async function completeCloudChatgptConnect<SessionT>(
   params: CloudProviderConnectionsGatewayParams<SessionT> & {
     callbackInput: string;
   },
-): Promise<{ openrouter: CloudOpenRouterConnectionStatus; chatgpt: CloudChatgptConnectionStatus }> {
+): Promise<{
+  openrouter: CloudOpenRouterConnectionStatus;
+  openai: CloudOpenAiConnectionStatus;
+  chatgpt: CloudChatgptConnectionStatus;
+}> {
   const { client, authSubject } = await bootstrapGatewayAuthContext(params.session);
   const payload = (await client.action("providerConnections:completeChatgptConnect" as any, {
     authSubject,
@@ -244,19 +333,25 @@ export async function completeCloudChatgptConnect<SessionT>(
   })) as CloudProviderConnectionsPayload | null;
   return {
     openrouter: normalizeOpenRouterConnection(payload?.openrouter ?? null),
+    openai: normalizeOpenAiConnection(payload?.openai ?? null),
     chatgpt: normalizeChatgptConnection(payload?.chatgpt ?? null),
   };
 }
 
 export async function disconnectCloudChatgpt<SessionT>(
   params: CloudProviderConnectionsGatewayParams<SessionT>,
-): Promise<{ openrouter: CloudOpenRouterConnectionStatus; chatgpt: CloudChatgptConnectionStatus }> {
+): Promise<{
+  openrouter: CloudOpenRouterConnectionStatus;
+  openai: CloudOpenAiConnectionStatus;
+  chatgpt: CloudChatgptConnectionStatus;
+}> {
   const { client, authSubject } = await bootstrapGatewayAuthContext(params.session);
   const payload = (await client.action("providerConnections:disconnectChatgpt" as any, {
     authSubject,
   })) as CloudProviderConnectionsPayload | null;
   return {
     openrouter: normalizeOpenRouterConnection(payload?.openrouter ?? null),
+    openai: normalizeOpenAiConnection(payload?.openai ?? null),
     chatgpt: normalizeChatgptConnection(payload?.chatgpt ?? null),
   };
 }

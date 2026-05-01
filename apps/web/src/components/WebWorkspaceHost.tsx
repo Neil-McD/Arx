@@ -868,9 +868,6 @@ function WorkspaceComposer(props: {
             style={{ display: "none" }}
             onChange={props.onWorkspaceFileInputChange}
           />
-          <div className="ask-model ask-model-static" aria-label={`Model: ${props.activeModelLabel}`}>
-            <span className="ask-model-label">{props.activeModelLabel}</span>
-          </div>
         </div>
         <div className={`ask-actions${props.landing ? " ask-actions-landing" : ""}`}>
           <VoiceInputButton

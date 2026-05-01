@@ -2,7 +2,7 @@ function formatInferenceSourceLabel(value: string | null | undefined): string | 
   const raw = (value ?? "").trim().toLowerCase();
   if (!raw) return null;
   if (raw === "platform") return "OpenRouter";
-  if (raw === "user" || raw === "user_key") return "OpenRouter key";
+  if (raw === "user" || raw === "user_key") return "OpenAI key";
   if (raw === "chatgpt" || raw === "user_chatgpt") return "ChatGPT auth";
   if (raw === "free" || raw === "demo_public") return "OpenRouter free";
   return null;
@@ -23,7 +23,7 @@ function formatInferenceProviderLabel(value: string | null | undefined): string 
   if (!raw) return null;
   if (raw === "chatgpt" || raw === "user_chatgpt") return "ChatGPT";
   if (raw === "platform") return "OpenRouter";
-  if (raw === "user" || raw === "user_key") return "OpenRouter key";
+  if (raw === "user" || raw === "user_key") return "OpenAI key";
   if (raw === "free" || raw === "demo_public") return "OpenRouter free";
   return null;
 }

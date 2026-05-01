@@ -3,7 +3,7 @@ import { api, internal } from "./_generated/api";
 import { v } from "convex/values";
 import { resolveUserIdForAuthenticatedRequest } from "./authActor";
 
-export type ProviderConnectionProvider = "openrouter" | "chatgpt";
+export type ProviderConnectionProvider = "openrouter" | "openai" | "chatgpt";
 export type ProviderConnectionAuthKind = "api_key" | "oauth_tokens";
 
 type ProviderConnectionRow = {
@@ -30,6 +30,15 @@ function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
 
 type PublicOpenRouterConnection = {
   provider: "openrouter";
+  auth_kind: "api_key";
+  connected: boolean;
+  key_last_four: string | null;
+  validated_at: string | null;
+  updated_at: string | null;
+};
+
+type PublicOpenAiConnection = {
+  provider: "openai";
   auth_kind: "api_key";
   connected: boolean;
   key_last_four: string | null;
@@ -205,6 +214,29 @@ function toPublicOpenRouterConnection(row: ProviderConnectionRow | null): Public
   };
 }
 
+function buildDisconnectedOpenAiConnection(): PublicOpenAiConnection {
+  return {
+    provider: "openai",
+    auth_kind: "api_key",
+    connected: false,
+    key_last_four: null,
+    validated_at: null,
+    updated_at: null,
+  };
+}
+
+function toPublicOpenAiConnection(row: ProviderConnectionRow | null): PublicOpenAiConnection {
+  if (!row || row.provider !== "openai") return buildDisconnectedOpenAiConnection();
+  return {
+    provider: "openai",
+    auth_kind: "api_key",
+    connected: true,
+    key_last_four: normalizeString(row.keyLastFour) || null,
+    validated_at: firstIsoOrNull(row.validatedAt),
+    updated_at: firstIsoOrNull(row.updatedAt),
+  };
+}
+
 function buildDisconnectedChatgptConnection(): PublicChatgptConnection {
   return {
     provider: "chatgpt",
@@ -277,6 +309,39 @@ async function validateOpenRouterKey(apiKey: string): Promise<void> {
     throw new Error("Invalid OpenRouter API key.");
   }
   throw new Error(message || `OpenRouter validation failed (${response.status}).`);
+}
+
+async function validateOpenAiKey(apiKey: string): Promise<void> {
+  let response: Response;
+  try {
+    response = await fetch("https://api.openai.com/v1/models", {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+      },
+    });
+  } catch (error) {
+    throw new Error(error instanceof Error ? error.message : "OpenAI validation failed.");
+  }
+
+  const raw = await response.text();
+  if (response.ok) return;
+
+  let message = "";
+  try {
+    const parsed = JSON.parse(raw) as {
+      error?: { message?: unknown };
+      message?: unknown;
+    };
+    message = normalizeString(parsed?.error?.message) || normalizeString(parsed?.message);
+  } catch {
+    message = raw.trim();
+  }
+
+  if (response.status === 401 || response.status === 403) {
+    throw new Error("Invalid OpenAI API key.");
+  }
+  throw new Error(message || `OpenAI validation failed (${response.status}).`);
 }
 
 async function getProviderConnectionRow(ctx: any, userId: any, provider: ProviderConnectionProvider) {
@@ -624,12 +689,14 @@ export const getCurrentUserProviderConnections = query({
       ctx,
       authSubject: args.authSubject ?? null,
     });
-    const [openrouter, chatgpt] = await Promise.all([
+    const [openrouter, openai, chatgpt] = await Promise.all([
       getProviderConnectionRow(ctx, userId, "openrouter"),
+      getProviderConnectionRow(ctx, userId, "openai"),
       getProviderConnectionRow(ctx, userId, "chatgpt"),
     ]);
     return {
       openrouter: toPublicOpenRouterConnection(openrouter),
+      openai: toPublicOpenAiConnection(openai),
       chatgpt: toPublicChatgptConnection(chatgpt),
     };
   },
@@ -641,6 +708,15 @@ export const getOpenRouterConnectionForUserInternal = internalQuery({
   },
   handler: async (ctx, args) => {
     return await getProviderConnectionRow(ctx, args.userId, "openrouter");
+  },
+});
+
+export const getOpenAiConnectionForUserInternal = internalQuery({
+  args: {
+    userId: v.id("users"),
+  },
+  handler: async (ctx, args) => {
+    return await getProviderConnectionRow(ctx, args.userId, "openai");
   },
 });
 
@@ -669,6 +745,49 @@ export const upsertOpenRouterConnectionInternal = internalMutation({
 
     const patch = {
       provider: "openrouter" as const,
+      authKind: "api_key" as const,
+      encryptedSecretHex: args.encryptedSecretHex,
+      secretIvHex: args.secretIvHex,
+      secretVersion: args.secretVersion,
+      keyLastFour: args.keyLastFour,
+      keyFingerprint: args.keyFingerprint,
+      accountId: undefined,
+      email: undefined,
+      accessTokenExpiresAt: undefined,
+      validatedAt: args.validatedAt,
+      updatedAt: args.nowMs,
+    };
+
+    if (!existing) {
+      const id = await ctx.db.insert("userProviderConnections", {
+        userId: args.userId,
+        ...patch,
+        createdAt: args.nowMs,
+      });
+      return { id };
+    }
+
+    await ctx.db.patch(existing._id as any, patch);
+    return { id: existing._id };
+  },
+});
+
+export const upsertOpenAiConnectionInternal = internalMutation({
+  args: {
+    userId: v.id("users"),
+    encryptedSecretHex: v.string(),
+    secretIvHex: v.string(),
+    secretVersion: v.number(),
+    keyLastFour: v.string(),
+    keyFingerprint: v.string(),
+    validatedAt: v.number(),
+    nowMs: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const existing = await getProviderConnectionRow(ctx, args.userId, "openai");
+
+    const patch = {
+      provider: "openai" as const,
       authKind: "api_key" as const,
       encryptedSecretHex: args.encryptedSecretHex,
       secretIvHex: args.secretIvHex,
@@ -749,6 +868,18 @@ export const deleteOpenRouterConnectionInternal = internalMutation({
   },
   handler: async (ctx, args) => {
     const existing = await getProviderConnectionRow(ctx, args.userId, "openrouter");
+    if (!existing) return { deleted: false };
+    await ctx.db.delete(existing._id as any);
+    return { deleted: true };
+  },
+});
+
+export const deleteOpenAiConnectionInternal = internalMutation({
+  args: {
+    userId: v.id("users"),
+  },
+  handler: async (ctx, args) => {
+    const existing = await getProviderConnectionRow(ctx, args.userId, "openai");
     if (!existing) return { deleted: false };
     await ctx.db.delete(existing._id as any);
     return { deleted: true };
@@ -938,14 +1069,14 @@ export const connectOpenRouterApiKey = action({
       nowMs: validatedAt,
     });
 
-    const row: ProviderConnectionRow | null = await ctx.runQuery(internal.providerConnections.getOpenRouterConnectionForUserInternal as any, {
-      userId,
-    });
-    const chatgpt: ProviderConnectionRow | null = await ctx.runQuery(internal.providerConnections.getChatgptConnectionForUserInternal as any, {
-      userId,
-    });
+    const [row, openai, chatgpt] = await Promise.all([
+      ctx.runQuery(internal.providerConnections.getOpenRouterConnectionForUserInternal as any, { userId }),
+      ctx.runQuery(internal.providerConnections.getOpenAiConnectionForUserInternal as any, { userId }),
+      ctx.runQuery(internal.providerConnections.getChatgptConnectionForUserInternal as any, { userId }),
+    ]);
     return {
       openrouter: toPublicOpenRouterConnection((row as ProviderConnectionRow | null) ?? null),
+      openai: toPublicOpenAiConnection((openai as ProviderConnectionRow | null) ?? null),
       chatgpt: toPublicChatgptConnection((chatgpt as ProviderConnectionRow | null) ?? null),
     };
   },
@@ -963,11 +1094,77 @@ export const disconnectOpenRouterApiKey = action({
     await ctx.runMutation(internal.providerConnections.deleteOpenRouterConnectionInternal as any, {
       userId,
     });
-    const chatgpt: ProviderConnectionRow | null = await ctx.runQuery(internal.providerConnections.getChatgptConnectionForUserInternal as any, {
-      userId,
-    });
+    const [openai, chatgpt] = await Promise.all([
+      ctx.runQuery(internal.providerConnections.getOpenAiConnectionForUserInternal as any, { userId }),
+      ctx.runQuery(internal.providerConnections.getChatgptConnectionForUserInternal as any, { userId }),
+    ]);
     return {
       openrouter: buildDisconnectedOpenRouterConnection(),
+      openai: toPublicOpenAiConnection((openai as ProviderConnectionRow | null) ?? null),
+      chatgpt: toPublicChatgptConnection((chatgpt as ProviderConnectionRow | null) ?? null),
+    };
+  },
+});
+
+export const connectOpenAiApiKey = action({
+  args: {
+    authSubject: v.optional(v.string()),
+    apiKey: v.string(),
+  },
+  handler: async (ctx, args): Promise<unknown> => {
+    const { userId } = await resolveActionUser({
+      ctx,
+      authSubject: args.authSubject ?? null,
+    });
+    const apiKey = normalizeString(args.apiKey);
+    if (!apiKey) throw new Error("OpenAI API key is required.");
+
+    await validateOpenAiKey(apiKey);
+
+    const validatedAt = Date.now();
+    const encrypted = await encryptSecret(apiKey);
+    const keyFingerprint = await sha256HexText(apiKey);
+    await ctx.runMutation(internal.providerConnections.upsertOpenAiConnectionInternal as any, {
+      userId,
+      ...encrypted,
+      keyLastFour: apiKey.slice(-4),
+      keyFingerprint,
+      validatedAt,
+      nowMs: validatedAt,
+    });
+
+    const [openrouter, openai, chatgpt] = await Promise.all([
+      ctx.runQuery(internal.providerConnections.getOpenRouterConnectionForUserInternal as any, { userId }),
+      ctx.runQuery(internal.providerConnections.getOpenAiConnectionForUserInternal as any, { userId }),
+      ctx.runQuery(internal.providerConnections.getChatgptConnectionForUserInternal as any, { userId }),
+    ]);
+    return {
+      openrouter: toPublicOpenRouterConnection((openrouter as ProviderConnectionRow | null) ?? null),
+      openai: toPublicOpenAiConnection((openai as ProviderConnectionRow | null) ?? null),
+      chatgpt: toPublicChatgptConnection((chatgpt as ProviderConnectionRow | null) ?? null),
+    };
+  },
+});
+
+export const disconnectOpenAiApiKey = action({
+  args: {
+    authSubject: v.optional(v.string()),
+  },
+  handler: async (ctx, args): Promise<unknown> => {
+    const { userId } = await resolveActionUser({
+      ctx,
+      authSubject: args.authSubject ?? null,
+    });
+    await ctx.runMutation(internal.providerConnections.deleteOpenAiConnectionInternal as any, {
+      userId,
+    });
+    const [openrouter, chatgpt] = await Promise.all([
+      ctx.runQuery(internal.providerConnections.getOpenRouterConnectionForUserInternal as any, { userId }),
+      ctx.runQuery(internal.providerConnections.getChatgptConnectionForUserInternal as any, { userId }),
+    ]);
+    return {
+      openrouter: toPublicOpenRouterConnection((openrouter as ProviderConnectionRow | null) ?? null),
+      openai: buildDisconnectedOpenAiConnection(),
       chatgpt: toPublicChatgptConnection((chatgpt as ProviderConnectionRow | null) ?? null),
     };
   },
@@ -985,11 +1182,13 @@ export const disconnectChatgpt = action({
     await ctx.runMutation(internal.providerConnections.deleteChatgptConnectionInternal as any, {
       userId,
     });
-    const openrouter: ProviderConnectionRow | null = await ctx.runQuery(internal.providerConnections.getOpenRouterConnectionForUserInternal as any, {
-      userId,
-    });
+    const [openrouter, openai] = await Promise.all([
+      ctx.runQuery(internal.providerConnections.getOpenRouterConnectionForUserInternal as any, { userId }),
+      ctx.runQuery(internal.providerConnections.getOpenAiConnectionForUserInternal as any, { userId }),
+    ]);
     return {
       openrouter: toPublicOpenRouterConnection((openrouter as ProviderConnectionRow | null) ?? null),
+      openai: toPublicOpenAiConnection((openai as ProviderConnectionRow | null) ?? null),
       chatgpt: buildDisconnectedChatgptConnection(),
     };
   },
@@ -1118,15 +1317,15 @@ export const pollChatgptConnect = action({
       id: args.loginId,
     });
 
-    const openrouter: ProviderConnectionRow | null = await ctx.runQuery(internal.providerConnections.getOpenRouterConnectionForUserInternal as any, {
-      userId,
-    });
-    const chatgpt: ProviderConnectionRow | null = await ctx.runQuery(internal.providerConnections.getChatgptConnectionForUserInternal as any, {
-      userId,
-    });
+    const [openrouter, openai, chatgpt] = await Promise.all([
+      ctx.runQuery(internal.providerConnections.getOpenRouterConnectionForUserInternal as any, { userId }),
+      ctx.runQuery(internal.providerConnections.getOpenAiConnectionForUserInternal as any, { userId }),
+      ctx.runQuery(internal.providerConnections.getChatgptConnectionForUserInternal as any, { userId }),
+    ]);
     return {
       status: "connected",
       openrouter: toPublicOpenRouterConnection((openrouter as ProviderConnectionRow | null) ?? null),
+      openai: toPublicOpenAiConnection((openai as ProviderConnectionRow | null) ?? null),
       chatgpt: toPublicChatgptConnection((chatgpt as ProviderConnectionRow | null) ?? null),
     };
   },
@@ -1189,14 +1388,14 @@ export const completeChatgptConnect = action({
       state: normalizeString(stateRow.state),
     });
 
-    const openrouter: ProviderConnectionRow | null = await ctx.runQuery(internal.providerConnections.getOpenRouterConnectionForUserInternal as any, {
-      userId,
-    });
-    const chatgpt: ProviderConnectionRow | null = await ctx.runQuery(internal.providerConnections.getChatgptConnectionForUserInternal as any, {
-      userId,
-    });
+    const [openrouter, openai, chatgpt] = await Promise.all([
+      ctx.runQuery(internal.providerConnections.getOpenRouterConnectionForUserInternal as any, { userId }),
+      ctx.runQuery(internal.providerConnections.getOpenAiConnectionForUserInternal as any, { userId }),
+      ctx.runQuery(internal.providerConnections.getChatgptConnectionForUserInternal as any, { userId }),
+    ]);
     return {
       openrouter: toPublicOpenRouterConnection((openrouter as ProviderConnectionRow | null) ?? null),
+      openai: toPublicOpenAiConnection((openai as ProviderConnectionRow | null) ?? null),
       chatgpt: toPublicChatgptConnection((chatgpt as ProviderConnectionRow | null) ?? null),
     };
   },
