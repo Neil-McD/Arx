@@ -153,18 +153,17 @@
   background: transparent;
 }
 
-/* Shrink header controls a touch so the floating groups feel lighter. */
 .app-topbar .icon-button,
 .app-topbar .new-session-header-btn {
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   border-radius: 8px;
 }
 
 .app-topbar .icon-button svg,
 .app-topbar .new-session-header-btn svg {
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
 }
 
 /* Floating "island" wrapper for single controls (used when we don't box the whole header). */

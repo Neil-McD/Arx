@@ -967,7 +967,7 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
   const [isDesktopViewport, setIsDesktopViewport] = useState<boolean>(() =>
     typeof window === "undefined" ? true : window.matchMedia("(min-width: 901px)").matches,
   );
-  const [isOperatorDataPanelOpen, setIsOperatorDataPanelOpen] = useState(true);
+  const [isOperatorDataPanelOpen, setIsOperatorDataPanelOpen] = useState(false);
   const [operatorActiveInsightTab, setOperatorActiveInsightTab] = useState<OperatorInsightTab>("platform");
   const [operatorRightPanelWidth, setOperatorRightPanelWidth] = useState(OPERATOR_RIGHT_PANEL_DEFAULT_WIDTH);
   const savedThreadScrollTopRef = useRef<number | null>(null);

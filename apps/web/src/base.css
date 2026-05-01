@@ -19429,16 +19429,16 @@ button.message-citation-chip:hover {
 .workspace-operator-data-toggle {
   position: fixed;
   top: 8px;
-  right: 50px;
+  right: 54px;
   z-index: 35;
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   border-radius: 8px;
 }
 
 .workspace-operator-data-toggle svg {
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
 }
 
 .operator-data-panel {

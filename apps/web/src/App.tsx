@@ -1137,14 +1137,17 @@ export default function App() {
 
   useEffect(() => {
     let isAlive = true;
-    if (!session) {
-      setOperatorAccess(null);
+    setOperatorAccess(null);
+
+    const sessionUserId = resolveAuthSubject(session);
+    if (!session || !sessionUserId) {
       return;
     }
 
     loadOperatorAccessCanonical({ session }).then(
       (access) => {
-        if (isAlive) setOperatorAccess(access);
+        if (!isAlive) return;
+        setOperatorAccess(access.userId === sessionUserId ? access : null);
       },
       () => {
         if (isAlive) setOperatorAccess(null);
@@ -1159,6 +1162,9 @@ export default function App() {
   const canonicalSessionUserId = useMemo(
     () => resolveAuthSubject(session),
     [session?.access_token, session?.id_token, session?.user?.id],
+  );
+  const hasOperatorDataPanelAccess = Boolean(
+    session && canonicalSessionUserId && operatorAccess?.userId === canonicalSessionUserId,
   );
   const profileStorageUserId = canonicalSessionUserId;
   const initialProfileDraft = useMemo(
@@ -6793,8 +6799,8 @@ export default function App() {
       settingsPanelsProps,
       workspaceHostProps: {
         ...workspaceHostProps,
-        showOperatorDataPanel: Boolean(operatorAccess && session),
-        operatorDataPanelSession: operatorAccess ? session : null,
+        showOperatorDataPanel: hasOperatorDataPanelAccess,
+        operatorDataPanelSession: hasOperatorDataPanelAccess ? session : null,
       },
     },
     publicCommunityFunnelProps: {
