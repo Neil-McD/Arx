@@ -9,7 +9,6 @@ const schema = read("convex/schema.ts");
 const operatorIntelligence = read("convex/operatorIntelligence.ts");
 const operatorTypes = read("shared/operatorTypes.ts");
 const operatorToolDirectory = read("shared/operatorToolDirectory.ts");
-const appShellNavigation = read("shared/appShellNavigation.ts");
 
 for (const [table, indexes] of [
   ["checkoutSessions", ["by_mode_status", "by_community_status"]],
@@ -134,12 +133,6 @@ assert.doesNotMatch(
   operatorIntelligence,
   /query\("communities"\)\.order\("desc"\)\.take\(limit\)/,
   "operator risk scans must not hide older communities before filtering",
-);
-
-assert.doesNotMatch(
-  appShellNavigation,
-  /AppPage = [^;]*"operator"/,
-  "operator UI route should not be introduced by the read-model pass",
 );
 
 console.log("operator_intelligence_proof: ok");

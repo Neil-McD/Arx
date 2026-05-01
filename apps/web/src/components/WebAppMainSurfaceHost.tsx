@@ -7,6 +7,7 @@ import { WebPublicCommunityFunnel } from "./WebPublicCommunityFunnel";
 import { WebWorkspaceSurfaceHost } from "./WebWorkspaceSurfaceHost";
 import { WebLandingPage } from "./WebLandingPage";
 import { WebOnboardingPage } from "./WebOnboardingPage";
+import { WebOperatorDashboard } from "./WebOperatorDashboard";
 
 export type WebAppMainSurfaceHostProps = {
   activePage: AppPage;
@@ -14,6 +15,7 @@ export type WebAppMainSurfaceHostProps = {
   showCommunitySurface: boolean;
   showDiscoverPanel: boolean;
   showProductDocsPanel: boolean;
+  showOperatorDashboard: boolean;
   landingPageProps: ComponentProps<typeof WebLandingPage>;
   onboardingPageProps: ComponentProps<typeof WebOnboardingPage>;
   showOnboardingModal: boolean;
@@ -22,6 +24,7 @@ export type WebAppMainSurfaceHostProps = {
   communityHostProps: ComponentProps<typeof WebCommunityHost>;
   discoverPanelProps: ComponentProps<typeof WebDiscoverPanel>;
   productDocsPanelProps: ComponentProps<typeof WebProductDocsPanel>;
+  operatorDashboardProps: ComponentProps<typeof WebOperatorDashboard>;
 };
 
 export function WebAppMainSurfaceHost(props: WebAppMainSurfaceHostProps) {
@@ -58,6 +61,8 @@ export function WebAppMainSurfaceHost(props: WebAppMainSurfaceHostProps) {
             <WebDiscoverPanel {...props.discoverPanelProps} />
           ) : props.showProductDocsPanel ? (
             <WebProductDocsPanel {...props.productDocsPanelProps} />
+          ) : props.showOperatorDashboard ? (
+            <WebOperatorDashboard {...props.operatorDashboardProps} />
           ) : null}
         </div>
       )}

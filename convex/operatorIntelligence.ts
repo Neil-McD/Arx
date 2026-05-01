@@ -200,7 +200,7 @@ async function buildBuilderRecord(ctx: any, community: any, nowMs: number) {
       removedMembers: removedMemberships.length,
     },
     activity: {
-      lastMemberActivityAt: activeMemberships.reduce<number | null>((latest, row: any) => {
+      lastMemberActivityAt: activeMemberships.reduce((latest: number | null, row: any) => {
         const updatedAt = typeof row.updatedAt === "number" ? row.updatedAt : null;
         if (updatedAt == null) return latest;
         return latest == null ? updatedAt : Math.max(latest, updatedAt);
@@ -404,7 +404,7 @@ export const listOperatorRisksInternal = internalQuery({
       .withIndex("by_severity_createdAt", (q: any) => q.eq("severity", "error"))
       .order("desc")
       .take(limit);
-    const riskItems = errorEvents.map((event: any) => ({
+    const riskItems: any[] = errorEvents.map((event: any) => ({
       id: `event:${String(event._id)}`,
       severity: "error",
       kind: event.eventType,

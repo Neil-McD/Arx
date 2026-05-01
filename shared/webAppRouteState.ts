@@ -383,6 +383,17 @@ function parseAppRouteFromPathname(pathname: string): AppRoutePathState | null {
     };
   }
 
+  if (segments[0] === "operator" && segments.length === 1) {
+    return {
+      page: "operator",
+      view: "home",
+      settingsPage: "agent",
+      communitySlug: null,
+      communityTab: "chat",
+      threadId: null,
+    };
+  }
+
   if (segments[0] === "workspace") {
     if (segments.length === 1) {
       return {
@@ -523,6 +534,10 @@ export function buildAppRoutePath(state: AppRoutePathState): string | null {
 
   if (state.page === "onboarding") {
     return "/onboarding";
+  }
+
+  if (state.page === "operator") {
+    return "/operator";
   }
 
   return state.threadId ? buildWorkspaceThreadPath(state.threadId) : buildWorkspaceDraftPath();
