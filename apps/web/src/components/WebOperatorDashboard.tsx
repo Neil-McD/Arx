@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { AuthSessionLike } from "../../../../shared/authSession";
+import { buildPlatformSwitcherStyle } from "../../../../shared/platformSwitcherUi";
 import {
   loadOperatorBuildersCanonical,
   loadOperatorEventsCanonical,
@@ -17,6 +18,11 @@ import type {
 } from "../../../../shared/operatorTypes";
 
 type OperatorInsightTab = "platform" | "builders";
+
+const OPERATOR_INSIGHT_TABS: Array<{ id: OperatorInsightTab; label: string }> = [
+  { id: "platform", label: "Platform" },
+  { id: "builders", label: "Builders" },
+];
 
 type OperatorDashboardState = {
   overview: OperatorOverviewSnapshot | null;
@@ -112,12 +118,14 @@ export function WebOperatorDashboard(props: WebOperatorDashboardProps) {
       ),
     [state.builders],
   );
+  const activeInsightTabIndex = OPERATOR_INSIGHT_TABS.findIndex((tab) => tab.id === activeInsightTab);
+  const insightTabSwitcherStyle = buildPlatformSwitcherStyle(OPERATOR_INSIGHT_TABS.length, activeInsightTabIndex);
 
   return (
     <div className={`operator-surface${isRightPanelOpen ? " operator-surface--right-open" : ""}`}>
       <button
         type="button"
-        className="operator-data-toggle"
+        className={`icon-button operator-data-toggle${isRightPanelOpen ? " active" : ""}`}
         onClick={() => setIsRightPanelOpen((value) => !value)}
         aria-expanded={isRightPanelOpen}
         aria-controls="operator-data-panel"
@@ -174,21 +182,24 @@ export function WebOperatorDashboard(props: WebOperatorDashboardProps) {
 
       {isRightPanelOpen ? (
         <aside id="operator-data-panel" className="operator-data-panel" aria-label="Operator intelligence data">
-          <div className="operator-data-panel__tabs" role="tablist" aria-label="Operator data tabs">
-            <button
-              type="button"
-              className={activeInsightTab === "platform" ? "active" : ""}
-              onClick={() => setActiveInsightTab("platform")}
-            >
-              Platform
-            </button>
-            <button
-              type="button"
-              className={activeInsightTab === "builders" ? "active" : ""}
-              onClick={() => setActiveInsightTab("builders")}
-            >
-              Builders
-            </button>
+          <div
+            className="platform-switcher platform-switcher-compact operator-data-panel__tabs"
+            role="tablist"
+            aria-label="Operator data tabs"
+            style={insightTabSwitcherStyle}
+          >
+            {OPERATOR_INSIGHT_TABS.map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                role="tab"
+                className={`platform-switcher-btn${activeInsightTab === tab.id ? " is-active" : ""}`}
+                aria-selected={activeInsightTab === tab.id}
+                onClick={() => setActiveInsightTab(tab.id)}
+              >
+                {tab.label}
+              </button>
+            ))}
           </div>
 
           <div className="operator-data-panel__content">

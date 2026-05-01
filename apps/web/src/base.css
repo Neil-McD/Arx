@@ -19407,47 +19407,11 @@ button.message-citation-chip:hover {
   text-align: center;
 }
 
-.operator-data-toggle,
-.operator-data-panel__tabs button {
-  border: 1px solid var(--border-default);
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.045);
-  color: var(--text-primary);
-  font-weight: 750;
-}
-
 .operator-data-toggle {
   position: absolute;
-  top: 14px;
-  right: 66px;
+  top: 12px;
+  right: 62px;
   z-index: 35;
-  width: 38px;
-  height: 38px;
-  padding: 0;
-  display: grid;
-  place-items: center;
-  border-radius: 12px;
-}
-
-.operator-data-toggle:hover,
-.operator-data-panel__tabs button:hover {
-  background: rgba(255, 255, 255, 0.075);
-}
-
-.operator-data-toggle[aria-expanded="true"] {
-  color: var(--accent);
-  border-color: color-mix(in srgb, var(--accent) 44%, var(--border-default));
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-}
-
-.operator-data-toggle svg {
-  width: 18px;
-  height: 18px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.9;
-  stroke-linecap: round;
-  stroke-linejoin: round;
 }
 
 .operator-data-panel {
@@ -19469,25 +19433,7 @@ button.message-citation-chip:hover {
 
 .operator-data-panel__tabs {
   width: fit-content;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px;
-  border: 1px solid var(--border-default);
-  border-radius: 14px;
-  background: rgba(0, 0, 0, 0.18);
-}
-
-.operator-data-panel__tabs button {
-  border: 0;
-  padding: 8px 12px;
-  color: var(--text-secondary);
-  background: transparent;
-}
-
-.operator-data-panel__tabs button.active {
-  color: var(--text-primary);
-  background: rgba(255, 105, 170, 0.16);
+  min-width: 208px;
 }
 
 .operator-data-panel__content {
