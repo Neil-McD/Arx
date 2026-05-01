@@ -841,6 +841,520 @@ export const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
     },
   },
   {
+    id: "gohighlevel",
+    name: "GoHighLevel",
+    tagline: "CRM, funnels, contacts, and agency operations",
+    description:
+      "High-fit operator surface for agencies, creator funnels, client follow-up, calendars, contacts, and revenue operations.",
+    supportLabel: "Needs verification",
+    supportNote:
+      "HighLevel documents an MCP server, but PolyNet should verify the hosted endpoint, auth mode, and account scoping before marking it ready.",
+    heroNote:
+      "Best for agentic distribution businesses and community operators already running funnels and client workflows in HighLevel.",
+    capabilities: [
+      "Read and coordinate contacts, opportunities, conversations, and calendars.",
+      "Support agency and creator follow-up workflows around community funnels.",
+      "Keep write actions governed until account and location scopes are explicit.",
+    ],
+    websiteUrl: "https://www.gohighlevel.com",
+    docsUrl:
+      "https://help.gohighlevel.com/support/solutions/articles/155000005741-how-to-use-the-highlevel-mcp-server",
+    logoUrl: "/app-logos/gohighlevel.svg",
+    personalConnect: {
+      connectionKind: "known",
+      availability: "later",
+      authMethod: "oauth",
+      connectionStrategy: {
+        defaultMode: "oauth",
+        supportedModes: ["oauth", "token"],
+      },
+      endpointUrl: null,
+      authType: null,
+      authLabel: "OAuth or API key",
+      secretLabel: "HighLevel API key",
+      note:
+        "Catalog-first until the exact HighLevel MCP endpoint and per-location permission model are verified in PolyNet.",
+    },
+  },
+  {
+    id: "salesforce",
+    name: "Salesforce",
+    tagline: "CRM, accounts, opportunities, and Agentforce context",
+    description:
+      "Enterprise CRM surface for account intelligence, sales workflows, support context, and Agentforce-backed operations.",
+    supportLabel: "Needs richer auth",
+    supportNote:
+      "Salesforce offers hosted MCP server options, but org setup, OAuth, and enterprise permission boundaries need a deliberate auth path.",
+    heroNote:
+      "Best for enterprise teams that need community or agent workflows grounded in CRM truth.",
+    capabilities: [
+      "Read CRM records, accounts, contacts, opportunities, and support context.",
+      "Support enterprise sales and customer-success workflows.",
+      "Respect Salesforce org permissions, OAuth consent, and audit controls.",
+    ],
+    websiteUrl: "https://www.salesforce.com",
+    docsUrl:
+      "https://developer.salesforce.com/docs/platform/hosted-mcp-servers/guide/hosted-mcp-servers-overview.html",
+    logoUrl: "/app-logos/salesforce.svg",
+    personalConnect: {
+      connectionKind: "known",
+      availability: "later",
+      authMethod: "oauth",
+      connectionStrategy: {
+        defaultMode: "oauth",
+        supportedModes: ["oauth"],
+      },
+      endpointUrl: null,
+      authType: null,
+      authLabel: "Salesforce OAuth",
+      note:
+        "Salesforce should stay catalog-first until PolyNet supports hosted OAuth MCP connections and org-scoped consent.",
+    },
+  },
+  {
+    id: "hubspot",
+    name: "HubSpot",
+    tagline: "CRM, marketing, deals, and customer context",
+    description:
+      "Strong CRM and marketing operations surface for founder funnels, lifecycle automation, deals, contacts, and customer context.",
+    supportLabel: "Needs verification",
+    supportNote:
+      "HubSpot has MCP documentation, but PolyNet still needs to verify the exact hosted auth flow and scopes before direct connect.",
+    heroNote:
+      "Best for teams that want their agents to understand marketing, sales, and customer lifecycle state.",
+    capabilities: [
+      "Read contacts, companies, deals, tickets, and marketing context.",
+      "Support funnel, lifecycle, and customer-success workflows.",
+      "Use HubSpot app scopes as the permission boundary before enabling writes.",
+    ],
+    websiteUrl: "https://www.hubspot.com",
+    docsUrl: "https://developers.hubspot.com/mcp",
+    logoUrl: "/app-logos/hubspot.svg",
+    personalConnect: {
+      connectionKind: "known",
+      availability: "later",
+      authMethod: "oauth",
+      connectionStrategy: {
+        defaultMode: "oauth",
+        supportedModes: ["oauth"],
+      },
+      endpointUrl: null,
+      authType: null,
+      authLabel: "HubSpot OAuth",
+      note:
+        "HubSpot belongs in Discover now, but direct install should wait for a verified hosted OAuth MCP path.",
+    },
+  },
+  {
+    id: "jira",
+    name: "Jira",
+    tagline: "Issues, projects, incidents, and delivery workflows",
+    description:
+      "Project and engineering operations surface for teams that use Atlassian issues, boards, sprints, and service workflows.",
+    supportLabel: "Backplane MCP",
+    supportNote:
+      "Jira is a high-value catalog app, but the safest near-term path is a vetted hosted connector or OAuth backplane.",
+    heroNote:
+      "Best for software, product, and delivery communities that work from Jira.",
+    capabilities: [
+      "Read issues, projects, boards, sprints, and delivery status.",
+      "Coordinate project planning and incident follow-up.",
+      "Keep issue writes behind explicit scopes and approvals.",
+    ],
+    websiteUrl: "https://www.atlassian.com/software/jira",
+    docsUrl: "https://mcp.pipedream.com/app/jira",
+    logoUrl: "/app-logos/jira.svg",
+    personalConnect: {
+      connectionKind: "known",
+      availability: "later",
+      authMethod: "oauth",
+      connectionStrategy: {
+        defaultMode: "oauth",
+        supportedModes: ["oauth"],
+      },
+      endpointUrl: null,
+      authType: null,
+      authLabel: "OAuth or managed connector",
+      note:
+        "Jira should remain catalog-first until PolyNet chooses the Atlassian MCP/provider path and scopes it cleanly.",
+    },
+  },
+  {
+    id: "gmail",
+    name: "Gmail",
+    tagline: "Email, threads, labels, and inbox context",
+    description:
+      "Personal and operator communication surface for email triage, follow-up, customer conversations, and founder workflows.",
+    supportLabel: "Google Workspace path",
+    supportNote:
+      "Gmail belongs with the Google Workspace family, but direct connection should wait for a vetted OAuth MCP path.",
+    heroNote:
+      "Best for turning inbox context into agent-readable follow-up and operating memory.",
+    capabilities: [
+      "Read and search email threads with explicit user consent.",
+      "Summarize conversations, draft replies, and identify follow-up.",
+      "Keep send actions gated behind approval and clear scopes.",
+    ],
+    websiteUrl: "https://workspace.google.com/products/gmail/",
+    docsUrl: "https://workspacemcp.com/",
+    logoUrl: "/app-logos/gmail.svg",
+    personalConnect: {
+      connectionKind: "known",
+      availability: "later",
+      authMethod: "oauth",
+      connectionStrategy: {
+        defaultMode: "oauth",
+        supportedModes: ["oauth"],
+      },
+      endpointUrl: null,
+      authType: null,
+      authLabel: "Google OAuth",
+      note:
+        "Gmail is catalog-first until PolyNet has a vetted Google Workspace MCP flow with explicit email scopes.",
+    },
+  },
+  {
+    id: "google-docs",
+    name: "Google Docs",
+    tagline: "Documents, drafts, briefs, and shared knowledge",
+    description:
+      "Core Google Workspace document surface for founder docs, strategy briefs, notes, policies, and community knowledge.",
+    supportLabel: "Google Workspace path",
+    supportNote:
+      "Google Docs should be grouped into a vetted Google Workspace OAuth/MCP path before direct install is enabled.",
+    heroNote:
+      "Best for bringing living documents and operating notes into community intelligence.",
+    capabilities: [
+      "Read, search, and summarize shared documents.",
+      "Use docs as source material for community resources and agent context.",
+      "Later support drafting and edits with explicit approval.",
+    ],
+    websiteUrl: "https://workspace.google.com/products/docs/",
+    docsUrl: "https://workspacemcp.com/",
+    logoUrl: "/app-logos/google-docs.svg",
+    personalConnect: {
+      connectionKind: "known",
+      availability: "later",
+      authMethod: "oauth",
+      connectionStrategy: {
+        defaultMode: "oauth",
+        supportedModes: ["oauth"],
+      },
+      endpointUrl: null,
+      authType: null,
+      authLabel: "Google OAuth",
+      note:
+        "Docs belongs in Discover now, but direct connection should wait for Google Workspace scoping and consent.",
+    },
+  },
+  {
+    id: "google-slides",
+    name: "Google Slides",
+    tagline: "Decks, presentations, and visual briefs",
+    description:
+      "Useful for founder decks, community presentations, investor updates, workshops, and reusable visual material.",
+    supportLabel: "Google Workspace path",
+    supportNote:
+      "Google Slides should wait for the same vetted Workspace connector path as Drive, Docs, Sheets, Calendar, and Gmail.",
+    heroNote:
+      "Best for turning community and founder knowledge into presentation workflows.",
+    capabilities: [
+      "Read presentation structure and slide content.",
+      "Support deck summarization, planning, and export workflows.",
+      "Later draft or update slides with explicit user approval.",
+    ],
+    websiteUrl: "https://workspace.google.com/products/slides/",
+    docsUrl: "https://workspacemcp.com/",
+    logoUrl: "/app-logos/google-slides.svg",
+    personalConnect: {
+      connectionKind: "known",
+      availability: "later",
+      authMethod: "oauth",
+      connectionStrategy: {
+        defaultMode: "oauth",
+        supportedModes: ["oauth"],
+      },
+      endpointUrl: null,
+      authType: null,
+      authLabel: "Google OAuth",
+      note:
+        "Slides belongs in the catalog, but should use the eventual Google Workspace connector rather than a one-off path.",
+    },
+  },
+  {
+    id: "microsoft-outlook",
+    name: "Microsoft Outlook",
+    tagline: "Email, calendar, contacts, and follow-up",
+    description:
+      "Microsoft 365 communication surface for email, calendar context, customer follow-up, and operator workflows.",
+    supportLabel: "Microsoft 365 path",
+    supportNote:
+      "Outlook should be added as catalog-first until PolyNet has a vetted Microsoft Graph/OAuth MCP connector.",
+    heroNote:
+      "Best for teams whose operating context lives in Microsoft 365.",
+    capabilities: [
+      "Read email and calendar context with explicit consent.",
+      "Summarize threads, draft follow-up, and coordinate scheduling.",
+      "Use Microsoft Graph scopes and approvals before enabling writes.",
+    ],
+    websiteUrl: "https://www.microsoft.com/microsoft-365/outlook/email-and-calendar-software-microsoft-outlook",
+    docsUrl: "https://mcp.pipedream.com/app/microsoft_outlook",
+    logoUrl: "/app-logos/microsoft-outlook.svg",
+    personalConnect: {
+      connectionKind: "known",
+      availability: "later",
+      authMethod: "oauth",
+      connectionStrategy: {
+        defaultMode: "oauth",
+        supportedModes: ["oauth"],
+      },
+      endpointUrl: null,
+      authType: null,
+      authLabel: "Microsoft OAuth",
+      note:
+        "Outlook is catalog-first until PolyNet chooses a Microsoft 365 MCP path with clear Graph scopes.",
+    },
+  },
+  {
+    id: "microsoft-teams",
+    name: "Microsoft Teams",
+    tagline: "Chats, channels, meetings, and team signal",
+    description:
+      "Collaboration surface for Microsoft 365 teams, meetings, channels, and operational conversations.",
+    supportLabel: "Microsoft 365 path",
+    supportNote:
+      "Teams needs a careful Microsoft Graph/OAuth and tenant-consent path before direct connection is honest.",
+    heroNote:
+      "Best for enterprise team context and meeting/channel workflows.",
+    capabilities: [
+      "Read channels, chats, meetings, and collaboration context.",
+      "Summarize operational signal and follow-up across teams.",
+      "Keep posting and moderation actions behind explicit approval.",
+    ],
+    websiteUrl: "https://www.microsoft.com/microsoft-teams/group-chat-software",
+    docsUrl: "https://mcp.pipedream.com/app/microsoft_teams",
+    logoUrl: "/app-logos/microsoft-teams.svg",
+    personalConnect: {
+      connectionKind: "known",
+      availability: "later",
+      authMethod: "oauth",
+      connectionStrategy: {
+        defaultMode: "oauth",
+        supportedModes: ["oauth"],
+      },
+      endpointUrl: null,
+      authType: null,
+      authLabel: "Microsoft OAuth",
+      note:
+        "Teams belongs in Discover, but should wait for a scoped Microsoft 365 connector and tenant-aware permissions.",
+    },
+  },
+  {
+    id: "microsoft-onedrive",
+    name: "OneDrive",
+    tagline: "Files, folders, and Microsoft 365 documents",
+    description:
+      "Microsoft file storage surface for documents, shared folders, and team knowledge stored in OneDrive.",
+    supportLabel: "Microsoft 365 path",
+    supportNote:
+      "OneDrive should share the same Microsoft Graph/OAuth connector path as Outlook, Teams, and SharePoint.",
+    heroNote:
+      "Best for Microsoft 365 file and document context.",
+    capabilities: [
+      "Search and read files, folders, and Microsoft documents.",
+      "Ground community and personal agents in shared file context.",
+      "Respect tenant, drive, and folder-level permissions.",
+    ],
+    websiteUrl: "https://www.microsoft.com/microsoft-365/onedrive/online-cloud-storage",
+    docsUrl: "https://mcp.pipedream.com/app/microsoft_onedrive",
+    logoUrl: "/app-logos/microsoft-onedrive.svg",
+    personalConnect: {
+      connectionKind: "known",
+      availability: "later",
+      authMethod: "oauth",
+      connectionStrategy: {
+        defaultMode: "oauth",
+        supportedModes: ["oauth"],
+      },
+      endpointUrl: null,
+      authType: null,
+      authLabel: "Microsoft OAuth",
+      note:
+        "OneDrive is catalog-first until Microsoft 365 file scopes are explicit and verified.",
+    },
+  },
+  {
+    id: "microsoft-sharepoint",
+    name: "SharePoint",
+    tagline: "Sites, files, intranet knowledge, and team content",
+    description:
+      "Enterprise knowledge surface for Microsoft 365 sites, shared files, intranet pages, and team content repositories.",
+    supportLabel: "Microsoft 365 path",
+    supportNote:
+      "SharePoint needs tenant-aware Microsoft Graph permissions and should stay catalog-first for now.",
+    heroNote:
+      "Best for enterprise knowledge bases and shared operating documentation.",
+    capabilities: [
+      "Search and read SharePoint sites, pages, lists, and files.",
+      "Bring intranet and team knowledge into agent context.",
+      "Preserve tenant, site, and document permissions.",
+    ],
+    websiteUrl: "https://www.microsoft.com/microsoft-365/sharepoint/collaboration",
+    docsUrl: "https://mcp.pipedream.com/app/microsoft_sharepoint",
+    logoUrl: "/app-logos/microsoft-sharepoint.svg",
+    personalConnect: {
+      connectionKind: "known",
+      availability: "later",
+      authMethod: "oauth",
+      connectionStrategy: {
+        defaultMode: "oauth",
+        supportedModes: ["oauth"],
+      },
+      endpointUrl: null,
+      authType: null,
+      authLabel: "Microsoft OAuth",
+      note:
+        "SharePoint is catalog-first until PolyNet has a tenant-aware Microsoft 365 MCP connector.",
+    },
+  },
+  {
+    id: "intercom",
+    name: "Intercom",
+    tagline: "Customer conversations, support, and product signal",
+    description:
+      "Customer communication surface for support conversations, product feedback, lifecycle messaging, and help-center context.",
+    supportLabel: "Backplane MCP",
+    supportNote:
+      "Intercom is a strong catalog app, but direct connection should wait for a vetted OAuth/provider path.",
+    heroNote:
+      "Best for customer-success and support intelligence around a community or product.",
+    capabilities: [
+      "Read customer conversations, tickets, and support context.",
+      "Summarize product feedback and recurring customer issues.",
+      "Keep outbound replies and automation actions approval-gated.",
+    ],
+    websiteUrl: "https://www.intercom.com",
+    docsUrl: "https://mcp.pipedream.com/app/intercom",
+    logoUrl: "/app-logos/intercom.svg",
+    personalConnect: {
+      connectionKind: "known",
+      availability: "later",
+      authMethod: "oauth",
+      connectionStrategy: {
+        defaultMode: "oauth",
+        supportedModes: ["oauth"],
+      },
+      endpointUrl: null,
+      authType: null,
+      authLabel: "OAuth or managed connector",
+      note:
+        "Intercom belongs in Discover now, but should wait for a trusted OAuth MCP path before direct install.",
+    },
+  },
+  {
+    id: "zendesk",
+    name: "Zendesk",
+    tagline: "Tickets, help center, support, and customer operations",
+    description:
+      "Support operations surface for tickets, help-center articles, customer context, and service workflows.",
+    supportLabel: "Backplane MCP",
+    supportNote:
+      "Zendesk should be catalog-first until PolyNet verifies a hosted MCP/provider path and safe write permissions.",
+    heroNote:
+      "Best for customer support teams and community operators with support queues.",
+    capabilities: [
+      "Read tickets, help-center content, users, and support context.",
+      "Summarize recurring issues and route follow-up.",
+      "Gate ticket updates and replies behind explicit approval.",
+    ],
+    websiteUrl: "https://www.zendesk.com",
+    docsUrl: "https://mcp.pipedream.com/app/zendesk",
+    logoUrl: "/app-logos/zendesk.svg",
+    personalConnect: {
+      connectionKind: "known",
+      availability: "later",
+      authMethod: "oauth",
+      connectionStrategy: {
+        defaultMode: "oauth",
+        supportedModes: ["oauth"],
+      },
+      endpointUrl: null,
+      authType: null,
+      authLabel: "OAuth or managed connector",
+      note:
+        "Zendesk is catalog-first until ticket write scopes and provider auth are verified.",
+    },
+  },
+  {
+    id: "n8n",
+    name: "n8n",
+    tagline: "Workflow automation, agents, and custom integrations",
+    description:
+      "Automation backplane for teams that want self-hosted or managed workflows around agents, apps, and business systems.",
+    supportLabel: "Automation backplane",
+    supportNote:
+      "n8n is strategically useful, but PolyNet should treat it as a governed workflow backplane rather than a generic unbounded tool surface.",
+    heroNote:
+      "Best for custom automations where Zapier is too constrained or teams want more control.",
+    capabilities: [
+      "Trigger and coordinate custom workflows across many apps.",
+      "Use n8n as an automation layer for community and operator processes.",
+      "Keep workflow execution governed, observable, and approval-aware.",
+    ],
+    websiteUrl: "https://n8n.io",
+    docsUrl: "https://docs.n8n.io/integrations/builtin/cluster-nodes/root-nodes/n8n-nodes-langchain.mcp/",
+    logoUrl: "/app-logos/n8n.svg",
+    personalConnect: {
+      connectionKind: "known",
+      availability: "later",
+      authMethod: "custom",
+      connectionStrategy: {
+        defaultMode: "custom",
+        supportedModes: ["custom", "token"],
+      },
+      endpointUrl: null,
+      authType: null,
+      authLabel: "Self-hosted or managed endpoint",
+      secretLabel: "n8n credential",
+      note:
+        "n8n belongs in Discover, but PolyNet needs an explicit workflow execution contract before direct install.",
+    },
+  },
+  {
+    id: "make",
+    name: "Make",
+    tagline: "Visual automations, scenarios, and app workflows",
+    description:
+      "Visual automation platform for connecting app workflows, operational scenarios, and cross-tool business processes.",
+    supportLabel: "Automation backplane",
+    supportNote:
+      "Make is useful as an automation backplane, but direct connection should wait for a verified MCP/provider path.",
+    heroNote:
+      "Best for visual workflow builders who want agents to coordinate app scenarios.",
+    capabilities: [
+      "Coordinate app workflows and scenario-based automations.",
+      "Support long-tail integration coverage without first-party builds.",
+      "Keep execution scoped through managed credentials and approvals.",
+    ],
+    websiteUrl: "https://www.make.com",
+    docsUrl: "https://mcp.pipedream.com/app/make",
+    logoUrl: "/app-logos/make.svg",
+    personalConnect: {
+      connectionKind: "known",
+      availability: "later",
+      authMethod: "oauth",
+      connectionStrategy: {
+        defaultMode: "oauth",
+        supportedModes: ["oauth"],
+      },
+      endpointUrl: null,
+      authType: null,
+      authLabel: "OAuth or managed connector",
+      note:
+        "Make should stay catalog-first until PolyNet chooses a trusted provider path and workflow approval model.",
+    },
+  },
+  {
     id: "heygen",
     name: "HeyGen",
     tagline: "Avatar video, translation, and generated explainers",
