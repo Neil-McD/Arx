@@ -19513,3 +19513,264 @@ button.message-citation-chip:hover {
     font-size: 34px;
   }
 }
+
+.community-events-panel {
+  gap: 18px;
+}
+
+.community-events-month-btn,
+.community-events-calendar-header button,
+.community-events-agenda-header button,
+.community-events-agenda-item-top button {
+  border: 1px solid var(--border-subtle);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-primary);
+  border-radius: 999px;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.community-events-month-btn:hover,
+.community-events-calendar-header button:hover,
+.community-events-agenda-header button:hover,
+.community-events-agenda-item-top button:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.community-events-shell {
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(280px, 0.8fr);
+  gap: 18px;
+}
+
+.community-events-calendar,
+.community-events-agenda {
+  border: 1px solid var(--border-subtle);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.community-events-calendar {
+  padding: 16px;
+}
+
+.community-events-calendar-header,
+.community-events-agenda-header,
+.community-events-agenda-item-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.community-events-calendar-header h3 {
+  margin: 0;
+  font-size: 18px;
+  letter-spacing: 0;
+}
+
+.community-events-weekdays,
+.community-events-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.community-events-weekdays {
+  margin-top: 16px;
+  margin-bottom: 8px;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.community-events-weekdays div {
+  padding: 0 4px;
+}
+
+.community-events-day {
+  min-height: 94px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--text-primary);
+  padding: 8px;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.community-events-day:hover {
+  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.055);
+}
+
+.community-events-day.is-muted {
+  color: var(--text-tertiary);
+  background: rgba(255, 255, 255, 0.018);
+}
+
+.community-events-day.is-selected {
+  border-color: rgba(255, 105, 170, 0.72);
+  box-shadow: 0 0 0 1px rgba(255, 105, 170, 0.16);
+}
+
+.community-events-day-number {
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.community-events-day-pill,
+.community-events-day-more {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border-radius: 999px;
+  padding: 3px 7px;
+  background: rgba(255, 105, 170, 0.14);
+  color: rgba(255, 220, 238, 0.95);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.community-events-day-more {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-secondary);
+}
+
+.community-events-agenda {
+  padding: 16px;
+  min-height: 340px;
+}
+
+.community-events-agenda-title {
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.community-events-agenda-date,
+.community-events-muted,
+.community-events-empty,
+.community-events-agenda-meta {
+  color: var(--text-tertiary);
+  font-size: 13px;
+}
+
+.community-events-empty,
+.community-events-muted {
+  margin-top: 22px;
+}
+
+.community-events-agenda-list {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.community-events-agenda-item {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  padding: 13px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.community-events-agenda-item h4 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.community-events-agenda-meta {
+  margin-top: 6px;
+}
+
+.community-events-agenda-meta a {
+  color: var(--text-link);
+  text-decoration: none;
+}
+
+.community-events-agenda-description {
+  margin: 10px 0 0;
+  color: var(--text-secondary);
+  line-height: 1.45;
+}
+
+.community-event-error {
+  color: #ff8585;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.community-event-modal {
+  max-width: 620px;
+}
+
+.community-event-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.community-event-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.community-event-form input,
+.community-event-form textarea,
+.community-event-form select {
+  width: 100%;
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.055);
+  color: var(--text-primary);
+  padding: 11px 12px;
+  font: inherit;
+}
+
+.community-event-form textarea {
+  resize: vertical;
+}
+
+.community-event-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+@media (max-width: 900px) {
+  .community-events-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .community-events-day {
+    min-height: 76px;
+  }
+}
+
+@media (max-width: 640px) {
+  .community-events-weekdays,
+  .community-events-grid {
+    gap: 5px;
+  }
+
+  .community-events-day {
+    min-height: 60px;
+    padding: 6px;
+  }
+
+  .community-events-day-pill {
+    display: none;
+  }
+
+  .community-event-form-grid {
+    grid-template-columns: 1fr;
+  }
+}

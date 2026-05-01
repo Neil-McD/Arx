@@ -72,6 +72,8 @@ type BuildWebCommunitySurfaceProjectionParams = {
   analyticsActions: WebCommunitySecondaryPanelsProps["analytics"]["actions"];
   resourcesState: WebCommunitySecondaryPanelsProps["resources"]["state"];
   resourcesActions: WebCommunitySecondaryPanelsProps["resources"]["actions"];
+  eventsState: WebCommunitySecondaryPanelsProps["events"]["state"];
+  eventsActions: WebCommunitySecondaryPanelsProps["events"]["actions"];
   canManageResourcesActiveCommunity: boolean;
   canModerateContentActiveCommunity: boolean;
   membersState: WebCommunitySecondaryPanelsProps["members"]["state"];
@@ -252,6 +254,15 @@ export function buildWebCommunitySurfaceProjection(
       },
       state: params.resourcesState,
       actions: params.resourcesActions,
+    },
+    events: {
+      capabilities: {
+        hasActiveCommunity: Boolean(params.activeCommunity),
+        activeCommunityName: params.activeCommunity?.name ?? null,
+        canManageEvents: Boolean(params.hasSession && params.canManageResourcesActiveCommunity),
+      },
+      state: params.eventsState,
+      actions: params.eventsActions,
     },
     members: {
       activeCommunity: params.activeCommunity,

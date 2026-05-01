@@ -263,6 +263,7 @@ import { useWebSettingsImageUploadController } from "../../../shared/useWebSetti
 import { useWebThreadDataController } from "../../../shared/useWebThreadDataController";
 import { useCommunityAdminController } from "../../../shared/useCommunityAdminController";
 import type { CloudCommunityMembershipAdminRow } from "../../../shared/cloudCommunityMembershipGateway";
+import type { CloudCommunityEvent } from "../../../shared/cloudCommunityEventsGateway";
 import { useCommunityAgentConfigController } from "../../../shared/useCommunityAgentDraftController";
 import { useCommunityFunnelController } from "../../../shared/useCommunityFunnelController";
 import { useCommunitySettingsGovernanceController } from "../../../shared/useCommunitySettingsGovernanceController";
@@ -344,6 +345,11 @@ import { useCommunityAgentLandingLifecycle } from "../../../shared/useCommunityA
 import { useCommunityAgentConfigLifecycle } from "../../../shared/useCommunityAgentConfigLifecycle";
 import { useCommunityMemberRosterLifecycle } from "../../../shared/useCommunityMemberRosterLifecycle";
 import { useCommunityResourcesTabLifecycle } from "../../../shared/useCommunityResourcesTabLifecycle";
+import { useCommunityEventsTabLifecycle } from "../../../shared/useCommunityEventsTabLifecycle";
+import {
+  useCommunityEventsController,
+  type CommunityEventsRange,
+} from "../../../shared/useCommunityEventsController";
 import { useCommunitySettingsAccessLifecycle } from "../../../shared/useCommunitySettingsAccessLifecycle";
 import { confirmDiscardUnsavedCommunitySettingsWeb } from "../../../shared/communityUnsavedGuard";
 import {
@@ -590,6 +596,8 @@ type CommunityResource = {
   created_at: string;
 };
 
+type CommunityEvent = CloudCommunityEvent;
+
 type CommunityMember = CloudCommunityMembershipAdminRow;
 
 type CommunityAccess = SharedCommunityAccess;
@@ -619,6 +627,21 @@ type MyCommunityJoinRequest = {
   reapply_at?: string | null;
   denied_until?: string | null;
 };
+
+function normalizeCommunityEventsMonthIso(raw: string | null | undefined): string {
+  const date = raw ? new Date(raw) : new Date();
+  const normalized = Number.isFinite(date.getTime()) ? date : new Date();
+  return new Date(normalized.getFullYear(), normalized.getMonth(), 1).toISOString();
+}
+
+function getCommunityEventsMonthRange(monthIso: string): CommunityEventsRange {
+  const start = new Date(normalizeCommunityEventsMonthIso(monthIso));
+  const end = new Date(start.getFullYear(), start.getMonth() + 1, 1);
+  return {
+    startIso: start.toISOString(),
+    endIso: end.toISOString(),
+  };
+}
 
 type PersonalMemoryItem = {
   id: string;
@@ -821,6 +844,10 @@ export default function App() {
         setIsSavingResource,
         setResourceSuccess,
         setOpenResourceEmbedId,
+        setCommunityEvents,
+        setIsLoadingCommunityEvents,
+        setCommunityEventsError,
+        setCommunityEventsSuccess,
         setCommunityMembers,
         setCommunitySettingsName,
         setCommunitySettingsSlug,
@@ -888,6 +915,10 @@ export default function App() {
         setIsSavingResource,
         setResourceSuccess,
         setOpenResourceEmbedId,
+        setCommunityEvents,
+        setIsLoadingCommunityEvents,
+        setCommunityEventsError,
+        setCommunityEventsSuccess,
         setCommunityMembers,
         setCommunitySettingsName,
         setCommunitySettingsSlug,
@@ -1613,6 +1644,13 @@ export default function App() {
   const [communityResources, setCommunityResources] = useState<CommunityResource[]>([]);
   const [isLoadingResources, setIsLoadingResources] = useState(false);
   const [openResourceEmbedId, setOpenResourceEmbedId] = useState<string | null>(null);
+  const [communityEvents, setCommunityEvents] = useState<CommunityEvent[]>([]);
+  const [isLoadingCommunityEvents, setIsLoadingCommunityEvents] = useState(false);
+  const [communityEventsError, setCommunityEventsError] = useState<string | null>(null);
+  const [communityEventsSuccess, setCommunityEventsSuccess] = useState(false);
+  const [communityEventsVisibleMonthIso, setCommunityEventsVisibleMonthIso] = useState(() =>
+    normalizeCommunityEventsMonthIso(null),
+  );
   const {
     communityMembers,
     setCommunityMembers,
@@ -1715,6 +1753,19 @@ export default function App() {
     parseEmbedUrl,
     setCommunityResources,
     setIsLoadingResources,
+  });
+  const {
+    loadCommunityEvents,
+    handleSaveCommunityEvent,
+    handleCancelCommunityEvent,
+  } = useCommunityEventsController<AuthSession>({
+    activeCommunityId,
+    session,
+    ensureSession: ensureUsableAuthSession,
+    setCommunityEvents,
+    setIsLoadingCommunityEvents,
+    setCommunityEventsError,
+    setCommunityEventsSuccess,
   });
 
   const [communityAnalyticsSummary, setCommunityAnalyticsSummary] = useState<CommunityAnalyticsSummary>({
@@ -3567,6 +3618,10 @@ export default function App() {
     setCommunityMessages([]);
     setMessageReactions([]);
     setCommunityResources([]);
+    setCommunityEvents([]);
+    setIsLoadingCommunityEvents(false);
+    setCommunityEventsError(null);
+    setCommunityEventsSuccess(false);
     setReplyingToMessage(null);
     setEditingMessageId(null);
     setEditingMessageText("");
@@ -3909,6 +3964,20 @@ export default function App() {
     ...sessionArg,
     activeCommunityId,
     loadCommunityResources,
+    requireCommunityPage: true,
+  });
+  const communityEventsVisibleRange = useMemo(
+    () => getCommunityEventsMonthRange(communityEventsVisibleMonthIso),
+    [communityEventsVisibleMonthIso],
+  );
+
+  useCommunityEventsTabLifecycle<AuthSession>({
+    activePage,
+    communityTab,
+    ...sessionArg,
+    activeCommunityId,
+    range: communityEventsVisibleRange,
+    loadCommunityEvents,
     requireCommunityPage: true,
   });
 
@@ -6028,6 +6097,24 @@ export default function App() {
         openNewResourceModal,
         handleEditResource,
         handleDeleteResource,
+      },
+      eventsState: {
+        events: communityEvents,
+        isLoadingEvents: isLoadingCommunityEvents,
+        eventsError: communityEventsError,
+        eventsSuccess: communityEventsSuccess,
+        visibleMonthIso: communityEventsVisibleMonthIso,
+      },
+      eventsActions: {
+        setVisibleMonthIso: setCommunityEventsVisibleMonthIso,
+        getVisibleRange: getCommunityEventsMonthRange,
+        reloadEvents: async (range) => {
+          const usableSession = await ensureUsableAuthSession();
+          if (!usableSession || !activeCommunityId) return;
+          await loadCommunityEvents(activeCommunityId, usableSession, range);
+        },
+        saveEvent: handleSaveCommunityEvent,
+        cancelEvent: handleCancelCommunityEvent,
       },
       canManageResourcesActiveCommunity,
       canModerateContentActiveCommunity,

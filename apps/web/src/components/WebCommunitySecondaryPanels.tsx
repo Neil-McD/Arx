@@ -10,6 +10,7 @@ import { WebCommunityBannerEditorModal } from "./WebCommunityBannerEditorModal";
 import { WebCommunityMembersSection } from "./WebCommunityMembersSection";
 import { WebCommunityPolynetSection } from "./WebCommunityPolynetSection";
 import { WebCommunityFunnelSection } from "./WebCommunityFunnelSection";
+import { WebCommunityEventsSection } from "./WebCommunityEventsSection";
 import { WebCommunityResourceModal } from "./WebCommunityResourceModal";
 import { WebCommunityResourcesSection } from "./WebCommunityResourcesSection";
 import { WebCommunitySettingsSection } from "./WebCommunitySettingsSection";
@@ -51,6 +52,7 @@ export type WebCommunitySecondaryPanelsProps = {
   funnel: ComponentProps<typeof WebCommunityFunnelSection>;
   analytics: ComponentProps<typeof WebCommunityAnalyticsSection>;
   resources: ComponentProps<typeof WebCommunityResourcesSection>;
+  events: ComponentProps<typeof WebCommunityEventsSection>;
   members: Omit<ComponentProps<typeof WebCommunityMembersSection>, "actions"> & {
     actions: Omit<ComponentProps<typeof WebCommunityMembersSection>["actions"], "communityInitials">;
   };
@@ -127,6 +129,9 @@ export function WebCommunitySecondaryPanels(props: WebCommunitySecondaryPanelsPr
 
       {props.communityTab === "resources" &&
         renderCenteredPane(<WebCommunityResourcesSection {...props.resources} />)}
+
+      {props.communityTab === "events" &&
+        renderCenteredPane(<WebCommunityEventsSection {...props.events} />)}
 
       {props.communityTab === "members" &&
         renderCenteredPane(<WebCommunityMembersSection {...membersSectionProps} />)}

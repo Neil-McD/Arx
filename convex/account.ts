@@ -166,6 +166,7 @@ export const deleteOwnAccount = mutation({
     await record("communityTypingPresence", await deleteRowsByIndex(ctx, "communityTypingPresence", "by_user", "userId", userId));
     await record("communityMemberSettings", await deleteRowsByIndex(ctx, "communityMemberSettings", "by_user", "userId", userId));
     await record("communityResources", await deleteRowsByIndex(ctx, "communityResources", "by_createdBy", "createdByUserId", userId));
+    await record("communityEvents", await deleteRowsByIndex(ctx, "communityEvents", "by_createdBy", "createdByUserId", userId));
     await record("userPlatformAppMounts", await deleteRowsByIndex(ctx, "userPlatformAppMounts", "by_user", "userId", userId));
     await record("userPlatformSkillInstalls", await deleteRowsByIndex(ctx, "userPlatformSkillInstalls", "by_user", "userId", userId));
     await record("communityAiFeedReactions", await deleteRowsByIndex(ctx, "communityAiFeedReactions", "by_actorUser", "actorUserId", userId));

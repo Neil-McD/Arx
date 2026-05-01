@@ -36,6 +36,7 @@ import type * as communityAttention from "../communityAttention.js";
 import type * as communityChat from "../communityChat.js";
 import type * as communityCommerce from "../communityCommerce.js";
 import type * as communityCore from "../communityCore.js";
+import type * as communityEvents from "../communityEvents.js";
 import type * as communityExperience from "../communityExperience.js";
 import type * as communityFunnel from "../communityFunnel.js";
 import type * as communityLifecycle from "../communityLifecycle.js";
@@ -163,6 +164,7 @@ declare const fullApi: ApiFromModules<{
   communityChat: typeof communityChat;
   communityCommerce: typeof communityCommerce;
   communityCore: typeof communityCore;
+  communityEvents: typeof communityEvents;
   communityExperience: typeof communityExperience;
   communityFunnel: typeof communityFunnel;
   communityLifecycle: typeof communityLifecycle;

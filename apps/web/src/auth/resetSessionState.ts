@@ -33,6 +33,10 @@ type WebSessionResetDeps = {
   setIsSavingResource: (value: boolean) => void;
   setResourceSuccess: (value: boolean) => void;
   setOpenResourceEmbedId: (value: string | null) => void;
+  setCommunityEvents?: (value: any[]) => void;
+  setIsLoadingCommunityEvents?: (value: boolean) => void;
+  setCommunityEventsError?: (value: string | null) => void;
+  setCommunityEventsSuccess?: (value: boolean) => void;
   setCommunityMembers: (value: any[]) => void;
   setCommunitySettingsName: (value: string) => void;
   setCommunitySettingsSlug: (value: string) => void;
@@ -80,6 +84,10 @@ export async function resetWebSessionStateAfterSignOut(deps: WebSessionResetDeps
   deps.setIsSavingResource(false);
   deps.setResourceSuccess(false);
   deps.setOpenResourceEmbedId(null);
+  deps.setCommunityEvents?.([]);
+  deps.setIsLoadingCommunityEvents?.(false);
+  deps.setCommunityEventsError?.(null);
+  deps.setCommunityEventsSuccess?.(false);
   deps.setCommunityMembers([]);
   deps.setCommunitySettingsName("");
   deps.setCommunitySettingsSlug("");

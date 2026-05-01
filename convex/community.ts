@@ -82,6 +82,11 @@ import {
   saveCommunityResource as saveCommunityResourceImpl,
 } from "./communityExperience";
 import {
+  cancelCommunityEvent as cancelCommunityEventImpl,
+  listCommunityEvents as listCommunityEventsImpl,
+  saveCommunityEvent as saveCommunityEventImpl,
+} from "./communityEvents";
+import {
   createCommunity as createCommunityImpl,
   deleteCommunity as deleteCommunityImpl,
   generateCommunityBrandingUploadUrl as generateCommunityBrandingUploadUrlImpl,
@@ -125,6 +130,9 @@ export const listCommunityResources = listCommunityResourcesImpl;
 export const countCommunityResources = countCommunityResourcesImpl;
 export const saveCommunityResource = saveCommunityResourceImpl;
 export const deleteCommunityResource = deleteCommunityResourceImpl;
+export const listCommunityEvents = listCommunityEventsImpl;
+export const saveCommunityEvent = saveCommunityEventImpl;
+export const cancelCommunityEvent = cancelCommunityEventImpl;
 export const getMyCommunityAccess = getMyCommunityAccessImpl;
 export const getMyCommunityAccessBySlug = getMyCommunityAccessBySlugImpl;
 export const getCommunityPresenceSummary = getCommunityPresenceSummaryImpl;

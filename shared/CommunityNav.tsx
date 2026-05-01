@@ -125,6 +125,25 @@ export function CommunityNav({
         <span className="nav-item-label">Resources</span>
         {communityTab !== "resources" && tabIndicators.resources ? <span className="nav-item-dot" aria-hidden="true" /> : null}
       </button>
+      <button
+        className={communityTab === "events" ? "nav-item active" : "nav-item"}
+        type={buttonType}
+        onClick={() => onSelectTab("events")}
+        title={maybeTitle("Events")}
+      >
+        <span className="nav-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M7 3v4" />
+            <path d="M17 3v4" />
+            <path d="M4 9h16" />
+            <path d="M5 5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z" />
+            <path d="M8 13h3" />
+            <path d="M13 13h3" />
+            <path d="M8 16h3" />
+          </svg>
+        </span>
+        <span className="nav-item-label">Events</span>
+      </button>
       {canViewMembersActiveCommunity && (
         <button
           className={communityTab === "members" ? "nav-item active" : "nav-item"}

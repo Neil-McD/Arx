@@ -22,6 +22,7 @@ export const COMMUNITY_TABS = [
   "chat",
   "ai_feed",
   "resources",
+  "events",
   "members",
   "settings",
   "polynet",
@@ -56,6 +57,10 @@ export function parseCommunityTab(value: string | null | undefined): CommunityTa
       return "resources";
     case "resources":
       return "resources";
+    case "events":
+      return "events";
+    case "calendar":
+      return "events";
     case "members":
       return "members";
     case "settings":

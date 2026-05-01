@@ -870,6 +870,27 @@ export default defineSchema({
     .index("by_community_createdAt", ["communityId", "createdAt"])
     .index("by_createdBy", ["createdByUserId"]),
 
+  communityEvents: defineTable({
+    communityId: v.id("communities"),
+    createdByUserId: v.id("users"),
+    title: v.string(),
+    descriptionMd: v.optional(v.string()),
+    startsAt: v.number(),
+    endsAt: v.optional(v.number()),
+    timezone: v.string(),
+    locationType: v.union(v.literal("online"), v.literal("physical"), v.literal("tbd")),
+    locationLabel: v.optional(v.string()),
+    url: v.optional(v.string()),
+    visibility: v.union(v.literal("members"), v.literal("public")),
+    status: v.union(v.literal("live"), v.literal("cancelled")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_community", ["communityId"])
+    .index("by_community_startsAt", ["communityId", "startsAt"])
+    .index("by_community_status_startsAt", ["communityId", "status", "startsAt"])
+    .index("by_createdBy", ["createdByUserId"]),
+
   communityArchiveDocuments: defineTable({
     communityId: v.id("communities"),
     sourceType: v.union(v.literal("chat"), v.literal("ai_feed"), v.literal("resource")),
