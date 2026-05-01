@@ -392,11 +392,6 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
               <div className="community-events-agenda-title">Agenda</div>
               <div className="community-events-agenda-date">{selectedDayKey}</div>
             </div>
-            {capabilities.canManageEvents ? (
-              <button type="button" onClick={() => openNewEvent(selectedDayKey)}>
-                New
-              </button>
-            ) : null}
           </div>
           {state.isLoadingEvents ? (
             <div className="community-events-muted">Loading events...</div>
