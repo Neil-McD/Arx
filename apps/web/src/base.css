@@ -19793,8 +19793,8 @@ button.message-citation-chip:hover {
 }
 
 .community-events-day.is-selected {
-  border-color: rgba(255, 105, 170, 0.72);
-  box-shadow: 0 0 0 1px rgba(255, 105, 170, 0.16);
+  border-color: color-mix(in srgb, var(--border-active) 72%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--border-active) 16%, transparent);
 }
 
 .community-events-day-number {

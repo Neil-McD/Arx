@@ -8,7 +8,7 @@ import {
 } from "./authActor";
 import { resolveAuthenticatedIdentityProfile } from "./authIdentity";
 import { normalizeAuthRelinkEmail } from "../shared/authRelinkPolicy";
-import { isCreatorDevTierOverrideEmail } from "../shared/devTierOverride";
+import { canUseCreatorDevTierOverride } from "../shared/devTierOverride";
 import { ensurePlatformHomeCommunityMembership } from "./platformHomeCommunity";
 
 type CanonicalTier = "free" | "builder" | "architect";
@@ -57,6 +57,21 @@ function resolveEffectiveTier(input: { authState: AuthState; canonicalTier: Cano
   if (input.authState === "anonymous") return "anon_free";
   if (input.canonicalTier === "free") return "auth_free";
   return input.canonicalTier;
+}
+
+function readEnv(name: string): string {
+  try {
+    const value = (globalThis as any)?.process?.env?.[name];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  } catch {
+    // Convex environments may not expose process.env in every runtime.
+  }
+  return "";
+}
+
+function isExplicitLocalDevEnvironment(): boolean {
+  const nodeEnv = readEnv("NODE_ENV").toLowerCase();
+  return nodeEnv === "development" || nodeEnv === "test";
 }
 
 function isActiveWindow(nowMs: number, startsAt: number, endsAt?: number): boolean {
@@ -330,7 +345,13 @@ export const setDevTierOverride = mutation({
       ctx,
       authSubject: args.authSubject ?? null,
     });
-    if (!isCreatorDevTierOverrideEmail(actor.email)) {
+    if (
+      !canUseCreatorDevTierOverride({
+        email: actor.email,
+        isDev: isExplicitLocalDevEnvironment(),
+        featureFlag: readEnv("ARX_ENABLE_DEV_TIER_OVERRIDE") || "false",
+      })
+    ) {
       throw new Error("dev_tier_override_forbidden");
     }
 

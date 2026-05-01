@@ -11,7 +11,6 @@ import {
   type DaytonaConfig,
 } from "./daytonaSandboxClient";
 import { executeDaytonaCommand } from "./daytonaToolboxExecutor";
-import { isCreatorDevTierOverrideEmail } from "../shared/devTierOverride";
 
 export type DaytonaProbeExecution =
   | {
@@ -185,13 +184,6 @@ export async function createWorkspaceSandboxSession(params: {
       message: "Workspace tools require Builder access.",
     };
   }
-  const runtimeActor = await params.ctx.runQuery(
-    internal.authActor.resolveAuthenticatedActorInternal as any,
-    {
-      authSubject: params.authSubject,
-    },
-  );
-  const creatorDevCreditBypass = isCreatorDevTierOverrideEmail(runtimeActor?.email ?? null);
   let creditBalance = await params.ctx.runQuery(
     internal.workspaceCredits.getWorkspaceCreditBalanceInternal as any,
     {
@@ -247,7 +239,7 @@ export async function createWorkspaceSandboxSession(params: {
       );
     }
   }
-  if (!creditBalance && canonicalTier !== "free" && !creatorDevCreditBypass) {
+  if (!creditBalance && canonicalTier !== "free") {
     return {
       ok: false,
       status: 503,
@@ -258,15 +250,7 @@ export async function createWorkspaceSandboxSession(params: {
   const remainingCredits =
     Number(creditBalance?.includedCreditsBalance ?? 0) +
     Number(creditBalance?.purchasedCreditsBalance ?? 0);
-  if (creatorDevCreditBypass) {
-    console.info("[workspace_tools] creator dev credit bypass active", {
-      userId: String(params.userId),
-      canonicalTier,
-      hasCreditBalance: Boolean(creditBalance),
-      remainingCredits,
-    });
-  }
-  if (creditBalance && remainingCredits <= 0 && !creatorDevCreditBypass) {
+  if (creditBalance && remainingCredits <= 0) {
     return {
       ok: false,
       status: 402,

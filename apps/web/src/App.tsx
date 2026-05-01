@@ -233,6 +233,7 @@ import {
   type ModelToggle,
 } from "../../../shared/modelCatalog";
 import {
+  applyAppThemeAttributes,
   parseAppTheme,
   type AppTheme,
 } from "../../../shared/theme";
@@ -1200,6 +1201,15 @@ export default function App() {
       return "polynet";
     }
   });
+  useEffect(() => {
+    applyAppThemeAttributes(appTheme, document.documentElement);
+    try {
+      localStorage.setItem(APP_THEME_STORAGE_KEY, appTheme);
+      localStorage.removeItem(LEGACY_APP_THEME_STORAGE_KEY);
+    } catch {
+      // Theme persistence is a preference only; the active document theme is already applied.
+    }
+  }, [appTheme]);
   const [cloudProfile, setCloudProfile] = useState<UserProfileDetail | null>(null);
   const [hasLoadedOnboardingProfile, setHasLoadedOnboardingProfile] = useState(false);
   const [isOnboardingModalOpen, setIsOnboardingModalOpen] = useState(false);
