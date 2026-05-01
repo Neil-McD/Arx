@@ -111,7 +111,6 @@ export function WebOperatorDashboard(props: WebOperatorDashboardProps) {
     <div className="operator-dashboard">
       <div className="operator-dashboard__header">
         <p className="operator-dashboard__eyebrow">Operator Intelligence</p>
-        <h1>PolyNet operating model</h1>
       </div>
 
       {error ? <div className="operator-dashboard__notice">{error}</div> : null}
