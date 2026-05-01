@@ -19568,6 +19568,13 @@ button.message-citation-chip:hover {
   gap: 12px;
 }
 
+.community-events-agenda-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
 .community-events-calendar-header h3 {
   margin: 0;
   font-size: 18px;

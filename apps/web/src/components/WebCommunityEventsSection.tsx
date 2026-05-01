@@ -108,15 +108,29 @@ function makeDraft(dayKey: string | null): EventDraft {
   };
 }
 
+function makeDraftFromEvent(event: CommunityEvent): EventDraft {
+  return {
+    title: event.title,
+    description_md: event.description_md ?? "",
+    starts_at: toLocalDateTimeInputValue(new Date(event.starts_at)),
+    ends_at: event.ends_at ? toLocalDateTimeInputValue(new Date(event.ends_at)) : "",
+    location_type: event.location_type,
+    location_label: event.location_label ?? "",
+    url: event.url ?? "",
+    visibility: event.visibility,
+  };
+}
+
 function EventModal(props: {
   draft: EventDraft;
   isSaving: boolean;
   error: string | null;
+  title: string;
   onChange: (draft: EventDraft) => void;
   onClose: () => void;
   onSubmit: () => void;
 }) {
-  const { draft, isSaving, error, onChange, onClose, onSubmit } = props;
+  const { draft, isSaving, error, title, onChange, onClose, onSubmit } = props;
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault();
     onSubmit();
@@ -130,7 +144,7 @@ function EventModal(props: {
         onMouseDown={(event) => event.stopPropagation()}
       >
         <div className="modal-header">
-          <div className="modal-title">New event</div>
+          <div className="modal-title">{title}</div>
           <button className="modal-close" type="button" onClick={onClose} aria-label="Close event editor">
             x
           </button>
@@ -234,6 +248,7 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
   const { capabilities, state, actions } = props;
   const [selectedDayKey, setSelectedDayKey] = useState(() => toLocalDateKey(new Date()));
   const [draft, setDraft] = useState<EventDraft | null>(null);
+  const [editingEventId, setEditingEventId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
 
@@ -255,7 +270,14 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
 
   const openNewEvent = (dayKey: string | null) => {
     setLocalError(null);
+    setEditingEventId(null);
     setDraft(makeDraft(dayKey));
+  };
+
+  const openEditEvent = (event: CommunityEvent) => {
+    setLocalError(null);
+    setEditingEventId(event.id);
+    setDraft(makeDraftFromEvent(event));
   };
 
   const showMonth = (date: Date) => {
@@ -283,7 +305,7 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
     }
     setIsSaving(true);
     const didSave = await actions.saveEvent(
-      null,
+      editingEventId,
       {
         title,
         description_md: draft.description_md.trim() || null,
@@ -300,6 +322,7 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
     setIsSaving(false);
     if (didSave) {
       setDraft(null);
+      setEditingEventId(null);
       setLocalError(null);
     }
   };
@@ -406,12 +429,17 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
                   <div className="community-events-agenda-item-top">
                     <h4>{event.title}</h4>
                     {capabilities.canManageEvents ? (
-                      <button
-                        type="button"
-                        onClick={() => void actions.cancelEvent(event.id, currentRange)}
-                      >
-                        Cancel
-                      </button>
+                      <div className="community-events-agenda-actions">
+                        <button type="button" onClick={() => openEditEvent(event)}>
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void actions.cancelEvent(event.id, currentRange)}
+                        >
+                          Cancel
+                        </button>
+                      </div>
                     ) : null}
                   </div>
                   <div className="community-events-agenda-meta">{formatEventTime(event)}</div>
@@ -443,10 +471,12 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
           draft={draft}
           isSaving={isSaving}
           error={localError}
+          title={editingEventId ? "Edit event" : "New event"}
           onChange={setDraft}
           onClose={() => {
             if (isSaving) return;
             setDraft(null);
+            setEditingEventId(null);
             setLocalError(null);
           }}
           onSubmit={submitDraft}
