@@ -17,7 +17,6 @@ import type {
 } from "../../../../shared/operatorTypes";
 
 type OperatorInsightTab = "platform" | "builders";
-type OperatorRightPanelMode = "closed" | "wide" | "dominant";
 
 type OperatorDashboardState = {
   overview: OperatorOverviewSnapshot | null;
@@ -61,7 +60,7 @@ export function WebOperatorDashboard(props: WebOperatorDashboardProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeInsightTab, setActiveInsightTab] = useState<OperatorInsightTab>("platform");
-  const [rightPanelMode, setRightPanelMode] = useState<OperatorRightPanelMode>("wide");
+  const [isRightPanelOpen, setIsRightPanelOpen] = useState(true);
   const [operatorDraft, setOperatorDraft] = useState("");
 
   useEffect(() => {
@@ -87,19 +86,20 @@ export function WebOperatorDashboard(props: WebOperatorDashboardProps) {
         ]),
       )
       .then(
-      ([overview, monetization, builders, risks, events]) => {
-        if (!isAlive) return;
-        setState({ overview, monetization, builders, risks, events });
-      },
-      (nextError) => {
-        if (!isAlive) return;
-        const message = nextError instanceof Error ? nextError.message : "Operator dashboard unavailable.";
-        setState(createEmptyOperatorDashboardState());
-        setError(message.includes("operator_access_forbidden") ? "Operator access required." : message);
-      },
-    ).finally(() => {
-      if (isAlive) setIsLoading(false);
-    });
+        ([overview, monetization, builders, risks, events]) => {
+          if (!isAlive) return;
+          setState({ overview, monetization, builders, risks, events });
+        },
+        (nextError) => {
+          if (!isAlive) return;
+          const message = nextError instanceof Error ? nextError.message : "Operator dashboard unavailable.";
+          setState(createEmptyOperatorDashboardState());
+          setError(message.includes("operator_access_forbidden") ? "Operator access required." : message);
+        },
+      )
+      .finally(() => {
+        if (isAlive) setIsLoading(false);
+      });
     return () => {
       isAlive = false;
     };
@@ -113,94 +113,80 @@ export function WebOperatorDashboard(props: WebOperatorDashboardProps) {
     [state.builders],
   );
 
-  const isRightPanelClosed = rightPanelMode === "closed";
-
   return (
-    <div className={`operator-workbench operator-workbench--${rightPanelMode}`}>
-      <section className="operator-agent-panel" aria-label="Operator agent">
-        <div className="operator-agent-panel__header">
-          <p className="operator-dashboard__eyebrow">Operator Intelligence</p>
-          <h1>Ask the platform.</h1>
-          <p>Investigate builders, money, risk, and critical events from one operator loop.</p>
-        </div>
+    <div className={`operator-surface${isRightPanelOpen ? " operator-surface--right-open" : ""}`}>
+      <button
+        type="button"
+        className="operator-data-toggle"
+        onClick={() => setIsRightPanelOpen((value) => !value)}
+        aria-expanded={isRightPanelOpen}
+        aria-controls="operator-data-panel"
+      >
+        {isRightPanelOpen ? "Close data" : "Data"}
+      </button>
 
-        {error ? <div className="operator-dashboard__notice">{error}</div> : null}
-        {isLoading ? <div className="operator-dashboard__notice">Loading operator data...</div> : null}
-
-        <div className="operator-agent-panel__prompts" aria-label="Suggested operator prompts">
-          <button type="button" onClick={() => setOperatorDraft("What changed today?")}>
-            What changed today?
-          </button>
-          <button type="button" onClick={() => setOperatorDraft("Which builders need attention?")}>
-            Which builders need attention?
-          </button>
-          <button type="button" onClick={() => setOperatorDraft("Why is Distribution Engineering at risk?")}>
-            Why is Distribution Engineering at risk?
-          </button>
-        </div>
-
-        <div className="operator-agent-panel__body">
-          <div className="operator-agent-panel__empty">
-            Use the operator agent to query platform state, compare builders, inspect risks, and decide what to do next.
-          </div>
-        </div>
-
-        <form className="operator-agent-composer">
-          <textarea
-            rows={3}
-            value={operatorDraft}
-            onChange={(event) => setOperatorDraft(event.currentTarget.value)}
-            placeholder="Ask about revenue, builders, risks, or recent events..."
-          />
-          <div className="operator-agent-composer__footer">
-            <span>Operator tools attach here next.</span>
-            <button type="button" disabled>
-              Ask
-            </button>
-          </div>
-        </form>
-      </section>
-
-      <aside className="operator-insight-panel" aria-label="Operator intelligence panel">
-        <button
-          type="button"
-          className="operator-insight-panel__collapsed-button"
-          onClick={() => setRightPanelMode("wide")}
-          aria-label="Open operator intelligence panel"
-        >
-          Data
-        </button>
-
-        {!isRightPanelClosed ? (
-          <>
-            <div className="operator-insight-panel__topbar">
-              <div className="operator-insight-panel__tabs" role="tablist" aria-label="Operator data tabs">
-                <button
-                  type="button"
-                  className={activeInsightTab === "platform" ? "active" : ""}
-                  onClick={() => setActiveInsightTab("platform")}
-                >
-                  Platform
-                </button>
-                <button
-                  type="button"
-                  className={activeInsightTab === "builders" ? "active" : ""}
-                  onClick={() => setActiveInsightTab("builders")}
-                >
-                  Builders
-                </button>
-              </div>
-              <div className="operator-insight-panel__controls">
-                <button
-                  type="button"
-                  onClick={() => setRightPanelMode(rightPanelMode === "dominant" ? "wide" : "dominant")}
-                >
-                  {rightPanelMode === "dominant" ? "Wide" : "Expand"}
-                </button>
-                <button type="button" onClick={() => setRightPanelMode("closed")}>Close</button>
+      <div className="workspace-body operator-workspace-body">
+        <div className="message-list message-list-empty-thread">
+          <div className="operator-empty-thread" role="region" aria-label="Ask the operator agent">
+            {error ? <div className="operator-surface-notice">{error}</div> : null}
+            {isLoading ? <div className="operator-surface-notice">Loading operator data...</div> : null}
+            <div className="web-empty-thread-composer operator-empty-thread-composer">
+              <div className="ask-bar ask-bar-landing operator-ask-bar">
+                <textarea
+                  className="ask-input ask-input-landing"
+                  rows={1}
+                  value={operatorDraft}
+                  onChange={(event) => setOperatorDraft(event.currentTarget.value)}
+                  placeholder="Ask about revenue, builders, risks, or recent events..."
+                />
+                <div className="ask-footer ask-footer-landing">
+                  <div className="ask-footer-left">
+                    <button className="ask-icon-btn ask-plus" type="button" disabled aria-label="Attach files">
+                      <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M12 5v14M5 12h14" />
+                      </svg>
+                    </button>
+                  </div>
+                  <div className="ask-actions ask-actions-landing">
+                    <button
+                      className="chat-send ask-send-btn ask-send-btn-v2"
+                      type="button"
+                      disabled
+                      aria-label="Send"
+                      title="Send"
+                    >
+                      <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M12 17V8M8.5 11.5 12 8l3.5 3.5" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
+          </div>
+        </div>
+      </div>
 
+      {isRightPanelOpen ? (
+        <aside id="operator-data-panel" className="operator-data-panel" aria-label="Operator intelligence data">
+          <div className="operator-data-panel__tabs" role="tablist" aria-label="Operator data tabs">
+            <button
+              type="button"
+              className={activeInsightTab === "platform" ? "active" : ""}
+              onClick={() => setActiveInsightTab("platform")}
+            >
+              Platform
+            </button>
+            <button
+              type="button"
+              className={activeInsightTab === "builders" ? "active" : ""}
+              onClick={() => setActiveInsightTab("builders")}
+            >
+              Builders
+            </button>
+          </div>
+
+          <div className="operator-data-panel__content">
             {activeInsightTab === "platform" ? (
               <OperatorPlatformInsights
                 overview={state.overview}
@@ -211,9 +197,9 @@ export function WebOperatorDashboard(props: WebOperatorDashboardProps) {
             ) : (
               <OperatorBuilderInsights builders={topBuilders} />
             )}
-          </>
-        ) : null}
-      </aside>
+          </div>
+        </aside>
+      ) : null}
     </div>
   );
 }
@@ -225,7 +211,7 @@ function OperatorPlatformInsights(props: {
   events: OperatorEventRecord[];
 }) {
   return (
-    <div className="operator-insight-panel__content">
+    <div className="operator-data-panel__grid">
       <section className="operator-dashboard__metrics" aria-label="Operator overview">
         <div>
           <span>Estimated community MRR</span>
@@ -316,7 +302,7 @@ function OperatorPlatformInsights(props: {
 
 function OperatorBuilderInsights(props: { builders: OperatorBuilderRecord[] }) {
   return (
-    <div className="operator-insight-panel__content">
+    <div className="operator-data-panel__grid">
       <section className="operator-dashboard__panel operator-dashboard__panel--full">
         <h2>Builder performance</h2>
         <div className="operator-dashboard__table">
