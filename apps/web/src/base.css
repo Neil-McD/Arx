@@ -19516,7 +19516,7 @@ button.message-citation-chip:hover {
 
 .community-events-panel {
   gap: 12px;
-  width: min(100%, 1040px);
+  width: min(calc(100% - 96px), 980px);
   margin: 0 auto;
   padding-top: clamp(56px, 9dvh, 92px);
 }
@@ -19545,6 +19545,7 @@ button.message-citation-chip:hover {
   display: grid;
   grid-template-columns: minmax(0, 1.45fr) minmax(260px, 0.72fr);
   gap: 14px;
+  margin-top: 22px;
 }
 
 .community-events-calendar,
@@ -19749,6 +19750,10 @@ button.message-citation-chip:hover {
 }
 
 @media (max-width: 900px) {
+  .community-events-panel {
+    width: min(calc(100% - 28px), 980px);
+  }
+
   .community-events-shell {
     grid-template-columns: 1fr;
   }
