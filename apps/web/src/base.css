@@ -19516,6 +19516,7 @@ button.message-citation-chip:hover {
 
 .community-events-panel {
   gap: 12px;
+  padding-top: clamp(18px, 3dvh, 30px);
 }
 
 .community-events-month-btn,
