@@ -19516,7 +19516,9 @@ button.message-citation-chip:hover {
 
 .community-events-panel {
   gap: 12px;
-  padding-top: clamp(18px, 3dvh, 30px);
+  width: min(100%, 1040px);
+  margin: 0 auto;
+  padding-top: clamp(56px, 9dvh, 92px);
 }
 
 .community-events-month-btn,
@@ -19541,7 +19543,7 @@ button.message-citation-chip:hover {
 
 .community-events-shell {
   display: grid;
-  grid-template-columns: minmax(0, 1.7fr) minmax(280px, 0.8fr);
+  grid-template-columns: minmax(0, 1.45fr) minmax(260px, 0.72fr);
   gap: 14px;
 }
 
