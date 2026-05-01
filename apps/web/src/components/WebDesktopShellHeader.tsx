@@ -73,7 +73,7 @@ export function WebDesktopShellHeader(props: WebDesktopShellHeaderProps) {
               </button>
             </>
           )
-        ) : (
+        ) : props.activePage === "operator" ? null : (
           <button
             className="back-to-workspace"
             onClick={props.onBackToWorkspace}

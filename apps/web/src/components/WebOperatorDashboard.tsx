@@ -121,8 +121,13 @@ export function WebOperatorDashboard(props: WebOperatorDashboardProps) {
         onClick={() => setIsRightPanelOpen((value) => !value)}
         aria-expanded={isRightPanelOpen}
         aria-controls="operator-data-panel"
+        aria-label={isRightPanelOpen ? "Close operator data panel" : "Open operator data panel"}
+        title={isRightPanelOpen ? "Close data panel" : "Open data panel"}
       >
-        {isRightPanelOpen ? "Close data" : "Data"}
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <rect x="3" y="4" width="18" height="16" rx="2" />
+          <path d="M15 4v16" />
+        </svg>
       </button>
 
       <div className="workspace-body operator-workspace-body">
