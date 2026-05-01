@@ -20,7 +20,6 @@ type EventDraft = {
   location_type: "online" | "physical" | "tbd";
   location_label: string;
   url: string;
-  visibility: "members" | "public";
 };
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -104,7 +103,6 @@ function makeDraft(dayKey: string | null): EventDraft {
     location_type: "online",
     location_label: "",
     url: "",
-    visibility: "members",
   };
 }
 
@@ -117,7 +115,6 @@ function makeDraftFromEvent(event: CommunityEvent): EventDraft {
     location_type: event.location_type,
     location_label: event.location_label ?? "",
     url: event.url ?? "",
-    visibility: event.visibility,
   };
 }
 
@@ -186,33 +183,19 @@ function EventModal(props: {
               />
             </label>
           </div>
-          <div className="community-event-form-grid">
-            <label>
-              <span>Location</span>
-              <select
-                value={draft.location_type}
-                onChange={(event) =>
-                  onChange({ ...draft, location_type: event.target.value as EventDraft["location_type"] })
-                }
-              >
-                <option value="online">Online</option>
-                <option value="physical">In person</option>
-                <option value="tbd">TBD</option>
-              </select>
-            </label>
-            <label>
-              <span>Visibility</span>
-              <select
-                value={draft.visibility}
-                onChange={(event) =>
-                  onChange({ ...draft, visibility: event.target.value as EventDraft["visibility"] })
-                }
-              >
-                <option value="members">Members</option>
-                <option value="public">Public</option>
-              </select>
-            </label>
-          </div>
+          <label>
+            <span>Location</span>
+            <select
+              value={draft.location_type}
+              onChange={(event) =>
+                onChange({ ...draft, location_type: event.target.value as EventDraft["location_type"] })
+              }
+            >
+              <option value="online">Online</option>
+              <option value="physical">In person</option>
+              <option value="tbd">TBD</option>
+            </select>
+          </label>
           <label>
             <span>Location label</span>
             <input
@@ -280,6 +263,12 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
     setDraft(makeDraftFromEvent(event));
   };
 
+  const confirmCancelEvent = (event: CommunityEvent) => {
+    const confirmed = window.confirm(`Cancel "${event.title}"? This will remove it from the calendar.`);
+    if (!confirmed) return;
+    void actions.cancelEvent(event.id, currentRange);
+  };
+
   const showMonth = (date: Date) => {
     const nextMonth = startOfLocalMonth(date);
     actions.setVisibleMonthIso(toMonthIso(nextMonth));
@@ -315,7 +304,7 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
         location_type: draft.location_type,
         location_label: draft.location_label.trim() || null,
         url: draft.url.trim() || null,
-        visibility: draft.visibility,
+        visibility: "members",
       },
       currentRange,
     );
@@ -435,9 +424,9 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
                         </button>
                         <button
                           type="button"
-                          onClick={() => void actions.cancelEvent(event.id, currentRange)}
+                          onClick={() => confirmCancelEvent(event)}
                         >
-                          Cancel
+                          Cancel event
                         </button>
                       </div>
                     ) : null}
