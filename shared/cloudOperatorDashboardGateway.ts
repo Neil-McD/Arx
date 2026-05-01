@@ -1,6 +1,7 @@
 import type { AuthSessionLike } from "./authSession";
 import { bootstrapConvexAuthenticatedClient, requireConvexUrl } from "./convexAuthenticatedClient";
 import type {
+  OperatorAccessSnapshot,
   OperatorBuilderRecord,
   OperatorEventRecord,
   OperatorMonetizationSnapshot,
@@ -12,6 +13,15 @@ import type {
 async function withOperatorAuth(session: AuthSessionLike) {
   requireConvexUrl();
   return await bootstrapConvexAuthenticatedClient(session);
+}
+
+export async function loadOperatorAccessCanonical(params: {
+  session: AuthSessionLike;
+}): Promise<OperatorAccessSnapshot> {
+  const { client, authSubject } = await withOperatorAuth(params.session);
+  return (await client.query("operatorDashboard:getOperatorAccess" as any, {
+    authSubject,
+  })) as OperatorAccessSnapshot;
 }
 
 export async function recordOperatorDashboardAccessCanonical(params: {

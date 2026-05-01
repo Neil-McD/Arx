@@ -9,9 +9,9 @@ const operatorDashboard = read("convex/operatorDashboard.ts");
 const operatorAccess = read("convex/operatorAccess.ts");
 const operatorGateway = read("shared/cloudOperatorDashboardGateway.ts");
 const schema = read("convex/schema.ts");
-const appShellNavigation = read("shared/appShellNavigation.ts");
 const webRouteState = read("shared/webAppRouteState.ts");
-const appMainSurfaceHost = read("apps/web/src/components/WebAppMainSurfaceHost.tsx");
+const app = read("apps/web/src/App.tsx");
+const workspaceHost = read("apps/web/src/components/WebWorkspaceHost.tsx");
 
 assert.match(
   schema,
@@ -28,10 +28,10 @@ assert.match(
   /query\("operatorRoles"\)[\s\S]*withIndex\("by_user"/,
   "operator access must check real operator role rows",
 );
-assert.match(
+assert.doesNotMatch(
   operatorAccess,
-  /isCreatorDevTierOverrideEmail\(actor\.email\)/,
-  "operator access must retain creator bootstrap fallback",
+  /isCreatorDevTierOverrideEmail|bootstrap_email|creatorDevTier/i,
+  "operator access must not grant production authority from creator email bootstrap",
 );
 assert.match(
   operatorAccess,
@@ -87,9 +87,36 @@ assert.doesNotMatch(
   "web gateway must not call internal operator intelligence directly",
 );
 
-assert.match(appShellNavigation, /AppPage = [^;]*"operator"/, "operator route must be declared");
 assert.match(webRouteState, /segments\[0\] === "operator"/, "operator route must parse explicitly");
-assert.match(webRouteState, /state\.page === "operator"[\s\S]*return "\/operator"/, "operator route must serialize explicitly");
-assert.match(appMainSurfaceHost, /WebOperatorDashboard/, "main surface must render the operator dashboard");
+assert.match(
+  webRouteState,
+  /segments\[0\] === "operator"[\s\S]*page: "workspace"/,
+  "operator route must fold into the canonical workspace shell",
+);
+assert.match(
+  webRouteState,
+  /state\.page === "operator"[\s\S]*return "\/workspace"/,
+  "operator route serialization must not preserve a standalone operator page",
+);
+assert.match(
+  app,
+  /loadOperatorAccessCanonical\(\{ session \}\)[\s\S]*setOperatorAccess\(access\)/,
+  "workspace must only enable operator UI after the gated operator access query succeeds",
+);
+assert.match(
+  app,
+  /showOperatorDataPanel: Boolean\(operatorAccess && session\)/,
+  "workspace operator panel must stay hidden without an operator access snapshot",
+);
+assert.match(
+  workspaceHost,
+  /showOperatorDataPanel = Boolean\(props\.showOperatorDataPanel && props\.operatorDataPanelSession\)/,
+  "workspace host must require both the operator flag and an authenticated session",
+);
+assert.match(
+  workspaceHost,
+  /useOperatorDashboardData\([\s\S]*enabled: isOperatorDataPanelVisible/,
+  "operator data loading must be disabled unless the operator panel is visible",
+);
 
 console.log("operator_dashboard_gate_proof: ok");

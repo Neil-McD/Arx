@@ -308,6 +308,8 @@ import {
   type BuilderBillingStatus,
 } from "../../../shared/builderBillingStatusGateway";
 import { startCloudWorkspaceCreditTopupCheckout } from "../../../shared/cloudBuilderBillingGateway";
+import { loadOperatorAccessCanonical } from "../../../shared/cloudOperatorDashboardGateway";
+import type { OperatorAccessSnapshot } from "../../../shared/operatorTypes";
 import { loadWorkspaceCreditBalanceCanonical, type WorkspaceCreditBalance } from "../../../shared/workspaceCreditsGateway";
 import { formatUsdCents, toEpochSeconds } from "../../../shared/displayFormatting";
 import { WORKSPACE_CREDIT_TOPUP_CREDITS, WORKSPACE_CREDIT_TOPUP_PRICE_USD } from "../../../shared/workspaceCredits";
@@ -1130,6 +1132,29 @@ export default function App() {
       window.location.assign("/");
     },
   });
+  const [operatorAccess, setOperatorAccess] = useState<OperatorAccessSnapshot | null>(null);
+
+  useEffect(() => {
+    let isAlive = true;
+    if (!session) {
+      setOperatorAccess(null);
+      return;
+    }
+
+    loadOperatorAccessCanonical({ session }).then(
+      (access) => {
+        if (isAlive) setOperatorAccess(access);
+      },
+      () => {
+        if (isAlive) setOperatorAccess(null);
+      },
+    );
+
+    return () => {
+      isAlive = false;
+    };
+  }, [session]);
+
   const canonicalSessionUserId = useMemo(
     () => resolveAuthSubject(session),
     [session?.access_token, session?.id_token, session?.user?.id],
@@ -6756,7 +6781,11 @@ export default function App() {
       },
       onShowMobileSettingsIndex: () => setMobileSettingsView("index"),
       settingsPanelsProps,
-      workspaceHostProps,
+      workspaceHostProps: {
+        ...workspaceHostProps,
+        showOperatorDataPanel: Boolean(operatorAccess && session),
+        operatorDataPanelSession: operatorAccess ? session : null,
+      },
     },
     publicCommunityFunnelProps: {
       publicRouteSlug:

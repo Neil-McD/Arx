@@ -7,6 +7,12 @@ export type OperatorDashboardSection =
 
 export type OperatorRange = "7d" | "30d" | "90d" | "all";
 
+export type OperatorAccessSnapshot = {
+  role: "owner" | "operator" | "readonly";
+  userId: string;
+  email: string | null;
+};
+
 export type OperatorMoneyMetric = {
   currency: string;
   amountBaseUnits: number;

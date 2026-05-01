@@ -2,7 +2,6 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { resolveAuthenticatedActor } from "./authActor";
 import { recordCriticalAuditEventBestEffort } from "./criticalAudit";
-import { isCreatorDevTierOverrideEmail } from "../shared/devTierOverride";
 
 const OPERATOR_ROLE_VALIDATOR = v.union(v.literal("owner"), v.literal("operator"), v.literal("readonly"));
 
@@ -53,8 +52,7 @@ export async function requireOperatorRole(
     authSubject: authSubject ?? null,
   });
   const roleRow = await readOperatorRole(ctx, actor);
-  const bootstrapRole = !roleRow && isCreatorDevTierOverrideEmail(actor.email) ? "owner" : null;
-  const role = (roleRow?.role ?? bootstrapRole) as OperatorRole | null;
+  const role = (roleRow?.role ?? null) as OperatorRole | null;
 
   if (!role || roleRank(role) < roleRank(minimumRole)) {
     throw new Error("operator_access_forbidden");
@@ -66,7 +64,7 @@ export async function requireOperatorRole(
     email: actor.email ?? null,
     displayName: actor.displayName ?? null,
     role,
-    source: roleRow ? "operator_role" : "bootstrap_email",
+    source: "operator_role",
   };
 }
 

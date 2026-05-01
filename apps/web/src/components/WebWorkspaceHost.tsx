@@ -12,6 +12,9 @@ import {
   DragEventHandler,
   MutableRefObject,
   ReactNode,
+  CSSProperties,
+  KeyboardEvent,
+  PointerEvent,
   SetStateAction,
 } from "react";
 import {
@@ -45,6 +48,15 @@ import type { ThreadStreamingRuntimeEvent } from "../../../../shared/webTurnRunn
 import { WebWorkspaceThreadError } from "./WebWorkspaceThreadError";
 import { WebWorkspaceThreadMessageList } from "./WebWorkspaceThreadMessageList";
 import { WebWorkspaceStreamingMessage } from "./WebWorkspaceStreamingMessage";
+import {
+  clampOperatorRightPanelWidth,
+  OPERATOR_RIGHT_PANEL_DEFAULT_WIDTH,
+  OPERATOR_RIGHT_PANEL_GUTTER,
+  OPERATOR_RIGHT_PANEL_KEYBOARD_STEP,
+  type OperatorInsightTab,
+  useOperatorDashboardData,
+  WebOperatorDataPanel,
+} from "./WebOperatorDataPanel";
 import type {
   WorkspaceMarkdownRenderer,
   WorkspaceStreamingMessageView,
@@ -149,6 +161,8 @@ export type WebWorkspaceHostProps = {
   openMessageContextModal: (payload: WorkspaceThreadContextPayload) => void;
   renderMarkdown: WorkspaceMarkdownRenderer;
   copyTextToClipboard: (text: string) => Promise<void> | void;
+  showOperatorDataPanel?: boolean;
+  operatorDataPanelSession?: AuthSessionLike | null;
 };
 
 function parsePreviewRunAnchor(
@@ -953,6 +967,9 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
   const [isDesktopViewport, setIsDesktopViewport] = useState<boolean>(() =>
     typeof window === "undefined" ? true : window.matchMedia("(min-width: 901px)").matches,
   );
+  const [isOperatorDataPanelOpen, setIsOperatorDataPanelOpen] = useState(true);
+  const [operatorActiveInsightTab, setOperatorActiveInsightTab] = useState<OperatorInsightTab>("platform");
+  const [operatorRightPanelWidth, setOperatorRightPanelWidth] = useState(OPERATOR_RIGHT_PANEL_DEFAULT_WIDTH);
   const savedThreadScrollTopRef = useRef<number | null>(null);
   const pendingRestoreThreadScrollTopRef = useRef<number | null>(null);
   const lastTerminalSnapshotSignatureRef = useRef<string | null>(null);
@@ -996,6 +1013,17 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
     setAttachments: setWorkspaceAttachments,
     setError: props.setWorkspaceError,
     ingestAttachmentsFromFileList: props.ingestWorkspaceAttachmentsFromFileList,
+  });
+  const showOperatorDataPanel = Boolean(props.showOperatorDataPanel && props.operatorDataPanelSession);
+  const isOperatorDataPanelVisible = Boolean(showOperatorDataPanel && isOperatorDataPanelOpen);
+  const operatorDataPanelStyle = {
+    "--operator-right-panel-width": `${operatorRightPanelWidth}px`,
+    "--operator-right-panel-gutter": `${OPERATOR_RIGHT_PANEL_GUTTER}px`,
+  } as CSSProperties;
+  const operatorData = useOperatorDashboardData({
+    session: props.operatorDataPanelSession ?? null,
+    enabled: isOperatorDataPanelVisible,
+    surface: "workspace_operator_data_panel",
   });
 
   useEffect(() => {
@@ -1666,10 +1694,47 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
 
   const isDesktopExpandedPreview = isDesktopViewport && expandedPreviewTerminal !== null;
 
+  const resizeOperatorRightPanelFromPointer = (event: PointerEvent<HTMLDivElement>) => {
+    setOperatorRightPanelWidth(clampOperatorRightPanelWidth(window.innerWidth - event.clientX));
+  };
+
+  const handleOperatorRightPanelResizePointerDown = (event: PointerEvent<HTMLDivElement>) => {
+    event.currentTarget.setPointerCapture(event.pointerId);
+    resizeOperatorRightPanelFromPointer(event);
+  };
+
+  const handleOperatorRightPanelResizeKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === "ArrowLeft") {
+      event.preventDefault();
+      setOperatorRightPanelWidth((width) => clampOperatorRightPanelWidth(width + OPERATOR_RIGHT_PANEL_KEYBOARD_STEP));
+    }
+    if (event.key === "ArrowRight") {
+      event.preventDefault();
+      setOperatorRightPanelWidth((width) => clampOperatorRightPanelWidth(width - OPERATOR_RIGHT_PANEL_KEYBOARD_STEP));
+    }
+  };
+
   return (
     <>
+      {showOperatorDataPanel ? (
+        <button
+          type="button"
+          className={`icon-button workspace-operator-data-toggle${isOperatorDataPanelOpen ? " active" : ""}`}
+          onClick={() => setIsOperatorDataPanelOpen((value) => !value)}
+          aria-expanded={isOperatorDataPanelOpen}
+          aria-controls="workspace-operator-data-panel"
+          aria-label={isOperatorDataPanelOpen ? "Close operator data panel" : "Open operator data panel"}
+          title={isOperatorDataPanelOpen ? "Close data panel" : "Open data panel"}
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <rect x="3" y="4" width="18" height="16" rx="2" />
+            <path d="M15 4v16" />
+          </svg>
+        </button>
+      ) : null}
       <div
-        className={`workspace-body workspace-attachment-drop-surface${isDesktopExpandedPreview ? " preview-expanded" : ""}${isWorkspaceAttachmentDragOver ? " drag-over" : ""}`}
+        className={`workspace-body workspace-attachment-drop-surface${isDesktopExpandedPreview ? " preview-expanded" : ""}${isWorkspaceAttachmentDragOver ? " drag-over" : ""}${isOperatorDataPanelVisible ? " workspace-operator-data-open" : ""}`}
+        style={operatorDataPanelStyle}
         onDrop={handleWorkspaceAttachmentDrop}
         onDragEnter={handleWorkspaceAttachmentDragEnter}
         onDragOver={handleWorkspaceAttachmentDragOver}
@@ -1797,7 +1862,8 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
       </div>
       {!props.isEmptyWorkspaceThread ? (
         <div
-          className={`workspace-composer-shell workspace-attachment-drop-surface${isDesktopExpandedPreview ? " preview-expanded" : ""}${isWorkspaceAttachmentDragOver ? " drag-over" : ""}`}
+          className={`workspace-composer-shell workspace-attachment-drop-surface${isDesktopExpandedPreview ? " preview-expanded" : ""}${isWorkspaceAttachmentDragOver ? " drag-over" : ""}${isOperatorDataPanelVisible ? " workspace-operator-data-open" : ""}`}
+          style={operatorDataPanelStyle}
           onDrop={handleWorkspaceAttachmentDrop}
           onDragEnter={handleWorkspaceAttachmentDragEnter}
           onDragOver={handleWorkspaceAttachmentDragOver}
@@ -1851,6 +1917,29 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
             showTerminalRail={!isDesktopExpandedPreview}
           />
         </div>
+      ) : null}
+      {isOperatorDataPanelVisible ? (
+        <aside
+          id="workspace-operator-data-panel"
+          className="operator-data-panel workspace-operator-data-panel"
+          style={operatorDataPanelStyle}
+          aria-label="Operator intelligence data"
+        >
+          <WebOperatorDataPanel
+            state={operatorData.state}
+            topBuilders={operatorData.topBuilders}
+            isLoading={operatorData.isLoading}
+            error={operatorData.error}
+            activeInsightTab={operatorActiveInsightTab}
+            onActiveInsightTabChange={setOperatorActiveInsightTab}
+            onResizePointerDown={handleOperatorRightPanelResizePointerDown}
+            onResizePointerMove={(event) => {
+              if (event.buttons === 1) resizeOperatorRightPanelFromPointer(event);
+            }}
+            onResizeDoubleClick={() => setOperatorRightPanelWidth(OPERATOR_RIGHT_PANEL_DEFAULT_WIDTH)}
+            onResizeKeyDown={handleOperatorRightPanelResizeKeyDown}
+          />
+        </aside>
       ) : null}
     </>
   );

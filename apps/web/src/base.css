@@ -8689,6 +8689,7 @@ button.chat-reply-quote:hover {
 }
 
 .workspace {
+  position: relative;
   display: grid;
   grid-template-rows: 1fr auto;
   /* Keep a left gutter for the content column, but let the bottom edge hit the window. */
@@ -9480,6 +9481,10 @@ button.chat-reply-quote:hover {
   display: flex;
   flex-direction: column;
   position: relative;
+}
+
+.workspace-body.workspace-operator-data-open {
+  padding-right: calc(var(--operator-right-panel-width) + var(--operator-right-panel-gutter));
 }
 
 .workspace-body.preview-expanded {
@@ -16715,6 +16720,11 @@ button.message-citation-chip:hover {
   gap: 0;
 }
 
+.workspace-composer-shell.workspace-operator-data-open {
+  max-width: min(var(--web-chat-max-width), calc(100% - var(--operator-right-panel-width) - var(--operator-right-panel-gutter) - 24px));
+  margin-right: calc(var(--operator-right-panel-width) + var(--operator-right-panel-gutter));
+}
+
 .workspace-composer-shell.preview-expanded {
   width: 100%;
   max-width: none;
@@ -19416,6 +19426,13 @@ button.message-citation-chip:hover {
   z-index: 35;
 }
 
+.workspace-operator-data-toggle {
+  position: absolute;
+  top: 12px;
+  right: 62px;
+  z-index: 35;
+}
+
 .operator-data-panel {
   position: absolute;
   top: 0;
@@ -19431,6 +19448,12 @@ button.message-citation-chip:hover {
   grid-template-rows: auto minmax(0, 1fr);
   gap: 14px;
   box-sizing: border-box;
+}
+
+.workspace-operator-data-panel {
+  top: 0;
+  right: 0;
+  bottom: 0;
 }
 
 .operator-data-panel__resize-handle {
@@ -19618,6 +19641,13 @@ button.message-citation-chip:hover {
 @media (max-width: 860px) {
   .operator-surface--right-open .operator-workspace-body {
     padding-right: 0;
+  }
+
+  .workspace-body.workspace-operator-data-open,
+  .workspace-composer-shell.workspace-operator-data-open {
+    padding-right: 0;
+    margin-right: auto;
+    max-width: var(--web-chat-max-width);
   }
 
   .operator-empty-thread {

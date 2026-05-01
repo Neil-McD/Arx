@@ -385,7 +385,7 @@ function parseAppRouteFromPathname(pathname: string): AppRoutePathState | null {
 
   if (segments[0] === "operator" && segments.length === 1) {
     return {
-      page: "operator",
+      page: "workspace",
       view: "home",
       settingsPage: "agent",
       communitySlug: null,
@@ -537,7 +537,7 @@ export function buildAppRoutePath(state: AppRoutePathState): string | null {
   }
 
   if (state.page === "operator") {
-    return "/operator";
+    return "/workspace";
   }
 
   return state.threadId ? buildWorkspaceThreadPath(state.threadId) : buildWorkspaceDraftPath();
