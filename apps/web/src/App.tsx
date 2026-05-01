@@ -6226,7 +6226,6 @@ export default function App() {
       handleSignOut,
       deleteAccount: deleteOwnAccountFromSettings,
       isLoadingChatgptConnection,
-      openAiConnection,
       chatgptConnection,
       hasPendingChatgptAuth,
       formatRelativeTime,
@@ -6280,6 +6279,9 @@ export default function App() {
     },
     agent: {
       session: session,
+      isLoadingOpenAiConnection: isLoadingChatgptConnection,
+      openAiConnection,
+      providerConnectionUi,
       exportError,
       exportThreadsCsv,
       exportMessagesCsv,

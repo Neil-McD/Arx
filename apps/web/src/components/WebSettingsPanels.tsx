@@ -49,11 +49,6 @@ export type WebSettingsPanelsProps = {
     handleSignOut: () => Promise<void> | void;
     deleteAccount: () => Promise<void> | void;
     isLoadingChatgptConnection: boolean;
-    openAiConnection: {
-      connected: boolean;
-      key_last_four?: string | null;
-      updated_at?: string | null;
-    };
     chatgptConnection: {
       connected: boolean;
       email?: string | null;
@@ -81,6 +76,13 @@ export type WebSettingsPanelsProps = {
   };
   agent: {
     session: SessionLike;
+    isLoadingOpenAiConnection: boolean;
+    openAiConnection: {
+      connected: boolean;
+      key_last_four?: string | null;
+      updated_at?: string | null;
+    };
+    providerConnectionUi: UseWebProviderConnectionUiControllerResult;
     exportError: string | null;
     exportThreadsCsv: () => Promise<void> | void;
     exportMessagesCsv: () => Promise<void> | void;
@@ -210,15 +212,7 @@ export function WebSettingsPanels(props: WebSettingsPanelsProps) {
     handleSignOut: account.handleSignOut,
     deleteAccount: account.deleteAccount,
     isLoadingChatgptConnection: account.isLoadingChatgptConnection,
-    openAiConnection: account.openAiConnection,
     chatgptConnection: account.chatgptConnection,
-    openAiApiKeyDraft: account.providerConnectionUi.openAiApiKeyDraft,
-    setOpenAiApiKeyDraft: account.providerConnectionUi.setOpenAiApiKeyDraft,
-    isSavingOpenAiConnection: account.providerConnectionUi.isSavingOpenAiConnection,
-    openAiConnectionError: account.providerConnectionUi.openAiConnectionError,
-    openAiConnectionSuccess: account.providerConnectionUi.openAiConnectionSuccess,
-    handleConnectOpenAi: account.providerConnectionUi.handleConnectOpenAi,
-    handleDisconnectOpenAi: account.providerConnectionUi.handleDisconnectOpenAi,
     isConnectingChatgpt: account.providerConnectionUi.isConnectingChatgpt,
     isPollingChatgptConnection: account.providerConnectionUi.isPollingChatgptConnection,
     hasPendingChatgptAuth: account.hasPendingChatgptAuth,
@@ -258,6 +252,15 @@ export function WebSettingsPanels(props: WebSettingsPanelsProps) {
 
   const agentSectionProps = {
     session: agent.session,
+    isLoadingOpenAiConnection: agent.isLoadingOpenAiConnection,
+    openAiConnection: agent.openAiConnection,
+    openAiApiKeyDraft: agent.providerConnectionUi.openAiApiKeyDraft,
+    setOpenAiApiKeyDraft: agent.providerConnectionUi.setOpenAiApiKeyDraft,
+    isSavingOpenAiConnection: agent.providerConnectionUi.isSavingOpenAiConnection,
+    openAiConnectionError: agent.providerConnectionUi.openAiConnectionError,
+    openAiConnectionSuccess: agent.providerConnectionUi.openAiConnectionSuccess,
+    handleConnectOpenAi: agent.providerConnectionUi.handleConnectOpenAi,
+    handleDisconnectOpenAi: agent.providerConnectionUi.handleDisconnectOpenAi,
     exportError: agent.exportError,
     exportThreadsCsv: agent.exportThreadsCsv,
     exportMessagesCsv: agent.exportMessagesCsv,

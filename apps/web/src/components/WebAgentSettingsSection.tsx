@@ -28,8 +28,23 @@ type BuilderBillingStatus = {
   builder_tier: "free" | "builder" | "architect";
 } | null;
 
+type OpenAiConnection = {
+  connected: boolean;
+  key_last_four?: string | null;
+  updated_at?: string | null;
+};
+
 type WebAgentSettingsSectionProps = {
   session: SessionLike;
+  isLoadingOpenAiConnection: boolean;
+  openAiConnection: OpenAiConnection;
+  openAiApiKeyDraft: string;
+  setOpenAiApiKeyDraft: (value: string) => void;
+  isSavingOpenAiConnection: boolean;
+  openAiConnectionError: string | null;
+  openAiConnectionSuccess: string | null;
+  handleConnectOpenAi: () => Promise<void> | void;
+  handleDisconnectOpenAi: () => Promise<void> | void;
   exportError: string | null;
   exportThreadsCsv: () => Promise<void> | void;
   exportMessagesCsv: () => Promise<void> | void;
@@ -79,6 +94,15 @@ function formatCredits(value: number): string {
 export function WebAgentSettingsSection(props: WebAgentSettingsSectionProps) {
   const {
     session,
+    isLoadingOpenAiConnection,
+    openAiConnection,
+    openAiApiKeyDraft,
+    setOpenAiApiKeyDraft,
+    isSavingOpenAiConnection,
+    openAiConnectionError,
+    openAiConnectionSuccess,
+    handleConnectOpenAi,
+    handleDisconnectOpenAi,
     exportError,
     exportThreadsCsv,
     exportMessagesCsv,
@@ -158,6 +182,72 @@ export function WebAgentSettingsSection(props: WebAgentSettingsSectionProps) {
           {!session ? (
             <div className="model-note">Sign in to save a personal agent soul.</div>
           ) : null}
+        </div>
+
+        <div className="settings-section">
+          <div className="settings-section-title">
+            <svg viewBox="0 0 24 24"><path d="M5 12h14" /><path d="M12 5v14" /><circle cx="12" cy="12" r="9" /></svg>
+            OpenAI API key
+          </div>
+          <div className="settings-section-desc">
+            Add your own OpenAI API key for personal agent inference.
+          </div>
+          {!session ? (
+            <div className="model-note">Sign in to connect an OpenAI API key.</div>
+          ) : (
+            <>
+              <div className="account-row">
+                <div className="account-identity">
+                  <span>Status</span>
+                  <strong>
+                    {isLoadingOpenAiConnection
+                      ? "Checking…"
+                      : openAiConnection.connected
+                        ? `Connected${openAiConnection.key_last_four ? ` · ••••${openAiConnection.key_last_four}` : ""}`
+                        : "Not connected"}
+                  </strong>
+                </div>
+                {openAiConnection.connected ? (
+                  <button
+                    className="secondary"
+                    type="button"
+                    onClick={() => void handleDisconnectOpenAi()}
+                    disabled={isSavingOpenAiConnection}
+                  >
+                    {isSavingOpenAiConnection ? "Disconnecting…" : "Disconnect"}
+                  </button>
+                ) : null}
+              </div>
+              <div className="provider-connection-actions">
+                <input
+                  className="provider-connection-input"
+                  type="password"
+                  value={openAiApiKeyDraft}
+                  onChange={(event) => setOpenAiApiKeyDraft(event.target.value)}
+                  placeholder="Paste OpenAI API key"
+                  autoComplete="off"
+                  disabled={isSavingOpenAiConnection}
+                />
+                <button
+                  className="secondary"
+                  type="button"
+                  onClick={() => void handleConnectOpenAi()}
+                  disabled={isSavingOpenAiConnection || openAiApiKeyDraft.trim().length === 0}
+                >
+                  {isSavingOpenAiConnection ? "Saving…" : openAiConnection.connected ? "Update key" : "Connect key"}
+                </button>
+              </div>
+              {openAiConnection.connected && (
+                <div className="auth-status">
+                  {openAiConnection.updated_at
+                    ? `Last validated ${formatRelativeTime(openAiConnection.updated_at)}.`
+                    : "Ready for OpenAI API inference."}
+                </div>
+              )}
+              {openAiConnectionError && <div className="auth-error">{openAiConnectionError}</div>}
+              {openAiConnectionSuccess && <div className="auth-success">{openAiConnectionSuccess}</div>}
+            </>
+          )}
         </div>
 
         <div className="settings-section">
