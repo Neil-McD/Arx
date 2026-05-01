@@ -19366,6 +19366,8 @@ button.message-citation-chip:hover {
 }
 
 .operator-surface {
+  --operator-right-panel-width: 560px;
+  --operator-right-panel-gutter: 28px;
   position: relative;
   flex: 1;
   min-width: 0;
@@ -19382,7 +19384,7 @@ button.message-citation-chip:hover {
 }
 
 .operator-surface--right-open .operator-workspace-body {
-  padding-right: min(720px, 46vw);
+  padding-right: calc(var(--operator-right-panel-width) + var(--operator-right-panel-gutter));
 }
 
 .operator-empty-thread {
@@ -19420,8 +19422,8 @@ button.message-citation-chip:hover {
   right: 0;
   bottom: 0;
   z-index: 30;
-  width: min(720px, 46vw);
-  min-width: 480px;
+  width: var(--operator-right-panel-width);
+  min-width: 0;
   padding: 16px 18px 18px;
   border-left: 1px solid var(--border-default);
   background: var(--bg-workspace, var(--bg-app));
@@ -19429,6 +19431,34 @@ button.message-citation-chip:hover {
   grid-template-rows: auto minmax(0, 1fr);
   gap: 14px;
   box-sizing: border-box;
+}
+
+.operator-data-panel__resize-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -6px;
+  z-index: 3;
+  width: 12px;
+  cursor: col-resize;
+  outline: none;
+  touch-action: none;
+}
+
+.operator-data-panel__resize-handle::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 5px;
+  width: 1px;
+  background: transparent;
+  transition: background 0.16s ease;
+}
+
+.operator-data-panel__resize-handle:hover::after,
+.operator-data-panel__resize-handle:focus-visible::after {
+  background: color-mix(in srgb, var(--accent) 45%, var(--border-default));
 }
 
 .operator-data-panel__tabs {
@@ -19599,6 +19629,10 @@ button.message-citation-chip:hover {
     left: 0;
     width: 100%;
     min-width: 0;
+  }
+
+  .operator-data-panel__resize-handle {
+    display: none;
   }
 
   .operator-dashboard {

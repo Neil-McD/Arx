@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type CSSProperties, type PointerEvent } from "react";
 import type { AuthSessionLike } from "../../../../shared/authSession";
 import { buildPlatformSwitcherStyle } from "../../../../shared/platformSwitcherUi";
 import {
@@ -23,6 +23,12 @@ const OPERATOR_INSIGHT_TABS: Array<{ id: OperatorInsightTab; label: string }> = 
   { id: "platform", label: "Platform" },
   { id: "builders", label: "Builders" },
 ];
+
+const OPERATOR_RIGHT_PANEL_DEFAULT_WIDTH = 560;
+const OPERATOR_RIGHT_PANEL_MIN_WIDTH = 380;
+const OPERATOR_RIGHT_PANEL_MAX_WIDTH = 860;
+const OPERATOR_RIGHT_PANEL_GUTTER = 28;
+const OPERATOR_RIGHT_PANEL_KEYBOARD_STEP = 32;
 
 type OperatorDashboardState = {
   overview: OperatorOverviewSnapshot | null;
@@ -61,12 +67,18 @@ function formatPercent(value: number | null | undefined): string {
   return `${Math.round(value * 100)}%`;
 }
 
+function clampOperatorRightPanelWidth(width: number): number {
+  if (!Number.isFinite(width)) return OPERATOR_RIGHT_PANEL_DEFAULT_WIDTH;
+  return Math.min(OPERATOR_RIGHT_PANEL_MAX_WIDTH, Math.max(OPERATOR_RIGHT_PANEL_MIN_WIDTH, Math.round(width)));
+}
+
 export function WebOperatorDashboard(props: WebOperatorDashboardProps) {
   const [state, setState] = useState<OperatorDashboardState>(() => createEmptyOperatorDashboardState());
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeInsightTab, setActiveInsightTab] = useState<OperatorInsightTab>("platform");
   const [isRightPanelOpen, setIsRightPanelOpen] = useState(true);
+  const [rightPanelWidth, setRightPanelWidth] = useState(OPERATOR_RIGHT_PANEL_DEFAULT_WIDTH);
   const [operatorDraft, setOperatorDraft] = useState("");
 
   useEffect(() => {
@@ -120,9 +132,25 @@ export function WebOperatorDashboard(props: WebOperatorDashboardProps) {
   );
   const activeInsightTabIndex = OPERATOR_INSIGHT_TABS.findIndex((tab) => tab.id === activeInsightTab);
   const insightTabSwitcherStyle = buildPlatformSwitcherStyle(OPERATOR_INSIGHT_TABS.length, activeInsightTabIndex);
+  const operatorSurfaceStyle = {
+    "--operator-right-panel-width": `${rightPanelWidth}px`,
+    "--operator-right-panel-gutter": `${OPERATOR_RIGHT_PANEL_GUTTER}px`,
+  } as CSSProperties;
+
+  const resizeRightPanelFromPointer = (event: PointerEvent<HTMLDivElement>) => {
+    setRightPanelWidth(clampOperatorRightPanelWidth(window.innerWidth - event.clientX));
+  };
+
+  const handleRightPanelResizePointerDown = (event: PointerEvent<HTMLDivElement>) => {
+    event.currentTarget.setPointerCapture(event.pointerId);
+    resizeRightPanelFromPointer(event);
+  };
 
   return (
-    <div className={`operator-surface${isRightPanelOpen ? " operator-surface--right-open" : ""}`}>
+    <div
+      className={`operator-surface${isRightPanelOpen ? " operator-surface--right-open" : ""}`}
+      style={operatorSurfaceStyle}
+    >
       <button
         type="button"
         className={`icon-button operator-data-toggle${isRightPanelOpen ? " active" : ""}`}
@@ -182,6 +210,28 @@ export function WebOperatorDashboard(props: WebOperatorDashboardProps) {
 
       {isRightPanelOpen ? (
         <aside id="operator-data-panel" className="operator-data-panel" aria-label="Operator intelligence data">
+          <div
+            className="operator-data-panel__resize-handle"
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize operator data panel"
+            tabIndex={0}
+            onPointerDown={handleRightPanelResizePointerDown}
+            onPointerMove={(event) => {
+              if (event.buttons === 1) resizeRightPanelFromPointer(event);
+            }}
+            onDoubleClick={() => setRightPanelWidth(OPERATOR_RIGHT_PANEL_DEFAULT_WIDTH)}
+            onKeyDown={(event) => {
+              if (event.key === "ArrowLeft") {
+                event.preventDefault();
+                setRightPanelWidth((width) => clampOperatorRightPanelWidth(width + OPERATOR_RIGHT_PANEL_KEYBOARD_STEP));
+              }
+              if (event.key === "ArrowRight") {
+                event.preventDefault();
+                setRightPanelWidth((width) => clampOperatorRightPanelWidth(width - OPERATOR_RIGHT_PANEL_KEYBOARD_STEP));
+              }
+            }}
+          />
           <div
             className="platform-switcher platform-switcher-compact operator-data-panel__tabs"
             role="tablist"
