@@ -126,7 +126,7 @@ export function useWebUserPlatformAppMountsController<
             return next;
           });
         }
-        if (!result.ok && result.error_message && !result.validation_report) {
+        if (!result.ok && !result.mount && result.error_message && !result.validation_report) {
           setUserPlatformAppMutationError(result.error_message);
         }
         return result;
