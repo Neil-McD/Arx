@@ -8,7 +8,7 @@ import { WebCommunityResourceModuleModal } from "../components/WebCommunityResou
 
 type SessionLike = unknown;
 
-const MODULE_BANNER_DATA_URL_CHAR_LIMIT = 600_000;
+const MODULE_BANNER_DATA_URL_CHAR_LIMIT = 1_200_000;
 
 type ResourceLike = {
   id: string;

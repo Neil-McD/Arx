@@ -28,7 +28,7 @@ export function getCommunityBannerImageStyle(args: {
   return {
     objectPosition: `${Math.round(focusX * 100)}% ${Math.round(focusY * 100)}%`,
     transform: zoom === 1 ? undefined : `scale(${zoom})`,
-    transformOrigin: "center center",
+    transformOrigin: `${Math.round(focusX * 100)}% ${Math.round(focusY * 100)}%`,
   };
 }
 

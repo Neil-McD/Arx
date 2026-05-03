@@ -39,8 +39,7 @@ type DragState = {
   pointerId: number;
   startX: number;
   startY: number;
-  startLeft: number;
-  startTop: number;
+  startLayout: BannerLayout;
 };
 
 function computeBannerLayout(args: {
@@ -149,16 +148,15 @@ export function WebCommunityBannerEditorModal(props: WebCommunityBannerEditorMod
   );
 
   const commitDraggedPosition = useCallback(
-    (nextLeft: number, nextTop: number) => {
-      if (!layout) return;
-      const clampedLeft = Math.max(layout.minLeft, Math.min(0, nextLeft));
-      const clampedTop = Math.max(layout.minTop, Math.min(0, nextTop));
-      const nextFocus = focusFromLeftTop(layout, clampedLeft, clampedTop);
+    (dragLayout: BannerLayout, nextLeft: number, nextTop: number) => {
+      const clampedLeft = Math.max(dragLayout.minLeft, Math.min(0, nextLeft));
+      const clampedTop = Math.max(dragLayout.minTop, Math.min(0, nextTop));
+      const nextFocus = focusFromLeftTop(dragLayout, clampedLeft, clampedTop);
       onChangeFocusX(nextFocus.focusX);
       onChangeFocusY(nextFocus.focusY);
       onDirty();
     },
-    [layout, onChangeFocusX, onChangeFocusY, onDirty],
+    [onChangeFocusX, onChangeFocusY, onDirty],
   );
 
   const handlePointerDown = useCallback(
@@ -170,8 +168,7 @@ export function WebCommunityBannerEditorModal(props: WebCommunityBannerEditorMod
         pointerId: event.pointerId,
         startX: event.clientX,
         startY: event.clientY,
-        startLeft: layout.left,
-        startTop: layout.top,
+        startLayout: layout,
       };
       event.currentTarget.setPointerCapture(event.pointerId);
       setIsDragging(true);
@@ -184,8 +181,9 @@ export function WebCommunityBannerEditorModal(props: WebCommunityBannerEditorMod
       const dragState = dragStateRef.current;
       if (!dragState || dragState.pointerId !== event.pointerId) return;
       commitDraggedPosition(
-        dragState.startLeft + (event.clientX - dragState.startX),
-        dragState.startTop + (event.clientY - dragState.startY),
+        dragState.startLayout,
+        dragState.startLayout.left + (event.clientX - dragState.startX),
+        dragState.startLayout.top + (event.clientY - dragState.startY),
       );
     },
     [commitDraggedPosition],
