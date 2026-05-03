@@ -186,6 +186,26 @@ function shouldRenderCodeCard(code: string, language?: string): boolean {
   return looksLikeCode(code);
 }
 
+function isInlineCodeNode(node: unknown, raw: string, className: string): boolean {
+  if (className.trim()) return false;
+  if (raw.includes("\n")) return false;
+
+  const position = (node as {
+    position?: {
+      start?: { line?: number };
+      end?: { line?: number };
+    };
+  } | null)?.position;
+  const startLine = position?.start?.line;
+  const endLine = position?.end?.line;
+
+  if (typeof startLine === "number" && typeof endLine === "number") {
+    return startLine === endLine;
+  }
+
+  return true;
+}
+
 function looksLikeDiagram(text: string): boolean {
   const trimmed = text.trim();
   if (!trimmed) return false;
@@ -512,9 +532,9 @@ export function renderMarkdown(text: string, options?: MarkdownRenderOptions): R
       return <blockquote className="md-blockquote">{children}</blockquote>;
     },
     code(props) {
-      const inline = Boolean((props as { inline?: boolean }).inline);
       const className = String(props.className ?? "");
       const raw = String(props.children ?? "").replace(/\n$/, "");
+      const inline = isInlineCodeNode(props.node, raw, className);
       if (inline) {
         return <code className="md-inline-code">{raw}</code>;
       }
