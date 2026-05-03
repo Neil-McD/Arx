@@ -92,6 +92,11 @@ assert.match(
   /operatorAccess:recordOperatorDashboardAccess/,
   "operator gateway must record dashboard access before loading operator data",
 );
+assert.match(
+  operatorGateway,
+  /bootstrap\?\.dbUserId[\s\S]*operator_access_identity_mismatch/,
+  "operator access must validate the returned operator role against the authenticated Convex user id",
+);
 assert.doesNotMatch(
   operatorGateway,
   /operatorIntelligence:/,
@@ -111,13 +116,18 @@ assert.match(
 );
 assert.match(
   app,
-  /loadOperatorAccessCanonical\(\{ session \}\)[\s\S]*setOperatorAccess\(access\)/,
+  /setOperatorAccess\(null\)[\s\S]*loadOperatorAccessCanonical\(\{ session \}\)[\s\S]*setOperatorAccess\(access\)/,
   "workspace must only enable operator UI after the gated operator access query succeeds",
 );
 assert.match(
   app,
-  /showOperatorDataPanel: Boolean\(operatorAccess && session\)/,
+  /hasOperatorDataPanelAccess = Boolean\(session && operatorAccess\)/,
   "workspace operator panel must stay hidden without an operator access snapshot",
+);
+assert.doesNotMatch(
+  app,
+  /operatorAccess\?\.userId === canonicalSessionUserId|operatorAccess\?\.userId === sessionUserId/,
+  "workspace must not compare Convex operator ids to WorkOS auth subjects",
 );
 assert.match(
   workspaceHost,

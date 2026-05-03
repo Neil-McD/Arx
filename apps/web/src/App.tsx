@@ -1139,15 +1139,14 @@ export default function App() {
     let isAlive = true;
     setOperatorAccess(null);
 
-    const sessionUserId = resolveAuthSubject(session);
-    if (!session || !sessionUserId) {
+    if (!session) {
       return;
     }
 
     loadOperatorAccessCanonical({ session }).then(
       (access) => {
         if (!isAlive) return;
-        setOperatorAccess(access.userId === sessionUserId ? access : null);
+        setOperatorAccess(access);
       },
       () => {
         if (isAlive) setOperatorAccess(null);
@@ -1163,9 +1162,7 @@ export default function App() {
     () => resolveAuthSubject(session),
     [session?.access_token, session?.id_token, session?.user?.id],
   );
-  const hasOperatorDataPanelAccess = Boolean(
-    session && canonicalSessionUserId && operatorAccess?.userId === canonicalSessionUserId,
-  );
+  const hasOperatorDataPanelAccess = Boolean(session && operatorAccess);
   const profileStorageUserId = canonicalSessionUserId;
   const initialProfileDraft = useMemo(
     () => readProfileDraftForUser(profileStorageUserId),
