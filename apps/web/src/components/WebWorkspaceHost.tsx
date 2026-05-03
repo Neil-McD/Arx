@@ -1918,12 +1918,13 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
           />
         </div>
       ) : null}
-      {isOperatorDataPanelVisible ? (
+      {showOperatorDataPanel ? (
         <aside
           id="workspace-operator-data-panel"
-          className="operator-data-panel workspace-operator-data-panel"
+          className={`operator-data-panel workspace-operator-data-panel${isOperatorDataPanelOpen ? " open" : ""}`}
           style={operatorDataPanelStyle}
           aria-label="Operator intelligence data"
+          aria-hidden={!isOperatorDataPanelOpen}
         >
           <WebOperatorDataPanel
             state={operatorData.state}
