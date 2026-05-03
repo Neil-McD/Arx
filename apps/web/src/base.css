@@ -19507,6 +19507,7 @@ button.message-citation-chip:hover {
   top: 0;
   right: 0;
   bottom: 0;
+  padding-right: 0;
   opacity: 0;
   pointer-events: none;
   transform: translateX(calc(100% + var(--operator-right-panel-gutter)));
@@ -19565,6 +19566,7 @@ button.message-citation-chip:hover {
 .operator-data-panel__content {
   min-height: 0;
   overflow: auto;
+  padding-right: 18px;
   scrollbar-width: thin;
 }
 
