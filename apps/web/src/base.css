@@ -9526,7 +9526,7 @@ button.chat-reply-quote:hover {
 }
 
 .workspace-body.workspace-operator-data-open {
-  padding-right: calc(var(--operator-right-panel-width) + var(--operator-right-panel-gutter));
+  padding-right: var(--operator-right-panel-width);
 }
 
 .workspace-body.preview-expanded {
@@ -16766,8 +16766,8 @@ button.message-citation-chip:hover {
 }
 
 .workspace-composer-shell.workspace-operator-data-open {
-  max-width: min(var(--web-chat-max-width), calc(100% - var(--operator-right-panel-width) - var(--operator-right-panel-gutter)));
-  margin-right: calc(var(--operator-right-panel-width) + var(--operator-right-panel-gutter));
+  max-width: min(var(--web-chat-max-width), calc(100% - var(--operator-right-panel-width)));
+  margin-right: var(--operator-right-panel-width);
 }
 
 .workspace-composer-shell.preview-expanded {

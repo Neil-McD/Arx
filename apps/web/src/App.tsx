@@ -5525,7 +5525,7 @@ export default function App() {
     WEB_RAIL_WIDTH -
     WEB_SESSIONS_DRAWER_WIDTH -
     (workspaceOperatorPanelLayout.open
-      ? workspaceOperatorPanelLayout.width + workspaceOperatorPanelLayout.gutter
+      ? workspaceOperatorPanelLayout.width
       : 0);
   const shouldOverlaySessionsDrawer =
     isSessionsDrawerOpen &&
