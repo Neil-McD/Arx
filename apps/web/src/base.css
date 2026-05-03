@@ -16766,7 +16766,7 @@ button.message-citation-chip:hover {
 }
 
 .workspace-composer-shell.workspace-operator-data-open {
-  max-width: min(var(--web-chat-max-width), calc(100% - var(--operator-right-panel-width) - var(--operator-right-panel-gutter) - 24px));
+  max-width: min(var(--web-chat-max-width), calc(100% - var(--operator-right-panel-width) - var(--operator-right-panel-gutter)));
   margin-right: calc(var(--operator-right-panel-width) + var(--operator-right-panel-gutter));
 }
 
