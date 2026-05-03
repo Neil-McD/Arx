@@ -4,6 +4,7 @@
 :root {
   --web-chat-max-width: 800px;
   --web-chat-gutter: clamp(12px, 3vw, 20px);
+  --workspace-chat-pressure-min-width: 340px;
   /* Keep the original top spacing, but render the controls as floating "islands". */
   --web-topbar-height: 48px;
   --mobile-topbar-control-size: 34px;
@@ -14,7 +15,7 @@
   --web-rail-control-size: 44px;
   --web-rail-anchor-inset: calc((var(--web-rail-width) - var(--web-rail-control-size)) / 2);
   --web-rail-balance-shift: calc((var(--web-rail-control-size) - var(--web-rail-width)) / 4);
-  --web-sessions-drawer-width: 240px;
+  --web-sessions-drawer-width: clamp(144px, 16vw, 240px);
 
   /* Minimal glassmorphism controls (web only). */
   --web-floating-chrome-bg: rgba(255, 255, 255, 0.5);
