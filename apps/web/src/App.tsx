@@ -679,6 +679,15 @@ const MAX_WEB_IMAGE_UPLOAD_BYTES = 25 * 1024 * 1024; // 25MB (client-side; still
 const MAX_WEB_FILE_UPLOAD_BYTES = 5 * 1024 * 1024; // 5MB
 const MAX_WEB_TEXT_ATTACHMENT_BYTES = 200 * 1024; // 200KB
 const MAX_WEB_IMAGE_DATA_URL_CHARS = 600_000; // ~0.6MB base64 payload
+const WEB_RAIL_WIDTH = 72;
+const WEB_SESSIONS_DRAWER_WIDTH = 240;
+const MIN_DOCKED_WORKSPACE_CENTER_WIDTH = 520;
+
+type WorkspaceOperatorPanelLayout = {
+  open: boolean;
+  width: number;
+  gutter: number;
+};
 
 function formatModelSignature(
   modelId: string | null | undefined,
@@ -1194,6 +1203,33 @@ export default function App() {
     useState(false);
   const settingsGroup = settingsGroupForPage(settingsPage);
   const [userWantsSessions, setUserWantsSessions] = useState(false);
+  const [workspaceViewportWidth, setWorkspaceViewportWidth] = useState(() =>
+    typeof window === "undefined" ? 0 : window.innerWidth,
+  );
+  const [workspaceOperatorPanelLayout, setWorkspaceOperatorPanelLayout] =
+    useState<WorkspaceOperatorPanelLayout>({ open: false, width: 0, gutter: 0 });
+  const handleWorkspaceOperatorPanelLayoutChange = useCallback((layout: WorkspaceOperatorPanelLayout) => {
+    setWorkspaceOperatorPanelLayout((current) =>
+      current.open === layout.open &&
+      current.width === layout.width &&
+      current.gutter === layout.gutter
+        ? current
+        : layout,
+    );
+  }, []);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const updateWorkspaceViewportWidth = () => {
+      setWorkspaceViewportWidth(window.innerWidth);
+    };
+
+    updateWorkspaceViewportWidth();
+    window.addEventListener("resize", updateWorkspaceViewportWidth);
+    return () => {
+      window.removeEventListener("resize", updateWorkspaceViewportWidth);
+    };
+  }, []);
   const [appTheme, setAppTheme] = useState<AppTheme>(() => {
     try {
       const stored = parseAppTheme(
@@ -5464,6 +5500,16 @@ export default function App() {
     mobileSecondaryMode,
     showHeaderIslands,
   } = shellProjection;
+  const dockedWorkspaceCenterWidth =
+    workspaceViewportWidth -
+    WEB_RAIL_WIDTH -
+    WEB_SESSIONS_DRAWER_WIDTH -
+    (workspaceOperatorPanelLayout.open
+      ? workspaceOperatorPanelLayout.width + workspaceOperatorPanelLayout.gutter
+      : 0);
+  const shouldOverlaySessionsDrawer =
+    isSessionsDrawerOpen &&
+    dockedWorkspaceCenterWidth < MIN_DOCKED_WORKSPACE_CENTER_WIDTH;
   const canReorderCommunities = railCommunities.length > 1;
   const hasCommunityRailMiddleContent = railCommunities.length > 0;
   const communityRailIds = useMemo(() => railCommunities.map((community) => community.id), [railCommunities]);
@@ -6879,6 +6925,7 @@ export default function App() {
         ...workspaceHostProps,
         showOperatorDataPanel: hasOperatorDataPanelAccess,
         operatorDataPanelSession: hasOperatorDataPanelAccess ? session : null,
+        onOperatorPanelLayoutChange: handleWorkspaceOperatorPanelLayoutChange,
       },
     },
     publicCommunityFunnelProps: {
@@ -7051,6 +7098,7 @@ export default function App() {
   const shellChromeHostProps = buildWebShellChromeHostProps({
     showHeaderIslands,
     isSessionsDrawerOpen,
+    shouldOverlaySessionsDrawer,
     showMobileAppShell,
     showMobileSettingsShell,
     showMobilePublicFunnel,

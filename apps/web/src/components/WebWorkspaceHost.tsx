@@ -122,6 +122,7 @@ export type WebWorkspaceHostProps = {
   initialComposerDraft: WorkspaceComposerDraft;
   onComposerDraftChange: (draft: WorkspaceComposerDraft) => void;
   onRegisterComposerApi: (api: WorkspaceComposerApi | null) => void;
+  onOperatorPanelLayoutChange?: (layout: { open: boolean; width: number; gutter: number }) => void;
   landingActionButtons: LandingActionButton[];
   authedWorkspaceComposerPlaceholder: string;
   guestWorkspaceComposerPlaceholder: string;
@@ -1025,6 +1026,14 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
     enabled: isOperatorDataPanelVisible,
     surface: "workspace_operator_data_panel",
   });
+
+  useEffect(() => {
+    props.onOperatorPanelLayoutChange?.({
+      open: isOperatorDataPanelVisible,
+      width: isOperatorDataPanelVisible ? operatorRightPanelWidth : 0,
+      gutter: isOperatorDataPanelVisible ? OPERATOR_RIGHT_PANEL_GUTTER : 0,
+    });
+  }, [isOperatorDataPanelVisible, operatorRightPanelWidth, props.onOperatorPanelLayoutChange]);
 
   useEffect(() => {
     workspaceAttachmentsRef.current = workspaceAttachments;

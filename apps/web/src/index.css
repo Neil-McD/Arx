@@ -244,16 +244,13 @@
   padding-left: var(--web-sessions-drawer-width);
 }
 
+.app-root.sessions-drawer-overlay .workspace:not(.scroll-to-bottom) {
+  padding-left: 0;
+}
+
 @media (max-width: 760px) {
   /* On narrow windows, keep the drawer overlayed instead of shrinking the chat column. */
   .app-root.sessions-drawer-open .workspace:not(.scroll-to-bottom) {
-    padding-left: 0;
-  }
-}
-
-@media (max-width: 1180px) {
-  /* Preserve a usable center workspace when both side panels are open. */
-  .app-root.sessions-drawer-open:has(.workspace-operator-data-open) .workspace:not(.scroll-to-bottom) {
     padding-left: 0;
   }
 }

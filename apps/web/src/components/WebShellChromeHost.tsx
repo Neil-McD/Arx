@@ -20,6 +20,7 @@ import type {
 export type WebShellChromeHostProps = {
   showHeaderIslands: boolean;
   isSessionsDrawerOpen: boolean;
+  shouldOverlaySessionsDrawer: boolean;
   showMobileAppShell: boolean;
   showMobileSettingsShell: boolean;
   showMobilePublicFunnel: boolean;
@@ -80,6 +81,7 @@ export function WebShellChromeHost(props: WebShellChromeHostProps) {
   const { rootClassName, shellClassName } = buildWebShellChromeClassNames({
     showHeaderIslands: props.showHeaderIslands,
     isSessionsDrawerOpen: props.isSessionsDrawerOpen,
+    shouldOverlaySessionsDrawer: props.shouldOverlaySessionsDrawer,
     showMobileAppShell: props.showMobileAppShell,
     showMobileSettingsShell: props.showMobileSettingsShell,
     showMobilePublicFunnel: props.showMobilePublicFunnel,

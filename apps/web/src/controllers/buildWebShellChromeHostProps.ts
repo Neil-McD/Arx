@@ -21,6 +21,7 @@ type CommunityLike = {
 export function buildWebShellChromeHostProps(params: {
   showHeaderIslands: boolean;
   isSessionsDrawerOpen: boolean;
+  shouldOverlaySessionsDrawer: boolean;
   showMobileAppShell: boolean;
   showMobileSettingsShell: boolean;
   showMobilePublicFunnel: boolean;
@@ -96,6 +97,7 @@ export function buildWebShellChromeHostProps(params: {
   return {
     showHeaderIslands: params.showHeaderIslands,
     isSessionsDrawerOpen: params.isSessionsDrawerOpen,
+    shouldOverlaySessionsDrawer: params.shouldOverlaySessionsDrawer,
     showMobileAppShell: params.showMobileAppShell,
     showMobileSettingsShell: params.showMobileSettingsShell,
     showMobilePublicFunnel: params.showMobilePublicFunnel,

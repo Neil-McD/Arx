@@ -1,6 +1,7 @@
 type BuildWebShellChromeClassNamesParams = {
   showHeaderIslands: boolean;
   isSessionsDrawerOpen: boolean;
+  shouldOverlaySessionsDrawer: boolean;
   showMobileAppShell: boolean;
   showMobileSettingsShell: boolean;
   showMobilePublicFunnel: boolean;
@@ -17,6 +18,8 @@ export function buildWebShellChromeClassNames(
   const rootClassName = `app-root${
     params.showHeaderIslands ? " web-header-islands" : ""
   }${params.isSessionsDrawerOpen ? " sessions-drawer-open" : ""}${
+    params.shouldOverlaySessionsDrawer ? " sessions-drawer-overlay" : ""
+  }${
     params.showMobileAppShell ? " mobile-shell" : ""
   }${params.showMobileSettingsShell ? " mobile-settings-shell" : ""}${
     params.showMobilePublicFunnel ? " public-funnel-mobile" : ""
