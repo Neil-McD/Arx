@@ -44,6 +44,7 @@ export type WebCommunityAiAgentSkillsEditorProps = {
     patch: { enabled?: boolean },
   ) => Promise<boolean> | boolean;
   onDetachSkill: (communitySkillAttachmentId: string) => Promise<boolean> | boolean;
+  onBrowseCatalog?: () => void;
 };
 
 export function WebCommunityAiAgentSkillsEditor(
@@ -68,6 +69,7 @@ export function WebCommunityAiAgentSkillsEditor(
     onAttachPackage,
     onUpdateSkill,
     onDetachSkill,
+    onBrowseCatalog,
   } = props;
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [draft, setDraft] = useState<CreateSkillPackageInput>(buildInitialDraft);
@@ -87,7 +89,11 @@ export function WebCommunityAiAgentSkillsEditor(
       <div className="agent-capability-toolbar">
         <button
           type="button"
-          onClick={() => setIsCreateOpen((prev) => !prev)}
+          onClick={
+            onBrowseCatalog
+              ? onBrowseCatalog
+              : () => setIsCreateOpen((prev) => !prev)
+          }
           disabled={isCreatingSkill}
         >
           {isCreateOpen ? "Close" : addButtonLabel}

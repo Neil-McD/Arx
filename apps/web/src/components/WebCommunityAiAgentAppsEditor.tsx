@@ -87,6 +87,7 @@ export type WebCommunityAiAgentAppsEditorProps = {
     secret: string,
   ) => Promise<boolean> | boolean;
   onUnmountApp: (communityAppMountId: string) => Promise<boolean> | boolean;
+  onBrowseCatalog?: () => void;
 };
 
 export function WebCommunityAiAgentAppsEditor(
@@ -110,6 +111,7 @@ export function WebCommunityAiAgentAppsEditor(
     onRefreshApp,
     onReconnectApp,
     onUnmountApp,
+    onBrowseCatalog,
   } = props;
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [connectStep, setConnectStep] = useState<ConnectStep>("url");
@@ -172,7 +174,11 @@ export function WebCommunityAiAgentAppsEditor(
       <div className="model-note agent-editor-intro">{intro}</div>
 
       <div className="agent-capability-toolbar">
-        <button type="button" onClick={openOrCloseCreateFlow} disabled={isConnecting}>
+        <button
+          type="button"
+          onClick={onBrowseCatalog ?? openOrCloseCreateFlow}
+          disabled={isConnecting}
+        >
           {isCreateOpen ? "Close" : addButtonLabel}
         </button>
       </div>
