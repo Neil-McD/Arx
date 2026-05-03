@@ -33,10 +33,33 @@ export type ResolvedEffectiveHarness = {
   activeCommunityModule: ResolvedCommunityHarnessModule | null;
   runtimeMountedTools: RuntimeMountedMcpTool[];
   discoveryMountedTools: RuntimeMountedMcpTool[];
+  shadowedMountedTools: RuntimeMountedMcpTool[];
+  capabilityGroups: EffectiveMountedToolCapabilityGroup[];
   shadowedRuntimeToolNames: string[];
   requestedSkillMentionTokens: string[];
   ambiguousSkillMentionTokens: string[];
   systemPromptSuffix: string;
+};
+
+export type EffectiveMountedToolCapabilityGroup = {
+  capability_key: string;
+  app_name: string;
+  catalog_app_id: string | null;
+  endpoint_url: string;
+  auth_type: string;
+  scopes: Array<"user" | "community">;
+  default_scope: "user" | "community";
+  tool_count: number;
+  default_runtime_tool_names: string[];
+  executable_runtime_tool_names: string[];
+};
+
+export type ResolvedEffectiveMountedToolCatalog = {
+  executableTools: RuntimeMountedMcpTool[];
+  defaultDiscoveryTools: RuntimeMountedMcpTool[];
+  shadowedTools: RuntimeMountedMcpTool[];
+  shadowedRuntimeToolNames: string[];
+  capabilityGroups: EffectiveMountedToolCapabilityGroup[];
 };
 
 export function buildAmbiguousSkillMentionsPromptBlock(
@@ -53,6 +76,32 @@ export function buildAmbiguousSkillMentionsPromptBlock(
 
 function normalizeMountedToolDuplicateKeyPart(value: unknown): string {
   return typeof value === "string" ? value.trim().toLowerCase() : "";
+}
+
+function buildMountedToolCapabilityKey(tool: RuntimeMountedMcpTool): string {
+  const normalizedCatalogAppId = normalizeMountedToolDuplicateKeyPart(
+    tool.catalog_app_id,
+  );
+  if (normalizedCatalogAppId) return `catalog:${normalizedCatalogAppId}`;
+
+  const normalizedEndpointUrl = normalizeMountedToolDuplicateKeyPart(
+    tool.endpoint_url,
+  );
+  const normalizedAuthType = normalizeMountedToolDuplicateKeyPart(
+    tool.auth_type,
+  );
+  if (normalizedEndpointUrl && normalizedAuthType) {
+    return `endpoint:${normalizedEndpointUrl}:auth:${normalizedAuthType}`;
+  }
+
+  const normalizedAppName =
+    normalizeMountedToolDuplicateKeyPart(tool.app_name) || "app";
+  const normalizedDeveloperAppId = normalizeMountedToolDuplicateKeyPart(
+    tool.developer_app_id,
+  );
+  return normalizedDeveloperAppId
+    ? `developer:${normalizedDeveloperAppId}`
+    : `app:${normalizedAppName}`;
 }
 
 export function buildMountedToolDuplicateKeys(
@@ -92,15 +141,18 @@ export function buildEffectiveMountedToolDiscoveryCatalog(
   mountedTools: RuntimeMountedMcpTool[],
 ): {
   discoveryMountedTools: RuntimeMountedMcpTool[];
+  shadowedMountedTools: RuntimeMountedMcpTool[];
   shadowedRuntimeToolNames: string[];
 } {
   const discoveryMountedTools: RuntimeMountedMcpTool[] = [];
+  const shadowedMountedTools: RuntimeMountedMcpTool[] = [];
   const shadowedRuntimeToolNames: string[] = [];
   const claimedDuplicateKeys = new Set<string>();
 
   const appendToolIfVisible = (tool: RuntimeMountedMcpTool) => {
     const duplicateKeys = buildMountedToolDuplicateKeys(tool);
     if (duplicateKeys.some((key) => claimedDuplicateKeys.has(key))) {
+      shadowedMountedTools.push(tool);
       shadowedRuntimeToolNames.push(tool.runtime_tool_name);
       return;
     }
@@ -119,7 +171,97 @@ export function buildEffectiveMountedToolDiscoveryCatalog(
 
   return {
     discoveryMountedTools,
+    shadowedMountedTools,
     shadowedRuntimeToolNames,
+  };
+}
+
+function buildEffectiveMountedToolCapabilityGroups(args: {
+  executableTools: RuntimeMountedMcpTool[];
+  defaultDiscoveryTools: RuntimeMountedMcpTool[];
+}): EffectiveMountedToolCapabilityGroup[] {
+  const defaultToolNames = new Set(
+    args.defaultDiscoveryTools.map((tool) => tool.runtime_tool_name),
+  );
+  const groups = new Map<
+    string,
+    {
+      appName: string;
+      catalogAppId: string | null;
+      endpointUrl: string;
+      authType: string;
+      scopes: Set<"user" | "community">;
+      defaultScopes: Set<"user" | "community">;
+      executableToolNames: Set<string>;
+      defaultToolNames: Set<string>;
+    }
+  >();
+
+  for (const tool of args.executableTools) {
+    const key = buildMountedToolCapabilityKey(tool);
+    const group =
+      groups.get(key) ??
+      {
+        appName: tool.app_name,
+        catalogAppId: tool.catalog_app_id,
+        endpointUrl: tool.endpoint_url,
+        authType: tool.auth_type,
+        scopes: new Set<"user" | "community">(),
+        defaultScopes: new Set<"user" | "community">(),
+        executableToolNames: new Set<string>(),
+        defaultToolNames: new Set<string>(),
+      };
+    group.scopes.add(tool.scope);
+    group.executableToolNames.add(tool.runtime_tool_name);
+    if (defaultToolNames.has(tool.runtime_tool_name)) {
+      group.defaultScopes.add(tool.scope);
+      group.defaultToolNames.add(tool.runtime_tool_name);
+    }
+    groups.set(key, group);
+  }
+
+  return [...groups.entries()]
+    .map(([capabilityKey, group]) => {
+      const scopes = [...group.scopes].sort((left, right) =>
+        left.localeCompare(right),
+      );
+      const defaultScope = group.defaultScopes.has("community")
+        ? "community"
+        : "user";
+      return {
+        capability_key: capabilityKey,
+        app_name: group.appName,
+        catalog_app_id: group.catalogAppId,
+        endpoint_url: group.endpointUrl,
+        auth_type: group.authType,
+        scopes,
+        default_scope: defaultScope,
+        tool_count: group.executableToolNames.size,
+        default_runtime_tool_names: [...group.defaultToolNames].sort(),
+        executable_runtime_tool_names: [...group.executableToolNames].sort(),
+      } satisfies EffectiveMountedToolCapabilityGroup;
+    })
+    .sort((left, right) => left.capability_key.localeCompare(right.capability_key));
+}
+
+export function resolveEffectiveMountedToolCatalog(
+  mountedTools: RuntimeMountedMcpTool[],
+): ResolvedEffectiveMountedToolCatalog {
+  const executableTools = [...mountedTools];
+  const {
+    discoveryMountedTools: defaultDiscoveryTools,
+    shadowedMountedTools: shadowedTools,
+    shadowedRuntimeToolNames,
+  } = buildEffectiveMountedToolDiscoveryCatalog(executableTools);
+  return {
+    executableTools,
+    defaultDiscoveryTools,
+    shadowedTools,
+    shadowedRuntimeToolNames,
+    capabilityGroups: buildEffectiveMountedToolCapabilityGroups({
+      executableTools,
+      defaultDiscoveryTools,
+    }),
   };
 }
 
@@ -175,17 +317,20 @@ export function composeResolvedRuntimeHarness(args: {
     ...args.personalMountedTools,
     ...(activeCommunityModule?.runtimeMountedTools ?? []),
   ];
-  const { discoveryMountedTools, shadowedRuntimeToolNames } =
-    buildEffectiveMountedToolDiscoveryCatalog(runtimeMountedTools);
+  const resolvedMountedToolCatalog =
+    resolveEffectiveMountedToolCatalog(runtimeMountedTools);
 
   return {
     personalMountedTools: args.personalMountedTools,
     personalSkillInventory,
     selectedPersonalSkills,
     activeCommunityModule,
-    runtimeMountedTools,
-    discoveryMountedTools,
-    shadowedRuntimeToolNames,
+    runtimeMountedTools: resolvedMountedToolCatalog.executableTools,
+    discoveryMountedTools: resolvedMountedToolCatalog.defaultDiscoveryTools,
+    shadowedMountedTools: resolvedMountedToolCatalog.shadowedTools,
+    capabilityGroups: resolvedMountedToolCatalog.capabilityGroups,
+    shadowedRuntimeToolNames:
+      resolvedMountedToolCatalog.shadowedRuntimeToolNames,
     requestedSkillMentionTokens:
       args.skillResolution.requested_mention_tokens,
     ambiguousSkillMentionTokens:

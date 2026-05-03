@@ -4,7 +4,7 @@ import type { AppTheme } from "../../../../shared/theme";
 import type { BuilderBillingStatus } from "../../../../shared/builderBillingStatusGateway";
 import type { WorkspaceCreditBalance } from "../../../../shared/workspaceCreditsGateway";
 import type { PendingPurchaseClaim } from "../../../../shared/pay_first";
-import type { UserPlatformMountedApp } from "../../../../shared/userPlatformAppMountTypes";
+import type { HarnessMount } from "../../../../shared/harnessMountTypes";
 import type { CreateSkillPackageInput } from "../../../../shared/skillPackageTypes";
 import type { UserPlatformInstalledSkill } from "../../../../shared/userPlatformSkillTypes";
 import type { UseWebProviderConnectionUiControllerResult } from "../controllers/useWebProviderConnectionUiController";
@@ -124,7 +124,9 @@ export type WebSettingsPanelsProps = {
     openDiscoverSkills: () => void;
     shouldOpenCreateSkillComposer: boolean;
     onConsumeCreateSkillComposerOpen: () => void;
-    userPlatformAppMounts: UserPlatformMountedApp[];
+    harnessMounts: HarnessMount[];
+    isLoadingHarnessMounts: boolean;
+    harnessMountError: string | null;
     isLoadingUserPlatformAppMounts: boolean;
     userPlatformAppMountError: string | null;
     userPlatformAppMutationError: string | null;
@@ -307,7 +309,9 @@ export function WebSettingsPanels(props: WebSettingsPanelsProps) {
     shouldOpenCreateSkillComposer: integrations.shouldOpenCreateSkillComposer,
     onConsumeCreateSkillComposerOpen:
       integrations.onConsumeCreateSkillComposerOpen,
-    userPlatformAppMounts: integrations.userPlatformAppMounts,
+    harnessMounts: integrations.harnessMounts,
+    isLoadingHarnessMounts: integrations.isLoadingHarnessMounts,
+    harnessMountError: integrations.harnessMountError,
     isLoadingUserPlatformAppMounts: integrations.isLoadingUserPlatformAppMounts,
     userPlatformAppMountError: integrations.userPlatformAppMountError,
     userPlatformAppMutationError: integrations.userPlatformAppMutationError,

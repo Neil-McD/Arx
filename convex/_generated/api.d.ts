@@ -68,6 +68,7 @@ import type * as entitlements from "../entitlements.js";
 import type * as errorLogging from "../errorLogging.js";
 import type * as fallbackHtmlSearchTransport from "../fallbackHtmlSearchTransport.js";
 import type * as gates from "../gates.js";
+import type * as harnessMounts from "../harnessMounts.js";
 import type * as http from "../http.js";
 import type * as httpAuth from "../httpAuth.js";
 import type * as httpAuthBridge from "../httpAuthBridge.js";
@@ -196,6 +197,7 @@ declare const fullApi: ApiFromModules<{
   errorLogging: typeof errorLogging;
   fallbackHtmlSearchTransport: typeof fallbackHtmlSearchTransport;
   gates: typeof gates;
+  harnessMounts: typeof harnessMounts;
   http: typeof http;
   httpAuth: typeof httpAuth;
   httpAuthBridge: typeof httpAuthBridge;

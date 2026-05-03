@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import type { CreateSkillPackageInput } from "../../../../shared/skillPackageTypes";
 import type { UserPlatformInstalledSkill } from "../../../../shared/userPlatformSkillTypes";
-import type { UserPlatformMountedApp } from "../../../../shared/userPlatformAppMountTypes";
+import type { HarnessMount } from "../../../../shared/harnessMountTypes";
 import { DISCOVER_APP_CATALOG } from "../lib/discoverCatalog";
 import { DiscoverCatalogLogo } from "./DiscoverCatalogLogo";
 
@@ -20,7 +20,9 @@ type WebIntegrationsSettingsSectionProps = {
   openDiscoverSkills: () => void;
   shouldOpenCreateSkillComposer: boolean;
   onConsumeCreateSkillComposerOpen: () => void;
-  userPlatformAppMounts: UserPlatformMountedApp[];
+  harnessMounts: HarnessMount[];
+  isLoadingHarnessMounts: boolean;
+  harnessMountError: string | null;
   isLoadingUserPlatformAppMounts: boolean;
   userPlatformAppMountError: string | null;
   userPlatformAppMutationError: string | null;
@@ -92,7 +94,7 @@ function pluralizeTools(count: number): string {
   return `${count} ${count === 1 ? "tool" : "tools"}`;
 }
 
-function buildMountStatusLabel(mount: UserPlatformMountedApp): string {
+function buildMountStatusLabel(mount: HarnessMount): string {
   const count = mount.enabled_tools.length;
   const connectionStatus = String(mount.connection.connection_status ?? "").trim();
   const gatedCount = mount.tools.filter(
@@ -100,6 +102,9 @@ function buildMountStatusLabel(mount: UserPlatformMountedApp): string {
   ).length;
   if (!mount.enabled) {
     return `Disabled · ${pluralizeTools(count)}`;
+  }
+  if (mount.live_status !== "live") {
+    return `${buildNotLiveReasonLabel(mount)} · ${pluralizeTools(count)}`;
   }
   if (
     mount.app.auth_type !== "none" &&
@@ -114,27 +119,69 @@ function buildMountStatusLabel(mount: UserPlatformMountedApp): string {
   return `${pluralizeTools(count)} active`;
 }
 
-function buildMountDetail(mount: UserPlatformMountedApp): string {
+function buildNotLiveReasonLabel(mount: HarnessMount): string {
+  switch (mount.not_live_reason) {
+    case "needs_auth":
+      return "Reconnect required";
+    case "validation_failed":
+      return "Validation failed";
+    case "no_tools_discovered":
+      return "No tools discovered";
+    case "missing_snapshot":
+      return "Missing tool snapshot";
+    case "disabled":
+      return "Disabled";
+    case "unknown":
+    default:
+      return "Not live";
+  }
+}
+
+function buildMountDetail(mount: HarnessMount): string {
   const enabledCount = mount.enabled_tools.length;
   const gatedCount = mount.tools.filter(
     (tool) => tool.enabled && tool.risk_level !== "read",
   ).length;
+  const scopeLabel =
+    mount.scope === "community"
+      ? "the active community lens"
+      : "your baseline platform layer";
   if (!mount.enabled) {
-    return "Disabled in your platform layer.";
+    return `Disabled in ${scopeLabel}.`;
+  }
+  if (mount.live_status !== "live") {
+    return `${buildNotLiveReasonLabel(mount)} in ${scopeLabel}.`;
   }
   if (
     mount.app.auth_type !== "none" &&
     mount.connection.connection_status !== "connected"
   ) {
-    return "Reconnect this app to restore its platform tools.";
+    return `Reconnect this app to restore tools in ${scopeLabel}.`;
   }
   if (gatedCount > 0) {
     return `${pluralizeTools(enabledCount)} mounted. ${gatedCount} write or sensitive tools run in full-access mode with audit logging.`;
   }
-  return `${pluralizeTools(enabledCount)} mounted in your baseline platform layer.`;
+  return `${pluralizeTools(enabledCount)} mounted in ${scopeLabel}.`;
 }
 
-function findCatalogEntryForMount(mount: UserPlatformMountedApp) {
+function buildHarnessSummary(mounts: HarnessMount[]): string {
+  const liveCount = mounts.filter((mount) => mount.live_status === "live").length;
+  const notLiveCount = mounts.length - liveCount;
+  const communityCount = mounts.filter((mount) => mount.scope === "community").length;
+  const scopeLabel =
+    communityCount > 0
+      ? `${mounts.length} harness apps across personal and active community scope`
+      : `${mounts.length} personal harness apps`;
+  if (mounts.length === 0) return "No apps are mounted in the active harness yet.";
+  if (notLiveCount === 0) return `${scopeLabel}. ${liveCount} live.`;
+  return `${scopeLabel}. ${liveCount} live, ${notLiveCount} not live.`;
+}
+
+function buildScopeLabel(mount: HarnessMount): string {
+  return mount.scope === "community" ? "Community lens" : "Personal";
+}
+
+function findCatalogEntryForMount(mount: HarnessMount) {
   const byCatalogId =
     typeof mount.app.catalog_app_id === "string" && mount.app.catalog_app_id.trim()
       ? DISCOVER_APP_CATALOG.find(
@@ -171,7 +218,9 @@ export function WebIntegrationsSettingsSection(
     openDiscoverSkills,
     shouldOpenCreateSkillComposer,
     onConsumeCreateSkillComposerOpen,
-    userPlatformAppMounts,
+    harnessMounts,
+    isLoadingHarnessMounts,
+    harnessMountError,
     isLoadingUserPlatformAppMounts,
     userPlatformAppMountError,
     userPlatformAppMutationError,
@@ -227,6 +276,15 @@ export function WebIntegrationsSettingsSection(
       removingUserPlatformAppMountId,
       updatingUserPlatformAppMountId,
     ],
+  );
+
+  const visibleHarnessMounts = useMemo(
+    () =>
+      [...harnessMounts].sort((left, right) => {
+        if (left.scope !== right.scope) return left.scope === "user" ? -1 : 1;
+        return left.app.name.localeCompare(right.app.name);
+      }),
+    [harnessMounts],
   );
 
   useEffect(() => {
@@ -295,21 +353,30 @@ export function WebIntegrationsSettingsSection(
             <rect x="4" y="14" width="6" height="6" rx="1.5" />
             <rect x="14" y="14" width="6" height="6" rx="1.5" />
           </svg>
-          My apps
+          Active harness apps
         </div>
         <div className="settings-section-desc">
-          Personal apps become part of your baseline platform tools and stay
-          available across communities.
+          Personal apps stay available across communities. Community apps appear
+          here when their community lens is active.
         </div>
+        {session ? (
+          <div className="model-note">
+            {isLoadingHarnessMounts && harnessMounts.length === 0
+              ? "Loading active harness status..."
+              : harnessMountError
+                ? "Could not load unified harness status yet."
+                : buildHarnessSummary(harnessMounts)}
+          </div>
+        ) : null}
         {!session ? (
           <div className="model-note">
             Sign in to connect personal apps at the platform level.
           </div>
         ) : null}
-        {session && userPlatformAppMountError ? (
+        {session && (userPlatformAppMountError || harnessMountError) ? (
           <div className="auth-error">
-            Couldn&apos;t load your personal apps right now. Try refreshing the
-            page.
+            Couldn&apos;t load your active harness apps right now. Try refreshing
+            the page.
           </div>
         ) : null}
         {session && userPlatformAppMutationError ? (
@@ -317,20 +384,26 @@ export function WebIntegrationsSettingsSection(
         ) : null}
         {session ? (
           <div className="integrations-app-list">
-            {isLoadingUserPlatformAppMounts && userPlatformAppMounts.length === 0 ? (
-              <div className="model-note">Loading your apps…</div>
+            {(isLoadingUserPlatformAppMounts || isLoadingHarnessMounts) &&
+            visibleHarnessMounts.length === 0 ? (
+              <div className="model-note">Loading your active harness apps…</div>
             ) : null}
-            {!isLoadingUserPlatformAppMounts && userPlatformAppMounts.length === 0 ? (
+            {!isLoadingUserPlatformAppMounts &&
+            !isLoadingHarnessMounts &&
+            visibleHarnessMounts.length === 0 ? (
               <div className="model-note">
-                No personal apps connected yet. Use `Connect apps` to browse the
-                catalog.
+                No apps are mounted in your active harness yet. Use `Connect
+                apps` to browse the catalog.
               </div>
             ) : null}
-            {userPlatformAppMounts.map((mount) => {
-              const canReconnect = mount.app.auth_type !== "none";
-              const isBusy = busyMountIds.has(mount.id);
+            {visibleHarnessMounts.map((mount) => {
+              const isPersonalMount = mount.scope === "user";
+              const sourceMountId = mount.source_mount_id;
+              const canReconnect = isPersonalMount && mount.app.auth_type !== "none";
+              const isBusy = isPersonalMount && busyMountIds.has(sourceMountId);
               const isReconnectDraftOpen = reconnectDraftMountId === mount.id;
-              const isReconnecting = reconnectingUserPlatformAppMountId === mount.id;
+              const isReconnecting =
+                reconnectingUserPlatformAppMountId === sourceMountId;
               const isMenuOpen = openMountMenuId === mount.id;
               const catalogEntry = findCatalogEntryForMount(mount);
               return (
@@ -348,6 +421,9 @@ export function WebIntegrationsSettingsSection(
                           <span className="integration-status-pill">
                             {buildMountStatusLabel(mount)}
                           </span>
+                          <span className="integration-status-pill">
+                            {buildScopeLabel(mount)}
+                          </span>
                         </div>
                         <div className="integration-mounted-meta">
                           {mount.app.endpoint_url}
@@ -357,109 +433,117 @@ export function WebIntegrationsSettingsSection(
                         </div>
                       </div>
                     </div>
-                    <div className="integration-mounted-rail">
-                      <label
-                        className={`members-switch integration-mounted-switch${
-                          isBusy ? " is-disabled" : ""
-                        }`}
-                        title={mount.enabled ? "Disable app" : "Enable app"}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={mount.enabled}
-                          disabled={isBusy}
-                          aria-label={`${
-                            mount.enabled ? "Disable" : "Enable"
-                          } ${mount.app.name}`}
-                          onChange={() =>
-                            void onUpdateUserPlatformAppMount(mount.id, {
-                              enabled: !mount.enabled,
-                            })
-                          }
-                        />
-                        <span className="members-switch-track">
-                          <span className="members-switch-thumb" />
-                        </span>
-                      </label>
-                      <div
-                        className="integration-mounted-menu-shell"
-                        data-integration-menu-root="true"
-                      >
-                        <button
-                          type="button"
-                          className="integration-mounted-menu-trigger"
-                          aria-expanded={isMenuOpen}
-                          aria-label={`${mount.app.name} options`}
-                          disabled={isBusy}
-                          onClick={() =>
-                            setOpenMountMenuId((current) =>
-                              current === mount.id ? null : mount.id,
-                            )
-                          }
+                    {isPersonalMount ? (
+                      <div className="integration-mounted-rail">
+                        <label
+                          className={`members-switch integration-mounted-switch${
+                            isBusy ? " is-disabled" : ""
+                          }`}
+                          title={mount.enabled ? "Disable app" : "Enable app"}
                         >
-                          <svg viewBox="0 0 24 24" aria-hidden="true">
-                            <circle cx="5" cy="12" r="1.8" />
-                            <circle cx="12" cy="12" r="1.8" />
-                            <circle cx="19" cy="12" r="1.8" />
-                          </svg>
-                        </button>
-                        {isMenuOpen ? (
-                          <div
-                            className="integration-mounted-menu"
-                            role="menu"
-                            aria-label={`${mount.app.name} actions`}
+                          <input
+                            type="checkbox"
+                            checked={mount.enabled}
+                            disabled={isBusy}
+                            aria-label={`${
+                              mount.enabled ? "Disable" : "Enable"
+                            } ${mount.app.name}`}
+                            onChange={() =>
+                              void onUpdateUserPlatformAppMount(sourceMountId, {
+                                enabled: !mount.enabled,
+                              })
+                            }
+                          />
+                          <span className="members-switch-track">
+                            <span className="members-switch-thumb" />
+                          </span>
+                        </label>
+                        <div
+                          className="integration-mounted-menu-shell"
+                          data-integration-menu-root="true"
+                        >
+                          <button
+                            type="button"
+                            className="integration-mounted-menu-trigger"
+                            aria-expanded={isMenuOpen}
+                            aria-label={`${mount.app.name} options`}
+                            disabled={isBusy}
+                            onClick={() =>
+                              setOpenMountMenuId((current) =>
+                                current === mount.id ? null : mount.id,
+                              )
+                            }
                           >
-                            <button
-                              type="button"
-                              className="integration-mounted-menu-item"
-                              disabled={isBusy}
-                              onClick={() => {
-                                setOpenMountMenuId(null);
-                                void onRefreshUserPlatformApp(mount.id);
-                              }}
+                            <svg viewBox="0 0 24 24" aria-hidden="true">
+                              <circle cx="5" cy="12" r="1.8" />
+                              <circle cx="12" cy="12" r="1.8" />
+                              <circle cx="19" cy="12" r="1.8" />
+                            </svg>
+                          </button>
+                          {isMenuOpen ? (
+                            <div
+                              className="integration-mounted-menu"
+                              role="menu"
+                              aria-label={`${mount.app.name} actions`}
                             >
-                              {refreshingUserPlatformAppMountId === mount.id
-                                ? "Refreshing…"
-                                : "Refresh"}
-                            </button>
-                            {canReconnect ? (
                               <button
                                 type="button"
                                 className="integration-mounted-menu-item"
                                 disabled={isBusy}
                                 onClick={() => {
                                   setOpenMountMenuId(null);
-                                  if (isReconnectDraftOpen) {
-                                    setReconnectDraftMountId(null);
-                                    setReconnectSecret("");
-                                    setReconnectError(null);
-                                    return;
-                                  }
-                                  setReconnectDraftMountId(mount.id);
-                                  setReconnectSecret("");
-                                  setReconnectError(null);
+                                  void onRefreshUserPlatformApp(sourceMountId);
                                 }}
                               >
-                                {isReconnectDraftOpen ? "Cancel reconnect" : "Reconnect"}
+                                {refreshingUserPlatformAppMountId === sourceMountId
+                                  ? "Refreshing…"
+                                  : "Refresh"}
                               </button>
-                            ) : null}
-                            <button
-                              type="button"
-                              className="integration-mounted-menu-item danger"
-                              disabled={isBusy}
-                              onClick={() => {
-                                setOpenMountMenuId(null);
-                                void onUnmountUserPlatformApp(mount.id);
-                              }}
-                            >
-                              {removingUserPlatformAppMountId === mount.id
-                                ? "Removing…"
-                                : "Remove"}
-                            </button>
-                          </div>
-                        ) : null}
+                              {canReconnect ? (
+                                <button
+                                  type="button"
+                                  className="integration-mounted-menu-item"
+                                  disabled={isBusy}
+                                  onClick={() => {
+                                    setOpenMountMenuId(null);
+                                    if (isReconnectDraftOpen) {
+                                      setReconnectDraftMountId(null);
+                                      setReconnectSecret("");
+                                      setReconnectError(null);
+                                      return;
+                                    }
+                                    setReconnectDraftMountId(mount.id);
+                                    setReconnectSecret("");
+                                    setReconnectError(null);
+                                  }}
+                                >
+                                  {isReconnectDraftOpen ? "Cancel reconnect" : "Reconnect"}
+                                </button>
+                              ) : null}
+                              <button
+                                type="button"
+                                className="integration-mounted-menu-item danger"
+                                disabled={isBusy}
+                                onClick={() => {
+                                  setOpenMountMenuId(null);
+                                  void onUnmountUserPlatformApp(sourceMountId);
+                                }}
+                              >
+                                {removingUserPlatformAppMountId === sourceMountId
+                                  ? "Removing…"
+                                  : "Remove"}
+                              </button>
+                            </div>
+                          ) : null}
+                        </div>
                       </div>
-                    </div>
+                    ) : (
+                      <div className="integration-mounted-rail">
+                        <span className="integration-status-pill">
+                          Managed in community settings
+                        </span>
+                      </div>
+                    )}
                   </div>
                   {isReconnectDraftOpen ? (
                     <div className="integration-reconnect-panel">
@@ -494,7 +578,7 @@ export function WebIntegrationsSettingsSection(
                               return;
                             }
                             const ok = await onReconnectUserPlatformApp(
-                              mount.id,
+                              sourceMountId,
                               reconnectSecret.trim(),
                             );
                             if (!ok) return;

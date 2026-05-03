@@ -65,6 +65,7 @@ import { useWebPersonalMemoryUiController } from "./controllers/useWebPersonalMe
 import { useWebPublicCommunityUiController } from "./controllers/useWebPublicCommunityUiController";
 import { useWebProfileSettingsUiController } from "./controllers/useWebProfileSettingsUiController";
 import { useWebProviderConnectionUiController } from "./controllers/useWebProviderConnectionUiController";
+import { useWebHarnessMountsController } from "./controllers/useWebHarnessMountsController";
 import { useWebUserPlatformAppMountsController } from "./controllers/useWebUserPlatformAppMountsController";
 import { useWebUserPlatformSkillsController } from "./controllers/useWebUserPlatformSkillsController";
 import { useWebWorkspaceProjectStateController } from "./controllers/useWebWorkspaceProjectStateController";
@@ -1953,6 +1954,18 @@ export default function App() {
     ensureSession: ensureUsableAuthSession,
   });
   const {
+    harnessMounts,
+    isLoadingHarnessMounts,
+    harnessMountError,
+    harnessMountsLoadedKeyRef,
+    clearHarnessMounts,
+    loadHarnessMounts,
+  } = useWebHarnessMountsController<AuthSession>({
+    activeCommunityId,
+    session,
+    ensureSession: ensureUsableAuthSession,
+  });
+  const {
     userPlatformSkills,
     isLoadingUserPlatformSkills,
     userPlatformSkillError,
@@ -2768,11 +2781,27 @@ export default function App() {
     saveFailureMessage: "Failed to save AI agent changes.",
   });
 
+  const reloadHarnessMounts = useCallback(async () => {
+    if (!session) {
+      clearHarnessMounts();
+      return;
+    }
+    harnessMountsLoadedKeyRef.current = null;
+    await loadHarnessMounts(session);
+  }, [
+    clearHarnessMounts,
+    harnessMountsLoadedKeyRef,
+    loadHarnessMounts,
+    session,
+  ]);
+
   const handleConnectCommunityApp = useCallback(
     async (input: ConnectCommunityAppInput) => {
-      return await connectCommunityApp(input);
+      const ok = await connectCommunityApp(input);
+      if (ok) void reloadHarnessMounts();
+      return ok;
     },
-    [connectCommunityApp],
+    [connectCommunityApp, reloadHarnessMounts],
   );
 
   const handleConnectUserPlatformApp = useCallback(
@@ -2783,9 +2812,11 @@ export default function App() {
       description?: string;
       secret?: string;
     }) => {
-      return await connectUserPlatformApp(input);
+      const result = await connectUserPlatformApp(input);
+      if (result.ok) void reloadHarnessMounts();
+      return result;
     },
-    [connectUserPlatformApp],
+    [connectUserPlatformApp, reloadHarnessMounts],
   );
 
   const handleUpdateUserPlatformAppMount = useCallback(
@@ -2796,30 +2827,38 @@ export default function App() {
         enabledTools?: string[];
       },
     ) => {
-      return await updateUserPlatformAppMount(userPlatformAppMountId, patch);
+      const ok = await updateUserPlatformAppMount(userPlatformAppMountId, patch);
+      if (ok) void reloadHarnessMounts();
+      return ok;
     },
-    [updateUserPlatformAppMount],
+    [reloadHarnessMounts, updateUserPlatformAppMount],
   );
 
   const handleRefreshUserPlatformApp = useCallback(
     async (userPlatformAppMountId: string) => {
-      return await refreshUserPlatformApp(userPlatformAppMountId);
+      const ok = await refreshUserPlatformApp(userPlatformAppMountId);
+      if (ok) void reloadHarnessMounts();
+      return ok;
     },
-    [refreshUserPlatformApp],
+    [refreshUserPlatformApp, reloadHarnessMounts],
   );
 
   const handleReconnectUserPlatformApp = useCallback(
     async (userPlatformAppMountId: string, secret: string) => {
-      return await reconnectUserPlatformApp(userPlatformAppMountId, secret);
+      const ok = await reconnectUserPlatformApp(userPlatformAppMountId, secret);
+      if (ok) void reloadHarnessMounts();
+      return ok;
     },
-    [reconnectUserPlatformApp],
+    [reconnectUserPlatformApp, reloadHarnessMounts],
   );
 
   const handleUnmountUserPlatformApp = useCallback(
     async (userPlatformAppMountId: string) => {
-      return await unmountUserPlatformApp(userPlatformAppMountId);
+      const ok = await unmountUserPlatformApp(userPlatformAppMountId);
+      if (ok) void reloadHarnessMounts();
+      return ok;
     },
-    [unmountUserPlatformApp],
+    [reloadHarnessMounts, unmountUserPlatformApp],
   );
 
   const handleUpdateCommunityAppMount = useCallback(
@@ -2830,30 +2869,38 @@ export default function App() {
         enabledTools?: string[];
       },
     ) => {
-      return await updateCommunityAppMount(communityAppMountId, patch);
+      const ok = await updateCommunityAppMount(communityAppMountId, patch);
+      if (ok) void reloadHarnessMounts();
+      return ok;
     },
-    [updateCommunityAppMount],
+    [reloadHarnessMounts, updateCommunityAppMount],
   );
 
   const handleUnmountCommunityApp = useCallback(
     async (communityAppMountId: string) => {
-      return await unmountCommunityApp(communityAppMountId);
+      const ok = await unmountCommunityApp(communityAppMountId);
+      if (ok) void reloadHarnessMounts();
+      return ok;
     },
-    [unmountCommunityApp],
+    [reloadHarnessMounts, unmountCommunityApp],
   );
 
   const handleRefreshCommunityApp = useCallback(
     async (communityAppMountId: string) => {
-      return await refreshCommunityApp(communityAppMountId);
+      const ok = await refreshCommunityApp(communityAppMountId);
+      if (ok) void reloadHarnessMounts();
+      return ok;
     },
-    [refreshCommunityApp],
+    [refreshCommunityApp, reloadHarnessMounts],
   );
 
   const handleReconnectCommunityApp = useCallback(
     async (communityAppMountId: string, secret: string) => {
-      return await reconnectCommunityApp(communityAppMountId, secret);
+      const ok = await reconnectCommunityApp(communityAppMountId, secret);
+      if (ok) void reloadHarnessMounts();
+      return ok;
     },
-    [reconnectCommunityApp],
+    [reconnectCommunityApp, reloadHarnessMounts],
   );
 
   const handleCreateCommunitySkill = useCallback(
@@ -3892,6 +3939,31 @@ export default function App() {
     clearUserPlatformAppMounts,
     loadUserPlatformAppMounts,
     userPlatformAppMountsLoadedUserIdRef,
+  ]);
+
+  useEffect(() => {
+    const shouldLoadHarnessMounts =
+      activePage === "discover" ||
+      (activePage === "workspace" &&
+        activeView === "settings" &&
+        settingsPage === "integrations");
+    if (!shouldLoadHarnessMounts) return;
+    if (!session) {
+      clearHarnessMounts();
+      return;
+    }
+    const loadedKey = `${session.user.id}:${activeCommunityId ?? "personal"}`;
+    if (harnessMountsLoadedKeyRef.current === loadedKey) return;
+    void loadHarnessMounts(session);
+  }, [
+    activeCommunityId,
+    activePage,
+    activeView,
+    session,
+    settingsPage,
+    clearHarnessMounts,
+    harnessMountsLoadedKeyRef,
+    loadHarnessMounts,
   ]);
 
   useEffect(() => {
@@ -6436,7 +6508,9 @@ export default function App() {
       shouldOpenCreateSkillComposer: shouldOpenCreatePersonalSkill,
       onConsumeCreateSkillComposerOpen: () =>
         setShouldOpenCreatePersonalSkill(false),
-      userPlatformAppMounts,
+      harnessMounts,
+      isLoadingHarnessMounts,
+      harnessMountError,
       isLoadingUserPlatformAppMounts,
       userPlatformAppMountError,
       userPlatformAppMutationError,
