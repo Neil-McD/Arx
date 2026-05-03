@@ -251,7 +251,7 @@
   }
 }
 
-@media (max-width: 1400px) {
+@media (max-width: 1180px) {
   /* Preserve a usable center workspace when both side panels are open. */
   .app-root.sessions-drawer-open:has(.workspace-operator-data-open) .workspace:not(.scroll-to-bottom) {
     padding-left: 0;
@@ -586,7 +586,7 @@
 
 @media (max-width: 820px) {
   .web-empty-thread {
-    margin-top: 66px;
+    margin-top: clamp(72px, 16vh, 230px);
   }
 }
 
