@@ -77,9 +77,11 @@ import {
   joinPublicCommunity as joinPublicCommunityImpl,
   joinPublicCommunityBySlug as joinPublicCommunityBySlugImpl,
   listCommunityResources as listCommunityResourcesImpl,
+  listCommunityResourceModules as listCommunityResourceModulesImpl,
   listPublicDiscoverCommunities as listPublicDiscoverCommunitiesImpl,
   resolvePublicFunnelBySlug as resolvePublicFunnelBySlugImpl,
   saveCommunityResource as saveCommunityResourceImpl,
+  saveCommunityResourceModule as saveCommunityResourceModuleImpl,
 } from "./communityExperience";
 import {
   cancelCommunityEvent as cancelCommunityEventImpl,
@@ -127,8 +129,10 @@ export const setCommunityFreeAccessMode = setCommunityFreeAccessModeImpl;
 export const leaveCommunity = leaveCommunityImpl;
 export const listCommunityRevenueSeries = listCommunityRevenueSeriesImpl;
 export const listCommunityResources = listCommunityResourcesImpl;
+export const listCommunityResourceModules = listCommunityResourceModulesImpl;
 export const countCommunityResources = countCommunityResourcesImpl;
 export const saveCommunityResource = saveCommunityResourceImpl;
+export const saveCommunityResourceModule = saveCommunityResourceModuleImpl;
 export const deleteCommunityResource = deleteCommunityResourceImpl;
 export const listCommunityEvents = listCommunityEventsImpl;
 export const saveCommunityEvent = saveCommunityEventImpl;

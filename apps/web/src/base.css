@@ -6266,6 +6266,35 @@ button.chat-reply-quote:hover {
   color: var(--text-muted);
 }
 
+.resources-back-btn {
+  appearance: none;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--text-faint);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  width: fit-content;
+}
+
+.resources-back-btn svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.resources-back-btn:hover {
+  color: var(--text-primary);
+}
+
 .resources-header-subtitle {
   font-size: 13px;
   line-height: 1.5;
@@ -6820,6 +6849,18 @@ button.chat-reply-quote:hover {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
   align-items: stretch;
+}
+
+.resource-module-grid {
+  padding: 0;
+}
+
+.resource-module-card-body {
+  padding-top: 14px;
+}
+
+.resource-module-card .discover-card-desc {
+  min-height: 32px;
 }
 
 .resource-card {

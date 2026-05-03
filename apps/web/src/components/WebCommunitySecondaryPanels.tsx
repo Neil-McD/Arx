@@ -12,6 +12,7 @@ import { WebCommunityPolynetSection } from "./WebCommunityPolynetSection";
 import { WebCommunityFunnelSection } from "./WebCommunityFunnelSection";
 import { WebCommunityEventsSection } from "./WebCommunityEventsSection";
 import { WebCommunityResourceModal } from "./WebCommunityResourceModal";
+import { WebCommunityResourceModuleModal } from "./WebCommunityResourceModuleModal";
 import { WebCommunityResourcesSection } from "./WebCommunityResourcesSection";
 import { WebCommunitySettingsSection } from "./WebCommunitySettingsSection";
 
@@ -56,6 +57,7 @@ export type WebCommunitySecondaryPanelsProps = {
   members: Omit<ComponentProps<typeof WebCommunityMembersSection>, "actions"> & {
     actions: Omit<ComponentProps<typeof WebCommunityMembersSection>["actions"], "communityInitials">;
   };
+  resourceModuleModal: ComponentProps<typeof WebCommunityResourceModuleModal>;
   resourceModal: ComponentProps<typeof WebCommunityResourceModal>;
 };
 
@@ -136,6 +138,7 @@ export function WebCommunitySecondaryPanels(props: WebCommunitySecondaryPanelsPr
       {props.communityTab === "members" &&
         renderCenteredPane(<WebCommunityMembersSection {...membersSectionProps} />)}
 
+      <WebCommunityResourceModuleModal {...props.resourceModuleModal} />
       <WebCommunityResourceModal {...props.resourceModal} />
     </>
   );

@@ -856,6 +856,7 @@ export default defineSchema({
 
   communityResources: defineTable({
     communityId: v.id("communities"),
+    moduleId: v.optional(v.id("communityResourceModules")),
     createdByUserId: v.id("users"),
     type: v.string(),
     title: v.string(),
@@ -867,7 +868,25 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_community", ["communityId"])
+    .index("by_community_module", ["communityId", "moduleId"])
     .index("by_community_createdAt", ["communityId", "createdAt"])
+    .index("by_createdBy", ["createdByUserId"]),
+
+  communityResourceModules: defineTable({
+    communityId: v.id("communities"),
+    createdByUserId: v.id("users"),
+    name: v.string(),
+    descriptionMd: v.optional(v.string()),
+    bannerUrl: v.optional(v.string()),
+    bannerFocusX: v.optional(v.number()),
+    bannerFocusY: v.optional(v.number()),
+    bannerZoom: v.optional(v.number()),
+    sortOrder: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_community", ["communityId"])
+    .index("by_community_sortOrder", ["communityId", "sortOrder"])
     .index("by_createdBy", ["createdByUserId"]),
 
   communityEvents: defineTable({

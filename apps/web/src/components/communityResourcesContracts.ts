@@ -1,11 +1,24 @@
 export type CommunityResource = {
   id: string;
+  module_id: string | null;
   type: "post" | "embed" | "link" | "file";
   title: string;
   body_md: string | null;
   url: string | null;
   pinned: boolean;
   created_at: string;
+};
+
+export type CommunityResourceModule = {
+  id: string;
+  name: string;
+  description_md: string | null;
+  banner_url: string | null;
+  banner_focus_x: number | null;
+  banner_focus_y: number | null;
+  banner_zoom: number | null;
+  sort_order: number;
+  is_virtual?: boolean;
 };
 
 export type CommunityResourcesCapabilities = {
@@ -16,14 +29,17 @@ export type CommunityResourcesCapabilities = {
 
 export type CommunityResourcesState = {
   isLoadingResources: boolean;
+  isLoadingResourceModules: boolean;
   resourceSuccess: boolean;
+  modules: CommunityResourceModule[];
   resources: CommunityResource[];
   openResourceEmbedId: string | null;
 };
 
 export type CommunityResourcesActions = {
   setOpenResourceEmbedId: (id: string | null) => void;
-  openNewResourceModal: () => void;
+  openNewModuleModal: () => void;
+  openNewResourceModal: (moduleId?: string | null) => void;
   handleEditResource: (resource: CommunityResource) => void;
   handleDeleteResource: (resourceId: string) => Promise<boolean> | boolean;
 };

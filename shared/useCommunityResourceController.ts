@@ -5,14 +5,17 @@ import { resolveUsableSession, type EnsureSessionFn } from "./ensureUsableSessio
 
 import {
   deleteCloudCommunityResource,
+  listCloudCommunityResourceModuleRows,
   listCloudCommunityResourceRows,
   saveCloudCommunityResource,
+  saveCloudCommunityResourceModule,
 } from "./cloudCommunityAdminGateway";
 
 type SessionLike = unknown;
 
 type ResourceLike = {
   id: string;
+  module_id?: string | null;
   type: string;
   title: string;
   body_md: string | null;
@@ -20,9 +23,21 @@ type ResourceLike = {
   pinned: boolean;
 };
 
+type ResourceModuleLike = {
+  id: string;
+  name: string;
+  description_md: string | null;
+  banner_url: string | null;
+  banner_focus_x?: number | null;
+  banner_focus_y?: number | null;
+  banner_zoom?: number | null;
+  sort_order?: number;
+};
+
 type UseCommunityResourceControllerArgs<
   SessionT extends SessionLike,
   ResourceT extends ResourceLike,
+  ResourceModuleT extends ResourceModuleLike,
 > = {
   activeCommunityId: string | null;
   session: SessionT | null;
@@ -37,29 +52,44 @@ type UseCommunityResourceControllerArgs<
   resourceUrlInput: string;
   resourceBodyInput: string;
   resourcePinnedInput: boolean;
+  resourceModuleIdInput: string | null;
+  moduleNameInput: string;
+  moduleDescriptionInput: string;
+  moduleBannerUrlInput: string;
   editingResourceId: string | null;
   beforeSaveValidate?: (payload: { title: string; description: string; rawUrl: string }) => Promise<string | null>;
   setCommunityResources: Dispatch<SetStateAction<ResourceT[]>>;
+  setCommunityResourceModules: Dispatch<SetStateAction<ResourceModuleT[]>>;
   setIsLoadingResources: Dispatch<SetStateAction<boolean>>;
+  setIsLoadingResourceModules: Dispatch<SetStateAction<boolean>>;
   setIsSavingResource: Dispatch<SetStateAction<boolean>>;
+  setIsSavingResourceModule: Dispatch<SetStateAction<boolean>>;
   setResourceError: Dispatch<SetStateAction<string | null>>;
+  setResourceModuleError: Dispatch<SetStateAction<string | null>>;
   setResourceSuccess: Dispatch<SetStateAction<boolean>>;
+  setShowResourceModuleModal: Dispatch<SetStateAction<boolean>>;
   setShowResourceModal: Dispatch<SetStateAction<boolean>>;
   setEditingResourceId: Dispatch<SetStateAction<string | null>>;
   setResourceTitleInput: Dispatch<SetStateAction<string>>;
   setResourceUrlInput: Dispatch<SetStateAction<string>>;
   setResourceBodyInput: Dispatch<SetStateAction<string>>;
   setResourcePinnedInput: Dispatch<SetStateAction<boolean>>;
+  setResourceModuleIdInput: Dispatch<SetStateAction<string | null>>;
+  setModuleNameInput: Dispatch<SetStateAction<string>>;
+  setModuleDescriptionInput: Dispatch<SetStateAction<string>>;
+  setModuleBannerUrlInput: Dispatch<SetStateAction<string>>;
 };
 
 export function useCommunityResourceController<
   SessionT extends SessionLike,
   ResourceT extends ResourceLike,
->(args: UseCommunityResourceControllerArgs<SessionT, ResourceT>) {
+  ResourceModuleT extends ResourceModuleLike,
+>(args: UseCommunityResourceControllerArgs<SessionT, ResourceT, ResourceModuleT>) {
   const argsRef = useRef(args);
   argsRef.current = args;
   const fetchAbortControllersRef = useRef<Map<string, AbortController>>(new Map());
   const resourceLoadGenerationRef = useRef(0);
+  const moduleLoadGenerationRef = useRef(0);
 
   const resetResourceEditor = useCallback((clearError: boolean) => {
     const current = argsRef.current;
@@ -68,8 +98,54 @@ export function useCommunityResourceController<
     current.setResourceUrlInput("");
     current.setResourceBodyInput("");
     current.setResourcePinnedInput(false);
+    current.setResourceModuleIdInput(null);
     if (clearError) {
       current.setResourceError(null);
+    }
+  }, []);
+
+  const resetModuleEditor = useCallback((clearError: boolean) => {
+    const current = argsRef.current;
+    current.setModuleNameInput("");
+    current.setModuleDescriptionInput("");
+    current.setModuleBannerUrlInput("");
+    if (clearError) {
+      current.setResourceModuleError(null);
+    }
+  }, []);
+
+  const loadCommunityResourceModules = useCallback(async (communityId: string, session: SessionT) => {
+    const current = argsRef.current;
+    const usableSession = await resolveUsableSession(session, current.ensureSession);
+    if (!usableSession) return;
+    const generation = (moduleLoadGenerationRef.current += 1);
+    const fetchController = beginScopedAbortRequest({
+      inFlightByKind: fetchAbortControllersRef.current,
+      kind: "community_resource_modules_list",
+    });
+    current.setIsLoadingResourceModules(true);
+    try {
+      try {
+        const rows = await listCloudCommunityResourceModuleRows<SessionT, ResourceModuleT>({
+          session: usableSession,
+          communityId,
+          limit: 200,
+          init: { signal: fetchController.signal },
+        });
+        current.setCommunityResourceModules(rows);
+      } catch (error) {
+        if (isAbortError(error)) return;
+        return;
+      }
+    } finally {
+      finishScopedAbortRequest({
+        inFlightByKind: fetchAbortControllersRef.current,
+        kind: "community_resource_modules_list",
+        controller: fetchController,
+      });
+      if (moduleLoadGenerationRef.current === generation) {
+        current.setIsLoadingResourceModules(false);
+      }
     }
   }, []);
 
@@ -92,6 +168,7 @@ export function useCommunityResourceController<
           init: { signal: fetchController.signal },
         });
         current.setCommunityResources(rows);
+        await loadCommunityResourceModules(communityId, usableSession);
       } catch (error) {
         if (isAbortError(error)) return;
         return;
@@ -106,7 +183,7 @@ export function useCommunityResourceController<
         current.setIsLoadingResources(false);
       }
     }
-  }, []);
+  }, [loadCommunityResourceModules]);
 
   useEffect(() => {
     return () => {
@@ -152,6 +229,7 @@ export function useCommunityResourceController<
       body_md: description,
       url: rawUrl ? rawUrl : null,
       pinned: current.resourcePinnedInput,
+      module_id: current.resourceModuleIdInput,
     };
     if (current.includeFileKeyOnSave) {
       basePayload.file_key = null;
@@ -193,6 +271,48 @@ export function useCommunityResourceController<
     }
   }, [loadCommunityResources, resetResourceEditor]);
 
+  const handleSaveCommunityResourceModule = useCallback(async () => {
+    const current = argsRef.current;
+    const session = await resolveUsableSession(current.session, current.ensureSession);
+    if (!session || !current.activeCommunityId) return;
+
+    const name = current.moduleNameInput.trim();
+    if (!name) {
+      current.setResourceModuleError("Module name is required.");
+      return;
+    }
+
+    current.setResourceModuleError(null);
+    current.setIsSavingResourceModule(true);
+    try {
+      await saveCloudCommunityResourceModule({
+        session,
+        moduleId: null,
+        isPatch: false,
+        payload: {
+          community_id: current.activeCommunityId,
+          name,
+          description_md: current.moduleDescriptionInput.trim() || null,
+          banner_url: current.moduleBannerUrlInput.trim() || null,
+        },
+      });
+      current.setShowResourceModuleModal(false);
+      resetModuleEditor(true);
+      await loadCommunityResourceModules(current.activeCommunityId, session);
+      current.setResourceSuccess(true);
+      window.setTimeout(() => current.setResourceSuccess(false), 2000);
+    } catch (error) {
+      const message = typeof error === "string"
+        ? error
+        : error instanceof Error
+          ? error.message
+          : "Failed to save module.";
+      current.setResourceModuleError(message);
+    } finally {
+      current.setIsSavingResourceModule(false);
+    }
+  }, [loadCommunityResourceModules, resetModuleEditor]);
+
   const handleDeleteResource = useCallback(async (resourceId: string) => {
     const current = argsRef.current;
     const session = await resolveUsableSession(current.session, current.ensureSession);
@@ -219,7 +339,9 @@ export function useCommunityResourceController<
   }, [loadCommunityResources, resetResourceEditor]);
 
   return {
+    loadCommunityResourceModules,
     loadCommunityResources,
+    handleSaveCommunityResourceModule,
     handleSaveCommunityResource,
     handleDeleteResource,
   };

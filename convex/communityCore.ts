@@ -185,6 +185,7 @@ export type CommunityMemberSettingsLike = {
 export type CommunityResourceLike = {
   _id: any;
   communityId: any;
+  moduleId?: any;
   createdByUserId: any;
   type: string;
   title: string;
@@ -192,6 +193,21 @@ export type CommunityResourceLike = {
   url?: string;
   fileKey?: string;
   pinned: boolean;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type CommunityResourceModuleLike = {
+  _id: any;
+  communityId: any;
+  createdByUserId: any;
+  name: string;
+  descriptionMd?: string;
+  bannerUrl?: string;
+  bannerFocusX?: number;
+  bannerFocusY?: number;
+  bannerZoom?: number;
+  sortOrder: number;
   createdAt: number;
   updatedAt: number;
 };
@@ -640,6 +656,7 @@ export async function mapCommunityResourceRow(
   return {
     id: String(row._id),
     community_id: String(row.communityId),
+    module_id: row.moduleId ? String(row.moduleId) : null,
     type: String(row.type ?? "").trim().toLowerCase() || "post",
     title: row.title,
     body_md: row.bodyMd ?? null,
@@ -647,6 +664,28 @@ export async function mapCommunityResourceRow(
     file_key: row.fileKey ?? null,
     pinned: Boolean(row.pinned),
     created_by: (await resolvePublicUserId(ctx, row.createdByUserId, userIdCache)) ?? String(row.createdByUserId),
+    created_at: toIsoString(row.createdAt),
+    updated_at: toIsoString(row.updatedAt),
+  };
+}
+
+export async function mapCommunityResourceModuleRow(
+  ctx: any,
+  row: CommunityResourceModuleLike,
+  userIdCache?: Map<string, string | null>,
+) {
+  void userIdCache;
+  void ctx;
+  return {
+    id: String(row._id),
+    community_id: String(row.communityId),
+    name: row.name,
+    description_md: row.descriptionMd ?? null,
+    banner_url: row.bannerUrl ?? null,
+    banner_focus_x: typeof row.bannerFocusX === "number" ? row.bannerFocusX : null,
+    banner_focus_y: typeof row.bannerFocusY === "number" ? row.bannerFocusY : null,
+    banner_zoom: typeof row.bannerZoom === "number" ? row.bannerZoom : null,
+    sort_order: Number.isFinite(row.sortOrder) ? row.sortOrder : 0,
     created_at: toIsoString(row.createdAt),
     updated_at: toIsoString(row.updatedAt),
   };

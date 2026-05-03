@@ -385,6 +385,26 @@ export async function listCloudCommunityResourceRows<SessionT, TResource = unkno
   return coerceGatewayRows<TResource>(payload);
 }
 
+export async function listCloudCommunityResourceModuleRows<SessionT, TModule = unknown>(
+  params: CloudCommunityAdminGatewayParams<SessionT> & {
+    communityId: string;
+    limit?: number;
+    init?: RequestInit;
+  },
+): Promise<TModule[]> {
+  void params.init;
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  const payload = await client.query("community:listCommunityResourceModules" as any, {
+    authSubject,
+    communityId: params.communityId,
+    limit:
+      typeof params.limit === "number" && Number.isFinite(params.limit)
+        ? Math.max(1, Math.floor(params.limit))
+        : 200,
+  });
+  return coerceGatewayRows<TModule>(payload);
+}
+
 export async function saveCloudCommunityResource<SessionT>(
   params: CloudCommunityAdminGatewayParams<SessionT> & {
     resourceId: string | null;
@@ -396,6 +416,22 @@ export async function saveCloudCommunityResource<SessionT>(
   await client.mutation("community:saveCommunityResource" as any, {
     authSubject,
     resourceId: params.resourceId,
+    isPatch: params.isPatch,
+    payload: params.payload,
+  });
+}
+
+export async function saveCloudCommunityResourceModule<SessionT>(
+  params: CloudCommunityAdminGatewayParams<SessionT> & {
+    moduleId: string | null;
+    isPatch: boolean;
+    payload: Record<string, unknown>;
+  },
+): Promise<void> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  await client.mutation("community:saveCommunityResourceModule" as any, {
+    authSubject,
+    moduleId: params.moduleId,
     isPatch: params.isPatch,
     payload: params.payload,
   });

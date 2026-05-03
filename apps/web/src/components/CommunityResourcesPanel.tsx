@@ -7,8 +7,10 @@ import {
   type KeyboardEvent,
 } from "react";
 import { parseEmbedUrl } from "../../../../shared/linkEmbedUi";
+import { getCommunityBannerImageStyle } from "../../../../shared/communityBannerUi";
 import type {
   CommunityResource,
+  CommunityResourceModule,
   CommunityResourcesActions,
   CommunityResourcesCapabilities,
   CommunityResourcesState,
@@ -24,6 +26,12 @@ type CommunityResourcesPanelProps = {
 
 type ResourceTitleProps = {
   title: string;
+};
+
+const LEGACY_RESOURCE_MODULE_ID = "__legacy_resources__";
+
+type ResourceModuleView = CommunityResourceModule & {
+  is_virtual?: boolean;
 };
 
 function normalizeExternalUrl(rawUrl: string | null): URL | null {
@@ -128,6 +136,62 @@ function LinkIcon() {
       <path d="M10 13a5 5 0 0 0 7.07 0l3.54-3.54a5 5 0 0 0-7.07-7.07L10 5" />
       <path d="M14 11a5 5 0 0 0-7.07 0L3.4 14.54a5 5 0 0 0 7.07 7.07L14 19" />
     </svg>
+  );
+}
+
+function BackIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M15 18l-6-6 6-6" />
+    </svg>
+  );
+}
+
+function ResourceModuleCard(props: {
+  module: ResourceModuleView;
+  onOpen: () => void;
+}) {
+  const { module, onOpen } = props;
+  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    onOpen();
+  };
+
+  return (
+    <div
+      className="discover-card clickable resource-module-card"
+      role="button"
+      tabIndex={0}
+      aria-label={`Open ${module.name}`}
+      onClick={onOpen}
+      onKeyDown={handleKeyDown}
+    >
+      <div className="discover-card-banner">
+        {module.banner_url ? (
+          <img
+            className="discover-card-banner-img"
+            src={module.banner_url}
+            alt=""
+            decoding="async"
+            draggable={false}
+            style={getCommunityBannerImageStyle({
+              focusX: module.banner_focus_x,
+              focusY: module.banner_focus_y,
+              zoom: module.banner_zoom,
+            })}
+          />
+        ) : null}
+      </div>
+      <div className="discover-card-body resource-module-card-body">
+        <div className="discover-card-meta">
+          <div className="discover-card-name">{module.name}</div>
+        </div>
+        <div className="discover-card-desc">
+          {module.description_md?.trim() || "Resources shared by the community team."}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -259,6 +323,7 @@ function ResourceCard(props: {
 
 export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
   const { capabilities, state, actions } = props;
+  const [selectedModuleId, setSelectedModuleId] = useState<string | null>(null);
   const [viewerResourceId, setViewerResourceId] = useState<string | null>(null);
   const [pendingDeleteResourceId, setPendingDeleteResourceId] = useState<string | null>(null);
   const [isDeletingResource, setIsDeletingResource] = useState(false);
@@ -271,6 +336,49 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
     () => state.resources.find((resource) => resource.id === pendingDeleteResourceId) ?? null,
     [state.resources, pendingDeleteResourceId],
   );
+  const hasLegacyResources = useMemo(
+    () => state.resources.some((resource) => !resource.module_id),
+    [state.resources],
+  );
+  const moduleViews = useMemo<ResourceModuleView[]>(() => {
+    const modules = state.modules.slice().sort((a, b) => {
+      const sortDelta = (a.sort_order ?? 0) - (b.sort_order ?? 0);
+      if (sortDelta !== 0) return sortDelta;
+      return a.name.localeCompare(b.name);
+    });
+    if (!hasLegacyResources) return modules;
+    return [
+      {
+        id: LEGACY_RESOURCE_MODULE_ID,
+        name: "Resources",
+        description_md: "Shared links, videos, and notes for this community.",
+        banner_url: null,
+        banner_focus_x: null,
+        banner_focus_y: null,
+        banner_zoom: null,
+        sort_order: -1,
+        is_virtual: true,
+      },
+      ...modules,
+    ];
+  }, [hasLegacyResources, state.modules]);
+  const selectedModule = useMemo(
+    () => moduleViews.find((module) => module.id === selectedModuleId) ?? null,
+    [moduleViews, selectedModuleId],
+  );
+  const visibleResources = useMemo(() => {
+    if (!selectedModule) return [];
+    if (selectedModule.id === LEGACY_RESOURCE_MODULE_ID) {
+      return state.resources.filter((resource) => !resource.module_id);
+    }
+    return state.resources.filter((resource) => resource.module_id === selectedModule.id);
+  }, [selectedModule, state.resources]);
+
+  useEffect(() => {
+    if (selectedModuleId && !selectedModule) {
+      setSelectedModuleId(null);
+    }
+  }, [selectedModule, selectedModuleId]);
 
   useEffect(() => {
     if (viewerResourceId && !viewerResource) {
@@ -290,17 +398,39 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
       <div className="community-panel resources-panel">
         <div className="feed-header-row">
           <div className="feed-header-copy">
-            <div className="resources-header">Resources</div>
+            {selectedModule ? (
+              <button className="resources-back-btn" type="button" onClick={() => setSelectedModuleId(null)}>
+                <BackIcon />
+                <span>Resources</span>
+              </button>
+            ) : null}
+            <div className="resources-header">{selectedModule?.name ?? "Resources"}</div>
             <div className="feed-header-subtitle">
-              Durable links, videos, and notes for {capabilities.activeCommunityName ?? "this community"}.
+              {selectedModule
+                ? selectedModule.description_md?.trim() ||
+                  `Durable links, videos, and notes for ${capabilities.activeCommunityName ?? "this community"}.`
+                : `Modules for ${capabilities.activeCommunityName ?? "this community"} resources.`}
             </div>
           </div>
           <div className="feed-header-actions">
-            <div className="feed-header-badge" aria-label={`${state.resources.length} resources`}>
-              {state.resources.length}
+            <div
+              className="feed-header-badge"
+              aria-label={selectedModule ? `${visibleResources.length} resources` : `${moduleViews.length} modules`}
+            >
+              {selectedModule ? visibleResources.length : moduleViews.length}
             </div>
             {capabilities.hasActiveCommunity && capabilities.canOperateResources ? (
-              <button className="resources-add-btn" onClick={actions.openNewResourceModal} title="Add resource">
+              <button
+                className="resources-add-btn"
+                onClick={() =>
+                  selectedModule
+                    ? actions.openNewResourceModal(
+                        selectedModule.id === LEGACY_RESOURCE_MODULE_ID ? null : selectedModule.id,
+                      )
+                    : actions.openNewModuleModal()
+                }
+                title={selectedModule ? "Add resource" : "Add module"}
+              >
                 +
               </button>
             ) : null}
@@ -311,7 +441,7 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
           <div className="success-toast">Resource saved successfully!</div>
         ) : null}
 
-        {state.isLoadingResources ? (
+        {state.isLoadingResources || state.isLoadingResourceModules ? (
           <div className="community-panel-state-shell">
             <div className="community-chat-page-loading-card" aria-busy="true" aria-live="polite">
               <div className="community-chat-page-loading-title">Loading resources…</div>
@@ -321,7 +451,7 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
               <div className="community-chat-page-loading-progress web-skeleton-pill" aria-hidden="true" />
             </div>
           </div>
-        ) : state.resources.length === 0 ? (
+        ) : !selectedModule && moduleViews.length === 0 ? (
           <div className="community-panel-state-shell">
             <div className="chat-empty-state">
               <div className="chat-empty-icon">
@@ -331,11 +461,40 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
                 </svg>
               </div>
               <div className="chat-empty-title">
-                Welcome to {capabilities.activeCommunityName ?? "your"} resources
+                Welcome to {capabilities.activeCommunityName ?? "your"} modules
               </div>
               <div className="chat-empty-text">
                 {capabilities.canOperateResources
-                  ? "Share links, videos, and notes that members can come back to."
+                  ? "Create modules to organize links, videos, and notes members can come back to."
+                  : "Modules shared by the community team will show up here."}
+              </div>
+            </div>
+          </div>
+        ) : !selectedModule ? (
+          <div className="resource-library">
+            <div className="discover-grid resource-module-grid">
+              {moduleViews.map((module) => (
+                <ResourceModuleCard
+                  key={module.id}
+                  module={module}
+                  onOpen={() => setSelectedModuleId(module.id)}
+                />
+              ))}
+            </div>
+          </div>
+        ) : visibleResources.length === 0 ? (
+          <div className="community-panel-state-shell">
+            <div className="chat-empty-state">
+              <div className="chat-empty-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                  <path d="M10 13a5 5 0 0 0 7.07 0l3.54-3.54a5 5 0 0 0-7.07-7.07L10 5" />
+                  <path d="M14 11a5 5 0 0 0-7.07 0L3.4 14.54a5 5 0 0 0 7.07 7.07L14 19" />
+                </svg>
+              </div>
+              <div className="chat-empty-title">No resources yet</div>
+              <div className="chat-empty-text">
+                {capabilities.canOperateResources
+                  ? "Add the first resource for this module."
                   : "Resources shared by the community team will show up here."}
               </div>
             </div>
@@ -343,7 +502,7 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
         ) : (
           <div className="resource-library">
             <div className="resource-grid">
-              {state.resources.map((resource) => (
+              {visibleResources.map((resource) => (
                 <ResourceCard
                   key={resource.id}
                   resource={resource}

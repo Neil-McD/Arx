@@ -81,6 +81,7 @@ type BuildWebCommunitySurfaceProjectionParams = {
   canReviewJoinRequestsActiveCommunity: WebCommunitySecondaryPanelsProps["members"]["capabilities"]["canReviewJoinRequests"];
   canViewMemberPlanDetailsActiveCommunity:
     WebCommunitySecondaryPanelsProps["members"]["capabilities"]["canViewMemberPlanDetails"];
+  resourceModuleModalProps: WebCommunitySecondaryPanelsProps["resourceModuleModal"];
   resourceModalProps: WebCommunitySecondaryPanelsProps["resourceModal"];
   canPostMessagesActiveCommunity: WebCommunityChatPanelProps["canPostMessages"];
   isLoadingChat: WebCommunityChatPanelProps["isLoadingChat"];
@@ -276,6 +277,7 @@ export function buildWebCommunitySurfaceProjection(
       state: params.membersState,
       actions: params.membersActions,
     },
+    resourceModuleModal: params.resourceModuleModalProps,
     resourceModal: params.resourceModalProps,
   };
 

@@ -1,10 +1,14 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import {
+  type CommunityResourceModuleLike,
   type CommunityResourceLike,
   getCommunityAndMembership,
+  mapCommunityResourceModuleRow,
   mapCommunityResourceRow,
   normalizeIdValue,
+  normalizeBannerFocus,
+  normalizeBannerZoom,
   normalizeName,
   normalizeOptionalFileKey,
   normalizeOptionalText,
@@ -19,6 +23,152 @@ import {
   deleteArchiveDocumentBySource,
   upsertArchiveDocumentForResource,
 } from "./communityArchiveDocuments";
+
+function normalizeOptionalModuleId(raw: unknown): string | null {
+  const value = String(raw ?? "").trim();
+  if (!value || value === "null" || value === "undefined") return null;
+  return value;
+}
+
+async function requireValidResourceModule(args: {
+  ctx: any;
+  communityId: any;
+  moduleId: string | null;
+}): Promise<any | undefined> {
+  if (!args.moduleId) return undefined;
+  const module = (await args.ctx.db.get(args.moduleId as any)) as CommunityResourceModuleLike | null;
+  if (!module || String(module.communityId) !== String(args.communityId)) {
+    throw new Error("community_resource_module_not_found");
+  }
+  return module._id;
+}
+
+export const listCommunityResourceModules = query({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      userId: args.userId,
+      authSubject: args.authSubject ?? null,
+    });
+    (args as { userId?: any }).userId = userId;
+    await requireCommunityChatAccess({
+      ctx,
+      communityId: args.communityId,
+      userId: args.userId,
+    });
+    const limit = Math.max(1, Math.min(500, Math.floor(args.limit ?? 200)));
+    const rows = (await ctx.db
+      .query("communityResourceModules" as any)
+      .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
+      .collect()) as CommunityResourceModuleLike[];
+    return await Promise.all(
+      rows
+        .slice()
+        .sort((a, b) => {
+          if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
+          return b.createdAt - a.createdAt;
+        })
+        .slice(0, limit)
+        .map((row) => mapCommunityResourceModuleRow(ctx, row)),
+    );
+  },
+});
+
+export const saveCommunityResourceModule = mutation({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    moduleId: v.optional(v.union(v.string(), v.null())),
+    isPatch: v.optional(v.boolean()),
+    payload: v.optional(v.any()),
+    communityId: v.optional(v.id("communities")),
+  },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      userId: args.userId,
+      authSubject: args.authSubject ?? null,
+    });
+    (args as { userId?: any }).userId = userId;
+    const nowMs = Date.now();
+    const payload =
+      args.payload && typeof args.payload === "object" && !Array.isArray(args.payload)
+        ? (args.payload as Record<string, unknown>)
+        : {};
+    const moduleId = String(args.moduleId ?? "").trim();
+    const isPatch = Boolean(args.isPatch) || moduleId.length > 0;
+
+    if (isPatch) {
+      if (!moduleId) throw new Error("community_resource_module_id_required");
+      const existing = (await ctx.db.get(moduleId as any)) as CommunityResourceModuleLike | null;
+      if (!existing) throw new Error("community_resource_module_not_found");
+      await requireCommunityManager({
+        ctx,
+        communityId: existing.communityId,
+        userId: args.userId,
+      });
+      const nextNameRaw = Object.prototype.hasOwnProperty.call(payload, "name") ? payload.name : existing.name;
+      const nextDescriptionRaw = Object.prototype.hasOwnProperty.call(payload, "description_md")
+        ? payload.description_md
+        : existing.descriptionMd;
+      const nextBannerUrlRaw = Object.prototype.hasOwnProperty.call(payload, "banner_url")
+        ? payload.banner_url
+        : existing.bannerUrl;
+      await ctx.db.patch(existing._id as any, {
+        name: normalizeName(nextNameRaw),
+        descriptionMd: normalizeOptionalText(nextDescriptionRaw, 1200),
+        bannerUrl: normalizeOptionalUrl(nextBannerUrlRaw),
+        bannerFocusX: normalizeBannerFocus(payload.banner_focus_x ?? existing.bannerFocusX),
+        bannerFocusY: normalizeBannerFocus(payload.banner_focus_y ?? existing.bannerFocusY),
+        bannerZoom: normalizeBannerZoom(payload.banner_zoom ?? existing.bannerZoom),
+        updatedAt: nowMs,
+      });
+      const updated = (await ctx.db.get(existing._id as any)) as CommunityResourceModuleLike | null;
+      if (!updated) throw new Error("community_resource_module_not_found");
+      return await mapCommunityResourceModuleRow(ctx, updated);
+    }
+
+    const communityIdRaw = args.communityId ?? (payload.community_id as any);
+    if (!communityIdRaw) throw new Error("community_id_required");
+    const { community } = await getCommunityAndMembership({
+      ctx,
+      communityId: communityIdRaw,
+      userId: args.userId,
+    });
+    await requireCommunityManager({
+      ctx,
+      communityId: community._id,
+      userId: args.userId,
+    });
+    const rows = (await ctx.db
+      .query("communityResourceModules" as any)
+      .withIndex("by_community", (q: any) => q.eq("communityId", community._id))
+      .collect()) as CommunityResourceModuleLike[];
+    const nextSortOrder = rows.reduce((max, row) => Math.max(max, Number(row.sortOrder) || 0), 0) + 1000;
+    const id = await ctx.db.insert("communityResourceModules" as any, {
+      communityId: community._id,
+      createdByUserId: args.userId,
+      name: normalizeName(payload.name),
+      descriptionMd: normalizeOptionalText(payload.description_md, 1200),
+      bannerUrl: normalizeOptionalUrl(payload.banner_url),
+      bannerFocusX: normalizeBannerFocus(payload.banner_focus_x),
+      bannerFocusY: normalizeBannerFocus(payload.banner_focus_y),
+      bannerZoom: normalizeBannerZoom(payload.banner_zoom),
+      sortOrder: nextSortOrder,
+      createdAt: nowMs,
+      updatedAt: nowMs,
+    });
+    const created = (await ctx.db.get(id as any)) as CommunityResourceModuleLike | null;
+    if (!created) throw new Error("community_resource_module_create_failed");
+    return await mapCommunityResourceModuleRow(ctx, created);
+  },
+});
 
 export const listCommunityResources = query({
   args: {
@@ -129,8 +279,17 @@ export const saveCommunityResource = mutation({
         ? payload.file_key
         : existing.fileKey;
       const nextPinnedRaw = Object.prototype.hasOwnProperty.call(payload, "pinned") ? payload.pinned : existing.pinned;
+      const nextModuleIdRaw = Object.prototype.hasOwnProperty.call(payload, "module_id")
+        ? payload.module_id
+        : existing.moduleId;
+      const nextModuleId = await requireValidResourceModule({
+        ctx,
+        communityId: existing.communityId,
+        moduleId: normalizeOptionalModuleId(nextModuleIdRaw),
+      });
 
       await ctx.db.patch(existing._id as any, {
+        ...(nextModuleId ? { moduleId: nextModuleId } : { moduleId: undefined }),
         type: normalizeResourceType(nextTypeRaw),
         title: nextTitle,
         bodyMd: normalizeOptionalText(nextBodyRaw, 20_000),
@@ -163,9 +322,15 @@ export const saveCommunityResource = mutation({
     const url = normalizeOptionalUrl(payload.url);
     const fileKey = normalizeOptionalFileKey(payload.file_key);
     const pinned = Boolean(payload.pinned);
+    const moduleId = await requireValidResourceModule({
+      ctx,
+      communityId: community._id,
+      moduleId: normalizeOptionalModuleId(payload.module_id),
+    });
 
     const id = await ctx.db.insert("communityResources" as any, {
       communityId: community._id,
+      ...(moduleId ? { moduleId } : {}),
       createdByUserId: args.userId,
       type,
       title,

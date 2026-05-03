@@ -2,6 +2,7 @@ import { useCallback, useRef, type Dispatch, type SetStateAction } from "react";
 
 type ResourceLike = {
   id: string;
+  module_id?: string | null;
   title: string;
   url: string | null;
   body_md: string | null;
@@ -17,6 +18,7 @@ type UseCommunityResourceEditorControllerArgs = {
   setResourceError: Dispatch<SetStateAction<string | null>>;
   setShowResourceModal: Dispatch<SetStateAction<boolean>>;
   onReset?: () => void;
+  onEdit?: (resource: ResourceLike) => void;
 };
 
 export function useCommunityResourceEditorController<ResourceT extends ResourceLike>(
@@ -55,6 +57,7 @@ export function useCommunityResourceEditorController<ResourceT extends ResourceL
     current.setResourceUrlInput(resource.url ?? "");
     current.setResourceBodyInput(resource.body_md ?? "");
     current.setResourcePinnedInput(resource.pinned);
+    current.onEdit?.(resource);
     current.setResourceError(null);
     current.setShowResourceModal(true);
   }, []);

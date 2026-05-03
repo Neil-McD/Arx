@@ -591,6 +591,7 @@ type MessageReaction = SharedMessageReaction;
 type CommunityResource = {
   id: string;
   community_id?: string | null;
+  module_id: string | null;
   type: "post" | "link" | "embed" | "file";
   title: string;
   body_md: string | null;
@@ -598,6 +599,18 @@ type CommunityResource = {
   file_key?: string | null;
   pinned: boolean;
   created_at: string;
+};
+
+type CommunityResourceModule = {
+  id: string;
+  community_id?: string | null;
+  name: string;
+  description_md: string | null;
+  banner_url: string | null;
+  banner_focus_x: number | null;
+  banner_focus_y: number | null;
+  banner_zoom: number | null;
+  sort_order: number;
 };
 
 type CommunityEvent = CloudCommunityEvent;
@@ -1717,7 +1730,9 @@ export default function App() {
   }, []);
 
   const [communityResources, setCommunityResources] = useState<CommunityResource[]>([]);
+  const [communityResourceModules, setCommunityResourceModules] = useState<CommunityResourceModule[]>([]);
   const [isLoadingResources, setIsLoadingResources] = useState(false);
+  const [isLoadingResourceModules, setIsLoadingResourceModules] = useState(false);
   const [openResourceEmbedId, setOpenResourceEmbedId] = useState<string | null>(null);
   const [communityEvents, setCommunityEvents] = useState<CommunityEvent[]>([]);
   const [isLoadingCommunityEvents, setIsLoadingCommunityEvents] = useState(false);
@@ -1808,6 +1823,7 @@ export default function App() {
   const {
     loadCommunityResources,
     resourceSuccess,
+    openNewModuleModal,
     openNewResourceModal,
     handleEditResource,
     handleDeleteResource,
@@ -1821,13 +1837,16 @@ export default function App() {
     setIsSavingResource,
     setResourceSuccess,
     resourceModalProps,
-  } = useWebCommunityResourceUiController<AuthSession, CommunityResource>({
+    resourceModuleModalProps,
+  } = useWebCommunityResourceUiController<AuthSession, CommunityResource, CommunityResourceModule>({
     activeCommunityId,
     session: session,
     ensureSession: ensureUsableAuthSession,
     parseEmbedUrl,
     setCommunityResources,
+    setCommunityResourceModules,
     setIsLoadingResources,
+    setIsLoadingResourceModules,
   });
   const {
     loadCommunityEvents,
@@ -3739,6 +3758,7 @@ export default function App() {
     setCommunityMessages([]);
     setMessageReactions([]);
     setCommunityResources([]);
+    setCommunityResourceModules([]);
     setCommunityEvents([]);
     setIsLoadingCommunityEvents(false);
     setCommunityEventsError(null);
@@ -6250,12 +6270,15 @@ export default function App() {
       },
       resourcesState: {
         isLoadingResources,
+        isLoadingResourceModules,
         resourceSuccess,
+        modules: communityResourceModules,
         resources: communityResources,
         openResourceEmbedId,
       },
       resourcesActions: {
         setOpenResourceEmbedId,
+        openNewModuleModal,
         openNewResourceModal,
         handleEditResource,
         handleDeleteResource,
@@ -6314,6 +6337,7 @@ export default function App() {
       },
       canReviewJoinRequestsActiveCommunity,
       canViewMemberPlanDetailsActiveCommunity,
+      resourceModuleModalProps,
       resourceModalProps,
       canPostMessagesActiveCommunity,
       isLoadingChat,

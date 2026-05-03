@@ -15,8 +15,10 @@ export {
 } from "./communityPublic";
 
 export {
+  listCommunityResourceModules,
   listCommunityResources,
   countCommunityResources,
+  saveCommunityResourceModule,
   saveCommunityResource,
   deleteCommunityResource,
 } from "./communityResources";
