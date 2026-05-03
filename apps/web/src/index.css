@@ -153,6 +153,10 @@
   background: transparent;
 }
 
+.app-topbar .topbar-right .community-btn {
+  transform: translateY(-2px);
+}
+
 .app-topbar .icon-button,
 .app-topbar .new-session-header-btn {
   width: 32px;
