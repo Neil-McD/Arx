@@ -11,7 +11,6 @@
   /* Shared layout constants (empty-thread landing) */
   --web-chat-max-width: 760px;
   --web-chat-gutter: clamp(12px, 3vw, 20px);
-  --workspace-chat-pressure-min-width: 340px;
 
   /* Base fallback tokens mirror Polynet so the shell never flashes light. */
   --bg-app: #121214;
@@ -16726,13 +16725,7 @@ button.message-citation-chip:hover {
 }
 
 .workspace-composer-shell.workspace-operator-data-open {
-  max-width: min(
-    var(--web-chat-max-width),
-    max(
-      var(--workspace-chat-pressure-min-width),
-      calc(100% - var(--operator-right-panel-width) - var(--operator-right-panel-gutter) - 24px)
-    )
-  );
+  max-width: min(var(--web-chat-max-width), calc(100% - var(--operator-right-panel-width) - var(--operator-right-panel-gutter) - 24px));
   margin-right: calc(var(--operator-right-panel-width) + var(--operator-right-panel-gutter));
 }
 

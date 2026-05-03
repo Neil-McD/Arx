@@ -1017,7 +1017,7 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
   const showOperatorDataPanel = Boolean(props.showOperatorDataPanel && props.operatorDataPanelSession);
   const isOperatorDataPanelVisible = Boolean(showOperatorDataPanel && isOperatorDataPanelOpen);
   const operatorDataPanelStyle = {
-    "--operator-right-panel-width": `clamp(340px, 32vw, ${operatorRightPanelWidth}px)`,
+    "--operator-right-panel-width": `${operatorRightPanelWidth}px`,
     "--operator-right-panel-gutter": `${OPERATOR_RIGHT_PANEL_GUTTER}px`,
   } as CSSProperties;
   const operatorData = useOperatorDashboardData({
