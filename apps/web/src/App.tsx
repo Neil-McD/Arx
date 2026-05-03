@@ -694,7 +694,7 @@ const MAX_WEB_TEXT_ATTACHMENT_BYTES = 200 * 1024; // 200KB
 const MAX_WEB_IMAGE_DATA_URL_CHARS = 600_000; // ~0.6MB base64 payload
 const WEB_RAIL_WIDTH = 72;
 const WEB_SESSIONS_DRAWER_WIDTH = 240;
-const MIN_DOCKED_WORKSPACE_CENTER_WIDTH = 480;
+const MIN_DOCKED_WORKSPACE_CENTER_WIDTH = 400;
 
 type WorkspaceOperatorPanelLayout = {
   open: boolean;
