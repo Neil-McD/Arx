@@ -119,6 +119,19 @@ function buildMountStatusLabel(mount: HarnessMount): string {
   return `${pluralizeTools(count)} active`;
 }
 
+function buildMountStateLabel(mount: HarnessMount): string {
+  if (!mount.enabled) return "Disabled";
+  if (mount.live_status === "live") return "Live";
+  return buildNotLiveReasonLabel(mount);
+}
+
+function buildMountStateClassName(mount: HarnessMount): string {
+  if (!mount.enabled) return " is-disabled";
+  if (mount.live_status === "live") return " is-live";
+  if (mount.not_live_reason === "needs_auth") return " is-setup";
+  return " is-not-live";
+}
+
 function buildNotLiveReasonLabel(mount: HarnessMount): string {
   switch (mount.not_live_reason) {
     case "needs_auth":
@@ -418,6 +431,14 @@ export function WebIntegrationsSettingsSection(
                       <div className="integration-mounted-main">
                         <div className="integration-mounted-title-row">
                           <strong>{mount.app.name}</strong>
+                          <span
+                            className={`integration-state-indicator${buildMountStateClassName(
+                              mount,
+                            )}`}
+                          >
+                            <span aria-hidden="true" />
+                            {buildMountStateLabel(mount)}
+                          </span>
                           <span className="integration-status-pill">
                             {buildMountStatusLabel(mount)}
                           </span>
