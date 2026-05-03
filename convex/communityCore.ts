@@ -204,6 +204,7 @@ export type CommunityResourceModuleLike = {
   name: string;
   descriptionMd?: string;
   bannerUrl?: string;
+  bannerStorageId?: any;
   bannerFocusX?: number;
   bannerFocusY?: number;
   bannerZoom?: number;
@@ -675,13 +676,16 @@ export async function mapCommunityResourceModuleRow(
   userIdCache?: Map<string, string | null>,
 ) {
   void userIdCache;
-  void ctx;
+  const resolvedBannerUrl = row.bannerStorageId
+    ? await maybeResolveStorageUrl(ctx, row.bannerStorageId)
+    : null;
   return {
     id: String(row._id),
     community_id: String(row.communityId),
     name: row.name,
     description_md: row.descriptionMd ?? null,
-    banner_url: row.bannerUrl ?? null,
+    banner_url: resolvedBannerUrl ?? row.bannerUrl ?? null,
+    banner_storage_id: row.bannerStorageId ? String(row.bannerStorageId) : null,
     banner_focus_x: typeof row.bannerFocusX === "number" ? row.bannerFocusX : null,
     banner_focus_y: typeof row.bannerFocusY === "number" ? row.bannerFocusY : null,
     banner_zoom: typeof row.bannerZoom === "number" ? row.bannerZoom : null,

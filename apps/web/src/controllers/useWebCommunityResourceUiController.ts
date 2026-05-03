@@ -1,11 +1,14 @@
-import { useState, type ComponentProps, type Dispatch, type SetStateAction } from "react";
+import { useState, type ComponentProps, type Dispatch, type DragEvent, type SetStateAction } from "react";
 
+import { readBannerFileAsWideDataUrlWithinLimit } from "../../../../shared/imageTransforms";
 import { useCommunityResourceController } from "../../../../shared/useCommunityResourceController";
 import { useCommunityResourceEditorController } from "../../../../shared/useCommunityResourceEditorController";
 import { WebCommunityResourceModal } from "../components/WebCommunityResourceModal";
 import { WebCommunityResourceModuleModal } from "../components/WebCommunityResourceModuleModal";
 
 type SessionLike = unknown;
+
+const MODULE_BANNER_DATA_URL_CHAR_LIMIT = 600_000;
 
 type ResourceLike = {
   id: string;
@@ -22,6 +25,7 @@ type ResourceModuleLike = {
   name: string;
   description_md: string | null;
   banner_url: string | null;
+  banner_storage_id?: string | null;
   banner_focus_x?: number | null;
   banner_focus_y?: number | null;
   banner_zoom?: number | null;
@@ -87,6 +91,13 @@ export function useWebCommunityResourceUiController<
   const [moduleNameInput, setModuleNameInput] = useState("");
   const [moduleDescriptionInput, setModuleDescriptionInput] = useState("");
   const [moduleBannerUrlInput, setModuleBannerUrlInput] = useState("");
+  const [moduleBannerFocusX, setModuleBannerFocusX] = useState(0.5);
+  const [moduleBannerFocusY, setModuleBannerFocusY] = useState(0.5);
+  const [moduleBannerZoom, setModuleBannerZoom] = useState(1);
+  const [isModuleBannerDragOver, setIsModuleBannerDragOver] = useState(false);
+  const [isProcessingModuleBanner, setIsProcessingModuleBanner] = useState(false);
+  const [moduleBannerUploadError, setModuleBannerUploadError] = useState<string | null>(null);
+  const [isModuleBannerFocusModalOpen, setIsModuleBannerFocusModalOpen] = useState(false);
   const [resourceError, setResourceError] = useState<string | null>(null);
   const [resourceModuleError, setResourceModuleError] = useState<string | null>(null);
   const [isSavingResource, setIsSavingResource] = useState(false);
@@ -117,6 +128,9 @@ export function useWebCommunityResourceUiController<
     moduleNameInput,
     moduleDescriptionInput,
     moduleBannerUrlInput,
+    moduleBannerFocusX,
+    moduleBannerFocusY,
+    moduleBannerZoom,
     editingResourceId,
     setCommunityResources: params.setCommunityResources,
     setCommunityResourceModules: params.setCommunityResourceModules,
@@ -138,6 +152,9 @@ export function useWebCommunityResourceUiController<
     setModuleNameInput,
     setModuleDescriptionInput,
     setModuleBannerUrlInput,
+    setModuleBannerFocusX,
+    setModuleBannerFocusY,
+    setModuleBannerZoom,
   });
 
   const {
@@ -166,8 +183,45 @@ export function useWebCommunityResourceUiController<
     setModuleNameInput("");
     setModuleDescriptionInput("");
     setModuleBannerUrlInput("");
+    setModuleBannerFocusX(0.5);
+    setModuleBannerFocusY(0.5);
+    setModuleBannerZoom(1);
+    setModuleBannerUploadError(null);
+    setIsModuleBannerFocusModalOpen(false);
     setResourceModuleError(null);
     setShowResourceModuleModal(true);
+  };
+
+  const handleModuleBannerUpload = async (file: File | null) => {
+    if (!file) return;
+    if (!file.type.toLowerCase().startsWith("image/")) {
+      setModuleBannerUploadError("Banner must be an image file.");
+      return;
+    }
+    setModuleBannerUploadError(null);
+    setIsProcessingModuleBanner(true);
+    try {
+      const dataUrl = await readBannerFileAsWideDataUrlWithinLimit(file, MODULE_BANNER_DATA_URL_CHAR_LIMIT);
+      setModuleBannerUrlInput(dataUrl);
+      setModuleBannerFocusX(0.5);
+      setModuleBannerFocusY(0.5);
+      setModuleBannerZoom(1);
+      setIsModuleBannerFocusModalOpen(true);
+    } catch (error) {
+      setModuleBannerUploadError(
+        error instanceof Error ? error.message : "Failed to load banner image.",
+      );
+    } finally {
+      setIsProcessingModuleBanner(false);
+    }
+  };
+
+  const handleModuleBannerDrop = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setIsModuleBannerDragOver(false);
+    const file = event.dataTransfer.files?.[0] ?? null;
+    void handleModuleBannerUpload(file);
   };
 
   return {
@@ -192,20 +246,50 @@ export function useWebCommunityResourceUiController<
       moduleNameInput,
       moduleDescriptionInput,
       moduleBannerUrlInput,
+      moduleBannerFocusX,
+      moduleBannerFocusY,
+      moduleBannerZoom,
+      isModuleBannerDragOver,
+      isProcessingModuleBanner,
+      moduleBannerUploadError,
+      isModuleBannerFocusModalOpen,
       moduleError: resourceModuleError,
       isSavingModule: isSavingResourceModule,
-      onClose: () => setShowResourceModuleModal(false),
+      onClose: () => {
+        setShowResourceModuleModal(false);
+        setIsModuleBannerFocusModalOpen(false);
+      },
       onCancel: () => {
         setModuleNameInput("");
         setModuleDescriptionInput("");
         setModuleBannerUrlInput("");
+        setModuleBannerFocusX(0.5);
+        setModuleBannerFocusY(0.5);
+        setModuleBannerZoom(1);
+        setModuleBannerUploadError(null);
+        setIsModuleBannerFocusModalOpen(false);
         setResourceModuleError(null);
         setShowResourceModuleModal(false);
       },
       onSave: handleSaveCommunityResourceModule,
       onChangeName: setModuleNameInput,
       onChangeDescription: setModuleDescriptionInput,
-      onChangeBannerUrl: setModuleBannerUrlInput,
+      onChangeBannerFocusX: setModuleBannerFocusX,
+      onChangeBannerFocusY: setModuleBannerFocusY,
+      onChangeBannerZoom: setModuleBannerZoom,
+      onSetBannerDragOver: setIsModuleBannerDragOver,
+      onBannerDrop: handleModuleBannerDrop,
+      onBannerUpload: handleModuleBannerUpload,
+      onOpenBannerFocusModal: () => setIsModuleBannerFocusModalOpen(true),
+      onCloseBannerFocusModal: () => setIsModuleBannerFocusModalOpen(false),
+      onRemoveBanner: () => {
+        setModuleBannerUrlInput("");
+        setModuleBannerFocusX(0.5);
+        setModuleBannerFocusY(0.5);
+        setModuleBannerZoom(1);
+        setModuleBannerUploadError(null);
+        setIsModuleBannerFocusModalOpen(false);
+      },
     },
     resourceModalProps: {
       isOpen: showResourceModal,

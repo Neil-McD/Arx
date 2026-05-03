@@ -878,6 +878,7 @@ export default defineSchema({
     name: v.string(),
     descriptionMd: v.optional(v.string()),
     bannerUrl: v.optional(v.string()),
+    bannerStorageId: v.optional(v.id("_storage")),
     bannerFocusX: v.optional(v.number()),
     bannerFocusY: v.optional(v.number()),
     bannerZoom: v.optional(v.number()),

@@ -7,6 +7,7 @@ import {
   deleteCloudCommunityResource,
   listCloudCommunityResourceModuleRows,
   listCloudCommunityResourceRows,
+  prepareCloudCommunityBrandingField,
   saveCloudCommunityResource,
   saveCloudCommunityResourceModule,
 } from "./cloudCommunityAdminGateway";
@@ -28,6 +29,7 @@ type ResourceModuleLike = {
   name: string;
   description_md: string | null;
   banner_url: string | null;
+  banner_storage_id?: string | null;
   banner_focus_x?: number | null;
   banner_focus_y?: number | null;
   banner_zoom?: number | null;
@@ -56,6 +58,9 @@ type UseCommunityResourceControllerArgs<
   moduleNameInput: string;
   moduleDescriptionInput: string;
   moduleBannerUrlInput: string;
+  moduleBannerFocusX: number;
+  moduleBannerFocusY: number;
+  moduleBannerZoom: number;
   editingResourceId: string | null;
   beforeSaveValidate?: (payload: { title: string; description: string; rawUrl: string }) => Promise<string | null>;
   setCommunityResources: Dispatch<SetStateAction<ResourceT[]>>;
@@ -78,6 +83,9 @@ type UseCommunityResourceControllerArgs<
   setModuleNameInput: Dispatch<SetStateAction<string>>;
   setModuleDescriptionInput: Dispatch<SetStateAction<string>>;
   setModuleBannerUrlInput: Dispatch<SetStateAction<string>>;
+  setModuleBannerFocusX: Dispatch<SetStateAction<number>>;
+  setModuleBannerFocusY: Dispatch<SetStateAction<number>>;
+  setModuleBannerZoom: Dispatch<SetStateAction<number>>;
 };
 
 export function useCommunityResourceController<
@@ -109,6 +117,9 @@ export function useCommunityResourceController<
     current.setModuleNameInput("");
     current.setModuleDescriptionInput("");
     current.setModuleBannerUrlInput("");
+    current.setModuleBannerFocusX(0.5);
+    current.setModuleBannerFocusY(0.5);
+    current.setModuleBannerZoom(1);
     if (clearError) {
       current.setResourceModuleError(null);
     }
@@ -285,6 +296,13 @@ export function useCommunityResourceController<
     current.setResourceModuleError(null);
     current.setIsSavingResourceModule(true);
     try {
+      const bannerField = await prepareCloudCommunityBrandingField({
+        session,
+        kind: "banner",
+        nextValue: current.moduleBannerUrlInput,
+        currentStorageId: null,
+        currentResolvedUrl: null,
+      });
       await saveCloudCommunityResourceModule({
         session,
         moduleId: null,
@@ -293,7 +311,11 @@ export function useCommunityResourceController<
           community_id: current.activeCommunityId,
           name,
           description_md: current.moduleDescriptionInput.trim() || null,
-          banner_url: current.moduleBannerUrlInput.trim() || null,
+          banner_storage_id: bannerField.storageId ?? null,
+          banner_url: bannerField.url ?? null,
+          banner_focus_x: current.moduleBannerFocusX,
+          banner_focus_y: current.moduleBannerFocusY,
+          banner_zoom: current.moduleBannerZoom,
         },
       });
       current.setShowResourceModuleModal(false);

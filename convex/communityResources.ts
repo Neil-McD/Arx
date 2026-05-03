@@ -6,6 +6,7 @@ import {
   getCommunityAndMembership,
   mapCommunityResourceModuleRow,
   mapCommunityResourceRow,
+  maybeDeleteStorageAsset,
   normalizeIdValue,
   normalizeBannerFocus,
   normalizeBannerZoom,
@@ -120,15 +121,23 @@ export const saveCommunityResourceModule = mutation({
       const nextBannerUrlRaw = Object.prototype.hasOwnProperty.call(payload, "banner_url")
         ? payload.banner_url
         : existing.bannerUrl;
+      const nextBannerStorageId = Object.prototype.hasOwnProperty.call(payload, "banner_storage_id")
+        ? (payload.banner_storage_id ?? undefined)
+        : existing.bannerStorageId;
+      const previousBannerStorageId = existing.bannerStorageId;
       await ctx.db.patch(existing._id as any, {
         name: normalizeName(nextNameRaw),
         descriptionMd: normalizeOptionalText(nextDescriptionRaw, 1200),
-        bannerUrl: normalizeOptionalUrl(nextBannerUrlRaw),
+        bannerUrl: nextBannerStorageId ? undefined : normalizeOptionalUrl(nextBannerUrlRaw),
+        bannerStorageId: nextBannerStorageId,
         bannerFocusX: normalizeBannerFocus(payload.banner_focus_x ?? existing.bannerFocusX),
         bannerFocusY: normalizeBannerFocus(payload.banner_focus_y ?? existing.bannerFocusY),
         bannerZoom: normalizeBannerZoom(payload.banner_zoom ?? existing.bannerZoom),
         updatedAt: nowMs,
       });
+      if (previousBannerStorageId && String(previousBannerStorageId) !== String(nextBannerStorageId ?? "")) {
+        await maybeDeleteStorageAsset(ctx, previousBannerStorageId);
+      }
       const updated = (await ctx.db.get(existing._id as any)) as CommunityResourceModuleLike | null;
       if (!updated) throw new Error("community_resource_module_not_found");
       return await mapCommunityResourceModuleRow(ctx, updated);
@@ -151,12 +160,14 @@ export const saveCommunityResourceModule = mutation({
       .withIndex("by_community", (q: any) => q.eq("communityId", community._id))
       .collect()) as CommunityResourceModuleLike[];
     const nextSortOrder = rows.reduce((max, row) => Math.max(max, Number(row.sortOrder) || 0), 0) + 1000;
+    const bannerStorageId = payload.banner_storage_id ?? undefined;
     const id = await ctx.db.insert("communityResourceModules" as any, {
       communityId: community._id,
       createdByUserId: args.userId,
       name: normalizeName(payload.name),
       descriptionMd: normalizeOptionalText(payload.description_md, 1200),
-      bannerUrl: normalizeOptionalUrl(payload.banner_url),
+      bannerUrl: bannerStorageId ? undefined : normalizeOptionalUrl(payload.banner_url),
+      bannerStorageId,
       bannerFocusX: normalizeBannerFocus(payload.banner_focus_x),
       bannerFocusY: normalizeBannerFocus(payload.banner_focus_y),
       bannerZoom: normalizeBannerZoom(payload.banner_zoom),
