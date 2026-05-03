@@ -6751,6 +6751,17 @@ button.chat-reply-quote:hover {
   background: color-mix(in srgb, var(--bg-card) 82%, transparent);
 }
 
+.resource-modal-actions .secondary.danger {
+  color: color-mix(in srgb, #f97316 68%, var(--text-primary));
+  border-color: color-mix(in srgb, #f97316 28%, var(--border-default));
+  margin-right: auto;
+}
+
+.resource-modal-actions .secondary.danger:hover:not(:disabled) {
+  color: color-mix(in srgb, #fb923c 80%, var(--text-primary));
+  border-color: color-mix(in srgb, #fb923c 44%, var(--border-strong));
+}
+
 .resource-modal-actions .secondary:disabled {
   opacity: 0.5;
   cursor: not-allowed;
@@ -6853,6 +6864,101 @@ button.chat-reply-quote:hover {
 
 .resource-module-grid {
   padding: 0;
+}
+
+.resource-module-card {
+  position: relative;
+}
+
+.resource-module-card-menu {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 3;
+}
+
+.resource-module-card-menu-trigger {
+  width: 30px;
+  height: 30px;
+  border: 1px solid color-mix(in srgb, var(--border-default) 72%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-card) 86%, transparent);
+  color: var(--text-secondary);
+  display: grid;
+  place-items: center;
+  padding: 0;
+  cursor: pointer;
+  backdrop-filter: blur(14px);
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.resource-module-card-menu-trigger:hover,
+.resource-module-card-menu-trigger[aria-expanded="true"] {
+  color: var(--text-primary);
+  border-color: var(--border-strong);
+  background: color-mix(in srgb, var(--bg-card) 94%, transparent);
+}
+
+.resource-module-card-menu-trigger svg {
+  width: 17px;
+  height: 17px;
+  fill: currentColor;
+}
+
+.resource-module-card-menu-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 128px;
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--bg-elevated) 96%, transparent);
+  box-shadow: var(--shadow-lg);
+  padding: 6px;
+  display: grid;
+  gap: 2px;
+  cursor: default;
+}
+
+.resource-module-card-menu-popover button {
+  width: 100%;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text-secondary);
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  padding: 8px 9px;
+  text-align: left;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.resource-module-card-menu-popover button:hover {
+  background: color-mix(in srgb, var(--bg-card) 86%, transparent);
+  color: var(--text-primary);
+}
+
+.resource-module-card-menu-popover button.danger {
+  color: color-mix(in srgb, #f97316 72%, var(--text-primary));
+}
+
+.resource-module-card-menu-popover button.danger:hover {
+  background: color-mix(in srgb, #f97316 12%, transparent);
+  color: color-mix(in srgb, #fb923c 82%, var(--text-primary));
+}
+
+.resource-module-card-menu-popover svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .resource-module-card-body {

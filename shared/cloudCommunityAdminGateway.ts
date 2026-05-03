@@ -449,6 +449,18 @@ export async function deleteCloudCommunityResource<SessionT>(
   });
 }
 
+export async function deleteCloudCommunityResourceModule<SessionT>(
+  params: CloudCommunityAdminGatewayParams<SessionT> & {
+    moduleId: string;
+  },
+): Promise<void> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  await client.mutation("community:deleteCommunityResourceModule" as any, {
+    authSubject,
+    moduleId: params.moduleId,
+  });
+}
+
 export async function createCloudCommunity<SessionT, TCommunity = unknown>(
   params: CloudCommunityAdminGatewayParams<SessionT> & {
     name: string;

@@ -5,6 +5,7 @@ import {
   useRef,
   useState,
   type KeyboardEvent,
+  type MouseEvent,
 } from "react";
 import { parseEmbedUrl } from "../../../../shared/linkEmbedUi";
 import { getCommunityBannerImageStyle } from "../../../../shared/communityBannerUi";
@@ -130,6 +131,16 @@ function DeleteIcon() {
   );
 }
 
+function MoreIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M12 13a1 1 0 1 0 0-2 1 1 0 0 0 0 2z" />
+      <path d="M19 13a1 1 0 1 0 0-2 1 1 0 0 0 0 2z" />
+      <path d="M5 13a1 1 0 1 0 0-2 1 1 0 0 0 0 2z" />
+    </svg>
+  );
+}
+
 function LinkIcon() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -150,12 +161,26 @@ function BackIcon() {
 function ResourceModuleCard(props: {
   module: ResourceModuleView;
   onOpen: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+  canManage: boolean;
 }) {
-  const { module, onOpen } = props;
+  const { module, onOpen, onEdit, onDelete, canManage } = props;
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.target !== event.currentTarget) return;
     if (event.key !== "Enter" && event.key !== " ") return;
     event.preventDefault();
     onOpen();
+  };
+  const handleMenuClick = (event: MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    setIsMenuOpen((current) => !current);
+  };
+  const closeAndRun = (event: MouseEvent<HTMLButtonElement>, action: () => void) => {
+    event.stopPropagation();
+    setIsMenuOpen(false);
+    action();
   };
 
   return (
@@ -166,7 +191,40 @@ function ResourceModuleCard(props: {
       aria-label={`Open ${module.name}`}
       onClick={onOpen}
       onKeyDown={handleKeyDown}
+      onMouseLeave={() => setIsMenuOpen(false)}
     >
+      {canManage ? (
+        <div className="resource-module-card-menu">
+          <button
+            className="resource-module-card-menu-trigger"
+            type="button"
+            title="Module actions"
+            aria-label={`Actions for ${module.name}`}
+            aria-haspopup="menu"
+            aria-expanded={isMenuOpen}
+            onClick={handleMenuClick}
+          >
+            <MoreIcon />
+          </button>
+          {isMenuOpen ? (
+            <div className="resource-module-card-menu-popover" role="menu">
+              <button type="button" role="menuitem" onClick={(event) => closeAndRun(event, onEdit)}>
+                <EditIcon />
+                <span>Edit</span>
+              </button>
+              <button
+                className="danger"
+                type="button"
+                role="menuitem"
+                onClick={(event) => closeAndRun(event, onDelete)}
+              >
+                <DeleteIcon />
+                <span>Delete</span>
+              </button>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
       <div className="discover-card-banner">
         {module.banner_url ? (
           <img
@@ -478,6 +536,9 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
                   key={module.id}
                   module={module}
                   onOpen={() => setSelectedModuleId(module.id)}
+                  onEdit={() => actions.handleEditModule(module)}
+                  onDelete={() => void actions.handleDeleteModule(module.id)}
+                  canManage={capabilities.canOperateResources && !module.is_virtual}
                 />
               ))}
             </div>

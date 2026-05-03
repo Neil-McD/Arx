@@ -4,6 +4,7 @@ import { WebCommunityBannerEditorModal } from "./WebCommunityBannerEditorModal";
 
 type WebCommunityResourceModuleModalProps = {
   isOpen: boolean;
+  isEditingModule: boolean;
   hasActiveCommunity: boolean;
   moduleNameInput: string;
   moduleDescriptionInput: string;
@@ -20,6 +21,7 @@ type WebCommunityResourceModuleModalProps = {
   onClose: () => void;
   onCancel: () => void;
   onSave: () => Promise<void> | void;
+  onDelete: (() => Promise<boolean> | boolean) | null;
   onChangeName: (value: string) => void;
   onChangeDescription: (value: string) => void;
   onChangeBannerFocusX: (value: number) => void;
@@ -36,6 +38,7 @@ type WebCommunityResourceModuleModalProps = {
 export function WebCommunityResourceModuleModal(props: WebCommunityResourceModuleModalProps) {
   const {
     isOpen,
+    isEditingModule,
     hasActiveCommunity,
     moduleNameInput,
     moduleDescriptionInput,
@@ -52,6 +55,7 @@ export function WebCommunityResourceModuleModal(props: WebCommunityResourceModul
     onClose,
     onCancel,
     onSave,
+    onDelete,
     onChangeName,
     onChangeDescription,
     onChangeBannerFocusX,
@@ -73,9 +77,11 @@ export function WebCommunityResourceModuleModal(props: WebCommunityResourceModul
         <div className="modal resource-modal" onClick={(event) => event.stopPropagation()}>
           <div className="modal-header">
             <div>
-              <div className="modal-title">Add module</div>
+              <div className="modal-title">{isEditingModule ? "Edit module" : "Add module"}</div>
               <div className="resource-modal-subtitle">
-                Create a course-style container for related resources.
+                {isEditingModule
+                  ? "Update this resource module or remove it from the community."
+                  : "Create a course-style container for related resources."}
               </div>
             </div>
             <button className="modal-close" onClick={onClose} title="Close">
@@ -188,6 +194,15 @@ export function WebCommunityResourceModuleModal(props: WebCommunityResourceModul
           </div>
           <div className="modal-footer">
             <div className="resource-modal-actions">
+              {isEditingModule && onDelete ? (
+                <button
+                  className="secondary danger"
+                  onClick={() => void onDelete()}
+                  disabled={!hasActiveCommunity || isSavingModule}
+                >
+                  Delete
+                </button>
+              ) : null}
               <button
                 className="platform-save-button"
                 onClick={() => void onSave()}

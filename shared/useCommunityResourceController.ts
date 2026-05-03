@@ -5,6 +5,7 @@ import { resolveUsableSession, type EnsureSessionFn } from "./ensureUsableSessio
 
 import {
   deleteCloudCommunityResource,
+  deleteCloudCommunityResourceModule,
   listCloudCommunityResourceModuleRows,
   listCloudCommunityResourceRows,
   prepareCloudCommunityBrandingField,
@@ -62,6 +63,9 @@ type UseCommunityResourceControllerArgs<
   moduleBannerFocusY: number;
   moduleBannerZoom: number;
   editingResourceId: string | null;
+  editingResourceModuleId: string | null;
+  editingResourceModuleBannerStorageId: string | null;
+  editingResourceModuleBannerUrl: string | null;
   beforeSaveValidate?: (payload: { title: string; description: string; rawUrl: string }) => Promise<string | null>;
   setCommunityResources: Dispatch<SetStateAction<ResourceT[]>>;
   setCommunityResourceModules: Dispatch<SetStateAction<ResourceModuleT[]>>;
@@ -75,6 +79,9 @@ type UseCommunityResourceControllerArgs<
   setShowResourceModuleModal: Dispatch<SetStateAction<boolean>>;
   setShowResourceModal: Dispatch<SetStateAction<boolean>>;
   setEditingResourceId: Dispatch<SetStateAction<string | null>>;
+  setEditingResourceModuleId: Dispatch<SetStateAction<string | null>>;
+  setEditingResourceModuleBannerStorageId: Dispatch<SetStateAction<string | null>>;
+  setEditingResourceModuleBannerUrl: Dispatch<SetStateAction<string | null>>;
   setResourceTitleInput: Dispatch<SetStateAction<string>>;
   setResourceUrlInput: Dispatch<SetStateAction<string>>;
   setResourceBodyInput: Dispatch<SetStateAction<string>>;
@@ -114,6 +121,9 @@ export function useCommunityResourceController<
 
   const resetModuleEditor = useCallback((clearError: boolean) => {
     const current = argsRef.current;
+    current.setEditingResourceModuleId(null);
+    current.setEditingResourceModuleBannerStorageId(null);
+    current.setEditingResourceModuleBannerUrl(null);
     current.setModuleNameInput("");
     current.setModuleDescriptionInput("");
     current.setModuleBannerUrlInput("");
@@ -296,19 +306,20 @@ export function useCommunityResourceController<
     current.setResourceModuleError(null);
     current.setIsSavingResourceModule(true);
     try {
+      const isPatch = Boolean(current.editingResourceModuleId);
       const bannerField = await prepareCloudCommunityBrandingField({
         session,
         kind: "banner",
         nextValue: current.moduleBannerUrlInput,
-        currentStorageId: null,
-        currentResolvedUrl: null,
+        currentStorageId: current.editingResourceModuleBannerStorageId,
+        currentResolvedUrl: current.editingResourceModuleBannerUrl,
       });
       await saveCloudCommunityResourceModule({
         session,
-        moduleId: null,
-        isPatch: false,
+        moduleId: isPatch ? current.editingResourceModuleId : null,
+        isPatch,
         payload: {
-          community_id: current.activeCommunityId,
+          ...(isPatch ? {} : { community_id: current.activeCommunityId }),
           name,
           description_md: current.moduleDescriptionInput.trim() || null,
           banner_storage_id: bannerField.storageId ?? null,
@@ -334,6 +345,33 @@ export function useCommunityResourceController<
       current.setIsSavingResourceModule(false);
     }
   }, [loadCommunityResourceModules, resetModuleEditor]);
+
+  const handleDeleteCommunityResourceModule = useCallback(async (moduleId: string) => {
+    const current = argsRef.current;
+    const session = await resolveUsableSession(current.session, current.ensureSession);
+    if (!session || !current.activeCommunityId) return false;
+    try {
+      await deleteCloudCommunityResourceModule({
+        session,
+        moduleId,
+      });
+    } catch (error) {
+      const message = typeof error === "string"
+        ? error
+        : error instanceof Error
+          ? error.message
+          : "Failed to delete module.";
+      current.setResourceModuleError(message);
+      return false;
+    }
+    if (current.editingResourceModuleId === moduleId) {
+      current.setShowResourceModuleModal(false);
+      resetModuleEditor(true);
+    }
+    await loadCommunityResourceModules(current.activeCommunityId, session);
+    await loadCommunityResources(current.activeCommunityId, session);
+    return true;
+  }, [loadCommunityResourceModules, loadCommunityResources, resetModuleEditor]);
 
   const handleDeleteResource = useCallback(async (resourceId: string) => {
     const current = argsRef.current;
@@ -364,6 +402,7 @@ export function useCommunityResourceController<
     loadCommunityResourceModules,
     loadCommunityResources,
     handleSaveCommunityResourceModule,
+    handleDeleteCommunityResourceModule,
     handleSaveCommunityResource,
     handleDeleteResource,
   };

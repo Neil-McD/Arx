@@ -64,6 +64,8 @@ export type UseWebCommunityResourceUiControllerResult<
   setIsSavingResource: Dispatch<SetStateAction<boolean>>;
   setResourceSuccess: Dispatch<SetStateAction<boolean>>;
   openNewModuleModal: () => void;
+  handleEditModule: (module: ResourceModuleT) => void;
+  handleDeleteModule: (moduleId: string) => Promise<boolean>;
   openNewResourceModal: (moduleId?: string | null) => void;
   handleEditResource: (resource: ResourceT) => void;
   handleDeleteResource: (resourceId: string) => Promise<boolean>;
@@ -83,6 +85,9 @@ export function useWebCommunityResourceUiController<
   const [showResourceModal, setShowResourceModal] = useState(false);
   const [showResourceModuleModal, setShowResourceModuleModal] = useState(false);
   const [editingResourceId, setEditingResourceId] = useState<string | null>(null);
+  const [editingResourceModuleId, setEditingResourceModuleId] = useState<string | null>(null);
+  const [editingResourceModuleBannerStorageId, setEditingResourceModuleBannerStorageId] = useState<string | null>(null);
+  const [editingResourceModuleBannerUrl, setEditingResourceModuleBannerUrl] = useState<string | null>(null);
   const [resourceTitleInput, setResourceTitleInput] = useState("");
   const [resourceUrlInput, setResourceUrlInput] = useState("");
   const [resourceBodyInput, setResourceBodyInput] = useState("");
@@ -108,6 +113,7 @@ export function useWebCommunityResourceUiController<
     loadCommunityResourceModules,
     loadCommunityResources,
     handleSaveCommunityResourceModule,
+    handleDeleteCommunityResourceModule,
     handleSaveCommunityResource,
     handleDeleteResource,
   } = useCommunityResourceController<SessionT, ResourceT, ResourceModuleT>({
@@ -132,6 +138,9 @@ export function useWebCommunityResourceUiController<
     moduleBannerFocusY,
     moduleBannerZoom,
     editingResourceId,
+    editingResourceModuleId,
+    editingResourceModuleBannerStorageId,
+    editingResourceModuleBannerUrl,
     setCommunityResources: params.setCommunityResources,
     setCommunityResourceModules: params.setCommunityResourceModules,
     setIsLoadingResources: params.setIsLoadingResources,
@@ -144,6 +153,9 @@ export function useWebCommunityResourceUiController<
     setShowResourceModuleModal,
     setShowResourceModal,
     setEditingResourceId,
+    setEditingResourceModuleId,
+    setEditingResourceModuleBannerStorageId,
+    setEditingResourceModuleBannerUrl,
     setResourceTitleInput,
     setResourceUrlInput,
     setResourceBodyInput,
@@ -180,6 +192,9 @@ export function useWebCommunityResourceUiController<
   };
 
   const openNewModuleModal = () => {
+    setEditingResourceModuleId(null);
+    setEditingResourceModuleBannerStorageId(null);
+    setEditingResourceModuleBannerUrl(null);
     setModuleNameInput("");
     setModuleDescriptionInput("");
     setModuleBannerUrlInput("");
@@ -190,6 +205,30 @@ export function useWebCommunityResourceUiController<
     setIsModuleBannerFocusModalOpen(false);
     setResourceModuleError(null);
     setShowResourceModuleModal(true);
+  };
+
+  const handleEditModule = (module: ResourceModuleT) => {
+    setEditingResourceModuleId(module.id);
+    setEditingResourceModuleBannerStorageId(module.banner_storage_id ?? null);
+    setEditingResourceModuleBannerUrl(module.banner_url ?? null);
+    setModuleNameInput(module.name);
+    setModuleDescriptionInput(module.description_md ?? "");
+    setModuleBannerUrlInput(module.banner_url ?? "");
+    setModuleBannerFocusX(module.banner_focus_x ?? 0.5);
+    setModuleBannerFocusY(module.banner_focus_y ?? 0.5);
+    setModuleBannerZoom(module.banner_zoom ?? 1);
+    setModuleBannerUploadError(null);
+    setIsModuleBannerFocusModalOpen(false);
+    setResourceModuleError(null);
+    setShowResourceModuleModal(true);
+  };
+
+  const handleDeleteModule = async (moduleId: string) => {
+    const didConfirm = window.confirm(
+      "Delete this module? Its resources will stay in the community and move back to Resources.",
+    );
+    if (!didConfirm) return false;
+    return await handleDeleteCommunityResourceModule(moduleId);
   };
 
   const handleModuleBannerUpload = async (file: File | null) => {
@@ -237,11 +276,14 @@ export function useWebCommunityResourceUiController<
     setIsSavingResource,
     setResourceSuccess,
     openNewModuleModal,
+    handleEditModule,
+    handleDeleteModule,
     openNewResourceModal,
     handleEditResource,
     handleDeleteResource,
     resourceModuleModalProps: {
       isOpen: showResourceModuleModal,
+      isEditingModule: Boolean(editingResourceModuleId),
       hasActiveCommunity: Boolean(params.activeCommunityId),
       moduleNameInput,
       moduleDescriptionInput,
@@ -260,6 +302,9 @@ export function useWebCommunityResourceUiController<
         setIsModuleBannerFocusModalOpen(false);
       },
       onCancel: () => {
+        setEditingResourceModuleId(null);
+        setEditingResourceModuleBannerStorageId(null);
+        setEditingResourceModuleBannerUrl(null);
         setModuleNameInput("");
         setModuleDescriptionInput("");
         setModuleBannerUrlInput("");
@@ -272,6 +317,7 @@ export function useWebCommunityResourceUiController<
         setShowResourceModuleModal(false);
       },
       onSave: handleSaveCommunityResourceModule,
+      onDelete: editingResourceModuleId ? () => handleDeleteModule(editingResourceModuleId) : null,
       onChangeName: setModuleNameInput,
       onChangeDescription: setModuleDescriptionInput,
       onChangeBannerFocusX: setModuleBannerFocusX,

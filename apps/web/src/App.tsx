@@ -1824,6 +1824,8 @@ export default function App() {
     loadCommunityResources,
     resourceSuccess,
     openNewModuleModal,
+    handleEditModule,
+    handleDeleteModule,
     openNewResourceModal,
     handleEditResource,
     handleDeleteResource,
@@ -6279,6 +6281,8 @@ export default function App() {
       resourcesActions: {
         setOpenResourceEmbedId,
         openNewModuleModal,
+        handleEditModule,
+        handleDeleteModule,
         openNewResourceModal,
         handleEditResource,
         handleDeleteResource,
