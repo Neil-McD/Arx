@@ -120,12 +120,21 @@ type UserPlatformAppMountRow = {
   _id: any;
   userId: any;
   developerAppId: any;
-  toolSnapshotId: any;
+  toolSnapshotId?: any;
   enabled: boolean;
   enabledTools?: string[];
   createdAt: number;
   updatedAt: number;
 };
+
+type UserPlatformAppMountLiveStatus = "live" | "not_live";
+
+type UserPlatformAppMountNotLiveReason =
+  | "disabled"
+  | "needs_auth"
+  | "validation_failed"
+  | "no_tools_discovered"
+  | "missing_snapshot";
 
 type RuntimeMountedUserPlatformAppTool = {
   user_platform_app_mount_id: any;
@@ -211,12 +220,13 @@ function buildConnectFailure(args: {
   code: ConnectUserPlatformAppErrorCode;
   appName: string;
   connectAttemptId: string;
+  mount?: unknown;
   validationReport?: ReturnType<typeof coerceValidationReport> | null;
   errorMessage?: string | null;
 }): ConnectUserPlatformAppResultRecord {
   return {
     ok: false,
-    mount: null,
+    mount: args.mount ?? null,
     validation_report: args.validationReport ?? null,
     error_code: args.code,
     error_message:
@@ -307,6 +317,37 @@ function computeSelectedToolNames(
   return enabled.filter((toolName) => allToolNames.includes(toolName));
 }
 
+function deriveUserPlatformMountLiveState(args: {
+  mount: UserPlatformAppMountRow;
+  app: DeveloperAppRow;
+  connection: AppConnectionRow | null;
+  snapshot: AppToolSnapshotRow | null;
+  enabledTools: string[];
+}): {
+  live_status: UserPlatformAppMountLiveStatus;
+  not_live_reason: UserPlatformAppMountNotLiveReason | null;
+} {
+  if (!args.mount.enabled) {
+    return { live_status: "not_live", not_live_reason: "disabled" };
+  }
+  if (
+    args.app.authType !== "none" &&
+    args.connection?.connectionStatus !== "connected"
+  ) {
+    return { live_status: "not_live", not_live_reason: "needs_auth" };
+  }
+  if (!args.snapshot) {
+    return { live_status: "not_live", not_live_reason: "missing_snapshot" };
+  }
+  if (args.app.status !== "valid" || args.snapshot.validationStatus !== "ok") {
+    return { live_status: "not_live", not_live_reason: "validation_failed" };
+  }
+  if (args.enabledTools.length === 0) {
+    return { live_status: "not_live", not_live_reason: "no_tools_discovered" };
+  }
+  return { live_status: "live", not_live_reason: null };
+}
+
 function mapUserPlatformAppMountReadModel(args: {
   mount: UserPlatformAppMountRow;
   app: DeveloperAppRow;
@@ -315,10 +356,19 @@ function mapUserPlatformAppMountReadModel(args: {
 }) {
   const tools = normalizeSnapshotTools(args.snapshot);
   const selectedToolNames = new Set(computeSelectedToolNames(args.mount, tools));
+  const enabledTools = Array.from(selectedToolNames);
+  const liveState = deriveUserPlatformMountLiveState({
+    mount: args.mount,
+    app: args.app,
+    connection: args.connection,
+    snapshot: args.snapshot,
+    enabledTools,
+  });
   return {
     id: String(args.mount._id),
     enabled: args.mount.enabled === true,
-    enabled_tools: Array.from(selectedToolNames),
+    enabled_tools: enabledTools,
+    ...liveState,
     app: mapDeveloperAppReadModel(args.app),
     connection: mapAppConnectionReadModel(args.app, args.connection),
     tools: tools.map((tool) => ({
@@ -395,7 +445,9 @@ async function getAppToolSnapshotById(
   ctx: any,
   toolSnapshotId: any,
 ): Promise<AppToolSnapshotRow | null> {
-  return ((await ctx.db.get(toolSnapshotId)) as AppToolSnapshotRow | null) ?? null;
+  return toolSnapshotId
+    ? ((await ctx.db.get(toolSnapshotId)) as AppToolSnapshotRow | null) ?? null
+    : null;
 }
 
 async function listUserPlatformAppMountRows(
@@ -536,7 +588,7 @@ async function mountValidatedDeveloperAppForUser(args: {
   ctx: any;
   userId: any;
   developerAppId: any;
-  toolSnapshotId: any;
+  toolSnapshotId?: any;
   enabledTools?: string[];
   nowMs: number;
 }): Promise<{ mountId: any; mount: unknown }> {
@@ -561,16 +613,23 @@ async function mountValidatedDeveloperAppForUser(args: {
   return { mountId, mount };
 }
 
-async function cleanupDeveloperAppAfterFailedConnect(args: {
+async function mountSetupNeededDeveloperAppForUser(args: {
   ctx: any;
+  userId: any;
   developerAppId: any;
-}): Promise<void> {
-  await args.ctx.runMutation(
-    internal.developerApps.deleteDeveloperAppCascadeInternal,
-    {
-      developerAppId: args.developerAppId,
-    },
-  );
+  toolSnapshotId?: any;
+  enabledTools?: string[];
+  nowMs: number;
+}): Promise<unknown> {
+  const mounted = await mountValidatedDeveloperAppForUser({
+    ctx: args.ctx,
+    userId: args.userId,
+    developerAppId: args.developerAppId,
+    toolSnapshotId: args.toolSnapshotId,
+    enabledTools: args.enabledTools,
+    nowMs: args.nowMs,
+  });
+  return mounted.mount;
 }
 
 async function requireExistingUserPlatformMount(args: {
@@ -641,7 +700,7 @@ export const getUserPlatformAppMountReadModelInternal = internalQuery({
     });
     const app = await getDeveloperAppById(ctx, mount.developerAppId);
     const snapshot = await getAppToolSnapshotById(ctx, mount.toolSnapshotId);
-    if (!app || !snapshot) {
+    if (!app) {
       throw new Error("user_platform_app_mount_missing_dependency");
     }
     const connection = await getAppConnectionByDeveloperAppId(
@@ -724,7 +783,7 @@ export const listUserPlatformAppMounts = query({
     for (const mount of mounts) {
       const app = await getDeveloperAppById(ctx, mount.developerAppId);
       const snapshot = await getAppToolSnapshotById(ctx, mount.toolSnapshotId);
-      if (!app || !snapshot) continue;
+      if (!app) continue;
       const connection = await getAppConnectionByDeveloperAppId(
         ctx,
         mount.developerAppId,
@@ -1006,10 +1065,19 @@ export const connectUserPlatformApp = action({
               nowMs,
             });
           } else if (existingMount.connection?.connectionStatus !== "connected") {
+            const mount = await mountSetupNeededDeveloperAppForUser({
+              ctx,
+              userId,
+              developerAppId: existingMount.app._id,
+              toolSnapshotId: existingMount.mount.toolSnapshotId,
+              enabledTools: existingMount.mount.enabledTools,
+              nowMs,
+            });
             return buildConnectFailure({
               code: "developer_app_connection_secret_required",
               appName: args.name,
               connectAttemptId,
+              mount,
             });
           }
         }
@@ -1025,6 +1093,14 @@ export const connectUserPlatformApp = action({
           developerAppId: existingMount.app._id,
         });
         if (validation.validationStatus !== "ok") {
+          const mount = await mountSetupNeededDeveloperAppForUser({
+            ctx,
+            userId,
+            developerAppId: existingMount.app._id,
+            toolSnapshotId: existingMount.mount.toolSnapshotId,
+            enabledTools: existingMount.mount.enabledTools,
+            nowMs,
+          });
           emitPersonalAppConnectTrace("personal_app_connect.validate.failure", {
             connectAttemptId,
             appName: args.name,
@@ -1038,6 +1114,7 @@ export const connectUserPlatformApp = action({
             code: "developer_app_validation_failed",
             appName: args.name,
             connectAttemptId,
+            mount,
             validationReport: withMountedStage(
               validation.validationReport,
               "skipped",
@@ -1062,10 +1139,19 @@ export const connectUserPlatformApp = action({
           },
         )) as DeveloperAppRow | null;
         if (!refreshedApp?.activeSnapshotId) {
+          const mount = await mountSetupNeededDeveloperAppForUser({
+            ctx,
+            userId,
+            developerAppId: existingMount.app._id,
+            toolSnapshotId: existingMount.mount.toolSnapshotId,
+            enabledTools: existingMount.mount.enabledTools,
+            nowMs,
+          });
           return buildConnectFailure({
             code: "developer_app_snapshot_missing",
             appName: args.name,
             connectAttemptId,
+            mount,
             validationReport: withMountedStage(
               validation.validationReport,
               "error",
@@ -1143,14 +1229,17 @@ export const connectUserPlatformApp = action({
 
       if (args.authType !== "none") {
         if (!normalizedSecret) {
-          await cleanupDeveloperAppAfterFailedConnect({
+          const mount = await mountSetupNeededDeveloperAppForUser({
             ctx,
+            userId,
             developerAppId,
+            nowMs,
           });
           return buildConnectFailure({
             code: "developer_app_connection_secret_required",
             appName: args.name,
             connectAttemptId,
+            mount,
           });
         }
         try {
@@ -1175,14 +1264,17 @@ export const connectUserPlatformApp = action({
             ok: false,
             code: "developer_app_secret_store_failed",
           });
-          await cleanupDeveloperAppAfterFailedConnect({
+          const mount = await mountSetupNeededDeveloperAppForUser({
             ctx,
+            userId,
             developerAppId,
+            nowMs,
           });
           return buildConnectFailure({
             code: "developer_app_secret_store_failed",
             appName: args.name,
             connectAttemptId,
+            mount,
           });
         }
       }
@@ -1198,9 +1290,18 @@ export const connectUserPlatformApp = action({
         developerAppId,
       });
       if (validation.validationStatus !== "ok") {
-        await cleanupDeveloperAppAfterFailedConnect({
+        const app = (await ctx.runQuery(
+          internal.developerApps.getDeveloperAppByIdInternal,
+          {
+            developerAppId,
+          },
+        )) as DeveloperAppRow | null;
+        const mount = await mountSetupNeededDeveloperAppForUser({
           ctx,
+          userId,
           developerAppId,
+          toolSnapshotId: app?.activeSnapshotId,
+          nowMs,
         });
         emitPersonalAppConnectTrace("personal_app_connect.validate.failure", {
           connectAttemptId,
@@ -1215,6 +1316,7 @@ export const connectUserPlatformApp = action({
           code: "developer_app_validation_failed",
           appName: args.name,
           connectAttemptId,
+          mount,
           validationReport: withMountedStage(
             validation.validationReport,
             "skipped",
@@ -1240,14 +1342,17 @@ export const connectUserPlatformApp = action({
         },
       )) as DeveloperAppRow;
       if (!app.activeSnapshotId) {
-        await cleanupDeveloperAppAfterFailedConnect({
+        const mount = await mountSetupNeededDeveloperAppForUser({
           ctx,
+          userId,
           developerAppId,
+          nowMs,
         });
         return buildConnectFailure({
           code: "developer_app_snapshot_missing",
           appName: args.name,
           connectAttemptId,
+          mount,
           validationReport: withMountedStage(
             validation.validationReport,
             "error",
@@ -1259,14 +1364,19 @@ export const connectUserPlatformApp = action({
         .map((tool) => normalizeString(tool.tool_name, 200))
         .filter(Boolean);
       if (enabledTools.length === 0) {
-        await cleanupDeveloperAppAfterFailedConnect({
+        const mount = await mountSetupNeededDeveloperAppForUser({
           ctx,
+          userId,
           developerAppId,
+          toolSnapshotId: app.activeSnapshotId,
+          enabledTools: [],
+          nowMs,
         });
         return buildConnectFailure({
           code: "developer_app_no_tools_discovered",
           appName: args.name,
           connectAttemptId,
+          mount,
           validationReport: withMountedStage(
             validation.validationReport,
             "skipped",
@@ -1304,11 +1414,18 @@ export const connectUserPlatformApp = action({
         connect_attempt_id: connectAttemptId,
       };
     } catch (error) {
+      let mount: unknown = null;
       if (developerAppId) {
-        await cleanupDeveloperAppAfterFailedConnect({
-          ctx,
-          developerAppId,
-        });
+        try {
+          mount = await mountSetupNeededDeveloperAppForUser({
+            ctx,
+            userId,
+            developerAppId,
+            nowMs,
+          });
+        } catch {
+          mount = null;
+        }
       }
       const errorCode: ConnectUserPlatformAppErrorCode = developerAppId
         ? "developer_app_connect_failed"
@@ -1330,6 +1447,7 @@ export const connectUserPlatformApp = action({
         code: errorCode,
         appName: args.name,
         connectAttemptId,
+        mount,
       });
     }
   },
@@ -1498,7 +1616,7 @@ export const updateUserPlatformAppMount = mutation({
       ctx,
       updated?.toolSnapshotId ?? mount.toolSnapshotId,
     );
-    if (!updated || !app || !updatedSnapshot) {
+    if (!updated || !app) {
       throw new Error("user_platform_app_mount_not_found");
     }
     return mapUserPlatformAppMountReadModel({
@@ -1539,7 +1657,7 @@ export const upsertUserPlatformAppMountInternal = internalMutation({
   args: {
     userId: v.id("users"),
     developerAppId: v.id("developerApps"),
-    toolSnapshotId: v.id("appToolSnapshots"),
+    toolSnapshotId: v.optional(v.id("appToolSnapshots")),
     enabled: v.boolean(),
     enabledTools: v.optional(v.array(v.string())),
     nowMs: v.optional(v.number()),
@@ -1554,7 +1672,7 @@ export const upsertUserPlatformAppMountInternal = internalMutation({
       .first();
     if (existing) {
       await ctx.db.patch(existing._id, {
-        toolSnapshotId: args.toolSnapshotId,
+        toolSnapshotId: args.toolSnapshotId ?? undefined,
         enabled: args.enabled,
         enabledTools: args.enabledTools ?? existing.enabledTools,
         updatedAt: nowMs,
@@ -1564,7 +1682,7 @@ export const upsertUserPlatformAppMountInternal = internalMutation({
     return await ctx.db.insert("userPlatformAppMounts", {
       userId: args.userId,
       developerAppId: args.developerAppId,
-      toolSnapshotId: args.toolSnapshotId,
+      ...(args.toolSnapshotId ? { toolSnapshotId: args.toolSnapshotId } : {}),
       enabled: args.enabled,
       enabledTools: args.enabledTools,
       createdAt: nowMs,

@@ -11,6 +11,9 @@ function assertIncludes(haystack: string, needle: string, label: string) {
 
 function main() {
   const communityAppMounts = readText("/Users/neilmcdevitt/code/arx/convex/communityAppMounts.ts");
+  const userPlatformAppMounts = readText(
+    "/Users/neilmcdevitt/code/arx/convex/userPlatformAppMounts.ts",
+  );
   const httpDaytona = readText("/Users/neilmcdevitt/code/arx/convex/httpDaytona.ts");
   const runtimeExecutionSession = readText(
     "/Users/neilmcdevitt/code/arx/convex/runtimeExecutionSession.ts",
@@ -36,6 +39,56 @@ function main() {
     communityAppMounts,
     "internal.appValidation.validateDeveloperAppInternal",
     "community app validation lifecycle",
+  );
+  assertIncludes(
+    communityAppMounts,
+    "toolSnapshotId: v.optional(v.id(\"appToolSnapshots\"))",
+    "community setup-needed mounts allow missing snapshots",
+  );
+  assertIncludes(
+    userPlatformAppMounts,
+    "toolSnapshotId: v.optional(v.id(\"appToolSnapshots\"))",
+    "personal setup-needed mounts allow missing snapshots",
+  );
+  assertIncludes(
+    communityAppMounts,
+    "deriveCommunityMountLiveState",
+    "community mounts expose live/not-live state",
+  );
+  assertIncludes(
+    userPlatformAppMounts,
+    "deriveUserPlatformMountLiveState",
+    "personal mounts expose live/not-live state",
+  );
+  assertIncludes(
+    communityAppMounts,
+    "return await mountDeveloperAppForCommunity({",
+    "community failed setup preserves mount intent",
+  );
+  assertIncludes(
+    userPlatformAppMounts,
+    "mountSetupNeededDeveloperAppForUser({",
+    "personal failed setup preserves mount intent",
+  );
+  assertIncludes(
+    communityAppMounts,
+    "if (!app) continue;",
+    "community list keeps snapshotless setup-needed mounts",
+  );
+  assertIncludes(
+    userPlatformAppMounts,
+    "if (!app) continue;",
+    "personal list keeps snapshotless setup-needed mounts",
+  );
+  assertIncludes(
+    communityAppMounts,
+    "if (!app || !snapshot) continue;",
+    "community runtime skips non-live snapshotless mounts",
+  );
+  assertIncludes(
+    userPlatformAppMounts,
+    "if (!app || !snapshot) continue;",
+    "personal runtime skips non-live snapshotless mounts",
   );
   assertIncludes(
     communityAppMounts,

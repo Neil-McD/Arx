@@ -38,13 +38,22 @@ type CommunityAppMountRow = {
   _id: any;
   communityId: any;
   developerAppId: any;
-  toolSnapshotId: any;
+  toolSnapshotId?: any;
   mountedByUserId: any;
   enabled: boolean;
   enabledTools?: string[];
   createdAt: number;
   updatedAt: number;
 };
+
+type CommunityAppMountLiveStatus = "live" | "not_live";
+
+type CommunityAppMountNotLiveReason =
+  | "disabled"
+  | "needs_auth"
+  | "validation_failed"
+  | "no_tools_discovered"
+  | "missing_snapshot";
 
 type RuntimeMountedCommunityAppTool = {
   community_app_mount_id: any;
@@ -119,6 +128,37 @@ function computeSelectedToolNames(
   return enabled.filter((toolName) => allToolNames.includes(toolName));
 }
 
+function deriveCommunityMountLiveState(args: {
+  mount: CommunityAppMountRow;
+  app: DeveloperAppRow;
+  connection: AppConnectionRow | null;
+  snapshot: AppToolSnapshotRow | null;
+  enabledTools: string[];
+}): {
+  live_status: CommunityAppMountLiveStatus;
+  not_live_reason: CommunityAppMountNotLiveReason | null;
+} {
+  if (!args.mount.enabled) {
+    return { live_status: "not_live", not_live_reason: "disabled" };
+  }
+  if (
+    args.app.authType !== "none" &&
+    args.connection?.connectionStatus !== "connected"
+  ) {
+    return { live_status: "not_live", not_live_reason: "needs_auth" };
+  }
+  if (!args.snapshot) {
+    return { live_status: "not_live", not_live_reason: "missing_snapshot" };
+  }
+  if (args.app.status !== "valid" || args.snapshot.validationStatus !== "ok") {
+    return { live_status: "not_live", not_live_reason: "validation_failed" };
+  }
+  if (args.enabledTools.length === 0) {
+    return { live_status: "not_live", not_live_reason: "no_tools_discovered" };
+  }
+  return { live_status: "live", not_live_reason: null };
+}
+
 function mapCommunityAppMountReadModel(args: {
   mount: CommunityAppMountRow;
   app: DeveloperAppRow;
@@ -127,10 +167,19 @@ function mapCommunityAppMountReadModel(args: {
 }) {
   const tools = normalizeSnapshotTools(args.snapshot);
   const selectedToolNames = new Set(computeSelectedToolNames(args.mount, tools));
+  const enabledTools = Array.from(selectedToolNames);
+  const liveState = deriveCommunityMountLiveState({
+    mount: args.mount,
+    app: args.app,
+    connection: args.connection,
+    snapshot: args.snapshot,
+    enabledTools,
+  });
   return {
     id: String(args.mount._id),
     enabled: args.mount.enabled === true,
-    enabled_tools: Array.from(selectedToolNames),
+    enabled_tools: enabledTools,
+    ...liveState,
     app: mapDeveloperAppReadModel(args.app),
     connection: mapAppConnectionReadModel(args.app, args.connection),
     tools: tools.map((tool) => ({
@@ -199,7 +248,9 @@ async function getAppToolSnapshotById(
   ctx: any,
   toolSnapshotId: any,
 ): Promise<AppToolSnapshotRow | null> {
-  return ((await ctx.db.get(toolSnapshotId)) as AppToolSnapshotRow | null) ?? null;
+  return toolSnapshotId
+    ? ((await ctx.db.get(toolSnapshotId)) as AppToolSnapshotRow | null) ?? null
+    : null;
 }
 
 async function listCommunityAppMountRows(
@@ -259,6 +310,38 @@ async function resolveAuthenticatedActionUser(args: {
   };
 }
 
+async function mountDeveloperAppForCommunity(args: {
+  ctx: any;
+  userId: any;
+  communityId: any;
+  developerAppId: any;
+  toolSnapshotId?: any;
+  enabledTools?: string[];
+  nowMs: number;
+}): Promise<unknown> {
+  const communityAppMountId = (await args.ctx.runMutation(
+    internal.communityAppMounts.upsertCommunityAppMountInternal,
+    {
+      communityId: args.communityId,
+      developerAppId: args.developerAppId,
+      toolSnapshotId: args.toolSnapshotId,
+      mountedByUserId: args.userId,
+      enabled: true,
+      enabledTools: args.enabledTools,
+      nowMs: args.nowMs,
+    },
+  )) as any;
+
+  return await args.ctx.runQuery(
+    internal.communityAppMounts.getCommunityAppMountReadModelInternal,
+    {
+      userId: args.userId,
+      communityId: args.communityId,
+      communityAppMountId,
+    },
+  );
+}
+
 export const assertCommunityManagerAccessInternal = internalQuery({
   args: {
     userId: v.id("users"),
@@ -296,7 +379,7 @@ export const getCommunityAppMountReadModelInternal = internalQuery({
     });
     const app = await getDeveloperAppById(ctx, mount.developerAppId);
     const snapshot = await getAppToolSnapshotById(ctx, mount.toolSnapshotId);
-    if (!app || !snapshot) throw new Error("community_app_mount_missing_dependency");
+    if (!app) throw new Error("community_app_mount_missing_dependency");
     const connection = await getAppConnectionByDeveloperAppId(ctx, mount.developerAppId);
     return mapCommunityAppMountReadModel({
       mount,
@@ -391,7 +474,7 @@ export const listCommunityAppMounts = query({
     for (const mount of mounts) {
       const app = await getDeveloperAppById(ctx, mount.developerAppId);
       const snapshot = await getAppToolSnapshotById(ctx, mount.toolSnapshotId);
-      if (!app || !snapshot) continue;
+      if (!app) continue;
       const connection = await getAppConnectionByDeveloperAppId(ctx, mount.developerAppId);
       results.push(
         mapCommunityAppMountReadModel({
@@ -612,7 +695,15 @@ export const connectCommunityApp = action({
 
       if (args.authType !== "none") {
         const secret = normalizeString(args.secret, 10_000);
-        if (!secret) throw new Error("developer_app_connection_secret_required");
+        if (!secret) {
+          return await mountDeveloperAppForCommunity({
+            ctx,
+            userId,
+            communityId: args.communityId,
+            developerAppId,
+            nowMs,
+          });
+        }
         const encryptedSecret = await encryptSecret(secret);
         await ctx.runMutation(internal.appConnections.upsertAppConnectionInternal, {
           developerAppId,
@@ -632,16 +723,32 @@ export const connectCommunityApp = action({
         snapshot?: { tools?: unknown };
       };
       if (String(validation.validation_status ?? "") !== "ok") {
-        throw new Error(
-          normalizeString(validation.validation_error, 2_000) || "developer_app_validation_failed",
-        );
+        const app = (await ctx.runQuery(internal.developerApps.getDeveloperAppByIdInternal, {
+          developerAppId,
+        })) as DeveloperAppRow | null;
+        return await mountDeveloperAppForCommunity({
+          ctx,
+          userId,
+          communityId: args.communityId,
+          developerAppId,
+          toolSnapshotId: app?.activeSnapshotId,
+          nowMs,
+        });
       }
 
       const app = (await ctx.runQuery(internal.developerApps.getDeveloperAppForOwnerInternal, {
         userId,
         developerAppId,
       })) as DeveloperAppRow;
-      if (!app.activeSnapshotId) throw new Error("developer_app_snapshot_missing");
+      if (!app.activeSnapshotId) {
+        return await mountDeveloperAppForCommunity({
+          ctx,
+          userId,
+          communityId: args.communityId,
+          developerAppId,
+          nowMs,
+        });
+      }
       const mountedTools = Array.isArray(validation.snapshot?.tools)
         ? (validation.snapshot?.tools as Array<{ tool_name?: unknown }>)
         : [];
@@ -649,7 +756,15 @@ export const connectCommunityApp = action({
         .map((tool) => normalizeString(tool.tool_name, 200))
         .filter(Boolean);
       if (enabledTools.length === 0) {
-        throw new Error("developer_app_no_tools_discovered");
+        return await mountDeveloperAppForCommunity({
+          ctx,
+          userId,
+          communityId: args.communityId,
+          developerAppId,
+          toolSnapshotId: app.activeSnapshotId,
+          enabledTools: [],
+          nowMs,
+        });
       }
 
       const communityAppMountId = (await ctx.runMutation(
@@ -672,9 +787,17 @@ export const connectCommunityApp = action({
       });
     } catch (error) {
       if (developerAppId) {
-        await ctx.runMutation(internal.developerApps.deleteDeveloperAppCascadeInternal, {
-          developerAppId,
-        });
+        try {
+          return await mountDeveloperAppForCommunity({
+            ctx,
+            userId,
+            communityId: args.communityId,
+            developerAppId,
+            nowMs,
+          });
+        } catch {
+          throw error;
+        }
       }
       throw error;
     }
@@ -839,7 +962,7 @@ export const updateCommunityAppMount = mutation({
       ctx,
       updated?.toolSnapshotId ?? mount.toolSnapshotId,
     );
-    if (!updated || !app || !updatedSnapshot) {
+    if (!updated || !app) {
       throw new Error("community_app_mount_not_found");
     }
     return mapCommunityAppMountReadModel({
@@ -886,7 +1009,7 @@ export const upsertCommunityAppMountInternal = internalMutation({
   args: {
     communityId: v.id("communities"),
     developerAppId: v.id("developerApps"),
-    toolSnapshotId: v.id("appToolSnapshots"),
+    toolSnapshotId: v.optional(v.id("appToolSnapshots")),
     mountedByUserId: v.id("users"),
     enabled: v.boolean(),
     enabledTools: v.optional(v.array(v.string())),
@@ -902,7 +1025,7 @@ export const upsertCommunityAppMountInternal = internalMutation({
       .first();
     if (existing) {
       await ctx.db.patch(existing._id, {
-        toolSnapshotId: args.toolSnapshotId,
+        toolSnapshotId: args.toolSnapshotId ?? undefined,
         mountedByUserId: args.mountedByUserId,
         enabled: args.enabled,
         enabledTools: args.enabledTools ?? existing.enabledTools,
@@ -913,7 +1036,7 @@ export const upsertCommunityAppMountInternal = internalMutation({
     return await ctx.db.insert("communityAppMounts", {
       communityId: args.communityId,
       developerAppId: args.developerAppId,
-      toolSnapshotId: args.toolSnapshotId,
+      ...(args.toolSnapshotId ? { toolSnapshotId: args.toolSnapshotId } : {}),
       mountedByUserId: args.mountedByUserId,
       enabled: args.enabled,
       enabledTools: args.enabledTools,

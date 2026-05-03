@@ -113,6 +113,15 @@ function deriveHarnessLiveState(args: {
       not_live_reason: "disabled" as const,
     };
   }
+  if (
+    args.app.authType !== "none" &&
+    args.connection?.connectionStatus !== "connected"
+  ) {
+    return {
+      live_status: "not_live" as const,
+      not_live_reason: "needs_auth" as const,
+    };
+  }
   if (!args.snapshot) {
     return {
       live_status: "not_live" as const,
@@ -123,15 +132,6 @@ function deriveHarnessLiveState(args: {
     return {
       live_status: "not_live" as const,
       not_live_reason: "validation_failed" as const,
-    };
-  }
-  if (
-    args.app.authType !== "none" &&
-    args.connection?.connectionStatus !== "connected"
-  ) {
-    return {
-      live_status: "not_live" as const,
-      not_live_reason: "needs_auth" as const,
     };
   }
   if (args.enabledTools.length === 0) {

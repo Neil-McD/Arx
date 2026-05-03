@@ -2868,7 +2868,7 @@ export default function App() {
       secret?: string;
     }) => {
       const result = await connectUserPlatformApp(input);
-      if (result.ok) void reloadHarnessMounts();
+      if (result.ok || result.mount) void reloadHarnessMounts();
       return result;
     },
     [connectUserPlatformApp, reloadHarnessMounts],

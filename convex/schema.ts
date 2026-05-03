@@ -723,7 +723,7 @@ export default defineSchema({
   communityAppMounts: defineTable({
     communityId: v.id("communities"),
     developerAppId: v.id("developerApps"),
-    toolSnapshotId: v.id("appToolSnapshots"),
+    toolSnapshotId: v.optional(v.id("appToolSnapshots")),
     mountedByUserId: v.id("users"),
     enabled: v.boolean(),
     enabledTools: v.optional(v.array(v.string())),
@@ -737,7 +737,7 @@ export default defineSchema({
   userPlatformAppMounts: defineTable({
     userId: v.id("users"),
     developerAppId: v.id("developerApps"),
-    toolSnapshotId: v.id("appToolSnapshots"),
+    toolSnapshotId: v.optional(v.id("appToolSnapshots")),
     enabled: v.boolean(),
     enabledTools: v.optional(v.array(v.string())),
     createdAt: v.number(),

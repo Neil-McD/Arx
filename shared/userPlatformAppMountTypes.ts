@@ -1,4 +1,8 @@
-import type { DeveloperAppAuthType } from "./communityAppMountTypes";
+import type {
+  AppMountLiveStatus,
+  AppMountNotLiveReason,
+  DeveloperAppAuthType,
+} from "./communityAppMountTypes";
 
 export type UserPlatformMountedAppTool = {
   tool_name: string;
@@ -12,6 +16,8 @@ export type UserPlatformMountedApp = {
   id: string;
   enabled: boolean;
   enabled_tools: string[];
+  live_status?: AppMountLiveStatus;
+  not_live_reason?: AppMountNotLiveReason | null;
   app: {
     catalog_app_id: string | null;
     name: string;

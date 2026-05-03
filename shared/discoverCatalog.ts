@@ -309,9 +309,9 @@ export function buildDiscoverAppPersonalConnectModalCopy(
   }
   if (app.personalConnect.authMethod === "token") {
     if (app.personalConnect.connectionStrategy.defaultMode === "oauth") {
-      return `Paste your ${app.personalConnect.secretLabel} to connect ${app.name} now. OAuth support will come later.`;
+      return `Add ${app.name} now. Paste your ${app.personalConnect.secretLabel} to make it live immediately; OAuth support will come later.`;
     }
-    return `Paste your ${app.personalConnect.secretLabel} to connect ${app.name} to your personal platform tools.`;
+    return `Add ${app.name} now. Paste your ${app.personalConnect.secretLabel} to make it live immediately.`;
   }
   return `Review the connection requirements, then connect ${app.name} to your personal platform tools.`;
 }
