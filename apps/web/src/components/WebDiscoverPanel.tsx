@@ -192,42 +192,6 @@ function buildDiscoverMountStatusClassName(mount: DiscoverMountedApp): string {
   }`;
 }
 
-function renderDiscoverMountStatusFacts(
-  mount: DiscoverMountedApp | null,
-  scopeLabel: string,
-  fallbackEndpoint: string | null,
-  fallbackAuthLabel: string | null,
-) {
-  if (!mount) return null;
-  const endpoint = mount.app.endpoint_url || fallbackEndpoint || "Not configured";
-  const authLabel = fallbackAuthLabel || mount.app.auth_type || "Unknown";
-  const toolsCount = mount.enabled_tools.length;
-  const facts = [
-    { label: "Scope", value: scopeLabel },
-    { label: "Endpoint", value: endpoint },
-    { label: "Auth", value: authLabel },
-    {
-      label: "Tools",
-      value:
-        mount.live_status === "live"
-          ? `${toolsCount} active`
-          : toolsCount > 0
-            ? `${toolsCount} discovered, setup needed`
-            : "0 active",
-    },
-  ];
-  return (
-    <div className="discover-connect-status-facts" aria-label="Connection status details">
-      {facts.map((fact) => (
-        <div className="discover-connect-status-fact" key={fact.label}>
-          <span>{fact.label}</span>
-          <strong>{fact.value}</strong>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 function findMatchingPersonalMount(
   app: DiscoverAppCatalogEntry,
   catalogApps: DiscoverAppCatalogEntry[],
@@ -639,18 +603,6 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
     setIsPersonalConnectModalOpen(true);
   };
 
-  const openAppStatusModalAndAdd = (
-    target: "personal" | "community",
-    app: DiscoverAppCatalogEntry,
-  ) => {
-    setAppConnectTarget(target);
-    resetAppConnectFeedback();
-    setIsPersonalConnectModalOpen(true);
-    void (target === "community"
-      ? handleUseInCommunity(app)
-      : handleUsePersonally(app));
-  };
-
   const handleUsePersonally = async (
     app: DiscoverAppCatalogEntry,
   ): Promise<void> => {
@@ -668,6 +620,18 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
       setPersonalConnectResult("failed");
       setPersonalConnectValidationReport(null);
       setPersonalConnectError("Paste the MCP endpoint before adding it.");
+      return;
+    }
+    if (
+      app.personalConnect.connectionKind === "known" &&
+      app.personalConnect.authMethod === "token" &&
+      !personalConnectSecret.trim()
+    ) {
+      setPersonalConnectResult("failed");
+      setPersonalConnectValidationReport(null);
+      setPersonalConnectError(
+        `Paste your ${app.personalConnect.secretLabel} before adding ${app.name}.`,
+      );
       return;
     }
     const connectInput = buildDiscoverAppPersonalConnectInput(app, {
@@ -726,6 +690,18 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
       setCommunityConnectResult("failed");
       setPersonalConnectValidationReport(null);
       setPersonalConnectError("Paste the MCP endpoint before adding it.");
+      return;
+    }
+    if (
+      app.personalConnect.connectionKind === "known" &&
+      app.personalConnect.authMethod === "token" &&
+      !personalConnectSecret.trim()
+    ) {
+      setCommunityConnectResult("failed");
+      setPersonalConnectValidationReport(null);
+      setPersonalConnectError(
+        `Paste your ${app.personalConnect.secretLabel} before adding ${app.name}.`,
+      );
       return;
     }
     const connectInput = buildDiscoverAppPersonalConnectInput(app, {
@@ -905,7 +881,7 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
                       isDiscoverAppPersonallyConnectable(selectedApp) &&
                       selectedApp.personalConnect.connectionKind !== "custom"
                     ) {
-                      openAppStatusModalAndAdd("personal", selectedApp);
+                      openAppConnectModal("personal");
                       return;
                     }
                     openAppConnectModal("personal");
@@ -936,7 +912,7 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
                       isDiscoverAppPersonallyConnectable(selectedApp) &&
                       selectedApp.personalConnect.connectionKind !== "custom"
                     ) {
-                      openAppStatusModalAndAdd("community", selectedApp);
+                      openAppConnectModal("community");
                       return;
                     }
                     openAppConnectModal("community");
@@ -1428,13 +1404,9 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
           >
             <div className="modal-header">
               <div className="modal-title" id="discover-connect-modal-title">
-                {(appConnectTarget === "community"
-                  ? selectedCommunityMount
-                  : selectedPersonalMount)
-                  ? `${selectedApp.name} setup status`
-                  : appConnectTarget === "community"
-                    ? `Add ${selectedApp.name} to ${communityTargetLabel}`
-                    : `Add ${selectedApp.name}`}
+                {appConnectTarget === "community"
+                  ? `Add ${selectedApp.name} to ${communityTargetLabel}`
+                  : `Add ${selectedApp.name}`}
               </div>
               <button
                 type="button"
@@ -1639,14 +1611,6 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
                       : personalConnectValidationReport.validation_error ??
                         `We couldn't connect ${selectedApp.name}. Check the validation stages below.`}
                   </div>
-                  {renderDiscoverMountStatusFacts(
-                    selectedPersonalMount,
-                    "Personal",
-                    selectedApp.personalConnect.connectionKind === "known"
-                      ? selectedApp.personalConnect.endpointUrl
-                      : personalConnectEndpoint,
-                    selectedApp.personalConnect.authLabel,
-                  )}
                   <div className="discover-connect-stage-list" role="list" aria-label="Validation stages">
                     {personalConnectValidationReport.stages.map((stage) => (
                       <div
@@ -1690,14 +1654,6 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
                         )
                       : `${selectedApp.name} is now mounted into ${communityTargetLabel}.`}
                   </div>
-                  {renderDiscoverMountStatusFacts(
-                    selectedCommunityMount,
-                    communityTargetLabel,
-                    selectedApp.personalConnect.connectionKind === "known"
-                      ? selectedApp.personalConnect.endpointUrl
-                      : personalConnectEndpoint,
-                    selectedApp.personalConnect.authLabel,
-                  )}
                 </div>
               ) : appConnectTarget === "community" &&
                 communityConnectResult === "failed" ? (
@@ -1737,14 +1693,6 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
                         ? `${selectedApp.name} is in your personal platform layer, but setup needs to be completed before tools go live.`
                       : `${selectedApp.name} is live in your personal platform layer.`}
                   </div>
-                  {renderDiscoverMountStatusFacts(
-                    selectedPersonalMount,
-                    "Personal",
-                    selectedApp.personalConnect.connectionKind === "known"
-                      ? selectedApp.personalConnect.endpointUrl
-                      : personalConnectEndpoint,
-                    selectedApp.personalConnect.authLabel,
-                  )}
                 </div>
               ) : personalConnectResult === "failed" ? (
                 <div

@@ -2663,41 +2663,6 @@ body {
   color: var(--text-muted);
 }
 
-.discover-connect-status-facts {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-  margin-top: 4px;
-}
-
-.discover-connect-status-fact {
-  min-width: 0;
-  border: 1px solid color-mix(in srgb, var(--border-default) 70%, transparent);
-  border-radius: 8px;
-  padding: 8px 10px;
-  background: color-mix(in srgb, var(--bg-card) 64%, transparent);
-  display: grid;
-  gap: 3px;
-}
-
-.discover-connect-status-fact span {
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0;
-  text-transform: uppercase;
-  color: var(--text-faint);
-}
-
-.discover-connect-status-fact strong {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
 .discover-connect-stage-list {
   display: grid;
   gap: 10px;
