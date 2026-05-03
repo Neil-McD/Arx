@@ -13651,43 +13651,36 @@ button.message-citation-chip:hover {
 .integration-state-indicator {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  min-height: 24px;
-  padding: 3px 9px;
-  border-radius: 8px;
-  border: 1px solid color-mix(in srgb, var(--border-default) 82%, transparent);
-  background: color-mix(in srgb, var(--bg-card-alt) 78%, transparent);
+  gap: 6px;
+  min-height: 20px;
+  padding: 0;
+  border: 0;
+  background: transparent;
   color: var(--text-secondary);
-  font-size: 11px;
-  font-weight: 700;
+  font-size: 12px;
+  font-weight: 600;
   letter-spacing: 0;
   white-space: nowrap;
 }
 
 .integration-state-indicator span {
-  width: 7px;
-  height: 7px;
+  width: 6px;
+  height: 6px;
+  flex: 0 0 auto;
   border-radius: 999px;
   background: currentColor;
-  box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 16%, transparent);
 }
 
 .integration-state-indicator.is-live {
-  border-color: color-mix(in srgb, #4ade80 38%, var(--border-default));
-  background: color-mix(in srgb, #4ade80 11%, var(--bg-card));
-  color: color-mix(in srgb, #4ade80 82%, white);
+  color: #7ddf9f;
 }
 
 .integration-state-indicator.is-setup {
-  border-color: color-mix(in srgb, #f59e0b 42%, var(--border-default));
-  background: color-mix(in srgb, #f59e0b 12%, var(--bg-card));
-  color: color-mix(in srgb, #f59e0b 82%, white);
+  color: #e4b15f;
 }
 
 .integration-state-indicator.is-not-live {
-  border-color: color-mix(in srgb, #f87171 36%, var(--border-default));
-  background: color-mix(in srgb, #f87171 10%, var(--bg-card));
-  color: color-mix(in srgb, #f87171 80%, white);
+  color: #e58a8a;
 }
 
 .integration-state-indicator.is-disabled {
