@@ -692,18 +692,6 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
       setPersonalConnectError("Paste the MCP endpoint before adding it.");
       return;
     }
-    if (
-      app.personalConnect.connectionKind === "known" &&
-      app.personalConnect.authMethod === "token" &&
-      !personalConnectSecret.trim()
-    ) {
-      setCommunityConnectResult("failed");
-      setPersonalConnectValidationReport(null);
-      setPersonalConnectError(
-        `Paste your ${app.personalConnect.secretLabel} before adding ${app.name}.`,
-      );
-      return;
-    }
     const connectInput = buildDiscoverAppPersonalConnectInput(app, {
       endpointUrl: personalConnectEndpoint,
       authType: personalConnectAuthType,
@@ -912,7 +900,7 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
                       isDiscoverAppPersonallyConnectable(selectedApp) &&
                       selectedApp.personalConnect.connectionKind !== "custom"
                     ) {
-                      openAppConnectModal("community");
+                      void handleUseInCommunity(selectedApp);
                       return;
                     }
                     openAppConnectModal("community");
