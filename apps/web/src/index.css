@@ -170,6 +170,11 @@
   height: 18px;
 }
 
+.landing-auth-hold {
+  min-height: 100vh;
+  background: var(--bg-workspace);
+}
+
 /* Floating "island" wrapper for single controls (used when we don't box the whole header). */
 .web-floating-island {
   display: flex;

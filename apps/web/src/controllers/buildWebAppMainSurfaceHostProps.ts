@@ -8,6 +8,7 @@ export function buildWebAppMainSurfaceHostProps(params: {
   landingPageProps: WebAppMainSurfaceHostProps["landingPageProps"];
   onboardingPageProps: WebAppMainSurfaceHostProps["onboardingPageProps"];
   showOnboardingModal: WebAppMainSurfaceHostProps["showOnboardingModal"];
+  holdLandingForAuth: WebAppMainSurfaceHostProps["holdLandingForAuth"];
   workspaceSurfaceHostProps: WebAppMainSurfaceHostProps["workspaceSurfaceHostProps"];
   publicCommunityFunnelProps: WebAppMainSurfaceHostProps["publicCommunityFunnelProps"];
   communityHostProps: WebAppMainSurfaceHostProps["communityHostProps"];
@@ -26,6 +27,7 @@ export function buildWebAppMainSurfaceHostProps(params: {
       params.publicRoute.kind === "app" && params.activePage === "docs",
     showOperatorDashboard:
       params.publicRoute.kind === "app" && params.activePage === "operator",
+    holdLandingForAuth: params.holdLandingForAuth,
     landingPageProps: params.landingPageProps,
     onboardingPageProps: params.onboardingPageProps,
     showOnboardingModal: params.showOnboardingModal,

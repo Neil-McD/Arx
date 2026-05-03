@@ -5806,6 +5806,12 @@ export default function App() {
     shellPublicRoute.kind === "app" && authPresentationState !== "signed_out";
   const isAuthRecoveringSignedInAppShell =
     shellPublicRoute.kind === "app" && authPresentationState === "recovering_signed_in";
+  const shouldHoldRootLandingForAuth =
+    shellPublicRoute.kind === "app" &&
+    activePage === "landing" &&
+    authPresentationState === "recovering_signed_in" &&
+    typeof window !== "undefined" &&
+    isRootAppRoutePath(window.location.pathname || "/");
   const isAccountGraphHydratingCriticalAppShell =
     shellPublicRoute.kind === "app" &&
     authPresentationState === "signed_in" &&
@@ -6826,6 +6832,7 @@ export default function App() {
     activePage,
     isPublicCommunityFunnel,
     publicRoute: shellPublicRoute,
+    holdLandingForAuth: shouldHoldRootLandingForAuth,
     landingPageProps: {
       onTryFree: () => {
         void routeTryPolynetFree();

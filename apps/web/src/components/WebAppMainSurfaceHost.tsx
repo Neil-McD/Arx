@@ -16,6 +16,7 @@ export type WebAppMainSurfaceHostProps = {
   showDiscoverPanel: boolean;
   showProductDocsPanel: boolean;
   showOperatorDashboard: boolean;
+  holdLandingForAuth: boolean;
   landingPageProps: ComponentProps<typeof WebLandingPage>;
   onboardingPageProps: ComponentProps<typeof WebOnboardingPage>;
   showOnboardingModal: boolean;
@@ -36,7 +37,9 @@ export function WebAppMainSurfaceHost(props: WebAppMainSurfaceHostProps) {
           : ""
       }`}
     >
-      {props.activePage === "landing" ? (
+      {props.holdLandingForAuth ? (
+        <div className="landing-auth-hold" aria-hidden="true" />
+      ) : props.activePage === "landing" ? (
         <WebLandingPage {...props.landingPageProps} />
       ) : props.showPublicCommunityFunnel ? (
         <div className="community-body">
