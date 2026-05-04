@@ -2865,6 +2865,7 @@ export default function App() {
 
   const handleConnectUserPlatformApp = useCallback(
     async (input: {
+      catalog_app_id?: string;
       name: string;
       endpoint_url: string;
       auth_type: "none" | "api_key" | "bearer";
@@ -6100,6 +6101,8 @@ export default function App() {
         onUpdateMount: handleUpdateCommunityAppMount,
         onRefreshApp: handleRefreshCommunityApp,
         onUnmountApp: handleUnmountCommunityApp,
+        isOptingIntoApp: isConnectingUserPlatformApp,
+        onOptInApp: handleConnectUserPlatformApp,
       },
       settingsState: {
         isSettingsBannerDragOver,

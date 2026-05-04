@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import type { DragEvent } from "react";
 import { hasBuilderTierPaidAccess } from "../../../../shared/builderBilling";
 import type { CommunitySettingsLayer } from "../../../../shared/communityAccessViewModel";
@@ -10,8 +10,12 @@ import { buildStripeConnectPresentation } from "../controllers/buildStripeConnec
 import { DISCOVER_APP_CATALOG } from "../lib/discoverCatalog";
 import { DiscoverCatalogLogo } from "./DiscoverCatalogLogo";
 import { StripeSetupButton } from "./StripeSetupButton";
-import type { CommunityMountedApp } from "../../../../shared/communityAppMountTypes";
+import type {
+  CommunityMountedApp,
+  DeveloperAppAuthType,
+} from "../../../../shared/communityAppMountTypes";
 import type { EffectiveMcpApp } from "../../../../shared/effectiveMcpApps";
+import type { ConnectUserPlatformAppResult } from "../../../../shared/userPlatformAppMountTypes";
 
 type CommunityPricingMode = "free" | "monthly" | "annual";
 
@@ -57,6 +61,14 @@ type WebCommunitySettingsSectionProps = {
     ) => Promise<boolean> | boolean;
     onRefreshApp: (communityAppMountId: string) => Promise<boolean> | boolean;
     onUnmountApp: (communityAppMountId: string) => Promise<boolean> | boolean;
+    isOptingIntoApp: boolean;
+    onOptInApp: (input: {
+      catalog_app_id?: string;
+      name: string;
+      endpoint_url: string;
+      auth_type: DeveloperAppAuthType;
+      description?: string;
+    }) => Promise<ConnectUserPlatformAppResult>;
   };
   state: {
     isSettingsBannerDragOver: boolean;
@@ -279,6 +291,32 @@ function buildCommunityRecommendationDetail(args: {
   return `Recommended by this community. Auth ${toStatusLabel(args.mount.app.auth_type)} · Connection ${toStatusLabel(args.mount.connection.connection_status)} · Validation ${toStatusLabel(args.mount.app.status)}`;
 }
 
+function buildPersonalOptInInput(args: {
+  mount: CommunityMountedApp;
+  catalogEntry: ReturnType<typeof findCatalogEntryForCommunityMount>;
+}): {
+  catalog_app_id?: string;
+  name: string;
+  endpoint_url: string;
+  auth_type: DeveloperAppAuthType;
+  description?: string;
+} {
+  const authType =
+    args.mount.app.auth_type === "none" ||
+    args.mount.app.auth_type === "api_key" ||
+    args.mount.app.auth_type === "bearer"
+      ? args.mount.app.auth_type
+      : "bearer";
+  return {
+    catalog_app_id:
+      args.mount.app.catalog_app_id ?? args.catalogEntry?.id ?? undefined,
+    name: args.mount.app.name,
+    endpoint_url: args.mount.app.endpoint_url,
+    auth_type: authType,
+    description: args.catalogEntry?.description,
+  };
+}
+
 function CommunityPersonalSettingsSection({
   state,
   actions,
@@ -336,12 +374,38 @@ function CommunityIntegrationsSettingsSection({
   canManage: boolean;
   integrations: WebCommunitySettingsSectionProps["communityIntegrations"];
 }) {
+  const [optingInMountId, setOptingInMountId] = useState<string | null>(null);
+  const [optInError, setOptInError] = useState<string | null>(null);
+
+  const handleOptIn = async (
+    mount: CommunityMountedApp,
+    catalogEntry: ReturnType<typeof findCatalogEntryForCommunityMount>,
+  ) => {
+    setOptInError(null);
+    setOptingInMountId(mount.id);
+    try {
+      const result = await integrations.onOptInApp(
+        buildPersonalOptInInput({ mount, catalogEntry }),
+      );
+      if (!result.mount) {
+        setOptInError(
+          result.error_message ??
+            `Couldn't add ${mount.app.name} to your harness right now.`,
+        );
+      }
+    } catch {
+      setOptInError(`Couldn't add ${mount.app.name} to your harness right now.`);
+    } finally {
+      setOptingInMountId(null);
+    }
+  };
+
   return (
     <div className="settings-section">
       <div className="settings-section-title">Community integrations</div>
       <div className="settings-section-desc">
-        Apps attached here become part of this community lens. Members use their
-        own personal credentials when an app requires authentication.
+        Apps recommended here can be added to a member&apos;s personal harness.
+        Members use their own credentials when an app requires authentication.
       </div>
       {canManage ? (
         <div className="agent-capability-toolbar">
@@ -360,6 +424,7 @@ function CommunityIntegrationsSettingsSection({
       {integrations.mutationError ? (
         <div className="auth-error">{integrations.mutationError}</div>
       ) : null}
+      {optInError ? <div className="auth-error">{optInError}</div> : null}
       {integrations.isLoading && integrations.mounts.length === 0 ? (
         <div className="model-note">Loading community integrations…</div>
       ) : null}
@@ -382,7 +447,10 @@ function CommunityIntegrationsSettingsSection({
             const isUpdating = integrations.updatingMountId === mount.id;
             const isRefreshing = integrations.refreshingMountId === mount.id;
             const isRemoving = integrations.removingMountId === mount.id;
-            const isBusy = isUpdating || isRefreshing || isRemoving;
+            const isOptingIn =
+              integrations.isOptingIntoApp || optingInMountId === mount.id;
+            const isBusy = isUpdating || isRefreshing || isRemoving || isOptingIn;
+            const hasPersonalMount = effectiveApp?.has_personal_mount === true;
             const stateLabel = buildCommunityRecommendationStateLabel({
               mount,
               effectiveApp,
@@ -430,47 +498,62 @@ function CommunityIntegrationsSettingsSection({
                       </div>
                     </div>
                   </div>
-                  {canManage ? (
+                  {canManage || !hasPersonalMount ? (
                   <div className="integration-mounted-rail">
-                    <label
-                      className={`members-switch integration-mounted-switch${
-                        isBusy ? " is-disabled" : ""
-                      }`}
-                      title={mount.enabled ? "Disable app" : "Enable app"}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={mount.enabled}
-                        disabled={isBusy}
-                        aria-label={`${mount.enabled ? "Disable" : "Enable"} ${
-                          mount.app.name
+                    {canManage ? (
+                      <label
+                        className={`members-switch integration-mounted-switch${
+                          isBusy ? " is-disabled" : ""
                         }`}
-                        onChange={() =>
-                          void integrations.onUpdateMount(mount.id, {
-                            enabled: !mount.enabled,
-                          })
-                        }
-                      />
-                      <span className="members-switch-track">
-                        <span className="members-switch-thumb" />
-                      </span>
-                    </label>
+                        title={mount.enabled ? "Disable app" : "Enable app"}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={mount.enabled}
+                          disabled={isBusy}
+                          aria-label={`${mount.enabled ? "Disable" : "Enable"} ${
+                            mount.app.name
+                          }`}
+                          onChange={() =>
+                            void integrations.onUpdateMount(mount.id, {
+                              enabled: !mount.enabled,
+                            })
+                          }
+                        />
+                        <span className="members-switch-track">
+                          <span className="members-switch-thumb" />
+                        </span>
+                      </label>
+                    ) : null}
                     <div className="agent-capability-toolbar-actions">
-                      <button
-                        type="button"
-                        onClick={() => void integrations.onRefreshApp(mount.id)}
-                        disabled={isBusy}
-                      >
-                        {isRefreshing ? "Refreshing…" : "Refresh"}
-                      </button>
-                      <button
-                        type="button"
-                        className="agent-onboarding-reset"
-                        onClick={() => void integrations.onUnmountApp(mount.id)}
-                        disabled={isBusy}
-                      >
-                        {isRemoving ? "Removing…" : "Remove"}
-                      </button>
+                      {!hasPersonalMount ? (
+                        <button
+                          type="button"
+                          onClick={() => void handleOptIn(mount, catalogEntry)}
+                          disabled={isBusy}
+                        >
+                          {isOptingIn ? "Adding…" : "Like"}
+                        </button>
+                      ) : null}
+                      {canManage ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => void integrations.onRefreshApp(mount.id)}
+                            disabled={isBusy}
+                          >
+                            {isRefreshing ? "Refreshing…" : "Refresh"}
+                          </button>
+                          <button
+                            type="button"
+                            className="agent-onboarding-reset"
+                            onClick={() => void integrations.onUnmountApp(mount.id)}
+                            disabled={isBusy}
+                          >
+                            {isRemoving ? "Removing…" : "Remove"}
+                          </button>
+                        </>
+                      ) : null}
                     </div>
                   </div>
                   ) : null}
