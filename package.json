@@ -42,6 +42,7 @@
     "check:runtime-tool-loop-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_tool_loop_proof.ts",
     "check:runtime-mcp-manager-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_mcp_manager_proof.ts",
     "check:runtime-mounted-tool-exposure-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_mounted_tool_exposure_proof.ts",
+    "check:mcp-app-architecture-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/mcp_app_architecture_contract_proof.ts",
     "check:effective-harness-resolver-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/effective_harness_resolver_proof.ts",
     "check:effective-mcp-app-projection-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/effective_mcp_app_projection_proof.ts",
     "check:runtime-responses-tool-schema-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_responses_tool_schema_proof.ts",
