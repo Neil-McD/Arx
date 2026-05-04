@@ -16,22 +16,58 @@ function normalizeMcpAppKeyPart(value: unknown): string {
   return typeof value === "string" ? value.trim().toLowerCase() : "";
 }
 
-function buildMcpAppIdentityKey(mount: HarnessMount): string {
-  const catalogAppId = normalizeMcpAppKeyPart(mount.app.catalog_app_id);
-  if (catalogAppId) return `catalog:${catalogAppId}`;
-  const endpointUrl = normalizeMcpAppKeyPart(mount.app.endpoint_url);
-  const authType = normalizeMcpAppKeyPart(mount.app.auth_type);
-  if (endpointUrl && authType) return `endpoint:${endpointUrl}:auth:${authType}`;
-  const slug = normalizeMcpAppKeyPart(mount.app.slug);
-  if (slug) return `slug:${slug}`;
-  return `name:${normalizeMcpAppKeyPart(mount.app.name) || mount.id}`;
+export type McpAppIdentitySource = {
+  id?: string | null;
+  app: {
+    catalog_app_id?: string | null;
+    endpoint_url?: string | null;
+    auth_type?: string | null;
+    slug?: string | null;
+    name?: string | null;
+  };
+};
+
+export function buildMcpAppIdentityAliases(source: McpAppIdentitySource): string[] {
+  const aliases: string[] = [];
+  const catalogAppId = normalizeMcpAppKeyPart(source.app.catalog_app_id);
+  if (catalogAppId) aliases.push(`catalog:${catalogAppId}`);
+  const endpointUrl = normalizeMcpAppKeyPart(source.app.endpoint_url);
+  const authType = normalizeMcpAppKeyPart(source.app.auth_type);
+  if (endpointUrl && authType) aliases.push(`endpoint:${endpointUrl}:auth:${authType}`);
+  if (aliases.length > 0) return aliases;
+  const slug = normalizeMcpAppKeyPart(source.app.slug);
+  if (slug) return [`slug:${slug}`];
+  const fallback = normalizeMcpAppKeyPart(source.app.name) || normalizeMcpAppKeyPart(source.id);
+  return [`name:${fallback || "unknown"}`];
+}
+
+export function mcpAppIdentitySourcesOverlap(
+  left: McpAppIdentitySource,
+  right: McpAppIdentitySource,
+): boolean {
+  const rightAliases = new Set(buildMcpAppIdentityAliases(right));
+  return buildMcpAppIdentityAliases(left).some((alias) => rightAliases.has(alias));
+}
+
+function compareIdentityKeyPriority(left: string, right: string): number {
+  const priority = (key: string) => {
+    if (key.startsWith("catalog:")) return 0;
+    if (key.startsWith("endpoint:")) return 1;
+    if (key.startsWith("slug:")) return 2;
+    return 3;
+  };
+  return priority(left) - priority(right) || left.localeCompare(right);
+}
+
+function choosePreferredIdentityKey(aliases: Iterable<string>): string {
+  return [...aliases].sort(compareIdentityKeyPriority)[0] ?? "name:unknown";
 }
 
 function chooseDisplayMount(
   personalMount: HarnessMount | null,
   communityMount: HarnessMount | null,
 ): HarnessMount {
-  return communityMount ?? personalMount!;
+  return personalMount ?? communityMount!;
 }
 
 function deriveEffectiveEnabledToolNames(args: {
@@ -101,29 +137,60 @@ function deriveCredentialState(args: {
 }
 
 export function buildEffectiveMcpApps(mounts: HarnessMount[]) {
-  const groups = new Map<
-    string,
-    {
-      personalMount: HarnessMount | null;
-      communityMount: HarnessMount | null;
+  type EffectiveMcpAppGroup = {
+    aliases: Set<string>;
+    identityKey: string;
+    personalMount: HarnessMount | null;
+    communityMount: HarnessMount | null;
+  };
+  const groups: EffectiveMcpAppGroup[] = [];
+  const aliasToGroup = new Map<string, EffectiveMcpAppGroup>();
+
+  const addAliasesToGroup = (group: EffectiveMcpAppGroup, aliases: string[]) => {
+    for (const alias of aliases) {
+      group.aliases.add(alias);
+      aliasToGroup.set(alias, group);
     }
-  >();
+    group.identityKey = choosePreferredIdentityKey(group.aliases);
+  };
+
   for (const mount of mounts) {
-    const key = buildMcpAppIdentityKey(mount);
-    const group = groups.get(key) ?? {
+    const aliases = buildMcpAppIdentityAliases(mount);
+    const matchedGroups = [
+      ...new Set(
+        aliases
+          .map((alias) => aliasToGroup.get(alias))
+          .filter((group): group is EffectiveMcpAppGroup => Boolean(group)),
+      ),
+    ];
+    const group = matchedGroups[0] ?? {
+      aliases: new Set<string>(),
+      identityKey: choosePreferredIdentityKey(aliases),
       personalMount: null,
       communityMount: null,
     };
+    if (matchedGroups.length === 0) groups.push(group);
+    for (const extraGroup of matchedGroups.slice(1)) {
+      if (!group.personalMount && extraGroup.personalMount) {
+        group.personalMount = extraGroup.personalMount;
+      }
+      if (!group.communityMount && extraGroup.communityMount) {
+        group.communityMount = extraGroup.communityMount;
+      }
+      addAliasesToGroup(group, [...extraGroup.aliases]);
+      const extraIndex = groups.indexOf(extraGroup);
+      if (extraIndex >= 0) groups.splice(extraIndex, 1);
+    }
     if (mount.scope === "user") {
       if (!group.personalMount) group.personalMount = mount;
     } else if (!group.communityMount) {
       group.communityMount = mount;
     }
-    groups.set(key, group);
+    addAliasesToGroup(group, aliases);
   }
 
-  return [...groups.entries()]
-    .map(([identityKey, group]) => {
+  return groups
+    .map((group) => {
       const displayMount = chooseDisplayMount(
         group.personalMount,
         group.communityMount,
@@ -131,7 +198,7 @@ export function buildEffectiveMcpApps(mounts: HarnessMount[]) {
       const credentialState = deriveCredentialState(group);
       const effectiveEnabledTools = deriveEffectiveEnabledToolNames(group);
       return {
-        app_identity_key: identityKey,
+        app_identity_key: group.identityKey,
         app: displayMount.app,
         personal_mount: group.personalMount,
         community_mount: group.communityMount,

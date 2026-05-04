@@ -12,6 +12,10 @@ function mount(patch: Partial<ProofMount> & {
 }): ProofMount {
   const appName = patch.app?.name ?? "Linear";
   const enabledTools = patch.enabled_tools ?? ["search_issues", "create_issue"];
+  const explicitCatalogAppId = Object.prototype.hasOwnProperty.call(
+    patch.app ?? {},
+    "catalog_app_id",
+  );
   return {
     id: patch.id,
     source_mount_id: patch.source_mount_id,
@@ -25,7 +29,9 @@ function mount(patch: Partial<ProofMount> & {
       patch.not_live_reason ??
       (patch.live_status === "live" ? null : "needs_auth"),
     app: {
-      catalog_app_id: patch.app?.catalog_app_id ?? "linear",
+      catalog_app_id: explicitCatalogAppId
+        ? patch.app?.catalog_app_id ?? null
+        : "linear",
       name: appName,
       slug: patch.app?.slug ?? appName.toLowerCase(),
       endpoint_url: patch.app?.endpoint_url ?? "https://mcp.linear.app/mcp",
@@ -140,6 +146,59 @@ function proveEmptyCommunityToolSelectionDoesNotZeroLivePersonalTools() {
   console.log("PASS: empty community tool selection does not zero live personal tools");
 }
 
+function proveMixedCatalogAndEndpointIdentitiesCollapse() {
+  const personalLinear = mount({
+    id: "user:u-linear",
+    source_mount_id: "u-linear",
+    scope: "user",
+    live_status: "live",
+    enabled_tools: ["search_issues", "create_issue", "list_projects"],
+    app: {
+      catalog_app_id: "linear",
+      name: "Linear",
+      slug: "linear",
+      endpoint_url: "https://mcp.linear.app/mcp",
+      auth_type: "bearer",
+      status: "valid",
+    },
+  });
+  const communityLinear = mount({
+    id: "community:c-linear",
+    source_mount_id: "c-linear",
+    scope: "community",
+    live_status: "not_live",
+    not_live_reason: "needs_auth",
+    enabled_tools: [],
+    app: {
+      catalog_app_id: null,
+      name: "Linear",
+      slug: "linear",
+      endpoint_url: "https://mcp.linear.app/mcp",
+      auth_type: "bearer",
+      status: "draft",
+    },
+  });
+
+  const rows = buildEffectiveMcpApps([personalLinear, communityLinear]);
+
+  assert.equal(rows.length, 1);
+  const [linear] = rows;
+  assert.equal(linear.app_identity_key, "catalog:linear");
+  assert.equal(linear.is_attached_to_community, true);
+  assert.equal(linear.has_personal_mount, true);
+  assert.equal(linear.has_personal_connection, true);
+  assert.equal(linear.live_for_current_user, true);
+  assert.equal(linear.credential_state, "live");
+  assert.deepEqual(linear.effective_enabled_tools, [
+    "search_issues",
+    "create_issue",
+    "list_projects",
+  ]);
+  assert.equal(linear.effective_tool_count, 3);
+
+  console.log("PASS: mixed catalog and endpoint Linear identities collapse");
+}
+
 function provePersonalOnlyMountRemainsLive() {
   const personalLinear = mount({
     id: "user:u-linear",
@@ -167,6 +226,7 @@ function provePersonalOnlyMountRemainsLive() {
 provePersonalConnectionSatisfiesCommunityAttachment();
 proveCommunityAttachmentRequiresMemberSetupWithoutPersonalMount();
 proveEmptyCommunityToolSelectionDoesNotZeroLivePersonalTools();
+proveMixedCatalogAndEndpointIdentitiesCollapse();
 provePersonalOnlyMountRemainsLive();
 
 console.log("effective_mcp_app_projection_proof: ok");

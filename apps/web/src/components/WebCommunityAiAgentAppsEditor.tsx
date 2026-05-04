@@ -5,7 +5,11 @@ import type {
   ConnectCommunityAppInput,
   DeveloperAppAuthType,
 } from "../../../../shared/communityAppMountTypes";
-import type { EffectiveMcpApp } from "../../../../shared/effectiveMcpApps";
+import {
+  buildMcpAppIdentityAliases,
+  mcpAppIdentitySourcesOverlap,
+  type EffectiveMcpApp,
+} from "../../../../shared/effectiveMcpApps";
 import { DISCOVER_APP_CATALOG } from "../lib/discoverCatalog";
 import { DiscoverCatalogLogo } from "./DiscoverCatalogLogo";
 
@@ -62,36 +66,14 @@ function pluralizeTools(count: number): string {
   return `${count} ${count === 1 ? "tool" : "tools"}`;
 }
 
-function normalizeMcpIdentityPart(value: unknown): string {
-  return typeof value === "string" ? value.trim().toLowerCase() : "";
-}
-
-function buildCommunityMountIdentityKey(mount: CommunityMountedApp): string {
-  const catalogAppId = normalizeMcpIdentityPart(mount.app.catalog_app_id);
-  if (catalogAppId) return `catalog:${catalogAppId}`;
-  const endpointUrl = normalizeMcpIdentityPart(mount.app.endpoint_url);
-  const authType = normalizeMcpIdentityPart(mount.app.auth_type);
-  if (endpointUrl && authType) return `endpoint:${endpointUrl}:auth:${authType}`;
-  const slug = normalizeMcpIdentityPart(mount.app.slug);
-  if (slug) return `slug:${slug}`;
-  return `name:${normalizeMcpIdentityPart(mount.app.name) || mount.id}`;
-}
-
 function findEffectiveMcpAppForCommunityMount(
   mount: CommunityMountedApp,
   apps: EffectiveMcpApp[],
 ): EffectiveMcpApp | null {
-  const identityKey = buildCommunityMountIdentityKey(mount);
+  const aliases = new Set(buildMcpAppIdentityAliases(mount));
   return (
-    apps.find((app) => app.app_identity_key === identityKey) ??
-    apps.find((app) => {
-      const endpointUrl = normalizeMcpIdentityPart(app.app.endpoint_url);
-      const authType = normalizeMcpIdentityPart(app.app.auth_type);
-      return (
-        endpointUrl === normalizeMcpIdentityPart(mount.app.endpoint_url) &&
-        authType === normalizeMcpIdentityPart(mount.app.auth_type)
-      );
-    }) ??
+    apps.find((app) => aliases.has(app.app_identity_key)) ??
+    apps.find((app) => mcpAppIdentitySourcesOverlap(app, mount)) ??
     null
   );
 }
