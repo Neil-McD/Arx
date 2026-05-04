@@ -19216,6 +19216,35 @@ button.message-citation-chip:hover {
   gap: 12px;
 }
 
+.community-app-mount-card {
+  gap: 0;
+}
+
+.community-app-mount-heading {
+  min-width: 0;
+}
+
+.community-app-mount-heading .model-note {
+  overflow-wrap: anywhere;
+}
+
+.community-app-mount-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+.community-app-edit-panel {
+  display: grid;
+  gap: 14px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-muted);
+}
+
 .agent-capability-field {
   display: grid;
   gap: 8px;
@@ -19358,9 +19387,19 @@ button.message-citation-chip:hover {
     flex-direction: column;
   }
 
+  .agent-capability-card-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
   .agent-capability-toolbar-actions,
+  .community-app-mount-actions,
   .agent-onboarding-reset {
     width: 100%;
+  }
+
+  .community-app-mount-actions {
+    justify-content: flex-start;
   }
 
   .agent-capability-field-grid {

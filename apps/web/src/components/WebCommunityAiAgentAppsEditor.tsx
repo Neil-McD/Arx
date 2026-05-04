@@ -105,6 +105,7 @@ export function WebCommunityAiAgentAppsEditor(
   const [connectStep, setConnectStep] = useState<ConnectStep>("url");
   const [draft, setDraft] = useState<ConnectCommunityAppInput>(buildInitialDraft);
   const [connectFlowError, setConnectFlowError] = useState<string | null>(null);
+  const [editingMountId, setEditingMountId] = useState<string | null>(null);
 
   const resetCreateFlow = () => {
     setDraft(buildInitialDraft());
@@ -319,10 +320,11 @@ export function WebCommunityAiAgentAppsEditor(
             const isUpdating = updatingMountId === mount.id;
             const isRefreshing = refreshingMountId === mount.id;
             const isRemoving = removingMountId === mount.id;
+            const isEditing = editingMountId === mount.id;
             return (
-              <div key={mount.id} className="agent-capability-card" role="listitem">
+              <div key={mount.id} className="agent-capability-card community-app-mount-card" role="listitem">
                 <div className="agent-capability-card-header">
-                  <div>
+                  <div className="community-app-mount-heading">
                     <div className="agent-capability-card-title-row">
                       <div className="settings-section-subtitle">{mount.app.name}</div>
                       <span className={`community-app-status-badge${mount.enabled ? "" : " is-muted"}`}>
@@ -333,13 +335,31 @@ export function WebCommunityAiAgentAppsEditor(
                       {mount.app.endpoint_url}
                     </div>
                   </div>
-                  <div className="agent-capability-toolbar-actions">
+                  <div className="community-app-mount-actions">
+                    <label
+                      className={`members-switch integration-mounted-switch${isUpdating || isRemoving || isRefreshing ? " is-disabled" : ""}`}
+                      aria-label={`${mount.enabled ? "Disable" : "Enable"} ${mount.app.name}`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={mount.enabled}
+                        onChange={(event) =>
+                          void onUpdateMount(mount.id, {
+                            enabled: event.target.checked,
+                          })
+                        }
+                        disabled={isUpdating || isRemoving || isRefreshing}
+                      />
+                      <span className="members-switch-track" aria-hidden="true">
+                        <span className="members-switch-thumb" />
+                      </span>
+                    </label>
                     <button
                       type="button"
-                      onClick={() => void onRefreshApp(mount.id)}
-                      disabled={isRefreshing || isRemoving || isUpdating}
+                      onClick={() => setEditingMountId(isEditing ? null : mount.id)}
+                      disabled={isRemoving}
                     >
-                      {isRefreshing ? "Refreshing…" : "Refresh"}
+                      {isEditing ? "Done" : "Edit"}
                     </button>
                     <button
                       type="button"
@@ -352,73 +372,77 @@ export function WebCommunityAiAgentAppsEditor(
                   </div>
                 </div>
 
-                <div className="community-app-metadata-grid">
-                  <div className="community-app-metadata-item">
-                    <span className="agent-capability-field-label">Auth</span>
-                    <span>{toStatusLabel(mount.app.auth_type)}</span>
-                  </div>
-                  <div className="community-app-metadata-item">
-                    <span className="agent-capability-field-label">Connection</span>
-                    <span>{toStatusLabel(mount.connection.connection_status)}</span>
-                  </div>
-                  <div className="community-app-metadata-item">
-                    <span className="agent-capability-field-label">Validation</span>
-                    <span>{toStatusLabel(mount.app.status)}</span>
-                  </div>
-                </div>
+                {isEditing ? (
+                  <div className="community-app-edit-panel">
+                    <div className="community-app-metadata-grid">
+                      <div className="community-app-metadata-item">
+                        <span className="agent-capability-field-label">Auth</span>
+                        <span>{toStatusLabel(mount.app.auth_type)}</span>
+                      </div>
+                      <div className="community-app-metadata-item">
+                        <span className="agent-capability-field-label">Connection</span>
+                        <span>{toStatusLabel(mount.connection.connection_status)}</span>
+                      </div>
+                      <div className="community-app-metadata-item">
+                        <span className="agent-capability-field-label">Validation</span>
+                        <span>{toStatusLabel(mount.app.status)}</span>
+                      </div>
+                    </div>
 
-                <div className="agent-capability-field-grid">
-                  <label className="agent-capability-field">
-                    <span className="agent-capability-field-label">Mount enabled</span>
-                    <select
-                      className="agent-capability-select"
-                      value={mount.enabled ? "enabled" : "disabled"}
-                      onChange={(event) =>
-                        void onUpdateMount(mount.id, {
-                          enabled: event.target.value === "enabled",
-                        })
-                      }
-                      disabled={isUpdating || isRemoving || isRefreshing}
-                    >
-                      <option value="enabled">Enabled</option>
-                      <option value="disabled">Disabled</option>
-                    </select>
-                  </label>
-                </div>
+                    <div className="agent-capability-toolbar">
+                      <div className="model-note">
+                        Refresh only re-checks the app grant and discovered tool surface. Members still use their own harness credentials.
+                      </div>
+                      <div className="agent-capability-toolbar-actions">
+                        <button
+                          type="button"
+                          onClick={() => void onRefreshApp(mount.id)}
+                          disabled={isRefreshing || isRemoving || isUpdating}
+                        >
+                          {isRefreshing ? "Refreshing…" : "Refresh"}
+                        </button>
+                      </div>
+                    </div>
 
-                <div className="agent-capability-field">
-                  <span className="agent-capability-field-label">Mounted tools</span>
-                  <div className="community-app-tool-list" role="list">
-                    {mount.tools.map((tool) => {
-                      const nextEnabledTools = tool.enabled
-                        ? enabledToolNames.filter((toolName) => toolName !== tool.tool_name)
-                        : [...enabledToolNames, tool.tool_name];
-                      return (
-                        <label key={tool.namespaced_tool_name} className="community-app-tool-row" role="listitem">
-                          <input
-                            type="checkbox"
-                            checked={tool.enabled}
-                            onChange={() =>
-                              void onUpdateMount(mount.id, {
-                                enabledTools: nextEnabledTools,
-                              })
-                            }
-                            disabled={isUpdating || isRemoving || isRefreshing}
-                          />
-                          <div className="community-app-tool-copy">
-                            <div className="community-app-tool-title-row">
-                              <span className="community-app-tool-name">{tool.tool_name}</span>
-                              <span className="community-app-tool-risk">{toStatusLabel(tool.risk_level)}</span>
-                            </div>
-                            {tool.description ? (
-                              <div className="model-note">{tool.description}</div>
-                            ) : null}
-                          </div>
-                        </label>
-                      );
-                    })}
+                    {mount.tools.length > 0 ? (
+                      <div className="agent-capability-field">
+                        <span className="agent-capability-field-label">Mounted tools</span>
+                        <div className="community-app-tool-list" role="list">
+                          {mount.tools.map((tool) => {
+                            const nextEnabledTools = tool.enabled
+                              ? enabledToolNames.filter((toolName) => toolName !== tool.tool_name)
+                              : [...enabledToolNames, tool.tool_name];
+                            return (
+                              <label key={tool.namespaced_tool_name} className="community-app-tool-row" role="listitem">
+                                <input
+                                  type="checkbox"
+                                  checked={tool.enabled}
+                                  onChange={() =>
+                                    void onUpdateMount(mount.id, {
+                                      enabledTools: nextEnabledTools,
+                                    })
+                                  }
+                                  disabled={isUpdating || isRemoving || isRefreshing}
+                                />
+                                <div className="community-app-tool-copy">
+                                  <div className="community-app-tool-title-row">
+                                    <span className="community-app-tool-name">{tool.tool_name}</span>
+                                    <span className="community-app-tool-risk">{toStatusLabel(tool.risk_level)}</span>
+                                  </div>
+                                  {tool.description ? (
+                                    <div className="model-note">{tool.description}</div>
+                                  ) : null}
+                                </div>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="model-note">No tools have been discovered for this community app yet.</div>
+                    )}
                   </div>
-                </div>
+                ) : null}
               </div>
             );
           })}
