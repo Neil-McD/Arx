@@ -36,7 +36,7 @@ const stackTotal = "$516+";
 
 const buildAgentStream = [
   {
-    call: "supabase.search",
+    call: "project.search",
     detail: "connected project tables",
     result: "Project data is available to the agent.",
   },
@@ -265,7 +265,10 @@ export function WebLandingPage(props: WebLandingPageProps) {
           ))}
         </div>
         <div className="polynet-landing-flow-detail" aria-live="polite">
-          <div className="polynet-landing-flow-active-visual" aria-hidden="true">
+          <div
+            className={`polynet-landing-flow-active-visual step-${activeFlowIndex}`}
+            aria-hidden="true"
+          >
             <img src={activeFlow.image} alt="" loading="lazy" />
           </div>
           <div className="polynet-landing-flow-copy">
