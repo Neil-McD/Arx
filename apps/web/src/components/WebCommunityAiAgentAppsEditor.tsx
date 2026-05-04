@@ -18,15 +18,10 @@ function buildInitialDraft(): ConnectCommunityAppInput {
     endpoint_url: "",
     auth_type: "none",
     description: "",
-    secret: "",
   };
 }
 
 type ConnectStep = "url" | "details";
-
-function resetReconnectState() {
-  return {} as Record<string, string>;
-}
 
 function normalizeEndpointUrl(value: string): string {
   return value.trim();
@@ -71,7 +66,6 @@ export type WebCommunityAiAgentAppsEditorProps = {
   isConnecting: boolean;
   updatingMountId: string | null;
   refreshingMountId: string | null;
-  reconnectingMountId: string | null;
   removingMountId: string | null;
   onConnectApp: (input: ConnectCommunityAppInput) => Promise<boolean> | boolean;
   onUpdateMount: (
@@ -82,10 +76,6 @@ export type WebCommunityAiAgentAppsEditorProps = {
     },
   ) => Promise<boolean> | boolean;
   onRefreshApp: (communityAppMountId: string) => Promise<boolean> | boolean;
-  onReconnectApp: (
-    communityAppMountId: string,
-    secret: string,
-  ) => Promise<boolean> | boolean;
   onUnmountApp: (communityAppMountId: string) => Promise<boolean> | boolean;
   onBrowseCatalog?: () => void;
 };
@@ -104,23 +94,17 @@ export function WebCommunityAiAgentAppsEditor(
     isConnecting,
     updatingMountId,
     refreshingMountId,
-    reconnectingMountId,
     removingMountId,
     onConnectApp,
     onUpdateMount,
     onRefreshApp,
-    onReconnectApp,
     onUnmountApp,
     onBrowseCatalog,
   } = props;
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [connectStep, setConnectStep] = useState<ConnectStep>("url");
   const [draft, setDraft] = useState<ConnectCommunityAppInput>(buildInitialDraft);
-  const [reconnectOpenMountId, setReconnectOpenMountId] = useState<string | null>(null);
-  const [reconnectSecretByMountId, setReconnectSecretByMountId] = useState<Record<string, string>>(resetReconnectState);
   const [connectFlowError, setConnectFlowError] = useState<string | null>(null);
-
-  const requiresSecret = draft.auth_type !== "none";
 
   const resetCreateFlow = () => {
     setDraft(buildInitialDraft());
@@ -211,8 +195,8 @@ export function WebCommunityAiAgentAppsEditor(
                 <div className="community-app-connect-summary-title">Alpha connect flow</div>
                 <ul className="community-app-connect-list">
                   <li>Paste the app&apos;s direct hosted MCP endpoint.</li>
-                  <li>Confirm auth only if the endpoint needs it.</li>
-                  <li>On connect, Polynet validates the endpoint, discovers tools, and mounts the app to this community.</li>
+                  <li>Confirm the auth method members will need for their own setup.</li>
+                  <li>On connect, Polynet records the community recommendation and members use their own harness credentials.</li>
                 </ul>
               </div>
 
@@ -263,7 +247,6 @@ export function WebCommunityAiAgentAppsEditor(
                       setDraft((prev) => ({
                         ...prev,
                         auth_type: event.target.value as DeveloperAppAuthType,
-                        secret: event.target.value === "none" ? "" : prev.secret,
                       }))
                     }
                   >
@@ -276,28 +259,11 @@ export function WebCommunityAiAgentAppsEditor(
                 </label>
               </div>
 
-              {requiresSecret ? (
-                <label className="agent-capability-field">
-                  <span className="agent-capability-field-label">
-                    {draft.auth_type === "api_key" ? "API key" : "Bearer token"}
-                  </span>
-                  <input
-                    type="password"
-                    className="agent-editor-inline-label-input"
-                    value={draft.secret ?? ""}
-                    onChange={(event) =>
-                      setDraft((prev) => ({ ...prev, secret: event.target.value }))
-                    }
-                    placeholder={draft.auth_type === "api_key" ? "sk_live_..." : "token"}
-                  />
-                </label>
-              ) : null}
-
               <div className="community-app-connect-summary">
                 <div className="community-app-connect-summary-title">What happens when you recommend it</div>
                 <ul className="community-app-connect-list">
-                  <li>Polynet validates the MCP endpoint.</li>
-                  <li>Polynet discovers the tool surface and risk labels.</li>
+                  <li>Polynet adds this app to the community&apos;s grant list.</li>
+                  <li>Polynet seeds or reuses personal harness apps for members.</li>
                   <li>The app is recommended for this community. Members use their own harness credentials when the app requires authentication.</li>
                 </ul>
               </div>
@@ -352,11 +318,7 @@ export function WebCommunityAiAgentAppsEditor(
               .map((tool) => tool.tool_name);
             const isUpdating = updatingMountId === mount.id;
             const isRefreshing = refreshingMountId === mount.id;
-            const isReconnecting = reconnectingMountId === mount.id;
             const isRemoving = removingMountId === mount.id;
-            const requiresReconnect = mount.app.auth_type !== "none";
-            const reconnectSecret = reconnectSecretByMountId[mount.id] ?? "";
-            const isReconnectOpen = reconnectOpenMountId === mount.id;
             return (
               <div key={mount.id} className="agent-capability-card" role="listitem">
                 <div className="agent-capability-card-header">
@@ -375,26 +337,15 @@ export function WebCommunityAiAgentAppsEditor(
                     <button
                       type="button"
                       onClick={() => void onRefreshApp(mount.id)}
-                      disabled={isRefreshing || isReconnecting || isRemoving || isUpdating}
+                      disabled={isRefreshing || isRemoving || isUpdating}
                     >
                       {isRefreshing ? "Refreshing…" : "Refresh"}
                     </button>
-                    {requiresReconnect ? (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setReconnectOpenMountId((prev) => (prev === mount.id ? null : mount.id))
-                        }
-                        disabled={isRefreshing || isReconnecting || isRemoving || isUpdating}
-                      >
-                        {isReconnectOpen ? "Close reconnect" : "Reconnect"}
-                      </button>
-                    ) : null}
                     <button
                       type="button"
                       className="agent-onboarding-reset"
                       onClick={() => void onUnmountApp(mount.id)}
-                      disabled={isRemoving || isUpdating || isRefreshing || isReconnecting}
+                      disabled={isRemoving || isUpdating || isRefreshing}
                     >
                       {isRemoving ? "Removing…" : "Remove"}
                     </button>
@@ -427,61 +378,13 @@ export function WebCommunityAiAgentAppsEditor(
                           enabled: event.target.value === "enabled",
                         })
                       }
-                      disabled={isUpdating || isRemoving || isRefreshing || isReconnecting}
+                      disabled={isUpdating || isRemoving || isRefreshing}
                     >
                       <option value="enabled">Enabled</option>
                       <option value="disabled">Disabled</option>
                     </select>
                   </label>
                 </div>
-
-                {requiresReconnect && isReconnectOpen ? (
-                  <div className="agent-capability-field">
-                    <span className="agent-capability-field-label">
-                      {mount.app.auth_type === "api_key" ? "API key" : "Bearer token"}
-                    </span>
-                    <div className="agent-capability-toolbar">
-                      <input
-                        type="password"
-                        className="agent-editor-inline-label-input"
-                        value={reconnectSecret}
-                        onChange={(event) =>
-                          setReconnectSecretByMountId((prev) => ({
-                            ...prev,
-                            [mount.id]: event.target.value,
-                          }))
-                        }
-                        placeholder={mount.app.auth_type === "api_key" ? "sk_live_..." : "token"}
-                        disabled={isReconnecting || isRefreshing || isRemoving || isUpdating}
-                      />
-                      <div className="agent-capability-toolbar-actions">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setReconnectOpenMountId(null);
-                            setReconnectSecretByMountId((prev) => ({ ...prev, [mount.id]: "" }));
-                          }}
-                          disabled={isReconnecting}
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          type="button"
-                          className="platform-save-button is-dirty"
-                          onClick={async () => {
-                            const ok = await onReconnectApp(mount.id, reconnectSecret);
-                            if (!ok) return;
-                            setReconnectOpenMountId(null);
-                            setReconnectSecretByMountId((prev) => ({ ...prev, [mount.id]: "" }));
-                          }}
-                          disabled={isReconnecting || !reconnectSecret.trim()}
-                        >
-                          {isReconnecting ? "Reconnecting…" : "Save secret"}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ) : null}
 
                 <div className="agent-capability-field">
                   <span className="agent-capability-field-label">Mounted tools</span>
@@ -500,7 +403,7 @@ export function WebCommunityAiAgentAppsEditor(
                                 enabledTools: nextEnabledTools,
                               })
                             }
-                            disabled={isUpdating || isRemoving || isRefreshing || isReconnecting}
+                            disabled={isUpdating || isRemoving || isRefreshing}
                           />
                           <div className="community-app-tool-copy">
                             <div className="community-app-tool-title-row">

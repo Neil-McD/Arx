@@ -30,6 +30,7 @@ A community app grant says a community recommends or grants access to an app.
 
 Current code:
 - `communityAppMounts`
+- `userPlatformAppMountSources` rows with `sourceType: "community"` after seeding
 
 Important: `communityAppMounts` is a legacy table name. Product behavior should treat it as a grant/recommendation record, not as an executable community runtime MCP layer.
 
@@ -46,11 +47,13 @@ User app state is the canonical state for whether an MCP app is usable by a user
 
 Current code:
 - `userPlatformAppMounts`
+- `userPlatformAppMountSources`
 - `appConnections`
 - `appToolSnapshots`
 
 Rules:
 - User app state is the only source for live/setup-needed/not-live status shown to that user.
+- Source rows explain why the app is present: personal, community, or both.
 - Personal credentials live in user connection state.
 - If a user already has Linear live personally and a community grants Linear, every surface must resolve to that same effective Linear state for that user.
 - If a user lacks required credentials, the app can be present but must show setup needed.
@@ -79,8 +82,19 @@ Adding or liking an app creates or reuses user app state by stable app identity.
 
 - If a matching user app state exists, reuse it.
 - If none exists, create it.
+- Record a personal source for the user app state.
 - If credentials are missing, show setup needed.
 - If credentials and validation are valid, show live.
+
+### Community add
+
+Adding an app to a community creates or reuses the community grant and seeds user app state for the builder and current active members.
+
+- Reuse an existing community grant by `catalogAppId` first, then endpoint/auth fallback.
+- Do not ask for or store a shared member secret.
+- Reuse matching user app state by stable identity.
+- Record a community source for seeded user app state.
+- Surface any setup-needed state from the user's effective app state, not from a separate community runtime.
 
 ### Community join
 
@@ -96,8 +110,9 @@ Joining a community grants access to that community's app bundle.
 Leaving a community revokes that community grant.
 
 - Do not blindly delete user-owned app state.
-- If future grant-only rows are introduced, record source ownership before deletion semantics are implemented.
+- Remove only that community source from the user app state.
 - A user who manually added or liked an app keeps that user app state after leaving.
+- If a user app state has no remaining personal/community source and is not live/configured, it can be removed as grant-only cleanup.
 
 ## Forbidden patterns
 

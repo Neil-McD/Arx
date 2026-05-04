@@ -13,6 +13,7 @@ import {
   type DeveloperAppRow,
   mapAppConnectionReadModel,
   mapDeveloperAppReadModel,
+  normalizeDeveloperAppEndpointUrl,
   normalizeString,
 } from "./appCore";
 import {
@@ -23,7 +24,6 @@ import {
   requireCommunityManager,
   resolveUserIdForAuthenticatedRequest,
 } from "./communityCore";
-import { encryptSecret } from "./providerConnections";
 
 type CommunityAppMountRow = {
   _id: any;
@@ -35,6 +35,17 @@ type CommunityAppMountRow = {
   enabledTools?: string[];
   createdAt: number;
   updatedAt: number;
+};
+
+type CommunityAppGrantRecipientRow = {
+  userId: any;
+  active?: boolean;
+  revokedAt?: number;
+};
+
+type CommunityRow = {
+  _id: any;
+  ownerId: any;
 };
 
 type CommunityAppMountLiveStatus = "live" | "not_live";
@@ -186,6 +197,49 @@ async function listCommunityAppMountRows(
     .collect()) as CommunityAppMountRow[];
 }
 
+export const findExistingCommunityAppMountByIdentityInternal = internalQuery({
+  args: {
+    communityId: v.id("communities"),
+    catalogAppId: v.optional(v.string()),
+    endpointUrl: v.string(),
+    authType: v.union(
+      v.literal("none"),
+      v.literal("api_key"),
+      v.literal("bearer"),
+    ),
+  },
+  handler: async (ctx, args) => {
+    const normalizedCatalogAppId = normalizeString(args.catalogAppId, 120).toLowerCase();
+    const normalizedEndpointUrl = normalizeDeveloperAppEndpointUrl(args.endpointUrl);
+    const mounts = await listCommunityAppMountRows(ctx, args.communityId);
+    mounts.sort((a, b) => b.updatedAt - a.updatedAt || b.createdAt - a.createdAt);
+    let endpointMatch: {
+      mount: CommunityAppMountRow;
+      app: DeveloperAppRow;
+    } | null = null;
+    for (const mount of mounts) {
+      const app = await getDeveloperAppById(ctx, mount.developerAppId);
+      if (!app) continue;
+      if (
+        normalizedCatalogAppId &&
+        normalizeString(app.catalogAppId, 120).toLowerCase() ===
+          normalizedCatalogAppId
+      ) {
+        return { mount, app };
+      }
+      if (
+        !endpointMatch &&
+        normalizedEndpointUrl &&
+        app.endpointUrl === normalizedEndpointUrl &&
+        app.authType === args.authType
+      ) {
+        endpointMatch = { mount, app };
+      }
+    }
+    return endpointMatch;
+  },
+});
+
 async function requireExistingCommunityMount(args: {
   ctx: any;
   communityId: any;
@@ -255,7 +309,7 @@ async function mountDeveloperAppForCommunity(args: {
     },
   )) as any;
 
-  return await args.ctx.runQuery(
+  const mount = await args.ctx.runQuery(
     internal.communityAppMounts.getCommunityAppMountReadModelInternal,
     {
       userId: args.userId,
@@ -263,6 +317,58 @@ async function mountDeveloperAppForCommunity(args: {
       communityAppMountId,
     },
   );
+
+  let personalSeedResult: unknown = null;
+  try {
+    personalSeedResult = await args.ctx.runAction(
+      internal.userPlatformAppMounts.seedCommunityAppGrantIntoUserHarnessInternal,
+      {
+        userId: args.userId,
+        communityAppMountId,
+        nowMs: args.nowMs,
+      },
+    );
+  } catch (error) {
+    console.warn("community_app_personal_seed_failed", {
+      community_app_mount_id: String(communityAppMountId),
+      user_id: String(args.userId),
+      error: error instanceof Error ? error.message : String(error ?? ""),
+    });
+  }
+
+  let existingMemberSeedResult: unknown = null;
+  try {
+    await args.ctx.scheduler.runAfter(
+      0,
+      internal.userPlatformAppMounts.seedCommunityAppGrantForExistingMembersInternal,
+      {
+        communityId: args.communityId,
+        communityAppMountId,
+        skipUserId: args.userId,
+        nowMs: args.nowMs,
+      },
+    );
+    existingMemberSeedResult = { scheduled: true };
+  } catch (error) {
+    existingMemberSeedResult = {
+      scheduled: false,
+      error: error instanceof Error ? error.message : String(error ?? ""),
+    };
+    console.warn("community_app_existing_member_seed_schedule_failed", {
+      community_app_mount_id: String(communityAppMountId),
+      community_id: String(args.communityId),
+      user_id: String(args.userId),
+      error: error instanceof Error ? error.message : String(error ?? ""),
+    });
+  }
+
+  return mount && typeof mount === "object" && !Array.isArray(mount)
+    ? {
+        ...(mount as Record<string, unknown>),
+        personal_seed_result: personalSeedResult,
+        existing_member_seed_result: existingMemberSeedResult,
+      }
+    : mount;
 }
 
 export const assertCommunityManagerAccessInternal = internalQuery({
@@ -337,6 +443,77 @@ export const getCommunityAppMountLifecycleContextInternal = internalQuery({
       developerAppId: mount.developerAppId,
       authType: app.authType,
     };
+  },
+});
+
+export const getCommunityAppMountSeedSourceInternal = internalQuery({
+  args: {
+    communityAppMountId: v.id("communityAppMounts"),
+  },
+  handler: async (ctx, args) => {
+    const mount = await getCommunityAppMountById(ctx, args.communityAppMountId);
+    if (!mount) return null;
+    const app = await getDeveloperAppById(ctx, mount.developerAppId);
+    if (!app) return null;
+    return {
+      mount,
+      app,
+    };
+  },
+});
+
+export const listCommunityAppGrantSeedSourcesInternal = internalQuery({
+  args: {
+    communityId: v.id("communities"),
+  },
+  handler: async (ctx, args) => {
+    const mounts = await listCommunityAppMountRows(ctx, args.communityId);
+    const out = [];
+    for (const mount of mounts) {
+      if (mount.enabled === false) continue;
+      const app = await getDeveloperAppById(ctx, mount.developerAppId);
+      if (!app) continue;
+      out.push({
+        mount: {
+          _id: mount._id,
+          communityId: mount.communityId,
+          enabled: mount.enabled,
+          enabledTools: mount.enabledTools,
+        },
+        app,
+      });
+    }
+    return out;
+  },
+});
+
+export const listCommunityAppGrantRecipientUserIdsInternal = internalQuery({
+  args: {
+    communityId: v.id("communities"),
+  },
+  handler: async (ctx, args) => {
+    const community = (await ctx.db.get(args.communityId)) as CommunityRow | null;
+    if (!community) return [];
+    const recipientUserIds: any[] = [];
+    const seen = new Set<string>();
+    const addRecipient = (userId: any) => {
+      const key = String(userId ?? "");
+      if (!key || seen.has(key)) return;
+      seen.add(key);
+      recipientUserIds.push(userId);
+    };
+
+    addRecipient(community.ownerId);
+    const memberships = (await ctx.db
+      .query("communityMemberships")
+      .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
+      .collect()) as CommunityAppGrantRecipientRow[];
+    for (const membership of memberships) {
+      if (membership.active === false) continue;
+      if (typeof membership.revokedAt === "number") continue;
+      addRecipient(membership.userId);
+    }
+    return recipientUserIds;
   },
 });
 
@@ -418,7 +595,6 @@ export const connectCommunityApp = action({
     endpointUrl: v.string(),
     authType: v.union(v.literal("none"), v.literal("api_key"), v.literal("bearer")),
     description: v.optional(v.string()),
-    secret: v.optional(v.string()),
   },
   handler: async (ctx, args): Promise<unknown> => {
     const { userId } = await resolveAuthenticatedActionUser({
@@ -431,6 +607,30 @@ export const connectCommunityApp = action({
     });
 
     const nowMs = Date.now();
+    const existingGrant = (await ctx.runQuery(
+      internal.communityAppMounts.findExistingCommunityAppMountByIdentityInternal,
+      {
+        communityId: args.communityId,
+        catalogAppId: args.catalogAppId,
+        endpointUrl: args.endpointUrl,
+        authType: args.authType,
+      },
+    )) as {
+      mount: CommunityAppMountRow;
+      app: DeveloperAppRow;
+    } | null;
+    if (existingGrant) {
+      return await mountDeveloperAppForCommunity({
+        ctx,
+        userId,
+        communityId: args.communityId,
+        developerAppId: existingGrant.app._id,
+        toolSnapshotId: existingGrant.mount.toolSnapshotId,
+        enabledTools: existingGrant.mount.enabledTools,
+        nowMs,
+      });
+    }
+
     let developerAppId: any = null;
     try {
       developerAppId = (await ctx.runMutation(internal.developerApps.createDeveloperAppInternal, {
@@ -443,28 +643,6 @@ export const connectCommunityApp = action({
         authType: args.authType,
         nowMs,
       })) as any;
-
-      if (args.authType !== "none") {
-        const secret = normalizeString(args.secret, 10_000);
-        if (!secret) {
-          return await mountDeveloperAppForCommunity({
-            ctx,
-            userId,
-            communityId: args.communityId,
-            developerAppId,
-            nowMs,
-          });
-        }
-        const encryptedSecret = await encryptSecret(secret);
-        await ctx.runMutation(internal.appConnections.upsertAppConnectionInternal, {
-          developerAppId,
-          connectionStatus: "connected",
-          encryptedSecretHex: encryptedSecret.encryptedSecretHex,
-          secretIvHex: encryptedSecret.secretIvHex,
-          secretVersion: encryptedSecret.secretVersion,
-          nowMs,
-        });
-      }
 
       const validation = (await ctx.runAction(internal.appValidation.validateDeveloperAppInternal, {
         developerAppId,
@@ -518,23 +696,14 @@ export const connectCommunityApp = action({
         });
       }
 
-      const communityAppMountId = (await ctx.runMutation(
-        internal.communityAppMounts.upsertCommunityAppMountInternal,
-        {
-          communityId: args.communityId,
-          developerAppId,
-          toolSnapshotId: app.activeSnapshotId,
-          mountedByUserId: userId,
-          enabled: true,
-          enabledTools,
-          nowMs,
-        },
-      )) as any;
-
-      return await ctx.runQuery(internal.communityAppMounts.getCommunityAppMountReadModelInternal, {
+      return await mountDeveloperAppForCommunity({
+        ctx,
         userId,
         communityId: args.communityId,
-        communityAppMountId,
+        developerAppId,
+        toolSnapshotId: app.activeSnapshotId,
+        enabledTools,
+        nowMs,
       });
     } catch (error) {
       if (developerAppId) {
@@ -578,72 +747,6 @@ export const refreshCommunityApp = action({
       developerAppId: any;
       authType: string;
     };
-
-    await ctx.runAction(internal.appValidation.validateDeveloperAppInternal, {
-      developerAppId: lifecycle.developerAppId,
-    });
-
-    const app = (await ctx.runQuery(internal.developerApps.getDeveloperAppByIdInternal, {
-      developerAppId: lifecycle.developerAppId,
-    })) as DeveloperAppRow | null;
-    const activeSnapshotId = app?.activeSnapshotId ?? null;
-    if (activeSnapshotId) {
-      await ctx.runMutation(
-        internal.communityAppMounts.patchCommunityAppMountsForDeveloperAppSnapshotInternal,
-        {
-        developerAppId: lifecycle.developerAppId,
-        toolSnapshotId: activeSnapshotId,
-        },
-      );
-    }
-
-    return await ctx.runQuery(internal.communityAppMounts.getCommunityAppMountReadModelInternal, {
-      userId,
-      communityId: args.communityId,
-      communityAppMountId: args.communityAppMountId,
-    });
-  },
-});
-
-export const reconnectCommunityApp = action({
-  args: {
-    authSubject: v.optional(v.string()),
-    communityId: v.id("communities"),
-    communityAppMountId: v.id("communityAppMounts"),
-    secret: v.string(),
-  },
-  handler: async (ctx, args): Promise<unknown> => {
-    const { userId } = await resolveAuthenticatedActionUser({
-      ctx,
-      authSubject: args.authSubject ?? null,
-    });
-    const lifecycle = (await ctx.runQuery(
-      internal.communityAppMounts.getCommunityAppMountLifecycleContextInternal,
-      {
-        userId,
-        communityId: args.communityId,
-        communityAppMountId: args.communityAppMountId,
-      },
-    )) as {
-      mountId: any;
-      developerAppId: any;
-      authType: string;
-    };
-
-    if (lifecycle.authType === "none") {
-      throw new Error("developer_app_connection_not_required");
-    }
-    const secret = normalizeString(args.secret, 10_000);
-    if (!secret) throw new Error("developer_app_connection_secret_required");
-    const encryptedSecret = await encryptSecret(secret);
-    await ctx.runMutation(internal.appConnections.upsertAppConnectionInternal, {
-      developerAppId: lifecycle.developerAppId,
-      connectionStatus: "connected",
-      encryptedSecretHex: encryptedSecret.encryptedSecretHex,
-      secretIvHex: encryptedSecret.secretIvHex,
-      secretVersion: encryptedSecret.secretVersion,
-      nowMs: Date.now(),
-    });
 
     await ctx.runAction(internal.appValidation.validateDeveloperAppInternal, {
       developerAppId: lifecycle.developerAppId,
@@ -725,24 +828,58 @@ export const updateCommunityAppMount = mutation({
   },
 });
 
-export const unmountCommunityApp = mutation({
+export const unmountCommunityApp = action({
   args: {
     userId: v.optional(v.id("users")),
     authSubject: v.optional(v.string()),
     communityId: v.id("communities"),
     communityAppMountId: v.id("communityAppMounts"),
   },
-  handler: async (ctx, args) => {
-    const userId = await resolveUserIdForAuthenticatedRequest({
+  handler: async (ctx, args): Promise<unknown> => {
+    const { userId } = await resolveAuthenticatedActionUser({
       ctx,
-      userId: args.userId,
       authSubject: args.authSubject ?? null,
     });
-    await requireCommunityManager({
-      ctx,
-      communityId: args.communityId,
+    await ctx.runQuery(internal.communityAppMounts.assertCommunityManagerAccessInternal, {
       userId,
+      communityId: args.communityId,
     });
+    await ctx.runQuery(
+      internal.communityAppMounts.getCommunityAppMountLifecycleContextInternal,
+      {
+        userId,
+        communityId: args.communityId,
+        communityAppMountId: args.communityAppMountId,
+      },
+    );
+    const personalHarnessCleanup = await ctx.runMutation(
+      internal.userPlatformAppMounts.removeCommunityAppGrantSourceInternal,
+      {
+        communityAppMountId: args.communityAppMountId,
+      },
+    );
+    const removed = await ctx.runMutation(
+      internal.communityAppMounts.deleteCommunityAppMountInternal,
+      {
+        communityId: args.communityId,
+        communityAppMountId: args.communityAppMountId,
+      },
+    );
+    return {
+      ...(removed && typeof removed === "object" && !Array.isArray(removed)
+        ? (removed as Record<string, unknown>)
+        : { removed: true, id: String(args.communityAppMountId) }),
+      personal_harness_cleanup: personalHarnessCleanup,
+    };
+  },
+});
+
+export const deleteCommunityAppMountInternal = internalMutation({
+  args: {
+    communityId: v.id("communities"),
+    communityAppMountId: v.id("communityAppMounts"),
+  },
+  handler: async (ctx, args) => {
     const mount = await requireExistingCommunityMount({
       ctx,
       communityId: args.communityId,

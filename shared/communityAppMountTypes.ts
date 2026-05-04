@@ -44,5 +44,4 @@ export type ConnectCommunityAppInput = {
   endpoint_url: string;
   auth_type: DeveloperAppAuthType;
   description?: string;
-  secret?: string;
 };

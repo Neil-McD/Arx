@@ -747,6 +747,20 @@ export default defineSchema({
     .index("by_user_app", ["userId", "developerAppId"])
     .index("by_app", ["developerAppId"]),
 
+  userPlatformAppMountSources: defineTable({
+    userId: v.id("users"),
+    userPlatformAppMountId: v.id("userPlatformAppMounts"),
+    sourceType: v.union(v.literal("personal"), v.literal("community")),
+    sourceKey: v.string(),
+    communityId: v.optional(v.id("communities")),
+    communityAppMountId: v.optional(v.id("communityAppMounts")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_user_mount", ["userId", "userPlatformAppMountId"])
+    .index("by_user_sourceKey", ["userId", "sourceKey"])
+    .index("by_community_mount", ["communityAppMountId"]),
+
   skillPackages: defineTable({
     ownerUserId: v.id("users"),
     catalogSkillId: v.optional(v.string()),

@@ -127,6 +127,26 @@ type UserPlatformAppMountRow = {
   updatedAt: number;
 };
 
+type UserPlatformAppMountSourceType = "personal" | "community";
+
+type UserPlatformAppMountSourceRow = {
+  _id: any;
+  userId: any;
+  userPlatformAppMountId: any;
+  sourceType: UserPlatformAppMountSourceType;
+  sourceKey: string;
+  communityId?: any;
+  communityAppMountId?: any;
+  createdAt: number;
+  updatedAt: number;
+};
+
+type UserHarnessAppSourceInput = {
+  sourceType: UserPlatformAppMountSourceType;
+  communityId?: any;
+  communityAppMountId?: any;
+};
+
 type UserPlatformAppMountLiveStatus = "live" | "not_live";
 
 type UserPlatformAppMountNotLiveReason =
@@ -183,6 +203,81 @@ function resolveEndpointHost(value: string): string | null {
   } catch {
     return null;
   }
+}
+
+function buildUserPlatformAppMountSourceKey(args: {
+  sourceType: UserPlatformAppMountSourceType;
+  userPlatformAppMountId: any;
+  communityAppMountId?: any;
+}): string {
+  if (args.sourceType === "personal") {
+    return `personal:${String(args.userPlatformAppMountId)}`;
+  }
+  const communityAppMountId = args.communityAppMountId
+    ? String(args.communityAppMountId)
+    : "";
+  if (!communityAppMountId) throw new Error("community_app_mount_source_required");
+  return `community:${communityAppMountId}`;
+}
+
+async function recordUserHarnessAppSource(args: {
+  ctx: any;
+  userId: any;
+  userPlatformAppMountId: any;
+  source: UserHarnessAppSourceInput;
+  nowMs: number;
+}): Promise<void> {
+  await args.ctx.runMutation(
+    internal.userPlatformAppMounts.upsertUserPlatformAppMountSourceInternal,
+    {
+      userId: args.userId,
+      userPlatformAppMountId: args.userPlatformAppMountId,
+      sourceType: args.source.sourceType,
+      communityId: args.source.communityId,
+      communityAppMountId: args.source.communityAppMountId,
+      nowMs: args.nowMs,
+    },
+  );
+}
+
+async function listUserHarnessAppSourcesForMount(args: {
+  ctx: any;
+  userId: any;
+  userPlatformAppMountId: any;
+}): Promise<UserPlatformAppMountSourceRow[]> {
+  return (await args.ctx.db
+    .query("userPlatformAppMountSources")
+    .withIndex("by_user_mount", (q: any) =>
+      q
+        .eq("userId", args.userId)
+        .eq("userPlatformAppMountId", args.userPlatformAppMountId),
+    )
+    .collect()) as UserPlatformAppMountSourceRow[];
+}
+
+async function shouldRetainUserHarnessMountAfterSourceRemoval(args: {
+  ctx: any;
+  mount: UserPlatformAppMountRow;
+}): Promise<boolean> {
+  const app = await getDeveloperAppById(args.ctx, args.mount.developerAppId);
+  if (!app) return false;
+  const connection = await getAppConnectionByDeveloperAppId(
+    args.ctx,
+    args.mount.developerAppId,
+  );
+  if (connection?.connectionStatus === "connected") return true;
+  const snapshot = await getAppToolSnapshotById(args.ctx, args.mount.toolSnapshotId);
+  const tools = normalizeSnapshotTools(snapshot);
+  const enabledTools = computeSelectedToolNames(args.mount, tools);
+  return (
+    deriveUserPlatformMountLiveState({
+      mount: args.mount,
+      app,
+      connection,
+      snapshot,
+      enabledTools,
+    }).live_status === "live"
+  );
 }
 
 function buildConnectErrorMessage(
@@ -460,42 +555,10 @@ async function listUserPlatformAppMountRows(
     .collect()) as UserPlatformAppMountRow[];
 }
 
-async function findExistingUserPlatformMountByEndpoint(args: {
-  ctx: any;
-  userId: any;
-  endpointUrl: string;
-  authType: string;
-}): Promise<{
-  mount: UserPlatformAppMountRow;
-  app: DeveloperAppRow;
-  connection: AppConnectionRow | null;
-} | null> {
-  const normalizedEndpointUrl = normalizeDeveloperAppEndpointUrl(args.endpointUrl);
-  if (!normalizedEndpointUrl) return null;
-  const mounts = await listUserPlatformAppMountRows(args.ctx, args.userId);
-  mounts.sort((a, b) => b.updatedAt - a.updatedAt || b.createdAt - a.createdAt);
-  for (const mount of mounts) {
-    const app = await getDeveloperAppById(args.ctx, mount.developerAppId);
-    if (!app) continue;
-    if (app.endpointUrl !== normalizedEndpointUrl || app.authType !== args.authType) {
-      continue;
-    }
-    const connection = await getAppConnectionByDeveloperAppId(
-      args.ctx,
-      mount.developerAppId,
-    );
-    return {
-      mount,
-      app,
-      connection,
-    };
-  }
-  return null;
-}
-
-export const findExistingUserPlatformMountByEndpointInternal = internalQuery({
+export const findExistingUserPlatformMountByIdentityInternal = internalQuery({
   args: {
     userId: v.id("users"),
+    catalogAppId: v.optional(v.string()),
     endpointUrl: v.string(),
     authType: v.union(
       v.literal("none"),
@@ -504,18 +567,46 @@ export const findExistingUserPlatformMountByEndpointInternal = internalQuery({
     ),
   },
   handler: async (ctx, args) => {
-    return await findExistingUserPlatformMountByEndpoint({
-      ctx,
-      userId: args.userId,
-      endpointUrl: args.endpointUrl,
-      authType: args.authType,
-    });
+    const normalizedCatalogAppId = normalizeString(args.catalogAppId, 120).toLowerCase();
+    const normalizedEndpointUrl = normalizeDeveloperAppEndpointUrl(args.endpointUrl);
+    const mounts = await listUserPlatformAppMountRows(ctx, args.userId);
+    mounts.sort((a, b) => b.updatedAt - a.updatedAt || b.createdAt - a.createdAt);
+    let endpointMatch: {
+      mount: UserPlatformAppMountRow;
+      app: DeveloperAppRow;
+      connection: AppConnectionRow | null;
+    } | null = null;
+    for (const mount of mounts) {
+      const app = await getDeveloperAppById(ctx, mount.developerAppId);
+      if (!app) continue;
+      const connection = await getAppConnectionByDeveloperAppId(
+        ctx,
+        mount.developerAppId,
+      );
+      if (
+        normalizedCatalogAppId &&
+        normalizeString(app.catalogAppId, 120).toLowerCase() ===
+          normalizedCatalogAppId
+      ) {
+        return { mount, app, connection };
+      }
+      if (
+        !endpointMatch &&
+        normalizedEndpointUrl &&
+        app.endpointUrl === normalizedEndpointUrl &&
+        app.authType === args.authType
+      ) {
+        endpointMatch = { mount, app, connection };
+      }
+    }
+    return endpointMatch;
   },
 });
 
 async function resolveExistingMountForConnect(args: {
   ctx: any;
   userId: any;
+  catalogAppId?: string;
   endpointUrl: string;
   authType: "none" | "api_key" | "bearer";
 }): Promise<{
@@ -524,9 +615,10 @@ async function resolveExistingMountForConnect(args: {
   connection: AppConnectionRow | null;
 } | null> {
   return (await args.ctx.runQuery(
-    internal.userPlatformAppMounts.findExistingUserPlatformMountByEndpointInternal,
+    internal.userPlatformAppMounts.findExistingUserPlatformMountByIdentityInternal,
     {
       userId: args.userId,
+      catalogAppId: args.catalogAppId,
       endpointUrl: args.endpointUrl,
       authType: args.authType,
     },
@@ -590,6 +682,7 @@ async function mountValidatedDeveloperAppForUser(args: {
   developerAppId: any;
   toolSnapshotId?: any;
   enabledTools?: string[];
+  source?: UserHarnessAppSourceInput;
   nowMs: number;
 }): Promise<{ mountId: any; mount: unknown }> {
   const mountId = (await args.ctx.runMutation(
@@ -603,6 +696,13 @@ async function mountValidatedDeveloperAppForUser(args: {
       nowMs: args.nowMs,
     },
   )) as any;
+  await recordUserHarnessAppSource({
+    ctx: args.ctx,
+    userId: args.userId,
+    userPlatformAppMountId: mountId,
+    source: args.source ?? { sourceType: "personal" },
+    nowMs: args.nowMs,
+  });
   const mount = await args.ctx.runQuery(
     internal.userPlatformAppMounts.getUserPlatformAppMountReadModelInternal,
     {
@@ -619,6 +719,7 @@ async function mountSetupNeededDeveloperAppForUser(args: {
   developerAppId: any;
   toolSnapshotId?: any;
   enabledTools?: string[];
+  source?: UserHarnessAppSourceInput;
   nowMs: number;
 }): Promise<unknown> {
   const mounted = await mountValidatedDeveloperAppForUser({
@@ -627,6 +728,7 @@ async function mountSetupNeededDeveloperAppForUser(args: {
     developerAppId: args.developerAppId,
     toolSnapshotId: args.toolSnapshotId,
     enabledTools: args.enabledTools,
+    source: args.source,
     nowMs: args.nowMs,
   });
   return mounted.mount;
@@ -1028,6 +1130,7 @@ export const connectUserPlatformApp = action({
       existingMount = await resolveExistingMountForConnect({
         ctx,
         userId,
+        catalogAppId: args.catalogAppId,
         endpointUrl: args.endpointUrl,
         authType: args.authType,
       });
@@ -1645,11 +1748,158 @@ export const unmountUserPlatformApp = mutation({
       userId,
       userPlatformAppMountId: args.userPlatformAppMountId,
     });
+    const sourceRows = await listUserHarnessAppSourcesForMount({
+      ctx,
+      userId,
+      userPlatformAppMountId: mount._id,
+    });
+    for (const source of sourceRows) {
+      await ctx.db.delete(source._id);
+    }
     await ctx.db.delete(mount._id);
     return {
       removed: true,
       id: String(mount._id),
     };
+  },
+});
+
+export const removeCommunityAppGrantSourceInternal = internalMutation({
+  args: {
+    communityAppMountId: v.id("communityAppMounts"),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const nowMs = args.nowMs ?? Date.now();
+    const sourceRows = (await ctx.db
+      .query("userPlatformAppMountSources")
+      .withIndex("by_community_mount", (q: any) =>
+        q.eq("communityAppMountId", args.communityAppMountId),
+      )
+      .collect()) as UserPlatformAppMountSourceRow[];
+    let removedSourceCount = 0;
+    let deletedMountCount = 0;
+    let retainedPersonalMountCount = 0;
+    let skippedMissingMountCount = 0;
+
+    for (const source of sourceRows) {
+      const mount = await getUserPlatformAppMountById(
+        ctx,
+        source.userPlatformAppMountId,
+      );
+      await ctx.db.delete(source._id);
+      removedSourceCount += 1;
+
+      if (!mount) {
+        skippedMissingMountCount += 1;
+        continue;
+      }
+
+      const remainingSources = await listUserHarnessAppSourcesForMount({
+        ctx,
+        userId: mount.userId,
+        userPlatformAppMountId: mount._id,
+      });
+      if (remainingSources.length > 0) continue;
+
+      const shouldRetain = await shouldRetainUserHarnessMountAfterSourceRemoval({
+        ctx,
+        mount,
+      });
+      if (shouldRetain) {
+        const sourceKey = buildUserPlatformAppMountSourceKey({
+          sourceType: "personal",
+          userPlatformAppMountId: mount._id,
+        });
+        const existingPersonalSource = await ctx.db
+          .query("userPlatformAppMountSources")
+          .withIndex("by_user_sourceKey", (q: any) =>
+            q.eq("userId", mount.userId).eq("sourceKey", sourceKey),
+          )
+          .first();
+        if (existingPersonalSource) {
+          await ctx.db.patch(existingPersonalSource._id, {
+            userPlatformAppMountId: mount._id,
+            sourceType: "personal",
+            sourceKey,
+            updatedAt: nowMs,
+          });
+        } else {
+          await ctx.db.insert("userPlatformAppMountSources", {
+            userId: mount.userId,
+            userPlatformAppMountId: mount._id,
+            sourceType: "personal",
+            sourceKey,
+            createdAt: nowMs,
+            updatedAt: nowMs,
+          });
+        }
+        retainedPersonalMountCount += 1;
+        continue;
+      }
+
+      await ctx.db.delete(mount._id);
+      deletedMountCount += 1;
+    }
+
+    return {
+      removed_source_count: removedSourceCount,
+      deleted_mount_count: deletedMountCount,
+      retained_personal_mount_count: retainedPersonalMountCount,
+      skipped_missing_mount_count: skippedMissingMountCount,
+    };
+  },
+});
+
+export const upsertUserPlatformAppMountSourceInternal = internalMutation({
+  args: {
+    userId: v.id("users"),
+    userPlatformAppMountId: v.id("userPlatformAppMounts"),
+    sourceType: v.union(v.literal("personal"), v.literal("community")),
+    communityId: v.optional(v.id("communities")),
+    communityAppMountId: v.optional(v.id("communityAppMounts")),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    if (
+      args.sourceType === "community" &&
+      (!args.communityId || !args.communityAppMountId)
+    ) {
+      throw new Error("community_app_mount_source_required");
+    }
+    const nowMs = args.nowMs ?? Date.now();
+    const sourceKey = buildUserPlatformAppMountSourceKey({
+      sourceType: args.sourceType,
+      userPlatformAppMountId: args.userPlatformAppMountId,
+      communityAppMountId: args.communityAppMountId,
+    });
+    const existing = await ctx.db
+      .query("userPlatformAppMountSources")
+      .withIndex("by_user_sourceKey", (q: any) =>
+        q.eq("userId", args.userId).eq("sourceKey", sourceKey),
+      )
+      .first();
+    const patch = {
+      userId: args.userId,
+      userPlatformAppMountId: args.userPlatformAppMountId,
+      sourceType: args.sourceType,
+      sourceKey,
+      ...(args.sourceType === "community"
+        ? {
+            communityId: args.communityId,
+            communityAppMountId: args.communityAppMountId,
+          }
+        : {}),
+      updatedAt: nowMs,
+    };
+    if (existing) {
+      await ctx.db.patch(existing._id, patch);
+      return existing._id;
+    }
+    return await ctx.db.insert("userPlatformAppMountSources", {
+      ...patch,
+      createdAt: nowMs,
+    });
   },
 });
 
@@ -1688,5 +1938,348 @@ export const upsertUserPlatformAppMountInternal = internalMutation({
       createdAt: nowMs,
       updatedAt: nowMs,
     });
+  },
+});
+
+export const ensureUserHarnessAppInternal = internalAction({
+  args: {
+    userId: v.id("users"),
+    catalogAppId: v.optional(v.string()),
+    name: v.string(),
+    description: v.optional(v.string()),
+    endpointUrl: v.string(),
+    authType: v.union(
+      v.literal("none"),
+      v.literal("api_key"),
+      v.literal("bearer"),
+    ),
+    toolSnapshotId: v.optional(v.id("appToolSnapshots")),
+    enabled: v.optional(v.boolean()),
+    enabledTools: v.optional(v.array(v.string())),
+    sourceType: v.union(v.literal("personal"), v.literal("community")),
+    communityId: v.optional(v.id("communities")),
+    communityAppMountId: v.optional(v.id("communityAppMounts")),
+    updateExistingMount: v.optional(v.boolean()),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args): Promise<unknown> => {
+    if (
+      args.sourceType === "community" &&
+      (!args.communityId || !args.communityAppMountId)
+    ) {
+      throw new Error("community_app_mount_source_required");
+    }
+    const nowMs = args.nowMs ?? Date.now();
+    const source: UserHarnessAppSourceInput = {
+      sourceType: args.sourceType,
+      communityId: args.communityId,
+      communityAppMountId: args.communityAppMountId,
+    };
+    const existing = (await ctx.runQuery(
+      internal.userPlatformAppMounts.findExistingUserPlatformMountByIdentityInternal,
+      {
+        userId: args.userId,
+        catalogAppId: args.catalogAppId,
+        endpointUrl: args.endpointUrl,
+        authType: args.authType,
+      },
+    )) as {
+      mount: UserPlatformAppMountRow;
+      app: DeveloperAppRow;
+      connection: AppConnectionRow | null;
+    } | null;
+
+    if (existing) {
+      let mountId = existing.mount._id;
+      if (args.updateExistingMount === true) {
+        mountId = (await ctx.runMutation(
+          internal.userPlatformAppMounts.upsertUserPlatformAppMountInternal,
+          {
+            userId: args.userId,
+            developerAppId: existing.app._id,
+            toolSnapshotId: args.toolSnapshotId ?? existing.mount.toolSnapshotId,
+            enabled: args.enabled ?? existing.mount.enabled,
+            enabledTools: args.enabledTools ?? existing.mount.enabledTools,
+            nowMs,
+          },
+        )) as any;
+      }
+      await recordUserHarnessAppSource({
+        ctx,
+        userId: args.userId,
+        userPlatformAppMountId: mountId,
+        source,
+        nowMs,
+      });
+      const mount = await ctx.runQuery(
+        internal.userPlatformAppMounts.getUserPlatformAppMountReadModelInternal,
+        {
+          userId: args.userId,
+          userPlatformAppMountId: mountId,
+        },
+      );
+      return {
+        ok: true,
+        ensured: true,
+        created: false,
+        reused: true,
+        source_type: args.sourceType,
+        mount,
+      };
+    }
+
+    const developerAppId = (await ctx.runMutation(
+      internal.developerApps.createDeveloperAppInternal,
+      {
+        ownerUserId: args.userId,
+        catalogAppId: args.catalogAppId,
+        name: args.name,
+        slug: undefined,
+        description: args.description,
+        endpointUrl: args.endpointUrl,
+        authType: args.authType,
+        nowMs,
+      },
+    )) as any;
+    const mountId = (await ctx.runMutation(
+      internal.userPlatformAppMounts.upsertUserPlatformAppMountInternal,
+      {
+        userId: args.userId,
+        developerAppId,
+        toolSnapshotId: args.toolSnapshotId,
+        enabled: args.enabled ?? true,
+        enabledTools: args.enabledTools,
+        nowMs,
+      },
+    )) as any;
+    await recordUserHarnessAppSource({
+      ctx,
+      userId: args.userId,
+      userPlatformAppMountId: mountId,
+      source,
+      nowMs,
+    });
+    const mount = await ctx.runQuery(
+      internal.userPlatformAppMounts.getUserPlatformAppMountReadModelInternal,
+      {
+        userId: args.userId,
+        userPlatformAppMountId: mountId,
+      },
+    );
+    return {
+      ok: true,
+      ensured: true,
+      created: true,
+      reused: false,
+      source_type: args.sourceType,
+      mount,
+    };
+  },
+});
+
+export const seedCommunityAppGrantIntoUserHarnessInternal = internalAction({
+  args: {
+    userId: v.id("users"),
+    communityAppMountId: v.id("communityAppMounts"),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args): Promise<unknown> => {
+    const seedSource = (await ctx.runQuery(
+      internal.communityAppMounts.getCommunityAppMountSeedSourceInternal,
+      {
+        communityAppMountId: args.communityAppMountId,
+      },
+    )) as {
+      mount: {
+        _id: any;
+        communityId: any;
+        enabled?: boolean;
+        enabledTools?: string[];
+      };
+      app: DeveloperAppRow;
+    } | null;
+    if (!seedSource) {
+      return {
+        ok: false,
+        seeded: false,
+        reason: "community_app_grant_not_found",
+        mount: null,
+      };
+    }
+
+    const ensured = (await ctx.runAction(
+      internal.userPlatformAppMounts.ensureUserHarnessAppInternal,
+      {
+        userId: args.userId,
+        catalogAppId: seedSource.app.catalogAppId,
+        name: seedSource.app.name,
+        description: seedSource.app.description,
+        endpointUrl: seedSource.app.endpointUrl,
+        authType: seedSource.app.authType,
+        enabled: seedSource.mount.enabled !== false,
+        enabledTools: Array.isArray(seedSource.mount.enabledTools)
+          ? seedSource.mount.enabledTools
+          : undefined,
+        sourceType: "community",
+        communityId: seedSource.mount.communityId,
+        communityAppMountId: seedSource.mount._id,
+        updateExistingMount: false,
+        nowMs: args.nowMs,
+      },
+    )) as {
+      ok?: boolean;
+      created?: boolean;
+      reused?: boolean;
+      mount?: unknown;
+    } | null;
+    return {
+      ok: ensured?.ok === true,
+      seeded: ensured?.created === true,
+      reason: ensured?.reused
+        ? "existing_personal_app_reused"
+        : "personal_setup_needed_seeded",
+      mount: ensured?.mount ?? null,
+    };
+  },
+});
+
+export const seedCommunityAppGrantForExistingMembersInternal = internalAction({
+  args: {
+    communityId: v.id("communities"),
+    communityAppMountId: v.id("communityAppMounts"),
+    skipUserId: v.optional(v.id("users")),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args): Promise<unknown> => {
+    const recipientUserIds = (await ctx.runQuery(
+      internal.communityAppMounts.listCommunityAppGrantRecipientUserIdsInternal,
+      {
+        communityId: args.communityId,
+      },
+    )) as any[];
+    let scheduledCount = 0;
+    let skippedCount = 0;
+    let failedCount = 0;
+    const failures: Array<{
+      user_id: string;
+      error: string;
+    }> = [];
+
+    for (const userId of recipientUserIds) {
+      if (args.skipUserId && String(userId) === String(args.skipUserId)) {
+        skippedCount += 1;
+        continue;
+      }
+      try {
+        await ctx.scheduler.runAfter(
+          0,
+          internal.userPlatformAppMounts.seedCommunityAppGrantIntoUserHarnessInternal,
+          {
+            userId,
+            communityAppMountId: args.communityAppMountId,
+            nowMs: args.nowMs,
+          },
+        );
+        scheduledCount += 1;
+      } catch (error) {
+        failedCount += 1;
+        failures.push({
+          user_id: String(userId),
+          error: error instanceof Error ? error.message : String(error ?? ""),
+        });
+      }
+    }
+
+    return {
+      ok: failedCount === 0,
+      community_id: String(args.communityId),
+      community_app_mount_id: String(args.communityAppMountId),
+      recipient_count: recipientUserIds.length,
+      scheduled_count: scheduledCount,
+      skipped_count: skippedCount,
+      failed_count: failedCount,
+      failures,
+    };
+  },
+});
+
+export const seedCommunityAppGrantsForUserInternal = internalAction({
+  args: {
+    userId: v.id("users"),
+    communityId: v.id("communities"),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args): Promise<unknown> => {
+    const seedSources = (await ctx.runQuery(
+      internal.communityAppMounts.listCommunityAppGrantSeedSourcesInternal,
+      {
+        communityId: args.communityId,
+      },
+    )) as Array<{
+      mount: {
+        _id: any;
+        communityId: any;
+        enabled?: boolean;
+        enabledTools?: string[];
+      };
+      app: DeveloperAppRow;
+    }>;
+    let createdCount = 0;
+    let reusedCount = 0;
+    let failedCount = 0;
+    const failures: Array<{
+      community_app_mount_id: string;
+      error: string;
+    }> = [];
+
+    for (const seedSource of seedSources) {
+      try {
+        const ensured = (await ctx.runAction(
+          internal.userPlatformAppMounts.ensureUserHarnessAppInternal,
+          {
+            userId: args.userId,
+            catalogAppId: seedSource.app.catalogAppId,
+            name: seedSource.app.name,
+            description: seedSource.app.description,
+            endpointUrl: seedSource.app.endpointUrl,
+            authType: seedSource.app.authType,
+            enabled: seedSource.mount.enabled !== false,
+            enabledTools: Array.isArray(seedSource.mount.enabledTools)
+              ? seedSource.mount.enabledTools
+              : undefined,
+            sourceType: "community",
+            communityId: seedSource.mount.communityId,
+            communityAppMountId: seedSource.mount._id,
+            updateExistingMount: false,
+            nowMs: args.nowMs,
+          },
+        )) as {
+          created?: boolean;
+          reused?: boolean;
+        } | null;
+        if (ensured?.created) {
+          createdCount += 1;
+        } else {
+          reusedCount += 1;
+        }
+      } catch (error) {
+        failedCount += 1;
+        failures.push({
+          community_app_mount_id: String(seedSource.mount._id),
+          error: error instanceof Error ? error.message : String(error ?? ""),
+        });
+      }
+    }
+
+    return {
+      ok: failedCount === 0,
+      community_id: String(args.communityId),
+      user_id: String(args.userId),
+      grant_count: seedSources.length,
+      created_count: createdCount,
+      reused_count: reusedCount,
+      failed_count: failedCount,
+      failures,
+    };
   },
 });

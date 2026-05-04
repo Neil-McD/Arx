@@ -49,7 +49,6 @@ export async function connectCloudCommunityApp<SessionT>(
     endpointUrl: params.input.endpoint_url,
     authType: params.input.auth_type,
     description: params.input.description,
-    secret: params.input.secret,
   })) as CommunityMountedApp | null;
   return payload ?? null;
 }
@@ -94,25 +93,6 @@ export async function refreshCloudCommunityApp<SessionT>(
 
 export const refreshCloudCommunityAppGrant = refreshCloudCommunityApp;
 
-export async function reconnectCloudCommunityApp<SessionT>(
-  params: CloudCommunityAppMountGatewayParams<SessionT> & {
-    communityId: string;
-    communityAppMountId: string;
-    secret: string;
-  },
-): Promise<CommunityMountedApp | null> {
-  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = (await client.action("community:reconnectCommunityApp" as any, {
-    authSubject,
-    communityId: params.communityId,
-    communityAppMountId: params.communityAppMountId,
-    secret: params.secret,
-  })) as CommunityMountedApp | null;
-  return payload ?? null;
-}
-
-export const reconnectCloudCommunityAppGrant = reconnectCloudCommunityApp;
-
 export async function unmountCloudCommunityApp<SessionT>(
   params: CloudCommunityAppMountGatewayParams<SessionT> & {
     communityId: string;
@@ -120,7 +100,7 @@ export async function unmountCloudCommunityApp<SessionT>(
   },
 ): Promise<boolean> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = (await client.mutation("community:unmountCommunityApp" as any, {
+  const payload = (await client.action("community:unmountCommunityApp" as any, {
     authSubject,
     communityId: params.communityId,
     communityAppMountId: params.communityAppMountId,

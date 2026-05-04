@@ -578,6 +578,13 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
         authType: personalConnectAuthType,
       })
     : [];
+  const communityConnectRequirements = personalConnectRequirements.filter(
+    (requirement) => requirement.id !== "secret",
+  );
+  const activeConnectRequirements =
+    appConnectTarget === "community"
+      ? communityConnectRequirements
+      : personalConnectRequirements;
   const communityTargetLabel =
     String(manageableCommunityTargetName ?? "").trim() || "this community";
   const selectedSkillErrorMessage =
@@ -638,7 +645,7 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
       endpointUrl: personalConnectEndpoint,
       authType: personalConnectAuthType,
       description: app.description,
-      secret: personalConnectSecret.trim() || undefined,
+      secret: undefined,
     });
     if (!connectInput) {
       setPersonalConnectResult("failed");
@@ -1416,7 +1423,7 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
             <div className="modal-body discover-connect-modal-body">
               {(appConnectTarget === "community"
                 ? selectedApp.personalConnect.connectionKind === "custom"
-                  ? `Enter a remote MCP endpoint and auth details to recommend it in ${communityTargetLabel}.`
+                  ? `Enter a remote MCP endpoint and auth method to recommend it in ${communityTargetLabel}.`
                     : selectedApp.personalConnect.authMethod === "token"
                       ? `Recommend ${selectedApp.name} in ${communityTargetLabel}. Members use their own ${selectedApp.personalConnect.secretLabel} to make it live in their harness.`
                       : `Review the connection requirements, then recommend ${selectedApp.name} in ${communityTargetLabel}.`
@@ -1424,7 +1431,7 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
                 <div className="discover-connect-modal-copy">
                   {appConnectTarget === "community"
                     ? selectedApp.personalConnect.connectionKind === "custom"
-                      ? `Enter a remote MCP endpoint and auth details to recommend it in ${communityTargetLabel}.`
+                      ? `Enter a remote MCP endpoint and auth method to recommend it in ${communityTargetLabel}.`
                         : selectedApp.personalConnect.authMethod === "token"
                           ? `Recommend ${selectedApp.name} in ${communityTargetLabel}. Members use their own ${selectedApp.personalConnect.secretLabel} to make it live in their harness.`
                           : `Review the connection requirements, then recommend ${selectedApp.name} in ${communityTargetLabel}.`
@@ -1432,7 +1439,7 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
                 </div>
               ) : null}
               <div className="agent-capability-field-grid discover-connect-grid">
-                    {personalConnectRequirements.map((requirement) =>
+                    {activeConnectRequirements.map((requirement) =>
                       requirement.kind === "readonly" ? (
                         <label
                           key={requirement.id}

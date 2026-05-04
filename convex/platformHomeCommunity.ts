@@ -1,3 +1,4 @@
+import { internal } from "./_generated/api";
 import {
   type CommunityLike,
   type CommunityJoinRequestLike,
@@ -12,6 +13,33 @@ import {
 
 const PLATFORM_HOME_COMMUNITY_SLUG = "polynet";
 const PLATFORM_HOME_AUTOJOIN_OPT_OUT_MESSAGE = "platform_home_autojoin_opt_out";
+
+async function scheduleCommunityAppGrantSeedingBestEffort(args: {
+  ctx: any;
+  communityId: any;
+  userId: any;
+  nowMs: number;
+  reason: string;
+}): Promise<void> {
+  try {
+    await args.ctx.scheduler.runAfter(
+      0,
+      internal.userPlatformAppMounts.seedCommunityAppGrantsForUserInternal,
+      {
+        communityId: args.communityId,
+        userId: args.userId,
+        nowMs: args.nowMs,
+      },
+    );
+  } catch (error) {
+    console.warn("community_app_grant_seed_schedule_failed", {
+      community_id: String(args.communityId),
+      user_id: String(args.userId),
+      reason: args.reason,
+      error: error instanceof Error ? error.message : String(error ?? ""),
+    });
+  }
+}
 
 export type PlatformHomeAutojoinOptOutKind = "left" | "removed";
 
@@ -185,6 +213,13 @@ export async function ensurePlatformHomeCommunityMembership(args: {
     .collect()) as CommunityMembershipLike[];
   const existingMembership = pickMostRelevantCommunityMembership(membershipRows);
   if (existingMembership && communityMembershipRowIsActive(existingMembership)) {
+    await scheduleCommunityAppGrantSeedingBestEffort({
+      ctx: args.ctx,
+      communityId: community._id,
+      userId: args.userId,
+      nowMs: args.nowMs,
+      reason: "platform_home_autojoin_already_member",
+    });
     return { status: "already_member", communityId };
   }
 
@@ -196,6 +231,13 @@ export async function ensurePlatformHomeCommunityMembership(args: {
     active: true,
     createdAt: args.nowMs,
     updatedAt: args.nowMs,
+  });
+  await scheduleCommunityAppGrantSeedingBestEffort({
+    ctx: args.ctx,
+    communityId: community._id,
+    userId: args.userId,
+    nowMs: args.nowMs,
+    reason: "platform_home_autojoin_joined",
   });
 
   return {

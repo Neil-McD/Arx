@@ -7,10 +7,10 @@ Status: active alpha plan
 The community app system only needs one honest loop:
 
 1. owner/admin opens `AI Agent -> Apps`
-2. connects a remote MCP app
-3. Polynet validates the endpoint and discovers tools
-4. Polynet mounts the app to the current community
-5. the runtime can later use those mounted tools under policy
+2. recommends a remote MCP app for the community
+3. Polynet validates the app definition when possible and records the community grant
+4. Polynet seeds/reuses canonical user harness app state for the builder and active members
+5. the runtime can later use the app only through each user's own harness state
 
 If a requirement does not directly support that loop, it is a deletion candidate.
 
@@ -22,8 +22,10 @@ If a requirement does not directly support that loop, it is a deletion candidate
 - remote HTTPS MCP only
 - auth types: `none`, `api_key`, `bearer`
 - explicit tool discovery
-- explicit per-community mounted tool allow-list
+- explicit per-community grant records
+- canonical user harness app state and source provenance
 - owner/admin-only management
+- member-readable community app grants
 
 ### Delete
 
@@ -32,6 +34,8 @@ If a requirement does not directly support that loop, it is a deletion candidate
 - multiple transport choices
 - OAuth onboarding in this slice
 - mount-wide editable approval controls
+- direct community MCP runtime execution
+- shared member secrets on community app grants
 
 ## Canonical objects
 
@@ -39,13 +43,14 @@ If a requirement does not directly support that loop, it is a deletion candidate
 - `AppConnection`
 - `AppToolSnapshot`
 - `CommunityAppMount`
+- `UserPlatformAppMount`
+- `UserPlatformAppMountSource`
 
 These remain separate internally even though the user sees one simple flow.
 
 ## Immediate next work
 
-1. keep the community app flow as the only product entrypoint
-2. make mounted apps executable in the harness for real
-3. enforce call-time policy
-4. add tool-call audit
-5. keep skills as separate package attachments, not prompt blobs
+1. keep runtime MCP execution personal-harness only
+2. seed community grants into user harness state on community add/join
+3. show one effective status for the same app across Discover, personal Settings, and Community Settings
+4. keep skills as separate package attachments, not prompt blobs

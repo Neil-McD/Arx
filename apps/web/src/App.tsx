@@ -1974,7 +1974,6 @@ export default function App() {
     communityAppMutationError,
     updatingCommunityAppMountId,
     refreshingCommunityAppMountId,
-    reconnectingCommunityAppMountId,
     removingCommunityAppMountId,
     communityAppMountsLoadedCommunityIdRef,
     clearCommunityAppMounts,
@@ -1982,7 +1981,6 @@ export default function App() {
     connectCommunityApp,
     updateCommunityAppMount,
     refreshCommunityApp,
-    reconnectCommunityApp,
     unmountCommunityApp,
   } = useWebCommunityAppGrantsController<AuthSession>({
     activeCommunityId,
@@ -2857,10 +2855,22 @@ export default function App() {
   const handleConnectCommunityApp = useCallback(
     async (input: ConnectCommunityAppInput) => {
       const ok = await connectCommunityApp(input);
-      if (ok) void reloadHarnessMounts();
+      if (ok) {
+        if (session) {
+          userPlatformAppMountsLoadedUserIdRef.current = null;
+          void loadUserPlatformAppMounts(session);
+        }
+        void reloadHarnessMounts();
+      }
       return ok;
     },
-    [connectCommunityApp, reloadHarnessMounts],
+    [
+      connectCommunityApp,
+      loadUserPlatformAppMounts,
+      reloadHarnessMounts,
+      session,
+      userPlatformAppMountsLoadedUserIdRef,
+    ],
   );
 
   const handleConnectUserPlatformApp = useCallback(
@@ -2952,15 +2962,6 @@ export default function App() {
       return ok;
     },
     [refreshCommunityApp, reloadHarnessMounts],
-  );
-
-  const handleReconnectCommunityApp = useCallback(
-    async (communityAppMountId: string, secret: string) => {
-      const ok = await reconnectCommunityApp(communityAppMountId, secret);
-      if (ok) void reloadHarnessMounts();
-      return ok;
-    },
-    [reconnectCommunityApp, reloadHarnessMounts],
   );
 
   const handleCreateCommunitySkill = useCallback(
@@ -6224,12 +6225,10 @@ export default function App() {
         isConnecting: isConnectingCommunityApp,
         updatingMountId: updatingCommunityAppMountId,
         refreshingMountId: refreshingCommunityAppMountId,
-        reconnectingMountId: reconnectingCommunityAppMountId,
         removingMountId: removingCommunityAppMountId,
         onConnectApp: handleConnectCommunityApp,
         onUpdateMount: handleUpdateCommunityAppMount,
         onRefreshApp: handleRefreshCommunityApp,
-        onReconnectApp: handleReconnectCommunityApp,
         onUnmountApp: handleUnmountCommunityApp,
         onBrowseCatalog: handleOpenDiscoverApps,
       },

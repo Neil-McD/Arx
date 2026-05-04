@@ -30,7 +30,6 @@ import {
 import {
   connectCommunityApp as connectCommunityAppImpl,
   listCommunityAppMounts as listCommunityAppMountsImpl,
-  reconnectCommunityApp as reconnectCommunityAppImpl,
   refreshCommunityApp as refreshCommunityAppImpl,
   unmountCommunityApp as unmountCommunityAppImpl,
   updateCommunityAppMount as updateCommunityAppMountImpl,
@@ -181,7 +180,6 @@ export const getActiveCommunityAgentLanding = getActiveCommunityAgentLandingImpl
 export const listCommunityAppMounts = listCommunityAppMountsImpl;
 export const connectCommunityApp = connectCommunityAppImpl;
 export const refreshCommunityApp = refreshCommunityAppImpl;
-export const reconnectCommunityApp = reconnectCommunityAppImpl;
 export const updateCommunityAppMount = updateCommunityAppMountImpl;
 export const unmountCommunityApp = unmountCommunityAppImpl;
 export const listCommunitySkillAttachments = listCommunitySkillAttachmentsImpl;

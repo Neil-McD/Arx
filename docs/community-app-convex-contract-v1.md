@@ -59,15 +59,30 @@ Fields:
 
 ### `communityAppMounts`
 
-Community-scoped exposure of a validated app.
+Community-scoped grant/recommendation for an app. The table name is historical;
+it must not be treated as a community runtime MCP layer.
 
 Fields:
 - `communityId`
 - `developerAppId`
-- `toolSnapshotId`
+- `toolSnapshotId?`
 - `mountedByUserId`
 - `enabled`
 - `enabledTools?`
+- `createdAt`
+- `updatedAt`
+
+### `userPlatformAppMountSources`
+
+Durable provenance for why a user's canonical harness app exists.
+
+Fields:
+- `userId`
+- `userPlatformAppMountId`
+- `sourceType`: `personal` or `community`
+- `sourceKey`
+- `communityId?`
+- `communityAppMountId?`
 - `createdAt`
 - `updatedAt`
 
@@ -93,6 +108,9 @@ This is intentionally the only product-facing app path for the current alpha sli
 
 - remote HTTPS MCP only
 - validation discovers tools before mount
-- failed connect should leave no orphaned app state
+- failed personal connect may leave setup-needed user app state when that is the
+  clearest next action
 - community config blobs are not canonical app truth
-- runtime prompt context must not claim more app capability than the harness actually executes
+- community grants never store member secrets
+- community grants seed/reuse user harness app state by stable app identity
+- runtime prompt context must not claim more app capability than the user harness actually executes

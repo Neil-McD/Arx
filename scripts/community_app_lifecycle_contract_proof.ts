@@ -20,6 +20,11 @@ function main() {
   const userPlatformAppMounts = readText(
     join(root, "convex/userPlatformAppMounts.ts"),
   );
+  const billingCore = readText(join(root, "convex/billingCore.ts"));
+  const communityAdmin = readText(join(root, "convex/communityAdmin.ts"));
+  const communityPublic = readText(join(root, "convex/communityPublic.ts"));
+  const platformHomeCommunity = readText(join(root, "convex/platformHomeCommunity.ts"));
+  const schema = readText(join(root, "convex/schema.ts"));
   const httpDaytona = readText(join(root, "convex/httpDaytona.ts"));
   const runtimeExecutionSession = readText(
     join(root, "convex/runtimeExecutionSession.ts"),
@@ -28,13 +33,25 @@ function main() {
     join(root, "convex/runtimeMcpManager.ts"),
   );
   const appEditor = readText(join(root, "apps/web/src/components/WebCommunityAiAgentAppsEditor.tsx"));
+  const communityAppMountTypes = readText(
+    join(root, "shared/communityAppMountTypes.ts"),
+  );
+  const cloudCommunityAppMountGateway = readText(
+    join(root, "shared/cloudCommunityAppMountGateway.ts"),
+  );
+  const webDiscoverPanel = readText(
+    join(root, "apps/web/src/components/WebDiscoverPanel.tsx"),
+  );
+  const communityAppGrantsController = readText(
+    join(root, "apps/web/src/controllers/useWebCommunityAppGrantsController.ts"),
+  );
+  const appShell = readText(join(root, "apps/web/src/App.tsx"));
 
   for (const exportedName of [
     "export const connectCommunityApp = action({",
     "export const refreshCommunityApp = action({",
-    "export const reconnectCommunityApp = action({",
     "export const updateCommunityAppMount = mutation({",
-    "export const unmountCommunityApp = mutation({",
+    "export const unmountCommunityApp = action({",
   ]) {
     assertIncludes(communityAppMounts, exportedName, "community app lifecycle surface");
   }
@@ -82,11 +99,153 @@ function main() {
     "return await mountDeveloperAppForCommunity({",
     "community failed setup preserves mount intent",
   );
+  assertNotIncludes(
+    communityAppMounts,
+    "export const reconnectCommunityApp = action({",
+    "community app grants do not own credential reconnect lifecycle",
+  );
+  assertNotIncludes(
+    communityAppMounts,
+    "encryptSecret(",
+    "community app grants do not store shared secrets",
+  );
+  assertNotIncludes(
+    communityAppMountTypes,
+    "secret?: string;",
+    "community connect input has no secret field",
+  );
+  assertNotIncludes(
+    cloudCommunityAppMountGateway,
+    "community:reconnectCommunityApp",
+    "cloud gateway exposes no community reconnect action",
+  );
+  assertNotIncludes(
+    appEditor,
+    "Save secret",
+    "community app editor has no shared secret reconnect UI",
+  );
   assertIncludes(
     userPlatformAppMounts,
     "mountSetupNeededDeveloperAppForUser({",
     "personal failed setup preserves mount intent",
   );
+  assertIncludes(
+    schema,
+    "userPlatformAppMountSources: defineTable({",
+    "user harness app provenance is durable",
+  );
+  assertIncludes(
+    schema,
+    ".index(\"by_user_sourceKey\", [\"userId\", \"sourceKey\"])",
+    "user harness app source writes are idempotent",
+  );
+  assertIncludes(
+    schema,
+    ".index(\"by_community_mount\", [\"communityAppMountId\"])",
+    "community app removal can find granted personal harness sources",
+  );
+  assertIncludes(
+    communityAppMounts,
+    "seedCommunityAppGrantIntoUserHarnessInternal",
+    "community add seeds the builder personal harness",
+  );
+  assertIncludes(
+    communityAppMounts,
+    "listCommunityAppGrantSeedSourcesInternal",
+    "community grants can be listed for member bulk seeding",
+  );
+  assertIncludes(
+    communityAppMounts,
+    "listCommunityAppGrantRecipientUserIdsInternal",
+    "community grant existing-member recipients are derived from community membership",
+  );
+  assertIncludes(
+    communityAppMounts,
+    "seedCommunityAppGrantForExistingMembersInternal",
+    "community add schedules existing-member grant seeding",
+  );
+  assertIncludes(
+    userPlatformAppMounts,
+    "export const ensureUserHarnessAppInternal = internalAction({",
+    "canonical user harness app ensure path",
+  );
+  assertIncludes(
+    userPlatformAppMounts,
+    "findExistingUserPlatformMountByIdentityInternal",
+    "community grant seeding reuses existing personal app identity",
+  );
+  assertIncludes(
+    communityAppMounts,
+    "findExistingCommunityAppMountByIdentityInternal",
+    "community app add reuses an existing community grant identity",
+  );
+  assertIncludes(
+    communityAppMounts,
+    "normalizeDeveloperAppEndpointUrl(args.endpointUrl)",
+    "community app add uses normalized endpoint fallback identity",
+  );
+  assertIncludes(
+    userPlatformAppMounts,
+    "throw new Error(\"community_app_mount_source_required\")",
+    "community source provenance fails closed when missing source ids",
+  );
+  assertIncludes(
+    userPlatformAppMounts,
+    "upsertUserPlatformAppMountSourceInternal",
+    "canonical ensure path records provenance",
+  );
+  assertIncludes(
+    userPlatformAppMounts,
+    "source: args.source ?? { sourceType: \"personal\" }",
+    "personal connects record personal source provenance",
+  );
+  assertIncludes(
+    userPlatformAppMounts,
+    "sourceType: \"community\"",
+    "community grants record community source provenance",
+  );
+  assertIncludes(
+    userPlatformAppMounts,
+    "export const seedCommunityAppGrantsForUserInternal = internalAction({",
+    "community join bulk-add has canonical scheduled seeding action",
+  );
+  assertIncludes(
+    userPlatformAppMounts,
+    "export const seedCommunityAppGrantForExistingMembersInternal = internalAction({",
+    "community add fan-out has canonical scheduled seeding action",
+  );
+  assertIncludes(
+    userPlatformAppMounts,
+    "export const removeCommunityAppGrantSourceInternal = internalMutation({",
+    "community removal has a canonical personal harness source cleanup path",
+  );
+  assertIncludes(
+    userPlatformAppMounts,
+    "shouldRetainUserHarnessMountAfterSourceRemoval",
+    "community removal retains configured or live personal harness apps",
+  );
+  assertIncludes(
+    communityAppMounts,
+    "removeCommunityAppGrantSourceInternal",
+    "community app removal removes community provenance before deleting grant",
+  );
+  for (const [source, label] of [
+    [communityPublic, "public/free community join"],
+    [communityAdmin, "join request approval"],
+    [billingCore, "paid checkout membership ensure"],
+    [platformHomeCommunity, "platform home autojoin"],
+  ] as const) {
+    assertIncludes(
+      source,
+      "seedCommunityAppGrantsForUserInternal",
+      `${label} schedules community app grant seeding`,
+    );
+    assertIncludes(
+      source,
+      "ctx.scheduler.runAfter",
+      `${label} seeds grants asynchronously`,
+    );
+  }
   assertIncludes(
     communityAppMounts,
     "if (!app) continue;",
@@ -106,6 +265,11 @@ function main() {
     communityAppMounts,
     "assertCommunityManagerAccessInternal",
     "manager-only community grant mutation guard",
+  );
+  assertNotIncludes(
+    communityAppMounts,
+    "listRuntimeCommunityMountedToolsInternal",
+    "community app grants must not expose runtime MCP tools",
   );
 
   assertNotIncludes(
@@ -148,9 +312,38 @@ function main() {
     "callTool:",
     "runtime MCP manager calls remote mounted tools",
   );
+  assertIncludes(
+    webDiscoverPanel,
+    "communityConnectRequirements = personalConnectRequirements.filter",
+    "community add hides personal secret requirements",
+  );
+  assertIncludes(
+    webDiscoverPanel,
+    "secret: undefined",
+    "community add does not submit personal secrets",
+  );
+  assertIncludes(
+    appShell,
+    "loadUserPlatformAppMounts(session)",
+    "community add reloads personal harness mounts after seeding",
+  );
+  assertIncludes(
+    communityAppGrantsController,
+    "communityAppMountsLoadRequestIdRef",
+    "community app mount loads are request-token guarded",
+  );
+  assertIncludes(
+    communityAppGrantsController,
+    "latest.activeCommunityId === communityId",
+    "community app mount controller checks the active community before state commits",
+  );
+  assertIncludes(
+    communityAppGrantsController,
+    "latest.session?.user.id === usableSession.user.id",
+    "community app mount controller checks the active session before state commits",
+  );
 
   assertIncludes(appEditor, "Refresh", "apps editor refresh control");
-  assertIncludes(appEditor, "Reconnect", "apps editor reconnect control");
 
   console.log("community_app_lifecycle_contract_proof: ok");
 }

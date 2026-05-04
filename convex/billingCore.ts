@@ -1,5 +1,6 @@
 import { resolveUserIdForAuthenticatedRequest } from "./authActor";
 export { resolveUserIdForAuthenticatedRequest } from "./authActor";
+import { internal } from "./_generated/api";
 import {
   communitySubscriptionStatusGrantsAccess,
   normalizeCommunitySubscriptionStatus,
@@ -17,6 +18,33 @@ export type CommunityLike = {
   oneLiner?: string;
   entryPolicy?: "open" | "approval" | "paid_subscription";
 };
+
+async function scheduleCommunityAppGrantSeedingBestEffort(args: {
+  ctx: any;
+  communityId: any;
+  userId: any;
+  nowMs: number;
+  reason: string;
+}): Promise<void> {
+  try {
+    await args.ctx.scheduler.runAfter(
+      0,
+      internal.userPlatformAppMounts.seedCommunityAppGrantsForUserInternal,
+      {
+        communityId: args.communityId,
+        userId: args.userId,
+        nowMs: args.nowMs,
+      },
+    );
+  } catch (error) {
+    console.warn("community_app_grant_seed_schedule_failed", {
+      community_id: String(args.communityId),
+      user_id: String(args.userId),
+      reason: args.reason,
+      error: error instanceof Error ? error.message : String(error ?? ""),
+    });
+  }
+}
 
 export type CommunityPricePointLike = {
   _id: any;
@@ -156,6 +184,13 @@ export async function ensureCommunityMembership(args: {
     await args.ctx.db.patch(existing._id, patch);
     const refreshed = (await args.ctx.db.get(existing._id)) as CommunityMembershipLike | null;
     if (!refreshed) throw new Error("community_membership_not_found");
+    await scheduleCommunityAppGrantSeedingBestEffort({
+      ctx: args.ctx,
+      communityId: args.communityId,
+      userId: args.userId,
+      nowMs: args.nowMs,
+      reason: "community_membership_ensured_existing",
+    });
     return {
       membership: refreshed,
       accessGranted: !Boolean(existing.active),
@@ -173,6 +208,13 @@ export async function ensureCommunityMembership(args: {
   });
   const created = (await args.ctx.db.get(membershipId)) as CommunityMembershipLike | null;
   if (!created) throw new Error("community_membership_create_failed");
+  await scheduleCommunityAppGrantSeedingBestEffort({
+    ctx: args.ctx,
+    communityId: args.communityId,
+    userId: args.userId,
+    nowMs: args.nowMs,
+    reason: "community_membership_ensured_created",
+  });
   return {
     membership: created,
     accessGranted: true,

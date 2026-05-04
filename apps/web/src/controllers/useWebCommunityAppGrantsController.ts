@@ -4,7 +4,6 @@ import type { ConnectCommunityAppInput, CommunityMountedApp } from "../../../../
 import {
   recommendCloudCommunityApp,
   listCloudCommunityAppGrants,
-  reconnectCloudCommunityAppGrant,
   refreshCloudCommunityAppGrant,
   removeCloudCommunityAppGrant,
   updateCloudCommunityAppGrant,
@@ -42,10 +41,20 @@ export function useWebCommunityAppGrantsController<SessionT extends SessionLike>
   const [communityAppMutationError, setCommunityAppMutationError] = useState<string | null>(null);
   const [updatingCommunityAppMountId, setUpdatingCommunityAppMountId] = useState<string | null>(null);
   const [refreshingCommunityAppMountId, setRefreshingCommunityAppMountId] = useState<string | null>(null);
-  const [reconnectingCommunityAppMountId, setReconnectingCommunityAppMountId] = useState<string | null>(null);
   const [removingCommunityAppMountId, setRemovingCommunityAppMountId] = useState<string | null>(null);
   const communityAppMountsLoadedCommunityIdRef = useRef<string | null>(null);
   const communityAppMountsLoadRequestIdRef = useRef(0);
+
+  const isCurrentCommunitySession = useCallback(
+    (usableSession: SessionT, communityId: string) => {
+      const latest = argsRef.current;
+      return (
+        latest.session?.user.id === usableSession.user.id &&
+        latest.activeCommunityId === communityId
+      );
+    },
+    [],
+  );
 
   const clearCommunityAppMounts = useCallback(() => {
     communityAppMountsLoadRequestIdRef.current += 1;
@@ -53,6 +62,9 @@ export function useWebCommunityAppGrantsController<SessionT extends SessionLike>
     setIsLoadingCommunityAppMounts(false);
     setCommunityAppMountError(null);
     setCommunityAppMutationError(null);
+    setUpdatingCommunityAppMountId(null);
+    setRefreshingCommunityAppMountId(null);
+    setRemovingCommunityAppMountId(null);
     communityAppMountsLoadedCommunityIdRef.current = null;
   }, []);
 
@@ -110,6 +122,7 @@ export function useWebCommunityAppGrantsController<SessionT extends SessionLike>
         input,
       });
       if (!mounted) return false;
+      if (!isCurrentCommunitySession(usableSession, communityId)) return true;
       setCommunityAppMounts((prev) => {
         const next = prev.filter((entry) => entry.id !== mounted.id);
         next.unshift(mounted);
@@ -117,12 +130,14 @@ export function useWebCommunityAppGrantsController<SessionT extends SessionLike>
       });
       return true;
     } catch (error) {
-      setCommunityAppMutationError(toErrorMessage(error, "Failed to connect app."));
+      if (isCurrentCommunitySession(usableSession, communityId)) {
+        setCommunityAppMutationError(toErrorMessage(error, "Failed to connect app."));
+      }
       return false;
     } finally {
       setIsConnectingCommunityApp(false);
     }
-  }, []);
+  }, [isCurrentCommunitySession]);
 
   const updateCommunityAppMount = useCallback(
     async (communityAppMountId: string, patch: {
@@ -144,18 +159,21 @@ export function useWebCommunityAppGrantsController<SessionT extends SessionLike>
           enabledTools: patch.enabledTools,
         });
         if (!mounted) return false;
+        if (!isCurrentCommunitySession(usableSession, communityId)) return true;
         setCommunityAppMounts((prev) =>
           prev.map((entry) => (entry.id === mounted.id ? mounted : entry)),
         );
         return true;
       } catch (error) {
-        setCommunityAppMutationError(toErrorMessage(error, "Failed to update app mount."));
+        if (isCurrentCommunitySession(usableSession, communityId)) {
+          setCommunityAppMutationError(toErrorMessage(error, "Failed to update app mount."));
+        }
         return false;
       } finally {
         setUpdatingCommunityAppMountId(null);
       }
     },
-    [],
+    [isCurrentCommunitySession],
   );
 
   const refreshCommunityApp = useCallback(async (communityAppMountId: string): Promise<boolean> => {
@@ -172,47 +190,20 @@ export function useWebCommunityAppGrantsController<SessionT extends SessionLike>
         communityAppMountId,
       });
       if (!mounted) return false;
+      if (!isCurrentCommunitySession(usableSession, communityId)) return true;
       setCommunityAppMounts((prev) =>
         prev.map((entry) => (entry.id === mounted.id ? mounted : entry)),
       );
       return true;
     } catch (error) {
-      setCommunityAppMutationError(toErrorMessage(error, "Failed to refresh app."));
+      if (isCurrentCommunitySession(usableSession, communityId)) {
+        setCommunityAppMutationError(toErrorMessage(error, "Failed to refresh app."));
+      }
       return false;
     } finally {
       setRefreshingCommunityAppMountId(null);
     }
-  }, []);
-
-  const reconnectCommunityApp = useCallback(
-    async (communityAppMountId: string, secret: string): Promise<boolean> => {
-      const current = argsRef.current;
-      const usableSession = await resolveUsableSession(current.session, current.ensureSession);
-      const communityId = current.activeCommunityId;
-      if (!usableSession || !communityId) return false;
-      setReconnectingCommunityAppMountId(communityAppMountId);
-      setCommunityAppMutationError(null);
-      try {
-        const mounted = await reconnectCloudCommunityAppGrant({
-          session: usableSession,
-          communityId,
-          communityAppMountId,
-          secret,
-        });
-        if (!mounted) return false;
-        setCommunityAppMounts((prev) =>
-          prev.map((entry) => (entry.id === mounted.id ? mounted : entry)),
-        );
-        return true;
-      } catch (error) {
-        setCommunityAppMutationError(toErrorMessage(error, "Failed to reconnect app."));
-        return false;
-      } finally {
-        setReconnectingCommunityAppMountId(null);
-      }
-    },
-    [],
-  );
+  }, [isCurrentCommunitySession]);
 
   const unmountCommunityApp = useCallback(async (communityAppMountId: string): Promise<boolean> => {
     const current = argsRef.current;
@@ -228,15 +219,18 @@ export function useWebCommunityAppGrantsController<SessionT extends SessionLike>
         communityAppMountId,
       });
       if (!removed) return false;
+      if (!isCurrentCommunitySession(usableSession, communityId)) return true;
       setCommunityAppMounts((prev) => prev.filter((entry) => entry.id !== communityAppMountId));
       return true;
     } catch (error) {
-      setCommunityAppMutationError(toErrorMessage(error, "Failed to remove app."));
+      if (isCurrentCommunitySession(usableSession, communityId)) {
+        setCommunityAppMutationError(toErrorMessage(error, "Failed to remove app."));
+      }
       return false;
     } finally {
       setRemovingCommunityAppMountId(null);
     }
-  }, []);
+  }, [isCurrentCommunitySession]);
 
   return {
     communityAppMounts,
@@ -247,7 +241,6 @@ export function useWebCommunityAppGrantsController<SessionT extends SessionLike>
     communityAppMutationError,
     updatingCommunityAppMountId,
     refreshingCommunityAppMountId,
-    reconnectingCommunityAppMountId,
     removingCommunityAppMountId,
     communityAppMountsLoadedCommunityIdRef,
     clearCommunityAppMounts,
@@ -255,7 +248,6 @@ export function useWebCommunityAppGrantsController<SessionT extends SessionLike>
     connectCommunityApp,
     updateCommunityAppMount,
     refreshCommunityApp,
-    reconnectCommunityApp,
     unmountCommunityApp,
   };
 }
