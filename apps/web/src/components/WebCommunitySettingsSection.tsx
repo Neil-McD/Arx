@@ -260,8 +260,10 @@ function CommunityPersonalSettingsSection({
 }
 
 function CommunityIntegrationsSettingsSection({
+  canManage,
   integrations,
 }: {
+  canManage: boolean;
   integrations: WebCommunitySettingsSectionProps["communityIntegrations"];
 }) {
   return (
@@ -271,15 +273,17 @@ function CommunityIntegrationsSettingsSection({
         Apps attached here become part of this community lens. Members use their
         own personal credentials when an app requires authentication.
       </div>
-      <div className="agent-capability-toolbar">
-        <button
-          type="button"
-          className="settings-cta"
-          onClick={integrations.onBrowseCatalog}
-        >
-          Browse apps
-        </button>
-      </div>
+      {canManage ? (
+        <div className="agent-capability-toolbar">
+          <button
+            type="button"
+            className="settings-cta"
+            onClick={integrations.onBrowseCatalog}
+          >
+            Browse apps
+          </button>
+        </div>
+      ) : null}
       {integrations.error ? (
         <div className="auth-error">Couldn&apos;t load community integrations.</div>
       ) : null}
@@ -344,6 +348,7 @@ function CommunityIntegrationsSettingsSection({
                       </div>
                     </div>
                   </div>
+                  {canManage ? (
                   <div className="integration-mounted-rail">
                     <label
                       className={`members-switch integration-mounted-switch${
@@ -386,6 +391,7 @@ function CommunityIntegrationsSettingsSection({
                       </button>
                     </div>
                   </div>
+                  ) : null}
                 </div>
                 {mount.tools.length > 0 ? (
                   <div className="community-app-tool-list" role="list">
@@ -404,7 +410,7 @@ function CommunityIntegrationsSettingsSection({
                           <input
                             type="checkbox"
                             checked={tool.enabled}
-                            disabled={isBusy}
+                            disabled={!canManage || isBusy}
                             onChange={() =>
                               void integrations.onUpdateMount(mount.id, {
                                 enabledTools: nextEnabledTools,
@@ -925,6 +931,7 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
               actions={actions}
             />
             <CommunityIntegrationsSettingsSection
+              canManage={canManageCommunitySettings}
               integrations={communityIntegrations}
             />
             <CommunityPersonalSettingsSection
@@ -961,6 +968,10 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
       ) : isMemberSettingsLayer ? (
         <>
           <div className="create-community-form community-settings-form">
+            <CommunityIntegrationsSettingsSection
+              canManage={false}
+              integrations={communityIntegrations}
+            />
             <CommunityPersonalSettingsSection
               state={state}
               actions={actions}

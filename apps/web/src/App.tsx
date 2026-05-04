@@ -3964,7 +3964,7 @@ export default function App() {
     if (!shouldLoadCommunityApps) return;
     const canManageCommunityApps =
       activePage === "community" && communityTab === "settings"
-        ? canManageCommunitySettings
+        ? canViewActiveCommunitySettings
         : canManageMembersActiveCommunity;
     if (!session || !activeCommunityId || !canManageCommunityApps) {
       clearCommunityAppMounts();
