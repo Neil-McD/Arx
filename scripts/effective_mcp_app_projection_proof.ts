@@ -107,6 +107,39 @@ function proveCommunityAttachmentRequiresMemberSetupWithoutPersonalMount() {
   console.log("PASS: community attachment prompts member setup when personal mount is missing");
 }
 
+function proveEmptyCommunityToolSelectionDoesNotZeroLivePersonalTools() {
+  const personalLinear = mount({
+    id: "user:u-linear",
+    source_mount_id: "u-linear",
+    scope: "user",
+    live_status: "live",
+    enabled_tools: ["search_issues", "create_issue", "list_projects"],
+  });
+  const communityLinear = mount({
+    id: "community:c-linear",
+    source_mount_id: "c-linear",
+    scope: "community",
+    live_status: "not_live",
+    not_live_reason: "needs_auth",
+    enabled_tools: [],
+  });
+
+  const rows = buildEffectiveMcpApps([personalLinear, communityLinear]);
+
+  assert.equal(rows.length, 1);
+  const [linear] = rows;
+  assert.equal(linear.live_for_current_user, true);
+  assert.equal(linear.credential_state, "live");
+  assert.deepEqual(linear.effective_enabled_tools, [
+    "search_issues",
+    "create_issue",
+    "list_projects",
+  ]);
+  assert.equal(linear.effective_tool_count, 3);
+
+  console.log("PASS: empty community tool selection does not zero live personal tools");
+}
+
 function provePersonalOnlyMountRemainsLive() {
   const personalLinear = mount({
     id: "user:u-linear",
@@ -133,6 +166,7 @@ function provePersonalOnlyMountRemainsLive() {
 
 provePersonalConnectionSatisfiesCommunityAttachment();
 proveCommunityAttachmentRequiresMemberSetupWithoutPersonalMount();
+proveEmptyCommunityToolSelectionDoesNotZeroLivePersonalTools();
 provePersonalOnlyMountRemainsLive();
 
 console.log("effective_mcp_app_projection_proof: ok");

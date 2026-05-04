@@ -34,15 +34,20 @@ function chooseDisplayMount(
   return communityMount ?? personalMount!;
 }
 
-function intersectEnabledToolNames(
-  first: HarnessMount | null,
-  second: HarnessMount | null,
-): string[] {
-  if (!first && !second) return [];
-  if (!first) return second?.enabled_tools ?? [];
-  if (!second) return first.enabled_tools;
-  const secondEnabled = new Set(second.enabled_tools);
-  return first.enabled_tools.filter((toolName) => secondEnabled.has(toolName));
+function deriveEffectiveEnabledToolNames(args: {
+  personalMount: HarnessMount | null;
+  communityMount: HarnessMount | null;
+}): string[] {
+  const { personalMount, communityMount } = args;
+  if (!personalMount) return communityMount?.enabled_tools ?? [];
+  if (!communityMount) return personalMount.enabled_tools;
+  if (personalMount.live_status === "live" && communityMount.enabled_tools.length === 0) {
+    return personalMount.enabled_tools;
+  }
+  const communityEnabled = new Set(communityMount.enabled_tools);
+  return personalMount.enabled_tools.filter((toolName) =>
+    communityEnabled.has(toolName),
+  );
 }
 
 function deriveCredentialState(args: {
@@ -124,9 +129,7 @@ export function buildEffectiveMcpApps(mounts: HarnessMount[]) {
         group.communityMount,
       );
       const credentialState = deriveCredentialState(group);
-      const effectiveEnabledTools = group.communityMount
-        ? intersectEnabledToolNames(group.personalMount, group.communityMount)
-        : group.personalMount?.enabled_tools ?? [];
+      const effectiveEnabledTools = deriveEffectiveEnabledToolNames(group);
       return {
         app_identity_key: identityKey,
         app: displayMount.app,
