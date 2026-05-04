@@ -8,6 +8,7 @@ import Stripe from "stripe";
 import type { PublicHttpAction } from "convex/server";
 import { logStructuredError } from "./errorLogging";
 import { buildStripeConnectAccountSnapshot } from "./stripeConnectAccountCore";
+import { normalizeStripeCommunitySubscriptionStatus } from "./billingCore";
 
 type HttpRouteMethod = "GET" | "POST" | "DELETE" | "OPTIONS" | "PUT" | "PATCH";
 
@@ -197,27 +198,6 @@ function normalizeStripeSubscriptionStatus(raw: unknown): string {
   return String(raw ?? "")
     .trim()
     .toLowerCase();
-}
-
-function normalizeStripeCommunitySubscriptionStatus(args: {
-  subscriptionStatus: unknown;
-  cancelAtPeriodEnd?: unknown;
-}): "active" | "past_due" | "cancel_at_period_end" | "canceled" | "ended" {
-  const subscriptionStatus = normalizeStripeSubscriptionStatus(args.subscriptionStatus);
-  const cancelAtPeriodEnd = Boolean(args.cancelAtPeriodEnd);
-  if (subscriptionStatus === "active" || subscriptionStatus === "trialing") {
-    return cancelAtPeriodEnd ? "cancel_at_period_end" : "active";
-  }
-  if (subscriptionStatus === "past_due") return "past_due";
-  if (subscriptionStatus === "canceled") return "canceled";
-  if (
-    subscriptionStatus === "unpaid" ||
-    subscriptionStatus === "incomplete" ||
-    subscriptionStatus === "incomplete_expired"
-  ) {
-    return "ended";
-  }
-  return "active";
 }
 
 function stripeSubscriptionGrantsBuilder(status: string): boolean {

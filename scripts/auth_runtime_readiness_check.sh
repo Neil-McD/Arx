@@ -90,6 +90,23 @@ warn_if_missing() {
   echo "OK: ${key} is set"
 }
 
+require_any_key() {
+  local description="$1"
+  local hint="$2"
+  shift 2
+  local key value
+  for key in "$@"; do
+    value="$(lookup_key "$key")"
+    if [[ -n "$value" ]]; then
+      echo "OK: ${description} is set via ${key}"
+      return
+    fi
+  done
+  echo "FAIL: missing ${description}"
+  echo "  hint: ${hint}"
+  missing_count=$((missing_count + 1))
+}
+
 validate_url() {
   local key="$1"
   local value
@@ -129,7 +146,8 @@ require_key "ARX_AUTH_JWT_ISSUER" "JWT issuer URL for verified Convex identity."
 require_key "ARX_AUTH_JWT_JWKS_URL" "JWKS URL for the verified JWT issuer."
 validate_url "ARX_AUTH_JWT_ISSUER"
 validate_url "ARX_AUTH_JWT_JWKS_URL"
-warn_if_missing "ARX_AUTH_JWT_AUDIENCE" "Set audience when your provider includes aud checks (often the OAuth client id for ID tokens)."
+require_any_key "JWT audience binding" "Set ARX_AUTH_JWT_AUDIENCE explicitly, or ensure ARX_AUTH_CLIENT_ID is set when the JWT audience is the OAuth client id." \
+  "ARX_AUTH_JWT_AUDIENCE" "ARX_AUTH_CLIENT_ID"
 
 echo "[5/5] Validating fail-closed auth posture..."
 allow_unverified="$(lookup_key "ARX_ALLOW_UNVERIFIED_AUTH_SUBJECT")"

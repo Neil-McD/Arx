@@ -144,7 +144,7 @@ function buildResolveMountedToolsOpenAiTool(): OpenAiCompatibleFunctionTool {
     function: {
       name: RESOLVE_MOUNTED_TOOLS_TOOL_NAME,
       description:
-        "Resolve connected personal or community app tools by search query. Use this before calling a mounted app tool that is not yet exposed.",
+        "Resolve connected personal app tools by search query. Use this before calling a mounted app tool that is not yet exposed.",
       parameters: RESOLVE_MOUNTED_TOOLS_INPUT_SCHEMA,
       strict: true,
     },
@@ -159,7 +159,7 @@ function buildResolveMountedToolsResponsesTool(): ResponsesApiFunctionTool {
     type: "function",
     name: RESOLVE_MOUNTED_TOOLS_TOOL_NAME,
     description:
-      "Resolve connected personal or community app tools by search query. Use this before calling a mounted app tool that is not yet exposed.",
+      "Resolve connected personal app tools by search query. Use this before calling a mounted app tool that is not yet exposed.",
     parameters: projection.parameters,
     strict: projection.strict,
   };

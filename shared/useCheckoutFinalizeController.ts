@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import type { AuthSession } from "./authCore";
+import { resolveAuthSubject } from "./authSession";
 import { createConvexClient } from "./convexAuthenticatedClient";
 
 export type CheckoutFinalizeStatus = "idle" | "loading" | "pending" | "succeeded" | "error";
@@ -81,15 +82,7 @@ export function useCheckoutFinalizeController(args: UseCheckoutFinalizeControlle
       currentArgs.setCheckoutClaimToken(null);
       currentArgs.setRedeemClaimError(null);
       try {
-        const payload = (await client.query("billing:finalizeCheckoutSession" as any, {
-          sessionId,
-        })) as {
-          ok?: boolean;
-          status?: string;
-          claim?: { token?: string };
-        };
-        if (cancelled) return;
-        if (payload?.status === "pending") {
+        const schedulePendingRetry = () => {
           currentArgs.setCheckoutStatus("pending");
           pollCountRef.current += 1;
           const attempt = pollCountRef.current;
@@ -103,7 +96,30 @@ export function useCheckoutFinalizeController(args: UseCheckoutFinalizeControlle
               void runAttempt();
             }, delayMs);
           }
+        };
+        const authSubject = resolveAuthSubject(currentArgs.getSession());
+        if (!authSubject) {
+          schedulePendingRetry();
           return;
+        }
+        const payload = (await client.query("billing:finalizeCheckoutSession" as any, {
+          authSubject,
+          sessionId,
+        })) as {
+          ok?: boolean;
+          status?: string;
+          message?: string;
+          claim?: { token?: string };
+        };
+        if (cancelled) return;
+        if (payload?.status === "pending") {
+          schedulePendingRetry();
+          return;
+        }
+        if (payload?.ok === false) {
+          throw new Error(typeof payload.message === "string" && payload.message.trim()
+            ? payload.message.trim()
+            : "Failed to finalize checkout.");
         }
 
         const token = typeof payload?.claim?.token === "string" ? payload.claim.token.trim() : "";

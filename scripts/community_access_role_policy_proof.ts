@@ -15,6 +15,7 @@ type AccessScenario = {
   entryPolicy?: EntryPolicy;
   subscriptionStatus?: SubscriptionStatus;
   joinRequestStatus?: string | null;
+  isBlocked?: boolean;
 };
 
 type AccessProjection = {
@@ -36,6 +37,10 @@ function assertIncludes(haystack: string, needle: string, label: string) {
   assert.ok(haystack.includes(needle), `expected ${label} to include ${needle}`);
 }
 
+function assertNotIncludes(haystack: string, needle: string, label: string) {
+  assert.ok(!haystack.includes(needle), `expected ${label} not to include ${needle}`);
+}
+
 function subscriptionGrantsAccess(status: SubscriptionStatus): boolean {
   return status === "active" || status === "past_due" || status === "cancel_at_period_end";
 }
@@ -54,7 +59,9 @@ function resolveScenarioAccess(scenario: AccessScenario): AccessProjection {
 
   const isEntitled = isOwner
     ? true
-    : !membershipActive
+    : scenario.isBlocked
+      ? false
+      : !membershipActive
       ? false
       : entryPolicy !== "paid_subscription" || accessSourceIsDurable(accessSource)
         ? true
@@ -101,6 +108,8 @@ function assertSourceAnchors() {
   const communityCore = readText(new URL("../convex/communityCore.ts", import.meta.url));
   const communityAdmin = readText(new URL("../convex/communityAdmin.ts", import.meta.url));
   const communityResources = readText(new URL("../convex/communityResources.ts", import.meta.url));
+  const resourceViewer = readText(new URL("../apps/web/src/components/WebCommunityResourceViewerModal.tsx", import.meta.url));
+  const linkEmbedUi = readText(new URL("../shared/linkEmbedUi.tsx", import.meta.url));
 
   assertIncludes(
     communityCore,
@@ -147,6 +156,46 @@ function assertSourceAnchors() {
     "throw new Error(\"community_owner_remove_forbidden\");",
     "owner cannot be removed",
   );
+  assertIncludes(
+    communityAdmin,
+    "resolveCommunityEntryPolicy(community) === \"paid_subscription\"",
+    "join approval rejects paid communities",
+  );
+  assertIncludes(
+    communityAdmin,
+    "throw new Error(\"community_paid_checkout_required\");",
+    "join approval uses paid checkout required domain error",
+  );
+  const blockGuardCalls = communityCore.match(/await requireCommunityUserNotBlocked\(\{/g) ?? [];
+  assert.ok(
+    blockGuardCalls.length >= 3,
+    "expected chat, manager, and moderator gates to enforce active community blocks",
+  );
+  assertIncludes(
+    communityCore,
+    "url.protocol !== \"http:\" && url.protocol !== \"https:\"",
+    "server URL normalization rejects unsafe schemes",
+  );
+  assertIncludes(
+    communityCore,
+    "throw new Error(\"community_url_invalid\");",
+    "server URL normalization rejects invalid URLs",
+  );
+  assertIncludes(
+    linkEmbedUi,
+    "export function normalizeExternalUrl",
+    "shared web URL normalizer is exported",
+  );
+  assertIncludes(
+    linkEmbedUi,
+    "url.protocol !== \"http:\" && url.protocol !== \"https:\"",
+    "client URL normalization rejects unsafe schemes",
+  );
+  assertNotIncludes(
+    resourceViewer,
+    "?? resource.url",
+    "resource viewer must not fall back to raw unsafe URLs",
+  );
 }
 
 function main() {
@@ -171,6 +220,22 @@ function main() {
       isEntitled: true,
       canEnterCommunity: true,
       canManageMembers: false,
+    },
+  );
+
+  assertScenario(
+    {
+      name: "blocked active member cannot enter",
+      role: "member",
+      accessSource: "free_grant",
+      isBlocked: true,
+    },
+    {
+      relation: "visitor",
+      isEntitled: false,
+      canEnterCommunity: false,
+      canReadChat: false,
+      canPostChat: false,
     },
   );
 
@@ -232,6 +297,22 @@ function main() {
       role: "admin",
       membershipActive: false,
       accessSource: "manual_grant",
+    },
+    {
+      relation: "visitor",
+      isEntitled: false,
+      canManageMembers: false,
+      canManageResources: false,
+      canReviewJoinRequests: false,
+    },
+  );
+
+  assertScenario(
+    {
+      name: "blocked admin loses admin powers",
+      role: "admin",
+      accessSource: "manual_grant",
+      isBlocked: true,
     },
     {
       relation: "visitor",

@@ -15,6 +15,7 @@ import {
   normalizeClaimToken,
   normalizeSessionId,
   normalizeSlug,
+  normalizeStripeCommunitySubscriptionStatus,
   redeemClaimRow,
   resolveCheckoutPricePoint,
   resolveUserIdForAuthenticatedRequest,
@@ -56,29 +57,6 @@ type CommunityCheckoutSessionRow = {
   createdAt: number;
   updatedAt: number;
 };
-
-function normalizeStripeCommunitySubscriptionStatus(args: {
-  subscriptionStatus: unknown;
-  cancelAtPeriodEnd?: unknown;
-}): "active" | "past_due" | "cancel_at_period_end" | "canceled" | "ended" {
-  const subscriptionStatus = String(args.subscriptionStatus ?? "")
-    .trim()
-    .toLowerCase();
-  const cancelAtPeriodEnd = Boolean(args.cancelAtPeriodEnd);
-  if (subscriptionStatus === "active" || subscriptionStatus === "trialing") {
-    return cancelAtPeriodEnd ? "cancel_at_period_end" : "active";
-  }
-  if (subscriptionStatus === "past_due") return "past_due";
-  if (subscriptionStatus === "canceled") return "canceled";
-  if (
-    subscriptionStatus === "unpaid" ||
-    subscriptionStatus === "incomplete" ||
-    subscriptionStatus === "incomplete_expired"
-  ) {
-    return "ended";
-  }
-  return "active";
-}
 
 export const syncCommunitySubscriptionLifecycleInternal = internalMutation({
   args: {
@@ -866,9 +844,16 @@ export const requirePublicCommunityCheckoutNotBlockedInternal = internalQuery({
 
 export const finalizeCheckoutSession = query({
   args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
     sessionId: v.string(),
   },
   handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      userId: args.userId,
+      authSubject: args.authSubject ?? null,
+    });
     const nowMs = Date.now();
     const sessionId = normalizeSessionId(args.sessionId);
     const session = await ctx.db
@@ -879,6 +864,13 @@ export const finalizeCheckoutSession = query({
       return {
         ok: true,
         status: "pending",
+      };
+    }
+    if (!session.ownerUserId || String(session.ownerUserId) !== String(userId)) {
+      return {
+        ok: false,
+        status: "forbidden",
+        message: "checkout_session_forbidden",
       };
     }
     if (session.expiresAt <= nowMs || session.status === "expired") {
@@ -933,6 +925,9 @@ export const redeemPurchaseClaim = mutation({
       .withIndex("by_claimToken", (q: any) => q.eq("claimToken", token))
       .first()) as PurchaseClaimLike | null;
     if (!claim) throw new Error("claim_not_found");
+    if (claim.ownerUserId && String(claim.ownerUserId) !== String(userId)) {
+      throw new Error("claim_owner_mismatch");
+    }
     if (claim.expiresAt <= nowMs || claim.status === "expired") {
       await ctx.db.patch(claim._id, {
         status: "expired",

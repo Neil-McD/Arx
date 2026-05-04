@@ -81,6 +81,8 @@ function normalizeStripeCommunitySubscriptionStatus(args: {
   cancelAtPeriodEnd?: boolean;
 }): SubscriptionStatus {
   const subscriptionStatus = args.subscriptionStatus.trim().toLowerCase();
+  if (subscriptionStatus === "cancel_at_period_end") return "cancel_at_period_end";
+  if (subscriptionStatus === "ended") return "ended";
   if (subscriptionStatus === "active" || subscriptionStatus === "trialing") {
     return args.cancelAtPeriodEnd === true ? "cancel_at_period_end" : "active";
   }
@@ -89,11 +91,12 @@ function normalizeStripeCommunitySubscriptionStatus(args: {
   if (
     subscriptionStatus === "unpaid" ||
     subscriptionStatus === "incomplete" ||
-    subscriptionStatus === "incomplete_expired"
+    subscriptionStatus === "incomplete_expired" ||
+    subscriptionStatus === "paused"
   ) {
     return "ended";
   }
-  return "active";
+  return "ended";
 }
 
 function selectLifecycleTarget(
@@ -423,6 +426,21 @@ function assertSourceAnchors() {
     "claim redemption requires completed checkout session",
   );
   assertIncludes(
+    billingCore,
+    "export function normalizeStripeCommunitySubscriptionStatus",
+    "shared Stripe community subscription status normalizer",
+  );
+  assertIncludes(
+    billingCore,
+    "subscriptionStatus === \"paused\"",
+    "Stripe paused subscriptions fail closed",
+  );
+  assertIncludes(
+    billingCore,
+    "return \"ended\";",
+    "unknown Stripe community subscription statuses fail closed",
+  );
+  assertIncludes(
     communityCore,
     "return status === \"active\" || status === \"past_due\" || status === \"cancel_at_period_end\";",
     "community subscription status grant policy",
@@ -482,6 +500,16 @@ function assertSourceAnchors() {
     "await requireCommunityUserNotBlocked({",
     "claim redemption checks block state",
   );
+  assertIncludes(
+    communityCommerce,
+    "String(session.ownerUserId) !== String(userId)",
+    "finalize checkout binds claim disclosure to checkout owner",
+  );
+  assertIncludes(
+    communityCommerce,
+    "String(claim.ownerUserId) !== String(userId)",
+    "claim redemption binds paid claims to checkout owner",
+  );
 }
 
 function main() {
@@ -492,7 +520,14 @@ function main() {
     normalizeStripeCommunitySubscriptionStatus({ subscriptionStatus: "active", cancelAtPeriodEnd: true }),
     "cancel_at_period_end",
   );
+  assert.equal(
+    normalizeStripeCommunitySubscriptionStatus({ subscriptionStatus: "cancel_at_period_end", cancelAtPeriodEnd: true }),
+    "cancel_at_period_end",
+  );
+  assert.equal(normalizeStripeCommunitySubscriptionStatus({ subscriptionStatus: "ended" }), "ended");
   assert.equal(normalizeStripeCommunitySubscriptionStatus({ subscriptionStatus: "unpaid" }), "ended");
+  assert.equal(normalizeStripeCommunitySubscriptionStatus({ subscriptionStatus: "paused" }), "ended");
+  assert.equal(normalizeStripeCommunitySubscriptionStatus({ subscriptionStatus: "new_stripe_status" }), "ended");
 
   const subscriptions: SubscriptionRow[] = [];
   const claim: PurchaseClaim = {

@@ -71,9 +71,9 @@ require_match_in_file "$DAYTONA_FILE" 'harnessName: "chat_tools"' \
   "runtime uses the unified chat_tools harness name"
 forbid_match_in_file "$DAYTONA_FILE" 'harnessName: "workspace"' \
   "runtime no longer carries a separate workspace harness name"
-require_match_in_file "$PROMPT_FILE" 'Use native tool calling when a tool is needed' \
+require_match_in_file "$PROMPT_FILE" 'Use native tool calls\. Do not describe tool calls in JSON or markdown\.' \
   "workspace prompt instructs native tool calling"
-require_match_in_file "$PROMPT_FILE" 'When multiple independent read-only lookups are obvious, emit them together' \
+require_match_in_file "$PROMPT_FILE" 'Use independent read-only tool calls in parallel when possible\.' \
   "workspace prompt encourages batched read-only tool calls"
 require_match_in_file "$DAYTONA_FILE" 'runProviderNativeToolCompletion\(' \
   "workspace loop uses provider-native tool completion"

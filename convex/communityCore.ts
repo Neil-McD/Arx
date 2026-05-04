@@ -419,7 +419,20 @@ export function normalizeResourceType(raw: unknown): "post" | "embed" | "link" |
 export function normalizeOptionalUrl(raw: unknown): string | undefined {
   const value = String(raw ?? "").trim();
   if (!value) return undefined;
-  return value.slice(0, 4096);
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    try {
+      url = new URL(`https://${value}`);
+    } catch {
+      throw new Error("community_url_invalid");
+    }
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    throw new Error("community_url_invalid");
+  }
+  return url.toString().slice(0, 4096);
 }
 
 export function normalizeOptionalFileKey(raw: unknown): string | undefined {
@@ -805,6 +818,13 @@ export async function requireCommunityChatAccess(args: {
   userId: any;
 }): Promise<{ community: CommunityLike }> {
   const { community, membership } = await getCommunityAndMembership(args);
+  if (String(community.ownerId) !== String(args.userId)) {
+    await requireCommunityUserNotBlocked({
+      ctx: args.ctx,
+      communityId: community._id,
+      userId: args.userId,
+    });
+  }
   const entitlement = await resolveCommunityMembershipEntitlementState({
     ctx: args.ctx,
     community,
@@ -940,6 +960,13 @@ export async function requireCommunityManager(args: {
   userId: any;
 }): Promise<{ community: CommunityLike }> {
   const { community, membership } = await getCommunityAndMembership(args);
+  if (String(community.ownerId) !== String(args.userId)) {
+    await requireCommunityUserNotBlocked({
+      ctx: args.ctx,
+      communityId: community._id,
+      userId: args.userId,
+    });
+  }
   const entitlement = await resolveCommunityMembershipEntitlementState({
     ctx: args.ctx,
     community,
@@ -971,6 +998,13 @@ export async function requireCommunityModerator(args: {
   userId: any;
 }): Promise<{ community: CommunityLike }> {
   const { community, membership } = await getCommunityAndMembership(args);
+  if (String(community.ownerId) !== String(args.userId)) {
+    await requireCommunityUserNotBlocked({
+      ctx: args.ctx,
+      communityId: community._id,
+      userId: args.userId,
+    });
+  }
   const entitlement = await resolveCommunityMembershipEntitlementState({
     ctx: args.ctx,
     community,

@@ -14,10 +14,15 @@ const issuer = readEnv("ARX_AUTH_JWT_ISSUER");
 const explicitJwks = readEnv("ARX_AUTH_JWT_JWKS_URL");
 const jwks = explicitJwks || (issuer ? `${trimTrailingSlash(issuer)}/.well-known/jwks.json` : "");
 
-const applicationID = readEnv("ARX_AUTH_JWT_AUDIENCE") || readEnv("ARX_AUTH_JWT_APPLICATION_ID");
+const applicationID =
+  readEnv("ARX_AUTH_JWT_AUDIENCE") || readEnv("ARX_AUTH_JWT_APPLICATION_ID") || readEnv("ARX_AUTH_CLIENT_ID");
 const workOsClientId = readEnv("ARX_AUTH_CLIENT_ID") || applicationID;
 const algorithmRaw = readEnv("ARX_AUTH_JWT_ALGORITHM").toUpperCase();
 const algorithm: "RS256" | "ES256" = algorithmRaw === "ES256" ? "ES256" : "RS256";
+
+if (issuer && jwks && !applicationID) {
+  throw new Error("ARX_AUTH_JWT_AUDIENCE or ARX_AUTH_CLIENT_ID is required for JWT audience binding.");
+}
 
 const providers: AuthConfig["providers"] = [];
 
@@ -27,7 +32,7 @@ if (issuer && jwks) {
     issuer,
     jwks,
     algorithm,
-    ...(applicationID ? { applicationID } : null),
+    applicationID,
   });
 }
 
@@ -44,6 +49,7 @@ if (workOsClientId) {
     type: "customJwt",
     issuer: `https://api.workos.com/user_management/${workOsClientId}`,
     algorithm: "RS256",
+    applicationID: workOsClientId,
     jwks: workOsJwks,
   });
 }

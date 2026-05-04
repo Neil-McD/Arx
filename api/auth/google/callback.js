@@ -7,7 +7,6 @@ import {
 import {
   buildRedirectUrl,
   clearAuthFlowCookie,
-  clearAuthSessionCookie,
   readVerifiedAuthFlow,
   setAuthSessionCookie,
 } from "../_cookies.js";
@@ -34,7 +33,6 @@ export default async function handler(req, res) {
   const fallbackReturnTo = pending?.returnTo ?? "/workspace";
   const redirectWithError = async (errorDescription) => {
     clearAuthFlowCookie(res, req);
-    clearAuthSessionCookie(res, req);
     redirect(
       res,
       buildRedirectUrl(req, fallbackReturnTo, {

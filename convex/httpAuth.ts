@@ -70,6 +70,25 @@ function resolveOAuthAudience(): string {
   return readEnv("ARX_AUTH_AUDIENCE");
 }
 
+function resolveAuthBridgeSecret(): string {
+  return readEnv("ARX_AUTH_BRIDGE_SECRET");
+}
+
+function safeStringEquals(left: string, right: string): boolean {
+  if (left.length !== right.length) return false;
+  let diff = 0;
+  for (let index = 0; index < left.length; index += 1) {
+    diff |= left.charCodeAt(index) ^ right.charCodeAt(index);
+  }
+  return diff === 0;
+}
+
+function hasValidAuthBridgeSecret(req: Request): boolean {
+  const expected = resolveAuthBridgeSecret();
+  const provided = String(req.headers.get("x-arx-auth-bridge-secret") ?? "").trim();
+  return Boolean(expected && provided && safeStringEquals(expected, provided));
+}
+
 function isLikelyWorkOsAuthUrl(value: string): boolean {
   const raw = String(value ?? "").trim();
   if (!raw) return false;
@@ -125,6 +144,18 @@ function toAuthMisconfiguredResponse(
     code: "auth_verifier_misconfigured",
     error: "auth_verifier_misconfigured",
     message,
+  });
+}
+
+function toAuthBridgeUnauthorizedResponse(
+  req: Request,
+  jsonResponse: RegisterRuntimeAuthRoutesArgs["jsonResponse"],
+): Response {
+  return jsonResponse(req, 401, {
+    ok: false,
+    code: "auth_bridge_unauthorized",
+    error: "auth_bridge_unauthorized",
+    message: "Auth bridge authorization is required.",
   });
 }
 
@@ -207,6 +238,10 @@ export function registerRuntimeAuthRoutes(args: RegisterRuntimeAuthRoutesArgs): 
     path: "/runtime/auth_begin_google_sign_in",
     method: "POST",
     handler: httpAction(async (_ctx, req) => {
+      if (!hasValidAuthBridgeSecret(req)) {
+        return toAuthBridgeUnauthorizedResponse(req, jsonResponse);
+      }
+
       let input: RuntimeAuthBeginGoogleSignInInput;
       try {
         input = (await req.json()) as RuntimeAuthBeginGoogleSignInInput;
@@ -294,6 +329,10 @@ export function registerRuntimeAuthRoutes(args: RegisterRuntimeAuthRoutesArgs): 
     path: "/runtime/auth_exchange_pkce_code",
     method: "POST",
     handler: httpAction(async (_ctx, req) => {
+      if (!hasValidAuthBridgeSecret(req)) {
+        return toAuthBridgeUnauthorizedResponse(req, jsonResponse);
+      }
+
       let input: RuntimeAuthPkceExchangeInput;
       try {
         input = (await req.json()) as RuntimeAuthPkceExchangeInput;

@@ -112,6 +112,7 @@ async function runLoggedCommunityAdminMutation<T>(params: {
       "community_not_found",
       "community_owner_cannot_leave",
       "community_revenue_not_available",
+      "community_paid_checkout_required",
       "community_forbidden",
       "community_owner_required",
       "community_entitlement_required",
@@ -565,11 +566,14 @@ export const approveCommunityJoinRequest = mutation({
         if (!request) throw new Error("join_request_not_found");
         logContext.communityId = String(request.communityId);
         logContext.targetUserId = String(request.userId);
-        await requireCommunityModerator({
+        const { community } = await requireCommunityModerator({
           ctx,
           communityId: request.communityId,
           userId: args.userId,
         });
+        if (resolveCommunityEntryPolicy(community) === "paid_subscription") {
+          throw new Error("community_paid_checkout_required");
+        }
         const existingMembershipRows = (await ctx.db
           .query("communityMemberships")
           .withIndex("by_community_user", (q: any) =>
@@ -614,9 +618,6 @@ export const approveCommunityJoinRequest = mutation({
           reapplyAt: undefined,
           updatedAt: nowMs,
         });
-        const community = (await ctx.db.get(
-          request.communityId,
-        )) as CommunityLike | null;
         if (isPlatformHomeCommunity({ communitySlug: community?.slug })) {
           await clearPlatformHomeCommunityAutojoinOptOut({
             ctx,

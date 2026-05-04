@@ -1,24 +1,10 @@
-import { parseEmbedUrl } from "../../../../shared/linkEmbedUi";
+import { normalizeExternalUrl, parseEmbedUrl } from "../../../../shared/linkEmbedUi";
 import type { CommunityResource } from "./communityResourcesContracts";
 
 type WebCommunityResourceViewerModalProps = {
   resource: CommunityResource | null;
   onClose: () => void;
 };
-
-function normalizeExternalUrl(rawUrl: string | null): URL | null {
-  const trimmed = typeof rawUrl === "string" ? rawUrl.trim() : "";
-  if (!trimmed) return null;
-  try {
-    return new URL(trimmed);
-  } catch {
-    try {
-      return new URL(`https://${trimmed}`);
-    } catch {
-      return null;
-    }
-  }
-}
 
 function getHostLabel(rawUrl: string | null): string {
   const url = normalizeExternalUrl(rawUrl);
@@ -30,7 +16,7 @@ function getMeta(resource: CommunityResource): { primary: string; secondary: str
   const embed = resource.url ? parseEmbedUrl(resource.url) : null;
   if (embed?.provider === "youtube") return { primary: "Video", secondary: "YouTube" };
   if (embed?.provider === "wistia") return { primary: "Video", secondary: "Wistia" };
-  if (resource.url) return { primary: "Link", secondary: getHostLabel(resource.url) };
+  if (normalizeExternalUrl(resource.url)) return { primary: "Link", secondary: getHostLabel(resource.url) };
   return { primary: "Note", secondary: null };
 }
 
@@ -41,6 +27,7 @@ export function WebCommunityResourceViewerModal(props: WebCommunityResourceViewe
 
   const embed = resource.url ? parseEmbedUrl(resource.url) : null;
   const meta = getMeta(resource);
+  const sourceUrl = normalizeExternalUrl(resource.url);
   const hostLabel = getHostLabel(resource.url);
 
   return (
@@ -73,10 +60,10 @@ export function WebCommunityResourceViewerModal(props: WebCommunityResourceViewe
                 {meta.secondary ? <span>{meta.secondary}</span> : null}
                 {resource.pinned ? <span>Pinned</span> : null}
               </div>
-              {resource.url ? (
+              {sourceUrl ? (
                 <a
                   className="resource-viewer-link-surface"
-                  href={normalizeExternalUrl(resource.url)?.toString() ?? resource.url}
+                  href={sourceUrl.toString()}
                   target="_blank"
                   rel="noreferrer"
                 >

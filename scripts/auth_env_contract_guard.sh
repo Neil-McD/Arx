@@ -98,6 +98,10 @@ require_match_in_file "$AUTH_CONFIG_FILE" 'const issuer = readEnv\("ARX_AUTH_JWT
   "JWT issuer is explicitly configured"
 require_match_in_file "$AUTH_CONFIG_FILE" 'const explicitJwks = readEnv\("ARX_AUTH_JWT_JWKS_URL"\);' \
   "explicit JWKS override is supported"
+require_match_in_file "$AUTH_CONFIG_FILE" 'readEnv\("ARX_AUTH_JWT_AUDIENCE"\).*readEnv\("ARX_AUTH_CLIENT_ID"\)' \
+  "JWT verifier audience falls back to the OAuth client id"
+require_match_in_file "$AUTH_CONFIG_FILE" 'applicationID' \
+  "JWT verifier binds tokens to an audience/application id"
 forbid_match_in_file "$AUTH_CONFIG_FILE" '/auth/v1' \
   "JWT issuer derivation must not append /auth/v1"
 forbid_match_in_file "$AUTH_CONFIG_FILE" 'ARX_AUTH_BASE_URL|VITE_AUTH_URL' \
@@ -110,14 +114,22 @@ require_match_in_file "$CONVEX_HTTP_FILE" 'registerRuntimeAuthBridgeRoutes' \
   "Convex HTTP router mounts the auth continuity bridge routes"
 require_match_in_file "$AUTH_HTTP_FILE" 'auth_begin_google_sign_in|auth_exchange_pkce_code' \
   "Convex auth helper exposes PKCE start/exchange routes"
+require_match_in_file "$AUTH_HTTP_FILE" 'hasValidAuthBridgeSecret' \
+  "Convex PKCE start/exchange routes require the auth bridge secret"
 require_match_in_file "$AUTH_BRIDGE_HTTP_FILE" 'auth_bridge_session_create|auth_bridge_session_bootstrap|auth_bridge_session_refresh|auth_bridge_session_logout' \
   "Convex auth bridge exposes session continuity routes"
 require_match_in_file "$API_AUTH_DIR/_bridge.js" 'callAuthBridgeJson' \
   "same-origin auth bridge helper exists"
+require_match_in_file "$API_AUTH_DIR/_bridge.js" 'buildBridgeHeaders' \
+  "same-origin OAuth runtime helper uses bridge-authenticated headers"
+require_match_in_file "$API_AUTH_DIR/_bridge.js" 'X-Arx-Auth-Bridge-Secret' \
+  "same-origin auth bridge helper sends the auth bridge secret"
 require_match_in_file "$API_AUTH_DIR/google/start.js" 'auth_begin_google_sign_in' \
   "same-origin auth start route exists"
 require_match_in_file "$API_AUTH_DIR/google/callback.js" 'auth_exchange_pkce_code|auth_bridge_session_create' \
   "same-origin auth callback route exchanges PKCE and stores opaque session"
+forbid_match_in_file "$API_AUTH_DIR/google/callback.js" 'clearAuthSessionCookie' \
+  "invalid OAuth callbacks must not clear an unrelated auth session"
 require_match_in_file "$API_AUTH_DIR/session.js" 'auth_bridge_session_bootstrap' \
   "same-origin auth bootstrap route exists"
 require_match_in_file "$API_AUTH_DIR/refresh.js" 'auth_bridge_session_refresh' \

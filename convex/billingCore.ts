@@ -141,6 +141,41 @@ export function newOpaqueToken(prefix: string): string {
   return `${prefix}_${crypto.randomUUID().replace(/-/g, "")}`;
 }
 
+export type LocalCommunitySubscriptionStatus =
+  | "active"
+  | "past_due"
+  | "cancel_at_period_end"
+  | "canceled"
+  | "ended";
+
+export function normalizeStripeCommunitySubscriptionStatus(args: {
+  subscriptionStatus: unknown;
+  cancelAtPeriodEnd?: unknown;
+}): LocalCommunitySubscriptionStatus {
+  const subscriptionStatus = String(args.subscriptionStatus ?? "")
+    .trim()
+    .toLowerCase();
+  const cancelAtPeriodEnd = Boolean(args.cancelAtPeriodEnd);
+  if (subscriptionStatus === "cancel_at_period_end") {
+    return "cancel_at_period_end";
+  }
+  if (subscriptionStatus === "ended") return "ended";
+  if (subscriptionStatus === "active" || subscriptionStatus === "trialing") {
+    return cancelAtPeriodEnd ? "cancel_at_period_end" : "active";
+  }
+  if (subscriptionStatus === "past_due") return "past_due";
+  if (subscriptionStatus === "canceled") return "canceled";
+  if (
+    subscriptionStatus === "unpaid" ||
+    subscriptionStatus === "incomplete" ||
+    subscriptionStatus === "incomplete_expired" ||
+    subscriptionStatus === "paused"
+  ) {
+    return "ended";
+  }
+  return "ended";
+}
+
 export function buildCheckoutSuccessUrl(successUrlRaw: unknown, sessionId: string): string {
   const successUrl = String(successUrlRaw ?? "").trim();
   if (!successUrl) throw new Error("checkout_success_url_required");

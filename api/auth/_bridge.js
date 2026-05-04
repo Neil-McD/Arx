@@ -58,6 +58,14 @@ function buildHeaders(params = {}) {
   return headers;
 }
 
+function buildBridgeHeaders(params = {}) {
+  const bridgeSecret = readBridgeSecret();
+  if (!bridgeSecret) throw new Error("Missing ARX_AUTH_BRIDGE_SECRET.");
+  const headers = buildHeaders(params);
+  headers.set("X-Arx-Auth-Bridge-Secret", bridgeSecret);
+  return headers;
+}
+
 export async function readResponseError(response) {
   try {
     const json = await response.clone().json();
@@ -80,20 +88,17 @@ export async function callRuntimeAuthJson(routePath, payload) {
   if (!url) throw new Error("Missing Convex runtime URL.");
   return await fetch(url, {
     method: "POST",
-    headers: buildHeaders(),
+    headers: buildBridgeHeaders(),
     body: JSON.stringify(payload ?? {}),
   });
 }
 
 export async function callAuthBridgeJson(routePath, params = {}) {
   const url = buildRuntimeUrl(routePath);
-  const bridgeSecret = readBridgeSecret();
   if (!url) throw new Error("Missing Convex runtime URL.");
-  if (!bridgeSecret) throw new Error("Missing ARX_AUTH_BRIDGE_SECRET.");
-  const headers = buildHeaders({
+  const headers = buildBridgeHeaders({
     accessToken: params.accessToken ?? "",
   });
-  headers.set("X-Arx-Auth-Bridge-Secret", bridgeSecret);
   return await fetch(url, {
     method: "POST",
     headers,

@@ -81,18 +81,21 @@ function parseTimeToSeconds(value: string): number | null {
   return matched ? seconds : null;
 }
 
-function normalizeExternalUrl(raw: string): URL | null {
-  const trimmed = raw.trim();
+export function normalizeExternalUrl(raw: string | null): URL | null {
+  const trimmed = typeof raw === "string" ? raw.trim() : "";
   if (!trimmed) return null;
+  let url: URL;
   try {
-    return new URL(trimmed);
+    url = new URL(trimmed);
   } catch {
     try {
-      return new URL(`https://${trimmed}`);
+      url = new URL(`https://${trimmed}`);
     } catch {
       return null;
     }
   }
+  if (url.protocol !== "http:" && url.protocol !== "https:") return null;
+  return url;
 }
 
 function parseYouTubeId(url: URL): { id: string; startSeconds: number | null } | null {
