@@ -159,6 +159,56 @@ function findCatalogEntryForCommunityMount(mount: CommunityMountedApp) {
   );
 }
 
+function buildCommunityAppNotLiveLabel(mount: CommunityMountedApp): string {
+  switch (mount.not_live_reason) {
+    case "needs_auth":
+      return "Setup needed";
+    case "validation_failed":
+      return "Validation failed";
+    case "no_tools_discovered":
+      return "No tools discovered";
+    case "missing_snapshot":
+      return "Missing snapshot";
+    case "disabled":
+      return "Disabled";
+    case "unknown":
+    default:
+      return "Not live";
+  }
+}
+
+function buildCommunityAppStateLabel(mount: CommunityMountedApp): string {
+  if (!mount.enabled) return "Disabled";
+  if (mount.live_status !== "live") return buildCommunityAppNotLiveLabel(mount);
+  if (
+    mount.app.auth_type !== "none" &&
+    mount.connection.connection_status !== "connected"
+  ) {
+    return "Reconnect required";
+  }
+  if (mount.app.status !== "valid") return "Validation failed";
+  if (mount.enabled_tools.length === 0) return "No tools";
+  return "Live";
+}
+
+function buildCommunityAppStateClassName(mount: CommunityMountedApp): string {
+  const label = buildCommunityAppStateLabel(mount);
+  if (label === "Live") return " is-live";
+  if (label === "Disabled") return " is-disabled";
+  if (label === "Setup needed" || label === "Reconnect required") {
+    return " is-setup";
+  }
+  return " is-not-live";
+}
+
+function buildCommunityAppStatusLabel(mount: CommunityMountedApp): string {
+  const toolLabel = pluralizeTools(mount.enabled_tools.length);
+  const stateLabel = buildCommunityAppStateLabel(mount);
+  if (stateLabel === "Live") return `${toolLabel} active`;
+  if (stateLabel === "Disabled") return `Disabled · ${toolLabel}`;
+  return `${stateLabel} · ${toolLabel}`;
+}
+
 function CommunityPersonalSettingsSection({
   state,
   actions,
@@ -255,10 +305,8 @@ function CommunityIntegrationsSettingsSection({
             const isRefreshing = integrations.refreshingMountId === mount.id;
             const isRemoving = integrations.removingMountId === mount.id;
             const isBusy = isUpdating || isRefreshing || isRemoving;
-            const enabledToolCount = enabledToolNames.length;
-            const statusLabel = mount.enabled
-              ? `${pluralizeTools(enabledToolCount)} attached`
-              : `Disabled · ${pluralizeTools(enabledToolCount)}`;
+            const stateLabel = buildCommunityAppStateLabel(mount);
+            const statusLabel = buildCommunityAppStatusLabel(mount);
             return (
               <div key={mount.id} className="integration-mounted-row">
                 <div className="integration-mounted-top">
@@ -272,12 +320,12 @@ function CommunityIntegrationsSettingsSection({
                       <div className="integration-mounted-title-row">
                         <strong>{mount.app.name}</strong>
                         <span
-                          className={`integration-state-indicator${
-                            mount.enabled ? " is-live" : " is-disabled"
-                          }`}
+                          className={`integration-state-indicator${buildCommunityAppStateClassName(
+                            mount,
+                          )}`}
                         >
                           <span aria-hidden="true" />
-                          {mount.enabled ? "Enabled" : "Disabled"}
+                          {stateLabel}
                         </span>
                         <span className="integration-status-pill">
                           {statusLabel}

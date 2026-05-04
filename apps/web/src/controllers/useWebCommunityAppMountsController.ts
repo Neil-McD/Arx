@@ -45,32 +45,54 @@ export function useWebCommunityAppMountsController<SessionT extends SessionLike>
   const [reconnectingCommunityAppMountId, setReconnectingCommunityAppMountId] = useState<string | null>(null);
   const [removingCommunityAppMountId, setRemovingCommunityAppMountId] = useState<string | null>(null);
   const communityAppMountsLoadedCommunityIdRef = useRef<string | null>(null);
+  const communityAppMountsLoadRequestIdRef = useRef(0);
 
   const clearCommunityAppMounts = useCallback(() => {
+    communityAppMountsLoadRequestIdRef.current += 1;
     setCommunityAppMounts([]);
+    setIsLoadingCommunityAppMounts(false);
     setCommunityAppMountError(null);
     setCommunityAppMutationError(null);
     communityAppMountsLoadedCommunityIdRef.current = null;
   }, []);
 
   const loadCommunityAppMounts = useCallback(async (communityId: string, session: SessionT) => {
+    const requestId = communityAppMountsLoadRequestIdRef.current + 1;
+    communityAppMountsLoadRequestIdRef.current = requestId;
     const current = argsRef.current;
     const usableSession = await resolveUsableSession(session, current.ensureSession);
-    if (!usableSession) return;
+    if (!usableSession) {
+      if (communityAppMountsLoadRequestIdRef.current === requestId) {
+        setIsLoadingCommunityAppMounts(false);
+      }
+      return;
+    }
+    const loadedCommunityId = communityId;
+    const loadedUserId = usableSession.user.id;
+    const isCurrentRequest = () => {
+      if (communityAppMountsLoadRequestIdRef.current !== requestId) return false;
+      const latest = argsRef.current;
+      if (latest.session?.user.id !== loadedUserId) return false;
+      return latest.activeCommunityId === loadedCommunityId;
+    };
     setIsLoadingCommunityAppMounts(true);
     setCommunityAppMountError(null);
     try {
       const rows = await listCloudCommunityAppMounts({
         session: usableSession,
-        communityId,
+        communityId: loadedCommunityId,
       });
+      if (!isCurrentRequest()) return;
       setCommunityAppMounts(rows);
-      communityAppMountsLoadedCommunityIdRef.current = communityId;
+      communityAppMountsLoadedCommunityIdRef.current = loadedCommunityId;
     } catch (error) {
+      if (!isCurrentRequest()) return;
       setCommunityAppMountError(toErrorMessage(error, "Failed to load community apps."));
-      communityAppMountsLoadedCommunityIdRef.current = communityId;
+      communityAppMountsLoadedCommunityIdRef.current = loadedCommunityId;
     } finally {
-      setIsLoadingCommunityAppMounts(false);
+      if (communityAppMountsLoadRequestIdRef.current === requestId) {
+        setIsLoadingCommunityAppMounts(false);
+      }
     }
   }, []);
 
