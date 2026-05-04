@@ -35,6 +35,8 @@ type BuildWebCommunitySurfaceProjectionParams = {
     WebCommunitySecondaryPanelsProps["settings"]["startBuilderConnectOnboarding"];
   isStartingBuilderConnectOnboarding:
     WebCommunitySecondaryPanelsProps["settings"]["isStartingBuilderConnectOnboarding"];
+  communityIntegrations:
+    WebCommunitySecondaryPanelsProps["settings"]["communityIntegrations"];
   settingsState: WebCommunitySecondaryPanelsProps["settings"]["state"];
   settingsActions: WebCommunitySecondaryPanelsProps["settings"]["actions"];
   setIsCommunityAvatarFocusModalOpen:
@@ -165,6 +167,7 @@ export function buildWebCommunitySurfaceProjection(
       builderBillingError: params.builderBillingError,
       startBuilderConnectOnboarding: params.startBuilderConnectOnboarding,
       isStartingBuilderConnectOnboarding: params.isStartingBuilderConnectOnboarding,
+      communityIntegrations: params.communityIntegrations,
       state: params.settingsState,
       actions: params.settingsActions,
       setIsCommunityAvatarFocusModalOpen:

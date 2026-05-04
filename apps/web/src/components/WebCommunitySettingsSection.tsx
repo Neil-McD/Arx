@@ -7,7 +7,10 @@ import type { BuilderBillingStatus } from "../../../../shared/builderBillingStat
 import { getCommunityBannerImageStyle } from "../../../../shared/communityBannerUi";
 import { buildPlatformSwitcherStyle } from "../../../../shared/platformSwitcherUi";
 import { buildStripeConnectPresentation } from "../controllers/buildStripeConnectPresentation";
+import { DISCOVER_APP_CATALOG } from "../lib/discoverCatalog";
+import { DiscoverCatalogLogo } from "./DiscoverCatalogLogo";
 import { StripeSetupButton } from "./StripeSetupButton";
+import type { CommunityMountedApp } from "../../../../shared/communityAppMountTypes";
 
 type CommunityPricingMode = "free" | "monthly" | "annual";
 
@@ -34,6 +37,25 @@ type WebCommunitySettingsSectionProps = {
     communitySlug?: string | null;
   }) => Promise<void> | void;
   isStartingBuilderConnectOnboarding: boolean;
+  communityIntegrations: {
+    mounts: CommunityMountedApp[];
+    isLoading: boolean;
+    error: string | null;
+    mutationError: string | null;
+    updatingMountId: string | null;
+    refreshingMountId: string | null;
+    removingMountId: string | null;
+    onBrowseCatalog: () => void;
+    onUpdateMount: (
+      communityAppMountId: string,
+      patch: {
+        enabled?: boolean;
+        enabledTools?: string[];
+      },
+    ) => Promise<boolean> | boolean;
+    onRefreshApp: (communityAppMountId: string) => Promise<boolean> | boolean;
+    onUnmountApp: (communityAppMountId: string) => Promise<boolean> | boolean;
+  };
   state: {
     isSettingsBannerDragOver: boolean;
     isProcessingCommunitySettingsBanner: boolean;
@@ -106,6 +128,37 @@ type WebCommunitySettingsSectionProps = {
 
 type SharedSettingsProps = Pick<WebCommunitySettingsSectionProps, "state" | "actions">;
 
+function pluralizeTools(count: number): string {
+  return `${count} ${count === 1 ? "tool" : "tools"}`;
+}
+
+function toStatusLabel(value: string | null | undefined): string {
+  const normalized = String(value ?? "").trim();
+  if (!normalized) return "Unknown";
+  return normalized
+    .split(/[_\s]+/g)
+    .filter(Boolean)
+    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+    .join(" ");
+}
+
+function findCatalogEntryForCommunityMount(mount: CommunityMountedApp) {
+  const byEndpoint = DISCOVER_APP_CATALOG.find((entry) => {
+    if (entry.personalConnect.connectionKind !== "known") return false;
+    return (
+      entry.personalConnect.endpointUrl === mount.app.endpoint_url &&
+      entry.personalConnect.authType === mount.app.auth_type
+    );
+  });
+  if (byEndpoint) return byEndpoint;
+  const normalizedName = mount.app.name.trim().toLowerCase();
+  return (
+    DISCOVER_APP_CATALOG.find(
+      (entry) => entry.name.trim().toLowerCase() === normalizedName,
+    ) ?? null
+  );
+}
+
 function CommunityPersonalSettingsSection({
   state,
   actions,
@@ -150,6 +203,192 @@ function CommunityPersonalSettingsSection({
       {state.communityMemberSettingsError ? (
         <div className="auth-error" style={{ marginTop: 10 }}>
           {state.communityMemberSettingsError}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function CommunityIntegrationsSettingsSection({
+  integrations,
+}: {
+  integrations: WebCommunitySettingsSectionProps["communityIntegrations"];
+}) {
+  return (
+    <div className="settings-section">
+      <div className="settings-section-title">Community integrations</div>
+      <div className="settings-section-desc">
+        Apps attached here become part of this community lens. Members use their
+        own personal credentials when an app requires authentication.
+      </div>
+      <div className="agent-capability-toolbar">
+        <button
+          type="button"
+          className="settings-cta"
+          onClick={integrations.onBrowseCatalog}
+        >
+          Browse apps
+        </button>
+      </div>
+      {integrations.error ? (
+        <div className="auth-error">Couldn&apos;t load community integrations.</div>
+      ) : null}
+      {integrations.mutationError ? (
+        <div className="auth-error">{integrations.mutationError}</div>
+      ) : null}
+      {integrations.isLoading && integrations.mounts.length === 0 ? (
+        <div className="model-note">Loading community integrations…</div>
+      ) : null}
+      {!integrations.isLoading && integrations.mounts.length === 0 ? (
+        <div className="model-note">
+          No apps are attached to this community lens yet.
+        </div>
+      ) : null}
+      {integrations.mounts.length > 0 ? (
+        <div className="integrations-app-list">
+          {integrations.mounts.map((mount) => {
+            const catalogEntry = findCatalogEntryForCommunityMount(mount);
+            const enabledToolNames = mount.tools
+              .filter((tool) => tool.enabled)
+              .map((tool) => tool.tool_name);
+            const isUpdating = integrations.updatingMountId === mount.id;
+            const isRefreshing = integrations.refreshingMountId === mount.id;
+            const isRemoving = integrations.removingMountId === mount.id;
+            const isBusy = isUpdating || isRefreshing || isRemoving;
+            const enabledToolCount = enabledToolNames.length;
+            const statusLabel = mount.enabled
+              ? `${pluralizeTools(enabledToolCount)} attached`
+              : `Disabled · ${pluralizeTools(enabledToolCount)}`;
+            return (
+              <div key={mount.id} className="integration-mounted-row">
+                <div className="integration-mounted-top">
+                  <div className="integration-mounted-identity">
+                    <DiscoverCatalogLogo
+                      name={mount.app.name}
+                      logoUrl={catalogEntry?.logoUrl}
+                      logoUrlDark={catalogEntry?.logoUrlDark}
+                    />
+                    <div className="integration-mounted-main">
+                      <div className="integration-mounted-title-row">
+                        <strong>{mount.app.name}</strong>
+                        <span
+                          className={`integration-state-indicator${
+                            mount.enabled ? " is-live" : " is-disabled"
+                          }`}
+                        >
+                          <span aria-hidden="true" />
+                          {mount.enabled ? "Enabled" : "Disabled"}
+                        </span>
+                        <span className="integration-status-pill">
+                          {statusLabel}
+                        </span>
+                        <span className="integration-status-pill">
+                          Community lens
+                        </span>
+                      </div>
+                      <div className="integration-mounted-meta">
+                        {mount.app.endpoint_url}
+                      </div>
+                      <div className="integration-mounted-detail">
+                        Auth {toStatusLabel(mount.app.auth_type)} · Connection{" "}
+                        {toStatusLabel(mount.connection.connection_status)} ·
+                        Validation {toStatusLabel(mount.app.status)}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="integration-mounted-rail">
+                    <label
+                      className={`members-switch integration-mounted-switch${
+                        isBusy ? " is-disabled" : ""
+                      }`}
+                      title={mount.enabled ? "Disable app" : "Enable app"}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={mount.enabled}
+                        disabled={isBusy}
+                        aria-label={`${mount.enabled ? "Disable" : "Enable"} ${
+                          mount.app.name
+                        }`}
+                        onChange={() =>
+                          void integrations.onUpdateMount(mount.id, {
+                            enabled: !mount.enabled,
+                          })
+                        }
+                      />
+                      <span className="members-switch-track">
+                        <span className="members-switch-thumb" />
+                      </span>
+                    </label>
+                    <div className="agent-capability-toolbar-actions">
+                      <button
+                        type="button"
+                        onClick={() => void integrations.onRefreshApp(mount.id)}
+                        disabled={isBusy}
+                      >
+                        {isRefreshing ? "Refreshing…" : "Refresh"}
+                      </button>
+                      <button
+                        type="button"
+                        className="agent-onboarding-reset"
+                        onClick={() => void integrations.onUnmountApp(mount.id)}
+                        disabled={isBusy}
+                      >
+                        {isRemoving ? "Removing…" : "Remove"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                {mount.tools.length > 0 ? (
+                  <div className="community-app-tool-list" role="list">
+                    {mount.tools.map((tool) => {
+                      const nextEnabledTools = tool.enabled
+                        ? enabledToolNames.filter(
+                            (toolName) => toolName !== tool.tool_name,
+                          )
+                        : [...enabledToolNames, tool.tool_name];
+                      return (
+                        <label
+                          key={tool.namespaced_tool_name}
+                          className="community-app-tool-row"
+                          role="listitem"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={tool.enabled}
+                            disabled={isBusy}
+                            onChange={() =>
+                              void integrations.onUpdateMount(mount.id, {
+                                enabledTools: nextEnabledTools,
+                              })
+                            }
+                          />
+                          <div className="community-app-tool-copy">
+                            <div className="community-app-tool-title-row">
+                              <span className="community-app-tool-name">
+                                {tool.tool_name}
+                              </span>
+                              <span className="community-app-tool-risk">
+                                {toStatusLabel(tool.risk_level)}
+                              </span>
+                            </div>
+                            {tool.description ? (
+                              <div className="model-note">{tool.description}</div>
+                            ) : null}
+                          </div>
+                        </label>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="model-note">
+                    No tools have been discovered for this community attachment
+                    yet.
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       ) : null}
     </div>
@@ -577,6 +816,7 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
     builderBillingError,
     startBuilderConnectOnboarding,
     isStartingBuilderConnectOnboarding,
+    communityIntegrations,
     state,
     actions,
   } = props;
@@ -635,6 +875,9 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
               canManagePayoutAccount={isOwnerSettingsLayer}
               state={state}
               actions={actions}
+            />
+            <CommunityIntegrationsSettingsSection
+              integrations={communityIntegrations}
             />
             <CommunityPersonalSettingsSection
               state={state}

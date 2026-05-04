@@ -3959,9 +3959,14 @@ export default function App() {
   useEffect(() => {
     const shouldLoadCommunityApps =
       (activePage === "community" && communityTab === "ai_agent") ||
+      (activePage === "community" && communityTab === "settings") ||
       activePage === "discover";
     if (!shouldLoadCommunityApps) return;
-    if (!session || !activeCommunityId || !canManageMembersActiveCommunity) {
+    const canManageCommunityApps =
+      activePage === "community" && communityTab === "settings"
+        ? canManageCommunitySettings
+        : canManageMembersActiveCommunity;
+    if (!session || !activeCommunityId || !canManageCommunityApps) {
       clearCommunityAppMounts();
       return;
     }
@@ -3972,6 +3977,7 @@ export default function App() {
     communityTab,
     session,
     activeCommunityId,
+    canManageCommunitySettings,
     canManageMembersActiveCommunity,
     clearCommunityAppMounts,
     loadCommunityAppMounts,
@@ -6079,6 +6085,19 @@ export default function App() {
       builderBillingError,
       startBuilderConnectOnboarding,
       isStartingBuilderConnectOnboarding,
+      communityIntegrations: {
+        mounts: communityAppMounts,
+        isLoading: isLoadingCommunityAppMounts,
+        error: communityAppMountError,
+        mutationError: communityAppMutationError,
+        updatingMountId: updatingCommunityAppMountId,
+        refreshingMountId: refreshingCommunityAppMountId,
+        removingMountId: removingCommunityAppMountId,
+        onBrowseCatalog: handleOpenDiscoverApps,
+        onUpdateMount: handleUpdateCommunityAppMount,
+        onRefreshApp: handleRefreshCommunityApp,
+        onUnmountApp: handleUnmountCommunityApp,
+      },
       settingsState: {
         isSettingsBannerDragOver,
         isProcessingCommunitySettingsBanner,
