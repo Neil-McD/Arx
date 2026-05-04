@@ -12,6 +12,7 @@ import {
   resolveUserIdForAuthenticatedRequest,
 } from "./communityCore";
 import { normalizeStoredSnapshotTools } from "./mcpSnapshotCodec";
+import { buildEffectiveMcpApps } from "../shared/effectiveMcpApps";
 
 type UserPlatformAppMountRow = {
   _id: any;
@@ -268,5 +269,32 @@ export const listHarnessMounts = query({
       args.communityId,
     );
     return [...personalMounts, ...communityMounts];
+  },
+});
+
+export const listEffectiveMcpApps = query({
+  args: {
+    authSubject: v.optional(v.string()),
+    userId: v.optional(v.id("users")),
+    communityId: v.optional(v.id("communities")),
+  },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      userId: args.userId,
+      authSubject: args.authSubject ?? null,
+    });
+    const personalMounts = await listUserHarnessMounts(ctx, userId);
+    if (!args.communityId) return buildEffectiveMcpApps(personalMounts);
+    await requireCommunityChatAccess({
+      ctx,
+      communityId: args.communityId,
+      userId,
+    });
+    const communityMounts = await listCommunityHarnessMounts(
+      ctx,
+      args.communityId,
+    );
+    return buildEffectiveMcpApps([...personalMounts, ...communityMounts]);
   },
 });
