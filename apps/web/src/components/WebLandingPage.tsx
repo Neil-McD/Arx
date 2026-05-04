@@ -1,4 +1,4 @@
-import { Brain, DollarSign, RefreshCw, UserRound } from "lucide-react";
+import { Brain, DollarSign, Play, RefreshCw, UserRound } from "lucide-react";
 
 type WebLandingPageProps = {
   onTryFree: () => void;
@@ -92,10 +92,11 @@ export function WebLandingPage(props: WebLandingPageProps) {
           <div className="polynet-landing-copy">
             <p className="polynet-landing-kicker">Services as software</p>
             <h1 id="polynet-landing-title">
-              Build an <span>AI community</span> that <span>thinks</span>, <span>remembers</span>, and <span>acts</span>.
+              Turn your expertise into a <span>paid AI community</span>.
             </h1>
             <p className="polynet-landing-subcopy">
-              Build, distribute, and monetize agent-powered communities.
+              Build an agent trained on your knowledge. Wrap it in a
+              community. Monetize access.
             </p>
             <div className="polynet-landing-cta-row">
               <button type="button" className="primary" onClick={props.onTryFree}>
@@ -106,40 +107,28 @@ export function WebLandingPage(props: WebLandingPageProps) {
 
           <div
             className="polynet-landing-video"
-            aria-label="Polynet overview video preview"
+            aria-label="Polynet demo preview"
           >
-            <span className="polynet-landing-video-topline">Polynet overview</span>
+            <span className="polynet-landing-video-topline">Watch the 2-minute demo</span>
             <span className="polynet-landing-video-stage">
-              <span className="polynet-landing-product" aria-hidden="true">
-                <span className="polynet-landing-rail">
-                  <span className="polynet-landing-rail-icon active">
-                    <img src="/favicon.svg" alt="" />
+              <span className="polynet-landing-demo-card" aria-hidden="true">
+                <span className="polynet-landing-demo-network">
+                  <span className="polynet-landing-demo-node top">Knowledge</span>
+                  <span className="polynet-landing-demo-node right">Members</span>
+                  <span className="polynet-landing-demo-node bottom">Offers</span>
+                  <span className="polynet-landing-demo-node left">Feedback</span>
+                  <span className="polynet-landing-demo-brain">
+                    <Brain />
                   </span>
-                  <span className="polynet-landing-rail-icon">D</span>
-                  <span className="polynet-landing-rail-add">+</span>
-                </span>
-                <span className="polynet-landing-workspace">
-                  <span className="polynet-landing-agent-card">
-                    <img src="/favicon.svg" alt="" />
-                    <strong>
-                      Welcome to <span>Polynet</span>
-                    </strong>
-                    <em>You are in the Polynet workspace</em>
-                  </span>
-                  <span className="polynet-landing-composer">
-                    <span>Describe what you need help with...</span>
-                    <span>
-                      <span>+</span>
-                      <span>GPT 5.5</span>
-                      <span className="polynet-landing-send">↑</span>
-                    </span>
-                  </span>
-                  <span className="polynet-landing-actions">
-                    <span>Build a business</span>
-                    <span>Explain the platform</span>
-                    <span>Use a community agent</span>
+                  <span className="polynet-landing-demo-play">
+                    <Play />
                   </span>
                 </span>
+                <strong>How services become software</strong>
+                <p>
+                  Turn expertise into a community agent members can learn from,
+                  build with, and pay to access.
+                </p>
               </span>
             </span>
           </div>

@@ -1044,6 +1044,7 @@ body {
 .polynet-landing-page {
   min-height: 100%;
   overflow-y: auto;
+  overflow-x: clip;
   color: var(--text-primary);
   background:
     radial-gradient(circle at 78% 0%, rgba(255, 60, 142, 0.16), transparent 28%),
@@ -1154,6 +1155,141 @@ body {
   position: relative;
   display: block;
   padding: 0 26px 26px;
+}
+
+.polynet-landing-demo-card {
+  min-height: 450px;
+  border: 1px solid var(--border-muted);
+  border-radius: 24px;
+  background:
+    radial-gradient(circle at 50% 38%, rgba(255, 72, 153, 0.18), transparent 30%),
+    rgba(12, 12, 14, 0.76);
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 16px;
+  overflow: hidden;
+  padding: 42px;
+  text-align: center;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.35);
+}
+
+.polynet-landing-demo-network {
+  position: relative;
+  width: min(100%, 340px);
+  aspect-ratio: 1;
+  display: block;
+  border: 1px solid color-mix(in srgb, var(--accent) 24%, transparent);
+  border-radius: 999px;
+  background:
+    radial-gradient(circle at 50% 50%, rgba(255, 72, 153, 0.14), transparent 30%),
+    rgba(255, 255, 255, 0.025);
+}
+
+.polynet-landing-demo-network::before,
+.polynet-landing-demo-network::after {
+  content: "";
+  position: absolute;
+  inset: 18%;
+  border: 1px solid color-mix(in srgb, var(--accent) 20%, transparent);
+  border-radius: 999px;
+}
+
+.polynet-landing-demo-network::after {
+  inset: 31%;
+  border-color: color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+.polynet-landing-demo-node {
+  position: absolute;
+  z-index: 1;
+  border: 1px solid color-mix(in srgb, var(--accent) 38%, transparent);
+  border-radius: 999px;
+  padding: 7px 10px;
+  color: var(--text-secondary);
+  background: rgba(10, 10, 12, 0.86);
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.polynet-landing-demo-node.top {
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.polynet-landing-demo-node.right {
+  top: 50%;
+  right: 4px;
+  transform: translateY(-50%);
+}
+
+.polynet-landing-demo-node.bottom {
+  bottom: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.polynet-landing-demo-node.left {
+  top: 50%;
+  left: 4px;
+  transform: translateY(-50%);
+}
+
+.polynet-landing-demo-brain,
+.polynet-landing-demo-play {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  display: grid;
+  place-items: center;
+  transform: translate(-50%, -50%);
+}
+
+.polynet-landing-demo-brain {
+  width: 104px;
+  height: 104px;
+  border-radius: 28px;
+  color: var(--accent);
+  background: #050506;
+  box-shadow: 0 18px 60px rgba(255, 72, 153, 0.22);
+}
+
+.polynet-landing-demo-brain svg {
+  width: 54px;
+  height: 54px;
+  stroke-width: 1.7;
+}
+
+.polynet-landing-demo-play {
+  width: 46px;
+  height: 46px;
+  border-radius: 999px;
+  color: #050506;
+  background: var(--text-primary);
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.36);
+}
+
+.polynet-landing-demo-play svg {
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
+  transform: translateX(1px);
+}
+
+.polynet-landing-demo-card strong {
+  max-width: 360px;
+  color: var(--text-primary);
+  font-size: clamp(28px, 3vw, 40px);
+  line-height: 1.04;
+}
+
+.polynet-landing-demo-card p {
+  max-width: 430px;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 16px;
+  line-height: 1.45;
 }
 
 .polynet-landing-hero-grid {
@@ -1959,6 +2095,7 @@ body {
   .polynet-landing-offer,
   .polynet-landing-comparison,
   .polynet-landing-section,
+  .polynet-landing-section.comparison,
   .polynet-landing-section.compact {
     grid-template-columns: 1fr;
   }
@@ -1984,9 +2121,153 @@ body {
     width: min(100% - 28px, 1160px);
   }
 
+  .polynet-landing-hero {
+    min-height: 0;
+    padding: 26px 0 56px;
+  }
+
   .polynet-landing-nav {
     align-items: flex-start;
     flex-direction: column;
+    gap: 18px;
+  }
+
+  .polynet-landing-brand img {
+    width: 54px;
+    height: 54px;
+    border-radius: 14px;
+  }
+
+  .polynet-landing-brand span {
+    font-size: 26px;
+  }
+
+  .polynet-landing-page button {
+    min-height: 42px;
+    padding: 0 18px;
+  }
+
+  .polynet-landing-hero-grid {
+    gap: 36px;
+    align-items: start;
+    padding-top: 44px;
+  }
+
+  .polynet-landing-copy {
+    gap: 18px;
+  }
+
+  .polynet-landing-copy h1 {
+    font-size: clamp(42px, 13.5vw, 54px);
+    line-height: 1.03;
+  }
+
+  .polynet-landing-subcopy,
+  .polynet-landing-section p {
+    font-size: 18px;
+    line-height: 1.5;
+  }
+
+  .polynet-landing-video {
+    border-radius: 22px;
+  }
+
+  .polynet-landing-video-topline {
+    padding: 18px 20px 0;
+    font-size: 12px;
+  }
+
+  .polynet-landing-video-stage {
+    padding: 0 14px 14px;
+  }
+
+  .polynet-landing-demo-card {
+    min-height: 0;
+    gap: 14px;
+    padding: 28px 18px;
+  }
+
+  .polynet-landing-demo-network {
+    width: min(100%, 246px);
+  }
+
+  .polynet-landing-demo-node {
+    padding: 6px 8px;
+    font-size: 10px;
+  }
+
+  .polynet-landing-demo-brain {
+    width: 82px;
+    height: 82px;
+    border-radius: 22px;
+  }
+
+  .polynet-landing-demo-brain svg {
+    width: 42px;
+    height: 42px;
+  }
+
+  .polynet-landing-demo-card strong {
+    font-size: 26px;
+  }
+
+  .polynet-landing-demo-card p {
+    font-size: 14px;
+  }
+
+  .polynet-landing-section {
+    gap: 28px;
+    padding: 54px 0;
+  }
+
+  .polynet-landing-section.compact {
+    padding-bottom: 54px;
+  }
+
+  .polynet-landing-section h2,
+  .polynet-landing-offer h2,
+  .polynet-landing-comparison-copy h2 {
+    font-size: clamp(32px, 10vw, 42px);
+    line-height: 1.05;
+  }
+
+  .polynet-landing-comparison,
+  .polynet-landing-stack-list,
+  .polynet-landing-polynet-plan {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .polynet-landing-stack-row,
+  .polynet-landing-stack-header {
+    padding: 13px 12px;
+    gap: 10px;
+  }
+
+  .polynet-landing-stack-vendor {
+    gap: 10px;
+  }
+
+  .polynet-landing-stack-vendor strong {
+    font-size: 13px;
+  }
+
+  .polynet-landing-stack-vendor em {
+    font-size: 11px;
+  }
+
+  .polynet-landing-stack-header strong,
+  .polynet-landing-stack-row > strong {
+    font-size: 14px;
+  }
+
+  .polynet-landing-polynet-plan {
+    min-height: 0;
+    padding: 18px;
+  }
+
+  .polynet-landing-polynet-plan strong {
+    font-size: clamp(42px, 15vw, 58px);
   }
 
   .polynet-landing-product {
