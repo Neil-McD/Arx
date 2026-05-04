@@ -35,10 +35,21 @@ function main() {
     "export const reconnectCommunityApp = action({",
     "export const updateCommunityAppMount = mutation({",
     "export const unmountCommunityApp = mutation({",
-    "export const listRuntimeCommunityMountedToolsInternal = internalQuery({",
-    "export const executeCommunityMountedAppToolInternal = internalAction({",
   ]) {
     assertIncludes(communityAppMounts, exportedName, "community app lifecycle surface");
+  }
+
+  for (const deletedRuntimeSurface of [
+    "export const listRuntimeCommunityMountedToolsInternal",
+    "export const executeCommunityMountedAppToolInternal",
+    "type RuntimeMountedCommunityAppTool",
+    "resolveRuntimeMountedCommunityAppTools",
+  ]) {
+    assertNotIncludes(
+      communityAppMounts,
+      deletedRuntimeSurface,
+      "deleted community MCP runtime surface",
+    );
   }
 
   assertIncludes(
@@ -87,24 +98,14 @@ function main() {
     "personal list keeps snapshotless setup-needed mounts",
   );
   assertIncludes(
-    communityAppMounts,
-    "if (!app || !snapshot) continue;",
-    "community runtime skips non-live snapshotless mounts",
-  );
-  assertIncludes(
     userPlatformAppMounts,
     "if (!app || !snapshot) continue;",
     "personal runtime skips non-live snapshotless mounts",
   );
   assertIncludes(
     communityAppMounts,
-    "if (mountedTool.risk_level !== \"read\")",
-    "mounted tool risk gate",
-  );
-  assertIncludes(
-    communityAppMounts,
     "assertCommunityManagerAccessInternal",
-    "manager-only mounted tool guard",
+    "manager-only community grant mutation guard",
   );
 
   assertNotIncludes(

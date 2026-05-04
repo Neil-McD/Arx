@@ -2,6 +2,10 @@
 
 Date: 2026-04-13
 
+Status: partially superseded by `docs/mcp-app-architecture-contract.md`
+
+The skills and behavior sections remain useful alpha context. The MCP/app model below is historical: community apps are grants/recommendations, while executable MCP runtime tools come only from user app state.
+
 This document freezes the irreducible alpha model for the community agent surface.
 
 ### Irreducible truth
@@ -25,7 +29,7 @@ The current community owner/admin flow should stay simple:
 1. open `AI Agent -> Apps`
 2. connect a remote MCP app
 3. Polynet validates it and discovers tools
-4. Polynet mounts it to the current community
+4. Polynet recommends/grants it through the current community
 5. open `AI Agent -> Skills`
 6. attach reusable skill packages to the current community
 7. that community now carries mounted tools plus attached skills as part of its lens
@@ -39,7 +43,7 @@ The system underneath stays split even though the UX stays simple:
 - `DeveloperApp`
 - `AppConnection`
 - `AppToolSnapshot`
-- `CommunityAppMount`
+- `CommunityAppMount` as a legacy-named community app grant
 - `SkillPackage`
 - `CommunitySkillAttachment`
 
@@ -51,7 +55,7 @@ This is required for reliability and security.
 - secrets/auth do not live in community config
 - apps are validated before mount
 - community app access fails closed
-- mounted tool inventory is explicit
+- user harness tool inventory is explicit
 - skill packages are injected only when selected, not dumped into every turn
 - skill packages are separate from app login/connection state in the current alpha
 - every future tool call must be auditable

@@ -1,6 +1,14 @@
 # Community App Convex Contract v1
 
-Status: current implementation contract
+Status: superseded by `docs/mcp-app-architecture-contract.md`
+
+This file is retained as historical implementation context only. The active contract is:
+
+- Communities grant access.
+- Users own app state.
+- Runtime executes only user harness tools.
+
+Do not use this file to justify adding community MCP runtime execution back into Daytona.
 
 ## Canonical tables
 

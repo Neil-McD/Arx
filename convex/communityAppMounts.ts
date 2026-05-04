@@ -1,7 +1,6 @@
 import { internal } from "./_generated/api";
 import {
   action,
-  internalAction,
   internalMutation,
   internalQuery,
   mutation,
@@ -17,7 +16,6 @@ import {
   normalizeString,
 } from "./appCore";
 import {
-  buildStoredMcpToolSchemaTransport,
   normalizeStoredSnapshotTools,
 } from "./mcpSnapshotCodec";
 import {
@@ -25,13 +23,6 @@ import {
   requireCommunityManager,
   resolveUserIdForAuthenticatedRequest,
 } from "./communityCore";
-import {
-  buildDeveloperAppAuthHeaders,
-  callMcpTool,
-  formatMcpToolResultOutput,
-  initializeStreamableHttpMcpSession,
-  sendInitializedNotification,
-} from "./mcpHttpClient";
 import { encryptSecret } from "./providerConnections";
 
 type CommunityAppMountRow = {
@@ -54,21 +45,6 @@ type CommunityAppMountNotLiveReason =
   | "validation_failed"
   | "no_tools_discovered"
   | "missing_snapshot";
-
-type RuntimeMountedCommunityAppTool = {
-  community_app_mount_id: any;
-  developer_app_id: any;
-  catalog_app_id: string | null;
-  app_name: string;
-  endpoint_url: string;
-  auth_type: string;
-  tool_name: string;
-  namespaced_tool_name: string;
-  description: string | null;
-  input_schema_json: string | null;
-  input_schema_kind: "object" | "boolean" | "missing" | "invalid";
-  risk_level: "read" | "write" | "sensitive";
-};
 
 function normalizeStringList(input: unknown): string[] {
   if (!Array.isArray(input)) return [];
@@ -95,25 +71,6 @@ function normalizeSnapshotTools(
     tool_name: tool.tool_name,
     namespaced_tool_name: tool.namespaced_tool_name,
     description: tool.description,
-    risk_level: tool.risk_level,
-  }));
-}
-
-function normalizeRuntimeSnapshotTools(
-  snapshot: AppToolSnapshotRow | null,
-): Array<{
-  tool_name: string;
-  namespaced_tool_name: string;
-  description: string | null;
-  input_schema_json: string | null;
-  input_schema_kind: "object" | "boolean" | "missing" | "invalid";
-  risk_level: "read" | "write" | "sensitive";
-}> {
-  return normalizeStoredSnapshotTools(snapshot?.toolsJson).map((tool) => ({
-    tool_name: tool.tool_name,
-    namespaced_tool_name: tool.namespaced_tool_name,
-    description: tool.description,
-    ...buildStoredMcpToolSchemaTransport(tool),
     risk_level: tool.risk_level,
   }));
 }
@@ -187,40 +144,6 @@ function mapCommunityAppMountReadModel(args: {
       enabled: selectedToolNames.has(tool.tool_name),
     })),
   };
-}
-
-function resolveRuntimeMountedCommunityAppTools(args: {
-  mount: CommunityAppMountRow;
-  app: DeveloperAppRow;
-  connection: AppConnectionRow | null;
-  snapshot: AppToolSnapshotRow | null;
-}): RuntimeMountedCommunityAppTool[] {
-  if (!args.mount.enabled) return [];
-  if (args.app.status !== "valid") return [];
-  if (
-    args.app.authType !== "none" &&
-    args.connection?.connectionStatus !== "connected"
-  ) {
-    return [];
-  }
-  const tools = normalizeRuntimeSnapshotTools(args.snapshot);
-  const selectedToolNames = new Set(computeSelectedToolNames(args.mount, tools));
-  return tools
-    .filter((tool) => selectedToolNames.has(tool.tool_name))
-    .map((tool) => ({
-      community_app_mount_id: args.mount._id,
-      developer_app_id: args.app._id,
-      catalog_app_id: args.app.catalogAppId ?? null,
-      app_name: args.app.name,
-      endpoint_url: args.app.endpointUrl,
-      auth_type: args.app.authType,
-      tool_name: tool.tool_name,
-      namespaced_tool_name: tool.namespaced_tool_name,
-      description: tool.description,
-      input_schema_json: tool.input_schema_json,
-      input_schema_kind: tool.input_schema_kind,
-      risk_level: tool.risk_level,
-    }));
 }
 
 async function getCommunityAppMountById(
@@ -417,40 +340,6 @@ export const getCommunityAppMountLifecycleContextInternal = internalQuery({
   },
 });
 
-export const listRuntimeCommunityMountedToolsInternal = internalQuery({
-  args: {
-    userId: v.id("users"),
-    communityId: v.id("communities"),
-  },
-  handler: async (ctx, args) => {
-    await requireCommunityChatAccess({
-      ctx,
-      communityId: args.communityId,
-      userId: args.userId,
-    });
-    const mounts = await listCommunityAppMountRows(ctx, args.communityId);
-    const resolved: RuntimeMountedCommunityAppTool[] = [];
-    for (const mount of mounts) {
-      const app = await getDeveloperAppById(ctx, mount.developerAppId);
-      const snapshot = await getAppToolSnapshotById(ctx, mount.toolSnapshotId);
-      if (!app || !snapshot) continue;
-      const connection = await getAppConnectionByDeveloperAppId(
-        ctx,
-        mount.developerAppId,
-      );
-      resolved.push(
-        ...resolveRuntimeMountedCommunityAppTools({
-          mount,
-          app,
-          connection,
-          snapshot,
-        }),
-      );
-    }
-    return resolved;
-  },
-});
-
 export const listCommunityAppMounts = query({
   args: {
     userId: v.optional(v.id("users")),
@@ -486,144 +375,6 @@ export const listCommunityAppMounts = query({
       );
     }
     return results;
-  },
-});
-
-export const executeCommunityMountedAppToolInternal = internalAction({
-  args: {
-    userId: v.id("users"),
-    communityId: v.id("communities"),
-    namespacedToolName: v.string(),
-    argsJson: v.any(),
-  },
-  handler: async (ctx, args) => {
-    const runtimeTools = (await ctx.runQuery(
-      internal.communityAppMounts.listRuntimeCommunityMountedToolsInternal,
-      {
-        userId: args.userId,
-        communityId: args.communityId,
-      },
-    )) as RuntimeMountedCommunityAppTool[];
-    const mountedTool = runtimeTools.find(
-      (tool) => tool.namespaced_tool_name === args.namespacedToolName,
-    );
-    if (!mountedTool) {
-      return {
-        status: "error" as const,
-        exitCode: null,
-        outputText: "",
-        errorCode: "community_app_tool_not_found",
-        errorMessage: "Mounted community app tool not found.",
-        details: null,
-      };
-    }
-
-    if (mountedTool.risk_level !== "read") {
-      await ctx.runQuery(
-        internal.communityAppMounts.assertCommunityManagerAccessInternal,
-        {
-          userId: args.userId,
-          communityId: args.communityId,
-        },
-      );
-    }
-
-    const connectionBundle = (await ctx.runQuery(
-      internal.appConnections.getDecryptedDeveloperAppConnectionBundleInternal,
-      {
-        developerAppId: mountedTool.developer_app_id,
-      },
-    )) as {
-      app: DeveloperAppRow;
-      connection: AppConnectionRow | null;
-      secret: string | null;
-    } | null;
-    if (!connectionBundle) {
-      return {
-        status: "error" as const,
-        exitCode: null,
-        outputText: "",
-        errorCode: "community_app_not_found",
-        errorMessage: "Mounted community app not found.",
-        details: null,
-      };
-    }
-
-    try {
-      const headers = buildDeveloperAppAuthHeaders({
-        app: connectionBundle.app,
-        secret: connectionBundle.secret,
-      });
-      const { protocolVersion, sessionId } =
-        await initializeStreamableHttpMcpSession({
-          url: mountedTool.endpoint_url,
-          headers,
-          clientName: "polynet-runtime",
-          clientVersion: "0.1.0",
-        });
-      await sendInitializedNotification({
-        url: mountedTool.endpoint_url,
-        headers,
-        protocolVersion,
-        sessionId,
-      });
-      const callResult = await callMcpTool({
-        url: mountedTool.endpoint_url,
-        headers,
-        protocolVersion,
-        sessionId,
-        toolName: mountedTool.tool_name,
-        argumentsObject:
-          args.argsJson &&
-          typeof args.argsJson === "object" &&
-          !Array.isArray(args.argsJson)
-            ? (args.argsJson as Record<string, unknown>)
-            : {},
-      });
-      const record =
-        callResult && typeof callResult === "object" && !Array.isArray(callResult)
-          ? (callResult as Record<string, unknown>)
-          : null;
-      const isError = record?.isError === true;
-      const outputText = formatMcpToolResultOutput(callResult);
-      return {
-        status: isError ? ("error" as const) : ("ok" as const),
-        exitCode: isError ? null : 0,
-        outputText,
-        errorCode: isError ? "community_app_tool_failed" : null,
-        errorMessage: isError ? outputText || "Community app tool failed." : null,
-        details: {
-          community_app: {
-            community_app_mount_id: String(mountedTool.community_app_mount_id),
-            developer_app_id: String(mountedTool.developer_app_id),
-            app_name: mountedTool.app_name,
-            tool_name: mountedTool.tool_name,
-            namespaced_tool_name: mountedTool.namespaced_tool_name,
-            risk_level: mountedTool.risk_level,
-          },
-        },
-      };
-    } catch (error) {
-      const message =
-        error instanceof Error ? normalizeString(error.message, 2_000) : "community_app_tool_failed";
-      return {
-        status: "error" as const,
-        exitCode: null,
-        outputText: "",
-        errorCode: "community_app_tool_failed",
-        errorMessage: message || "Community app tool failed.",
-        details: {
-          community_app: {
-            community_app_mount_id: String(mountedTool.community_app_mount_id),
-            developer_app_id: String(mountedTool.developer_app_id),
-            app_name: mountedTool.app_name,
-            tool_name: mountedTool.tool_name,
-            namespaced_tool_name: mountedTool.namespaced_tool_name,
-            risk_level: mountedTool.risk_level,
-          },
-        },
-      };
-    }
   },
 });
 
