@@ -255,31 +255,6 @@ async function listUserHarnessAppSourcesForMount(args: {
     .collect()) as UserPlatformAppMountSourceRow[];
 }
 
-async function shouldRetainUserHarnessMountAfterSourceRemoval(args: {
-  ctx: any;
-  mount: UserPlatformAppMountRow;
-}): Promise<boolean> {
-  const app = await getDeveloperAppById(args.ctx, args.mount.developerAppId);
-  if (!app) return false;
-  const connection = await getAppConnectionByDeveloperAppId(
-    args.ctx,
-    args.mount.developerAppId,
-  );
-  if (connection?.connectionStatus === "connected") return true;
-  const snapshot = await getAppToolSnapshotById(args.ctx, args.mount.toolSnapshotId);
-  const tools = normalizeSnapshotTools(snapshot);
-  const enabledTools = computeSelectedToolNames(args.mount, tools);
-  return (
-    deriveUserPlatformMountLiveState({
-      mount: args.mount,
-      app,
-      connection,
-      snapshot,
-      enabledTools,
-    }).live_status === "live"
-  );
-}
-
 function buildConnectErrorMessage(
   code: ConnectUserPlatformAppErrorCode,
   appName: string,
@@ -1764,7 +1739,7 @@ export const unmountUserPlatformApp = mutation({
   },
 });
 
-export const removeCommunityAppGrantSourceInternal = internalMutation({
+export const promoteCommunityAppGrantSourcesToPersonalInternal = internalMutation({
   args: {
     communityAppMountId: v.id("communityAppMounts"),
     nowMs: v.optional(v.number()),
@@ -1777,9 +1752,9 @@ export const removeCommunityAppGrantSourceInternal = internalMutation({
         q.eq("communityAppMountId", args.communityAppMountId),
       )
       .collect()) as UserPlatformAppMountSourceRow[];
-    let removedSourceCount = 0;
-    let deletedMountCount = 0;
-    let retainedPersonalMountCount = 0;
+    let removedCommunitySourceCount = 0;
+    let promotedPersonalSourceCount = 0;
+    let existingPersonalSourceCount = 0;
     let skippedMissingMountCount = 0;
 
     for (const source of sourceRows) {
@@ -1788,64 +1763,49 @@ export const removeCommunityAppGrantSourceInternal = internalMutation({
         source.userPlatformAppMountId,
       );
       await ctx.db.delete(source._id);
-      removedSourceCount += 1;
+      removedCommunitySourceCount += 1;
 
       if (!mount) {
         skippedMissingMountCount += 1;
         continue;
       }
 
-      const remainingSources = await listUserHarnessAppSourcesForMount({
-        ctx,
-        userId: mount.userId,
+      const sourceKey = buildUserPlatformAppMountSourceKey({
+        sourceType: "personal",
         userPlatformAppMountId: mount._id,
       });
-      if (remainingSources.length > 0) continue;
-
-      const shouldRetain = await shouldRetainUserHarnessMountAfterSourceRemoval({
-        ctx,
-        mount,
-      });
-      if (shouldRetain) {
-        const sourceKey = buildUserPlatformAppMountSourceKey({
-          sourceType: "personal",
+      const existingPersonalSource = await ctx.db
+        .query("userPlatformAppMountSources")
+        .withIndex("by_user_sourceKey", (q: any) =>
+          q.eq("userId", mount.userId).eq("sourceKey", sourceKey),
+        )
+        .first();
+      if (existingPersonalSource) {
+        await ctx.db.patch(existingPersonalSource._id, {
           userPlatformAppMountId: mount._id,
+          sourceType: "personal",
+          sourceKey,
+          updatedAt: nowMs,
         });
-        const existingPersonalSource = await ctx.db
-          .query("userPlatformAppMountSources")
-          .withIndex("by_user_sourceKey", (q: any) =>
-            q.eq("userId", mount.userId).eq("sourceKey", sourceKey),
-          )
-          .first();
-        if (existingPersonalSource) {
-          await ctx.db.patch(existingPersonalSource._id, {
-            userPlatformAppMountId: mount._id,
-            sourceType: "personal",
-            sourceKey,
-            updatedAt: nowMs,
-          });
-        } else {
-          await ctx.db.insert("userPlatformAppMountSources", {
-            userId: mount.userId,
-            userPlatformAppMountId: mount._id,
-            sourceType: "personal",
-            sourceKey,
-            createdAt: nowMs,
-            updatedAt: nowMs,
-          });
-        }
-        retainedPersonalMountCount += 1;
+        existingPersonalSourceCount += 1;
         continue;
       }
 
-      await ctx.db.delete(mount._id);
-      deletedMountCount += 1;
+      await ctx.db.insert("userPlatformAppMountSources", {
+        userId: mount.userId,
+        userPlatformAppMountId: mount._id,
+        sourceType: "personal",
+        sourceKey,
+        createdAt: nowMs,
+        updatedAt: nowMs,
+      });
+      promotedPersonalSourceCount += 1;
     }
 
     return {
-      removed_source_count: removedSourceCount,
-      deleted_mount_count: deletedMountCount,
-      retained_personal_mount_count: retainedPersonalMountCount,
+      removed_community_source_count: removedCommunitySourceCount,
+      promoted_personal_source_count: promotedPersonalSourceCount,
+      existing_personal_source_count: existingPersonalSourceCount,
       skipped_missing_mount_count: skippedMissingMountCount,
     };
   },
@@ -2120,9 +2080,7 @@ export const seedCommunityAppGrantIntoUserHarnessInternal = internalAction({
         enabledTools: Array.isArray(seedSource.mount.enabledTools)
           ? seedSource.mount.enabledTools
           : undefined,
-        sourceType: "community",
-        communityId: seedSource.mount.communityId,
-        communityAppMountId: seedSource.mount._id,
+        sourceType: "personal",
         updateExistingMount: false,
         nowMs: args.nowMs,
       },
@@ -2136,8 +2094,8 @@ export const seedCommunityAppGrantIntoUserHarnessInternal = internalAction({
       ok: ensured?.ok === true,
       seeded: ensured?.created === true,
       reason: ensured?.reused
-        ? "existing_personal_app_reused"
-        : "personal_setup_needed_seeded",
+        ? "existing_user_app_reused"
+        : "user_app_installed_from_community",
       mount: ensured?.mount ?? null,
     };
   },
@@ -2247,9 +2205,7 @@ export const seedCommunityAppGrantsForUserInternal = internalAction({
             enabledTools: Array.isArray(seedSource.mount.enabledTools)
               ? seedSource.mount.enabledTools
               : undefined,
-            sourceType: "community",
-            communityId: seedSource.mount.communityId,
-            communityAppMountId: seedSource.mount._id,
+            sourceType: "personal",
             updateExistingMount: false,
             nowMs: args.nowMs,
           },

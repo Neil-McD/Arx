@@ -48,8 +48,23 @@ function main() {
   );
   assertIncludes(
     contract,
+    "A community grant is a distribution path, not continuing ownership of the member's user app state.",
+    "MCP app architecture contract community distribution rule",
+  );
+  assertIncludes(
+    contract,
+    "Removing the app from the community stops future distribution but does not uninstall existing user harness apps.",
+    "MCP app architecture contract community removal rule",
+  );
+  assertIncludes(
+    contract,
     "Do not expose `communityAppMounts` directly as Daytona runtime tools.",
     "MCP app architecture contract forbidden runtime pattern",
+  );
+  assertIncludes(
+    contract,
+    "Do not remove an existing user harness app just because a builder removes it from the community recommendation bundle.",
+    "MCP app architecture contract forbidden uninstall pattern",
   );
 
   assertIncludes(schema, "developerApps: defineTable({", "app definition table");

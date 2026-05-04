@@ -142,7 +142,7 @@ function main() {
   assertIncludes(
     schema,
     ".index(\"by_community_mount\", [\"communityAppMountId\"])",
-    "community app removal can find granted personal harness sources",
+    "legacy community app source rows can be promoted on community removal",
   );
   assertIncludes(
     communityAppMounts,
@@ -187,7 +187,7 @@ function main() {
   assertIncludes(
     userPlatformAppMounts,
     "throw new Error(\"community_app_mount_source_required\")",
-    "community source provenance fails closed when missing source ids",
+    "legacy community source provenance fails closed when missing source ids",
   );
   assertIncludes(
     userPlatformAppMounts,
@@ -201,8 +201,8 @@ function main() {
   );
   assertIncludes(
     userPlatformAppMounts,
-    "sourceType: \"community\"",
-    "community grants record community source provenance",
+    "sourceType: \"personal\"",
+    "community distribution installs record user-owned app provenance",
   );
   assertIncludes(
     userPlatformAppMounts,
@@ -216,18 +216,23 @@ function main() {
   );
   assertIncludes(
     userPlatformAppMounts,
-    "export const removeCommunityAppGrantSourceInternal = internalMutation({",
-    "community removal has a canonical personal harness source cleanup path",
+    "export const promoteCommunityAppGrantSourcesToPersonalInternal = internalMutation({",
+    "community removal promotes legacy grant-sourced installs to user ownership",
   );
   assertIncludes(
     userPlatformAppMounts,
-    "shouldRetainUserHarnessMountAfterSourceRemoval",
-    "community removal retains configured or live personal harness apps",
+    "promoted_personal_source_count",
+    "community removal never deletes existing user harness apps",
   );
   assertIncludes(
     communityAppMounts,
-    "removeCommunityAppGrantSourceInternal",
-    "community app removal removes community provenance before deleting grant",
+    "promoteCommunityAppGrantSourcesToPersonalInternal",
+    "community app removal preserves existing user harness apps before deleting grant",
+  );
+  assertNotIncludes(
+    communityAppMounts,
+    "personal_harness_cleanup",
+    "community app removal is no longer an uninstall path for user harness apps",
   );
   for (const [source, label] of [
     [communityPublic, "public/free community join"],

@@ -74,7 +74,9 @@ Fields:
 
 ### `userPlatformAppMountSources`
 
-Durable provenance for why a user's canonical harness app exists.
+Durable ownership/provenance for a user's canonical harness app. The active
+MCP architecture treats community app grants as distribution, so seeded
+community installs are user-owned harness apps.
 
 Fields:
 - `userId`
@@ -113,4 +115,6 @@ This is intentionally the only product-facing app path for the current alpha sli
 - community config blobs are not canonical app truth
 - community grants never store member secrets
 - community grants seed/reuse user harness app state by stable app identity
+- community grant removal stops future distribution; it does not uninstall
+  already-seeded user harness apps
 - runtime prompt context must not claim more app capability than the user harness actually executes

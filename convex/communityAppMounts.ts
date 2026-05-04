@@ -852,8 +852,8 @@ export const unmountCommunityApp = action({
         communityAppMountId: args.communityAppMountId,
       },
     );
-    const personalHarnessCleanup = await ctx.runMutation(
-      internal.userPlatformAppMounts.removeCommunityAppGrantSourceInternal,
+    const personalHarnessPromotion = await ctx.runMutation(
+      internal.userPlatformAppMounts.promoteCommunityAppGrantSourcesToPersonalInternal,
       {
         communityAppMountId: args.communityAppMountId,
       },
@@ -869,7 +869,7 @@ export const unmountCommunityApp = action({
       ...(removed && typeof removed === "object" && !Array.isArray(removed)
         ? (removed as Record<string, unknown>)
         : { removed: true, id: String(args.communityAppMountId) }),
-      personal_harness_cleanup: personalHarnessCleanup,
+      personal_harness_promotion: personalHarnessPromotion,
     };
   },
 });

@@ -30,15 +30,15 @@ A community app grant says a community recommends or grants access to an app.
 
 Current code:
 - `communityAppMounts`
-- `userPlatformAppMountSources` rows with `sourceType: "community"` after seeding
 
 Important: `communityAppMounts` is a legacy table name. Product behavior should treat it as a grant/recommendation record, not as an executable community runtime MCP layer.
 
 Rules:
-- A community grant can cause a member to get a matching user app state.
+- A community grant can cause a member to get a matching user-owned app state.
 - A community grant can be shown in Community Settings and Discover.
 - A community grant must not create a second runtime copy of the app.
 - A community grant must not imply that members inherit another user's secret.
+- A community grant is a distribution path, not continuing ownership of the member's user app state.
 - Shared/community-owned credentials are a separate future policy and must be explicit before use.
 
 ### User App State
@@ -53,7 +53,7 @@ Current code:
 
 Rules:
 - User app state is the only source for live/setup-needed/not-live status shown to that user.
-- Source rows explain why the app is present: personal, community, or both.
+- Source rows explain durable user ownership for current distribution installs.
 - Personal credentials live in user connection state.
 - If a user already has Linear live personally and a community grants Linear, every surface must resolve to that same effective Linear state for that user.
 - If a user lacks required credentials, the app can be present but must show setup needed.
@@ -93,8 +93,9 @@ Adding an app to a community creates or reuses the community grant and seeds use
 - Reuse an existing community grant by `catalogAppId` first, then endpoint/auth fallback.
 - Do not ask for or store a shared member secret.
 - Reuse matching user app state by stable identity.
-- Record a community source for seeded user app state.
+- Record user-owned app state for seeded installs.
 - Surface any setup-needed state from the user's effective app state, not from a separate community runtime.
+- Removing the app from the community stops future distribution but does not uninstall existing user harness apps.
 
 ### Community join
 
@@ -107,12 +108,11 @@ Joining a community grants access to that community's app bundle.
 
 ### Community leave
 
-Leaving a community revokes that community grant.
+Leaving a community revokes community access, not previously installed user-owned MCP apps.
 
-- Do not blindly delete user-owned app state.
-- Remove only that community source from the user app state.
-- A user who manually added or liked an app keeps that user app state after leaving.
-- If a user app state has no remaining personal/community source and is not live/configured, it can be removed as grant-only cleanup.
+- Do not delete user-owned app state when community access ends.
+- Existing user harness apps remain available until the user removes them.
+- Future community-managed app access is a separate primitive with explicit shared/community authentication, metering, billing, and revocation semantics.
 
 ## Forbidden patterns
 
@@ -121,6 +121,7 @@ Leaving a community revokes that community grant.
 - Do not show community status as setup needed when the user's effective app state is live for the same app identity.
 - Do not infer that a community grant provides a member's bearer token, OAuth token, or secret.
 - Do not treat endpoint string equality alone as canonical when a catalog identity is available.
+- Do not remove an existing user harness app just because a builder removes it from the community recommendation bundle.
 
 ## Current migration stance
 
