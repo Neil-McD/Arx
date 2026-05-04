@@ -57,6 +57,34 @@ function toStatusLabel(value: string | null | undefined): string {
     .join(" ");
 }
 
+function buildMountStateClassName(mount: CommunityMountedApp): string {
+  if (!mount.enabled) return " is-disabled";
+  if (mount.live_status === "live") return " is-live";
+  const reason = String(mount.not_live_reason ?? "").trim();
+  if (reason === "needs_auth" || reason === "missing_snapshot") return " is-setup";
+  return " is-not-live";
+}
+
+function buildMountStateLabel(mount: CommunityMountedApp): string {
+  if (!mount.enabled) return "Disabled";
+  if (mount.live_status === "live") return "Live";
+  return "Setup needed";
+}
+
+function buildMountStatusLabel(mount: CommunityMountedApp): string {
+  const enabledCount = mount.tools.filter((tool) => tool.enabled).length;
+  if (enabledCount > 0) return `${enabledCount} ${enabledCount === 1 ? "tool" : "tools"} enabled`;
+  if (mount.tools.length > 0) return "0 tools enabled";
+  return "0 tools";
+}
+
+function buildMountDetail(mount: CommunityMountedApp): string {
+  const auth = toStatusLabel(mount.app.auth_type);
+  const connection = toStatusLabel(mount.connection.connection_status);
+  const validation = toStatusLabel(mount.app.status);
+  return `Auth ${auth} · Connection ${connection} · Validation ${validation}`;
+}
+
 function findCatalogEntryForCommunityMount(mount: CommunityMountedApp) {
   const byCatalogId = mount.app.catalog_app_id
     ? DISCOVER_APP_CATALOG.find((entry) => entry.id === mount.app.catalog_app_id)
@@ -337,7 +365,7 @@ export function WebCommunityAiAgentAppsEditor(
           <div className="model-note">{emptyState}</div>
         </div>
       ) : (
-        <div className="agent-capability-list" role="list" aria-label="Community apps">
+        <div className="integrations-app-list" role="list" aria-label="Community apps">
           {mounts.map((mount) => {
             const enabledToolNames = mount.tools
               .filter((tool) => tool.enabled)
@@ -348,30 +376,40 @@ export function WebCommunityAiAgentAppsEditor(
             const isEditing = editingMountId === mount.id;
             const catalogEntry = findCatalogEntryForCommunityMount(mount);
             return (
-              <div key={mount.id} className="agent-capability-card community-app-mount-card" role="listitem">
-                <div className="agent-capability-card-header">
-                  <div className="community-app-mount-identity">
+              <div key={mount.id} className="integration-mounted-row" role="listitem">
+                <div className="integration-mounted-top">
+                  <div className="integration-mounted-identity">
                     <DiscoverCatalogLogo
                       name={mount.app.name}
                       logoUrl={catalogEntry?.logoUrl}
                       logoUrlDark={catalogEntry?.logoUrlDark}
                     />
-                    <div className="community-app-mount-heading">
-                      <div className="agent-capability-card-title-row">
-                        <div className="settings-section-subtitle">{mount.app.name}</div>
-                        <span className={`community-app-status-badge${mount.enabled ? "" : " is-muted"}`}>
-                          {mount.enabled ? "Enabled" : "Disabled"}
+                    <div className="integration-mounted-main">
+                      <div className="integration-mounted-title-row">
+                        <strong>{mount.app.name}</strong>
+                        <span className={`integration-state-indicator${buildMountStateClassName(mount)}`}>
+                          <span aria-hidden="true" />
+                          {buildMountStateLabel(mount)}
+                        </span>
+                        <span className="integration-status-pill">
+                          {buildMountStatusLabel(mount)}
+                        </span>
+                        <span className="integration-status-pill">
+                          Community app
                         </span>
                       </div>
-                      <div className="model-note">
+                      <div className="integration-mounted-meta">
                         {mount.app.endpoint_url}
+                      </div>
+                      <div className="integration-mounted-detail">
+                        {buildMountDetail(mount)}
                       </div>
                     </div>
                   </div>
-                  <div className="community-app-mount-actions">
+                  <div className="integration-mounted-rail">
                     <label
                       className={`members-switch integration-mounted-switch${isUpdating || isRemoving || isRefreshing ? " is-disabled" : ""}`}
-                      aria-label={`${mount.enabled ? "Disable" : "Enable"} ${mount.app.name}`}
+                      title={mount.enabled ? "Disable app" : "Enable app"}
                     >
                       <input
                         type="checkbox"
@@ -382,26 +420,29 @@ export function WebCommunityAiAgentAppsEditor(
                           })
                         }
                         disabled={isUpdating || isRemoving || isRefreshing}
+                        aria-label={`${mount.enabled ? "Disable" : "Enable"} ${mount.app.name}`}
                       />
-                      <span className="members-switch-track" aria-hidden="true">
+                      <span className="members-switch-track">
                         <span className="members-switch-thumb" />
                       </span>
                     </label>
-                    <button
-                      type="button"
-                      onClick={() => setEditingMountId(isEditing ? null : mount.id)}
-                      disabled={isRemoving}
-                    >
-                      {isEditing ? "Done" : "Edit"}
-                    </button>
-                    <button
-                      type="button"
-                      className="agent-onboarding-reset"
-                      onClick={() => void onUnmountApp(mount.id)}
-                      disabled={isRemoving || isUpdating || isRefreshing}
-                    >
-                      {isRemoving ? "Removing…" : "Remove"}
-                    </button>
+                    <div className="agent-capability-toolbar-actions">
+                      <button
+                        type="button"
+                        onClick={() => setEditingMountId(isEditing ? null : mount.id)}
+                        disabled={isRemoving}
+                      >
+                        {isEditing ? "Done" : "Edit"}
+                      </button>
+                      <button
+                        type="button"
+                        className="agent-onboarding-reset"
+                        onClick={() => void onUnmountApp(mount.id)}
+                        disabled={isRemoving || isUpdating || isRefreshing}
+                      >
+                        {isRemoving ? "Removing…" : "Remove"}
+                      </button>
+                    </div>
                   </div>
                 </div>
 
