@@ -463,7 +463,7 @@ export const listCommunityAppMounts = query({
       userId: args.userId,
       authSubject: args.authSubject ?? null,
     });
-    await requireCommunityManager({
+    await requireCommunityChatAccess({
       ctx,
       communityId: args.communityId,
       userId,
