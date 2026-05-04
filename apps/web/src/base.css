@@ -1769,7 +1769,7 @@ body {
 .polynet-landing-flow-copy {
   display: grid;
   align-content: start;
-  gap: 12px;
+  gap: 14px;
 }
 
 .polynet-landing-flow-copy > span,
@@ -1783,45 +1783,47 @@ body {
 
 .polynet-landing-flow-copy h3 {
   margin: 0;
-  color: var(--text-primary);
-  font-size: clamp(28px, 3.2vw, 42px);
-  line-height: 1.02;
+  color: #fff;
+  font-size: clamp(42px, 5vw, 68px);
+  line-height: 0.96;
+  text-shadow: 0 16px 50px rgba(0, 0, 0, 0.42);
 }
 
 .polynet-landing-flow-copy p {
   max-width: 620px;
   margin: 0;
-  color: var(--text-secondary);
-  font-size: 17px;
+  color: color-mix(in srgb, var(--text-primary) 76%, var(--text-secondary));
+  font-size: 18px;
   line-height: 1.5;
 }
 
 .polynet-landing-flow-copy ul {
-  margin: 4px 0 0;
+  margin: 10px 0 0;
   padding: 0;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px 18px;
+  gap: 13px 22px;
   list-style: none;
   color: var(--text-primary);
-  font-size: 14px;
-  font-weight: 650;
+  font-size: 15px;
+  font-weight: 700;
 }
 
 .polynet-landing-flow-copy li {
   min-width: 0;
   display: flex;
-  gap: 9px;
-  line-height: 1.3;
+  align-items: flex-start;
+  gap: 11px;
+  line-height: 1.35;
 }
 
 .polynet-landing-flow-copy li::before {
   content: "";
   flex: 0 0 auto;
-  width: 7px;
-  height: 7px;
-  margin-top: 5px;
+  width: 8px;
+  height: 8px;
   border-radius: 999px;
+  margin-top: 6px;
   background: var(--accent);
   box-shadow: 0 0 18px rgba(255, 72, 153, 0.42);
 }
@@ -1836,6 +1838,136 @@ body {
   background:
     radial-gradient(circle at 0% 0%, rgba(255, 72, 153, 0.12), transparent 32%),
     rgba(255, 255, 255, 0.035);
+}
+
+.polynet-landing-agent-stream {
+  min-width: 0;
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 13px;
+  padding: 8px 4px 8px 18px;
+  color: var(--text-primary);
+  overflow: hidden;
+  mask-image: linear-gradient(to bottom, transparent 0%, black 8%, black 92%, transparent 100%);
+}
+
+.polynet-landing-agent-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  color: var(--text-tertiary);
+  font-size: 13px;
+  font-weight: 750;
+  letter-spacing: 0.01em;
+}
+
+.polynet-landing-agent-output {
+  width: fit-content;
+  max-width: min(100%, 540px);
+  margin: 0;
+  color: color-mix(in srgb, var(--text-primary) 82%, var(--text-secondary));
+  font-size: 15px;
+  font-weight: 650;
+  line-height: 1.45;
+  overflow: hidden;
+  white-space: nowrap;
+  border-right: 2px solid rgba(255, 72, 153, 0.72);
+  animation:
+    polynet-agent-type 2900ms steps(62, end) both,
+    polynet-agent-caret 900ms steps(2, end) infinite;
+}
+
+.polynet-landing-agent-tools {
+  display: grid;
+  gap: 9px;
+  max-width: 560px;
+}
+
+.polynet-landing-agent-tools.secondary {
+  margin-top: 2px;
+}
+
+.polynet-landing-agent-tool {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+  opacity: 0;
+  transform: translateY(10px);
+  animation: polynet-agent-tool-in 520ms ease forwards;
+  animation-delay: calc(760ms + (var(--tool-index) * 420ms));
+}
+
+.polynet-landing-agent-tool.research {
+  animation-delay: calc(3100ms + (var(--tool-index) * 460ms));
+}
+
+.polynet-landing-agent-tool > div {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.polynet-landing-agent-tool code {
+  color: var(--accent);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  font-weight: 850;
+  letter-spacing: 0.01em;
+}
+
+.polynet-landing-agent-tool span,
+.polynet-landing-agent-tool p {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.polynet-landing-agent-tool span {
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.polynet-landing-agent-tool p {
+  margin: 0;
+  padding-left: 16px;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  font-weight: 620;
+  line-height: 1.35;
+}
+
+.polynet-landing-agent-thinking {
+  width: fit-content;
+  margin-top: 2px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 760;
+  overflow: hidden;
+  opacity: 0;
+  transform: translateY(8px);
+  animation: polynet-agent-tool-in 520ms ease forwards;
+  animation-delay: 4650ms;
+}
+
+.polynet-landing-agent-thinking span {
+  display: inline-block;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--text-secondary) 45%, transparent),
+    var(--text-primary),
+    color-mix(in srgb, var(--text-secondary) 45%, transparent)
+  );
+  background-size: 220% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  animation: polynet-agent-shimmer 1900ms ease-in-out infinite;
 }
 
 .polynet-landing-tool-call {
@@ -1896,6 +2028,50 @@ body {
   font-size: 11px;
   font-weight: 800;
   text-transform: uppercase;
+}
+
+@keyframes polynet-agent-type {
+  from {
+    max-width: 0;
+  }
+
+  to {
+    max-width: 540px;
+  }
+}
+
+@keyframes polynet-agent-caret {
+  0%,
+  48% {
+    border-color: rgba(255, 72, 153, 0.72);
+  }
+
+  49%,
+  100% {
+    border-color: transparent;
+  }
+}
+
+@keyframes polynet-agent-tool-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes polynet-agent-shimmer {
+  from {
+    background-position: 140% 0;
+  }
+
+  to {
+    background-position: -80% 0;
+  }
 }
 
 .polynet-onboarding-page {
@@ -2340,14 +2516,75 @@ body {
   }
 
   .polynet-landing-flow-detail {
-    grid-template-columns: 1fr;
-    gap: 18px;
+    grid-template-columns: minmax(0, 0.86fr) minmax(0, 1.14fr);
+    gap: 14px;
     min-height: 0;
     padding-top: 22px;
   }
 
+  .polynet-landing-flow-copy {
+    gap: 9px;
+  }
+
+  .polynet-landing-flow-copy h3 {
+    font-size: clamp(28px, 8vw, 38px);
+  }
+
+  .polynet-landing-flow-copy p {
+    font-size: 13px;
+    line-height: 1.4;
+  }
+
   .polynet-landing-flow-copy ul {
     grid-template-columns: 1fr;
+    gap: 9px;
+    font-size: 12px;
+  }
+
+  .polynet-landing-agent-stream {
+    padding: 2px 0;
+    mask-image: none;
+  }
+
+  .polynet-landing-agent-status,
+  .polynet-landing-agent-thinking,
+  .polynet-landing-agent-output {
+    font-size: 12px;
+  }
+
+  .polynet-landing-agent-output {
+    white-space: normal;
+    border-right: 0;
+    animation: none;
+  }
+
+  .polynet-landing-agent-tools {
+    max-width: none;
+  }
+
+  .polynet-landing-agent-tool > div {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .polynet-landing-agent-tool {
+    gap: 3px;
+  }
+
+  .polynet-landing-agent-tool code,
+  .polynet-landing-agent-tool span,
+  .polynet-landing-agent-tool p {
+    font-size: 11px;
+  }
+
+  .polynet-landing-agent-tool p {
+    padding-left: 0;
+  }
+
+  .polynet-landing-agent-tool span,
+  .polynet-landing-agent-tool p {
+    white-space: normal;
   }
 
   .polynet-landing-stack-row,
@@ -2399,6 +2636,18 @@ body {
   .polynet-landing-offer-actions,
   .polynet-onboarding-actions {
     grid-template-columns: 1fr;
+  }
+
+  .polynet-landing-flow {
+    justify-items: center;
+  }
+
+  .polynet-landing-flow > button {
+    width: min(100%, 340px);
+  }
+
+  .polynet-landing-flow > button:not(.active) {
+    display: none;
   }
 }
 
@@ -20329,6 +20578,27 @@ button.message-citation-chip:hover {
   .workspace-composer-shell,
   .workspace-operator-data-panel {
     transition: none;
+  }
+
+  .polynet-landing-agent-output,
+  .polynet-landing-agent-tool,
+  .polynet-landing-agent-thinking span {
+    animation: none;
+  }
+
+  .polynet-landing-agent-output {
+    max-width: none;
+    border-right: 0;
+  }
+
+  .polynet-landing-agent-tool {
+    opacity: 1;
+    transform: none;
+  }
+
+  .polynet-landing-agent-thinking span {
+    color: var(--text-secondary);
+    background: none;
   }
 }
 

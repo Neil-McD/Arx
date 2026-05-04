@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { type CSSProperties, useEffect, useState } from "react";
 import { Brain, Play } from "lucide-react";
 
 type WebLandingPageProps = {
@@ -33,6 +33,47 @@ const stackItems = [
 ];
 
 const stackTotal = "$516+";
+
+const buildAgentStream = [
+  {
+    call: "supabase.search",
+    detail: "connected project tables",
+    result: "Project data is available to the agent.",
+  },
+  {
+    call: "linear.read",
+    detail: "synced issues and roadmap",
+    result: "Open work and priorities are now in context.",
+  },
+  {
+    call: "slack.search",
+    detail: "indexed team context",
+    result: "Recent decisions and conversations are searchable.",
+  },
+  {
+    call: "docs.attach",
+    detail: "attached source material",
+    result: "Canonical docs are ready for retrieval.",
+  },
+];
+
+const buildAgentResearchStream = [
+  {
+    call: "polynet.search",
+    detail: "searched platform docs",
+    result: "Found community intelligence primitives.",
+  },
+  {
+    call: "web.search",
+    detail: "checked external context",
+    result: "Compared language against the market.",
+  },
+  {
+    call: "community.reference",
+    detail: "loaded community intelligence",
+    result: "Positioning and examples are ready.",
+  },
+];
 
 const flowCards = [
   {
@@ -234,19 +275,64 @@ export function WebLandingPage(props: WebLandingPageProps) {
               ))}
             </ul>
           </div>
-          <div className="polynet-landing-tool-stream" aria-label={activeFlow.exampleTitle}>
-            <span>{activeFlow.exampleTitle}</span>
-            {activeFlow.examples.map((example) => (
-              <div key={`${activeFlow.title}-${example.name}`} className="polynet-landing-tool-call">
-                <span>{example.name.slice(0, 2)}</span>
-                <div>
-                  <strong>{example.name}</strong>
-                  <em>{example.detail}</em>
-                </div>
-                <small>{example.status}</small>
+          {activeFlowIndex === 0 ? (
+            <div className="polynet-landing-agent-stream" aria-label="Simulated agent harness stream">
+              <div className="polynet-landing-agent-status">
+                <span>Working for 8s</span>
+                <span aria-hidden="true">›</span>
               </div>
-            ))}
-          </div>
+              <p className="polynet-landing-agent-output">
+                I’ll connect this agent to the tools and context it can use.
+              </p>
+              <div className="polynet-landing-agent-tools" aria-label="Simulated tool calls">
+                {buildAgentStream.map((tool, index) => (
+                  <div
+                    key={tool.call}
+                    className="polynet-landing-agent-tool"
+                    style={{ "--tool-index": index } as CSSProperties}
+                  >
+                    <div>
+                      <code>{tool.call}</code>
+                      <span>{tool.detail}</span>
+                    </div>
+                    <p>{tool.result}</p>
+                  </div>
+                ))}
+              </div>
+              <div className="polynet-landing-agent-tools secondary" aria-label="Simulated research calls">
+                {buildAgentResearchStream.map((tool, index) => (
+                  <div
+                    key={tool.call}
+                    className="polynet-landing-agent-tool research"
+                    style={{ "--tool-index": index } as CSSProperties}
+                  >
+                    <div>
+                      <code>{tool.call}</code>
+                      <span>{tool.detail}</span>
+                    </div>
+                    <p>{tool.result}</p>
+                  </div>
+                ))}
+              </div>
+              <div className="polynet-landing-agent-thinking">
+                <span>Referencing community intelligence</span>
+              </div>
+            </div>
+          ) : (
+            <div className="polynet-landing-tool-stream" aria-label={activeFlow.exampleTitle}>
+              <span>{activeFlow.exampleTitle}</span>
+              {activeFlow.examples.map((example) => (
+                <div key={`${activeFlow.title}-${example.name}`} className="polynet-landing-tool-call">
+                  <span>{example.name.slice(0, 2)}</span>
+                  <div>
+                    <strong>{example.name}</strong>
+                    <em>{example.detail}</em>
+                  </div>
+                  <small>{example.status}</small>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </section>
 
