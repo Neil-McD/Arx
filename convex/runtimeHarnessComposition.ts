@@ -9,7 +9,6 @@ import {
   mapSelectedCommunitySkillsToOverlayRuntime,
   mapSelectedUserPlatformSkillsToOverlayRuntime,
   mapUserPlatformSkillsToOverlayRuntime,
-  type RuntimeMountedCommunityAppTool,
   type RuntimeCommunitySkillInventory,
   type RuntimeSelectedCommunitySkill,
   type RuntimeSelectedUserPlatformSkill,
@@ -18,8 +17,6 @@ import {
 } from "./runtimeHarnessShaping.ts";
 
 export type ResolvedCommunityHarnessModule = {
-  mountedTools: RuntimeMountedCommunityAppTool[];
-  runtimeMountedTools: RuntimeMountedMcpTool[];
   attachedSkills: RuntimeCommunitySkillInventory[];
   selectedSkills: RuntimeSelectedCommunitySkill[];
   systemPromptSuffix: string;
@@ -266,8 +263,6 @@ export function resolveEffectiveMountedToolCatalog(
 
 export function composeResolvedRuntimeHarness(args: {
   personalMountedTools: RuntimeMountedMcpTool[];
-  communityMountedTools: RuntimeMountedCommunityAppTool[];
-  runtimeMountedCommunityTools: RuntimeMountedMcpTool[];
   skillResolution: RuntimeSkillResolution;
 }): ResolvedEffectiveHarness {
   const personalSkillInventory = args.skillResolution.user_platform_skill_inventory;
@@ -290,7 +285,6 @@ export function composeResolvedRuntimeHarness(args: {
     attachedCommunitySkills.length > 0 || selectedCommunitySkills.length > 0
       ? (() => {
           const overlayRuntimeState = buildCommunityOverlayRuntimeState({
-            mountedTools: [],
             attachedSkills: mapCommunitySkillsToOverlayRuntime(
               attachedCommunitySkills,
             ),
@@ -299,8 +293,6 @@ export function composeResolvedRuntimeHarness(args: {
             ),
           });
           return {
-            mountedTools: [],
-            runtimeMountedTools: [],
             attachedSkills: attachedCommunitySkills,
             selectedSkills: selectedCommunitySkills,
             systemPromptSuffix: overlayRuntimeState.systemPromptSuffix,

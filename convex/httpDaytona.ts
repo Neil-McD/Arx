@@ -85,7 +85,6 @@ import {
   buildMountedAppOpenAiTools,
   buildMountedAppResponsesTools,
   formatJsonToolOutput,
-  type RuntimeMountedCommunityAppTool,
   normalizeRuntimeMountedUserPlatformAppTools,
   normalizeRuntimeSkillResolution,
   readFailureOutputPreview,
@@ -653,8 +652,6 @@ async function executeRetrievalAgentLoop(
       input_schema: tool.input_schema,
       risk_level: tool.risk_level,
     }));
-  const mountedCommunityAppTools: RuntimeMountedCommunityAppTool[] = [];
-  const runtimeMountedCommunityAppTools: RuntimeMountedMcpTool[] = [];
   const skillResolution = normalizeRuntimeSkillResolution(
     await params.ctx.runQuery(
       internal.runtimeSkillResolution.resolveRuntimeSkillSelectionInternal,
@@ -671,8 +668,6 @@ async function executeRetrievalAgentLoop(
   );
   const resolvedHarness = composeResolvedRuntimeHarness({
     personalMountedTools: runtimeMountedUserPlatformAppTools,
-    communityMountedTools: mountedCommunityAppTools,
-    runtimeMountedCommunityTools: runtimeMountedCommunityAppTools,
     skillResolution,
   });
   const installedUserPlatformSkills = resolvedHarness.personalSkillInventory;
@@ -1004,16 +999,11 @@ async function executeRetrievalAgentLoop(
         run_id: params.runId,
         stage: "initial",
         fixed_allowed_tool_count: params.allowedToolNames.length,
-        mounted_catalog_count:
-          runtimeMountedUserPlatformAppTools.length +
-          mountedCommunityAppTools.length,
+        mounted_catalog_count: runtimeMountedUserPlatformAppTools.length,
         active_tool_count: initialProviderTools.activeToolNames.length,
         exposed_mounted_tool_count: initialProviderTools.activeToolNames.filter(
           (toolName) =>
             runtimeMountedUserPlatformAppTools.some(
-              (tool) => tool.runtime_tool_name === toolName,
-            ) ||
-            runtimeMountedCommunityAppTools.some(
               (tool) => tool.runtime_tool_name === toolName,
             ),
         ).length,

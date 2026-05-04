@@ -68,16 +68,18 @@ function main() {
     "const runtimeMountedTools = [...args.personalMountedTools];",
     "resolved runtime harness personal-only MCP runtime",
   );
-  assertIncludes(
-    runtimeHarnessComposition,
+  for (const deletedRuntimeShape of [
+    "communityMountedTools:",
+    "runtimeMountedCommunityTools:",
     "mountedTools: [],",
-    "resolved runtime harness empty community MCP projection",
-  );
-  assertIncludes(
-    runtimeHarnessComposition,
     "runtimeMountedTools: [],",
-    "resolved runtime harness empty community runtime MCP projection",
-  );
+  ]) {
+    assertNotIncludes(
+      runtimeHarnessComposition,
+      deletedRuntimeShape,
+      "resolved runtime harness deleted community MCP shape",
+    );
+  }
 
   console.log("mcp_app_architecture_contract_proof: ok");
 }

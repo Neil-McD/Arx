@@ -1,5 +1,4 @@
 import {
-  type CommunityOverlayMountedTool,
   type CommunityOverlaySelectedSkill,
   type CommunityOverlaySkillInventory,
 } from "../shared/communityOverlayRuntime.ts";
@@ -18,20 +17,6 @@ import { decodeStoredMcpToolInputSchema } from "./mcpSnapshotCodec.ts";
 type OpenAiCompatibleFunctionTool = ReturnType<
   typeof buildOpenAiFunctionTools
 >[number];
-
-export type RuntimeMountedCommunityAppTool = {
-  community_app_mount_id: string;
-  developer_app_id: string;
-  catalog_app_id: string | null;
-  app_name: string;
-  endpoint_url: string;
-  auth_type: string;
-  tool_name: string;
-  namespaced_tool_name: string;
-  description: string | null;
-  input_schema: unknown;
-  risk_level: "read" | "write" | "sensitive";
-};
 
 export type RuntimeMountedUserPlatformAppTool = {
   user_platform_app_mount_id: string;
@@ -101,55 +86,6 @@ export function normalizeMountedToolSchema(
     additionalProperties: true,
     properties: {},
   };
-}
-
-export function normalizeRuntimeMountedCommunityAppTools(
-  value: unknown,
-): RuntimeMountedCommunityAppTool[] {
-  if (!Array.isArray(value)) return [];
-  const tools: RuntimeMountedCommunityAppTool[] = [];
-  const seen = new Set<string>();
-  for (const item of value) {
-    const record =
-      item && typeof item === "object" && !Array.isArray(item)
-        ? (item as Record<string, unknown>)
-        : null;
-    if (!record) continue;
-    const namespacedToolName = String(
-      record.namespaced_tool_name ?? "",
-    ).trim();
-    const toolName = String(record.tool_name ?? "").trim();
-    if (!namespacedToolName || !toolName || seen.has(namespacedToolName)) {
-      continue;
-    }
-    seen.add(namespacedToolName);
-    const riskLevel =
-      record.risk_level === "write" || record.risk_level === "sensitive"
-        ? record.risk_level
-        : "read";
-    tools.push({
-      community_app_mount_id: String(record.community_app_mount_id ?? "").trim(),
-      developer_app_id: String(record.developer_app_id ?? "").trim(),
-      catalog_app_id:
-        typeof record.catalog_app_id === "string" && record.catalog_app_id.trim()
-          ? record.catalog_app_id.trim().toLowerCase()
-          : null,
-      app_name: String(record.app_name ?? "").trim() || "Community app",
-      endpoint_url: String(record.endpoint_url ?? "").trim(),
-      auth_type: String(record.auth_type ?? "").trim(),
-      tool_name: toolName,
-      namespaced_tool_name: namespacedToolName,
-      description:
-        typeof record.description === "string" && record.description.trim()
-          ? record.description.trim()
-          : null,
-      input_schema: normalizeMountedToolSchema(
-        record.input_schema_json ?? record.input_schema,
-      ),
-      risk_level: riskLevel,
-    });
-  }
-  return tools;
 }
 
 export function normalizeRuntimeMountedUserPlatformAppTools(
@@ -456,17 +392,6 @@ export function buildUserPlatformMountedAppsPromptBlock(
     "Resolved personal app tools use the `me__` prefix when they are exposed to the model.",
     "Personal app tools run in full-access mode once mounted. Treat write and sensitive tools as exclusive, audited actions.",
   ].join("\n");
-}
-
-export function mapMountedToolsToOverlayRuntime(
-  mountedTools: RuntimeMountedCommunityAppTool[],
-): CommunityOverlayMountedTool[] {
-  return mountedTools.map((tool) => ({
-    namespacedToolName: tool.namespaced_tool_name,
-    toolName: tool.tool_name,
-    appName: tool.app_name,
-    description: tool.description,
-  }));
 }
 
 export function mapCommunitySkillsToOverlayRuntime(
