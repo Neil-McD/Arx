@@ -1,4 +1,4 @@
-import { Brain, DollarSign, Play, RefreshCw, UserRound } from "lucide-react";
+import { Brain, Play } from "lucide-react";
 
 type WebLandingPageProps = {
   onTryFree: () => void;
@@ -33,44 +33,24 @@ const stackItems = [
 
 const stackTotal = "$516+";
 
-function CommunityFlowVisual() {
-  return (
-    <span className="polynet-landing-flow-visual community" aria-hidden="true">
-      <UserRound className="polynet-community-person top" />
-      <UserRound className="polynet-community-person left" />
-      <UserRound className="polynet-community-person right" />
-      <Brain className="polynet-community-brain" />
-    </span>
-  );
-}
-
-function LandingFlowVisual(props: { kind: "agent" | "community" | "gate" | "loop" }) {
-  if (props.kind === "community") {
-    return <CommunityFlowVisual />;
-  }
-
-  if (props.kind === "gate") {
-    return (
-      <span className="polynet-landing-flow-visual monetize" aria-hidden="true">
-        <DollarSign />
-      </span>
-    );
-  }
-
-  if (props.kind === "loop") {
-    return (
-      <span className="polynet-landing-flow-visual loop" aria-hidden="true">
-        <RefreshCw />
-      </span>
-    );
-  }
-
-  return (
-    <span className="polynet-landing-flow-visual agent" aria-hidden="true">
-      <Brain />
-    </span>
-  );
-}
+const flowCards = [
+  {
+    title: "Build the agent",
+    image: "/landing/build-agent.png",
+  },
+  {
+    title: "Wrap it in a community",
+    image: "/landing/wrap-community.png",
+  },
+  {
+    title: "Monetize",
+    image: "/landing/monetize.png",
+  },
+  {
+    title: "Improve with usage",
+    image: "/landing/improve-usage.png",
+  },
+];
 
 export function WebLandingPage(props: WebLandingPageProps) {
   return (
@@ -95,8 +75,8 @@ export function WebLandingPage(props: WebLandingPageProps) {
               Turn your expertise into a <span>paid AI community</span>.
             </h1>
             <p className="polynet-landing-subcopy">
-              Build an agent trained on your knowledge. Wrap it in a
-              community. Monetize access.
+              Build an agent. Monetize access. Bring in members. Improve with
+              usage.
             </p>
             <div className="polynet-landing-cta-row">
               <button type="button" className="primary" onClick={props.onTryFree}>
@@ -141,22 +121,11 @@ export function WebLandingPage(props: WebLandingPageProps) {
           <h2 id="polynet-landing-flow">Turn expertise into a useful system.</h2>
         </div>
         <div className="polynet-landing-flow">
-          <span>
-            <LandingFlowVisual kind="agent" />
-            <strong>Build the agent</strong>
-          </span>
-          <span>
-            <LandingFlowVisual kind="community" />
-            <strong>Wrap it in a community</strong>
-          </span>
-          <span>
-            <LandingFlowVisual kind="gate" />
-            <strong>Monetize</strong>
-          </span>
-          <span>
-            <LandingFlowVisual kind="loop" />
-            <strong>Improve with usage</strong>
-          </span>
+          {flowCards.map((card) => (
+            <span key={card.title}>
+              <img src={card.image} alt={card.title} loading="lazy" />
+            </span>
+          ))}
         </div>
       </section>
 

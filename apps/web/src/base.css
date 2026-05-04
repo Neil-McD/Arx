@@ -1558,8 +1558,13 @@ body {
 }
 
 .polynet-landing-section.compact {
-  grid-template-columns: 0.7fr 1fr;
+  grid-template-columns: 1fr;
+  gap: 28px;
   padding-bottom: 110px;
+}
+
+.polynet-landing-section.compact h2 {
+  max-width: 760px;
 }
 
 .polynet-landing-section h2 {
@@ -1706,96 +1711,21 @@ body {
 .polynet-landing-flow {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
+  gap: 14px;
 }
 
 .polynet-landing-flow > span {
-  min-height: 132px;
-  border: 1px solid var(--border-muted);
-  border-radius: 16px;
-  padding: 18px;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  align-items: flex-end;
-  color: var(--text-primary);
-  background: rgba(255, 255, 255, 0.03);
-  font-weight: 700;
+  display: block;
+  min-width: 0;
 }
 
-.polynet-landing-flow-visual {
-  width: 54px;
-  height: 54px;
-  align-self: flex-start;
-  display: grid;
-  place-items: center;
-  color: rgba(255, 255, 255, 0.82);
-}
-
-.polynet-landing-flow-visual svg {
-  width: 52px;
-  height: 52px;
-  stroke-width: 1.65;
-}
-
-.polynet-landing-flow-visual.agent,
-.polynet-community-brain {
-  color: var(--accent-gold);
-}
-
-.polynet-landing-flow-visual.loop {
-  color: var(--accent-cyan);
-}
-
-.polynet-landing-flow-visual.monetize {
-  color: #52d273;
-}
-
-.polynet-landing-flow-visual.community {
-  position: relative;
-  width: 76px;
-  height: 70px;
-}
-
-.polynet-community-brain {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 32px !important;
-  height: 32px !important;
-  transform: translate(-50%, -42%);
-  stroke-width: 1.8 !important;
-}
-
-.polynet-community-person {
-  position: absolute;
-  width: 20px !important;
-  height: 20px !important;
-  color: rgba(255, 255, 255, 0.82);
-  stroke-width: 2 !important;
-}
-
-.polynet-community-person.top {
-  left: 50%;
-  top: 0;
-  transform: translateX(-50%);
-}
-
-.polynet-community-person.left {
-  left: 4px;
-  bottom: 5px;
-}
-
-.polynet-community-person.right {
-  right: 4px;
-  bottom: 5px;
-}
-
-.polynet-landing-flow strong {
-  align-self: flex-start;
-  max-width: 160px;
-  font: inherit;
-  line-height: 1.15;
+.polynet-landing-flow img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 18px;
+  object-fit: cover;
+  box-shadow: 0 22px 62px rgba(0, 0, 0, 0.32);
 }
 
 .polynet-onboarding-page {
