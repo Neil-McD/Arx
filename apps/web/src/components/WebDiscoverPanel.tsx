@@ -544,10 +544,13 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
         ? "Add"
         : null
     : null;
+  const selectedAppIsLiveForCurrentUser =
+    selectedPersonalMount?.live_status === "live" ||
+    selectedCommunityMount?.live_status === "live";
   const selectedAppCommunityActionLabel =
     selectedApp && hasManageableCommunityTarget
       ? selectedCommunityMount
-        ? selectedCommunityMount.live_status === "live"
+        ? selectedAppIsLiveForCurrentUser
           ? `Manage ${manageableCommunityTargetName}`
           : `Setup ${manageableCommunityTargetName}`
         : isDiscoverAppPersonallyConnectable(selectedApp)
