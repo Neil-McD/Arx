@@ -22,6 +22,15 @@ function main() {
   const runtimeHarnessComposition = readText(
     join(root, "convex/runtimeHarnessComposition.ts"),
   );
+  const discoverPanel = readText(
+    join(root, "apps/web/src/components/WebDiscoverPanel.tsx"),
+  );
+  const communitySettings = readText(
+    join(root, "apps/web/src/components/WebCommunitySettingsSection.tsx"),
+  );
+  const communityAppsEditor = readText(
+    join(root, "apps/web/src/components/WebCommunityAiAgentAppsEditor.tsx"),
+  );
 
   assertIncludes(
     contract,
@@ -80,6 +89,37 @@ function main() {
       "resolved runtime harness deleted community MCP shape",
     );
   }
+
+  assertIncludes(
+    discoverPanel,
+    "Recommend ${selectedApp.name} in ${communityTargetLabel}",
+    "Discover community app grant copy",
+  );
+  assertNotIncludes(
+    discoverPanel,
+    "Add ${selectedApp.name} to ${communityTargetLabel}",
+    "Discover community app mount copy",
+  );
+  assertIncludes(
+    communitySettings,
+    "No apps are recommended for this community yet.",
+    "Community Settings grant empty state",
+  );
+  assertNotIncludes(
+    communitySettings,
+    "No apps are attached to this community lens yet.",
+    "Community Settings legacy mount empty state",
+  );
+  assertIncludes(
+    communityAppsEditor,
+    "What happens when you recommend it",
+    "Community agent apps editor recommendation copy",
+  );
+  assertNotIncludes(
+    communityAppsEditor,
+    "The app is mounted into this community lens",
+    "Community agent apps editor legacy mount copy",
+  );
 
   console.log("mcp_app_architecture_contract_proof: ok");
 }

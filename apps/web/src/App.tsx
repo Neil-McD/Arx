@@ -55,7 +55,7 @@ import {
 import { useWebWorkspaceCoreController } from "./controllers/useWebWorkspaceCoreController";
 import { useWebCommunityUiController } from "./controllers/useWebCommunityUiController";
 import { useWebCommunityAgentConfigUiController } from "./controllers/useWebCommunityAgentConfigUiController";
-import { useWebCommunityAppMountsController } from "./controllers/useWebCommunityAppMountsController";
+import { useWebCommunityAppGrantsController } from "./controllers/useWebCommunityAppGrantsController";
 import { useWebCommunitySkillAttachmentsController } from "./controllers/useWebCommunitySkillAttachmentsController";
 import { useWebCommunityAdminUiController } from "./controllers/useWebCommunityAdminUiController";
 import { useWebCommunitySettingsUiController } from "./controllers/useWebCommunitySettingsUiController";
@@ -1984,7 +1984,7 @@ export default function App() {
     refreshCommunityApp,
     reconnectCommunityApp,
     unmountCommunityApp,
-  } = useWebCommunityAppMountsController<AuthSession>({
+  } = useWebCommunityAppGrantsController<AuthSession>({
     activeCommunityId,
     session,
     ensureSession: ensureUsableAuthSession,
@@ -6214,9 +6214,9 @@ export default function App() {
         previewProjectName: workspace.derived.resolvedActiveProjectName,
       },
       aiAgentAppsEditorProps: {
-        intro: "Connect hosted MCP apps here so this community lens loads real capabilities into the platform harness.",
-        emptyState: "Connect the first hosted MCP app to this community. Once mounted here, it becomes part of the community context whenever members switch into this lens.",
-        addButtonLabel: "Connect MCP app",
+        intro: "Recommend hosted MCP apps here so members can add them to their own harness.",
+        emptyState: "Recommend the first hosted MCP app for this community. Members can use their own credentials to make it live in their harness.",
+        addButtonLabel: "Browse apps",
         mounts: communityAppMounts,
         isLoading: isLoadingCommunityAppMounts,
         error: communityAppMountError,

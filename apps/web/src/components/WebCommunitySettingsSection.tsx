@@ -404,8 +404,8 @@ function CommunityIntegrationsSettingsSection({
     <div className="settings-section">
       <div className="settings-section-title">Community integrations</div>
       <div className="settings-section-desc">
-        Apps recommended here can be added to a member&apos;s personal harness.
-        Members use their own credentials when an app requires authentication.
+        Members can add recommended apps to their own harness and use their own
+        credentials when an app requires authentication.
       </div>
       {canManage ? (
         <div className="agent-capability-toolbar">
@@ -430,7 +430,7 @@ function CommunityIntegrationsSettingsSection({
       ) : null}
       {!integrations.isLoading && integrations.mounts.length === 0 ? (
         <div className="model-note">
-          No apps are attached to this community lens yet.
+          No apps are recommended for this community yet.
         </div>
       ) : null}
       {integrations.mounts.length > 0 ? (

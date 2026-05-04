@@ -2,12 +2,12 @@ import { useCallback, useRef, useState } from "react";
 
 import type { ConnectCommunityAppInput, CommunityMountedApp } from "../../../../shared/communityAppMountTypes";
 import {
-  connectCloudCommunityApp,
-  listCloudCommunityAppMounts,
-  reconnectCloudCommunityApp,
-  refreshCloudCommunityApp,
-  unmountCloudCommunityApp,
-  updateCloudCommunityAppMount,
+  recommendCloudCommunityApp,
+  listCloudCommunityAppGrants,
+  reconnectCloudCommunityAppGrant,
+  refreshCloudCommunityAppGrant,
+  removeCloudCommunityAppGrant,
+  updateCloudCommunityAppGrant,
 } from "../../../../shared/cloudCommunityAppMountGateway";
 import { resolveUsableSession, type EnsureSessionFn } from "../../../../shared/ensureUsableSession";
 
@@ -17,7 +17,7 @@ type SessionLike = {
   };
 };
 
-type UseWebCommunityAppMountsControllerArgs<SessionT extends SessionLike> = {
+type UseWebCommunityAppGrantsControllerArgs<SessionT extends SessionLike> = {
   activeCommunityId: string | null;
   session: SessionT | null;
   ensureSession?: EnsureSessionFn<SessionT>;
@@ -29,8 +29,8 @@ function toErrorMessage(error: unknown, fallback: string): string {
   return fallback;
 }
 
-export function useWebCommunityAppMountsController<SessionT extends SessionLike>(
-  args: UseWebCommunityAppMountsControllerArgs<SessionT>,
+export function useWebCommunityAppGrantsController<SessionT extends SessionLike>(
+  args: UseWebCommunityAppGrantsControllerArgs<SessionT>,
 ) {
   const argsRef = useRef(args);
   argsRef.current = args;
@@ -78,7 +78,7 @@ export function useWebCommunityAppMountsController<SessionT extends SessionLike>
     setIsLoadingCommunityAppMounts(true);
     setCommunityAppMountError(null);
     try {
-      const rows = await listCloudCommunityAppMounts({
+      const rows = await listCloudCommunityAppGrants({
         session: usableSession,
         communityId: loadedCommunityId,
       });
@@ -104,7 +104,7 @@ export function useWebCommunityAppMountsController<SessionT extends SessionLike>
     setIsConnectingCommunityApp(true);
     setCommunityAppMutationError(null);
     try {
-      const mounted = await connectCloudCommunityApp({
+      const mounted = await recommendCloudCommunityApp({
         session: usableSession,
         communityId,
         input,
@@ -136,7 +136,7 @@ export function useWebCommunityAppMountsController<SessionT extends SessionLike>
       setUpdatingCommunityAppMountId(communityAppMountId);
       setCommunityAppMutationError(null);
       try {
-        const mounted = await updateCloudCommunityAppMount({
+        const mounted = await updateCloudCommunityAppGrant({
           session: usableSession,
           communityId,
           communityAppMountId,
@@ -166,7 +166,7 @@ export function useWebCommunityAppMountsController<SessionT extends SessionLike>
     setRefreshingCommunityAppMountId(communityAppMountId);
     setCommunityAppMutationError(null);
     try {
-      const mounted = await refreshCloudCommunityApp({
+      const mounted = await refreshCloudCommunityAppGrant({
         session: usableSession,
         communityId,
         communityAppMountId,
@@ -193,7 +193,7 @@ export function useWebCommunityAppMountsController<SessionT extends SessionLike>
       setReconnectingCommunityAppMountId(communityAppMountId);
       setCommunityAppMutationError(null);
       try {
-        const mounted = await reconnectCloudCommunityApp({
+        const mounted = await reconnectCloudCommunityAppGrant({
           session: usableSession,
           communityId,
           communityAppMountId,
@@ -222,7 +222,7 @@ export function useWebCommunityAppMountsController<SessionT extends SessionLike>
     setRemovingCommunityAppMountId(communityAppMountId);
     setCommunityAppMutationError(null);
     try {
-      const removed = await unmountCloudCommunityApp({
+      const removed = await removeCloudCommunityAppGrant({
         session: usableSession,
         communityId,
         communityAppMountId,

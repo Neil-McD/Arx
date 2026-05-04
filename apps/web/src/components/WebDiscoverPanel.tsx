@@ -1393,7 +1393,7 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
             <div className="modal-header">
               <div className="modal-title" id="discover-connect-modal-title">
                 {appConnectTarget === "community"
-                  ? `Add ${selectedApp.name} to ${communityTargetLabel}`
+                  ? `Recommend ${selectedApp.name} in ${communityTargetLabel}`
                   : `Add ${selectedApp.name}`}
               </div>
               <button
@@ -1416,18 +1416,18 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
             <div className="modal-body discover-connect-modal-body">
               {(appConnectTarget === "community"
                 ? selectedApp.personalConnect.connectionKind === "custom"
-                  ? `Enter a remote MCP endpoint and auth details to add it to ${communityTargetLabel}.`
+                  ? `Enter a remote MCP endpoint and auth details to recommend it in ${communityTargetLabel}.`
                     : selectedApp.personalConnect.authMethod === "token"
-                      ? `Add ${selectedApp.name} to ${communityTargetLabel} now. Paste your ${selectedApp.personalConnect.secretLabel} to make it live immediately.`
-                      : `Review the connection requirements, then add ${selectedApp.name} to ${communityTargetLabel}.`
+                      ? `Recommend ${selectedApp.name} in ${communityTargetLabel}. Members use their own ${selectedApp.personalConnect.secretLabel} to make it live in their harness.`
+                      : `Review the connection requirements, then recommend ${selectedApp.name} in ${communityTargetLabel}.`
                 : personalConnectModalCopy) ? (
                 <div className="discover-connect-modal-copy">
                   {appConnectTarget === "community"
                     ? selectedApp.personalConnect.connectionKind === "custom"
-                      ? `Enter a remote MCP endpoint and auth details to add it to ${communityTargetLabel}.`
+                      ? `Enter a remote MCP endpoint and auth details to recommend it in ${communityTargetLabel}.`
                         : selectedApp.personalConnect.authMethod === "token"
-                          ? `Add ${selectedApp.name} to ${communityTargetLabel} now. Paste your ${selectedApp.personalConnect.secretLabel} to make it live immediately.`
-                          : `Review the connection requirements, then add ${selectedApp.name} to ${communityTargetLabel}.`
+                          ? `Recommend ${selectedApp.name} in ${communityTargetLabel}. Members use their own ${selectedApp.personalConnect.secretLabel} to make it live in their harness.`
+                          : `Review the connection requirements, then recommend ${selectedApp.name} in ${communityTargetLabel}.`
                     : personalConnectModalCopy}
                 </div>
               ) : null}

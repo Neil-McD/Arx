@@ -294,11 +294,11 @@ export function WebCommunityAiAgentAppsEditor(
               ) : null}
 
               <div className="community-app-connect-summary">
-                <div className="community-app-connect-summary-title">What happens when you connect</div>
+                <div className="community-app-connect-summary-title">What happens when you recommend it</div>
                 <ul className="community-app-connect-list">
                   <li>Polynet validates the MCP endpoint.</li>
                   <li>Polynet discovers the tool surface and risk labels.</li>
-                  <li>The app is mounted into this community lens and can be refreshed or reconnected later.</li>
+                  <li>The app is recommended for this community. Members use their own harness credentials when the app requires authentication.</li>
                 </ul>
               </div>
 
