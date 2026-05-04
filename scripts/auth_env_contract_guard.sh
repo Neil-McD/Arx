@@ -43,6 +43,17 @@ forbid_match_in_file() {
   echo "OK: $description"
 }
 
+forbid_multiline_match_in_file() {
+  local file="$1"
+  local pattern="$2"
+  local description="$3"
+  if PATTERN="$pattern" perl -0ne 'BEGIN { $pattern = $ENV{"PATTERN"}; $found = 0 } if (/$pattern/s) { $found = 1 } END { exit($found ? 0 : 1) }' "$file"; then
+    echo "FAIL: forbidden pattern detected: $description"
+    exit 1
+  fi
+  echo "OK: $description"
+}
+
 forbid_file_exists() {
   local path="$1"
   local description="$2"
@@ -102,6 +113,10 @@ require_match_in_file "$AUTH_CONFIG_FILE" 'readEnv\("ARX_AUTH_JWT_AUDIENCE"\).*r
   "JWT verifier audience falls back to the OAuth client id"
 require_match_in_file "$AUTH_CONFIG_FILE" 'applicationID' \
   "JWT verifier binds tokens to an audience/application id"
+require_match_in_file "$AUTH_CONFIG_FILE" 'do not carry aud; Convex applicationID validates aud' \
+  "WorkOS user-management JWT provider documents issuer/client_id-only token shape"
+forbid_multiline_match_in_file "$AUTH_CONFIG_FILE" 'issuer:\s*`https://api\.workos\.com/user_management/\$\{workOsClientId\}`,\s*algorithm:\s*"RS256",\s*applicationID:' \
+  "WorkOS user-management JWT provider must not bind Convex applicationID without a real aud claim"
 forbid_match_in_file "$AUTH_CONFIG_FILE" '/auth/v1' \
   "JWT issuer derivation must not append /auth/v1"
 forbid_match_in_file "$AUTH_CONFIG_FILE" 'ARX_AUTH_BASE_URL|VITE_AUTH_URL' \

@@ -49,6 +49,8 @@ if (workOsClientId) {
     type: "customJwt",
     issuer: `https://api.workos.com/user_management/${workOsClientId}`,
     algorithm: "RS256",
+    // WorkOS user-management access tokens are client-specific by issuer and
+    // client_id, but do not carry aud; Convex applicationID validates aud.
     jwks: workOsJwks,
   });
 }
