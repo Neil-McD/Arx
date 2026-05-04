@@ -6870,6 +6870,26 @@ button.chat-reply-quote:hover {
   position: relative;
 }
 
+.resource-module-card.can-reorder {
+  cursor: grab;
+}
+
+.resource-module-card.can-reorder:active {
+  cursor: grabbing;
+}
+
+.resource-module-card.is-dragging {
+  opacity: 0.58;
+  transform: scale(0.985);
+}
+
+.resource-module-card.is-drop-target {
+  border-color: color-mix(in srgb, var(--accent-gold) 72%, var(--border-strong));
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--accent-gold) 42%, transparent),
+    var(--shadow-md);
+}
+
 .resource-module-card-menu {
   position: absolute;
   top: 10px;

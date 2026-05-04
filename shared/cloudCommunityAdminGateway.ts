@@ -437,6 +437,20 @@ export async function saveCloudCommunityResourceModule<SessionT>(
   });
 }
 
+export async function reorderCloudCommunityResourceModules<SessionT>(
+  params: CloudCommunityAdminGatewayParams<SessionT> & {
+    communityId: string;
+    moduleIds: string[];
+  },
+): Promise<void> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  await client.mutation("community:reorderCommunityResourceModules" as any, {
+    authSubject,
+    communityId: params.communityId,
+    moduleIds: params.moduleIds,
+  });
+}
+
 export async function deleteCloudCommunityResource<SessionT>(
   params: CloudCommunityAdminGatewayParams<SessionT> & {
     resourceId: string;

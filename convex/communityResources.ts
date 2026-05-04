@@ -181,6 +181,60 @@ export const saveCommunityResourceModule = mutation({
   },
 });
 
+export const reorderCommunityResourceModules = mutation({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+    moduleIds: v.array(v.id("communityResourceModules")),
+  },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      userId: args.userId,
+      authSubject: args.authSubject ?? null,
+    });
+    (args as { userId?: any }).userId = userId;
+    await requireCommunityManager({
+      ctx,
+      communityId: args.communityId,
+      userId: args.userId,
+    });
+
+    const rows = (await ctx.db
+      .query("communityResourceModules" as any)
+      .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
+      .collect()) as CommunityResourceModuleLike[];
+    const existingIds = new Set(rows.map((row) => normalizeIdValue(row._id)));
+    const requestedIds = args.moduleIds.map((id) => normalizeIdValue(id));
+    const requestedIdSet = new Set(requestedIds);
+
+    if (requestedIds.length !== requestedIdSet.size) {
+      throw new Error("community_resource_module_order_duplicate_id");
+    }
+    if (requestedIds.length !== existingIds.size) {
+      throw new Error("community_resource_module_order_stale");
+    }
+    for (const moduleId of requestedIds) {
+      if (!existingIds.has(moduleId)) {
+        throw new Error("community_resource_module_not_found");
+      }
+    }
+
+    const nowMs = Date.now();
+    await Promise.all(
+      requestedIds.map((moduleId, index) =>
+        ctx.db.patch(moduleId as any, {
+          sortOrder: (index + 1) * 1000,
+          updatedAt: nowMs,
+        }),
+      ),
+    );
+
+    return { ok: true };
+  },
+});
+
 export const listCommunityResources = query({
   args: {
     userId: v.optional(v.id("users")),

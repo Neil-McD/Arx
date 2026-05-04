@@ -66,6 +66,7 @@ export type UseWebCommunityResourceUiControllerResult<
   openNewModuleModal: () => void;
   handleEditModule: (module: ResourceModuleT) => void;
   handleDeleteModule: (moduleId: string) => Promise<boolean>;
+  handleReorderModules: (moduleIds: string[]) => Promise<boolean>;
   openNewResourceModal: (moduleId?: string | null) => void;
   handleEditResource: (resource: ResourceT) => void;
   handleDeleteResource: (resourceId: string) => Promise<boolean>;
@@ -114,6 +115,7 @@ export function useWebCommunityResourceUiController<
     loadCommunityResources,
     handleSaveCommunityResourceModule,
     handleDeleteCommunityResourceModule,
+    handleReorderCommunityResourceModules,
     handleSaveCommunityResource,
     handleDeleteResource,
   } = useCommunityResourceController<SessionT, ResourceT, ResourceModuleT>({
@@ -278,6 +280,7 @@ export function useWebCommunityResourceUiController<
     openNewModuleModal,
     handleEditModule,
     handleDeleteModule,
+    handleReorderModules: handleReorderCommunityResourceModules,
     openNewResourceModal,
     handleEditResource,
     handleDeleteResource,

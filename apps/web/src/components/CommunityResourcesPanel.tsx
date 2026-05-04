@@ -4,6 +4,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type DragEvent,
   type KeyboardEvent,
   type MouseEvent,
 } from "react";
@@ -163,9 +164,31 @@ function ResourceModuleCard(props: {
   onOpen: () => void;
   onEdit: () => void;
   onDelete: () => void;
+  onDragStart: (event: DragEvent<HTMLDivElement>) => void;
+  onDragOver: (event: DragEvent<HTMLDivElement>) => void;
+  onDragLeave: () => void;
+  onDrop: (event: DragEvent<HTMLDivElement>) => void;
+  onDragEnd: () => void;
   canManage: boolean;
+  canReorder: boolean;
+  isDragging: boolean;
+  isDropTarget: boolean;
 }) {
-  const { module, onOpen, onEdit, onDelete, canManage } = props;
+  const {
+    module,
+    onOpen,
+    onEdit,
+    onDelete,
+    onDragStart,
+    onDragOver,
+    onDragLeave,
+    onDrop,
+    onDragEnd,
+    canManage,
+    canReorder,
+    isDragging,
+    isDropTarget,
+  } = props;
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.target !== event.currentTarget) return;
@@ -185,11 +208,22 @@ function ResourceModuleCard(props: {
 
   return (
     <div
-      className="discover-card clickable resource-module-card"
+      className={[
+        "discover-card clickable resource-module-card",
+        canReorder ? "can-reorder" : "",
+        isDragging ? "is-dragging" : "",
+        isDropTarget ? "is-drop-target" : "",
+      ].filter(Boolean).join(" ")}
       role="button"
       tabIndex={0}
       aria-label={`Open ${module.name}`}
+      draggable={canReorder}
       onClick={onOpen}
+      onDragStart={onDragStart}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+      onDragEnd={onDragEnd}
       onKeyDown={handleKeyDown}
       onMouseLeave={() => setIsMenuOpen(false)}
     >
@@ -203,6 +237,7 @@ function ResourceModuleCard(props: {
             aria-haspopup="menu"
             aria-expanded={isMenuOpen}
             onClick={handleMenuClick}
+            onPointerDown={(event) => event.stopPropagation()}
           >
             <MoreIcon />
           </button>
@@ -385,6 +420,8 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
   const [viewerResourceId, setViewerResourceId] = useState<string | null>(null);
   const [pendingDeleteResourceId, setPendingDeleteResourceId] = useState<string | null>(null);
   const [isDeletingResource, setIsDeletingResource] = useState(false);
+  const [draggingModuleId, setDraggingModuleId] = useState<string | null>(null);
+  const [dropTargetModuleId, setDropTargetModuleId] = useState<string | null>(null);
 
   const viewerResource = useMemo(
     () => state.resources.find((resource) => resource.id === viewerResourceId) ?? null,
@@ -424,6 +461,11 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
     () => moduleViews.find((module) => module.id === selectedModuleId) ?? null,
     [moduleViews, selectedModuleId],
   );
+  const reorderableModuleIds = useMemo(
+    () => moduleViews.filter((module) => !module.is_virtual).map((module) => module.id),
+    [moduleViews],
+  );
+  const canReorderModules = capabilities.canOperateResources && reorderableModuleIds.length > 1;
   const visibleResources = useMemo(() => {
     if (!selectedModule) return [];
     if (selectedModule.id === LEGACY_RESOURCE_MODULE_ID) {
@@ -450,6 +492,44 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
       setIsDeletingResource(false);
     }
   }, [pendingDeleteResource, pendingDeleteResourceId]);
+
+  const handleModuleDragStart = (event: DragEvent<HTMLDivElement>, module: ResourceModuleView) => {
+    if (!canReorderModules || module.is_virtual) {
+      event.preventDefault();
+      return;
+    }
+    setDraggingModuleId(module.id);
+    setDropTargetModuleId(null);
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", module.id);
+  };
+
+  const handleModuleDragOver = (event: DragEvent<HTMLDivElement>, module: ResourceModuleView) => {
+    if (!draggingModuleId || module.is_virtual || module.id === draggingModuleId) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+    setDropTargetModuleId(module.id);
+  };
+
+  const handleModuleDrop = (event: DragEvent<HTMLDivElement>, module: ResourceModuleView) => {
+    event.preventDefault();
+    const draggedId = draggingModuleId ?? event.dataTransfer.getData("text/plain");
+    setDraggingModuleId(null);
+    setDropTargetModuleId(null);
+    if (!draggedId || module.is_virtual || draggedId === module.id) return;
+    const fromIndex = reorderableModuleIds.indexOf(draggedId);
+    const toIndex = reorderableModuleIds.indexOf(module.id);
+    if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) return;
+    const nextIds = reorderableModuleIds.slice();
+    const [movedId] = nextIds.splice(fromIndex, 1);
+    nextIds.splice(toIndex, 0, movedId);
+    void actions.handleReorderModules(nextIds);
+  };
+
+  const handleModuleDragEnd = () => {
+    setDraggingModuleId(null);
+    setDropTargetModuleId(null);
+  };
 
   return (
     <>
@@ -539,6 +619,16 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
                   onEdit={() => actions.handleEditModule(module)}
                   onDelete={() => void actions.handleDeleteModule(module.id)}
                   canManage={capabilities.canOperateResources && !module.is_virtual}
+                  canReorder={canReorderModules && !module.is_virtual}
+                  isDragging={draggingModuleId === module.id}
+                  isDropTarget={dropTargetModuleId === module.id}
+                  onDragStart={(event) => handleModuleDragStart(event, module)}
+                  onDragOver={(event) => handleModuleDragOver(event, module)}
+                  onDragLeave={() => {
+                    if (dropTargetModuleId === module.id) setDropTargetModuleId(null);
+                  }}
+                  onDrop={(event) => handleModuleDrop(event, module)}
+                  onDragEnd={handleModuleDragEnd}
                 />
               ))}
             </div>

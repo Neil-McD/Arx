@@ -42,6 +42,7 @@ export type CommunityResourcesActions = {
   openNewModuleModal: () => void;
   handleEditModule: (module: CommunityResourceModule) => void;
   handleDeleteModule: (moduleId: string) => Promise<boolean> | boolean;
+  handleReorderModules: (moduleIds: string[]) => Promise<boolean> | boolean;
   openNewResourceModal: (moduleId?: string | null) => void;
   handleEditResource: (resource: CommunityResource) => void;
   handleDeleteResource: (resourceId: string) => Promise<boolean> | boolean;

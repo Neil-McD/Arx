@@ -9,6 +9,7 @@ import {
   listCloudCommunityResourceModuleRows,
   listCloudCommunityResourceRows,
   prepareCloudCommunityBrandingField,
+  reorderCloudCommunityResourceModules,
   saveCloudCommunityResource,
   saveCloudCommunityResourceModule,
 } from "./cloudCommunityAdminGateway";
@@ -373,6 +374,47 @@ export function useCommunityResourceController<
     return true;
   }, [loadCommunityResourceModules, loadCommunityResources, resetModuleEditor]);
 
+  const handleReorderCommunityResourceModules = useCallback(async (moduleIds: string[]) => {
+    const current = argsRef.current;
+    const session = await resolveUsableSession(current.session, current.ensureSession);
+    if (!session || !current.activeCommunityId) return false;
+
+    const previousModules: ResourceModuleT[] = [];
+    current.setCommunityResourceModules((modules) => {
+      previousModules.splice(0, previousModules.length, ...modules);
+      const orderById = new Map(moduleIds.map((id, index) => [id, (index + 1) * 1000]));
+      return modules
+        .map((module) => ({
+          ...module,
+          sort_order: orderById.get(module.id) ?? module.sort_order,
+        }))
+        .sort((a, b) => {
+          const sortDelta = (a.sort_order ?? 0) - (b.sort_order ?? 0);
+          if (sortDelta !== 0) return sortDelta;
+          return a.name.localeCompare(b.name);
+        });
+    });
+
+    try {
+      await reorderCloudCommunityResourceModules({
+        session,
+        communityId: current.activeCommunityId,
+        moduleIds,
+      });
+      await loadCommunityResourceModules(current.activeCommunityId, session);
+      return true;
+    } catch (error) {
+      current.setCommunityResourceModules(previousModules);
+      const message = typeof error === "string"
+        ? error
+        : error instanceof Error
+          ? error.message
+          : "Failed to reorder modules.";
+      current.setResourceModuleError(message);
+      return false;
+    }
+  }, [loadCommunityResourceModules]);
+
   const handleDeleteResource = useCallback(async (resourceId: string) => {
     const current = argsRef.current;
     const session = await resolveUsableSession(current.session, current.ensureSession);
@@ -403,6 +445,7 @@ export function useCommunityResourceController<
     loadCommunityResources,
     handleSaveCommunityResourceModule,
     handleDeleteCommunityResourceModule,
+    handleReorderCommunityResourceModules,
     handleSaveCommunityResource,
     handleDeleteResource,
   };
