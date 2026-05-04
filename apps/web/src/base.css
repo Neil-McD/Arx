@@ -1714,9 +1714,36 @@ body {
   gap: 14px;
 }
 
-.polynet-landing-flow > span {
+.polynet-landing-flow > button {
   display: block;
   min-width: 0;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 18px;
+  background: transparent;
+  box-shadow: none;
+  cursor: pointer;
+  overflow: visible;
+  transition:
+    box-shadow 180ms ease,
+    opacity 180ms ease,
+    transform 180ms ease;
+}
+
+.polynet-landing-flow > button:hover,
+.polynet-landing-flow > button.active {
+  box-shadow: 0 0 0 1px rgba(255, 72, 153, 0.5), 0 24px 70px rgba(255, 72, 153, 0.16);
+  transform: translateY(-2px);
+}
+
+.polynet-landing-flow > button:not(.active) {
+  opacity: 0.78;
+}
+
+.polynet-landing-flow > button:focus-visible {
+  outline: 2px solid rgba(255, 72, 153, 0.72);
+  outline-offset: 5px;
 }
 
 .polynet-landing-flow img {
@@ -1726,6 +1753,149 @@ body {
   border-radius: 18px;
   object-fit: cover;
   box-shadow: 0 22px 62px rgba(0, 0, 0, 0.32);
+}
+
+.polynet-landing-flow-detail {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(320px, 0.72fr);
+  gap: 24px;
+  align-items: stretch;
+  min-height: 236px;
+  margin-top: 12px;
+  padding-top: 28px;
+  border-top: 1px solid var(--border-muted);
+}
+
+.polynet-landing-flow-copy {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+}
+
+.polynet-landing-flow-copy > span,
+.polynet-landing-tool-stream > span {
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.polynet-landing-flow-copy h3 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: clamp(28px, 3.2vw, 42px);
+  line-height: 1.02;
+}
+
+.polynet-landing-flow-copy p {
+  max-width: 620px;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 17px;
+  line-height: 1.5;
+}
+
+.polynet-landing-flow-copy ul {
+  margin: 4px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 18px;
+  list-style: none;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.polynet-landing-flow-copy li {
+  min-width: 0;
+  display: flex;
+  gap: 9px;
+  line-height: 1.3;
+}
+
+.polynet-landing-flow-copy li::before {
+  content: "";
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  margin-top: 5px;
+  border-radius: 999px;
+  background: var(--accent);
+  box-shadow: 0 0 18px rgba(255, 72, 153, 0.42);
+}
+
+.polynet-landing-tool-stream {
+  min-width: 0;
+  border: 1px solid var(--border-muted);
+  border-radius: 18px;
+  padding: 16px;
+  display: grid;
+  gap: 10px;
+  background:
+    radial-gradient(circle at 0% 0%, rgba(255, 72, 153, 0.12), transparent 32%),
+    rgba(255, 255, 255, 0.035);
+}
+
+.polynet-landing-tool-call {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 11px;
+  padding: 10px;
+  border: 1px solid color-mix(in srgb, var(--border-muted) 72%, transparent);
+  border-radius: 13px;
+  background: rgba(6, 6, 8, 0.5);
+}
+
+.polynet-landing-tool-call > span {
+  width: 34px;
+  height: 34px;
+  border: 1px solid rgba(255, 72, 153, 0.32);
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  color: var(--accent);
+  background: rgba(255, 72, 153, 0.08);
+  font-size: 12px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.polynet-landing-tool-call div {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.polynet-landing-tool-call strong,
+.polynet-landing-tool-call em,
+.polynet-landing-tool-call small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.polynet-landing-tool-call strong {
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.polynet-landing-tool-call em {
+  color: var(--text-tertiary);
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 600;
+}
+
+.polynet-landing-tool-call small {
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
 }
 
 .polynet-onboarding-page {
@@ -2163,9 +2333,21 @@ body {
 
   .polynet-landing-comparison,
   .polynet-landing-stack-list,
-  .polynet-landing-polynet-plan {
+  .polynet-landing-polynet-plan,
+  .polynet-landing-flow-detail {
     width: 100%;
     min-width: 0;
+  }
+
+  .polynet-landing-flow-detail {
+    grid-template-columns: 1fr;
+    gap: 18px;
+    min-height: 0;
+    padding-top: 22px;
+  }
+
+  .polynet-landing-flow-copy ul {
+    grid-template-columns: 1fr;
   }
 
   .polynet-landing-stack-row,

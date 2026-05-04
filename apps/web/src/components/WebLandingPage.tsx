@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { Brain, Play } from "lucide-react";
 
 type WebLandingPageProps = {
@@ -37,22 +38,98 @@ const flowCards = [
   {
     title: "Build the agent",
     image: "/landing/build-agent.png",
+    summary: "Create the agent surface for your expertise, workflow, or point of view.",
+    bullets: [
+      "Add apps and MCP servers",
+      "Add custom skills and workflows",
+      "Set instructions and personality",
+      "Attach resources, docs, links, and files",
+    ],
+    exampleTitle: "Tool stream",
+    examples: [
+      { name: "Supabase", detail: "connected project data", status: "ready" },
+      { name: "Linear", detail: "synced issues and roadmap", status: "ready" },
+      { name: "Slack", detail: "indexed team context", status: "ready" },
+      { name: "Docs", detail: "attached source material", status: "ready" },
+    ],
   },
   {
     title: "Wrap it in a community",
     image: "/landing/wrap-community.png",
-  },
-  {
-    title: "Monetize",
-    image: "/landing/monetize.png",
+    summary: "Give the agent a home where members can use it together.",
+    bullets: [
+      "Create a community around an outcome",
+      "Give members access to the agent",
+      "Add resources, modules, and context",
+      "Let members ask, learn, and build",
+    ],
+    exampleTitle: "Community surface",
+    examples: [
+      { name: "Members", detail: "join the shared workspace", status: "active" },
+      { name: "Resources", detail: "organized into modules", status: "active" },
+      { name: "Threads", detail: "carry community context", status: "active" },
+      { name: "Voice", detail: "opens live participation", status: "active" },
+    ],
   },
   {
     title: "Improve with usage",
     image: "/landing/improve-usage.png",
+    summary: "Use repeated member activity to make the system more useful over time.",
+    bullets: [
+      "See repeated questions and requests",
+      "Add resources where members get stuck",
+      "Turn repeat work into skills",
+      "Refine instructions as patterns emerge",
+    ],
+    exampleTitle: "Usage signal",
+    examples: [
+      { name: "Questions", detail: "high-frequency asks appear", status: "signal" },
+      { name: "Resources", detail: "new docs fill gaps", status: "signal" },
+      { name: "Skills", detail: "repeat tasks become workflows", status: "signal" },
+      { name: "Feedback", detail: "members reveal demand", status: "signal" },
+    ],
+  },
+  {
+    title: "Monetize",
+    image: "/landing/monetize.png",
+    summary: "Turn useful access into a paid community product.",
+    bullets: [
+      "Gate access with memberships",
+      "Charge for community access",
+      "Offer premium resources and workflows",
+      "Track revenue and performance",
+    ],
+    exampleTitle: "Revenue layer",
+    examples: [
+      { name: "Stripe", detail: "checkout and billing", status: "paid" },
+      { name: "Access", detail: "entitlements enforced", status: "paid" },
+      { name: "MRR", detail: "recurring revenue tracked", status: "paid" },
+      { name: "Payouts", detail: "builder earnings flow", status: "paid" },
+    ],
   },
 ];
 
 export function WebLandingPage(props: WebLandingPageProps) {
+  const [activeFlowIndex, setActiveFlowIndex] = useState(0);
+  const [isFlowPinned, setIsFlowPinned] = useState(false);
+  const activeFlow = flowCards[activeFlowIndex] ?? flowCards[0];
+
+  useEffect(() => {
+    if (isFlowPinned || typeof window === "undefined") {
+      return;
+    }
+
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      return;
+    }
+
+    const interval = window.setInterval(() => {
+      setActiveFlowIndex((current) => (current + 1) % flowCards.length);
+    }, 4200);
+
+    return () => window.clearInterval(interval);
+  }, [isFlowPinned]);
+
   return (
     <div className="polynet-landing-page">
       <section className="polynet-landing-hero" aria-labelledby="polynet-landing-title">
@@ -121,11 +198,55 @@ export function WebLandingPage(props: WebLandingPageProps) {
           <h2 id="polynet-landing-flow">Turn expertise into a useful system.</h2>
         </div>
         <div className="polynet-landing-flow">
-          {flowCards.map((card) => (
-            <span key={card.title}>
+          {flowCards.map((card, index) => (
+            <button
+              key={card.title}
+              type="button"
+              className={index === activeFlowIndex ? "active" : undefined}
+              aria-pressed={index === activeFlowIndex}
+              onBlur={() => setIsFlowPinned(false)}
+              onClick={() => {
+                setActiveFlowIndex(index);
+                setIsFlowPinned(true);
+              }}
+              onFocus={() => {
+                setActiveFlowIndex(index);
+                setIsFlowPinned(true);
+              }}
+              onMouseEnter={() => {
+                setActiveFlowIndex(index);
+                setIsFlowPinned(true);
+              }}
+              onMouseLeave={() => setIsFlowPinned(false)}
+            >
               <img src={card.image} alt={card.title} loading="lazy" />
-            </span>
+            </button>
           ))}
+        </div>
+        <div className="polynet-landing-flow-detail" aria-live="polite">
+          <div className="polynet-landing-flow-copy">
+            <span>Step {activeFlowIndex + 1} of {flowCards.length}</span>
+            <h3>{activeFlow.title}</h3>
+            <p>{activeFlow.summary}</p>
+            <ul>
+              {activeFlow.bullets.map((bullet) => (
+                <li key={bullet}>{bullet}</li>
+              ))}
+            </ul>
+          </div>
+          <div className="polynet-landing-tool-stream" aria-label={activeFlow.exampleTitle}>
+            <span>{activeFlow.exampleTitle}</span>
+            {activeFlow.examples.map((example) => (
+              <div key={`${activeFlow.title}-${example.name}`} className="polynet-landing-tool-call">
+                <span>{example.name.slice(0, 2)}</span>
+                <div>
+                  <strong>{example.name}</strong>
+                  <em>{example.detail}</em>
+                </div>
+                <small>{example.status}</small>
+              </div>
+            ))}
+          </div>
         </div>
       </section>
 
