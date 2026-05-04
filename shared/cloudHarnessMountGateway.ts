@@ -1,4 +1,5 @@
 import { bootstrapConvexAuthenticatedClient } from "./convexAuthenticatedClient";
+import type { EffectiveMcpApp } from "./effectiveMcpApps";
 import type { HarnessMount } from "./harnessMountTypes";
 
 type CloudHarnessMountGatewayParams<SessionT> = {
@@ -29,4 +30,22 @@ export async function listCloudHarnessMounts<SessionT>(
     communityId: params.communityId ?? undefined,
   });
   return coerceObjectRows<HarnessMount>(payload);
+}
+
+export async function listCloudEffectiveMcpApps<SessionT>(
+  params: CloudHarnessMountGatewayParams<SessionT> & {
+    communityId?: string | null;
+  },
+): Promise<EffectiveMcpApp[]> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(
+    params.session,
+  );
+  const payload = await client.query(
+    "harnessMounts:listEffectiveMcpApps" as any,
+    {
+      authSubject,
+      communityId: params.communityId ?? undefined,
+    },
+  );
+  return coerceObjectRows<EffectiveMcpApp>(payload);
 }

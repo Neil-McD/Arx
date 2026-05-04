@@ -1,10 +1,14 @@
 import { useCallback, useRef, useState } from "react";
 
-import { listCloudHarnessMounts } from "../../../../shared/cloudHarnessMountGateway";
+import {
+  listCloudEffectiveMcpApps,
+  listCloudHarnessMounts,
+} from "../../../../shared/cloudHarnessMountGateway";
 import {
   resolveUsableSession,
   type EnsureSessionFn,
 } from "../../../../shared/ensureUsableSession";
+import type { EffectiveMcpApp } from "../../../../shared/effectiveMcpApps";
 import type { HarnessMount } from "../../../../shared/harnessMountTypes";
 
 type SessionLike = {
@@ -32,6 +36,7 @@ export function useWebHarnessMountsController<SessionT extends SessionLike>(
   argsRef.current = args;
 
   const [harnessMounts, setHarnessMounts] = useState<HarnessMount[]>([]);
+  const [effectiveMcpApps, setEffectiveMcpApps] = useState<EffectiveMcpApp[]>([]);
   const [isLoadingHarnessMounts, setIsLoadingHarnessMounts] = useState(false);
   const [harnessMountError, setHarnessMountError] = useState<string | null>(null);
   const harnessMountsLoadedKeyRef = useRef<string | null>(null);
@@ -40,6 +45,7 @@ export function useWebHarnessMountsController<SessionT extends SessionLike>(
   const clearHarnessMounts = useCallback(() => {
     harnessMountsLoadRequestIdRef.current += 1;
     setHarnessMounts([]);
+    setEffectiveMcpApps([]);
     setIsLoadingHarnessMounts(false);
     setHarnessMountError(null);
     harnessMountsLoadedKeyRef.current = null;
@@ -74,12 +80,19 @@ export function useWebHarnessMountsController<SessionT extends SessionLike>(
     setIsLoadingHarnessMounts(true);
     setHarnessMountError(null);
     try {
-      const rows = await listCloudHarnessMounts({
-        session: usableSession,
-        communityId: current.activeCommunityId,
-      });
+      const [rows, effectiveRows] = await Promise.all([
+        listCloudHarnessMounts({
+          session: usableSession,
+          communityId: current.activeCommunityId,
+        }),
+        listCloudEffectiveMcpApps({
+          session: usableSession,
+          communityId: current.activeCommunityId,
+        }),
+      ]);
       if (!isCurrentRequest()) return;
       setHarnessMounts(rows);
+      setEffectiveMcpApps(effectiveRows);
       harnessMountsLoadedKeyRef.current = loadedKey;
     } catch (error) {
       if (!isCurrentRequest()) return;
@@ -96,7 +109,9 @@ export function useWebHarnessMountsController<SessionT extends SessionLike>(
 
   return {
     harnessMounts,
+    effectiveMcpApps,
     setHarnessMounts,
+    setEffectiveMcpApps,
     isLoadingHarnessMounts,
     harnessMountError,
     harnessMountsLoadedKeyRef,

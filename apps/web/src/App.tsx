@@ -2012,6 +2012,7 @@ export default function App() {
   });
   const {
     harnessMounts,
+    effectiveMcpApps,
     isLoadingHarnessMounts,
     harnessMountError,
     harnessMountsLoadedKeyRef,
@@ -6591,6 +6592,7 @@ export default function App() {
       onConsumeCreateSkillComposerOpen: () =>
         setShouldOpenCreatePersonalSkill(false),
       harnessMounts,
+      effectiveMcpApps,
       isLoadingHarnessMounts,
       harnessMountError,
       isLoadingUserPlatformAppMounts,

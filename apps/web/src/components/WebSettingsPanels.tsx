@@ -4,6 +4,7 @@ import type { AppTheme } from "../../../../shared/theme";
 import type { BuilderBillingStatus } from "../../../../shared/builderBillingStatusGateway";
 import type { WorkspaceCreditBalance } from "../../../../shared/workspaceCreditsGateway";
 import type { PendingPurchaseClaim } from "../../../../shared/pay_first";
+import type { EffectiveMcpApp } from "../../../../shared/effectiveMcpApps";
 import type { HarnessMount } from "../../../../shared/harnessMountTypes";
 import type { CreateSkillPackageInput } from "../../../../shared/skillPackageTypes";
 import type { UserPlatformInstalledSkill } from "../../../../shared/userPlatformSkillTypes";
@@ -125,6 +126,7 @@ export type WebSettingsPanelsProps = {
     shouldOpenCreateSkillComposer: boolean;
     onConsumeCreateSkillComposerOpen: () => void;
     harnessMounts: HarnessMount[];
+    effectiveMcpApps: EffectiveMcpApp[];
     isLoadingHarnessMounts: boolean;
     harnessMountError: string | null;
     isLoadingUserPlatformAppMounts: boolean;
@@ -310,6 +312,7 @@ export function WebSettingsPanels(props: WebSettingsPanelsProps) {
     onConsumeCreateSkillComposerOpen:
       integrations.onConsumeCreateSkillComposerOpen,
     harnessMounts: integrations.harnessMounts,
+    effectiveMcpApps: integrations.effectiveMcpApps,
     isLoadingHarnessMounts: integrations.isLoadingHarnessMounts,
     harnessMountError: integrations.harnessMountError,
     isLoadingUserPlatformAppMounts: integrations.isLoadingUserPlatformAppMounts,

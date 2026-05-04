@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import type { CreateSkillPackageInput } from "../../../../shared/skillPackageTypes";
 import type { UserPlatformInstalledSkill } from "../../../../shared/userPlatformSkillTypes";
+import type { EffectiveMcpApp } from "../../../../shared/effectiveMcpApps";
 import type { HarnessMount } from "../../../../shared/harnessMountTypes";
 import { DISCOVER_APP_CATALOG } from "../lib/discoverCatalog";
 import { DiscoverCatalogLogo } from "./DiscoverCatalogLogo";
@@ -21,6 +22,7 @@ type WebIntegrationsSettingsSectionProps = {
   shouldOpenCreateSkillComposer: boolean;
   onConsumeCreateSkillComposerOpen: () => void;
   harnessMounts: HarnessMount[];
+  effectiveMcpApps: EffectiveMcpApp[];
   isLoadingHarnessMounts: boolean;
   harnessMountError: string | null;
   isLoadingUserPlatformAppMounts: boolean;
@@ -94,89 +96,6 @@ function pluralizeTools(count: number): string {
   return `${count} ${count === 1 ? "tool" : "tools"}`;
 }
 
-function buildMountStatusLabel(mount: HarnessMount): string {
-  const count = mount.enabled_tools.length;
-  const connectionStatus = String(mount.connection.connection_status ?? "").trim();
-  const gatedCount = mount.tools.filter(
-    (tool) => tool.enabled && tool.risk_level !== "read",
-  ).length;
-  if (!mount.enabled) {
-    return `Disabled · ${pluralizeTools(count)}`;
-  }
-  if (mount.live_status !== "live") {
-    return `${buildNotLiveReasonLabel(mount)} · ${pluralizeTools(count)}`;
-  }
-  if (
-    mount.app.auth_type !== "none" &&
-    connectionStatus &&
-    connectionStatus !== "connected"
-  ) {
-    return `Reconnect required · ${pluralizeTools(count)}`;
-  }
-  if (gatedCount > 0) {
-    return `${pluralizeTools(count)} active · ${gatedCount} audited`;
-  }
-  return `${pluralizeTools(count)} active`;
-}
-
-function buildMountStateLabel(mount: HarnessMount): string {
-  if (!mount.enabled) return "Disabled";
-  if (mount.live_status === "live") return "Live";
-  return buildNotLiveReasonLabel(mount);
-}
-
-function buildMountStateClassName(mount: HarnessMount): string {
-  if (!mount.enabled) return " is-disabled";
-  if (mount.live_status === "live") return " is-live";
-  if (mount.not_live_reason === "needs_auth") return " is-setup";
-  return " is-not-live";
-}
-
-function buildNotLiveReasonLabel(mount: HarnessMount): string {
-  switch (mount.not_live_reason) {
-    case "needs_auth":
-      return "Reconnect required";
-    case "validation_failed":
-      return "Validation failed";
-    case "no_tools_discovered":
-      return "No tools discovered";
-    case "missing_snapshot":
-      return "Missing tool snapshot";
-    case "disabled":
-      return "Disabled";
-    case "unknown":
-    default:
-      return "Not live";
-  }
-}
-
-function buildMountDetail(mount: HarnessMount): string {
-  const enabledCount = mount.enabled_tools.length;
-  const gatedCount = mount.tools.filter(
-    (tool) => tool.enabled && tool.risk_level !== "read",
-  ).length;
-  const scopeLabel =
-    mount.scope === "community"
-      ? "the active community lens"
-      : "your baseline platform layer";
-  if (!mount.enabled) {
-    return `Disabled in ${scopeLabel}.`;
-  }
-  if (mount.live_status !== "live") {
-    return `${buildNotLiveReasonLabel(mount)} in ${scopeLabel}.`;
-  }
-  if (
-    mount.app.auth_type !== "none" &&
-    mount.connection.connection_status !== "connected"
-  ) {
-    return `Reconnect this app to restore tools in ${scopeLabel}.`;
-  }
-  if (gatedCount > 0) {
-    return `${pluralizeTools(enabledCount)} mounted. ${gatedCount} write or sensitive tools run in full-access mode with audit logging.`;
-  }
-  return `${pluralizeTools(enabledCount)} mounted in ${scopeLabel}.`;
-}
-
 function buildHarnessSummary(mounts: HarnessMount[]): string {
   const liveCount = mounts.filter((mount) => mount.live_status === "live").length;
   const notLiveCount = mounts.length - liveCount;
@@ -190,28 +109,81 @@ function buildHarnessSummary(mounts: HarnessMount[]): string {
   return `${scopeLabel}. ${liveCount} live, ${notLiveCount} not live.`;
 }
 
-function buildScopeLabel(mount: HarnessMount): string {
-  return mount.scope === "community" ? "Community lens" : "Personal";
+function buildEffectiveHarnessSummary(apps: EffectiveMcpApp[]): string {
+  const liveCount = apps.filter((app) => app.live_for_current_user).length;
+  const setupCount = apps.filter(
+    (app) => !app.live_for_current_user && app.credential_state === "needs_personal_setup",
+  ).length;
+  const notLiveCount = apps.length - liveCount;
+  const communityCount = apps.filter((app) => app.is_attached_to_community).length;
+  const scopeLabel =
+    communityCount > 0
+      ? `${apps.length} harness apps across personal and active community scope`
+      : `${apps.length} personal harness apps`;
+  if (apps.length === 0) return "No apps are mounted in the active harness yet.";
+  if (notLiveCount === 0) return `${scopeLabel}. ${liveCount} live.`;
+  if (setupCount === notLiveCount) {
+    return `${scopeLabel}. ${liveCount} live, ${setupCount} need setup.`;
+  }
+  return `${scopeLabel}. ${liveCount} live, ${notLiveCount} not live.`;
 }
 
-function findCatalogEntryForMount(mount: HarnessMount) {
+function buildEffectiveAppStateLabel(app: EffectiveMcpApp): string {
+  if (app.live_for_current_user) return "Live";
+  switch (app.credential_state) {
+    case "needs_personal_setup":
+      return "Setup needed";
+    case "community_live":
+      return "Live";
+    case "not_live":
+    default:
+      return "Not live";
+  }
+}
+
+function buildEffectiveAppStateClassName(app: EffectiveMcpApp): string {
+  if (app.live_for_current_user) return " is-live";
+  if (app.credential_state === "needs_personal_setup") return " is-setup";
+  return " is-not-live";
+}
+
+function buildEffectiveAppStatusLabel(app: EffectiveMcpApp): string {
+  if (!app.live_for_current_user) {
+    return `${buildEffectiveAppStateLabel(app)} · ${pluralizeTools(app.effective_tool_count)}`;
+  }
+  return `${pluralizeTools(app.effective_tool_count)} active`;
+}
+
+function buildEffectiveAppDetail(app: EffectiveMcpApp): string {
+  if (app.live_for_current_user && app.is_attached_to_community && app.has_personal_mount) {
+    return `${pluralizeTools(app.effective_tool_count)} available in this community lens through your personal connection.`;
+  }
+  if (app.live_for_current_user) {
+    return `${pluralizeTools(app.effective_tool_count)} mounted in your baseline platform layer.`;
+  }
+  if (app.credential_state === "needs_personal_setup" && app.is_attached_to_community) {
+    return `${app.app.name} is attached to this community, but needs your personal connection before tools go live for you.`;
+  }
+  return `${buildEffectiveAppStateLabel(app)} in the active harness.`;
+}
+
+function findCatalogEntryForApp(app: EffectiveMcpApp["app"]) {
   const byCatalogId =
-    typeof mount.app.catalog_app_id === "string" && mount.app.catalog_app_id.trim()
-      ? DISCOVER_APP_CATALOG.find(
-          (entry) => entry.id === mount.app.catalog_app_id,
-        ) ?? null
+    typeof app.catalog_app_id === "string" && app.catalog_app_id.trim()
+      ? DISCOVER_APP_CATALOG.find((entry) => entry.id === app.catalog_app_id) ??
+        null
       : null;
   if (byCatalogId) return byCatalogId;
   const byEndpoint = DISCOVER_APP_CATALOG.find((entry) => {
     if (entry.personalConnect.connectionKind !== "known") return false;
     return (
-      entry.personalConnect.endpointUrl === mount.app.endpoint_url &&
-      entry.personalConnect.authType === mount.app.auth_type
+      entry.personalConnect.endpointUrl === app.endpoint_url &&
+      entry.personalConnect.authType === app.auth_type
     );
   });
   if (byEndpoint) return byEndpoint;
-  const normalizedSlug = mount.app.slug.trim().toLowerCase();
-  const normalizedName = mount.app.name.trim().toLowerCase();
+  const normalizedSlug = app.slug.trim().toLowerCase();
+  const normalizedName = app.name.trim().toLowerCase();
   return (
     DISCOVER_APP_CATALOG.find(
       (entry) =>
@@ -232,6 +204,7 @@ export function WebIntegrationsSettingsSection(
     shouldOpenCreateSkillComposer,
     onConsumeCreateSkillComposerOpen,
     harnessMounts,
+    effectiveMcpApps,
     isLoadingHarnessMounts,
     harnessMountError,
     isLoadingUserPlatformAppMounts,
@@ -291,13 +264,12 @@ export function WebIntegrationsSettingsSection(
     ],
   );
 
-  const visibleHarnessMounts = useMemo(
+  const visibleEffectiveMcpApps = useMemo(
     () =>
-      [...harnessMounts].sort((left, right) => {
-        if (left.scope !== right.scope) return left.scope === "user" ? -1 : 1;
-        return left.app.name.localeCompare(right.app.name);
-      }),
-    [harnessMounts],
+      [...effectiveMcpApps].sort((left, right) =>
+        left.app.name.localeCompare(right.app.name),
+      ),
+    [effectiveMcpApps],
   );
 
   useEffect(() => {
@@ -378,7 +350,9 @@ export function WebIntegrationsSettingsSection(
               ? "Loading active harness status..."
               : harnessMountError
                 ? "Could not load unified harness status yet."
-                : buildHarnessSummary(harnessMounts)}
+                : effectiveMcpApps.length > 0
+                  ? buildEffectiveHarnessSummary(effectiveMcpApps)
+                  : buildHarnessSummary(harnessMounts)}
           </div>
         ) : null}
         {!session ? (
@@ -398,80 +372,96 @@ export function WebIntegrationsSettingsSection(
         {session ? (
           <div className="integrations-app-list">
             {(isLoadingUserPlatformAppMounts || isLoadingHarnessMounts) &&
-            visibleHarnessMounts.length === 0 ? (
+            visibleEffectiveMcpApps.length === 0 ? (
               <div className="model-note">Loading your active harness apps…</div>
             ) : null}
             {!isLoadingUserPlatformAppMounts &&
             !isLoadingHarnessMounts &&
-            visibleHarnessMounts.length === 0 ? (
+            visibleEffectiveMcpApps.length === 0 ? (
               <div className="model-note">
                 No apps are mounted in your active harness yet. Use `Connect
                 apps` to browse the catalog.
               </div>
             ) : null}
-            {visibleHarnessMounts.map((mount) => {
-              const isPersonalMount = mount.scope === "user";
-              const sourceMountId = mount.source_mount_id;
-              const canReconnect = isPersonalMount && mount.app.auth_type !== "none";
-              const isBusy = isPersonalMount && busyMountIds.has(sourceMountId);
-              const isReconnectDraftOpen = reconnectDraftMountId === mount.id;
+            {visibleEffectiveMcpApps.map((effectiveApp) => {
+              const personalMount = effectiveApp.personal_mount;
+              const communityMount = effectiveApp.community_mount;
+              const actionMount = personalMount;
+              const sourceMountId = actionMount?.source_mount_id ?? null;
+              const canManagePersonal = Boolean(actionMount && sourceMountId);
+              const canReconnect = Boolean(
+                actionMount && sourceMountId && effectiveApp.app.auth_type !== "none",
+              );
+              const isBusy = Boolean(sourceMountId && busyMountIds.has(sourceMountId));
+              const isReconnectDraftOpen =
+                reconnectDraftMountId === effectiveApp.app_identity_key;
               const isReconnecting =
+                sourceMountId !== null &&
                 reconnectingUserPlatformAppMountId === sourceMountId;
-              const isMenuOpen = openMountMenuId === mount.id;
-              const catalogEntry = findCatalogEntryForMount(mount);
+              const isMenuOpen = openMountMenuId === effectiveApp.app_identity_key;
+              const catalogEntry = findCatalogEntryForApp(effectiveApp.app);
               return (
-                <div key={mount.id} className="integration-mounted-row">
+                <div
+                  key={effectiveApp.app_identity_key}
+                  className="integration-mounted-row"
+                >
                   <div className="integration-mounted-top">
                     <div className="integration-mounted-identity">
                       <DiscoverCatalogLogo
-                        name={mount.app.name}
+                        name={effectiveApp.app.name}
                         logoUrl={catalogEntry?.logoUrl}
                         logoUrlDark={catalogEntry?.logoUrlDark}
                       />
                       <div className="integration-mounted-main">
                         <div className="integration-mounted-title-row">
-                          <strong>{mount.app.name}</strong>
+                          <strong>{effectiveApp.app.name}</strong>
                           <span
-                            className={`integration-state-indicator${buildMountStateClassName(
-                              mount,
+                            className={`integration-state-indicator${buildEffectiveAppStateClassName(
+                              effectiveApp,
                             )}`}
                           >
                             <span aria-hidden="true" />
-                            {buildMountStateLabel(mount)}
+                            {buildEffectiveAppStateLabel(effectiveApp)}
                           </span>
                           <span className="integration-status-pill">
-                            {buildMountStatusLabel(mount)}
+                            {buildEffectiveAppStatusLabel(effectiveApp)}
                           </span>
                           <span className="integration-status-pill">
-                            {buildScopeLabel(mount)}
+                            {effectiveApp.is_attached_to_community
+                              ? effectiveApp.has_personal_mount
+                                ? "Personal + community"
+                                : "Community lens"
+                              : "Personal"}
                           </span>
                         </div>
                         <div className="integration-mounted-meta">
-                          {mount.app.endpoint_url}
+                          {effectiveApp.app.endpoint_url}
                         </div>
                         <div className="integration-mounted-detail">
-                          {buildMountDetail(mount)}
+                          {buildEffectiveAppDetail(effectiveApp)}
                         </div>
                       </div>
                     </div>
-                    {isPersonalMount ? (
+                    {canManagePersonal && sourceMountId ? (
                       <div className="integration-mounted-rail">
                         <label
                           className={`members-switch integration-mounted-switch${
                             isBusy ? " is-disabled" : ""
                           }`}
-                          title={mount.enabled ? "Disable app" : "Enable app"}
+                          title={
+                            actionMount?.enabled ? "Disable app" : "Enable app"
+                          }
                         >
                           <input
                             type="checkbox"
-                            checked={mount.enabled}
+                            checked={Boolean(actionMount?.enabled)}
                             disabled={isBusy}
                             aria-label={`${
-                              mount.enabled ? "Disable" : "Enable"
-                            } ${mount.app.name}`}
+                              actionMount?.enabled ? "Disable" : "Enable"
+                            } ${effectiveApp.app.name}`}
                             onChange={() =>
                               void onUpdateUserPlatformAppMount(sourceMountId, {
-                                enabled: !mount.enabled,
+                                enabled: !actionMount?.enabled,
                               })
                             }
                           />
@@ -487,11 +477,13 @@ export function WebIntegrationsSettingsSection(
                             type="button"
                             className="integration-mounted-menu-trigger"
                             aria-expanded={isMenuOpen}
-                            aria-label={`${mount.app.name} options`}
+                            aria-label={`${effectiveApp.app.name} options`}
                             disabled={isBusy}
                             onClick={() =>
                               setOpenMountMenuId((current) =>
-                                current === mount.id ? null : mount.id,
+                                current === effectiveApp.app_identity_key
+                                  ? null
+                                  : effectiveApp.app_identity_key,
                               )
                             }
                           >
@@ -505,7 +497,7 @@ export function WebIntegrationsSettingsSection(
                             <div
                               className="integration-mounted-menu"
                               role="menu"
-                              aria-label={`${mount.app.name} actions`}
+                              aria-label={`${effectiveApp.app.name} actions`}
                             >
                               <button
                                 type="button"
@@ -533,7 +525,9 @@ export function WebIntegrationsSettingsSection(
                                       setReconnectError(null);
                                       return;
                                     }
-                                    setReconnectDraftMountId(mount.id);
+                                    setReconnectDraftMountId(
+                                      effectiveApp.app_identity_key,
+                                    );
                                     setReconnectSecret("");
                                     setReconnectError(null);
                                   }}
@@ -561,7 +555,9 @@ export function WebIntegrationsSettingsSection(
                     ) : (
                       <div className="integration-mounted-rail">
                         <span className="integration-status-pill">
-                          Managed in community settings
+                          {communityMount
+                            ? "Managed by community"
+                            : "Open Discover to set up"}
                         </span>
                       </div>
                     )}
@@ -580,7 +576,7 @@ export function WebIntegrationsSettingsSection(
                             setReconnectSecret(event.target.value);
                             if (reconnectError) setReconnectError(null);
                           }}
-                          placeholder={`Paste your ${mount.app.name} token`}
+                          placeholder={`Paste your ${effectiveApp.app.name} token`}
                         />
                       </label>
                       {reconnectError ? (
@@ -594,10 +590,11 @@ export function WebIntegrationsSettingsSection(
                           onClick={async () => {
                             if (!reconnectSecret.trim()) {
                               setReconnectError(
-                                `Paste a fresh ${mount.app.name} token to reconnect this app.`,
+                                `Paste a fresh ${effectiveApp.app.name} token to reconnect this app.`,
                               );
                               return;
                             }
+                            if (!sourceMountId) return;
                             const ok = await onReconnectUserPlatformApp(
                               sourceMountId,
                               reconnectSecret.trim(),

@@ -145,3 +145,5 @@ export function buildEffectiveMcpApps(mounts: HarnessMount[]) {
     })
     .sort((left, right) => left.app.name.localeCompare(right.app.name));
 }
+
+export type EffectiveMcpApp = ReturnType<typeof buildEffectiveMcpApps>[number];
