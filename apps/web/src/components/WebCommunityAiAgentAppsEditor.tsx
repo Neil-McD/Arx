@@ -5,6 +5,8 @@ import type {
   ConnectCommunityAppInput,
   DeveloperAppAuthType,
 } from "../../../../shared/communityAppMountTypes";
+import { DISCOVER_APP_CATALOG } from "../lib/discoverCatalog";
+import { DiscoverCatalogLogo } from "./DiscoverCatalogLogo";
 
 const AUTH_TYPE_OPTIONS: Array<{ value: DeveloperAppAuthType; label: string }> = [
   { value: "none", label: "None" },
@@ -53,6 +55,29 @@ function toStatusLabel(value: string | null | undefined): string {
     .filter(Boolean)
     .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
     .join(" ");
+}
+
+function findCatalogEntryForCommunityMount(mount: CommunityMountedApp) {
+  const byCatalogId = mount.app.catalog_app_id
+    ? DISCOVER_APP_CATALOG.find((entry) => entry.id === mount.app.catalog_app_id)
+    : null;
+  if (byCatalogId) return byCatalogId;
+
+  const byEndpoint = DISCOVER_APP_CATALOG.find((entry) => {
+    if (entry.personalConnect.connectionKind !== "known") return false;
+    return (
+      entry.personalConnect.endpointUrl === mount.app.endpoint_url &&
+      entry.personalConnect.authType === mount.app.auth_type
+    );
+  });
+  if (byEndpoint) return byEndpoint;
+
+  const normalizedName = mount.app.name.trim().toLowerCase();
+  return (
+    DISCOVER_APP_CATALOG.find(
+      (entry) => entry.name.trim().toLowerCase() === normalizedName,
+    ) ?? null
+  );
 }
 
 export type WebCommunityAiAgentAppsEditorProps = {
@@ -321,18 +346,26 @@ export function WebCommunityAiAgentAppsEditor(
             const isRefreshing = refreshingMountId === mount.id;
             const isRemoving = removingMountId === mount.id;
             const isEditing = editingMountId === mount.id;
+            const catalogEntry = findCatalogEntryForCommunityMount(mount);
             return (
               <div key={mount.id} className="agent-capability-card community-app-mount-card" role="listitem">
                 <div className="agent-capability-card-header">
-                  <div className="community-app-mount-heading">
-                    <div className="agent-capability-card-title-row">
-                      <div className="settings-section-subtitle">{mount.app.name}</div>
-                      <span className={`community-app-status-badge${mount.enabled ? "" : " is-muted"}`}>
-                        {mount.enabled ? "Enabled" : "Disabled"}
-                      </span>
-                    </div>
-                    <div className="model-note">
-                      {mount.app.endpoint_url}
+                  <div className="community-app-mount-identity">
+                    <DiscoverCatalogLogo
+                      name={mount.app.name}
+                      logoUrl={catalogEntry?.logoUrl}
+                      logoUrlDark={catalogEntry?.logoUrlDark}
+                    />
+                    <div className="community-app-mount-heading">
+                      <div className="agent-capability-card-title-row">
+                        <div className="settings-section-subtitle">{mount.app.name}</div>
+                        <span className={`community-app-status-badge${mount.enabled ? "" : " is-muted"}`}>
+                          {mount.enabled ? "Enabled" : "Disabled"}
+                        </span>
+                      </div>
+                      <div className="model-note">
+                        {mount.app.endpoint_url}
+                      </div>
                     </div>
                   </div>
                   <div className="community-app-mount-actions">

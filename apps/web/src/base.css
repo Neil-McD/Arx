@@ -19220,6 +19220,13 @@ button.message-citation-chip:hover {
   gap: 0;
 }
 
+.community-app-mount-identity {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
 .community-app-mount-heading {
   min-width: 0;
 }
@@ -19396,6 +19403,10 @@ button.message-citation-chip:hover {
   .community-app-mount-actions,
   .agent-onboarding-reset {
     width: 100%;
+  }
+
+  .community-app-mount-identity {
+    align-items: flex-start;
   }
 
   .community-app-mount-actions {
