@@ -4010,6 +4010,7 @@ export default function App() {
   useEffect(() => {
     const shouldLoadHarnessMounts =
       activePage === "discover" ||
+      (activePage === "community" && communityTab === "settings") ||
       (activePage === "workspace" &&
         activeView === "settings" &&
         settingsPage === "integrations");
@@ -4025,6 +4026,7 @@ export default function App() {
     activeCommunityId,
     activePage,
     activeView,
+    communityTab,
     session,
     settingsPage,
     clearHarnessMounts,
@@ -6087,6 +6089,7 @@ export default function App() {
       isStartingBuilderConnectOnboarding,
       communityIntegrations: {
         mounts: communityAppMounts,
+        effectiveMcpApps,
         isLoading: isLoadingCommunityAppMounts,
         error: communityAppMountError,
         mutationError: communityAppMutationError,

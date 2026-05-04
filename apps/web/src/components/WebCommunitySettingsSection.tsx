@@ -11,6 +11,7 @@ import { DISCOVER_APP_CATALOG } from "../lib/discoverCatalog";
 import { DiscoverCatalogLogo } from "./DiscoverCatalogLogo";
 import { StripeSetupButton } from "./StripeSetupButton";
 import type { CommunityMountedApp } from "../../../../shared/communityAppMountTypes";
+import type { EffectiveMcpApp } from "../../../../shared/effectiveMcpApps";
 
 type CommunityPricingMode = "free" | "monthly" | "annual";
 
@@ -39,6 +40,7 @@ type WebCommunitySettingsSectionProps = {
   isStartingBuilderConnectOnboarding: boolean;
   communityIntegrations: {
     mounts: CommunityMountedApp[];
+    effectiveMcpApps: EffectiveMcpApp[];
     isLoading: boolean;
     error: string | null;
     mutationError: string | null;
@@ -159,6 +161,40 @@ function findCatalogEntryForCommunityMount(mount: CommunityMountedApp) {
   );
 }
 
+function normalizeMcpIdentityPart(value: unknown): string {
+  return typeof value === "string" ? value.trim().toLowerCase() : "";
+}
+
+function buildCommunityMountIdentityKey(mount: CommunityMountedApp): string {
+  const catalogAppId = normalizeMcpIdentityPart(mount.app.catalog_app_id);
+  if (catalogAppId) return `catalog:${catalogAppId}`;
+  const endpointUrl = normalizeMcpIdentityPart(mount.app.endpoint_url);
+  const authType = normalizeMcpIdentityPart(mount.app.auth_type);
+  if (endpointUrl && authType) return `endpoint:${endpointUrl}:auth:${authType}`;
+  const slug = normalizeMcpIdentityPart(mount.app.slug);
+  if (slug) return `slug:${slug}`;
+  return `name:${normalizeMcpIdentityPart(mount.app.name) || mount.id}`;
+}
+
+function findEffectiveMcpAppForCommunityMount(
+  mount: CommunityMountedApp,
+  apps: EffectiveMcpApp[],
+): EffectiveMcpApp | null {
+  const identityKey = buildCommunityMountIdentityKey(mount);
+  return (
+    apps.find((app) => app.app_identity_key === identityKey) ??
+    apps.find((app) => {
+      const endpointUrl = normalizeMcpIdentityPart(app.app.endpoint_url);
+      const authType = normalizeMcpIdentityPart(app.app.auth_type);
+      return (
+        endpointUrl === normalizeMcpIdentityPart(mount.app.endpoint_url) &&
+        authType === normalizeMcpIdentityPart(mount.app.auth_type)
+      );
+    }) ??
+    null
+  );
+}
+
 function buildCommunityAppNotLiveLabel(mount: CommunityMountedApp): string {
   switch (mount.not_live_reason) {
     case "needs_auth":
@@ -191,8 +227,23 @@ function buildCommunityAppStateLabel(mount: CommunityMountedApp): string {
   return "Live";
 }
 
-function buildCommunityAppStateClassName(mount: CommunityMountedApp): string {
-  const label = buildCommunityAppStateLabel(mount);
+function buildCommunityRecommendationStateLabel(args: {
+  mount: CommunityMountedApp;
+  effectiveApp: EffectiveMcpApp | null;
+}): string {
+  if (!args.mount.enabled) return "Disabled";
+  if (args.effectiveApp?.live_for_current_user) return "Live";
+  if (args.effectiveApp?.credential_state === "needs_personal_setup") {
+    return "Setup needed";
+  }
+  return buildCommunityAppStateLabel(args.mount);
+}
+
+function buildCommunityRecommendationStateClassName(args: {
+  mount: CommunityMountedApp;
+  effectiveApp: EffectiveMcpApp | null;
+}): string {
+  const label = buildCommunityRecommendationStateLabel(args);
   if (label === "Live") return " is-live";
   if (label === "Disabled") return " is-disabled";
   if (label === "Setup needed" || label === "Reconnect required") {
@@ -201,12 +252,31 @@ function buildCommunityAppStateClassName(mount: CommunityMountedApp): string {
   return " is-not-live";
 }
 
-function buildCommunityAppStatusLabel(mount: CommunityMountedApp): string {
-  const toolLabel = pluralizeTools(mount.enabled_tools.length);
-  const stateLabel = buildCommunityAppStateLabel(mount);
-  if (stateLabel === "Live") return `${toolLabel} active`;
-  if (stateLabel === "Disabled") return `Disabled · ${toolLabel}`;
-  return `${stateLabel} · ${toolLabel}`;
+function buildCommunityRecommendationStatusLabel(args: {
+  mount: CommunityMountedApp;
+  effectiveApp: EffectiveMcpApp | null;
+}): string {
+  if (args.effectiveApp?.live_for_current_user) {
+    return `${pluralizeTools(args.effectiveApp.effective_tool_count)} active`;
+  }
+  const stateLabel = buildCommunityRecommendationStateLabel(args);
+  const toolCount =
+    args.effectiveApp?.effective_tool_count ?? args.mount.enabled_tools.length;
+  if (stateLabel === "Disabled") return `Disabled · ${pluralizeTools(toolCount)}`;
+  return `${stateLabel} · ${pluralizeTools(toolCount)}`;
+}
+
+function buildCommunityRecommendationDetail(args: {
+  mount: CommunityMountedApp;
+  effectiveApp: EffectiveMcpApp | null;
+}): string {
+  if (args.effectiveApp?.live_for_current_user) {
+    return `${pluralizeTools(args.effectiveApp.effective_tool_count)} available through your personal harness for this community.`;
+  }
+  if (args.effectiveApp?.credential_state === "needs_personal_setup") {
+    return `${args.mount.app.name} is recommended by this community. Connect it in your personal harness to use its tools.`;
+  }
+  return `Recommended by this community. Auth ${toStatusLabel(args.mount.app.auth_type)} · Connection ${toStatusLabel(args.mount.connection.connection_status)} · Validation ${toStatusLabel(args.mount.app.status)}`;
 }
 
 function CommunityPersonalSettingsSection({
@@ -302,6 +372,10 @@ function CommunityIntegrationsSettingsSection({
         <div className="integrations-app-list">
           {integrations.mounts.map((mount) => {
             const catalogEntry = findCatalogEntryForCommunityMount(mount);
+            const effectiveApp = findEffectiveMcpAppForCommunityMount(
+              mount,
+              integrations.effectiveMcpApps,
+            );
             const enabledToolNames = mount.tools
               .filter((tool) => tool.enabled)
               .map((tool) => tool.tool_name);
@@ -309,8 +383,14 @@ function CommunityIntegrationsSettingsSection({
             const isRefreshing = integrations.refreshingMountId === mount.id;
             const isRemoving = integrations.removingMountId === mount.id;
             const isBusy = isUpdating || isRefreshing || isRemoving;
-            const stateLabel = buildCommunityAppStateLabel(mount);
-            const statusLabel = buildCommunityAppStatusLabel(mount);
+            const stateLabel = buildCommunityRecommendationStateLabel({
+              mount,
+              effectiveApp,
+            });
+            const statusLabel = buildCommunityRecommendationStatusLabel({
+              mount,
+              effectiveApp,
+            });
             return (
               <div key={mount.id} className="integration-mounted-row">
                 <div className="integration-mounted-top">
@@ -324,9 +404,10 @@ function CommunityIntegrationsSettingsSection({
                       <div className="integration-mounted-title-row">
                         <strong>{mount.app.name}</strong>
                         <span
-                          className={`integration-state-indicator${buildCommunityAppStateClassName(
+                          className={`integration-state-indicator${buildCommunityRecommendationStateClassName({
                             mount,
-                          )}`}
+                            effectiveApp,
+                          })}`}
                         >
                           <span aria-hidden="true" />
                           {stateLabel}
@@ -335,16 +416,17 @@ function CommunityIntegrationsSettingsSection({
                           {statusLabel}
                         </span>
                         <span className="integration-status-pill">
-                          Community lens
+                          Recommended by community
                         </span>
                       </div>
                       <div className="integration-mounted-meta">
                         {mount.app.endpoint_url}
                       </div>
                       <div className="integration-mounted-detail">
-                        Auth {toStatusLabel(mount.app.auth_type)} · Connection{" "}
-                        {toStatusLabel(mount.connection.connection_status)} ·
-                        Validation {toStatusLabel(mount.app.status)}
+                        {buildCommunityRecommendationDetail({
+                          mount,
+                          effectiveApp,
+                        })}
                       </div>
                     </div>
                   </div>
