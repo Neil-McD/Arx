@@ -49,7 +49,6 @@ if (workOsClientId) {
     type: "customJwt",
     issuer: `https://api.workos.com/user_management/${workOsClientId}`,
     algorithm: "RS256",
-    applicationID: workOsClientId,
     jwks: workOsJwks,
   });
 }
