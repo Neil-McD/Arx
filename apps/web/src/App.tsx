@@ -6219,6 +6219,7 @@ export default function App() {
         emptyState: "Recommend the first hosted MCP app for this community. Members can use their own credentials to make it live in their harness.",
         addButtonLabel: "Browse apps",
         mounts: communityAppMounts,
+        effectiveMcpApps,
         isLoading: isLoadingCommunityAppMounts,
         error: communityAppMountError,
         mutationError: communityAppMutationError,
