@@ -85,7 +85,7 @@ import {
   buildMountedAppOpenAiTools,
   buildMountedAppResponsesTools,
   formatJsonToolOutput,
-  normalizeRuntimeMountedCommunityAppTools,
+  type RuntimeMountedCommunityAppTool,
   normalizeRuntimeMountedUserPlatformAppTools,
   normalizeRuntimeSkillResolution,
   readFailureOutputPreview,
@@ -653,33 +653,8 @@ async function executeRetrievalAgentLoop(
       input_schema: tool.input_schema,
       risk_level: tool.risk_level,
     }));
-  const mountedCommunityAppTools = params.communityId
-    ? normalizeRuntimeMountedCommunityAppTools(
-        await params.ctx.runQuery(
-          internal.communityAppMounts.listRuntimeCommunityMountedToolsInternal,
-          {
-            userId: params.userId as any,
-            communityId: params.communityId as any,
-          },
-        ),
-      )
-    : [];
-  const runtimeMountedCommunityAppTools: RuntimeMountedMcpTool[] =
-    mountedCommunityAppTools.map((tool) => ({
-      scope: "community",
-      mount_id: tool.community_app_mount_id,
-      runtime_tool_name: tool.namespaced_tool_name,
-      developer_app_id: tool.developer_app_id,
-      catalog_app_id: tool.catalog_app_id,
-      app_name: tool.app_name,
-      endpoint_url: tool.endpoint_url,
-      auth_type: tool.auth_type,
-      tool_name: tool.tool_name,
-      namespaced_tool_name: tool.namespaced_tool_name,
-      description: tool.description,
-      input_schema: tool.input_schema,
-      risk_level: tool.risk_level,
-    }));
+  const mountedCommunityAppTools: RuntimeMountedCommunityAppTool[] = [];
+  const runtimeMountedCommunityAppTools: RuntimeMountedMcpTool[] = [];
   const skillResolution = normalizeRuntimeSkillResolution(
     await params.ctx.runQuery(
       internal.runtimeSkillResolution.resolveRuntimeSkillSelectionInternal,
@@ -939,26 +914,6 @@ async function executeRetrievalAgentLoop(
           selected_skill_mention_tokens: selectedUserPlatformSkills.map(
             (skill) => skill.mention_token,
           ),
-        },
-      });
-    } catch {
-      // Best-effort runtime evidence only.
-    }
-  }
-  if (mountedCommunityAppTools.length > 0) {
-    try {
-      await params.appendRunEvent({
-        eventType: "community_app_tools_resolved",
-        eventKey: `${params.runId}:community_app_tools_resolved:1`,
-        payload: {
-          run_id: params.runId,
-          community_scope_id: params.communityId ?? null,
-          tools: mountedCommunityAppTools.map((tool) => ({
-            app_name: tool.app_name,
-            tool_name: tool.tool_name,
-            namespaced_tool_name: tool.namespaced_tool_name,
-            risk_level: tool.risk_level,
-          })),
         },
       });
     } catch {
@@ -1332,24 +1287,6 @@ async function executeRetrievalAgentLoop(
               errorCode: "mounted_app_tool_not_found",
               errorMessage: `${toolName} is not active for this runtime.`,
             };
-          }
-          if (mountedTool.scope === "community" && mountedTool.risk_level !== "read") {
-            if (!params.communityId) {
-              return {
-                status: "error" as const,
-                exitCode: null,
-                outputText: "",
-                errorCode: "community_app_tool_not_found",
-                errorMessage: `${toolName} is not active for this community lens.`,
-              };
-            }
-            await params.ctx.runQuery(
-              internal.communityAppMounts.assertCommunityManagerAccessInternal,
-              {
-                userId: params.userId as any,
-                communityId: params.communityId as any,
-              },
-            );
           }
           try {
             const toolResult = await runAbortableWithRuntimeCancellation({

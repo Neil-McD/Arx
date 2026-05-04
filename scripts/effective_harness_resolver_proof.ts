@@ -236,25 +236,85 @@ function proveComposedHarnessUsesResolverAliases() {
     skillResolution: emptySkillResolution,
   });
   assert.deepEqual(runtimeToolNames(resolvedWithCommunity.runtimeMountedTools), [
-    "linear__search_issues",
     "me__linear__search_issues",
   ]);
   assert.deepEqual(runtimeToolNames(resolvedWithCommunity.discoveryMountedTools), [
-    "linear__search_issues",
-  ]);
-  assert.deepEqual(resolvedWithCommunity.shadowedRuntimeToolNames, [
     "me__linear__search_issues",
   ]);
-  assert.deepEqual(runtimeToolNames(resolvedWithCommunity.shadowedMountedTools), [
-    "me__linear__search_issues",
-  ]);
+  assert.deepEqual(resolvedWithCommunity.shadowedRuntimeToolNames, []);
+  assert.deepEqual(runtimeToolNames(resolvedWithCommunity.shadowedMountedTools), []);
+  assert.equal(resolvedWithCommunity.activeCommunityModule, null);
   assert.equal(
     resolvedWithCommunity.capabilityGroups.find(
       (group) => group.capability_key === "catalog:linear",
     )?.default_scope,
-    "community",
+    "user",
   );
-  console.log("PASS: composed harness preserves executable/default/shadowed aliases");
+  console.log("PASS: composed harness keeps MCP runtime canonical to personal tools");
+}
+
+function proveCommunitySkillsStillActivateWithoutCommunityMcpRuntime() {
+  const resolved = composeResolvedRuntimeHarness({
+    personalMountedTools: [personalLinear],
+    communityMountedTools: [
+      {
+        community_app_mount_id: "c1",
+        developer_app_id: "community-linear",
+        catalog_app_id: "linear",
+        app_name: "Linear",
+        endpoint_url: "https://mcp.example.test/linear",
+        auth_type: "bearer",
+        tool_name: "search_issues",
+        namespaced_tool_name: "linear__search_issues",
+        description: null,
+        input_schema: {},
+        risk_level: "read",
+      },
+    ],
+    runtimeMountedCommunityTools: [communityLinear],
+    skillResolution: {
+      ...emptySkillResolution,
+      community_skill_inventory: [
+        {
+          community_skill_attachment_id: "community-skill-1",
+          skill_package_id: "linear-triage",
+          catalog_skill_id: "linear-triage",
+          name: "Linear triage",
+          mention_token: "linear-triage",
+          description: "Triage Linear issues for this community.",
+        },
+      ],
+      selected_community_skills: [
+        {
+          community_skill_attachment_id: "community-skill-1",
+          skill_package_id: "linear-triage",
+          catalog_skill_id: "linear-triage",
+          name: "Linear triage",
+          mention_token: "linear-triage",
+          description: "Triage Linear issues for this community.",
+          skill_revision_id: "linear-triage-revision-1",
+          instructions_md: "Use the user's connected Linear tools when needed.",
+        },
+      ],
+    },
+  });
+
+  assert.deepEqual(runtimeToolNames(resolved.runtimeMountedTools), [
+    "me__linear__search_issues",
+  ]);
+  assert.deepEqual(resolved.activeCommunityModule?.mountedTools, []);
+  assert.deepEqual(resolved.activeCommunityModule?.runtimeMountedTools, []);
+  assert.deepEqual(
+    resolved.activeCommunityModule?.selectedSkills.map(
+      (skill) => skill.mention_token,
+    ),
+    ["linear-triage"],
+  );
+  assert.ok(
+    resolved.systemPromptSuffix.includes("COMMUNITY_SKILL_PACKAGE: Linear triage"),
+  );
+  assert.ok(!resolved.systemPromptSuffix.includes("Community-mounted app tools"));
+  console.log("PASS: community skills still activate without community MCP runtime");
 }
 
 function proveCommunitySwitchChangesDefaultTools() {
@@ -282,4 +342,5 @@ proveCommunityOnlyCatalog();
 proveCommunityShadowsPersonalDuplicateByDefault();
 proveDifferentCommunityToolDoesNotShadowPersonalTool();
 proveComposedHarnessUsesResolverAliases();
+proveCommunitySkillsStillActivateWithoutCommunityMcpRuntime();
 proveCommunitySwitchChangesDefaultTools();

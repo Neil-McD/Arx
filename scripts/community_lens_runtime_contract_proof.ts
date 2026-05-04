@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 function readText(path: string): string {
   return readFileSync(path, "utf8");
@@ -9,33 +10,37 @@ function assertIncludes(haystack: string, needle: string, label: string) {
   assert.ok(haystack.includes(needle), `expected ${label} to include ${needle}`);
 }
 
+function assertNotIncludes(haystack: string, needle: string, label: string) {
+  assert.ok(!haystack.includes(needle), `expected ${label} not to include ${needle}`);
+}
+
 function main() {
-  const httpDaytona = readText(
-    "/Users/neilmcdevitt/code/arx/convex/httpDaytona.ts",
-  );
-  const threads = readText(
-    "/Users/neilmcdevitt/code/arx/convex/threads.ts",
-  );
+  const root = process.cwd();
+  const httpDaytona = readText(join(root, "convex/httpDaytona.ts"));
+  const threads = readText(join(root, "convex/threads.ts"));
   const runtimeTurnResolution = readText(
-    "/Users/neilmcdevitt/code/arx/convex/runtimeTurnResolution.ts",
+    join(root, "convex/runtimeTurnResolution.ts"),
   );
   const runtimeTurnHandlers = readText(
-    "/Users/neilmcdevitt/code/arx/convex/runtimeTurnHandlers.ts",
+    join(root, "convex/runtimeTurnHandlers.ts"),
   );
-  const app = readText(
-    "/Users/neilmcdevitt/code/arx/apps/web/src/App.tsx",
-  );
+  const app = readText(join(root, "apps/web/src/App.tsx"));
   const runtimeSkillResolution = readText(
-    "/Users/neilmcdevitt/code/arx/convex/runtimeSkillResolution.ts",
+    join(root, "convex/runtimeSkillResolution.ts"),
   );
   const runtimeHarnessComposition = readText(
-    "/Users/neilmcdevitt/code/arx/convex/runtimeHarnessComposition.ts",
+    join(root, "convex/runtimeHarnessComposition.ts"),
   );
 
-  assertIncludes(
+  assertNotIncludes(
     httpDaytona,
     "internal.communityAppMounts.listRuntimeCommunityMountedToolsInternal",
-    "community-lens mounted app query",
+    "community-lens runtime app query",
+  );
+  assertNotIncludes(
+    httpDaytona,
+    "community_app_tools_resolved",
+    "runtime evidence for community app overlays",
   );
   assertIncludes(
     httpDaytona,
@@ -60,12 +65,7 @@ function main() {
   assertIncludes(
     httpDaytona,
     "mountedToolDiscoveryCatalog: resolvedHarness.discoveryMountedTools",
-    "community-lens effective mounted tool discovery projection",
-  );
-  assertIncludes(
-    httpDaytona,
-    "community_app_tools_resolved",
-    "runtime evidence for mounted app overlays",
+    "community-lens personal mounted tool discovery projection",
   );
   assertIncludes(
     httpDaytona,

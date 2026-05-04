@@ -6,7 +6,6 @@ import type { RuntimeMountedMcpTool } from "./runtimeMcpManager.ts";
 import {
   buildUserPlatformMountedAppsPromptBlock,
   mapCommunitySkillsToOverlayRuntime,
-  mapMountedToolsToOverlayRuntime,
   mapSelectedCommunitySkillsToOverlayRuntime,
   mapSelectedUserPlatformSkillsToOverlayRuntime,
   mapUserPlatformSkillsToOverlayRuntime,
@@ -288,14 +287,10 @@ export function composeResolvedRuntimeHarness(args: {
   });
 
   const activeCommunityModule =
-    args.communityMountedTools.length > 0 ||
-    attachedCommunitySkills.length > 0 ||
-    selectedCommunitySkills.length > 0
+    attachedCommunitySkills.length > 0 || selectedCommunitySkills.length > 0
       ? (() => {
           const overlayRuntimeState = buildCommunityOverlayRuntimeState({
-            mountedTools: mapMountedToolsToOverlayRuntime(
-              args.communityMountedTools,
-            ),
+            mountedTools: [],
             attachedSkills: mapCommunitySkillsToOverlayRuntime(
               attachedCommunitySkills,
             ),
@@ -304,8 +299,8 @@ export function composeResolvedRuntimeHarness(args: {
             ),
           });
           return {
-            mountedTools: args.communityMountedTools,
-            runtimeMountedTools: args.runtimeMountedCommunityTools,
+            mountedTools: [],
+            runtimeMountedTools: [],
             attachedSkills: attachedCommunitySkills,
             selectedSkills: selectedCommunitySkills,
             systemPromptSuffix: overlayRuntimeState.systemPromptSuffix,
@@ -313,10 +308,7 @@ export function composeResolvedRuntimeHarness(args: {
         })()
       : null;
 
-  const runtimeMountedTools = [
-    ...args.personalMountedTools,
-    ...(activeCommunityModule?.runtimeMountedTools ?? []),
-  ];
+  const runtimeMountedTools = [...args.personalMountedTools];
   const resolvedMountedToolCatalog =
     resolveEffectiveMountedToolCatalog(runtimeMountedTools);
 

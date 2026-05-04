@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 function readText(path: string): string {
   return readFileSync(path, "utf8");
@@ -9,19 +10,24 @@ function assertIncludes(haystack: string, needle: string, label: string) {
   assert.ok(haystack.includes(needle), `expected ${label} to include ${needle}`);
 }
 
+function assertNotIncludes(haystack: string, needle: string, label: string) {
+  assert.ok(!haystack.includes(needle), `expected ${label} not to include ${needle}`);
+}
+
 function main() {
-  const communityAppMounts = readText("/Users/neilmcdevitt/code/arx/convex/communityAppMounts.ts");
+  const root = process.cwd();
+  const communityAppMounts = readText(join(root, "convex/communityAppMounts.ts"));
   const userPlatformAppMounts = readText(
-    "/Users/neilmcdevitt/code/arx/convex/userPlatformAppMounts.ts",
+    join(root, "convex/userPlatformAppMounts.ts"),
   );
-  const httpDaytona = readText("/Users/neilmcdevitt/code/arx/convex/httpDaytona.ts");
+  const httpDaytona = readText(join(root, "convex/httpDaytona.ts"));
   const runtimeExecutionSession = readText(
-    "/Users/neilmcdevitt/code/arx/convex/runtimeExecutionSession.ts",
+    join(root, "convex/runtimeExecutionSession.ts"),
   );
   const runtimeMcpManager = readText(
-    "/Users/neilmcdevitt/code/arx/convex/runtimeMcpManager.ts",
+    join(root, "convex/runtimeMcpManager.ts"),
   );
-  const appEditor = readText("/Users/neilmcdevitt/code/arx/apps/web/src/components/WebCommunityAiAgentAppsEditor.tsx");
+  const appEditor = readText(join(root, "apps/web/src/components/WebCommunityAiAgentAppsEditor.tsx"));
 
   for (const exportedName of [
     "export const connectCommunityApp = action({",
@@ -101,7 +107,7 @@ function main() {
     "manager-only mounted tool guard",
   );
 
-  assertIncludes(
+  assertNotIncludes(
     httpDaytona,
     "internal.communityAppMounts.listRuntimeCommunityMountedToolsInternal",
     "runtime mounted-tool resolution",
@@ -109,27 +115,22 @@ function main() {
   assertIncludes(
     httpDaytona,
     "createPolyNetExecutionSession({",
-    "runtime mounted-tool execution session composition",
+    "runtime personal mounted-tool execution session composition",
   );
   assertIncludes(
     httpDaytona,
     "executionSession.executeMountedTool({",
-    "runtime mounted-tool execution dispatch",
+    "runtime personal mounted-tool execution dispatch",
   );
-  assertIncludes(
+  assertNotIncludes(
     httpDaytona,
     "community_app_tools_resolved",
     "runtime mounted-tool evidence event",
   );
-  assertIncludes(
+  assertNotIncludes(
     httpDaytona,
     "mountedTool.scope === \"community\" && mountedTool.risk_level !== \"read\"",
     "community mounted write/sensitive runtime guard",
-  );
-  assertIncludes(
-    httpDaytona,
-    "assertCommunityManagerAccessInternal",
-    "community mounted write/sensitive manager guard",
   );
   assertIncludes(
     runtimeExecutionSession,
