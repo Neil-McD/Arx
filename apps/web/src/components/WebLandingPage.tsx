@@ -86,7 +86,7 @@ const flowCards = [
       "Set instructions and personality",
       "Attach resources, docs, links, and files",
     ],
-    exampleTitle: "Tool stream",
+    exampleTitle: "Agent workflow",
     examples: [
       { name: "Supabase", detail: "connected project data", status: "ready" },
       { name: "Linear", detail: "synced issues and roadmap", status: "ready" },
@@ -265,6 +265,9 @@ export function WebLandingPage(props: WebLandingPageProps) {
           ))}
         </div>
         <div className="polynet-landing-flow-detail" aria-live="polite">
+          <div className="polynet-landing-flow-active-visual" aria-hidden="true">
+            <img src={activeFlow.image} alt="" loading="lazy" />
+          </div>
           <div className="polynet-landing-flow-copy">
             <span>Step {activeFlowIndex + 1} of {flowCards.length}</span>
             <h3>{activeFlow.title}</h3>
@@ -276,46 +279,53 @@ export function WebLandingPage(props: WebLandingPageProps) {
             </ul>
           </div>
           {activeFlowIndex === 0 ? (
-            <div className="polynet-landing-agent-stream" aria-label="Simulated agent harness stream">
-              <div className="polynet-landing-agent-status">
-                <span>Working for 8s</span>
-                <span aria-hidden="true">›</span>
-              </div>
-              <p className="polynet-landing-agent-output">
-                I’ll connect this agent to the tools and context it can use.
-              </p>
-              <div className="polynet-landing-agent-tools" aria-label="Simulated tool calls">
-                {buildAgentStream.map((tool, index) => (
-                  <div
-                    key={tool.call}
-                    className="polynet-landing-agent-tool"
-                    style={{ "--tool-index": index } as CSSProperties}
-                  >
-                    <div>
-                      <code>{tool.call}</code>
-                      <span>{tool.detail}</span>
+            <div className="polynet-landing-tool-stream" aria-label={activeFlow.exampleTitle}>
+              <span>{activeFlow.exampleTitle}</span>
+              <div className="polynet-landing-agent-stream-window">
+                <div className="polynet-landing-agent-stream-track">
+                  <div className="polynet-landing-agent-stream" aria-label="Simulated agent harness stream">
+                    <div className="polynet-landing-agent-status">
+                      <span>Working for 8s</span>
+                      <span aria-hidden="true">›</span>
                     </div>
-                    <p>{tool.result}</p>
-                  </div>
-                ))}
-              </div>
-              <div className="polynet-landing-agent-tools secondary" aria-label="Simulated research calls">
-                {buildAgentResearchStream.map((tool, index) => (
-                  <div
-                    key={tool.call}
-                    className="polynet-landing-agent-tool research"
-                    style={{ "--tool-index": index } as CSSProperties}
-                  >
-                    <div>
-                      <code>{tool.call}</code>
-                      <span>{tool.detail}</span>
+                    <p className="polynet-landing-agent-output">
+                      I’ll connect this agent to the tools and context it can use.
+                    </p>
+                    <div className="polynet-landing-agent-tools" aria-label="Simulated tool calls">
+                      {buildAgentStream.map((tool, index) => (
+                        <div
+                          key={tool.call}
+                          className="polynet-landing-agent-tool"
+                          style={{ "--tool-index": index } as CSSProperties}
+                        >
+                          <div>
+                            <code>{tool.call}</code>
+                            <span>{tool.detail}</span>
+                          </div>
+                          <p>{tool.result}</p>
+                        </div>
+                      ))}
                     </div>
-                    <p>{tool.result}</p>
+                    <div className="polynet-landing-agent-tools secondary" aria-label="Simulated research calls">
+                      {buildAgentResearchStream.map((tool, index) => (
+                        <div
+                          key={tool.call}
+                          className="polynet-landing-agent-tool research"
+                          style={{ "--tool-index": index } as CSSProperties}
+                        >
+                          <div>
+                            <code>{tool.call}</code>
+                            <span>{tool.detail}</span>
+                          </div>
+                          <p>{tool.result}</p>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="polynet-landing-agent-thinking">
+                      <span>Referencing community intelligence</span>
+                    </div>
                   </div>
-                ))}
-              </div>
-              <div className="polynet-landing-agent-thinking">
-                <span>Referencing community intelligence</span>
+                </div>
               </div>
             </div>
           ) : (
