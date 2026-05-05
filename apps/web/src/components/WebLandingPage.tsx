@@ -1,4 +1,4 @@
-import { type CSSProperties, useEffect, useState } from "react";
+import { type CSSProperties, useEffect, useRef, useState } from "react";
 import { Brain, Play } from "lucide-react";
 
 type WebLandingPageProps = {
@@ -150,9 +150,275 @@ const flowCards = [
   },
 ];
 
+const communityConversationEvents = [
+  {
+    kind: "message",
+    name: "Myah",
+    detail: "Can someone review this offer page before I publish?",
+  },
+  {
+    kind: "bot",
+    name: "Signal",
+    detail: "The CTA is clear. Tighten the outcome promise above the fold.",
+  },
+  {
+    kind: "file",
+    name: "Jordan",
+    detail: "Shared video · launch-teardown.mp4",
+  },
+  {
+    kind: "bot",
+    name: "Musebot",
+    detail: "Pulled 4 positioning notes from the shared video.",
+  },
+  {
+    kind: "file",
+    name: "Nate",
+    detail: "Shared PDF · offer-draft.pdf",
+  },
+  {
+    kind: "memory",
+    name: "Orbit",
+    detail: "Added to memory system · offer teardown, CTA notes, member demand.",
+  },
+];
+
+const usageSignalEvents = [
+  {
+    label: "New members",
+    value: "+38",
+    detail: "this month",
+  },
+  {
+    label: "Retention rate",
+    value: "84%",
+    detail: "member cohort",
+  },
+  {
+    label: "Weekly active",
+    value: "126",
+    detail: "members engaged",
+  },
+  {
+    label: "Agent sessions",
+    value: "412",
+    detail: "this week",
+  },
+  {
+    label: "Questions answered",
+    value: "1.2k",
+    detail: "without founder reply",
+  },
+  {
+    label: "Resource views",
+    value: "2.7k",
+    detail: "module engagement",
+  },
+  {
+    label: "Workflow demand",
+    value: "18x",
+    detail: "offer teardown requests",
+  },
+  {
+    label: "Time saved",
+    value: "14.5h",
+    detail: "founder leverage",
+  },
+];
+
+const monetizeEvents = [
+  {
+    label: "New subscription",
+    value: "$24/mo",
+    detail: "Builder plan activated",
+  },
+  {
+    label: "Community checkout",
+    value: "$49/mo",
+    detail: "Member joined Growth OS",
+  },
+  {
+    label: "Payment succeeded",
+    value: "$97",
+    detail: "Premium workflow purchased",
+  },
+  {
+    label: "MRR increased",
+    value: "+$312",
+    detail: "Recurring revenue this month",
+  },
+  {
+    label: "Payout ready",
+    value: "$428",
+    detail: "Builder earnings pending",
+  },
+  {
+    label: "Access granted",
+    value: "paid",
+    detail: "Entitlement synced from Stripe",
+  },
+];
+
+function renderFlowExample(flow: (typeof flowCards)[number], index: number) {
+  if (index === 0) {
+    return (
+      <div className="polynet-landing-tool-stream" aria-label={flow.exampleTitle}>
+        <span>{flow.exampleTitle}</span>
+        <div className="polynet-landing-agent-stream-window">
+          <div className="polynet-landing-agent-stream-track">
+            <div className="polynet-landing-agent-stream" aria-label="Simulated agent harness stream">
+              <div className="polynet-landing-agent-status">
+                <span>Working for 8s</span>
+                <span aria-hidden="true">›</span>
+              </div>
+              <p className="polynet-landing-agent-output">
+                I’ll connect this agent to the tools and context it can use.
+              </p>
+              <div className="polynet-landing-agent-tools" aria-label="Simulated tool calls">
+                {buildAgentStream.map((tool, toolIndex) => (
+                  <div
+                    key={tool.call}
+                    className="polynet-landing-agent-tool"
+                    style={{ "--tool-index": toolIndex } as CSSProperties}
+                  >
+                    <div>
+                      <code>{tool.call}</code>
+                      <span>{tool.detail}</span>
+                    </div>
+                    <p>{tool.result}</p>
+                  </div>
+                ))}
+              </div>
+              <div className="polynet-landing-agent-tools secondary" aria-label="Simulated research calls">
+                {buildAgentResearchStream.map((tool, toolIndex) => (
+                  <div
+                    key={tool.call}
+                    className="polynet-landing-agent-tool research"
+                    style={{ "--tool-index": toolIndex } as CSSProperties}
+                  >
+                    <div>
+                      <code>{tool.call}</code>
+                      <span>{tool.detail}</span>
+                    </div>
+                    <p>{tool.result}</p>
+                  </div>
+                ))}
+              </div>
+              <div className="polynet-landing-agent-thinking">
+                <span>Referencing community intelligence</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (index === 1) {
+    return (
+      <div
+        className="polynet-landing-tool-stream polynet-landing-community-feed"
+        aria-label={flow.exampleTitle}
+      >
+        <span>{flow.exampleTitle}</span>
+        <div className="polynet-landing-community-feed-window">
+          <div className="polynet-landing-community-feed-list">
+            {communityConversationEvents.map((event, eventIndex) => (
+              <div
+                key={`${event.name}-${event.detail}`}
+                className={`polynet-landing-community-event ${event.kind}`}
+                style={{ "--community-index": eventIndex } as CSSProperties}
+              >
+                <span>{event.name.slice(0, 2)}</span>
+                <div>
+                  <strong>{event.name}</strong>
+                  <p>{event.detail}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (index === 2) {
+    return (
+      <div
+        className="polynet-landing-tool-stream polynet-landing-usage-stream"
+        aria-label={flow.exampleTitle}
+      >
+        <span>{flow.exampleTitle}</span>
+        <div className="polynet-landing-usage-stream-window">
+          <div className="polynet-landing-usage-stream-track">
+            {usageSignalEvents.map((event, eventIndex) => (
+              <div
+                key={`${event.label}-${event.value}`}
+                className="polynet-landing-usage-event"
+                style={{ "--usage-index": eventIndex } as CSSProperties}
+              >
+                <div>
+                  <strong>{event.label}</strong>
+                  <p>{event.detail}</p>
+                </div>
+                <em>{event.value}</em>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (index === 3) {
+    return (
+      <div
+        className="polynet-landing-tool-stream polynet-landing-stripe-stream"
+        aria-label={flow.exampleTitle}
+      >
+        <span>{flow.exampleTitle}</span>
+        <div className="polynet-landing-usage-stream-window">
+          <div className="polynet-landing-usage-stream-track polynet-landing-stripe-stream-track">
+            {monetizeEvents.map((event, eventIndex) => (
+              <div
+                key={`${event.label}-${event.value}`}
+                className="polynet-landing-usage-event polynet-landing-stripe-event"
+                style={{ "--usage-index": eventIndex } as CSSProperties}
+              >
+                <div>
+                  <strong>{event.label}</strong>
+                  <p>{event.detail}</p>
+                </div>
+                <em>{event.value}</em>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="polynet-landing-tool-stream" aria-label={flow.exampleTitle}>
+      <span>{flow.exampleTitle}</span>
+      {flow.examples.map((example) => (
+        <div key={`${flow.title}-${example.name}`} className="polynet-landing-tool-call">
+          <span>{example.name.slice(0, 2)}</span>
+          <div>
+            <strong>{example.name}</strong>
+            <em>{example.detail}</em>
+          </div>
+          <small>{example.status}</small>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function WebLandingPage(props: WebLandingPageProps) {
   const [activeFlowIndex, setActiveFlowIndex] = useState(0);
   const [isFlowPinned, setIsFlowPinned] = useState(false);
+  const mobileFlowRef = useRef<HTMLDivElement | null>(null);
   const activeFlow = flowCards[activeFlowIndex] ?? flowCards[0];
 
   useEffect(() => {
@@ -170,6 +436,36 @@ export function WebLandingPage(props: WebLandingPageProps) {
 
     return () => window.clearInterval(interval);
   }, [isFlowPinned]);
+
+  useEffect(() => {
+    const carousel = mobileFlowRef.current;
+    if (!carousel) {
+      return;
+    }
+
+    const slide = carousel.children.item(activeFlowIndex);
+    if (!(slide instanceof HTMLElement)) {
+      return;
+    }
+
+    carousel.scrollTo({
+      left: slide.offsetLeft,
+      behavior: isFlowPinned ? "smooth" : "auto",
+    });
+  }, [activeFlowIndex, isFlowPinned]);
+
+  function handleMobileFlowScroll() {
+    const carousel = mobileFlowRef.current;
+    if (!carousel) {
+      return;
+    }
+
+    const nextIndex = Math.round(carousel.scrollLeft / Math.max(carousel.clientWidth, 1));
+    const clampedIndex = Math.max(0, Math.min(flowCards.length - 1, nextIndex));
+    if (clampedIndex !== activeFlowIndex) {
+      setActiveFlowIndex(clampedIndex);
+    }
+  }
 
   return (
     <div className="polynet-landing-page">
@@ -281,71 +577,54 @@ export function WebLandingPage(props: WebLandingPageProps) {
               ))}
             </ul>
           </div>
-          {activeFlowIndex === 0 ? (
-            <div className="polynet-landing-tool-stream" aria-label={activeFlow.exampleTitle}>
-              <span>{activeFlow.exampleTitle}</span>
-              <div className="polynet-landing-agent-stream-window">
-                <div className="polynet-landing-agent-stream-track">
-                  <div className="polynet-landing-agent-stream" aria-label="Simulated agent harness stream">
-                    <div className="polynet-landing-agent-status">
-                      <span>Working for 8s</span>
-                      <span aria-hidden="true">›</span>
-                    </div>
-                    <p className="polynet-landing-agent-output">
-                      I’ll connect this agent to the tools and context it can use.
-                    </p>
-                    <div className="polynet-landing-agent-tools" aria-label="Simulated tool calls">
-                      {buildAgentStream.map((tool, index) => (
-                        <div
-                          key={tool.call}
-                          className="polynet-landing-agent-tool"
-                          style={{ "--tool-index": index } as CSSProperties}
-                        >
-                          <div>
-                            <code>{tool.call}</code>
-                            <span>{tool.detail}</span>
-                          </div>
-                          <p>{tool.result}</p>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="polynet-landing-agent-tools secondary" aria-label="Simulated research calls">
-                      {buildAgentResearchStream.map((tool, index) => (
-                        <div
-                          key={tool.call}
-                          className="polynet-landing-agent-tool research"
-                          style={{ "--tool-index": index } as CSSProperties}
-                        >
-                          <div>
-                            <code>{tool.call}</code>
-                            <span>{tool.detail}</span>
-                          </div>
-                          <p>{tool.result}</p>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="polynet-landing-agent-thinking">
-                      <span>Referencing community intelligence</span>
-                    </div>
-                  </div>
+          {renderFlowExample(activeFlow, activeFlowIndex)}
+        </div>
+        <div
+          ref={mobileFlowRef}
+          className="polynet-landing-flow-mobile-carousel"
+          aria-label="How Polynet works"
+          onPointerDown={() => setIsFlowPinned(true)}
+          onScroll={handleMobileFlowScroll}
+        >
+          {flowCards.map((card, index) => (
+            <article
+              key={`mobile-${card.title}`}
+              className="polynet-landing-flow-mobile-slide"
+              aria-label={`Step ${index + 1}: ${card.title}`}
+            >
+              <div className="polynet-landing-flow-mobile-top">
+                <div className={`polynet-landing-flow-active-visual step-${index}`} aria-hidden="true">
+                  <img src={card.image} alt="" loading="lazy" />
                 </div>
+                {renderFlowExample(card, index)}
               </div>
-            </div>
-          ) : (
-            <div className="polynet-landing-tool-stream" aria-label={activeFlow.exampleTitle}>
-              <span>{activeFlow.exampleTitle}</span>
-              {activeFlow.examples.map((example) => (
-                <div key={`${activeFlow.title}-${example.name}`} className="polynet-landing-tool-call">
-                  <span>{example.name.slice(0, 2)}</span>
-                  <div>
-                    <strong>{example.name}</strong>
-                    <em>{example.detail}</em>
-                  </div>
-                  <small>{example.status}</small>
-                </div>
-              ))}
-            </div>
-          )}
+              <div className="polynet-landing-flow-copy">
+                <span>Step {index + 1} of {flowCards.length}</span>
+                <h3>{card.title}</h3>
+                <p>{card.summary}</p>
+                <ul>
+                  {card.bullets.map((bullet) => (
+                    <li key={bullet}>{bullet}</li>
+                  ))}
+                </ul>
+              </div>
+            </article>
+          ))}
+        </div>
+        <div className="polynet-landing-flow-dots" aria-label="How it works slides">
+          {flowCards.map((card, index) => (
+            <button
+              key={`dot-${card.title}`}
+              type="button"
+              className={index === activeFlowIndex ? "active" : undefined}
+              aria-label={`Show ${card.title}`}
+              aria-current={index === activeFlowIndex ? "step" : undefined}
+              onClick={() => {
+                setActiveFlowIndex(index);
+                setIsFlowPinned(true);
+              }}
+            />
+          ))}
         </div>
       </section>
 
