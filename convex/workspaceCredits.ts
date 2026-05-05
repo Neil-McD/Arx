@@ -7,7 +7,10 @@ import {
   estimateDaytonaWorkspaceComputeUsd,
   WORKSPACE_CREDIT_TOPUP_CREDITS,
 } from "../shared/workspaceCredits";
-import { newOpaqueToken } from "./billingCore";
+import {
+  newOpaqueToken,
+  requireCanonicalCheckoutReturnUrl,
+} from "./billingCore";
 import { resolveAuthenticatedActor } from "./authActor";
 import {
   getStripeClient,
@@ -517,10 +520,14 @@ export const startWorkspaceCreditTopupCheckout = action({
   },
   handler: async (ctx, args) => {
     const nowMs = args.nowMs ?? Date.now();
-    const successUrl = String(args.successUrl ?? "").trim();
-    const cancelUrl = String(args.cancelUrl ?? "").trim();
-    if (!successUrl) throw new Error("workspace_credit_topup_success_url_required");
-    if (!cancelUrl) throw new Error("workspace_credit_topup_cancel_url_required");
+    const successUrl = requireCanonicalCheckoutReturnUrl(
+      args.successUrl,
+      "workspace_credit_topup_success_url_invalid",
+    );
+    const cancelUrl = requireCanonicalCheckoutReturnUrl(
+      args.cancelUrl,
+      "workspace_credit_topup_cancel_url_invalid",
+    );
 
     const actor = (await ctx.runQuery(internal.authActor.resolveAuthenticatedActorInternal as any, {
       authSubject: args.authSubject ?? null,

@@ -9,6 +9,7 @@ import {
 } from "./communityCore";
 import { enqueueCommunityAccessGrantedEmailInternal } from "./emailEvents";
 import { recordCriticalAuditEventBestEffort } from "./criticalAudit";
+import { readCanonicalPublicAppOrigin } from "./publicAppUrl";
 
 export type CommunityLike = {
   _id: any;
@@ -121,6 +122,24 @@ export function normalizeSlug(raw: unknown): string {
   return slug;
 }
 
+export function requireCanonicalCheckoutReturnUrl(
+  urlRaw: unknown,
+  errorCode: string,
+): string {
+  const raw = String(urlRaw ?? "").trim();
+  if (!raw) throw new Error(errorCode);
+  const parseTarget = raw.replaceAll("{CHECKOUT_SESSION_ID}", "CHECKOUT_SESSION_ID");
+  let parsed: URL;
+  try {
+    parsed = new URL(parseTarget);
+  } catch {
+    throw new Error(errorCode);
+  }
+  if (parsed.username || parsed.password) throw new Error(errorCode);
+  if (parsed.origin !== readCanonicalPublicAppOrigin()) throw new Error(errorCode);
+  return raw;
+}
+
 export function normalizeSessionId(raw: unknown): string {
   const value = String(raw ?? "").trim();
   if (!value) throw new Error("checkout_session_id_required");
@@ -177,19 +196,16 @@ export function normalizeStripeCommunitySubscriptionStatus(args: {
 }
 
 export function buildCheckoutSuccessUrl(successUrlRaw: unknown, sessionId: string): string {
-  const successUrl = String(successUrlRaw ?? "").trim();
-  if (!successUrl) throw new Error("checkout_success_url_required");
+  const successUrl = requireCanonicalCheckoutReturnUrl(
+    successUrlRaw,
+    "checkout_success_url_invalid",
+  );
   if (successUrl.includes("{CHECKOUT_SESSION_ID}")) {
     return successUrl.replaceAll("{CHECKOUT_SESSION_ID}", sessionId);
   }
-  try {
-    const parsed = new URL(successUrl);
-    parsed.searchParams.set("session_id", sessionId);
-    return parsed.toString();
-  } catch {
-    const separator = successUrl.includes("?") ? "&" : "?";
-    return `${successUrl}${separator}session_id=${encodeURIComponent(sessionId)}`;
-  }
+  const parsed = new URL(successUrl);
+  parsed.searchParams.set("session_id", sessionId);
+  return parsed.toString();
 }
 
 export async function ensureCommunityMembership(args: {

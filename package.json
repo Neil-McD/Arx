@@ -30,6 +30,8 @@
     "check:operator-intelligence-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/operator_intelligence_proof.ts",
     "check:operator-dashboard-gate-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/operator_dashboard_gate_proof.ts",
     "check:builder-billing-redirect-authority-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/builder_billing_redirect_authority_proof.ts",
+    "check:purchase-token-hygiene-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/purchase_token_hygiene_proof.ts",
+    "check:frontend-privacy-hygiene-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/frontend_privacy_hygiene_proof.ts",
     "check:community-admin-contract-guard": "bash scripts/community_admin_contract_guard.sh",
     "check:community-public-identity-guard": "bash scripts/community_public_identity_guard.sh",
     "check:community-access-role-policy-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_access_role_policy_proof.ts",

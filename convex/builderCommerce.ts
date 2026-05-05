@@ -15,6 +15,7 @@ import {
   normalizeStripeConnectRequirementList,
 } from "./stripeConnectAccountCore";
 import { recordCriticalAuditEventBestEffort } from "./criticalAudit";
+import { readCanonicalPublicAppOrigin } from "./publicAppUrl";
 
 function isActiveWindow(nowMs: number, startsAt: number, endsAt?: number): boolean {
   if (startsAt > nowMs) return false;
@@ -32,13 +33,6 @@ function readEffectiveBuilderTier(rows: Array<{ tier: string }>): "free" | "buil
   return "free";
 }
 
-const PUBLIC_APP_URL_ENV_KEYS = [
-  "ARX_PUBLIC_APP_URL",
-  "PUBLIC_APP_URL",
-  "VITE_PUBLIC_APP_URL",
-  "VITE_APP_URL",
-] as const;
-
 const BUILDER_BILLING_CONTEXT_VALIDATOR = v.union(
   v.literal("builder"),
   v.literal("create_community"),
@@ -48,32 +42,6 @@ const BUILDER_CONNECT_CONTEXT_VALIDATOR = v.union(
   v.literal("account"),
   v.literal("community"),
 );
-
-function readEnv(name: string): string {
-  try {
-    const value = (globalThis as any)?.process?.env?.[name];
-    if (typeof value === "string" && value.trim()) return value.trim();
-  } catch {
-    // ignore
-  }
-  return "";
-}
-
-function readCanonicalPublicAppOrigin(): string {
-  for (const key of PUBLIC_APP_URL_ENV_KEYS) {
-    const value = readEnv(key).replace(/\/+$/, "");
-    if (!value) continue;
-    try {
-      const parsed = new URL(value);
-      if (parsed.protocol === "https:" || parsed.protocol === "http:") {
-        return parsed.origin;
-      }
-    } catch {
-      // Ignore malformed fallback envs; fail below if none are usable.
-    }
-  }
-  throw new Error("public_app_url_missing");
-}
 
 function buildBuilderBillingRedirectUrls(args: {
   context: "builder" | "create_community";

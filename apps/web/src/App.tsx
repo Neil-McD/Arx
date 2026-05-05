@@ -21,6 +21,10 @@ import {
   clearPendingPurchaseClaimToken, readPendingPurchaseClaimToken, storePendingPublicJoin, storePendingPurchaseClaimToken, type PendingPurchaseClaim
 } from "../../../shared/pay_first";
 import {
+  buildPathWithSearchParamsRemoved,
+  buildTelemetryRouteLabel,
+} from "../../../shared/routePrivacy";
+import {
   readProfileDraftForUser, writeProfileDraftForUser, } from "../../../shared/profileDraftStorage";
 import {
   resolveAuthSessionAvatarUrl,
@@ -474,6 +478,7 @@ const WORKSPACE_PLATFORM_STARTER_PROMPT =
   "Tell me what Polynet is, what I can build here, and how I should get started.";
 const GUEST_THREAD_STORAGE_KEY = "polynet_guest_thread_v1";
 const LEGACY_GUEST_THREAD_STORAGE_KEY = "arx_guest_thread_v1";
+const GUEST_THREAD_STORAGE_TTL_MS = 24 * 60 * 60 * 1000;
 const GUEST_MODEL_STORAGE_KEY = "polynet_guest_model_id_v1";
 const LEGACY_GUEST_MODEL_STORAGE_KEY = "arx_guest_model_id_v1";
 const GUEST_MODEL_ALLOWLIST = SHARED_FREE_MODEL_ALLOWLIST;
@@ -500,6 +505,8 @@ type GuestThreadStorageV1 = {
   v: 1;
   model_id: string;
   messages: GuestStoredMessageV1[];
+  stored_at?: number;
+  expires_at?: number;
 };
 
 function readFirstLocalStorageValue(keys: readonly string[]): string | null {
@@ -529,13 +536,43 @@ function storeGuestModelId(modelId: string): void {
   }
 }
 
+function clearGuestThreadStorage(): void {
+  try {
+    localStorage.removeItem(GUEST_THREAD_STORAGE_KEY);
+    localStorage.removeItem(LEGACY_GUEST_THREAD_STORAGE_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+function emptyGuestThreadStorage(modelId = loadGuestModelId()): GuestThreadStorageV1 {
+  const nowMs = Date.now();
+  return {
+    v: 1,
+    model_id: modelId,
+    messages: [],
+    stored_at: nowMs,
+    expires_at: nowMs + GUEST_THREAD_STORAGE_TTL_MS,
+  };
+}
+
+function isExpiredGuestThreadStorage(record: Record<string, unknown>, nowMs: number): boolean {
+  const expiresAt = Number(record.expires_at ?? 0);
+  return Number.isFinite(expiresAt) && expiresAt > 0 && expiresAt <= nowMs;
+}
+
 function loadGuestThreadStorage(): GuestThreadStorageV1 {
   try {
     const raw = readFirstLocalStorageValue([GUEST_THREAD_STORAGE_KEY, LEGACY_GUEST_THREAD_STORAGE_KEY]);
-    if (!raw) return { v: 1, model_id: loadGuestModelId(), messages: [] };
+    if (!raw) return emptyGuestThreadStorage();
     const parsed = JSON.parse(raw) as unknown;
-    if (!parsed || typeof parsed !== "object") return { v: 1, model_id: loadGuestModelId(), messages: [] };
+    if (!parsed || typeof parsed !== "object") return emptyGuestThreadStorage();
     const asAny = parsed as any;
+    const nowMs = Date.now();
+    if (isExpiredGuestThreadStorage(asAny, nowMs)) {
+      clearGuestThreadStorage();
+      return emptyGuestThreadStorage();
+    }
     const model_id_raw = typeof asAny.model_id === "string" ? asAny.model_id.trim() : "";
     const model_id = model_id_raw && isFreeModelId(model_id_raw, GUEST_MODEL_ALLOWLIST) ? model_id_raw : loadGuestModelId();
     const messages_raw = Array.isArray(asAny.messages) ? (asAny.messages as unknown[]) : [];
@@ -553,15 +590,38 @@ function loadGuestThreadStorage(): GuestThreadStorageV1 {
       if (!trimmed) continue;
       messages.push({ id, role: role as any, content: trimmed, created_at, run_id });
     }
-    return { v: 1, model_id, messages };
+    const storedAt = Number(asAny.stored_at ?? nowMs);
+    const expiresAt = Number(asAny.expires_at ?? 0);
+    const storage: GuestThreadStorageV1 = {
+      v: 1,
+      model_id,
+      messages,
+      stored_at: Number.isFinite(storedAt) && storedAt > 0 ? storedAt : nowMs,
+      expires_at:
+        Number.isFinite(expiresAt) && expiresAt > nowMs
+          ? expiresAt
+          : nowMs + GUEST_THREAD_STORAGE_TTL_MS,
+    };
+    if (!Number.isFinite(expiresAt) || expiresAt <= 0) {
+      storeGuestThreadStorage(storage);
+    }
+    return storage;
   } catch {
-    return { v: 1, model_id: loadGuestModelId(), messages: [] };
+    return emptyGuestThreadStorage();
   }
 }
 
 function storeGuestThreadStorage(storage: GuestThreadStorageV1): void {
   try {
-    localStorage.setItem(GUEST_THREAD_STORAGE_KEY, JSON.stringify(storage));
+    const nowMs = Date.now();
+    localStorage.setItem(
+      GUEST_THREAD_STORAGE_KEY,
+      JSON.stringify({
+        ...storage,
+        stored_at: Number.isFinite(storage.stored_at) && Number(storage.stored_at) > 0 ? storage.stored_at : nowMs,
+        expires_at: nowMs + GUEST_THREAD_STORAGE_TTL_MS,
+      }),
+    );
   } catch {
     // ignore
   }
@@ -701,6 +761,28 @@ type WorkspaceOperatorPanelLayout = {
   width: number;
   gutter: number;
 };
+
+function buildCurrentTelemetryPathname(): string | null {
+  if (typeof window === "undefined") return null;
+  return buildTelemetryRouteLabel({
+    pathname: window.location.pathname,
+    search: window.location.search,
+  });
+}
+
+function scrubCurrentRouteSearchParams(paramNames: readonly string[]): void {
+  if (typeof window === "undefined") return;
+  const currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+  const nextPath = buildPathWithSearchParamsRemoved({
+    pathname: window.location.pathname,
+    search: window.location.search,
+    hash: window.location.hash,
+    paramNames,
+    dropHash: true,
+  });
+  if (nextPath === currentPath) return;
+  window.history.replaceState(window.history.state ?? {}, document.title, nextPath);
+}
 
 function formatModelSignature(
   modelId: string | null | undefined,
@@ -4642,6 +4724,11 @@ export default function App() {
       setRedeemClaimError,
   });
 
+  useEffect(() => {
+    if (claimTokenParam) scrubCurrentRouteSearchParams(["token"]);
+    if (checkoutSuccessSessionId) scrubCurrentRouteSearchParams(["session_id"]);
+  }, [checkoutSuccessSessionId, claimTokenParam]);
+
   type WorkspaceLensTarget = {
     threadId: string;
     communityId: string | null;
@@ -5673,17 +5760,16 @@ export default function App() {
   useEffect(() => {
     if (!session) return;
     setGuestInferenceIssueById({});
+    clearGuestThreadStorage();
   }, [session]);
 
   useEffect(() => {
+    const telemetryPathname = buildCurrentTelemetryPathname();
     updateSentryUiContext({
       authState: session ? "authenticated" : "anonymous",
       userId: canonicalSessionUserId,
       builderTier: builderBillingStatus?.builder_tier ?? null,
-      pathname:
-        typeof window !== "undefined"
-          ? `${window.location.pathname}${window.location.search}${window.location.hash}`
-          : null,
+      pathname: telemetryPathname,
       publicRouteKind: publicRoute.kind,
       activePage,
       activeView,
@@ -5697,10 +5783,7 @@ export default function App() {
       authState: session ? "authenticated" : "anonymous",
       userId: canonicalSessionUserId,
       builderTier: builderBillingStatus?.builder_tier ?? null,
-      pathname:
-        typeof window !== "undefined"
-          ? `${window.location.pathname}${window.location.search}${window.location.hash}`
-          : null,
+      pathname: telemetryPathname,
       publicRouteKind: publicRoute.kind,
       activePage,
       activeView,

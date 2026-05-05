@@ -101,6 +101,7 @@ import type * as profiles from "../profiles.js";
 import type * as projects from "../projects.js";
 import type * as providerConnectionProbes from "../providerConnectionProbes.js";
 import type * as providerConnections from "../providerConnections.js";
+import type * as publicAppUrl from "../publicAppUrl.js";
 import type * as runtimeCancellation from "../runtimeCancellation.js";
 import type * as runtimeExecutionSession from "../runtimeExecutionSession.js";
 import type * as runtimeHarnessComposition from "../runtimeHarnessComposition.js";
@@ -231,6 +232,7 @@ declare const fullApi: ApiFromModules<{
   projects: typeof projects;
   providerConnectionProbes: typeof providerConnectionProbes;
   providerConnections: typeof providerConnections;
+  publicAppUrl: typeof publicAppUrl;
   runtimeCancellation: typeof runtimeCancellation;
   runtimeExecutionSession: typeof runtimeExecutionSession;
   runtimeHarnessComposition: typeof runtimeHarnessComposition;

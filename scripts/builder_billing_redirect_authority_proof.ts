@@ -17,6 +17,10 @@ const builderBillingSharedSource = readFileSync(
   new URL("../shared/builderBilling.ts", import.meta.url),
   "utf8",
 );
+const publicAppUrlSource = readFileSync(
+  new URL("../convex/publicAppUrl.ts", import.meta.url),
+  "utf8",
+);
 
 function sliceBetween(source: string, startMarker: string, endMarker?: string): string {
   const start = source.indexOf(startMarker);
@@ -57,8 +61,12 @@ const startCloudConnectOnboardingBlock = sliceBetween(
 );
 
 assert(
-  builderCommerceSource.includes("function readCanonicalPublicAppOrigin(): string"),
-  "expected builderCommerce to define a canonical public app origin helper",
+  publicAppUrlSource.includes("export function readCanonicalPublicAppOrigin(): string"),
+  "expected Convex billing surfaces to share a canonical public app origin helper",
+);
+assert(
+  builderCommerceSource.includes('from "./publicAppUrl"'),
+  "expected builderCommerce to use the shared public app origin helper",
 );
 assert(
   builderCommerceSource.includes("function buildBuilderBillingRedirectUrls"),

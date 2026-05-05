@@ -8,6 +8,7 @@ import { isLoginTrampolinePathname, LoginTrampolineRoute } from "./auth/loginTra
 import { applyAppThemeAttributes, parseAppTheme } from "../../../shared/theme";
 import { bootConvexProbe } from "../../../shared/convexRuntime";
 import { bootstrapConvexAnonymousActor } from "../../../shared/convexAuthBootstrap";
+import { buildTelemetryRouteLabel } from "../../../shared/routePrivacy";
 
 type ErrorBoundaryState = {
   error: Error | null;
@@ -55,7 +56,10 @@ function isLikelyModuleLoadFailure(error: unknown): boolean {
 }
 
 function currentRecoveryTarget(): string {
-  return `${window.location.pathname}${window.location.search}${window.location.hash}`;
+  return buildTelemetryRouteLabel({
+    pathname: window.location.pathname,
+    search: window.location.search,
+  });
 }
 
 function buildModuleLoadRecoveryExtras(error: unknown): Record<string, unknown> {

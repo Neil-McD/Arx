@@ -16,6 +16,7 @@ import {
   normalizeSessionId,
   normalizeSlug,
   normalizeStripeCommunitySubscriptionStatus,
+  requireCanonicalCheckoutReturnUrl,
   redeemClaimRow,
   resolveCheckoutPricePoint,
   resolveUserIdForAuthenticatedRequest,
@@ -643,8 +644,10 @@ export const startPublicCommunityCheckout = action({
     args,
   ): Promise<{ ok: true; session_id: string; checkout_url: string }> => {
     const nowMs = Date.now();
-    const cancelUrl = String(args.cancelUrl ?? "").trim();
-    if (!cancelUrl) throw new Error("checkout_cancel_url_required");
+    const cancelUrl = requireCanonicalCheckoutReturnUrl(
+      args.cancelUrl,
+      "checkout_cancel_url_invalid",
+    );
     const billingPeriod = normalizeBillingPeriod(args.billingPeriod);
     const checkoutConfig = (await ctx.runQuery(
       internal.communityCommerce.resolvePublicCommunityCheckoutConfigInternal as any,

@@ -1,8 +1,16 @@
 {
-  "installCommand": "npm install && npm --prefix apps/web install",
+  "installCommand": "npm ci && npm --prefix apps/web ci",
   "buildCommand": "npm run build",
   "outputDirectory": "apps/web/dist",
   "routes": [
+    {
+      "src": "/(.*)",
+      "headers": {
+        "Content-Security-Policy": "frame-ancestors 'self'",
+        "X-Frame-Options": "SAMEORIGIN"
+      },
+      "continue": true
+    },
     { "src": "/api/preview(/.*)?", "status": 404 },
     { "src": "/_preview/start(/.*)?", "status": 404 },
     { "handle": "filesystem" },
