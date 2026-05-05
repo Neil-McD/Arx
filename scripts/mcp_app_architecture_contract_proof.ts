@@ -113,7 +113,7 @@ function main() {
   assertNotIncludes(
     discoverPanel,
     "Add ${selectedApp.name} to ${communityTargetLabel}",
-    "Discover community app mount copy",
+    "Discover legacy community install copy",
   );
   assertIncludes(
     communitySettings,
@@ -123,7 +123,7 @@ function main() {
   assertNotIncludes(
     communitySettings,
     "No apps are attached to this community lens yet.",
-    "Community Settings legacy mount empty state",
+    "Community Settings legacy lens empty state",
   );
   assertIncludes(
     communityAppsEditor,
@@ -133,7 +133,7 @@ function main() {
   assertNotIncludes(
     communityAppsEditor,
     "The app is mounted into this community lens",
-    "Community agent apps editor legacy mount copy",
+    "Community agent apps editor legacy lens copy",
   );
 
   console.log("mcp_app_architecture_contract_proof: ok");

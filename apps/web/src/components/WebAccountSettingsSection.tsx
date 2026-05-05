@@ -532,7 +532,7 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
             Delete account
           </div>
           <div className="settings-section-desc">
-            Delete your Polynet account data, including your profile, sessions, provider connections, personal memory, workspace threads, and personal workspace data. Active subscriptions, payout setup, owned communities, and community-mounted apps or skills must be resolved first.
+            Delete your Polynet account data, including your profile, sessions, provider connections, personal memory, workspace threads, and personal workspace data. Active subscriptions, payout setup, owned communities, and community app grants or skills must be resolved first.
           </div>
           <div className="provider-connection-stack">
             <input

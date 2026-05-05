@@ -12,7 +12,7 @@
 1. `auth-money-access-matrix.md`
 2. `irreducible-core-contract.md`
 3. `bounded-workspace-loop-v2.md`
-4. `community-app-convex-contract-v1.md`
+4. `mcp-app-architecture-contract.md`
 5. `url-routing-contract-v1.md`
 
 ## Active operational guides
@@ -24,8 +24,7 @@
 ## Parked future-facing plans
 1. `convex-web3-posture-execution-plan-v1.md`
 2. `convex-schema-skeleton-v1.md`
-3. `community-app-registration-mounting-plan-v1.md`
-4. `system-surface-reduction-plan-v1.md`
+3. `system-surface-reduction-plan-v1.md`
 
 ## Historical evidence
 1. `production-baseline-fingerprint-worksheet.md`

@@ -3,7 +3,7 @@ id: product.guide.connect_apps_and_mcps
 title: Connect Apps and MCPs
 audience: builder, llm, operator
 status: alpha-current
-last_verified: 2026-04-26
+last_verified: 2026-05-05
 ---
 
 # Connect Apps and MCPs
@@ -44,7 +44,7 @@ The system should keep these concepts separate:
 - tool snapshot discovered during validation
 - community app grant
 - user app source/provenance
-- enabled tools for that mount
+- enabled tools for the user's harness app
 
 This separation matters because prompts and community config blobs are not app authority.
 

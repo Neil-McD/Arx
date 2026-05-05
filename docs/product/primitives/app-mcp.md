@@ -3,7 +3,7 @@ id: product.app_mcp
 title: Apps and MCPs
 audience: builder, llm, operator
 status: alpha-current
-last_verified: 2026-04-26
+last_verified: 2026-05-05
 ---
 
 # Apps and MCPs
@@ -18,7 +18,7 @@ Apps and MCPs let a builder extend an agent beyond static instructions by connec
 
 ## User Mental Model
 
-Apps are things the builder can connect or mount so the agent has more useful capability.
+Apps are things a user can connect to their harness so the agent has more useful capability. Builders can recommend apps through a community, but runtime capability still comes from each member's own harness state.
 
 ## System Mental Model
 
@@ -28,7 +28,7 @@ Apps and MCPs should be explicit, permissioned, and scoped. They are not ambient
 
 1. Remote tool capability must be explicit.
 2. A connected app does not automatically imply every user can use every tool.
-3. Community-mounted capability should respect community access and role rules.
+3. Community-recommended capability should seed or route to the user's canonical harness state.
 4. Tool availability should be distinguishable from product marketing copy.
 5. Unknown or unverified integrations should be documented as catalog or planned, not live capability.
 
@@ -42,4 +42,3 @@ Apps and MCPs are not a reason to turn Polynet into a general IDE or unbounded a
 - `skill`
 - `community`
 - `entitlement`
-
