@@ -123,6 +123,7 @@ export default defineSchema({
     sandboxDiskGiB: v.number(),
     computeCostUsd: v.number(),
     creditsDebited: v.number(),
+    creditReservationKey: v.optional(v.string()),
     debitSource: v.union(v.literal("included"), v.literal("purchased"), v.literal("mixed")),
     createdAt: v.number(),
   })
@@ -130,6 +131,41 @@ export default defineSchema({
     .index("by_user", ["userId"])
     .index("by_run", ["runId"])
     .index("by_providerSandboxId", ["providerSandboxId"]),
+
+  creditLedgerEntries: defineTable({
+    creditKey: v.string(),
+    userId: v.id("users"),
+    communityId: v.optional(v.id("communities")),
+    projectId: v.optional(v.id("cloudProjects")),
+    runId: v.optional(v.string()),
+    toolName: v.string(),
+    action: v.optional(v.string()),
+    vendor: v.optional(v.string()),
+    status: v.union(
+      v.literal("reserved"),
+      v.literal("succeeded"),
+      v.literal("refunded"),
+    ),
+    creditsReserved: v.number(),
+    creditsSettled: v.optional(v.number()),
+    includedCreditsDebited: v.number(),
+    purchasedCreditsDebited: v.number(),
+    includedCreditsRefunded: v.optional(v.number()),
+    purchasedCreditsRefunded: v.optional(v.number()),
+    rawVendorCostUsd: v.optional(v.number()),
+    polynetPriceUsd: v.optional(v.number()),
+    failureReason: v.optional(v.string()),
+    metadata: v.optional(v.any()),
+    expiresAt: v.optional(v.number()),
+    settledAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_creditKey", ["creditKey"])
+    .index("by_user_createdAt", ["userId", "createdAt"])
+    .index("by_run", ["runId"])
+    .index("by_tool_createdAt", ["toolName", "createdAt"])
+    .index("by_status_expiresAt", ["status", "expiresAt"]),
 
   criticalAuditEvents: defineTable({
     eventKey: v.string(),

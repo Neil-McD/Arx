@@ -1,6 +1,6 @@
 import type {
-  AnalyticsPoint,
   AnalyticsRange,
+  CommunityAnalyticsSeries,
   CommunityAnalyticsSummary,
 } from "../../../../shared/communityTypes";
 
@@ -15,7 +15,7 @@ export type CommunityAnalyticsState = {
   isLoadingCommunityAnalytics: boolean;
   communityAnalyticsError: string | null;
   communityAnalyticsSummary: CommunityAnalyticsSummary;
-  communityAnalyticsSeries: AnalyticsPoint[];
+  communityAnalyticsSeries: CommunityAnalyticsSeries;
 };
 
 export type CommunityAnalyticsActions = {

@@ -2,7 +2,21 @@ import { useCallback, useRef, type Dispatch, type MutableRefObject, type SetStat
 import { resolveUsableSession, type EnsureSessionFn } from "./ensureUsableSession";
 import { resolveAuthSubject } from "./authSession";
 import {
-  type AnalyticsPointLike, type AnalyticsRange, type AnalyticsSummaryLike, type CommunityMemberLike, type SessionLike, type UserProfileDetailLike, type UserProfileLike, analyticsBucketLabel, buildAnalyticsSeries, emptyAnalyticsSummary, resolveAnalyticsBucket, resolveAnalyticsWindowStart, trimProfileFields, } from "./communityAdminCore";
+  type AnalyticsMetricSeriesLike,
+  type AnalyticsRange,
+  type AnalyticsSummaryLike,
+  type CommunityMemberLike,
+  type SessionLike,
+  type UserProfileDetailLike,
+  type UserProfileLike,
+  buildAnalyticsSeries,
+  buildAnalyticsValueSeries,
+  emptyAnalyticsMetricSeries,
+  emptyAnalyticsSummary,
+  resolveAnalyticsBucket,
+  resolveAnalyticsWindowStart,
+  trimProfileFields,
+} from "./communityAdminCore";
 
 import {
   listCloudCommunityMembershipAdminRows,
@@ -11,6 +25,8 @@ import {
 import {
   banCloudCommunityMember,
   fetchCloudCommunityAnalyticsSummary,
+  listCloudCommunityFunnelVisitCreatedAtRows,
+  listCloudCommunityRevenueSeriesRows,
   removeCloudCommunityMember,
   setCloudCommunityMemberRole,
 } from "./cloudCommunityAdminGateway";
@@ -63,7 +79,7 @@ type UseCommunityAdminControllerArgs<
   setIsLoadingCommunityAnalytics: Dispatch<SetStateAction<boolean>>;
   setCommunityAnalyticsError: Dispatch<SetStateAction<string | null>>;
   setCommunityAnalyticsSummary: Dispatch<SetStateAction<AnalyticsSummaryLike>>;
-  setCommunityAnalyticsSeries: Dispatch<SetStateAction<AnalyticsPointLike[]>>;
+  setCommunityAnalyticsSeries: Dispatch<SetStateAction<AnalyticsMetricSeriesLike>>;
 };
 
 export function useCommunityAdminController<
@@ -86,6 +102,7 @@ export function useCommunityAdminController<
   const argsRef = useRef(args);
   argsRef.current = args;
   const communityMembersLoadSeqRef = useRef(0);
+  const communityAnalyticsLoadSeqRef = useRef(0);
 
   const loadCommunityMembers = useCallback(async (
     communityId: string,
@@ -258,6 +275,7 @@ export function useCommunityAdminController<
     const current = argsRef.current;
     const usableSession = await resolveUsableSession(session, current.ensureSession);
     if (!usableSession) return;
+    const seq = (communityAnalyticsLoadSeqRef.current += 1);
     current.setIsLoadingCommunityAnalytics(true);
     current.setCommunityAnalyticsError(null);
 
@@ -294,6 +312,51 @@ export function useCommunityAdminController<
         // ignore
       }
 
+      let visitRowsWindow: Array<{ created_at: string }> = [];
+      try {
+        visitRowsWindow = await listCloudCommunityFunnelVisitCreatedAtRows({
+          session: usableSession,
+          communityId,
+          sinceIso: sinceWindowIso,
+          limit: 5000,
+        });
+      } catch {
+        // The funnel visit row query may not be deployed yet during staged Convex releases.
+      }
+
+      let revenueRows: Array<{ bucket_start: string; net_base_units: number | string | null }> = [];
+      try {
+        revenueRows = await listCloudCommunityRevenueSeriesRows({
+          session: usableSession,
+          communityId,
+          range,
+        });
+      } catch {
+        // Revenue series is best-effort until the community billing analytics query is available.
+      }
+
+      if (communityAnalyticsLoadSeqRef.current !== seq) return;
+
+      const memberSeries = buildAnalyticsSeries({
+        rows: memberJoinsWindow,
+        start: windowStart ?? new Date(now - 30 * 86400000),
+        bucket: chartBucket,
+        dateKeyLocal: current.dateKeyLocal,
+      });
+      const visitSeries = buildAnalyticsSeries({
+        rows: visitRowsWindow,
+        start: windowStart ?? new Date(now - 30 * 86400000),
+        bucket: chartBucket,
+        dateKeyLocal: current.dateKeyLocal,
+      });
+      const revenueSeries = buildAnalyticsValueSeries({
+        rows: revenueRows.map((row) => ({
+          bucket_start: row.bucket_start,
+          value: row.net_base_units,
+        })),
+        bucket: chartBucket,
+      });
+
       current.setCommunityAnalyticsSummary({
         total_members: summary?.total_members ?? null,
         page_visits_window: summary?.page_visits_window ?? null,
@@ -307,15 +370,13 @@ export function useCommunityAdminController<
         total_resources: null,
         resources_added_window: null,
       });
-      current.setCommunityAnalyticsSeries(
-        buildAnalyticsSeries({
-          rows: memberJoinsWindow,
-          start: windowStart ?? new Date(now - 30 * 86400000),
-          bucket: chartBucket,
-          dateKeyLocal: current.dateKeyLocal,
-        }),
-      );
+      current.setCommunityAnalyticsSeries({
+        visits: visitSeries,
+        members: memberSeries,
+        revenue: revenueSeries,
+      });
     } catch (error) {
+      if (communityAnalyticsLoadSeqRef.current !== seq) return;
       const message = typeof error === "string"
         ? error
         : error instanceof Error
@@ -323,14 +384,17 @@ export function useCommunityAdminController<
           : "Failed to load analytics.";
       current.setCommunityAnalyticsError(message);
     } finally {
-      current.setIsLoadingCommunityAnalytics(false);
+      if (communityAnalyticsLoadSeqRef.current === seq) {
+        current.setIsLoadingCommunityAnalytics(false);
+      }
     }
   }, []);
 
   const resetCommunityAnalytics = useCallback(() => {
     const current = argsRef.current;
+    communityAnalyticsLoadSeqRef.current += 1;
     current.setCommunityAnalyticsSummary(emptyAnalyticsSummary());
-    current.setCommunityAnalyticsSeries([]);
+    current.setCommunityAnalyticsSeries(emptyAnalyticsMetricSeries());
     current.setCommunityAnalyticsError(null);
     current.setIsLoadingCommunityAnalytics(false);
   }, []);

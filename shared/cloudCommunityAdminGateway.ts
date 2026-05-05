@@ -12,6 +12,10 @@ export type CloudCommunityRevenueSeriesRow = {
   currency_decimals: number | null;
 };
 
+export type CloudCommunityCreatedAtRow = {
+  created_at: string;
+};
+
 export type CloudCommunityAnalyticsSummaryRow = {
   page_visits_window: number | null;
   total_members: number | null;
@@ -226,6 +230,23 @@ export async function listCloudCommunityRevenueSeriesRows<SessionT>(
     range: params.range,
   });
   return coerceGatewayRows<CloudCommunityRevenueSeriesRow>(payload);
+}
+
+export async function listCloudCommunityFunnelVisitCreatedAtRows<SessionT>(
+  params: CloudCommunityAdminGatewayParams<SessionT> & {
+    communityId: string;
+    sinceIso?: string | null;
+    limit?: number;
+  },
+): Promise<CloudCommunityCreatedAtRow[]> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  const payload = await client.query("community:listCommunityFunnelVisitCreatedAtRows" as any, {
+    authSubject,
+    communityId: params.communityId,
+    sinceIso: params.sinceIso ?? null,
+    limit: params.limit,
+  });
+  return coerceGatewayRows<CloudCommunityCreatedAtRow>(payload);
 }
 
 export async function fetchCloudCommunityAnalyticsSummary<SessionT>(

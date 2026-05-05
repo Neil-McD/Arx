@@ -33,6 +33,8 @@ import {
   readPlatformHomeAutojoinOptOut,
 } from "./platformHomeCommunity";
 
+const FUNNEL_VISIT_DEDUPE_WINDOW_MS = 30 * 60 * 1000;
+
 type PublicCommunityFace = {
   user_id: string;
   display_name: string | null;
@@ -245,10 +247,24 @@ export const recordPublicFunnelVisitBySlug = mutation({
     }
 
     const nowMs = Date.now();
+    const visitorKey = String(args.visitorKey ?? "").trim() || undefined;
+    if (visitorKey) {
+      const recentRows = (await ctx.db
+        .query("communityAnalyticsEvents" as any)
+        .withIndex("by_community_visitor_event", (q: any) =>
+          q.eq("communityId", community._id).eq("visitorKey", visitorKey).eq("eventType", "funnel_visit"),
+        )
+        .collect()) as Array<{ createdAt: number }>;
+      const dedupeAfterMs = nowMs - FUNNEL_VISIT_DEDUPE_WINDOW_MS;
+      if (recentRows.some((row) => row.createdAt >= dedupeAfterMs)) {
+        return { ok: true, deduped: true };
+      }
+    }
+
     await ctx.db.insert("communityAnalyticsEvents", {
       communityId: community._id,
       eventType: "funnel_visit",
-      visitorKey: String(args.visitorKey ?? "").trim() || undefined,
+      visitorKey,
       userId,
       createdAt: nowMs,
     });

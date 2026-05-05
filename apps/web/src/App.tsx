@@ -133,10 +133,10 @@ import {
 import type {
   CommunityAiFeedPost as SharedCommunityAiFeedPost,
   CommunityAiFeedReactionType as SharedCommunityAiFeedReactionType,
-  AnalyticsPoint as SharedAnalyticsPoint,
   AnalyticsRange as SharedAnalyticsRange,
   ChatLightboxImage as SharedChatLightboxImage,
   CommunityAccess as SharedCommunityAccess,
+  CommunityAnalyticsSeries as SharedCommunityAnalyticsSeries,
   CommunityAgentConfig as SharedCommunityAgentConfig,
   CommunityAnalyticsSummary as SharedCommunityAnalyticsSummary,
   CommunityChatMessage as SharedCommunityChatMessage,
@@ -679,7 +679,7 @@ type CommunityMember = CloudCommunityMembershipAdminRow;
 
 type CommunityAccess = SharedCommunityAccess;
 type CommunityAnalyticsSummary = SharedCommunityAnalyticsSummary;
-type AnalyticsPoint = SharedAnalyticsPoint;
+type CommunityAnalyticsSeries = SharedCommunityAnalyticsSeries;
 type AnalyticsRange = SharedAnalyticsRange;
 type UserProfile = SharedUserProfile;
 type UserProfileDetail = SharedUserProfileDetail;
@@ -1960,7 +1960,11 @@ export default function App() {
     total_resources: null,
     resources_added_window: null,
   });
-  const [communityAnalyticsSeries, setCommunityAnalyticsSeries] = useState<AnalyticsPoint[]>([]);
+  const [communityAnalyticsSeries, setCommunityAnalyticsSeries] = useState<CommunityAnalyticsSeries>({
+    visits: [],
+    members: [],
+    revenue: [],
+  });
   const [communityAnalyticsRange, setCommunityAnalyticsRange] = useState<AnalyticsRange>(() => {
     try {
       const stored = readFirstLocalStorageValue([

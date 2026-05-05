@@ -27,18 +27,19 @@ export function CommunityAnalyticsPanel(props: CommunityAnalyticsPanelProps) {
     chartMetricOptions.length,
     chartMetricOptions.findIndex((value) => value === chartMetric),
   );
-  const chartPoints = chartMetric === "members" ? state.communityAnalyticsSeries : [];
+  const chartPoints = state.communityAnalyticsSeries[chartMetric];
   const chartTitle = chartMetric === "visits" ? "Page visits" : chartMetric === "revenue" ? "Revenue" : "New members";
   const chartStat = useMemo(() => {
     if (chartPoints.length === 0) return "—";
-    const total = chartPoints.reduce((sum, point) => sum + point.value, 0);
     if (chartMetric === "revenue") {
+      const latest = chartPoints[chartPoints.length - 1]?.value ?? 0;
       return formatMoneyBaseUnits(
-        total,
+        latest,
         state.communityAnalyticsSummary.currency,
         state.communityAnalyticsSummary.currency_decimals,
       );
     }
+    const total = chartPoints.reduce((sum, point) => sum + point.value, 0);
     return formatCount(total);
   }, [
     chartMetric,
@@ -117,7 +118,7 @@ export function CommunityAnalyticsPanel(props: CommunityAnalyticsPanelProps) {
         <div className="analytics-chart-card">
           <div className="analytics-chart-header">
             <div className="analytics-chart-heading">
-              <div className="analytics-chart-label">{chartTitle}</div>
+              <div className="analytics-chart-title">{chartTitle}</div>
               <div className="analytics-chart-stat">{chartStat}</div>
             </div>
             <div
@@ -139,7 +140,19 @@ export function CommunityAnalyticsPanel(props: CommunityAnalyticsPanelProps) {
               ))}
             </div>
           </div>
-          <AnalyticsLineChart points={chartPoints} />
+          <AnalyticsLineChart
+            points={chartPoints}
+            valueFormatter={
+              chartMetric === "revenue"
+                ? (value) =>
+                    formatMoneyBaseUnits(
+                      value,
+                      state.communityAnalyticsSummary.currency,
+                      state.communityAnalyticsSummary.currency_decimals,
+                    )
+                : undefined
+            }
+          />
         </div>
       </div>
     </>

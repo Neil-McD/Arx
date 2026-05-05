@@ -37,6 +37,12 @@ export type AnalyticsPointLike = {
   value: number;
 };
 
+export type AnalyticsMetricSeriesLike = {
+  visits: AnalyticsPointLike[];
+  members: AnalyticsPointLike[];
+  revenue: AnalyticsPointLike[];
+};
+
 export type AnalyticsRange = "7d" | "30d" | "90d" | "1y" | "all";
 export type AnalyticsBucket = "day" | "week" | "month";
 
@@ -133,6 +139,30 @@ export function buildAnalyticsSeries(params: {
     points.push({ label: analyticsBucketLabel(cursor, params.bucket), value: counts.get(key) ?? 0 });
   }
   return points;
+}
+
+export function buildAnalyticsValueSeries(params: {
+  rows: Array<{ bucket_start: string; value: number | string | null | undefined }>;
+  bucket: AnalyticsBucket;
+}): AnalyticsPointLike[] {
+  return params.rows.flatMap((row) => {
+    const bucketStart = new Date(row.bucket_start);
+    if (Number.isNaN(bucketStart.getTime())) return [];
+    const rawValue = typeof row.value === "string" ? Number(row.value) : row.value;
+    if (rawValue == null || !Number.isFinite(rawValue)) return [];
+    return [{
+      label: analyticsBucketLabel(bucketStart, params.bucket),
+      value: Math.max(0, Math.round(rawValue)),
+    }];
+  });
+}
+
+export function emptyAnalyticsMetricSeries(): AnalyticsMetricSeriesLike {
+  return {
+    visits: [],
+    members: [],
+    revenue: [],
+  };
 }
 
 export function emptyAnalyticsSummary(): AnalyticsSummaryLike {

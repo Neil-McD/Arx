@@ -50,6 +50,73 @@ type CommunityMemberUserLike = {
   avatarUrl?: string;
 };
 
+type AnalyticsRangeValue = "7d" | "30d" | "90d" | "1y" | "all";
+type AnalyticsBucketValue = "day" | "week" | "month";
+
+const ACTIVE_RECURRING_SUBSCRIPTION_STATUSES = new Set([
+  "active",
+  "past_due",
+  "cancel_at_period_end",
+]);
+
+function normalizeAnalyticsRange(rawRange: unknown): AnalyticsRangeValue {
+  const range = String(rawRange ?? "30d").trim();
+  return range === "7d" || range === "90d" || range === "1y" || range === "all"
+    ? range
+    : "30d";
+}
+
+function resolveAnalyticsWindowStartMs(params: {
+  range: AnalyticsRangeValue;
+  nowMs: number;
+  communityCreatedAt: number;
+}): number {
+  if (params.range === "7d") return params.nowMs - 7 * 86400000;
+  if (params.range === "90d") return params.nowMs - 90 * 86400000;
+  if (params.range === "1y") return params.nowMs - 365 * 86400000;
+  if (params.range === "all") return params.communityCreatedAt;
+  return params.nowMs - 30 * 86400000;
+}
+
+function resolveAnalyticsBucket(range: AnalyticsRangeValue): AnalyticsBucketValue {
+  return range === "7d" || range === "30d" ? "day" : range === "90d" ? "week" : "month";
+}
+
+function startOfAnalyticsBucket(ms: number, bucket: AnalyticsBucketValue): Date {
+  const date = new Date(ms);
+  if (bucket === "month") return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1, 12));
+  const start = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), 12));
+  if (bucket === "week") {
+    const day = start.getUTCDay();
+    const diff = (day + 6) % 7;
+    start.setUTCDate(start.getUTCDate() - diff);
+  }
+  return start;
+}
+
+function addAnalyticsBucket(date: Date, bucket: AnalyticsBucketValue): Date {
+  if (bucket === "month") return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 1, 12));
+  const next = new Date(date.getTime());
+  next.setUTCDate(next.getUTCDate() + (bucket === "week" ? 7 : 1));
+  return next;
+}
+
+function buildAnalyticsBucketStarts(params: {
+  startMs: number;
+  endMs: number;
+  bucket: AnalyticsBucketValue;
+}): Date[] {
+  const starts: Date[] = [];
+  for (
+    let cursor = startOfAnalyticsBucket(params.startMs, params.bucket);
+    cursor.getTime() <= params.endMs && starts.length < 500;
+    cursor = addAnalyticsBucket(cursor, params.bucket)
+  ) {
+    starts.push(cursor);
+  }
+  return starts;
+}
+
 async function resolveCommunityMemberIdentity(ctx: any, userRowId: any) {
   const user = (await ctx.db.get(userRowId)) as CommunityMemberUserLike | null;
   return {
@@ -111,7 +178,6 @@ async function runLoggedCommunityAdminMutation<T>(params: {
       "community_free_access_mode_invalid",
       "community_not_found",
       "community_owner_cannot_leave",
-      "community_revenue_not_available",
       "community_paid_checkout_required",
       "community_forbidden",
       "community_owner_required",
@@ -428,13 +494,13 @@ export const listCommunityMembershipCreatedAtRows = query({
   handler: async (ctx, args) => {
     const sinceMs = parseIsoMs(args.sinceIso);
     const limit = Math.max(1, Math.min(10_000, Math.floor(args.limit ?? 5000)));
-    const { community, rows } = await listCommunityMembershipRowsForManager({
+    const { rows } = await listCommunityMembershipRowsForManager({
       ctx,
       communityId: args.communityId,
       userId: args.userId,
       authSubject: args.authSubject ?? null,
     });
-    return [{ createdAt: community.createdAt }, ...rows]
+    return rows
       .filter((row) => (sinceMs === null ? true : row.createdAt >= sinceMs))
       .sort((a, b) => a.createdAt - b.createdAt)
       .slice(0, limit)
@@ -1402,13 +1468,133 @@ export const listCommunityRevenueSeries = query({
       authSubject: args.authSubject ?? null,
     });
     (args as { userId?: any }).userId = userId;
-    void args.range;
+    const { community } = await requireCommunityManager({
+      ctx,
+      communityId: args.communityId,
+      userId: args.userId,
+    });
+    const range = normalizeAnalyticsRange(args.range);
+    const nowMs = Date.now();
+    const startMs = resolveAnalyticsWindowStartMs({
+      range,
+      nowMs,
+      communityCreatedAt: community.createdAt,
+    });
+    const bucket = resolveAnalyticsBucket(range);
+    const bucketStarts = buildAnalyticsBucketStarts({
+      startMs,
+      endMs: nowMs,
+      bucket,
+    });
+
+    const subscriptions = (await ctx.db
+      .query("communitySubscriptions" as any)
+      .withIndex("by_community_status", (q: any) => q.eq("communityId", args.communityId))
+      .collect()) as CommunitySubscriptionLike[];
+    const pricePointCache = new Map<string, CommunityPricePointLike | null>();
+    const monthlyRows: Array<{
+      createdAt: number;
+      endedAt: number | null;
+      amountBaseUnits: number;
+      currency: string | null;
+      currencyDecimals: number | null;
+    }> = [];
+    let currency: string | null = null;
+    let currencyDecimals: number | null = null;
+    let mixedCurrency = false;
+
+    for (const subscription of subscriptions) {
+      const status = String(subscription.status ?? "");
+      const isCurrentRecurring = ACTIVE_RECURRING_SUBSCRIPTION_STATUSES.has(status);
+      const endedAtRaw = Number(subscription.endedAt ?? NaN);
+      const endedAt = Number.isFinite(endedAtRaw)
+        ? endedAtRaw
+        : isCurrentRecurring
+          ? null
+          : Number(subscription.updatedAt ?? NaN);
+      if (!isCurrentRecurring && !Number.isFinite(Number(endedAt))) continue;
+
+      const pricePointId = String(subscription.pricePointId);
+      if (!pricePointCache.has(pricePointId)) {
+        pricePointCache.set(
+          pricePointId,
+          (await ctx.db.get(subscription.pricePointId as any)) as CommunityPricePointLike | null,
+        );
+      }
+      const pricePoint = pricePointCache.get(pricePointId);
+      if (!pricePoint) continue;
+      const rowCurrency = String(pricePoint.currency ?? "").trim().toUpperCase() || null;
+      const rowDecimals = Math.max(0, Math.floor(pricePoint.currencyDecimals ?? 0));
+      if (currency && rowCurrency && currency !== rowCurrency) mixedCurrency = true;
+      currency = currency ?? rowCurrency;
+      currencyDecimals = currencyDecimals ?? rowDecimals;
+      const period = String(pricePoint.billingPeriod ?? "").trim().toLowerCase();
+      const amountBaseUnits =
+        period === "annual"
+          ? Math.round(Math.max(0, pricePoint.amountBaseUnits) / 12)
+          : Math.max(0, Math.floor(pricePoint.amountBaseUnits));
+      monthlyRows.push({
+        createdAt: subscription.createdAt,
+        endedAt: endedAt == null ? null : endedAt,
+        amountBaseUnits,
+        currency: rowCurrency,
+        currencyDecimals: rowDecimals,
+      });
+    }
+
+    if (mixedCurrency) return [];
+
+    return bucketStarts.map((bucketStart, index) => {
+      const nextBucketStart = bucketStarts[index + 1] ?? addAnalyticsBucket(bucketStart, bucket);
+      const bucketEndMs = Math.min(nextBucketStart.getTime() - 1, nowMs);
+      const bucketStartMs = bucketStart.getTime();
+      const netBaseUnits = monthlyRows.reduce((sum, row) => {
+        if (row.createdAt > bucketEndMs) return sum;
+        if (row.endedAt != null && row.endedAt < bucketStartMs) return sum;
+        return sum + row.amountBaseUnits;
+      }, 0);
+      return {
+        bucket_start: bucketStart.toISOString(),
+        net_base_units: netBaseUnits,
+        currency,
+        currency_decimals: currencyDecimals,
+      };
+    });
+  },
+});
+
+export const listCommunityFunnelVisitCreatedAtRows = query({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+    sinceIso: v.optional(v.union(v.string(), v.null())),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      userId: args.userId,
+      authSubject: args.authSubject ?? null,
+    });
+    (args as { userId?: any }).userId = userId;
     await requireCommunityManager({
       ctx,
       communityId: args.communityId,
       userId: args.userId,
     });
-    throw new Error("community_revenue_not_available");
+    const sinceMs = parseIsoMs(args.sinceIso);
+    const limit = Math.max(1, Math.min(10_000, Math.floor(args.limit ?? 5000)));
+    const rows = (await ctx.db
+      .query("communityAnalyticsEvents" as any)
+      .withIndex("by_community_event_createdAt", (q: any) => {
+        const indexed = q.eq("communityId", args.communityId).eq("eventType", "funnel_visit");
+        return sinceMs == null ? indexed : indexed.gte("createdAt", sinceMs);
+      })
+      .take(limit)) as Array<{ createdAt: number }>;
+    return rows
+      .sort((a, b) => a.createdAt - b.createdAt)
+      .map((row) => ({ created_at: toIsoString(row.createdAt) }));
   },
 });
 
@@ -1426,7 +1612,7 @@ export const getCommunityAnalyticsSummary = query({
       authSubject: args.authSubject ?? null,
     });
     (args as { userId?: any }).userId = userId;
-    const range = String(args.range ?? "30d").trim();
+    const range = normalizeAnalyticsRange(args.range);
     const { community, rows } = await listCommunityMembershipRowsForManager({
       ctx,
       communityId: args.communityId,
@@ -1435,32 +1621,25 @@ export const getCommunityAnalyticsSummary = query({
     });
 
     const nowMs = Date.now();
-    const sinceMs =
-      range === "7d"
-        ? nowMs - 7 * 86400000
-        : range === "90d"
-          ? nowMs - 90 * 86400000
-          : range === "1y"
-            ? nowMs - 365 * 86400000
-            : range === "all"
-              ? community.createdAt
-              : nowMs - 30 * 86400000;
+    const sinceMs = resolveAnalyticsWindowStartMs({
+      range,
+      nowMs,
+      communityCreatedAt: community.createdAt,
+    });
 
     const totalMembers = 1 + rows.length;
-    const newMembersWindow =
-      (community.createdAt >= sinceMs ? 1 : 0) +
-      rows.reduce((count, row) => count + (row.createdAt >= sinceMs ? 1 : 0), 0);
+    const newMembersWindow = rows.reduce(
+      (count, row) => count + (row.createdAt >= sinceMs ? 1 : 0),
+      0,
+    );
 
     const visitRows = (await ctx.db
       .query("communityAnalyticsEvents" as any)
       .withIndex("by_community_event_createdAt", (q: any) =>
-        q.eq("communityId", args.communityId).eq("eventType", "funnel_visit"),
+        q.eq("communityId", args.communityId).eq("eventType", "funnel_visit").gte("createdAt", sinceMs),
       )
       .collect()) as Array<{ createdAt: number }>;
-    const pageVisitsWindow = visitRows.reduce(
-      (count, row) => count + (row.createdAt >= sinceMs ? 1 : 0),
-      0,
-    );
+    const pageVisitsWindow = visitRows.length;
     const conversionRateWindow =
       pageVisitsWindow > 0 ? newMembersWindow / pageVisitsWindow : null;
 
@@ -1474,7 +1653,7 @@ export const getCommunityAnalyticsSummary = query({
     let currencyDecimals: number | null = null;
     let mixedCurrency = false;
     for (const subscription of activeSubscriptions) {
-      if (!["active", "past_due", "cancel_at_period_end"].includes(String(subscription.status))) continue;
+      if (!ACTIVE_RECURRING_SUBSCRIPTION_STATUSES.has(String(subscription.status))) continue;
       const pricePointId = String(subscription.pricePointId);
       if (!pricePointCache.has(pricePointId)) {
         pricePointCache.set(

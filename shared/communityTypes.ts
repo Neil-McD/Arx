@@ -211,6 +211,12 @@ export type AnalyticsPoint = {
   value: number;
 };
 
+export type CommunityAnalyticsSeries = {
+  visits: AnalyticsPoint[];
+  members: AnalyticsPoint[];
+  revenue: AnalyticsPoint[];
+};
+
 export type AnalyticsRange = "7d" | "30d" | "90d" | "1y" | "all";
 
 export type CommunityPricingMode = "free" | "monthly" | "annual";
