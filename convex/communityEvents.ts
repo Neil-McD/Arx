@@ -26,6 +26,9 @@ type CommunityEventLike = {
   url?: string;
   visibility: "members" | "public";
   status: "live" | "cancelled";
+  recurrenceFrequency?: "none" | "daily" | "weekly" | "monthly";
+  recurrenceInterval?: number;
+  recurrenceUntil?: number;
   createdAt: number;
   updatedAt: number;
 };
@@ -49,6 +52,17 @@ function normalizeStatus(raw: unknown): "live" | "cancelled" {
   return String(raw ?? "").trim().toLowerCase() === "cancelled" ? "cancelled" : "live";
 }
 
+function normalizeRecurrenceFrequency(raw: unknown): "none" | "daily" | "weekly" | "monthly" {
+  const value = String(raw ?? "").trim().toLowerCase();
+  if (value === "daily" || value === "weekly" || value === "monthly") return value;
+  return "none";
+}
+
+function normalizeRecurrenceInterval(raw: unknown): number {
+  const value = typeof raw === "number" && Number.isFinite(raw) ? Math.floor(raw) : 1;
+  return Math.max(1, Math.min(12, value));
+}
+
 function requireIsoMs(raw: unknown, code: string): number {
   const parsed = parseIsoMs(raw);
   if (parsed === null) throw new Error(code);
@@ -63,23 +77,154 @@ function parseOptionalIsoMs(raw: unknown, code: string): number | null {
   return parsed;
 }
 
-function mapCommunityEventRow(row: CommunityEventLike) {
+function daysInMonth(year: number, monthIndex: number): number {
+  return new Date(year, monthIndex + 1, 0).getDate();
+}
+
+function addMonthsClamped(date: Date, monthCount: number, preferredDayOfMonth: number): Date {
+  const next = new Date(date);
+  const targetMonth = date.getMonth() + monthCount;
+  next.setDate(1);
+  next.setMonth(targetMonth);
+  next.setDate(Math.min(preferredDayOfMonth, daysInMonth(next.getFullYear(), next.getMonth())));
+  return next;
+}
+
+function addRecurrenceStep(
+  date: Date,
+  frequency: "daily" | "weekly" | "monthly",
+  interval: number,
+  preferredDayOfMonth: number,
+): Date {
+  const next = new Date(date);
+  if (frequency === "daily") next.setDate(next.getDate() + interval);
+  if (frequency === "weekly") next.setDate(next.getDate() + interval * 7);
+  if (frequency === "monthly") return addMonthsClamped(date, interval, preferredDayOfMonth);
+  return next;
+}
+
+function findFirstOccurrenceOnOrAfter(params: {
+  startsAt: number;
+  rangeStart: number;
+  frequency: "daily" | "weekly" | "monthly";
+  interval: number;
+}): Date {
+  const start = new Date(params.startsAt);
+  const preferredDayOfMonth = start.getDate();
+  if (params.rangeStart <= params.startsAt) return start;
+  if (params.frequency === "daily" || params.frequency === "weekly") {
+    const intervalMs = params.frequency === "daily"
+      ? params.interval * 24 * 60 * 60 * 1000
+      : params.interval * 7 * 24 * 60 * 60 * 1000;
+    const intervalsElapsed = Math.max(
+      0,
+      Math.floor((params.rangeStart - params.startsAt) / intervalMs),
+    );
+    let candidate = new Date(params.startsAt + intervalsElapsed * intervalMs);
+    if (candidate.getTime() < params.rangeStart) {
+      candidate = addRecurrenceStep(
+        candidate,
+        params.frequency,
+        params.interval,
+        preferredDayOfMonth,
+      );
+    }
+    return candidate;
+  }
+  const rangeStart = new Date(params.rangeStart);
+  const monthsElapsed =
+    (rangeStart.getFullYear() - start.getFullYear()) * 12 +
+    (rangeStart.getMonth() - start.getMonth());
+  const intervalsElapsed = Math.max(0, Math.floor(monthsElapsed / params.interval));
+  let candidate = addMonthsClamped(
+    start,
+    intervalsElapsed * params.interval,
+    preferredDayOfMonth,
+  );
+  if (candidate.getTime() < params.rangeStart) {
+    candidate = addRecurrenceStep(
+      candidate,
+      params.frequency,
+      params.interval,
+      preferredDayOfMonth,
+    );
+  }
+  return candidate;
+}
+
+function mapCommunityEventRow(row: CommunityEventLike, occurrenceStartsAt?: number) {
+  const startsAt = occurrenceStartsAt ?? row.startsAt;
+  const durationMs = typeof row.endsAt === "number" ? Math.max(0, row.endsAt - row.startsAt) : null;
+  const recurrenceFrequency = normalizeRecurrenceFrequency(row.recurrenceFrequency);
+  const parentId = normalizeIdValue(row._id);
   return {
-    id: normalizeIdValue(row._id),
+    id: occurrenceStartsAt && occurrenceStartsAt !== row.startsAt ? `${parentId}:${occurrenceStartsAt}` : parentId,
+    parent_event_id: parentId,
     community_id: normalizeIdValue(row.communityId),
     title: row.title,
     description_md: row.descriptionMd ?? null,
-    starts_at: toIsoString(row.startsAt),
-    ends_at: typeof row.endsAt === "number" ? toIsoString(row.endsAt) : null,
+    starts_at: toIsoString(startsAt),
+    ends_at: durationMs === null ? null : toIsoString(startsAt + durationMs),
+    series_starts_at: toIsoString(row.startsAt),
+    series_ends_at: typeof row.endsAt === "number" ? toIsoString(row.endsAt) : null,
     timezone: row.timezone,
     location_type: row.locationType,
     location_label: row.locationLabel ?? null,
     url: row.url ?? null,
     visibility: row.visibility,
     status: row.status,
+    recurrence_frequency: recurrenceFrequency,
+    recurrence_interval: normalizeRecurrenceInterval(row.recurrenceInterval),
+    recurrence_until: typeof row.recurrenceUntil === "number" ? toIsoString(row.recurrenceUntil) : null,
+    is_recurring_instance: Boolean(occurrenceStartsAt && occurrenceStartsAt !== row.startsAt),
     created_at: toIsoString(row.createdAt),
     updated_at: toIsoString(row.updatedAt),
   };
+}
+
+function expandCommunityEventRows(params: {
+  rows: CommunityEventLike[];
+  startMs: number;
+  endMs: number;
+  includeCancelled: boolean;
+  limit: number;
+}) {
+  const expanded: ReturnType<typeof mapCommunityEventRow>[] = [];
+  for (const row of params.rows) {
+    if (!params.includeCancelled && row.status === "cancelled") continue;
+    const frequency = normalizeRecurrenceFrequency(row.recurrenceFrequency);
+    const interval = normalizeRecurrenceInterval(row.recurrenceInterval);
+    const recurrenceUntil = typeof row.recurrenceUntil === "number" ? row.recurrenceUntil : null;
+    if (frequency === "none") {
+      if (row.startsAt >= params.startMs && row.startsAt <= params.endMs) {
+        expanded.push(mapCommunityEventRow(row));
+      }
+      continue;
+    }
+    if (row.startsAt > params.endMs) continue;
+    if (recurrenceUntil !== null && recurrenceUntil < params.startMs) continue;
+    const preferredDayOfMonth = new Date(row.startsAt).getDate();
+    let occurrence = findFirstOccurrenceOnOrAfter({
+      startsAt: row.startsAt,
+      rangeStart: params.startMs,
+      frequency,
+      interval,
+    });
+    let emittedForRow = 0;
+    while (emittedForRow <= params.limit) {
+      const occurrenceMs = occurrence.getTime();
+      if (occurrenceMs > params.endMs) break;
+      if (recurrenceUntil === null || occurrenceMs <= recurrenceUntil) {
+        expanded.push(mapCommunityEventRow(row, occurrenceMs));
+        emittedForRow += 1;
+      }
+      if (recurrenceUntil !== null && occurrenceMs >= recurrenceUntil) break;
+      occurrence = addRecurrenceStep(occurrence, frequency, interval, preferredDayOfMonth);
+    }
+  }
+  return expanded
+    .sort((a, b) => Date.parse(a.starts_at) - Date.parse(b.starts_at))
+    .slice(0, params.limit);
 }
 
 export const listCommunityEvents = query({
@@ -111,16 +256,10 @@ export const listCommunityEvents = query({
 
     const rows = (await ctx.db
       .query("communityEvents" as any)
-      .withIndex("by_community_startsAt", (q: any) =>
-        q.eq("communityId", args.communityId).gte("startsAt", startMs).lte("startsAt", endMs),
-      )
+      .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
       .collect()) as CommunityEventLike[];
 
-    return rows
-      .filter((row) => includeCancelled || row.status !== "cancelled")
-      .sort((a, b) => a.startsAt - b.startsAt)
-      .slice(0, limit)
-      .map(mapCommunityEventRow);
+    return expandCommunityEventRows({ rows, startMs, endMs, includeCancelled, limit });
   },
 });
 
@@ -161,8 +300,19 @@ export const saveCommunityEvent = mutation({
       const endsAt = Object.prototype.hasOwnProperty.call(payload, "ends_at")
         ? parseOptionalIsoMs(payload.ends_at, "community_event_ends_at_invalid")
         : existing.endsAt;
+      const recurrenceFrequency = normalizeRecurrenceFrequency(
+        Object.prototype.hasOwnProperty.call(payload, "recurrence_frequency")
+          ? payload.recurrence_frequency
+          : existing.recurrenceFrequency,
+      );
+      const recurrenceUntil = Object.prototype.hasOwnProperty.call(payload, "recurrence_until")
+        ? parseOptionalIsoMs(payload.recurrence_until, "community_event_recurrence_until_invalid")
+        : existing.recurrenceUntil;
       if (typeof endsAt === "number" && endsAt <= startsAt) {
         throw new Error("community_event_ends_at_invalid");
+      }
+      if (recurrenceFrequency !== "none" && typeof recurrenceUntil === "number" && recurrenceUntil < startsAt) {
+        throw new Error("community_event_recurrence_until_invalid");
       }
       await ctx.db.patch(existing._id as any, {
         title,
@@ -197,6 +347,16 @@ export const saveCommunityEvent = mutation({
         status: normalizeStatus(
           Object.prototype.hasOwnProperty.call(payload, "status") ? payload.status : existing.status,
         ),
+        recurrenceFrequency,
+        recurrenceInterval:
+          recurrenceFrequency === "none"
+            ? 1
+            : normalizeRecurrenceInterval(
+                Object.prototype.hasOwnProperty.call(payload, "recurrence_interval")
+                  ? payload.recurrence_interval
+                  : existing.recurrenceInterval,
+              ),
+        recurrenceUntil: recurrenceFrequency === "none" ? undefined : recurrenceUntil ?? undefined,
         updatedAt: nowMs,
       });
       const updated = (await ctx.db.get(existing._id as any)) as CommunityEventLike | null;
@@ -214,8 +374,13 @@ export const saveCommunityEvent = mutation({
     const title = normalizeName(payload.title);
     const startsAt = requireIsoMs(payload.starts_at, "community_event_starts_at_invalid");
     const endsAt = parseOptionalIsoMs(payload.ends_at, "community_event_ends_at_invalid");
+    const recurrenceFrequency = normalizeRecurrenceFrequency(payload.recurrence_frequency);
+    const recurrenceUntil = parseOptionalIsoMs(payload.recurrence_until, "community_event_recurrence_until_invalid");
     if (typeof endsAt === "number" && endsAt <= startsAt) {
       throw new Error("community_event_ends_at_invalid");
+    }
+    if (recurrenceFrequency !== "none" && typeof recurrenceUntil === "number" && recurrenceUntil < startsAt) {
+      throw new Error("community_event_recurrence_until_invalid");
     }
 
     const id = await ctx.db.insert("communityEvents" as any, {
@@ -231,6 +396,9 @@ export const saveCommunityEvent = mutation({
       url: normalizeOptionalUrl(payload.url),
       visibility: normalizeVisibility(payload.visibility),
       status: "live",
+      recurrenceFrequency,
+      recurrenceInterval: recurrenceFrequency === "none" ? 1 : normalizeRecurrenceInterval(payload.recurrence_interval),
+      recurrenceUntil: recurrenceFrequency === "none" ? undefined : recurrenceUntil ?? undefined,
       createdAt: nowMs,
       updatedAt: nowMs,
     });

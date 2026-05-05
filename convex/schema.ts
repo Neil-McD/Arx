@@ -917,6 +917,9 @@ export default defineSchema({
     url: v.optional(v.string()),
     visibility: v.union(v.literal("members"), v.literal("public")),
     status: v.union(v.literal("live"), v.literal("cancelled")),
+    recurrenceFrequency: v.optional(v.union(v.literal("none"), v.literal("daily"), v.literal("weekly"), v.literal("monthly"))),
+    recurrenceInterval: v.optional(v.number()),
+    recurrenceUntil: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })

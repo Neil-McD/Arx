@@ -20,6 +20,8 @@ type EventDraft = {
   location_type: "online" | "physical" | "tbd";
   location_label: string;
   url: string;
+  recurrence_frequency: "none" | "daily" | "weekly" | "monthly";
+  recurrence_until: string;
 };
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -103,6 +105,8 @@ function makeDraft(dayKey: string | null): EventDraft {
     location_type: "online",
     location_label: "",
     url: "",
+    recurrence_frequency: "none",
+    recurrence_until: "",
   };
 }
 
@@ -110,12 +114,34 @@ function makeDraftFromEvent(event: CommunityEvent): EventDraft {
   return {
     title: event.title,
     description_md: event.description_md ?? "",
-    starts_at: toLocalDateTimeInputValue(new Date(event.starts_at)),
-    ends_at: event.ends_at ? toLocalDateTimeInputValue(new Date(event.ends_at)) : "",
+    starts_at: toLocalDateTimeInputValue(new Date(event.series_starts_at)),
+    ends_at: event.series_ends_at ? toLocalDateTimeInputValue(new Date(event.series_ends_at)) : "",
     location_type: event.location_type,
     location_label: event.location_label ?? "",
     url: event.url ?? "",
+    recurrence_frequency: event.recurrence_frequency,
+    recurrence_until: event.recurrence_until
+      ? toLocalDateTimeInputValue(new Date(event.recurrence_until))
+      : "",
   };
+}
+
+function buildGoogleCalendarUrl(event: CommunityEvent): string {
+  const start = new Date(event.starts_at);
+  const end = event.ends_at
+    ? new Date(event.ends_at)
+    : new Date(start.getTime() + 60 * 60 * 1000);
+  const formatGoogleDate = (date: Date) =>
+    date.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
+  const details = [event.description_md, event.url].filter(Boolean).join("\n\n");
+  const params = new URLSearchParams({
+    action: "TEMPLATE",
+    text: event.title,
+    dates: `${formatGoogleDate(start)}/${formatGoogleDate(end)}`,
+    details,
+    location: event.location_label ?? event.url ?? "",
+  });
+  return `https://calendar.google.com/calendar/render?${params.toString()}`;
 }
 
 function EventModal(props: {
@@ -212,6 +238,34 @@ function EventModal(props: {
               placeholder="https://..."
             />
           </label>
+          <div className="community-event-form-grid">
+            <label>
+              <span>Repeats</span>
+              <select
+                value={draft.recurrence_frequency}
+                onChange={(event) =>
+                  onChange({
+                    ...draft,
+                    recurrence_frequency: event.target.value as EventDraft["recurrence_frequency"],
+                  })
+                }
+              >
+                <option value="none">Does not repeat</option>
+                <option value="daily">Daily</option>
+                <option value="weekly">Weekly</option>
+                <option value="monthly">Monthly</option>
+              </select>
+            </label>
+            <label>
+              <span>Repeats until</span>
+              <input
+                type="datetime-local"
+                value={draft.recurrence_until}
+                disabled={draft.recurrence_frequency === "none"}
+                onChange={(event) => onChange({ ...draft, recurrence_until: event.target.value })}
+              />
+            </label>
+          </div>
           {error ? <div className="community-event-error">{error}</div> : null}
         </div>
         <div className="modal-footer">
@@ -259,14 +313,14 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
 
   const openEditEvent = (event: CommunityEvent) => {
     setLocalError(null);
-    setEditingEventId(event.id);
+    setEditingEventId(event.parent_event_id);
     setDraft(makeDraftFromEvent(event));
   };
 
   const confirmCancelEvent = (event: CommunityEvent) => {
     const confirmed = window.confirm(`Cancel "${event.title}"? This will remove it from the calendar.`);
     if (!confirmed) return;
-    void actions.cancelEvent(event.id, currentRange);
+    void actions.cancelEvent(event.parent_event_id, currentRange);
   };
 
   const showMonth = (date: Date) => {
@@ -292,6 +346,16 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
       setLocalError("End time is invalid.");
       return;
     }
+    const recurrenceUntil =
+      draft.recurrence_frequency === "none"
+        ? null
+        : draft.recurrence_until
+          ? parseInputDateTime(draft.recurrence_until)
+          : null;
+    if (draft.recurrence_frequency !== "none" && draft.recurrence_until && !recurrenceUntil) {
+      setLocalError("Repeat end date is invalid.");
+      return;
+    }
     setIsSaving(true);
     const didSave = await actions.saveEvent(
       editingEventId,
@@ -305,6 +369,9 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
         location_label: draft.location_label.trim() || null,
         url: draft.url.trim() || null,
         visibility: "members",
+        recurrence_frequency: draft.recurrence_frequency,
+        recurrence_interval: 1,
+        recurrence_until: recurrenceUntil,
       },
       currentRange,
     );
@@ -420,7 +487,7 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
                     {capabilities.canManageEvents ? (
                       <div className="community-events-agenda-actions">
                         <button type="button" onClick={() => openEditEvent(event)}>
-                          Edit
+                          {event.recurrence_frequency === "none" ? "Edit" : "Edit series"}
                         </button>
                         <button
                           type="button"
@@ -432,6 +499,12 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
                     ) : null}
                   </div>
                   <div className="community-events-agenda-meta">{formatEventTime(event)}</div>
+                  {event.recurrence_frequency !== "none" ? (
+                    <div className="community-events-agenda-meta">
+                      Repeats {event.recurrence_frequency}
+                      {event.recurrence_until ? ` until ${new Date(event.recurrence_until).toLocaleDateString()}` : ""}
+                    </div>
+                  ) : null}
                   {event.location_label || event.url ? (
                     <div className="community-events-agenda-meta">
                       {event.location_label ?? "Online"}
@@ -445,6 +518,11 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
                       ) : null}
                     </div>
                   ) : null}
+                  <div className="community-events-agenda-meta">
+                    <a href={buildGoogleCalendarUrl(event)} target="_blank" rel="noreferrer">
+                      Add to Google Calendar
+                    </a>
+                  </div>
                   {event.description_md ? (
                     <p className="community-events-agenda-description">{event.description_md}</p>
                   ) : null}

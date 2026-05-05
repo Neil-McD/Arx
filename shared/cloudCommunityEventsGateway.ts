@@ -8,6 +8,7 @@ type CloudCommunityEventsGatewayParams<SessionT> = {
 export type CloudCommunityEventLocationType = "online" | "physical" | "tbd";
 export type CloudCommunityEventVisibility = "members" | "public";
 export type CloudCommunityEventStatus = "live" | "cancelled";
+export type CloudCommunityEventRecurrenceFrequency = "none" | "daily" | "weekly" | "monthly";
 
 export type CloudCommunityEvent = {
   id: string;
@@ -16,12 +17,19 @@ export type CloudCommunityEvent = {
   description_md: string | null;
   starts_at: string;
   ends_at: string | null;
+  series_starts_at: string;
+  series_ends_at: string | null;
   timezone: string;
   location_type: CloudCommunityEventLocationType;
   location_label: string | null;
   url: string | null;
   visibility: CloudCommunityEventVisibility;
   status: CloudCommunityEventStatus;
+  recurrence_frequency: CloudCommunityEventRecurrenceFrequency;
+  recurrence_interval: number;
+  recurrence_until: string | null;
+  parent_event_id: string;
+  is_recurring_instance: boolean;
   created_at: string;
   updated_at: string;
 };
@@ -38,6 +46,9 @@ export type CloudCommunityEventSavePayload = {
   url?: string | null;
   visibility?: CloudCommunityEventVisibility;
   status?: CloudCommunityEventStatus;
+  recurrence_frequency?: CloudCommunityEventRecurrenceFrequency;
+  recurrence_interval?: number;
+  recurrence_until?: string | null;
 };
 
 export async function listCloudCommunityEvents<SessionT>(

@@ -37,6 +37,7 @@
     "check:community-access-role-policy-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_access_role_policy_proof.ts",
     "check:community-access-lifecycle-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_access_lifecycle_proof.ts",
     "check:community-access-state-audit-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_access_state_audit_proof.ts",
+    "check:community-events-recurrence-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_events_recurrence_proof.ts",
     "check:discover-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/discover_contract_proof.ts",
     "check:community-subscription-lifecycle-policy-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_subscription_lifecycle_policy_proof.ts",
     "check:release-truth-docs-guard": "bash scripts/release_truth_docs_guard.sh",
