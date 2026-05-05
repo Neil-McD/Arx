@@ -511,21 +511,30 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
                       {event.url ? (
                         <>
                           {" · "}
-                          <a href={event.url} target="_blank" rel="noreferrer">
+                          <a className="community-events-open-link" href={event.url} target="_blank" rel="noreferrer">
                             Open link
                           </a>
                         </>
                       ) : null}
                     </div>
                   ) : null}
-                  <div className="community-events-agenda-meta">
-                    <a href={buildGoogleCalendarUrl(event)} target="_blank" rel="noreferrer">
-                      Add to Google Calendar
-                    </a>
-                  </div>
                   {event.description_md ? (
                     <p className="community-events-agenda-description">{event.description_md}</p>
                   ) : null}
+                  <a
+                    className="community-events-google-calendar-link"
+                    href={buildGoogleCalendarUrl(event)}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    <img
+                      className="community-events-google-calendar-icon"
+                      src="/app-logos/google-calendar.svg"
+                      alt=""
+                      aria-hidden="true"
+                    />
+                    <span>Add to Google Calendar</span>
+                  </a>
                 </article>
               ))}
             </div>

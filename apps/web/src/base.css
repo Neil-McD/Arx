@@ -21310,10 +21310,47 @@ button.message-citation-chip:hover {
   text-decoration: none;
 }
 
+.community-events-agenda-meta .community-events-open-link {
+  color: var(--accent-gold);
+  font-weight: 650;
+}
+
+.community-events-agenda-meta .community-events-open-link:hover {
+  color: color-mix(in srgb, var(--accent-gold) 84%, white);
+}
+
 .community-events-agenda-description {
   margin: 10px 0 0;
-  color: var(--text-secondary);
+  color: var(--text-primary);
   line-height: 1.45;
+}
+
+.community-events-google-calendar-link {
+  width: fit-content;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-default);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.045);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.community-events-google-calendar-link:hover {
+  border-color: var(--border-strong);
+  background: rgba(255, 255, 255, 0.075);
+}
+
+.community-events-google-calendar-icon {
+  width: 16px;
+  height: 16px;
+  display: block;
+  flex: 0 0 auto;
 }
 
 .community-event-error {
