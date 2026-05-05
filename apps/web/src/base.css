@@ -21184,6 +21184,7 @@ button.message-citation-chip:hover {
 
 .community-events-calendar-header h3 {
   margin: 0;
+  color: rgba(255, 255, 255, 0.82);
   font-size: 18px;
   letter-spacing: 0;
 }
@@ -21265,6 +21266,7 @@ button.message-citation-chip:hover {
 }
 
 .community-events-agenda-title {
+  color: rgba(255, 255, 255, 0.84);
   font-size: 16px;
   font-weight: 800;
 }
@@ -21273,7 +21275,7 @@ button.message-citation-chip:hover {
 .community-events-muted,
 .community-events-empty,
 .community-events-agenda-meta {
-  color: var(--text-tertiary);
+  color: rgba(255, 255, 255, 0.56);
   font-size: 13px;
 }
 
@@ -21298,6 +21300,7 @@ button.message-citation-chip:hover {
 
 .community-events-agenda-item h4 {
   margin: 0;
+  color: rgba(255, 255, 255, 0.78);
   font-size: 15px;
 }
 
@@ -21328,7 +21331,7 @@ button.message-citation-chip:hover {
 
 .community-events-agenda-description {
   margin: 10px 0 0;
-  color: var(--text-primary);
+  color: rgba(255, 255, 255, 0.68);
   line-height: 1.45;
 }
 
