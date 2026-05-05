@@ -4094,6 +4094,7 @@ export default function App() {
     const shouldLoadEffectiveMcpApps =
       activePage === "discover" ||
       (activePage === "community" && communityTab === "settings") ||
+      (activePage === "community" && communityTab === "ai_agent") ||
       (activePage === "workspace" &&
         activeView === "settings" &&
         settingsPage === "integrations");

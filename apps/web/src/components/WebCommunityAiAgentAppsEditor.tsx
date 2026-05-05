@@ -84,14 +84,8 @@ function buildMountStateClassName(
 ): string {
   if (!mount.enabled) return " is-disabled";
   if (effectiveApp?.live_for_current_user) return " is-live";
-  if (mount.app.status === "invalid" || mount.not_live_reason === "validation_failed") {
-    return " is-not-live";
-  }
-  if (!effectiveApp?.has_personal_mount) return "";
   if (effectiveApp?.credential_state === "needs_personal_setup") return " is-setup";
-  const reason = String(mount.not_live_reason ?? "").trim();
-  if (reason === "needs_auth" || reason === "missing_snapshot") return "";
-  return " is-not-live";
+  return "";
 }
 
 function buildMountStateLabel(
@@ -100,10 +94,6 @@ function buildMountStateLabel(
 ): string {
   if (!mount.enabled) return "Disabled";
   if (effectiveApp?.live_for_current_user) return "Live";
-  if (mount.app.status === "invalid" || mount.not_live_reason === "validation_failed") {
-    return "Validation failed";
-  }
-  if (!effectiveApp?.has_personal_mount) return "Recommended";
   if (effectiveApp?.credential_state === "needs_personal_setup") {
     return "Setup needed";
   }
@@ -133,10 +123,7 @@ function buildMountDetail(
   if (effectiveApp?.credential_state === "needs_personal_setup") {
     return `${mount.app.name} is recommended by this community. Connect it in your personal harness to use its tools.`;
   }
-  const auth = toStatusLabel(mount.app.auth_type);
-  const connection = toStatusLabel(mount.connection.connection_status);
-  const validation = toStatusLabel(mount.app.status);
-  return `Recommended by this community. Auth ${auth} · Connection ${connection} · Validation ${validation}`;
+  return `${mount.app.name} is recommended by this community.`;
 }
 
 function findCatalogEntryForCommunityMount(mount: CommunityMountedApp) {
