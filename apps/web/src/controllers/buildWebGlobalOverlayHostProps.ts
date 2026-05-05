@@ -119,7 +119,7 @@ export function buildWebGlobalOverlayHostProps(params: {
             params.setInferenceIssueModal(null);
             params.setActiveView("settings");
             params.setSettingsPage(
-              reason === "workspace_credits" ? "agent" : "account",
+              reason === "workspace_credits" || reason === "provider_connection_required" ? "agent" : "account",
             );
           },
         }

@@ -50,7 +50,7 @@ export function WebInferenceIssueModal(props: WebInferenceIssueModalProps) {
 
   const primaryMessage =
     inferenceIssueModal.reason === "provider_connection_required"
-      ? inferenceIssueModal.message || "Connect ChatGPT to use agent runs."
+      ? inferenceIssueModal.message || "Connect ChatGPT or add an OpenAI API key to use agent runs."
       : inferenceIssueModal.reason === "workspace_credits"
         ? inferenceIssueModal.message || "You've used your included workspace compute credits for this billing cycle."
       : inferenceIssueModal.reason === "quota"
@@ -65,7 +65,7 @@ export function WebInferenceIssueModal(props: WebInferenceIssueModalProps) {
 
   const followupMessage =
     inferenceIssueModal.reason === "provider_connection_required"
-      ? "To continue, open Account Settings to connect ChatGPT."
+      ? "Use ChatGPT Plus / Pro rate limits with no extra Polynet inference charge, or add an OpenAI API key billed directly through OpenAI."
       : inferenceIssueModal.reason === "workspace_credits"
         ? "To continue, open Agent Settings to review or top up your workspace credits. Community tools and web research still work without Daytona compute."
       : inferenceIssueModal.reason === "quota"
@@ -127,6 +127,8 @@ export function WebInferenceIssueModal(props: WebInferenceIssueModalProps) {
               >
                 {inferenceIssueModal.reason === "workspace_credits"
                   ? "Open agent settings"
+                  : inferenceIssueModal.reason === "provider_connection_required"
+                    ? "Open provider settings"
                   : "Open account settings"}
               </button>
             )}

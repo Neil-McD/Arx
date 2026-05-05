@@ -141,7 +141,7 @@ export function formatProviderConnectionErrorMessage(error: unknown, fallback: s
     return "Session expired. Please sign in again.";
   }
   if (code === "provider_connection_required") {
-    return "Connect a provider in Account Settings to continue.";
+    return "Connect a provider in Agent Settings to continue.";
   }
   if (code === "platform_inference_misconfigured" || code === "provider_inference_misconfigured") {
     return "Provider connection is temporarily unavailable. Please retry shortly.";
@@ -169,7 +169,7 @@ export function formatSendFlowErrorMessage(error: unknown, fallback: string): st
     return "This thread already has a turn in progress. Wait for it to finish before sending another.";
   }
   if (code === "provider_connection_required") {
-    return "Connect a provider in Account Settings to use this model.";
+    return "Connect a provider in Agent Settings to use this model.";
   }
   if (code === "workspace_credits_exhausted" || code === "workspace_credits_unavailable") {
     return "Workspace credits are unavailable for this run. Add credits or choose a different model.";

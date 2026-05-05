@@ -4278,8 +4278,8 @@ export default function App() {
         }
         if (payload.provider === "openai") {
           setActiveView("settings");
-          setSettingsPage("account");
-          showAppToastMessage("Paste your OpenAI API key in Account settings.");
+          setSettingsPage("agent");
+          showAppToastMessage("Paste your OpenAI API key in Agent settings.");
           return;
         }
         showAppToastMessage("Provider connection is not available.");
@@ -5159,11 +5159,12 @@ export default function App() {
   const hasPaidAccess = Boolean(session) && hasBuilderTierPaidAccess(builderBillingStatus?.builder_tier ?? "free");
   const hasUserKeyConnection = Boolean(session) && openAiConnection.connected;
   const hasUserChatgptConnection = Boolean(session) && chatgptConnection.connected;
+  const hasPersonalInferenceProvider = hasUserKeyConnection || hasUserChatgptConnection;
   const hasPendingChatgptAuth = providerConnectionUi.hasPendingChatgptAuth;
   const shouldShowEmptyThreadChatgptCard =
     Boolean(session) &&
     hasResolvedProviderConnections &&
-    !hasUserChatgptConnection &&
+    !hasPersonalInferenceProvider &&
     !isLoadingChatgptConnection;
 
   const { sendUserMessage, retryLastTurn } = useWebSendFlowController<
@@ -6926,6 +6927,10 @@ export default function App() {
     isPollingChatgptConnection: providerConnectionUi.isPollingChatgptConnection,
     onConnectChatgpt: () => {
       void providerConnectionUi.handleConnectChatgpt();
+    },
+    onAddOpenAiKey: () => {
+      setActiveView("settings");
+      setSettingsPage("agent");
     },
   });
   const { workspaceHostProps } = buildWebWorkspaceSurfaceProjection({

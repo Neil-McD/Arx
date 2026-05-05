@@ -24,6 +24,7 @@ type BuildWebWorkspaceLandingProjectionParams = {
   hasPendingChatgptAuth: boolean;
   isPollingChatgptConnection: boolean;
   onConnectChatgpt: () => void;
+  onAddOpenAiKey: () => void;
 };
 
 export function buildWebWorkspaceLandingProjection(
@@ -79,15 +80,16 @@ export function buildWebWorkspaceLandingProjection(
 
   const emptyThreadChatgptCard = params.shouldShowEmptyThreadChatgptCard ? (
     <WebChatgptEmptyStateCard
-      buttonLabel={
+      chatgptButtonLabel={
         params.isConnectingChatgpt
           ? "Starting..."
           : params.hasPendingChatgptAuth || params.isPollingChatgptConnection
             ? "Continue auth"
-            : "Authenticate"
+            : "Connect ChatGPT"
       }
-      disabled={params.isConnectingChatgpt}
-      onConnect={params.onConnectChatgpt}
+      isChatgptDisabled={params.isConnectingChatgpt}
+      onConnectChatgpt={params.onConnectChatgpt}
+      onAddOpenAiKey={params.onAddOpenAiKey}
     />
   ) : null;
 

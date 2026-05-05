@@ -1,20 +1,26 @@
 type WebChatgptEmptyStateCardProps = {
-  buttonLabel: string;
-  disabled: boolean;
-  onConnect: () => void;
+  chatgptButtonLabel: string;
+  isChatgptDisabled: boolean;
+  onConnectChatgpt: () => void;
+  onAddOpenAiKey: () => void;
 };
 
 export function WebChatgptEmptyStateCard(props: WebChatgptEmptyStateCardProps) {
-  const { buttonLabel, disabled, onConnect } = props;
+  const {
+    chatgptButtonLabel,
+    isChatgptDisabled,
+    onAddOpenAiKey,
+    onConnectChatgpt,
+  } = props;
 
   return (
     <div className="web-empty-thread-chatgpt-card-wrap">
       <div className="web-empty-thread-chatgpt-card">
         <div className="web-empty-thread-chatgpt-copy">
           <div className="web-empty-thread-chatgpt-text">
-            <div className="web-empty-thread-chatgpt-title">ChatGPT Plus / Pro</div>
+            <div className="web-empty-thread-chatgpt-title">Connect an inference provider</div>
             <div className="web-empty-thread-chatgpt-description">
-              Authenticate to use your ChatGPT Plus / Pro account rate limits.
+              Use ChatGPT Plus / Pro rate limits with no extra Polynet inference charge, or add an OpenAI API key billed directly through OpenAI.
             </div>
           </div>
         </div>
@@ -22,10 +28,17 @@ export function WebChatgptEmptyStateCard(props: WebChatgptEmptyStateCardProps) {
           <button
             className="platform-save-button platform-save-button--compact"
             type="button"
-            onClick={onConnect}
-            disabled={disabled}
+            onClick={onConnectChatgpt}
+            disabled={isChatgptDisabled}
           >
-            {buttonLabel}
+            {chatgptButtonLabel}
+          </button>
+          <button
+            className="secondary"
+            type="button"
+            onClick={onAddOpenAiKey}
+          >
+            Add OpenAI key
           </button>
         </div>
       </div>
