@@ -84,9 +84,13 @@ function buildMountStateClassName(
 ): string {
   if (!mount.enabled) return " is-disabled";
   if (effectiveApp?.live_for_current_user) return " is-live";
-  if (mount.live_status === "live") return " is-live";
+  if (mount.app.status === "invalid" || mount.not_live_reason === "validation_failed") {
+    return " is-not-live";
+  }
+  if (!effectiveApp?.has_personal_mount) return "";
+  if (effectiveApp?.credential_state === "needs_personal_setup") return " is-setup";
   const reason = String(mount.not_live_reason ?? "").trim();
-  if (reason === "needs_auth" || reason === "missing_snapshot") return " is-setup";
+  if (reason === "needs_auth" || reason === "missing_snapshot") return "";
   return " is-not-live";
 }
 
@@ -96,8 +100,14 @@ function buildMountStateLabel(
 ): string {
   if (!mount.enabled) return "Disabled";
   if (effectiveApp?.live_for_current_user) return "Live";
-  if (mount.live_status === "live") return "Live";
-  return "Setup needed";
+  if (mount.app.status === "invalid" || mount.not_live_reason === "validation_failed") {
+    return "Validation failed";
+  }
+  if (!effectiveApp?.has_personal_mount) return "Recommended";
+  if (effectiveApp?.credential_state === "needs_personal_setup") {
+    return "Setup needed";
+  }
+  return "Recommended";
 }
 
 function buildMountStatusLabel(

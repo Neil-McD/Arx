@@ -5,7 +5,6 @@ import type { BuilderBillingStatus } from "../../../../shared/builderBillingStat
 import type { WorkspaceCreditBalance } from "../../../../shared/workspaceCreditsGateway";
 import type { PendingPurchaseClaim } from "../../../../shared/pay_first";
 import type { EffectiveMcpApp } from "../../../../shared/effectiveMcpApps";
-import type { HarnessMount } from "../../../../shared/harnessMountTypes";
 import type { CreateSkillPackageInput } from "../../../../shared/skillPackageTypes";
 import type { UserPlatformInstalledSkill } from "../../../../shared/userPlatformSkillTypes";
 import type { UseWebProviderConnectionUiControllerResult } from "../controllers/useWebProviderConnectionUiController";
@@ -125,10 +124,9 @@ export type WebSettingsPanelsProps = {
     openDiscoverSkills: () => void;
     shouldOpenCreateSkillComposer: boolean;
     onConsumeCreateSkillComposerOpen: () => void;
-    harnessMounts: HarnessMount[];
     effectiveMcpApps: EffectiveMcpApp[];
-    isLoadingHarnessMounts: boolean;
-    harnessMountError: string | null;
+    isLoadingEffectiveMcpApps: boolean;
+    effectiveMcpAppsError: string | null;
     isLoadingUserPlatformAppMounts: boolean;
     userPlatformAppMountError: string | null;
     userPlatformAppMutationError: string | null;
@@ -311,10 +309,9 @@ export function WebSettingsPanels(props: WebSettingsPanelsProps) {
     shouldOpenCreateSkillComposer: integrations.shouldOpenCreateSkillComposer,
     onConsumeCreateSkillComposerOpen:
       integrations.onConsumeCreateSkillComposerOpen,
-    harnessMounts: integrations.harnessMounts,
     effectiveMcpApps: integrations.effectiveMcpApps,
-    isLoadingHarnessMounts: integrations.isLoadingHarnessMounts,
-    harnessMountError: integrations.harnessMountError,
+    isLoadingEffectiveMcpApps: integrations.isLoadingEffectiveMcpApps,
+    effectiveMcpAppsError: integrations.effectiveMcpAppsError,
     isLoadingUserPlatformAppMounts: integrations.isLoadingUserPlatformAppMounts,
     userPlatformAppMountError: integrations.userPlatformAppMountError,
     userPlatformAppMutationError: integrations.userPlatformAppMutationError,

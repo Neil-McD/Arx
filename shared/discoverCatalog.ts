@@ -386,7 +386,7 @@ export const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
       tokenHelpUrl: "https://supabase.com/dashboard/account/tokens",
       tokenHelpLabel: "Get access token",
       note:
-        "Connects into your baseline platform tools and stays available even when no community lens is active.",
+        "Connects into your personal harness and stays available across communities.",
     },
   },
   {
@@ -428,7 +428,7 @@ export const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
     name: "Linear",
     tagline: "Issues, projects, cycles, and team planning",
     description:
-      "Strong near-term MCP candidate for execution workflows and one of the best current fits for personal platform-level app mounts.",
+      "Strong near-term MCP candidate for execution workflows and one of the best current fits for personal harness app connections.",
     supportLabel: "Ready now",
     supportNote:
       "Linear exposes a remote MCP endpoint and bearer-token auth that align well with the current PolyNet connector contract.",
@@ -457,7 +457,7 @@ export const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
       tokenHelpUrl: "https://linear.app/settings/account/security",
       tokenHelpLabel: "Get API key",
       note:
-        "Connects into your baseline platform tools so it stays active with or without a community lens.",
+        "Connects into your personal harness and stays available across communities.",
     },
   },
   {

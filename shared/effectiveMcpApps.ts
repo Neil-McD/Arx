@@ -3,13 +3,11 @@ import type { HarnessMount } from "./harnessMountTypes";
 export type EffectiveMcpAppCredentialState =
   | "live"
   | "needs_personal_setup"
-  | "community_live"
   | "not_live";
 
 export type EffectiveMcpAppPrimaryAction =
   | "manage_personal"
   | "setup_personal"
-  | "manage_community"
   | "none";
 
 function normalizeMcpAppKeyPart(value: unknown): string {
@@ -76,14 +74,7 @@ function deriveEffectiveEnabledToolNames(args: {
 }): string[] {
   const { personalMount, communityMount } = args;
   if (!personalMount) return communityMount?.enabled_tools ?? [];
-  if (!communityMount) return personalMount.enabled_tools;
-  if (personalMount.live_status === "live" && communityMount.enabled_tools.length === 0) {
-    return personalMount.enabled_tools;
-  }
-  const communityEnabled = new Set(communityMount.enabled_tools);
-  return personalMount.enabled_tools.filter((toolName) =>
-    communityEnabled.has(toolName),
-  );
+  return personalMount.enabled_tools;
 }
 
 function deriveCredentialState(args: {
@@ -120,19 +111,13 @@ function deriveCredentialState(args: {
       primary_action: "setup_personal",
     };
   }
-  if (communityMount?.live_status === "live") {
-    return {
-      credential_state: "community_live",
-      live_for_current_user: true,
-      setup_reason: null,
-      primary_action: "manage_community",
-    };
-  }
   return {
     credential_state: "not_live",
     live_for_current_user: false,
-    setup_reason: communityMount?.not_live_reason ?? "unknown",
-    primary_action: communityMount ? "manage_community" : "none",
+    setup_reason: communityMount
+      ? (communityMount.not_live_reason ?? "not_in_personal_harness")
+      : "unknown",
+    primary_action: communityMount ? "setup_personal" : "none",
   };
 }
 

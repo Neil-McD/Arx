@@ -227,6 +227,13 @@ function buildCommunityRecommendationStateLabel(args: {
 }): string {
   if (!args.mount.enabled) return "Disabled";
   if (args.effectiveApp?.live_for_current_user) return "Live";
+  if (
+    args.mount.app.status === "invalid" ||
+    args.mount.not_live_reason === "validation_failed"
+  ) {
+    return "Validation failed";
+  }
+  if (!args.effectiveApp?.has_personal_mount) return "Recommended";
   if (args.effectiveApp?.credential_state === "needs_personal_setup") {
     return "Setup needed";
   }
@@ -243,6 +250,7 @@ function buildCommunityRecommendationStateClassName(args: {
   if (label === "Setup needed" || label === "Reconnect required") {
     return " is-setup";
   }
+  if (label === "Recommended") return "";
   return " is-not-live";
 }
 
@@ -257,6 +265,7 @@ function buildCommunityRecommendationStatusLabel(args: {
   const toolCount =
     args.effectiveApp?.effective_tool_count ?? args.mount.enabled_tools.length;
   if (stateLabel === "Disabled") return `Disabled · ${pluralizeTools(toolCount)}`;
+  if (stateLabel === "Recommended") return `${pluralizeTools(toolCount)} available`;
   return `${stateLabel} · ${pluralizeTools(toolCount)}`;
 }
 
@@ -514,7 +523,7 @@ function CommunityIntegrationsSettingsSection({
                           onClick={() => void handleOptIn(mount, catalogEntry)}
                           disabled={isBusy}
                         >
-                          {isOptingIn ? "Adding…" : "Like"}
+                          {isOptingIn ? "Adding…" : "Add to my harness"}
                         </button>
                       ) : null}
                       {canManage ? (

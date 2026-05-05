@@ -82,8 +82,11 @@ function provePersonalConnectionSatisfiesCommunityAttachment() {
   assert.equal(linear.credential_state, "live");
   assert.equal(linear.setup_reason, null);
   assert.equal(linear.primary_action, "manage_personal");
-  assert.deepEqual(linear.effective_enabled_tools, ["search_issues"]);
-  assert.equal(linear.effective_tool_count, 1);
+  assert.deepEqual(linear.effective_enabled_tools, [
+    "search_issues",
+    "create_issue",
+  ]);
+  assert.equal(linear.effective_tool_count, 2);
   assert.equal(linear.personal_mount?.source_mount_id, "u-linear");
   assert.equal(linear.community_mount?.source_mount_id, "c-linear");
 
@@ -111,6 +114,36 @@ function proveCommunityAttachmentRequiresMemberSetupWithoutPersonalMount() {
   assert.equal(linear.primary_action, "setup_personal");
 
   console.log("PASS: community attachment prompts member setup when personal mount is missing");
+}
+
+function proveCommunityGrantAloneIsNotRuntimeLive() {
+  const communityDocs = mount({
+    id: "community:c-docs",
+    source_mount_id: "c-docs",
+    scope: "community",
+    live_status: "live",
+    not_live_reason: null,
+    app: {
+      catalog_app_id: "docs",
+      name: "Docs",
+      slug: "docs",
+      endpoint_url: "https://mcp.docs.example/mcp",
+      auth_type: "none",
+      status: "valid",
+    },
+  });
+
+  const rows = buildEffectiveMcpApps([communityDocs]);
+
+  assert.equal(rows.length, 1);
+  const [docs] = rows;
+  assert.equal(docs.is_attached_to_community, true);
+  assert.equal(docs.has_personal_mount, false);
+  assert.equal(docs.live_for_current_user, false);
+  assert.equal(docs.credential_state, "not_live");
+  assert.equal(docs.primary_action, "setup_personal");
+
+  console.log("PASS: community grant alone does not become runtime-live");
 }
 
 function proveEmptyCommunityToolSelectionDoesNotZeroLivePersonalTools() {
@@ -225,6 +258,7 @@ function provePersonalOnlyMountRemainsLive() {
 
 provePersonalConnectionSatisfiesCommunityAttachment();
 proveCommunityAttachmentRequiresMemberSetupWithoutPersonalMount();
+proveCommunityGrantAloneIsNotRuntimeLive();
 proveEmptyCommunityToolSelectionDoesNotZeroLivePersonalTools();
 proveMixedCatalogAndEndpointIdentitiesCollapse();
 provePersonalOnlyMountRemainsLive();

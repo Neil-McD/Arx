@@ -3,7 +3,6 @@ import { useEffect, useMemo, useState } from "react";
 import type { CreateSkillPackageInput } from "../../../../shared/skillPackageTypes";
 import type { UserPlatformInstalledSkill } from "../../../../shared/userPlatformSkillTypes";
 import type { EffectiveMcpApp } from "../../../../shared/effectiveMcpApps";
-import type { HarnessMount } from "../../../../shared/harnessMountTypes";
 import { DISCOVER_APP_CATALOG } from "../lib/discoverCatalog";
 import { DiscoverCatalogLogo } from "./DiscoverCatalogLogo";
 
@@ -21,10 +20,9 @@ type WebIntegrationsSettingsSectionProps = {
   openDiscoverSkills: () => void;
   shouldOpenCreateSkillComposer: boolean;
   onConsumeCreateSkillComposerOpen: () => void;
-  harnessMounts: HarnessMount[];
   effectiveMcpApps: EffectiveMcpApp[];
-  isLoadingHarnessMounts: boolean;
-  harnessMountError: string | null;
+  isLoadingEffectiveMcpApps: boolean;
+  effectiveMcpAppsError: string | null;
   isLoadingUserPlatformAppMounts: boolean;
   userPlatformAppMountError: string | null;
   userPlatformAppMutationError: string | null;
@@ -96,31 +94,14 @@ function pluralizeTools(count: number): string {
   return `${count} ${count === 1 ? "tool" : "tools"}`;
 }
 
-function buildHarnessSummary(mounts: HarnessMount[]): string {
-  const liveCount = mounts.filter((mount) => mount.live_status === "live").length;
-  const notLiveCount = mounts.length - liveCount;
-  const communityCount = mounts.filter((mount) => mount.scope === "community").length;
-  const scopeLabel =
-    communityCount > 0
-      ? `${mounts.length} harness apps across personal and active community scope`
-      : `${mounts.length} personal harness apps`;
-  if (mounts.length === 0) return "No apps are mounted in the active harness yet.";
-  if (notLiveCount === 0) return `${scopeLabel}. ${liveCount} live.`;
-  return `${scopeLabel}. ${liveCount} live, ${notLiveCount} not live.`;
-}
-
 function buildEffectiveHarnessSummary(apps: EffectiveMcpApp[]): string {
   const liveCount = apps.filter((app) => app.live_for_current_user).length;
   const setupCount = apps.filter(
     (app) => !app.live_for_current_user && app.credential_state === "needs_personal_setup",
   ).length;
   const notLiveCount = apps.length - liveCount;
-  const communityCount = apps.filter((app) => app.is_attached_to_community).length;
-  const scopeLabel =
-    communityCount > 0
-      ? `${apps.length} harness apps across personal and active community scope`
-      : `${apps.length} personal harness apps`;
-  if (apps.length === 0) return "No apps are mounted in the active harness yet.";
+  const scopeLabel = `${apps.length} harness apps`;
+  if (apps.length === 0) return "No apps are mounted in your harness yet.";
   if (notLiveCount === 0) return `${scopeLabel}. ${liveCount} live.`;
   if (setupCount === notLiveCount) {
     return `${scopeLabel}. ${liveCount} live, ${setupCount} need setup.`;
@@ -133,8 +114,6 @@ function buildEffectiveAppStateLabel(app: EffectiveMcpApp): string {
   switch (app.credential_state) {
     case "needs_personal_setup":
       return "Setup needed";
-    case "community_live":
-      return "Live";
     case "not_live":
     default:
       return "Not live";
@@ -156,15 +135,15 @@ function buildEffectiveAppStatusLabel(app: EffectiveMcpApp): string {
 
 function buildEffectiveAppDetail(app: EffectiveMcpApp): string {
   if (app.live_for_current_user && app.is_attached_to_community && app.has_personal_mount) {
-    return `${pluralizeTools(app.effective_tool_count)} available in this community lens through your personal connection.`;
+    return `${pluralizeTools(app.effective_tool_count)} available through your personal harness.`;
   }
   if (app.live_for_current_user) {
-    return `${pluralizeTools(app.effective_tool_count)} mounted in your baseline platform layer.`;
+    return `${pluralizeTools(app.effective_tool_count)} available in your personal harness.`;
   }
   if (app.credential_state === "needs_personal_setup" && app.is_attached_to_community) {
-    return `${app.app.name} is attached to this community, but needs your personal connection before tools go live for you.`;
+    return `${app.app.name} is recommended by this community, but needs your personal connection before tools go live for you.`;
   }
-  return `${buildEffectiveAppStateLabel(app)} in the active harness.`;
+  return `${buildEffectiveAppStateLabel(app)} in your harness.`;
 }
 
 function findCatalogEntryForApp(app: EffectiveMcpApp["app"]) {
@@ -203,10 +182,9 @@ export function WebIntegrationsSettingsSection(
     openDiscoverSkills,
     shouldOpenCreateSkillComposer,
     onConsumeCreateSkillComposerOpen,
-    harnessMounts,
     effectiveMcpApps,
-    isLoadingHarnessMounts,
-    harnessMountError,
+    isLoadingEffectiveMcpApps,
+    effectiveMcpAppsError,
     isLoadingUserPlatformAppMounts,
     userPlatformAppMountError,
     userPlatformAppMutationError,
@@ -341,26 +319,24 @@ export function WebIntegrationsSettingsSection(
           Active harness apps
         </div>
         <div className="settings-section-desc">
-          Personal apps stay available across communities. Community apps appear
-          here when their community lens is active.
+          Your personal harness is the executable MCP source. Community
+          recommendations resolve to the same app state when present.
         </div>
         {session ? (
           <div className="model-note">
-            {isLoadingHarnessMounts && harnessMounts.length === 0
-              ? "Loading active harness status..."
-              : harnessMountError
+            {isLoadingEffectiveMcpApps && effectiveMcpApps.length === 0
+              ? "Loading harness status..."
+              : effectiveMcpAppsError
                 ? "Could not load unified harness status yet."
-                : effectiveMcpApps.length > 0
-                  ? buildEffectiveHarnessSummary(effectiveMcpApps)
-                  : buildHarnessSummary(harnessMounts)}
+                : buildEffectiveHarnessSummary(effectiveMcpApps)}
           </div>
         ) : null}
         {!session ? (
           <div className="model-note">
-            Sign in to connect personal apps at the platform level.
+            Sign in to connect personal apps to your harness.
           </div>
         ) : null}
-        {session && (userPlatformAppMountError || harnessMountError) ? (
+        {session && (userPlatformAppMountError || effectiveMcpAppsError) ? (
           <div className="auth-error">
             Couldn&apos;t load your active harness apps right now. Try refreshing
             the page.
@@ -371,16 +347,16 @@ export function WebIntegrationsSettingsSection(
         ) : null}
         {session ? (
           <div className="integrations-app-list">
-            {(isLoadingUserPlatformAppMounts || isLoadingHarnessMounts) &&
+            {(isLoadingUserPlatformAppMounts || isLoadingEffectiveMcpApps) &&
             visibleEffectiveMcpApps.length === 0 ? (
               <div className="model-note">Loading your active harness apps…</div>
             ) : null}
             {!isLoadingUserPlatformAppMounts &&
-            !isLoadingHarnessMounts &&
+            !isLoadingEffectiveMcpApps &&
             visibleEffectiveMcpApps.length === 0 ? (
               <div className="model-note">
-                No apps are mounted in your active harness yet. Use `Connect
-                apps` to browse the catalog.
+                No apps are mounted in your harness yet. Use `Connect apps` to
+                browse the catalog.
               </div>
             ) : null}
             {visibleEffectiveMcpApps.map((effectiveApp) => {
@@ -429,8 +405,8 @@ export function WebIntegrationsSettingsSection(
                           <span className="integration-status-pill">
                             {effectiveApp.is_attached_to_community
                               ? effectiveApp.has_personal_mount
-                                ? "Personal + community"
-                                : "Community lens"
+                                ? "Personal + recommended"
+                                : "Recommended"
                               : "Personal"}
                           </span>
                         </div>
@@ -556,7 +532,7 @@ export function WebIntegrationsSettingsSection(
                       <div className="integration-mounted-rail">
                         <span className="integration-status-pill">
                           {communityMount
-                            ? "Managed by community"
+                            ? "Recommended by community"
                             : "Open Discover to set up"}
                         </span>
                       </div>
@@ -632,7 +608,7 @@ export function WebIntegrationsSettingsSection(
         </div>
         {!session ? (
           <div className="model-note">
-            Sign in to create personal skills at the platform layer.
+            Sign in to create personal skills for your workspace.
           </div>
         ) : (
           <>

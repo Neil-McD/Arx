@@ -65,7 +65,7 @@ import { useWebPersonalMemoryUiController } from "./controllers/useWebPersonalMe
 import { useWebPublicCommunityUiController } from "./controllers/useWebPublicCommunityUiController";
 import { useWebProfileSettingsUiController } from "./controllers/useWebProfileSettingsUiController";
 import { useWebProviderConnectionUiController } from "./controllers/useWebProviderConnectionUiController";
-import { useWebHarnessMountsController } from "./controllers/useWebHarnessMountsController";
+import { useWebEffectiveMcpAppsController } from "./controllers/useWebEffectiveMcpAppsController";
 import { useWebUserPlatformAppMountsController } from "./controllers/useWebUserPlatformAppMountsController";
 import { useWebUserPlatformSkillsController } from "./controllers/useWebUserPlatformSkillsController";
 import { useWebWorkspaceProjectStateController } from "./controllers/useWebWorkspaceProjectStateController";
@@ -2010,14 +2010,13 @@ export default function App() {
     ensureSession: ensureUsableAuthSession,
   });
   const {
-    harnessMounts,
     effectiveMcpApps,
-    isLoadingHarnessMounts,
-    harnessMountError,
-    harnessMountsLoadedKeyRef,
-    clearHarnessMounts,
-    loadHarnessMounts,
-  } = useWebHarnessMountsController<AuthSession>({
+    isLoadingEffectiveMcpApps,
+    effectiveMcpAppsError,
+    effectiveMcpAppsLoadedKeyRef,
+    clearEffectiveMcpApps,
+    loadEffectiveMcpApps,
+  } = useWebEffectiveMcpAppsController<AuthSession>({
     activeCommunityId,
     session,
     ensureSession: ensureUsableAuthSession,
@@ -2838,17 +2837,17 @@ export default function App() {
     saveFailureMessage: "Failed to save AI agent changes.",
   });
 
-  const reloadHarnessMounts = useCallback(async () => {
+  const reloadEffectiveMcpApps = useCallback(async () => {
     if (!session) {
-      clearHarnessMounts();
+      clearEffectiveMcpApps();
       return;
     }
-    harnessMountsLoadedKeyRef.current = null;
-    await loadHarnessMounts(session);
+    effectiveMcpAppsLoadedKeyRef.current = null;
+    await loadEffectiveMcpApps(session);
   }, [
-    clearHarnessMounts,
-    harnessMountsLoadedKeyRef,
-    loadHarnessMounts,
+    clearEffectiveMcpApps,
+    effectiveMcpAppsLoadedKeyRef,
+    loadEffectiveMcpApps,
     session,
   ]);
 
@@ -2860,14 +2859,14 @@ export default function App() {
           userPlatformAppMountsLoadedUserIdRef.current = null;
           void loadUserPlatformAppMounts(session);
         }
-        void reloadHarnessMounts();
+        void reloadEffectiveMcpApps();
       }
       return ok;
     },
     [
       connectCommunityApp,
       loadUserPlatformAppMounts,
-      reloadHarnessMounts,
+      reloadEffectiveMcpApps,
       session,
       userPlatformAppMountsLoadedUserIdRef,
     ],
@@ -2883,10 +2882,10 @@ export default function App() {
       secret?: string;
     }) => {
       const result = await connectUserPlatformApp(input);
-      if (result.ok || result.mount) void reloadHarnessMounts();
+      if (result.ok || result.mount) void reloadEffectiveMcpApps();
       return result;
     },
-    [connectUserPlatformApp, reloadHarnessMounts],
+    [connectUserPlatformApp, reloadEffectiveMcpApps],
   );
 
   const handleUpdateUserPlatformAppMount = useCallback(
@@ -2898,37 +2897,37 @@ export default function App() {
       },
     ) => {
       const ok = await updateUserPlatformAppMount(userPlatformAppMountId, patch);
-      if (ok) void reloadHarnessMounts();
+      if (ok) void reloadEffectiveMcpApps();
       return ok;
     },
-    [reloadHarnessMounts, updateUserPlatformAppMount],
+    [reloadEffectiveMcpApps, updateUserPlatformAppMount],
   );
 
   const handleRefreshUserPlatformApp = useCallback(
     async (userPlatformAppMountId: string) => {
       const ok = await refreshUserPlatformApp(userPlatformAppMountId);
-      if (ok) void reloadHarnessMounts();
+      if (ok) void reloadEffectiveMcpApps();
       return ok;
     },
-    [refreshUserPlatformApp, reloadHarnessMounts],
+    [refreshUserPlatformApp, reloadEffectiveMcpApps],
   );
 
   const handleReconnectUserPlatformApp = useCallback(
     async (userPlatformAppMountId: string, secret: string) => {
       const ok = await reconnectUserPlatformApp(userPlatformAppMountId, secret);
-      if (ok) void reloadHarnessMounts();
+      if (ok) void reloadEffectiveMcpApps();
       return ok;
     },
-    [reconnectUserPlatformApp, reloadHarnessMounts],
+    [reconnectUserPlatformApp, reloadEffectiveMcpApps],
   );
 
   const handleUnmountUserPlatformApp = useCallback(
     async (userPlatformAppMountId: string) => {
       const ok = await unmountUserPlatformApp(userPlatformAppMountId);
-      if (ok) void reloadHarnessMounts();
+      if (ok) void reloadEffectiveMcpApps();
       return ok;
     },
-    [reloadHarnessMounts, unmountUserPlatformApp],
+    [reloadEffectiveMcpApps, unmountUserPlatformApp],
   );
 
   const handleUpdateCommunityAppMount = useCallback(
@@ -2940,28 +2939,28 @@ export default function App() {
       },
     ) => {
       const ok = await updateCommunityAppMount(communityAppMountId, patch);
-      if (ok) void reloadHarnessMounts();
+      if (ok) void reloadEffectiveMcpApps();
       return ok;
     },
-    [reloadHarnessMounts, updateCommunityAppMount],
+    [reloadEffectiveMcpApps, updateCommunityAppMount],
   );
 
   const handleUnmountCommunityApp = useCallback(
     async (communityAppMountId: string) => {
       const ok = await unmountCommunityApp(communityAppMountId);
-      if (ok) void reloadHarnessMounts();
+      if (ok) void reloadEffectiveMcpApps();
       return ok;
     },
-    [reloadHarnessMounts, unmountCommunityApp],
+    [reloadEffectiveMcpApps, unmountCommunityApp],
   );
 
   const handleRefreshCommunityApp = useCallback(
     async (communityAppMountId: string) => {
       const ok = await refreshCommunityApp(communityAppMountId);
-      if (ok) void reloadHarnessMounts();
+      if (ok) void reloadEffectiveMcpApps();
       return ok;
     },
-    [refreshCommunityApp, reloadHarnessMounts],
+    [refreshCommunityApp, reloadEffectiveMcpApps],
   );
 
   const handleCreateCommunitySkill = useCallback(
@@ -4010,20 +4009,20 @@ export default function App() {
   ]);
 
   useEffect(() => {
-    const shouldLoadHarnessMounts =
+    const shouldLoadEffectiveMcpApps =
       activePage === "discover" ||
       (activePage === "community" && communityTab === "settings") ||
       (activePage === "workspace" &&
         activeView === "settings" &&
         settingsPage === "integrations");
-    if (!shouldLoadHarnessMounts) return;
+    if (!shouldLoadEffectiveMcpApps) return;
     if (!session) {
-      clearHarnessMounts();
+      clearEffectiveMcpApps();
       return;
     }
     const loadedKey = `${session.user.id}:${activeCommunityId ?? "personal"}`;
-    if (harnessMountsLoadedKeyRef.current === loadedKey) return;
-    void loadHarnessMounts(session);
+    if (effectiveMcpAppsLoadedKeyRef.current === loadedKey) return;
+    void loadEffectiveMcpApps(session);
   }, [
     activeCommunityId,
     activePage,
@@ -4031,9 +4030,9 @@ export default function App() {
     communityTab,
     session,
     settingsPage,
-    clearHarnessMounts,
-    harnessMountsLoadedKeyRef,
-    loadHarnessMounts,
+    clearEffectiveMcpApps,
+    effectiveMcpAppsLoadedKeyRef,
+    loadEffectiveMcpApps,
   ]);
 
   useEffect(() => {
@@ -6215,8 +6214,8 @@ export default function App() {
         previewProjectName: workspace.derived.resolvedActiveProjectName,
       },
       aiAgentAppsEditorProps: {
-        intro: "Recommend hosted MCP apps here so members can add them to their own harness.",
-        emptyState: "Recommend the first hosted MCP app for this community. Members can use their own credentials to make it live in their harness.",
+        intro: "Recommend hosted MCP apps here. Polynet seeds or reuses each member's personal harness app.",
+        emptyState: "Recommend the first hosted MCP app for this community. Members use their own credentials when an app requires authentication.",
         addButtonLabel: "Browse apps",
         mounts: communityAppMounts,
         effectiveMcpApps,
@@ -6618,10 +6617,9 @@ export default function App() {
       shouldOpenCreateSkillComposer: shouldOpenCreatePersonalSkill,
       onConsumeCreateSkillComposerOpen: () =>
         setShouldOpenCreatePersonalSkill(false),
-      harnessMounts,
       effectiveMcpApps,
-      isLoadingHarnessMounts,
-      harnessMountError,
+      isLoadingEffectiveMcpApps,
+      effectiveMcpAppsError,
       isLoadingUserPlatformAppMounts,
       userPlatformAppMountError,
       userPlatformAppMutationError,

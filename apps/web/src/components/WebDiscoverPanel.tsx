@@ -34,6 +34,10 @@ import {
   isDiscoverAppPersonallyConnectable,
   type DiscoverAppCatalogEntry,
 } from "../lib/discoverCatalog";
+import {
+  mcpAppIdentitySourcesOverlap,
+  type McpAppIdentitySource,
+} from "../../../../shared/effectiveMcpApps";
 import { DiscoverCatalogLogo } from "./DiscoverCatalogLogo";
 
 const DISCOVER_TABS: Array<{ id: DiscoverTab; label: string }> = [
@@ -192,84 +196,93 @@ function buildDiscoverMountStatusClassName(mount: DiscoverMountedApp): string {
   }`;
 }
 
-function findMatchingPersonalMount(
-  app: DiscoverAppCatalogEntry,
-  catalogApps: DiscoverAppCatalogEntry[],
-  mounts: UserPlatformMountedApp[],
-): UserPlatformMountedApp | null {
-  const byCatalogId =
-    app.personalConnect.connectionKind === "known"
-      ? mounts.find((mount) => mount.app.catalog_app_id === app.id) ?? null
-      : null;
-  if (byCatalogId) return byCatalogId;
-  const catalogKnownMountKeys = catalogApps.filter(
-    (entry) =>
-      entry.personalConnect.connectionKind === "known" &&
-      entry.personalConnect.endpointUrl &&
-      entry.personalConnect.authType,
-  ).map(
-    (entry) =>
-      `${entry.personalConnect.endpointUrl}::${entry.personalConnect.authType}`,
-  );
-  if (!isDiscoverAppPersonallyConnectable(app)) {
-    return null;
+function buildDiscoverCommunityGrantStatusTitle(mount: CommunityMountedApp): string {
+  if (!mount.enabled) return "Disabled";
+  if (mount.app.status === "invalid" || mount.not_live_reason === "validation_failed") {
+    return "Validation failed";
   }
-  if (app.personalConnect.connectionKind === "custom") {
-    return (
-      mounts.find(
-        (mount) =>
-          !catalogKnownMountKeys.includes(
-            `${mount.app.endpoint_url}::${mount.app.auth_type}`,
-          ),
-      ) ?? null
-    );
-  }
-  return (
-    mounts.find(
-      (mount) =>
-        mount.app.endpoint_url === app.personalConnect.endpointUrl &&
-        mount.app.auth_type === app.personalConnect.authType,
-    ) ?? null
-  );
+  return "Recommended";
 }
 
-function findMatchingCommunityMount(
+function buildDiscoverCommunityGrantStatusBody(
+  appName: string,
+  mount: CommunityMountedApp,
+  communityLabel: string,
+): string {
+  if (!mount.enabled) return `${appName} is disabled for ${communityLabel}.`;
+  if (mount.app.status === "invalid" || mount.not_live_reason === "validation_failed") {
+    return `${appName} is recommended in ${communityLabel}, but validation failed.`;
+  }
+  return `${appName} is recommended in ${communityLabel}. Members use their own harness credentials when authentication is required.`;
+}
+
+function buildDiscoverCommunityGrantStatusClassName(mount: CommunityMountedApp): string {
+  return `discover-connect-status${
+    mount.enabled && mount.app.status !== "invalid" && mount.not_live_reason !== "validation_failed"
+      ? ""
+      : " is-error"
+  }`;
+}
+
+type DiscoverAppMountCandidate = UserPlatformMountedApp | CommunityMountedApp;
+
+function buildDiscoverAppIdentitySource(
+  app: DiscoverAppCatalogEntry,
+): McpAppIdentitySource | null {
+  if (!isDiscoverAppPersonallyConnectable(app)) return null;
+  if (app.personalConnect.connectionKind === "custom") {
+    return {
+      id: app.id,
+      app: {
+        catalog_app_id: app.id,
+        endpoint_url: null,
+        auth_type: null,
+        slug: app.id,
+        name: app.name,
+      },
+    };
+  }
+  return {
+    id: app.id,
+    app: {
+      catalog_app_id: app.id,
+      endpoint_url: app.personalConnect.endpointUrl,
+      auth_type: app.personalConnect.authType,
+      slug: app.id,
+      name: app.name,
+    },
+  };
+}
+
+function catalogKnownAppMatchesMount(
+  app: DiscoverAppCatalogEntry,
+  mount: DiscoverAppMountCandidate,
+): boolean {
+  const source = buildDiscoverAppIdentitySource(app);
+  return Boolean(source && mcpAppIdentitySourcesOverlap(source, mount));
+}
+
+function findMatchingDiscoverAppMount<TMount extends DiscoverAppMountCandidate>(
   app: DiscoverAppCatalogEntry,
   catalogApps: DiscoverAppCatalogEntry[],
-  mounts: CommunityMountedApp[],
-): CommunityMountedApp | null {
-  const byCatalogId =
-    app.personalConnect.connectionKind === "known"
-      ? mounts.find((mount) => mount.app.catalog_app_id === app.id) ?? null
-      : null;
-  if (byCatalogId) return byCatalogId;
-  const catalogKnownMountKeys = catalogApps.filter(
-    (entry) =>
-      entry.personalConnect.connectionKind === "known" &&
-      entry.personalConnect.endpointUrl &&
-      entry.personalConnect.authType,
-  ).map(
-    (entry) =>
-      `${entry.personalConnect.endpointUrl}::${entry.personalConnect.authType}`,
-  );
-  if (!isDiscoverAppPersonallyConnectable(app)) {
-    return null;
-  }
-  if (app.personalConnect.connectionKind === "custom") {
-    return (
-      mounts.find(
-        (mount) =>
-          !catalogKnownMountKeys.includes(
-            `${mount.app.endpoint_url}::${mount.app.auth_type}`,
-          ),
-      ) ?? null
-    );
-  }
+  mounts: TMount[],
+): TMount | null {
+  const source = buildDiscoverAppIdentitySource(app);
+  if (!source) return null;
+  const identityMatch =
+    mounts.find((mount) => mcpAppIdentitySourcesOverlap(source, mount)) ?? null;
+  if (identityMatch) return identityMatch;
+  if (app.personalConnect.connectionKind !== "custom") return null;
+
+  // Custom MCP apps can represent endpoints outside the first-party catalog.
   return (
     mounts.find(
       (mount) =>
-        mount.app.endpoint_url === app.personalConnect.endpointUrl &&
-        mount.app.auth_type === app.personalConnect.authType,
+        !catalogApps.some(
+          (entry) =>
+            entry.personalConnect.connectionKind === "known" &&
+            catalogKnownAppMatchesMount(entry, mount),
+        ),
     ) ?? null
   );
 }
@@ -450,11 +463,19 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
 
   const selectedPersonalMount = useMemo(() => {
     if (!selectedApp) return null;
-    return findMatchingPersonalMount(selectedApp, discoverApps, userPlatformAppMounts);
+    return findMatchingDiscoverAppMount(
+      selectedApp,
+      discoverApps,
+      userPlatformAppMounts,
+    );
   }, [discoverApps, selectedApp, userPlatformAppMounts]);
   const selectedCommunityMount = useMemo(() => {
     if (!selectedApp) return null;
-    return findMatchingCommunityMount(selectedApp, discoverApps, communityAppMounts);
+    return findMatchingDiscoverAppMount(
+      selectedApp,
+      discoverApps,
+      communityAppMounts,
+    );
   }, [communityAppMounts, discoverApps, selectedApp]);
   const selectedPersonalSkillInstall = useMemo(() => {
     if (!selectedSkill) return null;
@@ -544,17 +565,12 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
         ? "Add"
         : null
     : null;
-  const selectedAppIsLiveForCurrentUser =
-    selectedPersonalMount?.live_status === "live" ||
-    selectedCommunityMount?.live_status === "live";
   const selectedAppCommunityActionLabel =
     selectedApp && hasManageableCommunityTarget
       ? selectedCommunityMount
-        ? selectedAppIsLiveForCurrentUser
-          ? `Manage ${manageableCommunityTargetName}`
-          : `Setup ${manageableCommunityTargetName}`
+        ? `Manage ${manageableCommunityTargetName}`
         : isDiscoverAppPersonallyConnectable(selectedApp)
-          ? `Add to ${manageableCommunityTargetName}`
+          ? `Recommend in ${manageableCommunityTargetName}`
           : null
       : null;
   const selectedSkillPersonalActionLabel = selectedSkill
@@ -648,7 +664,7 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
       endpointUrl: personalConnectEndpoint,
       authType: personalConnectAuthType,
       description: app.description,
-      secret: undefined,
+      secret: personalConnectSecret.trim() || undefined,
     });
     if (!connectInput) {
       setPersonalConnectResult("failed");
@@ -706,7 +722,7 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
       endpointUrl: personalConnectEndpoint,
       authType: personalConnectAuthType,
       description: app.description,
-      secret: personalConnectSecret.trim() || undefined,
+      secret: undefined,
     });
     if (!connectInput) {
       setCommunityConnectResult("failed");
@@ -924,7 +940,7 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
                   {isAuthRecoveringSignedIn
                     ? "Restoring account…"
                     : isConnectingCommunityApp
-                      ? "Adding…"
+                      ? "Recommending…"
                     : isLoadingCommunityAppMounts && !selectedCommunityMount
                       ? "Checking…"
                       : selectedAppCommunityActionLabel}
@@ -1597,14 +1613,14 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
                   </div>
                   <div className="discover-connect-status-body">
                     {personalConnectResult === "passed"
-                      ? `${selectedApp.name} is now mounted into your personal platform layer.`
+                      ? `${selectedApp.name} is now live in your personal harness.`
                       : personalConnectResult === "mounted" && !selectedPersonalMount
-                        ? `${selectedApp.name} is in your personal platform layer, but setup needs to be completed before tools go live.`
+                        ? `${selectedApp.name} is in your personal harness, but setup needs to be completed before tools go live.`
                       : selectedPersonalMount
                         ? buildDiscoverMountStatusBody(
                             selectedApp.name,
                             selectedPersonalMount,
-                            "your personal platform layer",
+                            "your personal harness",
                           )
                       : personalConnectValidationReport.validation_error ??
                         `We couldn't connect ${selectedApp.name}. Check the validation stages below.`}
@@ -1634,23 +1650,23 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
                 <div
                   className={
                     selectedCommunityMount
-                      ? buildDiscoverMountStatusClassName(selectedCommunityMount)
+                      ? buildDiscoverCommunityGrantStatusClassName(selectedCommunityMount)
                       : "discover-connect-status is-success"
                   }
                 >
                   <div className="discover-connect-status-title">
                     {selectedCommunityMount
-                      ? buildDiscoverMountStatusTitle(selectedCommunityMount)
-                      : "Added"}
+                      ? buildDiscoverCommunityGrantStatusTitle(selectedCommunityMount)
+                      : "Recommended"}
                   </div>
                   <div className="discover-connect-status-body">
                     {selectedCommunityMount
-                      ? buildDiscoverMountStatusBody(
+                      ? buildDiscoverCommunityGrantStatusBody(
                           selectedApp.name,
                           selectedCommunityMount,
                           communityTargetLabel,
                         )
-                      : `${selectedApp.name} is now mounted into ${communityTargetLabel}.`}
+                      : `${selectedApp.name} is now recommended in ${communityTargetLabel}.`}
                   </div>
                 </div>
               ) : appConnectTarget === "community" &&
@@ -1658,7 +1674,7 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
                 <div className="discover-connect-status is-error">
                   <div className="discover-connect-status-title">Failed</div>
                   <div className="discover-connect-status-body">
-                    {`We couldn't add ${selectedApp.name} to ${communityTargetLabel}. Check the requirements and try again.`}
+                    {`We couldn't recommend ${selectedApp.name} in ${communityTargetLabel}. Check the requirements and try again.`}
                   </div>
                 </div>
               ) : personalConnectResult === "passed" ||
@@ -1685,11 +1701,11 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
                       ? buildDiscoverMountStatusBody(
                           selectedApp.name,
                           selectedPersonalMount,
-                          "your personal platform layer",
+                          "your personal harness",
                         )
                       : personalConnectResult === "mounted"
-                        ? `${selectedApp.name} is in your personal platform layer, but setup needs to be completed before tools go live.`
-                      : `${selectedApp.name} is live in your personal platform layer.`}
+                        ? `${selectedApp.name} is in your personal harness, but setup needs to be completed before tools go live.`
+                      : `${selectedApp.name} is live in your personal harness.`}
                   </div>
                 </div>
               ) : personalConnectResult === "failed" ? (
@@ -1747,7 +1763,7 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
                   {(appConnectTarget === "personal"
                     ? selectedPersonalMount?.live_status !== "live" ||
                       personalConnectResult === "mounted"
-                    : selectedCommunityMount?.live_status !== "live")
+                    : false)
                     ? "Setup"
                     : "Manage"}
                 </button>
@@ -1773,10 +1789,10 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
                     : appConnectTarget === "personal" && isConnectingUserPlatformApp
                       ? "Adding…"
                       : appConnectTarget === "community" && isConnectingCommunityApp
-                        ? "Adding…"
+                        ? "Recommending…"
                         : hasSession
                           ? appConnectTarget === "community"
-                            ? `Add to ${communityTargetLabel}`
+                            ? `Recommend in ${communityTargetLabel}`
                             : "Add"
                           : "Sign in to add"}
                 </button>

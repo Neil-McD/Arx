@@ -14,7 +14,7 @@ export function buildPersonalSkillsPromptBlock(
   if (installedSkills.length === 0) return "";
   const lines = [
     "",
-    "Personal skill packages are installed in your baseline platform layer.",
+    "Personal skill packages are installed in your personal runtime guidance.",
     "A personal skill package is injected only when you explicitly mention it, like `$weekly-research`.",
   ];
   for (const skill of installedSkills.slice(0, 12)) {
