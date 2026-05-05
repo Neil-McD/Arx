@@ -487,7 +487,7 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
                     {capabilities.canManageEvents ? (
                       <div className="community-events-agenda-actions">
                         <button type="button" onClick={() => openEditEvent(event)}>
-                          {event.recurrence_frequency === "none" ? "Edit" : "Edit series"}
+                          Edit
                         </button>
                         <button
                           type="button"
@@ -506,15 +506,12 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
                     </div>
                   ) : null}
                   {event.location_label || event.url ? (
-                    <div className="community-events-agenda-meta">
-                      {event.location_label ?? "Online"}
+                    <div className="community-events-agenda-meta community-events-agenda-location-row">
+                      {event.location_label ? <span>{event.location_label}</span> : null}
                       {event.url ? (
-                        <>
-                          {" · "}
-                          <a className="community-events-open-link" href={event.url} target="_blank" rel="noreferrer">
-                            Open link
-                          </a>
-                        </>
+                        <a className="community-events-open-link" href={event.url} target="_blank" rel="noreferrer">
+                          Open link
+                        </a>
                       ) : null}
                     </div>
                   ) : null}
