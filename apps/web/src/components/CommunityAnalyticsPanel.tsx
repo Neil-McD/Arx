@@ -1,3 +1,4 @@
+import { useMemo, useState } from "react";
 import { AnalyticsLineChart } from "../../../../shared/AnalyticsLineChart";
 import { formatCount, formatMoneyBaseUnits, formatPercent } from "../../../../shared/contentFormatting";
 import { buildPlatformSwitcherStyle } from "../../../../shared/platformSwitcherUi";
@@ -16,10 +17,35 @@ type CommunityAnalyticsPanelProps = {
 export function CommunityAnalyticsPanel(props: CommunityAnalyticsPanelProps) {
   const { capabilities, state, actions } = props;
   const rangeOptions = ["7d", "30d", "90d", "1y", "all"] as const;
+  const chartMetricOptions = ["visits", "members", "revenue"] as const;
+  const [chartMetric, setChartMetric] = useState<(typeof chartMetricOptions)[number]>("members");
   const rangeSwitcherStyle = buildPlatformSwitcherStyle(
     rangeOptions.length,
     rangeOptions.findIndex((value) => value === state.communityAnalyticsRange),
   );
+  const chartMetricSwitcherStyle = buildPlatformSwitcherStyle(
+    chartMetricOptions.length,
+    chartMetricOptions.findIndex((value) => value === chartMetric),
+  );
+  const chartPoints = chartMetric === "members" ? state.communityAnalyticsSeries : [];
+  const chartTitle = chartMetric === "visits" ? "Page visits" : chartMetric === "revenue" ? "Revenue" : "New members";
+  const chartStat = useMemo(() => {
+    if (chartPoints.length === 0) return "—";
+    const total = chartPoints.reduce((sum, point) => sum + point.value, 0);
+    if (chartMetric === "revenue") {
+      return formatMoneyBaseUnits(
+        total,
+        state.communityAnalyticsSummary.currency,
+        state.communityAnalyticsSummary.currency_decimals,
+      );
+    }
+    return formatCount(total);
+  }, [
+    chartMetric,
+    chartPoints,
+    state.communityAnalyticsSummary.currency,
+    state.communityAnalyticsSummary.currency_decimals,
+  ]);
 
   if (!capabilities.hasActiveCommunity) {
     return <div className="chat-empty">Select a community to view analytics.</div>;
@@ -90,14 +116,30 @@ export function CommunityAnalyticsPanel(props: CommunityAnalyticsPanelProps) {
       <div className="settings-section">
         <div className="analytics-chart-card">
           <div className="analytics-chart-header">
-            <div className="analytics-chart-label">Member growth</div>
-            <div className="analytics-chart-stat">
-              {state.communityAnalyticsSeries.length === 0
-                ? "—"
-                : formatCount(state.communityAnalyticsSeries.reduce((sum, point) => sum + point.value, 0))}
+            <div className="analytics-chart-heading">
+              <div className="analytics-chart-label">{chartTitle}</div>
+              <div className="analytics-chart-stat">{chartStat}</div>
+            </div>
+            <div
+              className="platform-switcher platform-switcher-compact analytics-chart-metric-switcher"
+              role="tablist"
+              aria-label="Chart metric"
+              style={chartMetricSwitcherStyle}
+            >
+              {chartMetricOptions.map((value) => (
+                <button
+                  key={value}
+                  className={value === chartMetric ? "platform-switcher-btn is-active" : "platform-switcher-btn"}
+                  type="button"
+                  onClick={() => setChartMetric(value)}
+                  aria-pressed={value === chartMetric}
+                >
+                  {value === "visits" ? "Visits" : value === "revenue" ? "Revenue" : "Members"}
+                </button>
+              ))}
             </div>
           </div>
-          <AnalyticsLineChart points={state.communityAnalyticsSeries} />
+          <AnalyticsLineChart points={chartPoints} />
         </div>
       </div>
     </>

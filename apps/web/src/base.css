@@ -15188,9 +15188,16 @@ button.message-citation-chip:hover {
 .analytics-chart-header {
   display: flex;
   justify-content: space-between;
-  align-items: flex-end;
+  align-items: center;
   gap: 12px;
   margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.analytics-chart-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
 }
 
 .analytics-chart-title {
@@ -15203,6 +15210,10 @@ button.message-citation-chip:hover {
   font-family: var(--font-mono);
   font-size: 14px;
   color: var(--text-primary);
+}
+
+.analytics-chart-metric-switcher {
+  min-width: min(100%, 260px);
 }
 
 .analytics-chart-copy {
