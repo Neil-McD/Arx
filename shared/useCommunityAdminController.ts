@@ -271,11 +271,16 @@ export function useCommunityAdminController<
     const chartBucket = resolveAnalyticsBucket(range);
 
     try {
-      const summary = await fetchCloudCommunityAnalyticsSummary({
-        session: usableSession,
-        communityId,
-        range,
-      });
+      let summary = null;
+      try {
+        summary = await fetchCloudCommunityAnalyticsSummary({
+          session: usableSession,
+          communityId,
+          range,
+        });
+      } catch {
+        // The canonical analytics query may not be deployed yet during staged Convex releases.
+      }
 
       let memberJoinsWindow: Array<{ created_at: string }> = [];
       try {
@@ -292,7 +297,7 @@ export function useCommunityAdminController<
       current.setCommunityAnalyticsSummary({
         total_members: summary?.total_members ?? null,
         page_visits_window: summary?.page_visits_window ?? null,
-        new_members_window: summary?.new_members_window ?? null,
+        new_members_window: summary?.new_members_window ?? memberJoinsWindow.length,
         conversion_rate_window: summary?.conversion_rate_window ?? null,
         mrr_base_units: summary?.mrr_base_units ?? null,
         currency: summary?.currency ?? null,
