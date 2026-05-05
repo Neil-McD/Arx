@@ -220,6 +220,42 @@ export const resolvePublicFunnelStatsBySlug = query({
   },
 });
 
+export const recordPublicFunnelVisitBySlug = mutation({
+  args: {
+    communitySlug: v.string(),
+    visitorKey: v.optional(v.string()),
+    authSubject: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const slug = normalizeSlug(args.communitySlug);
+    const community = (await ctx.db
+      .query("communities")
+      .withIndex("by_slug", (q) => q.eq("slug", slug))
+      .first()) as CommunityLike | null;
+    if (!community) return { ok: false };
+
+    let userId: any = undefined;
+    const authSubject = String(args.authSubject ?? "").trim();
+    if (authSubject) {
+      const user = await ctx.db
+        .query("users")
+        .withIndex("by_authSubject", (q: any) => q.eq("authSubject", authSubject))
+        .first();
+      userId = user?._id;
+    }
+
+    const nowMs = Date.now();
+    await ctx.db.insert("communityAnalyticsEvents", {
+      communityId: community._id,
+      eventType: "funnel_visit",
+      visitorKey: String(args.visitorKey ?? "").trim() || undefined,
+      userId,
+      createdAt: nowMs,
+    });
+    return { ok: true };
+  },
+});
+
 export const heartbeatCommunityPresence = mutation({
   args: {
     userId: v.optional(v.id("users")),

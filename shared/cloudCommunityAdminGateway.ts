@@ -12,6 +12,16 @@ export type CloudCommunityRevenueSeriesRow = {
   currency_decimals: number | null;
 };
 
+export type CloudCommunityAnalyticsSummaryRow = {
+  page_visits_window: number | null;
+  total_members: number | null;
+  new_members_window: number | null;
+  conversion_rate_window: number | null;
+  mrr_base_units: number | null;
+  currency: string | null;
+  currency_decimals: number | null;
+};
+
 export type CloudCommunitySettingsSaveResult = {
   community_id: string;
   name: string;
@@ -216,6 +226,21 @@ export async function listCloudCommunityRevenueSeriesRows<SessionT>(
     range: params.range,
   });
   return coerceGatewayRows<CloudCommunityRevenueSeriesRow>(payload);
+}
+
+export async function fetchCloudCommunityAnalyticsSummary<SessionT>(
+  params: CloudCommunityAdminGatewayParams<SessionT> & {
+    communityId: string;
+    range: string;
+  },
+): Promise<CloudCommunityAnalyticsSummaryRow | null> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  const payload = await client.query("community:getCommunityAnalyticsSummary" as any, {
+    authSubject,
+    communityId: params.communityId,
+    range: params.range,
+  });
+  return firstGatewayRow<CloudCommunityAnalyticsSummaryRow>(payload);
 }
 
 export async function fetchCloudCommunityEntitledMemberCount<SessionT>(

@@ -9,6 +9,7 @@ import {
   cancelCloudMyJoinRequestBySlug,
   fetchCloudPublicFunnelStats,
   fetchCloudMyJoinRequestBySlug,
+  recordCloudPublicFunnelVisit,
   resolveCloudPublicFunnel,
   startCloudPublicFunnelCheckout,
 } from "../../../../shared/cloudPublicFunnelGateway";
@@ -398,6 +399,13 @@ export function useWebPublicFunnelActions<
         } as PublicCommunityT);
         current.setPublicCommunityPlans(payload.active_plan ? [payload.active_plan] : []);
         current.setIsLoadingPublicCommunity(false);
+
+        void recordCloudPublicFunnelVisit<AuthSession>({
+          session: current.getSession(),
+          communitySlug: resolvedSlug,
+        }).catch((error) => {
+          console.warn("Failed to record public funnel visit:", error);
+        });
 
         void fetchCloudPublicFunnelStats<AuthSession, Record<string, unknown>>({
           communitySlug: resolvedSlug,

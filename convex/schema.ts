@@ -572,6 +572,17 @@ export default defineSchema({
     updatedAt: v.number(),
   }).index("by_community", ["communityId"]),
 
+  communityAnalyticsEvents: defineTable({
+    communityId: v.id("communities"),
+    eventType: v.union(v.literal("funnel_visit")),
+    visitorKey: v.optional(v.string()),
+    userId: v.optional(v.id("users")),
+    createdAt: v.number(),
+  })
+    .index("by_community_createdAt", ["communityId", "createdAt"])
+    .index("by_community_event_createdAt", ["communityId", "eventType", "createdAt"])
+    .index("by_community_visitor_event", ["communityId", "visitorKey", "eventType"]),
+
   communityPricePoints: defineTable({
     communityId: v.id("communities"),
     billingPeriod: v.string(),

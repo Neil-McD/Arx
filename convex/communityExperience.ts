@@ -7,6 +7,7 @@ export {
   cancelMyJoinRequestBySlug,
   heartbeatCommunityPresence,
   getCommunityPresenceSummary,
+  recordPublicFunnelVisitBySlug,
   resolvePublicFunnelBySlug,
   listPublicDiscoverCommunities,
   getMyJoinRequestBySlug,

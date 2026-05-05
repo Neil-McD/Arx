@@ -20,7 +20,12 @@ export type UserProfileDetailLike = UserProfileLike & {
 
 export type AnalyticsSummaryLike = {
   total_members: number | null;
+  page_visits_window: number | null;
   new_members_window: number | null;
+  conversion_rate_window: number | null;
+  mrr_base_units: number | null;
+  currency: string | null;
+  currency_decimals: number | null;
   active_members_window: number | null;
   retention_window: number | null;
   total_resources: number | null;
@@ -133,7 +138,12 @@ export function buildAnalyticsSeries(params: {
 export function emptyAnalyticsSummary(): AnalyticsSummaryLike {
   return {
     total_members: null,
+    page_visits_window: null,
     new_members_window: null,
+    conversion_rate_window: null,
+    mrr_base_units: null,
+    currency: null,
+    currency_decimals: null,
     active_members_window: null,
     retention_window: null,
     total_resources: null,

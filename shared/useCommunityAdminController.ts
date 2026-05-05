@@ -5,14 +5,12 @@ import {
   type AnalyticsPointLike, type AnalyticsRange, type AnalyticsSummaryLike, type CommunityMemberLike, type SessionLike, type UserProfileDetailLike, type UserProfileLike, analyticsBucketLabel, buildAnalyticsSeries, emptyAnalyticsSummary, resolveAnalyticsBucket, resolveAnalyticsWindowStart, trimProfileFields, } from "./communityAdminCore";
 
 import {
-  countCloudCommunityMembershipRows,
   listCloudCommunityMembershipAdminRows,
   listCloudCommunityMembershipCreatedAtRows,
 } from "./cloudCommunityMembershipGateway";
 import {
   banCloudCommunityMember,
-  countCloudCommunityResourceRows,
-  fetchCloudCommunityEntitledMemberCount,
+  fetchCloudCommunityAnalyticsSummary,
   removeCloudCommunityMember,
   setCloudCommunityMemberRole,
 } from "./cloudCommunityAdminGateway";
@@ -21,7 +19,6 @@ import {
   listCloudProfileRowsByUserIds,
   upsertCloudProfileDetail,
 } from "./cloudProfilesGateway";
-import { listCloudThreadUserMessageSenderIds } from "./cloudCommunityChatGateway";
 import { preloadImageUrls } from "./preloadImageUrls";
 
 type UseCommunityAdminControllerArgs<
@@ -274,36 +271,11 @@ export function useCommunityAdminController<
     const chartBucket = resolveAnalyticsBucket(range);
 
     try {
-      const [entitledMembers, rosterMembers, totalResources, newMembersWindow, resourcesAddedWindow] = await Promise.all([
-        fetchCloudCommunityEntitledMemberCount({
-          session: usableSession,
-          communityId,
-        }),
-        countCloudCommunityMembershipRows({
-          session: usableSession,
-          communityId,
-        }),
-        countCloudCommunityResourceRows({
-          session: usableSession,
-          communityId,
-        }),
-        sinceWindowIso
-          ? countCloudCommunityMembershipRows({
-              session: usableSession,
-              communityId,
-              sinceIso: sinceWindowIso,
-            })
-          : null,
-        sinceWindowIso
-          ? countCloudCommunityResourceRows({
-              session: usableSession,
-              communityId,
-              sinceIso: sinceWindowIso,
-            })
-          : null,
-      ]);
-
-      const totalMembers = entitledMembers ?? rosterMembers;
+      const summary = await fetchCloudCommunityAnalyticsSummary({
+        session: usableSession,
+        communityId,
+        range,
+      });
 
       let memberJoinsWindow: Array<{ created_at: string }> = [];
       try {
@@ -317,30 +289,18 @@ export function useCommunityAdminController<
         // ignore
       }
 
-      let activeMembersWindow: number | null = null;
-      try {
-        const threadId = await current.ensureCommunityChatThread(communityId, usableSession);
-        const senders = await listCloudThreadUserMessageSenderIds({
-          session: usableSession,
-          threadId,
-          sinceIso: sinceWindowIso,
-          limit: 5000,
-        });
-        activeMembersWindow = senders.length;
-      } catch {
-        // ignore
-      }
-
-      const retentionWindow =
-        totalMembers && totalMembers > 0 && activeMembersWindow != null ? activeMembersWindow / totalMembers : null;
-
       current.setCommunityAnalyticsSummary({
-        total_members: totalMembers,
-        new_members_window: newMembersWindow ?? totalMembers,
-        active_members_window: activeMembersWindow,
-        retention_window: retentionWindow,
-        total_resources: totalResources,
-        resources_added_window: resourcesAddedWindow ?? totalResources,
+        total_members: summary?.total_members ?? null,
+        page_visits_window: summary?.page_visits_window ?? null,
+        new_members_window: summary?.new_members_window ?? null,
+        conversion_rate_window: summary?.conversion_rate_window ?? null,
+        mrr_base_units: summary?.mrr_base_units ?? null,
+        currency: summary?.currency ?? null,
+        currency_decimals: summary?.currency_decimals ?? null,
+        active_members_window: null,
+        retention_window: null,
+        total_resources: null,
+        resources_added_window: null,
       });
       current.setCommunityAnalyticsSeries(
         buildAnalyticsSeries({

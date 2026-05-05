@@ -1,5 +1,5 @@
 import { AnalyticsLineChart } from "../../../../shared/AnalyticsLineChart";
-import { formatCount, formatPercent } from "../../../../shared/contentFormatting";
+import { formatCount, formatMoneyBaseUnits, formatPercent } from "../../../../shared/contentFormatting";
 import { buildPlatformSwitcherStyle } from "../../../../shared/platformSwitcherUi";
 import type {
   CommunityAnalyticsActions,
@@ -68,10 +68,17 @@ export function CommunityAnalyticsPanel(props: CommunityAnalyticsPanelProps) {
         {state.communityAnalyticsError && <div className="auth-error">{state.communityAnalyticsError}</div>}
         <div className="analytics-kpi-strip" aria-label="Key performance indicators">
           {[
-            { label: "Members", value: formatCount(state.communityAnalyticsSummary.total_members) },
-            { label: "New", value: formatCount(state.communityAnalyticsSummary.new_members_window) },
-            { label: "Active", value: formatCount(state.communityAnalyticsSummary.active_members_window) },
-            { label: "Retention", value: formatPercent(state.communityAnalyticsSummary.retention_window) },
+            { label: "Page visits", value: formatCount(state.communityAnalyticsSummary.page_visits_window) },
+            { label: "New members", value: formatCount(state.communityAnalyticsSummary.new_members_window) },
+            { label: "Conversion", value: formatPercent(state.communityAnalyticsSummary.conversion_rate_window) },
+            {
+              label: "MRR",
+              value: formatMoneyBaseUnits(
+                state.communityAnalyticsSummary.mrr_base_units,
+                state.communityAnalyticsSummary.currency,
+                state.communityAnalyticsSummary.currency_decimals,
+              ),
+            },
           ].map((kpi) => (
             <div key={kpi.label} className="analytics-kpi-tile">
               <div className="analytics-kpi-value-big">{kpi.value}</div>

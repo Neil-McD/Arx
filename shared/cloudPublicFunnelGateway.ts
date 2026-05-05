@@ -3,6 +3,7 @@ import {
   createConvexClient,
 } from "./convexAuthenticatedClient";
 import type { CommunityBillingPeriod } from "./communityTypes";
+import { resolveAuthSubject } from "./authSession";
 import { firstGatewayRow } from "./cloudGateway";
 
 type CloudPublicFunnelAuthParams<SessionT> = {
@@ -70,6 +71,38 @@ export async function fetchCloudPublicFunnelStats<SessionT, TPublicCommunityStat
     ok?: boolean;
     community?: TPublicCommunityStats;
   };
+}
+
+const COMMUNITY_FUNNEL_VISITOR_KEY = "polynet-community-funnel-visitor-key";
+
+function getCommunityFunnelVisitorKey(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const existing = window.localStorage.getItem(COMMUNITY_FUNNEL_VISITOR_KEY);
+    if (existing) return existing;
+    const next =
+      typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+    window.localStorage.setItem(COMMUNITY_FUNNEL_VISITOR_KEY, next);
+    return next;
+  } catch {
+    return null;
+  }
+}
+
+export async function recordCloudPublicFunnelVisit<SessionT>(
+  params: CloudPublicFunnelParams<SessionT> & {
+    session?: SessionT | null;
+    communitySlug: string;
+  },
+): Promise<void> {
+  const client = createConvexClient();
+  await client.mutation("community:recordPublicFunnelVisitBySlug" as any, {
+    communitySlug: params.communitySlug,
+    visitorKey: getCommunityFunnelVisitorKey(),
+    authSubject: params.session ? resolveAuthSubject(params.session as any) : undefined,
+  });
 }
 
 export async function heartbeatCloudCommunityPresence<SessionT>(

@@ -1949,7 +1949,12 @@ export default function App() {
 
   const [communityAnalyticsSummary, setCommunityAnalyticsSummary] = useState<CommunityAnalyticsSummary>({
     total_members: null,
+    page_visits_window: null,
     new_members_window: null,
+    conversion_rate_window: null,
+    mrr_base_units: null,
+    currency: null,
+    currency_decimals: null,
     active_members_window: null,
     retention_window: null,
     total_resources: null,

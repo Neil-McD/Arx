@@ -1411,3 +1411,100 @@ export const listCommunityRevenueSeries = query({
     throw new Error("community_revenue_not_available");
   },
 });
+
+export const getCommunityAnalyticsSummary = query({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+    range: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      userId: args.userId,
+      authSubject: args.authSubject ?? null,
+    });
+    (args as { userId?: any }).userId = userId;
+    const range = String(args.range ?? "30d").trim();
+    const { community, rows } = await listCommunityMembershipRowsForManager({
+      ctx,
+      communityId: args.communityId,
+      userId,
+      authSubject: args.authSubject ?? null,
+    });
+
+    const nowMs = Date.now();
+    const sinceMs =
+      range === "7d"
+        ? nowMs - 7 * 86400000
+        : range === "90d"
+          ? nowMs - 90 * 86400000
+          : range === "1y"
+            ? nowMs - 365 * 86400000
+            : range === "all"
+              ? community.createdAt
+              : nowMs - 30 * 86400000;
+
+    const totalMembers = 1 + rows.length;
+    const newMembersWindow =
+      (community.createdAt >= sinceMs ? 1 : 0) +
+      rows.reduce((count, row) => count + (row.createdAt >= sinceMs ? 1 : 0), 0);
+
+    const visitRows = (await ctx.db
+      .query("communityAnalyticsEvents" as any)
+      .withIndex("by_community_event_createdAt", (q: any) =>
+        q.eq("communityId", args.communityId).eq("eventType", "funnel_visit"),
+      )
+      .collect()) as Array<{ createdAt: number }>;
+    const pageVisitsWindow = visitRows.reduce(
+      (count, row) => count + (row.createdAt >= sinceMs ? 1 : 0),
+      0,
+    );
+    const conversionRateWindow =
+      pageVisitsWindow > 0 ? newMembersWindow / pageVisitsWindow : null;
+
+    const activeSubscriptions = (await ctx.db
+      .query("communitySubscriptions" as any)
+      .withIndex("by_community_status", (q: any) => q.eq("communityId", args.communityId))
+      .collect()) as CommunitySubscriptionLike[];
+    const pricePointCache = new Map<string, CommunityPricePointLike | null>();
+    let mrrBaseUnits = 0;
+    let currency: string | null = null;
+    let currencyDecimals: number | null = null;
+    let mixedCurrency = false;
+    for (const subscription of activeSubscriptions) {
+      if (!["active", "past_due", "cancel_at_period_end"].includes(String(subscription.status))) continue;
+      const pricePointId = String(subscription.pricePointId);
+      if (!pricePointCache.has(pricePointId)) {
+        pricePointCache.set(
+          pricePointId,
+          (await ctx.db.get(subscription.pricePointId as any)) as CommunityPricePointLike | null,
+        );
+      }
+      const pricePoint = pricePointCache.get(pricePointId);
+      if (!pricePoint) continue;
+      const rowCurrency = String(pricePoint.currency ?? "").trim().toUpperCase() || null;
+      const rowDecimals = Math.max(0, Math.floor(pricePoint.currencyDecimals ?? 0));
+      if (currency && rowCurrency && currency !== rowCurrency) mixedCurrency = true;
+      currency = currency ?? rowCurrency;
+      currencyDecimals = currencyDecimals ?? rowDecimals;
+      const period = String(pricePoint.billingPeriod ?? "").trim().toLowerCase();
+      const monthlyBaseUnits =
+        period === "annual"
+          ? Math.round(Math.max(0, pricePoint.amountBaseUnits) / 12)
+          : Math.max(0, Math.floor(pricePoint.amountBaseUnits));
+      mrrBaseUnits += monthlyBaseUnits;
+    }
+
+    return {
+      page_visits_window: pageVisitsWindow,
+      total_members: totalMembers,
+      new_members_window: newMembersWindow,
+      conversion_rate_window: conversionRateWindow,
+      mrr_base_units: mixedCurrency ? null : mrrBaseUnits,
+      currency: mixedCurrency ? null : currency,
+      currency_decimals: mixedCurrency ? null : currencyDecimals,
+    };
+  },
+});

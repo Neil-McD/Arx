@@ -4,6 +4,7 @@ import {
   countCommunityMemberships as countCommunityMembershipsImpl,
   denyCommunityJoinRequest as denyCommunityJoinRequestImpl,
   getCommunityMemberSettings as getCommunityMemberSettingsImpl,
+  getCommunityAnalyticsSummary as getCommunityAnalyticsSummaryImpl,
   listCommunityPricePoints as listCommunityPricePointsImpl,
   leaveCommunity as leaveCommunityImpl,
   listCommunityJoinRequests as listCommunityJoinRequestsImpl,
@@ -69,6 +70,7 @@ import {
   getCommunityPresenceSummary as getCommunityPresenceSummaryImpl,
   countCommunityResources as countCommunityResourcesImpl,
   heartbeatCommunityPresence as heartbeatCommunityPresenceImpl,
+  recordPublicFunnelVisitBySlug as recordPublicFunnelVisitBySlugImpl,
   deleteCommunityResource as deleteCommunityResourceImpl,
   getMyCommunityAccess as getMyCommunityAccessImpl,
   getMyCommunityAccessBySlug as getMyCommunityAccessBySlugImpl,
@@ -123,6 +125,7 @@ export const removeCommunityMember = removeCommunityMemberImpl;
 export const banCommunityMember = banCommunityMemberImpl;
 export const unbanCommunityUser = unbanCommunityUserImpl;
 export const getCommunityMemberSettings = getCommunityMemberSettingsImpl;
+export const getCommunityAnalyticsSummary = getCommunityAnalyticsSummaryImpl;
 export const saveCommunityMemberSettings = saveCommunityMemberSettingsImpl;
 export const listCommunityPricePoints = listCommunityPricePointsImpl;
 export const setCommunityFreeAccessMode = setCommunityFreeAccessModeImpl;
@@ -131,6 +134,7 @@ export const listCommunityRevenueSeries = listCommunityRevenueSeriesImpl;
 export const listCommunityResources = listCommunityResourcesImpl;
 export const listCommunityResourceModules = listCommunityResourceModulesImpl;
 export const countCommunityResources = countCommunityResourcesImpl;
+export const recordPublicFunnelVisitBySlug = recordPublicFunnelVisitBySlugImpl;
 export const saveCommunityResource = saveCommunityResourceImpl;
 export const saveCommunityResourceModule = saveCommunityResourceModuleImpl;
 export const reorderCommunityResourceModules = reorderCommunityResourceModulesImpl;
