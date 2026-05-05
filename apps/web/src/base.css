@@ -21430,8 +21430,8 @@ button.message-citation-chip:hover {
 }
 
 .community-event-modal .modal-footer .primary {
-  border: 1px solid var(--accent-gold);
-  background: var(--accent-gold);
+  border: 1px solid rgba(255, 255, 255, 0.92);
+  background: rgba(255, 255, 255, 0.96);
   color: var(--bg-button-text);
 }
 
