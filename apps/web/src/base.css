@@ -1763,7 +1763,6 @@ body {
   min-height: 236px;
   margin-top: 12px;
   padding-top: 28px;
-  border-top: 1px solid var(--border-muted);
 }
 
 .polynet-landing-flow-active-visual {
