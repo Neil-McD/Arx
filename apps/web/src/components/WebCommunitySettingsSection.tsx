@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import type { DragEvent } from "react";
-import { hasBuilderTierPaidAccess } from "../../../../shared/builderBilling";
 import type { CommunitySettingsLayer } from "../../../../shared/communityAccessViewModel";
 import { CommunityAvatar } from "../../../../shared/CommunityAvatar";
 import type { BuilderBillingStatus } from "../../../../shared/builderBillingStatusGateway";
@@ -845,13 +844,13 @@ function CommunityMonetizationConfigSection({
     pricingOptions.length,
     pricingOptions.findIndex((opt) => opt.key === state.communitySettingsPricingMode),
   );
-  const builderTier = builderBillingStatus?.builder_tier ?? "free";
   const stripeConnectPresentation = buildStripeConnectPresentation({
     builderBillingStatus,
     surface: "community",
   });
   const canAcceptCharges = stripeConnectPresentation.isReady;
-  const needsStripeConnect = !hasBuilderTierPaidAccess(builderTier) || !canAcceptCharges;
+  const canMonetizeCommunities = Number(builderBillingStatus?.platform_fee_bps ?? 0) > 0;
+  const needsStripeConnect = !canMonetizeCommunities || !canAcceptCharges;
 
   return (
     <div className="settings-section">
@@ -944,9 +943,9 @@ function CommunityMonetizationConfigSection({
           <span className="create-community-hint">Billed annually.</span>
         </label>
       ) : null}
-      {!hasBuilderTierPaidAccess(builderTier) ? (
+      {!canMonetizeCommunities ? (
         <div className="settings-section-desc" style={{ marginTop: 12 }}>
-          A paid creator plan is required before this community can charge for access.
+          Community monetization is not available for this account yet.
         </div>
       ) : (
         <>

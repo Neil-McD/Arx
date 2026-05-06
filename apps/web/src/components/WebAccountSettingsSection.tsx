@@ -85,7 +85,7 @@ function formatDeleteAccountError(message: string): string {
     return "Delete or transfer owned communities before deleting your account.";
   }
   if (message.includes("account_delete_active_builder_subscription_blocked")) {
-    return "Cancel your active Builder plan before deleting your account.";
+    return "Cancel your active legacy Builder plan before deleting your account.";
   }
   if (message.includes("account_delete_active_community_subscription_blocked")) {
     return "Cancel active community memberships before deleting your account.";
@@ -130,7 +130,6 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
     communityRoleById,
     openOwnedCommunitySettings,
     communityInitials,
-    openBuilderUpgrade,
     openBuilderBillingPortal,
     startBuilderConnectOnboarding,
     builderBillingError,
@@ -304,7 +303,9 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
             const communitiesLabel =
               max > 0 ? `${ownedCount}/${max} owned ${communityWord}` : `${ownedCount} owned ${communityWord}`;
             const tierLabel = formatBuilderTierLabel(tier);
+            const builderStatusLabel = isBuilderTierFree(tier) ? "Free builder" : `${tierLabel} (legacy)`;
             const canManagePlan = status?.can_manage_plan === true;
+            const canMonetizeCommunities = Number(status?.platform_fee_bps ?? 0) > 0;
             const stripeConnectPresentation = buildStripeConnectPresentation({
               builderBillingStatus: status,
               surface: "account",
@@ -313,42 +314,29 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
               <>
                 <div className="account-row">
                   <div className="account-identity">
-                    <span>Plan</span>
+                    <span>Builder status</span>
                     <strong>
-                      {tierLabel} · {communitiesLabel}
+                      {builderStatusLabel} · {communitiesLabel}
                     </strong>
                   </div>
                   <div className="auth-actions">
-                    {isBuilderTierFree(tier) ? (
-                      <button
-                        type="button"
-                        className="secondary"
-                        onClick={() => openBuilderUpgrade("builder")}
-                      >
-                        Upgrade to Builder ($24/mo)
-                      </button>
-                    ) : (
+                    <span className="auth-status">Credits cover paid tools like Daytona workspaces, web research, and voice input. Connect ChatGPT or add an OpenAI API key in Agent settings to bring your own inference.</span>
+                    {canManagePlan ? (
                       <>
-                        <span className="auth-status">Credits cover paid tools like Daytona workspaces, web research, and voice input. Connect ChatGPT or add an OpenAI API key in Agent settings to bring your own inference.</span>
-                        {canManagePlan ? (
-                          <button
-                            type="button"
-                            className="secondary"
-                            onClick={() => void openBuilderBillingPortal()}
-                            disabled={isOpeningBuilderBillingPortal}
-                          >
-                            {isOpeningBuilderBillingPortal ? "Opening…" : "Manage plan"}
-                          </button>
-                        ) : (
-                          <span className="auth-status">
-                            This Builder access is managed outside self-serve billing.
-                          </span>
-                        )}
+                        <span className="auth-status">Legacy Builder billing is still manageable here.</span>
+                        <button
+                          type="button"
+                          className="secondary"
+                          onClick={() => void openBuilderBillingPortal()}
+                          disabled={isOpeningBuilderBillingPortal}
+                        >
+                          {isOpeningBuilderBillingPortal ? "Opening…" : "Manage legacy plan"}
+                        </button>
                       </>
-                    )}
+                    ) : null}
                   </div>
                 </div>
-                {!isBuilderTierFree(tier) ? (
+                {canMonetizeCommunities ? (
                   <div className="account-row">
                     <div className="account-identity">
                       <span>Stripe monetization</span>
@@ -368,7 +356,7 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
                     </div>
                   </div>
                 ) : null}
-                {!isBuilderTierFree(tier) &&
+                {canMonetizeCommunities &&
                   !stripeConnectPresentation.isReady &&
                   stripeConnectPresentation.requirementsPreview.length > 0 && (
                     <div className="auth-status">

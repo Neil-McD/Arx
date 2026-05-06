@@ -27,7 +27,7 @@ export const OPERATOR_RIGHT_PANEL_KEYBOARD_STEP = 32;
 
 const OPERATOR_INSIGHT_TABS: Array<{ id: OperatorInsightTab; label: string }> = [
   { id: "platform", label: "Platform" },
-  { id: "builders", label: "Builders" },
+  { id: "builders", label: "Communities" },
 ];
 
 export type OperatorDashboardState = {
@@ -204,6 +204,73 @@ function formatPercent(value: number | null | undefined): string {
   return `${Math.round(value * 100)}%`;
 }
 
+function formatVisibility(value: OperatorBuilderRecord["community"]["visibility"]): string {
+  switch (value) {
+    case "published":
+      return "Published";
+    case "unlisted":
+      return "Unlisted";
+    default:
+      return "Unknown";
+  }
+}
+
+function formatEntryPolicy(value: OperatorBuilderRecord["community"]["entryPolicy"]): string {
+  switch (value) {
+    case "paid_subscription":
+      return "Paid";
+    case "approval":
+      return "Approval";
+    case "open":
+      return "Free";
+    default:
+      return "Unknown";
+  }
+}
+
+function formatPayoutStatus(value: OperatorBuilderRecord["builder"]["payoutStatus"]): string {
+  switch (value) {
+    case "ready":
+      return "Payout ready";
+    case "onboarding_required":
+      return "Payout setup";
+    case "pending_requirements":
+      return "Payout pending";
+    case "restricted":
+      return "Payout restricted";
+    case "not_connected":
+    default:
+      return "No payout";
+  }
+}
+
+function formatRiskFlag(value: string): string {
+  switch (value) {
+    case "paid_enabled_no_sales":
+      return "Paid community has no sales";
+    case "payout_not_ready":
+      return "Payout not ready";
+    case "checkout_abandonment":
+      return "Checkout abandonment";
+    default:
+      return value
+        .split("_")
+        .filter(Boolean)
+        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+        .join(" ");
+  }
+}
+
+function formatEventTime(createdAt: number): string {
+  if (!Number.isFinite(createdAt)) return "";
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(createdAt));
+}
+
 function OperatorPlatformInsights(props: {
   overview: OperatorOverviewSnapshot | null;
   monetization: OperatorMonetizationSnapshot | null;
@@ -214,33 +281,41 @@ function OperatorPlatformInsights(props: {
     <div className="operator-data-panel__grid">
       <section className="operator-dashboard__metrics" aria-label="Operator overview">
         <div>
-          <span>Estimated community MRR</span>
+          <span>Community subscription MRR</span>
           <strong>{formatMoney(props.overview?.totals.estimatedMrr ?? null)}</strong>
+          <span className="operator-dashboard__metric-note">Current run-rate from active community subscriptions.</span>
         </div>
         <div>
           <span>Builders</span>
           <strong>{props.overview?.totals.builders ?? 0}</strong>
+          <span className="operator-dashboard__metric-note">Unique community owners.</span>
         </div>
         <div>
           <span>Communities</span>
           <strong>{props.overview?.totals.communities ?? 0}</strong>
+          <span className="operator-dashboard__metric-note">All community records.</span>
         </div>
         <div>
           <span>Risk items</span>
           <strong>{props.overview?.totals.riskItems ?? 0}</strong>
+          <span className="operator-dashboard__metric-note">Open operator warnings and errors.</span>
         </div>
       </section>
 
       <section className="operator-dashboard__panel">
-        <h2>Polynet monetization</h2>
+        <h2>Revenue health</h2>
         <div className="operator-dashboard__table">
           <div className="operator-dashboard__row">
-            <span>Builder checkout conversion</span>
+            <span>Community subscription MRR</span>
+            <strong>{formatMoney(props.monetization?.estimatedCommunityMrr ?? null)}</strong>
+          </div>
+          <div className="operator-dashboard__row">
+            <span>Credit top-up conversion</span>
             <strong>
               {formatPercent(
-                props.monetization && props.monetization.builderPlanCheckoutStarts > 0
-                  ? props.monetization.builderPlanCheckoutCompletions /
-                      props.monetization.builderPlanCheckoutStarts
+                props.monetization && props.monetization.creditTopupCheckoutStarts > 0
+                  ? props.monetization.creditTopupCheckoutCompletions /
+                      props.monetization.creditTopupCheckoutStarts
                   : null,
               )}
             </strong>
@@ -272,7 +347,7 @@ function OperatorPlatformInsights(props: {
             props.risks.map((risk) => (
               <div className="operator-dashboard__row" key={risk.id}>
                 <div>
-                  <strong>{risk.title}</strong>
+                  <strong>{formatRiskFlag(risk.kind)}</strong>
                   <span>{risk.kind}</span>
                 </div>
                 <span>{risk.severity}</span>
@@ -289,7 +364,7 @@ function OperatorPlatformInsights(props: {
             <div className="operator-dashboard__row" key={event.id}>
               <div>
                 <strong>{event.eventType}</strong>
-                <span>{event.status}</span>
+                <span>{[event.status, formatEventTime(event.createdAt)].filter(Boolean).join(" · ")}</span>
               </div>
               <span>{event.severity}</span>
             </div>
@@ -304,16 +379,27 @@ function OperatorBuilderInsights(props: { builders: OperatorBuilderRecord[] }) {
   return (
     <div className="operator-data-panel__grid">
       <section className="operator-dashboard__panel operator-dashboard__panel--full">
-        <h2>Builder performance</h2>
+        <h2>Communities by builder</h2>
         <div className="operator-dashboard__table">
           {props.builders.map((record) => (
-            <div className="operator-dashboard__row" key={record.community.communityId}>
-              <div>
-                <strong>{record.builder.displayName ?? record.builder.email ?? record.builder.userId}</strong>
-                <span>{record.community.name}</span>
+            <div className="operator-dashboard__row operator-dashboard__community-row" key={record.community.communityId}>
+              <div className="operator-dashboard__community-main">
+                <strong>{record.community.name}</strong>
+                <span>{record.builder.displayName ?? record.builder.email ?? record.builder.userId}</span>
+                <div className="operator-dashboard__chips" aria-label={`${record.community.name} state`}>
+                  <span className="operator-dashboard__chip">{formatVisibility(record.community.visibility)}</span>
+                  <span className="operator-dashboard__chip">{formatEntryPolicy(record.community.entryPolicy)}</span>
+                  <span className="operator-dashboard__chip">{formatPayoutStatus(record.builder.payoutStatus)}</span>
+                  {record.risk.flags.map((flag) => (
+                    <span className="operator-dashboard__chip operator-dashboard__chip--warning" key={flag}>
+                      {formatRiskFlag(flag)}
+                    </span>
+                  ))}
+                </div>
               </div>
-              <div>
+              <div className="operator-dashboard__community-stats">
                 <strong>{formatMoney(record.money.estimatedMrr)}</strong>
+                <span>{record.members.activeMemberships} members</span>
                 <span>{record.money.activePaidMembers} paid</span>
               </div>
             </div>

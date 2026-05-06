@@ -2310,8 +2310,6 @@ export default function App() {
         return;
       }
 
-      setBuilderUpgradeContext("create_community");
-      setIsBuilderUpgradeOpen(true);
       navigateTo("/workspace");
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to save onboarding.";
@@ -4305,7 +4303,8 @@ export default function App() {
         });
       },
       start_builder_checkout: (payload) => {
-        void startBuilderPlanCheckout(payload.tier, { context: payload.context });
+        void payload;
+        showAppToastMessage("Builder is included. Add credits in Agent settings when paid tools need them.");
       },
       redeem_pending_purchases: (payload) => {
         void redeemPendingPurchases({ navigate: payload.navigate, silentNoop: payload.silent_noop });
@@ -4586,8 +4585,7 @@ export default function App() {
     loadBuilderBillingStatus,
     persistCreateCommunityIntent,
     onStartUpgradeFlow: () => {
-      setBuilderUpgradeContext("create_community");
-      setIsBuilderUpgradeOpen(true);
+      setBuilderBillingError("Builder is included. You can build one community on the free account.");
     },
     onPrimaryUnauthenticated: (draft) => {
       requireSignIn({ reason: "create_community", payload: { draft } });
@@ -5466,15 +5464,9 @@ export default function App() {
   });
   const projectUiController = useWebProjectUiController<AuthSession>({
     session: session,
-    builderTier: builderBillingStatus?.builder_tier,
     cloudProjects: workspace.state.projects,
     ensureSession: ensureUsableAuthSession,
     requireSignIn,
-    onRequireBuilderUpgrade: () => {
-      setBuilderUpgradeContext("builder");
-      setBuilderBillingError("Upgrade to Builder to create additional projects.");
-      setIsBuilderUpgradeOpen(true);
-    },
     showAppToastMessage,
     onProjectCreated: workspace.actions.handleProjectCreated,
     onProjectUpdated: workspace.actions.handleProjectUpdated,
@@ -6100,7 +6092,7 @@ export default function App() {
       openCommunityChat,
       handleOpenDiscover,
       handleTopbarBackToWorkspace,
-      hasBuilderAccess: hasBuilderTierPaidAccess(builderBillingStatus?.builder_tier ?? "free"),
+      hasBuilderAccess: Number(builderBillingStatus?.max_communities ?? 0) > 0,
       openCreateCommunityModal: () => openCreateCommunityModal(),
       setBuilderUpgradeContext,
       setIsBuilderUpgradeOpen,
@@ -7295,7 +7287,7 @@ export default function App() {
     openMobileAgentSettings,
     handleOpenDiscover,
     openMobileCreateCommunity,
-    hasBuilderAccess: hasBuilderTierPaidAccess(builderBillingStatus?.builder_tier ?? "free"),
+    hasBuilderAccess: Number(builderBillingStatus?.max_communities ?? 0) > 0,
     openCreateCommunityModal: () => openCreateCommunityModal(),
     communities,
     railCommunities,

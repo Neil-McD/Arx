@@ -37,9 +37,9 @@ function builderTierMeta(tier: CanonicalTier): BuilderTierMeta {
     };
   }
   return {
-    maxCommunities: 0,
-    platformFeeBps: 0,
-    hasPayouts: false,
+    maxCommunities: 1,
+    platformFeeBps: 1000,
+    hasPayouts: true,
   };
 }
 
@@ -409,6 +409,7 @@ export const getBuilderBillingStatus = query({
     const canonicalTier = await getCanonicalTierByUserIdInternal(ctx as never, actor.dbUserId, nowMs);
     const meta = builderTierMeta(canonicalTier);
     const hasPaidCreatorAccess = canonicalTier !== "free";
+    const hasPayoutAccess = meta.hasPayouts;
     const billingCustomer: { providerCustomerId?: unknown } | null = hasPaidCreatorAccess
       ? ((await ctx.runQuery(
           internal.builderCommerce.getLatestBuilderBillingCustomerForOwnerInternal as any,
@@ -419,7 +420,7 @@ export const getBuilderBillingStatus = query({
       hasPaidCreatorAccess &&
       typeof billingCustomer?.providerCustomerId === "string" &&
       billingCustomer.providerCustomerId.trim().length > 0;
-    const stripeConnect = hasPaidCreatorAccess
+    const stripeConnect = hasPayoutAccess
       ? ((await ctx.runQuery(
           internal.builderCommerce.getUserStripeConnectAccountInternal as any,
           { userId: actor.dbUserId },

@@ -77,7 +77,10 @@ function formatBuilderPortalUnavailableMessage(code: string | null): string | nu
 
 function formatBuilderConnectUnavailableMessage(message: string): string | null {
   if (message === "builder_connect_builder_required") {
-    return "Builder is required before connecting Stripe monetization.";
+    return "Community monetization is not available for this account yet.";
+  }
+  if (message === "builder_plan_deprecated") {
+    return "Builder is included now. Add credits when paid tools need them.";
   }
   if (
     message.includes("responsibilities of managing losses for connected accounts") ||

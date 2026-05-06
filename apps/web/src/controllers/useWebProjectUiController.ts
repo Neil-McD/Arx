@@ -1,7 +1,6 @@
 import { useCallback, useState } from "react";
 
 import { formatProjectOperationErrorMessage } from "../../../../shared/appErrorMappings";
-import { hasBuilderTierPaidAccess } from "../../../../shared/builderBilling";
 import {
   createMappedDaytonaCloudProject,
   deleteMappedDaytonaCloudProject,
@@ -67,11 +66,9 @@ export type WebProjectModalHostProps = {
 
 type UseWebProjectUiControllerParams<TSession> = {
   session: TSession | null;
-  builderTier: string | null | undefined;
   cloudProjects: WebCloudProjectRecord[];
   ensureSession: (session: TSession) => Promise<TSession | null>;
   requireSignIn: () => void;
-  onRequireBuilderUpgrade: () => void;
   showAppToastMessage: (message: string) => void;
   onProjectCreated: (project: WebCloudProjectRecord) => void;
   onProjectUpdated: (project: WebCloudProjectRecord) => void;
@@ -152,11 +149,9 @@ export function useWebProjectUiController<TSession>(
 } {
   const {
     session,
-    builderTier,
     cloudProjects,
     ensureSession,
     requireSignIn,
-    onRequireBuilderUpgrade,
     showAppToastMessage,
     onProjectCreated,
     onProjectUpdated,
@@ -183,8 +178,7 @@ export function useWebProjectUiController<TSession>(
   const [deleteProjectConfirmationValue, setDeleteProjectConfirmationValue] = useState("");
   const [deleteProjectError, setDeleteProjectError] = useState<string | null>(null);
 
-  const canCreateAdditionalCloudProjects =
-    Boolean(session) && hasBuilderTierPaidAccess(builderTier ?? "free");
+  const canCreateAdditionalCloudProjects = Boolean(session);
   const projectQuotaReached = cloudProjects.length >= BUILDER_MAX_PROJECTS;
   const deletingProject = deletingProjectId
     ? cloudProjects.find((project) => project.id === deletingProjectId) ?? null
@@ -234,14 +228,10 @@ export function useWebProjectUiController<TSession>(
       requireSignIn();
       return;
     }
-    if (!hasBuilderTierPaidAccess(builderTier ?? "free")) {
-      onRequireBuilderUpgrade();
-      return;
-    }
     setCreateProjectError(null);
     setCreateProjectImportFile(null);
     setIsCreateProjectModalOpen(true);
-  }, [builderTier, onRequireBuilderUpgrade, requireSignIn, session]);
+  }, [requireSignIn, session]);
 
   const openEditProjectModal = useCallback((project: WebCloudProjectRecord) => {
     setEditingProjectId(project.id);
@@ -266,10 +256,6 @@ export function useWebProjectUiController<TSession>(
     }
     const usableSession = await ensureSession(session);
     if (!usableSession) return;
-    if (!hasBuilderTierPaidAccess(builderTier ?? "free")) {
-      onRequireBuilderUpgrade();
-      return;
-    }
     if (cloudProjects.length >= BUILDER_MAX_PROJECTS || isCreatingProject) {
       return;
     }
@@ -332,7 +318,6 @@ export function useWebProjectUiController<TSession>(
       setIsCreatingProject(false);
     }
   }, [
-    builderTier,
     cloudProjects.length,
     session,
     createProjectDescription,
@@ -341,7 +326,6 @@ export function useWebProjectUiController<TSession>(
     ensureSession,
     isCreatingProject,
     onProjectCreated,
-    onRequireBuilderUpgrade,
     onStartDraftInProject,
     requireSignIn,
     resetCreateProjectModal,

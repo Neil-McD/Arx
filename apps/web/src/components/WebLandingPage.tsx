@@ -229,13 +229,13 @@ const usageSignalEvents = [
 const monetizeEvents = [
   {
     label: "New subscription",
-    value: "$24/mo",
-    detail: "Builder plan activated",
+    value: "$49/mo",
+    detail: "Member joined Growth OS",
   },
   {
     label: "Community checkout",
-    value: "$49/mo",
-    detail: "Member joined Growth OS",
+    value: "$5",
+    detail: "Credits added for tools",
   },
   {
     label: "Payment succeeded",
@@ -665,10 +665,10 @@ export function WebLandingPage(props: WebLandingPageProps) {
           <button type="button" className="polynet-landing-polynet-plan" onClick={props.onTryFree}>
             <div>
               <img src="/favicon.svg" alt="" />
-              <span>Polynet Builder</span>
+              <span>Polynet</span>
             </div>
-            <strong>$24/mo</strong>
-            <p>Agents, communities, resources, funnels, paid access, and builder controls in one platform.</p>
+            <strong>Free + credits</strong>
+            <p>Build one community for free. Credits cover paid tools like Daytona workspaces, web research, and voice input.</p>
           </button>
         </div>
       </section>
@@ -682,25 +682,25 @@ export function WebLandingPage(props: WebLandingPageProps) {
         </div>
         <div className="polynet-landing-offer-actions">
           <div className="polynet-landing-offer-plan">
-            <span>Free</span>
+            <span>Free builder</span>
             <ul>
-              <li>Explore the platform</li>
-              <li>Join communities</li>
-              <li>Use community agents</li>
+              <li>Build one community</li>
+              <li>Join and use communities</li>
+              <li>Monetize access with Stripe</li>
             </ul>
             <button type="button" onClick={props.onTryFree}>
               Continue free
             </button>
           </div>
           <div className="polynet-landing-offer-plan builder">
-            <span>Builder - $24/mo</span>
+            <span>Credits</span>
             <ul>
-              <li>Build your agent</li>
-              <li>Launch a community</li>
-              <li>Gate access and monetize</li>
+              <li>Run Daytona workspaces</li>
+              <li>Use web research</li>
+              <li>Use voice input</li>
             </ul>
             <button type="button" className="primary" onClick={props.onTryFree}>
-              Become a builder
+              Start with credits
             </button>
           </div>
         </div>

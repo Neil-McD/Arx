@@ -17,6 +17,14 @@ const builderBillingSharedSource = readFileSync(
   new URL("../shared/builderBilling.ts", import.meta.url),
   "utf8",
 );
+const authSource = readFileSync(
+  new URL("../convex/auth.ts", import.meta.url),
+  "utf8",
+);
+const communityLifecycleSource = readFileSync(
+  new URL("../convex/communityLifecycle.ts", import.meta.url),
+  "utf8",
+);
 const publicAppUrlSource = readFileSync(
   new URL("../convex/publicAppUrl.ts", import.meta.url),
   "utf8",
@@ -85,6 +93,14 @@ assert(
   "expected builder checkout action to stop accepting client cancelUrl",
 );
 assert(
+  startBuilderCheckoutBlock.includes('throw new Error("builder_plan_deprecated")'),
+  "expected self-serve Builder checkout to be explicitly deprecated",
+);
+assert(
+  !startBuilderCheckoutBlock.includes("stripe.checkout.sessions.create"),
+  "expected deprecated Builder checkout action to avoid creating Stripe sessions",
+);
+assert(
   !openBuilderBillingPortalBlock.includes("returnUrl: v.string()"),
   "expected builder portal action to stop accepting client returnUrl",
 );
@@ -146,6 +162,14 @@ assert(
 assert(
   !builderBillingSharedSource.includes("export function buildBuilderPortalRequestPayload"),
   "expected shared builder billing helpers to drop client portal URL builders",
+);
+assert(
+  /return\s*{\s*maxCommunities:\s*1,\s*platformFeeBps:\s*1000,\s*hasPayouts:\s*true,/m.test(authSource),
+  "expected free authenticated users to be one-community builders with payout access",
+);
+assert(
+  !communityLifecycleSource.includes('builder_tier ?? "").trim().toLowerCase() === "free"'),
+  "expected community creation to stop treating free tier as a non-builder state",
 );
 
 console.log("PASS: builder billing redirect authority is server-owned");

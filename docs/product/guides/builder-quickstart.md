@@ -3,7 +3,7 @@ id: product.guide.builder_quickstart
 title: Builder Quickstart
 audience: builder, llm
 status: alpha-current
-last_verified: 2026-04-26
+last_verified: 2026-05-06
 ---
 
 # Builder Quickstart
@@ -13,6 +13,8 @@ last_verified: 2026-04-26
 Launch a community intelligence system that members can join, use, and pay for where appropriate.
 
 The first version should be simple: one clear community, one useful agent, one believable access model, and enough shared knowledge for members to get value quickly.
+
+Every authenticated free user can build one community. Paid tool usage is handled through credits, not a monthly Builder subscription.
 
 ## Before You Start
 
@@ -76,6 +78,8 @@ The cash path is simple: configure the community, define the paid access model, 
 - Membership and entitlement are backend authority.
 - Paid community access requires verified backend entitlement.
 - Builder payouts depend on payout provider readiness.
+- Free builders can own one community.
+- Credits cover paid tools such as Daytona workspaces, web research, and voice input.
 - Owner/admin manage resources and most operational settings.
 - Moderators help with moderation and join request review, not paid access.
 - Remote MCP apps must be validated before mounted capability should be trusted.

@@ -1,5 +1,4 @@
 import type { DragEvent } from "react";
-import { hasBuilderTierPaidAccess } from "../../../../shared/builderBilling";
 
 type CommunityRecordForModal = {
   id: string;
@@ -87,11 +86,9 @@ export function WebCreateCommunityModal(props: WebCreateCommunityModalProps) {
     (acc, community) => acc + (communityRoleById[community.id] === "owner" ? 1 : 0),
     0,
   );
-  const tier = builderBillingStatus?.builder_tier ?? "unknown";
   const max = builderBillingStatus?.max_communities ?? 0;
-  const hasBuilderTier = hasBuilderTierPaidAccess(tier);
-  const needsPlan = Boolean(hasSession && !hasBuilderTier);
-  const limitReached = Boolean(hasSession && hasBuilderTier && max > 0 && ownedCount >= max);
+  const needsPlan = Boolean(hasSession && max <= 0);
+  const limitReached = Boolean(hasSession && max > 0 && ownedCount >= max);
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -244,14 +241,14 @@ export function WebCreateCommunityModal(props: WebCreateCommunityModalProps) {
                 className="create-community-primary"
                 type="button"
                 onClick={() => void onPrimaryAction()}
-                disabled={isCreatingCommunity || createCommunityName.trim().length === 0}
+                disabled={isCreatingCommunity || needsPlan || limitReached || createCommunityName.trim().length === 0}
               >
                 {isCreatingCommunity
                   ? "Creating..."
                   : needsPlan
-                    ? "Upgrade to Builder"
+                    ? "Unavailable"
                     : limitReached
-                      ? "Upgrade plan"
+                      ? "Community limit reached"
                       : "Create community"}
               </button>
             )}

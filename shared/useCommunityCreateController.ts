@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, type Dispatch, type DragEvent, type SetStateAction } from "react";
-import { hasBuilderTierPaidAccess } from "./builderBilling";
 import { type CreateCommunityIntentDraft } from "./createCommunityIntent";
 import { resolveUsableSession, type EnsureSessionFn } from "./ensureUsableSession";
 
@@ -87,7 +86,7 @@ function mapCreateCommunityErrorMessage(error: unknown): string {
       ? error.message
       : "Failed to create community.";
   if (message === "community_builder_required") {
-    return "A paid creator plan is required to create a community.";
+    return "Your account cannot create a community yet.";
   }
   if (message === "community_owner_limit_reached") {
     return "You've reached your community limit.";
@@ -145,10 +144,9 @@ export function useCommunityCreateController<
 
   const openCreateCommunityModal = useCallback((draft: CreateCommunityIntentDraft | null = null) => {
     const current = argsRef.current;
-    const tier = (current.builderBillingStatus?.builder_tier ?? "free").toLowerCase();
     const max = current.builderBillingStatus?.max_communities ?? 0;
     const ownedCount = getOwnedCountForOpenModal();
-    if (hasBuilderTierPaidAccess(tier) && max > 0 && ownedCount >= max) {
+    if (max > 0 && ownedCount >= max) {
       current.onOwnedCommunityLimitReached?.();
       return;
     }
@@ -275,15 +273,17 @@ export function useCommunityCreateController<
       current.setCreateCommunityError("Couldn't check your plan. Try again.");
       return;
     }
-    const tier = (status.builder_tier ?? "free").toLowerCase();
     const max = status.max_communities ?? 0;
     const ownedCount = getOwnedCountForPrimary();
-    const hasPaidCreatorAccess = hasBuilderTierPaidAccess(tier);
-    const needsPlan = !hasPaidCreatorAccess;
-    const limitReached = hasPaidCreatorAccess && max > 0 && ownedCount >= max;
+    const needsPlan = max <= 0;
+    const limitReached = max > 0 && ownedCount >= max;
     const canCreate = !needsPlan && !limitReached;
     if (canCreate) {
       await handleCreateCommunity();
+      return;
+    }
+    if (needsPlan) {
+      current.setCreateCommunityError("Your account cannot create a community yet.");
       return;
     }
 
@@ -296,7 +296,6 @@ export function useCommunityCreateController<
       current.onOwnedCommunityLimitReached?.();
       return;
     }
-    current.onStartUpgradeFlow();
   }, [buildCreateCommunityIntentFromState, closeCreateCommunityModal, getOwnedCountForPrimary, handleCreateCommunity]);
 
   const handleCreateCommunityAvatarUpload = useCallback(async (file: File | null) => {

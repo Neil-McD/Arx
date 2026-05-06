@@ -347,8 +347,8 @@ export const getOperatorMonetizationInternal = internalQuery({
     }
     return {
       computedAt: nowMs,
-      builderPlanCheckoutStarts: inRangeCheckouts.filter((row: any) => row.mode === "builder_upgrade").length,
-      builderPlanCheckoutCompletions: inRangeCheckouts.filter((row: any) => row.mode === "builder_upgrade" && row.status === "complete").length,
+      creditTopupCheckoutStarts: inRangeCheckouts.filter((row: any) => row.mode === "workspace_credit_topup").length,
+      creditTopupCheckoutCompletions: inRangeCheckouts.filter((row: any) => row.mode === "workspace_credit_topup" && row.status === "complete").length,
       communityCheckoutStarts: inRangeCheckouts.filter((row: any) => row.mode === "community_join").length,
       communityCheckoutCompletions: inRangeCheckouts.filter((row: any) => row.mode === "community_join" && row.status === "complete").length,
       activeCommunitySubscriptions: activeSubscriptions.length,

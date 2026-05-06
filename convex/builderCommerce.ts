@@ -572,78 +572,8 @@ export const startBuilderCheckout = action({
     context: BUILDER_BILLING_CONTEXT_VALIDATOR,
     nowMs: v.optional(v.number()),
   },
-  handler: async (ctx, args) => {
-    const nowMs = args.nowMs ?? Date.now();
-    const targetTier = normalizeBuilderTier(args.tier);
-    const { successUrl, cancelUrl } = buildBuilderBillingRedirectUrls({
-      context: args.context,
-    });
-    const sessionId = newOpaqueToken("builder");
-    const actor = (await ctx.runQuery(internal.authActor.resolveAuthenticatedActorInternal as any, {
-      authSubject: args.authSubject ?? null,
-    })) as { dbUserId?: unknown; email?: string | null };
-    const userId = actor?.dbUserId;
-    if (!userId) throw new Error("user_not_found");
-    const priceId = readStripeBuilderPriceId();
-    await ctx.runMutation(internal.builderCommerce.createPendingBuilderCheckoutSessionInternal as any, {
-      sessionId,
-      ownerUserId: userId,
-      targetTier,
-      providerPriceId: priceId,
-      expiresAt: nowMs + 14 * 24 * 60 * 60 * 1000,
-      nowMs,
-    });
-
-    try {
-      const stripe = getStripeClient();
-      const checkoutSession = await stripe.checkout.sessions.create({
-        mode: "subscription",
-        success_url: successUrl,
-        cancel_url: cancelUrl,
-        client_reference_id: sessionId,
-        line_items: [
-          {
-            price: priceId,
-            quantity: 1,
-          },
-        ],
-        metadata: {
-          local_session_id: sessionId,
-          target_tier: targetTier,
-        },
-        subscription_data: {
-          metadata: {
-            local_session_id: sessionId,
-            target_tier: targetTier,
-          },
-        },
-        ...(typeof actor?.email === "string" && actor.email.trim()
-          ? { customer_email: actor.email.trim() }
-          : {}),
-      });
-      const checkoutUrl = String(checkoutSession.url ?? "").trim();
-      if (!checkoutUrl) throw new Error("stripe_checkout_url_missing");
-      await ctx.runMutation(internal.builderCommerce.attachBuilderStripeCheckoutSessionInternal as any, {
-        sessionId,
-        providerCheckoutSessionId: checkoutSession.id,
-        providerCustomerId:
-          typeof checkoutSession.customer === "string" ? checkoutSession.customer : null,
-        providerSubscriptionId:
-          typeof checkoutSession.subscription === "string" ? checkoutSession.subscription : null,
-        providerPriceId: priceId,
-        nowMs: Date.now(),
-      });
-      return {
-        checkout_url: checkoutUrl,
-      };
-    } catch (error) {
-      await ctx.runMutation(internal.builderCommerce.expireBuilderCheckoutSessionInternal as any, {
-        sessionId,
-        nowMs: Date.now(),
-      });
-      throw error;
-    }
-
+  handler: async () => {
+    throw new Error("builder_plan_deprecated");
   },
 });
 
@@ -713,9 +643,7 @@ export const startConnectOnboarding = action({
       internal.auth.getBuilderCommerceAccessForUserInternal as any,
       { userId, nowMs: Date.now() },
     )) as { builder_tier?: unknown; has_payouts?: unknown } | null;
-    const hasBuilderPayoutAccess =
-      String(builderAccess?.builder_tier ?? "").trim().toLowerCase() !== "free" &&
-      builderAccess?.has_payouts === true;
+    const hasBuilderPayoutAccess = builderAccess?.has_payouts === true;
     if (!hasBuilderPayoutAccess) {
       throw new Error("builder_connect_builder_required");
     }

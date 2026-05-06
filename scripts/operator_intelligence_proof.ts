@@ -20,6 +20,8 @@ for (const [table, indexes] of [
 assert.match(operatorTypes, /export type OperatorBuilderRecord = /, "operator builder record contract is missing");
 assert.match(operatorTypes, /export type OperatorOverviewSnapshot = /, "operator overview contract is missing");
 assert.match(operatorTypes, /export type OperatorMonetizationSnapshot = /, "operator monetization contract is missing");
+assert.match(operatorTypes, /creditTopupCheckoutStarts: number/, "operator monetization should track credit top-up starts");
+assert.doesNotMatch(operatorTypes, /builderPlanCheckoutStarts: number/, "operator monetization must not foreground deprecated Builder checkout starts");
 assert.match(operatorTypes, /export type OperatorRiskItem = /, "operator risk contract is missing");
 assert.match(operatorTypes, /export type OperatorEventRecord = /, "operator event contract is missing");
 assert.doesNotMatch(operatorTypes, /OperatorToolDefinition|OperatorDashboardSection/, "unused operator tool scaffold must stay deleted");
@@ -73,6 +75,16 @@ assert.match(
   operatorIntelligence,
   /CHECKOUT_STATUSES = \["pending", "complete", "expired"\]/,
   "operator checkout starts must include expired checkout sessions",
+);
+assert.match(
+  operatorIntelligence,
+  /row\.mode === "workspace_credit_topup"/,
+  "operator monetization should treat credits as the paid-tool checkout signal",
+);
+assert.doesNotMatch(
+  operatorIntelligence,
+  /builderPlanCheckoutStarts|builderPlanCheckoutCompletions/,
+  "operator monetization must not expose deprecated Builder checkout metrics",
 );
 
 assert.match(

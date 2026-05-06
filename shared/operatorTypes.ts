@@ -75,8 +75,8 @@ export type OperatorOverviewSnapshot = {
 
 export type OperatorMonetizationSnapshot = {
   computedAt: number;
-  builderPlanCheckoutStarts: number;
-  builderPlanCheckoutCompletions: number;
+  creditTopupCheckoutStarts: number;
+  creditTopupCheckoutCompletions: number;
   communityCheckoutStarts: number;
   communityCheckoutCompletions: number;
   activeCommunitySubscriptions: number;

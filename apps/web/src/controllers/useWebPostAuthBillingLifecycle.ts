@@ -1,6 +1,5 @@
 import { useEffect, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
 import type { BuilderBillingReturn } from "../../../../shared/builderBilling";
-import { hasBuilderTierPaidAccess } from "../../../../shared/builderBilling";
 import {
   readPendingPublicJoinCommunityId,
   readPendingPublicJoinCommunitySlug,
@@ -150,11 +149,9 @@ export function useWebPostAuthBillingLifecycle<
           if (cancelled) return;
           const status = await params.loadBuilderBillingStatus(session);
           lastStatus = status;
-          const tier = (status?.builder_tier ?? "free").toLowerCase();
           const max = status?.max_communities ?? 0;
-          const hasPaidCreatorAccess = hasBuilderTierPaidAccess(tier);
-          const hasCapacity = hasPaidCreatorAccess && max > 0 && ownedCount < max;
-          if (hasPaidCreatorAccess && (!wantsCreate || hasCapacity)) break;
+          const hasCapacity = max > 0 && ownedCount < max;
+          if (!wantsCreate || hasCapacity) break;
           if (params.builderBillingReturn?.status !== "success" && !wantsCreate) break;
           await new Promise((resolve) => window.setTimeout(resolve, 1000));
         }
@@ -164,10 +161,9 @@ export function useWebPostAuthBillingLifecycle<
           params.clearBuilderBillingReturn();
           return;
         }
-        const tier = (lastStatus?.builder_tier ?? params.builderBillingStatus?.builder_tier ?? "free").toLowerCase();
         const max = lastStatus?.max_communities ?? params.builderBillingStatus?.max_communities ?? 0;
-        if (!hasBuilderTierPaidAccess(tier)) {
-          params.setBuilderBillingError("A paid creator plan is required to create a community.");
+        if (max <= 0) {
+          params.setBuilderBillingError("Your account cannot create a community yet.");
           params.clearBuilderBillingReturn();
           return;
         }

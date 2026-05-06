@@ -255,8 +255,8 @@ async function requirePaidCommunityPricingReady(args: {
       userId: args.community.ownerId,
       nowMs: args.nowMs,
     },
-  )) as { builder_tier?: unknown } | null;
-  if (String(ownerBilling?.builder_tier ?? "").trim().toLowerCase() === "free") {
+  )) as { has_payouts?: unknown } | null;
+  if (ownerBilling?.has_payouts !== true) {
     throw new Error("community_builder_plan_required");
   }
   const connectAccount = (await args.ctx.runQuery(
@@ -461,7 +461,7 @@ export const createCommunity = mutation({
       authSubject: args.authSubject ?? undefined,
       nowMs,
     });
-    if (!billingStatus || String(billingStatus.builder_tier ?? "").trim().toLowerCase() === "free") {
+    if (!billingStatus) {
       throw new Error("community_builder_required");
     }
     const ownedCommunities = await ctx.db
@@ -469,6 +469,9 @@ export const createCommunity = mutation({
       .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
       .collect();
     const maxCommunities = Math.max(0, Math.floor(Number(billingStatus.max_communities ?? 0)));
+    if (maxCommunities <= 0) {
+      throw new Error("community_builder_required");
+    }
     if (maxCommunities > 0 && ownedCommunities.length >= maxCommunities) {
       throw new Error("community_owner_limit_reached");
     }

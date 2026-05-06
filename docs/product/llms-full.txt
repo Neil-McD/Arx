@@ -967,6 +967,8 @@ Launch a community intelligence system that members can join, use, and pay for w
 
 The first version should be simple: one clear community, one useful agent, one believable access model, and enough shared knowledge for members to get value quickly.
 
+Every authenticated free user can build one community. Paid tool usage is handled through credits, not a monthly Builder subscription.
+
 ## Before You Start
 
 You need a clear answer to four questions:
@@ -1029,6 +1031,8 @@ The cash path is simple: configure the community, define the paid access model, 
 - Membership and entitlement are backend authority.
 - Paid community access requires verified backend entitlement.
 - Builder payouts depend on payout provider readiness.
+- Free builders can own one community.
+- Credits cover paid tools such as Daytona workspaces, web research, and voice input.
 - Owner/admin manage resources and most operational settings.
 - Moderators help with moderation and join request review, not paid access.
 - Remote MCP apps must be validated before mounted capability should be trusted.
@@ -2124,6 +2128,8 @@ Summary: The authority model for paid access, checkout, and subscriptions.
 
 Billing is the payment system. Entitlements are the access truth derived from verified payment, grants, membership, or plan state.
 
+Free authenticated users are builders by default for one owned community. The self-serve Builder subscription is deprecated. Credits are the canonical paid-tool meter for Daytona workspaces, web research, and voice input. LLM inference should be supplied through the user's connected ChatGPT account or OpenAI API key.
+
 ## Builder Revenue Path
 
 The simple cash path is:
@@ -2138,6 +2144,8 @@ The simple cash path is:
 8. Builder revenue and payouts remain tied to verified provider and community revenue state.
 
 This is the product value loop: the builder packages expertise into a community intelligence system, members pay for access to that system, and Polynet keeps access and payout state explicit.
+
+The current default platform fee for free-builder community revenue is 10%. Legacy paid creator entitlements may retain their previous terms until migrated or cancelled.
 
 ## Payout Readiness
 
@@ -2155,6 +2163,7 @@ Payout readiness does not grant community access. It determines whether the buil
 6. Access should fail closed if billing evidence is missing or inconsistent.
 7. Builders should be shown payout readiness before they rely on paid community revenue.
 8. Paid access, management authority, and payout readiness are separate concepts.
+9. Credits, not a Builder subscription, are the source of truth for paid tool access.
 
 ## Common Mistakes
 
