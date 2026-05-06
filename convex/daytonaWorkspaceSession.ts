@@ -135,6 +135,9 @@ export async function executeDaytonaProbeToolCall(params: {
   projectId: string;
   runId: string;
   projectVolumeId?: string | null;
+  creditReservationKey?: string | null;
+  creditBudgetCredits?: number | null;
+  creditBudgetExpiresAt?: number | null;
 }): Promise<DaytonaProbeExecution> {
   const created = await createDaytonaSandbox({
     config: buildRunPinnedDaytonaConfig(params.config),
@@ -142,6 +145,9 @@ export async function executeDaytonaProbeToolCall(params: {
     projectId: params.projectId,
     runId: params.runId,
     projectVolumeId: params.projectVolumeId ?? null,
+    creditReservationKey: params.creditReservationKey ?? null,
+    creditBudgetCredits: params.creditBudgetCredits ?? null,
+    creditBudgetExpiresAt: params.creditBudgetExpiresAt ?? null,
   });
   if (!created.ok) return created;
   const providerSandboxId = String(created.sandbox.id ?? "").trim();
@@ -275,7 +281,7 @@ export async function createWorkspaceSandboxSession(params: {
       ok: false,
       status: 402,
       code: "workspace_credits_exhausted",
-      message: "Add balance to use workspace tools.",
+      message: "Daytona workspaces use paid sandbox compute, so they need tool balance before they run.",
     };
   }
   const remainingCredits =
@@ -286,7 +292,7 @@ export async function createWorkspaceSandboxSession(params: {
       ok: false,
       status: 402,
       code: "workspace_credits_exhausted",
-      message: "Add balance to use workspace tools.",
+      message: "Daytona workspaces use paid sandbox compute, so they need tool balance before they run.",
     };
   }
 
@@ -341,7 +347,7 @@ export async function createWorkspaceSandboxSession(params: {
       code: message === "credits_exhausted" ? "workspace_credits_exhausted" : "workspace_credits_unavailable",
       message:
         message === "credits_exhausted"
-          ? "Add balance to use workspace tools."
+          ? "Daytona workspaces use paid sandbox compute, so they need tool balance before they run."
           : "Tool balance is unavailable for workspace tools.",
     };
   }
@@ -380,6 +386,9 @@ export async function createWorkspaceSandboxSession(params: {
       projectId: params.projectId,
       runId: params.runId,
       projectVolumeId,
+      creditReservationKey,
+      creditBudgetCredits,
+      creditBudgetExpiresAt,
     });
   } catch (error) {
     await settleReservedCreditsBestEffort({

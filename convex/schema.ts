@@ -124,7 +124,12 @@ export default defineSchema({
     computeCostUsd: v.number(),
     creditsDebited: v.number(),
     creditReservationKey: v.optional(v.string()),
-    debitSource: v.union(v.literal("included"), v.literal("purchased"), v.literal("mixed")),
+    debitSource: v.union(
+      v.literal("included"),
+      v.literal("purchased"),
+      v.literal("mixed"),
+      v.literal("unbilled"),
+    ),
     createdAt: v.number(),
   })
     .index("by_chargeKey", ["chargeKey"])

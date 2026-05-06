@@ -8,6 +8,14 @@ async function readRepoFile(relativePath: string): Promise<string> {
   return await readFile(path.join(rootDir, relativePath), "utf8");
 }
 
+function sliceBetween(source: string, startNeedle: string, endNeedle: string): string {
+  const start = source.indexOf(startNeedle);
+  assert.notEqual(start, -1, `expected source to include ${startNeedle}`);
+  const end = source.indexOf(endNeedle, start + startNeedle.length);
+  assert.notEqual(end, -1, `expected source to include ${endNeedle}`);
+  return source.slice(start, end);
+}
+
 async function proveWorkspaceCreditAccountingContract() {
   const schemaSource = await readRepoFile("convex/schema.ts");
   const sharedCreditsSource = await readRepoFile("shared/workspaceCredits.ts");
@@ -18,15 +26,24 @@ async function proveWorkspaceCreditAccountingContract() {
   const httpDaytonaSource = await readRepoFile("convex/httpDaytona.ts");
   const httpVoiceSource = await readRepoFile("convex/httpVoice.ts");
   const runtimeSessionSource = await readRepoFile("convex/runtimeExecutionSession.ts");
+  const runtimeKernelSource = await readRepoFile("shared/runtimeKernel.ts");
+  const runtimeTurnHandlersSource = await readRepoFile("convex/runtimeTurnHandlers.ts");
   const cronsSource = await readRepoFile("convex/crons.ts");
   const accountSource = await readRepoFile("convex/account.ts");
   const voiceControllerSource = await readRepoFile("shared/useWebVoiceInputController.ts");
+  const turnRunnerSource = await readRepoFile("shared/useWebTurnRunnerController.ts");
   const appSource = await readRepoFile("apps/web/src/App.tsx");
+  const inferenceIssueModalSource = await readRepoFile("apps/web/src/components/WebInferenceIssueModal.tsx");
 
   assert.match(
     schemaSource,
     /creditReservationKey:\s*v\.optional\(v\.string\(\)\)/,
     "expected workspace compute charges to retain the source credit reservation key",
+  );
+  assert.match(
+    schemaSource,
+    /debitSource:\s*v\.union\([\s\S]*v\.literal\("included"\)[\s\S]*v\.literal\("purchased"\)[\s\S]*v\.literal\("mixed"\)[\s\S]*v\.literal\("unbilled"\)/,
+    "expected compute charges to distinguish unbilled usage from included balance",
   );
   assert.match(
     schemaSource,
@@ -142,6 +159,11 @@ async function proveWorkspaceCreditAccountingContract() {
   );
   assert.match(
     creditsSource,
+    /debitedCredits <= 0[\s\S]*\? "unbilled"/,
+    "expected zero-debit compute charges to be labeled as unbilled",
+  );
+  assert.match(
+    creditsSource,
     /canRefundIncludedCreditsForEntry[\s\S]*includedCycleStartedAt[\s\S]*includedCycleEndsAt/,
     "expected included-credit refunds to be cycle-aware",
   );
@@ -183,6 +205,16 @@ async function proveWorkspaceCreditAccountingContract() {
   );
   assert.match(
     daytonaSessionSource,
+    /executeDaytonaProbeToolCall\(params:[\s\S]*creditReservationKey\?: string \| null[\s\S]*createDaytonaSandbox\([\s\S]*creditReservationKey: params\.creditReservationKey/,
+    "expected temporary Daytona sandbox creation to carry the credit reservation key",
+  );
+  assert.match(
+    daytonaSessionSource,
+    /executeDaytonaProbeToolCall\(\{[\s\S]*creditReservationKey,[\s\S]*creditBudgetCredits,[\s\S]*creditBudgetExpiresAt/,
+    "expected runtime Daytona sessions to label sandbox instances with reservation budget provenance",
+  );
+  assert.match(
+    daytonaSessionSource,
     /settleCreditsInternal[\s\S]*recordWorkspaceComputeChargeInternal[\s\S]*creditReservationKey/,
     "expected temporary Daytona teardown to settle the reservation before recording the charge",
   );
@@ -209,12 +241,22 @@ async function proveWorkspaceCreditAccountingContract() {
   );
   assert.match(
     orphanReconcilerSource,
+    /readSandboxCreditReservation[\s\S]*arx_credit_reservation_key[\s\S]*arx_credit_budget_credits[\s\S]*arx_credit_budget_expires_at/,
+    "expected orphan reconciliation to recover runtime sandbox credit reservation labels",
+  );
+  assert.match(
+    orphanReconcilerSource,
+    /priceCreditsWithinBudget[\s\S]*settleReservedCreditsBestEffort\(\{[\s\S]*creditKey: backgroundCredit\.creditReservationKey[\s\S]*recordWorkspaceComputeChargeInternal/,
+    "expected orphan reconciliation to settle the original reservation before recording compute evidence",
+  );
+  assert.match(
+    orphanReconcilerSource,
     /creditBudgetExpiresAt[\s\S]*terminalRows\.some\(\(row\) => isActiveTerminalStatus\(row\.status\)\) &&\s*!budgetExpired/,
     "expected the orphan reconciler to stop budget-expired background sandboxes even with active terminals",
   );
   assert.match(
     orphanReconcilerSource,
-    /priceDaytonaWorkspaceUsageCredits\(\{\s*computeCostUsd\s*\}\)/,
+    /priceCreditsWithinBudget[\s\S]*priceDaytonaWorkspaceUsageCredits\(\{[\s\S]*computeCostUsd: params\.computeCostUsd/,
     "expected orphan Daytona cleanup to settle usage at margin-aware credit pricing",
   );
 
@@ -238,6 +280,21 @@ async function proveWorkspaceCreditAccountingContract() {
     /priceWebResearchCredits\(webResearchAction\)[\s\S]*rawVendorCostUsd:\s*webResearchVendorCostUsd[\s\S]*polynetPriceUsd:\s*creditsToUsd\(webResearchCredits\)/,
     "expected web research to use shared margin-aware fixed-tool pricing with ledger cost evidence",
   );
+  const webResearchReservationBlock = sliceBetween(
+    httpDaytonaSource,
+    'if (params.toolName === "web_research")',
+    "let result:",
+  );
+  assert.doesNotMatch(
+    webResearchReservationBlock,
+    /\bquery\s*:/,
+    "web research credit ledger metadata must not store raw query text",
+  );
+  assert.doesNotMatch(
+    webResearchReservationBlock,
+    /\burl\s*:/,
+    "web research credit ledger metadata must not store raw URLs",
+  );
   assert.match(
     httpVoiceSource,
     /reservedCreditKey[\s\S]*reserveCreditsInternal[\s\S]*primary\.ok[\s\S]*settleReservedCreditsStrict[\s\S]*fallback\.ok[\s\S]*settleReservedCreditsStrict/,
@@ -257,6 +314,26 @@ async function proveWorkspaceCreditAccountingContract() {
     appSource,
     /onToolBalanceRequired:[\s\S]*setInferenceIssueModal\(\{[\s\S]*reason:\s*"workspace_credits"/,
     "expected voice input tool-balance failures to open the workspace issue modal",
+  );
+  assert.match(
+    runtimeKernelSource,
+    /normalizeToolBalanceTerminalCode[\s\S]*credits_exhausted[\s\S]*workspace_credits_exhausted[\s\S]*tool_error_unrecoverable/,
+    "expected agent-called paid-tool balance failures to stop as typed workspace-credit errors",
+  );
+  assert.match(
+    runtimeTurnHandlersSource,
+    /event:\s*"error"[\s\S]*code:\s*loopResult\.code[\s\S]*message:\s*loopResult\.message[\s\S]*status:\s*loopResult\.status/,
+    "expected streaming runtime paid-tool failures to send typed error data to the UI",
+  );
+  assert.match(
+    turnRunnerSource,
+    /classifyCloudFunctionErrorCategory[\s\S]*category === "workspace_credits"[\s\S]*setInferenceIssueModal/,
+    "expected streamed workspace-credit errors to open the add-balance modal",
+  );
+  assert.match(
+    inferenceIssueModalSource,
+    /Premium tools use paid provider or sandbox infrastructure, so they need tool balance before they run/,
+    "expected the add-balance modal to explain why paid tools need balance",
   );
   assert.doesNotMatch(
     httpDaytonaSource,

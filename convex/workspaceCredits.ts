@@ -647,11 +647,13 @@ export const recordWorkspaceComputeChargeInternal = internalMutation({
 
     const debitedCredits = roundCredits(debitIncluded + debitPurchased);
     const debitSource =
-      debitIncluded > 0 && debitPurchased > 0
-        ? "mixed"
-        : debitPurchased > 0
-          ? "purchased"
-          : "included";
+      debitedCredits <= 0
+        ? "unbilled"
+        : debitIncluded > 0 && debitPurchased > 0
+          ? "mixed"
+          : debitPurchased > 0
+            ? "purchased"
+            : "included";
 
     const id = await ctx.db.insert("workspaceComputeCharges", {
       chargeKey: args.chargeKey,

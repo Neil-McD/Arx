@@ -273,6 +273,9 @@ export async function createDaytonaSandbox(params: {
   runId?: string | null;
   sourceLabel?: string | null;
   projectVolumeId?: string | null;
+  creditReservationKey?: string | null;
+  creditBudgetCredits?: number | null;
+  creditBudgetExpiresAt?: number | null;
 }): Promise<
   | {
       ok: true;
@@ -300,6 +303,16 @@ export async function createDaytonaSandbox(params: {
   const runId = String(params.runId ?? "").trim();
   if (runId) {
     labels.arx_run_id = runId;
+  }
+  const creditReservationKey = String(params.creditReservationKey ?? "").trim();
+  if (creditReservationKey) {
+    labels.arx_credit_reservation_key = creditReservationKey;
+  }
+  if (typeof params.creditBudgetCredits === "number" && Number.isFinite(params.creditBudgetCredits)) {
+    labels.arx_credit_budget_credits = String(params.creditBudgetCredits);
+  }
+  if (typeof params.creditBudgetExpiresAt === "number" && Number.isFinite(params.creditBudgetExpiresAt)) {
+    labels.arx_credit_budget_expires_at = String(Math.floor(params.creditBudgetExpiresAt));
   }
   const requiredPayload: Record<string, unknown> = {
     labels,

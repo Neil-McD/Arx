@@ -69,6 +69,39 @@ function readBackgroundCreditReservation(project: any): {
   };
 }
 
+function readSandboxCreditReservation(sandbox: DaytonaSandboxApiDto): {
+  creditReservationKey: string | null;
+  creditBudgetCredits: number;
+  creditBudgetExpiresAt: number;
+} {
+  return {
+    creditReservationKey: readSandboxLabel(sandbox, "arx_credit_reservation_key"),
+    creditBudgetCredits: readPositiveNumber(
+      readSandboxLabel(sandbox, "arx_credit_budget_credits"),
+      0,
+    ),
+    creditBudgetExpiresAt: readPositiveNumber(
+      readSandboxLabel(sandbox, "arx_credit_budget_expires_at"),
+      0,
+    ),
+  };
+}
+
+function priceCreditsWithinBudget(params: {
+  computeCostUsd: number;
+  creditReservationKey?: string | null;
+  creditBudgetCredits?: number | null;
+}): number {
+  const pricedCredits = priceDaytonaWorkspaceUsageCredits({
+    computeCostUsd: params.computeCostUsd,
+  });
+  const creditReservationKey = normalizeOptionalString(params.creditReservationKey);
+  const creditBudgetCredits = readPositiveNumber(params.creditBudgetCredits, 0);
+  return creditReservationKey && creditBudgetCredits > 0
+    ? Math.min(creditBudgetCredits, pricedCredits)
+    : pricedCredits;
+}
+
 async function settleReservedCreditsBestEffort(params: {
   ctx: any;
   creditKey?: string | null;
@@ -156,12 +189,13 @@ export const reconcileDaytonaOrphanedSandboxesInternal = internalAction({
       const ownerId = readSandboxLabel(sandbox, "arx_user_id");
       const runId = readSandboxLabel(sandbox, "arx_run_id");
       const projectId = readSandboxLabel(sandbox, "arx_project_id");
+      const sandboxCredit = readSandboxCreditReservation(sandbox);
 
       let backgroundProject: any = null;
       let backgroundCredit = {
-        creditReservationKey: null as string | null,
-        creditBudgetCredits: 0,
-        creditBudgetExpiresAt: 0,
+        creditReservationKey: sandboxCredit.creditReservationKey,
+        creditBudgetCredits: sandboxCredit.creditBudgetCredits,
+        creditBudgetExpiresAt: sandboxCredit.creditBudgetExpiresAt,
         startedAt: null as number | null,
       };
       let budgetExpired = false;
@@ -175,7 +209,16 @@ export const reconcileDaytonaOrphanedSandboxesInternal = internalAction({
                 projectId,
               },
             );
-            backgroundCredit = readBackgroundCreditReservation(backgroundProject);
+            const projectCredit = readBackgroundCreditReservation(backgroundProject);
+            backgroundCredit = {
+              creditReservationKey:
+                projectCredit.creditReservationKey ?? sandboxCredit.creditReservationKey,
+              creditBudgetCredits:
+                projectCredit.creditBudgetCredits || sandboxCredit.creditBudgetCredits,
+              creditBudgetExpiresAt:
+                projectCredit.creditBudgetExpiresAt || sandboxCredit.creditBudgetExpiresAt,
+              startedAt: projectCredit.startedAt,
+            };
             budgetExpired =
               backgroundCredit.creditBudgetExpiresAt > 0 &&
               nowMs >= backgroundCredit.creditBudgetExpiresAt;
@@ -332,12 +375,11 @@ export const reconcileDaytonaOrphanedSandboxesInternal = internalAction({
             sandboxCpu,
             sandboxMemoryGiB,
           });
-          const creditsDebited = backgroundCredit.creditReservationKey
-            ? Math.min(
-                backgroundCredit.creditBudgetCredits,
-                priceDaytonaWorkspaceUsageCredits({ computeCostUsd }),
-              )
-            : priceDaytonaWorkspaceUsageCredits({ computeCostUsd });
+          const creditsDebited = priceCreditsWithinBudget({
+            computeCostUsd,
+            creditReservationKey: backgroundCredit.creditReservationKey,
+            creditBudgetCredits: backgroundCredit.creditBudgetCredits,
+          });
           await settleReservedCreditsBestEffort({
             ctx,
             creditKey: backgroundCredit.creditReservationKey,

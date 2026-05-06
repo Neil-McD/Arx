@@ -485,14 +485,6 @@ async function executeRetrievalHarnessTool(params: {
           pricing_version: PAID_TOOL_PRICING_VERSION,
           target_gross_margin_bps: PAID_TOOL_TARGET_GROSS_MARGIN_BPS,
           estimated_vendor_cost_usd: webResearchVendorCostUsd,
-          query:
-            typeof normalizedArgs.query === "string"
-              ? normalizedArgs.query.slice(0, 240)
-              : null,
-          url:
-            typeof normalizedArgs.url === "string"
-              ? normalizedArgs.url.slice(0, 500)
-              : null,
         },
         nowMs: Date.now(),
       });
@@ -505,7 +497,7 @@ async function executeRetrievalHarnessTool(params: {
         errorCode: message === "credits_exhausted" ? "credits_exhausted" : "credits_unavailable",
         errorMessage:
           message === "credits_exhausted"
-            ? "Add balance to use web research."
+            ? "Web research uses paid provider calls, so it needs tool balance before it runs."
             : "Tool balance is unavailable for web research.",
       };
     }
@@ -609,7 +601,7 @@ async function executeRetrievalHarnessTool(params: {
         exitCode: null,
         outputText: "",
         errorCode: "workspace_credits_exhausted",
-        errorMessage: "Workspace tool balance budget expired. Add balance to use workspace tools.",
+        errorMessage: "This Daytona workspace budget expired. Add balance to keep using workspace tools.",
       };
     }
     const budgetSignal = buildWorkspaceCreditBudgetSignal(
@@ -720,7 +712,7 @@ async function executeRetrievalHarnessTool(params: {
         exitCode: null,
         outputText: "",
         errorCode: "workspace_credits_exhausted",
-        errorMessage: "Workspace tool balance budget expired. Add balance to use workspace tools.",
+        errorMessage: "This Daytona workspace budget expired. Add balance to keep using workspace tools.",
       };
     }
     if (!result.ok) {
