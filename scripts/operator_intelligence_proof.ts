@@ -8,7 +8,6 @@ function read(relativePath: string): string {
 const schema = read("convex/schema.ts");
 const operatorIntelligence = read("convex/operatorIntelligence.ts");
 const operatorTypes = read("shared/operatorTypes.ts");
-const operatorToolDirectory = read("shared/operatorToolDirectory.ts");
 
 for (const [table, indexes] of [
   ["checkoutSessions", ["by_mode_status", "by_community_status"]],
@@ -23,36 +22,7 @@ assert.match(operatorTypes, /export type OperatorOverviewSnapshot = /, "operator
 assert.match(operatorTypes, /export type OperatorMonetizationSnapshot = /, "operator monetization contract is missing");
 assert.match(operatorTypes, /export type OperatorRiskItem = /, "operator risk contract is missing");
 assert.match(operatorTypes, /export type OperatorEventRecord = /, "operator event contract is missing");
-assert.match(operatorTypes, /permissions: "operator_only"/, "operator tools must be operator-only");
-
-for (const section of ["overview", "builders", "monetization", "risk", "events"]) {
-  assert.match(
-    operatorToolDirectory,
-    new RegExp(`section: "${section}"`),
-    `operator tool directory missing ${section} section`,
-  );
-}
-
-for (const toolId of [
-  "overview.snapshot",
-  "builders.search",
-  "builders.snapshot",
-  "monetization.snapshot",
-  "risk.queue",
-  "events.search",
-]) {
-  assert.match(
-    operatorToolDirectory,
-    new RegExp(`id: "${toolId}"`),
-    `operator tool directory missing ${toolId}`,
-  );
-}
-
-assert.match(
-  operatorToolDirectory,
-  /searchOperatorTools/,
-  "operator tool directory should expose deterministic local search",
-);
+assert.doesNotMatch(operatorTypes, /OperatorToolDefinition|OperatorDashboardSection/, "unused operator tool scaffold must stay deleted");
 
 for (const queryName of [
   "getOperatorOverviewInternal",

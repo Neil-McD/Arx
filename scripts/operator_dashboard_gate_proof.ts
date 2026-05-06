@@ -11,6 +11,7 @@ const operatorGateway = read("shared/cloudOperatorDashboardGateway.ts");
 const schema = read("convex/schema.ts");
 const webRouteState = read("shared/webAppRouteState.ts");
 const app = read("apps/web/src/App.tsx");
+const appMainSurfaceHost = read("apps/web/src/components/WebAppMainSurfaceHost.tsx");
 const workspaceHost = read("apps/web/src/components/WebWorkspaceHost.tsx");
 const packageJson = read("package.json");
 const seedScript = read("scripts/seed_operator_owner.ts");
@@ -103,16 +104,12 @@ assert.doesNotMatch(
   "web gateway must not call internal operator intelligence directly",
 );
 
-assert.match(webRouteState, /segments\[0\] === "operator"/, "operator route must parse explicitly");
-assert.match(
-  webRouteState,
-  /segments\[0\] === "operator"[\s\S]*page: "workspace"/,
-  "operator route must fold into the canonical workspace shell",
-);
-assert.match(
-  webRouteState,
-  /state\.page === "operator"[\s\S]*return "\/workspace"/,
-  "operator route serialization must not preserve a standalone operator page",
+assert.doesNotMatch(webRouteState, /segments\[0\] === "operator"/, "standalone operator route must stay deleted");
+assert.doesNotMatch(webRouteState, /state\.page === "operator"/, "operator page serialization must stay deleted");
+assert.doesNotMatch(
+  appMainSurfaceHost,
+  /WebOperatorDashboard|showOperatorDashboard|operatorDashboardProps/,
+  "standalone operator dashboard surface must stay deleted",
 );
 assert.match(
   app,

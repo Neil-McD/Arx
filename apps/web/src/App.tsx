@@ -7226,9 +7226,6 @@ export default function App() {
       },
       renderMarkdown,
     },
-    operatorDashboardProps: {
-      session,
-    },
   });
   const globalOverlays = <WebGlobalOverlayHost {...globalOverlayHostProps} />;
   const mainSurface = <WebAppMainSurfaceHost {...mainSurfaceHostProps} />;

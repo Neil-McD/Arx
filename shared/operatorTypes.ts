@@ -1,10 +1,3 @@
-export type OperatorDashboardSection =
-  | "overview"
-  | "builders"
-  | "monetization"
-  | "risk"
-  | "events";
-
 export type OperatorRange = "7d" | "30d" | "90d" | "all";
 
 export type OperatorAccessSnapshot = {
@@ -121,21 +114,4 @@ export type OperatorEventRecord = {
   providerObjectId: string | null;
   metadata: unknown;
   createdAt: number;
-};
-
-export type OperatorToolDefinition = {
-  id: string;
-  label: string;
-  section: OperatorDashboardSection;
-  question: string;
-  inputs: string[];
-  sources: string[];
-  permissions: "operator_only";
-  outputShape:
-    | "OperatorOverviewSnapshot"
-    | "OperatorBuilderRecord[]"
-    | "OperatorBuilderRecord"
-    | "OperatorMonetizationSnapshot"
-    | "OperatorRiskItem[]"
-    | "OperatorEventRecord[]";
 };
