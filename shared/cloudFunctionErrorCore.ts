@@ -72,7 +72,11 @@ function normalizePlainTextError(value: string, status: number): string {
   return text || `Request failed (${status})`;
 }
 
-function classifyErrorCategory(input: { status: number; code: string | null; message: string }): CloudFunctionErrorCategory {
+export function classifyCloudFunctionErrorCategoryCore(input: {
+  status: number;
+  code: string | null;
+  message: string;
+}): CloudFunctionErrorCategory {
   const code = (input.code ?? "").toLowerCase();
   const message = (input.message ?? "").toLowerCase();
 
@@ -152,7 +156,7 @@ export async function readCloudFunctionErrorCore(response: Response): Promise<Cl
   const parsed = await readFunctionErrorBody(response);
   const fallbackMessage = `Request failed (${response.status})`;
   const message = parsed.message || fallbackMessage;
-  const category = classifyErrorCategory({
+  const category = classifyCloudFunctionErrorCategoryCore({
     status: response.status,
     code: parsed.code,
     message,

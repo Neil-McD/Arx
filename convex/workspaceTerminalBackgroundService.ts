@@ -299,7 +299,7 @@ export async function ensureProjectBackgroundSandbox(params: {
       code: message === "credits_exhausted" ? "workspace_credits_exhausted" : "workspace_credits_unavailable",
       message:
         message === "credits_exhausted"
-          ? "Add balance to use workspace tools."
+          ? "Daytona workspaces use paid sandbox compute, so they need tool balance before they run."
           : "Tool balance is unavailable for workspace tools.",
     };
   }
@@ -531,7 +531,7 @@ export async function resolveProjectBackgroundSandboxIfReady(params: {
       ok: false,
       status: 402,
       code: "workspace_credits_exhausted",
-      message: "Workspace tool balance budget expired. Add balance to use workspace tools.",
+      message: "This Daytona workspace budget expired. Add balance to keep using workspace tools.",
     };
   }
 
@@ -646,7 +646,7 @@ export async function resolveTerminalSandboxContext(params: {
         ok: false,
         status: 402,
         code: "workspace_credits_exhausted",
-        message: "Workspace tool balance budget expired. Add balance to use workspace tools.",
+        message: "This Daytona workspace budget expired. Add balance to keep using workspace tools.",
       };
     }
   }

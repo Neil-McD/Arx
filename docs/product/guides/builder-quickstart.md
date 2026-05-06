@@ -14,7 +14,7 @@ Launch a community intelligence system that members can join, use, and pay for w
 
 The first version should be simple: one clear community, one useful agent, one believable access model, and enough shared knowledge for members to get value quickly.
 
-Every authenticated free user can build one community. Paid tool usage is handled through credits, not a monthly Builder subscription.
+Every authenticated free user can build one community. Paid tool usage is handled through tool balance, not a monthly Builder subscription.
 
 ## Before You Start
 
@@ -79,7 +79,7 @@ The cash path is simple: configure the community, define the paid access model, 
 - Paid community access requires verified backend entitlement.
 - Builder payouts depend on payout provider readiness.
 - Free builders can own one community.
-- Credits cover paid tools such as Daytona workspaces, web research, and voice input.
+- Tool balance covers paid tools such as Daytona workspaces, web research, and voice input.
 - Owner/admin manage resources and most operational settings.
 - Moderators help with moderation and join request review, not paid access.
 - Remote MCP apps must be validated before mounted capability should be trusted.

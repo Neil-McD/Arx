@@ -998,7 +998,10 @@ export async function handleRuntimeTurnRequest(args: {
             writer.send({
               event: "error",
               data: {
+                code: loopResult.code,
                 error: loopResult.message,
+                message: loopResult.message,
+                status: loopResult.status,
               },
             });
             return;

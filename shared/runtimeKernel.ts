@@ -132,6 +132,39 @@ function buildToolExecutionExceptionResult(
   };
 }
 
+function normalizeToolBalanceTerminalCode(code: string | null | undefined): string | null {
+  const normalized = String(code ?? "").trim().toLowerCase();
+  if (normalized === "credits_exhausted" || normalized === "workspace_credits_exhausted") {
+    return "workspace_credits_exhausted";
+  }
+  if (normalized === "credits_unavailable" || normalized === "workspace_credits_unavailable") {
+    return "workspace_credits_unavailable";
+  }
+  return null;
+}
+
+function buildToolBalanceTerminalSignal<TToolName extends string>(
+  toolResult: RuntimeKernelToolExecutionResult,
+): {
+  status: number;
+  code: RuntimeKernelFailure<TToolName>["code"];
+  stopReason: RuntimeKernelStopReason;
+  message: string;
+} | null {
+  const code = normalizeToolBalanceTerminalCode(toolResult.errorCode);
+  if (!code) return null;
+  const fallbackMessage =
+    code === "workspace_credits_exhausted"
+      ? "Premium tools use paid provider or sandbox infrastructure, so they need tool balance before they run."
+      : "Tool balance is unavailable for premium tools.";
+  return {
+    status: 402,
+    code,
+    stopReason: "tool_error_unrecoverable",
+    message: String(toolResult.errorMessage ?? "").trim() || fallbackMessage,
+  };
+}
+
 function toKernelFailure<TToolName extends string>(params: {
   failure: RuntimeKernelFailureInput;
   transcript: NativeToolAwareMessage[];
@@ -701,6 +734,10 @@ export async function runNativeRuntimeKernel<TToolName extends string>(params: {
           message: toolResult.errorMessage || "Run cancelled by user.",
         };
       }
+
+      const toolBalanceTerminalSignal =
+        buildToolBalanceTerminalSignal<TToolName>(toolResult);
+      if (toolBalanceTerminalSignal) return toolBalanceTerminalSignal;
 
       if (consecutiveFailureCount >= params.budget.maxConsecutiveFailures) {
         return {

@@ -1,5 +1,6 @@
 import { useCallback, useRef } from "react";
 import {
+  classifyCloudFunctionErrorCategory,
   formatCloudFunctionErrorMessage,
   readCloudFunctionError,
 } from "./cloudFunctionErrors";
@@ -694,6 +695,7 @@ export function useWebTurnRunnerController<
       let lastEventName: string | null = null;
       let finalContent = "";
       let preserveStreamingStateForRecovery = false;
+      let streamInferenceIssueHandled = false;
 
       const getSanitizedStreamingContent = () => {
         const raw = threadStreamingContentRefById.current[threadId] ?? "";
@@ -913,11 +915,39 @@ export function useWebTurnRunnerController<
               (typeof parsed?.message === "string" && parsed.message.trim()) ||
               (typeof parsed?.raw === "string" && parsed.raw.trim()) ||
               "Failed to run model.";
-              const details: string[] = [];
-              if (runtimeStage) details.push(`stage=${runtimeStage}`);
-              if (runtimeRequestId) details.push(`request_id=${runtimeRequestId}`);
-              throw new Error(details.length > 0 ? `${msg} (${details.join(", ")})` : msg);
+            const code =
+              (typeof parsed?.code === "string" && parsed.code.trim()) ||
+              null;
+            const status = Number(parsed?.status);
+            const category = classifyCloudFunctionErrorCategory({
+              status: Number.isFinite(status) ? Math.max(0, Math.floor(status)) : 500,
+              code,
+              message: msg,
+            });
+            if (
+              category === "quota" ||
+              category === "workspace_credits" ||
+              category === "plan" ||
+              category === "provider_connection_required" ||
+              category === "misconfigured" ||
+              category === "disabled" ||
+              category === "unavailable"
+            ) {
+              current.setInferenceIssueModal({
+                reason: mapInferenceIssueReason(category),
+                threadId,
+                mode: params.mode === "regenerate" ? "regenerate" : "respond",
+                message: msg.trim() || null,
+              });
+              streamInferenceIssueHandled = true;
+              seenDone = true;
+              return;
             }
+            const details: string[] = [];
+            if (runtimeStage) details.push(`stage=${runtimeStage}`);
+            if (runtimeRequestId) details.push(`request_id=${runtimeRequestId}`);
+            throw new Error(details.length > 0 ? `${msg} (${details.join(", ")})` : msg);
+          }
             eventName = "message";
           };
 
@@ -946,6 +976,12 @@ export function useWebTurnRunnerController<
             }
           }
           flushEvent();
+
+          if (streamInferenceIssueHandled) {
+            await current.loadThreadMessages(threadId, session);
+            await current.loadThreads(session);
+            return { cancelled: false, error: null };
+          }
 
           const safeAssistantText = sanitizeUserFacingAssistantText({
             text: finalContent,
