@@ -329,7 +329,7 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
                       </button>
                     ) : (
                       <>
-                        <span className="auth-status">Builder includes 500 monthly workspace credits. Connect ChatGPT or add an OpenAI API key in Agent settings to bring your own inference.</span>
+                        <span className="auth-status">Credits cover paid tools like Daytona workspaces, web research, and voice input. Connect ChatGPT or add an OpenAI API key in Agent settings to bring your own inference.</span>
                         {canManagePlan ? (
                           <button
                             type="button"
