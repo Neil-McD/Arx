@@ -10,6 +10,13 @@ import {
   type DaytonaConfig,
 } from "./daytonaSandboxClient";
 import { isWorkspaceTerminalActiveStatus } from "./workspaceTerminalProcessCore";
+import {
+  DAYTONA_WORKSPACE_SESSION_BUDGET_SECONDS,
+  DAYTONA_WORKSPACE_SESSION_RESERVATION_EXPIRY_MS,
+  convertUsdToWorkspaceCredits,
+  estimateDaytonaWorkspaceComputeUsd,
+  estimateDaytonaWorkspaceReservationCredits,
+} from "../shared/workspaceCredits";
 
 const PROJECT_BACKGROUND_SANDBOX_CREATE_LEASE_MS = 60_000;
 const PROJECT_BACKGROUND_SANDBOX_WAIT_MS = 65_000;
@@ -35,6 +42,52 @@ function buildBackgroundSandboxRunId(
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function newCreditKey(prefix: string): string {
+  return `${prefix}_${crypto.randomUUID().replace(/-/g, "")}`;
+}
+
+function readPositiveNumber(value: unknown, fallback: number): number {
+  const normalized = Number(value);
+  return Number.isFinite(normalized) && normalized > 0 ? normalized : fallback;
+}
+
+function readBackgroundCreditReservation(project: any): {
+  creditReservationKey: string | null;
+  creditBudgetCredits: number;
+  creditBudgetExpiresAt: number;
+  startedAt: number | null;
+} {
+  return {
+    creditReservationKey: normalizeOptionalString(project?.providerSandboxCreditReservationKey),
+    creditBudgetCredits: readPositiveNumber(project?.providerSandboxCreditBudgetCredits, 0),
+    creditBudgetExpiresAt: readPositiveNumber(project?.providerSandboxCreditBudgetExpiresAt, 0),
+    startedAt: readPositiveNumber(project?.providerSandboxStartedAt, 0) || null,
+  };
+}
+
+async function settleReservedCreditsBestEffort(params: {
+  ctx: any;
+  creditKey?: string | null;
+  status: "succeeded" | "refunded";
+  creditsSettled?: number;
+  failureReason?: string | null;
+  nowMs?: number;
+}): Promise<void> {
+  const creditKey = normalizeOptionalString(params.creditKey);
+  if (!creditKey) return;
+  try {
+    await params.ctx.runMutation(internal.workspaceCredits.settleCreditsInternal as any, {
+      creditKey,
+      status: params.status,
+      creditsSettled: params.creditsSettled,
+      failureReason: params.failureReason ?? undefined,
+      nowMs: params.nowMs ?? Date.now(),
+    });
+  } catch {
+    // Expired-reservation reconciliation is the durable fallback.
+  }
 }
 
 async function waitForProjectBackgroundSandboxRegistration(params: {
@@ -98,6 +151,10 @@ export async function ensureProjectBackgroundSandbox(params: {
       sandboxCpu: number;
       sandboxMemoryGiB: number;
       sandboxDiskGiB: number;
+      startedAt: number;
+      creditReservationKey: string | null;
+      creditBudgetCredits: number;
+      creditBudgetExpiresAt: number;
     }
   | {
       ok: false;
@@ -114,6 +171,7 @@ export async function ensureProjectBackgroundSandbox(params: {
     projectId: params.projectId,
   });
   if (existing.ok) return existing;
+  if (existing.code === "workspace_credits_exhausted") return existing;
 
   const project = await params.ctx.runQuery(api.projects.getCloudProjectById as any, {
     authSubject: params.authSubject,
@@ -191,6 +249,48 @@ export async function ensureProjectBackgroundSandbox(params: {
     autoStopInterval: 0,
   };
 
+  const creditReservationKey = newCreditKey("daytona_bg");
+  const creditBudgetCredits = estimateDaytonaWorkspaceReservationCredits({
+    sandboxCpu: config.sandboxCpu,
+    sandboxMemoryGiB: config.sandboxMemoryGiB,
+  });
+  const reservedAt = Date.now();
+  const creditBudgetExpiresAt = reservedAt + DAYTONA_WORKSPACE_SESSION_BUDGET_SECONDS * 1000;
+  try {
+    await params.ctx.runMutation(
+      internal.workspaceCredits.reserveCreditsInternal as any,
+      {
+        creditKey: creditReservationKey,
+        userId: params.userId,
+        projectId: params.projectId,
+        runId: buildBackgroundSandboxRunId(params.projectId),
+        toolName: "daytona_workspace",
+        action: "background_sandbox",
+        vendor: "daytona",
+        credits: creditBudgetCredits,
+        metadata: {
+          sandbox_cpu: config.sandboxCpu,
+          sandbox_memory_gib: config.sandboxMemoryGiB,
+          sandbox_disk_gib: config.sandboxDiskGiB,
+        },
+        expiresAt: reservedAt + DAYTONA_WORKSPACE_SESSION_RESERVATION_EXPIRY_MS,
+        nowMs: reservedAt,
+      },
+    );
+  } catch (error) {
+    await clearCreationLease();
+    const message = error instanceof Error ? error.message : String(error ?? "");
+    return {
+      ok: false,
+      status: 402,
+      code: message === "credits_exhausted" ? "workspace_credits_exhausted" : "workspace_credits_unavailable",
+      message:
+        message === "credits_exhausted"
+          ? "Add credits to use workspace tools."
+          : "Credits are unavailable for workspace tools.",
+    };
+  }
+
   let runtimeProject: any;
   try {
     runtimeProject = await params.ctx.runAction(
@@ -202,6 +302,13 @@ export async function ensureProjectBackgroundSandbox(params: {
     );
   } catch (error) {
     await clearCreationLease();
+    await settleReservedCreditsBestEffort({
+      ctx: params.ctx,
+      creditKey: creditReservationKey,
+      status: "refunded",
+      failureReason: "project_volume_unavailable",
+      nowMs: Date.now(),
+    });
     return {
       ok: false,
       status: 503,
@@ -224,12 +331,24 @@ export async function ensureProjectBackgroundSandbox(params: {
   });
   if (!created.ok) {
     await clearCreationLease();
+    await settleReservedCreditsBestEffort({
+      ctx: params.ctx,
+      creditKey: creditReservationKey,
+      status: "refunded",
+      failureReason: created.code,
+    });
     return created;
   }
 
   const providerSandboxId = String(created.sandbox.id ?? "").trim();
   if (!providerSandboxId) {
     await clearCreationLease();
+    await settleReservedCreditsBestEffort({
+      ctx: params.ctx,
+      creditKey: creditReservationKey,
+      status: "refunded",
+      failureReason: "sandbox_id_missing",
+    });
     return {
       ok: false,
       status: 503,
@@ -250,6 +369,12 @@ export async function ensureProjectBackgroundSandbox(params: {
     } catch {
       // Orphan reconciliation will clean up if Daytona cleanup fails here.
     }
+    await settleReservedCreditsBestEffort({
+      ctx: params.ctx,
+      creditKey: creditReservationKey,
+      status: "refunded",
+      failureReason: ready.code,
+    });
     return ready;
   }
 
@@ -265,9 +390,16 @@ export async function ensureProjectBackgroundSandbox(params: {
     } catch {
       // Orphan reconciliation will clean up if Daytona cleanup fails here.
     }
+    await settleReservedCreditsBestEffort({
+      ctx: params.ctx,
+      creditKey: creditReservationKey,
+      status: "refunded",
+      failureReason: toolbox.code,
+    });
     return toolbox;
   }
 
+  const sandboxStartedAt = Date.now();
   try {
     await params.ctx.runMutation(
       internal.workspaceTerminals.setProjectBackgroundSandboxInternal as any,
@@ -275,7 +407,11 @@ export async function ensureProjectBackgroundSandbox(params: {
         projectId: params.projectId,
         providerSandboxId,
         providerSandboxState: String(ready.sandbox.state ?? "").trim() || "started",
-        providerSandboxLastSeenAt: Date.now(),
+        providerSandboxLastSeenAt: sandboxStartedAt,
+        providerSandboxStartedAt: sandboxStartedAt,
+        providerSandboxCreditReservationKey: creditReservationKey,
+        providerSandboxCreditBudgetCredits: creditBudgetCredits,
+        providerSandboxCreditBudgetExpiresAt: creditBudgetExpiresAt,
       },
     );
   } catch {
@@ -286,6 +422,12 @@ export async function ensureProjectBackgroundSandbox(params: {
     } catch {
       // Orphan reconciliation will clean up if Daytona cleanup fails here.
     }
+    await settleReservedCreditsBestEffort({
+      ctx: params.ctx,
+      creditKey: creditReservationKey,
+      status: "refunded",
+      failureReason: "background_sandbox_register_failed",
+    });
     return {
       ok: false,
       status: 500,
@@ -304,6 +446,10 @@ export async function ensureProjectBackgroundSandbox(params: {
     sandboxCpu: config.sandboxCpu,
     sandboxMemoryGiB: config.sandboxMemoryGiB,
     sandboxDiskGiB: config.sandboxDiskGiB,
+    startedAt: sandboxStartedAt,
+    creditReservationKey,
+    creditBudgetCredits,
+    creditBudgetExpiresAt,
   };
 }
 
@@ -322,6 +468,10 @@ export async function resolveProjectBackgroundSandboxIfReady(params: {
       sandboxCpu: number;
       sandboxMemoryGiB: number;
       sandboxDiskGiB: number;
+      startedAt: number;
+      creditReservationKey: string | null;
+      creditBudgetCredits: number;
+      creditBudgetExpiresAt: number;
     }
   | {
       ok: false;
@@ -351,6 +501,24 @@ export async function resolveProjectBackgroundSandboxIfReady(params: {
       status: 404,
       code: "background_sandbox_not_found",
       message: "No active project background sandbox is registered.",
+    };
+  }
+  const credit = readBackgroundCreditReservation(project);
+  if (
+    credit.creditBudgetExpiresAt > 0 &&
+    Date.now() >= credit.creditBudgetExpiresAt
+  ) {
+    await releaseProjectBackgroundSandboxIfIdle({
+      ctx: params.ctx,
+      ownerId: params.userId,
+      projectId: params.projectId,
+      providerSandboxId: existingSandboxId,
+    });
+    return {
+      ok: false,
+      status: 402,
+      code: "workspace_credits_exhausted",
+      message: "Workspace credit budget expired. Add credits to use workspace tools.",
     };
   }
 
@@ -426,6 +594,10 @@ export async function resolveProjectBackgroundSandboxIfReady(params: {
     sandboxCpu: config.sandboxCpu,
     sandboxMemoryGiB: config.sandboxMemoryGiB,
     sandboxDiskGiB: config.sandboxDiskGiB,
+    startedAt: credit.startedAt ?? Date.now(),
+    creditReservationKey: credit.creditReservationKey,
+    creditBudgetCredits: credit.creditBudgetCredits,
+    creditBudgetExpiresAt: credit.creditBudgetExpiresAt,
   };
 }
 
@@ -443,6 +615,28 @@ export async function resolveTerminalSandboxContext(params: {
       message: string;
     }
 > {
+  const project = await params.ctx.runQuery(
+    internal.projects.getCloudProjectByIdInternal as any,
+    {
+      projectId: params.projectId,
+    },
+  );
+  if (
+    String(project?.providerSandboxId ?? "").trim() === params.providerSandboxId
+  ) {
+    const credit = readBackgroundCreditReservation(project);
+    if (
+      credit.creditBudgetExpiresAt > 0 &&
+      Date.now() >= credit.creditBudgetExpiresAt
+    ) {
+      return {
+        ok: false,
+        status: 402,
+        code: "workspace_credits_exhausted",
+        message: "Workspace credit budget expired. Add credits to use workspace tools.",
+      };
+    }
+  }
   const loadedConfig = loadDaytonaConfig();
   if (!loadedConfig.ok) {
     return {
@@ -565,9 +759,31 @@ export async function releaseProjectBackgroundSandboxIfIdle(params: {
     const startedAtCandidates = sandboxRows
       .map((row) => Number(row.startedAt ?? 0))
       .filter((value) => Number.isFinite(value) && value > 0);
+    const credit = readBackgroundCreditReservation(project);
     const startedAt =
-      startedAtCandidates.length > 0 ? Math.min(...startedAtCandidates) : Date.now();
+      credit.startedAt ??
+      (startedAtCandidates.length > 0 ? Math.min(...startedAtCandidates) : Date.now());
     try {
+      const endedAt = Date.now();
+      const durationSeconds = Math.max(0, (endedAt - startedAt) / 1000);
+      const computeCostUsd = estimateDaytonaWorkspaceComputeUsd({
+        durationSeconds,
+        sandboxCpu: config.sandboxCpu,
+        sandboxMemoryGiB: config.sandboxMemoryGiB,
+      });
+      const creditsDebited = credit.creditReservationKey
+        ? Math.min(
+            credit.creditBudgetCredits,
+            convertUsdToWorkspaceCredits(computeCostUsd),
+          )
+        : convertUsdToWorkspaceCredits(computeCostUsd);
+      await settleReservedCreditsBestEffort({
+        ctx: params.ctx,
+        creditKey: credit.creditReservationKey,
+        status: "succeeded",
+        creditsSettled: creditsDebited,
+        nowMs: endedAt,
+      });
       await params.ctx.runMutation(
         internal.workspaceCredits.recordWorkspaceComputeChargeInternal as any,
         {
@@ -580,10 +796,14 @@ export async function releaseProjectBackgroundSandboxIfIdle(params: {
           ),
           providerSandboxId: params.providerSandboxId,
           startedAt,
-          endedAt: Date.now(),
+          endedAt,
+          durationSeconds,
           sandboxCpu: config.sandboxCpu,
           sandboxMemoryGiB: config.sandboxMemoryGiB,
           sandboxDiskGiB: config.sandboxDiskGiB,
+          computeCostUsd,
+          creditsDebited,
+          creditReservationKey: credit.creditReservationKey,
         },
       );
     } catch {

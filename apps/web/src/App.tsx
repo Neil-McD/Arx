@@ -3619,8 +3619,8 @@ export default function App() {
             ? error
             : error instanceof Error
               ? error.message
-              : "Failed to load workspace credits.";
-        console.warn("Workspace credit balance refresh failed:", error);
+              : "Failed to load credits.";
+        console.warn("Credit balance refresh failed:", error);
         if (requestId === workspaceCreditLoadRequestIdRef.current) {
           setWorkspaceCreditBalanceError(message);
         }
@@ -3637,9 +3637,8 @@ export default function App() {
   useEffect(() => {
     if (!session) return;
     if (activeView !== "settings" || settingsGroup !== "agent") return;
-    if (!hasBuilderTierPaidAccess(builderBillingStatus?.builder_tier ?? "free")) return;
     void loadWorkspaceCreditBalance(session);
-  }, [activeView, builderBillingStatus?.builder_tier, session, loadWorkspaceCreditBalance, settingsGroup]);
+  }, [activeView, session, loadWorkspaceCreditBalance, settingsGroup]);
 
   useEffect(() => {
     if (!session || activePage !== "workspace") return;
@@ -4561,7 +4560,7 @@ export default function App() {
           ? error
           : error instanceof Error
             ? error.message
-            : "Failed to start workspace credit top-up checkout.";
+            : "Failed to start credit checkout.";
       setWorkspaceCreditTopupError(message);
     } finally {
       setIsStartingWorkspaceCreditTopupCheckout(false);

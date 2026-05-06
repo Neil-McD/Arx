@@ -30,6 +30,7 @@ import {
   writeDaytonaWorkspaceFile,
 } from "./daytonaWorkspaceTools";
 import { executeWebResearch } from "./webResearchTools";
+import { WEB_RESEARCH_CREDITS_PER_CALL } from "../shared/workspaceCredits";
 import { runOpenRouterNativeToolCompletion } from "./openRouterNativeTransport";
 import {
   type RetrievalToolName,
@@ -125,6 +126,111 @@ const CHAT_TOOLS_RUNTIME_KERNEL_BUDGET: RuntimeKernelBudget =
   DEFAULT_RUNTIME_KERNEL_BUDGET;
 const RUNTIME_PARALLEL_READ_TOOLS_FLAG =
   "RUNTIME_PARALLEL_READ_TOOLS_ENABLED";
+
+function newCreditKey(prefix: string): string {
+  return `${prefix}_${crypto.randomUUID().replace(/-/g, "")}`;
+}
+
+function isWorkspaceCreditBudgetExpired(
+  session: WorkspaceSandboxSession | null | undefined,
+): boolean {
+  const expiresAt = Number(session?.creditBudgetExpiresAt ?? 0);
+  return Number.isFinite(expiresAt) && expiresAt > 0 && Date.now() >= expiresAt;
+}
+
+function buildWorkspaceCreditBudgetSignal(
+  session: WorkspaceSandboxSession,
+  parentSignal?: AbortSignal,
+): { signal?: AbortSignal; cleanup: () => void } {
+  const expiresAt = Number(session.creditBudgetExpiresAt ?? 0);
+  if (!Number.isFinite(expiresAt) || expiresAt <= 0) {
+    return { signal: parentSignal, cleanup: () => {} };
+  }
+  const remainingMs = Math.max(0, expiresAt - Date.now());
+  const controller = new AbortController();
+  let settled = false;
+  const cleanupFns: Array<() => void> = [];
+  const abort = () => {
+    if (settled) return;
+    settled = true;
+    controller.abort();
+  };
+  const timeout = setTimeout(abort, remainingMs);
+  cleanupFns.push(() => clearTimeout(timeout));
+  if (parentSignal) {
+    if (parentSignal.aborted) {
+      abort();
+    } else {
+      const onAbort = () => abort();
+      parentSignal.addEventListener("abort", onAbort, { once: true });
+      cleanupFns.push(() => parentSignal.removeEventListener("abort", onAbort));
+    }
+  }
+  return {
+    signal: controller.signal,
+    cleanup: () => {
+      settled = true;
+      for (const cleanup of cleanupFns) cleanup();
+    },
+  };
+}
+
+async function settleReservedCreditsBestEffort(params: {
+  ctx: any;
+  creditKey: string;
+  status: "succeeded" | "refunded";
+  failureReason?: string | null;
+}): Promise<void> {
+  let lastError: unknown = null;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      await params.ctx.runMutation(internal.workspaceCredits.settleCreditsInternal as any, {
+        creditKey: params.creditKey,
+        status: params.status,
+        failureReason: params.failureReason ?? undefined,
+        nowMs: Date.now(),
+      });
+      return;
+    } catch (error) {
+      lastError = error;
+      await new Promise((resolve) => setTimeout(resolve, attempt * 100));
+    }
+  }
+  console.warn("credits_settle_failed", {
+    credit_key: params.creditKey,
+    status: params.status,
+    error: lastError instanceof Error ? lastError.message : String(lastError ?? ""),
+  });
+}
+
+async function settleReservedCreditsStrict(params: {
+  ctx: any;
+  creditKey: string;
+  status: "succeeded" | "refunded";
+  failureReason?: string | null;
+}): Promise<void> {
+  let lastError: unknown = null;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      await params.ctx.runMutation(internal.workspaceCredits.settleCreditsInternal as any, {
+        creditKey: params.creditKey,
+        status: params.status,
+        failureReason: params.failureReason ?? undefined,
+        nowMs: Date.now(),
+      });
+      return;
+    } catch (error) {
+      lastError = error;
+      await new Promise((resolve) => setTimeout(resolve, attempt * 100));
+    }
+  }
+  throw new Error(
+    lastError instanceof Error
+      ? lastError.message || "credits_settlement_failed"
+      : "credits_settlement_failed",
+  );
+}
+
 function readRuntimeBooleanFlag(name: string, defaultValue: boolean): boolean {
   try {
     const rawValue = (globalThis as any)?.process?.env?.[name];
@@ -345,27 +451,106 @@ async function executeRetrievalHarnessTool(params: {
   }
 
   if (params.toolName === "web_research") {
-    const result = await executeWebResearch({
-      action:
-        String(normalizedArgs.action ?? "").trim() === "find_in_page"
-          ? "find_in_page"
-          : String(normalizedArgs.action ?? "").trim() === "open_page"
-            ? "open_page"
-            : "search",
-      query:
-        typeof normalizedArgs.query === "string"
-          ? normalizedArgs.query
-          : undefined,
-      url:
-        typeof normalizedArgs.url === "string" ? normalizedArgs.url : undefined,
-    });
+    const action =
+      String(normalizedArgs.action ?? "").trim() === "find_in_page"
+        ? "find_in_page"
+        : String(normalizedArgs.action ?? "").trim() === "open_page"
+          ? "open_page"
+          : "search";
+    const creditKey = newCreditKey("web");
+    try {
+      await params.ctx.runMutation(internal.workspaceCredits.reserveCreditsInternal as any, {
+        creditKey,
+        userId: params.userId,
+        communityId: params.communityId ?? undefined,
+        projectId: params.projectId ?? undefined,
+        runId: params.runId,
+        toolName: params.toolName,
+        action,
+        vendor: action === "search" ? "openai_xai_fallback" : "jina",
+        credits: WEB_RESEARCH_CREDITS_PER_CALL,
+        polynetPriceUsd: WEB_RESEARCH_CREDITS_PER_CALL / 100,
+        metadata: {
+          query:
+            typeof normalizedArgs.query === "string"
+              ? normalizedArgs.query.slice(0, 240)
+              : null,
+          url:
+            typeof normalizedArgs.url === "string"
+              ? normalizedArgs.url.slice(0, 500)
+              : null,
+        },
+        nowMs: Date.now(),
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return {
+        status: "error",
+        exitCode: null,
+        outputText: "",
+        errorCode: message === "credits_exhausted" ? "credits_exhausted" : "credits_unavailable",
+        errorMessage:
+          message === "credits_exhausted"
+            ? "Add credits to use web research."
+            : "Credits are unavailable for web research.",
+      };
+    }
+
+    let result: Awaited<ReturnType<typeof executeWebResearch>>;
+    try {
+      result = await executeWebResearch({
+        action,
+        query:
+          typeof normalizedArgs.query === "string"
+            ? normalizedArgs.query
+            : undefined,
+        url:
+          typeof normalizedArgs.url === "string" ? normalizedArgs.url : undefined,
+      });
+    } catch (error) {
+      await settleReservedCreditsBestEffort({
+        ctx: params.ctx,
+        creditKey,
+        status: "refunded",
+        failureReason: "web_research_threw",
+      });
+      const message = error instanceof Error ? error.message : String(error);
+      return {
+        status: "error",
+        exitCode: null,
+        outputText: "",
+        errorCode: "web_research_failed",
+        errorMessage: message || "Web research failed.",
+      };
+    }
     if (!result.ok) {
+      await settleReservedCreditsBestEffort({
+        ctx: params.ctx,
+        creditKey,
+        status: "refunded",
+        failureReason: result.code,
+      });
       return {
         status: "error",
         exitCode: null,
         outputText: String(result.outputPreview ?? ""),
         errorCode: result.code,
         errorMessage: result.message,
+      };
+    }
+    try {
+      await settleReservedCreditsStrict({
+        ctx: params.ctx,
+        creditKey,
+        status: "succeeded",
+      });
+    } catch {
+      return {
+        status: "error",
+        exitCode: null,
+        outputText: "",
+        errorCode: "credits_settlement_failed",
+        errorMessage: "Web research succeeded, but credit settlement failed. Try again.",
       };
     }
     return {
@@ -404,17 +589,32 @@ async function executeRetrievalHarnessTool(params: {
         errorMessage: `${params.toolName} requires a bound project workspace.`,
       };
     }
-    const result =
-      params.toolName === "list_dir"
-        ? await listDaytonaWorkspaceDirectory({
+    if (isWorkspaceCreditBudgetExpired(workspaceSession)) {
+      return {
+        status: "error",
+        exitCode: null,
+        outputText: "",
+        errorCode: "workspace_credits_exhausted",
+        errorMessage: "Workspace credit budget expired. Add credits to use workspace tools.",
+      };
+    }
+    const budgetSignal = buildWorkspaceCreditBudgetSignal(
+      workspaceSession,
+      params.signal,
+    );
+    const startedBeforeBudgetExpiry = !isWorkspaceCreditBudgetExpired(workspaceSession);
+    const result = await (async () => {
+      try {
+        return params.toolName === "list_dir"
+          ? await listDaytonaWorkspaceDirectory({
             config: workspaceSession.config,
             toolboxProxyUrl: workspaceSession.toolboxProxyUrl,
             sandboxId: workspaceSession.providerSandboxId,
             relPath: String(normalizedArgs.path ?? ".") || ".",
-            signal: params.signal,
+            signal: budgetSignal.signal,
           })
-        : params.toolName === "read"
-          ? await readDaytonaWorkspaceFile({
+          : params.toolName === "read"
+            ? await readDaytonaWorkspaceFile({
               config: workspaceSession.config,
               toolboxProxyUrl: workspaceSession.toolboxProxyUrl,
               sandboxId: workspaceSession.providerSandboxId,
@@ -427,10 +627,10 @@ async function executeRetrievalHarnessTool(params: {
                 typeof normalizedArgs.limit === "number"
                   ? normalizedArgs.limit
                   : undefined,
-              signal: params.signal,
+              signal: budgetSignal.signal,
             })
-          : params.toolName === "glob"
-            ? await globDaytonaWorkspacePaths({
+            : params.toolName === "glob"
+              ? await globDaytonaWorkspacePaths({
                 config: workspaceSession.config,
                 toolboxProxyUrl: workspaceSession.toolboxProxyUrl,
                 sandboxId: workspaceSession.providerSandboxId,
@@ -439,10 +639,10 @@ async function executeRetrievalHarnessTool(params: {
                   typeof normalizedArgs.path === "string"
                     ? normalizedArgs.path
                     : undefined,
-                signal: params.signal,
+                signal: budgetSignal.signal,
               })
-            : params.toolName === "grep"
-              ? await grepDaytonaWorkspaceFiles({
+              : params.toolName === "grep"
+                ? await grepDaytonaWorkspaceFiles({
                   config: workspaceSession.config,
                   toolboxProxyUrl: workspaceSession.toolboxProxyUrl,
                   sandboxId: workspaceSession.providerSandboxId,
@@ -451,27 +651,27 @@ async function executeRetrievalHarnessTool(params: {
                     typeof normalizedArgs.path === "string"
                       ? normalizedArgs.path
                       : undefined,
-                  signal: params.signal,
+                  signal: budgetSignal.signal,
                 })
-              : params.toolName === "sha256"
-                ? await sha256DaytonaWorkspaceFile({
+                : params.toolName === "sha256"
+                  ? await sha256DaytonaWorkspaceFile({
                     config: workspaceSession.config,
                     toolboxProxyUrl: workspaceSession.toolboxProxyUrl,
                     sandboxId: workspaceSession.providerSandboxId,
                     relPath: String(normalizedArgs.path ?? "").trim(),
-                    signal: params.signal,
+                    signal: budgetSignal.signal,
                   })
-                : params.toolName === "write"
-                  ? await writeDaytonaWorkspaceFile({
+                  : params.toolName === "write"
+                    ? await writeDaytonaWorkspaceFile({
                       config: workspaceSession.config,
                       toolboxProxyUrl: workspaceSession.toolboxProxyUrl,
                       sandboxId: workspaceSession.providerSandboxId,
                       relPath: String(normalizedArgs.path ?? "").trim(),
                       content: String(normalizedArgs.content ?? ""),
-                      signal: params.signal,
+                      signal: budgetSignal.signal,
                     })
-                  : params.toolName === "edit"
-                    ? await editDaytonaWorkspaceFile({
+                    : params.toolName === "edit"
+                      ? await editDaytonaWorkspaceFile({
                         config: workspaceSession.config,
                         toolboxProxyUrl: workspaceSession.toolboxProxyUrl,
                         sandboxId: workspaceSession.providerSandboxId,
@@ -479,9 +679,9 @@ async function executeRetrievalHarnessTool(params: {
                         oldText: String(normalizedArgs.old_text ?? ""),
                         newText: String(normalizedArgs.new_text ?? ""),
                         replaceAll: normalizedArgs.replace_all === true,
-                        signal: params.signal,
+                        signal: budgetSignal.signal,
                       })
-                    : await runDaytonaWorkspaceBash({
+                      : await runDaytonaWorkspaceBash({
                         config: workspaceSession.config,
                         toolboxProxyUrl: workspaceSession.toolboxProxyUrl,
                         sandboxId: workspaceSession.providerSandboxId,
@@ -490,8 +690,25 @@ async function executeRetrievalHarnessTool(params: {
                           typeof normalizedArgs.cwd === "string"
                             ? normalizedArgs.cwd
                             : undefined,
-                        signal: params.signal,
+                        signal: budgetSignal.signal,
                       });
+      } finally {
+        budgetSignal.cleanup();
+      }
+    })();
+    if (
+      startedBeforeBudgetExpiry &&
+      budgetSignal.signal?.aborted &&
+      isWorkspaceCreditBudgetExpired(workspaceSession)
+    ) {
+      return {
+        status: "error",
+        exitCode: null,
+        outputText: "",
+        errorCode: "workspace_credits_exhausted",
+        errorMessage: "Workspace credit budget expired. Add credits to use workspace tools.",
+      };
+    }
     if (!result.ok) {
       const detailsExitCode =
         typeof result.details?.exit_code === "number" &&

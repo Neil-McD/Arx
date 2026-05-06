@@ -59,6 +59,7 @@
     "check:runtime-workspace-state-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_workspace_state_proof.ts",
     "check:runtime-preview-diagnostics-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_preview_diagnostics_proof.ts",
     "check:runtime-preview-probe-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_preview_probe_proof.ts",
+    "check:workspace-credit-accounting-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/workspace_credit_accounting_proof.ts",
     "check:runtime-prompt-layout-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_prompt_layout_proof.ts",
     "check:runtime-failure-finalization-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_failure_finalization_proof.ts",
     "check:runtime-activity-timeline-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_activity_timeline_proof.ts",

@@ -32,6 +32,15 @@ crons.interval(
   {},
 );
 
+crons.interval(
+  "reconcile expired credit reservations",
+  { minutes: 15 },
+  (internal as any).workspaceCredits.reconcileExpiredCreditReservationsInternal,
+  {
+    limit: 100,
+  },
+);
+
 crons.monthly(
   "prune low-signal community ai feed posts",
   {

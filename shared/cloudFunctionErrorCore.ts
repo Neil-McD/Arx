@@ -79,7 +79,13 @@ function classifyErrorCategory(input: { status: number; code: string | null; mes
   if (AUTH_CODES.has(code) || code === "auth_required" || includesAuthFailureText(message)) return "auth";
   if (code === "rate_limited") return "rate_limited";
   if (code === "platform_inference_quota_exceeded" || code === "provider_inference_quota_exceeded") return "quota";
-  if (code === "workspace_credits_exhausted" || code === "workspace_credits_unavailable") return "workspace_credits";
+  if (
+    code === "workspace_credits_exhausted" ||
+    code === "workspace_credits_unavailable" ||
+    code === "credits_exhausted" ||
+    code === "credits_unavailable"
+  )
+    return "workspace_credits";
   if (
     code === "platform_inference_not_allowed" ||
     code === "tier_required" ||

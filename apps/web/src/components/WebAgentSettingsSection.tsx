@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { hasBuilderTierPaidAccess } from "../../../../shared/builderBilling";
 import {
   WORKSPACE_CREDIT_LOW_BALANCE_THRESHOLD,
   WORKSPACE_CREDIT_TOPUP_CREDITS,
@@ -112,8 +111,6 @@ export function WebAgentSettingsSection(props: WebAgentSettingsSectionProps) {
     isLoadingUserMemorySettings,
     saveUserMemorySettings,
     personalMemoryError,
-    builderBillingStatus,
-    openBuilderUpgrade,
     isLoadingPersonalMemory,
     personalMemoryItems,
     personalMemoryQuery,
@@ -287,60 +284,53 @@ export function WebAgentSettingsSection(props: WebAgentSettingsSectionProps) {
         </div>
 
         {(() => {
-          const tier = builderBillingStatus?.builder_tier ?? "free";
-          const hasWorkspaceCreditAccess = hasBuilderTierPaidAccess(tier);
           if (!session) return null;
+          const totalCredits = workspaceCreditBalance
+            ? workspaceCreditBalance.includedCreditsBalance + workspaceCreditBalance.purchasedCreditsBalance
+            : 0;
+          const includedCredits = workspaceCreditBalance?.includedCreditsBalance ?? 0;
+          const purchasedCredits = workspaceCreditBalance?.purchasedCreditsBalance ?? 0;
 
           return (
             <>
               <div className="settings-section">
                 <div className="settings-section-title">
                   <svg viewBox="0 0 24 24"><path d="M4 7h16" /><path d="M4 12h16" /><path d="M4 17h10" /><path d="M18 4v16" /></svg>
-                  Workspace credits
+                  Credits
                 </div>
                 <div className="settings-section-desc">
-                  Credits are only used when Builder tools spin up a Daytona sandbox. Community tools and web research do not consume them.
+                  Credits are used for paid tools: Daytona workspaces, web research, and voice input. LLM inference still uses your connected ChatGPT account or OpenAI API key.
                 </div>
-                {!hasWorkspaceCreditAccess ? (
-                  <div className="auth-actions" style={{ paddingLeft: 0 }}>
-                    <button type="button" onClick={() => openBuilderUpgrade("builder")}>
-                      Upgrade to Builder
-                    </button>
-                  </div>
-                ) : isLoadingWorkspaceCreditBalance && !workspaceCreditBalance ? (
-                  <div className="model-note">Checking workspace credits…</div>
-                ) : workspaceCreditBalance ? (
+                {isLoadingWorkspaceCreditBalance && !workspaceCreditBalance ? (
+                  <div className="model-note">Checking credits…</div>
+                ) : (
                   <>
-                    {workspaceCreditBalance.includedCreditsBalance +
-                      workspaceCreditBalance.purchasedCreditsBalance <=
-                    WORKSPACE_CREDIT_LOW_BALANCE_THRESHOLD ? (
+                    {totalCredits <= WORKSPACE_CREDIT_LOW_BALANCE_THRESHOLD ? (
                       <div className="auth-error" style={{ marginBottom: 12 }}>
-                        You&apos;re running low on workspace credits. Buy another{" "}
-                        {formatCredits(WORKSPACE_CREDIT_TOPUP_CREDITS)} credits to keep Builder tools available.
+                        You&apos;re running low on credits. Buy another{" "}
+                        {formatCredits(WORKSPACE_CREDIT_TOPUP_CREDITS)} credits to keep paid tools available.
                       </div>
                     ) : null}
                     <div className="account-row">
                       <div className="account-identity">
                         <span>Remaining</span>
                         <strong>
-                          {formatCredits(
-                            workspaceCreditBalance.includedCreditsBalance +
-                              workspaceCreditBalance.purchasedCreditsBalance,
-                          )}{" "}
-                          credits
+                          {formatCredits(totalCredits)} credits
                         </strong>
                       </div>
-                      <div className="auth-status">
-                        {formatCredits(workspaceCreditBalance.includedCycleCredits)} included this cycle
-                      </div>
+                      {includedCredits > 0 ? (
+                        <div className="auth-status">
+                          {formatCredits(workspaceCreditBalance?.includedCycleCredits ?? 0)} included this cycle
+                        </div>
+                      ) : null}
                     </div>
                     <div className="settings-section-desc">
-                      {workspaceCreditBalance.purchasedCreditsBalance > 0
-                        ? `${formatCredits(workspaceCreditBalance.purchasedCreditsBalance)} purchased credits are available in addition to your monthly Builder credits. `
+                      {purchasedCredits > 0
+                        ? `${formatCredits(purchasedCredits)} purchased credits are available. `
                         : ""}
-                      {workspaceCreditBalance.includedCycleEndsAt > 0
-                        ? `Your included credits reset ${formatRelativeTime(new Date(workspaceCreditBalance.includedCycleEndsAt).toISOString())}.`
-                        : "Your included Builder credits reset each paid billing cycle."}
+                      {includedCredits > 0 && (workspaceCreditBalance?.includedCycleEndsAt ?? 0) > 0
+                        ? `Your included credits reset ${formatRelativeTime(new Date(workspaceCreditBalance?.includedCycleEndsAt ?? 0).toISOString())}.`
+                        : "Buy credits before using paid tools."}
                     </div>
                     <div className="auth-actions" style={{ paddingLeft: 0, marginTop: 12 }}>
                       <button
@@ -354,10 +344,6 @@ export function WebAgentSettingsSection(props: WebAgentSettingsSectionProps) {
                       </button>
                     </div>
                   </>
-                ) : (
-                  <div className="model-note">
-                    Workspace credits will appear here after your Builder billing cycle is available.
-                  </div>
                 )}
                 {workspaceCreditBalanceError && <div className="auth-error">{workspaceCreditBalanceError}</div>}
                 {workspaceCreditTopupError && <div className="auth-error">{workspaceCreditTopupError}</div>}

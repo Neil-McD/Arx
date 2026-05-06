@@ -159,6 +159,50 @@ function normalizeRuntimeTerminalIdentityCommand(
     .trim();
 }
 
+function isWorkspaceCreditBudgetExpired(
+  session: WorkspaceSandboxSession | null | undefined,
+): boolean {
+  const expiresAt = Number(session?.creditBudgetExpiresAt ?? 0);
+  return Number.isFinite(expiresAt) && expiresAt > 0 && Date.now() >= expiresAt;
+}
+
+function buildWorkspaceCreditBudgetSignal(
+  session: WorkspaceSandboxSession,
+  parentSignal?: AbortSignal,
+): { signal?: AbortSignal; cleanup: () => void } {
+  const expiresAt = Number(session.creditBudgetExpiresAt ?? 0);
+  if (!Number.isFinite(expiresAt) || expiresAt <= 0) {
+    return { signal: parentSignal, cleanup: () => {} };
+  }
+  const remainingMs = Math.max(0, expiresAt - Date.now());
+  const controller = new AbortController();
+  let settled = false;
+  const cleanupFns: Array<() => void> = [];
+  const abort = () => {
+    if (settled) return;
+    settled = true;
+    controller.abort();
+  };
+  const timeout = setTimeout(abort, remainingMs);
+  cleanupFns.push(() => clearTimeout(timeout));
+  if (parentSignal) {
+    if (parentSignal.aborted) {
+      abort();
+    } else {
+      const onAbort = () => abort();
+      parentSignal.addEventListener("abort", onAbort, { once: true });
+      cleanupFns.push(() => parentSignal.removeEventListener("abort", onAbort));
+    }
+  }
+  return {
+    signal: controller.signal,
+    cleanup: () => {
+      settled = true;
+      for (const cleanup of cleanupFns) cleanup();
+    },
+  };
+}
+
 async function requireRuntimeAccessibleTerminalRow(params: {
   ctx: any;
   ownerId: any;
@@ -440,6 +484,19 @@ export function createPolyNetExecutionSession(params: {
             message: workspaceSessionFailure.message,
           };
         }
+        if (isWorkspaceCreditBudgetExpired(workspaceSession)) {
+          workspaceSessionFailure = {
+            status: 402,
+            code: "workspace_credits_exhausted",
+            message: "Workspace credit budget expired. Add credits to use workspace tools.",
+          };
+          return {
+            ok: false as const,
+            status: workspaceSessionFailure.status,
+            code: workspaceSessionFailure.code,
+            message: workspaceSessionFailure.message,
+          };
+        }
         return {
           ok: true as const,
           session: workspaceSession,
@@ -510,7 +567,10 @@ export function createPolyNetExecutionSession(params: {
         sandboxCpu: backgroundSandbox.sandboxCpu,
         sandboxMemoryGiB: backgroundSandbox.sandboxMemoryGiB,
         sandboxDiskGiB: backgroundSandbox.sandboxDiskGiB,
-        startedAt: Date.now(),
+        startedAt: backgroundSandbox.startedAt,
+        creditReservationKey: backgroundSandbox.creditReservationKey,
+        creditBudgetCredits: backgroundSandbox.creditBudgetCredits,
+        creditBudgetExpiresAt: backgroundSandbox.creditBudgetExpiresAt,
         lifecycleMode: "native_stop_delete",
       };
       ensureWorkspaceHeartbeat();
@@ -1072,6 +1132,7 @@ export function createPolyNetExecutionSession(params: {
           errorMessage: `${paramsForComputer.toolName} is not a computer-use tool.`,
         };
       }
+      const computerToolName = paramsForComputer.toolName;
       let activeWorkspaceSession = workspaceSession;
       if (!activeWorkspaceSession) {
         const created = await this.ensureWorkspaceForTool({
@@ -1090,21 +1151,52 @@ export function createPolyNetExecutionSession(params: {
         }
         activeWorkspaceSession = created.session;
       }
-      const computerResult = await runDaytonaComputerUseTool({
-        config: activeWorkspaceSession.config,
-        toolboxProxyUrl: activeWorkspaceSession.toolboxProxyUrl,
-        sandboxId: activeWorkspaceSession.providerSandboxId,
-        toolName: paramsForComputer.toolName,
-        args: paramsForComputer.normalizedArgs,
-        signal: paramsForComputer.signal,
-      });
+      if (isWorkspaceCreditBudgetExpired(activeWorkspaceSession)) {
+        return {
+          status: "error",
+          exitCode: null,
+          outputText: "",
+          errorCode: "workspace_credits_exhausted",
+          errorMessage: "Workspace credit budget expired. Add credits to use workspace tools.",
+        };
+      }
+      const budgetSignal = buildWorkspaceCreditBudgetSignal(
+        activeWorkspaceSession,
+        paramsForComputer.signal,
+      );
+      const computerResult = await (async () => {
+        try {
+          return await runDaytonaComputerUseTool({
+            config: activeWorkspaceSession.config,
+            toolboxProxyUrl: activeWorkspaceSession.toolboxProxyUrl,
+            sandboxId: activeWorkspaceSession.providerSandboxId,
+            toolName: computerToolName,
+            args: paramsForComputer.normalizedArgs,
+            signal: budgetSignal.signal,
+          });
+        } finally {
+          budgetSignal.cleanup();
+        }
+      })();
+      if (
+        budgetSignal.signal?.aborted &&
+        isWorkspaceCreditBudgetExpired(activeWorkspaceSession)
+      ) {
+        return {
+          status: "error",
+          exitCode: null,
+          outputText: "",
+          errorCode: "workspace_credits_exhausted",
+          errorMessage: "Workspace credit budget expired. Add credits to use workspace tools.",
+        };
+      }
       const enriched = await enrichComputerUseToolResult({
-        toolName: paramsForComputer.toolName,
+        toolName: computerToolName,
         toolResult: computerResult,
       });
       await emitRunEvent("computer_tool_completed", {
         run_id: params.runId,
-        tool_name: paramsForComputer.toolName,
+        tool_name: computerToolName,
         latency_ms: Date.now() - computerStartedAt,
         status: enriched.status,
         used_existing_workspace: hadWorkspaceSession,

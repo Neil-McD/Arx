@@ -1,3 +1,6 @@
+import { internal } from "./_generated/api";
+import { VOICE_TRANSCRIPTION_CREDITS_PER_REQUEST } from "../shared/workspaceCredits";
+
 type VoiceTranscribeInput = {
   audio_base64?: unknown;
   mime_type?: unknown;
@@ -57,6 +60,66 @@ const DEFAULT_VOICE_FALLBACK_MODEL = "whisper-large-v3-turbo";
 const DEFAULT_VOICE_FALLBACK_ENDPOINT = "https://api.groq.com/openai/v1/audio/transcriptions";
 const DEFAULT_VOICE_PROMPT =
   "Transcribe spoken words verbatim. If speech is unclear or absent, return an empty transcript.";
+
+function newCreditKey(prefix: string): string {
+  return `${prefix}_${crypto.randomUUID().replace(/-/g, "")}`;
+}
+
+async function settleReservedCreditsBestEffort(params: {
+  ctx: any;
+  creditKey: string;
+  status: "succeeded" | "refunded";
+  failureReason?: string | null;
+}): Promise<void> {
+  let lastError: unknown = null;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      await params.ctx.runMutation(internal.workspaceCredits.settleCreditsInternal as any, {
+        creditKey: params.creditKey,
+        status: params.status,
+        failureReason: params.failureReason ?? undefined,
+        nowMs: Date.now(),
+      });
+      return;
+    } catch (error) {
+      lastError = error;
+      await new Promise((resolve) => setTimeout(resolve, attempt * 100));
+    }
+  }
+  console.warn("credits_settle_failed", {
+    credit_key: params.creditKey,
+    status: params.status,
+    error: lastError instanceof Error ? lastError.message : String(lastError ?? ""),
+  });
+}
+
+async function settleReservedCreditsStrict(params: {
+  ctx: any;
+  creditKey: string;
+  status: "succeeded" | "refunded";
+  failureReason?: string | null;
+}): Promise<void> {
+  let lastError: unknown = null;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      await params.ctx.runMutation(internal.workspaceCredits.settleCreditsInternal as any, {
+        creditKey: params.creditKey,
+        status: params.status,
+        failureReason: params.failureReason ?? undefined,
+        nowMs: Date.now(),
+      });
+      return;
+    } catch (error) {
+      lastError = error;
+      await new Promise((resolve) => setTimeout(resolve, attempt * 100));
+    }
+  }
+  throw new Error(
+    lastError instanceof Error
+      ? lastError.message || "credits_settlement_failed"
+      : "credits_settlement_failed",
+  );
+}
 
 function readEnv(name: string): string {
   try {
@@ -336,6 +399,7 @@ export function registerRuntimeVoiceRoutes(args: RegisterRuntimeVoiceRoutesArgs)
       if (!auth.ok) return auth.response;
       void auth.actor.authSubject;
 
+      let reservedCreditKey: string | null = null;
       try {
         const input = await readJsonBounded<VoiceTranscribeInput>(req);
         const audioBase64Raw = typeof input.audio_base64 === "string" ? input.audio_base64.trim() : "";
@@ -388,8 +452,55 @@ export function registerRuntimeVoiceRoutes(args: RegisterRuntimeVoiceRoutesArgs)
           });
         }
 
+        const creditKey = newCreditKey("voice");
+        reservedCreditKey = creditKey;
+        try {
+          await (ctx as any).runMutation(internal.workspaceCredits.reserveCreditsInternal as any, {
+            creditKey,
+            userId: auth.actor.userId,
+            toolName: "voice_transcribe",
+            action: "transcribe",
+            vendor: "openai_groq",
+            credits: VOICE_TRANSCRIPTION_CREDITS_PER_REQUEST,
+            polynetPriceUsd: VOICE_TRANSCRIPTION_CREDITS_PER_REQUEST / 100,
+            metadata: {
+              surface: surface || null,
+              mime_type: mimeType,
+              audio_bytes: bytes.byteLength,
+            },
+            nowMs: Date.now(),
+          });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          return jsonResponse(req, 402, {
+            ok: false,
+            error: message === "credits_exhausted" ? "credits_exhausted" : "credits_unavailable",
+            code: message === "credits_exhausted" ? "credits_exhausted" : "credits_unavailable",
+            message:
+              message === "credits_exhausted"
+                ? "Add credits to use voice input."
+                : "Credits are unavailable for voice input.",
+          });
+        }
+
         const primary = await transcribeWithOpenAi({ bytes, mimeType, language, prompt });
         if (primary.ok) {
+          try {
+            await settleReservedCreditsStrict({
+              ctx,
+              creditKey,
+              status: "succeeded",
+            });
+          } catch {
+            reservedCreditKey = null;
+            return jsonResponse(req, 503, {
+              ok: false,
+              error: "credits_settlement_failed",
+              code: "credits_settlement_failed",
+              message: "Voice transcription succeeded, but credit settlement failed. Try again.",
+            });
+          }
+          reservedCreditKey = null;
           return jsonResponse(req, 200, {
             ok: true,
             text: primary.text,
@@ -400,6 +511,12 @@ export function registerRuntimeVoiceRoutes(args: RegisterRuntimeVoiceRoutesArgs)
         }
 
         if (preferPrimary) {
+          await settleReservedCreditsBestEffort({
+            ctx,
+            creditKey,
+            status: "refunded",
+            failureReason: "primary_failed",
+          });
           return jsonResponse(req, 502, {
             ok: false,
             error: "voice_transcription_failed",
@@ -412,6 +529,12 @@ export function registerRuntimeVoiceRoutes(args: RegisterRuntimeVoiceRoutesArgs)
 
         const fallbackKeyPresent = Boolean(resolveVoiceFallbackConfig().apiKey);
         if (!fallbackKeyPresent) {
+          await settleReservedCreditsBestEffort({
+            ctx,
+            creditKey,
+            status: "refunded",
+            failureReason: "fallback_missing",
+          });
           return jsonResponse(req, 502, {
             ok: false,
             error: "voice_transcription_failed",
@@ -424,6 +547,22 @@ export function registerRuntimeVoiceRoutes(args: RegisterRuntimeVoiceRoutesArgs)
 
         const fallback = await transcribeWithGroqFallback({ bytes, mimeType, language, prompt });
         if (fallback.ok) {
+          try {
+            await settleReservedCreditsStrict({
+              ctx,
+              creditKey,
+              status: "succeeded",
+            });
+          } catch {
+            reservedCreditKey = null;
+            return jsonResponse(req, 503, {
+              ok: false,
+              error: "credits_settlement_failed",
+              code: "credits_settlement_failed",
+              message: "Voice transcription succeeded, but credit settlement failed. Try again.",
+            });
+          }
+          reservedCreditKey = null;
           return jsonResponse(req, 200, {
             ok: true,
             text: fallback.text,
@@ -437,6 +576,12 @@ export function registerRuntimeVoiceRoutes(args: RegisterRuntimeVoiceRoutesArgs)
         const errors = [primary.message, fallback.message].filter(
           (value): value is string => typeof value === "string" && value.trim().length > 0,
         );
+        await settleReservedCreditsBestEffort({
+          ctx,
+          creditKey,
+          status: "refunded",
+          failureReason: "transcription_failed",
+        });
         return jsonResponse(req, 502, {
           ok: false,
           error: "voice_transcription_failed",
@@ -454,6 +599,14 @@ export function registerRuntimeVoiceRoutes(args: RegisterRuntimeVoiceRoutesArgs)
               ? "invalid_request"
               : "internal_error";
         const status = code === "request_too_large" ? 413 : code === "invalid_request" ? 400 : 500;
+        if (reservedCreditKey) {
+          await settleReservedCreditsBestEffort({
+            ctx,
+            creditKey: reservedCreditKey,
+            status: "refunded",
+            failureReason: code,
+          });
+        }
         return jsonResponse(req, status, {
           ok: false,
           error: code,

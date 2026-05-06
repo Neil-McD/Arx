@@ -1,8 +1,9 @@
-import { api, internal } from "./_generated/api";
+import { internal } from "./_generated/api";
 import { action, internalMutation, internalQuery, query } from "./_generated/server";
 import { v } from "convex/values";
 import {
   BUILDER_INCLUDED_WORKSPACE_CREDITS,
+  CREDIT_RESERVATION_EXPIRY_MS,
   convertUsdToWorkspaceCredits,
   estimateDaytonaWorkspaceComputeUsd,
   WORKSPACE_CREDIT_TOPUP_CREDITS,
@@ -23,6 +24,99 @@ function roundCurrency(value: number): number {
 
 function roundCredits(value: number): number {
   return Math.round((Number(value) || 0) * 100) / 100;
+}
+
+function normalizeOptionalString(value: unknown): string | undefined {
+  const normalized = String(value ?? "").trim();
+  return normalized || undefined;
+}
+
+function clampCredits(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, roundCredits(value)));
+}
+
+function splitSettledCredits(args: {
+  includedDebited: number;
+  purchasedDebited: number;
+  creditsSettled: number;
+}): {
+  includedSettled: number;
+  purchasedSettled: number;
+  includedRefunded: number;
+  purchasedRefunded: number;
+} {
+  const includedDebited = roundCredits(args.includedDebited);
+  const purchasedDebited = roundCredits(args.purchasedDebited);
+  const creditsSettled = clampCredits(
+    args.creditsSettled,
+    0,
+    includedDebited + purchasedDebited,
+  );
+  const includedSettled = Math.min(includedDebited, creditsSettled);
+  const purchasedSettled = Math.min(
+    purchasedDebited,
+    Math.max(0, creditsSettled - includedSettled),
+  );
+  return {
+    includedSettled: roundCredits(includedSettled),
+    purchasedSettled: roundCredits(purchasedSettled),
+    includedRefunded: roundCredits(includedDebited - includedSettled),
+    purchasedRefunded: roundCredits(purchasedDebited - purchasedSettled),
+  };
+}
+
+function canRefundIncludedCreditsForEntry(args: {
+  balance: any;
+  entry: any;
+}): boolean {
+  const balanceStartedAt =
+    typeof args.balance?.includedCycleStartedAt === "number"
+      ? args.balance.includedCycleStartedAt
+      : null;
+  const balanceEndsAt =
+    typeof args.balance?.includedCycleEndsAt === "number"
+      ? args.balance.includedCycleEndsAt
+      : null;
+  if (balanceStartedAt === null || balanceEndsAt === null) return false;
+
+  const entryStartedAt =
+    typeof args.entry?.includedCycleStartedAt === "number"
+      ? args.entry.includedCycleStartedAt
+      : null;
+  const entryEndsAt =
+    typeof args.entry?.includedCycleEndsAt === "number"
+      ? args.entry.includedCycleEndsAt
+      : null;
+  if (entryStartedAt !== null && entryEndsAt !== null) {
+    return entryStartedAt === balanceStartedAt && entryEndsAt === balanceEndsAt;
+  }
+
+  const createdAt =
+    typeof args.entry?.createdAt === "number" ? args.entry.createdAt : null;
+  return (
+    createdAt !== null &&
+    createdAt >= balanceStartedAt &&
+    createdAt < balanceEndsAt
+  );
+}
+
+function applyCycleAwareRefund(args: {
+  split: ReturnType<typeof splitSettledCredits>;
+  balance: any;
+  entry: any;
+}): {
+  includedRefunded: number;
+  purchasedRefunded: number;
+} {
+  return {
+    includedRefunded: canRefundIncludedCreditsForEntry({
+      balance: args.balance,
+      entry: args.entry,
+    })
+      ? args.split.includedRefunded
+      : 0,
+    purchasedRefunded: args.split.purchasedRefunded,
+  };
 }
 
 function compareBillingCycle(
@@ -431,6 +525,7 @@ export const recordWorkspaceComputeChargeInternal = internalMutation({
     sandboxDiskGiB: v.number(),
     computeCostUsd: v.optional(v.number()),
     creditsDebited: v.optional(v.number()),
+    creditReservationKey: v.optional(v.union(v.string(), v.null())),
     nowMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
@@ -462,24 +557,91 @@ export const recordWorkspaceComputeChargeInternal = internalMutation({
         : convertUsdToWorkspaceCredits(computeCostUsd),
     );
 
-    const balance = await ctx.db
-      .query("workspaceCreditBalances")
-      .withIndex("by_user", (q) => q.eq("userId", args.userId))
-      .first();
-
     let debitIncluded = 0;
     let debitPurchased = 0;
-    if (balance) {
-      debitIncluded = Math.min(balance.includedCreditsBalance, requestedCredits);
-      debitPurchased = Math.min(
-        balance.purchasedCreditsBalance,
-        Math.max(0, requestedCredits - debitIncluded),
-      );
-      await ctx.db.patch(balance._id, {
-        includedCreditsBalance: roundCredits(balance.includedCreditsBalance - debitIncluded),
-        purchasedCreditsBalance: roundCredits(balance.purchasedCreditsBalance - debitPurchased),
-        updatedAt: nowMs,
-      });
+    const creditReservationKey = normalizeOptionalString(args.creditReservationKey);
+    if (creditReservationKey) {
+      const reservation = await ctx.db
+        .query("creditLedgerEntries")
+        .withIndex("by_creditKey", (q) => q.eq("creditKey", creditReservationKey))
+        .first();
+      if (reservation?.status === "reserved") {
+        const split = splitSettledCredits({
+          includedDebited: reservation.includedCreditsDebited,
+          purchasedDebited: reservation.purchasedCreditsDebited,
+          creditsSettled: requestedCredits,
+        });
+        const hasRefund = split.includedRefunded > 0 || split.purchasedRefunded > 0;
+        if (hasRefund) {
+          const balance = await ctx.db
+            .query("workspaceCreditBalances")
+            .withIndex("by_user", (q) => q.eq("userId", reservation.userId))
+            .first();
+          if (balance) {
+            await ctx.db.patch(balance._id, {
+              includedCreditsBalance: roundCredits(
+                balance.includedCreditsBalance + split.includedRefunded,
+              ),
+              purchasedCreditsBalance: roundCredits(
+                balance.purchasedCreditsBalance + split.purchasedRefunded,
+              ),
+              updatedAt: nowMs,
+            });
+          } else {
+            await ctx.db.insert("workspaceCreditBalances", {
+              userId: reservation.userId,
+              includedCreditsBalance: split.includedRefunded,
+              purchasedCreditsBalance: split.purchasedRefunded,
+              includedCycleCredits: 0,
+              includedCycleStartedAt: nowMs,
+              includedCycleEndsAt: nowMs,
+              createdAt: nowMs,
+              updatedAt: nowMs,
+            });
+          }
+        }
+        await ctx.db.patch(reservation._id, {
+          status: "succeeded",
+          creditsSettled: roundCredits(split.includedSettled + split.purchasedSettled),
+          includedCreditsRefunded: split.includedRefunded,
+          purchasedCreditsRefunded: split.purchasedRefunded,
+          settledAt: nowMs,
+          updatedAt: nowMs,
+        });
+        debitIncluded = split.includedSettled;
+        debitPurchased = split.purchasedSettled;
+      } else if (reservation?.status === "succeeded") {
+        const settledCredits = roundCredits(
+          typeof reservation.creditsSettled === "number"
+            ? reservation.creditsSettled
+            : requestedCredits,
+        );
+        debitIncluded = Math.min(
+          Number(reservation.includedCreditsDebited ?? 0),
+          settledCredits,
+        );
+        debitPurchased = Math.min(
+          Number(reservation.purchasedCreditsDebited ?? 0),
+          Math.max(0, settledCredits - debitIncluded),
+        );
+      }
+    } else {
+      const balance = await ctx.db
+        .query("workspaceCreditBalances")
+        .withIndex("by_user", (q) => q.eq("userId", args.userId))
+        .first();
+      if (balance) {
+        debitIncluded = Math.min(balance.includedCreditsBalance, requestedCredits);
+        debitPurchased = Math.min(
+          balance.purchasedCreditsBalance,
+          Math.max(0, requestedCredits - debitIncluded),
+        );
+        await ctx.db.patch(balance._id, {
+          includedCreditsBalance: roundCredits(balance.includedCreditsBalance - debitIncluded),
+          purchasedCreditsBalance: roundCredits(balance.purchasedCreditsBalance - debitPurchased),
+          updatedAt: nowMs,
+        });
+      }
     }
 
     const debitedCredits = roundCredits(debitIncluded + debitPurchased);
@@ -504,10 +666,254 @@ export const recordWorkspaceComputeChargeInternal = internalMutation({
       sandboxDiskGiB: args.sandboxDiskGiB,
       computeCostUsd,
       creditsDebited: debitedCredits,
+      creditReservationKey,
       debitSource,
       createdAt: nowMs,
     });
     return await ctx.db.get(id);
+  },
+});
+
+export const reserveCreditsInternal = internalMutation({
+  args: {
+    creditKey: v.string(),
+    userId: v.id("users"),
+    communityId: v.optional(v.union(v.id("communities"), v.null())),
+    projectId: v.optional(v.union(v.id("cloudProjects"), v.null())),
+    runId: v.optional(v.union(v.string(), v.null())),
+    toolName: v.string(),
+    action: v.optional(v.union(v.string(), v.null())),
+    vendor: v.optional(v.union(v.string(), v.null())),
+    credits: v.number(),
+    rawVendorCostUsd: v.optional(v.number()),
+    polynetPriceUsd: v.optional(v.number()),
+    metadata: v.optional(v.any()),
+    expiresAt: v.optional(v.number()),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const nowMs = args.nowMs ?? Date.now();
+    const creditKey = String(args.creditKey ?? "").trim();
+    if (!creditKey) throw new Error("credits_key_required");
+    const existing = await ctx.db
+      .query("creditLedgerEntries")
+      .withIndex("by_creditKey", (q) => q.eq("creditKey", creditKey))
+      .first();
+    if (existing) return existing;
+
+    const requestedCredits = roundCredits(args.credits);
+    if (!(requestedCredits > 0)) throw new Error("credits_amount_invalid");
+
+    const balance = await ctx.db
+      .query("workspaceCreditBalances")
+      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .first();
+    const remainingCredits =
+      Number(balance?.includedCreditsBalance ?? 0) +
+      Number(balance?.purchasedCreditsBalance ?? 0);
+    if (!balance || remainingCredits < requestedCredits) {
+      throw new Error("credits_exhausted");
+    }
+
+    const debitIncluded = Math.min(balance.includedCreditsBalance, requestedCredits);
+    const debitPurchased = Math.min(
+      balance.purchasedCreditsBalance,
+      Math.max(0, requestedCredits - debitIncluded),
+    );
+    const debitedCredits = roundCredits(debitIncluded + debitPurchased);
+    if (debitedCredits < requestedCredits) {
+      throw new Error("credits_exhausted");
+    }
+
+    await ctx.db.patch(balance._id, {
+      includedCreditsBalance: roundCredits(balance.includedCreditsBalance - debitIncluded),
+      purchasedCreditsBalance: roundCredits(balance.purchasedCreditsBalance - debitPurchased),
+      updatedAt: nowMs,
+    });
+
+    const id = await ctx.db.insert("creditLedgerEntries", {
+      creditKey,
+      userId: args.userId,
+      communityId: args.communityId ?? undefined,
+      projectId: args.projectId ?? undefined,
+      runId: normalizeOptionalString(args.runId),
+      toolName: String(args.toolName ?? "").trim() || "unknown",
+      action: normalizeOptionalString(args.action),
+      vendor: normalizeOptionalString(args.vendor),
+      status: "reserved",
+      creditsReserved: requestedCredits,
+      includedCreditsDebited: roundCredits(debitIncluded),
+      purchasedCreditsDebited: roundCredits(debitPurchased),
+      includedCycleStartedAt:
+        typeof balance.includedCycleStartedAt === "number"
+          ? balance.includedCycleStartedAt
+          : undefined,
+      includedCycleEndsAt:
+        typeof balance.includedCycleEndsAt === "number"
+          ? balance.includedCycleEndsAt
+          : undefined,
+      rawVendorCostUsd:
+        typeof args.rawVendorCostUsd === "number" ? roundCurrency(args.rawVendorCostUsd) : undefined,
+      polynetPriceUsd:
+        typeof args.polynetPriceUsd === "number" ? roundCurrency(args.polynetPriceUsd) : undefined,
+      metadata: args.metadata,
+      expiresAt:
+        typeof args.expiresAt === "number" && Number.isFinite(args.expiresAt)
+          ? args.expiresAt
+          : nowMs + CREDIT_RESERVATION_EXPIRY_MS,
+      createdAt: nowMs,
+      updatedAt: nowMs,
+    });
+    return await ctx.db.get(id);
+  },
+});
+
+export const settleCreditsInternal = internalMutation({
+  args: {
+    creditKey: v.string(),
+    status: v.union(v.literal("succeeded"), v.literal("refunded")),
+    creditsSettled: v.optional(v.number()),
+    failureReason: v.optional(v.union(v.string(), v.null())),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const nowMs = args.nowMs ?? Date.now();
+    const creditKey = String(args.creditKey ?? "").trim();
+    if (!creditKey) throw new Error("credits_key_required");
+    const entry = await ctx.db
+      .query("creditLedgerEntries")
+      .withIndex("by_creditKey", (q) => q.eq("creditKey", creditKey))
+      .first();
+    if (!entry) throw new Error("credits_ledger_entry_not_found");
+    if (entry.status === args.status) return entry;
+    if (entry.status === "refunded" || entry.status === "succeeded") return entry;
+
+    const creditsSettled =
+      args.status === "refunded"
+        ? 0
+        : typeof args.creditsSettled === "number"
+          ? clampCredits(args.creditsSettled, 0, entry.creditsReserved)
+          : roundCredits(entry.creditsReserved);
+    const split = splitSettledCredits({
+      includedDebited: entry.includedCreditsDebited,
+      purchasedDebited: entry.purchasedCreditsDebited,
+      creditsSettled,
+    });
+    const balance = await ctx.db
+      .query("workspaceCreditBalances")
+      .withIndex("by_user", (q) => q.eq("userId", entry.userId))
+      .first();
+    const refund = balance
+      ? applyCycleAwareRefund({ split, balance, entry })
+      : {
+          includedRefunded: 0,
+          purchasedRefunded: split.purchasedRefunded,
+        };
+    const hasRefund = refund.includedRefunded > 0 || refund.purchasedRefunded > 0;
+
+    if (hasRefund) {
+      if (balance) {
+        await ctx.db.patch(balance._id, {
+          includedCreditsBalance: roundCredits(
+            balance.includedCreditsBalance + refund.includedRefunded,
+          ),
+          purchasedCreditsBalance: roundCredits(
+            balance.purchasedCreditsBalance + refund.purchasedRefunded,
+          ),
+          updatedAt: nowMs,
+        });
+      } else {
+        await ctx.db.insert("workspaceCreditBalances", {
+          userId: entry.userId,
+          includedCreditsBalance: 0,
+          purchasedCreditsBalance: refund.purchasedRefunded,
+          includedCycleCredits: 0,
+          includedCycleStartedAt: nowMs,
+          includedCycleEndsAt: nowMs,
+          createdAt: nowMs,
+          updatedAt: nowMs,
+        });
+      }
+    }
+
+    await ctx.db.patch(entry._id, {
+      status: args.status,
+      creditsSettled,
+      includedCreditsRefunded: refund.includedRefunded,
+      purchasedCreditsRefunded: refund.purchasedRefunded,
+      failureReason: normalizeOptionalString(args.failureReason),
+      settledAt: nowMs,
+      updatedAt: nowMs,
+    });
+    return await ctx.db.get(entry._id);
+  },
+});
+
+export const reconcileExpiredCreditReservationsInternal = internalMutation({
+  args: {
+    nowMs: v.optional(v.number()),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const nowMs = args.nowMs ?? Date.now();
+    const limit = Math.max(1, Math.min(100, Math.floor(args.limit ?? 50)));
+    const expired = await ctx.db
+      .query("creditLedgerEntries")
+      .withIndex("by_status_expiresAt", (q) =>
+        q.eq("status", "reserved").lt("expiresAt", nowMs),
+      )
+      .take(limit);
+    let refunded = 0;
+    for (const entry of expired) {
+      const split = splitSettledCredits({
+        includedDebited: entry.includedCreditsDebited,
+        purchasedDebited: entry.purchasedCreditsDebited,
+        creditsSettled: 0,
+      });
+      const balance = await ctx.db
+        .query("workspaceCreditBalances")
+        .withIndex("by_user", (q) => q.eq("userId", entry.userId))
+        .first();
+      const refund = balance
+        ? applyCycleAwareRefund({ split, balance, entry })
+        : {
+            includedRefunded: 0,
+            purchasedRefunded: split.purchasedRefunded,
+          };
+      if (balance) {
+        await ctx.db.patch(balance._id, {
+          includedCreditsBalance: roundCredits(
+            balance.includedCreditsBalance + refund.includedRefunded,
+          ),
+          purchasedCreditsBalance: roundCredits(
+            balance.purchasedCreditsBalance + refund.purchasedRefunded,
+          ),
+          updatedAt: nowMs,
+        });
+      } else if (refund.purchasedRefunded > 0) {
+        await ctx.db.insert("workspaceCreditBalances", {
+          userId: entry.userId,
+          includedCreditsBalance: 0,
+          purchasedCreditsBalance: refund.purchasedRefunded,
+          includedCycleCredits: 0,
+          includedCycleStartedAt: nowMs,
+          includedCycleEndsAt: nowMs,
+          createdAt: nowMs,
+          updatedAt: nowMs,
+        });
+      }
+      await ctx.db.patch(entry._id, {
+        status: "refunded",
+        creditsSettled: 0,
+        includedCreditsRefunded: refund.includedRefunded,
+        purchasedCreditsRefunded: refund.purchasedRefunded,
+        failureReason: "reservation_expired",
+        settledAt: nowMs,
+        updatedAt: nowMs,
+      });
+      refunded += 1;
+    }
+    return { scanned: expired.length, refunded };
   },
 });
 
@@ -534,13 +940,6 @@ export const startWorkspaceCreditTopupCheckout = action({
     })) as { dbUserId?: unknown; email?: string | null };
     const userId = actor?.dbUserId;
     if (!userId) throw new Error("user_not_found");
-
-    const canonicalTier = await ctx.runQuery(api.entitlements.getCanonicalTierByUserId as any, {
-      userId,
-    });
-    if (canonicalTier === "free") {
-      throw new Error("plan_required");
-    }
 
     const sessionId = newOpaqueToken("credits");
     const priceId = readStripeWorkspaceCreditTopupPriceId();

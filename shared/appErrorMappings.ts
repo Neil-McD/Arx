@@ -171,8 +171,13 @@ export function formatSendFlowErrorMessage(error: unknown, fallback: string): st
   if (code === "provider_connection_required") {
     return "Connect a provider in Agent Settings to use this model.";
   }
-  if (code === "workspace_credits_exhausted" || code === "workspace_credits_unavailable") {
-    return "Workspace credits are unavailable for this run. Add credits or choose a different model.";
+  if (
+    code === "workspace_credits_exhausted" ||
+    code === "workspace_credits_unavailable" ||
+    code === "credits_exhausted" ||
+    code === "credits_unavailable"
+  ) {
+    return "Credits are unavailable for this action. Add credits or choose a different tool.";
   }
   if (
     code === "platform_inference_quota_exceeded" ||

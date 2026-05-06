@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
-import { hasBuilderTierPaidAccess } from "./builderBilling";
 import { blobToBase64 } from "./imageTransforms";
 import { transcribeVoice } from "./authCore";
 import { resolveUsableSession } from "./ensureUsableSession";
@@ -103,10 +102,7 @@ export function useWebVoiceInputController<SessionT>(args: UseWebVoiceInputContr
     }
     return {
       mode: "start_recording",
-      title:
-        hasBuilderTierPaidAccess(args.normalizedBuilderTier)
-          ? "Start voice input (paid plan)."
-          : "Start voice input.",
+      title: "Start voice input (uses credits).",
     };
   }
 

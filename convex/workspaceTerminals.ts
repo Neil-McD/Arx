@@ -546,12 +546,28 @@ export const setProjectBackgroundSandboxInternal = internalMutation({
     providerSandboxId: v.string(),
     providerSandboxState: v.optional(v.string()),
     providerSandboxLastSeenAt: v.optional(v.number()),
+    providerSandboxStartedAt: v.optional(v.number()),
+    providerSandboxCreditReservationKey: v.optional(v.string()),
+    providerSandboxCreditBudgetCredits: v.optional(v.number()),
+    providerSandboxCreditBudgetExpiresAt: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    const project = await ctx.db.get(args.projectId);
     await ctx.db.patch(args.projectId, {
       providerSandboxId: args.providerSandboxId,
       providerSandboxState: args.providerSandboxState,
       providerSandboxLastSeenAt: args.providerSandboxLastSeenAt,
+      providerSandboxStartedAt:
+        args.providerSandboxStartedAt ?? project?.providerSandboxStartedAt,
+      providerSandboxCreditReservationKey:
+        args.providerSandboxCreditReservationKey ??
+        project?.providerSandboxCreditReservationKey,
+      providerSandboxCreditBudgetCredits:
+        args.providerSandboxCreditBudgetCredits ??
+        project?.providerSandboxCreditBudgetCredits,
+      providerSandboxCreditBudgetExpiresAt:
+        args.providerSandboxCreditBudgetExpiresAt ??
+        project?.providerSandboxCreditBudgetExpiresAt,
       updatedAt: Date.now(),
     });
     return await ctx.db.get(args.projectId);
@@ -567,6 +583,10 @@ export const clearProjectBackgroundSandboxInternal = internalMutation({
       providerSandboxId: undefined,
       providerSandboxState: undefined,
       providerSandboxLastSeenAt: undefined,
+      providerSandboxStartedAt: undefined,
+      providerSandboxCreditReservationKey: undefined,
+      providerSandboxCreditBudgetCredits: undefined,
+      providerSandboxCreditBudgetExpiresAt: undefined,
       updatedAt: Date.now(),
     });
     return await ctx.db.get(args.projectId);

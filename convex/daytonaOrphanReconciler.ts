@@ -8,6 +8,10 @@ import {
   waitForDaytonaSandboxStopped,
   type DaytonaSandboxApiDto,
 } from "./daytonaSandboxClient";
+import {
+  convertUsdToWorkspaceCredits,
+  estimateDaytonaWorkspaceComputeUsd,
+} from "../shared/workspaceCredits";
 
 const DAYTONA_ORPHAN_GRACE_MS = 60 * 60 * 1000;
 
@@ -44,6 +48,48 @@ function readSandboxStartedAt(sandbox: DaytonaSandboxApiDto): number | null {
 function readPositiveNumber(raw: unknown, fallback: number): number {
   const value = Number(raw);
   return Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
+function normalizeOptionalString(value: unknown): string | null {
+  const normalized = String(value ?? "").trim();
+  return normalized || null;
+}
+
+function readBackgroundCreditReservation(project: any): {
+  creditReservationKey: string | null;
+  creditBudgetCredits: number;
+  creditBudgetExpiresAt: number;
+  startedAt: number | null;
+} {
+  return {
+    creditReservationKey: normalizeOptionalString(project?.providerSandboxCreditReservationKey),
+    creditBudgetCredits: readPositiveNumber(project?.providerSandboxCreditBudgetCredits, 0),
+    creditBudgetExpiresAt: readPositiveNumber(project?.providerSandboxCreditBudgetExpiresAt, 0),
+    startedAt: readPositiveNumber(project?.providerSandboxStartedAt, 0) || null,
+  };
+}
+
+async function settleReservedCreditsBestEffort(params: {
+  ctx: any;
+  creditKey?: string | null;
+  status: "succeeded" | "refunded";
+  creditsSettled?: number;
+  failureReason?: string | null;
+  nowMs: number;
+}): Promise<void> {
+  const creditKey = normalizeOptionalString(params.creditKey);
+  if (!creditKey) return;
+  try {
+    await params.ctx.runMutation(internal.workspaceCredits.settleCreditsInternal as any, {
+      creditKey,
+      status: params.status,
+      creditsSettled: params.creditsSettled,
+      failureReason: params.failureReason ?? undefined,
+      nowMs: params.nowMs,
+    });
+  } catch {
+    // Expired-reservation reconciliation is the durable fallback.
+  }
 }
 
 function isActiveTerminalStatus(status: unknown): boolean {
@@ -111,7 +157,32 @@ export const reconcileDaytonaOrphanedSandboxesInternal = internalAction({
       const runId = readSandboxLabel(sandbox, "arx_run_id");
       const projectId = readSandboxLabel(sandbox, "arx_project_id");
 
+      let backgroundProject: any = null;
+      let backgroundCredit = {
+        creditReservationKey: null as string | null,
+        creditBudgetCredits: 0,
+        creditBudgetExpiresAt: 0,
+        startedAt: null as number | null,
+      };
+      let budgetExpired = false;
+
       if (sandboxSource === "convex_background_terminal") {
+        if (projectId) {
+          try {
+            backgroundProject = await ctx.runQuery(
+              internal.projects.getCloudProjectByIdInternal as any,
+              {
+                projectId,
+              },
+            );
+            backgroundCredit = readBackgroundCreditReservation(backgroundProject);
+            budgetExpired =
+              backgroundCredit.creditBudgetExpiresAt > 0 &&
+              nowMs >= backgroundCredit.creditBudgetExpiresAt;
+          } catch {
+            backgroundProject = null;
+          }
+        }
         if (ownerId && projectId) {
           try {
             await ctx.runAction(
@@ -138,17 +209,25 @@ export const reconcileDaytonaOrphanedSandboxesInternal = internalAction({
           terminalRows = [];
         }
 
-        if (terminalRows.some((row) => isActiveTerminalStatus(row.status))) {
+        if (
+          terminalRows.some((row) => isActiveTerminalStatus(row.status)) &&
+          !budgetExpired
+        ) {
           skipped += 1;
           continue;
         }
 
         const startedAt =
+          backgroundCredit.startedAt ??
           terminalRows
             .map((row) => Number(row.startedAt ?? 0))
             .filter((value) => Number.isFinite(value) && value > 0)
             .sort((a, b) => a - b)[0] ?? readSandboxStartedAt(sandbox);
-        if (startedAt && Math.max(0, nowMs - startedAt) < DAYTONA_ORPHAN_GRACE_MS) {
+        if (
+          !budgetExpired &&
+          startedAt &&
+          Math.max(0, nowMs - startedAt) < DAYTONA_ORPHAN_GRACE_MS
+        ) {
           skipped += 1;
           continue;
         }
@@ -235,6 +314,7 @@ export const reconcileDaytonaOrphanedSandboxesInternal = internalAction({
       reconciled += 1;
 
       const startedAt =
+        backgroundCredit.startedAt ??
         (typeof run?.startedAt === "number" && Number.isFinite(run.startedAt)
           ? Math.floor(run.startedAt)
           : null) ?? readSandboxStartedAt(sandbox);
@@ -244,21 +324,44 @@ export const reconcileDaytonaOrphanedSandboxesInternal = internalAction({
       const sandboxMemoryGiB = readPositiveNumber(sandbox.memory, loaded.config.sandboxMemoryGiB);
       const sandboxDiskGiB = readPositiveNumber(sandbox.disk, loaded.config.sandboxDiskGiB);
 
-      if (ownerId && runId && effectiveProjectId && startedAt && startedAt < nowMs) {
+      if (ownerId && effectiveProjectId && startedAt && startedAt < nowMs) {
         try {
+          const durationSeconds = Math.max(0, (nowMs - startedAt) / 1000);
+          const computeCostUsd = estimateDaytonaWorkspaceComputeUsd({
+            durationSeconds,
+            sandboxCpu,
+            sandboxMemoryGiB,
+          });
+          const creditsDebited = backgroundCredit.creditReservationKey
+            ? Math.min(
+                backgroundCredit.creditBudgetCredits,
+                convertUsdToWorkspaceCredits(computeCostUsd),
+              )
+            : convertUsdToWorkspaceCredits(computeCostUsd);
+          await settleReservedCreditsBestEffort({
+            ctx,
+            creditKey: backgroundCredit.creditReservationKey,
+            status: "succeeded",
+            creditsSettled: creditsDebited,
+            nowMs,
+          });
           const charge = await ctx.runMutation(
             internal.workspaceCredits.recordWorkspaceComputeChargeInternal as any,
             {
               chargeKey: providerSandboxId,
               userId: ownerId,
               projectId: effectiveProjectId,
-              runId,
+              runId: runId || `background_terminal:${effectiveProjectId}:${providerSandboxId}`,
               providerSandboxId,
               startedAt,
               endedAt: nowMs,
+              durationSeconds,
               sandboxCpu,
               sandboxMemoryGiB,
               sandboxDiskGiB,
+              computeCostUsd,
+              creditsDebited,
+              creditReservationKey: backgroundCredit.creditReservationKey,
               nowMs,
             },
           );
