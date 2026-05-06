@@ -17,12 +17,36 @@ An app definition is the stable identity and connection shape for an MCP app.
 Current code:
 - `developerApps`
 - catalog app entries that seed or identify first-party apps
+- Discover integration profiles that declare adapter, readiness, validation, identity, and risk metadata
 
 Rules:
 - Every app must resolve through one stable identity when possible.
 - `catalogAppId` is the preferred identity for first-party/catalog apps.
 - Endpoint and auth type are fallback matching inputs only when no catalog identity exists.
 - Logo, name, endpoint, auth type, and setup link belong to the app definition, not to a community duplicate.
+
+### Integration Profile
+
+An integration profile says how a catalog app can become real executable harness capability.
+
+Current code:
+- `resolveDiscoverAppIntegrationProfile`
+- `DISCOVER_APP_INTEGRATION_PROFILE_OVERRIDES`
+- `DISCOVER_APP_PLANNED_PROFILE_KINDS`
+
+Rules:
+- Every Discover app must resolve to one profile.
+- Ready apps must have an explicit profile override.
+- A ready app profile must declare adapter kind, readiness, auth mode, validation kind, identity, and risk metadata.
+- Planned apps must remain disabled at the profile layer until their adapter contract exists.
+- Adapter categories are MCP, connector backplane, direct API, sandboxed CLI, or catalog-only.
+- Catalog app connection policy is server-authoritative; the frontend cannot choose a catalog app endpoint, auth mode, or display name as authority.
+- Catalog singleton apps reuse by `catalogAppId`; endpoint-instance apps, such as Shopify Storefront MCP, reuse by endpoint/auth identity.
+- Uncataloged remote MCP endpoints are blocked from public server-fetch paths until they have a reviewed catalog policy or a network-layer egress guard.
+- Operator audit must identify uncataloged or catalog-policy-blocked developer app rows before broad release.
+- Integration profile default risk is applied as a floor during MCP tool snapshot classification.
+- Dedicated human approval is not implemented yet; integration profiles do not carry approval-policy metadata.
+- Operator MCP servers configured in Codex are not user-facing Discover integration profiles.
 
 ### Community App Grant
 

@@ -57,6 +57,19 @@ export const listOperatorBuilders = query({
   },
 });
 
+export const listDeveloperAppPolicyAudit = query({
+  args: {
+    authSubject: v.optional(v.string()),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args): Promise<any> => {
+    await requireOperatorAccess(ctx, args.authSubject);
+    return await ctx.runQuery((internal as any).operatorIntelligence.listOperatorDeveloperAppPolicyAuditInternal, {
+      limit: args.limit,
+    });
+  },
+});
+
 export const getOperatorMonetization = query({
   args: {
     authSubject: v.optional(v.string()),

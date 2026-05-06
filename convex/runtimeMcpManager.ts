@@ -3,6 +3,7 @@ import type {
   DeveloperAppRow,
 } from "./appCore.ts";
 import { normalizeString } from "./appCore.ts";
+import { assertDeveloperAppServerFetchAllowed } from "./appFetchPolicy.ts";
 import {
   buildDeveloperAppAuthHeaders,
   callMcpTool,
@@ -212,6 +213,10 @@ export function createRuntimeMcpManager(params: {
     const bundle = params.bundle ?? (await getConnectionBundle(params.tool));
     if (!bundle) {
       throw new Error(buildAppNotFoundCode(params.tool));
+    }
+    assertDeveloperAppServerFetchAllowed(bundle.app);
+    if (params.tool.endpoint_url !== bundle.app.endpointUrl) {
+      throw new Error("Mounted app tool endpoint does not match its app definition.");
     }
     const headers = transport.buildAuthHeaders({
       app: bundle.app,

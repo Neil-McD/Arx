@@ -6321,7 +6321,6 @@ export default function App() {
         updatingMountId: updatingCommunityAppMountId,
         refreshingMountId: refreshingCommunityAppMountId,
         removingMountId: removingCommunityAppMountId,
-        onConnectApp: handleConnectCommunityApp,
         onUpdateMount: handleUpdateCommunityAppMount,
         onRefreshApp: handleRefreshCommunityApp,
         onUnmountApp: handleUnmountCommunityApp,

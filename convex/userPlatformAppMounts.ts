@@ -28,6 +28,10 @@ import {
   initializeStreamableHttpMcpSession,
   sendInitializedNotification,
 } from "./mcpHttpClient";
+import {
+  isDiscoverAppCatalogSingletonIdentity,
+  resolveDiscoverAppCatalogConnectPolicy,
+} from "../shared/discoverCatalog";
 
 function coerceValidationReport(
   rawReport: unknown,
@@ -182,6 +186,7 @@ type ConnectUserPlatformAppErrorCode =
   | "developer_app_no_tools_discovered"
   | "developer_app_mount_failed"
   | "developer_app_connect_failed"
+  | "developer_app_catalog_connect_rejected"
   | "server_unavailable";
 
 type ConnectUserPlatformAppResultRecord = {
@@ -278,6 +283,8 @@ function buildConnectErrorMessage(
       return `${appName} responded, but no MCP tools were discovered.`;
     case "developer_app_mount_failed":
       return `Validation succeeded, but we couldn't mount ${appName} into your personal layer.`;
+    case "developer_app_catalog_connect_rejected":
+      return `${appName} is not ready for this connection path.`;
     case "server_unavailable":
       return "The personal app service is unavailable right now. Try again.";
     case "developer_app_connect_failed":
@@ -544,6 +551,8 @@ export const findExistingUserPlatformMountByIdentityInternal = internalQuery({
   handler: async (ctx, args) => {
     const normalizedCatalogAppId = normalizeString(args.catalogAppId, 120).toLowerCase();
     const normalizedEndpointUrl = normalizeDeveloperAppEndpointUrl(args.endpointUrl);
+    const useCatalogSingletonIdentity =
+      isDiscoverAppCatalogSingletonIdentity(normalizedCatalogAppId);
     const mounts = await listUserPlatformAppMountRows(ctx, args.userId);
     mounts.sort((a, b) => b.updatedAt - a.updatedAt || b.createdAt - a.createdAt);
     let endpointMatch: {
@@ -559,6 +568,7 @@ export const findExistingUserPlatformMountByIdentityInternal = internalQuery({
         mount.developerAppId,
       );
       if (
+        useCatalogSingletonIdentity &&
         normalizedCatalogAppId &&
         normalizeString(app.catalogAppId, 120).toLowerCase() ===
           normalizedCatalogAppId
@@ -1095,6 +1105,32 @@ export const connectUserPlatformApp = action({
       });
     }
 
+    const connectPolicy = resolveDiscoverAppCatalogConnectPolicy({
+      catalogAppId: args.catalogAppId,
+      name: args.name,
+      endpointUrl: args.endpointUrl,
+      authType: args.authType,
+    });
+    if (!connectPolicy.ok) {
+      emitPersonalAppConnectTrace("personal_app_connect.policy_rejected", {
+        connectAttemptId,
+        appName: args.name,
+        endpointUrl: args.endpointUrl,
+        authType: args.authType,
+        ok: false,
+        code: connectPolicy.code,
+      });
+      return buildConnectFailure({
+        code: "developer_app_catalog_connect_rejected",
+        appName: args.name,
+        connectAttemptId,
+        errorMessage: connectPolicy.message,
+      });
+    }
+    const catalogAppId = connectPolicy.catalogAppId;
+    const appName = connectPolicy.name;
+    const endpointUrl = connectPolicy.endpointUrl;
+    const authType = connectPolicy.authType;
     const normalizedSecret = normalizeString(args.secret, 10_000);
     let existingMount: {
       mount: UserPlatformAppMountRow;
@@ -1105,36 +1141,36 @@ export const connectUserPlatformApp = action({
       existingMount = await resolveExistingMountForConnect({
         ctx,
         userId,
-        catalogAppId: args.catalogAppId,
-        endpointUrl: args.endpointUrl,
-        authType: args.authType,
+        catalogAppId,
+        endpointUrl,
+        authType,
       });
       emitPersonalAppConnectTrace("personal_app_connect.lookup_existing", {
         connectAttemptId,
-        appName: args.name,
-        endpointUrl: args.endpointUrl,
-        authType: args.authType,
+        appName,
+        endpointUrl,
+        authType,
         ok: true,
       });
     } catch (error) {
       emitPersonalAppConnectTrace("personal_app_connect.lookup_existing", {
         connectAttemptId,
-        appName: args.name,
-        endpointUrl: args.endpointUrl,
-        authType: args.authType,
+        appName,
+        endpointUrl,
+        authType,
         ok: false,
         code: "connect_lookup_failed",
       });
       return buildConnectFailure({
         code: "connect_lookup_failed",
-        appName: args.name,
+        appName,
         connectAttemptId,
       });
     }
 
     if (existingMount) {
       try {
-        if (args.authType !== "none") {
+        if (authType !== "none") {
           if (normalizedSecret) {
             await upsertConnectedSecretForConnect({
               ctx,
@@ -1153,7 +1189,7 @@ export const connectUserPlatformApp = action({
             });
             return buildConnectFailure({
               code: "developer_app_connection_secret_required",
-              appName: args.name,
+              appName,
               connectAttemptId,
               mount,
             });
@@ -1162,9 +1198,9 @@ export const connectUserPlatformApp = action({
 
         emitPersonalAppConnectTrace("personal_app_connect.validate.start", {
           connectAttemptId,
-          appName: args.name,
-          endpointUrl: args.endpointUrl,
-          authType: args.authType,
+          appName,
+          endpointUrl,
+          authType,
         });
         const validation = await validateDeveloperAppForConnect({
           ctx,
@@ -1181,16 +1217,16 @@ export const connectUserPlatformApp = action({
           });
           emitPersonalAppConnectTrace("personal_app_connect.validate.failure", {
             connectAttemptId,
-            appName: args.name,
-            endpointUrl: args.endpointUrl,
-            authType: args.authType,
+            appName,
+            endpointUrl,
+            authType,
             ok: false,
             code: "developer_app_validation_failed",
             toolCount: validation.validationReport?.tool_count ?? 0,
           });
           return buildConnectFailure({
             code: "developer_app_validation_failed",
-            appName: args.name,
+            appName,
             connectAttemptId,
             mount,
             validationReport: withMountedStage(
@@ -1203,9 +1239,9 @@ export const connectUserPlatformApp = action({
         }
         emitPersonalAppConnectTrace("personal_app_connect.validate.success", {
           connectAttemptId,
-          appName: args.name,
-          endpointUrl: args.endpointUrl,
-          authType: args.authType,
+          appName,
+          endpointUrl,
+          authType,
           ok: true,
           toolCount: validation.validationReport?.tool_count ?? 0,
         });
@@ -1227,7 +1263,7 @@ export const connectUserPlatformApp = action({
           });
           return buildConnectFailure({
             code: "developer_app_snapshot_missing",
-            appName: args.name,
+            appName,
             connectAttemptId,
             mount,
             validationReport: withMountedStage(
@@ -1248,9 +1284,9 @@ export const connectUserPlatformApp = action({
         });
         emitPersonalAppConnectTrace("personal_app_connect.mount.success", {
           connectAttemptId,
-          appName: args.name,
-          endpointUrl: args.endpointUrl,
-          authType: args.authType,
+          appName,
+          endpointUrl,
+          authType,
           ok: true,
           toolCount: validation.validationReport?.tool_count ?? 0,
         });
@@ -1269,15 +1305,15 @@ export const connectUserPlatformApp = action({
       } catch (error) {
         emitPersonalAppConnectTrace("personal_app_connect.mount.failure", {
           connectAttemptId,
-          appName: args.name,
-          endpointUrl: args.endpointUrl,
-          authType: args.authType,
+          appName,
+          endpointUrl,
+          authType,
           ok: false,
           code: "developer_app_mount_failed",
         });
         return buildConnectFailure({
           code: "developer_app_mount_failed",
-          appName: args.name,
+          appName,
           connectAttemptId,
         });
       }
@@ -1287,25 +1323,25 @@ export const connectUserPlatformApp = action({
     try {
       emitPersonalAppConnectTrace("personal_app_connect.create_app", {
         connectAttemptId,
-        appName: args.name,
-        endpointUrl: args.endpointUrl,
-        authType: args.authType,
+        appName,
+        endpointUrl,
+        authType,
       });
       developerAppId = (await ctx.runMutation(
         internal.developerApps.createDeveloperAppInternal,
         {
           ownerUserId: userId,
-          catalogAppId: args.catalogAppId,
-          name: args.name,
+          catalogAppId,
+          name: appName,
           slug: undefined,
           description: args.description,
-          endpointUrl: args.endpointUrl,
-          authType: args.authType,
+          endpointUrl,
+          authType,
           nowMs,
         },
       )) as any;
 
-      if (args.authType !== "none") {
+      if (authType !== "none") {
         if (!normalizedSecret) {
           const mount = await mountSetupNeededDeveloperAppForUser({
             ctx,
@@ -1315,7 +1351,7 @@ export const connectUserPlatformApp = action({
           });
           return buildConnectFailure({
             code: "developer_app_connection_secret_required",
-            appName: args.name,
+            appName,
             connectAttemptId,
             mount,
           });
@@ -1323,9 +1359,9 @@ export const connectUserPlatformApp = action({
         try {
           emitPersonalAppConnectTrace("personal_app_connect.store_secret", {
             connectAttemptId,
-            appName: args.name,
-            endpointUrl: args.endpointUrl,
-            authType: args.authType,
+            appName,
+            endpointUrl,
+            authType,
           });
           await upsertConnectedSecretForConnect({
             ctx,
@@ -1336,9 +1372,9 @@ export const connectUserPlatformApp = action({
         } catch (error) {
           emitPersonalAppConnectTrace("personal_app_connect.store_secret.failure", {
             connectAttemptId,
-            appName: args.name,
-            endpointUrl: args.endpointUrl,
-            authType: args.authType,
+            appName,
+            endpointUrl,
+            authType,
             ok: false,
             code: "developer_app_secret_store_failed",
           });
@@ -1350,7 +1386,7 @@ export const connectUserPlatformApp = action({
           });
           return buildConnectFailure({
             code: "developer_app_secret_store_failed",
-            appName: args.name,
+            appName,
             connectAttemptId,
             mount,
           });
@@ -1359,9 +1395,9 @@ export const connectUserPlatformApp = action({
 
       emitPersonalAppConnectTrace("personal_app_connect.validate.start", {
         connectAttemptId,
-        appName: args.name,
-        endpointUrl: args.endpointUrl,
-        authType: args.authType,
+        appName,
+        endpointUrl,
+        authType,
       });
       const validation = await validateDeveloperAppForConnect({
         ctx,
@@ -1383,16 +1419,16 @@ export const connectUserPlatformApp = action({
         });
         emitPersonalAppConnectTrace("personal_app_connect.validate.failure", {
           connectAttemptId,
-          appName: args.name,
-          endpointUrl: args.endpointUrl,
-          authType: args.authType,
+          appName,
+          endpointUrl,
+          authType,
           ok: false,
           code: "developer_app_validation_failed",
           toolCount: validation.validationReport?.tool_count ?? 0,
         });
         return buildConnectFailure({
           code: "developer_app_validation_failed",
-          appName: args.name,
+          appName,
           connectAttemptId,
           mount,
           validationReport: withMountedStage(
@@ -1405,9 +1441,9 @@ export const connectUserPlatformApp = action({
       }
       emitPersonalAppConnectTrace("personal_app_connect.validate.success", {
         connectAttemptId,
-        appName: args.name,
-        endpointUrl: args.endpointUrl,
-        authType: args.authType,
+        appName,
+        endpointUrl,
+        authType,
         ok: true,
         toolCount: validation.validationReport?.tool_count ?? 0,
       });
@@ -1428,7 +1464,7 @@ export const connectUserPlatformApp = action({
         });
         return buildConnectFailure({
           code: "developer_app_snapshot_missing",
-          appName: args.name,
+          appName,
           connectAttemptId,
           mount,
           validationReport: withMountedStage(
@@ -1452,7 +1488,7 @@ export const connectUserPlatformApp = action({
         });
         return buildConnectFailure({
           code: "developer_app_no_tools_discovered",
-          appName: args.name,
+          appName,
           connectAttemptId,
           mount,
           validationReport: withMountedStage(
@@ -1473,9 +1509,9 @@ export const connectUserPlatformApp = action({
       });
       emitPersonalAppConnectTrace("personal_app_connect.mount.success", {
         connectAttemptId,
-        appName: args.name,
-        endpointUrl: args.endpointUrl,
-        authType: args.authType,
+        appName,
+        endpointUrl,
+        authType,
         ok: true,
         toolCount: validation.validationReport?.tool_count ?? 0,
       });
@@ -1514,16 +1550,16 @@ export const connectUserPlatformApp = action({
           : "personal_app_connect.create_app.failure",
         {
         connectAttemptId,
-        appName: args.name,
-        endpointUrl: args.endpointUrl,
-        authType: args.authType,
+        appName,
+        endpointUrl,
+        authType,
         ok: false,
         code: errorCode,
         },
       );
       return buildConnectFailure({
         code: errorCode,
-        appName: args.name,
+        appName,
         connectAttemptId,
         mount,
       });

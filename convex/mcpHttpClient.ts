@@ -14,6 +14,7 @@ export type JsonRpcError = {
 };
 
 const MCP_HTTP_TIMEOUT_MS = 10_000;
+const MCP_HTTP_MAX_RESPONSE_BYTES = 1_000_000;
 
 function parseSseJsonPayload(
   rawText: string,
@@ -45,6 +46,39 @@ function parseMcpPayload(rawText: string): JsonRpcSuccess | JsonRpcError | null 
     return JSON.parse(trimmed) as JsonRpcSuccess | JsonRpcError;
   } catch {
     return parseSseJsonPayload(trimmed);
+  }
+}
+
+async function readMcpResponseText(response: Response): Promise<string> {
+  const contentLength = Number(response.headers.get("content-length") ?? "");
+  if (
+    Number.isFinite(contentLength) &&
+    contentLength > MCP_HTTP_MAX_RESPONSE_BYTES
+  ) {
+    throw new Error("mcp_response_too_large");
+  }
+  const body = response.body;
+  if (!body) return "";
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let totalBytes = 0;
+  let text = "";
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value) continue;
+      totalBytes += value.byteLength;
+      if (totalBytes > MCP_HTTP_MAX_RESPONSE_BYTES) {
+        await reader.cancel();
+        throw new Error("mcp_response_too_large");
+      }
+      text += decoder.decode(value, { stream: true });
+    }
+    text += decoder.decode();
+    return text;
+  } finally {
+    reader.releaseLock();
   }
 }
 
@@ -103,6 +137,7 @@ export async function postMcpJson(params: {
   try {
     response = await fetch(params.url, {
       method: "POST",
+      redirect: "manual",
       headers: {
         Accept: "application/json, text/event-stream",
         "Content-Type": "application/json",
@@ -129,7 +164,15 @@ export async function postMcpJson(params: {
     clearTimeout(timeout);
     params.signal?.removeEventListener("abort", abortFromExternalSignal);
   }
-  const rawText = await response.text();
+  if (response.status >= 300 && response.status < 400) {
+    return {
+      status: response.status,
+      sessionId: null,
+      payload: null,
+      rawText: "MCP endpoint redirects are not allowed.",
+    };
+  }
+  const rawText = await readMcpResponseText(response);
   const payload = parseMcpPayload(rawText);
   return {
     status: response.status,

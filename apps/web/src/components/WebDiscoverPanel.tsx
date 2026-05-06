@@ -26,7 +26,9 @@ import {
   type DiscoverSkillCatalogEntry,
 } from "../lib/discoverSkillCatalog";
 import {
+  buildDiscoverAppAdapterLabel,
   buildDiscoverAppConnectionStrategyLabel,
+  buildDiscoverAppIntegrationReadinessLabel,
   buildDiscoverAppPersonalConnectInput,
   buildDiscoverAppPersonalConnectModalCopy,
   buildDiscoverAppPersonalConnectRequirements,
@@ -1139,6 +1141,18 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
                     <div className="discover-info-label">Connection</div>
                     <div className="discover-info-value">
                       {buildDiscoverAppConnectionStrategyLabel(selectedApp)}
+                    </div>
+                  </div>
+                  <div className="discover-info-row">
+                    <div className="discover-info-label">Readiness</div>
+                    <div className="discover-info-value">
+                      {buildDiscoverAppIntegrationReadinessLabel(selectedApp)}
+                    </div>
+                  </div>
+                  <div className="discover-info-row">
+                    <div className="discover-info-label">Adapter</div>
+                    <div className="discover-info-value">
+                      {buildDiscoverAppAdapterLabel(selectedApp)}
                     </div>
                   </div>
                   <div className="discover-info-row">

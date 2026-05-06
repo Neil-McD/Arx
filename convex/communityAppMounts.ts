@@ -24,6 +24,10 @@ import {
   requireCommunityManager,
   resolveUserIdForAuthenticatedRequest,
 } from "./communityCore";
+import {
+  isDiscoverAppCatalogSingletonIdentity,
+  resolveDiscoverAppCatalogConnectPolicy,
+} from "../shared/discoverCatalog";
 
 type CommunityAppMountRow = {
   _id: any;
@@ -211,6 +215,8 @@ export const findExistingCommunityAppMountByIdentityInternal = internalQuery({
   handler: async (ctx, args) => {
     const normalizedCatalogAppId = normalizeString(args.catalogAppId, 120).toLowerCase();
     const normalizedEndpointUrl = normalizeDeveloperAppEndpointUrl(args.endpointUrl);
+    const useCatalogSingletonIdentity =
+      isDiscoverAppCatalogSingletonIdentity(normalizedCatalogAppId);
     const mounts = await listCommunityAppMountRows(ctx, args.communityId);
     mounts.sort((a, b) => b.updatedAt - a.updatedAt || b.createdAt - a.createdAt);
     let endpointMatch: {
@@ -221,6 +227,7 @@ export const findExistingCommunityAppMountByIdentityInternal = internalQuery({
       const app = await getDeveloperAppById(ctx, mount.developerAppId);
       if (!app) continue;
       if (
+        useCatalogSingletonIdentity &&
         normalizedCatalogAppId &&
         normalizeString(app.catalogAppId, 120).toLowerCase() ===
           normalizedCatalogAppId
@@ -606,14 +613,27 @@ export const connectCommunityApp = action({
       communityId: args.communityId,
     });
 
+    const connectPolicy = resolveDiscoverAppCatalogConnectPolicy({
+      catalogAppId: args.catalogAppId,
+      name: args.name,
+      endpointUrl: args.endpointUrl,
+      authType: args.authType,
+    });
+    if (!connectPolicy.ok) {
+      throw new Error(connectPolicy.message);
+    }
+    const catalogAppId = connectPolicy.catalogAppId;
+    const appName = connectPolicy.name;
+    const endpointUrl = connectPolicy.endpointUrl;
+    const authType = connectPolicy.authType;
     const nowMs = Date.now();
     const existingGrant = (await ctx.runQuery(
       internal.communityAppMounts.findExistingCommunityAppMountByIdentityInternal,
       {
         communityId: args.communityId,
-        catalogAppId: args.catalogAppId,
-        endpointUrl: args.endpointUrl,
-        authType: args.authType,
+        catalogAppId,
+        endpointUrl,
+        authType,
       },
     )) as {
       mount: CommunityAppMountRow;
@@ -635,12 +655,12 @@ export const connectCommunityApp = action({
     try {
       developerAppId = (await ctx.runMutation(internal.developerApps.createDeveloperAppInternal, {
         ownerUserId: userId,
-        catalogAppId: args.catalogAppId,
-        name: args.name,
+        catalogAppId,
+        name: appName,
         slug: undefined,
         description: args.description,
-        endpointUrl: args.endpointUrl,
-        authType: args.authType,
+        endpointUrl,
+        authType,
         nowMs,
       })) as any;
 

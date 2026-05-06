@@ -1,4 +1,5 @@
 import type { HarnessMount } from "./harnessMountTypes";
+import { isDiscoverAppCatalogSingletonIdentity } from "./discoverCatalog.ts";
 
 export type EffectiveMcpAppCredentialState =
   | "live"
@@ -28,9 +29,11 @@ export type McpAppIdentitySource = {
 export function buildMcpAppIdentityAliases(source: McpAppIdentitySource): string[] {
   const aliases: string[] = [];
   const catalogAppId = normalizeMcpAppKeyPart(source.app.catalog_app_id);
-  if (catalogAppId) aliases.push(`catalog:${catalogAppId}`);
   const endpointUrl = normalizeMcpAppKeyPart(source.app.endpoint_url);
   const authType = normalizeMcpAppKeyPart(source.app.auth_type);
+  if (catalogAppId && isDiscoverAppCatalogSingletonIdentity(catalogAppId)) {
+    aliases.push(`catalog:${catalogAppId}`);
+  }
   if (endpointUrl && authType) aliases.push(`endpoint:${endpointUrl}:auth:${authType}`);
   if (aliases.length > 0) return aliases;
   const slug = normalizeMcpAppKeyPart(source.app.slug);

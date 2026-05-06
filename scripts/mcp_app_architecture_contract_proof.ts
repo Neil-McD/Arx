@@ -38,6 +38,7 @@ function main() {
     "MCP app architecture contract first principle",
   );
   assertIncludes(contract, "### App Definition", "MCP app architecture contract");
+  assertIncludes(contract, "### Integration Profile", "MCP app architecture contract");
   assertIncludes(contract, "### Community App Grant", "MCP app architecture contract");
   assertIncludes(contract, "### User App State", "MCP app architecture contract");
   assertIncludes(contract, "### Runtime Harness", "MCP app architecture contract");
@@ -45,6 +46,36 @@ function main() {
     contract,
     "Runtime MCP tools come only from user app state.",
     "MCP app architecture contract runtime rule",
+  );
+  assertIncludes(
+    contract,
+    "Ready apps must have an explicit profile override.",
+    "MCP app architecture contract integration profile rule",
+  );
+  assertIncludes(
+    contract,
+    "Catalog app connection policy is server-authoritative",
+    "MCP app architecture contract server-authoritative catalog policy rule",
+  );
+  assertIncludes(
+    contract,
+    "endpoint-instance apps, such as Shopify Storefront MCP, reuse by endpoint/auth identity.",
+    "MCP app architecture contract endpoint-instance identity rule",
+  );
+  assertIncludes(
+    contract,
+    "Uncataloged remote MCP endpoints are blocked from public server-fetch paths",
+    "MCP app architecture contract uncataloged endpoint fetch rule",
+  );
+  assertIncludes(
+    contract,
+    "Integration profile default risk is applied as a floor during MCP tool snapshot classification.",
+    "MCP app architecture contract profile risk floor rule",
+  );
+  assertIncludes(
+    contract,
+    "Operator MCP servers configured in Codex are not user-facing Discover integration profiles.",
+    "MCP app architecture contract operator MCP separation rule",
   );
   assertIncludes(
     contract,
@@ -127,8 +158,23 @@ function main() {
   );
   assertIncludes(
     communityAppsEditor,
+    "onClick={onBrowseCatalog}",
+    "Community agent apps editor catalog-only add path",
+  );
+  assertNotIncludes(
+    communityAppsEditor,
+    "Connect hosted MCP app",
+    "Community agent apps editor generic hosted MCP fallback",
+  );
+  assertNotIncludes(
+    communityAppsEditor,
+    "Paste the app&apos;s direct hosted MCP endpoint.",
+    "Community agent apps editor generic endpoint copy",
+  );
+  assertNotIncludes(
+    communityAppsEditor,
     "What happens when you recommend it",
-    "Community agent apps editor recommendation copy",
+    "Community agent apps editor generic connect flow copy",
   );
   assertNotIncludes(
     communityAppsEditor,

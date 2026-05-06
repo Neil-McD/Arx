@@ -11,6 +11,7 @@
 import type * as account from "../account.js";
 import type * as appConnections from "../appConnections.js";
 import type * as appCore from "../appCore.js";
+import type * as appFetchPolicy from "../appFetchPolicy.js";
 import type * as appValidation from "../appValidation.js";
 import type * as auth from "../auth.js";
 import type * as authActor from "../authActor.js";
@@ -143,6 +144,7 @@ declare const fullApi: ApiFromModules<{
   account: typeof account;
   appConnections: typeof appConnections;
   appCore: typeof appCore;
+  appFetchPolicy: typeof appFetchPolicy;
   appValidation: typeof appValidation;
   auth: typeof auth;
   authActor: typeof authActor;

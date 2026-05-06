@@ -67,7 +67,7 @@ function isPrivateOrSpecialIpv4(hostname: string): boolean {
 }
 
 function isLocalOrPrivateHostname(hostname: string): boolean {
-  const normalized = hostname.trim().toLowerCase();
+  const normalized = hostname.trim().toLowerCase().replace(/^\[|\]$/g, "");
   if (!normalized) return true;
   if (
     normalized === "localhost" ||
@@ -80,13 +80,17 @@ function isLocalOrPrivateHostname(hostname: string): boolean {
   if (isPrivateOrSpecialIpv4(normalized)) return true;
   if (
     normalized === "::1" ||
+    normalized === "0:0:0:0:0:0:0:1" ||
     normalized.startsWith("fc") ||
     normalized.startsWith("fd") ||
     normalized.startsWith("fe80:") ||
     normalized.startsWith("::ffff:127.") ||
     normalized.startsWith("::ffff:10.") ||
     normalized.startsWith("::ffff:192.168.") ||
-    normalized.startsWith("::ffff:172.")
+    normalized.startsWith("::ffff:172.") ||
+    normalized.startsWith("::ffff:7f") ||
+    normalized.startsWith("::ffff:a") ||
+    normalized.startsWith("::ffff:c0a8")
   ) {
     return true;
   }

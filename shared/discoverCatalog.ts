@@ -3,6 +3,69 @@ import type { DeveloperAppAuthType } from "./communityAppMountTypes";
 export type DiscoverAppConnectionKind = "known" | "custom";
 export type DiscoverAppConnectionMode = "token" | "oauth" | "none" | "custom";
 export type DiscoverAppAuthMethod = DiscoverAppConnectionMode;
+export type DiscoverAppAdapterKind =
+  | "remote_mcp_token"
+  | "remote_mcp_no_auth"
+  | "custom_remote_mcp"
+  | "remote_mcp_oauth"
+  | "backplane_mcp"
+  | "direct_api"
+  | "cli_sandbox"
+  | "catalog_only";
+export type DiscoverAppReadiness =
+  | "ready_token"
+  | "ready_no_auth"
+  | "custom_endpoint"
+  | "oauth_planned"
+  | "backplane_planned"
+  | "api_planned"
+  | "cli_sandbox_planned"
+  | "catalog_only";
+export type DiscoverAppValidationKind =
+  | "mcp_initialize_tools_list"
+  | "hosted_oauth_mcp_planned"
+  | "backplane_mcp_planned"
+  | "direct_api_adapter_planned"
+  | "sandbox_bridge_planned"
+  | "catalog_only";
+export type DiscoverAppDefaultToolRisk = "read" | "write" | "sensitive";
+export type DiscoverAppIdentityScope = "catalog_singleton" | "endpoint_instance";
+
+export type DiscoverAppRuntimePolicy = {
+  defaultToolRisk: DiscoverAppDefaultToolRisk;
+};
+
+export type DiscoverAppIntegrationProfile = {
+  adapterKind: DiscoverAppAdapterKind;
+  readiness: DiscoverAppReadiness;
+  identityScope: DiscoverAppIdentityScope;
+  authMode: DiscoverAppConnectionMode;
+  validationKind: DiscoverAppValidationKind;
+  runtimePolicy: DiscoverAppRuntimePolicy;
+};
+
+export type DiscoverAppCatalogConnectPolicyErrorCode =
+  | "catalog_app_not_found"
+  | "catalog_app_not_ready"
+  | "catalog_app_endpoint_mismatch"
+  | "catalog_app_auth_mismatch"
+  | "catalog_app_custom_endpoint_invalid"
+  | "catalog_app_connection_invalid";
+
+export type DiscoverAppCatalogConnectPolicyResult =
+  | {
+      ok: true;
+      catalogAppId: string;
+      name: string;
+      endpointUrl: string;
+      authType: DeveloperAppAuthType;
+      identityScope: DiscoverAppIdentityScope;
+    }
+  | {
+      ok: false;
+      code: DiscoverAppCatalogConnectPolicyErrorCode;
+      message: string;
+    };
 
 type DiscoverAppConnectionStrategy = {
   defaultMode: DiscoverAppConnectionMode;
@@ -114,6 +177,457 @@ export type DiscoverAppCatalogEntry = {
   logoUrlDark?: string | null;
   personalConnect: DiscoverAppPersonalConnectTemplate;
 };
+
+// Profiles describe integration intent. Runtime enforcement still lives in the harness policy layer.
+export const DISCOVER_APP_INTEGRATION_PROFILE_OVERRIDES = {
+  supabase: {
+    adapterKind: "remote_mcp_token",
+    readiness: "ready_token",
+    identityScope: "catalog_singleton",
+    authMode: "token",
+    validationKind: "mcp_initialize_tools_list",
+    runtimePolicy: {
+      defaultToolRisk: "sensitive",
+    },
+  },
+  linear: {
+    adapterKind: "remote_mcp_token",
+    readiness: "ready_token",
+    identityScope: "catalog_singleton",
+    authMode: "token",
+    validationKind: "mcp_initialize_tools_list",
+    runtimePolicy: {
+      defaultToolRisk: "write",
+    },
+  },
+  airtable: {
+    adapterKind: "remote_mcp_token",
+    readiness: "ready_token",
+    identityScope: "catalog_singleton",
+    authMode: "token",
+    validationKind: "mcp_initialize_tools_list",
+    runtimePolicy: {
+      defaultToolRisk: "write",
+    },
+  },
+  shopify: {
+    adapterKind: "custom_remote_mcp",
+    readiness: "custom_endpoint",
+    identityScope: "endpoint_instance",
+    authMode: "custom",
+    validationKind: "mcp_initialize_tools_list",
+    runtimePolicy: {
+      defaultToolRisk: "write",
+    },
+  },
+} satisfies Partial<Record<string, DiscoverAppIntegrationProfile>>;
+
+const DISCOVER_APP_INTEGRATION_PROFILE_BY_ID: Partial<
+  Record<string, DiscoverAppIntegrationProfile>
+> = DISCOVER_APP_INTEGRATION_PROFILE_OVERRIDES;
+
+type PlannedDiscoverAppProfileKind =
+  | "remote_mcp_oauth"
+  | "backplane_mcp"
+  | "direct_api"
+  | "cli_sandbox"
+  | "catalog_only";
+
+const DISCOVER_APP_PLANNED_PROFILE_KINDS = {
+  github: "catalog_only",
+  vercel: "remote_mcp_oauth",
+  notion: "remote_mcp_oauth",
+  "google-drive": "backplane_mcp",
+  "google-sheets": "backplane_mcp",
+  "google-calendar": "backplane_mcp",
+  stripe: "remote_mcp_oauth",
+  figma: "remote_mcp_oauth",
+  canva: "remote_mcp_oauth",
+  youtube: "direct_api",
+  zapier: "backplane_mcp",
+  gohighlevel: "direct_api",
+  salesforce: "remote_mcp_oauth",
+  hubspot: "remote_mcp_oauth",
+  jira: "backplane_mcp",
+  gmail: "backplane_mcp",
+  "google-docs": "backplane_mcp",
+  "google-slides": "backplane_mcp",
+  "microsoft-outlook": "backplane_mcp",
+  "microsoft-teams": "backplane_mcp",
+  "microsoft-onedrive": "backplane_mcp",
+  "microsoft-sharepoint": "backplane_mcp",
+  intercom: "backplane_mcp",
+  zendesk: "backplane_mcp",
+  n8n: "backplane_mcp",
+  make: "backplane_mcp",
+  heygen: "remote_mcp_oauth",
+  hyperframes: "cli_sandbox",
+  remotion: "cli_sandbox",
+  slack: "remote_mcp_oauth",
+  discord: "backplane_mcp",
+  asana: "remote_mcp_oauth",
+} satisfies Record<string, PlannedDiscoverAppProfileKind>;
+
+const DISCOVER_APP_PLANNED_PROFILE_KIND_BY_ID: Partial<
+  Record<string, PlannedDiscoverAppProfileKind>
+> = DISCOVER_APP_PLANNED_PROFILE_KINDS;
+
+function buildPlannedDiscoverAppIntegrationProfile(
+  kind: PlannedDiscoverAppProfileKind,
+): DiscoverAppIntegrationProfile {
+  switch (kind) {
+    case "remote_mcp_oauth":
+      return {
+        adapterKind: "remote_mcp_oauth",
+        readiness: "oauth_planned",
+        identityScope: "catalog_singleton",
+        authMode: "oauth",
+        validationKind: "hosted_oauth_mcp_planned",
+        runtimePolicy: {
+          defaultToolRisk: "write",
+        },
+      };
+    case "backplane_mcp":
+      return {
+        adapterKind: "backplane_mcp",
+        readiness: "backplane_planned",
+        identityScope: "catalog_singleton",
+        authMode: "oauth",
+        validationKind: "backplane_mcp_planned",
+        runtimePolicy: {
+          defaultToolRisk: "sensitive",
+        },
+      };
+    case "direct_api":
+      return {
+        adapterKind: "direct_api",
+        readiness: "api_planned",
+        identityScope: "catalog_singleton",
+        authMode: "oauth",
+        validationKind: "direct_api_adapter_planned",
+        runtimePolicy: {
+          defaultToolRisk: "write",
+        },
+      };
+    case "cli_sandbox":
+      return {
+        adapterKind: "cli_sandbox",
+        readiness: "cli_sandbox_planned",
+        identityScope: "catalog_singleton",
+        authMode: "custom",
+        validationKind: "sandbox_bridge_planned",
+        runtimePolicy: {
+          defaultToolRisk: "sensitive",
+        },
+      };
+    case "catalog_only":
+      return {
+        adapterKind: "catalog_only",
+        readiness: "catalog_only",
+        identityScope: "catalog_singleton",
+        authMode: "custom",
+        validationKind: "catalog_only",
+        runtimePolicy: {
+          defaultToolRisk: "read",
+        },
+      };
+    default:
+      return {
+        adapterKind: "catalog_only",
+        readiness: "catalog_only",
+        identityScope: "catalog_singleton",
+        authMode: "custom",
+        validationKind: "catalog_only",
+        runtimePolicy: {
+          defaultToolRisk: "read",
+        },
+      };
+  }
+}
+
+export function hasExplicitDiscoverAppIntegrationProfile(
+  app: DiscoverAppCatalogEntry,
+): boolean {
+  return Object.prototype.hasOwnProperty.call(
+    DISCOVER_APP_INTEGRATION_PROFILE_BY_ID,
+    app.id,
+  );
+}
+
+export function hasPlannedDiscoverAppIntegrationProfileKind(
+  app: DiscoverAppCatalogEntry,
+): boolean {
+  return Object.prototype.hasOwnProperty.call(
+    DISCOVER_APP_PLANNED_PROFILE_KIND_BY_ID,
+    app.id,
+  );
+}
+
+export function resolveDiscoverAppIntegrationProfile(
+  app: DiscoverAppCatalogEntry,
+): DiscoverAppIntegrationProfile {
+  const override = DISCOVER_APP_INTEGRATION_PROFILE_BY_ID[app.id];
+  if (override) return override;
+  const plannedKind =
+    DISCOVER_APP_PLANNED_PROFILE_KIND_BY_ID[app.id] ?? "catalog_only";
+  return buildPlannedDiscoverAppIntegrationProfile(plannedKind);
+}
+
+function normalizeCatalogId(value: unknown): string {
+  return typeof value === "string" ? value.trim().toLowerCase().slice(0, 120) : "";
+}
+
+function normalizeCatalogEndpointUrl(value: unknown): string {
+  const raw = typeof value === "string" ? value.trim().slice(0, 1_000) : "";
+  if (!raw) return "";
+  try {
+    const url = new URL(raw);
+    if (url.protocol !== "https:") return "";
+    if (url.username || url.password) return "";
+    return url.toString();
+  } catch {
+    return "";
+  }
+}
+
+function normalizeShopifyStorefrontMcpEndpoint(value: unknown): {
+  endpointUrl: string;
+  storeSubdomain: string;
+} | null {
+  const raw = typeof value === "string" ? value.trim().slice(0, 1_000) : "";
+  if (!raw) return null;
+  try {
+    const url = new URL(raw);
+    const hostname = url.hostname.toLowerCase();
+    const suffix = ".myshopify.com";
+    const storeSubdomain = hostname.endsWith(suffix)
+      ? hostname.slice(0, -suffix.length)
+      : "";
+    if (url.protocol !== "https:") return null;
+    if (url.username || url.password || url.port || url.search || url.hash) return null;
+    if (!storeSubdomain || !/^[a-z0-9][a-z0-9-]*$/.test(storeSubdomain)) {
+      return null;
+    }
+    if (url.pathname.replace(/\/+$/g, "") !== "/api/mcp") return null;
+    url.hostname = hostname;
+    url.pathname = "/api/mcp";
+    return {
+      endpointUrl: url.toString(),
+      storeSubdomain,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function findDiscoverAppCatalogEntryById(
+  catalogAppId: unknown,
+): DiscoverAppCatalogEntry | null {
+  const normalizedCatalogAppId = normalizeCatalogId(catalogAppId);
+  if (!normalizedCatalogAppId) return null;
+  return (
+    DISCOVER_APP_CATALOG.find((app) => app.id === normalizedCatalogAppId) ??
+    null
+  );
+}
+
+export function getDiscoverAppIdentityScopeByCatalogId(
+  catalogAppId: unknown,
+): DiscoverAppIdentityScope | null {
+  const app = findDiscoverAppCatalogEntryById(catalogAppId);
+  if (!app) return null;
+  return resolveDiscoverAppIntegrationProfile(app).identityScope;
+}
+
+export function isDiscoverAppCatalogSingletonIdentity(
+  catalogAppId: unknown,
+): boolean {
+  const normalizedCatalogAppId = normalizeCatalogId(catalogAppId);
+  if (!normalizedCatalogAppId) return false;
+  const scope = getDiscoverAppIdentityScopeByCatalogId(normalizedCatalogAppId);
+  return scope === null || scope === "catalog_singleton";
+}
+
+function compareDiscoverAppRisk(
+  left: DiscoverAppDefaultToolRisk,
+  right: DiscoverAppDefaultToolRisk,
+): number {
+  const rank: Record<DiscoverAppDefaultToolRisk, number> = {
+    read: 0,
+    write: 1,
+    sensitive: 2,
+  };
+  return rank[left] - rank[right];
+}
+
+function normalizeDiscoverAppToolRisk(value: unknown): DiscoverAppDefaultToolRisk {
+  return value === "write" || value === "sensitive" ? value : "read";
+}
+
+export function applyDiscoverAppDefaultToolRiskFloor(
+  catalogAppId: unknown,
+  risk: unknown,
+): DiscoverAppDefaultToolRisk {
+  const normalizedRisk = normalizeDiscoverAppToolRisk(risk);
+  const app = findDiscoverAppCatalogEntryById(catalogAppId);
+  if (!app) return normalizedRisk;
+  const riskFloor = resolveDiscoverAppIntegrationProfile(app).runtimePolicy
+    .defaultToolRisk;
+  return compareDiscoverAppRisk(normalizedRisk, riskFloor) >= 0
+    ? normalizedRisk
+    : riskFloor;
+}
+
+export function resolveDiscoverAppCatalogConnectPolicy(args: {
+  catalogAppId?: unknown;
+  name?: unknown;
+  endpointUrl: unknown;
+  authType: DeveloperAppAuthType;
+}): DiscoverAppCatalogConnectPolicyResult {
+  const catalogAppId = normalizeCatalogId(args.catalogAppId);
+  if (!catalogAppId) {
+    return {
+      ok: false,
+      code: "catalog_app_connection_invalid",
+      message:
+        "Custom MCP endpoints need a reviewed catalog entry before Polynet can connect to them.",
+    };
+  }
+
+  const app = findDiscoverAppCatalogEntryById(catalogAppId);
+  if (!app) {
+    return {
+      ok: false,
+      code: "catalog_app_not_found",
+      message: "This catalog app is not available for direct connection.",
+    };
+  }
+  if (!isDiscoverAppPersonallyConnectable(app)) {
+    return {
+      ok: false,
+      code: "catalog_app_not_ready",
+      message: `${app.name} is not ready for direct connection yet.`,
+    };
+  }
+
+  const profile = resolveDiscoverAppIntegrationProfile(app);
+  if (app.personalConnect.connectionKind === "known") {
+    const expectedEndpointUrl = normalizeCatalogEndpointUrl(
+      app.personalConnect.endpointUrl,
+    );
+    const endpointUrl = normalizeCatalogEndpointUrl(args.endpointUrl);
+    if (!endpointUrl || endpointUrl !== expectedEndpointUrl) {
+      return {
+        ok: false,
+        code: "catalog_app_endpoint_mismatch",
+        message: `${app.name} must use its vetted catalog endpoint.`,
+      };
+    }
+    if (args.authType !== app.personalConnect.authType) {
+      return {
+        ok: false,
+        code: "catalog_app_auth_mismatch",
+        message: `${app.name} must use its vetted catalog auth mode.`,
+      };
+    }
+    return {
+      ok: true,
+      catalogAppId: app.id,
+      name: app.name,
+      endpointUrl: expectedEndpointUrl,
+      authType: app.personalConnect.authType,
+      identityScope: profile.identityScope,
+    };
+  }
+
+  if (app.id !== "shopify") {
+    return {
+      ok: false,
+      code: "catalog_app_connection_invalid",
+      message: `${app.name} does not have a vetted custom endpoint policy.`,
+    };
+  }
+  if (
+    !app.personalConnect.supportedAuthTypes.some(
+      (option) => option.value === args.authType,
+    )
+  ) {
+    return {
+      ok: false,
+      code: "catalog_app_auth_mismatch",
+      message: `${app.name} must use one of its supported auth modes.`,
+    };
+  }
+  const shopifyEndpoint = normalizeShopifyStorefrontMcpEndpoint(args.endpointUrl);
+  if (!shopifyEndpoint) {
+    return {
+      ok: false,
+      code: "catalog_app_custom_endpoint_invalid",
+      message:
+        "Use a Shopify Storefront MCP endpoint like https://your-store.myshopify.com/api/mcp.",
+    };
+  }
+  return {
+    ok: true,
+    catalogAppId: app.id,
+    name: `${shopifyEndpoint.storeSubdomain} Shopify`,
+    endpointUrl: shopifyEndpoint.endpointUrl,
+    authType: args.authType,
+    identityScope: profile.identityScope,
+  };
+}
+
+export function buildDiscoverAppIntegrationReadinessLabel(
+  app: DiscoverAppCatalogEntry,
+): string {
+  const profile = resolveDiscoverAppIntegrationProfile(app);
+  switch (profile.readiness) {
+    case "ready_token":
+      return "Ready with token";
+    case "ready_no_auth":
+      return "Ready without auth";
+    case "custom_endpoint":
+      return "Ready with custom endpoint";
+    case "oauth_planned":
+      return "OAuth planned";
+    case "backplane_planned":
+      return "Backplane planned";
+    case "api_planned":
+      return "API adapter planned";
+    case "cli_sandbox_planned":
+      return "Sandbox bridge planned";
+    case "catalog_only":
+      return "Catalog only";
+    default:
+      return "Catalog only";
+  }
+}
+
+export function buildDiscoverAppAdapterLabel(
+  app: DiscoverAppCatalogEntry,
+): string {
+  const profile = resolveDiscoverAppIntegrationProfile(app);
+  switch (profile.adapterKind) {
+    case "remote_mcp_token":
+      return "Remote MCP + token";
+    case "remote_mcp_no_auth":
+      return "Remote MCP without auth";
+    case "custom_remote_mcp":
+      return "Custom remote MCP";
+    case "remote_mcp_oauth":
+      return "Remote MCP + OAuth";
+    case "backplane_mcp":
+      return "Connector backplane";
+    case "direct_api":
+      return "Direct API adapter";
+    case "cli_sandbox":
+      return "Sandboxed CLI";
+    case "catalog_only":
+      return "Catalog only";
+    default:
+      return "Catalog only";
+  }
+}
 
 export function formatDiscoverAppConnectionModeLabel(
   mode: DiscoverAppConnectionMode,

@@ -3,7 +3,7 @@ id: product.guide.connect_apps_and_mcps
 title: Connect Apps and MCPs
 audience: builder, llm, operator
 status: alpha-current
-last_verified: 2026-05-05
+last_verified: 2026-05-06
 ---
 
 # Connect Apps and MCPs
@@ -40,6 +40,8 @@ For personal platform apps:
 The system should keep these concepts separate:
 
 - developer app definition
+- integration profile
+- server-side catalog connect policy
 - app connection and secret state
 - tool snapshot discovered during validation
 - community app grant
@@ -55,10 +57,11 @@ An app is not useful merely because it appears in a catalog.
 Capability is real only when:
 
 1. the endpoint or app definition exists
-2. connection/auth state is valid
-3. tools are discovered or known
-4. the app is present in the user's canonical harness state
-5. runtime policy allows the tool for the turn
+2. the integration profile declares the adapter, identity scope, risk floor, and readiness contract
+3. connection/auth state is valid
+4. tools are discovered or known
+5. the app is present in the user's canonical harness state
+6. runtime policy allows the tool for the turn
 
 ## Rules
 
@@ -72,6 +75,11 @@ Capability is real only when:
 8. Runtime prompt context must not claim more app capability than the harness can execute.
 9. Secrets and auth state should not live in community prompt/config text or community app grants.
 10. Communities grant access; users own app state; runtime executes only user harness tools.
+11. Ready Discover apps must declare adapter, validation, auth mode, readiness, identity, and risk metadata before they can be treated as connectable.
+12. Catalog app connectability must be enforced on the server, not inferred from client-submitted fields.
+13. Shopify Storefront MCP is a catalog app template with endpoint-instance identity, not one global Shopify app identity.
+14. Uncataloged remote MCP endpoints are blocked from public server-fetch paths until they have a reviewed catalog policy or network egress guard.
+15. Before broad release, operators should audit existing app rows for uncataloged or catalog-policy-blocked endpoints.
 
 ## Common Mistakes
 

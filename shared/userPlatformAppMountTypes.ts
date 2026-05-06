@@ -75,6 +75,7 @@ export type ConnectUserPlatformAppErrorCode =
   | "developer_app_no_tools_discovered"
   | "developer_app_mount_failed"
   | "developer_app_connect_failed"
+  | "developer_app_catalog_connect_rejected"
   | "server_unavailable";
 
 export type ConnectUserPlatformAppResult = {

@@ -18,11 +18,13 @@ import {
   postMcpJson,
   sendInitializedNotification,
 } from "./mcpHttpClient";
+import { assertDeveloperAppServerFetchAllowed } from "./appFetchPolicy";
 import {
   encodeMcpToolForStorage,
   type StoredMcpToolRecord,
 } from "./mcpSnapshotCodec";
 import { sha256HexText } from "./providerConnections";
+import { applyDiscoverAppDefaultToolRiskFloor } from "../shared/discoverCatalog";
 
 type ValidationStageId =
   | "endpoint_reachable"
@@ -166,7 +168,10 @@ function normalizeToolArray(
     if (!toolName || seen.has(toolName)) continue;
     seen.add(toolName);
     const description = normalizeString(tool.description, 2_000) || null;
-    const risk = classifyToolRisk(toolName, description);
+    const risk = applyDiscoverAppDefaultToolRiskFloor(
+      app.catalogAppId,
+      classifyToolRisk(toolName, description),
+    );
     tools.push(
       encodeMcpToolForStorage({
         tool_name: toolName,
@@ -196,6 +201,7 @@ async function validateStreamableHttpApp(params: {
   validationReport: ValidationReport;
 }> {
   const headers = buildDeveloperAppAuthHeaders(params);
+  assertDeveloperAppServerFetchAllowed(params.app);
   const stages = createBaseValidationStages();
   let validationStatus: AppToolValidationStatus = "error";
   let validationError: string | null = null;
