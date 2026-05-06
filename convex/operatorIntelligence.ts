@@ -1,4 +1,5 @@
 import { internalQuery } from "./_generated/server";
+import { internal } from "./_generated/api";
 import { v } from "convex/values";
 
 type MoneyMetric = {
@@ -76,6 +77,42 @@ function mapEvent(row: any) {
     metadata: row.metadata ?? null,
     createdAt: row.createdAt,
   };
+}
+
+function mapDiagnosticEvent(row: any) {
+  return {
+    id: String(row._id),
+    eventKey: String(row.eventKey ?? ""),
+    eventType: String(row.eventType ?? ""),
+    subsystem: row.subsystem ?? "diagnostics",
+    severity: row.severity ?? "info",
+    status: row.status ?? "started",
+    surface: row.surface ?? null,
+    userId: row.userId ? String(row.userId) : null,
+    communityId: row.communityId ? String(row.communityId) : null,
+    projectId: row.projectId ? String(row.projectId) : null,
+    threadId: row.threadId ? String(row.threadId) : null,
+    runId: row.runId ?? null,
+    requestId: row.requestId ?? null,
+    release: row.release ?? null,
+    latencyMs: typeof row.latencyMs === "number" ? row.latencyMs : null,
+    errorCode: row.errorCode ?? null,
+    metadata: row.metadata ?? null,
+    createdAt: row.createdAt,
+  };
+}
+
+async function readDiagnosticEventsBySubsystem(
+  ctx: any,
+  subsystem: "auth" | "access",
+  rangeStart: number | null,
+  limit: number,
+) {
+  const query = ctx.db.query("platformDiagnosticEvents").withIndex("by_subsystem_createdAt", (q: any) => {
+    const scoped = q.eq("subsystem", subsystem);
+    return rangeStart == null ? scoped : scoped.gte("createdAt", rangeStart);
+  });
+  return await query.order("desc").take(limit);
 }
 
 async function readActiveTier(ctx: any, userId: any, nowMs: number): Promise<"free" | "builder" | "architect" | "unknown"> {
@@ -388,6 +425,67 @@ export const listOperatorEventsInternal = internalQuery({
     }
     const rows = await ctx.db.query("criticalAuditEvents").order("desc").take(limit);
     return rows.map(mapEvent);
+  },
+});
+
+export const getOperatorAuthAccessDiagnosticsInternal = internalQuery({
+  args: {
+    range: v.optional(v.union(v.literal("7d"), v.literal("30d"), v.literal("90d"), v.literal("all"))),
+  },
+  handler: async (ctx, args): Promise<any> => {
+    const nowMs = Date.now();
+    const range = args.range ?? "30d";
+    const rangeStart = normalizeRangeStart(range, nowMs);
+    const scannedEventLimit = 500;
+    const [authRows, accessRows, entitlementFindings]: [any[], any[], any] = await Promise.all([
+      readDiagnosticEventsBySubsystem(ctx, "auth", rangeStart, scannedEventLimit),
+      readDiagnosticEventsBySubsystem(ctx, "access", rangeStart, scannedEventLimit),
+      ctx.runQuery((internal as any).communityAccessAudit.listCommunityAccessStateAuditFindingsInternal, {
+        limit: 500,
+      }),
+    ]);
+    const rows: any[] = [...authRows, ...accessRows].sort((a: any, b: any) => b.createdAt - a.createdAt);
+    const warningRows = rows.filter((row: any) => row.severity === "warning");
+    const errorRows: any[] = rows.filter((row: any) => row.severity === "error");
+    const authFailureRows = rows.filter((row: any) => row.subsystem === "auth" && row.status === "failed");
+    const entitlementFindingsList = Array.isArray(entitlementFindings) ? entitlementFindings : [];
+    const entitlementErrorFindings = entitlementFindingsList.filter((finding: any) => finding.severity === "error").length;
+    const unknownAuthErrors = authFailureRows.filter((row: any) => {
+      const errorCode = String(row.errorCode ?? "").trim().toLowerCase();
+      return !errorCode || errorCode === "unknown" || errorCode === "auth_unknown";
+    }).length;
+    const health: "healthy" | "degraded" | "incident" =
+      errorRows.length > 0 || entitlementErrorFindings > 0
+        ? "incident"
+        : warningRows.length > 0 || authFailureRows.length > 0 || entitlementFindingsList.length > 0
+          ? "degraded"
+          : "healthy";
+
+    return {
+      computedAt: nowMs,
+      range,
+      health,
+      totals: {
+        events: rows.length,
+        warnings: warningRows.length,
+        errors: errorRows.length,
+        authFailures: authFailureRows.length,
+        sessionEstablished: rows.filter((row: any) => row.eventType === "auth.session_established").length,
+        sessionRefreshFailures: rows.filter((row: any) => row.eventType === "auth.session_refresh_failed").length,
+        operatorAccessGranted: rows.filter((row: any) => row.eventType === "access.operator_access_granted").length,
+        operatorAccessDenied: rows.filter((row: any) => row.eventType === "access.operator_access_denied").length,
+        communityAccessDenied: rows.filter((row: any) => row.eventType === "access.community_denied").length,
+        entitlementFindings: entitlementFindingsList.length,
+        entitlementErrorFindings,
+        unknownAuthErrors,
+      },
+      latestEvents: rows.slice(0, 8).map(mapDiagnosticEvent),
+      evidence: {
+        sourceTables: ["platformDiagnosticEvents", "communityAccessAudit"],
+        scannedEventLimit,
+        isTruncated: authRows.length >= scannedEventLimit || accessRows.length >= scannedEventLimit,
+      },
+    };
   },
 });
 

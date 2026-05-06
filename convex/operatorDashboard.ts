@@ -70,6 +70,19 @@ export const getOperatorMonetization = query({
   },
 });
 
+export const getOperatorAuthAccessDiagnostics = query({
+  args: {
+    authSubject: v.optional(v.string()),
+    range: operatorRange,
+  },
+  handler: async (ctx, args): Promise<any> => {
+    await requireOperatorAccess(ctx, args.authSubject);
+    return await ctx.runQuery((internal as any).operatorIntelligence.getOperatorAuthAccessDiagnosticsInternal, {
+      range: args.range,
+    });
+  },
+});
+
 export const listOperatorRisks = query({
   args: {
     authSubject: v.optional(v.string()),

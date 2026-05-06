@@ -2,6 +2,7 @@ import type { AuthSessionLike } from "./authSession";
 import { bootstrapConvexAuthenticatedClient, requireConvexUrl } from "./convexAuthenticatedClient";
 import type {
   OperatorAccessSnapshot,
+  OperatorAuthAccessDiagnosticsSnapshot,
   OperatorBuilderRecord,
   OperatorEventRecord,
   OperatorMonetizationSnapshot,
@@ -73,6 +74,17 @@ export async function loadOperatorMonetizationCanonical(params: {
     authSubject,
     range: params.range ?? "30d",
   })) as OperatorMonetizationSnapshot;
+}
+
+export async function loadOperatorAuthAccessDiagnosticsCanonical(params: {
+  session: AuthSessionLike;
+  range?: OperatorRange;
+}): Promise<OperatorAuthAccessDiagnosticsSnapshot> {
+  const { client, authSubject } = await withOperatorAuth(params.session);
+  return (await client.query("operatorDashboard:getOperatorAuthAccessDiagnostics" as any, {
+    authSubject,
+    range: params.range ?? "30d",
+  })) as OperatorAuthAccessDiagnosticsSnapshot;
 }
 
 export async function loadOperatorRisksCanonical(params: {

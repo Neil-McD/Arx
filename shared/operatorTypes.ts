@@ -115,3 +115,61 @@ export type OperatorEventRecord = {
   metadata: unknown;
   createdAt: number;
 };
+
+export type OperatorDiagnosticEventRecord = {
+  id: string;
+  eventKey: string;
+  eventType: string;
+  subsystem:
+    | "auth"
+    | "access"
+    | "security"
+    | "billing"
+    | "runtime"
+    | "mcp"
+    | "tool"
+    | "community"
+    | "funnel"
+    | "deploy"
+    | "diagnostics";
+  severity: "info" | "warning" | "error";
+  status: "started" | "succeeded" | "failed" | "blocked" | "ignored";
+  surface: string | null;
+  userId: string | null;
+  communityId: string | null;
+  projectId: string | null;
+  threadId: string | null;
+  runId: string | null;
+  requestId: string | null;
+  release: string | null;
+  latencyMs: number | null;
+  errorCode: string | null;
+  metadata: unknown;
+  createdAt: number;
+};
+
+export type OperatorAuthAccessDiagnosticsSnapshot = {
+  computedAt: number;
+  range: OperatorRange;
+  health: "healthy" | "degraded" | "incident" | "unknown";
+  totals: {
+    events: number;
+    warnings: number;
+    errors: number;
+    authFailures: number;
+    sessionEstablished: number;
+    sessionRefreshFailures: number;
+    operatorAccessGranted: number;
+    operatorAccessDenied: number;
+    communityAccessDenied: number;
+    entitlementFindings: number;
+    entitlementErrorFindings: number;
+    unknownAuthErrors: number;
+  };
+  latestEvents: OperatorDiagnosticEventRecord[];
+  evidence: {
+    sourceTables: string[];
+    scannedEventLimit: number;
+    isTruncated: boolean;
+  };
+};

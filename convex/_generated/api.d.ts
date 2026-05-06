@@ -94,6 +94,7 @@ import type * as operatorAccess from "../operatorAccess.js";
 import type * as operatorDashboard from "../operatorDashboard.js";
 import type * as operatorIntelligence from "../operatorIntelligence.js";
 import type * as personalMemory from "../personalMemory.js";
+import type * as platformDiagnostics from "../platformDiagnostics.js";
 import type * as platformHomeCommunity from "../platformHomeCommunity.js";
 import type * as previewProxySessionToken from "../previewProxySessionToken.js";
 import type * as probe from "../probe.js";
@@ -225,6 +226,7 @@ declare const fullApi: ApiFromModules<{
   operatorDashboard: typeof operatorDashboard;
   operatorIntelligence: typeof operatorIntelligence;
   personalMemory: typeof personalMemory;
+  platformDiagnostics: typeof platformDiagnostics;
   platformHomeCommunity: typeof platformHomeCommunity;
   previewProxySessionToken: typeof previewProxySessionToken;
   probe: typeof probe;

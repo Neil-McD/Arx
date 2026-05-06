@@ -196,6 +196,51 @@ export default defineSchema({
     .index("by_community_createdAt", ["communityId", "createdAt"])
     .index("by_providerObject", ["provider", "providerObjectId"]),
 
+  platformDiagnosticEvents: defineTable({
+    eventKey: v.string(),
+    eventType: v.string(),
+    subsystem: v.union(
+      v.literal("auth"),
+      v.literal("access"),
+      v.literal("security"),
+      v.literal("billing"),
+      v.literal("runtime"),
+      v.literal("mcp"),
+      v.literal("tool"),
+      v.literal("community"),
+      v.literal("funnel"),
+      v.literal("deploy"),
+      v.literal("diagnostics"),
+    ),
+    severity: v.union(v.literal("info"), v.literal("warning"), v.literal("error")),
+    status: v.union(
+      v.literal("started"),
+      v.literal("succeeded"),
+      v.literal("failed"),
+      v.literal("blocked"),
+      v.literal("ignored"),
+    ),
+    surface: v.optional(v.string()),
+    userId: v.optional(v.id("users")),
+    communityId: v.optional(v.id("communities")),
+    projectId: v.optional(v.id("cloudProjects")),
+    threadId: v.optional(v.id("threads")),
+    runId: v.optional(v.string()),
+    requestId: v.optional(v.string()),
+    release: v.optional(v.string()),
+    latencyMs: v.optional(v.number()),
+    errorCode: v.optional(v.string()),
+    metadata: v.optional(v.any()),
+    createdAt: v.number(),
+  })
+    .index("by_eventKey", ["eventKey"])
+    .index("by_type_createdAt", ["eventType", "createdAt"])
+    .index("by_subsystem_createdAt", ["subsystem", "createdAt"])
+    .index("by_severity_createdAt", ["severity", "createdAt"])
+    .index("by_status_createdAt", ["status", "createdAt"])
+    .index("by_user_createdAt", ["userId", "createdAt"])
+    .index("by_community_createdAt", ["communityId", "createdAt"]),
+
   checkoutSessions: defineTable({
     sessionId: v.string(),
     mode: v.union(

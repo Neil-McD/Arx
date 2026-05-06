@@ -43,6 +43,67 @@ function normalizeString(value: unknown): string {
   return String(value ?? "").trim();
 }
 
+function normalizeDiagnosticErrorCode(value: unknown, fallback: string): string {
+  const normalized = normalizeString(value).toLowerCase();
+  if (!normalized) return fallback;
+  if (normalized.includes("auth_session_missing")) return "auth_session_missing";
+  if (normalized.includes("auth_session_invalid")) return "auth_session_invalid";
+  if (normalized.includes("auth_session_resolution_loop")) return "auth_session_resolution_loop";
+  if (normalized.includes("auth_session_resolution_depth")) return "auth_session_resolution_depth";
+  if (normalized.includes("invalid_grant")) return "invalid_grant";
+  if (normalized.includes("invalid_token")) return "invalid_token";
+  if (normalized.includes("unauthorized")) return "unauthorized";
+  if (normalized.includes("timeout")) return "timeout";
+  return normalized.replace(/[^a-z0-9_.:-]+/g, "_").slice(0, 96) || fallback;
+}
+
+function buildDiagnosticEventKey(eventType: string, status: string, userId: unknown): string {
+  return [
+    eventType,
+    status,
+    String(userId ?? "unknown"),
+    Date.now(),
+    Math.random().toString(36).slice(2, 8),
+  ].join(":");
+}
+
+async function recordAuthSessionDiagnostic(
+  ctx: any,
+  input: {
+    eventType: string;
+    status: "succeeded" | "failed";
+    severity?: "info" | "warning" | "error";
+    userId?: unknown;
+    surface: string;
+    latencyMs?: number;
+    errorCode?: string;
+    metadata?: Record<string, unknown>;
+  },
+) {
+  try {
+    await ctx.runMutation((internal as any).platformDiagnostics.recordPlatformDiagnosticEventInternal, {
+      eventKey: buildDiagnosticEventKey(input.eventType, input.status, input.userId),
+      eventType: input.eventType,
+      subsystem: "auth",
+      severity: input.severity ?? (input.status === "failed" ? "warning" : "info"),
+      status: input.status,
+      surface: input.surface,
+      ...(input.userId ? { userId: input.userId } : null),
+      ...(typeof input.latencyMs === "number" && Number.isFinite(input.latencyMs)
+        ? { latencyMs: input.latencyMs }
+        : null),
+      ...(input.errorCode ? { errorCode: input.errorCode } : null),
+      ...(input.metadata ? { metadata: input.metadata } : null),
+      createdAt: Date.now(),
+    });
+  } catch (error) {
+    console.warn("auth_session_diagnostic_record_failed", {
+      eventType: input.eventType,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
 function asObject(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   return value as Record<string, unknown>;
@@ -708,10 +769,25 @@ export const bootstrapAuthSessionInternal = internalAction({
   handler: async (ctx, args) => {
     const resolved = await resolveAuthSessionRowForAction(ctx, args.sessionId);
     if (!resolved.ok) {
+      await recordAuthSessionDiagnostic(ctx, {
+        eventType: "auth.bootstrap_failed",
+        status: "failed",
+        severity: "warning",
+        surface: "auth_bridge_bootstrap",
+        errorCode: normalizeDiagnosticErrorCode(resolved.reason, "auth_session_resolution_failed"),
+      });
       return { status: "terminal_failure" as const, reason: resolved.reason };
     }
     const row = resolved.row;
     if (typeof row.revokedAt === "number") {
+      await recordAuthSessionDiagnostic(ctx, {
+        eventType: "auth.bootstrap_failed",
+        status: "failed",
+        severity: "warning",
+        userId: row.userId,
+        surface: "auth_bridge_bootstrap",
+        errorCode: "auth_session_missing",
+      });
       return { status: "terminal_failure" as const, reason: "auth_session_missing" };
     }
     const stored = await decodeStoredState(row);
@@ -720,10 +796,28 @@ export const bootstrapAuthSessionInternal = internalAction({
         sessionId: resolved.resolvedSessionId,
         nowMs: Date.now(),
       });
+      await recordAuthSessionDiagnostic(ctx, {
+        eventType: "auth.bootstrap_failed",
+        status: "failed",
+        severity: "warning",
+        userId: row.userId,
+        surface: "auth_bridge_bootstrap",
+        errorCode: "auth_session_invalid",
+      });
       return { status: "terminal_failure" as const, reason: "auth_session_invalid" };
     }
     const nowSec = Math.floor(Date.now() / 1000);
     if (hasUsableAccessToken(stored, nowSec, 60)) {
+      await recordAuthSessionDiagnostic(ctx, {
+        eventType: "auth.session_established",
+        status: "succeeded",
+        userId: row.userId,
+        surface: "auth_bridge_bootstrap",
+        metadata: {
+          bootstrapPath: "stored_token",
+          rotatedSessionFollowed: resolved.wasRedirected,
+        },
+      });
       return {
         status: "ready" as const,
         session: toPublicSession(stored),
@@ -752,6 +846,17 @@ export const bootstrapAuthSessionInternal = internalAction({
         ...(refreshed.user.avatarUrl ? { avatarUrl: refreshed.user.avatarUrl } : null),
         nowMs: Date.now(),
       });
+      await recordAuthSessionDiagnostic(ctx, {
+        eventType: "auth.session_established",
+        status: "succeeded",
+        userId: row.userId,
+        surface: "auth_bridge_bootstrap",
+        latencyMs: upstreamRefreshMs,
+        metadata: {
+          bootstrapPath: "upstream_refresh",
+          rotatedSessionFollowed: resolved.wasRedirected,
+        },
+      });
       return {
         status: "ready" as const,
         session: toPublicSession(refreshed),
@@ -769,15 +874,42 @@ export const bootstrapAuthSessionInternal = internalAction({
           sessionId: resolved.resolvedSessionId,
           nowMs: Date.now(),
         });
+        await recordAuthSessionDiagnostic(ctx, {
+          eventType: "auth.bootstrap_failed",
+          status: "failed",
+          severity: "error",
+          userId: row.userId,
+          surface: "auth_bridge_bootstrap",
+          errorCode: normalizeDiagnosticErrorCode(reason, "auth_session_refresh_invalid"),
+        });
         return { status: "terminal_failure" as const, reason: reason || "auth_session_refresh_invalid" };
       }
       if (hasUsableAccessToken(stored, nowSec, 0)) {
+        await recordAuthSessionDiagnostic(ctx, {
+          eventType: "auth.bootstrap_failed",
+          status: "failed",
+          severity: "warning",
+          userId: row.userId,
+          surface: "auth_bridge_bootstrap",
+          errorCode: normalizeDiagnosticErrorCode(reason, "auth_session_refresh_unavailable"),
+          metadata: {
+            recoveredWithStoredToken: true,
+          },
+        });
         return {
           status: "ready" as const,
           session: toPublicSession(stored),
           sessionId: resolved.resolvedSessionId,
         };
       }
+      await recordAuthSessionDiagnostic(ctx, {
+        eventType: "auth.bootstrap_failed",
+        status: "failed",
+        severity: "warning",
+        userId: row.userId,
+        surface: "auth_bridge_bootstrap",
+        errorCode: normalizeDiagnosticErrorCode(reason, "auth_session_refresh_unavailable"),
+      });
       return { status: "transient_failure" as const, reason: reason || "auth_session_refresh_unavailable" };
     }
   },
@@ -790,10 +922,25 @@ export const refreshAuthSessionInternal = internalAction({
   handler: async (ctx, args) => {
     const resolved = await resolveAuthSessionRowForAction(ctx, args.sessionId);
     if (!resolved.ok) {
+      await recordAuthSessionDiagnostic(ctx, {
+        eventType: "auth.session_refresh_failed",
+        status: "failed",
+        severity: "warning",
+        surface: "auth_bridge_refresh",
+        errorCode: normalizeDiagnosticErrorCode(resolved.reason, "auth_session_resolution_failed"),
+      });
       return { status: "terminal_failure" as const, reason: resolved.reason };
     }
     const row = resolved.row;
     if (typeof row.revokedAt === "number") {
+      await recordAuthSessionDiagnostic(ctx, {
+        eventType: "auth.session_refresh_failed",
+        status: "failed",
+        severity: "warning",
+        userId: row.userId,
+        surface: "auth_bridge_refresh",
+        errorCode: "auth_session_missing",
+      });
       return { status: "terminal_failure" as const, reason: "auth_session_missing" };
     }
     const stored = await decodeStoredState(row);
@@ -802,11 +949,21 @@ export const refreshAuthSessionInternal = internalAction({
         sessionId: resolved.resolvedSessionId,
         nowMs: Date.now(),
       });
+      await recordAuthSessionDiagnostic(ctx, {
+        eventType: "auth.session_refresh_failed",
+        status: "failed",
+        severity: "warning",
+        userId: row.userId,
+        surface: "auth_bridge_refresh",
+        errorCode: "auth_session_invalid",
+      });
       return { status: "terminal_failure" as const, reason: "auth_session_invalid" };
     }
     const nowSec = Math.floor(Date.now() / 1000);
     try {
+      const upstreamRefreshStartedAt = Date.now();
       const refreshed = await refreshUpstreamSession(stored);
+      const upstreamRefreshMs = Date.now() - upstreamRefreshStartedAt;
       const newSessionId = buildSessionId();
       await ctx.runMutation(internal.authSessions.rotateAuthSessionInternal as any, {
         currentSessionId: resolved.resolvedSessionId,
@@ -823,6 +980,13 @@ export const refreshAuthSessionInternal = internalAction({
         ...(refreshed.user.avatarUrl ? { avatarUrl: refreshed.user.avatarUrl } : null),
         nowMs: Date.now(),
       });
+      await recordAuthSessionDiagnostic(ctx, {
+        eventType: "auth.session_refreshed",
+        status: "succeeded",
+        userId: row.userId,
+        surface: "auth_bridge_refresh",
+        latencyMs: upstreamRefreshMs,
+      });
       return {
         status: "refreshed" as const,
         session: toPublicSession(refreshed),
@@ -835,15 +999,42 @@ export const refreshAuthSessionInternal = internalAction({
           sessionId: resolved.resolvedSessionId,
           nowMs: Date.now(),
         });
+        await recordAuthSessionDiagnostic(ctx, {
+          eventType: "auth.session_refresh_failed",
+          status: "failed",
+          severity: "error",
+          userId: row.userId,
+          surface: "auth_bridge_refresh",
+          errorCode: normalizeDiagnosticErrorCode(reason, "auth_session_refresh_invalid"),
+        });
         return { status: "terminal_failure" as const, reason: reason || "auth_session_refresh_invalid" };
       }
       if (hasUsableAccessToken(stored, nowSec, 0)) {
+        await recordAuthSessionDiagnostic(ctx, {
+          eventType: "auth.session_refresh_failed",
+          status: "failed",
+          severity: "warning",
+          userId: row.userId,
+          surface: "auth_bridge_refresh",
+          errorCode: normalizeDiagnosticErrorCode(reason, "auth_session_refresh_unavailable"),
+          metadata: {
+            recoveredWithStoredToken: true,
+          },
+        });
         return {
           status: "ready" as const,
           session: toPublicSession(stored),
           sessionId: resolved.resolvedSessionId,
         };
       }
+      await recordAuthSessionDiagnostic(ctx, {
+        eventType: "auth.session_refresh_failed",
+        status: "failed",
+        severity: "warning",
+        userId: row.userId,
+        surface: "auth_bridge_refresh",
+        errorCode: normalizeDiagnosticErrorCode(reason, "auth_session_refresh_unavailable"),
+      });
       return { status: "transient_failure" as const, reason: reason || "auth_session_refresh_unavailable" };
     }
   },

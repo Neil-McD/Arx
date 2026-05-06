@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type CSSProperties, type KeyboardEvent, t
 import type { AuthSessionLike } from "../../../../shared/authSession";
 import { buildPlatformSwitcherStyle } from "../../../../shared/platformSwitcherUi";
 import {
+  loadOperatorAuthAccessDiagnosticsCanonical,
   loadOperatorBuildersCanonical,
   loadOperatorEventsCanonical,
   loadOperatorMonetizationCanonical,
@@ -10,6 +11,7 @@ import {
   recordOperatorDashboardAccessCanonical,
 } from "../../../../shared/cloudOperatorDashboardGateway";
 import type {
+  OperatorAuthAccessDiagnosticsSnapshot,
   OperatorBuilderRecord,
   OperatorEventRecord,
   OperatorMonetizationSnapshot,
@@ -33,6 +35,7 @@ const OPERATOR_INSIGHT_TABS: Array<{ id: OperatorInsightTab; label: string }> = 
 export type OperatorDashboardState = {
   overview: OperatorOverviewSnapshot | null;
   monetization: OperatorMonetizationSnapshot | null;
+  authAccess: OperatorAuthAccessDiagnosticsSnapshot | null;
   builders: OperatorBuilderRecord[];
   risks: OperatorRiskItem[];
   events: OperatorEventRecord[];
@@ -42,6 +45,7 @@ export function createEmptyOperatorDashboardState(): OperatorDashboardState {
   return {
     overview: null,
     monetization: null,
+    authAccess: null,
     builders: [],
     risks: [],
     events: [],
@@ -86,15 +90,16 @@ export function useOperatorDashboardData(params: {
         Promise.all([
           loadOperatorOverviewCanonical({ session, range: "30d" }),
           loadOperatorMonetizationCanonical({ session, range: "30d" }),
+          loadOperatorAuthAccessDiagnosticsCanonical({ session, range: "30d" }),
           loadOperatorBuildersCanonical({ session, limit: 12 }),
           loadOperatorRisksCanonical({ session, limit: 12 }),
           loadOperatorEventsCanonical({ session, limit: 12 }),
         ]),
       )
       .then(
-        ([overview, monetization, builders, risks, events]) => {
+        ([overview, monetization, authAccess, builders, risks, events]) => {
           if (!isAlive) return;
-          setState({ overview, monetization, builders, risks, events });
+          setState({ overview, monetization, authAccess, builders, risks, events });
         },
         (nextError) => {
           if (!isAlive) return;
@@ -178,6 +183,7 @@ export function WebOperatorDataPanel(props: {
           <OperatorPlatformInsights
             overview={props.state.overview}
             monetization={props.state.monetization}
+            authAccess={props.state.authAccess}
             risks={props.state.risks}
             events={props.state.events}
           />
@@ -261,6 +267,45 @@ function formatRiskFlag(value: string): string {
   }
 }
 
+function formatHealth(value: OperatorAuthAccessDiagnosticsSnapshot["health"] | null | undefined): string {
+  switch (value) {
+    case "healthy":
+      return "Healthy";
+    case "degraded":
+      return "Degraded";
+    case "incident":
+      return "Incident";
+    case "unknown":
+    default:
+      return "Unknown";
+  }
+}
+
+function formatDiagnosticEventType(value: string): string {
+  switch (value) {
+    case "auth.session_established":
+      return "Session established";
+    case "auth.session_refreshed":
+      return "Session refreshed";
+    case "auth.bootstrap_failed":
+      return "Auth bootstrap failed";
+    case "auth.session_refresh_failed":
+      return "Session refresh failed";
+    case "access.operator_access_granted":
+      return "Operator access granted";
+    case "access.operator_access_denied":
+      return "Operator access denied";
+    case "access.community_denied":
+      return "Community access denied";
+    default:
+      return value
+        .split(/[._:-]+/)
+        .filter(Boolean)
+        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+        .join(" ");
+  }
+}
+
 function formatEventTime(createdAt: number): string {
   if (!Number.isFinite(createdAt)) return "";
   return new Intl.DateTimeFormat("en-US", {
@@ -274,6 +319,7 @@ function formatEventTime(createdAt: number): string {
 function OperatorPlatformInsights(props: {
   overview: OperatorOverviewSnapshot | null;
   monetization: OperatorMonetizationSnapshot | null;
+  authAccess: OperatorAuthAccessDiagnosticsSnapshot | null;
   risks: OperatorRiskItem[];
   events: OperatorEventRecord[];
 }) {
@@ -299,6 +345,49 @@ function OperatorPlatformInsights(props: {
           <span>Risk items</span>
           <strong>{props.overview?.totals.riskItems ?? 0}</strong>
           <span className="operator-dashboard__metric-note">Open operator warnings and errors.</span>
+        </div>
+      </section>
+
+      <section className="operator-dashboard__panel">
+        <h2>Auth &amp; access</h2>
+        <div className="operator-dashboard__table">
+          <div className="operator-dashboard__row">
+            <span>Health</span>
+            <strong>{formatHealth(props.authAccess?.health)}</strong>
+          </div>
+          <div className="operator-dashboard__row">
+            <span>Sessions established</span>
+            <strong>{props.authAccess?.totals.sessionEstablished ?? 0}</strong>
+          </div>
+          <div className="operator-dashboard__row">
+            <span>Auth failures</span>
+            <strong>{props.authAccess?.totals.authFailures ?? 0}</strong>
+          </div>
+          <div className="operator-dashboard__row">
+            <span>Refresh failures</span>
+            <strong>{props.authAccess?.totals.sessionRefreshFailures ?? 0}</strong>
+          </div>
+          <div className="operator-dashboard__row">
+            <span>Entitlement findings</span>
+            <strong>{props.authAccess?.totals.entitlementFindings ?? 0}</strong>
+          </div>
+          <div className="operator-dashboard__row">
+            <span>Unknown auth errors</span>
+            <strong>{props.authAccess?.totals.unknownAuthErrors ?? 0}</strong>
+          </div>
+          {props.authAccess?.latestEvents.length ? (
+            props.authAccess.latestEvents.slice(0, 3).map((event) => (
+              <div className="operator-dashboard__row" key={event.id}>
+                <div>
+                  <strong>{formatDiagnosticEventType(event.eventType)}</strong>
+                  <span>{[event.status, event.errorCode, formatEventTime(event.createdAt)].filter(Boolean).join(" · ")}</span>
+                </div>
+                <span>{event.severity}</span>
+              </div>
+            ))
+          ) : (
+            <div className="operator-dashboard__empty">No auth or access diagnostics returned.</div>
+          )}
         </div>
       </section>
 
