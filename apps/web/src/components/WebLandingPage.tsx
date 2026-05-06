@@ -667,8 +667,8 @@ export function WebLandingPage(props: WebLandingPageProps) {
               <img src="/favicon.svg" alt="" />
               <span>Polynet</span>
             </div>
-            <strong>Free + balance</strong>
-            <p>Build one community for free. Tool balance covers premium tools like Daytona workspaces, web research, and voice input.</p>
+            <strong>Free</strong>
+            <p>Build one community, launch your agent, and monetize access from one platform.</p>
           </button>
         </div>
       </section>
@@ -686,21 +686,11 @@ export function WebLandingPage(props: WebLandingPageProps) {
             <ul>
               <li>Build one community</li>
               <li>Join and use communities</li>
+              <li>Launch an agent-powered member experience</li>
               <li>Monetize access with Stripe</li>
             </ul>
             <button type="button" onClick={props.onTryFree}>
               Continue free
-            </button>
-          </div>
-          <div className="polynet-landing-offer-plan builder">
-            <span>Tool balance</span>
-            <ul>
-              <li>Run Daytona workspaces</li>
-              <li>Use web research</li>
-              <li>Use voice input</li>
-            </ul>
-            <button type="button" className="primary" onClick={props.onTryFree}>
-              Add balance
             </button>
           </div>
         </div>

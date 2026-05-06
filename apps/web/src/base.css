@@ -1494,9 +1494,9 @@ body {
 }
 
 .polynet-landing-offer-actions {
-  width: min(100%, 620px);
+  width: min(100%, 360px);
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
 }
 
@@ -1508,11 +1508,6 @@ body {
   display: grid;
   gap: 16px;
   background: rgba(255, 255, 255, 0.03);
-}
-
-.polynet-landing-offer-plan.builder {
-  border-color: rgba(214, 106, 138, 0.45);
-  background: rgba(214, 106, 138, 0.08);
 }
 
 .polynet-landing-offer-plan > span {
