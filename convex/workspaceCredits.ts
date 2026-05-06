@@ -4,8 +4,8 @@ import { v } from "convex/values";
 import {
   BUILDER_INCLUDED_WORKSPACE_CREDITS,
   CREDIT_RESERVATION_EXPIRY_MS,
-  convertUsdToWorkspaceCredits,
   estimateDaytonaWorkspaceComputeUsd,
+  priceDaytonaWorkspaceUsageCredits,
   WORKSPACE_CREDIT_TOPUP_CREDITS,
 } from "../shared/workspaceCredits";
 import {
@@ -554,7 +554,7 @@ export const recordWorkspaceComputeChargeInternal = internalMutation({
     const requestedCredits = roundCredits(
       typeof args.creditsDebited === "number"
         ? args.creditsDebited
-        : convertUsdToWorkspaceCredits(computeCostUsd),
+        : priceDaytonaWorkspaceUsageCredits({ computeCostUsd }),
     );
 
     let debitIncluded = 0;

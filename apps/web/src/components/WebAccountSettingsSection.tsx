@@ -232,7 +232,7 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
           ChatGPT connection
         </div>
         <div className="settings-section-desc">
-          Connect ChatGPT for personal inference. Builder unlocks the private workbench and workspace tools.
+          Connect ChatGPT for personal inference. Credits unlock paid tools like Daytona workspaces, web research, and voice input.
         </div>
         {!session ? (
           <div className="model-note">Sign in to connect a personal provider.</div>

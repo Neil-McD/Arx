@@ -2147,6 +2147,8 @@ This is the product value loop: the builder packages expertise into a community 
 
 The current default platform fee for free-builder community revenue is 10%. Legacy paid creator entitlements may retain their previous terms until migrated or cancelled.
 
+Paid-tool usage is priced through credits. Daytona workspace usage targets 50% gross margin by charging roughly 2x estimated vendor compute cost, then settling actual usage and refunding unused reservation credits. Web research and voice input use simple alpha tariffs with centralized vendor-cost estimates, and should still write tool, vendor, Polynet price, raw cost estimate, and settlement evidence into the credit ledger.
+
 ## Payout Readiness
 
 Paid communities need payout state to be understandable before launch. Stripe Connect or the active payout provider handles regulated payout setup, verification, and payout ability. Polynet should expose whether payouts are ready, pending, restricted, or require onboarding.

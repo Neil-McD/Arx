@@ -54,6 +54,11 @@ async function proveWorkspaceCreditAccountingContract() {
   );
   assert.match(
     sharedCreditsSource,
+    /BUILDER_INCLUDED_WORKSPACE_CREDITS\s*=\s*0/,
+    "expected free-builder default to include no paid-tool credits",
+  );
+  assert.match(
+    sharedCreditsSource,
     /DAYTONA_WORKSPACE_SESSION_RESERVE_SECONDS\s*=[\s\S]*DAYTONA_WORKSPACE_SESSION_BUDGET_SECONDS\s*\+[\s\S]*DAYTONA_WORKSPACE_SESSION_STOP_GRACE_SECONDS/,
     "expected Daytona reservations to cover the runtime budget plus cleanup grace",
   );
@@ -61,6 +66,36 @@ async function proveWorkspaceCreditAccountingContract() {
     sharedCreditsSource,
     /export function estimateDaytonaWorkspaceReservationCredits/,
     "expected a shared Daytona reservation estimator",
+  );
+  assert.match(
+    sharedCreditsSource,
+    /PAID_TOOL_TARGET_GROSS_MARGIN_BPS\s*=\s*5000/,
+    "expected paid tools to target 50% gross margin",
+  );
+  assert.match(
+    sharedCreditsSource,
+    /priceUsdForTargetGrossMargin[\s\S]*rawVendorCostUsd\s*\/\s*\(1\s*-\s*marginRate\)/,
+    "expected paid-tool pricing to calculate customer price from gross margin, not markup",
+  );
+  assert.match(
+    sharedCreditsSource,
+    /export function priceDaytonaWorkspaceUsageCredits/,
+    "expected Daytona usage to have a shared margin-aware credit price helper",
+  );
+  assert.match(
+    sharedCreditsSource,
+    /export function priceFixedPaidToolCredits[\s\S]*Math\.max\(params\.minimumCredits,\s*marginAwareCredits\)/,
+    "expected fixed-tariff paid tools to floor at a simple credit price while preserving margin-aware estimates",
+  );
+  assert.match(
+    sharedCreditsSource,
+    /export function priceWebResearchCredits/,
+    "expected web research to have a shared credit pricing helper",
+  );
+  assert.match(
+    sharedCreditsSource,
+    /export function priceVoiceTranscriptionCredits/,
+    "expected voice transcription to have a shared credit pricing helper",
   );
 
   assert.match(
@@ -109,6 +144,11 @@ async function proveWorkspaceCreditAccountingContract() {
     /settleCreditsInternal[\s\S]*recordWorkspaceComputeChargeInternal[\s\S]*creditReservationKey/,
     "expected temporary Daytona teardown to settle the reservation before recording the charge",
   );
+  assert.match(
+    daytonaSessionSource,
+    /priceDaytonaWorkspaceUsageCredits\(\{\s*computeCostUsd\s*\}\)/,
+    "expected temporary Daytona sessions to settle usage at margin-aware credit pricing",
+  );
 
   assert.match(
     backgroundServiceSource,
@@ -121,9 +161,19 @@ async function proveWorkspaceCreditAccountingContract() {
     "expected background sandbox reservation keys to be persisted on the project",
   );
   assert.match(
+    backgroundServiceSource,
+    /priceDaytonaWorkspaceUsageCredits\(\{\s*computeCostUsd\s*\}\)/,
+    "expected background Daytona sandboxes to settle usage at margin-aware credit pricing",
+  );
+  assert.match(
     orphanReconcilerSource,
     /creditBudgetExpiresAt[\s\S]*terminalRows\.some\(\(row\) => isActiveTerminalStatus\(row\.status\)\) &&\s*!budgetExpired/,
     "expected the orphan reconciler to stop budget-expired background sandboxes even with active terminals",
+  );
+  assert.match(
+    orphanReconcilerSource,
+    /priceDaytonaWorkspaceUsageCredits\(\{\s*computeCostUsd\s*\}\)/,
+    "expected orphan Daytona cleanup to settle usage at margin-aware credit pricing",
   );
 
   assert.match(
@@ -142,9 +192,19 @@ async function proveWorkspaceCreditAccountingContract() {
     "expected successful web research to reserve and then strictly settle credits",
   );
   assert.match(
+    httpDaytonaSource,
+    /priceWebResearchCredits\(webResearchAction\)[\s\S]*rawVendorCostUsd:\s*webResearchVendorCostUsd[\s\S]*polynetPriceUsd:\s*creditsToUsd\(webResearchCredits\)/,
+    "expected web research to use shared margin-aware fixed-tool pricing with ledger cost evidence",
+  );
+  assert.match(
     httpVoiceSource,
     /reservedCreditKey[\s\S]*reserveCreditsInternal[\s\S]*primary\.ok[\s\S]*settleReservedCreditsStrict[\s\S]*fallback\.ok[\s\S]*settleReservedCreditsStrict/,
     "expected successful voice transcription to reserve and then strictly settle credits",
+  );
+  assert.match(
+    httpVoiceSource,
+    /priceVoiceTranscriptionCredits\(\{[\s\S]*audioBytes:\s*bytes\.byteLength[\s\S]*rawVendorCostUsd:\s*voiceVendorCostUsd[\s\S]*polynetPriceUsd:\s*creditsToUsd\(voiceCredits\)/,
+    "expected voice transcription to use shared margin-aware fixed-tool pricing with ledger cost evidence",
   );
   assert.doesNotMatch(
     httpDaytonaSource,

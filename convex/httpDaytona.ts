@@ -30,7 +30,14 @@ import {
   writeDaytonaWorkspaceFile,
 } from "./daytonaWorkspaceTools";
 import { executeWebResearch } from "./webResearchTools";
-import { WEB_RESEARCH_CREDITS_PER_CALL } from "../shared/workspaceCredits";
+import {
+  creditsToUsd,
+  estimateWebResearchVendorCostUsd,
+  PAID_TOOL_PRICING_VERSION,
+  PAID_TOOL_TARGET_GROSS_MARGIN_BPS,
+  priceWebResearchCredits,
+  type WebResearchCreditAction,
+} from "../shared/workspaceCredits";
 import { runOpenRouterNativeToolCompletion } from "./openRouterNativeTransport";
 import {
   type RetrievalToolName,
@@ -457,6 +464,9 @@ async function executeRetrievalHarnessTool(params: {
         : String(normalizedArgs.action ?? "").trim() === "open_page"
           ? "open_page"
           : "search";
+    const webResearchAction = action as WebResearchCreditAction;
+    const webResearchCredits = priceWebResearchCredits(webResearchAction);
+    const webResearchVendorCostUsd = estimateWebResearchVendorCostUsd(webResearchAction);
     const creditKey = newCreditKey("web");
     try {
       await params.ctx.runMutation(internal.workspaceCredits.reserveCreditsInternal as any, {
@@ -468,9 +478,13 @@ async function executeRetrievalHarnessTool(params: {
         toolName: params.toolName,
         action,
         vendor: action === "search" ? "openai_xai_fallback" : "jina",
-        credits: WEB_RESEARCH_CREDITS_PER_CALL,
-        polynetPriceUsd: WEB_RESEARCH_CREDITS_PER_CALL / 100,
+        credits: webResearchCredits,
+        rawVendorCostUsd: webResearchVendorCostUsd,
+        polynetPriceUsd: creditsToUsd(webResearchCredits),
         metadata: {
+          pricing_version: PAID_TOOL_PRICING_VERSION,
+          target_gross_margin_bps: PAID_TOOL_TARGET_GROSS_MARGIN_BPS,
+          estimated_vendor_cost_usd: webResearchVendorCostUsd,
           query:
             typeof normalizedArgs.query === "string"
               ? normalizedArgs.query.slice(0, 240)

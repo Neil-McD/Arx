@@ -9,8 +9,8 @@ import {
   type DaytonaSandboxApiDto,
 } from "./daytonaSandboxClient";
 import {
-  convertUsdToWorkspaceCredits,
   estimateDaytonaWorkspaceComputeUsd,
+  priceDaytonaWorkspaceUsageCredits,
 } from "../shared/workspaceCredits";
 
 const DAYTONA_ORPHAN_GRACE_MS = 60 * 60 * 1000;
@@ -335,9 +335,9 @@ export const reconcileDaytonaOrphanedSandboxesInternal = internalAction({
           const creditsDebited = backgroundCredit.creditReservationKey
             ? Math.min(
                 backgroundCredit.creditBudgetCredits,
-                convertUsdToWorkspaceCredits(computeCostUsd),
+                priceDaytonaWorkspaceUsageCredits({ computeCostUsd }),
               )
-            : convertUsdToWorkspaceCredits(computeCostUsd);
+            : priceDaytonaWorkspaceUsageCredits({ computeCostUsd });
           await settleReservedCreditsBestEffort({
             ctx,
             creditKey: backgroundCredit.creditReservationKey,

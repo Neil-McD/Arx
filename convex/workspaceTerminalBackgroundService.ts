@@ -12,10 +12,14 @@ import {
 import { isWorkspaceTerminalActiveStatus } from "./workspaceTerminalProcessCore";
 import {
   DAYTONA_WORKSPACE_SESSION_BUDGET_SECONDS,
+  DAYTONA_WORKSPACE_SESSION_RESERVE_SECONDS,
   DAYTONA_WORKSPACE_SESSION_RESERVATION_EXPIRY_MS,
-  convertUsdToWorkspaceCredits,
+  creditsToUsd,
   estimateDaytonaWorkspaceComputeUsd,
   estimateDaytonaWorkspaceReservationCredits,
+  PAID_TOOL_PRICING_VERSION,
+  PAID_TOOL_TARGET_GROSS_MARGIN_BPS,
+  priceDaytonaWorkspaceUsageCredits,
 } from "../shared/workspaceCredits";
 
 const PROJECT_BACKGROUND_SANDBOX_CREATE_LEASE_MS = 60_000;
@@ -254,6 +258,11 @@ export async function ensureProjectBackgroundSandbox(params: {
     sandboxCpu: config.sandboxCpu,
     sandboxMemoryGiB: config.sandboxMemoryGiB,
   });
+  const creditBudgetVendorCostUsd = estimateDaytonaWorkspaceComputeUsd({
+    durationSeconds: DAYTONA_WORKSPACE_SESSION_RESERVE_SECONDS,
+    sandboxCpu: config.sandboxCpu,
+    sandboxMemoryGiB: config.sandboxMemoryGiB,
+  });
   const reservedAt = Date.now();
   const creditBudgetExpiresAt = reservedAt + DAYTONA_WORKSPACE_SESSION_BUDGET_SECONDS * 1000;
   try {
@@ -268,10 +277,14 @@ export async function ensureProjectBackgroundSandbox(params: {
         action: "background_sandbox",
         vendor: "daytona",
         credits: creditBudgetCredits,
+        rawVendorCostUsd: creditBudgetVendorCostUsd,
+        polynetPriceUsd: creditsToUsd(creditBudgetCredits),
         metadata: {
           sandbox_cpu: config.sandboxCpu,
           sandbox_memory_gib: config.sandboxMemoryGiB,
           sandbox_disk_gib: config.sandboxDiskGiB,
+          pricing_version: PAID_TOOL_PRICING_VERSION,
+          target_gross_margin_bps: PAID_TOOL_TARGET_GROSS_MARGIN_BPS,
         },
         expiresAt: reservedAt + DAYTONA_WORKSPACE_SESSION_RESERVATION_EXPIRY_MS,
         nowMs: reservedAt,
@@ -774,9 +787,9 @@ export async function releaseProjectBackgroundSandboxIfIdle(params: {
       const creditsDebited = credit.creditReservationKey
         ? Math.min(
             credit.creditBudgetCredits,
-            convertUsdToWorkspaceCredits(computeCostUsd),
+            priceDaytonaWorkspaceUsageCredits({ computeCostUsd }),
           )
-        : convertUsdToWorkspaceCredits(computeCostUsd);
+        : priceDaytonaWorkspaceUsageCredits({ computeCostUsd });
       await settleReservedCreditsBestEffort({
         ctx: params.ctx,
         creditKey: credit.creditReservationKey,

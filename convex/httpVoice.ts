@@ -1,5 +1,11 @@
 import { internal } from "./_generated/api";
-import { VOICE_TRANSCRIPTION_CREDITS_PER_REQUEST } from "../shared/workspaceCredits";
+import {
+  creditsToUsd,
+  estimateVoiceTranscriptionVendorCostUsd,
+  PAID_TOOL_PRICING_VERSION,
+  PAID_TOOL_TARGET_GROSS_MARGIN_BPS,
+  priceVoiceTranscriptionCredits,
+} from "../shared/workspaceCredits";
 
 type VoiceTranscribeInput = {
   audio_base64?: unknown;
@@ -454,6 +460,12 @@ export function registerRuntimeVoiceRoutes(args: RegisterRuntimeVoiceRoutesArgs)
 
         const creditKey = newCreditKey("voice");
         reservedCreditKey = creditKey;
+        const voiceVendorCostUsd = estimateVoiceTranscriptionVendorCostUsd({
+          audioBytes: bytes.byteLength,
+        });
+        const voiceCredits = priceVoiceTranscriptionCredits({
+          audioBytes: bytes.byteLength,
+        });
         try {
           await (ctx as any).runMutation(internal.workspaceCredits.reserveCreditsInternal as any, {
             creditKey,
@@ -461,9 +473,13 @@ export function registerRuntimeVoiceRoutes(args: RegisterRuntimeVoiceRoutesArgs)
             toolName: "voice_transcribe",
             action: "transcribe",
             vendor: "openai_groq",
-            credits: VOICE_TRANSCRIPTION_CREDITS_PER_REQUEST,
-            polynetPriceUsd: VOICE_TRANSCRIPTION_CREDITS_PER_REQUEST / 100,
+            credits: voiceCredits,
+            rawVendorCostUsd: voiceVendorCostUsd,
+            polynetPriceUsd: creditsToUsd(voiceCredits),
             metadata: {
+              pricing_version: PAID_TOOL_PRICING_VERSION,
+              target_gross_margin_bps: PAID_TOOL_TARGET_GROSS_MARGIN_BPS,
+              estimated_vendor_cost_usd: voiceVendorCostUsd,
               surface: surface || null,
               mime_type: mimeType,
               audio_bytes: bytes.byteLength,
