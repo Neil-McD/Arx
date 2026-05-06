@@ -318,7 +318,7 @@ import { loadOperatorAccessCanonical } from "../../../shared/cloudOperatorDashbo
 import type { OperatorAccessSnapshot } from "../../../shared/operatorTypes";
 import { loadWorkspaceCreditBalanceCanonical, type WorkspaceCreditBalance } from "../../../shared/workspaceCreditsGateway";
 import { formatUsdCents, toEpochSeconds } from "../../../shared/displayFormatting";
-import { WORKSPACE_CREDIT_TOPUP_CREDITS, WORKSPACE_CREDIT_TOPUP_PRICE_USD } from "../../../shared/workspaceCredits";
+import type { WorkspaceToolBalanceTopupPackId } from "../../../shared/workspaceCredits";
 import {
   deriveCommunityFunnelAction,
   deriveCommunityMembersJoinReviewMode,
@@ -3617,8 +3617,8 @@ export default function App() {
             ? error
             : error instanceof Error
               ? error.message
-              : "Failed to load credits.";
-        console.warn("Credit balance refresh failed:", error);
+              : "Failed to load tool balance.";
+        console.warn("Tool balance refresh failed:", error);
         if (requestId === workspaceCreditLoadRequestIdRef.current) {
           setWorkspaceCreditBalanceError(message);
         }
@@ -4304,7 +4304,7 @@ export default function App() {
       },
       start_builder_checkout: (payload) => {
         void payload;
-        showAppToastMessage("Builder is included. Add credits in Agent settings when paid tools need them.");
+        showAppToastMessage("Builder is included. Add balance in Agent Settings when premium tools need it.");
       },
       redeem_pending_purchases: (payload) => {
         void redeemPendingPurchases({ navigate: payload.navigate, silentNoop: payload.silent_noop });
@@ -4522,7 +4522,7 @@ export default function App() {
     }
   }
 
-  const startWorkspaceCreditTopupCheckout = useCallback(async (): Promise<void> => {
+  const startWorkspaceCreditTopupCheckout = useCallback(async (packId?: WorkspaceToolBalanceTopupPackId): Promise<void> => {
     const session = await ensureUsableAuthSession();
     if (!session) {
       requireSignIn();
@@ -4536,6 +4536,7 @@ export default function App() {
         session,
         successUrl: returnUrl,
         cancelUrl: returnUrl,
+        packId,
       });
       const checkoutUrl =
         data && typeof data === "object" && typeof (data as { checkout_url?: unknown }).checkout_url === "string"
@@ -4551,6 +4552,7 @@ export default function App() {
       });
       captureProductAnalyticsEvent("workspace credit topup started", {
         surface: "settings_agent",
+        pack_id: packId ?? null,
       });
       window.location.assign(checkoutUrl);
     } catch (error) {
@@ -4559,12 +4561,12 @@ export default function App() {
           ? error
           : error instanceof Error
             ? error.message
-            : "Failed to start credit checkout.";
+            : "Failed to start tool-balance checkout.";
       setWorkspaceCreditTopupError(message);
     } finally {
       setIsStartingWorkspaceCreditTopupCheckout(false);
     }
-  }, [ensureUsableAuthSession, requireSignIn]);
+  }, [ensureUsableAuthSession, requireSignIn, workspaceCreditBalance]);
 
   const communityUi = useWebCommunityUiController<
     AuthSession,
@@ -5391,6 +5393,14 @@ export default function App() {
     normalizedBuilderTier,
     requireSignIn: () => requireSignIn(),
     showAppToastMessage,
+    onToolBalanceRequired: (_surface, message) => {
+      setInferenceIssueModal({
+        reason: "workspace_credits",
+        threadId: activeThreadId ?? GUEST_THREAD_ID,
+        mode: "respond",
+        message: message.trim() || null,
+      });
+    },
     appendWorkspaceTranscript: (transcript) => workspaceComposerApiRef.current?.appendTranscript(transcript),
     focusWorkspaceInput: focusWorkspaceComposer,
     setCommunityMessageInput,
@@ -6856,7 +6866,10 @@ export default function App() {
     continuePreviewAccessGateAuth,
     inferenceIssueModal,
     isInferenceIssueModalRunning,
+    isStartingWorkspaceCreditTopupCheckout,
+    workspaceCreditTopupError,
     setInferenceIssueModal,
+    startWorkspaceCreditTopupCheckout,
     setActiveView,
     setSettingsPage,
     isBuilderUpgradeOpen,

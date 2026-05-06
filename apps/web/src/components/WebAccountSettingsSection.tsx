@@ -232,7 +232,7 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
           ChatGPT connection
         </div>
         <div className="settings-section-desc">
-          Connect ChatGPT for personal inference. Credits unlock paid tools like Daytona workspaces, web research, and voice input.
+          Connect ChatGPT for personal inference. Tool balance unlocks premium tools like Daytona workspaces, web research, and voice input.
         </div>
         {!session ? (
           <div className="model-note">Sign in to connect a personal provider.</div>
@@ -320,7 +320,7 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
                     </strong>
                   </div>
                   <div className="auth-actions">
-                    <span className="auth-status">Credits cover paid tools like Daytona workspaces, web research, and voice input. Connect ChatGPT or add an OpenAI API key in Agent settings to bring your own inference.</span>
+                    <span className="auth-status">Tool balance covers premium tools like Daytona workspaces, web research, and voice input. Connect ChatGPT or add an OpenAI API key in Agent Settings to bring your own inference.</span>
                     {canManagePlan ? (
                       <>
                         <span className="auth-status">Legacy Builder billing is still manageable here.</span>

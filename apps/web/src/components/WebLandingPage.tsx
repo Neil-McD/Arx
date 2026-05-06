@@ -235,7 +235,7 @@ const monetizeEvents = [
   {
     label: "Community checkout",
     value: "$5",
-    detail: "Credits added for tools",
+    detail: "Tool balance added",
   },
   {
     label: "Payment succeeded",
@@ -667,8 +667,8 @@ export function WebLandingPage(props: WebLandingPageProps) {
               <img src="/favicon.svg" alt="" />
               <span>Polynet</span>
             </div>
-            <strong>Free + credits</strong>
-            <p>Build one community for free. Credits cover paid tools like Daytona workspaces, web research, and voice input.</p>
+            <strong>Free + balance</strong>
+            <p>Build one community for free. Tool balance covers premium tools like Daytona workspaces, web research, and voice input.</p>
           </button>
         </div>
       </section>
@@ -693,14 +693,14 @@ export function WebLandingPage(props: WebLandingPageProps) {
             </button>
           </div>
           <div className="polynet-landing-offer-plan builder">
-            <span>Credits</span>
+            <span>Tool balance</span>
             <ul>
               <li>Run Daytona workspaces</li>
               <li>Use web research</li>
               <li>Use voice input</li>
             </ul>
             <button type="button" className="primary" onClick={props.onTryFree}>
-              Start with credits
+              Add balance
             </button>
           </div>
         </div>

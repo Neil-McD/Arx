@@ -488,7 +488,7 @@ export function createPolyNetExecutionSession(params: {
           workspaceSessionFailure = {
             status: 402,
             code: "workspace_credits_exhausted",
-            message: "Workspace credit budget expired. Add credits to use workspace tools.",
+            message: "Workspace tool balance budget expired. Add balance to use workspace tools.",
           };
           return {
             ok: false as const,
@@ -1157,7 +1157,7 @@ export function createPolyNetExecutionSession(params: {
           exitCode: null,
           outputText: "",
           errorCode: "workspace_credits_exhausted",
-          errorMessage: "Workspace credit budget expired. Add credits to use workspace tools.",
+          errorMessage: "Workspace tool balance budget expired. Add balance to use workspace tools.",
         };
       }
       const budgetSignal = buildWorkspaceCreditBudgetSignal(
@@ -1187,7 +1187,7 @@ export function createPolyNetExecutionSession(params: {
           exitCode: null,
           outputText: "",
           errorCode: "workspace_credits_exhausted",
-          errorMessage: "Workspace credit budget expired. Add credits to use workspace tools.",
+          errorMessage: "Workspace tool balance budget expired. Add balance to use workspace tools.",
         };
       }
       const enriched = await enrichComputerUseToolResult({

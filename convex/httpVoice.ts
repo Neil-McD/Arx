@@ -494,8 +494,8 @@ export function registerRuntimeVoiceRoutes(args: RegisterRuntimeVoiceRoutesArgs)
             code: message === "credits_exhausted" ? "credits_exhausted" : "credits_unavailable",
             message:
               message === "credits_exhausted"
-                ? "Add credits to use voice input."
-                : "Credits are unavailable for voice input.",
+                ? "Add balance to use voice input."
+                : "Tool balance is unavailable for voice input.",
           });
         }
 

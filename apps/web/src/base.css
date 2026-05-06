@@ -16646,6 +16646,59 @@ button.message-citation-chip:hover {
   text-decoration: none;
 }
 
+.tool-balance-pack-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.modal-tool-balance-pack-grid {
+  margin-bottom: 12px;
+}
+
+.tool-balance-pack-button {
+  min-height: 64px;
+  padding: 10px;
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-primary);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 4px;
+  text-align: left;
+}
+
+.tool-balance-pack-button:hover:not(:disabled) {
+  border-color: rgba(255, 89, 154, 0.58);
+  background: rgba(255, 89, 154, 0.1);
+}
+
+.tool-balance-pack-button.recommended {
+  border-color: rgba(255, 89, 154, 0.72);
+  background: rgba(255, 89, 154, 0.14);
+}
+
+.tool-balance-pack-button strong {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.tool-balance-pack-button span {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+@media (max-width: 640px) {
+  .tool-balance-pack-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 .stripe-setup-button {
   --stripe-setup-bg: #4f46e5;
   --stripe-setup-bg-hover: #5a52ea;

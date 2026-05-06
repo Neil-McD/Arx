@@ -275,7 +275,7 @@ export async function createWorkspaceSandboxSession(params: {
       ok: false,
       status: 402,
       code: "workspace_credits_exhausted",
-      message: "Add credits to use workspace tools.",
+      message: "Add balance to use workspace tools.",
     };
   }
   const remainingCredits =
@@ -286,7 +286,7 @@ export async function createWorkspaceSandboxSession(params: {
       ok: false,
       status: 402,
       code: "workspace_credits_exhausted",
-      message: "Add credits to use workspace tools.",
+      message: "Add balance to use workspace tools.",
     };
   }
 
@@ -341,8 +341,8 @@ export async function createWorkspaceSandboxSession(params: {
       code: message === "credits_exhausted" ? "workspace_credits_exhausted" : "workspace_credits_unavailable",
       message:
         message === "credits_exhausted"
-          ? "Add credits to use workspace tools."
-          : "Credits are unavailable for workspace tools.",
+          ? "Add balance to use workspace tools."
+          : "Tool balance is unavailable for workspace tools.",
     };
   }
 

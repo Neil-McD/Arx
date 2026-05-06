@@ -505,8 +505,8 @@ async function executeRetrievalHarnessTool(params: {
         errorCode: message === "credits_exhausted" ? "credits_exhausted" : "credits_unavailable",
         errorMessage:
           message === "credits_exhausted"
-            ? "Add credits to use web research."
-            : "Credits are unavailable for web research.",
+            ? "Add balance to use web research."
+            : "Tool balance is unavailable for web research.",
       };
     }
 
@@ -609,7 +609,7 @@ async function executeRetrievalHarnessTool(params: {
         exitCode: null,
         outputText: "",
         errorCode: "workspace_credits_exhausted",
-        errorMessage: "Workspace credit budget expired. Add credits to use workspace tools.",
+        errorMessage: "Workspace tool balance budget expired. Add balance to use workspace tools.",
       };
     }
     const budgetSignal = buildWorkspaceCreditBudgetSignal(
@@ -720,7 +720,7 @@ async function executeRetrievalHarnessTool(params: {
         exitCode: null,
         outputText: "",
         errorCode: "workspace_credits_exhausted",
-        errorMessage: "Workspace credit budget expired. Add credits to use workspace tools.",
+        errorMessage: "Workspace tool balance budget expired. Add balance to use workspace tools.",
       };
     }
     if (!result.ok) {

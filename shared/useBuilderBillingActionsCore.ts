@@ -80,7 +80,7 @@ function formatBuilderConnectUnavailableMessage(message: string): string | null 
     return "Community monetization is not available for this account yet.";
   }
   if (message === "builder_plan_deprecated") {
-    return "Builder is included now. Add credits when paid tools need them.";
+    return "Builder is included now. Add balance when premium tools need it.";
   }
   if (
     message.includes("responsibilities of managing losses for connected accounts") ||

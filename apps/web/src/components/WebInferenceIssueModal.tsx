@@ -1,3 +1,8 @@
+import {
+  WORKSPACE_TOOL_BALANCE_TOPUP_PACKS,
+  type WorkspaceToolBalanceTopupPackId,
+} from "../../../../shared/workspaceCredits";
+
 type InferenceIssueReason =
   | "quota"
   | "workspace_credits"
@@ -18,8 +23,11 @@ type WebInferenceIssueModalProps = {
   hasSession: boolean;
   inferenceIssueModal: InferenceIssueModalState;
   isInferenceIssueModalRunning: boolean;
+  isStartingWorkspaceCreditTopupCheckout?: boolean;
+  workspaceCreditTopupError?: string | null;
   onClose: () => void;
   onOpenSettings: (reason: InferenceIssueReason) => void;
+  onStartWorkspaceCreditTopupCheckout?: (packId?: WorkspaceToolBalanceTopupPackId) => Promise<void> | void;
 };
 
 export function WebInferenceIssueModal(props: WebInferenceIssueModalProps) {
@@ -27,8 +35,11 @@ export function WebInferenceIssueModal(props: WebInferenceIssueModalProps) {
     hasSession,
     inferenceIssueModal,
     isInferenceIssueModalRunning,
+    isStartingWorkspaceCreditTopupCheckout = false,
+    workspaceCreditTopupError = null,
     onClose,
     onOpenSettings,
+    onStartWorkspaceCreditTopupCheckout,
   } = props;
 
   if (!hasSession || !inferenceIssueModal) return null;
@@ -37,7 +48,7 @@ export function WebInferenceIssueModal(props: WebInferenceIssueModalProps) {
     inferenceIssueModal.reason === "provider_connection_required"
       ? "Connect a provider"
       : inferenceIssueModal.reason === "workspace_credits"
-        ? "Credits used up"
+        ? "Add balance to use premium tools"
       : inferenceIssueModal.reason === "quota"
         ? "Provider quota reached"
         : inferenceIssueModal.reason === "plan"
@@ -52,7 +63,7 @@ export function WebInferenceIssueModal(props: WebInferenceIssueModalProps) {
     inferenceIssueModal.reason === "provider_connection_required"
       ? inferenceIssueModal.message || "Connect ChatGPT or add an OpenAI API key to use agent runs."
       : inferenceIssueModal.reason === "workspace_credits"
-        ? inferenceIssueModal.message || "Add credits to use paid tools."
+        ? "Premium tools need tool balance before they run."
       : inferenceIssueModal.reason === "quota"
         ? inferenceIssueModal.message || "Your connected provider has run out of available quota or credits for this model."
         : inferenceIssueModal.reason === "plan"
@@ -67,7 +78,7 @@ export function WebInferenceIssueModal(props: WebInferenceIssueModalProps) {
     inferenceIssueModal.reason === "provider_connection_required"
       ? "Use ChatGPT Plus / Pro rate limits with no extra Polynet inference charge, or add an OpenAI API key billed directly through OpenAI."
       : inferenceIssueModal.reason === "workspace_credits"
-        ? "To continue, open Agent Settings to review or top up your credits. Credits cover Daytona workspaces, web research, and voice input."
+        ? "Tool balance covers Daytona workspaces, web research, and voice input. Chat still uses your connected ChatGPT account or OpenAI API key."
       : inferenceIssueModal.reason === "quota"
         ? "To continue, check your connected provider in Account Settings."
         : inferenceIssueModal.reason === "plan"
@@ -107,6 +118,32 @@ export function WebInferenceIssueModal(props: WebInferenceIssueModalProps) {
               This model isn&apos;t available on your current plan.
             </div>
           )}
+          {inferenceIssueModal.reason === "workspace_credits" && (
+            <>
+              <div className="tool-balance-pack-grid modal-tool-balance-pack-grid">
+                {WORKSPACE_TOOL_BALANCE_TOPUP_PACKS.map((pack) => (
+                  <button
+                    key={pack.id}
+                    type="button"
+                    className={`tool-balance-pack-button${pack.recommended ? " recommended" : ""}`}
+                    onClick={() => void onStartWorkspaceCreditTopupCheckout?.(pack.id)}
+                    disabled={isInferenceIssueModalRunning || isStartingWorkspaceCreditTopupCheckout}
+                  >
+                    <strong>{pack.label}</strong>
+                    <span>{pack.recommended ? "Recommended" : "Add balance"}</span>
+                  </button>
+                ))}
+              </div>
+              <div className="model-note">
+                Tool balance is non-refundable and only works inside Polynet.
+              </div>
+              {workspaceCreditTopupError ? (
+                <div className="auth-error" style={{ marginTop: 12 }}>
+                  {workspaceCreditTopupError}
+                </div>
+              ) : null}
+            </>
+          )}
         </div>
         <div className="modal-footer">
           <div className="auth-actions">
@@ -126,7 +163,7 @@ export function WebInferenceIssueModal(props: WebInferenceIssueModalProps) {
                 disabled={isInferenceIssueModalRunning}
               >
                 {inferenceIssueModal.reason === "workspace_credits"
-                  ? "Open agent settings"
+                  ? "Manage in Agent Settings"
                   : inferenceIssueModal.reason === "provider_connection_required"
                     ? "Open provider settings"
                   : "Open account settings"}

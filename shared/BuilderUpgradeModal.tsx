@@ -16,7 +16,7 @@ export function BuilderUpgradeModal({
 }: BuilderUpgradeModalProps) {
   if (!isOpen) return null;
 
-  const upgradeLead = "Builder is included. Free accounts can build one community; credits cover paid tools.";
+  const upgradeLead = "Builder is included. Free accounts can build one community; tool balance covers premium tools.";
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -51,11 +51,11 @@ export function BuilderUpgradeModal({
 
             <div className="plan-card builder">
               <div className="plan-card-header">
-                <div className="plan-name">Credits</div>
+                <div className="plan-name">Tool balance</div>
               </div>
               <div className="plan-price">
                 <span className="plan-price-amount">$5</span>
-                <span className="plan-price-period">/500</span>
+                <span className="plan-price-period">to start</span>
               </div>
               <ul className="plan-points">
                 <li>Use Daytona workspaces.</li>

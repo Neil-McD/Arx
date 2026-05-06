@@ -20,6 +20,8 @@ async function proveWorkspaceCreditAccountingContract() {
   const runtimeSessionSource = await readRepoFile("convex/runtimeExecutionSession.ts");
   const cronsSource = await readRepoFile("convex/crons.ts");
   const accountSource = await readRepoFile("convex/account.ts");
+  const voiceControllerSource = await readRepoFile("shared/useWebVoiceInputController.ts");
+  const appSource = await readRepoFile("apps/web/src/App.tsx");
 
   assert.match(
     schemaSource,
@@ -56,6 +58,21 @@ async function proveWorkspaceCreditAccountingContract() {
     sharedCreditsSource,
     /BUILDER_INCLUDED_WORKSPACE_CREDITS\s*=\s*0/,
     "expected free-builder default to include no paid-tool credits",
+  );
+  assert.match(
+    sharedCreditsSource,
+    /WORKSPACE_TOOL_BALANCE_TOPUP_PACKS[\s\S]*priceUsd:\s*5[\s\S]*priceUsd:\s*10[\s\S]*priceUsd:\s*20[\s\S]*recommended:\s*true[\s\S]*priceUsd:\s*50/,
+    "expected tool balance to expose fixed dollar top-up packs with a recommended $20 pack",
+  );
+  assert.match(
+    sharedCreditsSource,
+    /export function resolveWorkspaceToolBalanceTopupPack/,
+    "expected top-up pack resolution to live in shared server-controlled pricing code",
+  );
+  assert.match(
+    sharedCreditsSource,
+    /export function formatWorkspaceToolBalanceUsdFromCredits/,
+    "expected user-facing tool balance to display dollars while retaining internal credit units",
   );
   assert.match(
     sharedCreditsSource,
@@ -133,6 +150,31 @@ async function proveWorkspaceCreditAccountingContract() {
     /includedCycleStartedAt:[\s\S]*balance\.includedCycleStartedAt[\s\S]*includedCycleEndsAt:[\s\S]*balance\.includedCycleEndsAt/,
     "expected reservations to persist the active included-credit cycle",
   );
+  assert.match(
+    creditsSource,
+    /startWorkspaceCreditTopupCheckout[\s\S]*packId:\s*v\.optional\(v\.string\(\)\)[\s\S]*resolveWorkspaceToolBalanceTopupPack\(args\.packId\)[\s\S]*workspace_tool_balance_pack_invalid/,
+    "expected top-up checkout to accept only server-defined tool-balance pack ids",
+  );
+  assert.match(
+    creditsSource,
+    /line_items:[\s\S]*price_data:[\s\S]*unit_amount:\s*Math\.round\(pack\.priceUsd\s*\*\s*100\)/,
+    "expected Stripe Checkout top-ups to price fixed dollar packs server-side",
+  );
+  assert.match(
+    creditsSource,
+    /custom_text:[\s\S]*Tool balance is non-refundable/,
+    "expected Stripe Checkout to disclose non-refundable tool balance before payment",
+  );
+  assert.match(
+    creditsSource,
+    /metadata:[\s\S]*workspace_tool_balance_pack_id:\s*pack\.id[\s\S]*workspace_tool_balance_usd:\s*String\(pack\.priceUsd\)[\s\S]*workspace_credits_amount:\s*String\(workspaceCreditsAmount\)/,
+    "expected top-up metadata to preserve pack id, dollar amount, and internal credit units",
+  );
+  assert.doesNotMatch(
+    creditsSource,
+    /readStripeWorkspaceCreditTopupPriceId/,
+    "workspace tool balance top-ups should not depend on one static Stripe price id",
+  );
 
   assert.match(
     daytonaSessionSource,
@@ -205,6 +247,16 @@ async function proveWorkspaceCreditAccountingContract() {
     httpVoiceSource,
     /priceVoiceTranscriptionCredits\(\{[\s\S]*audioBytes:\s*bytes\.byteLength[\s\S]*rawVendorCostUsd:\s*voiceVendorCostUsd[\s\S]*polynetPriceUsd:\s*creditsToUsd\(voiceCredits\)/,
     "expected voice transcription to use shared margin-aware fixed-tool pricing with ledger cost evidence",
+  );
+  assert.match(
+    voiceControllerSource,
+    /onToolBalanceRequired\?:[\s\S]*isToolBalanceError[\s\S]*args\.onToolBalanceRequired\?\.\(surface,\s*message\)/,
+    "expected voice input to surface exhausted tool balance through the add-balance modal path",
+  );
+  assert.match(
+    appSource,
+    /onToolBalanceRequired:[\s\S]*setInferenceIssueModal\(\{[\s\S]*reason:\s*"workspace_credits"/,
+    "expected voice input tool-balance failures to open the workspace issue modal",
   );
   assert.doesNotMatch(
     httpDaytonaSource,

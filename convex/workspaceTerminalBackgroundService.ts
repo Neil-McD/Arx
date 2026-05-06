@@ -299,8 +299,8 @@ export async function ensureProjectBackgroundSandbox(params: {
       code: message === "credits_exhausted" ? "workspace_credits_exhausted" : "workspace_credits_unavailable",
       message:
         message === "credits_exhausted"
-          ? "Add credits to use workspace tools."
-          : "Credits are unavailable for workspace tools.",
+          ? "Add balance to use workspace tools."
+          : "Tool balance is unavailable for workspace tools.",
     };
   }
 
@@ -531,7 +531,7 @@ export async function resolveProjectBackgroundSandboxIfReady(params: {
       ok: false,
       status: 402,
       code: "workspace_credits_exhausted",
-      message: "Workspace credit budget expired. Add credits to use workspace tools.",
+      message: "Workspace tool balance budget expired. Add balance to use workspace tools.",
     };
   }
 
@@ -646,7 +646,7 @@ export async function resolveTerminalSandboxContext(params: {
         ok: false,
         status: 402,
         code: "workspace_credits_exhausted",
-        message: "Workspace credit budget expired. Add credits to use workspace tools.",
+        message: "Workspace tool balance budget expired. Add balance to use workspace tools.",
       };
     }
   }

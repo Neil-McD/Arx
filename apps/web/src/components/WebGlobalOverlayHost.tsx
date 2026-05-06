@@ -7,6 +7,7 @@ import { WebMessageContextModal } from "./WebMessageContextModal";
 import { WebPreviewAccessGateModal } from "./WebPreviewAccessGateModal";
 import { WebProjectModalHost } from "./WebProjectModalHost";
 import { WebProviderConnectionModalHost } from "./WebProviderConnectionModalHost";
+import type { WorkspaceToolBalanceTopupPackId } from "../../../../shared/workspaceCredits";
 
 type InferenceIssueReason =
   | "quota"
@@ -41,8 +42,11 @@ type WebInferenceIssueModalProps = {
   hasSession: boolean;
   inferenceIssueModal: InferenceIssueModalState;
   isInferenceIssueModalRunning: boolean;
+  isStartingWorkspaceCreditTopupCheckout?: boolean;
+  workspaceCreditTopupError?: string | null;
   onClose: () => void;
   onOpenSettings: (reason: InferenceIssueReason) => void;
+  onStartWorkspaceCreditTopupCheckout?: (packId?: WorkspaceToolBalanceTopupPackId) => Promise<void> | void;
 };
 
 type PreviewAccessGateModalState = ComponentProps<

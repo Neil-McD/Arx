@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import {
+  formatWorkspaceToolBalanceUsdFromCredits,
   WORKSPACE_CREDIT_LOW_BALANCE_THRESHOLD,
-  WORKSPACE_CREDIT_TOPUP_CREDITS,
-  WORKSPACE_CREDIT_TOPUP_PRICE_USD,
+  WORKSPACE_TOOL_BALANCE_TOPUP_PACKS,
+  type WorkspaceToolBalanceTopupPackId,
 } from "../../../../shared/workspaceCredits";
 import type { WorkspaceCreditBalance } from "../../../../shared/workspaceCreditsGateway";
 
@@ -82,13 +83,8 @@ type WebAgentSettingsSectionProps = {
   workspaceCreditBalanceError: string | null;
   isStartingWorkspaceCreditTopupCheckout: boolean;
   workspaceCreditTopupError: string | null;
-  startWorkspaceCreditTopupCheckout: () => Promise<void> | void;
+  startWorkspaceCreditTopupCheckout: (packId?: WorkspaceToolBalanceTopupPackId) => Promise<void> | void;
 };
-
-function formatCredits(value: number): string {
-  const normalized = Math.max(0, Number(value) || 0);
-  return normalized % 1 === 0 ? String(normalized) : normalized.toFixed(2);
-}
 
 export function WebAgentSettingsSection(props: WebAgentSettingsSectionProps) {
   const {
@@ -296,52 +292,54 @@ export function WebAgentSettingsSection(props: WebAgentSettingsSectionProps) {
               <div className="settings-section">
                 <div className="settings-section-title">
                   <svg viewBox="0 0 24 24"><path d="M4 7h16" /><path d="M4 12h16" /><path d="M4 17h10" /><path d="M18 4v16" /></svg>
-                  Credits
+                  Tool balance
                 </div>
                 <div className="settings-section-desc">
-                  Credits are used for paid tools: Daytona workspaces, web research, and voice input. LLM inference still uses your connected ChatGPT account or OpenAI API key.
+                  Tool balance is used for premium tools: Daytona workspaces, web research, and voice input. LLM inference still uses your connected ChatGPT account or OpenAI API key.
                 </div>
                 {isLoadingWorkspaceCreditBalance && !workspaceCreditBalance ? (
-                  <div className="model-note">Checking credits…</div>
+                  <div className="model-note">Checking tool balance…</div>
                 ) : (
                   <>
                     {totalCredits <= WORKSPACE_CREDIT_LOW_BALANCE_THRESHOLD ? (
                       <div className="auth-error" style={{ marginBottom: 12 }}>
-                        You&apos;re running low on credits. Buy another{" "}
-                        {formatCredits(WORKSPACE_CREDIT_TOPUP_CREDITS)} credits to keep paid tools available.
+                        You&apos;re running low on tool balance. Add balance to keep premium tools available.
                       </div>
                     ) : null}
                     <div className="account-row">
                       <div className="account-identity">
                         <span>Remaining</span>
                         <strong>
-                          {formatCredits(totalCredits)} credits
+                          {formatWorkspaceToolBalanceUsdFromCredits(totalCredits)}
                         </strong>
                       </div>
                       {includedCredits > 0 ? (
                         <div className="auth-status">
-                          {formatCredits(workspaceCreditBalance?.includedCycleCredits ?? 0)} included this cycle
+                          {formatWorkspaceToolBalanceUsdFromCredits(workspaceCreditBalance?.includedCycleCredits ?? 0)} included this cycle
                         </div>
                       ) : null}
                     </div>
                     <div className="settings-section-desc">
                       {purchasedCredits > 0
-                        ? `${formatCredits(purchasedCredits)} purchased credits are available. `
+                        ? `${formatWorkspaceToolBalanceUsdFromCredits(purchasedCredits)} purchased balance is available. `
                         : ""}
                       {includedCredits > 0 && (workspaceCreditBalance?.includedCycleEndsAt ?? 0) > 0
-                        ? `Your included credits reset ${formatRelativeTime(new Date(workspaceCreditBalance?.includedCycleEndsAt ?? 0).toISOString())}.`
-                        : "Buy credits before using paid tools."}
+                        ? `Your included balance resets ${formatRelativeTime(new Date(workspaceCreditBalance?.includedCycleEndsAt ?? 0).toISOString())}.`
+                        : "Add balance before using premium tools."} Tool balance is non-refundable and only works inside Polynet.
                     </div>
-                    <div className="auth-actions" style={{ paddingLeft: 0, marginTop: 12 }}>
-                      <button
-                        type="button"
-                        onClick={() => void startWorkspaceCreditTopupCheckout()}
-                        disabled={isStartingWorkspaceCreditTopupCheckout}
-                      >
-                        {isStartingWorkspaceCreditTopupCheckout
-                          ? "Starting…"
-                          : `Buy ${formatCredits(WORKSPACE_CREDIT_TOPUP_CREDITS)} credits ($${WORKSPACE_CREDIT_TOPUP_PRICE_USD})`}
-                      </button>
+                    <div className="tool-balance-pack-grid">
+                      {WORKSPACE_TOOL_BALANCE_TOPUP_PACKS.map((pack) => (
+                        <button
+                          key={pack.id}
+                          type="button"
+                          className={`tool-balance-pack-button${pack.recommended ? " recommended" : ""}`}
+                          onClick={() => void startWorkspaceCreditTopupCheckout(pack.id)}
+                          disabled={isStartingWorkspaceCreditTopupCheckout}
+                        >
+                          <strong>{pack.label}</strong>
+                          <span>{pack.recommended ? "Recommended" : "Add balance"}</span>
+                        </button>
+                      ))}
                     </div>
                   </>
                 )}

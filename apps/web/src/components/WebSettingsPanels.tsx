@@ -3,6 +3,7 @@ import type { SettingsGroup } from "../../../../shared/appShellNavigation";
 import type { AppTheme } from "../../../../shared/theme";
 import type { BuilderBillingStatus } from "../../../../shared/builderBillingStatusGateway";
 import type { WorkspaceCreditBalance } from "../../../../shared/workspaceCreditsGateway";
+import type { WorkspaceToolBalanceTopupPackId } from "../../../../shared/workspaceCredits";
 import type { PendingPurchaseClaim } from "../../../../shared/pay_first";
 import type { EffectiveMcpApp } from "../../../../shared/effectiveMcpApps";
 import type { CreateSkillPackageInput } from "../../../../shared/skillPackageTypes";
@@ -113,7 +114,7 @@ export type WebSettingsPanelsProps = {
     handleCreatePersonalMemoryItem: () => Promise<void> | void;
     loadPersonalMemoryItems: () => Promise<void> | void;
     openBuilderUpgrade: (context: "builder") => void;
-    startWorkspaceCreditTopupCheckout: () => Promise<void> | void;
+    startWorkspaceCreditTopupCheckout: (packId?: WorkspaceToolBalanceTopupPackId) => Promise<void> | void;
     personalMemoryUi: ReturnType<typeof useWebPersonalMemoryUiController>;
     billingUi: UseWebBillingUiControllerResult<BuilderBillingStatus, WorkspaceCreditBalance, PendingPurchaseClaim>;
   };

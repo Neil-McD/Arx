@@ -7,6 +7,39 @@ export const WORKSPACE_CREDITS_PER_USD = 100;
 export const WORKSPACE_CREDIT_TOPUP_CREDITS = 500;
 export const WORKSPACE_CREDIT_TOPUP_PRICE_USD = 5;
 export const WORKSPACE_CREDIT_LOW_BALANCE_THRESHOLD = 100;
+export const WORKSPACE_TOOL_BALANCE_TOPUP_PACKS = [
+  {
+    id: "tool_balance_500",
+    label: "$5",
+    priceUsd: 5,
+    credits: 500,
+    recommended: false,
+  },
+  {
+    id: "tool_balance_1000",
+    label: "$10",
+    priceUsd: 10,
+    credits: 1000,
+    recommended: false,
+  },
+  {
+    id: "tool_balance_2000",
+    label: "$20",
+    priceUsd: 20,
+    credits: 2000,
+    recommended: true,
+  },
+  {
+    id: "tool_balance_5000",
+    label: "$50",
+    priceUsd: 50,
+    credits: 5000,
+    recommended: false,
+  },
+] as const;
+export type WorkspaceToolBalanceTopupPack = (typeof WORKSPACE_TOOL_BALANCE_TOPUP_PACKS)[number];
+export type WorkspaceToolBalanceTopupPackId = WorkspaceToolBalanceTopupPack["id"];
+export const DEFAULT_WORKSPACE_TOOL_BALANCE_TOPUP_PACK_ID: WorkspaceToolBalanceTopupPackId = "tool_balance_500";
 export const WEB_RESEARCH_CREDITS_PER_CALL = 1;
 export const VOICE_TRANSCRIPTION_CREDITS_PER_REQUEST = 1;
 export const PAID_TOOL_TARGET_GROSS_MARGIN_BPS = 5000;
@@ -169,4 +202,17 @@ export function priceDaytonaWorkspaceUsageCredits(params: {
 
 export function creditsToUsd(credits: number): number {
   return Math.round((Math.max(0, Number(credits) || 0) / WORKSPACE_CREDITS_PER_USD) * 10000) / 10000;
+}
+
+export function resolveWorkspaceToolBalanceTopupPack(
+  packId?: string | null,
+): WorkspaceToolBalanceTopupPack | null {
+  const normalized = String(packId ?? DEFAULT_WORKSPACE_TOOL_BALANCE_TOPUP_PACK_ID).trim() ||
+    DEFAULT_WORKSPACE_TOOL_BALANCE_TOPUP_PACK_ID;
+  return WORKSPACE_TOOL_BALANCE_TOPUP_PACKS.find((pack) => pack.id === normalized) ?? null;
+}
+
+export function formatWorkspaceToolBalanceUsdFromCredits(credits: number): string {
+  const usd = creditsToUsd(credits);
+  return usd % 1 === 0 ? `$${usd.toFixed(0)}` : `$${usd.toFixed(2)}`;
 }

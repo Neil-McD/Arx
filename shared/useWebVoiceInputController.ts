@@ -37,11 +37,24 @@ type UseWebVoiceInputControllerArgs<SessionT> = {
   normalizedBuilderTier: "free" | "builder" | "architect";
   requireSignIn: () => void;
   showAppToastMessage: (message: string) => void;
+  onToolBalanceRequired?: (surface: VoiceSurface, message: string) => void;
   appendWorkspaceTranscript: (transcript: string) => void;
   focusWorkspaceInput: () => void;
   setCommunityMessageInput: Dispatch<SetStateAction<string>>;
   chatInputRef: MutableRefObject<HTMLTextAreaElement | null>;
 };
+
+function isToolBalanceError(message: string): boolean {
+  const normalized = message.trim().toLowerCase();
+  return (
+    normalized.includes("credits_exhausted") ||
+    normalized.includes("credits_unavailable") ||
+    normalized.includes("workspace_credits_exhausted") ||
+    normalized.includes("workspace_credits_unavailable") ||
+    normalized.includes("add balance to use voice input") ||
+    normalized.includes("tool balance is unavailable")
+  );
+}
 
 export function useWebVoiceInputController<SessionT>(args: UseWebVoiceInputControllerArgs<SessionT>) {
   const [activeVoiceSurface, setActiveVoiceSurface] = useState<VoiceSurface | null>(null);
@@ -102,7 +115,7 @@ export function useWebVoiceInputController<SessionT>(args: UseWebVoiceInputContr
     }
     return {
       mode: "start_recording",
-      title: "Start voice input (uses credits).",
+      title: "Start voice input (uses tool balance).",
     };
   }
 
@@ -316,6 +329,13 @@ export function useWebVoiceInputController<SessionT>(args: UseWebVoiceInputContr
       args.showAppToastMessage("Transcript inserted.");
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      if (isToolBalanceError(message)) {
+        args.onToolBalanceRequired?.(surface, message);
+        if (!args.onToolBalanceRequired) {
+          args.showAppToastMessage("Add balance to use voice input.");
+        }
+        return;
+      }
       args.showAppToastMessage(message || "Voice transcription failed.");
     } finally {
       releaseVoiceCaptureResources();

@@ -5,7 +5,9 @@ import {
   BUILDER_INCLUDED_WORKSPACE_CREDITS,
   CREDIT_RESERVATION_EXPIRY_MS,
   estimateDaytonaWorkspaceComputeUsd,
+  formatWorkspaceToolBalanceUsdFromCredits,
   priceDaytonaWorkspaceUsageCredits,
+  resolveWorkspaceToolBalanceTopupPack,
   WORKSPACE_CREDIT_TOPUP_CREDITS,
 } from "../shared/workspaceCredits";
 import {
@@ -15,7 +17,6 @@ import {
 import { resolveAuthenticatedActor } from "./authActor";
 import {
   getStripeClient,
-  readStripeWorkspaceCreditTopupPriceId,
 } from "./stripeCore";
 
 function roundCurrency(value: number): number {
@@ -922,6 +923,7 @@ export const startWorkspaceCreditTopupCheckout = action({
     authSubject: v.optional(v.string()),
     successUrl: v.string(),
     cancelUrl: v.string(),
+    packId: v.optional(v.string()),
     nowMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
@@ -942,14 +944,16 @@ export const startWorkspaceCreditTopupCheckout = action({
     if (!userId) throw new Error("user_not_found");
 
     const sessionId = newOpaqueToken("credits");
-    const priceId = readStripeWorkspaceCreditTopupPriceId();
-    const workspaceCreditsAmount = WORKSPACE_CREDIT_TOPUP_CREDITS;
+    const pack = resolveWorkspaceToolBalanceTopupPack(args.packId);
+    if (!pack) throw new Error("workspace_tool_balance_pack_invalid");
+    const providerPriceId = pack.id;
+    const workspaceCreditsAmount = pack.credits;
     await ctx.runMutation(
       internal.workspaceCredits.createPendingWorkspaceCreditTopupCheckoutSessionInternal as any,
       {
         sessionId,
         ownerUserId: userId,
-        providerPriceId: priceId,
+        providerPriceId,
         workspaceCreditsAmount,
         expiresAt: nowMs + 14 * 24 * 60 * 60 * 1000,
         nowMs,
@@ -965,13 +969,30 @@ export const startWorkspaceCreditTopupCheckout = action({
         client_reference_id: sessionId,
         line_items: [
           {
-            price: priceId,
+            price_data: {
+              currency: "usd",
+              unit_amount: Math.round(pack.priceUsd * 100),
+              product_data: {
+                name: "Polynet tool balance",
+                description: `${formatWorkspaceToolBalanceUsdFromCredits(
+                  workspaceCreditsAmount,
+                )} for Daytona workspaces, web research, and voice input.`,
+              },
+            },
             quantity: 1,
           },
         ],
+        custom_text: {
+          submit: {
+            message:
+              "Tool balance is non-refundable and can only be used for Polynet premium tools.",
+          },
+        },
         metadata: {
           local_session_id: sessionId,
           checkout_mode: "workspace_credit_topup",
+          workspace_tool_balance_pack_id: pack.id,
+          workspace_tool_balance_usd: String(pack.priceUsd),
           workspace_credits_amount: String(workspaceCreditsAmount),
         },
         ...(typeof actor?.email === "string" && actor.email.trim()
@@ -987,7 +1008,7 @@ export const startWorkspaceCreditTopupCheckout = action({
           providerCheckoutSessionId: checkoutSession.id,
           providerCustomerId:
             typeof checkoutSession.customer === "string" ? checkoutSession.customer : null,
-          providerPriceId: priceId,
+          providerPriceId,
           nowMs: Date.now(),
         },
       );

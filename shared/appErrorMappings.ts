@@ -177,7 +177,7 @@ export function formatSendFlowErrorMessage(error: unknown, fallback: string): st
     code === "credits_exhausted" ||
     code === "credits_unavailable"
   ) {
-    return "Credits are unavailable for this action. Add credits or choose a different tool.";
+    return "Tool balance is unavailable for this action. Add balance or choose a different tool.";
   }
   if (
     code === "platform_inference_quota_exceeded" ||

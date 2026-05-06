@@ -1,6 +1,7 @@
 import { EXTERNAL_MEMORY_IMPORT_PROMPT } from "../../../../shared/externalMemoryImport";
 import type { AppView, SettingsPage } from "../../../../shared/appShellNavigation";
 import type { BuilderCheckoutTier, BuilderUpgradeContext } from "../../../../shared/authResumeState";
+import type { WorkspaceToolBalanceTopupPackId } from "../../../../shared/workspaceCredits";
 import type { WebGlobalOverlayHostProps } from "../components/WebGlobalOverlayHost";
 
 type InferenceIssueModalState = NonNullable<
@@ -45,7 +46,10 @@ export function buildWebGlobalOverlayHostProps(params: {
   continuePreviewAccessGateAuth: () => void;
   inferenceIssueModal: InferenceIssueModalState;
   isInferenceIssueModalRunning: boolean;
+  isStartingWorkspaceCreditTopupCheckout: boolean;
+  workspaceCreditTopupError: string | null;
   setInferenceIssueModal: (value: InferenceIssueModalState) => void;
+  startWorkspaceCreditTopupCheckout: (packId?: WorkspaceToolBalanceTopupPackId) => void | Promise<void>;
   setActiveView: (value: AppView) => void;
   setSettingsPage: (value: SettingsPage) => void;
   isBuilderUpgradeOpen: boolean;
@@ -114,7 +118,10 @@ export function buildWebGlobalOverlayHostProps(params: {
           hasSession: Boolean(params.session),
           inferenceIssueModal: params.inferenceIssueModal,
           isInferenceIssueModalRunning: params.isInferenceIssueModalRunning,
+          isStartingWorkspaceCreditTopupCheckout: params.isStartingWorkspaceCreditTopupCheckout,
+          workspaceCreditTopupError: params.workspaceCreditTopupError,
           onClose: () => params.setInferenceIssueModal(null),
+          onStartWorkspaceCreditTopupCheckout: params.startWorkspaceCreditTopupCheckout,
           onOpenSettings: (reason) => {
             params.setInferenceIssueModal(null);
             params.setActiveView("settings");

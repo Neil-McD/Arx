@@ -42,6 +42,7 @@ export async function startCloudWorkspaceCreditTopupCheckout<SessionT>(
   params: CloudBuilderBillingGatewayParams<SessionT> & {
     successUrl: string;
     cancelUrl: string;
+    packId?: string;
   },
 ): Promise<{ checkout_url?: unknown }> {
   const { client, authSubject } = await bootstrapGatewayAuthContext(params.session);
@@ -49,6 +50,7 @@ export async function startCloudWorkspaceCreditTopupCheckout<SessionT>(
     authSubject,
     successUrl: params.successUrl,
     cancelUrl: params.cancelUrl,
+    packId: params.packId,
     nowMs: Date.now(),
   })) as {
     checkout_url?: unknown;
