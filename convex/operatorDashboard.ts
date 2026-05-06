@@ -83,6 +83,32 @@ export const getOperatorAuthAccessDiagnostics = query({
   },
 });
 
+export const getOperatorSecurityAuditDiagnostics = query({
+  args: {
+    authSubject: v.optional(v.string()),
+    range: operatorRange,
+  },
+  handler: async (ctx, args): Promise<any> => {
+    await requireOperatorAccess(ctx, args.authSubject);
+    return await ctx.runQuery((internal as any).operatorIntelligence.getOperatorSecurityAuditDiagnosticsInternal, {
+      range: args.range,
+    });
+  },
+});
+
+export const getOperatorRuntimeToolDiagnostics = query({
+  args: {
+    authSubject: v.optional(v.string()),
+    range: operatorRange,
+  },
+  handler: async (ctx, args): Promise<any> => {
+    await requireOperatorAccess(ctx, args.authSubject);
+    return await ctx.runQuery((internal as any).operatorIntelligence.getOperatorRuntimeToolDiagnosticsInternal, {
+      range: args.range,
+    });
+  },
+});
+
 export const listOperatorRisks = query({
   args: {
     authSubject: v.optional(v.string()),

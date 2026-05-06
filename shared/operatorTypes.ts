@@ -173,3 +173,89 @@ export type OperatorAuthAccessDiagnosticsSnapshot = {
     isTruncated: boolean;
   };
 };
+
+export type OperatorSecurityAuditAttentionItem = {
+  id: string;
+  severity: "warning" | "error";
+  title: string;
+  eventType: string;
+  status: "started" | "succeeded" | "failed" | "blocked" | "ignored";
+  eventId: string;
+  actorUserId: string | null;
+  subjectUserId: string | null;
+  communityId: string | null;
+  createdAt: number;
+  evidence: {
+    sourceTables: string[];
+  };
+};
+
+export type OperatorSecurityAuditDiagnosticsSnapshot = {
+  computedAt: number;
+  range: OperatorRange;
+  health: "healthy" | "degraded" | "incident" | "unknown";
+  totals: {
+    events: number;
+    warnings: number;
+    errors: number;
+    webhookFailures: number;
+    blockedActions: number;
+    destructiveActions: number;
+    operatorRoleChanges: number;
+    operatorAccessBlocks: number;
+    billingTrustEvents: number;
+    unknownSecurityEvents: number;
+  };
+  attentionItems: OperatorSecurityAuditAttentionItem[];
+  latestEvents: OperatorEventRecord[];
+  evidence: {
+    sourceTables: string[];
+    scannedEventLimit: number;
+    isTruncated: boolean;
+  };
+};
+
+export type OperatorRuntimeToolFailureBucket = {
+  key: string;
+  label: string;
+  count: number;
+  latestAt: number | null;
+  severity: "warning" | "error";
+};
+
+export type OperatorRuntimeToolDiagnosticsSnapshot = {
+  computedAt: number;
+  range: OperatorRange;
+  health: "healthy" | "degraded" | "incident" | "unknown";
+  totals: {
+    turnsStarted: number;
+    turnsSucceeded: number;
+    turnsFailed: number;
+    turnsCancelled: number;
+    turnsRunning: number;
+    toolCalls: number;
+    toolFailures: number;
+    runtimeDiagnosticEvents: number;
+    providerFailures: number;
+    rateLimitFailures: number;
+    workspaceCreditFailures: number;
+    paidToolLedgerFailures: number;
+    sandboxCreateFailures: number;
+    unbilledComputeCharges: number;
+  };
+  rates: {
+    turnSuccessRate: number | null;
+    toolFailureRate: number | null;
+  };
+  topFailureCodes: OperatorRuntimeToolFailureBucket[];
+  topFailingTools: OperatorRuntimeToolFailureBucket[];
+  latestEvents: OperatorDiagnosticEventRecord[];
+  evidence: {
+    sourceTables: string[];
+    scannedRunLimit: number;
+    scannedEventLimit: number;
+    scannedCreditLimit: number;
+    scannedComputeLimit: number;
+    isTruncated: boolean;
+  };
+};

@@ -1,6 +1,7 @@
 import { internalQuery } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
+import { sanitizeCriticalAuditMetadata } from "./criticalAudit";
 
 type MoneyMetric = {
   currency: string;
@@ -10,6 +11,57 @@ type MoneyMetric = {
 
 const ACTIVE_SUBSCRIPTION_STATUSES = new Set(["active", "past_due", "cancel_at_period_end"]);
 const CHECKOUT_STATUSES = ["pending", "complete", "expired"] as const;
+const SECURITY_AUDIT_EVENT_TYPES = [
+  "account_delete_blocked",
+  "account_delete_completed",
+  "builder_entitlement_granted",
+  "builder_entitlement_revoked",
+  "builder_subscription_synced",
+  "community_subscription_synced",
+  "operator_dashboard_accessed",
+  "operator_role_deactivated",
+  "operator_role_upserted",
+  "stripe_connect_account_synced",
+  "stripe_webhook_failed",
+  "stripe_webhook_processed",
+  "stripe_webhook_received",
+] as const;
+const SECURITY_AUDIT_EVENT_TYPE_SET = new Set<string>(SECURITY_AUDIT_EVENT_TYPES);
+const WEBHOOK_FAILURE_AUDIT_EVENT_TYPES = new Set(["stripe_webhook_failed"]);
+const DESTRUCTIVE_AUDIT_EVENT_TYPES = new Set([
+  "account_delete_blocked",
+  "account_delete_completed",
+  "operator_role_deactivated",
+]);
+const OPERATOR_ROLE_AUDIT_EVENT_TYPES = new Set(["operator_role_deactivated", "operator_role_upserted"]);
+const BILLING_TRUST_AUDIT_EVENT_TYPES = new Set([
+  "builder_entitlement_granted",
+  "builder_entitlement_revoked",
+  "builder_subscription_synced",
+  "community_subscription_synced",
+  "stripe_connect_account_synced",
+  "stripe_webhook_failed",
+]);
+const RUNTIME_RUN_STATUSES = ["running", "ok", "error", "cancelled"] as const;
+const RUNTIME_TOOL_EVENT_TYPES = [
+  "tool_call_started",
+  "tool_call_finished",
+  "runtime_diagnostics_detected",
+  "workspace_session_create_completed",
+] as const;
+const PAID_TOOL_LEDGER_NAMES = ["daytona_workspace", "web_research", "voice_transcribe"] as const;
+type DiagnosticSubsystem =
+  | "auth"
+  | "access"
+  | "security"
+  | "billing"
+  | "runtime"
+  | "mcp"
+  | "tool"
+  | "community"
+  | "funnel"
+  | "deploy"
+  | "diagnostics";
 
 function normalizeLimit(value: number | undefined, fallback: number, max: number): number {
   if (typeof value !== "number" || !Number.isFinite(value)) return fallback;
@@ -62,10 +114,11 @@ function addMoney(a: MoneyMetric | null, b: MoneyMetric | null): MoneyMetric | n
 }
 
 function mapEvent(row: any) {
+  const eventType = String(row.eventType ?? "");
   return {
     id: String(row._id),
     eventKey: String(row.eventKey ?? ""),
-    eventType: String(row.eventType ?? ""),
+    eventType,
     severity: row.severity ?? "info",
     status: row.status ?? "started",
     actorUserId: row.actorUserId ? String(row.actorUserId) : null,
@@ -74,7 +127,7 @@ function mapEvent(row: any) {
     checkoutSessionId: row.checkoutSessionId ?? null,
     provider: row.provider ?? "polynet",
     providerObjectId: row.providerObjectId ?? null,
-    metadata: row.metadata ?? null,
+    metadata: sanitizeCriticalAuditMetadata(eventType, row.metadata) ?? null,
     createdAt: row.createdAt,
   };
 }
@@ -104,7 +157,7 @@ function mapDiagnosticEvent(row: any) {
 
 async function readDiagnosticEventsBySubsystem(
   ctx: any,
-  subsystem: "auth" | "access",
+  subsystem: DiagnosticSubsystem,
   rangeStart: number | null,
   limit: number,
 ) {
@@ -113,6 +166,282 @@ async function readDiagnosticEventsBySubsystem(
     return rangeStart == null ? scoped : scoped.gte("createdAt", rangeStart);
   });
   return await query.order("desc").take(limit);
+}
+
+async function readRuntimeRunsByStatus(
+  ctx: any,
+  status: (typeof RUNTIME_RUN_STATUSES)[number],
+  rangeStart: number | null,
+  limit: number,
+) {
+  const query = ctx.db.query("runtimeRuns").withIndex("by_status_startedAt", (q: any) => {
+    const scoped = q.eq("status", status);
+    return rangeStart == null ? scoped : scoped.gte("startedAt", rangeStart);
+  });
+  return await query.order("desc").take(limit);
+}
+
+async function readRuntimeEventsByType(
+  ctx: any,
+  eventType: string,
+  rangeStart: number | null,
+  limit: number,
+) {
+  const query = ctx.db.query("runtimeRunEvents").withIndex("by_eventType_createdAt", (q: any) => {
+    const scoped = q.eq("eventType", eventType);
+    return rangeStart == null ? scoped : scoped.gte("createdAt", rangeStart);
+  });
+  return await query.order("desc").take(limit);
+}
+
+async function readCreditLedgerEntriesByTool(
+  ctx: any,
+  toolName: string,
+  rangeStart: number | null,
+  limit: number,
+) {
+  const query = ctx.db.query("creditLedgerEntries").withIndex("by_tool_createdAt", (q: any) => {
+    const scoped = q.eq("toolName", toolName);
+    return rangeStart == null ? scoped : scoped.gte("createdAt", rangeStart);
+  });
+  return await query.order("desc").take(limit);
+}
+
+async function readWorkspaceComputeChargesByDebitSource(
+  ctx: any,
+  debitSource: "included" | "purchased" | "mixed" | "unbilled",
+  rangeStart: number | null,
+  limit: number,
+) {
+  const query = ctx.db.query("workspaceComputeCharges").withIndex("by_debitSource_createdAt", (q: any) => {
+    const scoped = q.eq("debitSource", debitSource);
+    return rangeStart == null ? scoped : scoped.gte("createdAt", rangeStart);
+  });
+  return await query.order("desc").take(limit);
+}
+
+function readPayloadRecord(row: any): Record<string, unknown> {
+  const payload = row?.payload;
+  return payload && typeof payload === "object" && !Array.isArray(payload)
+    ? (payload as Record<string, unknown>)
+    : {};
+}
+
+function normalizeOperatorKey(value: unknown, fallback: string): string {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  return normalized || fallback;
+}
+
+function normalizeRuntimeFailureCode(value: unknown): string {
+  const normalized = normalizeOperatorKey(value, "unknown_runtime_error");
+  if (normalized === "credits_exhausted" || normalized === "workspace_credits_exhausted") {
+    return "workspace_credits_exhausted";
+  }
+  if (normalized === "credits_unavailable" || normalized === "workspace_credits_unavailable") {
+    return "workspace_credits_unavailable";
+  }
+  if (normalized.includes("rate_limit") || normalized.includes("rate_limited") || normalized === "too_many_requests") {
+    return "provider_rate_limited";
+  }
+  if (normalized.includes("provider") || normalized.includes("model_")) {
+    return "provider_failed";
+  }
+  if (normalized.includes("sandbox") || normalized.includes("workspace_session_create")) {
+    return "sandbox_create_failed";
+  }
+  if (normalized.includes("timeout") || normalized.includes("timed_out")) {
+    return "runtime_timeout";
+  }
+  return normalized;
+}
+
+function readToolFailureCode(row: any): string {
+  const payload = readPayloadRecord(row);
+  const failureSemantics =
+    payload.failure_semantics && typeof payload.failure_semantics === "object" && !Array.isArray(payload.failure_semantics)
+      ? (payload.failure_semantics as Record<string, unknown>)
+      : null;
+  return normalizeRuntimeFailureCode(
+    payload.error_code ??
+      payload.errorCode ??
+      failureSemantics?.kind ??
+      payload.code ??
+      "tool_call_failed",
+  );
+}
+
+function readToolName(row: any): string {
+  const payload = readPayloadRecord(row);
+  return normalizeOperatorKey(payload.tool_name ?? payload.toolName, "unknown_tool");
+}
+
+function readRowCreatedAt(row: any): number {
+  const value = Number(row?.createdAt ?? row?.startedAt ?? row?.updatedAt ?? 0);
+  return Number.isFinite(value) ? value : 0;
+}
+
+function isToolFailureRow(row: any): boolean {
+  const payload = readPayloadRecord(row);
+  const status = normalizeOperatorKey(payload.status, "");
+  return (
+    status === "error" ||
+    status === "failed" ||
+    payload.success === false ||
+    Boolean(payload.error_code || payload.errorCode || payload.failure_semantics)
+  );
+}
+
+function formatOperatorBucketLabel(key: string): string {
+  switch (key) {
+    case "workspace_credits_exhausted":
+      return "Tool balance exhausted";
+    case "workspace_credits_unavailable":
+      return "Tool balance unavailable";
+    case "provider_failed":
+      return "Provider failed";
+    case "provider_rate_limited":
+      return "Provider rate-limited";
+    case "sandbox_create_failed":
+      return "Sandbox create failed";
+    case "runtime_timeout":
+      return "Runtime timeout";
+    case "tool_call_failed":
+      return "Tool call failed";
+    case "unknown_runtime_error":
+      return "Unknown runtime error";
+    default:
+      return key
+        .split(/[._:-]+/)
+        .filter(Boolean)
+        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+        .join(" ");
+  }
+}
+
+function buildRuntimeBucket(
+  rows: any[],
+  readKey: (row: any) => string,
+  options?: { errorKeys?: Set<string> },
+) {
+  const buckets = new Map<
+    string,
+    { key: string; label: string; count: number; latestAt: number | null; severity: "warning" | "error" }
+  >();
+  for (const row of rows) {
+    const key = normalizeOperatorKey(readKey(row), "unknown_runtime_error");
+    const latestAt = readRowCreatedAt(row);
+    const current =
+      buckets.get(key) ??
+      {
+        key,
+        label: formatOperatorBucketLabel(key),
+        count: 0,
+        latestAt: null,
+        severity: options?.errorKeys?.has(key) ? "error" : "warning",
+      };
+    current.count += 1;
+    current.latestAt = Math.max(current.latestAt ?? 0, latestAt) || current.latestAt;
+    if (options?.errorKeys?.has(key)) current.severity = "error";
+    buckets.set(key, current);
+  }
+  return [...buckets.values()]
+    .sort((a, b) => b.count - a.count || Number(b.latestAt ?? 0) - Number(a.latestAt ?? 0))
+    .slice(0, 8);
+}
+
+async function readCriticalAuditEventsByType(
+  ctx: any,
+  eventType: string,
+  rangeStart: number | null,
+  limit: number,
+) {
+  const query = ctx.db.query("criticalAuditEvents").withIndex("by_type_createdAt", (q: any) => {
+    const scoped = q.eq("eventType", eventType);
+    return rangeStart == null ? scoped : scoped.gte("createdAt", rangeStart);
+  });
+  return await query.order("desc").take(limit);
+}
+
+async function readCriticalAuditEventsBySeverity(
+  ctx: any,
+  severity: "warning" | "error",
+  rangeStart: number | null,
+  limit: number,
+) {
+  const query = ctx.db.query("criticalAuditEvents").withIndex("by_severity_createdAt", (q: any) => {
+    const scoped = q.eq("severity", severity);
+    return rangeStart == null ? scoped : scoped.gte("createdAt", rangeStart);
+  });
+  return await query.order("desc").take(limit);
+}
+
+function dedupeAuditRows(rows: any[]): any[] {
+  const seen = new Set<string>();
+  const deduped: any[] = [];
+  for (const row of rows) {
+    const id = String(row._id);
+    if (seen.has(id)) continue;
+    seen.add(id);
+    deduped.push(row);
+  }
+  return deduped.sort((a: any, b: any) => Number(b.createdAt ?? 0) - Number(a.createdAt ?? 0));
+}
+
+function formatSecurityAuditTitle(row: any): string {
+  switch (String(row.eventType ?? "")) {
+    case "account_delete_blocked":
+      return "Account deletion blocked";
+    case "account_delete_completed":
+      return "Account deleted";
+    case "operator_dashboard_accessed":
+      return row.status === "blocked" ? "Operator access blocked" : "Operator dashboard accessed";
+    case "operator_role_deactivated":
+      return "Operator role deactivated";
+    case "operator_role_upserted":
+      return "Operator role changed";
+    case "stripe_webhook_failed":
+      return "Stripe webhook failed";
+    case "stripe_webhook_processed":
+      return "Stripe webhook processed";
+    case "stripe_webhook_received":
+      return "Stripe webhook received";
+    case "stripe_connect_account_synced":
+      return "Stripe Connect account synced";
+    case "builder_entitlement_granted":
+      return "Builder entitlement granted";
+    case "builder_entitlement_revoked":
+      return "Builder entitlement revoked";
+    case "builder_subscription_synced":
+      return "Builder subscription synced";
+    case "community_subscription_synced":
+      return "Community subscription synced";
+    default:
+      return String(row.eventType ?? "Audit event")
+        .split(/[._:-]+/)
+        .filter(Boolean)
+        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+        .join(" ");
+  }
+}
+
+function mapSecurityAuditAttentionItem(row: any) {
+  const eventType = String(row.eventType ?? "");
+  const isError = row.severity === "error" || row.status === "failed" || WEBHOOK_FAILURE_AUDIT_EVENT_TYPES.has(eventType);
+  return {
+    id: `critical-audit:${String(row._id)}`,
+    severity: isError ? "error" : "warning",
+    title: formatSecurityAuditTitle(row),
+    eventType,
+    status: row.status ?? "started",
+    eventId: String(row._id),
+    actorUserId: row.actorUserId ? String(row.actorUserId) : null,
+    subjectUserId: row.subjectUserId ? String(row.subjectUserId) : null,
+    communityId: row.communityId ? String(row.communityId) : null,
+    createdAt: row.createdAt,
+    evidence: {
+      sourceTables: ["criticalAuditEvents"],
+    },
+  };
 }
 
 async function readActiveTier(ctx: any, userId: any, nowMs: number): Promise<"free" | "builder" | "architect" | "unknown"> {
@@ -484,6 +813,311 @@ export const getOperatorAuthAccessDiagnosticsInternal = internalQuery({
         sourceTables: ["platformDiagnosticEvents", "communityAccessAudit"],
         scannedEventLimit,
         isTruncated: authRows.length >= scannedEventLimit || accessRows.length >= scannedEventLimit,
+      },
+    };
+  },
+});
+
+export const getOperatorSecurityAuditDiagnosticsInternal = internalQuery({
+  args: {
+    range: v.optional(v.union(v.literal("7d"), v.literal("30d"), v.literal("90d"), v.literal("all"))),
+  },
+  handler: async (ctx, args): Promise<any> => {
+    const nowMs = Date.now();
+    const range = args.range ?? "30d";
+    const rangeStart = normalizeRangeStart(range, nowMs);
+    const scannedEventLimit = 200;
+    const perTypeLimit = 100;
+    const [typedRowGroups, errorRows, warningRows] = await Promise.all([
+      Promise.all(
+        SECURITY_AUDIT_EVENT_TYPES.map((eventType) =>
+          readCriticalAuditEventsByType(ctx, eventType, rangeStart, perTypeLimit),
+        ),
+      ),
+      readCriticalAuditEventsBySeverity(ctx, "error", rangeStart, scannedEventLimit),
+      readCriticalAuditEventsBySeverity(ctx, "warning", rangeStart, scannedEventLimit),
+    ]);
+    const rows = dedupeAuditRows([...typedRowGroups.flat(), ...errorRows, ...warningRows]);
+    const errors = rows.filter((row: any) => row.severity === "error" || row.status === "failed");
+    const warnings = rows.filter((row: any) => row.severity === "warning");
+    const webhookFailures = rows.filter((row: any) =>
+      WEBHOOK_FAILURE_AUDIT_EVENT_TYPES.has(String(row.eventType ?? "")),
+    );
+    const blockedActions = rows.filter((row: any) => row.status === "blocked");
+    const destructiveActions = rows.filter((row: any) =>
+      DESTRUCTIVE_AUDIT_EVENT_TYPES.has(String(row.eventType ?? "")),
+    );
+    const operatorRoleChanges = rows.filter((row: any) =>
+      OPERATOR_ROLE_AUDIT_EVENT_TYPES.has(String(row.eventType ?? "")),
+    );
+    const operatorAccessBlocks = rows.filter(
+      (row: any) => row.eventType === "operator_dashboard_accessed" && row.status === "blocked",
+    );
+    const billingTrustEvents = rows.filter((row: any) =>
+      BILLING_TRUST_AUDIT_EVENT_TYPES.has(String(row.eventType ?? "")),
+    );
+    const unknownSecurityEvents = rows.filter((row: any) => {
+      const eventType = String(row.eventType ?? "");
+      if (SECURITY_AUDIT_EVENT_TYPE_SET.has(eventType)) return false;
+      return row.severity !== "info" || row.status === "failed" || row.status === "blocked";
+    });
+    const health: "healthy" | "degraded" | "incident" =
+      errors.length > 0 || webhookFailures.length > 0 || unknownSecurityEvents.length > 0
+        ? "incident"
+        : warnings.length > 0 || blockedActions.length > 0
+          ? "degraded"
+          : "healthy";
+    const attentionRows = rows.filter((row: any) => {
+      const eventType = String(row.eventType ?? "");
+      return (
+        row.severity === "error" ||
+        row.severity === "warning" ||
+        row.status === "failed" ||
+        row.status === "blocked" ||
+        WEBHOOK_FAILURE_AUDIT_EVENT_TYPES.has(eventType) ||
+        DESTRUCTIVE_AUDIT_EVENT_TYPES.has(eventType) ||
+        OPERATOR_ROLE_AUDIT_EVENT_TYPES.has(eventType)
+      );
+    });
+
+    return {
+      computedAt: nowMs,
+      range,
+      health,
+      totals: {
+        events: rows.length,
+        warnings: warnings.length,
+        errors: errors.length,
+        webhookFailures: webhookFailures.length,
+        blockedActions: blockedActions.length,
+        destructiveActions: destructiveActions.length,
+        operatorRoleChanges: operatorRoleChanges.length,
+        operatorAccessBlocks: operatorAccessBlocks.length,
+        billingTrustEvents: billingTrustEvents.length,
+        unknownSecurityEvents: unknownSecurityEvents.length,
+      },
+      attentionItems: attentionRows.slice(0, 8).map(mapSecurityAuditAttentionItem),
+      latestEvents: rows.slice(0, 8).map(mapEvent),
+      evidence: {
+        sourceTables: ["criticalAuditEvents"],
+        scannedEventLimit,
+        isTruncated:
+          errorRows.length >= scannedEventLimit ||
+          warningRows.length >= scannedEventLimit ||
+          typedRowGroups.some((group: any[]) => group.length >= perTypeLimit),
+      },
+    };
+  },
+});
+
+export const getOperatorRuntimeToolDiagnosticsInternal = internalQuery({
+  args: {
+    range: v.optional(v.union(v.literal("7d"), v.literal("30d"), v.literal("90d"), v.literal("all"))),
+  },
+  handler: async (ctx, args): Promise<any> => {
+    const nowMs = Date.now();
+    const range = args.range ?? "30d";
+    const rangeStart = normalizeRangeStart(range, nowMs);
+    const scannedRunLimit = 250;
+    const scannedEventLimit = 400;
+    const scannedCreditLimit = 300;
+    const scannedComputeLimit = 200;
+    const [
+      runtimeRunGroups,
+      runtimeEventGroups,
+      diagnosticGroups,
+      paidToolCreditGroups,
+      unbilledComputeCharges,
+    ] = await Promise.all([
+      Promise.all(
+        RUNTIME_RUN_STATUSES.map((status) =>
+          readRuntimeRunsByStatus(ctx, status, rangeStart, scannedRunLimit),
+        ),
+      ),
+      Promise.all(
+        RUNTIME_TOOL_EVENT_TYPES.map((eventType) =>
+          readRuntimeEventsByType(ctx, eventType, rangeStart, scannedEventLimit),
+        ),
+      ),
+      Promise.all(
+        (["runtime", "tool", "mcp", "billing"] as const).map((subsystem) =>
+          readDiagnosticEventsBySubsystem(ctx, subsystem, rangeStart, scannedEventLimit),
+        ),
+      ),
+      Promise.all(
+        PAID_TOOL_LEDGER_NAMES.map((toolName) =>
+          readCreditLedgerEntriesByTool(ctx, toolName, rangeStart, scannedCreditLimit),
+        ),
+      ),
+      readWorkspaceComputeChargesByDebitSource(ctx, "unbilled", rangeStart, scannedComputeLimit),
+    ]);
+
+    const runs: any[] = runtimeRunGroups.flat();
+    const runtimeEvents: any[] = runtimeEventGroups.flat();
+    const diagnosticRows: any[] = diagnosticGroups.flat().sort((a: any, b: any) => b.createdAt - a.createdAt);
+    const paidToolLedgerRows: any[] = paidToolCreditGroups.flat();
+    const toolStartedRows = runtimeEvents.filter((row: any) => row.eventType === "tool_call_started");
+    const toolFinishedRows = runtimeEvents.filter((row: any) => row.eventType === "tool_call_finished");
+    const runtimeDiagnosticRows = runtimeEvents.filter((row: any) => row.eventType === "runtime_diagnostics_detected");
+    const workspaceSessionCreateRows = runtimeEvents.filter(
+      (row: any) => row.eventType === "workspace_session_create_completed",
+    );
+    const workspaceSessionCreateFailureRows = workspaceSessionCreateRows.filter((row: any) => {
+      const payload = readPayloadRecord(row);
+      return normalizeOperatorKey(payload.status, "") === "error";
+    });
+    const toolFailureRows = toolFinishedRows.filter(isToolFailureRow);
+    const runFailureRows = runs.filter((row: any) => row.status === "error");
+    const normalizedRunFailureCodes = runFailureRows.map((row: any) =>
+      normalizeRuntimeFailureCode(row.errorCode ?? row.reason ?? "unknown_runtime_error"),
+    );
+    const normalizedToolFailureCodes = toolFailureRows.map(readToolFailureCode);
+    const normalizedWorkspaceSessionCreateFailureCodes = workspaceSessionCreateFailureRows.map((row: any) => {
+      const payload = readPayloadRecord(row);
+      return normalizeRuntimeFailureCode(
+        payload.code ??
+          payload.error_code ??
+          payload.errorCode ??
+          "sandbox_create_failed",
+      );
+    });
+    const allFailureCodeRows = [
+      ...runFailureRows.map((row: any) => ({
+        ...row,
+        __operatorFailureCode: normalizeRuntimeFailureCode(row.errorCode ?? row.reason ?? "unknown_runtime_error"),
+      })),
+      ...toolFailureRows.map((row: any) => ({
+        ...row,
+        __operatorFailureCode: readToolFailureCode(row),
+      })),
+      ...runtimeDiagnosticRows.map((row: any) => {
+        const payload = readPayloadRecord(row);
+        const failureSemantics =
+          payload.failure_semantics && typeof payload.failure_semantics === "object" && !Array.isArray(payload.failure_semantics)
+            ? (payload.failure_semantics as Record<string, unknown>)
+            : null;
+        return {
+          ...row,
+          __operatorFailureCode: normalizeRuntimeFailureCode(
+            failureSemantics?.kind ?? payload.diagnostic_source ?? "runtime_diagnostics_detected",
+          ),
+        };
+      }),
+      ...workspaceSessionCreateFailureRows.map((row: any) => {
+        const payload = readPayloadRecord(row);
+        return {
+          ...row,
+          __operatorFailureCode: normalizeRuntimeFailureCode(
+            payload.code ??
+              payload.error_code ??
+              payload.errorCode ??
+              "sandbox_create_failed",
+          ),
+        };
+      }),
+      ...paidToolLedgerRows
+        .filter((row: any) => row.status === "refunded" || row.failureReason)
+        .map((row: any) => ({
+          ...row,
+          __operatorFailureCode: normalizeRuntimeFailureCode(row.failureReason ?? "paid_tool_ledger_failure"),
+        })),
+      ...unbilledComputeCharges.map((row: any) => ({
+        ...row,
+        __operatorFailureCode: "unbilled_compute",
+      })),
+    ];
+    const providerFailures =
+      normalizedRunFailureCodes.filter((code) => code === "provider_failed").length +
+      normalizedToolFailureCodes.filter((code) => code === "provider_failed").length;
+    const rateLimitFailures =
+      normalizedRunFailureCodes.filter((code) => code === "provider_rate_limited").length +
+      normalizedToolFailureCodes.filter((code) => code === "provider_rate_limited").length;
+    const workspaceCreditFailures =
+      normalizedRunFailureCodes.filter((code) => code.startsWith("workspace_credits_")).length +
+      normalizedToolFailureCodes.filter((code) => code.startsWith("workspace_credits_")).length +
+      normalizedWorkspaceSessionCreateFailureCodes.filter((code) => code.startsWith("workspace_credits_")).length +
+      paidToolLedgerRows.filter((row: any) =>
+        String(row.failureReason ?? "").toLowerCase().includes("credits"),
+      ).length;
+    const paidToolLedgerFailures = paidToolLedgerRows.filter(
+      (row: any) => row.status === "refunded" || row.failureReason,
+    ).length;
+    const sandboxCreateFailures =
+      workspaceSessionCreateFailureRows.length +
+      normalizedToolFailureCodes.filter((code) => code === "sandbox_create_failed").length;
+    const toolCalls = Math.max(toolStartedRows.length, toolFinishedRows.length);
+    const turnTerminalCount = runs.filter((row: any) => row.status !== "running").length;
+    const turnSuccessRate =
+      turnTerminalCount > 0
+        ? runs.filter((row: any) => row.status === "ok").length / turnTerminalCount
+        : null;
+    const toolFailureRate =
+      toolFinishedRows.length > 0 ? toolFailureRows.length / toolFinishedRows.length : null;
+    const incidentCount =
+      providerFailures +
+      workspaceCreditFailures +
+      paidToolLedgerFailures +
+      sandboxCreateFailures +
+      unbilledComputeCharges.length;
+    const health: "healthy" | "degraded" | "incident" =
+      incidentCount > 0
+        ? "incident"
+        : runFailureRows.length > 0 || toolFailureRows.length > 0 || runtimeDiagnosticRows.length > 0
+          ? "degraded"
+          : "healthy";
+    const errorKeys = new Set(["provider_failed", "workspace_credits_exhausted", "sandbox_create_failed", "unbilled_compute"]);
+
+    return {
+      computedAt: nowMs,
+      range,
+      health,
+      totals: {
+        turnsStarted: runs.length,
+        turnsSucceeded: runs.filter((row: any) => row.status === "ok").length,
+        turnsFailed: runFailureRows.length,
+        turnsCancelled: runs.filter((row: any) => row.status === "cancelled").length,
+        turnsRunning: runs.filter((row: any) => row.status === "running").length,
+        toolCalls,
+        toolFailures: toolFailureRows.length,
+        runtimeDiagnosticEvents: runtimeDiagnosticRows.length,
+        providerFailures,
+        rateLimitFailures,
+        workspaceCreditFailures,
+        paidToolLedgerFailures,
+        sandboxCreateFailures,
+        unbilledComputeCharges: unbilledComputeCharges.length,
+      },
+      rates: {
+        turnSuccessRate,
+        toolFailureRate,
+      },
+      topFailureCodes: buildRuntimeBucket(
+        allFailureCodeRows,
+        (row: any) => row.__operatorFailureCode ?? "unknown_runtime_error",
+        { errorKeys },
+      ),
+      topFailingTools: buildRuntimeBucket(toolFailureRows, readToolName, {
+        errorKeys: new Set(toolFailureRows.map(readToolName)),
+      }),
+      latestEvents: diagnosticRows.slice(0, 8).map(mapDiagnosticEvent),
+      evidence: {
+        sourceTables: [
+          "runtimeRuns",
+          "runtimeRunEvents",
+          "platformDiagnosticEvents",
+          "creditLedgerEntries",
+          "workspaceComputeCharges",
+        ],
+        scannedRunLimit,
+        scannedEventLimit,
+        scannedCreditLimit,
+        scannedComputeLimit,
+        isTruncated:
+          runtimeRunGroups.some((group: any[]) => group.length >= scannedRunLimit) ||
+          runtimeEventGroups.some((group: any[]) => group.length >= scannedEventLimit) ||
+          diagnosticGroups.some((group: any[]) => group.length >= scannedEventLimit) ||
+          paidToolCreditGroups.some((group: any[]) => group.length >= scannedCreditLimit) ||
+          unbilledComputeCharges.length >= scannedComputeLimit,
       },
     };
   },

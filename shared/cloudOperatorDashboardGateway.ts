@@ -9,6 +9,8 @@ import type {
   OperatorOverviewSnapshot,
   OperatorRange,
   OperatorRiskItem,
+  OperatorRuntimeToolDiagnosticsSnapshot,
+  OperatorSecurityAuditDiagnosticsSnapshot,
 } from "./operatorTypes";
 
 async function withOperatorAuth(session: AuthSessionLike) {
@@ -85,6 +87,28 @@ export async function loadOperatorAuthAccessDiagnosticsCanonical(params: {
     authSubject,
     range: params.range ?? "30d",
   })) as OperatorAuthAccessDiagnosticsSnapshot;
+}
+
+export async function loadOperatorSecurityAuditDiagnosticsCanonical(params: {
+  session: AuthSessionLike;
+  range?: OperatorRange;
+}): Promise<OperatorSecurityAuditDiagnosticsSnapshot> {
+  const { client, authSubject } = await withOperatorAuth(params.session);
+  return (await client.query("operatorDashboard:getOperatorSecurityAuditDiagnostics" as any, {
+    authSubject,
+    range: params.range ?? "30d",
+  })) as OperatorSecurityAuditDiagnosticsSnapshot;
+}
+
+export async function loadOperatorRuntimeToolDiagnosticsCanonical(params: {
+  session: AuthSessionLike;
+  range?: OperatorRange;
+}): Promise<OperatorRuntimeToolDiagnosticsSnapshot> {
+  const { client, authSubject } = await withOperatorAuth(params.session);
+  return (await client.query("operatorDashboard:getOperatorRuntimeToolDiagnostics" as any, {
+    authSubject,
+    range: params.range ?? "30d",
+  })) as OperatorRuntimeToolDiagnosticsSnapshot;
 }
 
 export async function loadOperatorRisksCanonical(params: {

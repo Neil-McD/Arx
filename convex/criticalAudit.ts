@@ -48,9 +48,129 @@ type CriticalAuditEventInput = {
   createdAt?: number;
 };
 
+type CriticalAuditMetadataValue = string | number | boolean;
+
+const CRITICAL_AUDIT_METADATA_STRING_MAX_LENGTH = 300;
+
+const CRITICAL_AUDIT_METADATA_BLOCKED_KEY_PARTS = [
+  "token",
+  "secret",
+  "password",
+  "cookie",
+  "authorization",
+  "bearer",
+  "session",
+  "api_key",
+  "apikey",
+  "access_token",
+  "accesstoken",
+  "refresh_token",
+  "refreshtoken",
+  "id_token",
+  "idtoken",
+  "encrypted",
+  "payload",
+  "body",
+  "raw",
+];
+
+const CRITICAL_AUDIT_METADATA_ALLOWLIST: Record<string, readonly string[]> = {
+  account_delete_blocked: ["reason"],
+  account_delete_completed: [],
+  builder_checkout_created: ["targetTier", "expiresAt"],
+  builder_checkout_attached_to_stripe: ["providerCustomerId", "providerSubscriptionId", "providerPriceId"],
+  builder_entitlement_granted: ["targetTier", "subscriptionStatus", "providerPriceId"],
+  builder_entitlement_revoked: ["subscriptionStatus", "revokedCount"],
+  builder_subscription_synced: [
+    "targetTier",
+    "subscriptionStatus",
+    "grantsAccess",
+    "currentPeriodStartAt",
+    "currentPeriodEndAt",
+  ],
+  community_checkout_created: [
+    "billingPeriod",
+    "pricePointId",
+    "amountBaseUnits",
+    "currency",
+    "currencyDecimals",
+    "expiresAt",
+  ],
+  community_checkout_attached_to_stripe: ["providerCustomerId", "providerSubscriptionId", "providerPriceId"],
+  community_purchase_claim_created: ["billingPeriod", "pricePointId", "amountBaseUnits", "currency"],
+  community_purchase_claim_redeemed: ["accessGranted", "grantMarker", "pricePointId"],
+  community_subscription_synced: [
+    "membershipId",
+    "pricePointId",
+    "communitySubscriptionStatus",
+    "subscriptionStatus",
+    "source",
+    "cancelAtPeriodEnd",
+    "markComplete",
+    "providerPriceId",
+    "currentPeriodStartAt",
+    "currentPeriodEndAt",
+  ],
+  operator_dashboard_accessed: ["surface", "role", "source", "error"],
+  operator_role_deactivated: ["previousRole"],
+  operator_role_upserted: ["role", "active"],
+  stripe_connect_account_synced: ["connectStatus", "chargesEnabled", "payoutsEnabled", "detailsSubmitted"],
+  stripe_webhook_failed: ["stripeEventType", "stripeEventId", "requestPath", "errorMessage"],
+  stripe_webhook_processed: ["stripeEventType", "stripeEventId"],
+  stripe_webhook_received: ["stripeEventType", "stripeEventId"],
+};
+
 function cleanString(value: unknown): string | undefined {
   const normalized = String(value ?? "").trim();
   return normalized || undefined;
+}
+
+function normalizeMetadataKey(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function criticalAuditMetadataKeyLooksSensitive(key: string): boolean {
+  const normalizedKey = normalizeMetadataKey(key);
+  return CRITICAL_AUDIT_METADATA_BLOCKED_KEY_PARTS.some((part) =>
+    normalizedKey.includes(normalizeMetadataKey(part)),
+  );
+}
+
+function sanitizeCriticalAuditMetadataValue(value: unknown): CriticalAuditMetadataValue | undefined {
+  if (typeof value === "string") {
+    const normalized = value.trim();
+    return normalized
+      ? normalized.slice(0, CRITICAL_AUDIT_METADATA_STRING_MAX_LENGTH)
+      : undefined;
+  }
+  if (typeof value === "number") return Number.isFinite(value) ? value : undefined;
+  if (typeof value === "boolean") return value;
+  return undefined;
+}
+
+export function sanitizeCriticalAuditMetadata(
+  eventType: string,
+  metadata: unknown,
+): Record<string, CriticalAuditMetadataValue> | undefined {
+  const allowedKeys = CRITICAL_AUDIT_METADATA_ALLOWLIST[eventType] ?? [];
+  if (
+    allowedKeys.length === 0 ||
+    !metadata ||
+    typeof metadata !== "object" ||
+    Array.isArray(metadata)
+  ) {
+    return undefined;
+  }
+
+  const input = metadata as Record<string, unknown>;
+  const sanitized: Record<string, CriticalAuditMetadataValue> = {};
+  for (const key of allowedKeys) {
+    if (criticalAuditMetadataKeyLooksSensitive(key)) continue;
+    const safeValue = sanitizeCriticalAuditMetadataValue(input[key]);
+    if (safeValue !== undefined) sanitized[key] = safeValue;
+  }
+
+  return Object.keys(sanitized).length > 0 ? sanitized : undefined;
 }
 
 export async function recordCriticalAuditEvent(ctx: any, input: CriticalAuditEventInput) {
@@ -75,7 +195,7 @@ export async function recordCriticalAuditEvent(ctx: any, input: CriticalAuditEve
     checkoutSessionId: cleanString(input.checkoutSessionId),
     provider: input.provider ?? "polynet",
     providerObjectId: cleanString(input.providerObjectId),
-    metadata: input.metadata ?? undefined,
+    metadata: sanitizeCriticalAuditMetadata(eventType, input.metadata),
     createdAt:
       typeof input.createdAt === "number" && Number.isFinite(input.createdAt)
         ? input.createdAt

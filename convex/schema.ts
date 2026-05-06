@@ -135,7 +135,8 @@ export default defineSchema({
     .index("by_chargeKey", ["chargeKey"])
     .index("by_user", ["userId"])
     .index("by_run", ["runId"])
-    .index("by_providerSandboxId", ["providerSandboxId"]),
+    .index("by_providerSandboxId", ["providerSandboxId"])
+    .index("by_debitSource_createdAt", ["debitSource", "createdAt"]),
 
   creditLedgerEntries: defineTable({
     creditKey: v.string(),
@@ -1195,7 +1196,8 @@ export default defineSchema({
     .index("by_owner_runId", ["ownerId", "runId"])
     .index("by_thread_status_startedAt", ["threadId", "status", "startedAt"])
     .index("by_thread_startedAt", ["threadId", "startedAt"])
-    .index("by_owner_startedAt", ["ownerId", "startedAt"]),
+    .index("by_owner_startedAt", ["ownerId", "startedAt"])
+    .index("by_status_startedAt", ["status", "startedAt"]),
 
   runtimeRunEvents: defineTable({
     ownerId: v.id("users"),
@@ -1209,6 +1211,7 @@ export default defineSchema({
   })
     .index("by_owner_run_seq", ["ownerId", "runId", "seq"])
     .index("by_thread_run_seq", ["threadId", "runId", "seq"])
-    .index("by_owner_run_eventKey", ["ownerId", "runId", "eventKey"]),
+    .index("by_owner_run_eventKey", ["ownerId", "runId", "eventKey"])
+    .index("by_eventType_createdAt", ["eventType", "createdAt"]),
 
 });

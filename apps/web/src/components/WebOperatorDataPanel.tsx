@@ -8,6 +8,8 @@ import {
   loadOperatorMonetizationCanonical,
   loadOperatorOverviewCanonical,
   loadOperatorRisksCanonical,
+  loadOperatorRuntimeToolDiagnosticsCanonical,
+  loadOperatorSecurityAuditDiagnosticsCanonical,
   recordOperatorDashboardAccessCanonical,
 } from "../../../../shared/cloudOperatorDashboardGateway";
 import type {
@@ -17,6 +19,8 @@ import type {
   OperatorMonetizationSnapshot,
   OperatorOverviewSnapshot,
   OperatorRiskItem,
+  OperatorRuntimeToolDiagnosticsSnapshot,
+  OperatorSecurityAuditDiagnosticsSnapshot,
 } from "../../../../shared/operatorTypes";
 
 export type OperatorInsightTab = "platform" | "builders";
@@ -36,6 +40,8 @@ export type OperatorDashboardState = {
   overview: OperatorOverviewSnapshot | null;
   monetization: OperatorMonetizationSnapshot | null;
   authAccess: OperatorAuthAccessDiagnosticsSnapshot | null;
+  securityAudit: OperatorSecurityAuditDiagnosticsSnapshot | null;
+  runtimeTools: OperatorRuntimeToolDiagnosticsSnapshot | null;
   builders: OperatorBuilderRecord[];
   risks: OperatorRiskItem[];
   events: OperatorEventRecord[];
@@ -46,6 +52,8 @@ export function createEmptyOperatorDashboardState(): OperatorDashboardState {
     overview: null,
     monetization: null,
     authAccess: null,
+    securityAudit: null,
+    runtimeTools: null,
     builders: [],
     risks: [],
     events: [],
@@ -55,6 +63,22 @@ export function createEmptyOperatorDashboardState(): OperatorDashboardState {
 export function clampOperatorRightPanelWidth(width: number): number {
   if (!Number.isFinite(width)) return OPERATOR_RIGHT_PANEL_DEFAULT_WIDTH;
   return Math.min(OPERATOR_RIGHT_PANEL_MAX_WIDTH, Math.max(OPERATOR_RIGHT_PANEL_MIN_WIDTH, Math.round(width)));
+}
+
+function fulfilledValue<T>(result: PromiseSettledResult<T>): T | null {
+  return result.status === "fulfilled" ? result.value : null;
+}
+
+function fulfilledList<T>(result: PromiseSettledResult<T[]>): T[] {
+  return result.status === "fulfilled" ? result.value : [];
+}
+
+function logRejectedOperatorSection(label: string, result: PromiseSettledResult<unknown>): void {
+  if (result.status !== "rejected") return;
+  console.warn("operator_dashboard_section_load_failed", {
+    section: label,
+    error: result.reason instanceof Error ? result.reason.message : String(result.reason),
+  });
 }
 
 export function useOperatorDashboardData(params: {
@@ -86,20 +110,43 @@ export function useOperatorDashboardData(params: {
     setError(null);
     const session = params.session;
     recordOperatorDashboardAccessCanonical({ session, surface: params.surface })
-      .then(() =>
-        Promise.all([
+      .then(async () => {
+        const results = await Promise.allSettled([
           loadOperatorOverviewCanonical({ session, range: "30d" }),
           loadOperatorMonetizationCanonical({ session, range: "30d" }),
           loadOperatorAuthAccessDiagnosticsCanonical({ session, range: "30d" }),
+          loadOperatorSecurityAuditDiagnosticsCanonical({ session, range: "30d" }),
+          loadOperatorRuntimeToolDiagnosticsCanonical({ session, range: "30d" }),
           loadOperatorBuildersCanonical({ session, limit: 12 }),
           loadOperatorRisksCanonical({ session, limit: 12 }),
           loadOperatorEventsCanonical({ session, limit: 12 }),
-        ]),
-      )
+        ] as const);
+        const [overview, monetization, authAccess, securityAudit, runtimeTools, builders, risks, events] = results;
+        [
+          ["overview", overview],
+          ["monetization", monetization],
+          ["auth_access", authAccess],
+          ["security_audit", securityAudit],
+          ["runtime_tools", runtimeTools],
+          ["builders", builders],
+          ["risks", risks],
+          ["events", events],
+        ].forEach(([label, result]) => logRejectedOperatorSection(String(label), result as PromiseSettledResult<unknown>));
+        return {
+          overview: fulfilledValue(overview),
+          monetization: fulfilledValue(monetization),
+          authAccess: fulfilledValue(authAccess),
+          securityAudit: fulfilledValue(securityAudit),
+          runtimeTools: fulfilledValue(runtimeTools),
+          builders: fulfilledList(builders),
+          risks: fulfilledList(risks),
+          events: fulfilledList(events),
+        };
+      })
       .then(
-        ([overview, monetization, authAccess, builders, risks, events]) => {
+        (nextState) => {
           if (!isAlive) return;
-          setState({ overview, monetization, authAccess, builders, risks, events });
+          setState(nextState);
         },
         (nextError) => {
           if (!isAlive) return;
@@ -184,6 +231,8 @@ export function WebOperatorDataPanel(props: {
             overview={props.state.overview}
             monetization={props.state.monetization}
             authAccess={props.state.authAccess}
+            securityAudit={props.state.securityAudit}
+            runtimeTools={props.state.runtimeTools}
             risks={props.state.risks}
             events={props.state.events}
           />
@@ -267,7 +316,14 @@ function formatRiskFlag(value: string): string {
   }
 }
 
-function formatHealth(value: OperatorAuthAccessDiagnosticsSnapshot["health"] | null | undefined): string {
+function formatHealth(
+  value:
+    | OperatorAuthAccessDiagnosticsSnapshot["health"]
+    | OperatorSecurityAuditDiagnosticsSnapshot["health"]
+    | OperatorRuntimeToolDiagnosticsSnapshot["health"]
+    | null
+    | undefined,
+): string {
   switch (value) {
     case "healthy":
       return "Healthy";
@@ -306,6 +362,43 @@ function formatDiagnosticEventType(value: string): string {
   }
 }
 
+function formatAuditEventType(value: string): string {
+  switch (value) {
+    case "account_delete_blocked":
+      return "Account deletion blocked";
+    case "account_delete_completed":
+      return "Account deleted";
+    case "operator_dashboard_accessed":
+      return "Operator dashboard access";
+    case "operator_role_deactivated":
+      return "Operator role deactivated";
+    case "operator_role_upserted":
+      return "Operator role changed";
+    case "stripe_webhook_failed":
+      return "Stripe webhook failed";
+    case "stripe_webhook_processed":
+      return "Stripe webhook processed";
+    case "stripe_webhook_received":
+      return "Stripe webhook received";
+    case "stripe_connect_account_synced":
+      return "Stripe Connect synced";
+    case "builder_entitlement_granted":
+      return "Builder entitlement granted";
+    case "builder_entitlement_revoked":
+      return "Builder entitlement revoked";
+    case "builder_subscription_synced":
+      return "Builder subscription synced";
+    case "community_subscription_synced":
+      return "Community subscription synced";
+    default:
+      return value
+        .split(/[._:-]+/)
+        .filter(Boolean)
+        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+        .join(" ");
+  }
+}
+
 function formatEventTime(createdAt: number): string {
   if (!Number.isFinite(createdAt)) return "";
   return new Intl.DateTimeFormat("en-US", {
@@ -320,6 +413,8 @@ function OperatorPlatformInsights(props: {
   overview: OperatorOverviewSnapshot | null;
   monetization: OperatorMonetizationSnapshot | null;
   authAccess: OperatorAuthAccessDiagnosticsSnapshot | null;
+  securityAudit: OperatorSecurityAuditDiagnosticsSnapshot | null;
+  runtimeTools: OperatorRuntimeToolDiagnosticsSnapshot | null;
   risks: OperatorRiskItem[];
   events: OperatorEventRecord[];
 }) {
@@ -388,6 +483,102 @@ function OperatorPlatformInsights(props: {
           ) : (
             <div className="operator-dashboard__empty">No auth or access diagnostics returned.</div>
           )}
+        </div>
+      </section>
+
+      <section className="operator-dashboard__panel">
+        <h2>Security &amp; audit</h2>
+        <div className="operator-dashboard__table">
+          <div className="operator-dashboard__row">
+            <span>Health</span>
+            <strong>{formatHealth(props.securityAudit?.health)}</strong>
+          </div>
+          <div className="operator-dashboard__row">
+            <span>Webhook failures</span>
+            <strong>{props.securityAudit?.totals.webhookFailures ?? 0}</strong>
+          </div>
+          <div className="operator-dashboard__row">
+            <span>Blocked actions</span>
+            <strong>{props.securityAudit?.totals.blockedActions ?? 0}</strong>
+          </div>
+          <div className="operator-dashboard__row">
+            <span>Destructive actions</span>
+            <strong>{props.securityAudit?.totals.destructiveActions ?? 0}</strong>
+          </div>
+          <div className="operator-dashboard__row">
+            <span>Operator role changes</span>
+            <strong>{props.securityAudit?.totals.operatorRoleChanges ?? 0}</strong>
+          </div>
+          <div className="operator-dashboard__row">
+            <span>Unknown security events</span>
+            <strong>{props.securityAudit?.totals.unknownSecurityEvents ?? 0}</strong>
+          </div>
+          {props.securityAudit?.attentionItems.length ? (
+            props.securityAudit.attentionItems.slice(0, 3).map((item) => (
+              <div className="operator-dashboard__row" key={item.id}>
+                <div>
+                  <strong>{item.title || formatAuditEventType(item.eventType)}</strong>
+                  <span>{[item.status, formatEventTime(item.createdAt)].filter(Boolean).join(" · ")}</span>
+                </div>
+                <span>{item.severity}</span>
+              </div>
+            ))
+          ) : (
+            <div className="operator-dashboard__empty">No security audit attention items returned.</div>
+          )}
+          {props.securityAudit?.evidence.isTruncated ? (
+            <div className="operator-dashboard__empty">Security audit diagnostics are sampled for this window.</div>
+          ) : null}
+        </div>
+      </section>
+
+      <section className="operator-dashboard__panel">
+        <h2>Runtime &amp; tools</h2>
+        <div className="operator-dashboard__table">
+          <div className="operator-dashboard__row">
+            <span>Health</span>
+            <strong>{formatHealth(props.runtimeTools?.health)}</strong>
+          </div>
+          <div className="operator-dashboard__row">
+            <span>Turn success</span>
+            <strong>{formatPercent(props.runtimeTools?.rates.turnSuccessRate)}</strong>
+          </div>
+          <div className="operator-dashboard__row">
+            <span>Failed turns</span>
+            <strong>{props.runtimeTools?.totals.turnsFailed ?? 0}</strong>
+          </div>
+          <div className="operator-dashboard__row">
+            <span>Tool failure rate</span>
+            <strong>{formatPercent(props.runtimeTools?.rates.toolFailureRate)}</strong>
+          </div>
+          <div className="operator-dashboard__row">
+            <span>Paid-tool failures</span>
+            <strong>{props.runtimeTools?.totals.paidToolLedgerFailures ?? 0}</strong>
+          </div>
+          <div className="operator-dashboard__row">
+            <span>Unbilled compute</span>
+            <strong>{props.runtimeTools?.totals.unbilledComputeCharges ?? 0}</strong>
+          </div>
+          <div className="operator-dashboard__row">
+            <span>Sandbox create failures</span>
+            <strong>{props.runtimeTools?.totals.sandboxCreateFailures ?? 0}</strong>
+          </div>
+          {props.runtimeTools?.topFailureCodes.length ? (
+            props.runtimeTools.topFailureCodes.slice(0, 3).map((bucket) => (
+              <div className="operator-dashboard__row" key={bucket.key}>
+                <div>
+                  <strong>{bucket.label}</strong>
+                  <span>{bucket.latestAt ? formatEventTime(bucket.latestAt) : bucket.key}</span>
+                </div>
+                <span>{bucket.count}</span>
+              </div>
+            ))
+          ) : (
+            <div className="operator-dashboard__empty">No runtime or tool failures returned.</div>
+          )}
+          {props.runtimeTools?.evidence.isTruncated ? (
+            <div className="operator-dashboard__empty">Runtime diagnostics are sampled for this window.</div>
+          ) : null}
         </div>
       </section>
 
