@@ -294,7 +294,11 @@ export type OperatorWebDeployDiagnosticsSnapshot = {
   evidence: {
     sourceTables: string[];
     routeProbePaths: string[];
+    routeProbeTimeoutMs: number | null;
     versionJsonReachable: boolean | null;
+    frontendCrashSource: "platformDiagnosticEvents";
+    frontendCrashCoverage: "first_party_deploy_events_only";
+    sentryBacked: boolean;
     scannedEventLimit: number;
     isTruncated: boolean;
   };

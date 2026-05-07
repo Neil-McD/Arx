@@ -860,7 +860,11 @@ export const getOperatorWebDeployDiagnosticsInternal = internalQuery({
       evidence: {
         sourceTables: ["platformDiagnosticEvents"],
         routeProbePaths: [],
+        routeProbeTimeoutMs: null,
         versionJsonReachable: null,
+        frontendCrashSource: "platformDiagnosticEvents",
+        frontendCrashCoverage: "first_party_deploy_events_only",
+        sentryBacked: false,
         scannedEventLimit,
         isTruncated: deployRows.length >= scannedEventLimit,
       },

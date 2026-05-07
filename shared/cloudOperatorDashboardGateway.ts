@@ -25,6 +25,7 @@ const OPERATOR_WEB_DEPLOY_ROUTE_PROBES: Array<{ label: string; path: string }> =
   { label: "Discover apps", path: "/discover/apps" },
   { label: "Integrations", path: "/settings/integrations" },
 ];
+const OPERATOR_WEB_DEPLOY_PROBE_TIMEOUT_MS = 4000;
 
 function canRunBrowserWebDeployProbes(): boolean {
   return typeof window !== "undefined" && typeof fetch === "function";
@@ -42,6 +43,27 @@ function buildVersionProbeUrl(): string {
   return url.toString();
 }
 
+function readProbeErrorCode(error: unknown): string {
+  return error instanceof Error && error.name === "AbortError"
+    ? "timeout"
+    : error instanceof Error
+      ? error.name || "route_probe_failed"
+      : "route_probe_failed";
+}
+
+async function fetchSameOriginWithTimeout(url: string, init: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), OPERATOR_WEB_DEPLOY_PROBE_TIMEOUT_MS);
+  try {
+    return await fetch(url, {
+      ...init,
+      signal: controller.signal,
+    });
+  } finally {
+    window.clearTimeout(timeout);
+  }
+}
+
 async function readCurrentBuildFromVersionJson(): Promise<{
   buildId: string | null;
   checkedAt: number;
@@ -49,7 +71,7 @@ async function readCurrentBuildFromVersionJson(): Promise<{
 }> {
   const checkedAt = Date.now();
   try {
-    const response = await fetch(buildVersionProbeUrl(), {
+    const response = await fetchSameOriginWithTimeout(buildVersionProbeUrl(), {
       cache: "no-store",
       credentials: "same-origin",
     });
@@ -69,7 +91,7 @@ async function probeSameOriginRoute(
 ): Promise<OperatorWebDeployRouteCheck> {
   const startedAt = Date.now();
   try {
-    const response = await fetch(buildSameOriginUrl(route.path), {
+    const response = await fetchSameOriginWithTimeout(buildSameOriginUrl(route.path), {
       cache: "no-store",
       credentials: "same-origin",
       redirect: "follow",
@@ -92,7 +114,7 @@ async function probeSameOriginRoute(
       httpStatus: null,
       latencyMs: Math.max(0, Date.now() - startedAt),
       checkedAt: Date.now(),
-      errorCode: error instanceof Error ? error.name || "route_probe_failed" : "route_probe_failed",
+      errorCode: readProbeErrorCode(error),
     };
   }
 }
@@ -136,6 +158,7 @@ async function enrichWebDeployDiagnosticsWithBrowserProbes(
       ...snapshot.evidence,
       sourceTables: [...new Set([...snapshot.evidence.sourceTables, "version.json", "same-origin route probes"])],
       routeProbePaths: OPERATOR_WEB_DEPLOY_ROUTE_PROBES.map((route) => route.path),
+      routeProbeTimeoutMs: OPERATOR_WEB_DEPLOY_PROBE_TIMEOUT_MS,
       versionJsonReachable: build.reachable,
     },
   };

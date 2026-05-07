@@ -477,11 +477,11 @@ function OperatorPlatformInsights(props: {
             <strong>{props.webDeploy?.totals.deployEvents ?? 0}</strong>
           </div>
           <div className="operator-dashboard__row">
-            <span>Frontend crashes</span>
+            <span>First-party crash events</span>
             <strong>{props.webDeploy?.totals.frontendCrashEvents ?? 0}</strong>
           </div>
           <div className="operator-dashboard__row">
-            <span>Stale build recoveries</span>
+            <span>First-party recovery events</span>
             <strong>{props.webDeploy?.totals.moduleLoadRecoveries ?? 0}</strong>
           </div>
           {props.webDeploy?.routeChecks.length ? (
@@ -503,6 +503,11 @@ function OperatorPlatformInsights(props: {
           )}
           {props.webDeploy?.evidence.versionJsonReachable === false ? (
             <div className="operator-dashboard__empty">Build version evidence is unavailable.</div>
+          ) : null}
+          {props.webDeploy && !props.webDeploy.evidence.sentryBacked ? (
+            <div className="operator-dashboard__empty">
+              Crash counts are first-party deploy diagnostics only. Sentry-backed frontend totals are not connected yet.
+            </div>
           ) : null}
           {props.webDeploy?.evidence.isTruncated ? (
             <div className="operator-dashboard__empty">Web and deploy diagnostics are sampled for this window.</div>

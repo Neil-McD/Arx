@@ -69,6 +69,11 @@ assert.match(
   /sourceTables:\s*\["platformDiagnosticEvents"\]/,
   "web/deploy diagnostics evidence must name platformDiagnosticEvents",
 );
+assert.match(
+  webDeployBlock,
+  /frontendCrashSource:\s*"platformDiagnosticEvents"[\s\S]*frontendCrashCoverage:\s*"first_party_deploy_events_only"[\s\S]*sentryBacked:\s*false/,
+  "web/deploy diagnostics must label frontend crash coverage as first-party only until Sentry ingestion exists",
+);
 assert.doesNotMatch(
   webDeployBlock,
   /internalMutation|mutation|action|ctx\.db\.insert|ctx\.db\.patch|ctx\.db\.delete/,
@@ -102,6 +107,16 @@ assert.match(
 );
 assert.match(
   operatorGateway,
+  /OPERATOR_WEB_DEPLOY_PROBE_TIMEOUT_MS\s*=\s*\d+[\s\S]*AbortController[\s\S]*controller\.abort\(\)/,
+  "web/deploy diagnostics must bound browser probes with AbortController timeouts",
+);
+assert.match(
+  operatorGateway,
+  /fetchSameOriginWithTimeout[\s\S]*readCurrentBuildFromVersionJson[\s\S]*fetchSameOriginWithTimeout[\s\S]*probeSameOriginRoute[\s\S]*fetchSameOriginWithTimeout/,
+  "version and route probes must both use timeout-bound fetches",
+);
+assert.match(
+  operatorGateway,
   /credentials:\s*"same-origin"/,
   "web/deploy probes must stay same-origin",
 );
@@ -125,6 +140,11 @@ assert.match(
   operatorPanel,
   /Build version evidence is unavailable/,
   "operator panel must surface missing version evidence",
+);
+assert.match(
+  operatorPanel,
+  /Crash counts are first-party deploy diagnostics only[\s\S]*Sentry-backed frontend totals are not connected yet/,
+  "operator panel must label frontend crash coverage limits",
 );
 assert.match(
   operatorPanel,
