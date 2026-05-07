@@ -6334,7 +6334,12 @@ export default function App() {
         onRefreshApp: handleRefreshCommunityApp,
         onUnmountApp: handleUnmountCommunityApp,
         isOptingIntoApp: isConnectingUserPlatformApp,
+        refreshingPersonalMountId: refreshingUserPlatformAppMountId,
+        reconnectingPersonalMountId: reconnectingUserPlatformAppMountId,
         onOptInApp: handleConnectUserPlatformApp,
+        onBeginPersonalAppOAuth: handleBeginUserPlatformAppOAuth,
+        onRefreshPersonalApp: handleRefreshUserPlatformApp,
+        onReconnectPersonalApp: handleReconnectUserPlatformApp,
       },
       settingsState: {
         isSettingsBannerDragOver,

@@ -194,6 +194,26 @@ function main() {
     "No apps have been added to this community yet.",
     "Community Settings app empty state",
   );
+  assertIncludes(
+    communitySettings,
+    "openSetupModalForMount",
+    "Community Settings can open personal setup for a community app",
+  );
+  assertIncludes(
+    communitySettings,
+    "onBeginPersonalAppOAuth",
+    "Community Settings setup can start personal OAuth",
+  );
+  assertIncludes(
+    communitySettings,
+    "setupTargetsExistingPersonalMount",
+    "Community Settings setup reuses existing personal app identity",
+  );
+  assertIncludes(
+    communitySettings,
+    "integration-mounted-setup-action",
+    "Community Settings renders setup action for setup-needed community apps",
+  );
   for (const legacyCopy of [
     "recommended by this community",
     "Recommended by community",

@@ -6,7 +6,14 @@ import type { BuilderBillingStatus } from "../../../../shared/builderBillingStat
 import { getCommunityBannerImageStyle } from "../../../../shared/communityBannerUi";
 import { buildPlatformSwitcherStyle } from "../../../../shared/platformSwitcherUi";
 import { buildStripeConnectPresentation } from "../controllers/buildStripeConnectPresentation";
-import { DISCOVER_APP_CATALOG } from "../lib/discoverCatalog";
+import {
+  buildDiscoverAppPersonalConnectInput,
+  buildDiscoverAppPersonalConnectModalCopy,
+  buildDiscoverAppPersonalConnectRequirements,
+  DISCOVER_APP_CATALOG,
+  isDiscoverAppPersonallyConnectable,
+  type DiscoverAppCatalogEntry,
+} from "../lib/discoverCatalog";
 import { DiscoverCatalogLogo } from "./DiscoverCatalogLogo";
 import { StripeSetupButton } from "./StripeSetupButton";
 import type {
@@ -18,7 +25,11 @@ import {
   mcpAppIdentitySourcesOverlap,
   type EffectiveMcpApp,
 } from "../../../../shared/effectiveMcpApps";
-import type { ConnectUserPlatformAppResult } from "../../../../shared/userPlatformAppMountTypes";
+import type {
+  BeginUserPlatformAppOAuthResult,
+  ConnectUserPlatformAppInput,
+  ConnectUserPlatformAppResult,
+} from "../../../../shared/userPlatformAppMountTypes";
 
 type CommunityPricingMode = "free" | "monthly" | "annual";
 
@@ -65,13 +76,19 @@ type WebCommunitySettingsSectionProps = {
     onRefreshApp: (communityAppMountId: string) => Promise<boolean> | boolean;
     onUnmountApp: (communityAppMountId: string) => Promise<boolean> | boolean;
     isOptingIntoApp: boolean;
-    onOptInApp: (input: {
-      catalog_app_id?: string;
-      name: string;
-      endpoint_url: string;
-      auth_type: DeveloperAppAuthType;
-      description?: string;
-    }) => Promise<ConnectUserPlatformAppResult>;
+    refreshingPersonalMountId: string | null;
+    reconnectingPersonalMountId: string | null;
+    onOptInApp: (
+      input: ConnectUserPlatformAppInput,
+    ) => Promise<ConnectUserPlatformAppResult>;
+    onBeginPersonalAppOAuth: (
+      catalogAppId: string,
+    ) => Promise<BeginUserPlatformAppOAuthResult>;
+    onRefreshPersonalApp: (userPlatformAppMountId: string) => Promise<boolean> | boolean;
+    onReconnectPersonalApp: (
+      userPlatformAppMountId: string,
+      secret: string,
+    ) => Promise<boolean> | boolean;
   };
   state: {
     isSettingsBannerDragOver: boolean;
@@ -284,13 +301,7 @@ function buildCommunityAddedAppDetail(args: {
 function buildPersonalOptInInput(args: {
   mount: CommunityMountedApp;
   catalogEntry: ReturnType<typeof findCatalogEntryForCommunityMount>;
-}): {
-  catalog_app_id?: string;
-  name: string;
-  endpoint_url: string;
-  auth_type: DeveloperAppAuthType;
-  description?: string;
-} {
+}): ConnectUserPlatformAppInput {
   const authType =
     args.mount.app.auth_type === "none" ||
     args.mount.app.auth_type === "api_key" ||
@@ -306,6 +317,66 @@ function buildPersonalOptInInput(args: {
     auth_type: authType,
     description: args.catalogEntry?.description,
   };
+}
+
+function isDeveloperAppAuthType(value: string): value is DeveloperAppAuthType {
+  return (
+    value === "none" ||
+    value === "api_key" ||
+    value === "bearer" ||
+    value === "oauth"
+  );
+}
+
+function resolveInitialSetupAuthType(
+  mount: CommunityMountedApp,
+  catalogEntry: DiscoverAppCatalogEntry,
+): DeveloperAppAuthType {
+  if (!isDiscoverAppPersonallyConnectable(catalogEntry)) return "bearer";
+  if (catalogEntry.personalConnect.connectionKind === "custom") {
+    const currentAuthType = mount.app.auth_type;
+    if (
+      isDeveloperAppAuthType(currentAuthType) &&
+      catalogEntry.personalConnect.supportedAuthTypes.some(
+        (option) => option.value === currentAuthType,
+      )
+    ) {
+      return currentAuthType;
+    }
+    return catalogEntry.personalConnect.supportedAuthTypes[0]?.value ?? "none";
+  }
+  return catalogEntry.personalConnect.authType;
+}
+
+function setupRequiresSecret(
+  catalogEntry: DiscoverAppCatalogEntry,
+  authType: DeveloperAppAuthType,
+): boolean {
+  if (!isDiscoverAppPersonallyConnectable(catalogEntry)) return false;
+  if (catalogEntry.personalConnect.connectionKind === "custom") {
+    return authType !== "none";
+  }
+  return catalogEntry.personalConnect.authMethod === "token";
+}
+
+function normalizeSetupIdentityPart(value: string | null | undefined): string {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase();
+}
+
+function setupTargetsExistingPersonalMount(
+  effectiveApp: EffectiveMcpApp | null,
+  connectInput: ConnectUserPlatformAppInput,
+): boolean {
+  const personalMount = effectiveApp?.personal_mount;
+  if (!personalMount) return false;
+  return (
+    normalizeSetupIdentityPart(personalMount.app.endpoint_url) ===
+      normalizeSetupIdentityPart(connectInput.endpoint_url) &&
+    normalizeSetupIdentityPart(personalMount.app.auth_type) ===
+      normalizeSetupIdentityPart(connectInput.auth_type)
+  );
 }
 
 function CommunityPersonalSettingsSection({
@@ -360,13 +431,180 @@ function CommunityPersonalSettingsSection({
 
 function CommunityIntegrationsSettingsSection({
   canManage,
+  hasSession,
+  requireSignIn,
   integrations,
 }: {
   canManage: boolean;
+  hasSession: boolean;
+  requireSignIn: () => void;
   integrations: WebCommunitySettingsSectionProps["communityIntegrations"];
 }) {
   const [optingInMountId, setOptingInMountId] = useState<string | null>(null);
   const [optInError, setOptInError] = useState<string | null>(null);
+  const [setupMountId, setSetupMountId] = useState<string | null>(null);
+  const [setupEndpoint, setSetupEndpoint] = useState("");
+  const [setupAuthType, setSetupAuthType] =
+    useState<DeveloperAppAuthType>("bearer");
+  const [setupSecret, setSetupSecret] = useState("");
+  const [setupError, setSetupError] = useState<string | null>(null);
+
+  const setupMount = setupMountId
+    ? integrations.mounts.find((mount) => mount.id === setupMountId) ?? null
+    : null;
+  const setupCatalogEntry = setupMount
+    ? findCatalogEntryForCommunityMount(setupMount)
+    : null;
+  const setupEffectiveApp = setupMount
+    ? findEffectiveMcpAppForCommunityMount(
+        setupMount,
+        integrations.effectiveMcpApps,
+      )
+    : null;
+  const setupRequirements =
+    setupCatalogEntry && isDiscoverAppPersonallyConnectable(setupCatalogEntry)
+      ? buildDiscoverAppPersonalConnectRequirements(setupCatalogEntry, {
+          endpointUrl: setupEndpoint,
+          authType: setupAuthType,
+        })
+      : [];
+  const setupModalCopy = setupCatalogEntry
+    ? buildDiscoverAppPersonalConnectModalCopy(setupCatalogEntry)
+    : null;
+  const isSetupOauth =
+    setupCatalogEntry &&
+    isDiscoverAppPersonallyConnectable(setupCatalogEntry) &&
+    setupCatalogEntry.personalConnect.connectionKind === "known" &&
+    setupCatalogEntry.personalConnect.authMethod === "oauth";
+  const setupPersonalMountId =
+    setupEffectiveApp?.personal_mount?.source_mount_id ?? null;
+  const isSettingUpApp =
+    integrations.isOptingIntoApp ||
+    Boolean(
+      setupPersonalMountId &&
+        (integrations.refreshingPersonalMountId === setupPersonalMountId ||
+          integrations.reconnectingPersonalMountId === setupPersonalMountId),
+    );
+
+  const closeSetupModal = () => {
+    setSetupMountId(null);
+    setSetupEndpoint("");
+    setSetupAuthType("bearer");
+    setSetupSecret("");
+    setSetupError(null);
+  };
+
+  const openSetupModalForMount = (
+    mount: CommunityMountedApp,
+    catalogEntry: ReturnType<typeof findCatalogEntryForCommunityMount>,
+  ) => {
+    if (!hasSession) {
+      requireSignIn();
+      return;
+    }
+    if (!catalogEntry || !isDiscoverAppPersonallyConnectable(catalogEntry)) {
+      integrations.onBrowseCatalog();
+      return;
+    }
+    const initialAuthType = resolveInitialSetupAuthType(mount, catalogEntry);
+    const initialEndpoint =
+      catalogEntry.personalConnect.connectionKind === "custom"
+        ? mount.app.endpoint_url
+        : catalogEntry.personalConnect.endpointUrl;
+    setOptInError(null);
+    setSetupMountId(mount.id);
+    setSetupEndpoint(initialEndpoint);
+    setSetupAuthType(initialAuthType);
+    setSetupSecret("");
+    setSetupError(null);
+  };
+
+  const handleConfirmSetup = async () => {
+    if (!setupMount || !setupCatalogEntry) return;
+    setSetupError(null);
+    if (!isDiscoverAppPersonallyConnectable(setupCatalogEntry)) {
+      setSetupError("This app is not ready for setup yet.");
+      return;
+    }
+    if (isSetupOauth) {
+      const result = await integrations.onBeginPersonalAppOAuth(setupCatalogEntry.id);
+      if (!result.ok) {
+        setSetupError(
+          result.error_message ??
+            `Couldn't start ${setupCatalogEntry.name} authentication.`,
+        );
+      }
+      return;
+    }
+
+    const trimmedSecret = setupSecret.trim();
+    if (setupRequiresSecret(setupCatalogEntry, setupAuthType) && !trimmedSecret) {
+      setSetupError(`Paste your ${setupCatalogEntry.name} token to continue.`);
+      return;
+    }
+
+    const connectInput = buildDiscoverAppPersonalConnectInput(setupCatalogEntry, {
+      endpointUrl: setupEndpoint,
+      authType: setupAuthType,
+      description: setupCatalogEntry.description,
+      secret: trimmedSecret || undefined,
+    });
+    if (!connectInput) {
+      setSetupError("This app is not ready for this setup path.");
+      return;
+    }
+
+    const existingMountId =
+      setupEffectiveApp?.personal_mount?.source_mount_id ?? null;
+    const targetsExistingPersonalMount =
+      existingMountId !== null &&
+      setupTargetsExistingPersonalMount(setupEffectiveApp, connectInput);
+    if (
+      existingMountId &&
+      targetsExistingPersonalMount &&
+      connectInput.auth_type !== "none" &&
+      connectInput.auth_type !== "oauth"
+    ) {
+      const ok = await integrations.onReconnectPersonalApp(
+        existingMountId,
+        trimmedSecret,
+      );
+      if (!ok) {
+        setSetupError(
+          `Couldn't finish setting up ${setupCatalogEntry.name}. Check the token and try again.`,
+        );
+        return;
+      }
+      closeSetupModal();
+      return;
+    }
+
+    if (
+      existingMountId &&
+      targetsExistingPersonalMount &&
+      connectInput.auth_type === "none"
+    ) {
+      const ok = await integrations.onRefreshPersonalApp(existingMountId);
+      if (!ok) {
+        setSetupError(
+          `Couldn't refresh ${setupCatalogEntry.name}. Try again from this setup modal.`,
+        );
+        return;
+      }
+      closeSetupModal();
+      return;
+    }
+
+    const result = await integrations.onOptInApp(connectInput);
+    if (!result.ok && !result.mount) {
+      setSetupError(
+        result.error_message ??
+          `Couldn't set up ${setupCatalogEntry.name}. Check the requirements and try again.`,
+      );
+      return;
+    }
+    closeSetupModal();
+  };
 
   const handleOptIn = async (
     mount: CommunityMountedApp,
@@ -450,6 +688,13 @@ function CommunityIntegrationsSettingsSection({
               mount,
               effectiveApp,
             });
+            const canSetupPersonal =
+              Boolean(
+                catalogEntry &&
+                  isDiscoverAppPersonallyConnectable(catalogEntry) &&
+                  (effectiveApp?.primary_action === "setup_personal" ||
+                    (!hasPersonalMount && mount.app.auth_type !== "none")),
+              );
             return (
               <div key={mount.id} className="integration-mounted-row">
                 <div className="integration-mounted-top">
@@ -489,64 +734,80 @@ function CommunityIntegrationsSettingsSection({
                       </div>
                     </div>
                   </div>
-                  {canManage || !hasPersonalMount ? (
-                  <div className="integration-mounted-rail">
-                    {canManage ? (
-                      <label
-                        className={`members-switch integration-mounted-switch${
-                          isBusy ? " is-disabled" : ""
-                        }`}
-                        title={mount.enabled ? "Disable app" : "Enable app"}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={mount.enabled}
-                          disabled={isBusy}
-                          aria-label={`${mount.enabled ? "Disable" : "Enable"} ${
-                            mount.app.name
-                          }`}
-                          onChange={() =>
-                            void integrations.onUpdateMount(mount.id, {
-                              enabled: !mount.enabled,
-                            })
-                          }
-                        />
-                        <span className="members-switch-track">
-                          <span className="members-switch-thumb" />
-                        </span>
-                      </label>
-                    ) : null}
-                    <div className="agent-capability-toolbar-actions">
-                      {!hasPersonalMount ? (
+                  {canManage || !hasPersonalMount || canSetupPersonal ? (
+                    <div className="integration-mounted-rail">
+                      {canSetupPersonal ? (
                         <button
                           type="button"
-                          onClick={() => void handleOptIn(mount, catalogEntry)}
+                          className="settings-cta integration-mounted-setup-action"
+                          onClick={() =>
+                            openSetupModalForMount(mount, catalogEntry)
+                          }
                           disabled={isBusy}
                         >
-                          {isOptingIn ? "Adding…" : "Add to my harness"}
+                          Set up
                         </button>
                       ) : null}
                       {canManage ? (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => void integrations.onRefreshApp(mount.id)}
+                        <label
+                          className={`members-switch integration-mounted-switch${
+                            isBusy ? " is-disabled" : ""
+                          }`}
+                          title={mount.enabled ? "Disable app" : "Enable app"}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={mount.enabled}
                             disabled={isBusy}
-                          >
-                            {isRefreshing ? "Refreshing…" : "Refresh"}
-                          </button>
-                          <button
-                            type="button"
-                            className="agent-onboarding-reset"
-                            onClick={() => void integrations.onUnmountApp(mount.id)}
-                            disabled={isBusy}
-                          >
-                            {isRemoving ? "Removing…" : "Remove"}
-                          </button>
-                        </>
+                            aria-label={`${mount.enabled ? "Disable" : "Enable"} ${
+                              mount.app.name
+                            }`}
+                            onChange={() =>
+                              void integrations.onUpdateMount(mount.id, {
+                                enabled: !mount.enabled,
+                              })
+                            }
+                          />
+                          <span className="members-switch-track">
+                            <span className="members-switch-thumb" />
+                          </span>
+                        </label>
                       ) : null}
+                      <div className="agent-capability-toolbar-actions">
+                        {!hasPersonalMount && !canSetupPersonal ? (
+                          <button
+                            type="button"
+                            onClick={() => void handleOptIn(mount, catalogEntry)}
+                            disabled={isBusy}
+                          >
+                            {isOptingIn ? "Adding…" : "Add to my harness"}
+                          </button>
+                        ) : null}
+                        {canManage ? (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                void integrations.onRefreshApp(mount.id)
+                              }
+                              disabled={isBusy}
+                            >
+                              {isRefreshing ? "Refreshing…" : "Refresh"}
+                            </button>
+                            <button
+                              type="button"
+                              className="agent-onboarding-reset"
+                              onClick={() =>
+                                void integrations.onUnmountApp(mount.id)
+                              }
+                              disabled={isBusy}
+                            >
+                              {isRemoving ? "Removing…" : "Remove"}
+                            </button>
+                          </>
+                        ) : null}
+                      </div>
                     </div>
-                  </div>
                   ) : null}
                 </div>
                 {mount.tools.length > 0 ? (
@@ -599,6 +860,175 @@ function CommunityIntegrationsSettingsSection({
               </div>
             );
           })}
+        </div>
+      ) : null}
+      {setupMount &&
+      setupCatalogEntry &&
+      isDiscoverAppPersonallyConnectable(setupCatalogEntry) ? (
+        <div
+          className="modal-overlay"
+          role="presentation"
+          onClick={() => {
+            if (isSettingUpApp) return;
+            closeSetupModal();
+          }}
+        >
+          <div
+            className="modal discover-connect-modal integration-setup-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="community-integration-setup-modal-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="modal-header">
+              <div
+                className="modal-title"
+                id="community-integration-setup-modal-title"
+              >
+                Set up {setupCatalogEntry.name}
+              </div>
+              <button
+                type="button"
+                className="modal-close"
+                aria-label="Close"
+                disabled={isSettingUpApp}
+                onClick={closeSetupModal}
+              >
+                ×
+              </button>
+            </div>
+            <div className="modal-body discover-connect-modal-body">
+              {setupModalCopy ? (
+                <div className="discover-connect-modal-copy">
+                  {setupModalCopy}
+                </div>
+              ) : null}
+              <div className="agent-capability-field-grid discover-connect-grid">
+                {setupRequirements.map((requirement) =>
+                  requirement.kind === "readonly" ? (
+                    <label
+                      key={requirement.id}
+                      className="agent-capability-field"
+                    >
+                      <span className="agent-capability-field-label">
+                        {requirement.label}
+                      </span>
+                      <input
+                        className="agent-editor-inline-label-input"
+                        value={requirement.value}
+                        readOnly
+                      />
+                    </label>
+                  ) : requirement.kind === "text" ? (
+                    <label
+                      key={requirement.id}
+                      className="agent-capability-field discover-connect-secret-field"
+                    >
+                      <span className="agent-capability-field-label">
+                        {requirement.label}
+                      </span>
+                      <input
+                        className="agent-editor-inline-label-input"
+                        value={setupEndpoint}
+                        onChange={(event) => {
+                          setSetupEndpoint(event.target.value);
+                          if (setupError) setSetupError(null);
+                        }}
+                        placeholder={requirement.placeholder}
+                        autoCapitalize="off"
+                        autoCorrect="off"
+                        spellCheck={false}
+                      />
+                    </label>
+                  ) : requirement.kind === "select" ? (
+                    <label
+                      key={requirement.id}
+                      className="agent-capability-field"
+                    >
+                      <span className="agent-capability-field-label">
+                        {requirement.label}
+                      </span>
+                      <select
+                        className="agent-capability-select"
+                        value={setupAuthType}
+                        onChange={(event) => {
+                          setSetupAuthType(
+                            event.target.value as DeveloperAppAuthType,
+                          );
+                          setSetupSecret("");
+                          if (setupError) setSetupError(null);
+                        }}
+                      >
+                        {requirement.options.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  ) : (
+                    <label
+                      key={requirement.id}
+                      className="agent-capability-field discover-connect-secret-field"
+                    >
+                      <span className="agent-capability-field-label">
+                        {requirement.label}
+                      </span>
+                      <input
+                        className="agent-editor-inline-label-input"
+                        type="password"
+                        value={setupSecret}
+                        onChange={(event) => {
+                          setSetupSecret(event.target.value);
+                          if (setupError) setSetupError(null);
+                        }}
+                        placeholder={requirement.placeholder}
+                      />
+                      {setupCatalogEntry.personalConnect.connectionKind ===
+                        "known" &&
+                      setupCatalogEntry.personalConnect.authMethod ===
+                        "token" ? (
+                        <a
+                          className="discover-connect-help-link"
+                          href={setupCatalogEntry.personalConnect.tokenHelpUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          {setupCatalogEntry.personalConnect.tokenHelpLabel}
+                          <span aria-hidden="true">↗</span>
+                        </a>
+                      ) : null}
+                    </label>
+                  ),
+                )}
+              </div>
+              {setupError ? <div className="auth-error">{setupError}</div> : null}
+            </div>
+            <div className="modal-footer discover-connect-modal-footer">
+              <button
+                type="button"
+                className="settings-cta"
+                onClick={closeSetupModal}
+                disabled={isSettingUpApp}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="platform-save-button is-dirty"
+                onClick={() => void handleConfirmSetup()}
+                disabled={isSettingUpApp}
+              >
+                {isSettingUpApp
+                  ? isSetupOauth
+                    ? "Starting…"
+                    : "Setting up…"
+                  : isSetupOauth
+                    ? "Continue"
+                    : "Set up"}
+              </button>
+            </div>
+          </div>
         </div>
       ) : null}
     </div>
@@ -1088,6 +1518,8 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
             />
             <CommunityIntegrationsSettingsSection
               canManage={canManageCommunitySettings}
+              hasSession={hasSession}
+              requireSignIn={requireSignIn}
               integrations={communityIntegrations}
             />
             <CommunityPersonalSettingsSection
@@ -1126,6 +1558,8 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
           <div className="create-community-form community-settings-form">
             <CommunityIntegrationsSettingsSection
               canManage={false}
+              hasSession={hasSession}
+              requireSignIn={requireSignIn}
               integrations={communityIntegrations}
             />
             <CommunityPersonalSettingsSection
