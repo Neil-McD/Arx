@@ -53,6 +53,16 @@ export type DiscoverAppRuntimePolicy = {
   declaredIntents: string[];
 };
 
+export type DiscoverAppOAuthClientConfig =
+  | {
+      mode: "dynamic_registration";
+    }
+  | {
+      mode: "static_env";
+      clientIdEnv: string;
+      clientSecretEnv: string;
+    };
+
 export type DiscoverAppIntegrationProfile = {
   adapterKind: DiscoverAppAdapterKind;
   readiness: DiscoverAppReadiness;
@@ -62,6 +72,7 @@ export type DiscoverAppIntegrationProfile = {
   contextStrategy: DiscoverAppContextStrategy;
   resultPolicy: DiscoverAppResultPolicy;
   runtimePolicy: DiscoverAppRuntimePolicy;
+  oauthClient?: DiscoverAppOAuthClientConfig;
 };
 
 export type DiscoverAppCatalogConnectPolicyErrorCode =
@@ -281,6 +292,30 @@ export const DISCOVER_APP_INTEGRATION_PROFILE_OVERRIDES = {
       defaultToolRisk: "write",
       declaredIntents: ["page_search", "page_fetch", "database_context"],
     }),
+    oauthClient: {
+      mode: "dynamic_registration",
+    },
+  },
+  asana: {
+    adapterKind: "remote_mcp_oauth",
+    readiness: "oauth_planned",
+    identityScope: "catalog_singleton",
+    authMode: "oauth",
+    validationKind: "hosted_oauth_mcp_planned",
+    contextStrategy: "search_then_fetch",
+    resultPolicy: buildDiscoverAppResultPolicy({
+      maxToolCount: 32,
+      maxResultBytes: 12_000,
+    }),
+    runtimePolicy: buildDiscoverAppRuntimePolicy({
+      defaultToolRisk: "write",
+      declaredIntents: ["task_search", "task_update", "project_context"],
+    }),
+    oauthClient: {
+      mode: "static_env",
+      clientIdEnv: "ASANA_MCP_CLIENT_ID",
+      clientSecretEnv: "ASANA_MCP_CLIENT_SECRET",
+    },
   },
   airtable: {
     adapterKind: "remote_mcp_token",
@@ -359,7 +394,6 @@ const DISCOVER_APP_PLANNED_PROFILE_KINDS = {
   remotion: "cli_sandbox",
   slack: "remote_mcp_oauth",
   discord: "backplane_mcp",
-  asana: "remote_mcp_oauth",
 } satisfies Record<string, PlannedDiscoverAppProfileKind>;
 
 const DISCOVER_APP_PLANNED_PROFILE_KIND_BY_ID: Partial<
@@ -516,6 +550,16 @@ export function resolveDiscoverAppIntegrationProfile(
   const plannedKind =
     DISCOVER_APP_PLANNED_PROFILE_KIND_BY_ID[app.id] ?? "catalog_only";
   return buildPlannedDiscoverAppIntegrationProfile(plannedKind);
+}
+
+export function resolveDiscoverAppOAuthClientConfig(
+  app: DiscoverAppCatalogEntry,
+): DiscoverAppOAuthClientConfig | null {
+  const profile = resolveDiscoverAppIntegrationProfile(app);
+  if (profile.adapterKind !== "remote_mcp_oauth" || profile.authMode !== "oauth") {
+    return null;
+  }
+  return profile.oauthClient ?? { mode: "dynamic_registration" };
 }
 
 export function resolveDiscoverAppExecutionSurface(
@@ -2248,16 +2292,16 @@ export const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
     name: "Asana",
     tagline: "Projects, tasks, goals, and work tracking",
     description:
-      "Strong planning and execution surface for teams, but it still needs a fuller auth path before direct personal connection is honest.",
-    supportLabel: "Needs richer auth",
+      "Strong planning and execution surface for teams. It is the next static-client OAuth MCP target once Polynet's Asana OAuth client is configured.",
+    supportLabel: "Needs OAuth client config",
     supportNote:
-      "Asana is a good catalog and detail-page candidate now, but direct connection should wait for a richer auth flow.",
+      "Asana's remote MCP server uses OAuth with a pre-registered client. Keep it catalog-only until the deployment has Asana client credentials configured.",
     heroNote:
       "Best for tasks, projects, goals, and execution tracking across teams.",
     capabilities: [
       "Read task state, project progress, and planning context.",
-      "Support personal and community execution workflows later.",
-      "Stay catalog-first until the connection path can be made honest.",
+      "Support personal and community execution workflows once the OAuth client is configured.",
+      "Use OAuth so each member can connect their own Asana workspace later.",
     ],
     websiteUrl: "https://asana.com",
     docsUrl: "https://developers.asana.com/docs/using-asanas-mcp-server",
@@ -2274,7 +2318,7 @@ export const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
       authType: null,
       authLabel: "OAuth",
       note:
-        "Asana should stay informational until PolyNet supports the right auth path for it.",
+        "Asana should stay informational until the Polynet deployment has a configured Asana OAuth client.",
     },
   },
 ];

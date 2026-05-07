@@ -4,6 +4,7 @@ import {
   findDiscoverAppCatalogEntryById,
   resolveDiscoverAppCatalogConnectPolicy,
   resolveDiscoverAppIntegrationProfile,
+  resolveDiscoverAppOAuthClientConfig,
 } from "../shared/discoverCatalog.ts";
 
 function readText(path: string | URL): string {
@@ -20,6 +21,9 @@ function main() {
   assert.equal(notion.personalConnect.availability, "ready");
   assert.equal(notion.personalConnect.authMethod, "oauth");
   assert.equal(notion.personalConnect.endpointUrl, "https://mcp.notion.com/mcp");
+  assert.deepEqual(resolveDiscoverAppOAuthClientConfig(notion), {
+    mode: "dynamic_registration",
+  });
 
   const policy = resolveDiscoverAppCatalogConnectPolicy({
     catalogAppId: "notion",
@@ -52,6 +56,32 @@ function main() {
     "Notion OAuth must not fall back to bearer-token identity",
   );
 
+  const asana = findDiscoverAppCatalogEntryById("asana");
+  assert.ok(asana, "Asana must exist in the Discover catalog");
+  const asanaProfile = resolveDiscoverAppIntegrationProfile(asana);
+  assert.equal(asanaProfile.adapterKind, "remote_mcp_oauth");
+  assert.equal(asanaProfile.readiness, "oauth_planned");
+  assert.equal(asanaProfile.authMode, "oauth");
+  assert.equal(asana.personalConnect.availability, "later");
+  assert.equal(asana.personalConnect.authMethod, "oauth");
+  assert.equal(asana.personalConnect.endpointUrl, "https://mcp.asana.com/v2/mcp");
+  assert.deepEqual(resolveDiscoverAppOAuthClientConfig(asana), {
+    mode: "static_env",
+    clientIdEnv: "ASANA_MCP_CLIENT_ID",
+    clientSecretEnv: "ASANA_MCP_CLIENT_SECRET",
+  });
+
+  assert.equal(
+    resolveDiscoverAppCatalogConnectPolicy({
+      catalogAppId: "asana",
+      name: "untrusted name",
+      endpointUrl: "https://mcp.asana.com/v2/mcp",
+      authType: "oauth",
+    }).ok,
+    false,
+    "Asana static OAuth support must stay non-connectable until deployment credentials are configured",
+  );
+
   const oauthSource = readText(new URL("../convex/appOAuth.ts", import.meta.url));
   for (const required of [
     "codeVerifier",
@@ -61,9 +91,23 @@ function main() {
     "state",
     "resource",
     "/.well-known/oauth-protected-resource${resourcePath}",
+    "/.well-known/oauth-protected-resource${parentPath}",
+    "${parentPath}/.well-known/oauth-protected-resource",
     "/.well-known/oauth-authorization-server${issuerPath}",
     "/.well-known/openid-configuration${issuerPath}",
     "!codeChallengeMethods.includes(\"S256\")",
+    "registrationEndpoint: string | null",
+    "resolveDiscoverAppOAuthClientConfig",
+    "resolveOAuthClientCredentials",
+    "oauthClient.mode === \"static_env\"",
+    "readEnv(oauthClient.clientIdEnv)",
+    "readEnv(oauthClient.clientSecretEnv)",
+    "clientSecretSource: \"static_env\"",
+    "client.clientSecretSource === \"stored\"",
+    "clientSecret: args.clientSecretSource === \"stored\" ? args.clientSecret : null",
+    "resolveOAuthClientSecretForTokenRequest",
+    "refreshTokenBundle(parsed, bundle.app)",
+    "scopesSupported.includes(\"default\")",
     "fetchOAuthJson",
     "APP_OAUTH_HTTP_TIMEOUT_MS",
     "readBoundedResponseText",
@@ -174,6 +218,11 @@ function main() {
       oauthSource.includes("body.set(\"resource\", bundle.resource)"),
     "Notion must keep authorize-time MCP resource binding while omitting resource from token/refresh requests unless a provider mode requires it",
   );
+  assert.equal(
+    oauthSource.includes("Notion authorization could not be finalized"),
+    false,
+    "OAuth finalization errors must be provider-neutral now that OAuth is not Notion-only",
+  );
 
   const httpSource = readText(new URL("../convex/httpAppOAuth.ts", import.meta.url));
   assert.ok(
@@ -245,7 +294,7 @@ function main() {
   );
 
   console.log(
-    "PASS: Notion is the first ready OAuth MCP app, with PKCE, provider-aware resource handling, duplicate-begin protection, passive callback capture, authenticated finalization, refreshable token storage, and runtime token loading.",
+    "PASS: Ready OAuth MCP apps support dynamic and static clients with PKCE, provider-aware resource handling, duplicate-begin protection, passive callback capture, authenticated finalization, refreshable token storage, and runtime token loading.",
   );
 }
 

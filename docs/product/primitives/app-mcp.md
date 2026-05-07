@@ -3,7 +3,7 @@ id: product.app_mcp
 title: Apps and MCPs
 audience: builder, llm, operator
 status: alpha-current
-last_verified: 2026-05-06
+last_verified: 2026-05-07
 ---
 
 # Apps and MCPs
@@ -39,7 +39,7 @@ Each catalog app should resolve to an integration profile: MCP, connector backpl
 9. Uncataloged remote MCP endpoints should not be server-fetched until they have a reviewed catalog policy or network egress guard.
 10. Apps should expose compact harness context first, then retrieve external context lazily through bounded tool calls.
 11. CLI-shaped apps should run through sandboxed command wrappers and return artifact references instead of raw shell access.
-12. OAuth MCP apps must bind tokens to the MCP resource, store tokens server-side only after authenticated Polynet finalization, refresh tokens before validation/runtime execution, and keep community app records credential-free.
+12. OAuth MCP apps must bind tokens to the MCP resource, store tokens server-side only after authenticated Polynet finalization, refresh tokens before validation/runtime execution, and keep community app records credential-free. Providers can use dynamic registration or static deployment-owned OAuth clients, but the client mode must be explicit in the integration profile and static client secrets must stay in deployment env.
 
 ## Non-Goals
 

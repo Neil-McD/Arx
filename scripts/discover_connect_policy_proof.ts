@@ -107,6 +107,16 @@ function main() {
     "catalog_app_auth_mismatch",
   );
 
+  assertRejected(
+    {
+      catalogAppId: "asana",
+      name: "Not Asana",
+      endpointUrl: "https://mcp.asana.com/v2/mcp",
+      authType: "oauth",
+    },
+    "catalog_app_not_ready",
+  );
+
   const shopify = resolveDiscoverAppCatalogConnectPolicy({
     catalogAppId: "shopify",
     name: "Anything",

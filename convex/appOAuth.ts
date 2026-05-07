@@ -20,6 +20,9 @@ import { readCanonicalPublicAppOrigin } from "./publicAppUrl";
 import {
   findDiscoverAppCatalogEntryById,
   resolveDiscoverAppCatalogConnectPolicy,
+  resolveDiscoverAppOAuthClientConfig,
+  type DiscoverAppCatalogEntry,
+  type DiscoverAppOAuthClientConfig,
 } from "../shared/discoverCatalog";
 
 type StoredOAuthTokenBundleV1 = {
@@ -31,6 +34,7 @@ type StoredOAuthTokenBundleV1 = {
   expiresAt: number | null;
   clientId: string;
   clientSecret: string | null;
+  clientSecretSource: OAuthClientSecretSource;
   tokenEndpoint: string;
   issuer: string | null;
   resource: string;
@@ -38,6 +42,7 @@ type StoredOAuthTokenBundleV1 = {
 };
 
 type OAuthTokenResourceMode = "token_and_refresh" | "authorize_only";
+type OAuthClientSecretSource = "stored" | "static_env" | "none";
 
 type OAuthMetadata = {
   issuer?: unknown;
@@ -51,6 +56,13 @@ type OAuthMetadata = {
 type ClientCredentials = {
   client_id?: unknown;
   client_secret?: unknown;
+};
+
+type ResolvedOAuthClientCredentials = {
+  clientId: string;
+  clientSecret: string | null;
+  clientSecretSource: OAuthClientSecretSource;
+  mode: DiscoverAppOAuthClientConfig["mode"];
 };
 
 type TokenResponse = {
@@ -313,10 +325,25 @@ async function fetchOAuthJson(params: {
 function buildProtectedResourceMetadataUrls(mcpServerUrl: string): string[] {
   const parsed = new URL(mcpServerUrl);
   const resourcePath = parsed.pathname.replace(/\/+$/g, "");
+  const pathSegments = resourcePath.split("/").filter(Boolean);
+  const parentPath =
+    pathSegments.length > 1 ? `/${pathSegments.slice(0, -1).join("/")}` : "";
   const pathInsertion = new URL(
     `/.well-known/oauth-protected-resource${resourcePath}`,
     parsed.origin,
   ).toString();
+  const parentPathInsertion = parentPath
+    ? new URL(
+        `/.well-known/oauth-protected-resource${parentPath}`,
+        parsed.origin,
+      ).toString()
+    : "";
+  const parentPathAppend = parentPath
+    ? new URL(
+        `${parentPath}/.well-known/oauth-protected-resource`,
+        parsed.origin,
+      ).toString()
+    : "";
   const legacyPathAppend = resourcePath
     ? new URL(
         `${resourcePath}/.well-known/oauth-protected-resource`,
@@ -327,7 +354,17 @@ function buildProtectedResourceMetadataUrls(mcpServerUrl: string): string[] {
     "/.well-known/oauth-protected-resource",
     parsed.origin,
   ).toString();
-  return [...new Set([pathInsertion, root, legacyPathAppend].filter(Boolean))];
+  return [
+    ...new Set(
+      [
+        pathInsertion,
+        parentPathInsertion,
+        root,
+        parentPathAppend,
+        legacyPathAppend,
+      ].filter(Boolean),
+    ),
+  ];
 }
 
 function buildAuthorizationServerMetadataUrls(authServer: string): string[] {
@@ -355,7 +392,7 @@ async function discoverOAuthMetadata(mcpServerUrl: string): Promise<{
   issuer: string | null;
   authorizationEndpoint: string;
   tokenEndpoint: string;
-  registrationEndpoint: string;
+  registrationEndpoint: string | null;
   scope: string | null;
   resource: string;
 }> {
@@ -396,8 +433,8 @@ async function discoverOAuthMetadata(mcpServerUrl: string): Promise<{
   const tokenEndpoint = normalizeHttpsUrl(metadata.token_endpoint);
   const registrationEndpoint = normalizeHttpsUrl(
     metadata.registration_endpoint,
-  );
-  if (!authorizationEndpoint || !tokenEndpoint || !registrationEndpoint) {
+  ) || null;
+  if (!authorizationEndpoint || !tokenEndpoint) {
     throw new Error("app_oauth_metadata_incomplete");
   }
   const codeChallengeMethods = Array.isArray(
@@ -418,8 +455,14 @@ async function discoverOAuthMetadata(mcpServerUrl: string): Promise<{
     authorizationEndpoint,
     tokenEndpoint,
     registrationEndpoint,
-    scope: scopesSupported.includes("offline_access") ? "offline_access" : null,
-    resource: new URL(mcpServerUrl).toString(),
+    scope: scopesSupported.includes("offline_access")
+      ? "offline_access"
+      : scopesSupported.includes("default")
+        ? "default"
+        : null,
+    resource:
+      normalizeHttpsUrl(protectedResource?.resource, 2_000) ||
+      new URL(mcpServerUrl).toString(),
   };
 }
 
@@ -427,6 +470,9 @@ async function registerOAuthClient(params: {
   metadata: Awaited<ReturnType<typeof discoverOAuthMetadata>>;
   redirectUri: string;
 }): Promise<{ clientId: string; clientSecret: string | null }> {
+  if (!params.metadata.registrationEndpoint) {
+    throw new Error("app_oauth_dynamic_registration_unavailable");
+  }
   const body = {
     client_name: "Polynet",
     client_uri: "https://polynet.ai",
@@ -455,6 +501,80 @@ async function registerOAuthClient(params: {
   };
 }
 
+async function resolveOAuthClientCredentials(params: {
+  app: DiscoverAppCatalogEntry;
+  metadata: Awaited<ReturnType<typeof discoverOAuthMetadata>>;
+  redirectUri: string;
+}): Promise<ResolvedOAuthClientCredentials> {
+  const oauthClient = resolveDiscoverAppOAuthClientConfig(params.app);
+  if (!oauthClient) throw new Error("app_oauth_client_mode_missing");
+  if (oauthClient.mode === "static_env") {
+    const clientId = readEnv(oauthClient.clientIdEnv);
+    const clientSecret = resolveStaticOAuthClientSecret(params.app, oauthClient);
+    if (!clientId || !clientSecret) {
+      throw new Error(`${params.app.name} OAuth client is not configured yet.`);
+    }
+    return {
+      clientId,
+      clientSecret,
+      clientSecretSource: "static_env",
+      mode: oauthClient.mode,
+    };
+  }
+  const client = await registerOAuthClient({
+    metadata: params.metadata,
+    redirectUri: params.redirectUri,
+  });
+  return {
+    ...client,
+    clientSecretSource: client.clientSecret ? "stored" : "none",
+    mode: oauthClient.mode,
+  };
+}
+
+function resolveStaticOAuthClientSecret(
+  app: DiscoverAppCatalogEntry,
+  oauthClient = resolveDiscoverAppOAuthClientConfig(app),
+): string {
+  if (!oauthClient || oauthClient.mode !== "static_env") return "";
+  return readEnv(oauthClient.clientSecretEnv);
+}
+
+function normalizeOAuthClientSecretSource(value: unknown): OAuthClientSecretSource | null {
+  return value === "stored" || value === "static_env" || value === "none"
+    ? value
+    : null;
+}
+
+function inferOAuthClientSecretSource(args: {
+  catalogAppId: unknown;
+  storedClientSecret: string | null;
+  source?: unknown;
+}): OAuthClientSecretSource {
+  const explicitSource = normalizeOAuthClientSecretSource(args.source);
+  if (explicitSource) return explicitSource;
+  const app = findDiscoverAppCatalogEntryById(args.catalogAppId);
+  const oauthClient = app ? resolveDiscoverAppOAuthClientConfig(app) : null;
+  if (oauthClient?.mode === "static_env") return "static_env";
+  return args.storedClientSecret ? "stored" : "none";
+}
+
+function resolveOAuthClientSecretForTokenRequest(args: {
+  catalogAppId: unknown;
+  storedClientSecret: string | null;
+  clientSecretSource: OAuthClientSecretSource;
+}): string | null {
+  if (args.clientSecretSource === "stored") return args.storedClientSecret;
+  if (args.clientSecretSource === "static_env") {
+    const app = findDiscoverAppCatalogEntryById(args.catalogAppId);
+    if (!app) throw new Error("app_oauth_static_client_app_missing");
+    const clientSecret = resolveStaticOAuthClientSecret(app);
+    if (!clientSecret) throw new Error(`${app.name} OAuth client is not configured yet.`);
+    return clientSecret;
+  }
+  return null;
+}
+
 function normalizeTokenResponse(args: {
   parsed: TokenResponse;
   existing?: StoredOAuthTokenBundleV1 | null;
@@ -462,6 +582,7 @@ function normalizeTokenResponse(args: {
   issuer: string | null;
   clientId: string;
   clientSecret: string | null;
+  clientSecretSource: OAuthClientSecretSource;
   resource: string;
   tokenResourceMode: OAuthTokenResourceMode;
   nowMs: number;
@@ -490,7 +611,8 @@ function normalizeTokenResponse(args: {
       null,
     expiresAt,
     clientId: args.clientId,
-    clientSecret: args.clientSecret,
+    clientSecret: args.clientSecretSource === "stored" ? args.clientSecret : null,
+    clientSecretSource: args.clientSecretSource,
     tokenEndpoint: args.tokenEndpoint,
     issuer: args.issuer,
     resource: args.resource,
@@ -507,6 +629,7 @@ async function exchangeCodeForTokenBundle(params: {
   issuer: string | null;
   clientId: string;
   clientSecret: string | null;
+  clientSecretSource: OAuthClientSecretSource;
   resource: string;
   scope: string | null;
   nowMs: number;
@@ -540,6 +663,7 @@ async function exchangeCodeForTokenBundle(params: {
     issuer: params.issuer,
     clientId: params.clientId,
     clientSecret: params.clientSecret,
+    clientSecretSource: params.clientSecretSource,
     resource: params.resource,
     tokenResourceMode,
     nowMs: params.nowMs,
@@ -548,8 +672,14 @@ async function exchangeCodeForTokenBundle(params: {
 
 async function refreshTokenBundle(
   bundle: StoredOAuthTokenBundleV1,
+  app: DeveloperAppRow,
 ): Promise<StoredOAuthTokenBundleV1> {
   if (!bundle.refreshToken) throw new Error("developer_app_oauth_reauth_required");
+  const clientSecret = resolveOAuthClientSecretForTokenRequest({
+    catalogAppId: app.catalogAppId,
+    storedClientSecret: bundle.clientSecret,
+    clientSecretSource: bundle.clientSecretSource,
+  });
   const body = new URLSearchParams({
     grant_type: "refresh_token",
     refresh_token: bundle.refreshToken,
@@ -558,7 +688,7 @@ async function refreshTokenBundle(
   if (bundle.tokenResourceMode === "token_and_refresh") {
     body.set("resource", bundle.resource);
   }
-  if (bundle.clientSecret) body.set("client_secret", bundle.clientSecret);
+  if (clientSecret) body.set("client_secret", clientSecret);
   const response = await fetchOAuthJson({
     url: bundle.tokenEndpoint,
     method: "POST",
@@ -576,7 +706,8 @@ async function refreshTokenBundle(
     tokenEndpoint: bundle.tokenEndpoint,
     issuer: bundle.issuer,
     clientId: bundle.clientId,
-    clientSecret: bundle.clientSecret,
+    clientSecret,
+    clientSecretSource: bundle.clientSecretSource,
     resource: bundle.resource,
     tokenResourceMode: bundle.tokenResourceMode,
     nowMs: Date.now(),
@@ -593,6 +724,12 @@ function parseStoredOAuthTokenBundle(raw: unknown): StoredOAuthTokenBundleV1 | n
     const clientId = normalizeString(record.clientId, 2_000);
     const tokenEndpoint = normalizeString(record.tokenEndpoint, 2_000);
     const resource = normalizeHttpsUrl(record.resource, 2_000);
+    const storedClientSecret = normalizeString(record.clientSecret, 2_000) || null;
+    const clientSecretSource = inferOAuthClientSecretSource({
+      catalogAppId: record.catalogAppId,
+      storedClientSecret,
+      source: record.clientSecretSource,
+    });
     const tokenResourceMode =
       record.tokenResourceMode === "authorize_only"
         ? "authorize_only"
@@ -607,7 +744,8 @@ function parseStoredOAuthTokenBundle(raw: unknown): StoredOAuthTokenBundleV1 | n
       scope: normalizeString(record.scope, 2_000) || null,
       expiresAt: Number.isFinite(expiresAt) && expiresAt > 0 ? expiresAt : null,
       clientId,
-      clientSecret: normalizeString(record.clientSecret, 2_000) || null,
+      clientSecret: clientSecretSource === "stored" ? storedClientSecret : null,
+      clientSecretSource,
       tokenEndpoint,
       issuer: normalizeString(record.issuer, 2_000) || null,
       resource,
@@ -804,7 +942,7 @@ export const claimAppOAuthFinalizeInternal = internalMutation({
             catalog_app_id: catalogAppId,
             error_message:
               normalizeString(row.finalizeErrorMessage, 500) ||
-              "Notion authorization could not be finalized. Start again.",
+              "OAuth authorization could not be finalized. Start again.",
           },
       };
     }
@@ -905,7 +1043,8 @@ export const beginUserPlatformAppOAuth = action({
     if (!connectPolicy.ok) throw new Error(connectPolicy.message);
     const redirectUri = buildCallbackUri(args.callbackBaseUrl);
     const metadata = await discoverOAuthMetadata(connectPolicy.endpointUrl);
-    const client = await registerOAuthClient({
+    const client = await resolveOAuthClientCredentials({
+      app,
       metadata,
       redirectUri,
     });
@@ -914,9 +1053,10 @@ export const beginUserPlatformAppOAuth = action({
     const state = randomBase64Url(32);
     const returnToPath = normalizeReturnToPath(args.returnToPath);
     const nowMs = Date.now();
-    const encryptedClientSecret = client.clientSecret
-      ? await encryptSecret(client.clientSecret)
-      : null;
+    const encryptedClientSecret =
+      client.clientSecretSource === "stored" && client.clientSecret
+        ? await encryptSecret(client.clientSecret)
+        : null;
     await ctx.runMutation(internal.appOAuth.insertAppOAuthStateInternal as any, {
       userId,
       catalogAppId: connectPolicy.catalogAppId,
@@ -1170,8 +1310,17 @@ export const finalizeUserPlatformAppOAuth = action({
             secretIvHex: row.clientSecretIvHex,
           })
         : null;
+    const clientSecretSource = inferOAuthClientSecretSource({
+      catalogAppId,
+      storedClientSecret: normalizeString(clientSecret, 2_000) || null,
+    });
     let tokenBundle: StoredOAuthTokenBundleV1;
     try {
+      const tokenRequestClientSecret = resolveOAuthClientSecretForTokenRequest({
+        catalogAppId,
+        storedClientSecret: normalizeString(clientSecret, 2_000) || null,
+        clientSecretSource,
+      });
       tokenBundle = await exchangeCodeForTokenBundle({
         catalogAppId,
         code,
@@ -1180,7 +1329,8 @@ export const finalizeUserPlatformAppOAuth = action({
         tokenEndpoint: row.tokenEndpoint,
         issuer: normalizeString(row.issuer, 2_000) || null,
         clientId: row.clientId,
-        clientSecret: normalizeString(clientSecret, 2_000) || null,
+        clientSecret: tokenRequestClientSecret,
+        clientSecretSource,
         resource: normalizeString(row.resource, 2_000),
         scope: normalizeString(row.scope, 2_000) || null,
         nowMs,
@@ -1189,7 +1339,7 @@ export const finalizeUserPlatformAppOAuth = action({
       const result: AppOAuthFinalizeResult = {
         ok: false,
         catalog_app_id: catalogAppId || null,
-        error_message: "Notion authorization could not be finalized. Start again.",
+        error_message: `${app.name} authorization could not be finalized. Start again.`,
       };
       await ctx.runMutation(internal.appOAuth.failAppOAuthFinalizeInternal as any, {
         stateId: row._id,
@@ -1312,7 +1462,7 @@ export const getFreshDeveloperAppConnectionBundleInternal = internalAction({
         secret: parsed.accessToken,
       };
     }
-    const refreshed = await refreshTokenBundle(parsed);
+    const refreshed = await refreshTokenBundle(parsed, bundle.app);
     await storeOAuthTokenBundle({
       ctx,
       developerAppId: bundle.app._id,

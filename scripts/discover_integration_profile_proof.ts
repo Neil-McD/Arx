@@ -77,6 +77,20 @@ function assertReadyProfileMatchesConnection(
     assert.equal(profile.readiness, "ready_oauth");
     assert.equal(profile.authMode, "oauth");
     assert.equal(app.personalConnect.authType, "oauth");
+    assert.ok(
+      profile.oauthClient,
+      `${app.id} ready OAuth app must declare how Polynet obtains an OAuth client`,
+    );
+    if (profile.oauthClient?.mode === "static_env") {
+      assertNonEmpty(
+        profile.oauthClient.clientIdEnv,
+        `${app.id} static OAuth client id env`,
+      );
+      assertNonEmpty(
+        profile.oauthClient.clientSecretEnv,
+        `${app.id} static OAuth client secret env`,
+      );
+    }
   } else {
     assert.equal(app.personalConnect.authMethod, "token");
     assert.equal(profile.adapterKind, "remote_mcp_token");
@@ -207,11 +221,13 @@ function main() {
     if (app.personalConnect.availability === "ready") {
       assertReadyProfileMatchesConnection(app, profile);
     } else {
-      assert.equal(
-        hasPlannedDiscoverAppIntegrationProfileKind(app),
-        true,
-        `${app.id} planned app must have an explicit planned integration profile kind`,
-      );
+      if (!hasExplicitDiscoverAppIntegrationProfile(app)) {
+        assert.equal(
+          hasPlannedDiscoverAppIntegrationProfileKind(app),
+          true,
+          `${app.id} planned app must have an explicit planned integration profile kind or profile override`,
+        );
+      }
       assertPlannedProfileIsNotExecutable(app, profile);
     }
   }

@@ -49,7 +49,7 @@ Rules:
 - Uncataloged remote MCP endpoints are blocked from public server-fetch paths until they have a reviewed catalog policy or a network-layer egress guard.
 - Operator audit must identify uncataloged or catalog-policy-blocked developer app rows before broad release.
 - Integration profile default risk is applied as a floor during MCP tool snapshot classification.
-- OAuth remote MCP apps use server-side PKCE state, provider-aware MCP `resource` handling, a passive callback that records the provider result, an authenticated user finalization action that exchanges the code, encrypted token bundles, token refresh, and the same MCP validation/runtime path as token-based remote MCP apps.
+- OAuth remote MCP apps use server-side PKCE state, provider-aware MCP `resource` handling, a passive callback that records the provider result, an authenticated user finalization action that exchanges the code, encrypted token bundles, token refresh, and the same MCP validation/runtime path as token-based remote MCP apps. OAuth clients may be provider-discovered through dynamic registration or configured as static deployment env credentials when the provider requires a pre-registered client. Static deployment-owned client secrets must stay in env and must not be copied into per-user connection bundles.
 - Dedicated human approval is not implemented yet; integration profiles do not carry approval-policy metadata.
 - Operator MCP servers configured in Codex are not user-facing Discover integration profiles.
 

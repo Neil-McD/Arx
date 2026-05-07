@@ -3,7 +3,7 @@ id: product.guide.connect_apps_and_mcps
 title: Connect Apps and MCPs
 audience: builder, llm, operator
 status: alpha-current
-last_verified: 2026-05-06
+last_verified: 2026-05-07
 ---
 
 # Connect Apps and MCPs
@@ -83,7 +83,7 @@ Capability is real only when:
 16. Before broad release, operators should audit existing app rows for uncataloged or catalog-policy-blocked endpoints.
 17. Prefer direct API adapters when the product workflow needs token-efficient structured snapshots instead of broad tool discovery.
 18. Prefer sandboxed CLI adapters when the app produces artifacts, renders, builds, or previews.
-19. Notion is the first ready OAuth remote MCP app; it uses `https://mcp.notion.com/mcp`, PKCE OAuth, MCP `resource` audience binding, authenticated finalization, encrypted token storage, token refresh, and user-owned harness state.
+19. Ready OAuth remote MCP apps use PKCE OAuth, MCP `resource` audience binding, authenticated finalization, encrypted token storage, token refresh, and user-owned harness state. Notion uses dynamic client registration against `https://mcp.notion.com/mcp`; Asana is the first static-client OAuth MCP target and remains non-connectable until the deployment has `ASANA_MCP_CLIENT_ID` and `ASANA_MCP_CLIENT_SECRET` configured for `https://mcp.asana.com/v2/mcp`.
 
 ## Common Mistakes
 
