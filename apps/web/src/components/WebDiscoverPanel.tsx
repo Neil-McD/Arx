@@ -202,27 +202,27 @@ function buildDiscoverMountStatusClassName(mount: DiscoverMountedApp): string {
   }`;
 }
 
-function buildDiscoverCommunityGrantStatusTitle(mount: CommunityMountedApp): string {
+function buildDiscoverCommunityAppStatusTitle(mount: CommunityMountedApp): string {
   if (!mount.enabled) return "Disabled";
   if (mount.app.status === "invalid" || mount.not_live_reason === "validation_failed") {
     return "Validation failed";
   }
-  return "Recommended";
+  return "Added";
 }
 
-function buildDiscoverCommunityGrantStatusBody(
+function buildDiscoverCommunityAppStatusBody(
   appName: string,
   mount: CommunityMountedApp,
   communityLabel: string,
 ): string {
   if (!mount.enabled) return `${appName} is disabled for ${communityLabel}.`;
   if (mount.app.status === "invalid" || mount.not_live_reason === "validation_failed") {
-    return `${appName} is recommended in ${communityLabel}, but validation failed.`;
+    return `${appName} is added to ${communityLabel}, but validation failed.`;
   }
-  return `${appName} is recommended in ${communityLabel}. Members use their own harness credentials when authentication is required.`;
+  return `${appName} is added to ${communityLabel}. Members use their own harness credentials when authentication is required.`;
 }
 
-function buildDiscoverCommunityGrantStatusClassName(mount: CommunityMountedApp): string {
+function buildDiscoverCommunityAppStatusClassName(mount: CommunityMountedApp): string {
   return `discover-connect-status${
     mount.enabled && mount.app.status !== "invalid" && mount.not_live_reason !== "validation_failed"
       ? ""
@@ -577,7 +577,7 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
       ? selectedCommunityMount
         ? `Manage ${manageableCommunityTargetName}`
         : isDiscoverAppPersonallyConnectable(selectedApp)
-          ? `Recommend in ${manageableCommunityTargetName}`
+          ? `Add to ${manageableCommunityTargetName}`
           : null
       : null;
   const selectedSkillPersonalActionLabel = selectedSkill
@@ -964,7 +964,7 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
                   {isAuthRecoveringSignedIn
                     ? "Restoring account…"
                     : isConnectingCommunityApp
-                      ? "Recommending…"
+                      ? "Adding…"
                     : isLoadingCommunityAppMounts && !selectedCommunityMount
                       ? "Checking…"
                       : selectedAppCommunityActionLabel}
@@ -1455,7 +1455,7 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
             <div className="modal-header">
               <div className="modal-title" id="discover-connect-modal-title">
                 {appConnectTarget === "community"
-                  ? `Recommend ${selectedApp.name} in ${communityTargetLabel}`
+                  ? `Add ${selectedApp.name} to ${communityTargetLabel}`
                   : `Add ${selectedApp.name}`}
               </div>
               <button
@@ -1478,18 +1478,18 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
             <div className="modal-body discover-connect-modal-body">
               {(appConnectTarget === "community"
                 ? selectedApp.personalConnect.connectionKind === "custom"
-                  ? `Enter a remote MCP endpoint and auth method to recommend it in ${communityTargetLabel}.`
+                  ? `Enter a remote MCP endpoint and auth method to add it to ${communityTargetLabel}.`
                     : selectedApp.personalConnect.authMethod === "token"
-                      ? `Recommend ${selectedApp.name} in ${communityTargetLabel}. Members use their own ${selectedApp.personalConnect.secretLabel} to make it live in their harness.`
-                      : `Review the connection requirements, then recommend ${selectedApp.name} in ${communityTargetLabel}.`
+                      ? `Add ${selectedApp.name} to ${communityTargetLabel}. Members use their own ${selectedApp.personalConnect.secretLabel} to make it live in their harness.`
+                      : `Review the connection requirements, then add ${selectedApp.name} to ${communityTargetLabel}.`
                 : personalConnectModalCopy) ? (
                 <div className="discover-connect-modal-copy">
                   {appConnectTarget === "community"
                     ? selectedApp.personalConnect.connectionKind === "custom"
-                      ? `Enter a remote MCP endpoint and auth method to recommend it in ${communityTargetLabel}.`
-                        : selectedApp.personalConnect.authMethod === "token"
-                          ? `Recommend ${selectedApp.name} in ${communityTargetLabel}. Members use their own ${selectedApp.personalConnect.secretLabel} to make it live in their harness.`
-                          : `Review the connection requirements, then recommend ${selectedApp.name} in ${communityTargetLabel}.`
+                      ? `Enter a remote MCP endpoint and auth method to add it to ${communityTargetLabel}.`
+                      : selectedApp.personalConnect.authMethod === "token"
+                          ? `Add ${selectedApp.name} to ${communityTargetLabel}. Members use their own ${selectedApp.personalConnect.secretLabel} to make it live in their harness.`
+                          : `Review the connection requirements, then add ${selectedApp.name} to ${communityTargetLabel}.`
                     : personalConnectModalCopy}
                 </div>
               ) : null}
@@ -1686,23 +1686,23 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
                 <div
                   className={
                     selectedCommunityMount
-                      ? buildDiscoverCommunityGrantStatusClassName(selectedCommunityMount)
+                      ? buildDiscoverCommunityAppStatusClassName(selectedCommunityMount)
                       : "discover-connect-status is-success"
                   }
                 >
                   <div className="discover-connect-status-title">
                     {selectedCommunityMount
-                      ? buildDiscoverCommunityGrantStatusTitle(selectedCommunityMount)
-                      : "Recommended"}
+                      ? buildDiscoverCommunityAppStatusTitle(selectedCommunityMount)
+                      : "Added"}
                   </div>
                   <div className="discover-connect-status-body">
                     {selectedCommunityMount
-                      ? buildDiscoverCommunityGrantStatusBody(
+                      ? buildDiscoverCommunityAppStatusBody(
                           selectedApp.name,
                           selectedCommunityMount,
                           communityTargetLabel,
                         )
-                      : `${selectedApp.name} is now recommended in ${communityTargetLabel}.`}
+                      : `${selectedApp.name} is now added to ${communityTargetLabel}.`}
                   </div>
                 </div>
               ) : appConnectTarget === "community" &&
@@ -1710,7 +1710,7 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
                 <div className="discover-connect-status is-error">
                   <div className="discover-connect-status-title">Failed</div>
                   <div className="discover-connect-status-body">
-                    {`We couldn't recommend ${selectedApp.name} in ${communityTargetLabel}. Check the requirements and try again.`}
+                    {`We couldn't add ${selectedApp.name} to ${communityTargetLabel}. Check the requirements and try again.`}
                   </div>
                 </div>
               ) : personalConnectResult === "passed" ||
@@ -1824,11 +1824,11 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
                     ? "Restoring account…"
                     : appConnectTarget === "personal" && isConnectingUserPlatformApp
                       ? "Adding…"
-                      : appConnectTarget === "community" && isConnectingCommunityApp
-                        ? "Recommending…"
+                    : appConnectTarget === "community" && isConnectingCommunityApp
+                        ? "Adding…"
                         : hasSession
                           ? appConnectTarget === "community"
-                            ? `Recommend in ${communityTargetLabel}`
+                            ? `Add to ${communityTargetLabel}`
                             : "Add"
                           : "Sign in to add"}
                 </button>

@@ -42,8 +42,8 @@ function main() {
   const webDiscoverPanel = readText(
     join(root, "apps/web/src/components/WebDiscoverPanel.tsx"),
   );
-  const communityAppGrantsController = readText(
-    join(root, "apps/web/src/controllers/useWebCommunityAppGrantsController.ts"),
+  const communityAppsController = readText(
+    join(root, "apps/web/src/controllers/useWebCommunityAppsController.ts"),
   );
   const appShell = readText(join(root, "apps/web/src/App.tsx"));
 
@@ -102,12 +102,12 @@ function main() {
   assertNotIncludes(
     communityAppMounts,
     "export const reconnectCommunityApp = action({",
-    "community app grants do not own credential reconnect lifecycle",
+    "community app records do not own credential reconnect lifecycle",
   );
   assertNotIncludes(
     communityAppMounts,
     "encryptSecret(",
-    "community app grants do not store shared secrets",
+    "community app records do not store shared secrets",
   );
   assertNotIncludes(
     communityAppMountTypes,
@@ -152,17 +152,17 @@ function main() {
   assertIncludes(
     communityAppMounts,
     "listCommunityAppGrantSeedSourcesInternal",
-    "community grants can be listed for member bulk seeding",
+    "community app records can be listed for member bulk seeding",
   );
   assertIncludes(
     communityAppMounts,
     "listCommunityAppGrantRecipientUserIdsInternal",
-    "community grant existing-member recipients are derived from community membership",
+    "community app existing-member recipients are derived from community membership",
   );
   assertIncludes(
     communityAppMounts,
     "seedCommunityAppGrantForExistingMembersInternal",
-    "community add schedules existing-member grant seeding",
+    "community add schedules existing-member app seeding",
   );
   assertIncludes(
     userPlatformAppMounts,
@@ -172,12 +172,12 @@ function main() {
   assertIncludes(
     userPlatformAppMounts,
     "findExistingUserPlatformMountByIdentityInternal",
-    "community grant seeding reuses existing personal app identity",
+    "community app seeding reuses existing personal app identity",
   );
   assertIncludes(
     communityAppMounts,
     "findExistingCommunityAppMountByIdentityInternal",
-    "community app add reuses an existing community grant identity",
+    "community app add reuses an existing community app identity",
   );
   assertIncludes(
     communityAppMounts,
@@ -217,7 +217,7 @@ function main() {
   assertIncludes(
     userPlatformAppMounts,
     "export const promoteCommunityAppGrantSourcesToPersonalInternal = internalMutation({",
-    "community removal promotes legacy grant-sourced installs to user ownership",
+    "community removal promotes legacy community-sourced installs to user ownership",
   );
   assertIncludes(
     userPlatformAppMounts,
@@ -227,7 +227,7 @@ function main() {
   assertIncludes(
     communityAppMounts,
     "promoteCommunityAppGrantSourcesToPersonalInternal",
-    "community app removal preserves existing user harness apps before deleting grant",
+    "community app removal preserves existing user harness apps before deleting the community app record",
   );
   assertNotIncludes(
     communityAppMounts,
@@ -243,12 +243,12 @@ function main() {
     assertIncludes(
       source,
       "seedCommunityAppGrantsForUserInternal",
-      `${label} schedules community app grant seeding`,
+      `${label} schedules community app seeding`,
     );
     assertIncludes(
       source,
       "ctx.scheduler.runAfter",
-      `${label} seeds grants asynchronously`,
+      `${label} seeds community apps asynchronously`,
     );
   }
   assertIncludes(
@@ -269,12 +269,12 @@ function main() {
   assertIncludes(
     communityAppMounts,
     "assertCommunityManagerAccessInternal",
-    "manager-only community grant mutation guard",
+    "manager-only community app mutation guard",
   );
   assertNotIncludes(
     communityAppMounts,
     "listRuntimeCommunityMountedToolsInternal",
-    "community app grants must not expose runtime MCP tools",
+    "community app records must not expose runtime MCP tools",
   );
 
   assertNotIncludes(
@@ -333,17 +333,17 @@ function main() {
     "community add reloads personal harness mounts after seeding",
   );
   assertIncludes(
-    communityAppGrantsController,
+    communityAppsController,
     "communityAppMountsLoadRequestIdRef",
     "community app mount loads are request-token guarded",
   );
   assertIncludes(
-    communityAppGrantsController,
+    communityAppsController,
     "latest.activeCommunityId === communityId",
     "community app mount controller checks the active community before state commits",
   );
   assertIncludes(
-    communityAppGrantsController,
+    communityAppsController,
     "latest.session?.user.id === usableSession.user.id",
     "community app mount controller checks the active session before state commits",
   );

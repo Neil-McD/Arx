@@ -28,6 +28,9 @@ function main() {
   const communitySettings = readText(
     join(root, "apps/web/src/components/WebCommunitySettingsSection.tsx"),
   );
+  const integrationsSettings = readText(
+    join(root, "apps/web/src/components/WebIntegrationsSettingsSection.tsx"),
+  );
   const communityAppsEditor = readText(
     join(root, "apps/web/src/components/WebCommunityAiAgentAppsEditor.tsx"),
   );
@@ -39,7 +42,7 @@ function main() {
   );
   assertIncludes(contract, "### App Definition", "MCP app architecture contract");
   assertIncludes(contract, "### Integration Profile", "MCP app architecture contract");
-  assertIncludes(contract, "### Community App Grant", "MCP app architecture contract");
+  assertIncludes(contract, "### Community App Add", "MCP app architecture contract");
   assertIncludes(contract, "### User App State", "MCP app architecture contract");
   assertIncludes(contract, "### Runtime Harness", "MCP app architecture contract");
   assertIncludes(
@@ -104,7 +107,7 @@ function main() {
   );
   assertIncludes(
     contract,
-    "OAuth tokens live in encrypted user connection state and must not be stored in community grants; callback results must not attach provider tokens to a Polynet user until an authenticated finalization action verifies the state owner.",
+    "OAuth tokens live in encrypted user connection state and must not be stored in community app bundle records; callback results must not attach provider tokens to a Polynet user until an authenticated finalization action verifies the state owner.",
     "MCP app architecture contract OAuth credential ownership rule",
   );
   assertIncludes(
@@ -114,7 +117,7 @@ function main() {
   );
   assertIncludes(
     contract,
-    "A community grant is a distribution path, not continuing ownership of the member's user app state.",
+    "A community app add is a distribution path, not continuing ownership of the member's user app state.",
     "MCP app architecture contract community distribution rule",
   );
   assertIncludes(
@@ -129,12 +132,12 @@ function main() {
   );
   assertIncludes(
     contract,
-    "Do not remove an existing user harness app just because a builder removes it from the community recommendation bundle.",
+    "Do not remove an existing user harness app just because a builder removes it from the community app bundle.",
     "MCP app architecture contract forbidden uninstall pattern",
   );
 
   assertIncludes(schema, "developerApps: defineTable({", "app definition table");
-  assertIncludes(schema, "communityAppMounts: defineTable({", "community app grant table");
+  assertIncludes(schema, "communityAppMounts: defineTable({", "community app bundle table");
   assertIncludes(schema, "userPlatformAppMounts: defineTable({", "user app state table");
 
   assertIncludes(
@@ -173,19 +176,30 @@ function main() {
 
   assertIncludes(
     discoverPanel,
-    "Recommend ${selectedApp.name} in ${communityTargetLabel}",
-    "Discover community app grant copy",
+    "Add ${selectedApp.name} to ${communityTargetLabel}",
+    "Discover community app add copy",
   );
   assertNotIncludes(
     discoverPanel,
-    "Add ${selectedApp.name} to ${communityTargetLabel}",
-    "Discover legacy community install copy",
+    "Recommend ${selectedApp.name} in ${communityTargetLabel}",
+    "Discover legacy community recommend copy",
   );
   assertIncludes(
     communitySettings,
-    "No apps are recommended for this community yet.",
-    "Community Settings grant empty state",
+    "No apps have been added to this community yet.",
+    "Community Settings app empty state",
   );
+  for (const legacyCopy of [
+    "recommended by this community",
+    "Recommended by community",
+    "No apps are recommended",
+    "Members can add recommended apps",
+    "Recommend",
+  ]) {
+    assertNotIncludes(communitySettings, legacyCopy, "Community Settings legacy recommend copy");
+    assertNotIncludes(integrationsSettings, legacyCopy, "Integrations Settings legacy recommend copy");
+    assertNotIncludes(communityAppsEditor, legacyCopy, "Community app editor legacy recommend copy");
+  }
   assertNotIncludes(
     communitySettings,
     "No apps are attached to this community lens yet.",

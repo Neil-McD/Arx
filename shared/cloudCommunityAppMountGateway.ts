@@ -32,8 +32,6 @@ export async function listCloudCommunityAppMounts<SessionT>(
   return coerceObjectRows<CommunityMountedApp>(payload);
 }
 
-export const listCloudCommunityAppGrants = listCloudCommunityAppMounts;
-
 export async function connectCloudCommunityApp<SessionT>(
   params: CloudCommunityAppMountGatewayParams<SessionT> & {
     communityId: string;
@@ -52,8 +50,6 @@ export async function connectCloudCommunityApp<SessionT>(
   })) as CommunityMountedApp | null;
   return payload ?? null;
 }
-
-export const recommendCloudCommunityApp = connectCloudCommunityApp;
 
 export async function updateCloudCommunityAppMount<SessionT>(
   params: CloudCommunityAppMountGatewayParams<SessionT> & {
@@ -74,8 +70,6 @@ export async function updateCloudCommunityAppMount<SessionT>(
   return payload ?? null;
 }
 
-export const updateCloudCommunityAppGrant = updateCloudCommunityAppMount;
-
 export async function refreshCloudCommunityApp<SessionT>(
   params: CloudCommunityAppMountGatewayParams<SessionT> & {
     communityId: string;
@@ -91,8 +85,6 @@ export async function refreshCloudCommunityApp<SessionT>(
   return payload ?? null;
 }
 
-export const refreshCloudCommunityAppGrant = refreshCloudCommunityApp;
-
 export async function unmountCloudCommunityApp<SessionT>(
   params: CloudCommunityAppMountGatewayParams<SessionT> & {
     communityId: string;
@@ -107,5 +99,3 @@ export async function unmountCloudCommunityApp<SessionT>(
   })) as { removed?: unknown } | null;
   return payload?.removed === true;
 }
-
-export const removeCloudCommunityAppGrant = unmountCloudCommunityApp;

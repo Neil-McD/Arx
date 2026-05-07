@@ -59,7 +59,7 @@ import {
 import { useWebWorkspaceCoreController } from "./controllers/useWebWorkspaceCoreController";
 import { useWebCommunityUiController } from "./controllers/useWebCommunityUiController";
 import { useWebCommunityAgentConfigUiController } from "./controllers/useWebCommunityAgentConfigUiController";
-import { useWebCommunityAppGrantsController } from "./controllers/useWebCommunityAppGrantsController";
+import { useWebCommunityAppsController } from "./controllers/useWebCommunityAppsController";
 import { useWebCommunitySkillAttachmentsController } from "./controllers/useWebCommunitySkillAttachmentsController";
 import { useWebCommunityAdminUiController } from "./controllers/useWebCommunityAdminUiController";
 import { useWebCommunitySettingsUiController } from "./controllers/useWebCommunitySettingsUiController";
@@ -2116,7 +2116,7 @@ export default function App() {
     updateCommunityAppMount,
     refreshCommunityApp,
     unmountCommunityApp,
-  } = useWebCommunityAppGrantsController<AuthSession>({
+  } = useWebCommunityAppsController<AuthSession>({
     activeCommunityId,
     session,
     ensureSession: ensureUsableAuthSession,

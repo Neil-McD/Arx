@@ -53,21 +53,21 @@ Rules:
 - Dedicated human approval is not implemented yet; integration profiles do not carry approval-policy metadata.
 - Operator MCP servers configured in Codex are not user-facing Discover integration profiles.
 
-### Community App Grant
+### Community App Add
 
-A community app grant says a community recommends or grants access to an app.
+A community app add says a community includes an app in its app bundle.
 
 Current code:
 - `communityAppMounts`
 
-Important: `communityAppMounts` is a legacy table name. Product behavior should treat it as a grant/recommendation record, not as an executable community runtime MCP layer.
+Important: `communityAppMounts` is a legacy table name. Product behavior should treat it as a community app bundle record, not as an executable community runtime MCP layer.
 
 Rules:
-- A community grant can cause a member to get a matching user-owned app state.
-- A community grant can be shown in Community Settings and Discover.
-- A community grant must not create a second runtime copy of the app.
-- A community grant must not imply that members inherit another user's secret.
-- A community grant is a distribution path, not continuing ownership of the member's user app state.
+- A community app add can cause a member to get a matching user-owned app state.
+- A community app add can be shown in Community Settings and Discover.
+- A community app add must not create a second runtime copy of the app.
+- A community app add must not imply that members inherit another user's secret.
+- A community app add is a distribution path, not continuing ownership of the member's user app state.
 - Shared/community-owned credentials are a separate future policy and must be explicit before use.
 
 ### User App State
@@ -84,8 +84,8 @@ Rules:
 - User app state is the only source for live/setup-needed/not-live status shown to that user.
 - Source rows explain durable user ownership for current distribution installs.
 - Personal credentials live in user connection state.
-- OAuth tokens live in encrypted user connection state and must not be stored in community grants; callback results must not attach provider tokens to a Polynet user until an authenticated finalization action verifies the state owner.
-- If a user already has Linear live personally and a community grants Linear, every surface must resolve to that same effective Linear state for that user.
+- OAuth tokens live in encrypted user connection state and must not be stored in community app bundle records; callback results must not attach provider tokens to a Polynet user until an authenticated finalization action verifies the state owner.
+- If a user already has Linear live personally and a community adds Linear, every surface must resolve to that same effective Linear state for that user.
 - If a user lacks required credentials, the app can be present but must show setup needed.
 - If auth is not required and validation succeeds, the app can become live after seeding.
 
@@ -118,9 +118,9 @@ Adding or liking an app creates or reuses user app state by stable app identity.
 
 ### Community add
 
-Adding an app to a community creates or reuses the community grant and seeds user app state for the builder and current active members.
+Adding an app to a community creates or reuses the community app record and seeds user app state for the builder and current active members.
 
-- Reuse an existing community grant by `catalogAppId` first, then endpoint/auth fallback.
+- Reuse an existing community app record by `catalogAppId` first, then endpoint/auth fallback.
 - Do not ask for or store a shared member secret.
 - Reuse matching user app state by stable identity.
 - Record user-owned app state for seeded installs.
@@ -131,7 +131,7 @@ Adding an app to a community creates or reuses the community grant and seeds use
 
 Joining a community grants access to that community's app bundle.
 
-- Seed missing granted apps into user app state.
+- Seed missing community apps into user app state.
 - Reuse existing user app state when the same app identity already exists.
 - Never create duplicate runtime tools for the same app identity.
 - Show the same effective app state in global Settings, Community Settings, and Discover.
@@ -149,16 +149,16 @@ Leaving a community revokes community access, not previously installed user-owne
 - Do not add "community Linear runtime" beside "personal Linear runtime".
 - Do not expose `communityAppMounts` directly as Daytona runtime tools.
 - Do not show community status as setup needed when the user's effective app state is live for the same app identity.
-- Do not infer that a community grant provides a member's bearer token, OAuth token, or secret.
+- Do not infer that a community app record provides a member's bearer token, OAuth token, or secret.
 - Do not treat endpoint string equality alone as canonical when a catalog identity is available.
-- Do not remove an existing user harness app just because a builder removes it from the community recommendation bundle.
+- Do not remove an existing user harness app just because a builder removes it from the community app bundle.
 
 ## Current migration stance
 
 Keep the existing table names for now. The behavior contract is more important than a broad rename.
 
 Next cleanup should reduce drift by:
-- renaming or wrapping community mount APIs as app grants,
+- deleting obsolete grant/recommend frontend aliases and copy,
 - deleting unused community runtime execution APIs after proof,
-- replacing direct community add/setup language with grant/recommend/like language,
+- keeping product language direct: add apps to communities, connect apps to personal harnesses,
 - keeping all user-facing status projection backed by the same effective user app resolver.

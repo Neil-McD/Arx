@@ -18,7 +18,7 @@ Apps and MCPs let a builder extend an agent beyond static instructions by connec
 
 ## User Mental Model
 
-Apps are things a user can connect to their harness so the agent has more useful capability. Builders can recommend apps through a community, but runtime capability still comes from each member's own harness state.
+Apps are things a user can connect to their harness so the agent has more useful capability. Builders can add apps to a community, but runtime capability still comes from each member's own harness state.
 
 ## System Mental Model
 
@@ -30,7 +30,7 @@ Each catalog app should resolve to an integration profile: MCP, connector backpl
 
 1. Remote tool capability must be explicit.
 2. A connected app does not automatically imply every user can use every tool.
-3. Community-recommended capability should seed or route to the user's canonical harness state.
+3. Community-added capability should seed or route to the user's canonical harness state.
 4. Tool availability should be distinguishable from product marketing copy.
 5. Unknown or unverified integrations should be documented as catalog or planned, not live capability.
 6. No app should be marked ready unless its adapter, validation, auth mode, identity, and risk metadata are explicit.
@@ -39,7 +39,7 @@ Each catalog app should resolve to an integration profile: MCP, connector backpl
 9. Uncataloged remote MCP endpoints should not be server-fetched until they have a reviewed catalog policy or network egress guard.
 10. Apps should expose compact harness context first, then retrieve external context lazily through bounded tool calls.
 11. CLI-shaped apps should run through sandboxed command wrappers and return artifact references instead of raw shell access.
-12. OAuth MCP apps must bind tokens to the MCP resource, store tokens server-side only after authenticated Polynet finalization, refresh tokens before validation/runtime execution, and keep community recommendations credential-free.
+12. OAuth MCP apps must bind tokens to the MCP resource, store tokens server-side only after authenticated Polynet finalization, refresh tokens before validation/runtime execution, and keep community app records credential-free.
 
 ## Non-Goals
 

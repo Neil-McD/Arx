@@ -24,8 +24,8 @@ For a community owner/admin:
 
 1. Open the community AI Agent surface.
 2. Open Apps.
-3. Recommend a remote MCP app for the community.
-4. Polynet records the community grant.
+3. Add a remote MCP app to the community.
+4. Polynet records the community app record.
 5. Polynet seeds/reuses the app in the builder's and active members' personal harness state.
 6. Members see the same effective app status in personal Settings, Community Settings, and Discover.
 
@@ -44,7 +44,7 @@ The system should keep these concepts separate:
 - server-side catalog connect policy
 - app connection and secret state
 - tool snapshot discovered during validation
-- community app grant
+- community app record
 - user app source/provenance
 - enabled tools for the user's harness app
 
@@ -73,7 +73,7 @@ Capability is real only when:
 6. Remote MCP apps should be validated before live use.
 7. Failed or missing authentication should show setup needed in the user harness state.
 8. Runtime prompt context must not claim more app capability than the harness can execute.
-9. Secrets and auth state should not live in community prompt/config text or community app grants.
+9. Secrets and auth state should not live in community prompt/config text or community app records.
 10. Communities grant access; users own app state; runtime executes only user harness tools.
 11. Ready Discover apps must declare adapter, validation, auth mode, readiness, identity, context, result, declared-intent, and risk metadata before they can be treated as connectable.
 12. Catalog app connectability must be enforced on the server, not inferred from client-submitted fields.

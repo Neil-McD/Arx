@@ -101,7 +101,7 @@ function buildEffectiveHarnessSummary(apps: EffectiveMcpApp[]): string {
   ).length;
   const notLiveCount = apps.length - liveCount;
   const scopeLabel = `${apps.length} harness apps`;
-  if (apps.length === 0) return "No apps are mounted in your harness yet.";
+  if (apps.length === 0) return "No apps are connected to your harness yet.";
   if (notLiveCount === 0) return `${scopeLabel}. ${liveCount} live.`;
   if (setupCount === notLiveCount) {
     return `${scopeLabel}. ${liveCount} live, ${setupCount} need setup.`;
@@ -141,7 +141,7 @@ function buildEffectiveAppDetail(app: EffectiveMcpApp): string {
     return `${pluralizeTools(app.effective_tool_count)} available in your personal harness.`;
   }
   if (app.credential_state === "needs_personal_setup" && app.is_attached_to_community) {
-    return `${app.app.name} is recommended by this community, but needs your personal connection before tools go live for you.`;
+    return `${app.app.name} is added by this community, but needs your personal connection before tools go live for you.`;
   }
   return `${buildEffectiveAppStateLabel(app)} in your harness.`;
 }
@@ -320,7 +320,7 @@ export function WebIntegrationsSettingsSection(
         </div>
         <div className="settings-section-desc">
           Your personal harness is the executable MCP source. Community
-          recommendations resolve to the same app state when present.
+          apps resolve to the same app state when present.
         </div>
         {session ? (
           <div className="model-note">
@@ -355,7 +355,7 @@ export function WebIntegrationsSettingsSection(
             !isLoadingEffectiveMcpApps &&
             visibleEffectiveMcpApps.length === 0 ? (
               <div className="model-note">
-                No apps are mounted in your harness yet. Use `Connect apps` to
+                No apps are connected to your harness yet. Use `Connect apps` to
                 browse the catalog.
               </div>
             ) : null}
@@ -405,8 +405,8 @@ export function WebIntegrationsSettingsSection(
                           <span className="integration-status-pill">
                             {effectiveApp.is_attached_to_community
                               ? effectiveApp.has_personal_mount
-                                ? "Personal + recommended"
-                                : "Recommended"
+                                ? "Personal + community"
+                                : "Community"
                               : "Personal"}
                           </span>
                         </div>
@@ -532,7 +532,7 @@ export function WebIntegrationsSettingsSection(
                       <div className="integration-mounted-rail">
                         <span className="integration-status-pill">
                           {communityMount
-                            ? "Recommended by community"
+                            ? "Added by community"
                             : "Open Discover to set up"}
                         </span>
                       </div>

@@ -220,7 +220,7 @@ function buildCommunityAppStateLabel(mount: CommunityMountedApp): string {
   return "Live";
 }
 
-function buildCommunityRecommendationStateLabel(args: {
+function buildCommunityAddedAppStateLabel(args: {
   mount: CommunityMountedApp;
   effectiveApp: EffectiveMcpApp | null;
 }): string {
@@ -232,43 +232,43 @@ function buildCommunityRecommendationStateLabel(args: {
   ) {
     return "Validation failed";
   }
-  if (!args.effectiveApp?.has_personal_mount) return "Recommended";
+  if (!args.effectiveApp?.has_personal_mount) return "Added";
   if (args.effectiveApp?.credential_state === "needs_personal_setup") {
     return "Setup needed";
   }
   return buildCommunityAppStateLabel(args.mount);
 }
 
-function buildCommunityRecommendationStateClassName(args: {
+function buildCommunityAddedAppStateClassName(args: {
   mount: CommunityMountedApp;
   effectiveApp: EffectiveMcpApp | null;
 }): string {
-  const label = buildCommunityRecommendationStateLabel(args);
+  const label = buildCommunityAddedAppStateLabel(args);
   if (label === "Live") return " is-live";
   if (label === "Disabled") return " is-disabled";
   if (label === "Setup needed" || label === "Reconnect required") {
     return " is-setup";
   }
-  if (label === "Recommended") return "";
+  if (label === "Added") return "";
   return " is-not-live";
 }
 
-function buildCommunityRecommendationStatusLabel(args: {
+function buildCommunityAddedAppStatusLabel(args: {
   mount: CommunityMountedApp;
   effectiveApp: EffectiveMcpApp | null;
 }): string {
   if (args.effectiveApp?.live_for_current_user) {
     return `${pluralizeTools(args.effectiveApp.effective_tool_count)} active`;
   }
-  const stateLabel = buildCommunityRecommendationStateLabel(args);
+  const stateLabel = buildCommunityAddedAppStateLabel(args);
   const toolCount =
     args.effectiveApp?.effective_tool_count ?? args.mount.enabled_tools.length;
   if (stateLabel === "Disabled") return `Disabled · ${pluralizeTools(toolCount)}`;
-  if (stateLabel === "Recommended") return `${pluralizeTools(toolCount)} available`;
+  if (stateLabel === "Added") return `${pluralizeTools(toolCount)} available`;
   return `${stateLabel} · ${pluralizeTools(toolCount)}`;
 }
 
-function buildCommunityRecommendationDetail(args: {
+function buildCommunityAddedAppDetail(args: {
   mount: CommunityMountedApp;
   effectiveApp: EffectiveMcpApp | null;
 }): string {
@@ -276,9 +276,9 @@ function buildCommunityRecommendationDetail(args: {
     return `${pluralizeTools(args.effectiveApp.effective_tool_count)} available through your personal harness for this community.`;
   }
   if (args.effectiveApp?.credential_state === "needs_personal_setup") {
-    return `${args.mount.app.name} is recommended by this community. Connect it in your personal harness to use its tools.`;
+    return `${args.mount.app.name} is added to this community. Connect it in your personal harness to use its tools.`;
   }
-  return `Recommended by this community. Auth ${toStatusLabel(args.mount.app.auth_type)} · Connection ${toStatusLabel(args.mount.connection.connection_status)} · Validation ${toStatusLabel(args.mount.app.status)}`;
+  return `Added to this community. Auth ${toStatusLabel(args.mount.app.auth_type)} · Connection ${toStatusLabel(args.mount.connection.connection_status)} · Validation ${toStatusLabel(args.mount.app.status)}`;
 }
 
 function buildPersonalOptInInput(args: {
@@ -395,7 +395,7 @@ function CommunityIntegrationsSettingsSection({
     <div className="settings-section">
       <div className="settings-section-title">Community integrations</div>
       <div className="settings-section-desc">
-        Members can add recommended apps to their own harness and use their own
+        Members can add community apps to their own harness and use their own
         credentials when an app requires authentication.
       </div>
       {canManage ? (
@@ -421,7 +421,7 @@ function CommunityIntegrationsSettingsSection({
       ) : null}
       {!integrations.isLoading && integrations.mounts.length === 0 ? (
         <div className="model-note">
-          No apps are recommended for this community yet.
+          No apps have been added to this community yet.
         </div>
       ) : null}
       {integrations.mounts.length > 0 ? (
@@ -442,11 +442,11 @@ function CommunityIntegrationsSettingsSection({
               integrations.isOptingIntoApp || optingInMountId === mount.id;
             const isBusy = isUpdating || isRefreshing || isRemoving || isOptingIn;
             const hasPersonalMount = effectiveApp?.has_personal_mount === true;
-            const stateLabel = buildCommunityRecommendationStateLabel({
+            const stateLabel = buildCommunityAddedAppStateLabel({
               mount,
               effectiveApp,
             });
-            const statusLabel = buildCommunityRecommendationStatusLabel({
+            const statusLabel = buildCommunityAddedAppStatusLabel({
               mount,
               effectiveApp,
             });
@@ -463,7 +463,7 @@ function CommunityIntegrationsSettingsSection({
                       <div className="integration-mounted-title-row">
                         <strong>{mount.app.name}</strong>
                         <span
-                          className={`integration-state-indicator${buildCommunityRecommendationStateClassName({
+                          className={`integration-state-indicator${buildCommunityAddedAppStateClassName({
                             mount,
                             effectiveApp,
                           })}`}
@@ -475,14 +475,14 @@ function CommunityIntegrationsSettingsSection({
                           {statusLabel}
                         </span>
                         <span className="integration-status-pill">
-                          Recommended by community
+                          Added to community
                         </span>
                       </div>
                       <div className="integration-mounted-meta">
                         {mount.app.endpoint_url}
                       </div>
                       <div className="integration-mounted-detail">
-                        {buildCommunityRecommendationDetail({
+                        {buildCommunityAddedAppDetail({
                           mount,
                           effectiveApp,
                         })}

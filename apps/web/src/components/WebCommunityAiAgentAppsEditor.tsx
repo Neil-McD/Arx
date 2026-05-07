@@ -54,7 +54,7 @@ function buildMountStateLabel(
   if (effectiveApp?.credential_state === "needs_personal_setup") {
     return "Setup needed";
   }
-  return "Recommended";
+  return "Added";
 }
 
 function buildMountStatusLabel(
@@ -78,9 +78,9 @@ function buildMountDetail(
     return `${pluralizeTools(effectiveApp.effective_tool_count)} available through your personal harness for this community.`;
   }
   if (effectiveApp?.credential_state === "needs_personal_setup") {
-    return `${mount.app.name} is recommended by this community. Connect it in your personal harness to use its tools.`;
+    return `${mount.app.name} is added to this community. Connect it in your personal harness to use its tools.`;
   }
-  return `${mount.app.name} is recommended by this community.`;
+  return `${mount.app.name} is added to this community.`;
 }
 
 function findCatalogEntryForCommunityMount(mount: CommunityMountedApp) {
@@ -175,7 +175,7 @@ export function WebCommunityAiAgentAppsEditor(
         <div className="chat-empty">Loading apps…</div>
       ) : mounts.length === 0 ? (
         <div className="agent-capability-empty">
-          <div className="agent-capability-empty-title">No apps recommended yet</div>
+          <div className="agent-capability-empty-title">No apps added yet</div>
           <div className="model-note">{emptyState}</div>
         </div>
       ) : (
@@ -283,7 +283,7 @@ export function WebCommunityAiAgentAppsEditor(
 
                     <div className="agent-capability-toolbar">
                       <div className="model-note">
-                        Refresh only re-checks the app grant and discovered tool surface. Members still use their own harness credentials.
+                        Refresh only re-checks the community app and discovered tool surface. Members still use their own harness credentials.
                       </div>
                       <div className="agent-capability-toolbar-actions">
                         <button
@@ -298,7 +298,7 @@ export function WebCommunityAiAgentAppsEditor(
 
                     {mount.tools.length > 0 ? (
                       <div className="agent-capability-field">
-                        <span className="agent-capability-field-label">Mounted tools</span>
+                        <span className="agent-capability-field-label">Tools</span>
                         <div className="community-app-tool-list" role="list">
                           {mount.tools.map((tool) => {
                             const nextEnabledTools = tool.enabled
