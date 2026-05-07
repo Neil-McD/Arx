@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 
-import { buildEffectiveMcpApps } from "../shared/effectiveMcpApps.ts";
+import {
+  buildEffectiveMcpApps,
+  removePersonalMountFromEffectiveMcpApps,
+} from "../shared/effectiveMcpApps.ts";
 
 type ProofMount = Parameters<typeof buildEffectiveMcpApps>[0][number];
 
@@ -256,11 +259,67 @@ function provePersonalOnlyMountRemainsLive() {
   console.log("PASS: personal-only live mount remains live in effective projection");
 }
 
+function provePersonalMountRemovalRebuildsEffectiveProjection() {
+  const personalLinear = mount({
+    id: "user:u-linear",
+    source_mount_id: "u-linear",
+    scope: "user",
+    live_status: "live",
+  });
+  const communityLinear = mount({
+    id: "community:c-linear",
+    source_mount_id: "c-linear",
+    scope: "community",
+    live_status: "not_live",
+    not_live_reason: "needs_auth",
+  });
+  const personalNotion = mount({
+    id: "user:u-notion",
+    source_mount_id: "u-notion",
+    scope: "user",
+    live_status: "not_live",
+    not_live_reason: "missing_snapshot",
+    enabled_tools: [],
+    app: {
+      catalog_app_id: "notion",
+      name: "Notion",
+      slug: "notion",
+      endpoint_url: "https://mcp.notion.com/mcp",
+      auth_type: "oauth",
+      status: "draft",
+    },
+  });
+
+  const rows = buildEffectiveMcpApps([
+    personalLinear,
+    communityLinear,
+    personalNotion,
+  ]);
+  const afterNotionRemoval = removePersonalMountFromEffectiveMcpApps(
+    rows,
+    "u-notion",
+  );
+  assert.equal(afterNotionRemoval.some((row) => row.app.name === "Notion"), false);
+
+  const afterLinearRemoval = removePersonalMountFromEffectiveMcpApps(
+    rows,
+    "u-linear",
+  );
+  const [linear] = afterLinearRemoval.filter((row) => row.app.name === "Linear");
+  assert.ok(linear);
+  assert.equal(linear.has_personal_mount, false);
+  assert.equal(linear.is_attached_to_community, true);
+  assert.equal(linear.credential_state, "needs_personal_setup");
+
+  console.log("PASS: personal mount removal rebuilds effective projection");
+}
+
 provePersonalConnectionSatisfiesCommunityAttachment();
 proveCommunityAttachmentRequiresMemberSetupWithoutPersonalMount();
 proveCommunityGrantAloneIsNotRuntimeLive();
 proveEmptyCommunityToolSelectionDoesNotZeroLivePersonalTools();
 proveMixedCatalogAndEndpointIdentitiesCollapse();
 provePersonalOnlyMountRemainsLive();
+provePersonalMountRemovalRebuildsEffectiveProjection();
 
 console.log("effective_mcp_app_projection_proof: ok");

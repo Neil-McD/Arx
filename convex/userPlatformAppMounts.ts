@@ -1783,11 +1783,19 @@ export const unmountUserPlatformApp = mutation({
       userId: args.userId,
       authSubject: args.authSubject ?? null,
     });
-    const mount = await requireExistingUserPlatformMount({
+    const mount = await getUserPlatformAppMountById(
       ctx,
-      userId,
-      userPlatformAppMountId: args.userPlatformAppMountId,
-    });
+      args.userPlatformAppMountId,
+    );
+    if (!mount) {
+      return {
+        removed: true,
+        id: String(args.userPlatformAppMountId),
+      };
+    }
+    if (String(mount.userId) !== String(userId)) {
+      throw new Error("user_platform_app_mount_not_found");
+    }
     const sourceRows = await listUserHarnessAppSourcesForMount({
       ctx,
       userId,

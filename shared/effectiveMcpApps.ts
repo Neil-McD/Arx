@@ -205,3 +205,24 @@ export function buildEffectiveMcpApps(mounts: HarnessMount[]) {
 }
 
 export type EffectiveMcpApp = ReturnType<typeof buildEffectiveMcpApps>[number];
+
+export function removePersonalMountFromEffectiveMcpApps(
+  effectiveApps: EffectiveMcpApp[],
+  sourceMountId: string,
+): EffectiveMcpApp[] {
+  const trimmedSourceMountId = sourceMountId.trim();
+  if (!trimmedSourceMountId) return effectiveApps;
+  const mounts: HarnessMount[] = [];
+  let removed = false;
+  for (const app of effectiveApps) {
+    if (app.personal_mount) {
+      if (app.personal_mount.source_mount_id === trimmedSourceMountId) {
+        removed = true;
+      } else {
+        mounts.push(app.personal_mount);
+      }
+    }
+    if (app.community_mount) mounts.push(app.community_mount);
+  }
+  return removed ? buildEffectiveMcpApps(mounts) : effectiveApps;
+}

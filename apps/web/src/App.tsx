@@ -72,6 +72,7 @@ import { useWebProviderConnectionUiController } from "./controllers/useWebProvid
 import { useWebEffectiveMcpAppsController } from "./controllers/useWebEffectiveMcpAppsController";
 import { useWebUserPlatformAppMountsController } from "./controllers/useWebUserPlatformAppMountsController";
 import { useWebUserPlatformSkillsController } from "./controllers/useWebUserPlatformSkillsController";
+import { removePersonalMountFromEffectiveMcpApps } from "../../../shared/effectiveMcpApps";
 import { useWebWorkspaceProjectStateController } from "./controllers/useWebWorkspaceProjectStateController";
 import { useWebWorkspaceModelStateController } from "./controllers/useWebWorkspaceModelStateController";
 import { useWebWorkspaceSurfaceController } from "./controllers/useWebWorkspaceSurfaceController";
@@ -2112,6 +2113,7 @@ export default function App() {
   });
   const {
     effectiveMcpApps,
+    setEffectiveMcpApps,
     isLoadingEffectiveMcpApps,
     effectiveMcpAppsError,
     effectiveMcpAppsLoadedKeyRef,
@@ -3038,10 +3040,15 @@ export default function App() {
   const handleUnmountUserPlatformApp = useCallback(
     async (userPlatformAppMountId: string) => {
       const ok = await unmountUserPlatformApp(userPlatformAppMountId);
-      if (ok) void reloadEffectiveMcpApps();
+      if (ok) {
+        setEffectiveMcpApps((prev) =>
+          removePersonalMountFromEffectiveMcpApps(prev, userPlatformAppMountId),
+        );
+        void reloadEffectiveMcpApps();
+      }
       return ok;
     },
-    [reloadEffectiveMcpApps, unmountUserPlatformApp],
+    [reloadEffectiveMcpApps, setEffectiveMcpApps, unmountUserPlatformApp],
   );
 
   const handleUpdateCommunityAppMount = useCallback(
