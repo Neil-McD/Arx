@@ -27,7 +27,7 @@ import type {
   OperatorWebDeployDiagnosticsSnapshot,
 } from "../../../../shared/operatorTypes";
 
-export type OperatorInsightTab = "platform" | "builders";
+export type OperatorInsightTab = "platform" | "business" | "communities";
 
 export const OPERATOR_RIGHT_PANEL_DEFAULT_WIDTH = 560;
 export const OPERATOR_RIGHT_PANEL_MIN_WIDTH = 380;
@@ -37,7 +37,8 @@ export const OPERATOR_RIGHT_PANEL_KEYBOARD_STEP = 32;
 
 const OPERATOR_INSIGHT_TABS: Array<{ id: OperatorInsightTab; label: string }> = [
   { id: "platform", label: "Platform" },
-  { id: "builders", label: "Communities" },
+  { id: "business", label: "Business" },
+  { id: "communities", label: "Communities" },
 ];
 
 export type OperatorDashboardState = {
@@ -262,18 +263,22 @@ export function WebOperatorDataPanel(props: {
         {props.isLoading ? <div className="operator-surface-notice">Loading operator data...</div> : null}
         {props.activeInsightTab === "platform" ? (
           <OperatorPlatformInsights
-            overview={props.state.overview}
-            monetization={props.state.monetization}
             webDeploy={props.state.webDeploy}
             authAccess={props.state.authAccess}
             securityAudit={props.state.securityAudit}
             runtimeTools={props.state.runtimeTools}
             frontendErrors={props.state.frontendErrors}
+          />
+        ) : props.activeInsightTab === "business" ? (
+          <OperatorBusinessInsights
+            overview={props.state.overview}
+            monetization={props.state.monetization}
+            runtimeTools={props.state.runtimeTools}
             risks={props.state.risks}
             events={props.state.events}
           />
         ) : (
-          <OperatorBuilderInsights builders={props.topBuilders} />
+          <OperatorCommunityInsights overview={props.state.overview} builders={props.topBuilders} />
         )}
       </div>
     </>
@@ -459,38 +464,34 @@ function formatCredits(value: number | null | undefined): string {
 }
 
 function OperatorPlatformInsights(props: {
-  overview: OperatorOverviewSnapshot | null;
-  monetization: OperatorMonetizationSnapshot | null;
   webDeploy: OperatorWebDeployDiagnosticsSnapshot | null;
   authAccess: OperatorAuthAccessDiagnosticsSnapshot | null;
   securityAudit: OperatorSecurityAuditDiagnosticsSnapshot | null;
   runtimeTools: OperatorRuntimeToolDiagnosticsSnapshot | null;
   frontendErrors: OperatorFrontendErrorDiagnosticsSnapshot | null;
-  risks: OperatorRiskItem[];
-  events: OperatorEventRecord[];
 }) {
   return (
     <div className="operator-data-panel__grid">
-      <section className="operator-dashboard__metrics" aria-label="Operator overview">
+      <section className="operator-dashboard__metrics" aria-label="Platform health overview">
         <div>
-          <span>Community subscription MRR</span>
-          <strong>{formatMoney(props.overview?.totals.estimatedMrr ?? null)}</strong>
-          <span className="operator-dashboard__metric-note">Current run-rate from active community subscriptions.</span>
+          <span>Web health</span>
+          <strong>{formatHealth(props.webDeploy?.health)}</strong>
+          <span className="operator-dashboard__metric-note">Production build, route probes, and deploy evidence.</span>
         </div>
         <div>
-          <span>Builders</span>
-          <strong>{props.overview?.totals.builders ?? 0}</strong>
-          <span className="operator-dashboard__metric-note">Unique community owners.</span>
+          <span>Runtime health</span>
+          <strong>{formatHealth(props.runtimeTools?.health)}</strong>
+          <span className="operator-dashboard__metric-note">Agent turns, tools, provider failures, and sandbox health.</span>
         </div>
         <div>
-          <span>Communities</span>
-          <strong>{props.overview?.totals.communities ?? 0}</strong>
-          <span className="operator-dashboard__metric-note">All community records.</span>
+          <span>Auth health</span>
+          <strong>{formatHealth(props.authAccess?.health)}</strong>
+          <span className="operator-dashboard__metric-note">Session, access, and entitlement diagnostics.</span>
         </div>
         <div>
-          <span>Risk items</span>
-          <strong>{props.overview?.totals.riskItems ?? 0}</strong>
-          <span className="operator-dashboard__metric-note">Open operator warnings and errors.</span>
+          <span>Security health</span>
+          <strong>{formatHealth(props.securityAudit?.health)}</strong>
+          <span className="operator-dashboard__metric-note">Audit, webhook, blocked-action, and trust-boundary diagnostics.</span>
         </div>
       </section>
 
@@ -739,18 +740,6 @@ function OperatorPlatformInsights(props: {
             <strong>{props.runtimeTools?.totals.paidToolLedgerFailures ?? 0}</strong>
           </div>
           <div className="operator-dashboard__row">
-            <span>Credits settled</span>
-            <strong>{formatCredits(props.runtimeTools?.paidTools.totals.settledCredits)}</strong>
-          </div>
-          <div className="operator-dashboard__row">
-            <span>Credits refunded</span>
-            <strong>{formatCredits(props.runtimeTools?.paidTools.totals.refundedCredits)}</strong>
-          </div>
-          <div className="operator-dashboard__row">
-            <span>Still reserved</span>
-            <strong>{props.runtimeTools?.paidTools.totals.stillReserved ?? 0}</strong>
-          </div>
-          <div className="operator-dashboard__row">
             <span>Unbilled compute</span>
             <strong>{props.runtimeTools?.totals.unbilledComputeCharges ?? 0}</strong>
           </div>
@@ -771,6 +760,102 @@ function OperatorPlatformInsights(props: {
           ) : (
             <div className="operator-dashboard__empty">No runtime or tool failures returned.</div>
           )}
+          {props.runtimeTools?.evidence.isTruncated ? (
+            <div className="operator-dashboard__empty">Runtime diagnostics are sampled for this window.</div>
+          ) : null}
+        </div>
+      </section>
+
+    </div>
+  );
+}
+
+function OperatorBusinessInsights(props: {
+  overview: OperatorOverviewSnapshot | null;
+  monetization: OperatorMonetizationSnapshot | null;
+  runtimeTools: OperatorRuntimeToolDiagnosticsSnapshot | null;
+  risks: OperatorRiskItem[];
+  events: OperatorEventRecord[];
+}) {
+  const creditTopupConversion =
+    props.monetization && props.monetization.creditTopupCheckoutStarts > 0
+      ? props.monetization.creditTopupCheckoutCompletions / props.monetization.creditTopupCheckoutStarts
+      : null;
+  const communityCheckoutConversion =
+    props.monetization && props.monetization.communityCheckoutStarts > 0
+      ? props.monetization.communityCheckoutCompletions / props.monetization.communityCheckoutStarts
+      : null;
+
+  return (
+    <div className="operator-data-panel__grid">
+      <section className="operator-dashboard__metrics" aria-label="Business overview">
+        <div>
+          <span>Community subscription MRR</span>
+          <strong>{formatMoney(props.overview?.totals.estimatedMrr ?? null)}</strong>
+          <span className="operator-dashboard__metric-note">Current run-rate from active community subscriptions.</span>
+        </div>
+        <div>
+          <span>Community conversion</span>
+          <strong>{formatPercent(communityCheckoutConversion)}</strong>
+          <span className="operator-dashboard__metric-note">Paid community checkout completions over starts.</span>
+        </div>
+        <div>
+          <span>Credit top-up conversion</span>
+          <strong>{formatPercent(creditTopupConversion)}</strong>
+          <span className="operator-dashboard__metric-note">Tool-balance checkout completions over starts.</span>
+        </div>
+        <div>
+          <span>Active paid members</span>
+          <strong>{props.overview?.totals.activePaidMembers ?? 0}</strong>
+          <span className="operator-dashboard__metric-note">Members currently attached to paid community subscriptions.</span>
+        </div>
+      </section>
+
+      <section className="operator-dashboard__panel">
+        <h2>Revenue health</h2>
+        <div className="operator-dashboard__table">
+          <div className="operator-dashboard__row">
+            <span>Community subscription MRR</span>
+            <strong>{formatMoney(props.monetization?.estimatedCommunityMrr ?? null)}</strong>
+          </div>
+          <div className="operator-dashboard__row">
+            <span>Community checkout starts</span>
+            <strong>{props.monetization?.communityCheckoutStarts ?? 0}</strong>
+          </div>
+          <div className="operator-dashboard__row">
+            <span>Community checkout completions</span>
+            <strong>{props.monetization?.communityCheckoutCompletions ?? 0}</strong>
+          </div>
+          <div className="operator-dashboard__row">
+            <span>Active community subscriptions</span>
+            <strong>{props.monetization?.activeCommunitySubscriptions ?? 0}</strong>
+          </div>
+        </div>
+      </section>
+
+      <section className="operator-dashboard__panel">
+        <h2>Tool balance revenue</h2>
+        <div className="operator-dashboard__table">
+          <div className="operator-dashboard__row">
+            <span>Credit top-up starts</span>
+            <strong>{props.monetization?.creditTopupCheckoutStarts ?? 0}</strong>
+          </div>
+          <div className="operator-dashboard__row">
+            <span>Credit top-up completions</span>
+            <strong>{props.monetization?.creditTopupCheckoutCompletions ?? 0}</strong>
+          </div>
+          <div className="operator-dashboard__row">
+            <span>Credits settled</span>
+            <strong>{formatCredits(props.runtimeTools?.paidTools.totals.settledCredits)}</strong>
+          </div>
+          <div className="operator-dashboard__row">
+            <span>Credits refunded</span>
+            <strong>{formatCredits(props.runtimeTools?.paidTools.totals.refundedCredits)}</strong>
+          </div>
+          <div className="operator-dashboard__row">
+            <span>Still reserved</span>
+            <strong>{props.runtimeTools?.paidTools.totals.stillReserved ?? 0}</strong>
+          </div>
           {props.runtimeTools?.paidTools.lanes.some((lane) => lane.reservations > 0) ? (
             props.runtimeTools.paidTools.lanes
               .filter((lane) => lane.reservations > 0)
@@ -796,50 +881,11 @@ function OperatorPlatformInsights(props: {
           ) : (
             <div className="operator-dashboard__empty">No paid-tool credit activity returned.</div>
           )}
-          {props.runtimeTools?.evidence.isTruncated ? (
-            <div className="operator-dashboard__empty">Runtime diagnostics are sampled for this window.</div>
-          ) : null}
         </div>
       </section>
 
       <section className="operator-dashboard__panel">
-        <h2>Revenue health</h2>
-        <div className="operator-dashboard__table">
-          <div className="operator-dashboard__row">
-            <span>Community subscription MRR</span>
-            <strong>{formatMoney(props.monetization?.estimatedCommunityMrr ?? null)}</strong>
-          </div>
-          <div className="operator-dashboard__row">
-            <span>Credit top-up conversion</span>
-            <strong>
-              {formatPercent(
-                props.monetization && props.monetization.creditTopupCheckoutStarts > 0
-                  ? props.monetization.creditTopupCheckoutCompletions /
-                      props.monetization.creditTopupCheckoutStarts
-                  : null,
-              )}
-            </strong>
-          </div>
-          <div className="operator-dashboard__row">
-            <span>Community checkout conversion</span>
-            <strong>
-              {formatPercent(
-                props.monetization && props.monetization.communityCheckoutStarts > 0
-                  ? props.monetization.communityCheckoutCompletions /
-                      props.monetization.communityCheckoutStarts
-                  : null,
-              )}
-            </strong>
-          </div>
-          <div className="operator-dashboard__row">
-            <span>Active community subscriptions</span>
-            <strong>{props.monetization?.activeCommunitySubscriptions ?? 0}</strong>
-          </div>
-        </div>
-      </section>
-
-      <section className="operator-dashboard__panel">
-        <h2>Risk</h2>
+        <h2>Friction &amp; risks</h2>
         <div className="operator-dashboard__table">
           {props.risks.length === 0 ? (
             <div className="operator-dashboard__empty">No risk items returned.</div>
@@ -858,26 +904,53 @@ function OperatorPlatformInsights(props: {
       </section>
 
       <section className="operator-dashboard__panel">
-        <h2>Events</h2>
+        <h2>Recent operator events</h2>
         <div className="operator-dashboard__table">
-          {props.events.map((event) => (
-            <div className="operator-dashboard__row" key={event.id}>
-              <div>
-                <strong>{event.eventType}</strong>
-                <span>{[event.status, formatEventTime(event.createdAt)].filter(Boolean).join(" · ")}</span>
+          {props.events.length === 0 ? (
+            <div className="operator-dashboard__empty">No operator events returned.</div>
+          ) : (
+            props.events.map((event) => (
+              <div className="operator-dashboard__row" key={event.id}>
+                <div>
+                  <strong>{event.eventType}</strong>
+                  <span>{[event.status, formatEventTime(event.createdAt)].filter(Boolean).join(" · ")}</span>
+                </div>
+                <span>{event.severity}</span>
               </div>
-              <span>{event.severity}</span>
-            </div>
-          ))}
+            ))
+          )}
         </div>
       </section>
     </div>
   );
 }
 
-function OperatorBuilderInsights(props: { builders: OperatorBuilderRecord[] }) {
+function OperatorCommunityInsights(props: { overview: OperatorOverviewSnapshot | null; builders: OperatorBuilderRecord[] }) {
   return (
     <div className="operator-data-panel__grid">
+      <section className="operator-dashboard__metrics" aria-label="Community performance overview">
+        <div>
+          <span>Builders</span>
+          <strong>{props.overview?.totals.builders ?? 0}</strong>
+          <span className="operator-dashboard__metric-note">Unique community owners.</span>
+        </div>
+        <div>
+          <span>Communities</span>
+          <strong>{props.overview?.totals.communities ?? 0}</strong>
+          <span className="operator-dashboard__metric-note">All community records.</span>
+        </div>
+        <div>
+          <span>Paid communities</span>
+          <strong>{props.overview?.totals.paidCommunities ?? 0}</strong>
+          <span className="operator-dashboard__metric-note">Communities with paid access configured.</span>
+        </div>
+        <div>
+          <span>Active paid members</span>
+          <strong>{props.overview?.totals.activePaidMembers ?? 0}</strong>
+          <span className="operator-dashboard__metric-note">Current paid community member base.</span>
+        </div>
+      </section>
+
       <section className="operator-dashboard__panel operator-dashboard__panel--full">
         <h2>Communities by builder</h2>
         <div className="operator-dashboard__table">
