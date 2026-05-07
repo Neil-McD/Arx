@@ -22,16 +22,6 @@ export function getStripeClient(): Stripe {
   return stripeClient;
 }
 
-export function readStripeWorkspaceCreditTopupPriceId(): string {
-  const priceId = readEnv(
-    "STRIPE_WORKSPACE_CREDIT_TOPUP_PRICE_ID",
-    "ARX_STRIPE_WORKSPACE_CREDIT_TOPUP_PRICE_ID",
-    "WORKSPACE_CREDIT_TOPUP_STRIPE_PRICE_ID",
-  );
-  if (!priceId) throw new Error("stripe_workspace_credit_topup_price_id_missing");
-  return priceId;
-}
-
 export function readStripeWebhookSecret(): string {
   const secret = readEnv("STRIPE_WEBHOOK_SECRET", "ARX_STRIPE_WEBHOOK_SECRET");
   if (!secret) throw new Error("stripe_webhook_secret_missing");

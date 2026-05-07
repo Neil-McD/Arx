@@ -32,6 +32,11 @@ function normalizeOptionalString(value: unknown): string | undefined {
   return normalized || undefined;
 }
 
+function normalizeStripePriceId(value: unknown): string | undefined {
+  const normalized = normalizeOptionalString(value);
+  return normalized && normalized.startsWith("price_") ? normalized : undefined;
+}
+
 function clampCredits(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, roundCredits(value)));
 }
@@ -229,7 +234,7 @@ export const createPendingWorkspaceCreditTopupCheckoutSessionInternal = internal
       sessionId: args.sessionId,
       mode: "workspace_credit_topup",
       provider: "stripe",
-      providerPriceId: args.providerPriceId,
+      providerPriceId: normalizeStripePriceId(args.providerPriceId),
       ownerUserId: args.ownerUserId,
       workspaceCreditsAmount: roundCredits(args.workspaceCreditsAmount),
       status: "pending",
@@ -260,7 +265,7 @@ export const attachWorkspaceCreditTopupStripeCheckoutSessionInternal = internalM
       provider: "stripe",
       providerCheckoutSessionId: args.providerCheckoutSessionId,
       providerCustomerId: String(args.providerCustomerId ?? "").trim() || undefined,
-      providerPriceId: String(args.providerPriceId ?? "").trim() || row.providerPriceId,
+      providerPriceId: normalizeStripePriceId(args.providerPriceId) ?? normalizeStripePriceId(row.providerPriceId),
       updatedAt: nowMs,
     });
   },
@@ -353,7 +358,7 @@ export const completeWorkspaceCreditTopupCheckoutSessionInternal = internalMutat
         String(args.providerCheckoutSessionId ?? "").trim() || row.providerCheckoutSessionId,
       providerCustomerId:
         String(args.providerCustomerId ?? "").trim() || row.providerCustomerId,
-      providerPriceId: String(args.providerPriceId ?? "").trim() || row.providerPriceId,
+      providerPriceId: normalizeStripePriceId(args.providerPriceId) ?? normalizeStripePriceId(row.providerPriceId),
       workspaceCreditsAmount: grantedCredits,
       workspaceCreditsGrantedAt: nowMs,
       status: "complete",
@@ -806,14 +811,12 @@ export const startWorkspaceCreditTopupCheckout = action({
     const sessionId = newOpaqueToken("credits");
     const pack = resolveWorkspaceToolBalanceTopupPack(args.packId);
     if (!pack) throw new Error("workspace_tool_balance_pack_invalid");
-    const providerPriceId = pack.id;
     const workspaceCreditsAmount = pack.credits;
     await ctx.runMutation(
       internal.workspaceCredits.createPendingWorkspaceCreditTopupCheckoutSessionInternal as any,
       {
         sessionId,
         ownerUserId: userId,
-        providerPriceId,
         workspaceCreditsAmount,
         expiresAt: nowMs + 14 * 24 * 60 * 60 * 1000,
         nowMs,
@@ -868,7 +871,6 @@ export const startWorkspaceCreditTopupCheckout = action({
           providerCheckoutSessionId: checkoutSession.id,
           providerCustomerId:
             typeof checkoutSession.customer === "string" ? checkoutSession.customer : null,
-          providerPriceId,
           nowMs: Date.now(),
         },
       );

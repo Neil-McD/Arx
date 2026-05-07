@@ -25,6 +25,7 @@ async function proveWorkspaceCreditAccountingContract() {
   const orphanReconcilerSource = await readRepoFile("convex/daytonaOrphanReconciler.ts");
   const httpDaytonaSource = await readRepoFile("convex/httpDaytona.ts");
   const httpVoiceSource = await readRepoFile("convex/httpVoice.ts");
+  const stripeCoreSource = await readRepoFile("convex/stripeCore.ts");
   const runtimeSessionSource = await readRepoFile("convex/runtimeExecutionSession.ts");
   const runtimeKernelSource = await readRepoFile("shared/runtimeKernel.ts");
   const runtimeTurnHandlersSource = await readRepoFile("convex/runtimeTurnHandlers.ts");
@@ -192,10 +193,28 @@ async function proveWorkspaceCreditAccountingContract() {
     /metadata:[\s\S]*workspace_tool_balance_pack_id:\s*pack\.id[\s\S]*workspace_tool_balance_usd:\s*String\(pack\.priceUsd\)[\s\S]*workspace_credits_amount:\s*String\(workspaceCreditsAmount\)/,
     "expected top-up metadata to preserve pack id, dollar amount, and internal credit units",
   );
+  const workspaceTopupCheckoutBlock = creditsSource.slice(
+    creditsSource.indexOf("export const startWorkspaceCreditTopupCheckout = action"),
+  );
+  assert.doesNotMatch(
+    workspaceTopupCheckoutBlock,
+    /providerPriceId\s*=\s*pack\.id|providerPriceId,\s*\n/,
+    "workspace tool-balance pack ids must not be written into providerPriceId",
+  );
+  assert.match(
+    creditsSource,
+    /function normalizeStripePriceId[\s\S]*startsWith\("price_"\)[\s\S]*providerPriceId:\s*normalizeStripePriceId/,
+    "workspace credit top-ups must keep providerPriceId reserved for real Stripe price ids",
+  );
   assert.doesNotMatch(
     creditsSource,
     /readStripeWorkspaceCreditTopupPriceId/,
     "workspace tool balance top-ups should not depend on one static Stripe price id",
+  );
+  assert.doesNotMatch(
+    stripeCoreSource,
+    /STRIPE_WORKSPACE_CREDIT_TOPUP_PRICE_ID|ARX_STRIPE_WORKSPACE_CREDIT_TOPUP_PRICE_ID|WORKSPACE_CREDIT_TOPUP_STRIPE_PRICE_ID|readStripeWorkspaceCreditTopupPriceId/,
+    "workspace tool balance top-ups should not keep the deleted static Stripe price helper",
   );
 
   assert.match(
