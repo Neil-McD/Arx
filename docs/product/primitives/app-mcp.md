@@ -24,7 +24,7 @@ Apps are things a user can connect to their harness so the agent has more useful
 
 Apps and MCPs should be explicit, permissioned, and scoped. They are not ambient global powers.
 
-Each catalog app should resolve to an integration profile: MCP, connector backplane, direct API, sandboxed CLI, or catalog-only. That profile describes readiness, adapter intent, identity scope, and default tool risk; the user's harness state still decides what can actually run.
+Each catalog app should resolve to an integration profile: MCP, connector backplane, direct API, sandboxed CLI, or catalog-only. That profile describes readiness, adapter intent, identity scope, context strategy, intended result bounds, declared intents, and default tool risk; the adapter determines the execution surface, and the user's harness state still decides what can actually run.
 
 ## Rules
 
@@ -37,6 +37,8 @@ Each catalog app should resolve to an integration profile: MCP, connector backpl
 7. Catalog app connection inputs are server-authoritative; client-supplied endpoint, auth mode, and name are only requests.
 8. Endpoint-instance apps must not collapse by catalog id alone.
 9. Uncataloged remote MCP endpoints should not be server-fetched until they have a reviewed catalog policy or network egress guard.
+10. Apps should expose compact harness context first, then retrieve external context lazily through bounded tool calls.
+11. CLI-shaped apps should run through sandboxed command wrappers and return artifact references instead of raw shell access.
 
 ## Non-Goals
 

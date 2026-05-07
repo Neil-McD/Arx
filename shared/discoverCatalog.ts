@@ -30,9 +30,26 @@ export type DiscoverAppValidationKind =
   | "catalog_only";
 export type DiscoverAppDefaultToolRisk = "read" | "write" | "sensitive";
 export type DiscoverAppIdentityScope = "catalog_singleton" | "endpoint_instance";
+export type DiscoverAppContextStrategy =
+  | "manifest_only"
+  | "search_then_fetch"
+  | "structured_snapshot"
+  | "artifact_reference";
+export type DiscoverAppExecutionSurface =
+  | "server_http"
+  | "connector_backplane"
+  | "sandbox_cli"
+  | "catalog_only";
+
+export type DiscoverAppResultPolicy = {
+  maxToolCount: number;
+  maxResultBytes: number;
+  summarizeLargeResults: boolean;
+};
 
 export type DiscoverAppRuntimePolicy = {
   defaultToolRisk: DiscoverAppDefaultToolRisk;
+  declaredIntents: string[];
 };
 
 export type DiscoverAppIntegrationProfile = {
@@ -41,6 +58,8 @@ export type DiscoverAppIntegrationProfile = {
   identityScope: DiscoverAppIdentityScope;
   authMode: DiscoverAppConnectionMode;
   validationKind: DiscoverAppValidationKind;
+  contextStrategy: DiscoverAppContextStrategy;
+  resultPolicy: DiscoverAppResultPolicy;
   runtimePolicy: DiscoverAppRuntimePolicy;
 };
 
@@ -178,6 +197,28 @@ export type DiscoverAppCatalogEntry = {
   personalConnect: DiscoverAppPersonalConnectTemplate;
 };
 
+function buildDiscoverAppResultPolicy(args: {
+  maxToolCount: number;
+  maxResultBytes: number;
+  summarizeLargeResults?: boolean;
+}): DiscoverAppResultPolicy {
+  return {
+    maxToolCount: args.maxToolCount,
+    maxResultBytes: args.maxResultBytes,
+    summarizeLargeResults: args.summarizeLargeResults ?? true,
+  };
+}
+
+function buildDiscoverAppRuntimePolicy(args: {
+  defaultToolRisk: DiscoverAppDefaultToolRisk;
+  declaredIntents: string[];
+}): DiscoverAppRuntimePolicy {
+  return {
+    defaultToolRisk: args.defaultToolRisk,
+    declaredIntents: args.declaredIntents,
+  };
+}
+
 // Profiles describe integration intent. Runtime enforcement still lives in the harness policy layer.
 export const DISCOVER_APP_INTEGRATION_PROFILE_OVERRIDES = {
   supabase: {
@@ -186,9 +227,15 @@ export const DISCOVER_APP_INTEGRATION_PROFILE_OVERRIDES = {
     identityScope: "catalog_singleton",
     authMode: "token",
     validationKind: "mcp_initialize_tools_list",
-    runtimePolicy: {
+    contextStrategy: "structured_snapshot",
+    resultPolicy: buildDiscoverAppResultPolicy({
+      maxToolCount: 24,
+      maxResultBytes: 8_000,
+    }),
+    runtimePolicy: buildDiscoverAppRuntimePolicy({
       defaultToolRisk: "sensitive",
-    },
+      declaredIntents: ["project_context", "schema_inspection", "data_query"],
+    }),
   },
   linear: {
     adapterKind: "remote_mcp_token",
@@ -196,9 +243,15 @@ export const DISCOVER_APP_INTEGRATION_PROFILE_OVERRIDES = {
     identityScope: "catalog_singleton",
     authMode: "token",
     validationKind: "mcp_initialize_tools_list",
-    runtimePolicy: {
+    contextStrategy: "search_then_fetch",
+    resultPolicy: buildDiscoverAppResultPolicy({
+      maxToolCount: 32,
+      maxResultBytes: 12_000,
+    }),
+    runtimePolicy: buildDiscoverAppRuntimePolicy({
       defaultToolRisk: "write",
-    },
+      declaredIntents: ["issue_search", "issue_update", "project_context"],
+    }),
   },
   airtable: {
     adapterKind: "remote_mcp_token",
@@ -206,9 +259,15 @@ export const DISCOVER_APP_INTEGRATION_PROFILE_OVERRIDES = {
     identityScope: "catalog_singleton",
     authMode: "token",
     validationKind: "mcp_initialize_tools_list",
-    runtimePolicy: {
+    contextStrategy: "search_then_fetch",
+    resultPolicy: buildDiscoverAppResultPolicy({
+      maxToolCount: 32,
+      maxResultBytes: 12_000,
+    }),
+    runtimePolicy: buildDiscoverAppRuntimePolicy({
       defaultToolRisk: "write",
-    },
+      declaredIntents: ["record_search", "record_update", "base_context"],
+    }),
   },
   shopify: {
     adapterKind: "custom_remote_mcp",
@@ -216,9 +275,15 @@ export const DISCOVER_APP_INTEGRATION_PROFILE_OVERRIDES = {
     identityScope: "endpoint_instance",
     authMode: "custom",
     validationKind: "mcp_initialize_tools_list",
-    runtimePolicy: {
+    contextStrategy: "search_then_fetch",
+    resultPolicy: buildDiscoverAppResultPolicy({
+      maxToolCount: 24,
+      maxResultBytes: 10_000,
+    }),
+    runtimePolicy: buildDiscoverAppRuntimePolicy({
       defaultToolRisk: "write",
-    },
+      declaredIntents: ["storefront_context", "cart_update", "checkout_handoff"],
+    }),
   },
 } satisfies Partial<Record<string, DiscoverAppIntegrationProfile>>;
 
@@ -234,7 +299,7 @@ type PlannedDiscoverAppProfileKind =
   | "catalog_only";
 
 const DISCOVER_APP_PLANNED_PROFILE_KINDS = {
-  github: "catalog_only",
+  github: "remote_mcp_oauth",
   vercel: "remote_mcp_oauth",
   notion: "remote_mcp_oauth",
   "google-drive": "backplane_mcp",
@@ -272,6 +337,39 @@ const DISCOVER_APP_PLANNED_PROFILE_KIND_BY_ID: Partial<
   Record<string, PlannedDiscoverAppProfileKind>
 > = DISCOVER_APP_PLANNED_PROFILE_KINDS;
 
+function buildPlannedDiscoverAppResultPolicy(
+  kind: PlannedDiscoverAppProfileKind,
+): DiscoverAppResultPolicy {
+  switch (kind) {
+    case "remote_mcp_oauth":
+      return buildDiscoverAppResultPolicy({
+        maxToolCount: 32,
+        maxResultBytes: 12_000,
+      });
+    case "backplane_mcp":
+      return buildDiscoverAppResultPolicy({
+        maxToolCount: 24,
+        maxResultBytes: 8_000,
+      });
+    case "direct_api":
+      return buildDiscoverAppResultPolicy({
+        maxToolCount: 12,
+        maxResultBytes: 6_000,
+      });
+    case "cli_sandbox":
+      return buildDiscoverAppResultPolicy({
+        maxToolCount: 8,
+        maxResultBytes: 4_000,
+      });
+    case "catalog_only":
+      return buildDiscoverAppResultPolicy({
+        maxToolCount: 0,
+        maxResultBytes: 0,
+        summarizeLargeResults: false,
+      });
+  }
+}
+
 function buildPlannedDiscoverAppIntegrationProfile(
   kind: PlannedDiscoverAppProfileKind,
 ): DiscoverAppIntegrationProfile {
@@ -283,9 +381,12 @@ function buildPlannedDiscoverAppIntegrationProfile(
         identityScope: "catalog_singleton",
         authMode: "oauth",
         validationKind: "hosted_oauth_mcp_planned",
-        runtimePolicy: {
+        contextStrategy: "search_then_fetch",
+        resultPolicy: buildPlannedDiscoverAppResultPolicy(kind),
+        runtimePolicy: buildDiscoverAppRuntimePolicy({
           defaultToolRisk: "write",
-        },
+          declaredIntents: ["provider_search", "provider_fetch", "provider_write"],
+        }),
       };
     case "backplane_mcp":
       return {
@@ -294,9 +395,12 @@ function buildPlannedDiscoverAppIntegrationProfile(
         identityScope: "catalog_singleton",
         authMode: "oauth",
         validationKind: "backplane_mcp_planned",
-        runtimePolicy: {
+        contextStrategy: "search_then_fetch",
+        resultPolicy: buildPlannedDiscoverAppResultPolicy(kind),
+        runtimePolicy: buildDiscoverAppRuntimePolicy({
           defaultToolRisk: "sensitive",
-        },
+          declaredIntents: ["record_search", "record_update", "workflow_trigger"],
+        }),
       };
     case "direct_api":
       return {
@@ -305,9 +409,12 @@ function buildPlannedDiscoverAppIntegrationProfile(
         identityScope: "catalog_singleton",
         authMode: "oauth",
         validationKind: "direct_api_adapter_planned",
-        runtimePolicy: {
+        contextStrategy: "structured_snapshot",
+        resultPolicy: buildPlannedDiscoverAppResultPolicy(kind),
+        runtimePolicy: buildDiscoverAppRuntimePolicy({
           defaultToolRisk: "write",
-        },
+          declaredIntents: ["structured_fetch", "structured_update"],
+        }),
       };
     case "cli_sandbox":
       return {
@@ -316,9 +423,12 @@ function buildPlannedDiscoverAppIntegrationProfile(
         identityScope: "catalog_singleton",
         authMode: "custom",
         validationKind: "sandbox_bridge_planned",
-        runtimePolicy: {
+        contextStrategy: "artifact_reference",
+        resultPolicy: buildPlannedDiscoverAppResultPolicy(kind),
+        runtimePolicy: buildDiscoverAppRuntimePolicy({
           defaultToolRisk: "sensitive",
-        },
+          declaredIntents: ["artifact_generate", "artifact_inspect", "artifact_export"],
+        }),
       };
     case "catalog_only":
       return {
@@ -327,9 +437,12 @@ function buildPlannedDiscoverAppIntegrationProfile(
         identityScope: "catalog_singleton",
         authMode: "custom",
         validationKind: "catalog_only",
-        runtimePolicy: {
+        contextStrategy: "manifest_only",
+        resultPolicy: buildPlannedDiscoverAppResultPolicy(kind),
+        runtimePolicy: buildDiscoverAppRuntimePolicy({
           defaultToolRisk: "read",
-        },
+          declaredIntents: ["catalog_reference"],
+        }),
       };
     default:
       return {
@@ -338,9 +451,12 @@ function buildPlannedDiscoverAppIntegrationProfile(
         identityScope: "catalog_singleton",
         authMode: "custom",
         validationKind: "catalog_only",
-        runtimePolicy: {
+        contextStrategy: "manifest_only",
+        resultPolicy: buildPlannedDiscoverAppResultPolicy("catalog_only"),
+        runtimePolicy: buildDiscoverAppRuntimePolicy({
           defaultToolRisk: "read",
-        },
+          declaredIntents: ["catalog_reference"],
+        }),
       };
   }
 }
@@ -371,6 +487,27 @@ export function resolveDiscoverAppIntegrationProfile(
   const plannedKind =
     DISCOVER_APP_PLANNED_PROFILE_KIND_BY_ID[app.id] ?? "catalog_only";
   return buildPlannedDiscoverAppIntegrationProfile(plannedKind);
+}
+
+export function resolveDiscoverAppExecutionSurface(
+  profile: Pick<DiscoverAppIntegrationProfile, "adapterKind">,
+): DiscoverAppExecutionSurface {
+  switch (profile.adapterKind) {
+    case "backplane_mcp":
+      return "connector_backplane";
+    case "cli_sandbox":
+      return "sandbox_cli";
+    case "catalog_only":
+      return "catalog_only";
+    case "remote_mcp_token":
+    case "remote_mcp_no_auth":
+    case "custom_remote_mcp":
+    case "remote_mcp_oauth":
+    case "direct_api":
+      return "server_http";
+    default:
+      return "catalog_only";
+  }
 }
 
 function normalizeCatalogId(value: unknown): string {
@@ -1185,18 +1322,18 @@ export const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
   {
     id: "shopify",
     name: "Shopify",
-    tagline: "Storefront catalog, carts, policies, and checkout handoff",
+    tagline: "Storefront carts, policies, and checkout handoff",
     description:
       "Strong commerce surface for creator communities that sell products, merch, courses, templates, or member-facing store bundles.",
     supportLabel: "Custom endpoint ready",
     supportNote:
-      "Shopify documents per-store Storefront MCP endpoints at https://{shop}.myshopify.com/api/mcp with no authentication required, though individual stores may restrict access.",
+      "This ready path accepts Shopify's standard per-store Storefront MCP endpoint at https://{shop}.myshopify.com/api/mcp. UCP catalog endpoints at /api/ucp/mcp need a separate reviewed profile before launch.",
     heroNote:
-      "Best for letting a community agent answer product questions and guide shoppers through a store catalog.",
+      "Best for letting a community agent guide shoppers through storefront cart, policy, and checkout handoff flows for a specific store.",
     capabilities: [
-      "Search a specific store's catalog and product policies.",
+      "Use the standard Storefront MCP endpoint for store context and policy questions.",
       "Create and update shopping carts through the storefront MCP surface.",
-      "Support commerce recommendations without touching PolyNet billing authority.",
+      "Support commerce recommendations without touching PolyNet billing authority or UCP catalog endpoints.",
     ],
     websiteUrl: "https://www.shopify.com",
     docsUrl: "https://shopify.dev/docs/apps/build/storefront-mcp/servers/storefront",
@@ -1215,7 +1352,7 @@ export const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
       endpointPlaceholder: "https://your-store.myshopify.com/api/mcp",
       supportedAuthTypes: [{ value: "none", label: "No auth" }],
       note:
-        "Paste the target store's Storefront MCP endpoint. Keep Shopify Admin operations out of this path until scoped write auth is explicit.",
+        "Paste the target store's standard Storefront MCP endpoint. UCP catalog endpoints and Shopify Admin operations stay out of this path until scoped profiles are explicit.",
     },
   },
   {

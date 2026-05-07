@@ -57,7 +57,7 @@ An app is not useful merely because it appears in a catalog.
 Capability is real only when:
 
 1. the endpoint or app definition exists
-2. the integration profile declares the adapter, identity scope, risk floor, and readiness contract
+2. the integration profile declares the adapter, identity scope, context strategy, intended result bounds, declared intents, risk floor, and readiness contract
 3. connection/auth state is valid
 4. tools are discovered or known
 5. the app is present in the user's canonical harness state
@@ -75,11 +75,14 @@ Capability is real only when:
 8. Runtime prompt context must not claim more app capability than the harness can execute.
 9. Secrets and auth state should not live in community prompt/config text or community app grants.
 10. Communities grant access; users own app state; runtime executes only user harness tools.
-11. Ready Discover apps must declare adapter, validation, auth mode, readiness, identity, and risk metadata before they can be treated as connectable.
+11. Ready Discover apps must declare adapter, validation, auth mode, readiness, identity, context, result, declared-intent, and risk metadata before they can be treated as connectable.
 12. Catalog app connectability must be enforced on the server, not inferred from client-submitted fields.
 13. Shopify Storefront MCP is a catalog app template with endpoint-instance identity, not one global Shopify app identity.
-14. Uncataloged remote MCP endpoints are blocked from public server-fetch paths until they have a reviewed catalog policy or network egress guard.
-15. Before broad release, operators should audit existing app rows for uncataloged or catalog-policy-blocked endpoints.
+14. Shopify's ready path accepts only the standard Storefront MCP `/api/mcp` endpoint; UCP catalog endpoints such as `/api/ucp/mcp` need a separate reviewed profile before they are connectable.
+15. Uncataloged remote MCP endpoints are blocked from public server-fetch paths until they have a reviewed catalog policy or network egress guard.
+16. Before broad release, operators should audit existing app rows for uncataloged or catalog-policy-blocked endpoints.
+17. Prefer direct API adapters when the product workflow needs token-efficient structured snapshots instead of broad tool discovery.
+18. Prefer sandboxed CLI adapters when the app produces artifacts, renders, builds, or previews.
 
 ## Common Mistakes
 

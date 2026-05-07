@@ -19,6 +19,9 @@ EXCLUDES=(
   --glob '!references/**'
   --glob '!apps/web/src/lib/discoverCatalog.ts'
   --glob '!shared/discoverCatalog.ts'
+  --glob '!scripts/discover_connect_policy_proof.ts'
+  --glob '!scripts/discover_integration_profile_proof.ts'
+  --glob '!scripts/runtime_profile_policy_proof.ts'
 )
 CODE_TARGETS=(
   apps
@@ -26,7 +29,7 @@ CODE_TARGETS=(
   convex
 )
 
-echo "[1/3] Scanning repository for forbidden legacy provider references outside the MCP catalog..."
+echo "[1/3] Scanning repository for forbidden legacy provider references outside approved MCP catalog/proof surfaces..."
 if rg -n -i --hidden -S "$PATTERN" . "${EXCLUDES[@]}"; then
   echo "FAIL: legacy provider reference detected."
   exit 1
@@ -39,4 +42,4 @@ if rg -n -i --hidden -S "$OBFUSCATED_PATTERN" "${CODE_TARGETS[@]}" "${EXCLUDES[@
 fi
 
 echo "[3/3] Guard passed."
-echo "PASS: repository is legacy-provider free."
+echo "PASS: repository is legacy-provider free outside approved MCP catalog/proof surfaces."

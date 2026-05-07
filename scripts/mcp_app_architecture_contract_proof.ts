@@ -54,6 +54,26 @@ function main() {
   );
   assertIncludes(
     contract,
+    "A ready app profile must declare adapter kind, readiness, auth mode, validation kind, identity, context strategy, result policy, declared intents, and risk metadata.",
+    "MCP app architecture contract profile metadata rule",
+  );
+  assertIncludes(
+    contract,
+    "Context strategy must say whether the harness should use manifest-only context, search-then-fetch, structured snapshots, or artifact references.",
+    "MCP app architecture contract context strategy rule",
+  );
+  assertIncludes(
+    contract,
+    "Execution surface is derived from adapter kind: remote MCP and direct API use server HTTP, backplane uses connector backplane, sandboxed CLI uses sandboxed commands, and catalog-only has no executable surface.",
+    "MCP app architecture contract execution surface rule",
+  );
+  assertIncludes(
+    contract,
+    "Result policy declares intended tool-count and result-byte bounds; runtime enforcement must be wired before those bounds are treated as active execution policy.",
+    "MCP app architecture contract result policy rule",
+  );
+  assertIncludes(
+    contract,
     "Catalog app connection policy is server-authoritative",
     "MCP app architecture contract server-authoritative catalog policy rule",
   );
@@ -61,6 +81,11 @@ function main() {
     contract,
     "endpoint-instance apps, such as Shopify Storefront MCP, reuse by endpoint/auth identity.",
     "MCP app architecture contract endpoint-instance identity rule",
+  );
+  assertIncludes(
+    contract,
+    "Shopify's ready profile accepts only the standard Storefront MCP `/api/mcp` endpoint",
+    "MCP app architecture contract Shopify standard Storefront MCP rule",
   );
   assertIncludes(
     contract,

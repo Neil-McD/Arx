@@ -95,6 +95,7 @@ function main() {
   for (const endpointUrl of [
     "https://evil.example/api/mcp",
     "https://demo-store.myshopify.com/admin/api/mcp",
+    "https://demo-store.myshopify.com/api/ucp/mcp",
     "https://demo-store.myshopify.com/api/mcp?redirect=https://evil.example",
     "http://demo-store.myshopify.com/api/mcp",
   ]) {

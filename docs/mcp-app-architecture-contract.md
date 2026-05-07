@@ -17,7 +17,7 @@ An app definition is the stable identity and connection shape for an MCP app.
 Current code:
 - `developerApps`
 - catalog app entries that seed or identify first-party apps
-- Discover integration profiles that declare adapter, readiness, validation, identity, and risk metadata
+- Discover integration profiles that declare adapter, readiness, validation, identity, context, execution, result, and risk metadata
 
 Rules:
 - Every app must resolve through one stable identity when possible.
@@ -37,11 +37,15 @@ Current code:
 Rules:
 - Every Discover app must resolve to one profile.
 - Ready apps must have an explicit profile override.
-- A ready app profile must declare adapter kind, readiness, auth mode, validation kind, identity, and risk metadata.
+- A ready app profile must declare adapter kind, readiness, auth mode, validation kind, identity, context strategy, result policy, declared intents, and risk metadata.
 - Planned apps must remain disabled at the profile layer until their adapter contract exists.
 - Adapter categories are MCP, connector backplane, direct API, sandboxed CLI, or catalog-only.
+- Context strategy must say whether the harness should use manifest-only context, search-then-fetch, structured snapshots, or artifact references.
+- Execution surface is derived from adapter kind: remote MCP and direct API use server HTTP, backplane uses connector backplane, sandboxed CLI uses sandboxed commands, and catalog-only has no executable surface.
+- Result policy declares intended tool-count and result-byte bounds; runtime enforcement must be wired before those bounds are treated as active execution policy.
 - Catalog app connection policy is server-authoritative; the frontend cannot choose a catalog app endpoint, auth mode, or display name as authority.
 - Catalog singleton apps reuse by `catalogAppId`; endpoint-instance apps, such as Shopify Storefront MCP, reuse by endpoint/auth identity.
+- Shopify's ready profile accepts only the standard Storefront MCP `/api/mcp` endpoint; UCP catalog endpoints such as `/api/ucp/mcp` require a separate reviewed profile before they are connectable.
 - Uncataloged remote MCP endpoints are blocked from public server-fetch paths until they have a reviewed catalog policy or a network-layer egress guard.
 - Operator audit must identify uncataloged or catalog-policy-blocked developer app rows before broad release.
 - Integration profile default risk is applied as a floor during MCP tool snapshot classification.

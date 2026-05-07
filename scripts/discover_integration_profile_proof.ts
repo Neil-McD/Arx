@@ -5,6 +5,7 @@ import {
   buildDiscoverAppIntegrationReadinessLabel,
   hasExplicitDiscoverAppIntegrationProfile,
   hasPlannedDiscoverAppIntegrationProfileKind,
+  resolveDiscoverAppExecutionSurface,
   resolveDiscoverAppIntegrationProfile,
   type DiscoverAppCatalogEntry,
   type DiscoverAppIntegrationProfile,
@@ -14,6 +15,14 @@ const READY_APP_IDS = new Set(["airtable", "linear", "shopify", "supabase"]);
 
 function assertNonEmpty(value: string, label: string) {
   assert.ok(value.trim().length > 0, `${label} must be non-empty`);
+}
+
+function assertNonEmptyArray(value: string[], label: string) {
+  assert.ok(Array.isArray(value), `${label} must be an array`);
+  assert.ok(value.length > 0, `${label} must be non-empty`);
+  for (const item of value) {
+    assertNonEmpty(item, `${label} item`);
+  }
 }
 
 function assertHttpsEndpoint(app: DiscoverAppCatalogEntry) {
@@ -88,6 +97,82 @@ function assertPlannedProfileIsNotExecutable(
   );
 }
 
+function assertProfileHarnessContract(app: DiscoverAppCatalogEntry, profile: DiscoverAppIntegrationProfile) {
+  assertNonEmpty(profile.contextStrategy, `${app.id} context strategy`);
+  const executionSurface = resolveDiscoverAppExecutionSurface(profile);
+  assertNonEmpty(executionSurface, `${app.id} execution surface`);
+  assert.ok(
+    Number.isInteger(profile.resultPolicy.maxToolCount) &&
+      profile.resultPolicy.maxToolCount >= 0,
+    `${app.id} result policy max tool count must be a non-negative integer`,
+  );
+  assert.ok(
+    Number.isInteger(profile.resultPolicy.maxResultBytes) &&
+      profile.resultPolicy.maxResultBytes >= 0,
+    `${app.id} result policy max result bytes must be a non-negative integer`,
+  );
+  assert.equal(
+    typeof profile.resultPolicy.summarizeLargeResults,
+    "boolean",
+    `${app.id} result policy summarize flag must be boolean`,
+  );
+  assertNonEmptyArray(profile.runtimePolicy.declaredIntents, `${app.id} declared intents`);
+
+  if (profile.adapterKind === "cli_sandbox") {
+    assert.equal(
+      executionSurface,
+      "sandbox_cli",
+      `${app.id} sandbox adapters must execute through sandbox CLI`,
+    );
+    assert.equal(
+      profile.contextStrategy,
+      "artifact_reference",
+      `${app.id} sandbox adapters should pass artifact references, not raw process output`,
+    );
+  }
+  if (profile.adapterKind === "backplane_mcp") {
+    assert.equal(
+      executionSurface,
+      "connector_backplane",
+      `${app.id} backplane adapters must execute through the connector backplane`,
+    );
+  }
+  if (
+    profile.adapterKind === "remote_mcp_token" ||
+    profile.adapterKind === "remote_mcp_no_auth" ||
+    profile.adapterKind === "remote_mcp_oauth" ||
+    profile.adapterKind === "custom_remote_mcp" ||
+    profile.adapterKind === "direct_api"
+  ) {
+    assert.equal(
+      executionSurface,
+      "server_http",
+      `${app.id} remote/API adapters must execute through server HTTP`,
+    );
+  }
+  if (profile.adapterKind === "catalog_only") {
+    assert.equal(
+      executionSurface,
+      "catalog_only",
+      `${app.id} catalog-only adapters must not declare an executable surface`,
+    );
+    assert.equal(
+      profile.resultPolicy.maxToolCount,
+      0,
+      `${app.id} catalog-only adapters must expose no tools`,
+    );
+  } else {
+    assert.ok(
+      profile.resultPolicy.maxToolCount > 0,
+      `${app.id} executable/planned adapters should declare a positive tool budget`,
+    );
+    assert.ok(
+      profile.resultPolicy.maxResultBytes > 0,
+      `${app.id} executable/planned adapters should declare a positive result budget`,
+    );
+  }
+}
+
 function main() {
   const seenIds = new Set<string>();
   for (const app of DISCOVER_APP_CATALOG) {
@@ -101,6 +186,7 @@ function main() {
     assertNonEmpty(profile.authMode, `${app.id} auth mode`);
     assertNonEmpty(profile.validationKind, `${app.id} validation kind`);
     assertNonEmpty(profile.runtimePolicy.defaultToolRisk, `${app.id} tool risk`);
+    assertProfileHarnessContract(app, profile);
     assertNonEmpty(buildDiscoverAppIntegrationReadinessLabel(app), `${app.id} readiness label`);
     assertNonEmpty(buildDiscoverAppAdapterLabel(app), `${app.id} adapter label`);
 
