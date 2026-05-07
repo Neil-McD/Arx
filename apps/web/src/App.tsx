@@ -792,6 +792,40 @@ const APP_OAUTH_RETURN_PARAM_NAMES = [
   "app_oauth_message",
   "catalog_app_id",
 ] as const;
+const APP_OAUTH_FINALIZE_SESSION_GUARD_PREFIX = "app_oauth_finalize:";
+const APP_OAUTH_FINALIZE_SESSION_GUARD_TTL_MS = 2 * 60_000;
+
+function buildAppOAuthFinalizeSessionGuardKey(
+  state: string,
+  finalizeToken: string,
+): string {
+  return `${APP_OAUTH_FINALIZE_SESSION_GUARD_PREFIX}${state}:${finalizeToken}`;
+}
+
+function claimAppOAuthFinalizeSessionGuard(key: string): boolean {
+  try {
+    const existing = Number(window.sessionStorage.getItem(key) ?? "");
+    const now = Date.now();
+    if (
+      Number.isFinite(existing) &&
+      existing > now - APP_OAUTH_FINALIZE_SESSION_GUARD_TTL_MS
+    ) {
+      return false;
+    }
+    window.sessionStorage.setItem(key, String(now));
+    return true;
+  } catch {
+    return true;
+  }
+}
+
+function clearAppOAuthFinalizeSessionGuard(key: string): void {
+  try {
+    window.sessionStorage.removeItem(key);
+  } catch {
+    // Ignore storage failures; the backend finalizer is still idempotent.
+  }
+}
 
 function formatModelSignature(
   modelId: string | null | undefined,
@@ -3786,8 +3820,12 @@ export default function App() {
     if (!session) return;
     const inFlightKey = `${state}:${finalizeToken}`;
     if (appOAuthFinalizeInFlightRef.current === inFlightKey) return;
+    const sessionGuardKey = buildAppOAuthFinalizeSessionGuardKey(
+      state,
+      finalizeToken,
+    );
+    if (!claimAppOAuthFinalizeSessionGuard(sessionGuardKey)) return;
     appOAuthFinalizeInFlightRef.current = inFlightKey;
-    let cancelled = false;
 
     void (async () => {
       try {
@@ -3795,7 +3833,6 @@ export default function App() {
           state,
           finalizeToken,
         });
-        if (cancelled) return;
         if (result.ok) {
           showAppToastMessage("App connected.");
           userPlatformAppMountsLoadedUserIdRef.current = null;
@@ -3809,6 +3846,7 @@ export default function App() {
         scrubCurrentRouteSearchParams(APP_OAUTH_RETURN_PARAM_NAMES);
         applyLocationToState();
       } finally {
+        clearAppOAuthFinalizeSessionGuard(sessionGuardKey);
         if (appOAuthFinalizeInFlightRef.current === inFlightKey) {
           appOAuthFinalizeInFlightRef.current = null;
         }
@@ -3816,10 +3854,7 @@ export default function App() {
     })();
 
     return () => {
-      cancelled = true;
-      if (appOAuthFinalizeInFlightRef.current === inFlightKey) {
-        appOAuthFinalizeInFlightRef.current = null;
-      }
+      // Keep the in-flight/session guards while the one-shot finalizer runs.
     };
   }, [
     applyLocationToState,

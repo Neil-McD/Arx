@@ -839,6 +839,17 @@ export default defineSchema({
     callbackCodeVersion: v.optional(v.number()),
     finalizeTokenHash: v.optional(v.string()),
     callbackReceivedAt: v.optional(v.number()),
+    finalizeStatus: v.optional(
+      v.union(
+        v.literal("processing"),
+        v.literal("completed"),
+        v.literal("failed"),
+      ),
+    ),
+    finalizeStartedAt: v.optional(v.number()),
+    finalizeCompletedAt: v.optional(v.number()),
+    finalizeResultJson: v.optional(v.string()),
+    finalizeErrorMessage: v.optional(v.string()),
     createdAt: v.number(),
     expiresAt: v.number(),
   })

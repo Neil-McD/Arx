@@ -61,10 +61,19 @@ type TokenResponse = {
   scope?: unknown;
 };
 
+type AppOAuthFinalizeResult = {
+  ok: boolean;
+  catalog_app_id: string | null;
+  mount_id?: string | null;
+  validation_status?: string | null;
+  error_message?: string | null;
+};
+
 const APP_OAUTH_STATE_TTL_MS = 10 * 60_000;
 const APP_OAUTH_REFRESH_WINDOW_MS = 60_000;
 const APP_OAUTH_JSON_MAX_BYTES = 128_000;
 const APP_OAUTH_HTTP_TIMEOUT_MS = 10_000;
+const APP_OAUTH_FINALIZE_PROCESSING_TIMEOUT_MS = 2 * 60_000;
 const DEFAULT_NOTION_MCP_ENDPOINT = "https://mcp.notion.com/mcp";
 
 function resolveOAuthTokenResourceMode(catalogAppId: unknown): OAuthTokenResourceMode {
@@ -91,6 +100,33 @@ function normalizeReturnToPath(value: unknown): string {
     return "/discover";
   }
   return trimmed;
+}
+
+function parseFinalizeResultJson(raw: unknown): AppOAuthFinalizeResult | null {
+  try {
+    const parsed = JSON.parse(normalizeString(raw, 4_000));
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+    const record = parsed as Record<string, unknown>;
+    return {
+      ok: record.ok === true,
+      catalog_app_id: normalizeString(record.catalog_app_id, 120) || null,
+      mount_id: normalizeString(record.mount_id, 200) || null,
+      validation_status: normalizeString(record.validation_status, 200) || null,
+      error_message: normalizeString(record.error_message, 500) || null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function stringifyFinalizeResult(result: AppOAuthFinalizeResult): string {
+  return JSON.stringify({
+    ok: result.ok === true,
+    catalog_app_id: result.catalog_app_id ?? null,
+    mount_id: result.mount_id ?? null,
+    validation_status: result.validation_status ?? null,
+    error_message: result.error_message ?? null,
+  });
 }
 
 function normalizeHttpsOrLocalOrigin(value: unknown): string | null {
@@ -703,6 +739,149 @@ export const deleteAppOAuthStateInternal = internalMutation({
   },
 });
 
+export const claimAppOAuthFinalizeInternal = internalMutation({
+  args: {
+    state: v.string(),
+    userId: v.id("users"),
+    finalizeTokenHash: v.string(),
+    nowMs: v.number(),
+  },
+  handler: async (ctx, args): Promise<unknown> => {
+    const row = await ctx.db
+      .query("appOAuthStates")
+      .withIndex("by_state", (q: any) => q.eq("state", args.state))
+      .first();
+    if (!row) {
+      return {
+        status: "missing",
+        result: {
+          ok: false,
+          catalog_app_id: null,
+          error_message: "OAuth connection was not found. Start again.",
+        },
+      };
+    }
+    const catalogAppId = normalizeString(row.catalogAppId, 120);
+    if (String(row.userId) !== String(args.userId)) {
+      await ctx.db.delete(row._id);
+      return {
+        status: "wrong_user",
+        result: {
+          ok: false,
+          catalog_app_id: catalogAppId,
+          error_message:
+            "OAuth connection must be finished by the Polynet account that started it.",
+        },
+      };
+    }
+    if (args.nowMs > Number(row.expiresAt ?? 0)) {
+      await ctx.db.delete(row._id);
+      return {
+        status: "expired",
+        result: {
+          ok: false,
+          catalog_app_id: catalogAppId,
+          error_message: "OAuth connection expired. Start again.",
+        },
+      };
+    }
+    if (
+      !normalizeString(row.finalizeTokenHash, 200) ||
+      normalizeString(row.finalizeTokenHash, 200) !== args.finalizeTokenHash
+    ) {
+      throw new Error("app_oauth_finalize_token_mismatch");
+    }
+    const completedResult = parseFinalizeResultJson(row.finalizeResultJson);
+    if (row.finalizeStatus === "completed" && completedResult) {
+      return { status: "completed", result: completedResult };
+    }
+    if (row.finalizeStatus === "failed") {
+      return {
+        status: "failed",
+        result:
+          completedResult ?? {
+            ok: false,
+            catalog_app_id: catalogAppId,
+            error_message:
+              normalizeString(row.finalizeErrorMessage, 500) ||
+              "Notion authorization could not be finalized. Start again.",
+          },
+      };
+    }
+    if (
+      row.finalizeStatus === "processing" &&
+      Number(row.finalizeStartedAt ?? 0) >
+        args.nowMs - APP_OAUTH_FINALIZE_PROCESSING_TIMEOUT_MS
+    ) {
+      return {
+        status: "processing",
+        result: {
+          ok: false,
+          catalog_app_id: catalogAppId,
+          error_message: "OAuth connection is finishing.",
+        },
+      };
+    }
+    await ctx.db.patch(row._id, {
+      finalizeStatus: "processing",
+      finalizeStartedAt: args.nowMs,
+      finalizeErrorMessage: undefined,
+    });
+    return { status: "claimed" };
+  },
+});
+
+export const completeAppOAuthFinalizeInternal = internalMutation({
+  args: {
+    stateId: v.id("appOAuthStates"),
+    resultJson: v.string(),
+    nowMs: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db.get(args.stateId);
+    if (!existing) return { completed: false };
+    await ctx.db.patch(args.stateId, {
+      clientSecretEncryptedHex: undefined,
+      clientSecretIvHex: undefined,
+      clientSecretVersion: undefined,
+      callbackCodeEncryptedHex: undefined,
+      callbackCodeIvHex: undefined,
+      callbackCodeVersion: undefined,
+      finalizeStatus: "completed",
+      finalizeCompletedAt: args.nowMs,
+      finalizeResultJson: args.resultJson,
+      finalizeErrorMessage: undefined,
+    });
+    return { completed: true };
+  },
+});
+
+export const failAppOAuthFinalizeInternal = internalMutation({
+  args: {
+    stateId: v.id("appOAuthStates"),
+    resultJson: v.string(),
+    errorMessage: v.string(),
+    nowMs: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db.get(args.stateId);
+    if (!existing) return { failed: false };
+    await ctx.db.patch(args.stateId, {
+      clientSecretEncryptedHex: undefined,
+      clientSecretIvHex: undefined,
+      clientSecretVersion: undefined,
+      callbackCodeEncryptedHex: undefined,
+      callbackCodeIvHex: undefined,
+      callbackCodeVersion: undefined,
+      finalizeStatus: "failed",
+      finalizeCompletedAt: args.nowMs,
+      finalizeResultJson: args.resultJson,
+      finalizeErrorMessage: args.errorMessage,
+    });
+    return { failed: true };
+  },
+});
+
 export const beginUserPlatformAppOAuth = action({
   args: {
     authSubject: v.optional(v.string()),
@@ -934,6 +1113,25 @@ export const finalizeUserPlatformAppOAuth = action({
     ) {
       throw new Error("app_oauth_finalize_token_mismatch");
     }
+    const claim = (await ctx.runMutation(
+      internal.appOAuth.claimAppOAuthFinalizeInternal as any,
+      {
+        state,
+        userId,
+        finalizeTokenHash: actualFinalizeTokenHash,
+        nowMs: Date.now(),
+      },
+    )) as {
+      status?: string;
+      result?: AppOAuthFinalizeResult;
+    } | null;
+    if (claim?.status !== "claimed") {
+      return claim?.result ?? {
+        ok: false,
+        catalog_app_id: catalogAppId || null,
+        error_message: "OAuth connection could not be finalized.",
+      };
+    }
     if (!row.callbackCodeEncryptedHex || !row.callbackCodeIvHex) {
       return {
         ok: false,
@@ -972,19 +1170,35 @@ export const finalizeUserPlatformAppOAuth = action({
             secretIvHex: row.clientSecretIvHex,
           })
         : null;
-    const tokenBundle = await exchangeCodeForTokenBundle({
-      catalogAppId,
-      code,
-      codeVerifier: row.codeVerifier,
-      redirectUri: row.redirectUri,
-      tokenEndpoint: row.tokenEndpoint,
-      issuer: normalizeString(row.issuer, 2_000) || null,
-      clientId: row.clientId,
-      clientSecret: normalizeString(clientSecret, 2_000) || null,
-      resource: normalizeString(row.resource, 2_000),
-      scope: normalizeString(row.scope, 2_000) || null,
-      nowMs,
-    });
+    let tokenBundle: StoredOAuthTokenBundleV1;
+    try {
+      tokenBundle = await exchangeCodeForTokenBundle({
+        catalogAppId,
+        code,
+        codeVerifier: row.codeVerifier,
+        redirectUri: row.redirectUri,
+        tokenEndpoint: row.tokenEndpoint,
+        issuer: normalizeString(row.issuer, 2_000) || null,
+        clientId: row.clientId,
+        clientSecret: normalizeString(clientSecret, 2_000) || null,
+        resource: normalizeString(row.resource, 2_000),
+        scope: normalizeString(row.scope, 2_000) || null,
+        nowMs,
+      });
+    } catch {
+      const result: AppOAuthFinalizeResult = {
+        ok: false,
+        catalog_app_id: catalogAppId || null,
+        error_message: "Notion authorization could not be finalized. Start again.",
+      };
+      await ctx.runMutation(internal.appOAuth.failAppOAuthFinalizeInternal as any, {
+        stateId: row._id,
+        resultJson: stringifyFinalizeResult(result),
+        errorMessage: result.error_message ?? "OAuth finalization failed.",
+        nowMs: Date.now(),
+      });
+      return result;
+    }
     await ctx.runAction(internal.userPlatformAppMounts.ensureUserHarnessAppInternal, {
       userId: row.userId,
       catalogAppId: connectPolicy.catalogAppId,
@@ -1012,9 +1226,6 @@ export const finalizeUserPlatformAppOAuth = action({
       developerAppId: existing.app._id,
       bundle: tokenBundle,
       nowMs,
-    });
-    await ctx.runMutation(internal.appOAuth.deleteAppOAuthStateInternal as any, {
-      stateId: row._id,
     });
     const validation = (await ctx.runAction(
       internal.appValidation.validateDeveloperAppInternal,
@@ -1055,12 +1266,18 @@ export const finalizeUserPlatformAppOAuth = action({
         },
       );
     }
-    return {
+    const result: AppOAuthFinalizeResult = {
       ok: true,
       catalog_app_id: catalogAppId,
       mount_id: String(existing.mount._id),
       validation_status: String(validation.validation_status ?? ""),
     };
+    await ctx.runMutation(internal.appOAuth.completeAppOAuthFinalizeInternal as any, {
+      stateId: row._id,
+      resultJson: stringifyFinalizeResult(result),
+      nowMs: Date.now(),
+    });
+    return result;
   },
 });
 
