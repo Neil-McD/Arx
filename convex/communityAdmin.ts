@@ -31,7 +31,6 @@ import {
   resolveCommunityBrandingFields,
   resolvePublicUserId,
   resolveUserIdForAuthenticatedRequest,
-  tierHasBuilderAccess,
   tierHasArchitectAccess,
   toIsoString,
 } from "./communityCore";

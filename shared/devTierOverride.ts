@@ -1,4 +1,4 @@
-export type DevBuilderTierUi = "free" | "builder" | "architect";
+export type DevBuilderTierUi = "free" | "architect";
 
 const CREATOR_EMAIL_ALLOWLIST = new Set<string>([
   "neilmcdevitt@gmail.com",

@@ -18,7 +18,7 @@ export type OperatorBuilderRecord = {
     displayName: string | null;
     email: string | null;
     avatarUrl: string | null;
-    tier: "free" | "builder" | "architect" | "unknown";
+    tier: "free" | "architect" | "unknown";
     payoutStatus: "not_connected" | "onboarding_required" | "pending_requirements" | "ready" | "restricted";
   };
   community: {

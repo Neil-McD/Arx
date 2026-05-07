@@ -296,35 +296,46 @@ async function listUserHarnessAppSourcesForMount(args: {
 async function listCommunityAppSourceProvenanceRecipientUserIds(
   ctx: any,
   communityId: any,
-): Promise<any[]> {
+  maxRecipients: number,
+): Promise<{ userIds: any[]; truncated: boolean }> {
   const community = (await ctx.db.get(communityId)) as { ownerId?: any } | null;
-  if (!community) return [];
+  if (!community) return { userIds: [], truncated: false };
   const recipients: any[] = [];
   const seen = new Set<string>();
+  let truncated = false;
   const addRecipient = (userId: any) => {
     const key = String(userId ?? "");
     if (!key || seen.has(key)) return;
+    if (recipients.length >= maxRecipients) {
+      truncated = true;
+      return;
+    }
     seen.add(key);
     recipients.push(userId);
   };
 
   addRecipient(community.ownerId);
-  const memberships = (await ctx.db
+  const membershipRows = (await ctx.db
     .query("communityMemberships")
     .withIndex("by_community", (q: any) => q.eq("communityId", communityId))
-    .collect()) as CommunityAppGrantRecipientRow[];
-  for (const membership of memberships) {
+    .take(maxRecipients + 1)) as CommunityAppGrantRecipientRow[];
+  if (membershipRows.length > maxRecipients) {
+    truncated = true;
+  }
+  for (const membership of membershipRows.slice(0, maxRecipients)) {
     if (membership.active === false) continue;
     if (typeof membership.revokedAt === "number") continue;
     addRecipient(membership.userId);
   }
-  return recipients;
+  return { userIds: recipients, truncated };
 }
 
 async function collectCommunityAppSourceProvenanceAudit(args: {
   ctx: any;
   limit: number;
   maxPairs: number;
+  maxCommunityAppMounts: number;
+  maxRecipientsPerCommunity: number;
   repair: boolean;
   nowMs: number;
 }): Promise<{
@@ -340,6 +351,12 @@ async function collectCommunityAppSourceProvenanceAudit(args: {
     repairedCommunitySourcePairs: number;
   };
   findings: CommunityAppSourceProvenanceFinding[];
+  limits: {
+    findingLimit: number;
+    maxPairs: number;
+    maxCommunityAppMounts: number;
+    maxRecipientsPerCommunity: number;
+  };
   truncated: boolean;
   dry_run: boolean;
   computedAt: number;
@@ -365,14 +382,22 @@ async function collectCommunityAppSourceProvenanceAudit(args: {
     }
   };
 
-  const communityAppMounts = (await args.ctx.db
+  const communityAppMountRows = (await args.ctx.db
     .query("communityAppMounts")
-    .collect()) as Array<{
+    .order("asc")
+    .take(args.maxCommunityAppMounts + 1)) as Array<{
     _id: any;
     communityId: any;
     developerAppId: any;
     enabled?: boolean;
   }>;
+  if (communityAppMountRows.length > args.maxCommunityAppMounts) {
+    truncated = true;
+  }
+  const communityAppMounts = communityAppMountRows.slice(
+    0,
+    args.maxCommunityAppMounts,
+  );
 
   for (const communityAppMount of communityAppMounts) {
     summary.communityAppMountsScanned += 1;
@@ -407,25 +432,27 @@ async function collectCommunityAppSourceProvenanceAudit(args: {
       continue;
     }
 
-    const recipientUserIds =
-      await listCommunityAppSourceProvenanceRecipientUserIds(
-        args.ctx,
-        communityAppMount.communityId,
-      );
-    for (const userId of recipientUserIds) {
+    const recipientScan = await listCommunityAppSourceProvenanceRecipientUserIds(
+      args.ctx,
+      communityAppMount.communityId,
+      args.maxRecipientsPerCommunity,
+    );
+    if (recipientScan.truncated) {
+      truncated = true;
+    }
+    for (const userId of recipientScan.userIds) {
       if (summary.recipientPairsScanned >= args.maxPairs) {
         truncated = true;
         break;
       }
       summary.recipientPairsScanned += 1;
-      const userPlatformAppMount = await args.ctx.db
-        .query("userPlatformAppMounts")
-        .withIndex("by_user_app", (q: any) =>
-          q
-            .eq("userId", userId)
-            .eq("developerAppId", communityAppMount.developerAppId),
-        )
-        .first();
+      const existingUserHarnessApp =
+        await findExistingUserPlatformMountByDeveloperAppIdentity(
+          args.ctx,
+          userId,
+          developerApp,
+        );
+      const userPlatformAppMount = existingUserHarnessApp?.mount ?? null;
       if (!userPlatformAppMount) {
         summary.missingUserHarnessAppPairs += 1;
         pushFinding({
@@ -508,6 +535,12 @@ async function collectCommunityAppSourceProvenanceAudit(args: {
   return {
     summary,
     findings,
+    limits: {
+      findingLimit: args.limit,
+      maxPairs: args.maxPairs,
+      maxCommunityAppMounts: args.maxCommunityAppMounts,
+      maxRecipientsPerCommunity: args.maxRecipientsPerCommunity,
+    },
     truncated,
     dry_run: !args.repair,
     computedAt: args.nowMs,
@@ -807,11 +840,37 @@ function developerAppsSharePersonalIdentity(
   ) {
     return true;
   }
+  const leftEndpoint = normalizeDeveloperAppEndpointUrl(left.endpointUrl);
+  const rightEndpoint = normalizeDeveloperAppEndpointUrl(right.endpointUrl);
   return (
-    normalizeDeveloperAppEndpointUrl(left.endpointUrl) ===
-      normalizeDeveloperAppEndpointUrl(right.endpointUrl) &&
+    Boolean(leftEndpoint && rightEndpoint) &&
+    leftEndpoint === rightEndpoint &&
     left.authType === right.authType
   );
+}
+
+async function findExistingUserPlatformMountByDeveloperAppIdentity(
+  ctx: any,
+  userId: any,
+  targetApp: DeveloperAppRow,
+): Promise<{
+  mount: UserPlatformAppMountRow;
+  app: DeveloperAppRow;
+  connection: AppConnectionRow | null;
+} | null> {
+  const mounts = await listUserPlatformAppMountRows(ctx, userId);
+  mounts.sort((a, b) => b.updatedAt - a.updatedAt || b.createdAt - a.createdAt);
+  for (const mount of mounts) {
+    const app = await getDeveloperAppById(ctx, mount.developerAppId);
+    if (!app) continue;
+    if (!developerAppsSharePersonalIdentity(targetApp, app)) continue;
+    const connection = await getAppConnectionByDeveloperAppId(
+      ctx,
+      mount.developerAppId,
+    );
+    return { mount, app, connection };
+  }
+  return null;
 }
 
 export const findExistingUserPlatformMountByIdentityInternal = internalQuery({
@@ -2108,12 +2167,24 @@ export const listCommunityAppSourceProvenanceAuditInternal = internalQuery({
   args: {
     limit: v.optional(v.number()),
     maxPairs: v.optional(v.number()),
+    maxCommunityAppMounts: v.optional(v.number()),
+    maxRecipientsPerCommunity: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     return await collectCommunityAppSourceProvenanceAudit({
       ctx,
       limit: normalizeProvenanceAuditLimit(args.limit, 100, 500),
       maxPairs: normalizeProvenanceAuditLimit(args.maxPairs, 1_000, 5_000),
+      maxCommunityAppMounts: normalizeProvenanceAuditLimit(
+        args.maxCommunityAppMounts,
+        500,
+        1_000,
+      ),
+      maxRecipientsPerCommunity: normalizeProvenanceAuditLimit(
+        args.maxRecipientsPerCommunity,
+        1_000,
+        5_000,
+      ),
       repair: false,
       nowMs: Date.now(),
     });
@@ -2124,14 +2195,27 @@ export const backfillCommunityAppSourceProvenanceInternal = internalMutation({
   args: {
     limit: v.optional(v.number()),
     maxPairs: v.optional(v.number()),
+    maxCommunityAppMounts: v.optional(v.number()),
+    maxRecipientsPerCommunity: v.optional(v.number()),
     dryRun: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
+    const shouldRepair = args.dryRun === false;
     return await collectCommunityAppSourceProvenanceAudit({
       ctx,
       limit: normalizeProvenanceAuditLimit(args.limit, 100, 500),
       maxPairs: normalizeProvenanceAuditLimit(args.maxPairs, 250, 1_000),
-      repair: args.dryRun !== true,
+      maxCommunityAppMounts: normalizeProvenanceAuditLimit(
+        args.maxCommunityAppMounts,
+        250,
+        1_000,
+      ),
+      maxRecipientsPerCommunity: normalizeProvenanceAuditLimit(
+        args.maxRecipientsPerCommunity,
+        250,
+        1_000,
+      ),
+      repair: shouldRepair,
       nowMs: Date.now(),
     });
   },

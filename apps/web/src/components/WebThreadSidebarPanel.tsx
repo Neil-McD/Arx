@@ -314,7 +314,7 @@ export function WebThreadSidebarPanel<TThread, TProject extends ProjectLike>(
                       <div className="empty-state">
                         {projectThreadGroups.length > 0
                           ? "No local threads yet. Pick a project and start one."
-                          : "No local threads yet. Start one when Builder workspace access is enabled."}
+                          : "No local threads yet. Start one after your workspace is ready."}
                       </div>
                     )
                   : chatThreadsCount === 0 && (

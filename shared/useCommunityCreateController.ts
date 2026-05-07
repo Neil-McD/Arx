@@ -36,7 +36,6 @@ type UseCommunityCreateControllerArgs<
   communityRoleById: Record<string, string>;
   loadBuilderBillingStatus: (session: SessionT) => Promise<BillingStatusT | null>;
   persistCreateCommunityIntent: (draft: CreateCommunityIntentDraft) => void;
-  onStartUpgradeFlow: () => void;
   onPrimaryUnauthenticated: (draft: CreateCommunityIntentDraft) => Promise<void> | void;
   onCreateUnauthenticated?: (draft: CreateCommunityIntentDraft) => Promise<void> | void;
   onOwnedCommunityLimitReached?: () => void;
@@ -270,19 +269,19 @@ export function useCommunityCreateController<
 
     const status = current.builderBillingStatus ?? await current.loadBuilderBillingStatus(session);
     if (!status) {
-      current.setCreateCommunityError("Couldn't check your plan. Try again.");
+      current.setCreateCommunityError("Couldn't check your account status. Try again.");
       return;
     }
     const max = status.max_communities ?? 0;
     const ownedCount = getOwnedCountForPrimary();
-    const needsPlan = max <= 0;
+    const needsCommunityCreationAccess = max <= 0;
     const limitReached = max > 0 && ownedCount >= max;
-    const canCreate = !needsPlan && !limitReached;
+    const canCreate = !needsCommunityCreationAccess && !limitReached;
     if (canCreate) {
       await handleCreateCommunity();
       return;
     }
-    if (needsPlan) {
+    if (needsCommunityCreationAccess) {
       current.setCreateCommunityError("Your account cannot create a community yet.");
       return;
     }

@@ -45,7 +45,6 @@ type UseWebCommunityUiControllerParams<
   communityInitials: (value: string) => string;
   loadBuilderBillingStatus: (session: SessionT) => Promise<BillingStatusT | null>;
   persistCreateCommunityIntent: (draft: CreateCommunityIntentDraft) => void;
-  onStartUpgradeFlow: () => void;
   onPrimaryUnauthenticated: (draft: CreateCommunityIntentDraft) => Promise<void> | void;
   onCreateUnauthenticated?: (draft: CreateCommunityIntentDraft) => Promise<void> | void;
   onOwnedCommunityLimitReached?: () => void;
@@ -179,7 +178,6 @@ export function useWebCommunityUiController<
     communityRoleById: params.communityRoleById,
     loadBuilderBillingStatus: params.loadBuilderBillingStatus,
     persistCreateCommunityIntent: params.persistCreateCommunityIntent,
-    onStartUpgradeFlow: params.onStartUpgradeFlow,
     onPrimaryUnauthenticated: params.onPrimaryUnauthenticated,
     onCreateUnauthenticated: params.onCreateUnauthenticated,
     onOwnedCommunityLimitReached: params.onOwnedCommunityLimitReached,

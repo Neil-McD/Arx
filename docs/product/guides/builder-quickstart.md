@@ -3,7 +3,7 @@ id: product.guide.builder_quickstart
 title: Builder Quickstart
 audience: builder, llm
 status: alpha-current
-last_verified: 2026-05-06
+last_verified: 2026-05-07
 ---
 
 # Builder Quickstart
@@ -78,8 +78,8 @@ The cash path is simple: configure the community, define the paid access model, 
 - Membership and entitlement are backend authority.
 - Paid community access requires verified backend entitlement.
 - Builder payouts depend on payout provider readiness.
-- Free builders can own one community.
-- Tool balance covers paid tools such as Daytona workspaces, web research, and voice input.
+- Free accounts can own one community.
+- Tool balance covers paid tools such as workspace tools, web research, and voice input.
 - Owner/admin manage resources and most operational settings.
 - Moderators help with moderation and join request review, not paid access.
 - Remote MCP apps must be validated before mounted capability should be trusted.

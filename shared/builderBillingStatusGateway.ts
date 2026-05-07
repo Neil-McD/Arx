@@ -3,7 +3,7 @@ import { bootstrapConvexAuthenticatedClient, requireConvexUrl } from "./convexAu
 
 export type BuilderBillingStatus = {
   user_id: string;
-  builder_tier: "free" | "builder" | "architect";
+  builder_tier: "free" | "architect";
   max_communities: number;
   platform_fee_bps: number;
   stripe_connect: {
@@ -20,13 +20,11 @@ export type BuilderBillingStatus = {
   };
 };
 
-export type DevBuilderTier = "free" | "builder" | "architect";
+export type DevBuilderTier = "free" | "architect";
 
 function normalizeBuilderTier(raw: unknown): BuilderBillingStatus["builder_tier"] {
   const value = String(raw ?? "").trim().toLowerCase();
-  if (value === "builder") return "builder";
   if (value === "architect") return "architect";
-  if (value === "pro") return "builder";
   return "free";
 }
 

@@ -25,7 +25,7 @@ type PersonalMemoryItem = {
 };
 
 type BuilderBillingStatus = {
-  builder_tier: "free" | "builder" | "architect";
+  builder_tier: "free" | "architect";
 } | null;
 
 type OpenAiConnection = {
@@ -63,7 +63,6 @@ type WebAgentSettingsSectionProps = {
   }) => Promise<void> | void;
   personalMemoryError: string | null;
   builderBillingStatus: BuilderBillingStatus;
-  openBuilderUpgrade: (context: "builder") => void;
   isLoadingPersonalMemory: boolean;
   personalMemoryItems: PersonalMemoryItem[];
   personalMemoryQuery: string;
@@ -295,7 +294,7 @@ export function WebAgentSettingsSection(props: WebAgentSettingsSectionProps) {
                   Tool balance
                 </div>
                 <div className="settings-section-desc">
-                  Tool balance is used for premium tools: Daytona workspaces, web research, and voice input. LLM inference still uses your connected ChatGPT account or OpenAI API key.
+                  Tool balance is used for premium tools: workspace tools, web research, and voice input. LLM inference still uses your connected ChatGPT account or OpenAI API key.
                 </div>
                 {isLoadingWorkspaceCreditBalance && !workspaceCreditBalance ? (
                   <div className="model-note">Checking tool balance…</div>

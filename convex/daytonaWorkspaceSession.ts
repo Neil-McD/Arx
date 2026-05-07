@@ -229,7 +229,7 @@ export async function createWorkspaceSandboxSession(params: {
       ok: false,
       status: 402,
       code: "workspace_credits_exhausted",
-      message: "Daytona workspaces use paid sandbox compute, so they need tool balance before they run.",
+      message: "Workspace tools use paid sandbox compute, so they need tool balance before they run.",
     };
   }
   const remainingCredits =
@@ -240,7 +240,7 @@ export async function createWorkspaceSandboxSession(params: {
       ok: false,
       status: 402,
       code: "workspace_credits_exhausted",
-      message: "Daytona workspaces use paid sandbox compute, so they need tool balance before they run.",
+      message: "Workspace tools use paid sandbox compute, so they need tool balance before they run.",
     };
   }
 
@@ -295,7 +295,7 @@ export async function createWorkspaceSandboxSession(params: {
       code: message === "credits_exhausted" ? "workspace_credits_exhausted" : "workspace_credits_unavailable",
       message:
         message === "credits_exhausted"
-          ? "Daytona workspaces use paid sandbox compute, so they need tool balance before they run."
+          ? "Workspace tools use paid sandbox compute, so they need tool balance before they run."
           : "Tool balance is unavailable for workspace tools.",
     };
   }
@@ -351,7 +351,7 @@ export async function createWorkspaceSandboxSession(params: {
       ok: false,
       status: 503,
       code: "daytona_probe_failed",
-      message: message || "Failed to create Daytona workspace.",
+      message: message || "Failed to create workspace tools session.",
     };
   }
   if (!probe.ok) {

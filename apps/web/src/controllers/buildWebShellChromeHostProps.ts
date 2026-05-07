@@ -1,5 +1,4 @@
 import type { ReactNode, TouchEventHandler } from "react";
-import type { BuilderUpgradeContextValue } from "../../../../shared/builderBilling";
 import type { AppPage, SettingsGroup } from "../../../../shared/appShellNavigation";
 import type { WebShellChromeHostProps } from "../components/WebShellChromeHost";
 import type { MobileOverlay } from "../components/webShellChromeShared";
@@ -84,8 +83,7 @@ export function buildWebShellChromeHostProps(params: {
   draggingCommunityId: string | null;
   setCommunityRailListElement: WebShellChromeHostProps["communityShell"]["setCommunityRailListElement"];
   getCommunityRailItemBindings: WebShellChromeHostProps["communityShell"]["getCommunityRailItemBindings"];
-  setBuilderUpgradeContext: (value: BuilderUpgradeContextValue) => void;
-  setIsBuilderUpgradeOpen: (value: boolean) => void;
+  setIsBuilderInfoOpen: (value: boolean) => void;
   handleToggleWorkspaceSettings: () => void;
   settingsGroup: SettingsGroup;
   setSettingsPage: (page: WebShellChromeHostProps["settingsSidebar"]["onSelectPage"] extends (page: infer T) => void ? T : never) => void;
@@ -223,13 +221,12 @@ export function buildWebShellChromeHostProps(params: {
       draggingCommunityId: params.draggingCommunityId,
       setCommunityRailListElement: params.setCommunityRailListElement,
       getCommunityRailItemBindings: params.getCommunityRailItemBindings,
-      onOpenBuilderUpgrade: () => {
+      onOpenBuilderInfo: () => {
         if (params.hasBuilderAccess) {
           params.openCreateCommunityModal();
           return;
         }
-        params.setBuilderUpgradeContext("builder");
-        params.setIsBuilderUpgradeOpen(true);
+        params.setIsBuilderInfoOpen(true);
       },
       builderRailCtaLabel: "+",
       builderRailCtaTitle: "Create community",

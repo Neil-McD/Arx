@@ -1,6 +1,5 @@
 import { EXTERNAL_MEMORY_IMPORT_PROMPT } from "../../../../shared/externalMemoryImport";
 import type { AppView, SettingsPage } from "../../../../shared/appShellNavigation";
-import type { BuilderUpgradeContextValue } from "../../../../shared/builderBilling";
 import type { WorkspaceToolBalanceTopupPackId } from "../../../../shared/workspaceCredits";
 import type { WebGlobalOverlayHostProps } from "../components/WebGlobalOverlayHost";
 
@@ -21,9 +20,8 @@ export function buildWebGlobalOverlayHostProps(params: {
   showMemoryToastMessage: (message: string) => void;
   requireSignIn: (intentInput?: unknown) => void;
   builderBillingStatus: { builder_tier?: string | null } | null;
-  setBuilderUpgradeContext: (value: BuilderUpgradeContextValue) => void;
   setBuilderBillingError: (value: string | null) => void;
-  setIsBuilderUpgradeOpen: (value: boolean) => void;
+  setIsBuilderInfoOpen: (value: boolean) => void;
   personalMemoryUi: {
     isMemoryImportModalOpen: boolean;
     memoryImportText: string;
@@ -52,7 +50,7 @@ export function buildWebGlobalOverlayHostProps(params: {
   startWorkspaceCreditTopupCheckout: (packId?: WorkspaceToolBalanceTopupPackId) => void | Promise<void>;
   setActiveView: (value: AppView) => void;
   setSettingsPage: (value: SettingsPage) => void;
-  isBuilderUpgradeOpen: boolean;
+  isBuilderInfoOpen: boolean;
   builderBillingError: string | null;
   communityModalHostProps: WebGlobalOverlayHostProps["communityModalHostProps"];
   appToast: string | null;
@@ -125,10 +123,10 @@ export function buildWebGlobalOverlayHostProps(params: {
           },
         }
       : null,
-    builderUpgradeModalProps: {
-      isOpen: params.isBuilderUpgradeOpen,
+    builderIncludedModalProps: {
+      isOpen: params.isBuilderInfoOpen,
       builderBillingError: params.builderBillingError,
-      onClose: () => params.setIsBuilderUpgradeOpen(false),
+      onClose: () => params.setIsBuilderInfoOpen(false),
     },
     communityModalHostProps: params.communityModalHostProps,
     appToast: params.appToast,

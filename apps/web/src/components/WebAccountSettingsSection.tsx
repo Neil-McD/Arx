@@ -58,7 +58,6 @@ type WebAccountSettingsSectionProps = {
   communityRoleById: Record<string, string>;
   openOwnedCommunitySettings: (communityId: string) => void;
   communityInitials: (value: string) => string;
-  openBuilderUpgrade: (context: "builder") => void;
   startBuilderConnectOnboarding: (opts?: {
     context?: "account" | "community";
     communitySlug?: string | null;
@@ -67,7 +66,7 @@ type WebAccountSettingsSectionProps = {
   isStartingBuilderConnectOnboarding: boolean;
   canUseDevTierOverride: boolean;
   isSettingDevBuilderTier: boolean;
-  setDevBuilderTier: (tier: "free" | "builder" | "architect") => Promise<void> | void;
+  setDevBuilderTier: (tier: "free" | "architect") => Promise<void> | void;
   devBuilderTierError: string | null;
   pendingPurchaseClaims: PendingPurchaseClaim[];
   isLoadingPendingPurchases: boolean;
@@ -225,7 +224,7 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
           ChatGPT connection
         </div>
         <div className="settings-section-desc">
-          Connect ChatGPT for personal inference. Tool balance unlocks premium tools like Daytona workspaces, web research, and voice input.
+          Connect ChatGPT for personal inference. Tool balance unlocks premium tools like workspace tools, web research, and voice input.
         </div>
         {!session ? (
           <div className="model-note">Sign in to connect a personal provider.</div>
@@ -296,7 +295,7 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
             const communitiesLabel =
               max > 0 ? `${ownedCount}/${max} owned ${communityWord}` : `${ownedCount} owned ${communityWord}`;
             const tierLabel = formatBuilderTierLabel(tier);
-            const builderStatusLabel = isBuilderTierFree(tier) ? "Free builder" : `${tierLabel} (legacy)`;
+            const builderStatusLabel = isBuilderTierFree(tier) ? "Free account" : `${tierLabel} (internal)`;
             const canMonetizeCommunities = Number(status?.platform_fee_bps ?? 0) > 0;
             const stripeConnectPresentation = buildStripeConnectPresentation({
               builderBillingStatus: status,
@@ -306,13 +305,13 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
               <>
                 <div className="account-row">
                   <div className="account-identity">
-                    <span>Builder status</span>
+                    <span>Account status</span>
                     <strong>
                       {builderStatusLabel} · {communitiesLabel}
                     </strong>
                   </div>
                   <div className="auth-actions">
-                    <span className="auth-status">Tool balance covers premium tools like Daytona workspaces, web research, and voice input. Connect ChatGPT or add an OpenAI API key in Agent Settings to bring your own inference.</span>
+                    <span className="auth-status">Tool balance covers premium tools like workspace tools, web research, and voice input. Connect ChatGPT or add an OpenAI API key in Agent Settings to bring your own inference.</span>
                   </div>
                 </div>
                 {canMonetizeCommunities ? (
@@ -357,14 +356,6 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
                           disabled={isSettingDevBuilderTier || isBuilderTierFree(tier)}
                         >
                           Free
-                        </button>
-                        <button
-                          type="button"
-                          className={tier === "builder" ? "" : "secondary"}
-                          onClick={() => void setDevBuilderTier("builder")}
-                          disabled={isSettingDevBuilderTier || tier === "builder"}
-                        >
-                          Builder
                         </button>
                         <button
                           type="button"

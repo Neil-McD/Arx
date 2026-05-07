@@ -37,7 +37,7 @@
       }
     },
     {
-      "id": "auth_builder_platform_legacy_requires_connection",
+      "id": "auth_legacy_builder_platform_requires_connection_as_free",
       "input": {
         "authState": "authenticated",
         "tier": "builder",
@@ -50,7 +50,7 @@
         "cta": "connect_provider",
         "lane": null,
         "fundingSource": null,
-        "effectiveTier": "builder"
+        "effectiveTier": "auth_free"
       }
     },
     {

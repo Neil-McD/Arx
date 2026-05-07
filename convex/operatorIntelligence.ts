@@ -468,17 +468,16 @@ function mapSecurityAuditAttentionItem(row: any) {
   };
 }
 
-async function readActiveTier(ctx: any, userId: any, nowMs: number): Promise<"free" | "builder" | "architect" | "unknown"> {
+async function readActiveTier(ctx: any, userId: any, nowMs: number): Promise<"free" | "architect" | "unknown"> {
   const rows = await ctx.db
     .query("userEntitlements")
     .withIndex("by_user", (q: any) => q.eq("userId", userId))
     .collect();
-  let tier: "free" | "builder" | "architect" | "unknown" = "unknown";
+  let tier: "free" | "architect" | "unknown" = "unknown";
   for (const row of rows) {
     if (row.startsAt > nowMs) continue;
     if (typeof row.endsAt === "number" && row.endsAt <= nowMs) continue;
     if (row.tier === "architect") return "architect";
-    if (row.tier === "builder") tier = "builder";
     if (row.tier === "free" && tier === "unknown") tier = "free";
   }
   return tier;

@@ -682,7 +682,7 @@ export function WebLandingPage(props: WebLandingPageProps) {
         </div>
         <div className="polynet-landing-offer-actions">
           <div className="polynet-landing-offer-plan">
-            <span>Free builder</span>
+            <span>Free account</span>
             <ul>
               <li>Build one community</li>
               <li>Join and use communities</li>

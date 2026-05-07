@@ -574,13 +574,6 @@ export function isActiveEntitlementWindow(nowMs: number, startsAt: unknown, ends
   return true;
 }
 
-export function tierHasBuilderAccess(rawTier: unknown): boolean {
-  const tier = String(rawTier ?? "")
-    .trim()
-    .toLowerCase();
-  return tier === "builder" || tier === "architect" || tier === "pro";
-}
-
 export function tierHasArchitectAccess(rawTier: unknown): boolean {
   const tier = String(rawTier ?? "")
     .trim()

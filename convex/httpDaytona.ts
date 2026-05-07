@@ -601,7 +601,7 @@ async function executeRetrievalHarnessTool(params: {
         exitCode: null,
         outputText: "",
         errorCode: "workspace_credits_exhausted",
-        errorMessage: "This Daytona workspace budget expired. Add balance to keep using workspace tools.",
+        errorMessage: "This workspace tool budget expired. Add balance to keep using workspace tools.",
       };
     }
     const budgetSignal = buildWorkspaceCreditBudgetSignal(
@@ -712,7 +712,7 @@ async function executeRetrievalHarnessTool(params: {
         exitCode: null,
         outputText: "",
         errorCode: "workspace_credits_exhausted",
-        errorMessage: "This Daytona workspace budget expired. Add balance to keep using workspace tools.",
+        errorMessage: "This workspace tool budget expired. Add balance to keep using workspace tools.",
       };
     }
     if (!result.ok) {

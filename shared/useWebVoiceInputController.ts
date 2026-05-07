@@ -34,7 +34,7 @@ type UseWebVoiceInputControllerArgs<SessionT> = {
   activeCommunity: unknown | null;
   activeCommunityFunnelAction: "checkout" | "request_access" | "join" | null;
   canPostMessagesActiveCommunity: boolean;
-  normalizedBuilderTier: "free" | "builder" | "architect";
+  normalizedBuilderTier: "free" | "architect";
   requireSignIn: () => void;
   showAppToastMessage: (message: string) => void;
   onToolBalanceRequired?: (surface: VoiceSurface, message: string) => void;

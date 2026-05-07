@@ -3,7 +3,20 @@ import { useEffect, useMemo, useState } from "react";
 import type { CreateSkillPackageInput } from "../../../../shared/skillPackageTypes";
 import type { UserPlatformInstalledSkill } from "../../../../shared/userPlatformSkillTypes";
 import type { EffectiveMcpApp } from "../../../../shared/effectiveMcpApps";
-import { DISCOVER_APP_CATALOG } from "../lib/discoverCatalog";
+import type { DeveloperAppAuthType } from "../../../../shared/communityAppMountTypes";
+import type {
+  BeginUserPlatformAppOAuthResult,
+  ConnectUserPlatformAppInput,
+  ConnectUserPlatformAppResult,
+} from "../../../../shared/userPlatformAppMountTypes";
+import {
+  buildDiscoverAppPersonalConnectInput,
+  buildDiscoverAppPersonalConnectModalCopy,
+  buildDiscoverAppPersonalConnectRequirements,
+  DISCOVER_APP_CATALOG,
+  isDiscoverAppPersonallyConnectable,
+  type DiscoverAppCatalogEntry,
+} from "../lib/discoverCatalog";
 import { DiscoverCatalogLogo } from "./DiscoverCatalogLogo";
 
 type SessionLike = {
@@ -26,10 +39,17 @@ type WebIntegrationsSettingsSectionProps = {
   isLoadingUserPlatformAppMounts: boolean;
   userPlatformAppMountError: string | null;
   userPlatformAppMutationError: string | null;
+  isConnectingUserPlatformApp: boolean;
   updatingUserPlatformAppMountId: string | null;
   refreshingUserPlatformAppMountId: string | null;
   reconnectingUserPlatformAppMountId: string | null;
   removingUserPlatformAppMountId: string | null;
+  onConnectUserPlatformApp: (
+    input: ConnectUserPlatformAppInput,
+  ) => Promise<ConnectUserPlatformAppResult>;
+  onBeginUserPlatformAppOAuth: (
+    catalogAppId: string,
+  ) => Promise<BeginUserPlatformAppOAuthResult>;
   onUpdateUserPlatformAppMount: (
     userPlatformAppMountId: string,
     patch: {
@@ -172,6 +192,66 @@ function findCatalogEntryForApp(app: EffectiveMcpApp["app"]) {
   );
 }
 
+function isDeveloperAppAuthType(value: string): value is DeveloperAppAuthType {
+  return (
+    value === "none" ||
+    value === "api_key" ||
+    value === "bearer" ||
+    value === "oauth"
+  );
+}
+
+function resolveInitialSetupAuthType(
+  app: EffectiveMcpApp,
+  catalogEntry: DiscoverAppCatalogEntry,
+): DeveloperAppAuthType {
+  if (!isDiscoverAppPersonallyConnectable(catalogEntry)) return "bearer";
+  if (catalogEntry.personalConnect.connectionKind === "custom") {
+    const currentAuthType = app.app.auth_type;
+    if (
+      isDeveloperAppAuthType(currentAuthType) &&
+      catalogEntry.personalConnect.supportedAuthTypes.some(
+        (option) => option.value === currentAuthType,
+      )
+    ) {
+      return currentAuthType;
+    }
+    return catalogEntry.personalConnect.supportedAuthTypes[0]?.value ?? "none";
+  }
+  return catalogEntry.personalConnect.authType;
+}
+
+function setupRequiresSecret(
+  catalogEntry: DiscoverAppCatalogEntry,
+  authType: DeveloperAppAuthType,
+): boolean {
+  if (!isDiscoverAppPersonallyConnectable(catalogEntry)) return false;
+  if (catalogEntry.personalConnect.connectionKind === "custom") {
+    return authType !== "none";
+  }
+  return catalogEntry.personalConnect.authMethod === "token";
+}
+
+function normalizeSetupIdentityPart(value: string | null | undefined): string {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase();
+}
+
+function setupTargetsExistingPersonalMount(
+  app: EffectiveMcpApp,
+  connectInput: ConnectUserPlatformAppInput,
+): boolean {
+  const personalMount = app.personal_mount;
+  if (!personalMount) return false;
+  return (
+    normalizeSetupIdentityPart(personalMount.app.endpoint_url) ===
+      normalizeSetupIdentityPart(connectInput.endpoint_url) &&
+    normalizeSetupIdentityPart(personalMount.app.auth_type) ===
+      normalizeSetupIdentityPart(connectInput.auth_type)
+  );
+}
+
 export function WebIntegrationsSettingsSection(
   props: WebIntegrationsSettingsSectionProps,
 ) {
@@ -188,10 +268,13 @@ export function WebIntegrationsSettingsSection(
     isLoadingUserPlatformAppMounts,
     userPlatformAppMountError,
     userPlatformAppMutationError,
+    isConnectingUserPlatformApp,
     updatingUserPlatformAppMountId,
     refreshingUserPlatformAppMountId,
     reconnectingUserPlatformAppMountId,
     removingUserPlatformAppMountId,
+    onConnectUserPlatformApp,
+    onBeginUserPlatformAppOAuth,
     onUpdateUserPlatformAppMount,
     onRefreshUserPlatformApp,
     onReconnectUserPlatformApp,
@@ -223,6 +306,14 @@ export function WebIntegrationsSettingsSection(
     useState<CreateSkillPackageInput>(buildInitialSkillDraft);
   const [reconnectSecret, setReconnectSecret] = useState("");
   const [reconnectError, setReconnectError] = useState<string | null>(null);
+  const [setupAppIdentityKey, setSetupAppIdentityKey] = useState<string | null>(
+    null,
+  );
+  const [setupEndpoint, setSetupEndpoint] = useState("");
+  const [setupAuthType, setSetupAuthType] =
+    useState<DeveloperAppAuthType>("bearer");
+  const [setupSecret, setSetupSecret] = useState("");
+  const [setupError, setSetupError] = useState<string | null>(null);
 
   const busyMountIds = useMemo(
     () =>
@@ -248,6 +339,38 @@ export function WebIntegrationsSettingsSection(
         left.app.name.localeCompare(right.app.name),
       ),
     [effectiveMcpApps],
+  );
+  const setupEffectiveApp = useMemo(
+    () =>
+      setupAppIdentityKey
+        ? visibleEffectiveMcpApps.find(
+            (app) => app.app_identity_key === setupAppIdentityKey,
+          ) ?? null
+        : null,
+    [setupAppIdentityKey, visibleEffectiveMcpApps],
+  );
+  const setupCatalogEntry = setupEffectiveApp
+    ? findCatalogEntryForApp(setupEffectiveApp.app)
+    : null;
+  const setupRequirements =
+    setupCatalogEntry && isDiscoverAppPersonallyConnectable(setupCatalogEntry)
+      ? buildDiscoverAppPersonalConnectRequirements(setupCatalogEntry, {
+          endpointUrl: setupEndpoint,
+          authType: setupAuthType,
+        })
+      : [];
+  const setupModalCopy = setupCatalogEntry
+    ? buildDiscoverAppPersonalConnectModalCopy(setupCatalogEntry)
+    : null;
+  const isSetupOauth =
+    setupCatalogEntry &&
+    isDiscoverAppPersonallyConnectable(setupCatalogEntry) &&
+    setupCatalogEntry.personalConnect.connectionKind === "known" &&
+    setupCatalogEntry.personalConnect.authMethod === "oauth";
+  const isSettingUpApp = isConnectingUserPlatformApp || Boolean(
+    setupEffectiveApp?.personal_mount?.source_mount_id &&
+      reconnectingUserPlatformAppMountId ===
+        setupEffectiveApp.personal_mount.source_mount_id,
   );
 
   useEffect(() => {
@@ -293,6 +416,125 @@ export function WebIntegrationsSettingsSection(
     if (!ok) return;
     setEditingUserPlatformSkillInstallId(null);
     setEditingSkillDraft(buildInitialSkillDraft());
+  };
+
+  const closeSetupModal = () => {
+    setSetupAppIdentityKey(null);
+    setSetupEndpoint("");
+    setSetupAuthType("bearer");
+    setSetupSecret("");
+    setSetupError(null);
+  };
+
+  const openSetupModalForApp = (
+    app: EffectiveMcpApp,
+    catalogEntry: DiscoverAppCatalogEntry | null,
+  ) => {
+    if (!session) {
+      requireSignIn();
+      return;
+    }
+    if (!catalogEntry || !isDiscoverAppPersonallyConnectable(catalogEntry)) {
+      openDiscoverApps();
+      return;
+    }
+    const initialAuthType = resolveInitialSetupAuthType(app, catalogEntry);
+    const initialEndpoint =
+      catalogEntry.personalConnect.connectionKind === "custom"
+        ? app.app.endpoint_url
+        : catalogEntry.personalConnect.endpointUrl;
+    setOpenMountMenuId(null);
+    setReconnectDraftMountId(null);
+    setReconnectSecret("");
+    setReconnectError(null);
+    setSetupAppIdentityKey(app.app_identity_key);
+    setSetupEndpoint(initialEndpoint);
+    setSetupAuthType(initialAuthType);
+    setSetupSecret("");
+    setSetupError(null);
+  };
+
+  const handleConfirmSetup = async () => {
+    if (!setupEffectiveApp || !setupCatalogEntry) return;
+    setSetupError(null);
+    if (!isDiscoverAppPersonallyConnectable(setupCatalogEntry)) {
+      setSetupError("This app is not ready for setup yet.");
+      return;
+    }
+    if (isSetupOauth) {
+      const result = await onBeginUserPlatformAppOAuth(setupCatalogEntry.id);
+      if (!result.ok) {
+        setSetupError(
+          result.error_message ??
+            `Couldn't start ${setupCatalogEntry.name} authentication.`,
+        );
+      }
+      return;
+    }
+
+    const trimmedSecret = setupSecret.trim();
+    if (setupRequiresSecret(setupCatalogEntry, setupAuthType) && !trimmedSecret) {
+      setSetupError(`Paste your ${setupCatalogEntry.name} token to continue.`);
+      return;
+    }
+
+    const connectInput = buildDiscoverAppPersonalConnectInput(setupCatalogEntry, {
+      endpointUrl: setupEndpoint,
+      authType: setupAuthType,
+      description: setupCatalogEntry.description,
+      secret: trimmedSecret || undefined,
+    });
+    if (!connectInput) {
+      setSetupError("This app is not ready for this setup path.");
+      return;
+    }
+
+    const existingMountId = setupEffectiveApp.personal_mount?.source_mount_id ?? null;
+    const targetsExistingPersonalMount =
+      existingMountId !== null &&
+      setupTargetsExistingPersonalMount(setupEffectiveApp, connectInput);
+    if (
+      existingMountId &&
+      targetsExistingPersonalMount &&
+      connectInput.auth_type !== "none" &&
+      connectInput.auth_type !== "oauth"
+    ) {
+      const ok = await onReconnectUserPlatformApp(existingMountId, trimmedSecret);
+      if (!ok) {
+        setSetupError(
+          `Couldn't finish setting up ${setupCatalogEntry.name}. Check the token and try again.`,
+        );
+        return;
+      }
+      closeSetupModal();
+      return;
+    }
+
+    if (
+      existingMountId &&
+      targetsExistingPersonalMount &&
+      connectInput.auth_type === "none"
+    ) {
+      const ok = await onRefreshUserPlatformApp(existingMountId);
+      if (!ok) {
+        setSetupError(
+          `Couldn't refresh ${setupCatalogEntry.name}. Try again from this setup modal.`,
+        );
+        return;
+      }
+      closeSetupModal();
+      return;
+    }
+
+    const result = await onConnectUserPlatformApp(connectInput);
+    if (!result.ok && !result.mount) {
+      setSetupError(
+        result.error_message ??
+          `Couldn't set up ${setupCatalogEntry.name}. Check the requirements and try again.`,
+      );
+      return;
+    }
+    closeSetupModal();
   };
 
   return (
@@ -376,6 +618,12 @@ export function WebIntegrationsSettingsSection(
                 reconnectingUserPlatformAppMountId === sourceMountId;
               const isMenuOpen = openMountMenuId === effectiveApp.app_identity_key;
               const catalogEntry = findCatalogEntryForApp(effectiveApp.app);
+              const canSetupPersonal =
+                effectiveApp.primary_action === "setup_personal" &&
+                Boolean(
+                  catalogEntry &&
+                    isDiscoverAppPersonallyConnectable(catalogEntry),
+                );
               return (
                 <div
                   key={effectiveApp.app_identity_key}
@@ -420,6 +668,18 @@ export function WebIntegrationsSettingsSection(
                     </div>
                     {canManagePersonal && sourceMountId ? (
                       <div className="integration-mounted-rail">
+                        {canSetupPersonal ? (
+                          <button
+                            type="button"
+                            className="settings-cta integration-mounted-setup-action"
+                            disabled={isBusy || isConnectingUserPlatformApp}
+                            onClick={() =>
+                              openSetupModalForApp(effectiveApp, catalogEntry)
+                            }
+                          >
+                            Set up
+                          </button>
+                        ) : null}
                         <label
                           className={`members-switch integration-mounted-switch${
                             isBusy ? " is-disabled" : ""
@@ -530,11 +790,24 @@ export function WebIntegrationsSettingsSection(
                       </div>
                     ) : (
                       <div className="integration-mounted-rail">
-                        <span className="integration-status-pill">
-                          {communityMount
-                            ? "Added by community"
-                            : "Open Discover to set up"}
-                        </span>
+                        {canSetupPersonal ? (
+                          <button
+                            type="button"
+                            className="settings-cta integration-mounted-setup-action"
+                            disabled={isConnectingUserPlatformApp}
+                            onClick={() =>
+                              openSetupModalForApp(effectiveApp, catalogEntry)
+                            }
+                          >
+                            Set up
+                          </button>
+                        ) : (
+                          <span className="integration-status-pill">
+                            {communityMount
+                              ? "Added by community"
+                              : "Open Discover to set up"}
+                          </span>
+                        )}
                       </div>
                     )}
                   </div>
@@ -592,6 +865,169 @@ export function WebIntegrationsSettingsSection(
           </div>
         ) : null}
       </div>
+
+      {setupEffectiveApp &&
+      setupCatalogEntry &&
+      isDiscoverAppPersonallyConnectable(setupCatalogEntry) ? (
+        <div
+          className="modal-overlay"
+          role="presentation"
+          onClick={() => {
+            if (isSettingUpApp) return;
+            closeSetupModal();
+          }}
+        >
+          <div
+            className="modal discover-connect-modal integration-setup-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="integration-setup-modal-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="modal-header">
+              <div className="modal-title" id="integration-setup-modal-title">
+                Set up {setupCatalogEntry.name}
+              </div>
+              <button
+                type="button"
+                className="modal-close"
+                aria-label="Close"
+                disabled={isSettingUpApp}
+                onClick={closeSetupModal}
+              >
+                ×
+              </button>
+            </div>
+            <div className="modal-body discover-connect-modal-body">
+              {setupModalCopy ? (
+                <div className="discover-connect-modal-copy">
+                  {setupModalCopy}
+                </div>
+              ) : null}
+              <div className="agent-capability-field-grid discover-connect-grid">
+                {setupRequirements.map((requirement) =>
+                  requirement.kind === "readonly" ? (
+                    <label
+                      key={requirement.id}
+                      className="agent-capability-field"
+                    >
+                      <span className="agent-capability-field-label">
+                        {requirement.label}
+                      </span>
+                      <input
+                        className="agent-editor-inline-label-input"
+                        value={requirement.value}
+                        readOnly
+                      />
+                    </label>
+                  ) : requirement.kind === "text" ? (
+                    <label
+                      key={requirement.id}
+                      className="agent-capability-field discover-connect-secret-field"
+                    >
+                      <span className="agent-capability-field-label">
+                        {requirement.label}
+                      </span>
+                      <input
+                        className="agent-editor-inline-label-input"
+                        value={setupEndpoint}
+                        onChange={(event) => {
+                          setSetupEndpoint(event.target.value);
+                          if (setupError) setSetupError(null);
+                        }}
+                        placeholder={requirement.placeholder}
+                        autoCapitalize="off"
+                        autoCorrect="off"
+                        spellCheck={false}
+                      />
+                    </label>
+                  ) : requirement.kind === "select" ? (
+                    <label
+                      key={requirement.id}
+                      className="agent-capability-field"
+                    >
+                      <span className="agent-capability-field-label">
+                        {requirement.label}
+                      </span>
+                      <select
+                        className="agent-capability-select"
+                        value={setupAuthType}
+                        onChange={(event) => {
+                          setSetupAuthType(event.target.value as DeveloperAppAuthType);
+                          setSetupSecret("");
+                          if (setupError) setSetupError(null);
+                        }}
+                      >
+                        {requirement.options.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  ) : (
+                    <label
+                      key={requirement.id}
+                      className="agent-capability-field discover-connect-secret-field"
+                    >
+                      <span className="agent-capability-field-label">
+                        {requirement.label}
+                      </span>
+                      <input
+                        className="agent-editor-inline-label-input"
+                        type="password"
+                        value={setupSecret}
+                        onChange={(event) => {
+                          setSetupSecret(event.target.value);
+                          if (setupError) setSetupError(null);
+                        }}
+                        placeholder={requirement.placeholder}
+                      />
+                      {setupCatalogEntry.personalConnect.connectionKind === "known" &&
+                      setupCatalogEntry.personalConnect.authMethod === "token" ? (
+                        <a
+                          className="discover-connect-help-link"
+                          href={setupCatalogEntry.personalConnect.tokenHelpUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          {setupCatalogEntry.personalConnect.tokenHelpLabel}
+                          <span aria-hidden="true">↗</span>
+                        </a>
+                      ) : null}
+                    </label>
+                  ),
+                )}
+              </div>
+              {setupError ? <div className="auth-error">{setupError}</div> : null}
+            </div>
+            <div className="modal-footer discover-connect-modal-footer">
+              <button
+                type="button"
+                className="settings-cta"
+                onClick={closeSetupModal}
+                disabled={isSettingUpApp}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="platform-save-button is-dirty"
+                onClick={() => void handleConfirmSetup()}
+                disabled={isSettingUpApp}
+              >
+                {isSettingUpApp
+                  ? isSetupOauth
+                    ? "Starting…"
+                    : "Setting up…"
+                  : isSetupOauth
+                    ? "Continue"
+                    : "Set up"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <div className="settings-section">
         <div className="settings-section-title">

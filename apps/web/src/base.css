@@ -10416,7 +10416,7 @@ button.chat-reply-quote:hover {
     0 24px 64px rgba(0, 0, 0, 0.55);
 }
 
-/* Header CTA — hidden by default (keep for upgrade prompts) */
+/* Header CTA - hidden by default for contextual account prompts. */
 .model-picker-top {
   display: none;
 }
@@ -11458,22 +11458,22 @@ button.message-citation-chip:hover {
   flex-direction: column;
 }
 
-.modal.modal-upgrade {
+.modal.modal-builder-info {
   width: min(980px, calc(100vw - 32px));
 }
 
-.modal.modal-upgrade .modal-header {
+.modal.modal-builder-info .modal-header {
   border-bottom: none;
   padding: 22px 24px 4px;
 }
 
-.modal.modal-upgrade .modal-title {
+.modal.modal-builder-info .modal-title {
   font-size: 13px;
   letter-spacing: 0.08em;
   color: var(--text-muted);
 }
 
-.modal.modal-upgrade .modal-close {
+.modal.modal-builder-info .modal-close {
   width: 38px;
   height: 38px;
   border: none;
@@ -11481,11 +11481,11 @@ button.message-citation-chip:hover {
   background: transparent;
 }
 
-.modal.modal-upgrade .modal-close:hover {
+.modal.modal-builder-info .modal-close:hover {
   background: var(--hover-overlay);
 }
 
-.modal.modal-upgrade .modal-body {
+.modal.modal-builder-info .modal-body {
   padding: 6px 24px 24px;
 }
 
@@ -14111,7 +14111,7 @@ button.message-citation-chip:hover {
   gap: 14px;
 }
 
-.modal.modal-upgrade .plan-grid {
+.modal.modal-builder-info .plan-grid {
   grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr);
   gap: 18px;
   align-items: stretch;
@@ -14137,18 +14137,18 @@ button.message-citation-chip:hover {
   opacity: 0.92;
 }
 
-.modal.modal-upgrade .plan-card {
+.modal.modal-builder-info .plan-card {
   border-radius: 22px;
   padding: 22px;
   box-shadow: none;
 }
 
-.modal.modal-upgrade .plan-card.free {
+.modal.modal-builder-info .plan-card.free {
   background: color-mix(in srgb, var(--bg-card-alt) 90%, transparent);
   border-color: color-mix(in srgb, var(--border-muted) 72%, transparent);
 }
 
-.modal.modal-upgrade .plan-card.builder {
+.modal.modal-builder-info .plan-card.builder {
   background:
     radial-gradient(circle at top right, color-mix(in srgb, var(--accent-gold) 12%, transparent), transparent 32%),
     radial-gradient(circle at top left, color-mix(in srgb, var(--accent-cyan, var(--accent-gold)) 10%, transparent), transparent 30%),
@@ -14172,7 +14172,7 @@ button.message-citation-chip:hover {
   color: var(--text-primary);
 }
 
-.modal.modal-upgrade .plan-name {
+.modal.modal-builder-info .plan-name {
   font-size: 18px;
   font-weight: 700;
 }
@@ -14202,11 +14202,11 @@ button.message-citation-chip:hover {
   color: var(--text-primary);
 }
 
-.modal.modal-upgrade .plan-price {
+.modal.modal-builder-info .plan-price {
   margin-top: 14px;
 }
 
-.modal.modal-upgrade .plan-price-amount {
+.modal.modal-builder-info .plan-price-amount {
   font-size: 56px;
 }
 
@@ -14215,7 +14215,7 @@ button.message-citation-chip:hover {
   color: var(--text-muted);
 }
 
-.modal.modal-upgrade .plan-price-period {
+.modal.modal-builder-info .plan-price-period {
   font-size: 15px;
 }
 
@@ -14225,7 +14225,7 @@ button.message-citation-chip:hover {
   color: var(--text-muted);
 }
 
-.modal.modal-upgrade .plan-subtitle {
+.modal.modal-builder-info .plan-subtitle {
   margin-top: 12px;
   font-size: 15px;
   line-height: 1.45;
@@ -14310,7 +14310,7 @@ button.message-citation-chip:hover {
   display: none;
 }
 
-.upgrade-copy {
+.builder-info-copy {
   display: grid;
   gap: 0;
   max-width: 720px;
@@ -14318,7 +14318,7 @@ button.message-citation-chip:hover {
   font-family: var(--font-sans, inherit);
 }
 
-.upgrade-lead {
+.builder-info-lead {
   font-family: var(--font-sans, inherit);
   font-size: clamp(19px, 1.9vw, 24px);
   line-height: 1.08;
@@ -14327,13 +14327,6 @@ button.message-citation-chip:hover {
   color: var(--text-primary);
   max-width: 32ch;
   text-wrap: balance;
-}
-
-.upgrade-footnote {
-  max-width: 64ch;
-  font-size: 11px;
-  line-height: 1.35;
-  color: var(--text-secondary);
 }
 
 .plan-points {
@@ -14363,12 +14356,12 @@ button.message-citation-chip:hover {
   background: color-mix(in srgb, var(--text-muted) 82%, transparent);
 }
 
-.modal.modal-upgrade .plan-card.builder .plan-points li::before {
+.modal.modal-builder-info .plan-card.builder .plan-points li::before {
   background: color-mix(in srgb, var(--accent-gold) 72%, white 8%);
   box-shadow: 0 0 10px color-mix(in srgb, var(--accent-gold) 20%, transparent);
 }
 
-.modal.modal-upgrade .plan-card .plan-cta {
+.modal.modal-builder-info .plan-card .plan-cta {
   margin-top: 14px;
   align-self: flex-start;
   width: auto;
@@ -14376,7 +14369,7 @@ button.message-citation-chip:hover {
   padding-inline: 24px;
 }
 
-.modal.modal-upgrade .plan-cta {
+.modal.modal-builder-info .plan-cta {
   margin-top: 22px;
   height: 48px;
   border-radius: 14px;
@@ -14386,36 +14379,36 @@ button.message-citation-chip:hover {
   font-weight: 650;
 }
 
-.modal.modal-upgrade .plan-cta:hover {
+.modal.modal-builder-info .plan-cta:hover {
   background: #ececec;
 }
 
-.modal.modal-upgrade .plan-card.free.current {
+.modal.modal-builder-info .plan-card.free.current {
   opacity: 0.82;
 }
 
-.modal.modal-upgrade .plan-card.builder.current {
+.modal.modal-builder-info .plan-card.builder.current {
   opacity: 1;
 }
 
 @media (max-width: 860px) {
-  .modal.modal-upgrade .plan-grid {
+  .modal.modal-builder-info .plan-grid {
     grid-template-columns: 1fr;
   }
 
-  .modal.modal-upgrade .plan-card.free {
+  .modal.modal-builder-info .plan-card.free {
     display: none;
   }
 
-  .modal.modal-upgrade .modal-body {
+  .modal.modal-builder-info .modal-body {
     padding: 6px 18px 18px;
   }
 
-  .modal.modal-upgrade .plan-price-amount {
+  .modal.modal-builder-info .plan-price-amount {
     font-size: 48px;
   }
 
-  .modal.modal-upgrade .plan-card .plan-cta {
+  .modal.modal-builder-info .plan-card .plan-cta {
     align-self: stretch;
     width: 100%;
     min-width: 0;
@@ -15001,6 +14994,17 @@ button.message-citation-chip:hover {
 .settings-panel button.danger:hover:not(:disabled) {
   border-color: rgba(210, 80, 80, 0.55);
   background: rgba(210, 80, 80, 0.18);
+}
+
+.settings-panel .integration-mounted-setup-action {
+  min-height: 32px;
+  padding: 7px 12px;
+  justify-content: center;
+  white-space: nowrap;
+}
+
+.integration-setup-modal .discover-connect-modal-copy {
+  color: var(--text-secondary);
 }
 
 .delete-community-btn {
@@ -20748,6 +20752,10 @@ button.message-citation-chip:hover {
 .app-root.mobile-shell .integration-reconnect-actions {
   width: 100%;
   justify-content: flex-end;
+}
+
+.app-root.mobile-shell .integration-mounted-setup-action {
+  flex: 1;
 }
 
 .app-root.mobile-shell .integration-mounted-menu {

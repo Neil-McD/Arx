@@ -1,7 +1,7 @@
 # Auth + Money + Access Matrix (Canonical Contract)
 
 Status: active
-Last verified: 2026-05-06
+Last verified: 2026-05-07
 Scope: canonical web runtime, community monetization, provider-funded inference, and paid-tool balance
 
 ## 0) Current Account Ladder
@@ -17,13 +17,13 @@ Scope: canonical web runtime, community monetization, provider-funded inference,
    - can connect Stripe and monetize paid community access
    - pays the default 10% Polynet platform fee on paid community revenue
    - uses ChatGPT or an OpenAI API key for personal inference
-   - uses tool balance for Daytona workspaces, web research, and voice input
-3. `builder` / `architect`
-   - historical tier labels that may still exist in data
-   - no self-serve platform subscription or checkout path
+   - uses tool balance for workspace tools, web research, and voice input
+3. `architect`
+   - internal/dev-only access label
+   - not a product-facing subscription tier
    - does not define the default monetization model
 
-The self-serve Builder subscription has been removed. Builder status now means an authenticated user can create and manage a community; paid tools are funded through tool balance.
+The product-facing model is a free authenticated account plus tool balance. Legacy `builder` and `pro` tier labels may still exist in historical data, but runtime normalization treats them as free unless an internal `architect` override is present.
 
 ## 1) Irreducible Contract
 
@@ -31,7 +31,7 @@ The active system is defined by these inputs:
 
 1. Surface: `web`
 2. Auth state: `anonymous` | `authenticated`
-3. Canonical tier: `free` | `builder` | `architect`
+3. Account tier: product-facing `free`; internal/dev-only `architect`
 4. Requested funding source: `demo_public` | `platform` | `user_key` | `user_chatgpt` | `auto`
 5. Provider connection state: ChatGPT connected, OpenAI key connected, or neither
 6. Active community lens: absent | present and server-validated
@@ -66,13 +66,13 @@ And these outputs:
 
 ## 3) Capability Rules
 
-Entitled capability families come from auth state and tier:
+Entitled capability families come from auth state and account status:
 
 | Auth state | Tier | Entitled capability families |
 |---|---|---|
 | anonymous | n/a | `[]` |
 | authenticated | `free` | `["product_docs","community_tools","web_research","workspace_tools"]` |
-| authenticated | `builder` / `architect` | `["product_docs","community_tools","web_research","workspace_tools"]` |
+| authenticated | internal `architect` | `["product_docs","community_tools","web_research","workspace_tools"]` |
 
 Active capability families are narrower than entitled capability families:
 
@@ -81,7 +81,7 @@ Active capability families are narrower than entitled capability families:
 3. `web_research` can be active when entitled, but execution still requires tool balance.
 4. `workspace_tools` is active only when entitled and a project context is present.
 
-Tool exposure is not free usage. Daytona, web research, and voice input must reserve and settle tool balance.
+Tool exposure is not free usage. Workspace tools, web research, and voice input must reserve and settle tool balance.
 
 ## 4) Community Money Rules
 
@@ -97,7 +97,7 @@ Tool exposure is not free usage. Daytona, web research, and voice input must res
 6. Paid access becomes real only after backend entitlement, membership, claim, and subscription state agree.
 7. Payout readiness is separate from member entitlement.
 8. Community role is separate from paid access.
-9. The default platform fee for free-builder community revenue is 10%.
+9. The default platform fee for free-account community revenue is 10%.
 10. Legacy paid creator billing does not create or renew platform-plan access.
 
 ## 5) Paid-Tool Balance Rules
@@ -106,8 +106,8 @@ Tool balance is the product-facing meter for premium tools. Internally it is tra
 
 1. Tool balance is non-refundable.
 2. Tool balance top-ups use server-defined Stripe Checkout packs.
-3. Daytona reserves balance before workspace infrastructure is created or used.
-4. Daytona settles actual compute usage and refunds unused reservation credits.
+3. Workspace tools reserve balance before workspace infrastructure is created or used.
+4. Workspace tools settle actual compute usage and refund unused reservation credits.
 5. Web research reserves before the call and strictly settles on success.
 6. Voice input reserves before transcription and strictly settles on success.
 7. Failed tool calls should refund reserved balance when no paid tool result was delivered.
@@ -123,7 +123,7 @@ Tool balance is the product-facing meter for premium tools. Internally it is tra
 - Stripe webhook handling: `/Users/neilmcdevitt/code/arx/convex/httpBilling.ts`
 - Tool-balance pricing: `/Users/neilmcdevitt/code/arx/shared/workspaceCredits.ts`
 - Tool-balance ledger: `/Users/neilmcdevitt/code/arx/convex/workspaceCredits.ts`
-- Daytona charge paths: `/Users/neilmcdevitt/code/arx/convex/daytonaWorkspaceSession.ts`, `/Users/neilmcdevitt/code/arx/convex/workspaceTerminalBackgroundService.ts`
+- Workspace tool charge paths: `/Users/neilmcdevitt/code/arx/convex/daytonaWorkspaceSession.ts`, `/Users/neilmcdevitt/code/arx/convex/workspaceTerminalBackgroundService.ts`
 - Web research charge path: `/Users/neilmcdevitt/code/arx/convex/httpDaytona.ts`
 - Voice charge path: `/Users/neilmcdevitt/code/arx/convex/httpVoice.ts`
 

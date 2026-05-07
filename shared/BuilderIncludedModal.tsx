@@ -1,36 +1,36 @@
-type BuilderUpgradeModalProps = {
+type BuilderIncludedModalProps = {
   isOpen: boolean;
   builderBillingError: string | null;
   onClose: () => void;
 };
 
-export function BuilderUpgradeModal({
+export function BuilderIncludedModal({
   isOpen,
   builderBillingError,
   onClose,
-}: BuilderUpgradeModalProps) {
+}: BuilderIncludedModalProps) {
   if (!isOpen) return null;
 
-  const upgradeLead = "Builder is included. Free accounts can build one community; tool balance covers premium tools.";
+  const builderInfoLead = "Free accounts can create one community. Tool balance covers workspace tools, web research, and voice input.";
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal modal-upgrade" onClick={(event) => event.stopPropagation()}>
+      <div className="modal modal-builder-info" onClick={(event) => event.stopPropagation()}>
         <div className="modal-header">
-          <div className="modal-title">Builder is included</div>
+          <div className="modal-title">Free account</div>
           <button className="modal-close" type="button" onClick={onClose} title="Close">
             ×
           </button>
         </div>
         <div className="modal-body">
-          <div className="upgrade-copy">
-            <div className="upgrade-lead">{upgradeLead}</div>
+          <div className="builder-info-copy">
+            <div className="builder-info-lead">{builderInfoLead}</div>
           </div>
           {builderBillingError && <div className="auth-error">{builderBillingError}</div>}
           <div className="plan-grid">
             <div className="plan-card free current">
               <div className="plan-card-header">
-                <div className="plan-name">Free builder</div>
+                <div className="plan-name">Community creation</div>
                 <div className="plan-badge">Current</div>
               </div>
               <div className="plan-price">
@@ -53,7 +53,7 @@ export function BuilderUpgradeModal({
                 <span className="plan-price-period">to start</span>
               </div>
               <ul className="plan-points">
-                <li>Use Daytona workspaces.</li>
+                <li>Use workspace tools.</li>
                 <li>Run web research.</li>
                 <li>Use voice input.</li>
                 <li>Bring your own ChatGPT or OpenAI inference.</li>

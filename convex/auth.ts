@@ -11,8 +11,8 @@ import { normalizeAuthRelinkEmail } from "../shared/authRelinkPolicy";
 import { canUseCreatorDevTierOverride } from "../shared/devTierOverride";
 import { ensurePlatformHomeCommunityMembership } from "./platformHomeCommunity";
 
-type CanonicalTier = "free" | "builder" | "architect";
-type EffectiveTier = "anon_free" | "auth_free" | "builder" | "architect";
+type CanonicalTier = "free" | "architect";
+type EffectiveTier = "anon_free" | "auth_free" | "architect";
 type AuthState = "anonymous" | "authenticated";
 
 type BuilderTierMeta = {
@@ -29,13 +29,6 @@ function builderTierMeta(tier: CanonicalTier): BuilderTierMeta {
       hasPayouts: true,
     };
   }
-  if (tier === "builder") {
-    return {
-      maxCommunities: 1,
-      platformFeeBps: 300,
-      hasPayouts: true,
-    };
-  }
   return {
     maxCommunities: 1,
     platformFeeBps: 1000,
@@ -47,9 +40,7 @@ function normalizeCanonicalTier(rawTier: unknown): CanonicalTier {
   const normalized = String(rawTier ?? "")
     .trim()
     .toLowerCase();
-  if (normalized === "builder") return "builder";
   if (normalized === "architect") return "architect";
-  if (normalized === "pro") return "builder";
   return "free";
 }
 
@@ -85,7 +76,7 @@ async function getCanonicalTierByUserIdInternal(ctx: any, userId: any, nowMs: nu
     .query("userEntitlements")
     .withIndex("by_user", (q: any) => q.eq("userId", userId))
     .collect()) as Array<{
-    tier: CanonicalTier;
+    tier: unknown;
     startsAt: number;
     endsAt?: number;
   }>;
@@ -336,7 +327,7 @@ export const getActor = query({
 export const setDevTierOverride = mutation({
   args: {
     authSubject: v.optional(v.string()),
-    tier: v.union(v.literal("free"), v.literal("builder"), v.literal("architect")),
+    tier: v.union(v.literal("free"), v.literal("architect")),
     nowMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {

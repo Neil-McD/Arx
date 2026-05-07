@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { mutation, query } from "./_generated/server";
+import { recordCriticalAuditEventBestEffort } from "./criticalAudit";
 import { requireOperatorRole } from "./operatorAccess";
 
 const operatorRange = v.optional(v.union(v.literal("7d"), v.literal("30d"), v.literal("90d"), v.literal("all")));
@@ -79,12 +80,16 @@ export const listHarnessAppSourceProvenanceAudit = query({
     authSubject: v.optional(v.string()),
     limit: v.optional(v.number()),
     maxPairs: v.optional(v.number()),
+    maxCommunityAppMounts: v.optional(v.number()),
+    maxRecipientsPerCommunity: v.optional(v.number()),
   },
   handler: async (ctx, args): Promise<any> => {
     await requireOperatorAccess(ctx, args.authSubject);
     return await ctx.runQuery((internal as any).userPlatformAppMounts.listCommunityAppSourceProvenanceAuditInternal, {
       limit: args.limit,
       maxPairs: args.maxPairs,
+      maxCommunityAppMounts: args.maxCommunityAppMounts,
+      maxRecipientsPerCommunity: args.maxRecipientsPerCommunity,
     });
   },
 });
@@ -94,15 +99,69 @@ export const backfillHarnessAppSourceProvenance = mutation({
     authSubject: v.optional(v.string()),
     limit: v.optional(v.number()),
     maxPairs: v.optional(v.number()),
+    maxCommunityAppMounts: v.optional(v.number()),
+    maxRecipientsPerCommunity: v.optional(v.number()),
     dryRun: v.optional(v.boolean()),
   },
   handler: async (ctx, args): Promise<any> => {
-    await requireOperatorWriteAccess(ctx, args.authSubject);
-    return await ctx.runMutation((internal as any).userPlatformAppMounts.backfillCommunityAppSourceProvenanceInternal, {
-      limit: args.limit,
-      maxPairs: args.maxPairs,
-      dryRun: args.dryRun,
-    });
+    const operator = await requireOperatorWriteAccess(ctx, args.authSubject);
+    const startedAt = Date.now();
+    const dryRun = args.dryRun !== false;
+    try {
+      const result = await ctx.runMutation((internal as any).userPlatformAppMounts.backfillCommunityAppSourceProvenanceInternal, {
+        limit: args.limit,
+        maxPairs: args.maxPairs,
+        maxCommunityAppMounts: args.maxCommunityAppMounts,
+        maxRecipientsPerCommunity: args.maxRecipientsPerCommunity,
+        dryRun: args.dryRun,
+      });
+      await recordCriticalAuditEventBestEffort(ctx, {
+        eventKey: `harness_app_source_provenance_backfill:${String(operator.dbUserId)}:${startedAt}`,
+        eventType: "harness_app_source_provenance_backfill",
+        severity: dryRun ? "info" : "warning",
+        status: "succeeded",
+        actorUserId: operator.dbUserId,
+        provider: "polynet",
+        metadata: {
+          dryRun: Boolean(result?.dry_run ?? dryRun),
+          limit: result?.limits?.findingLimit,
+          maxPairs: result?.limits?.maxPairs,
+          maxCommunityAppMounts: result?.limits?.maxCommunityAppMounts,
+          maxRecipientsPerCommunity: result?.limits?.maxRecipientsPerCommunity,
+          communityAppMountsScanned: result?.summary?.communityAppMountsScanned,
+          disabledCommunityAppMountsSkipped: result?.summary?.disabledCommunityAppMountsSkipped,
+          recipientPairsScanned: result?.summary?.recipientPairsScanned,
+          existingCommunitySourcePairs: result?.summary?.existingCommunitySourcePairs,
+          missingCommunitySourcePairs: result?.summary?.missingCommunitySourcePairs,
+          missingUserHarnessAppPairs: result?.summary?.missingUserHarnessAppPairs,
+          missingCommunityRecords: result?.summary?.missingCommunityRecords,
+          missingDeveloperAppRecords: result?.summary?.missingDeveloperAppRecords,
+          repairedCommunitySourcePairs: result?.summary?.repairedCommunitySourcePairs,
+          truncated: Boolean(result?.truncated),
+        },
+        createdAt: startedAt,
+      });
+      return result;
+    } catch (error) {
+      await recordCriticalAuditEventBestEffort(ctx, {
+        eventKey: `harness_app_source_provenance_backfill:${String(operator.dbUserId)}:${startedAt}`,
+        eventType: "harness_app_source_provenance_backfill",
+        severity: "error",
+        status: "failed",
+        actorUserId: operator.dbUserId,
+        provider: "polynet",
+        metadata: {
+          dryRun,
+          limit: args.limit,
+          maxPairs: args.maxPairs,
+          maxCommunityAppMounts: args.maxCommunityAppMounts,
+          maxRecipientsPerCommunity: args.maxRecipientsPerCommunity,
+          errorMessage: error instanceof Error ? error.message : String(error ?? ""),
+        },
+        createdAt: startedAt,
+      });
+      throw error;
+    }
   },
 });
 

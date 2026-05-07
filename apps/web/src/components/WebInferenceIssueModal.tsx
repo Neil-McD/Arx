@@ -82,7 +82,7 @@ export function WebInferenceIssueModal(props: WebInferenceIssueModalProps) {
       : inferenceIssueModal.reason === "quota"
         ? "To continue, check your connected provider in Account Settings."
         : inferenceIssueModal.reason === "plan"
-          ? "To continue, upgrade to a plan that includes agent runs."
+          ? "To continue, check your connected provider in Account Settings."
           : "To continue, check your provider in Account Settings.";
 
   return (

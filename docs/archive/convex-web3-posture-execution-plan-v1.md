@@ -46,8 +46,7 @@ Do not activate chain logic until Track A is stable.
 
 ## 4) Track A — Convex Completion (Execution-Blocking)
 
-Execution board:
-1. `docs/archive/convex-track-a-execution-board-v1.md`
+Historical execution-board notes were not carried forward into the canonical docs tree.
 
 ### A1. Runtime contract completion
 

@@ -5,8 +5,8 @@
 Reduce the platform to the fewest moving parts that still support the product truth:
 
 1. Verified account identity
-2. `free | builder` account tier
-3. Project-bound Daytona runtime
+2. free product account plus internal architect/dev access
+3. Project-bound workspace runtime
 4. Canonical community policy and access
 5. Truthful recurring community pricing with grandfathered cohorts
 
@@ -74,7 +74,7 @@ These are legacy mirrors or redundant semantics. Active UI/controller behavior n
 ### Delete If No Real Requirement Appears
 
 - any remaining `mod` residue
-- compatibility aliases for `architect` / `pro`
+- legacy compatibility aliases for `builder` / `pro`
 - community-level fields or UI chips that imply per-member subscription analytics beyond actual backend truth
 
 ## Optimize
@@ -217,7 +217,7 @@ Before deleting a redundant surface, verify:
 The irreducible system should end up as:
 
 - `authSubject`
-- `free | builder`
+- free account plus internal architect/dev access
 - `project -> volume -> sandbox`
 - `entryPolicy`
 - `communityMemberships`

@@ -7,7 +7,6 @@ import {
   type TouchEventHandler,
 } from "react";
 import type { AppPage, AppView } from "../../../../shared/appShellNavigation";
-import type { BuilderUpgradeContextValue } from "../../../../shared/builderBilling";
 
 type MobileOverlay = "agent" | "community" | "community_selector";
 type MobileSettingsView = "index" | "detail";
@@ -32,8 +31,7 @@ export function useWebMobileShellController(params: {
   handleTopbarBackToWorkspace: () => void;
   hasBuilderAccess: boolean;
   openCreateCommunityModal: () => void;
-  setBuilderUpgradeContext: Dispatch<SetStateAction<BuilderUpgradeContextValue>>;
-  setIsBuilderUpgradeOpen: Dispatch<SetStateAction<boolean>>;
+  setIsBuilderInfoOpen: Dispatch<SetStateAction<boolean>>;
 }) {
   const mobileShellSwipeStartRef = useRef<{ x: number; y: number } | null>(null);
   const mobileAgentDrawerSwipeEdgePx = 44;
@@ -103,13 +101,11 @@ export function useWebMobileShellController(params: {
       params.openCreateCommunityModal();
       return;
     }
-    params.setBuilderUpgradeContext("builder");
-    params.setIsBuilderUpgradeOpen(true);
+    params.setIsBuilderInfoOpen(true);
   }, [
     params.hasBuilderAccess,
     params.openCreateCommunityModal,
-    params.setBuilderUpgradeContext,
-    params.setIsBuilderUpgradeOpen,
+    params.setIsBuilderInfoOpen,
     params.setMobileOverlay,
   ]);
 

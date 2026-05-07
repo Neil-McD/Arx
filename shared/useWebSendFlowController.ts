@@ -10,7 +10,7 @@ import {
   mapRequestedFundingSourceToInferenceSource,
   persistGuestThreadStorageFromMessages,
   resolvePreferredModelSelectionFromArgs,
-  showBuilderLimitUpgradeIfNeeded,
+  showBuilderLimitInfoIfNeeded,
   syncThreadModelSelectionInState,
 } from "./webSendFlowCore";
 
@@ -31,8 +31,8 @@ export function useWebSendFlowController<
   const argsRef = useRef(args);
   argsRef.current = args;
 
-  const maybeShowBuilderLimitUpgrade = useCallback((message: string): void => {
-    showBuilderLimitUpgradeIfNeeded(argsRef.current, message);
+  const maybeShowBuilderLimitInfo = useCallback((message: string): void => {
+    showBuilderLimitInfoIfNeeded(argsRef.current, message);
   }, []);
 
   const resolvePreferredModelSelection = useCallback(() => resolvePreferredModelSelectionFromArgs(argsRef.current), []);
@@ -321,7 +321,7 @@ export function useWebSendFlowController<
         current.setWorkspaceWantsNewChatMode(true);
         current.setActiveThreadId(null);
       }
-      maybeShowBuilderLimitUpgrade(message);
+      maybeShowBuilderLimitInfo(message);
     } finally {
       if (startedInDraft) current.setIsSendingMessage(false);
       if (runThreadId) {
@@ -330,7 +330,7 @@ export function useWebSendFlowController<
     }
   }, [
     isThreadBusy,
-    maybeShowBuilderLimitUpgrade,
+    maybeShowBuilderLimitInfo,
     persistGuestFromMessages,
     resolvePreferredModelSelection,
     syncThreadModelSelection,
@@ -400,13 +400,13 @@ export function useWebSendFlowController<
     } catch (error) {
       const message = formatSendFlowErrorMessage(error, "Failed to run model.");
       setErrorForThread(threadId, message);
-      maybeShowBuilderLimitUpgrade(message);
+      maybeShowBuilderLimitInfo(message);
     } finally {
       current.setThreadRunSending(threadId, false);
     }
   }, [
     isThreadBusy,
-    maybeShowBuilderLimitUpgrade,
+    maybeShowBuilderLimitInfo,
     resolvePreferredModelSelection,
     syncThreadModelSelection,
   ]);
@@ -494,13 +494,13 @@ export function useWebSendFlowController<
     } catch (error) {
       const message = formatSendFlowErrorMessage(error, "Failed to run model.");
       setErrorForThread(threadId, message);
-      maybeShowBuilderLimitUpgrade(message);
+      maybeShowBuilderLimitInfo(message);
     } finally {
       current.setThreadRunSending(threadId, false);
     }
   }, [
     isThreadBusy,
-    maybeShowBuilderLimitUpgrade,
+    maybeShowBuilderLimitInfo,
     resolvePreferredModelSelection,
     syncThreadModelSelection,
   ]);

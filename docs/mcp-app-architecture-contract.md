@@ -84,6 +84,9 @@ Rules:
 - User app state is the only source for live/setup-needed/not-live status shown to that user.
 - Source rows explain why a user app exists: direct personal add or community seed.
 - Operator audit/backfill may add missing community source rows for existing community/member pairs, but must not delete or rewrite personal source rows.
+- Operator source-provenance repair must find existing user harness apps by stable app identity, not by exact `developerAppId`.
+- Operator source-provenance repair must not match app identities through empty or invalid normalized endpoints.
+- Operator source-provenance repair defaults to dry-run, requires explicit repair intent for writes, scans bounded app and recipient batches, and records a critical audit event for every attempted run.
 - Personal credentials live in user connection state.
 - OAuth tokens live in encrypted user connection state and must not be stored in community app bundle records; callback results must not attach provider tokens to a Polynet user until an authenticated finalization action verifies the state owner.
 - If a user already has Linear live personally and a community adds Linear, every surface must resolve to that same effective Linear state for that user.

@@ -1,5 +1,5 @@
-export type CanonicalTier = "free" | "builder" | "architect";
-export type EffectiveTier = "anon_free" | "auth_free" | "builder" | "architect";
+export type CanonicalTier = "free" | "architect";
+export type EffectiveTier = "anon_free" | "auth_free" | "architect";
 export type AuthState = "anonymous" | "authenticated";
 export type Surface = "web";
 export type ExecutionMode = "cloud";
@@ -49,11 +49,7 @@ export type CanonicalGatePolicy = {
   harnessProfile: string;
 };
 
-const CANONICAL_TIER_SET = new Set<CanonicalTier>(["free", "builder", "architect"]);
-const WORKBENCH_TIER_SET = new Set<Exclude<EffectiveTier, "anon_free" | "auth_free">>([
-  "builder",
-  "architect",
-]);
+const CANONICAL_TIER_SET = new Set<CanonicalTier>(["free", "architect"]);
 const VALID_AUTH_STATE = new Set<AuthState>(["anonymous", "authenticated"]);
 const VALID_MODEL_CLASS = new Set<ModelClass>(["free_model", "paid_model"]);
 const VALID_REQUESTED_FUNDING_SOURCE = new Set<RequestedFundingSource>([
@@ -108,7 +104,6 @@ function normalizeRequestedFundingSource(
 function normalizeCanonicalTier(rawTier: unknown): CanonicalTier {
   const normalized = toLowerTrimmed(rawTier);
   if (normalized === "architect") return "architect";
-  if (normalized === "pro") return "builder";
   if (CANONICAL_TIER_SET.has(normalized as CanonicalTier)) {
     return normalized as CanonicalTier;
   }
@@ -121,12 +116,6 @@ function resolveEffectiveTier(input: { authState?: unknown; tier?: unknown }): E
   if (authState === "anonymous") return "anon_free";
   if (canonicalTier === "free") return "auth_free";
   return canonicalTier;
-}
-
-function isPaidEffectiveTier(effectiveTier: EffectiveTier): boolean {
-  return WORKBENCH_TIER_SET.has(
-    effectiveTier as Exclude<EffectiveTier, "anon_free" | "auth_free">,
-  );
 }
 
 function normalizeHasCommunityContext(rawValue: unknown): boolean {
@@ -375,11 +364,4 @@ export function resolveEffectiveTierForGate(input: {
   tier?: string | null;
 }): EffectiveTier {
   return resolveEffectiveTier(input);
-}
-
-export function hasPaidAccessForGate(input: {
-  authState: AuthState;
-  tier?: string | null;
-}): boolean {
-  return isPaidEffectiveTier(resolveEffectiveTier(input));
 }

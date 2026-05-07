@@ -292,7 +292,7 @@ function buildPlatformChatContextPrompt(): string {
     "WORKSPACE_CONTEXT",
     "Active harness: chat.",
     "This is a chat-only platform run.",
-    "No Daytona workspace tools are active in this run.",
+    "No workspace tools are active in this run.",
   ].join("\n");
 }
 
@@ -409,7 +409,7 @@ function buildChatOperatingPolicyPrompt(): string {
     "Answer the user's actual question directly and truthfully.",
     "Use the active community context when it is actually relevant to the user's request.",
     "Do not narrow a generic user request into the active community topic unless the user explicitly asks for that community-specific angle.",
-    "Do not imply Daytona workspace tools are active in this run.",
+    "Do not imply workspace tools are active in this run.",
     "Distinguish clearly between current implementation, platform ambition, and uncertainty.",
     "Never fabricate capabilities, facts, or feature status.",
   ].join("\n");

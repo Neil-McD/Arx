@@ -139,7 +139,6 @@ export type UseWebSendFlowControllerArgs<
   modelToggles: ModelToggle[];
   userMemoryRememberEnabled: boolean;
   builderTier: string | null;
-  hasPaidAccess: boolean;
   hasUserKeyConnection: boolean;
   hasUserChatgptConnection: boolean;
   loadBuilderBillingStatus?: (session: SessionT) => Promise<{ builder_tier?: string | null } | null>;
@@ -173,9 +172,8 @@ export type UseWebSendFlowControllerArgs<
   ) => void;
   setThreads: (value: ThreadRecordT[] | ((prev: ThreadRecordT[]) => ThreadRecordT[])) => void;
   setActiveModelId: (value: string | null | ((prev: string | null) => string | null)) => void;
-  setBuilderUpgradeContext: (next: string) => void;
   setBuilderBillingError: (value: string | null | ((prev: string | null) => string | null)) => void;
-  setIsBuilderUpgradeOpen: (value: boolean | ((prev: boolean) => boolean)) => void;
+  setIsBuilderInfoOpen: (value: boolean | ((prev: boolean) => boolean)) => void;
 };
 
 export function toErrorMessage(error: unknown, fallback: string): string {
@@ -193,16 +191,15 @@ export function getLastThreadMessageId(
   return null;
 }
 
-export function showBuilderLimitUpgradeIfNeeded<
+export function showBuilderLimitInfoIfNeeded<
   SessionT,
   AttachmentT,
   ThreadRecordT extends ThreadRecord,
   ThreadMessageT extends ThreadMessage,
 >(args: UseWebSendFlowControllerArgs<SessionT, AttachmentT, ThreadRecordT, ThreadMessageT>, message: string): void {
   if (!message.toLowerCase().includes("cloud history limit reached")) return;
-  args.setBuilderUpgradeContext("builder");
   args.setBuilderBillingError(message);
-  args.setIsBuilderUpgradeOpen(true);
+  args.setIsBuilderInfoOpen(true);
 }
 
 export function resolvePreferredModelSelectionFromArgs<
@@ -222,7 +219,6 @@ export function resolvePreferredModelSelectionFromArgs<
     enabledModelIds: enabled.map((toggle) => toggle.id),
     defaultAuthedModelId: args.defaultActiveModelId,
     defaultGuestModelId: args.defaultGuestModelId,
-    hasPaidAccess: args.hasPaidAccess,
     hasUserKeyConnection: args.hasUserKeyConnection,
     hasChatgptAuth: args.hasUserChatgptConnection,
     freeModelAllowlist: args.guestModelAllowlist,

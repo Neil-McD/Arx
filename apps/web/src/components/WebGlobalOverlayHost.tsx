@@ -1,5 +1,5 @@
 import type { ComponentProps } from "react";
-import { BuilderUpgradeModal } from "../../../../shared/BuilderUpgradeModal";
+import { BuilderIncludedModal } from "../../../../shared/BuilderIncludedModal";
 import { WebCommunityModalHost } from "./WebCommunityModalHost";
 import { WebInferenceIssueModal } from "./WebInferenceIssueModal";
 import { WebMemoryImportModal } from "./WebMemoryImportModal";
@@ -70,7 +70,7 @@ export type WebGlobalOverlayHostProps = {
   >["modalHostProps"];
   previewAccessGateModalProps: WebPreviewAccessGateModalProps | null;
   inferenceIssueModalProps: WebInferenceIssueModalProps | null;
-  builderUpgradeModalProps: ComponentProps<typeof BuilderUpgradeModal>;
+  builderIncludedModalProps: ComponentProps<typeof BuilderIncludedModal>;
   communityModalHostProps: ComponentProps<typeof WebCommunityModalHost>["modalHostProps"];
   appToast: string | null;
 };
@@ -98,7 +98,7 @@ export function WebGlobalOverlayHost(props: WebGlobalOverlayHostProps) {
         <WebInferenceIssueModal {...props.inferenceIssueModalProps} />
       ) : null}
 
-      <BuilderUpgradeModal {...props.builderUpgradeModalProps} />
+      <BuilderIncludedModal {...props.builderIncludedModalProps} />
 
       <WebCommunityModalHost modalHostProps={props.communityModalHostProps} />
 

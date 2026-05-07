@@ -4,14 +4,13 @@ import {
 
 export type AccessSurface = "web";
 export type AccessAuthState = "anonymous" | "authenticated";
-export type BuilderTier = "free" | "builder" | "architect" | "unknown";
+export type BuilderTier = "free" | "architect" | "unknown";
 export type ThreadMode = "single_guest" | "multi_cloud";
 
 export type UserAccessPolicy = {
   surface: AccessSurface;
   authState: AccessAuthState;
   tier: BuilderTier;
-  isPaid: boolean;
   threadMode: ThreadMode;
   allowMultipleThreads: boolean;
   allowGuestInference: boolean;
@@ -52,11 +51,10 @@ function resolveUserAccessPolicyViaCanonicalGate(input: {
 
   const isAnonymous = effectiveTier === "anon_free";
   const isAuthenticated = !isAnonymous;
-  const hasWorkbenchAccess = effectiveTier === "builder" || effectiveTier === "architect";
 
   const tier: BuilderTier = isAnonymous
     ? "unknown"
-    : effectiveTier === "builder" || effectiveTier === "architect"
+    : effectiveTier === "architect"
       ? effectiveTier
       : "free";
 
@@ -68,7 +66,6 @@ function resolveUserAccessPolicyViaCanonicalGate(input: {
     surface: input.surface,
     authState: input.authState,
     tier,
-    isPaid: hasWorkbenchAccess,
     threadMode,
     allowMultipleThreads: threadMode !== "single_guest",
     allowGuestInference: true,

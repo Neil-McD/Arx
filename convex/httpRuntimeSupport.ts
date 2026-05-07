@@ -255,7 +255,7 @@ export function gateDeniedResponse(
       ok: false,
       code: "plan_required",
       error: "plan_required",
-      message: "This model requires a higher plan.",
+      message: "This model is not available with the current provider setup.",
       gate_code: params.decision.code,
       cta: params.decision.cta,
       lane: params.decision.lane,

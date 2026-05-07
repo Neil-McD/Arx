@@ -8,6 +8,9 @@ TARGETS=(convex apps shared scripts docs package.json AGENTS.md)
 EXCLUDES=(
   --glob '!scripts/no_builder_plan_infra_guard.sh'
   --glob '!convex/schema.ts'
+  --glob '!docs/archive/**'
+  --glob '!docs/product/generated/**'
+  --glob '!docs/product/llms*.txt'
 )
 
 FORBIDDEN_PATTERNS=(
@@ -36,12 +39,41 @@ FORBIDDEN_PATTERNS=(
   'can_manage_plan'
   'builder_billing_customer_missing'
   'account_delete_active_builder_subscription_blocked'
+  'BuilderUpgrade'
+  'builder upgrade'
+  'openBuilderUpgrade'
+  'isBuilderUpgradeOpen'
+  'setIsBuilderUpgradeOpen'
+  'BuilderUpgradeContextValue'
+  'hasBuilderTierPaidAccess'
+  'hasBuilderWorkbenchAccess'
+  'hasBuilderProjectAccess'
+  'tierHasBuilderAccess'
+  'WORKBENCH_TIER_SET'
+  'hasPaidAccessForGate'
+  'setDevBuilderTier\("builder"\)'
+  'return "builder";'
+  'normalizeBuilderTier\(raw: unknown\): "builder"'
 )
 
 failed=0
 for pattern in "${FORBIDDEN_PATTERNS[@]}"; do
   if rg -n -S "$pattern" "${TARGETS[@]}" "${EXCLUDES[@]}"; then
     echo "Forbidden legacy Builder plan infrastructure pattern found: $pattern" >&2
+    failed=1
+  fi
+done
+
+PROJECT_TIER_GATE_PATTERNS=(
+  'canonicalTier === "free"'
+  'canonicalTier !== "free"'
+  'plan_required'
+  'tier_required'
+)
+
+for pattern in "${PROJECT_TIER_GATE_PATTERNS[@]}"; do
+  if rg -n -S "$pattern" convex/projects.ts convex/threads.ts; then
+    echo "Forbidden project/workspace tier gate found: $pattern" >&2
     failed=1
   fi
 done

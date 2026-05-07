@@ -48,20 +48,6 @@ async function resolveOwnerIdForAuthenticatedRequest(args: {
   }
 }
 
-async function hasBuilderProjectAccess(args: {
-  ctx: any;
-  ownerId: any;
-  authSubject?: string | null;
-  nowMs?: number;
-}): Promise<boolean> {
-  const canonicalTier = await args.ctx.runQuery(api.entitlements.getCanonicalTierByUserId as any, {
-    userId: args.ownerId,
-    authSubject: args.authSubject ?? null,
-    nowMs: args.nowMs ?? Date.now(),
-  });
-  return canonicalTier !== "free";
-}
-
 async function ensureDefaultProjectInternal(args: {
   ctx: any;
   ownerId: any;
@@ -967,16 +953,6 @@ export const ensureDefaultCloudProjectForOwner = mutation({
       authSubject: args.authSubject ?? null,
     });
     const nowMs = args.nowMs ?? Date.now();
-    if (
-      !(await hasBuilderProjectAccess({
-        ctx,
-        ownerId,
-        authSubject: args.authSubject ?? null,
-        nowMs,
-      }))
-    ) {
-      return null;
-    }
     return await ensureDefaultProjectInternal({
       ctx,
       ownerId,
@@ -996,15 +972,6 @@ export const listCloudProjectsForOwner = query({
       ownerId: args.ownerId,
       authSubject: args.authSubject ?? null,
     });
-    if (
-      !(await hasBuilderProjectAccess({
-        ctx,
-        ownerId,
-        authSubject: args.authSubject ?? null,
-      }))
-    ) {
-      return [];
-    }
     const rows = await ctx.db
       .query("cloudProjects")
       .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
@@ -1028,15 +995,6 @@ export const createCloudProjectForOwner = mutation({
       authSubject: args.authSubject ?? null,
     });
     const nowMs = args.nowMs ?? Date.now();
-    const canonicalTier = await ctx.runQuery(api.entitlements.getCanonicalTierByUserId as any, {
-      userId: ownerId,
-      authSubject: args.authSubject ?? null,
-      nowMs,
-    });
-    if (canonicalTier === "free") {
-      throw new Error("plan_required");
-    }
-
     const existingRows = await ctx.db
       .query("cloudProjects")
       .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
@@ -1081,16 +1039,6 @@ export const updateCloudProjectForOwner = mutation({
     if (!existing || existing.ownerId !== ownerId) {
       throw new Error("project_not_found");
     }
-    if (
-      !(await hasBuilderProjectAccess({
-        ctx,
-        ownerId,
-        authSubject: args.authSubject ?? null,
-        nowMs: args.nowMs,
-      }))
-    ) {
-      throw new Error("plan_required");
-    }
     const nowMs = args.nowMs ?? Date.now();
     const name = normalizeOptionalProjectString(args.name);
     if (!name) throw new Error("project_name_required");
@@ -1118,15 +1066,6 @@ export const generateCloudProjectImportUploadUrl = mutation({
       ownerId: args.ownerId,
       authSubject: args.authSubject ?? null,
     });
-    const nowMs = args.nowMs ?? Date.now();
-    const canonicalTier = await ctx.runQuery(api.entitlements.getCanonicalTierByUserId as any, {
-      userId: ownerId,
-      authSubject: args.authSubject ?? null,
-      nowMs,
-    });
-    if (canonicalTier === "free") {
-      throw new Error("plan_required");
-    }
     return {
       uploadUrl: await ctx.storage.generateUploadUrl(),
     };
@@ -1460,16 +1399,6 @@ export const getCloudProjectById = query({
         })
       : args.ownerId;
     if (ownerId && row.ownerId !== ownerId) return null;
-    if (
-      ownerId &&
-      !(await hasBuilderProjectAccess({
-        ctx,
-        ownerId,
-        authSubject: args.authSubject ?? null,
-      }))
-    ) {
-      return null;
-    }
     return row;
   },
 });

@@ -104,15 +104,6 @@ export function normalizeBillingPeriod(raw: unknown): "monthly" | "annual" {
   return "monthly";
 }
 
-export function normalizeBuilderTier(raw: unknown): "builder" {
-  const tier = String(raw ?? "")
-    .trim()
-    .toLowerCase();
-  if (tier === "builder") return "builder";
-  if (tier === "architect" || tier === "pro") return "builder";
-  throw new Error("builder_tier_invalid");
-}
-
 export function normalizeSlug(raw: unknown): string {
   const slug = String(raw ?? "")
     .trim()

@@ -6,8 +6,8 @@ import {
   resolveCanonicalGatePolicy,
 } from "../shared/canonicalGateEngine";
 
-type CanonicalTier = "free" | "builder" | "architect";
-type EffectiveTier = "anon_free" | "auth_free" | "builder" | "architect";
+type CanonicalTier = "free" | "architect";
+type EffectiveTier = "anon_free" | "auth_free" | "architect";
 type GateCode =
   | "ok"
   | "auth_required"

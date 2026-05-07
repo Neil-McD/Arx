@@ -8,6 +8,11 @@ import type { PendingPurchaseClaim } from "../../../../shared/pay_first";
 import type { EffectiveMcpApp } from "../../../../shared/effectiveMcpApps";
 import type { CreateSkillPackageInput } from "../../../../shared/skillPackageTypes";
 import type { UserPlatformInstalledSkill } from "../../../../shared/userPlatformSkillTypes";
+import type {
+  BeginUserPlatformAppOAuthResult,
+  ConnectUserPlatformAppInput,
+  ConnectUserPlatformAppResult,
+} from "../../../../shared/userPlatformAppMountTypes";
 import type { UseWebProviderConnectionUiControllerResult } from "../controllers/useWebProviderConnectionUiController";
 import type { useWebProfileSettingsUiController } from "../controllers/useWebProfileSettingsUiController";
 import type { useWebPersonalMemoryUiController } from "../controllers/useWebPersonalMemoryUiController";
@@ -61,13 +66,12 @@ export type WebSettingsPanelsProps = {
     communityRoleById: Record<string, string>;
     openOwnedCommunitySettings: (communityId: string) => void;
     communityInitials: (value: string) => string;
-    openBuilderUpgrade: (context: "builder") => void;
     startBuilderConnectOnboarding: (opts?: {
       context?: "account" | "community";
       communitySlug?: string | null;
     }) => Promise<void> | void;
     canUseDevTierOverride: boolean;
-    setDevBuilderTier: (tier: "free" | "builder" | "architect") => Promise<void> | void;
+    setDevBuilderTier: (tier: "free" | "architect") => Promise<void> | void;
     redeemPendingPurchases: () => Promise<void> | void;
     ensureSession: () => Promise<SessionLike>;
     loadPendingPurchaseClaims: (session: NonNullable<SessionLike>) => Promise<void>;
@@ -112,7 +116,6 @@ export type WebSettingsPanelsProps = {
     handleDeletePersonalMemoryItem: (id: string) => Promise<void> | void;
     handleCreatePersonalMemoryItem: () => Promise<void> | void;
     loadPersonalMemoryItems: () => Promise<void> | void;
-    openBuilderUpgrade: (context: "builder") => void;
     startWorkspaceCreditTopupCheckout: (packId?: WorkspaceToolBalanceTopupPackId) => Promise<void> | void;
     personalMemoryUi: ReturnType<typeof useWebPersonalMemoryUiController>;
     billingUi: UseWebBillingUiControllerResult<BuilderBillingStatus, WorkspaceCreditBalance, PendingPurchaseClaim>;
@@ -130,6 +133,7 @@ export type WebSettingsPanelsProps = {
     isLoadingUserPlatformAppMounts: boolean;
     userPlatformAppMountError: string | null;
     userPlatformAppMutationError: string | null;
+    isConnectingUserPlatformApp: boolean;
     updatingUserPlatformAppMountId: string | null;
     refreshingUserPlatformAppMountId: string | null;
     reconnectingUserPlatformAppMountId: string | null;
@@ -141,6 +145,12 @@ export type WebSettingsPanelsProps = {
     isCreatingUserPlatformSkill: boolean;
     updatingUserPlatformSkillInstallId: string | null;
     removingUserPlatformSkillInstallId: string | null;
+    onConnectUserPlatformApp: (
+      input: ConnectUserPlatformAppInput,
+    ) => Promise<ConnectUserPlatformAppResult>;
+    onBeginUserPlatformAppOAuth: (
+      catalogAppId: string,
+    ) => Promise<BeginUserPlatformAppOAuthResult>;
     onUpdateUserPlatformAppMount: (
       userPlatformAppMountId: string,
       patch: {
@@ -229,7 +239,6 @@ export function WebSettingsPanels(props: WebSettingsPanelsProps) {
     communityRoleById: account.communityRoleById,
     openOwnedCommunitySettings: account.openOwnedCommunitySettings,
     communityInitials: account.communityInitials,
-    openBuilderUpgrade: account.openBuilderUpgrade,
     startBuilderConnectOnboarding: account.startBuilderConnectOnboarding,
     builderBillingError: account.billingUi.builderBillingError,
     isStartingBuilderConnectOnboarding: account.billingUi.isStartingBuilderConnectOnboarding,
@@ -271,7 +280,6 @@ export function WebSettingsPanels(props: WebSettingsPanelsProps) {
     saveUserMemorySettings: agent.saveUserMemorySettings,
     personalMemoryError: agent.personalMemoryUi.personalMemoryError,
     builderBillingStatus: agent.billingUi.builderBillingStatus,
-    openBuilderUpgrade: agent.openBuilderUpgrade,
     isLoadingPersonalMemory: agent.personalMemoryUi.isLoadingPersonalMemory,
     personalMemoryItems: agent.personalMemoryUi.personalMemoryItems,
     personalMemoryQuery: agent.personalMemoryUi.personalMemoryQuery,
@@ -313,6 +321,7 @@ export function WebSettingsPanels(props: WebSettingsPanelsProps) {
     isLoadingUserPlatformAppMounts: integrations.isLoadingUserPlatformAppMounts,
     userPlatformAppMountError: integrations.userPlatformAppMountError,
     userPlatformAppMutationError: integrations.userPlatformAppMutationError,
+    isConnectingUserPlatformApp: integrations.isConnectingUserPlatformApp,
     updatingUserPlatformAppMountId: integrations.updatingUserPlatformAppMountId,
     refreshingUserPlatformAppMountId:
       integrations.refreshingUserPlatformAppMountId,
@@ -328,6 +337,8 @@ export function WebSettingsPanels(props: WebSettingsPanelsProps) {
       integrations.updatingUserPlatformSkillInstallId,
     removingUserPlatformSkillInstallId:
       integrations.removingUserPlatformSkillInstallId,
+    onConnectUserPlatformApp: integrations.onConnectUserPlatformApp,
+    onBeginUserPlatformAppOAuth: integrations.onBeginUserPlatformAppOAuth,
     onUpdateUserPlatformAppMount: integrations.onUpdateUserPlatformAppMount,
     onRefreshUserPlatformApp: integrations.onRefreshUserPlatformApp,
     onReconnectUserPlatformApp: integrations.onReconnectUserPlatformApp,

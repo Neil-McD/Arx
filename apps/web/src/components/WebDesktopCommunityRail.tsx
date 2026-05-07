@@ -105,7 +105,7 @@ export function WebDesktopCommunityRail(props: WebDesktopCommunityRailProps) {
         <button
           type="button"
           className="community-rail-button community-rail-add"
-          onClick={communityShell.onOpenBuilderUpgrade}
+          onClick={communityShell.onOpenBuilderInfo}
           title={communityShell.builderRailCtaTitle}
           aria-label={communityShell.builderRailCtaTitle}
         >

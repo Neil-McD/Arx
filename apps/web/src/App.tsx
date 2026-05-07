@@ -50,7 +50,7 @@ import { normalizeCommunityFunnelConfig } from "../../../shared/communityFunnel"
 import {
   buildCsv, dateKeyLocal, formatChatTime, formatCount, formatMoneyBaseUnits, formatPercent, formatRelativeTimeFromIso as formatRelativeTime, parseContentRangeTotal, } from "../../../shared/contentFormatting";
 import {
-  formatBuilderTierLabel, hasBuilderTierPaidAccess, isBuilderTierFree, normalizeBuilderTierForUi, formatPlanPrice, formatSubscriptionPrice, type BuilderConnectReturn, type BuilderUpgradeContextValue, } from "../../../shared/builderBilling";
+  formatBuilderTierLabel, isBuilderTierFree, normalizeBuilderTierForUi, formatPlanPrice, formatSubscriptionPrice, type BuilderConnectReturn, } from "../../../shared/builderBilling";
 import { canUseCreatorDevTierOverride } from "../../../shared/devTierOverride";
 import { useCheckoutFinalizeController } from "../../../shared/useCheckoutFinalizeController";
 import {
@@ -1510,8 +1510,7 @@ export default function App() {
   const [, setIsPendingPurchasesBannerDismissed] = useState(false);
   const workspaceCreditLoadRequestIdRef = useRef(0);
   const lastTrackedAuthSessionUserIdRef = useRef<string | null>(null);
-  const [isBuilderUpgradeOpen, setIsBuilderUpgradeOpen] = useState(false);
-  const [, setBuilderUpgradeContext] = useState<BuilderUpgradeContextValue>("builder");
+  const [isBuilderInfoOpen, setIsBuilderInfoOpen] = useState(false);
   const [builderConnectReturn, setBuilderConnectReturn] = useState<BuilderConnectReturn | null>(null);
   const lastAutoRedeemPendingPurchasesUserIdRef = useRef<string | null>(null);
   const autoRedeemPendingPurchasesAttemptRef = useRef(0);
@@ -4685,7 +4684,7 @@ export default function App() {
     redeemPendingPurchasesInFlightRef,
   });
 
-  async function setDevBuilderTier(tier: "free" | "builder" | "architect"): Promise<void> {
+  async function setDevBuilderTier(tier: "free" | "architect"): Promise<void> {
     const session = await ensureUsableAuthSession();
     if (!session || !canUseDevTierOverride) return;
     setIsSettingDevBuilderTier(true);
@@ -4773,9 +4772,6 @@ export default function App() {
     communityInitials,
     loadBuilderBillingStatus,
     persistCreateCommunityIntent,
-    onStartUpgradeFlow: () => {
-      setBuilderBillingError("Builder is included. You can build one community on the free account.");
-    },
     onPrimaryUnauthenticated: (draft) => {
       requireSignIn({ reason: "create_community", payload: { draft } });
     },
@@ -5336,7 +5332,6 @@ export default function App() {
     return out;
   }
 
-  const hasPaidAccess = Boolean(session) && hasBuilderTierPaidAccess(builderBillingStatus?.builder_tier ?? "free");
   const hasUserKeyConnection = Boolean(session) && openAiConnection.connected;
   const hasUserChatgptConnection = Boolean(session) && chatgptConnection.connected;
   const hasPersonalInferenceProvider = hasUserKeyConnection || hasUserChatgptConnection;
@@ -5434,9 +5429,6 @@ export default function App() {
     userMemoryRememberEnabled:
       userMemorySettings.memory_mode !== "off" && userMemorySettings.remember_intent_enabled !== false,
     builderTier: builderBillingStatus?.builder_tier ?? null,
-    hasPaidAccess:
-      Boolean(session) &&
-      hasBuilderTierPaidAccess(builderBillingStatus?.builder_tier ?? "free"),
     loadBuilderBillingStatus,
     hasUserKeyConnection,
     hasUserChatgptConnection,
@@ -5457,9 +5449,8 @@ export default function App() {
     setThreadMessages,
     setThreads,
     setActiveModelId,
-    setBuilderUpgradeContext: (next) => setBuilderUpgradeContext(next as BuilderUpgradeContextValue),
     setBuilderBillingError,
-    setIsBuilderUpgradeOpen,
+    setIsBuilderInfoOpen,
   });
 
   const { resetGuestThread: resetGuestThreadBase, exportThreadsCsv, exportMessagesCsv, exportMemoryCsv } =
@@ -5519,7 +5510,7 @@ export default function App() {
     setAuthError,
   });
 
-  const normalizedBuilderTier = useMemo<"free" | "builder" | "architect">(
+  const normalizedBuilderTier = useMemo<"free" | "architect">(
     () => normalizeBuilderTierForUi(builderBillingStatus?.builder_tier),
     [builderBillingStatus?.builder_tier],
   );
@@ -5665,7 +5656,7 @@ export default function App() {
         disabled={projectUiController.isCreatingProject || projectUiController.projectQuotaReached}
         title={
           projectUiController.projectQuotaReached
-            ? `Builder projects are capped at ${projectUiController.maxProjects}.`
+            ? `Projects are capped at ${projectUiController.maxProjects}.`
             : projectUiController.isCreatingProject
               ? "Creating project…"
               : "Create a new project"
@@ -6251,8 +6242,7 @@ export default function App() {
       handleTopbarBackToWorkspace,
       hasBuilderAccess: Number(builderBillingStatus?.max_communities ?? 0) > 0,
       openCreateCommunityModal: () => openCreateCommunityModal(),
-      setBuilderUpgradeContext,
-      setIsBuilderUpgradeOpen,
+      setIsBuilderInfoOpen,
     });
     useEffect(() => {
       if (shellPublicRoute.kind !== "app") return;
@@ -6799,10 +6789,6 @@ export default function App() {
         openCommunityTab(nextCommunitySlug, "settings", { pushSnapshot: false });
       },
       communityInitials,
-      openBuilderUpgrade: (context) => {
-        setBuilderUpgradeContext(context);
-        setIsBuilderUpgradeOpen(true);
-      },
       startBuilderConnectOnboarding: (opts) => {
         void startBuilderConnectOnboarding({
           context: opts?.context ?? "account",
@@ -6834,10 +6820,6 @@ export default function App() {
       userMemorySettings,
       isLoadingUserMemorySettings,
       saveUserMemorySettings,
-      openBuilderUpgrade: (context) => {
-        setBuilderUpgradeContext(context);
-        setIsBuilderUpgradeOpen(true);
-      },
       loadPersonalMemoryItems,
       formatRelativeTime,
       handleTogglePersonalMemoryPinned,
@@ -6861,6 +6843,7 @@ export default function App() {
       isLoadingUserPlatformAppMounts,
       userPlatformAppMountError,
       userPlatformAppMutationError,
+      isConnectingUserPlatformApp,
       updatingUserPlatformAppMountId,
       refreshingUserPlatformAppMountId,
       reconnectingUserPlatformAppMountId,
@@ -6872,6 +6855,8 @@ export default function App() {
       isCreatingUserPlatformSkill,
       updatingUserPlatformSkillInstallId,
       removingUserPlatformSkillInstallId,
+      onConnectUserPlatformApp: handleConnectUserPlatformApp,
+      onBeginUserPlatformAppOAuth: handleBeginUserPlatformAppOAuth,
       onUpdateUserPlatformAppMount: handleUpdateUserPlatformAppMount,
       onRefreshUserPlatformApp: handleRefreshUserPlatformApp,
       onReconnectUserPlatformApp: handleReconnectUserPlatformApp,
@@ -6995,9 +6980,8 @@ export default function App() {
     showMemoryToastMessage,
     requireSignIn,
     builderBillingStatus,
-    setBuilderUpgradeContext,
     setBuilderBillingError,
-    setIsBuilderUpgradeOpen,
+    setIsBuilderInfoOpen,
     personalMemoryUi,
     handleImportExternalMemory,
     projectModalHostProps: projectUiController.modalHostProps,
@@ -7015,7 +6999,7 @@ export default function App() {
     startWorkspaceCreditTopupCheckout,
     setActiveView,
     setSettingsPage,
-    isBuilderUpgradeOpen,
+    isBuilderInfoOpen,
     builderBillingError,
     communityModalHostProps: communityUi.modalHostProps,
     appToast,
@@ -7463,8 +7447,7 @@ export default function App() {
     draggingCommunityId,
     setCommunityRailListElement,
     getCommunityRailItemBindings,
-    setBuilderUpgradeContext,
-    setIsBuilderUpgradeOpen,
+    setIsBuilderInfoOpen,
     handleToggleWorkspaceSettings,
     settingsGroup: settingsGroup as SettingsGroup,
     setSettingsPage,

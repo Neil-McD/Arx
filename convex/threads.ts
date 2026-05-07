@@ -695,12 +695,6 @@ async function ensureDefaultProjectId(args: {
   authSubject?: string | null;
   nowMs: number;
 }): Promise<any | null> {
-  const canonicalTier = await args.ctx.runQuery(api.entitlements.getCanonicalTierByUserId as any, {
-    userId: args.ownerId,
-    authSubject: args.authSubject ?? null,
-    nowMs: args.nowMs,
-  });
-  if (canonicalTier === "free") return null;
   const existing = await args.ctx.db
     .query("cloudProjects")
     .withIndex("by_owner", (q: any) => q.eq("ownerId", args.ownerId))

@@ -75,7 +75,7 @@ async function proveWorkspaceCreditAccountingContract() {
   assert.match(
     sharedCreditsSource,
     /BUILDER_INCLUDED_WORKSPACE_CREDITS\s*=\s*0/,
-    "expected free-builder default to include no paid-tool credits",
+    "expected free-account default to include no paid-tool credits",
   );
   assert.match(
     sharedCreditsSource,

@@ -13,12 +13,10 @@ export function resolveCloudInferenceLane(params: {
   surface?: "web";
   hasChatgptAuth?: boolean;
   hasUserKeyConnection?: boolean;
-  hasPaidAccess?: boolean;
 }): CloudInferenceLane {
   const allowlist = params.freeModelAllowlist ?? FREE_MODEL_ALLOWLIST;
   const hasChatgptAuth = Boolean(params.hasChatgptAuth);
   const hasUserKeyConnection = Boolean(params.hasUserKeyConnection);
-  const hasPaidAccess = Boolean(params.hasPaidAccess);
   const isFree = isFreeModelId(params.modelId, allowlist);
   if (isFree) return "public";
   if (hasChatgptAuth && supportsModelFundingSource(params.modelId, "user_chatgpt")) {
@@ -27,7 +25,6 @@ export function resolveCloudInferenceLane(params: {
   if (hasUserKeyConnection && supportsModelFundingSource(params.modelId, "user_key")) {
     return "user_key";
   }
-  void hasPaidAccess;
   if (supportsModelFundingSource(params.modelId, "user_chatgpt")) {
     return "chatgpt";
   }
@@ -76,7 +73,6 @@ export function resolveCloudModelSelection(params: {
   enabledModelIds: ReadonlyArray<string>;
   defaultAuthedModelId: string;
   defaultGuestModelId: string;
-  hasPaidAccess: boolean;
   hasUserKeyConnection?: boolean;
   freeModelAllowlist?: ReadonlySet<string>;
   surface?: "web";
@@ -104,15 +100,6 @@ export function resolveCloudModelSelection(params: {
     (enabledSet.has(requestedModelId) || isFreeModelId(requestedModelId, allowlist));
   const candidateModelId = requestedAllowed ? requestedModelId : authedFallbackModelId;
 
-  const candidateLane = resolveCloudInferenceLane({
-    modelId: candidateModelId,
-    freeModelAllowlist: allowlist,
-    surface: params.surface,
-    hasChatgptAuth,
-    hasUserKeyConnection,
-    hasPaidAccess: params.hasPaidAccess,
-  });
-
   const modelId = candidateModelId;
   const lane = resolveCloudInferenceLane({
     modelId,
@@ -120,7 +107,6 @@ export function resolveCloudModelSelection(params: {
     surface: params.surface,
     hasChatgptAuth,
     hasUserKeyConnection,
-    hasPaidAccess: params.hasPaidAccess,
   });
   const fundingSource =
     lane === "public"

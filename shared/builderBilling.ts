@@ -1,7 +1,6 @@
 import type { CommunityBillingPeriod } from "./communityTypes";
 
-export type BuilderUpgradeContextValue = "builder" | "create_community";
-export type BuilderTierUi = "free" | "builder" | "architect";
+export type BuilderTierUi = "free" | "architect";
 
 export type BuilderConnectReturnAction = "refresh" | "return";
 export type BuilderConnectContext = "account" | "community";
@@ -61,9 +60,7 @@ function normalizeBuilderTierRaw(value: string | null | undefined): string {
 
 export function normalizeBuilderTierForUi(value: string | null | undefined): BuilderTierUi {
   const raw = normalizeBuilderTierRaw(value);
-  if (raw === "builder") return "builder";
   if (raw === "architect") return "architect";
-  if (raw === "pro") return "builder";
   return "free";
 }
 
@@ -71,24 +68,10 @@ export function isBuilderTierFree(value: string | null | undefined): boolean {
   return normalizeBuilderTierRaw(value) === "free";
 }
 
-export function isBuilderTierBuilder(value: string | null | undefined): boolean {
-  const raw = normalizeBuilderTierRaw(value);
-  return raw === "builder";
-}
-
-export function hasBuilderTierPaidAccess(value: string | null | undefined): boolean {
-  return normalizeBuilderTierForUi(value) !== "free";
-}
-
-export function hasBuilderWorkbenchAccess(value: string | null | undefined): boolean {
-  return hasBuilderTierPaidAccess(value);
-}
-
 export function formatBuilderTierLabel(
   value: string | null | undefined,
-): "Free" | "Builder" | "Architect" {
+): "Free" | "Architect" {
   if (normalizeBuilderTierForUi(value) === "architect") return "Architect";
-  if (isBuilderTierBuilder(value)) return "Builder";
   return "Free";
 }
 

@@ -839,7 +839,7 @@ export const startWorkspaceCreditTopupCheckout = action({
                 name: "Polynet tool balance",
                 description: `${formatWorkspaceToolBalanceUsdFromCredits(
                   workspaceCreditsAmount,
-                )} for Daytona workspaces, web research, and voice input.`,
+                )} for workspace tools, web research, and voice input.`,
               },
             },
             quantity: 1,
