@@ -448,6 +448,11 @@ function formatIsoEventTime(value: string | null): string {
   return formatEventTime(timestamp);
 }
 
+function formatBoundedCount(value: number | null | undefined, isTruncated: boolean | undefined): string {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "-";
+  return isTruncated ? `${value}+` : String(value);
+}
+
 function OperatorPlatformInsights(props: {
   overview: OperatorOverviewSnapshot | null;
   monetization: OperatorMonetizationSnapshot | null;
@@ -554,16 +559,28 @@ function OperatorPlatformInsights(props: {
             <strong>{formatHealth(props.frontendErrors?.health)}</strong>
           </div>
           <div className="operator-dashboard__row">
-            <span>Open issues</span>
-            <strong>{props.frontendErrors?.totals.unresolvedIssues ?? 0}</strong>
+            <span>Open issues shown</span>
+            <strong>
+              {formatBoundedCount(
+                props.frontendErrors?.totals.unresolvedIssues,
+                props.frontendErrors?.evidence.isTruncated,
+              )}
+            </strong>
           </div>
           <div className="operator-dashboard__row">
-            <span>Issue events</span>
-            <strong>{props.frontendErrors?.totals.events ?? 0}</strong>
+            <span>Top issue events</span>
+            <strong>
+              {formatBoundedCount(props.frontendErrors?.totals.events, props.frontendErrors?.evidence.isTruncated)}
+            </strong>
           </div>
           <div className="operator-dashboard__row">
-            <span>Affected users</span>
-            <strong>{props.frontendErrors?.totals.affectedUsers ?? "-"}</strong>
+            <span>Affected users shown</span>
+            <strong>
+              {formatBoundedCount(
+                props.frontendErrors?.totals.affectedUsers,
+                props.frontendErrors?.evidence.isTruncated,
+              )}
+            </strong>
           </div>
           <div className="operator-dashboard__row">
             <span>Sentry release</span>
@@ -594,7 +611,9 @@ function OperatorPlatformInsights(props: {
             <div className="operator-dashboard__empty">Sentry release evidence does not match the current build id.</div>
           ) : null}
           {props.frontendErrors?.evidence.sampled ? (
-            <div className="operator-dashboard__empty">Frontend error diagnostics are sampled from top Sentry issues.</div>
+            <div className="operator-dashboard__empty">
+              Frontend error diagnostics show the top {props.frontendErrors.evidence.issueLimit} Sentry issues.
+            </div>
           ) : null}
           {props.frontendErrors?.evidence.isTruncated ? (
             <div className="operator-dashboard__empty">Sentry returned more issues than the operator panel displays.</div>

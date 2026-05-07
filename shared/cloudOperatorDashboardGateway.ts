@@ -67,6 +67,8 @@ async function fetchSameOriginWithTimeout(url: string, init: RequestInit): Promi
 
 async function readCurrentBuildFromVersionJson(): Promise<{
   buildId: string | null;
+  sentryRelease: string | null;
+  environment: string | null;
   checkedAt: number;
   reachable: boolean;
 }> {
@@ -77,13 +79,25 @@ async function readCurrentBuildFromVersionJson(): Promise<{
       credentials: "same-origin",
     });
     if (!response.ok) {
-      return { buildId: null, checkedAt, reachable: false };
+      return { buildId: null, sentryRelease: null, environment: null, checkedAt, reachable: false };
     }
-    const payload = (await response.json()) as { buildId?: unknown };
+    const payload = (await response.json()) as {
+      buildId?: unknown;
+      sentryRelease?: unknown;
+      environment?: unknown;
+    };
     const buildId = String(payload?.buildId ?? "").trim();
-    return { buildId: buildId || null, checkedAt, reachable: true };
+    const sentryRelease = String(payload?.sentryRelease ?? "").trim();
+    const environment = String(payload?.environment ?? "").trim();
+    return {
+      buildId: buildId || null,
+      sentryRelease: sentryRelease || null,
+      environment: environment || null,
+      checkedAt,
+      reachable: true,
+    };
   } catch {
-    return { buildId: null, checkedAt, reachable: false };
+    return { buildId: null, sentryRelease: null, environment: null, checkedAt, reachable: false };
   }
 }
 
@@ -277,11 +291,12 @@ export async function loadOperatorFrontendErrorDiagnosticsCanonical(params: {
   const { client, authSubject } = await withOperatorAuth(params.session);
   const build = canRunBrowserWebDeployProbes()
     ? await readCurrentBuildFromVersionJson()
-    : { buildId: null, checkedAt: Date.now(), reachable: false };
+    : { buildId: null, sentryRelease: null, environment: null, checkedAt: Date.now(), reachable: false };
   return (await client.action("operatorSentryDiagnostics:getOperatorFrontendErrorDiagnostics" as any, {
     authSubject,
     range: params.range ?? "30d",
     currentBuildId: build.buildId ?? undefined,
+    frontendSentryRelease: build.sentryRelease ?? undefined,
   })) as OperatorFrontendErrorDiagnosticsSnapshot;
 }
 

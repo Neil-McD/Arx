@@ -9,6 +9,7 @@ const operatorSentryDiagnostics = read("convex/operatorSentryDiagnostics.ts");
 const operatorGateway = read("shared/cloudOperatorDashboardGateway.ts");
 const operatorTypes = read("shared/operatorTypes.ts");
 const operatorPanel = read("apps/web/src/components/WebOperatorDataPanel.tsx");
+const viteConfig = read("apps/web/vite.config.ts");
 const packageJson = read("package.json");
 
 assert.match(
@@ -26,14 +27,30 @@ assert.match(
 );
 assert.match(
   operatorTypes,
-  /configured: boolean[\s\S]*unavailableReason: string \| null[\s\S]*sampled: boolean[\s\S]*isTruncated: boolean/,
-  "frontend error evidence must expose configuration, sampling, and truncation state",
+  /issueLimit: number[\s\S]*configured: boolean[\s\S]*unavailableReason: string \| null[\s\S]*sampled: boolean[\s\S]*isTruncated: boolean/,
+  "frontend error evidence must expose limit, configuration, sampling, and truncation state",
+);
+
+assert.match(
+  viteConfig,
+  /polynetBuildVersionPlugin[\s\S]*sentryRelease: string \| null[\s\S]*environment: string \| null[\s\S]*fileName: "version\.json"[\s\S]*JSON\.stringify\(params/,
+  "version.json must include frontend Sentry release and environment evidence",
 );
 
 assert.match(
   operatorSentryDiagnostics,
   /getOperatorFrontendErrorDiagnostics = action/,
   "frontend error diagnostics must be a Convex action",
+);
+assert.match(
+  operatorSentryDiagnostics,
+  /frontendSentryRelease: v\.optional\(v\.string\(\)\)/,
+  "Sentry diagnostics action must accept frontend Sentry release evidence from version.json",
+);
+assert.doesNotMatch(
+  operatorSentryDiagnostics,
+  /process\.env\.SENTRY_RELEASE|process\.env\.VERCEL_GIT_COMMIT_SHA|process\.env\.GIT_COMMIT_SHA/,
+  "Sentry diagnostics action must not use Convex env release as primary frontend release truth",
 );
 assert.match(
   operatorSentryDiagnostics,
@@ -55,8 +72,13 @@ assert.match(
 );
 assert.match(
   operatorSentryDiagnostics,
-  /summarizeSentryIssues[\s\S]*cleanRequiredString\(issue\.title[\s\S]*cleanOptionalString\(issue\.culprit[\s\S]*cleanOptionalString\(issue\.permalink/,
+  /summarizeSentryIssues[\s\S]*sentryRelease: string \| null[\s\S]*cleanRequiredString\(issue\.title[\s\S]*cleanOptionalString\(issue\.culprit[\s\S]*cleanOptionalString\(issue\.permalink/,
   "Sentry diagnostics must sanitize issue rows before returning them",
+);
+assert.match(
+  operatorSentryDiagnostics,
+  /issueLimit: SENTRY_ISSUE_LIMIT[\s\S]*isTruncated: rows\.length >= SENTRY_ISSUE_LIMIT/,
+  "Sentry diagnostics must expose bounded issue limit and truncation evidence",
 );
 assert.doesNotMatch(
   operatorSentryDiagnostics,
@@ -76,8 +98,8 @@ assert.match(
 );
 assert.match(
   operatorGateway,
-  /readCurrentBuildFromVersionJson\(\)[\s\S]*currentBuildId: build\.buildId/,
-  "operator gateway must pass current build evidence to Sentry diagnostics",
+  /readCurrentBuildFromVersionJson\(\)[\s\S]*sentryRelease: string \| null[\s\S]*currentBuildId: build\.buildId[\s\S]*frontendSentryRelease: build\.sentryRelease/,
+  "operator gateway must pass current build and frontend Sentry release evidence to Sentry diagnostics",
 );
 assert.doesNotMatch(
   operatorGateway,
@@ -102,8 +124,13 @@ assert.match(
 );
 assert.match(
   operatorPanel,
-  /Frontend error diagnostics are sampled from top Sentry issues/,
-  "operator panel must label sampled Sentry issue counts",
+  /Open issues shown[\s\S]*Top issue events[\s\S]*Affected users shown[\s\S]*formatBoundedCount/,
+  "operator panel must label bounded sampled Sentry metrics explicitly",
+);
+assert.match(
+  operatorPanel,
+  /Frontend error diagnostics show the top \{props\.frontendErrors\.evidence\.issueLimit\} Sentry issues/,
+  "operator panel must render the backend issue limit",
 );
 assert.match(
   operatorPanel,

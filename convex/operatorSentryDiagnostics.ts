@@ -91,6 +91,7 @@ function buildUnavailableSnapshot(args: {
   statsPeriod: string;
   currentBuildId: string | null;
   sentryRelease: string | null;
+  issueLimit: number;
   configured: boolean;
   reason: string;
 }): unknown {
@@ -120,6 +121,7 @@ function buildUnavailableSnapshot(args: {
       environment: args.environment,
       query: args.query,
       statsPeriod: args.statsPeriod,
+      issueLimit: args.issueLimit,
       configured: args.configured,
       unavailableReason: args.reason,
       sampled: true,
@@ -152,6 +154,7 @@ async function fetchJsonWithTimeout(url: URL, token: string): Promise<unknown> {
 function summarizeSentryIssues(rows: SentryIssueLike[]): {
   health: "healthy" | "degraded" | "incident" | "unknown";
   totals: { issues: number; events: number; affectedUsers: number | null; unresolvedIssues: number };
+  sentryRelease: string | null;
   topIssues: Array<{
     id: string;
     shortId: string | null;
@@ -193,6 +196,7 @@ function summarizeSentryIssues(rows: SentryIssueLike[]): {
   const affectedUsers = affectedUserCounts.length ? affectedUserCounts.reduce((sum, count) => sum + count, 0) : null;
   const hasFatal = topIssues.some((issue) => issue.level === "fatal");
   const hasError = topIssues.some((issue) => issue.level === "error");
+  const sentryRelease = topIssues.find((issue) => issue.release)?.release ?? null;
   return {
     health: hasFatal ? "incident" : hasError || topIssues.length > 0 ? "degraded" : "healthy",
     totals: {
@@ -201,6 +205,7 @@ function summarizeSentryIssues(rows: SentryIssueLike[]): {
       affectedUsers,
       unresolvedIssues: topIssues.filter((issue) => issue.status !== "resolved").length,
     },
+    sentryRelease,
     topIssues,
   };
 }
@@ -210,6 +215,7 @@ export const getOperatorFrontendErrorDiagnostics = action({
     authSubject: v.optional(v.string()),
     range: operatorRange,
     currentBuildId: v.optional(v.string()),
+    frontendSentryRelease: v.optional(v.string()),
   },
   handler: async (ctx, args): Promise<unknown> => {
     await ctx.runQuery((api as any).operatorDashboard.getOperatorAccess, {
@@ -220,11 +226,8 @@ export const getOperatorFrontendErrorDiagnostics = action({
     const org = cleanOptionalString(process.env.SENTRY_ORG, 120);
     const project = cleanOptionalString(process.env.SENTRY_PROJECT, 120);
     const projectId = cleanOptionalString(process.env.SENTRY_PROJECT_ID, 80);
-    const sentryRelease =
-      cleanOptionalString(process.env.SENTRY_RELEASE, 120) ??
-      cleanOptionalString(process.env.VERCEL_GIT_COMMIT_SHA, 120) ??
-      cleanOptionalString(process.env.GIT_COMMIT_SHA, 120);
     const currentBuildId = cleanOptionalString(args.currentBuildId, 120);
+    const frontendSentryRelease = cleanOptionalString(args.frontendSentryRelease, 120);
     const environment = cleanOptionalString(process.env.SENTRY_ENVIRONMENT, 80) ?? DEFAULT_SENTRY_ENVIRONMENT;
     const endpointMode = projectId ? "organization_issues" : "project_issues";
     const query = "is:unresolved";
@@ -241,7 +244,8 @@ export const getOperatorFrontendErrorDiagnostics = action({
         query,
         statsPeriod,
         currentBuildId,
-        sentryRelease,
+        sentryRelease: frontendSentryRelease,
+        issueLimit: SENTRY_ISSUE_LIMIT,
         configured: false,
         reason: "sentry_not_configured",
       });
@@ -267,6 +271,7 @@ export const getOperatorFrontendErrorDiagnostics = action({
       const payload = await fetchJsonWithTimeout(url, token);
       const rows = Array.isArray(payload) ? (payload as SentryIssueLike[]) : [];
       const summary = summarizeSentryIssues(rows);
+      const sentryRelease = frontendSentryRelease ?? summary.sentryRelease;
       return {
         computedAt: Date.now(),
         range: args.range ?? "30d",
@@ -288,6 +293,7 @@ export const getOperatorFrontendErrorDiagnostics = action({
           environment,
           query,
           statsPeriod,
+          issueLimit: SENTRY_ISSUE_LIMIT,
           configured: true,
           unavailableReason: null,
           sampled: true,
@@ -305,7 +311,8 @@ export const getOperatorFrontendErrorDiagnostics = action({
         query,
         statsPeriod,
         currentBuildId,
-        sentryRelease,
+        sentryRelease: frontendSentryRelease,
+        issueLimit: SENTRY_ISSUE_LIMIT,
         configured: true,
         reason: error instanceof Error ? error.message : "sentry_unavailable",
       });

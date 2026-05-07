@@ -22,14 +22,18 @@ function deriveAppBuildId(env: Record<string, string>, mode: string): string {
   return `${mode}-${Date.now().toString(36)}`;
 }
 
-function polynetBuildVersionPlugin(buildId: string): Plugin {
+function polynetBuildVersionPlugin(params: {
+  buildId: string;
+  sentryRelease: string | null;
+  environment: string | null;
+}): Plugin {
   return {
     name: "polynet-build-version",
     generateBundle() {
       this.emitFile({
         type: "asset",
         fileName: "version.json",
-        source: `${JSON.stringify({ buildId }, null, 2)}\n`,
+        source: `${JSON.stringify(params, null, 2)}\n`,
       });
     },
   };
@@ -78,7 +82,11 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [
       react(),
-      polynetBuildVersionPlugin(appBuildId),
+      polynetBuildVersionPlugin({
+        buildId: appBuildId,
+        sentryRelease: sentryRelease || null,
+        environment: sentryEnvironment || null,
+      }),
       ...(sentryBuildEnabled
         ? [
             ...sentryVitePlugin({

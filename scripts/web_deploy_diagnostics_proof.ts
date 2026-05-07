@@ -29,7 +29,7 @@ const webDeployBlock = sliceBetween(
 
 assert.match(
   viteConfig,
-  /polynetBuildVersionPlugin[\s\S]*fileName: "version\.json"[\s\S]*JSON\.stringify\(\{ buildId \}/,
+  /polynetBuildVersionPlugin[\s\S]*fileName: "version\.json"[\s\S]*JSON\.stringify\(params/,
   "web build must emit version.json for operator deploy evidence",
 );
 

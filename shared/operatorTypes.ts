@@ -300,6 +300,7 @@ export type OperatorFrontendErrorDiagnosticsSnapshot = {
     environment: string | null;
     query: string;
     statsPeriod: string;
+    issueLimit: number;
     configured: boolean;
     unavailableReason: string | null;
     sampled: boolean;
