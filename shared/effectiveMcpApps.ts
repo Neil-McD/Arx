@@ -212,11 +212,25 @@ export function removePersonalMountFromEffectiveMcpApps(
 ): EffectiveMcpApp[] {
   const trimmedSourceMountId = sourceMountId.trim();
   if (!trimmedSourceMountId) return effectiveApps;
+  const targetApp = effectiveApps.find(
+    (app) => app.personal_mount?.source_mount_id === trimmedSourceMountId,
+  );
+  const targetAliases = targetApp
+    ? new Set(buildMcpAppIdentityAliases(targetApp.personal_mount!))
+    : null;
   const mounts: HarnessMount[] = [];
   let removed = false;
   for (const app of effectiveApps) {
     if (app.personal_mount) {
-      if (app.personal_mount.source_mount_id === trimmedSourceMountId) {
+      const matchesTargetIdentity = targetAliases
+        ? buildMcpAppIdentityAliases(app.personal_mount).some((alias) =>
+            targetAliases.has(alias),
+          )
+        : false;
+      if (
+        app.personal_mount.source_mount_id === trimmedSourceMountId ||
+        matchesTargetIdentity
+      ) {
         removed = true;
       } else {
         mounts.push(app.personal_mount);

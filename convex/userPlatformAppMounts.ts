@@ -538,7 +538,28 @@ async function listUserPlatformAppMountRows(
   return (await ctx.db
     .query("userPlatformAppMounts")
     .withIndex("by_user", (q: any) => q.eq("userId", userId))
-    .collect()) as UserPlatformAppMountRow[];
+      .collect()) as UserPlatformAppMountRow[];
+}
+
+function developerAppsSharePersonalIdentity(
+  left: DeveloperAppRow,
+  right: DeveloperAppRow,
+): boolean {
+  const leftCatalogAppId = normalizeString(left.catalogAppId, 120).toLowerCase();
+  const rightCatalogAppId = normalizeString(right.catalogAppId, 120).toLowerCase();
+  if (
+    leftCatalogAppId &&
+    rightCatalogAppId &&
+    leftCatalogAppId === rightCatalogAppId &&
+    isDiscoverAppCatalogSingletonIdentity(leftCatalogAppId)
+  ) {
+    return true;
+  }
+  return (
+    normalizeDeveloperAppEndpointUrl(left.endpointUrl) ===
+      normalizeDeveloperAppEndpointUrl(right.endpointUrl) &&
+    left.authType === right.authType
+  );
 }
 
 export const findExistingUserPlatformMountByIdentityInternal = internalQuery({
@@ -1796,18 +1817,37 @@ export const unmountUserPlatformApp = mutation({
     if (String(mount.userId) !== String(userId)) {
       throw new Error("user_platform_app_mount_not_found");
     }
-    const sourceRows = await listUserHarnessAppSourcesForMount({
-      ctx,
-      userId,
-      userPlatformAppMountId: mount._id,
-    });
-    for (const source of sourceRows) {
-      await ctx.db.delete(source._id);
+    const app = await getDeveloperAppById(ctx, mount.developerAppId);
+    const matchedMounts = [];
+    if (app) {
+      const allUserMounts = await listUserPlatformAppMountRows(ctx, userId);
+      for (const candidate of allUserMounts) {
+        const candidateApp = await getDeveloperAppById(
+          ctx,
+          candidate.developerAppId,
+        );
+        if (!candidateApp) continue;
+        if (developerAppsSharePersonalIdentity(app, candidateApp)) {
+          matchedMounts.push(candidate);
+        }
+      }
     }
-    await ctx.db.delete(mount._id);
+    if (matchedMounts.length === 0) matchedMounts.push(mount);
+    for (const matchedMount of matchedMounts) {
+      const sourceRows = await listUserHarnessAppSourcesForMount({
+        ctx,
+        userId,
+        userPlatformAppMountId: matchedMount._id,
+      });
+      for (const source of sourceRows) {
+        await ctx.db.delete(source._id);
+      }
+      await ctx.db.delete(matchedMount._id);
+    }
     return {
       removed: true,
       id: String(mount._id),
+      removed_count: matchedMounts.length,
     };
   },
 });

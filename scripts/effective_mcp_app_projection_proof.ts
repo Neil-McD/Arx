@@ -289,11 +289,28 @@ function provePersonalMountRemovalRebuildsEffectiveProjection() {
       status: "draft",
     },
   });
+  const duplicatePersonalNotion = mount({
+    id: "user:u-notion-duplicate",
+    source_mount_id: "u-notion-duplicate",
+    scope: "user",
+    live_status: "not_live",
+    not_live_reason: "missing_snapshot",
+    enabled_tools: [],
+    app: {
+      catalog_app_id: "notion",
+      name: "Notion",
+      slug: "notion",
+      endpoint_url: "https://mcp.notion.com/mcp",
+      auth_type: "oauth",
+      status: "draft",
+    },
+  });
 
   const rows = buildEffectiveMcpApps([
     personalLinear,
     communityLinear,
     personalNotion,
+    duplicatePersonalNotion,
   ]);
   const afterNotionRemoval = removePersonalMountFromEffectiveMcpApps(
     rows,
