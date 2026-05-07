@@ -69,11 +69,43 @@ assert.match(
   /topFailureCodes: OperatorRuntimeToolFailureBucket\[\]/,
   "runtime/tool diagnostics must expose normalized failure buckets",
 );
+assert.match(
+  operatorTypes,
+  /export type OperatorPaidToolLane = /,
+  "runtime/tool diagnostics must expose a paid-tool lane contract",
+);
+for (const field of [
+  "reservations",
+  "succeeded",
+  "refunded",
+  "stillReserved",
+  "failures",
+  "reservedCredits",
+  "settledCredits",
+  "refundedCredits",
+]) {
+  assert.match(operatorTypes, new RegExp(`${field}: number`), `paid-tool diagnostics missing ${field}`);
+}
+assert.match(
+  operatorTypes,
+  /paidTools:[\s\S]*totals:[\s\S]*lanes: OperatorPaidToolLane\[\]/,
+  "runtime/tool diagnostics must expose aggregate paid-tool accounting",
+);
 
 assert.match(
   runtimeDiagnosticsBlock,
   /readRuntimeRunsByStatus[\s\S]*readRuntimeEventsByType[\s\S]*readCreditLedgerEntriesByTool[\s\S]*readWorkspaceComputeChargesByDebitSource/,
   "runtime/tool diagnostics must aggregate runtime, tool, credit, and compute evidence",
+);
+assert.match(
+  operatorIntelligence,
+  /function buildPaidToolDiagnostics[\s\S]*reservedCredits[\s\S]*settledCredits[\s\S]*refundedCredits[\s\S]*unbilledComputeCharges/,
+  "runtime/tool diagnostics must project safe paid-tool accounting aggregates",
+);
+assert.match(
+  runtimeDiagnosticsBlock,
+  /const paidTools = buildPaidToolDiagnostics\(paidToolLedgerRows, unbilledComputeCharges\)[\s\S]*paidTools,/,
+  "runtime/tool diagnostics must return paid-tool accounting from the ledger rows",
 );
 assert.match(
   operatorIntelligence,
@@ -117,7 +149,7 @@ assert.match(
 );
 assert.doesNotMatch(
   runtimeDiagnosticsBlock,
-  /output_preview|outputText|rawArguments|full_content|prompt:/,
+  /output_preview|outputText|rawArguments|full_content|prompt:|metadata:|query:|url:|transcript:|audio:/,
   "runtime/tool operator projection must not expose raw prompts or tool output",
 );
 assert.doesNotMatch(
@@ -160,6 +192,16 @@ assert.match(
   operatorPanel,
   /Runtime diagnostics are sampled for this window/,
   "operator panel must label sampled runtime diagnostics",
+);
+assert.match(
+  operatorPanel,
+  /Credits settled[\s\S]*Credits refunded[\s\S]*No paid-tool credit activity returned/,
+  "operator panel must render compact paid-tool accounting",
+);
+assert.doesNotMatch(
+  operatorPanel,
+  /metadata|rawQuery|queryText|transcript|audioBlob|audioUrl/,
+  "operator panel must not render raw paid-tool metadata",
 );
 assert.match(
   packageJson,

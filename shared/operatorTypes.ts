@@ -223,6 +223,20 @@ export type OperatorRuntimeToolFailureBucket = {
   severity: "warning" | "error";
 };
 
+export type OperatorPaidToolLane = {
+  toolName: string;
+  label: string;
+  reservations: number;
+  succeeded: number;
+  refunded: number;
+  stillReserved: number;
+  failures: number;
+  reservedCredits: number;
+  settledCredits: number;
+  refundedCredits: number;
+  latestAt: number | null;
+};
+
 export type OperatorRuntimeToolDiagnosticsSnapshot = {
   computedAt: number;
   range: OperatorRange;
@@ -249,6 +263,20 @@ export type OperatorRuntimeToolDiagnosticsSnapshot = {
   };
   topFailureCodes: OperatorRuntimeToolFailureBucket[];
   topFailingTools: OperatorRuntimeToolFailureBucket[];
+  paidTools: {
+    totals: {
+      reservations: number;
+      succeeded: number;
+      refunded: number;
+      stillReserved: number;
+      failures: number;
+      reservedCredits: number;
+      settledCredits: number;
+      refundedCredits: number;
+      unbilledComputeCharges: number;
+    };
+    lanes: OperatorPaidToolLane[];
+  };
   latestEvents: OperatorDiagnosticEventRecord[];
   evidence: {
     sourceTables: string[];

@@ -453,6 +453,11 @@ function formatBoundedCount(value: number | null | undefined, isTruncated: boole
   return isTruncated ? `${value}+` : String(value);
 }
 
+function formatCredits(value: number | null | undefined): string {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "0";
+  return value.toLocaleString("en-US", { maximumFractionDigits: 2 });
+}
+
 function OperatorPlatformInsights(props: {
   overview: OperatorOverviewSnapshot | null;
   monetization: OperatorMonetizationSnapshot | null;
@@ -734,6 +739,18 @@ function OperatorPlatformInsights(props: {
             <strong>{props.runtimeTools?.totals.paidToolLedgerFailures ?? 0}</strong>
           </div>
           <div className="operator-dashboard__row">
+            <span>Credits settled</span>
+            <strong>{formatCredits(props.runtimeTools?.paidTools.totals.settledCredits)}</strong>
+          </div>
+          <div className="operator-dashboard__row">
+            <span>Credits refunded</span>
+            <strong>{formatCredits(props.runtimeTools?.paidTools.totals.refundedCredits)}</strong>
+          </div>
+          <div className="operator-dashboard__row">
+            <span>Still reserved</span>
+            <strong>{props.runtimeTools?.paidTools.totals.stillReserved ?? 0}</strong>
+          </div>
+          <div className="operator-dashboard__row">
             <span>Unbilled compute</span>
             <strong>{props.runtimeTools?.totals.unbilledComputeCharges ?? 0}</strong>
           </div>
@@ -753,6 +770,31 @@ function OperatorPlatformInsights(props: {
             ))
           ) : (
             <div className="operator-dashboard__empty">No runtime or tool failures returned.</div>
+          )}
+          {props.runtimeTools?.paidTools.lanes.some((lane) => lane.reservations > 0) ? (
+            props.runtimeTools.paidTools.lanes
+              .filter((lane) => lane.reservations > 0)
+              .slice(0, 3)
+              .map((lane) => (
+                <div className="operator-dashboard__row" key={lane.toolName}>
+                  <div>
+                    <strong>{lane.label}</strong>
+                    <span>
+                      {[
+                        `${lane.succeeded} settled`,
+                        `${lane.refunded} refunded`,
+                        `${formatCredits(lane.settledCredits)} credits`,
+                        lane.latestAt ? formatEventTime(lane.latestAt) : null,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </span>
+                  </div>
+                  <span>{lane.failures > 0 ? `${lane.failures} failures` : "ok"}</span>
+                </div>
+              ))
+          ) : (
+            <div className="operator-dashboard__empty">No paid-tool credit activity returned.</div>
           )}
           {props.runtimeTools?.evidence.isTruncated ? (
             <div className="operator-dashboard__empty">Runtime diagnostics are sampled for this window.</div>

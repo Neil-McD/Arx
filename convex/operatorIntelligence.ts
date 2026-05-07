@@ -379,6 +379,123 @@ function buildRuntimeBucket(
     .slice(0, 8);
 }
 
+function readLedgerCredits(value: unknown): number {
+  const parsed = Number(value ?? 0);
+  if (!Number.isFinite(parsed) || parsed < 0) return 0;
+  return Math.round(parsed * 100) / 100;
+}
+
+function readLedgerSettledCredits(row: any): number {
+  if (typeof row?.creditsSettled === "number") {
+    return readLedgerCredits(row.creditsSettled);
+  }
+  return row?.status === "succeeded" ? readLedgerCredits(row?.creditsReserved) : 0;
+}
+
+function readLedgerRefundedCredits(row: any): number {
+  const explicitRefund = readLedgerCredits(row?.includedCreditsRefunded) + readLedgerCredits(row?.purchasedCreditsRefunded);
+  if (explicitRefund > 0) return readLedgerCredits(explicitRefund);
+  if (row?.status !== "refunded") return 0;
+  return readLedgerCredits(readLedgerCredits(row?.creditsReserved) - readLedgerSettledCredits(row));
+}
+
+function formatPaidToolName(toolName: string): string {
+  switch (toolName) {
+    case "daytona_workspace":
+      return "Workspace runtime";
+    case "web_research":
+      return "Web research";
+    case "voice_transcribe":
+      return "Voice input";
+    default:
+      return formatOperatorBucketLabel(toolName);
+  }
+}
+
+function buildPaidToolDiagnostics(paidToolLedgerRows: any[], unbilledComputeCharges: any[]) {
+  const lanes = new Map<
+    string,
+    {
+      toolName: string;
+      label: string;
+      reservations: number;
+      succeeded: number;
+      refunded: number;
+      stillReserved: number;
+      failures: number;
+      reservedCredits: number;
+      settledCredits: number;
+      refundedCredits: number;
+      latestAt: number | null;
+    }
+  >();
+  for (const toolName of PAID_TOOL_LEDGER_NAMES) {
+    lanes.set(toolName, {
+      toolName,
+      label: formatPaidToolName(toolName),
+      reservations: 0,
+      succeeded: 0,
+      refunded: 0,
+      stillReserved: 0,
+      failures: 0,
+      reservedCredits: 0,
+      settledCredits: 0,
+      refundedCredits: 0,
+      latestAt: null,
+    });
+  }
+  for (const row of paidToolLedgerRows) {
+    const toolName = String(row?.toolName ?? "unknown").trim() || "unknown";
+    const lane =
+      lanes.get(toolName) ??
+      {
+        toolName,
+        label: formatPaidToolName(toolName),
+        reservations: 0,
+        succeeded: 0,
+        refunded: 0,
+        stillReserved: 0,
+        failures: 0,
+        reservedCredits: 0,
+        settledCredits: 0,
+        refundedCredits: 0,
+        latestAt: null,
+      };
+    const status = String(row?.status ?? "").trim().toLowerCase();
+    lane.reservations += 1;
+    lane.reservedCredits = readLedgerCredits(lane.reservedCredits + readLedgerCredits(row?.creditsReserved));
+    lane.settledCredits = readLedgerCredits(lane.settledCredits + readLedgerSettledCredits(row));
+    lane.refundedCredits = readLedgerCredits(lane.refundedCredits + readLedgerRefundedCredits(row));
+    if (status === "succeeded") lane.succeeded += 1;
+    if (status === "refunded") lane.refunded += 1;
+    if (status === "reserved") lane.stillReserved += 1;
+    if (status === "refunded" || row?.failureReason) lane.failures += 1;
+    const latestAt = readRowCreatedAt(row);
+    lane.latestAt = Math.max(lane.latestAt ?? 0, latestAt) || lane.latestAt;
+    lanes.set(toolName, lane);
+  }
+  const orderedLanes = [...lanes.values()].sort(
+    (a, b) =>
+      b.reservations - a.reservations ||
+      Number(b.latestAt ?? 0) - Number(a.latestAt ?? 0) ||
+      a.label.localeCompare(b.label),
+  );
+  return {
+    totals: {
+      reservations: orderedLanes.reduce((sum, lane) => sum + lane.reservations, 0),
+      succeeded: orderedLanes.reduce((sum, lane) => sum + lane.succeeded, 0),
+      refunded: orderedLanes.reduce((sum, lane) => sum + lane.refunded, 0),
+      stillReserved: orderedLanes.reduce((sum, lane) => sum + lane.stillReserved, 0),
+      failures: orderedLanes.reduce((sum, lane) => sum + lane.failures, 0),
+      reservedCredits: readLedgerCredits(orderedLanes.reduce((sum, lane) => sum + lane.reservedCredits, 0)),
+      settledCredits: readLedgerCredits(orderedLanes.reduce((sum, lane) => sum + lane.settledCredits, 0)),
+      refundedCredits: readLedgerCredits(orderedLanes.reduce((sum, lane) => sum + lane.refundedCredits, 0)),
+      unbilledComputeCharges: unbilledComputeCharges.length,
+    },
+    lanes: orderedLanes,
+  };
+}
+
 async function readCriticalAuditEventsByType(
   ctx: any,
   eventType: string,
@@ -1214,6 +1331,7 @@ export const getOperatorRuntimeToolDiagnosticsInternal = internalQuery({
     const paidToolLedgerFailures = paidToolLedgerRows.filter(
       (row: any) => row.status === "refunded" || row.failureReason,
     ).length;
+    const paidTools = buildPaidToolDiagnostics(paidToolLedgerRows, unbilledComputeCharges);
     const sandboxCreateFailures =
       workspaceSessionCreateFailureRows.length +
       normalizedToolFailureCodes.filter((code) => code === "sandbox_create_failed").length;
@@ -1271,6 +1389,7 @@ export const getOperatorRuntimeToolDiagnosticsInternal = internalQuery({
       topFailingTools: buildRuntimeBucket(toolFailureRows, readToolName, {
         errorKeys: new Set(toolFailureRows.map(readToolName)),
       }),
+      paidTools,
       latestEvents: diagnosticRows.slice(0, 8).map(mapDiagnosticEvent),
       evidence: {
         sourceTables: [
