@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
-import { query } from "./_generated/server";
+import { mutation, query } from "./_generated/server";
 import { requireOperatorRole } from "./operatorAccess";
 
 const operatorRange = v.optional(v.union(v.literal("7d"), v.literal("30d"), v.literal("90d"), v.literal("all")));
@@ -8,6 +8,10 @@ const operatorSeverity = v.optional(v.union(v.literal("info"), v.literal("warnin
 
 async function requireOperatorAccess(ctx: any, authSubject: string | null | undefined) {
   return await requireOperatorRole(ctx, authSubject, "readonly");
+}
+
+async function requireOperatorWriteAccess(ctx: any, authSubject: string | null | undefined) {
+  return await requireOperatorRole(ctx, authSubject, "operator");
 }
 
 export const getOperatorAccess = query({
@@ -66,6 +70,38 @@ export const listDeveloperAppPolicyAudit = query({
     await requireOperatorAccess(ctx, args.authSubject);
     return await ctx.runQuery((internal as any).operatorIntelligence.listOperatorDeveloperAppPolicyAuditInternal, {
       limit: args.limit,
+    });
+  },
+});
+
+export const listHarnessAppSourceProvenanceAudit = query({
+  args: {
+    authSubject: v.optional(v.string()),
+    limit: v.optional(v.number()),
+    maxPairs: v.optional(v.number()),
+  },
+  handler: async (ctx, args): Promise<any> => {
+    await requireOperatorAccess(ctx, args.authSubject);
+    return await ctx.runQuery((internal as any).userPlatformAppMounts.listCommunityAppSourceProvenanceAuditInternal, {
+      limit: args.limit,
+      maxPairs: args.maxPairs,
+    });
+  },
+});
+
+export const backfillHarnessAppSourceProvenance = mutation({
+  args: {
+    authSubject: v.optional(v.string()),
+    limit: v.optional(v.number()),
+    maxPairs: v.optional(v.number()),
+    dryRun: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args): Promise<any> => {
+    await requireOperatorWriteAccess(ctx, args.authSubject);
+    return await ctx.runMutation((internal as any).userPlatformAppMounts.backfillCommunityAppSourceProvenanceInternal, {
+      limit: args.limit,
+      maxPairs: args.maxPairs,
+      dryRun: args.dryRun,
     });
   },
 });

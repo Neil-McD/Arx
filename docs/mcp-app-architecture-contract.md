@@ -83,6 +83,7 @@ Current code:
 Rules:
 - User app state is the only source for live/setup-needed/not-live status shown to that user.
 - Source rows explain why a user app exists: direct personal add or community seed.
+- Operator audit/backfill may add missing community source rows for existing community/member pairs, but must not delete or rewrite personal source rows.
 - Personal credentials live in user connection state.
 - OAuth tokens live in encrypted user connection state and must not be stored in community app bundle records; callback results must not attach provider tokens to a Polynet user until an authenticated finalization action verifies the state owner.
 - If a user already has Linear live personally and a community adds Linear, every surface must resolve to that same effective Linear state for that user.

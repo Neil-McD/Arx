@@ -51,6 +51,7 @@
     "check:mcp-endpoint-security-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/mcp_endpoint_security_proof.ts",
     "check:runtime-profile-policy-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_profile_policy_proof.ts",
     "check:developer-app-policy-audit-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/developer_app_policy_audit_proof.ts",
+    "check:harness-app-source-provenance-audit-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/harness_app_source_provenance_audit_proof.ts",
     "check:community-subscription-lifecycle-policy-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_subscription_lifecycle_policy_proof.ts",
     "check:release-truth-docs-guard": "bash scripts/release_truth_docs_guard.sh",
     "check:daytona-runtime-sandbox-contract-guard": "bash scripts/daytona_runtime_sandbox_contract_guard.sh",

@@ -152,6 +152,28 @@ type UserHarnessAppSourceInput = {
   communityAppMountId?: any;
 };
 
+type CommunityAppGrantRecipientRow = {
+  userId: any;
+  active?: boolean;
+  revokedAt?: number;
+};
+
+type CommunityAppSourceProvenanceFinding = {
+  code:
+    | "missing_community_source"
+    | "missing_user_harness_app"
+    | "missing_community"
+    | "missing_developer_app";
+  communityAppMountId: string;
+  communityId: string;
+  developerAppId: string;
+  userId?: string;
+  userPlatformAppMountId?: string;
+  appName?: string;
+  sourceTypes?: string[];
+  repaired?: boolean;
+};
+
 type UserPlatformAppMountLiveStatus = "live" | "not_live";
 
 type UserPlatformAppMountNotLiveReason =
@@ -202,6 +224,15 @@ type ConnectUserPlatformAppResultRecord = {
 
 function normalizeConnectAttemptId(value: unknown, nowMs: number): string {
   return normalizeString(value, 120) || `connect-${nowMs}`;
+}
+
+function normalizeProvenanceAuditLimit(
+  value: number | undefined,
+  fallback: number,
+  max: number,
+): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) return fallback;
+  return Math.min(max, Math.max(1, Math.floor(value)));
 }
 
 function resolveEndpointHost(value: string): string | null {
@@ -260,6 +291,227 @@ async function listUserHarnessAppSourcesForMount(args: {
         .eq("userPlatformAppMountId", args.userPlatformAppMountId),
     )
     .collect()) as UserPlatformAppMountSourceRow[];
+}
+
+async function listCommunityAppSourceProvenanceRecipientUserIds(
+  ctx: any,
+  communityId: any,
+): Promise<any[]> {
+  const community = (await ctx.db.get(communityId)) as { ownerId?: any } | null;
+  if (!community) return [];
+  const recipients: any[] = [];
+  const seen = new Set<string>();
+  const addRecipient = (userId: any) => {
+    const key = String(userId ?? "");
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    recipients.push(userId);
+  };
+
+  addRecipient(community.ownerId);
+  const memberships = (await ctx.db
+    .query("communityMemberships")
+    .withIndex("by_community", (q: any) => q.eq("communityId", communityId))
+    .collect()) as CommunityAppGrantRecipientRow[];
+  for (const membership of memberships) {
+    if (membership.active === false) continue;
+    if (typeof membership.revokedAt === "number") continue;
+    addRecipient(membership.userId);
+  }
+  return recipients;
+}
+
+async function collectCommunityAppSourceProvenanceAudit(args: {
+  ctx: any;
+  limit: number;
+  maxPairs: number;
+  repair: boolean;
+  nowMs: number;
+}): Promise<{
+  summary: {
+    communityAppMountsScanned: number;
+    disabledCommunityAppMountsSkipped: number;
+    recipientPairsScanned: number;
+    existingCommunitySourcePairs: number;
+    missingCommunitySourcePairs: number;
+    missingUserHarnessAppPairs: number;
+    missingCommunityRecords: number;
+    missingDeveloperAppRecords: number;
+    repairedCommunitySourcePairs: number;
+  };
+  findings: CommunityAppSourceProvenanceFinding[];
+  truncated: boolean;
+  dry_run: boolean;
+  computedAt: number;
+}> {
+  const summary = {
+    communityAppMountsScanned: 0,
+    disabledCommunityAppMountsSkipped: 0,
+    recipientPairsScanned: 0,
+    existingCommunitySourcePairs: 0,
+    missingCommunitySourcePairs: 0,
+    missingUserHarnessAppPairs: 0,
+    missingCommunityRecords: 0,
+    missingDeveloperAppRecords: 0,
+    repairedCommunitySourcePairs: 0,
+  };
+  const findings: CommunityAppSourceProvenanceFinding[] = [];
+  let truncated = false;
+  const pushFinding = (finding: CommunityAppSourceProvenanceFinding) => {
+    if (findings.length < args.limit) {
+      findings.push(finding);
+    } else {
+      truncated = true;
+    }
+  };
+
+  const communityAppMounts = (await args.ctx.db
+    .query("communityAppMounts")
+    .collect()) as Array<{
+    _id: any;
+    communityId: any;
+    developerAppId: any;
+    enabled?: boolean;
+  }>;
+
+  for (const communityAppMount of communityAppMounts) {
+    summary.communityAppMountsScanned += 1;
+    if (communityAppMount.enabled === false) {
+      summary.disabledCommunityAppMountsSkipped += 1;
+      continue;
+    }
+
+    const community = await args.ctx.db.get(communityAppMount.communityId);
+    if (!community) {
+      summary.missingCommunityRecords += 1;
+      pushFinding({
+        code: "missing_community",
+        communityAppMountId: String(communityAppMount._id),
+        communityId: String(communityAppMount.communityId),
+        developerAppId: String(communityAppMount.developerAppId),
+      });
+      continue;
+    }
+
+    const developerApp = (await args.ctx.db.get(
+      communityAppMount.developerAppId,
+    )) as DeveloperAppRow | null;
+    if (!developerApp) {
+      summary.missingDeveloperAppRecords += 1;
+      pushFinding({
+        code: "missing_developer_app",
+        communityAppMountId: String(communityAppMount._id),
+        communityId: String(communityAppMount.communityId),
+        developerAppId: String(communityAppMount.developerAppId),
+      });
+      continue;
+    }
+
+    const recipientUserIds =
+      await listCommunityAppSourceProvenanceRecipientUserIds(
+        args.ctx,
+        communityAppMount.communityId,
+      );
+    for (const userId of recipientUserIds) {
+      if (summary.recipientPairsScanned >= args.maxPairs) {
+        truncated = true;
+        break;
+      }
+      summary.recipientPairsScanned += 1;
+      const userPlatformAppMount = await args.ctx.db
+        .query("userPlatformAppMounts")
+        .withIndex("by_user_app", (q: any) =>
+          q
+            .eq("userId", userId)
+            .eq("developerAppId", communityAppMount.developerAppId),
+        )
+        .first();
+      if (!userPlatformAppMount) {
+        summary.missingUserHarnessAppPairs += 1;
+        pushFinding({
+          code: "missing_user_harness_app",
+          communityAppMountId: String(communityAppMount._id),
+          communityId: String(communityAppMount.communityId),
+          developerAppId: String(communityAppMount.developerAppId),
+          userId: String(userId),
+          appName: String(developerApp.name ?? ""),
+        });
+        continue;
+      }
+
+      const sourceRows = await listUserHarnessAppSourcesForMount({
+        ctx: args.ctx,
+        userId,
+        userPlatformAppMountId: userPlatformAppMount._id,
+      });
+      const hasCommunitySource = sourceRows.some(
+        (source) =>
+          source.sourceType === "community" &&
+          String(source.communityAppMountId) === String(communityAppMount._id),
+      );
+      if (hasCommunitySource) {
+        summary.existingCommunitySourcePairs += 1;
+        continue;
+      }
+
+      summary.missingCommunitySourcePairs += 1;
+      let repaired = false;
+      if (args.repair) {
+        const sourceKey = buildUserPlatformAppMountSourceKey({
+          sourceType: "community",
+          userPlatformAppMountId: userPlatformAppMount._id,
+          communityAppMountId: communityAppMount._id,
+        });
+        const existingSourceForKey = await args.ctx.db
+          .query("userPlatformAppMountSources")
+          .withIndex("by_user_sourceKey", (q: any) =>
+            q.eq("userId", userId).eq("sourceKey", sourceKey),
+          )
+          .first();
+        const patch = {
+          userId,
+          userPlatformAppMountId: userPlatformAppMount._id,
+          sourceType: "community" as const,
+          sourceKey,
+          communityId: communityAppMount.communityId,
+          communityAppMountId: communityAppMount._id,
+          updatedAt: args.nowMs,
+        };
+        if (existingSourceForKey) {
+          await args.ctx.db.patch(existingSourceForKey._id, patch);
+        } else {
+          await args.ctx.db.insert("userPlatformAppMountSources", {
+            ...patch,
+            createdAt: args.nowMs,
+          });
+        }
+        summary.repairedCommunitySourcePairs += 1;
+        repaired = true;
+      }
+      pushFinding({
+        code: "missing_community_source",
+        communityAppMountId: String(communityAppMount._id),
+        communityId: String(communityAppMount.communityId),
+        developerAppId: String(communityAppMount.developerAppId),
+        userId: String(userId),
+        userPlatformAppMountId: String(userPlatformAppMount._id),
+        appName: String(developerApp.name ?? ""),
+        sourceTypes: Array.from(
+          new Set(sourceRows.map((source) => String(source.sourceType))),
+        ),
+        repaired,
+      });
+    }
+    if (summary.recipientPairsScanned >= args.maxPairs) break;
+  }
+
+  return {
+    summary,
+    findings,
+    truncated,
+    dry_run: !args.repair,
+    computedAt: args.nowMs,
+  };
 }
 
 function buildConnectErrorMessage(
@@ -1849,6 +2101,39 @@ export const unmountUserPlatformApp = mutation({
       id: String(mount._id),
       removed_count: matchedMounts.length,
     };
+  },
+});
+
+export const listCommunityAppSourceProvenanceAuditInternal = internalQuery({
+  args: {
+    limit: v.optional(v.number()),
+    maxPairs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    return await collectCommunityAppSourceProvenanceAudit({
+      ctx,
+      limit: normalizeProvenanceAuditLimit(args.limit, 100, 500),
+      maxPairs: normalizeProvenanceAuditLimit(args.maxPairs, 1_000, 5_000),
+      repair: false,
+      nowMs: Date.now(),
+    });
+  },
+});
+
+export const backfillCommunityAppSourceProvenanceInternal = internalMutation({
+  args: {
+    limit: v.optional(v.number()),
+    maxPairs: v.optional(v.number()),
+    dryRun: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    return await collectCommunityAppSourceProvenanceAudit({
+      ctx,
+      limit: normalizeProvenanceAuditLimit(args.limit, 100, 500),
+      maxPairs: normalizeProvenanceAuditLimit(args.maxPairs, 250, 1_000),
+      repair: args.dryRun !== true,
+      nowMs: Date.now(),
+    });
   },
 });
 
