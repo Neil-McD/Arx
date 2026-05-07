@@ -138,6 +138,11 @@ function main() {
       `Authenticated OAuth finalizer must enforce ${required}`,
     );
   }
+  assert.ok(
+    oauthSource.includes("const existing = await ctx.db.get(args.stateId)") &&
+      oauthSource.includes("if (!existing) return { deleted: false }"),
+    "OAuth state deletion must be idempotent because callback/finalize requests can be duplicated",
+  );
 
   const httpSource = readText(new URL("../convex/httpAppOAuth.ts", import.meta.url));
   assert.ok(

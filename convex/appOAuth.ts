@@ -668,6 +668,8 @@ export const deleteAppOAuthStateInternal = internalMutation({
     stateId: v.id("appOAuthStates"),
   },
   handler: async (ctx, args) => {
+    const existing = await ctx.db.get(args.stateId);
+    if (!existing) return { deleted: false };
     await ctx.db.delete(args.stateId);
     return { deleted: true };
   },
