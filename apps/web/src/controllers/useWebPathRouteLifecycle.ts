@@ -13,7 +13,11 @@ import type { PublicRoute } from "../../../../shared/webAppRouteState";
 function hasPendingOAuthCallbackParams(): boolean {
   try {
     const url = new URL(window.location.href);
-    return url.searchParams.has("code") || url.searchParams.has("error");
+    return (
+      url.searchParams.has("code") ||
+      url.searchParams.has("error") ||
+      url.searchParams.has("app_oauth")
+    );
   } catch {
     return false;
   }

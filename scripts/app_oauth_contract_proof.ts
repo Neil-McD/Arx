@@ -177,6 +177,14 @@ function main() {
     "Generic personal secret connect must reject OAuth and force the OAuth begin/finalize flow",
   );
 
+  const routeLifecycleSource = readText(
+    new URL("../apps/web/src/controllers/useWebPathRouteLifecycle.ts", import.meta.url),
+  );
+  assert.ok(
+    routeLifecycleSource.includes('url.searchParams.has("app_oauth")'),
+    "Route normalization must preserve app_oauth return params until the app finalizer consumes them",
+  );
+
   const communitySource = readText(new URL("../convex/communityAppMounts.ts", import.meta.url));
   assert.ok(
     communitySource.includes("authType: v.union") &&
