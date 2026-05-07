@@ -54,6 +54,14 @@ const RUNTIME_TOOL_EVENT_TYPES = [
   "workspace_session_create_completed",
 ] as const;
 const PAID_TOOL_LEDGER_NAMES = ["daytona_workspace", "web_research", "voice_transcribe"] as const;
+const WEB_DEPLOY_FRONTEND_CRASH_EVENT_TYPES = new Set([
+  "deploy.frontend_crash",
+  "deploy.route_load_failed",
+]);
+const WEB_DEPLOY_MODULE_LOAD_EVENT_TYPES = new Set([
+  "deploy.module_load_recovery",
+  "deploy.stale_asset_recovered",
+]);
 type DiagnosticSubsystem =
   | "auth"
   | "access"
@@ -793,6 +801,68 @@ export const getOperatorOverviewInternal = internalQuery({
           "checkoutSessions",
           "criticalAuditEvents",
         ],
+      },
+    };
+  },
+});
+
+export const getOperatorWebDeployDiagnosticsInternal = internalQuery({
+  args: {
+    range: v.optional(v.union(v.literal("7d"), v.literal("30d"), v.literal("90d"), v.literal("all"))),
+  },
+  handler: async (ctx, args): Promise<any> => {
+    const nowMs = Date.now();
+    const range = args.range ?? "30d";
+    const rangeStart = normalizeRangeStart(range, nowMs);
+    const scannedEventLimit = 300;
+    const deployRows = await readDiagnosticEventsBySubsystem(ctx, "deploy", rangeStart, scannedEventLimit);
+    const warningRows = deployRows.filter((row: any) => row.severity === "warning");
+    const errorRows = deployRows.filter((row: any) => row.severity === "error" || row.status === "failed");
+    const frontendCrashEvents = deployRows.filter((row: any) =>
+      WEB_DEPLOY_FRONTEND_CRASH_EVENT_TYPES.has(String(row.eventType ?? "")),
+    );
+    const moduleLoadRecoveries = deployRows.filter((row: any) =>
+      WEB_DEPLOY_MODULE_LOAD_EVENT_TYPES.has(String(row.eventType ?? "")),
+    );
+    const staleBuildWarnings = deployRows.filter((row: any) => {
+      const eventType = String(row.eventType ?? "").toLowerCase();
+      const errorCode = String(row.errorCode ?? "").toLowerCase();
+      return eventType.includes("stale") || errorCode.includes("stale");
+    });
+    const health: "healthy" | "degraded" | "incident" =
+      errorRows.length > 0 || frontendCrashEvents.length > 0
+        ? "incident"
+        : warningRows.length > 0 || moduleLoadRecoveries.length > 0 || staleBuildWarnings.length > 0
+          ? "degraded"
+          : "healthy";
+
+    return {
+      computedAt: nowMs,
+      range,
+      health,
+      currentBuild: {
+        buildId: null,
+        source: "unknown",
+        checkedAt: null,
+      },
+      totals: {
+        deployEvents: deployRows.length,
+        warnings: warningRows.length,
+        errors: errorRows.length,
+        routeChecks: 0,
+        routeFailures: 0,
+        frontendCrashEvents: frontendCrashEvents.length,
+        moduleLoadRecoveries: moduleLoadRecoveries.length,
+        staleBuildWarnings: staleBuildWarnings.length,
+      },
+      routeChecks: [],
+      latestEvents: deployRows.slice(0, 8).map(mapDiagnosticEvent),
+      evidence: {
+        sourceTables: ["platformDiagnosticEvents"],
+        routeProbePaths: [],
+        versionJsonReachable: null,
+        scannedEventLimit,
+        isTruncated: deployRows.length >= scannedEventLimit,
       },
     };
   },

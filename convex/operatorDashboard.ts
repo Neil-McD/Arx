@@ -83,6 +83,19 @@ export const getOperatorMonetization = query({
   },
 });
 
+export const getOperatorWebDeployDiagnostics = query({
+  args: {
+    authSubject: v.optional(v.string()),
+    range: operatorRange,
+  },
+  handler: async (ctx, args): Promise<any> => {
+    await requireOperatorAccess(ctx, args.authSubject);
+    return await ctx.runQuery((internal as any).operatorIntelligence.getOperatorWebDeployDiagnosticsInternal, {
+      range: args.range,
+    });
+  },
+});
+
 export const getOperatorAuthAccessDiagnostics = query({
   args: {
     authSubject: v.optional(v.string()),

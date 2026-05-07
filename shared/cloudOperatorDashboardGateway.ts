@@ -11,11 +11,134 @@ import type {
   OperatorRiskItem,
   OperatorRuntimeToolDiagnosticsSnapshot,
   OperatorSecurityAuditDiagnosticsSnapshot,
+  OperatorWebDeployDiagnosticsSnapshot,
+  OperatorWebDeployRouteCheck,
 } from "./operatorTypes";
 
 async function withOperatorAuth(session: AuthSessionLike) {
   requireConvexUrl();
   return await bootstrapConvexAuthenticatedClient(session);
+}
+
+const OPERATOR_WEB_DEPLOY_ROUTE_PROBES: Array<{ label: string; path: string }> = [
+  { label: "Home", path: "/" },
+  { label: "Discover apps", path: "/discover/apps" },
+  { label: "Integrations", path: "/settings/integrations" },
+];
+
+function canRunBrowserWebDeployProbes(): boolean {
+  return typeof window !== "undefined" && typeof fetch === "function";
+}
+
+function buildSameOriginUrl(path: string): string {
+  const origin = String(window.location.origin ?? "").replace(/\/+$/, "");
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  return `${origin}${normalizedPath}`;
+}
+
+function buildVersionProbeUrl(): string {
+  const url = new URL(buildSameOriginUrl("/version.json"));
+  url.searchParams.set("t", String(Date.now()));
+  return url.toString();
+}
+
+async function readCurrentBuildFromVersionJson(): Promise<{
+  buildId: string | null;
+  checkedAt: number;
+  reachable: boolean;
+}> {
+  const checkedAt = Date.now();
+  try {
+    const response = await fetch(buildVersionProbeUrl(), {
+      cache: "no-store",
+      credentials: "same-origin",
+    });
+    if (!response.ok) {
+      return { buildId: null, checkedAt, reachable: false };
+    }
+    const payload = (await response.json()) as { buildId?: unknown };
+    const buildId = String(payload?.buildId ?? "").trim();
+    return { buildId: buildId || null, checkedAt, reachable: true };
+  } catch {
+    return { buildId: null, checkedAt, reachable: false };
+  }
+}
+
+async function probeSameOriginRoute(
+  route: { label: string; path: string },
+): Promise<OperatorWebDeployRouteCheck> {
+  const startedAt = Date.now();
+  try {
+    const response = await fetch(buildSameOriginUrl(route.path), {
+      cache: "no-store",
+      credentials: "same-origin",
+      redirect: "follow",
+    });
+    const latencyMs = Math.max(0, Date.now() - startedAt);
+    return {
+      label: route.label,
+      path: route.path,
+      status: response.ok ? "ok" : "failed",
+      httpStatus: response.status,
+      latencyMs,
+      checkedAt: Date.now(),
+      errorCode: response.ok ? null : `http_${response.status}`,
+    };
+  } catch (error) {
+    return {
+      label: route.label,
+      path: route.path,
+      status: "failed",
+      httpStatus: null,
+      latencyMs: Math.max(0, Date.now() - startedAt),
+      checkedAt: Date.now(),
+      errorCode: error instanceof Error ? error.name || "route_probe_failed" : "route_probe_failed",
+    };
+  }
+}
+
+function chooseWebDeployHealth(
+  serverHealth: OperatorWebDeployDiagnosticsSnapshot["health"],
+  routeFailures: number,
+  versionJsonReachable: boolean,
+): OperatorWebDeployDiagnosticsSnapshot["health"] {
+  if (routeFailures > 0 || serverHealth === "incident") return "incident";
+  if (!versionJsonReachable || serverHealth === "degraded") return "degraded";
+  if (serverHealth === "unknown") return "unknown";
+  return "healthy";
+}
+
+async function enrichWebDeployDiagnosticsWithBrowserProbes(
+  snapshot: OperatorWebDeployDiagnosticsSnapshot,
+): Promise<OperatorWebDeployDiagnosticsSnapshot> {
+  if (!canRunBrowserWebDeployProbes()) return snapshot;
+  const [build, routeChecks] = await Promise.all([
+    readCurrentBuildFromVersionJson(),
+    Promise.all(OPERATOR_WEB_DEPLOY_ROUTE_PROBES.map(probeSameOriginRoute)),
+  ]);
+  const routeFailures = routeChecks.filter((check) => check.status === "failed").length;
+  return {
+    ...snapshot,
+    computedAt: Date.now(),
+    health: chooseWebDeployHealth(snapshot.health, routeFailures, build.reachable),
+    currentBuild: {
+      buildId: build.buildId,
+      source: build.buildId ? "version_json" : "unknown",
+      checkedAt: build.checkedAt,
+    },
+    totals: {
+      ...snapshot.totals,
+      routeChecks: routeChecks.length,
+      routeFailures,
+    },
+    routeChecks,
+    evidence: {
+      ...snapshot.evidence,
+      sourceTables: [...new Set([...snapshot.evidence.sourceTables, "version.json", "same-origin route probes"])],
+      routeProbePaths: OPERATOR_WEB_DEPLOY_ROUTE_PROBES.map((route) => route.path),
+      versionJsonReachable: build.reachable,
+    },
+  };
 }
 
 export async function loadOperatorAccessCanonical(params: {
@@ -76,6 +199,18 @@ export async function loadOperatorMonetizationCanonical(params: {
     authSubject,
     range: params.range ?? "30d",
   })) as OperatorMonetizationSnapshot;
+}
+
+export async function loadOperatorWebDeployDiagnosticsCanonical(params: {
+  session: AuthSessionLike;
+  range?: OperatorRange;
+}): Promise<OperatorWebDeployDiagnosticsSnapshot> {
+  const { client, authSubject } = await withOperatorAuth(params.session);
+  const snapshot = (await client.query("operatorDashboard:getOperatorWebDeployDiagnostics" as any, {
+    authSubject,
+    range: params.range ?? "30d",
+  })) as OperatorWebDeployDiagnosticsSnapshot;
+  return await enrichWebDeployDiagnosticsWithBrowserProbes(snapshot);
 }
 
 export async function loadOperatorAuthAccessDiagnosticsCanonical(params: {

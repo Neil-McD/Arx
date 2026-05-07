@@ -29,6 +29,7 @@
     "check:critical-audit-events-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/critical_audit_events_proof.ts",
     "check:security-audit-diagnostics-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/security_audit_diagnostics_proof.ts",
     "check:runtime-tool-diagnostics-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_tool_diagnostics_proof.ts",
+    "check:web-deploy-diagnostics-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/web_deploy_diagnostics_proof.ts",
     "check:platform-diagnostics-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/platform_diagnostics_contract_proof.ts",
     "check:operator-intelligence-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/operator_intelligence_proof.ts",
     "check:operator-dashboard-gate-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/operator_dashboard_gate_proof.ts",

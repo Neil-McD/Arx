@@ -10,6 +10,7 @@ import {
   loadOperatorRisksCanonical,
   loadOperatorRuntimeToolDiagnosticsCanonical,
   loadOperatorSecurityAuditDiagnosticsCanonical,
+  loadOperatorWebDeployDiagnosticsCanonical,
   recordOperatorDashboardAccessCanonical,
 } from "../../../../shared/cloudOperatorDashboardGateway";
 import type {
@@ -21,6 +22,7 @@ import type {
   OperatorRiskItem,
   OperatorRuntimeToolDiagnosticsSnapshot,
   OperatorSecurityAuditDiagnosticsSnapshot,
+  OperatorWebDeployDiagnosticsSnapshot,
 } from "../../../../shared/operatorTypes";
 
 export type OperatorInsightTab = "platform" | "builders";
@@ -39,6 +41,7 @@ const OPERATOR_INSIGHT_TABS: Array<{ id: OperatorInsightTab; label: string }> = 
 export type OperatorDashboardState = {
   overview: OperatorOverviewSnapshot | null;
   monetization: OperatorMonetizationSnapshot | null;
+  webDeploy: OperatorWebDeployDiagnosticsSnapshot | null;
   authAccess: OperatorAuthAccessDiagnosticsSnapshot | null;
   securityAudit: OperatorSecurityAuditDiagnosticsSnapshot | null;
   runtimeTools: OperatorRuntimeToolDiagnosticsSnapshot | null;
@@ -51,6 +54,7 @@ export function createEmptyOperatorDashboardState(): OperatorDashboardState {
   return {
     overview: null,
     monetization: null,
+    webDeploy: null,
     authAccess: null,
     securityAudit: null,
     runtimeTools: null,
@@ -114,6 +118,7 @@ export function useOperatorDashboardData(params: {
         const results = await Promise.allSettled([
           loadOperatorOverviewCanonical({ session, range: "30d" }),
           loadOperatorMonetizationCanonical({ session, range: "30d" }),
+          loadOperatorWebDeployDiagnosticsCanonical({ session, range: "30d" }),
           loadOperatorAuthAccessDiagnosticsCanonical({ session, range: "30d" }),
           loadOperatorSecurityAuditDiagnosticsCanonical({ session, range: "30d" }),
           loadOperatorRuntimeToolDiagnosticsCanonical({ session, range: "30d" }),
@@ -121,10 +126,11 @@ export function useOperatorDashboardData(params: {
           loadOperatorRisksCanonical({ session, limit: 12 }),
           loadOperatorEventsCanonical({ session, limit: 12 }),
         ] as const);
-        const [overview, monetization, authAccess, securityAudit, runtimeTools, builders, risks, events] = results;
+        const [overview, monetization, webDeploy, authAccess, securityAudit, runtimeTools, builders, risks, events] = results;
         [
           ["overview", overview],
           ["monetization", monetization],
+          ["web_deploy", webDeploy],
           ["auth_access", authAccess],
           ["security_audit", securityAudit],
           ["runtime_tools", runtimeTools],
@@ -135,6 +141,7 @@ export function useOperatorDashboardData(params: {
         return {
           overview: fulfilledValue(overview),
           monetization: fulfilledValue(monetization),
+          webDeploy: fulfilledValue(webDeploy),
           authAccess: fulfilledValue(authAccess),
           securityAudit: fulfilledValue(securityAudit),
           runtimeTools: fulfilledValue(runtimeTools),
@@ -230,6 +237,7 @@ export function WebOperatorDataPanel(props: {
           <OperatorPlatformInsights
             overview={props.state.overview}
             monetization={props.state.monetization}
+            webDeploy={props.state.webDeploy}
             authAccess={props.state.authAccess}
             securityAudit={props.state.securityAudit}
             runtimeTools={props.state.runtimeTools}
@@ -321,6 +329,7 @@ function formatHealth(
     | OperatorAuthAccessDiagnosticsSnapshot["health"]
     | OperatorSecurityAuditDiagnosticsSnapshot["health"]
     | OperatorRuntimeToolDiagnosticsSnapshot["health"]
+    | OperatorWebDeployDiagnosticsSnapshot["health"]
     | null
     | undefined,
 ): string {
@@ -412,6 +421,7 @@ function formatEventTime(createdAt: number): string {
 function OperatorPlatformInsights(props: {
   overview: OperatorOverviewSnapshot | null;
   monetization: OperatorMonetizationSnapshot | null;
+  webDeploy: OperatorWebDeployDiagnosticsSnapshot | null;
   authAccess: OperatorAuthAccessDiagnosticsSnapshot | null;
   securityAudit: OperatorSecurityAuditDiagnosticsSnapshot | null;
   runtimeTools: OperatorRuntimeToolDiagnosticsSnapshot | null;
@@ -440,6 +450,63 @@ function OperatorPlatformInsights(props: {
           <span>Risk items</span>
           <strong>{props.overview?.totals.riskItems ?? 0}</strong>
           <span className="operator-dashboard__metric-note">Open operator warnings and errors.</span>
+        </div>
+      </section>
+
+      <section className="operator-dashboard__panel">
+        <h2>Web &amp; deploy</h2>
+        <div className="operator-dashboard__table">
+          <div className="operator-dashboard__row">
+            <span>Health</span>
+            <strong>{formatHealth(props.webDeploy?.health)}</strong>
+          </div>
+          <div className="operator-dashboard__row">
+            <span>Current build</span>
+            <strong>{props.webDeploy?.currentBuild.buildId?.slice(0, 12) ?? "Unknown"}</strong>
+          </div>
+          <div className="operator-dashboard__row">
+            <span>Route checks</span>
+            <strong>
+              {props.webDeploy
+                ? `${Math.max(0, props.webDeploy.totals.routeChecks - props.webDeploy.totals.routeFailures)}/${props.webDeploy.totals.routeChecks}`
+                : "0/0"}
+            </strong>
+          </div>
+          <div className="operator-dashboard__row">
+            <span>Deploy events</span>
+            <strong>{props.webDeploy?.totals.deployEvents ?? 0}</strong>
+          </div>
+          <div className="operator-dashboard__row">
+            <span>Frontend crashes</span>
+            <strong>{props.webDeploy?.totals.frontendCrashEvents ?? 0}</strong>
+          </div>
+          <div className="operator-dashboard__row">
+            <span>Stale build recoveries</span>
+            <strong>{props.webDeploy?.totals.moduleLoadRecoveries ?? 0}</strong>
+          </div>
+          {props.webDeploy?.routeChecks.length ? (
+            props.webDeploy.routeChecks.map((check) => (
+              <div className="operator-dashboard__row" key={check.path}>
+                <div>
+                  <strong>{check.label}</strong>
+                  <span>
+                    {[check.path, check.httpStatus ? `HTTP ${check.httpStatus}` : check.errorCode, check.latencyMs != null ? `${check.latencyMs} ms` : null]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </span>
+                </div>
+                <span>{check.status}</span>
+              </div>
+            ))
+          ) : (
+            <div className="operator-dashboard__empty">No web route probes returned.</div>
+          )}
+          {props.webDeploy?.evidence.versionJsonReachable === false ? (
+            <div className="operator-dashboard__empty">Build version evidence is unavailable.</div>
+          ) : null}
+          {props.webDeploy?.evidence.isTruncated ? (
+            <div className="operator-dashboard__empty">Web and deploy diagnostics are sampled for this window.</div>
+          ) : null}
         </div>
       </section>
 

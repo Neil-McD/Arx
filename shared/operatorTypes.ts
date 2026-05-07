@@ -259,3 +259,43 @@ export type OperatorRuntimeToolDiagnosticsSnapshot = {
     isTruncated: boolean;
   };
 };
+
+export type OperatorWebDeployRouteCheck = {
+  label: string;
+  path: string;
+  status: "ok" | "failed" | "unknown";
+  httpStatus: number | null;
+  latencyMs: number | null;
+  checkedAt: number | null;
+  errorCode: string | null;
+};
+
+export type OperatorWebDeployDiagnosticsSnapshot = {
+  computedAt: number;
+  range: OperatorRange;
+  health: "healthy" | "degraded" | "incident" | "unknown";
+  currentBuild: {
+    buildId: string | null;
+    source: "version_json" | "unknown";
+    checkedAt: number | null;
+  };
+  totals: {
+    deployEvents: number;
+    warnings: number;
+    errors: number;
+    routeChecks: number;
+    routeFailures: number;
+    frontendCrashEvents: number;
+    moduleLoadRecoveries: number;
+    staleBuildWarnings: number;
+  };
+  routeChecks: OperatorWebDeployRouteCheck[];
+  latestEvents: OperatorDiagnosticEventRecord[];
+  evidence: {
+    sourceTables: string[];
+    routeProbePaths: string[];
+    versionJsonReachable: boolean | null;
+    scannedEventLimit: number;
+    isTruncated: boolean;
+  };
+};
