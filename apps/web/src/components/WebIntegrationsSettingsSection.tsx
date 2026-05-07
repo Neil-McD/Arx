@@ -11,10 +11,10 @@ import type {
 } from "../../../../shared/userPlatformAppMountTypes";
 import {
   buildDiscoverAppPersonalConnectInput,
-  DISCOVER_APP_CATALOG,
   isDiscoverAppPersonallyConnectable,
   type DiscoverAppCatalogEntry,
 } from "../lib/discoverCatalog";
+import { findDiscoverCatalogEntryForAppIdentity } from "../lib/discoverCatalogMatching";
 import { DiscoverCatalogLogo } from "./DiscoverCatalogLogo";
 import {
   PersonalAppSetupModal,
@@ -170,32 +170,6 @@ function buildEffectiveAppDetail(app: EffectiveMcpApp): string {
   return `${buildEffectiveAppStateLabel(app)} in your harness.`;
 }
 
-function findCatalogEntryForApp(app: EffectiveMcpApp["app"]) {
-  const byCatalogId =
-    typeof app.catalog_app_id === "string" && app.catalog_app_id.trim()
-      ? DISCOVER_APP_CATALOG.find((entry) => entry.id === app.catalog_app_id) ??
-        null
-      : null;
-  if (byCatalogId) return byCatalogId;
-  const byEndpoint = DISCOVER_APP_CATALOG.find((entry) => {
-    if (entry.personalConnect.connectionKind !== "known") return false;
-    return (
-      entry.personalConnect.endpointUrl === app.endpoint_url &&
-      entry.personalConnect.authType === app.auth_type
-    );
-  });
-  if (byEndpoint) return byEndpoint;
-  const normalizedSlug = app.slug.trim().toLowerCase();
-  const normalizedName = app.name.trim().toLowerCase();
-  return (
-    DISCOVER_APP_CATALOG.find(
-      (entry) =>
-        entry.id === normalizedSlug ||
-        entry.name.trim().toLowerCase() === normalizedName,
-    ) ?? null
-  );
-}
-
 export function WebIntegrationsSettingsSection(
   props: WebIntegrationsSettingsSectionProps,
 ) {
@@ -294,7 +268,7 @@ export function WebIntegrationsSettingsSection(
     [setupAppIdentityKey, visibleEffectiveMcpApps],
   );
   const setupCatalogEntry = setupEffectiveApp
-    ? findCatalogEntryForApp(setupEffectiveApp.app)
+    ? findDiscoverCatalogEntryForAppIdentity(setupEffectiveApp.app)
     : null;
   const isSetupOauth =
     setupCatalogEntry &&
@@ -560,7 +534,9 @@ export function WebIntegrationsSettingsSection(
                 sourceMountId !== null &&
                 reconnectingUserPlatformAppMountId === sourceMountId;
               const isMenuOpen = openMountMenuId === effectiveApp.app_identity_key;
-              const catalogEntry = findCatalogEntryForApp(effectiveApp.app);
+              const catalogEntry = findDiscoverCatalogEntryForAppIdentity(
+                effectiveApp.app,
+              );
               const canSetupPersonal =
                 effectiveApp.primary_action === "setup_personal" &&
                 Boolean(

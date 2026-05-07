@@ -1210,7 +1210,7 @@ export const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
       authType: "oauth",
       authLabel: "OAuth",
       note:
-        "Connects to your personal harness through Notion OAuth. Community recommendations still require each member to authorize their own workspace.",
+        "Connects to your personal harness through Notion OAuth. Community-added apps still require each member to authorize their own workspace.",
     },
   },
   {
@@ -1349,7 +1349,7 @@ export const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
       tokenHelpUrl: "https://airtable.com/create/tokens",
       tokenHelpLabel: "Create PAT",
       note:
-        "OAuth is the recommended long-term path, but Airtable's PAT support fits the current manual bearer-token connector.",
+        "OAuth is the long-term path, but Airtable's PAT support fits the current manual bearer-token connector.",
     },
   },
   {
@@ -1401,7 +1401,7 @@ export const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
     capabilities: [
       "Use the standard Storefront MCP endpoint for store context and policy questions.",
       "Create and update shopping carts through the storefront MCP surface.",
-      "Support commerce recommendations without touching PolyNet billing authority or UCP catalog endpoints.",
+      "Support commerce guidance without touching PolyNet billing authority or UCP catalog endpoints.",
     ],
     websiteUrl: "https://www.shopify.com",
     docsUrl: "https://shopify.dev/docs/apps/build/storefront-mcp/servers/storefront",

@@ -8,9 +8,10 @@ import { buildPlatformSwitcherStyle } from "../../../../shared/platformSwitcherU
 import { buildStripeConnectPresentation } from "../controllers/buildStripeConnectPresentation";
 import {
   buildDiscoverAppPersonalConnectInput,
-  DISCOVER_APP_CATALOG,
   isDiscoverAppPersonallyConnectable,
+  type DiscoverAppCatalogEntry,
 } from "../lib/discoverCatalog";
+import { findDiscoverCatalogEntryForAppIdentity } from "../lib/discoverCatalogMatching";
 import { DiscoverCatalogLogo } from "./DiscoverCatalogLogo";
 import { StripeSetupButton } from "./StripeSetupButton";
 import {
@@ -179,23 +180,6 @@ function toStatusLabel(value: string | null | undefined): string {
     .join(" ");
 }
 
-function findCatalogEntryForCommunityMount(mount: CommunityMountedApp) {
-  const byEndpoint = DISCOVER_APP_CATALOG.find((entry) => {
-    if (entry.personalConnect.connectionKind !== "known") return false;
-    return (
-      entry.personalConnect.endpointUrl === mount.app.endpoint_url &&
-      entry.personalConnect.authType === mount.app.auth_type
-    );
-  });
-  if (byEndpoint) return byEndpoint;
-  const normalizedName = mount.app.name.trim().toLowerCase();
-  return (
-    DISCOVER_APP_CATALOG.find(
-      (entry) => entry.name.trim().toLowerCase() === normalizedName,
-    ) ?? null
-  );
-}
-
 function findEffectiveMcpAppForCommunityMount(
   mount: CommunityMountedApp,
   apps: EffectiveMcpApp[],
@@ -303,7 +287,7 @@ function buildCommunityAddedAppDetail(args: {
 
 function buildPersonalOptInInput(args: {
   mount: CommunityMountedApp;
-  catalogEntry: ReturnType<typeof findCatalogEntryForCommunityMount>;
+  catalogEntry: DiscoverAppCatalogEntry | null;
 }): ConnectUserPlatformAppInput {
   const authType =
     args.mount.app.auth_type === "none" ||
@@ -396,7 +380,7 @@ function CommunityIntegrationsSettingsSection({
     ? integrations.mounts.find((mount) => mount.id === setupMountId) ?? null
     : null;
   const setupCatalogEntry = setupMount
-    ? findCatalogEntryForCommunityMount(setupMount)
+    ? findDiscoverCatalogEntryForAppIdentity(setupMount.app)
     : null;
   const setupEffectiveApp = setupMount
     ? findEffectiveMcpAppForCommunityMount(
@@ -429,7 +413,7 @@ function CommunityIntegrationsSettingsSection({
 
   const openSetupModalForMount = (
     mount: CommunityMountedApp,
-    catalogEntry: ReturnType<typeof findCatalogEntryForCommunityMount>,
+    catalogEntry: DiscoverAppCatalogEntry | null,
   ) => {
     if (!hasSession) {
       requireSignIn();
@@ -550,7 +534,7 @@ function CommunityIntegrationsSettingsSection({
 
   const handleOptIn = async (
     mount: CommunityMountedApp,
-    catalogEntry: ReturnType<typeof findCatalogEntryForCommunityMount>,
+    catalogEntry: DiscoverAppCatalogEntry | null,
   ) => {
     setOptInError(null);
     setOptingInMountId(mount.id);
@@ -607,7 +591,9 @@ function CommunityIntegrationsSettingsSection({
       {integrations.mounts.length > 0 ? (
         <div className="integrations-app-list">
           {integrations.mounts.map((mount) => {
-            const catalogEntry = findCatalogEntryForCommunityMount(mount);
+            const catalogEntry = findDiscoverCatalogEntryForAppIdentity(
+              mount.app,
+            );
             const effectiveApp = findEffectiveMcpAppForCommunityMount(
               mount,
               integrations.effectiveMcpApps,

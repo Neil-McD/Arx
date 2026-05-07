@@ -6,7 +6,7 @@ import {
   mcpAppIdentitySourcesOverlap,
   type EffectiveMcpApp,
 } from "../../../../shared/effectiveMcpApps";
-import { DISCOVER_APP_CATALOG } from "../lib/discoverCatalog";
+import { findDiscoverCatalogEntryForAppIdentity } from "../lib/discoverCatalogMatching";
 import { DiscoverCatalogLogo } from "./DiscoverCatalogLogo";
 
 function toStatusLabel(value: string | null | undefined): string {
@@ -81,29 +81,6 @@ function buildMountDetail(
     return `${mount.app.name} is added to this community. Connect it in your personal harness to use its tools.`;
   }
   return `${mount.app.name} is added to this community.`;
-}
-
-function findCatalogEntryForCommunityMount(mount: CommunityMountedApp) {
-  const byCatalogId = mount.app.catalog_app_id
-    ? DISCOVER_APP_CATALOG.find((entry) => entry.id === mount.app.catalog_app_id)
-    : null;
-  if (byCatalogId) return byCatalogId;
-
-  const byEndpoint = DISCOVER_APP_CATALOG.find((entry) => {
-    if (entry.personalConnect.connectionKind !== "known") return false;
-    return (
-      entry.personalConnect.endpointUrl === mount.app.endpoint_url &&
-      entry.personalConnect.authType === mount.app.auth_type
-    );
-  });
-  if (byEndpoint) return byEndpoint;
-
-  const normalizedName = mount.app.name.trim().toLowerCase();
-  return (
-    DISCOVER_APP_CATALOG.find(
-      (entry) => entry.name.trim().toLowerCase() === normalizedName,
-    ) ?? null
-  );
 }
 
 export type WebCommunityAiAgentAppsEditorProps = {
@@ -188,7 +165,9 @@ export function WebCommunityAiAgentAppsEditor(
             const isRefreshing = refreshingMountId === mount.id;
             const isRemoving = removingMountId === mount.id;
             const isEditing = editingMountId === mount.id;
-            const catalogEntry = findCatalogEntryForCommunityMount(mount);
+            const catalogEntry = findDiscoverCatalogEntryForAppIdentity(
+              mount.app,
+            );
             const effectiveApp = findEffectiveMcpAppForCommunityMount(
               mount,
               effectiveMcpApps,

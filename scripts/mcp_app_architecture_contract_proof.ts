@@ -17,6 +17,7 @@ function assertNotIncludes(haystack: string, needle: string, label: string) {
 function main() {
   const root = process.cwd();
   const contract = readText(join(root, "docs/mcp-app-architecture-contract.md"));
+  const discoverCatalog = readText(join(root, "shared/discoverCatalog.ts"));
   const schema = readText(join(root, "convex/schema.ts"));
   const httpDaytona = readText(join(root, "convex/httpDaytona.ts"));
   const runtimeHarnessComposition = readText(
@@ -33,6 +34,9 @@ function main() {
   );
   const personalAppSetupModal = readText(
     join(root, "apps/web/src/components/PersonalAppSetupModal.tsx"),
+  );
+  const discoverCatalogMatching = readText(
+    join(root, "apps/web/src/lib/discoverCatalogMatching.ts"),
   );
   const communityAppsEditor = readText(
     join(root, "apps/web/src/components/WebCommunityAiAgentAppsEditor.tsx"),
@@ -143,6 +147,11 @@ function main() {
     "Do not remove an existing user harness app just because a builder removes it from the community app bundle.",
     "MCP app architecture contract forbidden uninstall pattern",
   );
+  assertIncludes(
+    contract,
+    "keeping obsolete grant/recommend frontend aliases and copy out of app management surfaces",
+    "MCP app architecture contract ongoing copy drift rule",
+  );
 
   assertIncludes(schema, "developerApps: defineTable({", "app definition table");
   assertIncludes(schema, "communityAppMounts: defineTable({", "community app bundle table");
@@ -232,6 +241,42 @@ function main() {
     "buildDiscoverAppPersonalConnectRequirements",
     "Canonical personal app setup modal renders catalog-driven requirements",
   );
+  assertIncludes(
+    discoverCatalogMatching,
+    "findDiscoverCatalogEntryForAppIdentity",
+    "Canonical Discover catalog identity matcher",
+  );
+  for (const appSurface of [
+    ["Community Settings", communitySettings],
+    ["Integrations Settings", integrationsSettings],
+    ["Community app editor", communityAppsEditor],
+  ] as const) {
+    assertIncludes(
+      appSurface[1],
+      "findDiscoverCatalogEntryForAppIdentity",
+      `${appSurface[0]} uses canonical Discover catalog identity matcher`,
+    );
+  }
+  for (const duplicatedCatalogLookup of [
+    "function findCatalogEntryForCommunityMount",
+    "function findCatalogEntryForApp",
+  ]) {
+    assertNotIncludes(
+      communitySettings,
+      duplicatedCatalogLookup,
+      "Community Settings local duplicate Discover catalog lookup helper",
+    );
+    assertNotIncludes(
+      integrationsSettings,
+      duplicatedCatalogLookup,
+      "Integrations Settings local duplicate Discover catalog lookup helper",
+    );
+    assertNotIncludes(
+      communityAppsEditor,
+      duplicatedCatalogLookup,
+      "Community app editor local duplicate Discover catalog lookup helper",
+    );
+  }
   assertNotIncludes(
     communitySettings,
     "function setupTargetsExistingPersonalMount",
@@ -252,6 +297,17 @@ function main() {
     assertNotIncludes(communitySettings, legacyCopy, "Community Settings legacy recommend copy");
     assertNotIncludes(integrationsSettings, legacyCopy, "Integrations Settings legacy recommend copy");
     assertNotIncludes(communityAppsEditor, legacyCopy, "Community app editor legacy recommend copy");
+  }
+  for (const catalogDriftCopy of [
+    "Community recommendations",
+    "commerce recommendations",
+    "recommended long-term",
+  ]) {
+    assertNotIncludes(
+      discoverCatalog,
+      catalogDriftCopy,
+      "Discover catalog app/community copy drift",
+    );
   }
   assertNotIncludes(
     communitySettings,

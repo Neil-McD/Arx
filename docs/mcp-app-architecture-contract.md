@@ -162,8 +162,8 @@ Leaving a community revokes community access, not previously installed user-owne
 
 Keep the existing table names for now. The behavior contract is more important than a broad rename.
 
-Next cleanup should reduce drift by:
-- deleting obsolete grant/recommend frontend aliases and copy,
+Ongoing cleanup should keep drift low by:
+- keeping obsolete grant/recommend frontend aliases and copy out of app management surfaces,
 - deleting unused community runtime execution APIs after proof,
 - keeping product language direct: add apps to communities, connect apps to personal harnesses,
 - keeping all user-facing status projection backed by the same effective user app resolver.
