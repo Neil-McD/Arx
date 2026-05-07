@@ -73,8 +73,9 @@ function main() {
     "completeAppOAuthCallbackInternal",
     "finalizeUserPlatformAppOAuth",
     "authorizationUrl.searchParams.set(\"resource\", metadata.resource)",
-    "resource: params.resource",
-    "resource: bundle.resource",
+    "resolveOAuthTokenResourceMode",
+    "tokenResourceMode === \"token_and_refresh\"",
+    "\"authorize_only\"",
     "finalizeTokenHash",
     "app_oauth_finalize_token",
     "callbackCodeEncryptedHex",
@@ -143,6 +144,18 @@ function main() {
       oauthSource.includes("if (!existing) return { deleted: false }"),
     "OAuth state deletion must be idempotent because callback/finalize requests can be duplicated",
   );
+  assert.ok(
+    oauthSource.includes("Number(row.expiresAt ?? 0) <= args.createdAt") &&
+      !oauthSource.includes("await ctx.db.delete(row._id);\n    }\n    return await ctx.db.insert(\"appOAuthStates\""),
+    "Starting a new OAuth attempt must not delete still-active same-app state rows because stale browser/provider tabs can return older states",
+  );
+  assert.ok(
+    oauthSource.includes("normalizeString(catalogAppId, 120) === \"notion\"") &&
+      oauthSource.includes("? \"authorize_only\"") &&
+      oauthSource.includes("body.set(\"resource\", params.resource)") &&
+      oauthSource.includes("body.set(\"resource\", bundle.resource)"),
+    "Notion must keep authorize-time MCP resource binding while omitting resource from token/refresh requests unless a provider mode requires it",
+  );
 
   const httpSource = readText(new URL("../convex/httpAppOAuth.ts", import.meta.url));
   assert.ok(
@@ -189,6 +202,14 @@ function main() {
     routeLifecycleSource.includes('url.searchParams.has("app_oauth")'),
     "Route normalization must preserve app_oauth return params until the app finalizer consumes them",
   );
+  const webMountControllerSource = readText(
+    new URL("../apps/web/src/controllers/useWebUserPlatformAppMountsController.ts", import.meta.url),
+  );
+  assert.ok(
+    webMountControllerSource.includes("beginOAuthInFlightCatalogAppIdRef") &&
+      webMountControllerSource.includes("OAuth connection is already starting."),
+    "Frontend OAuth begin must be guarded against duplicate click/race starts for the same app",
+  );
 
   const communitySource = readText(new URL("../convex/communityAppMounts.ts", import.meta.url));
   assert.ok(
@@ -198,7 +219,7 @@ function main() {
   );
 
   console.log(
-    "PASS: Notion is the first ready OAuth MCP app, with PKCE, resource-bound OAuth, passive callback capture, authenticated finalization, refreshable token storage, and runtime token loading.",
+    "PASS: Notion is the first ready OAuth MCP app, with PKCE, provider-aware resource handling, duplicate-begin protection, passive callback capture, authenticated finalization, refreshable token storage, and runtime token loading.",
   );
 }
 

@@ -99,7 +99,7 @@ function main() {
   );
   assertIncludes(
     contract,
-    "OAuth remote MCP apps use server-side PKCE state, MCP `resource` audience binding, a passive callback that records the provider result, an authenticated user finalization action that exchanges the code, encrypted token bundles, token refresh, and the same MCP validation/runtime path as token-based remote MCP apps.",
+    "OAuth remote MCP apps use server-side PKCE state, provider-aware MCP `resource` handling, a passive callback that records the provider result, an authenticated user finalization action that exchanges the code, encrypted token bundles, token refresh, and the same MCP validation/runtime path as token-based remote MCP apps.",
     "MCP app architecture contract OAuth MCP rule",
   );
   assertIncludes(

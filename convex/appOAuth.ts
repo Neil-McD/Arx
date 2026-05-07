@@ -34,7 +34,10 @@ type StoredOAuthTokenBundleV1 = {
   tokenEndpoint: string;
   issuer: string | null;
   resource: string;
+  tokenResourceMode: OAuthTokenResourceMode;
 };
+
+type OAuthTokenResourceMode = "token_and_refresh" | "authorize_only";
 
 type OAuthMetadata = {
   issuer?: unknown;
@@ -63,6 +66,14 @@ const APP_OAUTH_REFRESH_WINDOW_MS = 60_000;
 const APP_OAUTH_JSON_MAX_BYTES = 128_000;
 const APP_OAUTH_HTTP_TIMEOUT_MS = 10_000;
 const DEFAULT_NOTION_MCP_ENDPOINT = "https://mcp.notion.com/mcp";
+
+function resolveOAuthTokenResourceMode(catalogAppId: unknown): OAuthTokenResourceMode {
+  // Notion's MCP OAuth guide currently omits `resource` from token and refresh
+  // requests even though its authorization URL accepts MCP resource binding.
+  return normalizeString(catalogAppId, 120) === "notion"
+    ? "authorize_only"
+    : "token_and_refresh";
+}
 
 function readEnv(name: string): string {
   try {
@@ -416,6 +427,7 @@ function normalizeTokenResponse(args: {
   clientId: string;
   clientSecret: string | null;
   resource: string;
+  tokenResourceMode: OAuthTokenResourceMode;
   nowMs: number;
 }): StoredOAuthTokenBundleV1 {
   const accessToken = normalizeString(args.parsed.access_token, 20_000);
@@ -446,10 +458,12 @@ function normalizeTokenResponse(args: {
     tokenEndpoint: args.tokenEndpoint,
     issuer: args.issuer,
     resource: args.resource,
+    tokenResourceMode: args.tokenResourceMode,
   };
 }
 
 async function exchangeCodeForTokenBundle(params: {
+  catalogAppId: string;
   code: string;
   codeVerifier: string;
   redirectUri: string;
@@ -461,14 +475,17 @@ async function exchangeCodeForTokenBundle(params: {
   scope: string | null;
   nowMs: number;
 }): Promise<StoredOAuthTokenBundleV1> {
+  const tokenResourceMode = resolveOAuthTokenResourceMode(params.catalogAppId);
   const body = new URLSearchParams({
     grant_type: "authorization_code",
     code: params.code,
     redirect_uri: params.redirectUri,
     client_id: params.clientId,
     code_verifier: params.codeVerifier,
-    resource: params.resource,
   });
+  if (tokenResourceMode === "token_and_refresh") {
+    body.set("resource", params.resource);
+  }
   if (params.clientSecret) body.set("client_secret", params.clientSecret);
   const response = await fetchOAuthJson({
     url: params.tokenEndpoint,
@@ -488,6 +505,7 @@ async function exchangeCodeForTokenBundle(params: {
     clientId: params.clientId,
     clientSecret: params.clientSecret,
     resource: params.resource,
+    tokenResourceMode,
     nowMs: params.nowMs,
   });
 }
@@ -500,8 +518,10 @@ async function refreshTokenBundle(
     grant_type: "refresh_token",
     refresh_token: bundle.refreshToken,
     client_id: bundle.clientId,
-    resource: bundle.resource,
   });
+  if (bundle.tokenResourceMode === "token_and_refresh") {
+    body.set("resource", bundle.resource);
+  }
   if (bundle.clientSecret) body.set("client_secret", bundle.clientSecret);
   const response = await fetchOAuthJson({
     url: bundle.tokenEndpoint,
@@ -522,6 +542,7 @@ async function refreshTokenBundle(
     clientId: bundle.clientId,
     clientSecret: bundle.clientSecret,
     resource: bundle.resource,
+    tokenResourceMode: bundle.tokenResourceMode,
     nowMs: Date.now(),
   });
 }
@@ -536,6 +557,10 @@ function parseStoredOAuthTokenBundle(raw: unknown): StoredOAuthTokenBundleV1 | n
     const clientId = normalizeString(record.clientId, 2_000);
     const tokenEndpoint = normalizeString(record.tokenEndpoint, 2_000);
     const resource = normalizeHttpsUrl(record.resource, 2_000);
+    const tokenResourceMode =
+      record.tokenResourceMode === "authorize_only"
+        ? "authorize_only"
+        : "token_and_refresh";
     if (!accessToken || !clientId || !tokenEndpoint || !resource) return null;
     const expiresAt = Number(record.expiresAt ?? "");
     return {
@@ -550,6 +575,7 @@ function parseStoredOAuthTokenBundle(raw: unknown): StoredOAuthTokenBundleV1 | n
       tokenEndpoint,
       issuer: normalizeString(record.issuer, 2_000) || null,
       resource,
+      tokenResourceMode,
     };
   } catch {
     return null;
@@ -636,7 +662,9 @@ export const insertAppOAuthStateInternal = internalMutation({
       )
       .collect();
     for (const row of existing) {
-      await ctx.db.delete(row._id);
+      if (Number(row.expiresAt ?? 0) <= args.createdAt) {
+        await ctx.db.delete(row._id);
+      }
     }
     return await ctx.db.insert("appOAuthStates", args);
   },
@@ -945,6 +973,7 @@ export const finalizeUserPlatformAppOAuth = action({
           })
         : null;
     const tokenBundle = await exchangeCodeForTokenBundle({
+      catalogAppId,
       code,
       codeVerifier: row.codeVerifier,
       redirectUri: row.redirectUri,

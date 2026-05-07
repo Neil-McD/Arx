@@ -66,6 +66,7 @@ export function useWebUserPlatformAppMountsController<
   const [removingUserPlatformAppMountId, setRemovingUserPlatformAppMountId] =
     useState<string | null>(null);
   const userPlatformAppMountsLoadedUserIdRef = useRef<string | null>(null);
+  const beginOAuthInFlightCatalogAppIdRef = useRef<string | null>(null);
 
   const clearUserPlatformAppMounts = useCallback(() => {
     setUserPlatformAppMounts([]);
@@ -158,12 +159,24 @@ export function useWebUserPlatformAppMountsController<
       catalogAppId: string;
       returnToPath?: string | null;
     }): Promise<BeginUserPlatformAppOAuthResult> => {
+      if (beginOAuthInFlightCatalogAppIdRef.current === params.catalogAppId) {
+        return {
+          ok: false,
+          catalog_app_id: params.catalogAppId,
+          authorize_url: null,
+          error_message: "OAuth connection is already starting.",
+        };
+      }
+      beginOAuthInFlightCatalogAppIdRef.current = params.catalogAppId;
       const current = argsRef.current;
       const usableSession = await resolveUsableSession(
         current.session,
         current.ensureSession,
       );
       if (!usableSession) {
+        if (beginOAuthInFlightCatalogAppIdRef.current === params.catalogAppId) {
+          beginOAuthInFlightCatalogAppIdRef.current = null;
+        }
         return {
           ok: false,
           catalog_app_id: params.catalogAppId,
@@ -196,6 +209,9 @@ export function useWebUserPlatformAppMountsController<
           error_message: message,
         };
       } finally {
+        if (beginOAuthInFlightCatalogAppIdRef.current === params.catalogAppId) {
+          beginOAuthInFlightCatalogAppIdRef.current = null;
+        }
         setIsConnectingUserPlatformApp(false);
       }
     },
