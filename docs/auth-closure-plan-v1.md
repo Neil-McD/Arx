@@ -9,11 +9,11 @@ It is not an active contract and it contains stale closure assumptions from an o
 Use these instead:
 
 1. Canonical auth + funding + access contract:
-   - [/Users/neilmcdevitt/code/arx/.worktrees/daytona/docs/auth-money-access-matrix.md](/Users/neilmcdevitt/code/arx/.worktrees/daytona/docs/auth-money-access-matrix.md)
+   - [/Users/neilmcdevitt/code/arx/docs/auth-money-access-matrix.md](/Users/neilmcdevitt/code/arx/docs/auth-money-access-matrix.md)
 2. Active docs index:
-   - [/Users/neilmcdevitt/code/arx/.worktrees/daytona/docs/README.md](/Users/neilmcdevitt/code/arx/.worktrees/daytona/docs/README.md)
+   - [/Users/neilmcdevitt/code/arx/docs/README.md](/Users/neilmcdevitt/code/arx/docs/README.md)
 3. Schema/data cleanup discipline:
-   - [/Users/neilmcdevitt/code/arx/.worktrees/daytona/docs/schema-data-migration-discipline.md](/Users/neilmcdevitt/code/arx/.worktrees/daytona/docs/schema-data-migration-discipline.md)
+   - [/Users/neilmcdevitt/code/arx/docs/schema-data-migration-discipline.md](/Users/neilmcdevitt/code/arx/docs/schema-data-migration-discipline.md)
 
 Why it was superseded:
 

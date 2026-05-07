@@ -1,9 +1,11 @@
 # Community Membership Access Re-Architecture Plan v1
 
-Status: draft
-Worktree: `/Users/neilmcdevitt/code/arx/.worktrees/daytona`
+Status: archived / superseded
+Worktree: historical Daytona snapshot, not the active worktree
 Scope: community membership, access, public funnel, members/admin projections, community creation gating
 Non-goal: redesign the current community UI style
+
+This file is retained as historical planning evidence only. Current access truth lives in `docs/auth-money-access-matrix.md` and the Convex community modules under `/Users/neilmcdevitt/code/arx`.
 
 ## 1) Irreducible Model
 

@@ -1,8 +1,10 @@
 # Community Chat Execution Plan v1
 
-Status: active
-Worktree: `/Users/neilmcdevitt/code/arx/.worktrees/daytona`
+Status: archived / superseded
+Worktree: historical Daytona snapshot, not the active worktree
 Scope: stabilize and harden community chat without changing the existing visual UI style
+
+This file is retained as historical planning evidence only. It is not an active implementation contract.
 
 ## 1) Product Rule
 

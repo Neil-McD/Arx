@@ -21350,6 +21350,24 @@ button.message-citation-chip:hover {
   font-weight: 750;
 }
 
+.community-events-day-marker {
+  display: none;
+  align-items: center;
+  gap: 5px;
+  min-height: 16px;
+  color: rgba(255, 220, 238, 0.95);
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.community-events-day-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255, 105, 170, 0.86);
+  box-shadow: 0 0 0 3px rgba(255, 105, 170, 0.12);
+}
+
 .community-events-day-pill,
 .community-events-day-more {
   display: block;
@@ -21605,6 +21623,10 @@ button.message-citation-chip:hover {
 }
 
 @media (max-height: 820px) and (min-width: 901px) {
+  .community-events-day-marker {
+    display: inline-flex;
+  }
+
   .community-events-day-pill {
     display: none;
   }
@@ -21623,6 +21645,10 @@ button.message-citation-chip:hover {
 
   .community-events-day-pill {
     display: none;
+  }
+
+  .community-events-day-marker {
+    display: inline-flex;
   }
 
   .community-event-form-grid {

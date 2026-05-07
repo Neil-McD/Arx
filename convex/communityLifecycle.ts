@@ -257,7 +257,7 @@ async function requirePaidCommunityPricingReady(args: {
     },
   )) as { has_payouts?: unknown } | null;
   if (ownerBilling?.has_payouts !== true) {
-    throw new Error("community_builder_plan_required");
+    throw new Error("community_payout_access_required");
   }
   const connectAccount = (await args.ctx.runQuery(
     internal.builderCommerce.getUserStripeConnectAccountInternal as any,

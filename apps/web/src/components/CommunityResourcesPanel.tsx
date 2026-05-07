@@ -473,6 +473,18 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
     }
     return state.resources.filter((resource) => resource.module_id === selectedModule.id);
   }, [selectedModule, state.resources]);
+  const isRefreshingResources = state.isLoadingResources || state.isLoadingResourceModules;
+  const hasResourceContent = state.modules.length > 0 || state.resources.length > 0;
+  const wasRefreshingResourcesRef = useRef(false);
+  const hasCompletedResourceLoadRef = useRef(false);
+  useEffect(() => {
+    if (!isRefreshingResources && wasRefreshingResourcesRef.current) {
+      hasCompletedResourceLoadRef.current = true;
+    }
+    wasRefreshingResourcesRef.current = isRefreshingResources;
+  }, [isRefreshingResources]);
+  const showInitialResourceLoading =
+    isRefreshingResources && !hasResourceContent && !hasCompletedResourceLoadRef.current;
 
   useEffect(() => {
     if (selectedModuleId && !selectedModule) {
@@ -578,8 +590,11 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
         {state.resourceSuccess ? (
           <div className="success-toast">Resource saved successfully!</div>
         ) : null}
+        {isRefreshingResources && !showInitialResourceLoading ? (
+          <div className="analytics-refreshing-note">Refreshing resources...</div>
+        ) : null}
 
-        {state.isLoadingResources || state.isLoadingResourceModules ? (
+        {showInitialResourceLoading ? (
           <div className="community-panel-state-shell">
             <div className="community-chat-page-loading-card" aria-busy="true" aria-live="polite">
               <div className="community-chat-page-loading-title">Loading resources…</div>

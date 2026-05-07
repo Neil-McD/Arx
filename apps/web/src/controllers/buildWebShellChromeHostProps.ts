@@ -1,5 +1,5 @@
 import type { ReactNode, TouchEventHandler } from "react";
-import type { BuilderUpgradeContext } from "../../../../shared/authResumeState";
+import type { BuilderUpgradeContextValue } from "../../../../shared/builderBilling";
 import type { AppPage, SettingsGroup } from "../../../../shared/appShellNavigation";
 import type { WebShellChromeHostProps } from "../components/WebShellChromeHost";
 import type { MobileOverlay } from "../components/webShellChromeShared";
@@ -84,7 +84,7 @@ export function buildWebShellChromeHostProps(params: {
   draggingCommunityId: string | null;
   setCommunityRailListElement: WebShellChromeHostProps["communityShell"]["setCommunityRailListElement"];
   getCommunityRailItemBindings: WebShellChromeHostProps["communityShell"]["getCommunityRailItemBindings"];
-  setBuilderUpgradeContext: (value: BuilderUpgradeContext) => void;
+  setBuilderUpgradeContext: (value: BuilderUpgradeContextValue) => void;
   setIsBuilderUpgradeOpen: (value: boolean) => void;
   handleToggleWorkspaceSettings: () => void;
   settingsGroup: SettingsGroup;

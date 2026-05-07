@@ -62,7 +62,6 @@ export type WebSettingsPanelsProps = {
     openOwnedCommunitySettings: (communityId: string) => void;
     communityInitials: (value: string) => string;
     openBuilderUpgrade: (context: "builder") => void;
-    openBuilderBillingPortal: () => Promise<void> | void;
     startBuilderConnectOnboarding: (opts?: {
       context?: "account" | "community";
       communitySlug?: string | null;
@@ -231,10 +230,8 @@ export function WebSettingsPanels(props: WebSettingsPanelsProps) {
     openOwnedCommunitySettings: account.openOwnedCommunitySettings,
     communityInitials: account.communityInitials,
     openBuilderUpgrade: account.openBuilderUpgrade,
-    openBuilderBillingPortal: account.openBuilderBillingPortal,
     startBuilderConnectOnboarding: account.startBuilderConnectOnboarding,
     builderBillingError: account.billingUi.builderBillingError,
-    isOpeningBuilderBillingPortal: account.billingUi.isOpeningBuilderBillingPortal,
     isStartingBuilderConnectOnboarding: account.billingUi.isStartingBuilderConnectOnboarding,
     canUseDevTierOverride: account.canUseDevTierOverride,
     isSettingDevBuilderTier: account.billingUi.isSettingDevBuilderTier,

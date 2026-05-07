@@ -120,52 +120,6 @@ function applyCycleAwareRefund(args: {
   };
 }
 
-function compareBillingCycle(
-  left: { cycleStartedAt: number; cycleEndsAt: number },
-  right: { cycleStartedAt: number; cycleEndsAt: number },
-): number {
-  if (left.cycleStartedAt !== right.cycleStartedAt) {
-    return left.cycleStartedAt - right.cycleStartedAt;
-  }
-  return left.cycleEndsAt - right.cycleEndsAt;
-}
-
-const SYNTHETIC_BUILDER_CYCLE_MS = 30 * 24 * 60 * 60 * 1000;
-
-function normalizeBuilderAccessTier(value: unknown): "free" | "builder" {
-  const normalized = String(value ?? "")
-    .trim()
-    .toLowerCase();
-  if (normalized === "builder" || normalized === "architect" || normalized === "pro") {
-    return "builder";
-  }
-  return "free";
-}
-
-function isActiveWindow(nowMs: number, startsAt: number, endsAt?: number): boolean {
-  if (startsAt > nowMs) return false;
-  if (typeof endsAt === "number" && nowMs > endsAt) return false;
-  return true;
-}
-
-function deriveSyntheticBuilderProvisioningWindow(args: {
-  nowMs: number;
-  startsAt: number;
-  endsAt?: number;
-}): { cycleStartedAt: number; cycleEndsAt: number } {
-  const offsetPeriods = Math.max(
-    0,
-    Math.floor(Math.max(0, args.nowMs - args.startsAt) / SYNTHETIC_BUILDER_CYCLE_MS),
-  );
-  const cycleStartedAt = args.startsAt + offsetPeriods * SYNTHETIC_BUILDER_CYCLE_MS;
-  const nominalCycleEndsAt = cycleStartedAt + SYNTHETIC_BUILDER_CYCLE_MS;
-  const cycleEndsAt =
-    typeof args.endsAt === "number"
-      ? Math.min(args.endsAt, nominalCycleEndsAt)
-      : nominalCycleEndsAt;
-  return { cycleStartedAt, cycleEndsAt };
-}
-
 export const getWorkspaceCreditBalanceInternal = internalQuery({
   args: {
     userId: v.id("users"),
@@ -191,33 +145,6 @@ export const getWorkspaceCreditBalance = query({
       .query("workspaceCreditBalances")
       .withIndex("by_user", (q) => q.eq("userId", actor.dbUserId))
       .first();
-  },
-});
-
-export const getActiveBuilderCreditProvisioningWindowInternal = internalQuery({
-  args: {
-    userId: v.id("users"),
-    nowMs: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    const nowMs = args.nowMs ?? Date.now();
-    const entitlements = await ctx.db
-      .query("userEntitlements")
-      .withIndex("by_user", (q) => q.eq("userId", args.userId))
-      .collect();
-    const activeBuilderEntitlement = entitlements
-      .filter(
-        (row) =>
-          normalizeBuilderAccessTier(row.tier) === "builder" &&
-          isActiveWindow(nowMs, row.startsAt, row.endsAt),
-      )
-      .sort((a, b) => b.startsAt - a.startsAt)[0];
-    if (!activeBuilderEntitlement) return null;
-    return deriveSyntheticBuilderProvisioningWindow({
-      nowMs,
-      startsAt: activeBuilderEntitlement.startsAt,
-      endsAt: activeBuilderEntitlement.endsAt,
-    });
   },
 });
 
@@ -355,75 +282,6 @@ export const expireWorkspaceCreditTopupCheckoutSessionInternal = internalMutatio
       status: "expired",
       updatedAt: nowMs,
     });
-  },
-});
-
-export const syncBuilderMonthlyCreditsInternal = internalMutation({
-  args: {
-    userId: v.id("users"),
-    targetTier: v.union(v.literal("builder"), v.literal("architect")),
-    grantsAccess: v.boolean(),
-    cycleStartedAt: v.number(),
-    cycleEndsAt: v.number(),
-    includedCycleCredits: v.optional(v.number()),
-    nowMs: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    const nowMs = args.nowMs ?? Date.now();
-    const existing = await ctx.db
-      .query("workspaceCreditBalances")
-      .withIndex("by_user", (q) => q.eq("userId", args.userId))
-      .first();
-    if (!args.grantsAccess) {
-      return existing ?? null;
-    }
-
-    const includedCycleCredits = roundCredits(
-      typeof args.includedCycleCredits === "number"
-        ? args.includedCycleCredits
-        : BUILDER_INCLUDED_WORKSPACE_CREDITS,
-    );
-    const isSameCycle =
-      !!existing &&
-      existing.includedCycleStartedAt === args.cycleStartedAt &&
-      existing.includedCycleEndsAt === args.cycleEndsAt;
-    if (isSameCycle) {
-      return existing;
-    }
-    const isOlderCycle =
-      !!existing &&
-      compareBillingCycle(
-        {
-          cycleStartedAt: args.cycleStartedAt,
-          cycleEndsAt: args.cycleEndsAt,
-        },
-        {
-          cycleStartedAt: existing.includedCycleStartedAt,
-          cycleEndsAt: existing.includedCycleEndsAt,
-        },
-      ) < 0;
-    if (isOlderCycle) {
-      return existing;
-    }
-
-    const patch = {
-      includedCreditsBalance: includedCycleCredits,
-      purchasedCreditsBalance: existing?.purchasedCreditsBalance ?? 0,
-      includedCycleCredits,
-      includedCycleStartedAt: args.cycleStartedAt,
-      includedCycleEndsAt: args.cycleEndsAt,
-      updatedAt: nowMs,
-    };
-    if (!existing) {
-      const id = await ctx.db.insert("workspaceCreditBalances", {
-        userId: args.userId,
-        ...patch,
-        createdAt: nowMs,
-      });
-      return await ctx.db.get(id);
-    }
-    await ctx.db.patch(existing._id, patch);
-    return await ctx.db.get(existing._id);
   },
 });
 

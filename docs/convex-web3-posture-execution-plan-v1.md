@@ -1,8 +1,10 @@
 # Convex + Web3 Posture Execution Plan v1
 
 Status: parked (future-facing)
-Worktree: `/Users/neilmcdevitt/code/arx/.worktrees/daytona`
+Worktree: historical Daytona snapshot, not the active worktree
 Intent: complete Convex migration and hardening first, while preserving a clean path to wallet-linked identity and tokenized community rails later without rewriting core product logic.
+
+This file is retained as future-facing historical planning only. It is not an active implementation contract.
 
 ## 1) First-Principles Model
 

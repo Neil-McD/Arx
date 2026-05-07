@@ -1,6 +1,6 @@
 import { EXTERNAL_MEMORY_IMPORT_PROMPT } from "../../../../shared/externalMemoryImport";
 import type { AppView, SettingsPage } from "../../../../shared/appShellNavigation";
-import type { BuilderCheckoutTier, BuilderUpgradeContext } from "../../../../shared/authResumeState";
+import type { BuilderUpgradeContextValue } from "../../../../shared/builderBilling";
 import type { WorkspaceToolBalanceTopupPackId } from "../../../../shared/workspaceCredits";
 import type { WebGlobalOverlayHostProps } from "../components/WebGlobalOverlayHost";
 
@@ -21,7 +21,7 @@ export function buildWebGlobalOverlayHostProps(params: {
   showMemoryToastMessage: (message: string) => void;
   requireSignIn: (intentInput?: unknown) => void;
   builderBillingStatus: { builder_tier?: string | null } | null;
-  setBuilderUpgradeContext: (value: BuilderUpgradeContext) => void;
+  setBuilderUpgradeContext: (value: BuilderUpgradeContextValue) => void;
   setBuilderBillingError: (value: string | null) => void;
   setIsBuilderUpgradeOpen: (value: boolean) => void;
   personalMemoryUi: {
@@ -53,13 +53,7 @@ export function buildWebGlobalOverlayHostProps(params: {
   setActiveView: (value: AppView) => void;
   setSettingsPage: (value: SettingsPage) => void;
   isBuilderUpgradeOpen: boolean;
-  builderUpgradeContext: BuilderUpgradeContext;
-  isStartingBuilderCheckout: boolean;
   builderBillingError: string | null;
-  startBuilderPlanCheckout: (
-    tier: BuilderCheckoutTier,
-    options: { context: BuilderUpgradeContext },
-  ) => void | Promise<void>;
   communityModalHostProps: WebGlobalOverlayHostProps["communityModalHostProps"];
   appToast: string | null;
 }): WebGlobalOverlayHostProps {
@@ -133,23 +127,8 @@ export function buildWebGlobalOverlayHostProps(params: {
       : null,
     builderUpgradeModalProps: {
       isOpen: params.isBuilderUpgradeOpen,
-      builderTier: params.builderBillingStatus?.builder_tier,
-      isStartingBuilderCheckout: params.isStartingBuilderCheckout,
       builderBillingError: params.builderBillingError,
       onClose: () => params.setIsBuilderUpgradeOpen(false),
-      onStartBuilderPlanCheckout: (tier) => {
-        if (!params.session) {
-          params.setIsBuilderUpgradeOpen(false);
-          params.requireSignIn({
-            reason: "start_builder_checkout",
-            payload: { tier, context: params.builderUpgradeContext },
-          });
-          return;
-        }
-        void params.startBuilderPlanCheckout(tier, {
-          context: params.builderUpgradeContext,
-        });
-      },
     },
     communityModalHostProps: params.communityModalHostProps,
     appToast: params.appToast,

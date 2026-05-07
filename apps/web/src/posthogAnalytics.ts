@@ -17,7 +17,7 @@ type AnalyticsUiContext = {
 
 type PrimitiveValue = string | number | boolean | null | undefined;
 type EventProperties = Record<string, PrimitiveValue>;
-type PendingReturnMarkerName = "builder_checkout" | "workspace_credit_topup";
+type PendingReturnMarkerName = "workspace_credit_topup";
 
 const posthogKey = String(import.meta.env.VITE_PUBLIC_POSTHOG_KEY ?? "").trim();
 const posthogHost = String(import.meta.env.VITE_PUBLIC_POSTHOG_HOST ?? "").trim();

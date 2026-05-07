@@ -386,7 +386,6 @@ export const getBuilderBillingStatus = query({
     builder_tier: CanonicalTier;
     max_communities: number;
     platform_fee_bps: number;
-    can_manage_plan: boolean;
     stripe_connect: {
       status: "not_connected" | "onboarding_required" | "pending_requirements" | "ready" | "restricted";
       account_id: string | null;
@@ -408,18 +407,7 @@ export const getBuilderBillingStatus = query({
     if (!actor) return null;
     const canonicalTier = await getCanonicalTierByUserIdInternal(ctx as never, actor.dbUserId, nowMs);
     const meta = builderTierMeta(canonicalTier);
-    const hasPaidCreatorAccess = canonicalTier !== "free";
     const hasPayoutAccess = meta.hasPayouts;
-    const billingCustomer: { providerCustomerId?: unknown } | null = hasPaidCreatorAccess
-      ? ((await ctx.runQuery(
-          internal.builderCommerce.getLatestBuilderBillingCustomerForOwnerInternal as any,
-          { ownerUserId: actor.dbUserId },
-        )) as { providerCustomerId?: unknown } | null)
-      : null;
-    const canManagePlan: boolean =
-      hasPaidCreatorAccess &&
-      typeof billingCustomer?.providerCustomerId === "string" &&
-      billingCustomer.providerCustomerId.trim().length > 0;
     const stripeConnect = hasPayoutAccess
       ? ((await ctx.runQuery(
           internal.builderCommerce.getUserStripeConnectAccountInternal as any,
@@ -450,7 +438,6 @@ export const getBuilderBillingStatus = query({
       builder_tier: canonicalTier,
       max_communities: meta.maxCommunities,
       platform_fee_bps: meta.platformFeeBps,
-      can_manage_plan: canManagePlan,
       stripe_connect: {
         status: stripeConnectStatus,
         account_id:

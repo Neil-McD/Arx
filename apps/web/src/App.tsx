@@ -5,6 +5,7 @@ import {
   useRef,
   useState,
   type ChangeEvent,
+  type Dispatch,
   type ReactNode,
   type SetStateAction,
 } from "react";
@@ -49,7 +50,7 @@ import { normalizeCommunityFunnelConfig } from "../../../shared/communityFunnel"
 import {
   buildCsv, dateKeyLocal, formatChatTime, formatCount, formatMoneyBaseUnits, formatPercent, formatRelativeTimeFromIso as formatRelativeTime, parseContentRangeTotal, } from "../../../shared/contentFormatting";
 import {
-  formatBuilderTierLabel, hasBuilderTierPaidAccess, isBuilderTierFree, normalizeBuilderTierForUi, formatPlanPrice, formatSubscriptionPrice, type BuilderBillingReturn, type BuilderConnectReturn, } from "../../../shared/builderBilling";
+  formatBuilderTierLabel, hasBuilderTierPaidAccess, isBuilderTierFree, normalizeBuilderTierForUi, formatPlanPrice, formatSubscriptionPrice, type BuilderConnectReturn, type BuilderUpgradeContextValue, } from "../../../shared/builderBilling";
 import { canUseCreatorDevTierOverride } from "../../../shared/devTierOverride";
 import { useCheckoutFinalizeController } from "../../../shared/useCheckoutFinalizeController";
 import {
@@ -218,7 +219,6 @@ import {
   clearAuthResumeState,
   readAuthResumeState,
   storeAuthResumeState,
-  type BuilderUpgradeContext,
 } from "../../../shared/authResumeState";
 import {
   hasOAuthCallbackParamsInLocation,
@@ -713,12 +713,19 @@ function normalizeCommunityEventsMonthIso(raw: string | null | undefined): strin
 }
 
 function getCommunityEventsMonthRange(monthIso: string): CommunityEventsRange {
-  const start = new Date(normalizeCommunityEventsMonthIso(monthIso));
-  const end = new Date(start.getFullYear(), start.getMonth() + 1, 1);
+  const monthStart = new Date(normalizeCommunityEventsMonthIso(monthIso));
+  const start = new Date(monthStart);
+  start.setDate(monthStart.getDate() - monthStart.getDay());
+  const end = new Date(start);
+  end.setDate(start.getDate() + 42);
   return {
     startIso: start.toISOString(),
     endIso: end.toISOString(),
   };
+}
+
+function buildCommunityEventsCacheKey(communityId: string, range: CommunityEventsRange): string {
+  return `${communityId}:${range.startIso}:${range.endIso}`;
 }
 
 type PersonalMemoryItem = {
@@ -995,7 +1002,7 @@ export default function App() {
         setIsSavingResource,
         setResourceSuccess,
         setOpenResourceEmbedId,
-        setCommunityEvents,
+        setCommunityEvents: resetCommunityEventsCache,
         setIsLoadingCommunityEvents,
         setCommunityEventsError,
         setCommunityEventsSuccess,
@@ -1066,7 +1073,7 @@ export default function App() {
         setIsSavingResource,
         setResourceSuccess,
         setOpenResourceEmbedId,
-        setCommunityEvents,
+        setCommunityEvents: resetCommunityEventsCache,
         setIsLoadingCommunityEvents,
         setCommunityEventsError,
         setCommunityEventsSuccess,
@@ -1281,35 +1288,47 @@ export default function App() {
       window.location.assign("/");
     },
   });
-  const [operatorAccess, setOperatorAccess] = useState<OperatorAccessSnapshot | null>(null);
+  const canonicalSessionUserId = useMemo(
+    () => resolveAuthSubject(session),
+    [session?.access_token, session?.id_token, session?.user?.id],
+  );
+  const [operatorAccessState, setOperatorAccessState] = useState<{
+    subject: string;
+    access: OperatorAccessSnapshot;
+  } | null>(null);
+  const operatorAccess =
+    operatorAccessState?.subject === canonicalSessionUserId ? operatorAccessState.access : null;
 
   useEffect(() => {
     let isAlive = true;
-    setOperatorAccess(null);
+    const operatorSubject = String(canonicalSessionUserId ?? "").trim();
 
-    if (!session) {
+    if (!session || !operatorSubject) {
+      setOperatorAccessState(null);
       return;
     }
 
     loadOperatorAccessCanonical({ session }).then(
       (access) => {
         if (!isAlive) return;
-        setOperatorAccess(access);
+        setOperatorAccessState({ subject: operatorSubject, access });
       },
-      () => {
-        if (isAlive) setOperatorAccess(null);
+      (error) => {
+        if (!isAlive) return;
+        const message = error instanceof Error ? error.message : String(error);
+        if (
+          message.includes("operator_access_forbidden") ||
+          message.includes("operator_access_identity_mismatch")
+        ) {
+          setOperatorAccessState((prev) => (prev?.subject === operatorSubject ? null : prev));
+        }
       },
     );
 
     return () => {
       isAlive = false;
     };
-  }, [session]);
-
-  const canonicalSessionUserId = useMemo(
-    () => resolveAuthSubject(session),
-    [session?.access_token, session?.id_token, session?.user?.id],
-  );
+  }, [canonicalSessionUserId, session]);
   const hasOperatorDataPanelAccess = Boolean(session && operatorAccess);
   const profileStorageUserId = canonicalSessionUserId;
   const initialProfileDraft = useMemo(
@@ -1471,10 +1490,6 @@ export default function App() {
     setIsSettingDevBuilderTier,
     devBuilderTierError,
     setDevBuilderTierError,
-    isStartingBuilderCheckout,
-    setIsStartingBuilderCheckout,
-    isOpeningBuilderBillingPortal,
-    setIsOpeningBuilderBillingPortal,
     isStartingBuilderConnectOnboarding,
     setIsStartingBuilderConnectOnboarding,
     checkoutStatus,
@@ -1495,12 +1510,9 @@ export default function App() {
   const [, setIsPendingPurchasesBannerDismissed] = useState(false);
   const workspaceCreditLoadRequestIdRef = useRef(0);
   const lastTrackedAuthSessionUserIdRef = useRef<string | null>(null);
-  const lastTrackedBuilderReturnKeyRef = useRef<string | null>(null);
   const [isBuilderUpgradeOpen, setIsBuilderUpgradeOpen] = useState(false);
-  const [builderUpgradeContext, setBuilderUpgradeContext] = useState<BuilderUpgradeContext>("builder");
+  const [, setBuilderUpgradeContext] = useState<BuilderUpgradeContextValue>("builder");
   const [builderConnectReturn, setBuilderConnectReturn] = useState<BuilderConnectReturn | null>(null);
-  const [builderBillingReturn, setBuilderBillingReturn] = useState<BuilderBillingReturn | null>(null);
-  const [, setIsFinalizingBuilderReturn] = useState(false);
   const lastAutoRedeemPendingPurchasesUserIdRef = useRef<string | null>(null);
   const autoRedeemPendingPurchasesAttemptRef = useRef(0);
   const autoRedeemPendingPurchasesTimeoutRef = useRef<number | null>(null);
@@ -1859,13 +1871,65 @@ export default function App() {
   const [isLoadingResources, setIsLoadingResources] = useState(false);
   const [isLoadingResourceModules, setIsLoadingResourceModules] = useState(false);
   const [openResourceEmbedId, setOpenResourceEmbedId] = useState<string | null>(null);
-  const [communityEvents, setCommunityEvents] = useState<CommunityEvent[]>([]);
+  const [communityEventsByCacheKey, setCommunityEventsByCacheKey] = useState<Record<string, CommunityEvent[]>>({});
   const [isLoadingCommunityEvents, setIsLoadingCommunityEvents] = useState(false);
   const [communityEventsError, setCommunityEventsError] = useState<string | null>(null);
   const [communityEventsSuccess, setCommunityEventsSuccess] = useState(false);
   const [communityEventsVisibleMonthIso, setCommunityEventsVisibleMonthIso] = useState(() =>
     normalizeCommunityEventsMonthIso(null),
   );
+  const communityEventsVisibleRange = useMemo(
+    () => getCommunityEventsMonthRange(communityEventsVisibleMonthIso),
+    [communityEventsVisibleMonthIso],
+  );
+  const communityEventsCacheKey = useMemo(
+    () =>
+      activeCommunityId
+        ? buildCommunityEventsCacheKey(activeCommunityId, communityEventsVisibleRange)
+        : null,
+    [activeCommunityId, communityEventsVisibleRange],
+  );
+  const communityEvents = useMemo(
+    () => (communityEventsCacheKey ? communityEventsByCacheKey[communityEventsCacheKey] ?? [] : []),
+    [communityEventsByCacheKey, communityEventsCacheKey],
+  );
+  const setCommunityEvents = useCallback<Dispatch<SetStateAction<CommunityEvent[]>>>(
+    (nextEvents) => {
+      setCommunityEventsByCacheKey((prev) => {
+        const previousForKey = communityEventsCacheKey ? prev[communityEventsCacheKey] ?? [] : [];
+        const resolvedEvents =
+          typeof nextEvents === "function"
+            ? nextEvents(previousForKey)
+            : nextEvents;
+        if (!communityEventsCacheKey) {
+          return resolvedEvents.length === 0 ? {} : prev;
+        }
+        return {
+          ...prev,
+          [communityEventsCacheKey]: resolvedEvents,
+        };
+      });
+    },
+    [communityEventsCacheKey],
+  );
+  const resetCommunityEventsCache = useCallback(() => {
+    setCommunityEventsByCacheKey({});
+  }, []);
+  const invalidateCommunityEventsCacheForCommunity = useCallback((communityId: string) => {
+    const cacheKeyPrefix = `${communityId}:`;
+    setCommunityEventsByCacheKey((prev) => {
+      let didRemove = false;
+      const next: Record<string, CommunityEvent[]> = {};
+      for (const [key, events] of Object.entries(prev)) {
+        if (key.startsWith(cacheKeyPrefix)) {
+          didRemove = true;
+          continue;
+        }
+        next[key] = events;
+      }
+      return didRemove ? next : prev;
+    });
+  }, []);
   const {
     communityMembers,
     setCommunityMembers,
@@ -1988,6 +2052,7 @@ export default function App() {
     setIsLoadingCommunityEvents,
     setCommunityEventsError,
     setCommunityEventsSuccess,
+    invalidateCommunityEventsCache: invalidateCommunityEventsCacheForCommunity,
   });
 
   const [communityAnalyticsSummary, setCommunityAnalyticsSummary] = useState<CommunityAnalyticsSummary>({
@@ -2233,11 +2298,11 @@ export default function App() {
   } = communityAdminUi;
 
   const [threads, setThreads] = useState<ThreadRecord[]>([]);
-  const initialWorkspaceWantsNewChat = Boolean(
+  const initialWorkspaceWantsNewChat = !(
     initialAppRoute &&
-      initialAppRoute.page === "workspace" &&
-      initialAppRoute.view === "home" &&
-      initialAppRoute.threadId === null,
+    initialAppRoute.page === "workspace" &&
+    initialAppRoute.view === "home" &&
+    initialAppRoute.threadId
   );
   const [workspaceWantsNewChat, setWorkspaceWantsNewChat] = useState<boolean>(initialWorkspaceWantsNewChat);
   const workspaceWantsNewChatRef = useRef<boolean>(initialWorkspaceWantsNewChat);
@@ -2440,10 +2505,10 @@ export default function App() {
         communityTab: nextAppRoute.communityTab,
       });
     }
-    setActiveThreadId(nextThreadId);
-    setWorkspaceWantsNewChatMode(
-      nextAppRoute.page === "workspace" && nextAppRoute.view === "home" && nextThreadId === null,
-    );
+    if (nextAppRoute.page === "workspace" && nextAppRoute.view === "home") {
+      setActiveThreadId(nextThreadId);
+      setWorkspaceWantsNewChatMode(nextThreadId === null);
+    }
     if (nextAppRoute.page !== "workspace") {
       workspaceProject.actions.setActiveProjectId(null);
     }
@@ -3424,6 +3489,7 @@ export default function App() {
     threadsHydratedRef,
     workspaceWantsNewChatRef,
     setActiveThreadId,
+    setWorkspaceWantsNewChatMode,
     setThreadError,
     setThreads,
     setThreadMessages,
@@ -3777,7 +3843,6 @@ export default function App() {
     activeThreadId,
     applyLocationToState,
     setBuilderConnectReturn,
-    setBuilderBillingReturn,
     buildAppRoutePath: (state) => applyShellVariantToAppPath(buildAppRoutePath(state) ?? "", shellVariant) || null,
   });
 
@@ -4003,7 +4068,6 @@ export default function App() {
     setMessageReactions([]);
     setCommunityResources([]);
     setCommunityResourceModules([]);
-    setCommunityEvents([]);
     setIsLoadingCommunityEvents(false);
     setCommunityEventsError(null);
     setCommunityEventsSuccess(false);
@@ -4385,11 +4449,6 @@ export default function App() {
     loadCommunityResources,
     requireCommunityPage: true,
   });
-  const communityEventsVisibleRange = useMemo(
-    () => getCommunityEventsMonthRange(communityEventsVisibleMonthIso),
-    [communityEventsVisibleMonthIso],
-  );
-
   useCommunityEventsTabLifecycle<AuthSession>({
     activePage,
     communityTab,
@@ -4452,10 +4511,6 @@ export default function App() {
           communityId: payload.community_id ?? undefined,
           communitySlug: payload.community_slug ?? undefined,
         });
-      },
-      start_builder_checkout: (payload) => {
-        void payload;
-        showAppToastMessage("Builder is included. Add balance in Agent Settings when premium tools need it.");
       },
       redeem_pending_purchases: (payload) => {
         void redeemPendingPurchases({ navigate: payload.navigate, silentNoop: payload.silent_noop });
@@ -4583,28 +4638,11 @@ export default function App() {
     navigateToUrl: (url) => window.location.assign(url),
   });
 
-  const { openBuilderPlanPortal, startBuilderPlanCheckout, startBuilderConnectOnboarding } =
+  const { startBuilderConnectOnboarding } =
     useWebBuilderBillingActions({
       getSession: () => sessionRef.current,
       ensureSession: ensureUsableAuthSession,
-      requireSignIn: (intent) => requireSignIn(intent),
-      onCheckoutStarted: ({ tier, context }) => {
-        markPendingAnalyticsReturn("builder_checkout", {
-          requested_tier: tier,
-          billing_context: context,
-        });
-        captureProductAnalyticsEvent("builder checkout started", {
-          requested_tier: tier,
-          billing_context: context,
-          surface: "billing",
-        });
-      },
-      onPortalOpened: ({ context }) => {
-        captureProductAnalyticsEvent("builder billing portal opened", {
-          billing_context: context,
-          surface: "account_settings",
-        });
-      },
+      requireSignIn: () => requireSignIn(),
       onConnectOnboardingStarted: ({ context, communitySlug }) => {
         captureProductAnalyticsEvent("builder stripe connect onboarding started", {
           billing_context: context,
@@ -4613,8 +4651,6 @@ export default function App() {
         });
       },
       setBuilderBillingError,
-      setIsStartingBuilderCheckout,
-      setIsOpeningBuilderBillingPortal,
       setIsStartingBuilderConnectOnboarding,
       navigateToUrl: (url) => window.location.assign(url),
     });
@@ -4773,16 +4809,8 @@ export default function App() {
   });
   const {
     openCreateCommunityModal,
-    resumeCreateCommunityIntent,
     openDeleteCommunityModal,
   } = communityUi;
-
-  const resumePendingCreateCommunityIntent = useCallback((): void => {
-    const intent = readAuthResumeState()?.intent;
-    if (!intent || intent.reason !== "create_community") return;
-    clearAuthResumeState();
-    resumeCreateCommunityIntent(intent.payload.draft ?? null);
-  }, [resumeCreateCommunityIntent]);
 
   const {
     publicFunnelSlug,
@@ -4843,25 +4871,18 @@ export default function App() {
     claimTokenParam,
     isRedeemingClaim,
     isJoiningPublicCommunity: publicCommunityUi.isJoiningPublicCommunity,
-    builderBillingReturn,
-    builderBillingStatus,
-    communities,
-    communityRoleById,
     lastAutoRedeemPendingPurchasesUserIdRef,
     autoRedeemPendingPurchasesAttemptRef,
     autoRedeemPendingPurchasesTimeoutRef,
     setBuilderBillingStatus,
     setBuilderBillingError,
     setIsLoadingBuilderBilling,
-    setIsFinalizingBuilderReturn,
-    clearBuilderBillingReturn: () => setBuilderBillingReturn(null),
     getAuthUid: getAuthUid,
     redeemPurchaseClaim,
     redeemPendingPurchases,
     loadPendingPurchaseClaims,
     loadBuilderBillingStatus,
     joinPublicCommunity,
-    resumeCreateCommunityIntent: resumePendingCreateCommunityIntent,
   });
 
   useWebPostAuthStripeConnectLifecycle({
@@ -5436,7 +5457,7 @@ export default function App() {
     setThreadMessages,
     setThreads,
     setActiveModelId,
-    setBuilderUpgradeContext: (next) => setBuilderUpgradeContext(next as BuilderUpgradeContext),
+    setBuilderUpgradeContext: (next) => setBuilderUpgradeContext(next as BuilderUpgradeContextValue),
     setBuilderBillingError,
     setIsBuilderUpgradeOpen,
   });
@@ -5981,31 +6002,6 @@ export default function App() {
       surface: publicRoute.kind === "app" ? activePage : publicRoute.kind,
     });
   }, [activePage, canonicalSessionUserId, publicRoute.kind]);
-
-  useEffect(() => {
-    if (!builderBillingReturn) return;
-    const captureKey = [
-      builderBillingReturn.status,
-      builderBillingReturn.source,
-      builderBillingReturn.context,
-    ].join(":");
-    if (lastTrackedBuilderReturnKeyRef.current === captureKey) return;
-    lastTrackedBuilderReturnKeyRef.current = captureKey;
-
-    if (builderBillingReturn.status === "cancel") {
-      clearPendingAnalyticsReturn("builder_checkout");
-      return;
-    }
-    if (builderBillingReturn.status !== "success") return;
-    const pending = consumePendingAnalyticsReturn("builder_checkout");
-    if (!pending) return;
-    captureProductAnalyticsEvent("builder checkout succeeded", {
-      requested_tier: pending.requested_tier,
-      billing_context: builderBillingReturn.context,
-      billing_source: builderBillingReturn.source,
-      surface: "billing",
-    });
-  }, [builderBillingReturn]);
 
   useEffect(() => {
     const pending = readPendingAnalyticsReturn("workspace_credit_topup");
@@ -6807,9 +6803,6 @@ export default function App() {
         setBuilderUpgradeContext(context);
         setIsBuilderUpgradeOpen(true);
       },
-      openBuilderBillingPortal: () => {
-        void openBuilderPlanPortal({ context: "builder" });
-      },
       startBuilderConnectOnboarding: (opts) => {
         void startBuilderConnectOnboarding({
           context: opts?.context ?? "account",
@@ -7023,10 +7016,7 @@ export default function App() {
     setActiveView,
     setSettingsPage,
     isBuilderUpgradeOpen,
-    builderUpgradeContext,
-    isStartingBuilderCheckout,
     builderBillingError,
-    startBuilderPlanCheckout,
     communityModalHostProps: communityUi.modalHostProps,
     appToast,
   });

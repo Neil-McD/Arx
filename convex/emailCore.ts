@@ -2,8 +2,6 @@ import { Resend } from "resend";
 
 export const EMAIL_TEMPLATE_KEYS = [
   "community_access_granted",
-  "builder_plan_upgraded",
-  "builder_plan_downgraded",
   "billing_issue",
   "weekly_member_digest",
   "weekly_founder_digest",
@@ -217,7 +215,6 @@ export function renderEmailTemplate(params: {
   const templateKey = normalizeTemplateKey(params.templateKey);
   const payload = asRecord(params.payload);
   const communityName = readString(payload.communityName) || "your community";
-  const planName = readString(payload.planName) || "your plan";
   const dateLabel = readString(payload.dateLabel);
   const eventTitle = readString(payload.eventTitle) || "Your event";
   const items = readArray(payload.items)
@@ -238,22 +235,6 @@ export function renderEmailTemplate(params: {
         `Your access to ${communityName} is ready`,
         `You can now open ${communityName} and start participating.`,
         "Open community",
-      );
-    case "builder_plan_upgraded":
-      return renderTransactionalTemplate(
-        `Your ${planName} plan is active`,
-        payload,
-        `Your ${planName} plan is active`,
-        `Your Polynet plan change is complete.`,
-        "Open account",
-      );
-    case "builder_plan_downgraded":
-      return renderTransactionalTemplate(
-        `Your plan changed to ${planName}`,
-        payload,
-        `Your plan changed to ${planName}`,
-        `Your Polynet account change has been recorded.`,
-        "Open account",
       );
     case "billing_issue":
       return renderTransactionalTemplate(

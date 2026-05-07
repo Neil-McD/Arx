@@ -315,10 +315,8 @@ export const resolveGateBundle = query({
         allowCommunityTools: entitledCapabilityFamilies.includes("community_tools"),
         allowWebResearch: entitledCapabilityFamilies.includes("web_research"),
         allowWorkspaceTools: entitledCapabilityFamilies.includes("workspace_tools"),
-        allowCommunityCreate:
-          effectiveTier === "builder" || effectiveTier === "architect",
-        allowPersonalMemory:
-          effectiveTier === "builder" || effectiveTier === "architect",
+        allowCommunityCreate: args.authState === "authenticated",
+        allowPersonalMemory: args.authState === "authenticated",
       },
     };
   },

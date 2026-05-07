@@ -1,12 +1,7 @@
-import type { BuilderCheckoutTier } from "./builderBilling";
-
 type BuilderUpgradeModalProps = {
   isOpen: boolean;
-  builderTier: string | null | undefined;
-  isStartingBuilderCheckout: boolean;
   builderBillingError: string | null;
   onClose: () => void;
-  onStartBuilderPlanCheckout: (tier: BuilderCheckoutTier) => void;
 };
 
 export function BuilderUpgradeModal({

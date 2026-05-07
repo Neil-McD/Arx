@@ -78,7 +78,7 @@ function formatCommunitySettingsErrorMessage(error: unknown): string {
   ) {
     return "Only the community owner can change identity, branding, publishing, or deletion settings.";
   }
-  if (message === "community_builder_plan_required") {
+  if (message === "community_payout_access_required") {
     return "Community monetization is not available for this account yet.";
   }
   if (message === "community_stripe_connect_required") {

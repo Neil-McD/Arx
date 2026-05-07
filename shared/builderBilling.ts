@@ -1,17 +1,7 @@
 import type { CommunityBillingPeriod } from "./communityTypes";
 
-export type BuilderBillingStatus = "success" | "cancel" | "return";
-export type BuilderBillingSource = "web" | "unknown";
 export type BuilderUpgradeContextValue = "builder" | "create_community";
-export type BuilderBillingContext = BuilderUpgradeContextValue | "unknown";
 export type BuilderTierUi = "free" | "builder" | "architect";
-export type BuilderCheckoutTier = "builder";
-
-export type BuilderBillingReturn = {
-  status: BuilderBillingStatus;
-  source: BuilderBillingSource;
-  context: BuilderBillingContext;
-};
 
 export type BuilderConnectReturnAction = "refresh" | "return";
 export type BuilderConnectContext = "account" | "community";
@@ -100,55 +90,6 @@ export function formatBuilderTierLabel(
   if (normalizeBuilderTierForUi(value) === "architect") return "Architect";
   if (isBuilderTierBuilder(value)) return "Builder";
   return "Free";
-}
-
-function normalizeBuilderBillingStatus(value: string | null | undefined): BuilderBillingStatus | null {
-  const normalized = String(value ?? "").trim().toLowerCase();
-  if (normalized === "success" || normalized === "cancel" || normalized === "return") {
-    return normalized;
-  }
-  return null;
-}
-
-function normalizeBuilderBillingSource(
-  value: string | null | undefined,
-  fallbackSource: BuilderBillingSource,
-): BuilderBillingSource {
-  const normalized = String(value ?? "").trim().toLowerCase();
-  if (normalized === "web") return normalized;
-  return fallbackSource;
-}
-
-function normalizeBuilderBillingContext(value: string | null | undefined): BuilderBillingContext {
-  const normalized = String(value ?? "").trim().toLowerCase();
-  if (normalized === "builder" || normalized === "create_community") return normalized;
-  return "unknown";
-}
-
-export function parseBuilderBillingReturn(
-  searchParams: URLSearchParams,
-  opts?: { fallbackSource?: BuilderBillingSource },
-): BuilderBillingReturn | null {
-  const status =
-    normalizeBuilderBillingStatus(searchParams.get("billing")) ??
-    normalizeBuilderBillingStatus(searchParams.get("status"));
-  if (!status) return null;
-
-  const source = normalizeBuilderBillingSource(
-    searchParams.get("billing_source") ?? searchParams.get("source"),
-    opts?.fallbackSource ?? "unknown",
-  );
-  const context = normalizeBuilderBillingContext(
-    searchParams.get("billing_context") ?? searchParams.get("context"),
-  );
-
-  return { status, source, context };
-}
-
-export function clearBuilderBillingQueryParams(searchParams: URLSearchParams): void {
-  searchParams.delete("billing");
-  searchParams.delete("billing_source");
-  searchParams.delete("billing_context");
 }
 
 function normalizeBuilderConnectAction(

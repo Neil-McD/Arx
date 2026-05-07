@@ -59,13 +59,11 @@ type WebAccountSettingsSectionProps = {
   openOwnedCommunitySettings: (communityId: string) => void;
   communityInitials: (value: string) => string;
   openBuilderUpgrade: (context: "builder") => void;
-  openBuilderBillingPortal: () => Promise<void> | void;
   startBuilderConnectOnboarding: (opts?: {
     context?: "account" | "community";
     communitySlug?: string | null;
   }) => Promise<void> | void;
   builderBillingError: string | null;
-  isOpeningBuilderBillingPortal: boolean;
   isStartingBuilderConnectOnboarding: boolean;
   canUseDevTierOverride: boolean;
   isSettingDevBuilderTier: boolean;
@@ -83,9 +81,6 @@ type WebAccountSettingsSectionProps = {
 function formatDeleteAccountError(message: string): string {
   if (message.includes("account_delete_owned_communities_blocked")) {
     return "Delete or transfer owned communities before deleting your account.";
-  }
-  if (message.includes("account_delete_active_builder_subscription_blocked")) {
-    return "Cancel your active legacy Builder plan before deleting your account.";
   }
   if (message.includes("account_delete_active_community_subscription_blocked")) {
     return "Cancel active community memberships before deleting your account.";
@@ -130,10 +125,8 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
     communityRoleById,
     openOwnedCommunitySettings,
     communityInitials,
-    openBuilderBillingPortal,
     startBuilderConnectOnboarding,
     builderBillingError,
-    isOpeningBuilderBillingPortal,
     isStartingBuilderConnectOnboarding,
     canUseDevTierOverride,
     isSettingDevBuilderTier,
@@ -304,7 +297,6 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
               max > 0 ? `${ownedCount}/${max} owned ${communityWord}` : `${ownedCount} owned ${communityWord}`;
             const tierLabel = formatBuilderTierLabel(tier);
             const builderStatusLabel = isBuilderTierFree(tier) ? "Free builder" : `${tierLabel} (legacy)`;
-            const canManagePlan = status?.can_manage_plan === true;
             const canMonetizeCommunities = Number(status?.platform_fee_bps ?? 0) > 0;
             const stripeConnectPresentation = buildStripeConnectPresentation({
               builderBillingStatus: status,
@@ -321,19 +313,6 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
                   </div>
                   <div className="auth-actions">
                     <span className="auth-status">Tool balance covers premium tools like Daytona workspaces, web research, and voice input. Connect ChatGPT or add an OpenAI API key in Agent Settings to bring your own inference.</span>
-                    {canManagePlan ? (
-                      <>
-                        <span className="auth-status">Legacy Builder billing is still manageable here.</span>
-                        <button
-                          type="button"
-                          className="secondary"
-                          onClick={() => void openBuilderBillingPortal()}
-                          disabled={isOpeningBuilderBillingPortal}
-                        >
-                          {isOpeningBuilderBillingPortal ? "Opening…" : "Manage legacy plan"}
-                        </button>
-                      </>
-                    ) : null}
                   </div>
                 </div>
                 {canMonetizeCommunities ? (

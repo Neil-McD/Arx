@@ -14,13 +14,6 @@ async function deleteRowsByIndex(ctx: any, tableName: string, indexName: string,
   return rows.length;
 }
 
-function isActiveBuilderEntitlement(row: any, nowMs: number): boolean {
-  if (!row || row.source !== "stripe") return false;
-  if (row.tier !== "builder" && row.tier !== "architect") return false;
-  if (typeof row.endsAt === "number" && row.endsAt <= nowMs) return false;
-  return true;
-}
-
 function isActiveCommunitySubscription(row: any): boolean {
   return row?.status === "active" || row?.status === "past_due" || row?.status === "cancel_at_period_end";
 }
@@ -29,21 +22,13 @@ function hasPayoutAccountState(row: any): boolean {
   return Boolean(row);
 }
 
-async function assertAccountDeletionAllowed(ctx: any, userId: any, nowMs: number) {
+async function assertAccountDeletionAllowed(ctx: any, userId: any) {
   const ownedCommunity = await ctx.db
     .query("communities")
     .withIndex("by_owner", (q: any) => q.eq("ownerId", userId))
     .first();
   if (ownedCommunity) {
     throw new Error("account_delete_owned_communities_blocked");
-  }
-
-  const entitlements = await ctx.db
-    .query("userEntitlements")
-    .withIndex("by_user", (q: any) => q.eq("userId", userId))
-    .collect();
-  if (entitlements.some((row: any) => isActiveBuilderEntitlement(row, nowMs))) {
-    throw new Error("account_delete_active_builder_subscription_blocked");
   }
 
   const communitySubscriptions = await ctx.db
@@ -119,7 +104,7 @@ export const deleteOwnAccount = mutation({
     const userId = actor.dbUserId;
 
     try {
-      await assertAccountDeletionAllowed(ctx, userId, nowMs);
+      await assertAccountDeletionAllowed(ctx, userId);
     } catch (error) {
       await recordCriticalAuditEventBestEffort(ctx, {
         eventKey: `account_delete_blocked:${userId}:${error instanceof Error ? error.message : String(error)}:${nowMs}`,

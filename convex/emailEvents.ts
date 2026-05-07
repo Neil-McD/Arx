@@ -1,13 +1,5 @@
 import { internal } from "./_generated/api";
-import { formatBuilderTierLabel, normalizeBuilderTierForUi } from "../shared/builderBilling";
-import { buildCommunityTabPath, buildSettingsPath } from "../shared/webAppRouteState";
-
-type BuilderPlanTier = "free" | "builder" | "architect";
-type BuilderSubscriptionEmailKind =
-  | "builder_plan_upgraded"
-  | "builder_plan_downgraded"
-  | "billing_issue"
-  | null;
+import { buildCommunityTabPath } from "../shared/webAppRouteState";
 
 function readEnv(name: string): string {
   try {
@@ -42,45 +34,6 @@ function readPublicAppBaseUrl(): string {
 
 function buildAppUrl(path: string): string {
   return new URL(path, `${readPublicAppBaseUrl()}/`).toString();
-}
-
-function normalizeBuilderPlanTier(value: unknown): BuilderPlanTier {
-  return normalizeBuilderTierForUi(typeof value === "string" ? value : null);
-}
-
-function readBuilderPlanRank(value: BuilderPlanTier): number {
-  if (value === "builder" || value === "architect") return 1;
-  return 0;
-}
-
-function normalizeSubscriptionStatus(value: unknown): string {
-  return String(value ?? "")
-    .trim()
-    .toLowerCase();
-}
-
-function isBuilderBillingIssueStatus(value: unknown): boolean {
-  const status = normalizeSubscriptionStatus(value);
-  return (
-    status === "past_due" ||
-    status === "unpaid" ||
-    status === "incomplete" ||
-    status === "incomplete_expired"
-  );
-}
-
-function classifyBuilderSubscriptionEmailEvent(params: {
-  previousTier: BuilderPlanTier;
-  nextTier: BuilderPlanTier;
-  subscriptionStatus: unknown;
-}): BuilderSubscriptionEmailKind {
-  if (isBuilderBillingIssueStatus(params.subscriptionStatus)) {
-    return "billing_issue";
-  }
-  const previousRank = readBuilderPlanRank(params.previousTier);
-  const nextRank = readBuilderPlanRank(params.nextTier);
-  if (previousRank === nextRank) return null;
-  return nextRank > previousRank ? "builder_plan_upgraded" : "builder_plan_downgraded";
 }
 
 export async function enqueueCommunityAccessGrantedEmailInternal(params: {
@@ -155,53 +108,6 @@ export async function enqueueCommunityBillingIssueEmailInternal(params: {
     );
   } catch (error) {
     console.error("community_billing_issue_email_enqueue_failed", error);
-    return { ok: false, skipped: true, reason: "email_enqueue_failed" };
-  }
-}
-
-export async function enqueueBuilderSubscriptionStateEmailInternal(params: {
-  ctx: any;
-  userId: any;
-  previousTier: unknown;
-  nextTier: unknown;
-  subscriptionStatus: unknown;
-  providerSubscriptionId?: unknown;
-  periodMarker: string;
-  nowMs: number;
-}) {
-  try {
-    const previousTier = normalizeBuilderPlanTier(params.previousTier);
-    const nextTier = normalizeBuilderPlanTier(params.nextTier);
-    const templateKey = classifyBuilderSubscriptionEmailEvent({
-      previousTier,
-      nextTier,
-      subscriptionStatus: params.subscriptionStatus,
-    });
-    if (!templateKey) {
-      return { ok: true, skipped: true, reason: "no_builder_subscription_email" };
-    }
-    const subscriptionStatus = normalizeSubscriptionStatus(params.subscriptionStatus);
-    const providerSubscriptionId = String(params.providerSubscriptionId ?? "").trim();
-    const dedupeKey =
-      templateKey === "billing_issue"
-        ? `builder_billing_issue:${String(params.userId)}:${providerSubscriptionId || "unknown"}:${subscriptionStatus || "unknown"}:${params.periodMarker}`
-        : `builder_plan_change:${String(params.userId)}:${previousTier}:${nextTier}:${params.periodMarker}`;
-    return await params.ctx.runMutation(
-      (internal as any).email.enqueueEmailJobInternal,
-      {
-        kind: templateKey,
-        recipientUserId: params.userId,
-        templateKey,
-        payload: {
-          planName: formatBuilderTierLabel(nextTier),
-          actionUrl: buildAppUrl(buildSettingsPath("account")),
-        },
-        dedupeKey,
-        nowMs: params.nowMs,
-      },
-    );
-  } catch (error) {
-    console.error("builder_subscription_state_email_enqueue_failed", error);
     return { ok: false, skipped: true, reason: "email_enqueue_failed" };
   }
 }

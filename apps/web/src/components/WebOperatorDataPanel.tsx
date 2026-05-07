@@ -73,8 +73,8 @@ function fulfilledValue<T>(result: PromiseSettledResult<T>): T | null {
   return result.status === "fulfilled" ? result.value : null;
 }
 
-function fulfilledList<T>(result: PromiseSettledResult<T[]>): T[] {
-  return result.status === "fulfilled" ? result.value : [];
+function fulfilledList<T>(result: PromiseSettledResult<T[]>): T[] | null {
+  return result.status === "fulfilled" ? result.value : null;
 }
 
 function logRejectedOperatorSection(label: string, result: PromiseSettledResult<unknown>): void {
@@ -97,19 +97,15 @@ export function useOperatorDashboardData(params: {
   useEffect(() => {
     let isAlive = true;
     if (!params.enabled) {
-      setState(createEmptyOperatorDashboardState());
       setIsLoading(false);
-      setError(null);
       return;
     }
     if (!params.session) {
-      setState(createEmptyOperatorDashboardState());
       setIsLoading(false);
       setError("Sign in with an operator account to view this surface.");
       return;
     }
 
-    setState(createEmptyOperatorDashboardState());
     setIsLoading(true);
     setError(null);
     const session = params.session;
@@ -153,12 +149,24 @@ export function useOperatorDashboardData(params: {
       .then(
         (nextState) => {
           if (!isAlive) return;
-          setState(nextState);
+          setState((prev) => ({
+            overview: nextState.overview ?? prev.overview,
+            monetization: nextState.monetization ?? prev.monetization,
+            webDeploy: nextState.webDeploy ?? prev.webDeploy,
+            authAccess: nextState.authAccess ?? prev.authAccess,
+            securityAudit: nextState.securityAudit ?? prev.securityAudit,
+            runtimeTools: nextState.runtimeTools ?? prev.runtimeTools,
+            builders: nextState.builders ?? prev.builders,
+            risks: nextState.risks ?? prev.risks,
+            events: nextState.events ?? prev.events,
+          }));
         },
         (nextError) => {
           if (!isAlive) return;
           const message = nextError instanceof Error ? nextError.message : "Operator dashboard unavailable.";
-          setState(createEmptyOperatorDashboardState());
+          if (message.includes("operator_access_forbidden")) {
+            setState(createEmptyOperatorDashboardState());
+          }
           setError(message.includes("operator_access_forbidden") ? "Operator access required." : message);
         },
       )
@@ -391,12 +399,6 @@ function formatAuditEventType(value: string): string {
       return "Stripe webhook received";
     case "stripe_connect_account_synced":
       return "Stripe Connect synced";
-    case "builder_entitlement_granted":
-      return "Builder entitlement granted";
-    case "builder_entitlement_revoked":
-      return "Builder entitlement revoked";
-    case "builder_subscription_synced":
-      return "Builder subscription synced";
     case "community_subscription_synced":
       return "Community subscription synced";
     default:

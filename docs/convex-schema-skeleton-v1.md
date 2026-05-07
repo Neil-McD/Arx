@@ -1,8 +1,10 @@
 # Convex Schema Skeleton v1
 
-Status: draft  
-Worktree: `/Users/neilmcdevitt/code/arx/.worktrees/daytona`  
+Status: archived / superseded  
+Worktree: historical Daytona snapshot, not the active worktree  
 Goal: define a minimal Convex data shape that preserves current product contracts while reducing drift and duplication.
+
+This file is retained as historical planning evidence only. Current schema cleanup guidance lives in `docs/schema-data-migration-discipline.md`.
 
 ## 1) Design Rules
 

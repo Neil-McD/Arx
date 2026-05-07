@@ -113,8 +113,8 @@ assert.doesNotMatch(
 );
 assert.match(
   app,
-  /setOperatorAccess\(null\)[\s\S]*loadOperatorAccessCanonical\(\{ session \}\)[\s\S]*setOperatorAccess\(access\)/,
-  "workspace must only enable operator UI after the gated operator access query succeeds",
+  /operatorAccessState\?\.subject === canonicalSessionUserId \? operatorAccessState\.access : null[\s\S]*loadOperatorAccessCanonical\(\{ session \}\)[\s\S]*setOperatorAccessState\(\{ subject: operatorSubject, access \}\)/,
+  "workspace must only enable operator UI after the gated operator access query succeeds for the current subject",
 );
 assert.match(
   app,

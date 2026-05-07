@@ -4,11 +4,6 @@ import { v } from "convex/values";
 export const CRITICAL_AUDIT_EVENT_TYPES = [
   "account_delete_blocked",
   "account_delete_completed",
-  "builder_checkout_attached_to_stripe",
-  "builder_checkout_created",
-  "builder_entitlement_granted",
-  "builder_entitlement_revoked",
-  "builder_subscription_synced",
   "community_checkout_attached_to_stripe",
   "community_checkout_created",
   "community_purchase_claim_created",
@@ -77,17 +72,6 @@ const CRITICAL_AUDIT_METADATA_BLOCKED_KEY_PARTS = [
 const CRITICAL_AUDIT_METADATA_ALLOWLIST: Record<string, readonly string[]> = {
   account_delete_blocked: ["reason"],
   account_delete_completed: [],
-  builder_checkout_created: ["targetTier", "expiresAt"],
-  builder_checkout_attached_to_stripe: ["providerCustomerId", "providerSubscriptionId", "providerPriceId"],
-  builder_entitlement_granted: ["targetTier", "subscriptionStatus", "providerPriceId"],
-  builder_entitlement_revoked: ["subscriptionStatus", "revokedCount"],
-  builder_subscription_synced: [
-    "targetTier",
-    "subscriptionStatus",
-    "grantsAccess",
-    "currentPeriodStartAt",
-    "currentPeriodEndAt",
-  ],
   community_checkout_created: [
     "billingPeriod",
     "pricePointId",

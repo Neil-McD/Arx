@@ -14,7 +14,7 @@ Launch a community intelligence system that members can join, use, and pay for w
 
 The first version should be simple: one clear community, one useful agent, one believable access model, and enough shared knowledge for members to get value quickly.
 
-Every authenticated free user can build one community. Paid tool usage is handled through tool balance, not a monthly Builder subscription.
+Every authenticated free user can build one community. Paid tool usage is handled through tool balance, not a platform-plan subscription.
 
 ## Before You Start
 

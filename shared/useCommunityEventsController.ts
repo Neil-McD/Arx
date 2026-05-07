@@ -29,6 +29,7 @@ type UseCommunityEventsControllerArgs<SessionT extends SessionLike> = {
   setIsLoadingCommunityEvents: Dispatch<SetStateAction<boolean>>;
   setCommunityEventsError: Dispatch<SetStateAction<string | null>>;
   setCommunityEventsSuccess: Dispatch<SetStateAction<boolean>>;
+  invalidateCommunityEventsCache?: (communityId: string) => void;
 };
 
 export function useCommunityEventsController<SessionT extends SessionLike>(
@@ -47,7 +48,12 @@ export function useCommunityEventsController<SessionT extends SessionLike>(
     const current = argsRef.current;
     const usableSession = await resolveUsableSession(session, current.ensureSession);
     if (!usableSession) return;
+    const requestedCommunityId = String(communityId ?? "").trim();
+    if (!requestedCommunityId) return;
     const generation = (eventsLoadGenerationRef.current += 1);
+    const isCurrentEventsLoad = () =>
+      eventsLoadGenerationRef.current === generation &&
+      String(argsRef.current.activeCommunityId ?? "").trim() === requestedCommunityId;
     const fetchController = beginScopedAbortRequest({
       inFlightByKind: fetchAbortControllersRef.current,
       kind: "community_events_list",
@@ -57,14 +63,16 @@ export function useCommunityEventsController<SessionT extends SessionLike>(
     try {
       const rows = await listCloudCommunityEvents({
         session: usableSession,
-        communityId,
+        communityId: requestedCommunityId,
         startIso: range.startIso,
         endIso: range.endIso,
         limit: 500,
       });
+      if (!isCurrentEventsLoad()) return;
       current.setCommunityEvents(rows);
     } catch (error) {
       if (isAbortError(error)) return;
+      if (!isCurrentEventsLoad()) return;
       const message = error instanceof Error ? error.message : "Could not load community events.";
       current.setCommunityEventsError(message);
     } finally {
@@ -73,7 +81,7 @@ export function useCommunityEventsController<SessionT extends SessionLike>(
         kind: "community_events_list",
         controller: fetchController,
       });
-      if (eventsLoadGenerationRef.current === generation) {
+      if (isCurrentEventsLoad()) {
         current.setIsLoadingCommunityEvents(false);
       }
     }
@@ -101,6 +109,7 @@ export function useCommunityEventsController<SessionT extends SessionLike>(
           ...payload,
         },
       });
+      current.invalidateCommunityEventsCache?.(current.activeCommunityId);
       await loadCommunityEvents(current.activeCommunityId, session, range);
       current.setCommunityEventsSuccess(true);
       window.setTimeout(() => current.setCommunityEventsSuccess(false), 2000);
@@ -124,6 +133,7 @@ export function useCommunityEventsController<SessionT extends SessionLike>(
         session,
         eventId,
       });
+      current.invalidateCommunityEventsCache?.(current.activeCommunityId);
       await loadCommunityEvents(current.activeCommunityId, session, range);
       return true;
     } catch (error) {

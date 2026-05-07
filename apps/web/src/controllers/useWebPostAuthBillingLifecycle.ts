@@ -1,5 +1,4 @@
 import { useEffect, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
-import type { BuilderBillingReturn } from "../../../../shared/builderBilling";
 import {
   readPendingPublicJoinCommunityId,
   readPendingPublicJoinCommunitySlug,
@@ -13,43 +12,27 @@ type SessionLike = {
   };
 };
 
-type BuilderBillingStatusLike = {
-  builder_tier: string;
-  max_communities: number;
-};
-
-type CommunityLike = {
-  id: string;
-};
-
 export function useWebPostAuthBillingLifecycle<
   TSession extends SessionLike,
-  TBillingStatus extends BuilderBillingStatusLike,
+  TBillingStatus,
 >(params: {
   session: TSession | null;
   sessionRef: MutableRefObject<TSession | null>;
   claimTokenParam: string | null;
   isRedeemingClaim: boolean;
   isJoiningPublicCommunity: boolean;
-  builderBillingReturn: BuilderBillingReturn | null;
-  builderBillingStatus: TBillingStatus | null;
-  communities: CommunityLike[];
-  communityRoleById: Record<string, string>;
   lastAutoRedeemPendingPurchasesUserIdRef: MutableRefObject<string | null>;
   autoRedeemPendingPurchasesAttemptRef: MutableRefObject<number>;
   autoRedeemPendingPurchasesTimeoutRef: MutableRefObject<number | null>;
   setBuilderBillingStatus: Dispatch<SetStateAction<TBillingStatus | null>>;
   setBuilderBillingError: Dispatch<SetStateAction<string | null>>;
   setIsLoadingBuilderBilling: Dispatch<SetStateAction<boolean>>;
-  setIsFinalizingBuilderReturn: Dispatch<SetStateAction<boolean>>;
-  clearBuilderBillingReturn: () => void;
   getAuthUid: (session: TSession) => string | null;
   redeemPurchaseClaim: (token: string) => Promise<void>;
   redeemPendingPurchases: (args: { navigate: boolean; silentNoop: boolean }) => Promise<number>;
   loadPendingPurchaseClaims: (session: TSession) => Promise<void>;
   loadBuilderBillingStatus: (session: TSession) => Promise<TBillingStatus | null>;
   joinPublicCommunity: (args: { communitySlug: string | null; communityId?: string }) => Promise<void>;
-  resumeCreateCommunityIntent: () => void;
 }) {
   useEffect(() => {
     const token = (params.claimTokenParam ?? "").trim();
@@ -127,63 +110,6 @@ export function useWebPostAuthBillingLifecycle<
     }
     void params.loadBuilderBillingStatus(session);
   }, [params.session]);
-
-  useEffect(() => {
-    if (!params.builderBillingReturn) return;
-    const session = params.session;
-    if (!session) return;
-    if (params.builderBillingReturn.status === "cancel") return;
-
-    let cancelled = false;
-    const run = async () => {
-      params.setIsFinalizingBuilderReturn(true);
-      try {
-        const wantsCreate = params.builderBillingReturn?.context === "create_community";
-        const maxAttempts = params.builderBillingReturn?.status === "success" ? 30 : wantsCreate ? 10 : 1;
-        const ownedCount = params.communities.reduce(
-          (acc, community) => acc + (params.communityRoleById[community.id] === "owner" ? 1 : 0),
-          0,
-        );
-        let lastStatus: BuilderBillingStatusLike | null = null;
-        for (let attempt = 0; attempt < maxAttempts; attempt++) {
-          if (cancelled) return;
-          const status = await params.loadBuilderBillingStatus(session);
-          lastStatus = status;
-          const max = status?.max_communities ?? 0;
-          const hasCapacity = max > 0 && ownedCount < max;
-          if (!wantsCreate || hasCapacity) break;
-          if (params.builderBillingReturn?.status !== "success" && !wantsCreate) break;
-          await new Promise((resolve) => window.setTimeout(resolve, 1000));
-        }
-
-        if (cancelled) return;
-        if (!wantsCreate) {
-          params.clearBuilderBillingReturn();
-          return;
-        }
-        const max = lastStatus?.max_communities ?? params.builderBillingStatus?.max_communities ?? 0;
-        if (max <= 0) {
-          params.setBuilderBillingError("Your account cannot create a community yet.");
-          params.clearBuilderBillingReturn();
-          return;
-        }
-        if (max > 0 && ownedCount >= max) {
-          params.setBuilderBillingError("You've reached your community limit.");
-          params.clearBuilderBillingReturn();
-          return;
-        }
-        params.resumeCreateCommunityIntent();
-        params.clearBuilderBillingReturn();
-      } finally {
-        if (!cancelled) params.setIsFinalizingBuilderReturn(false);
-      }
-    };
-
-    void run();
-    return () => {
-      cancelled = true;
-    };
-  }, [params.builderBillingReturn, params.session]);
 
   useEffect(() => {
     const session = params.session;

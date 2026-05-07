@@ -251,6 +251,7 @@ export default defineSchema({
     sessionId: v.string(),
     mode: v.union(
       v.literal("community_join"),
+      // Historical rows only. No first-party code creates Builder plan checkout sessions.
       v.literal("builder_upgrade"),
       v.literal("workspace_credit_topup"),
     ),

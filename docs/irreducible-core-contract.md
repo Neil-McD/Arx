@@ -39,14 +39,12 @@ Core AI-agent paths:
 
 - User-funded ChatGPT lane path for eligible OpenAI aliases.
 - Platform and public fallback lanes.
-- Daytona workbench remains a paid builder capability.
+- Daytona workspace tooling remains available to authenticated users with sufficient tool balance.
 - Public and private edge routing contracts remain explicit.
 
 ## Monetization Rails (Must Keep)
 
 - Public funnel -> checkout start -> checkout finalize -> webhook chain.
-- Builder checkout start.
-- Builder billing portal.
 - Connect onboard start (Stripe Connect account onboarding).
 - Webhook idempotency + entitlement reconciliation path.
 

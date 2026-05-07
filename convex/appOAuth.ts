@@ -827,7 +827,7 @@ export const claimAppOAuthFinalizeInternal = internalMutation({
       finalizeStartedAt: args.nowMs,
       finalizeErrorMessage: undefined,
     });
-    return { status: "claimed" };
+    return { status: "claimed", row };
   },
 });
 

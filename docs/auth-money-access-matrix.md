@@ -19,12 +19,11 @@ Scope: canonical web runtime, community monetization, provider-funded inference,
    - uses ChatGPT or an OpenAI API key for personal inference
    - uses tool balance for Daytona workspaces, web research, and voice input
 3. `builder` / `architect`
-   - retained legacy paid creator entitlements
-   - may retain older platform-fee terms until migrated or cancelled
-   - can receive `workspace_tools` capability when a project context is active
+   - historical tier labels that may still exist in data
+   - no self-serve platform subscription or checkout path
    - does not define the default monetization model
 
-The self-serve Builder subscription is deprecated. Builder status now means the user can create and manage a community; it does not require a new monthly platform subscription.
+The self-serve Builder subscription has been removed. Builder status now means an authenticated user can create and manage a community; paid tools are funded through tool balance.
 
 ## 1) Irreducible Contract
 
@@ -72,7 +71,7 @@ Entitled capability families come from auth state and tier:
 | Auth state | Tier | Entitled capability families |
 |---|---|---|
 | anonymous | n/a | `[]` |
-| authenticated | `free` | `["product_docs","community_tools","web_research"]` |
+| authenticated | `free` | `["product_docs","community_tools","web_research","workspace_tools"]` |
 | authenticated | `builder` / `architect` | `["product_docs","community_tools","web_research","workspace_tools"]` |
 
 Active capability families are narrower than entitled capability families:
@@ -87,7 +86,7 @@ Tool exposure is not free usage. Daytona, web research, and voice input must res
 ## 4) Community Money Rules
 
 1. Free authenticated users can create one community.
-2. Community creation is limited by `max_communities`, not by requiring a new Builder checkout.
+2. Community creation is limited by `max_communities`, not by requiring a new platform-plan checkout.
 3. Paid community checkout requires:
    - paid community entry policy
    - active price point
@@ -99,7 +98,7 @@ Tool exposure is not free usage. Daytona, web research, and voice input must res
 7. Payout readiness is separate from member entitlement.
 8. Community role is separate from paid access.
 9. The default platform fee for free-builder community revenue is 10%.
-10. Legacy paid creator entitlements may retain different platform-fee terms until migrated or cancelled.
+10. Legacy paid creator billing does not create or renew platform-plan access.
 
 ## 5) Paid-Tool Balance Rules
 
@@ -135,6 +134,6 @@ Any change to tier semantics, runtime lane routing, paid community checkout, Str
 1. Update this matrix and product billing docs together.
 2. Regenerate product docs artifacts.
 3. Keep `npm run check:gate-parity` green.
-4. Keep `npm run check:builder-billing-redirect-authority-proof` green.
+4. Keep `npm run check:no-builder-plan-infra` green.
 5. Keep `npm run check:workspace-credit-accounting-proof` green.
 6. Keep `npm run check:product-docs-index-proof` green.

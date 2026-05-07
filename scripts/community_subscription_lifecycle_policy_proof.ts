@@ -29,7 +29,7 @@ type SubscriptionRow = {
 };
 
 type CheckoutSession = {
-  mode: "community_join" | "builder_upgrade";
+  mode: "community_join";
   claimToken: string;
   status: "pending" | "complete" | "expired";
   expiresAt: number;

@@ -1,8 +1,10 @@
 # Convex Hardening Plan v1
 
-Status: active
-Worktree: `/Users/neilmcdevitt/code/arx/.worktrees/daytona`
+Status: archived / superseded
+Worktree: historical Daytona snapshot, not the active worktree
 Scope: post-Supabase-cut hardening for the Convex-native platform
+
+This file is retained as historical planning evidence only. Use `/Users/neilmcdevitt/code/arx` and `docs/alpha-release-workflow.md` for current release truth.
 
 ## 1) Current Position
 

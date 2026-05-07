@@ -62,7 +62,7 @@ function resolveUserAccessPolicyViaCanonicalGate(input: {
 
   const threadMode: ThreadMode = isAuthenticated ? "multi_cloud" : "single_guest";
   const entitledCapabilityFamilies = policy.entitledCapabilityFamilies;
-  const canCreateCommunityInAlpha = hasWorkbenchAccess;
+  const canCreateCommunityInAlpha = isAuthenticated;
 
   return {
     surface: input.surface,
@@ -78,6 +78,6 @@ function resolveUserAccessPolicyViaCanonicalGate(input: {
     allowWorkspaceTools: entitledCapabilityFamilies.includes("workspace_tools"),
     allowCommunityJoin: isAuthenticated,
     allowCommunityCreate: canCreateCommunityInAlpha,
-    allowPersonalMemory: hasWorkbenchAccess,
+    allowPersonalMemory: isAuthenticated,
   };
 }

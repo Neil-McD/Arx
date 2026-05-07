@@ -91,7 +91,7 @@ After runtime-surface schema cleanup, use:
 1. `npm run convex:codegen`
 2. `npm run check:gate-parity`
 3. `npm run check:runtime-turn-contract-guard`
-4. `npm run build` in `/Users/neilmcdevitt/code/arx/.worktrees/daytona/apps/web`
+4. `npm run build` from `/Users/neilmcdevitt/code/arx`
 
 ## 8) Practical Rule
 

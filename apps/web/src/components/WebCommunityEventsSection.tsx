@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import type {
   CommunityEvent,
   CommunityEventsActions,
@@ -142,6 +142,10 @@ function buildGoogleCalendarUrl(event: CommunityEvent): string {
     location: event.location_label ?? event.url ?? "",
   });
   return `https://calendar.google.com/calendar/render?${params.toString()}`;
+}
+
+function isRecurringCommunityEvent(event: CommunityEvent | null): boolean {
+  return !!event && event.recurrence_frequency !== "none";
 }
 
 function EventModal(props: {
@@ -288,6 +292,8 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
+  const wasLoadingEventsRef = useRef(false);
+  const hasCompletedEventsLoadRef = useRef(false);
 
   const monthDate = useMemo(() => startOfLocalMonth(new Date(state.visibleMonthIso)), [state.visibleMonthIso]);
   const days = useMemo(() => buildCalendarDays(monthDate), [monthDate]);
@@ -303,7 +309,27 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
     return grouped;
   }, [state.events]);
   const selectedEvents = eventsByDay.get(selectedDayKey) ?? [];
+  const editingSourceEvent = useMemo(
+    () =>
+      editingEventId
+        ? state.events.find((event) => event.parent_event_id === editingEventId) ?? null
+        : null,
+    [editingEventId, state.events],
+  );
+  const eventModalTitle = editingEventId
+    ? isRecurringCommunityEvent(editingSourceEvent)
+      ? "Edit series"
+      : "Edit event"
+    : "New event";
   const currentRange = actions.getVisibleRange(state.visibleMonthIso);
+  useEffect(() => {
+    if (!state.isLoadingEvents && wasLoadingEventsRef.current) {
+      hasCompletedEventsLoadRef.current = true;
+    }
+    wasLoadingEventsRef.current = state.isLoadingEvents;
+  }, [state.isLoadingEvents]);
+  const showInitialEventsLoading =
+    state.isLoadingEvents && state.events.length === 0 && !hasCompletedEventsLoadRef.current;
 
   const openNewEvent = (dayKey: string | null) => {
     setLocalError(null);
@@ -318,7 +344,12 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
   };
 
   const confirmCancelEvent = (event: CommunityEvent) => {
-    const confirmed = window.confirm(`Cancel "${event.title}"? This will remove it from the calendar.`);
+    const isRecurring = isRecurringCommunityEvent(event);
+    const confirmed = window.confirm(
+      isRecurring
+        ? `Cancel "${event.title}" series? This will remove every occurrence from the calendar.`
+        : `Cancel "${event.title}"? This will remove it from the calendar.`,
+    );
     if (!confirmed) return;
     void actions.cancelEvent(event.parent_event_id, currentRange);
   };
@@ -420,6 +451,9 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
 
       {state.eventsSuccess ? <div className="success-toast">Event saved.</div> : null}
       {state.eventsError ? <div className="community-event-error">{state.eventsError}</div> : null}
+      {state.isLoadingEvents && !showInitialEventsLoading ? (
+        <div className="analytics-refreshing-note">Refreshing events...</div>
+      ) : null}
 
       <div className="community-events-shell">
         <section className="community-events-calendar" aria-label={formatMonthLabel(monthDate)}>
@@ -443,6 +477,8 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
                 <button
                   key={dayKey}
                   type="button"
+                  aria-label={`${dayKey}, ${dayEvents.length} event${dayEvents.length === 1 ? "" : "s"}`}
+                  aria-pressed={selectedDayKey === dayKey}
                   className={[
                     "community-events-day",
                     isCurrentMonth ? "" : "is-muted",
@@ -451,6 +487,12 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
                   onClick={() => setSelectedDayKey(dayKey)}
                 >
                   <span className="community-events-day-number">{day.getDate()}</span>
+                  {dayEvents.length > 0 ? (
+                    <span className="community-events-day-marker" aria-hidden="true">
+                      <span className="community-events-day-dot" />
+                      <span className="community-events-day-count">{dayEvents.length}</span>
+                    </span>
+                  ) : null}
                   {dayEvents.slice(0, 2).map((event) => (
                     <span key={event.id} className="community-events-day-pill">
                       {event.title}
@@ -472,7 +514,7 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
               <div className="community-events-agenda-date">{selectedDayKey}</div>
             </div>
           </div>
-          {state.isLoadingEvents ? (
+          {showInitialEventsLoading ? (
             <div className="community-events-muted">Loading events...</div>
           ) : selectedEvents.length === 0 ? (
             <div className="community-events-empty">
@@ -480,60 +522,63 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
             </div>
           ) : (
             <div className="community-events-agenda-list">
-              {selectedEvents.map((event) => (
-                <article key={event.id} className="community-events-agenda-item">
-                  <div className="community-events-agenda-item-top">
-                    <h4>{event.title}</h4>
-                    {capabilities.canManageEvents ? (
-                      <div className="community-events-agenda-actions">
-                        <button type="button" onClick={() => openEditEvent(event)}>
-                          Edit
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => confirmCancelEvent(event)}
-                        >
-                          Cancel event
-                        </button>
-                      </div>
-                    ) : null}
-                  </div>
-                  <div className="community-events-agenda-meta">{formatEventTime(event)}</div>
-                  {event.recurrence_frequency !== "none" ? (
-                    <div className="community-events-agenda-meta">
-                      Repeats {event.recurrence_frequency}
-                      {event.recurrence_until ? ` until ${new Date(event.recurrence_until).toLocaleDateString()}` : ""}
-                    </div>
-                  ) : null}
-                  {event.location_label || event.url ? (
-                    <div className="community-events-agenda-meta community-events-agenda-location-row">
-                      {event.location_label ? <span>{event.location_label}</span> : null}
-                      {event.url ? (
-                        <a className="community-events-open-link" href={event.url} target="_blank" rel="noreferrer">
-                          Open link
-                        </a>
+              {selectedEvents.map((event) => {
+                const isRecurring = isRecurringCommunityEvent(event);
+                return (
+                  <article key={event.id} className="community-events-agenda-item">
+                    <div className="community-events-agenda-item-top">
+                      <h4>{event.title}</h4>
+                      {capabilities.canManageEvents ? (
+                        <div className="community-events-agenda-actions">
+                          <button type="button" onClick={() => openEditEvent(event)}>
+                            {isRecurring ? "Edit series" : "Edit event"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => confirmCancelEvent(event)}
+                          >
+                            {isRecurring ? "Cancel series" : "Cancel event"}
+                          </button>
+                        </div>
                       ) : null}
                     </div>
-                  ) : null}
-                  {event.description_md ? (
-                    <p className="community-events-agenda-description">{event.description_md}</p>
-                  ) : null}
-                  <a
-                    className="community-events-google-calendar-link"
-                    href={buildGoogleCalendarUrl(event)}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    <img
-                      className="community-events-google-calendar-icon"
-                      src="/app-logos/google-calendar.svg"
-                      alt=""
-                      aria-hidden="true"
-                    />
-                    <span>Add to Google Calendar</span>
-                  </a>
-                </article>
-              ))}
+                    <div className="community-events-agenda-meta">{formatEventTime(event)}</div>
+                    {event.recurrence_frequency !== "none" ? (
+                      <div className="community-events-agenda-meta">
+                        Repeats {event.recurrence_frequency}
+                        {event.recurrence_until ? ` until ${new Date(event.recurrence_until).toLocaleDateString()}` : ""}
+                      </div>
+                    ) : null}
+                    {event.location_label || event.url ? (
+                      <div className="community-events-agenda-meta community-events-agenda-location-row">
+                        {event.location_label ? <span>{event.location_label}</span> : null}
+                        {event.url ? (
+                          <a className="community-events-open-link" href={event.url} target="_blank" rel="noreferrer">
+                            Open link
+                          </a>
+                        ) : null}
+                      </div>
+                    ) : null}
+                    {event.description_md ? (
+                      <p className="community-events-agenda-description">{event.description_md}</p>
+                    ) : null}
+                    <a
+                      className="community-events-google-calendar-link"
+                      href={buildGoogleCalendarUrl(event)}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      <img
+                        className="community-events-google-calendar-icon"
+                        src="/app-logos/google-calendar.svg"
+                        alt=""
+                        aria-hidden="true"
+                      />
+                      <span>Add to Google Calendar</span>
+                    </a>
+                  </article>
+                );
+              })}
             </div>
           )}
         </aside>
@@ -544,7 +589,7 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
           draft={draft}
           isSaving={isSaving}
           error={localError}
-          title={editingEventId ? "Edit event" : "New event"}
+          title={eventModalTitle}
           onChange={setDraft}
           onClose={() => {
             if (isSaving) return;

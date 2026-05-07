@@ -13,9 +13,6 @@ type PendingAuthIntentHandlers = {
   join_public_community: (
     payload: Extract<PendingAuthIntent, { reason: "join_public_community" }>["payload"],
   ) => void;
-  start_builder_checkout: (
-    payload: Extract<PendingAuthIntent, { reason: "start_builder_checkout" }>["payload"],
-  ) => void;
   redeem_pending_purchases: (
     payload: Extract<PendingAuthIntent, { reason: "redeem_pending_purchases" }>["payload"],
   ) => void;
@@ -43,9 +40,6 @@ export function routePendingAuthIntent(intent: PendingAuthIntent, handlers: Pend
       return;
     case "join_public_community":
       handlers.join_public_community(intent.payload);
-      return;
-    case "start_builder_checkout":
-      handlers.start_builder_checkout(intent.payload);
       return;
     case "redeem_pending_purchases":
       handlers.redeem_pending_purchases(intent.payload);

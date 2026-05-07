@@ -22,16 +22,6 @@ export function getStripeClient(): Stripe {
   return stripeClient;
 }
 
-export function readStripeBuilderPriceId(): string {
-  const priceId = readEnv(
-    "STRIPE_BUILDER_PRICE_ID",
-    "ARX_STRIPE_BUILDER_PRICE_ID",
-    "BUILDER_STRIPE_PRICE_ID",
-  );
-  if (!priceId) throw new Error("stripe_builder_price_id_missing");
-  return priceId;
-}
-
 export function readStripeWorkspaceCreditTopupPriceId(): string {
   const priceId = readEnv(
     "STRIPE_WORKSPACE_CREDIT_TOPUP_PRICE_ID",
@@ -57,10 +47,4 @@ export async function verifyStripeWebhookSignature(args: {
     args.signature,
     readStripeWebhookSecret(),
   );
-}
-
-export function isBuilderStripePriceId(raw: unknown): boolean {
-  const candidate = String(raw ?? "").trim();
-  if (!candidate) return false;
-  return candidate === readStripeBuilderPriceId();
 }

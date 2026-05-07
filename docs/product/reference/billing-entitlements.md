@@ -12,7 +12,7 @@ last_verified: 2026-05-06
 
 Billing is the payment system. Entitlements are the access truth derived from verified payment, grants, membership, or plan state.
 
-Free authenticated users are builders by default for one owned community. The self-serve Builder subscription is deprecated. Tool balance is the canonical paid-tool meter for Daytona workspaces, web research, and voice input. Tool balance is shown to users in dollars, is non-refundable, and is tracked internally as integer credit units. LLM inference should be supplied through the user's connected ChatGPT account or OpenAI API key.
+Free authenticated users are builders by default for one owned community. The self-serve Builder subscription has been removed. Tool balance is the canonical paid-tool meter for Daytona workspaces, web research, and voice input. Tool balance is shown to users in dollars, is non-refundable, and is tracked internally as integer credit units. LLM inference should be supplied through the user's connected ChatGPT account or OpenAI API key.
 
 ## Builder Revenue Path
 
@@ -29,7 +29,7 @@ The simple cash path is:
 
 This is the product value loop: the builder packages expertise into a community intelligence system, members pay for access to that system, and Polynet keeps access and payout state explicit.
 
-The current default platform fee for free-builder community revenue is 10%. Legacy paid creator entitlements may retain their previous terms until migrated or cancelled.
+The current default platform fee for free-builder community revenue is 10%. Legacy paid creator billing does not create or renew platform-plan access.
 
 Paid-tool usage is priced through tool balance. Daytona workspace usage targets 50% gross margin by charging roughly 2x estimated vendor compute cost, then settling actual usage and refunding unused reservations. Web research and voice input use simple alpha tariffs with centralized vendor-cost estimates, and should still write tool, vendor, Polynet price, raw cost estimate, and settlement evidence into the internal credit ledger.
 

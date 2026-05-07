@@ -186,7 +186,7 @@ export function resolveEntitledCapabilityFamiliesForGate(input: {
     tier: input?.tier,
   });
   if (effectiveTier === "anon_free") return [];
-  if (effectiveTier === "auth_free") return ["product_docs", "community_tools", "web_research"];
+  if (effectiveTier === "auth_free") return ["product_docs", "community_tools", "web_research", "workspace_tools"];
   return ["product_docs", "community_tools", "web_research", "workspace_tools"];
 }
 

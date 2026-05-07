@@ -78,6 +78,10 @@ function main() {
     "callbackCodeEncryptedHex: undefined",
     "clientSecretEncryptedHex: undefined",
     "finalizeUserPlatformAppOAuth",
+    "claimAppOAuthFinalizeInternal",
+    "completeAppOAuthFinalizeInternal",
+    "failAppOAuthFinalizeInternal",
+    "APP_OAUTH_FINALIZE_PROCESSING_TIMEOUT_MS",
     "authorizationUrl.searchParams.set(\"resource\", metadata.resource)",
     "resolveOAuthTokenResourceMode",
     "tokenResourceMode === \"token_and_refresh\"",
@@ -133,6 +137,8 @@ function main() {
     "resolveAuthenticatedActionUser",
     "String(row.userId) !== String(userId)",
     "sha256HexText(finalizeToken)",
+    "claimAppOAuthFinalizeInternal",
+    "claim?.status !== \"claimed\"",
     "callbackCodeEncryptedHex",
     "claimAppOAuthFinalizeInternal",
     "claim?.status !== \"claimed\"",
@@ -143,6 +149,8 @@ function main() {
     "completeAppOAuthFinalizeInternal",
     "failAppOAuthFinalizeInternal",
     "validateDeveloperAppInternal",
+    "completeAppOAuthFinalizeInternal",
+    "failAppOAuthFinalizeInternal",
   ]) {
     assert.ok(
       finalizerSource.includes(required),
@@ -180,13 +188,13 @@ function main() {
   const schemaSource = readText(new URL("../convex/schema.ts", import.meta.url));
   assert.ok(
     schemaSource.includes("clientSecretEncryptedHex") &&
-    schemaSource.includes("callbackCodeEncryptedHex") &&
-    schemaSource.includes("finalizeTokenHash") &&
-    schemaSource.includes("finalizeStatus") &&
-    schemaSource.includes("finalizeResultJson") &&
-    schemaSource.includes("resource: v.string()") &&
-    !schemaSource.includes("clientSecret: v.optional(v.string())"),
-    "Transient OAuth state must keep dynamic secrets/callback codes encrypted, resource-bound, and one-shot finalizer stateful",
+      schemaSource.includes("callbackCodeEncryptedHex") &&
+      schemaSource.includes("finalizeTokenHash") &&
+      schemaSource.includes("finalizeStatus") &&
+      schemaSource.includes("finalizeResultJson") &&
+      schemaSource.includes("resource: v.string()") &&
+      !schemaSource.includes("clientSecret: v.optional(v.string())"),
+    "Transient OAuth state must keep dynamic secrets/callback codes encrypted, resource-bound, and finalization-idempotent",
   );
 
   const validationSource = readText(new URL("../convex/appValidation.ts", import.meta.url));
@@ -214,6 +222,13 @@ function main() {
     routeLifecycleSource.includes('url.searchParams.has("app_oauth")'),
     "Route normalization must preserve app_oauth return params until the app finalizer consumes them",
   );
+  const appSource = readText(new URL("../apps/web/src/App.tsx", import.meta.url));
+  assert.ok(
+    appSource.includes("APP_OAUTH_FINALIZE_SESSION_GUARD_PREFIX") &&
+      appSource.includes("window.sessionStorage.setItem") &&
+      appSource.includes("Keep the in-flight/session guards while the one-shot finalizer runs."),
+    "Frontend OAuth finalization must use a durable sessionStorage guard instead of relying only on React effect cleanup",
+  );
   const webMountControllerSource = readText(
     new URL("../apps/web/src/controllers/useWebUserPlatformAppMountsController.ts", import.meta.url),
   );
@@ -222,14 +237,6 @@ function main() {
       webMountControllerSource.includes("OAuth connection is already starting."),
     "Frontend OAuth begin must be guarded against duplicate click/race starts for the same app",
   );
-  const appSource = readText(new URL("../apps/web/src/App.tsx", import.meta.url));
-  assert.ok(
-    appSource.includes("APP_OAUTH_FINALIZE_SESSION_GUARD_PREFIX") &&
-      appSource.includes("window.sessionStorage.setItem") &&
-      appSource.includes("Keep the in-flight/session guards while the one-shot finalizer runs."),
-    "Frontend OAuth finalization must keep a session-scoped one-shot guard while the return URL is still present",
-  );
-
   const communitySource = readText(new URL("../convex/communityAppMounts.ts", import.meta.url));
   assert.ok(
     communitySource.includes("authType: v.union") &&

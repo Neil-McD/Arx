@@ -6,9 +6,6 @@ import {
 const AUTH_RESUME_STATE_STORAGE_KEY = "arx_auth_resume_state_v1";
 const AUTH_RESUME_STATE_TTL_MS = 24 * 60 * 60 * 1000;
 
-export type BuilderUpgradeContext = "builder" | "create_community";
-export type BuilderCheckoutTier = "builder";
-
 export type PendingAuthIntent =
   | {
       reason: "select_model";
@@ -33,10 +30,6 @@ export type PendingAuthIntent =
   | {
       reason: "join_public_community";
       payload: { community_id: string | null; community_slug: string | null };
-    }
-  | {
-      reason: "start_builder_checkout";
-      payload: { tier: BuilderCheckoutTier; context: BuilderUpgradeContext };
     }
   | {
       reason: "redeem_pending_purchases";
@@ -107,15 +100,6 @@ function normalizePendingAuthIntent(
     const community_slug = typeof payload.community_slug === "string" ? payload.community_slug.trim() || null : null;
     if (!community_id && !community_slug) return null;
     return { reason, payload: { community_id, community_slug } };
-  }
-
-  if (reason === "start_builder_checkout") {
-    const rawTier = payload.tier;
-    const context = payload.context;
-    const tier = rawTier === "builder" || rawTier === "architect" || rawTier === "pro" ? "builder" : null;
-    if (!tier) return null;
-    if (context !== "builder" && context !== "create_community") return null;
-    return { reason, payload: { tier, context } };
   }
 
   if (reason === "redeem_pending_purchases") {

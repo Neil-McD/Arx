@@ -3,7 +3,7 @@
 ## Canonical Truths
 
 - Active development worktree: `/Users/neilmcdevitt/code/arx`
-- Legacy Daytona worktree: `/Users/neilmcdevitt/code/arx/.worktrees/daytona` may still exist as a side worktree or frozen snapshot, but it is not release truth
+- Legacy Daytona worktree snapshots are historical only and are not part of active development or release truth
 - Canonical Git remote: `origin` -> `Neil-McD/Arx`
 - Canonical release branch: `main`
 - Canonical production web target: Vercel project `polynet`
@@ -98,7 +98,7 @@ After every production release, verify the changed surface and at least these co
 
 If the release touched billing, check both:
 
-- Builder checkout
+- Community checkout and Stripe Connect payout readiness
 - Workspace credit top-up
 
 ## Decision Rules

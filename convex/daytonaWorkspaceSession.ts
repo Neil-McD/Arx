@@ -218,64 +218,12 @@ export async function createWorkspaceSandboxSession(params: {
     }
 > {
   const nowMs = Date.now();
-  const canonicalTier = await params.ctx.runQuery(api.entitlements.getCanonicalTierByUserId as any, {
-    userId: params.userId,
-  });
-  let creditBalance = await params.ctx.runQuery(
+  const creditBalance = await params.ctx.runQuery(
     internal.workspaceCredits.getWorkspaceCreditBalanceInternal as any,
     {
       userId: params.userId,
     },
   );
-  if (canonicalTier !== "free") {
-    let provisioningWindow:
-      | { cycleStartedAt: number; cycleEndsAt: number }
-      | null = null;
-    const latestBuilderBillingCycle = await params.ctx.runQuery(
-      internal.builderCommerce.getLatestBuilderBillingCycleForOwnerInternal as any,
-      {
-        ownerUserId: params.userId,
-      },
-    );
-    if (
-      typeof latestBuilderBillingCycle?.currentPeriodStartAt === "number" &&
-      typeof latestBuilderBillingCycle?.currentPeriodEndAt === "number"
-    ) {
-      provisioningWindow = {
-        cycleStartedAt: latestBuilderBillingCycle.currentPeriodStartAt,
-        cycleEndsAt: latestBuilderBillingCycle.currentPeriodEndAt,
-      };
-    } else {
-      provisioningWindow = await params.ctx.runQuery(
-        internal.workspaceCredits.getActiveBuilderCreditProvisioningWindowInternal as any,
-        {
-          userId: params.userId,
-          nowMs,
-        },
-      );
-    }
-    const needsProvisioningSync =
-      !!provisioningWindow &&
-      (!creditBalance ||
-        creditBalance.includedCycleStartedAt !== provisioningWindow.cycleStartedAt ||
-        creditBalance.includedCycleEndsAt !== provisioningWindow.cycleEndsAt);
-    if (provisioningWindow && needsProvisioningSync) {
-      await params.ctx.runMutation(internal.workspaceCredits.syncBuilderMonthlyCreditsInternal as any, {
-        userId: params.userId,
-        targetTier: canonicalTier === "architect" ? "architect" : "builder",
-        grantsAccess: true,
-        cycleStartedAt: provisioningWindow.cycleStartedAt,
-        cycleEndsAt: provisioningWindow.cycleEndsAt,
-        nowMs,
-      });
-      creditBalance = await params.ctx.runQuery(
-        internal.workspaceCredits.getWorkspaceCreditBalanceInternal as any,
-        {
-          userId: params.userId,
-        },
-      );
-    }
-  }
   if (!creditBalance) {
     return {
       ok: false,

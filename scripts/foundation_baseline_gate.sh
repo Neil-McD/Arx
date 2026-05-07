@@ -30,7 +30,7 @@ run_step "Convex client surface guard" bash scripts/convex_client_surface_guard.
 run_step "Convex verified identity guard" bash scripts/convex_verified_identity_guard.sh
 run_step "Auth bootstrap public identity guard" bash scripts/auth_bootstrap_public_identity_guard.sh
 run_step "Auth and billing public identity guard" bash scripts/auth_billing_public_identity_guard.sh
-run_step "Builder billing redirect authority proof" npm run check:builder-billing-redirect-authority-proof
+run_step "No legacy Builder plan infra guard" npm run check:no-builder-plan-infra
 run_step "Purchase token hygiene proof" npm run check:purchase-token-hygiene-proof
 run_step "Frontend privacy hygiene proof" npm run check:frontend-privacy-hygiene-proof
 run_step "Community admin contract guard" bash scripts/community_admin_contract_guard.sh

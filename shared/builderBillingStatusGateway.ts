@@ -6,7 +6,6 @@ export type BuilderBillingStatus = {
   builder_tier: "free" | "builder" | "architect";
   max_communities: number;
   platform_fee_bps: number;
-  can_manage_plan: boolean;
   stripe_connect: {
     status: "not_connected" | "onboarding_required" | "pending_requirements" | "ready" | "restricted";
     account_id: string | null;
@@ -44,7 +43,6 @@ async function loadBuilderBillingStatusViaConvex(session: AuthSessionLike): Prom
     builder_tier: normalizeBuilderTier(row.builder_tier),
     max_communities: Number(row.max_communities ?? 0),
     platform_fee_bps: Number(row.platform_fee_bps ?? 0),
-    can_manage_plan: row.can_manage_plan === true,
     stripe_connect: {
       status:
         row.stripe_connect?.status === "onboarding_required" ||

@@ -180,7 +180,7 @@ Then compare Daytona and `origin/main` against that known production outcome.
 | Remove member | `Unknown` | Fill | Fill | Open | Requires authenticated admin state |
 | Workspace send/run | `Prod works for guest public chat surface` | expected yes | Fill | Partial | Guest prompt send returned a model response without console errors |
 | Preview load | `Unknown` | Fill | Fill | Open | Requires authenticated workspace/preview context |
-| Builder checkout opens live Stripe | `Unknown from clean guest browser; auth gate works` | expected yes | Fill | Partial | Guest flow reaches sign-in gate cleanly; authenticated Stripe handoff still unverified |
+| Community checkout opens live Stripe | `Unknown from clean guest browser; auth gate works` | expected yes | Fill | Partial | Guest flow reaches sign-in gate cleanly; authenticated Stripe handoff still unverified |
 | Workspace top-up opens live Stripe | `Unknown` | expected yes | Fill | Open | Requires authenticated workspace state |
 | Sentry captures frontend smoke error | `yes` | expected yes | `no` unless reconciled | Known | Strong live canary |
 | PostHog events appear in PostHog | `no` | local only until deploy | `no` | Known | Strong not-live canary |

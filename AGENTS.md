@@ -129,7 +129,7 @@ Classification buckets for every candidate:
 ## 6.5) Canonical Release Workflow
 
 - Active development worktree: `/Users/neilmcdevitt/code/arx`.
-- Legacy Daytona worktree: `/Users/neilmcdevitt/code/arx/.worktrees/daytona` may still exist as a side worktree or historical snapshot, but it is not canonical.
+- Legacy Daytona worktree snapshots are historical only and are not canonical or active.
 - Canonical Git release branch: `origin/main`.
 - Canonical production app: Vercel project `polynet`.
 - Legacy Vercel project `arx` is not a production target.

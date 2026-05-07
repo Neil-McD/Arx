@@ -60,11 +60,6 @@ assert.equal(
 );
 
 const requiredEvents = [
-  "builder_checkout_created",
-  "builder_checkout_attached_to_stripe",
-  "builder_subscription_synced",
-  "builder_entitlement_granted",
-  "builder_entitlement_revoked",
   "community_checkout_created",
   "community_checkout_attached_to_stripe",
   "community_subscription_synced",
@@ -87,11 +82,6 @@ for (const [fileName, source, eventTypes] of [
     "convex/builderCommerce.ts",
     builderCommerce,
     [
-      "builder_checkout_created",
-      "builder_checkout_attached_to_stripe",
-      "builder_subscription_synced",
-      "builder_entitlement_granted",
-      "builder_entitlement_revoked",
       "stripe_connect_account_synced",
     ],
   ],

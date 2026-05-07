@@ -82,6 +82,7 @@ type UseWebThreadDataControllerArgs<SessionT, ThreadMessageT> = {
   workspaceWantsNewChatRef: MutableRefObject<boolean>;
 
   setActiveThreadId: Dispatch<SetStateAction<string | null>>;
+  setWorkspaceWantsNewChatMode: (next: SetStateAction<boolean>) => void;
   setThreadError: Dispatch<SetStateAction<string | null>>;
   setThreads: Dispatch<SetStateAction<ThreadRecord[]>>;
   setThreadMessages: Dispatch<SetStateAction<ThreadMessageT[]>>;
@@ -117,7 +118,6 @@ export function useWebThreadDataController<SessionT, ThreadMessageT extends Thre
     try {
       const applyLoadedThreadList = (nextList: ThreadRecord[]): void => {
         current.setThreads(nextList);
-        const visible = nextList.filter((thread) => thread.last_seq > 0);
 
         if (current.workspaceWantsNewChatRef.current) {
           if (current.activeThreadId !== null) {
@@ -128,16 +128,15 @@ export function useWebThreadDataController<SessionT, ThreadMessageT extends Thre
         }
 
         if (!current.activeThreadId) {
-          if (!current.threadsHydratedRef.current && !current.workspaceWantsNewChatRef.current) {
-            current.setActiveThreadId(visible[0]?.id ?? null);
-          }
+          current.setWorkspaceWantsNewChatMode(true);
           current.threadsHydratedRef.current = true;
           return;
         }
 
         const selected = nextList.find((thread) => thread.id === current.activeThreadId) ?? null;
         if (!selected) {
-          current.setActiveThreadId(visible[0]?.id ?? null);
+          current.setActiveThreadId(null);
+          current.setWorkspaceWantsNewChatMode(true);
         }
         current.threadsHydratedRef.current = true;
       };

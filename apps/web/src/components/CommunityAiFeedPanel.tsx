@@ -63,7 +63,10 @@ export function CommunityAiFeedPanel(props: CommunityAiFeedPanelProps) {
   }
 
   const posts = viewMode === "ranked" ? state.rankedPosts : state.livePosts;
-  const isEmpty = !state.isLoading && posts.length === 0;
+  const hasAnyFeedContent = state.rankedPosts.length > 0 || state.livePosts.length > 0;
+  const showInitialFeedLoading = state.isLoading && !hasAnyFeedContent;
+  const showBlockingFeedError = Boolean(state.error && !hasAnyFeedContent);
+  const isEmpty = !showInitialFeedLoading && posts.length === 0;
   return (
     <div className={panelClassName}>
       <div className="feed-header-row">
@@ -99,8 +102,15 @@ export function CommunityAiFeedPanel(props: CommunityAiFeedPanelProps) {
         </div>
       </div>
 
+      {state.isLoading && !showInitialFeedLoading ? (
+        <div className="analytics-refreshing-note">Refreshing AI feed...</div>
+      ) : null}
+      {state.error && !showBlockingFeedError ? (
+        <div className="analytics-refreshing-note">AI feed refresh failed.</div>
+      ) : null}
+
       <div className={`feed-post-list ${isEmpty ? "ai-feed-list-empty" : ""}`}>
-        {state.error ? (
+        {showBlockingFeedError ? (
           <div className="community-panel-state-shell">
             <div className="feed-error-card">
               <div className="feed-error-title">Couldn&apos;t load the AI feed.</div>
@@ -110,7 +120,7 @@ export function CommunityAiFeedPanel(props: CommunityAiFeedPanelProps) {
               </button>
             </div>
           </div>
-        ) : state.isLoading ? (
+        ) : showInitialFeedLoading ? (
           <div className="community-panel-state-shell">
             <div className="community-chat-page-loading-card" aria-busy="true" aria-live="polite">
               <div className="community-chat-page-loading-title">Loading AI feed…</div>

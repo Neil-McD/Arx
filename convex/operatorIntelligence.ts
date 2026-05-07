@@ -18,9 +18,6 @@ const CHECKOUT_STATUSES = ["pending", "complete", "expired"] as const;
 const SECURITY_AUDIT_EVENT_TYPES = [
   "account_delete_blocked",
   "account_delete_completed",
-  "builder_entitlement_granted",
-  "builder_entitlement_revoked",
-  "builder_subscription_synced",
   "community_subscription_synced",
   "operator_dashboard_accessed",
   "operator_role_deactivated",
@@ -39,9 +36,6 @@ const DESTRUCTIVE_AUDIT_EVENT_TYPES = new Set([
 ]);
 const OPERATOR_ROLE_AUDIT_EVENT_TYPES = new Set(["operator_role_deactivated", "operator_role_upserted"]);
 const BILLING_TRUST_AUDIT_EVENT_TYPES = new Set([
-  "builder_entitlement_granted",
-  "builder_entitlement_revoked",
-  "builder_subscription_synced",
   "community_subscription_synced",
   "stripe_connect_account_synced",
   "stripe_webhook_failed",
@@ -443,12 +437,6 @@ function formatSecurityAuditTitle(row: any): string {
       return "Stripe webhook received";
     case "stripe_connect_account_synced":
       return "Stripe Connect account synced";
-    case "builder_entitlement_granted":
-      return "Builder entitlement granted";
-    case "builder_entitlement_revoked":
-      return "Builder entitlement revoked";
-    case "builder_subscription_synced":
-      return "Builder subscription synced";
     case "community_subscription_synced":
       return "Community subscription synced";
     default:
