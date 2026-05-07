@@ -69,7 +69,7 @@ function main() {
   );
   assertIncludes(
     contract,
-    "Result policy declares intended tool-count and result-byte bounds; runtime enforcement must be wired before those bounds are treated as active execution policy.",
+    "Result policy declares active tool-count and result-byte bounds; validation caps discovered tool snapshots and runtime truncates oversized tool output to the app profile budget.",
     "MCP app architecture contract result policy rule",
   );
   assertIncludes(
@@ -96,6 +96,16 @@ function main() {
     contract,
     "Integration profile default risk is applied as a floor during MCP tool snapshot classification.",
     "MCP app architecture contract profile risk floor rule",
+  );
+  assertIncludes(
+    contract,
+    "OAuth remote MCP apps use server-side PKCE state, MCP `resource` audience binding, a passive callback that records the provider result, an authenticated user finalization action that exchanges the code, encrypted token bundles, token refresh, and the same MCP validation/runtime path as token-based remote MCP apps.",
+    "MCP app architecture contract OAuth MCP rule",
+  );
+  assertIncludes(
+    contract,
+    "OAuth tokens live in encrypted user connection state and must not be stored in community grants; callback results must not attach provider tokens to a Polynet user until an authenticated finalization action verifies the state owner.",
+    "MCP app architecture contract OAuth credential ownership rule",
   );
   assertIncludes(
     contract,

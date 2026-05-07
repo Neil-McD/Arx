@@ -1,6 +1,7 @@
-export type DeveloperAppAuthType = "api_key" | "bearer" | "none";
+export type DeveloperAppAuthType = "api_key" | "bearer" | "none" | "oauth";
 export type DeveloperAppStatus = "draft" | "valid" | "invalid";
 export type AppConnectionStatus = "connected" | "error";
+export type AppConnectionAuthKind = "secret" | "oauth_tokens";
 export type AppToolValidationStatus = "ok" | "error";
 
 export type DeveloperAppRow = {
@@ -23,6 +24,7 @@ export type DeveloperAppRow = {
 export type AppConnectionRow = {
   _id: any;
   developerAppId: any;
+  authKind?: AppConnectionAuthKind;
   connectionStatus: AppConnectionStatus;
   encryptedSecretHex?: string;
   secretIvHex?: string;
@@ -137,7 +139,12 @@ export function normalizeDeveloperAppEndpointUrl(value: unknown): string {
 }
 
 export function isDeveloperAppAuthType(value: unknown): value is DeveloperAppAuthType {
-  return value === "api_key" || value === "bearer" || value === "none";
+  return (
+    value === "api_key" ||
+    value === "bearer" ||
+    value === "none" ||
+    value === "oauth"
+  );
 }
 
 export function buildDisconnectedConnectionReadModel(app: DeveloperAppRow) {

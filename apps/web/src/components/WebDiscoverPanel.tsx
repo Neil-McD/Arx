@@ -14,6 +14,7 @@ import type { DiscoverCommunitySnapshot } from "../../../../shared/communityType
 import type { CreateSkillPackageInput } from "../../../../shared/skillPackageTypes";
 import type { DiscoverTab } from "../../../../shared/appShellNavigation";
 import type {
+  BeginUserPlatformAppOAuthResult,
   ConnectUserPlatformAppResult,
   ConnectUserPlatformAppInput,
   UserPlatformMountedApp,
@@ -84,6 +85,9 @@ type WebDiscoverPanelProps = {
   onConnectUserPlatformApp: (
     input: ConnectUserPlatformAppInput,
   ) => Promise<ConnectUserPlatformAppResult> | ConnectUserPlatformAppResult;
+  onBeginUserPlatformAppOAuth: (
+    catalogAppId: string,
+  ) => Promise<BeginUserPlatformAppOAuthResult> | BeginUserPlatformAppOAuthResult;
   manageableCommunityTargetName: string | null;
   communityAppMounts: CommunityMountedApp[];
   isLoadingCommunityAppMounts: boolean;
@@ -381,6 +385,7 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
     userPlatformAppMutationError,
     isConnectingUserPlatformApp,
     onConnectUserPlatformApp,
+    onBeginUserPlatformAppOAuth,
     manageableCommunityTargetName,
     communityAppMounts,
     isLoadingCommunityAppMounts,
@@ -641,6 +646,23 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
       return;
     }
     if (selectedPersonalMount) return;
+    if (
+      app.personalConnect.connectionKind === "known" &&
+      app.personalConnect.authMethod === "oauth"
+    ) {
+      setPersonalConnectError(null);
+      setPersonalConnectResult(null);
+      setPersonalConnectValidationReport(null);
+      const result = await onBeginUserPlatformAppOAuth(app.id);
+      if (!result.ok) {
+        setPersonalConnectResult("failed");
+        setPersonalConnectError(
+          result.error_message ??
+            `Couldn't start ${app.name} OAuth. Check the connection and try again.`,
+        );
+      }
+      return;
+    }
     if (
       app.personalConnect.connectionKind === "custom" &&
       !personalConnectEndpoint.trim()

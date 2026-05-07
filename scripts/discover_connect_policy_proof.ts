@@ -78,6 +78,35 @@ function main() {
     "catalog_app_not_ready",
   );
 
+  const notion = resolveDiscoverAppCatalogConnectPolicy({
+    catalogAppId: "notion",
+    name: "Not Notion",
+    endpointUrl: "https://mcp.notion.com/mcp",
+    authType: "oauth",
+  });
+  assert.equal(notion.ok, true);
+  assert.deepEqual(
+    notion,
+    {
+      ok: true,
+      catalogAppId: "notion",
+      name: "Notion",
+      endpointUrl: "https://mcp.notion.com/mcp",
+      authType: "oauth",
+      identityScope: "catalog_singleton",
+    },
+    "Notion OAuth catalog policy should be server-authoritative",
+  );
+  assertRejected(
+    {
+      catalogAppId: "notion",
+      name: "Notion",
+      endpointUrl: "https://mcp.notion.com/mcp",
+      authType: "bearer",
+    },
+    "catalog_app_auth_mismatch",
+  );
+
   const shopify = resolveDiscoverAppCatalogConnectPolicy({
     catalogAppId: "shopify",
     name: "Anything",

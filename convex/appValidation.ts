@@ -24,7 +24,10 @@ import {
   type StoredMcpToolRecord,
 } from "./mcpSnapshotCodec";
 import { sha256HexText } from "./providerConnections";
-import { applyDiscoverAppDefaultToolRiskFloor } from "../shared/discoverCatalog";
+import {
+  applyDiscoverAppDefaultToolRiskFloor,
+  resolveDiscoverAppResultPolicyForCatalogAppId,
+} from "../shared/discoverCatalog";
 
 type ValidationStageId =
   | "endpoint_reachable"
@@ -161,7 +164,11 @@ function normalizeToolArray(
   const tools: StoredMcpToolRecord[] = [];
   const seen = new Set<string>();
   const seenNamespacedToolNames = new Set<string>();
+  const maxToolCount =
+    resolveDiscoverAppResultPolicyForCatalogAppId(app.catalogAppId)
+      ?.maxToolCount ?? Number.POSITIVE_INFINITY;
   for (const rawTool of rawTools) {
+    if (tools.length >= maxToolCount) break;
     if (!rawTool || typeof rawTool !== "object" || Array.isArray(rawTool)) continue;
     const tool = rawTool as Record<string, unknown>;
     const toolName = normalizeString(tool.name, 200);
@@ -354,8 +361,8 @@ export const validateDeveloperAppInternal = internalAction({
     developerAppId: v.id("developerApps"),
   },
   handler: async (ctx, args): Promise<unknown> => {
-    const connectionBundle = (await ctx.runQuery(
-      internal.appConnections.getDecryptedDeveloperAppConnectionBundleInternal,
+    const connectionBundle = (await ctx.runAction(
+      internal.appOAuth.getFreshDeveloperAppConnectionBundleInternal,
       {
       developerAppId: args.developerAppId,
       },

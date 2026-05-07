@@ -42,13 +42,14 @@ Rules:
 - Adapter categories are MCP, connector backplane, direct API, sandboxed CLI, or catalog-only.
 - Context strategy must say whether the harness should use manifest-only context, search-then-fetch, structured snapshots, or artifact references.
 - Execution surface is derived from adapter kind: remote MCP and direct API use server HTTP, backplane uses connector backplane, sandboxed CLI uses sandboxed commands, and catalog-only has no executable surface.
-- Result policy declares intended tool-count and result-byte bounds; runtime enforcement must be wired before those bounds are treated as active execution policy.
+- Result policy declares active tool-count and result-byte bounds; validation caps discovered tool snapshots and runtime truncates oversized tool output to the app profile budget.
 - Catalog app connection policy is server-authoritative; the frontend cannot choose a catalog app endpoint, auth mode, or display name as authority.
 - Catalog singleton apps reuse by `catalogAppId`; endpoint-instance apps, such as Shopify Storefront MCP, reuse by endpoint/auth identity.
 - Shopify's ready profile accepts only the standard Storefront MCP `/api/mcp` endpoint; UCP catalog endpoints such as `/api/ucp/mcp` require a separate reviewed profile before they are connectable.
 - Uncataloged remote MCP endpoints are blocked from public server-fetch paths until they have a reviewed catalog policy or a network-layer egress guard.
 - Operator audit must identify uncataloged or catalog-policy-blocked developer app rows before broad release.
 - Integration profile default risk is applied as a floor during MCP tool snapshot classification.
+- OAuth remote MCP apps use server-side PKCE state, MCP `resource` audience binding, a passive callback that records the provider result, an authenticated user finalization action that exchanges the code, encrypted token bundles, token refresh, and the same MCP validation/runtime path as token-based remote MCP apps.
 - Dedicated human approval is not implemented yet; integration profiles do not carry approval-policy metadata.
 - Operator MCP servers configured in Codex are not user-facing Discover integration profiles.
 
@@ -83,6 +84,7 @@ Rules:
 - User app state is the only source for live/setup-needed/not-live status shown to that user.
 - Source rows explain durable user ownership for current distribution installs.
 - Personal credentials live in user connection state.
+- OAuth tokens live in encrypted user connection state and must not be stored in community grants; callback results must not attach provider tokens to a Polynet user until an authenticated finalization action verifies the state owner.
 - If a user already has Linear live personally and a community grants Linear, every surface must resolve to that same effective Linear state for that user.
 - If a user lacks required credentials, the app can be present but must show setup needed.
 - If auth is not required and validation succeeds, the app can become live after seeding.

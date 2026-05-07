@@ -11,7 +11,13 @@ import {
   type DiscoverAppIntegrationProfile,
 } from "../shared/discoverCatalog.ts";
 
-const READY_APP_IDS = new Set(["airtable", "linear", "shopify", "supabase"]);
+const READY_APP_IDS = new Set([
+  "airtable",
+  "linear",
+  "notion",
+  "shopify",
+  "supabase",
+]);
 
 function assertNonEmpty(value: string, label: string) {
   assert.ok(value.trim().length > 0, `${label} must be non-empty`);
@@ -66,16 +72,23 @@ function assertReadyProfileMatchesConnection(
   }
 
   assert.equal(app.personalConnect.connectionKind, "known");
-  assert.equal(app.personalConnect.authMethod, "token");
-  assert.equal(profile.adapterKind, "remote_mcp_token");
-  assert.equal(profile.readiness, "ready_token");
-  assert.equal(profile.authMode, "token");
-  assert.ok(
-    app.personalConnect.authType === "bearer" ||
-      app.personalConnect.authType === "api_key",
-    `${app.id} token-ready app must use a supported secret auth type`,
-  );
-  assertNonEmpty(app.personalConnect.secretLabel, `${app.id} secret label`);
+  if (app.personalConnect.authMethod === "oauth") {
+    assert.equal(profile.adapterKind, "remote_mcp_oauth");
+    assert.equal(profile.readiness, "ready_oauth");
+    assert.equal(profile.authMode, "oauth");
+    assert.equal(app.personalConnect.authType, "oauth");
+  } else {
+    assert.equal(app.personalConnect.authMethod, "token");
+    assert.equal(profile.adapterKind, "remote_mcp_token");
+    assert.equal(profile.readiness, "ready_token");
+    assert.equal(profile.authMode, "token");
+    assert.ok(
+      app.personalConnect.authType === "bearer" ||
+        app.personalConnect.authType === "api_key",
+      `${app.id} token-ready app must use a supported secret auth type`,
+    );
+    assertNonEmpty(app.personalConnect.secretLabel, `${app.id} secret label`);
+  }
   assertHttpsEndpoint(app);
 }
 
@@ -89,6 +102,7 @@ function assertPlannedProfileIsNotExecutable(
     `${app.id} planned profile assertion only applies to later apps`,
   );
   assert.notEqual(profile.readiness, "ready_token", `${app.id} must not be token-ready`);
+  assert.notEqual(profile.readiness, "ready_oauth", `${app.id} must not be OAuth-ready`);
   assert.notEqual(profile.readiness, "ready_no_auth", `${app.id} must not be no-auth ready`);
   assert.notEqual(
     profile.readiness,

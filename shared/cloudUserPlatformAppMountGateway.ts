@@ -1,9 +1,12 @@
 import { bootstrapConvexAuthenticatedClient } from "./convexAuthenticatedClient";
 import type {
+  BeginUserPlatformAppOAuthResult,
   ConnectUserPlatformAppResult,
   ConnectUserPlatformAppInput,
+  FinalizeUserPlatformAppOAuthResult,
   UserPlatformMountedApp,
 } from "./userPlatformAppMountTypes";
+import { readConvexRuntimeUrl } from "./convexRuntime";
 
 type CloudUserPlatformAppMountGatewayParams<SessionT> = {
   session: SessionT;
@@ -76,6 +79,92 @@ export async function connectCloudUserPlatformApp<SessionT>(
       ? null
       : "The personal app service is unavailable right now. Try again.",
     connect_attempt_id: params.input.connect_attempt_id ?? null,
+  };
+}
+
+export async function beginCloudUserPlatformAppOAuth<SessionT>(
+  params: CloudUserPlatformAppMountGatewayParams<SessionT> & {
+    catalogAppId: string;
+    returnToPath?: string | null;
+  },
+): Promise<BeginUserPlatformAppOAuthResult> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(
+    params.session,
+  );
+  const payload = (await client.action(
+    "appOAuth:beginUserPlatformAppOAuth" as any,
+    {
+      authSubject,
+      catalogAppId: params.catalogAppId,
+      returnToPath: String(params.returnToPath ?? "").trim() || "/discover",
+      callbackBaseUrl: readConvexRuntimeUrl() ?? undefined,
+    },
+  )) as {
+    ok?: unknown;
+    catalog_app_id?: unknown;
+    authorize_url?: unknown;
+    redirect_uri?: unknown;
+  } | null;
+  const authorizeUrl =
+    typeof payload?.authorize_url === "string" ? payload.authorize_url.trim() : "";
+  return {
+    ok: payload?.ok === true && Boolean(authorizeUrl),
+    catalog_app_id:
+      typeof payload?.catalog_app_id === "string"
+        ? payload.catalog_app_id.trim() || null
+        : null,
+    authorize_url: authorizeUrl || null,
+    redirect_uri:
+      typeof payload?.redirect_uri === "string"
+        ? payload.redirect_uri.trim() || null
+        : null,
+    error_message: authorizeUrl ? null : "OAuth authorization URL was not returned.",
+  };
+}
+
+export async function finalizeCloudUserPlatformAppOAuth<SessionT>(
+  params: CloudUserPlatformAppMountGatewayParams<SessionT> & {
+    state: string;
+    finalizeToken: string;
+  },
+): Promise<FinalizeUserPlatformAppOAuthResult> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(
+    params.session,
+  );
+  const payload = (await client.action(
+    "appOAuth:finalizeUserPlatformAppOAuth" as any,
+    {
+      authSubject,
+      state: params.state,
+      finalizeToken: params.finalizeToken,
+    },
+  )) as {
+    ok?: unknown;
+    catalog_app_id?: unknown;
+    mount_id?: unknown;
+    validation_status?: unknown;
+    error_message?: unknown;
+  } | null;
+  return {
+    ok: payload?.ok === true,
+    catalog_app_id:
+      typeof payload?.catalog_app_id === "string"
+        ? payload.catalog_app_id.trim() || null
+        : null,
+    mount_id:
+      typeof payload?.mount_id === "string"
+        ? payload.mount_id.trim() || null
+        : null,
+    validation_status:
+      typeof payload?.validation_status === "string"
+        ? payload.validation_status.trim() || null
+        : null,
+    error_message:
+      typeof payload?.error_message === "string"
+        ? payload.error_message.trim() || null
+        : payload?.ok === true
+          ? null
+          : "OAuth connection could not be finalized.",
   };
 }
 

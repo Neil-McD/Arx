@@ -29,6 +29,7 @@ import {
   sendInitializedNotification,
 } from "./mcpHttpClient";
 import {
+  applyDiscoverAppResultPolicyToText,
   isDiscoverAppCatalogSingletonIdentity,
   resolveDiscoverAppCatalogConnectPolicy,
 } from "../shared/discoverCatalog";
@@ -187,6 +188,7 @@ type ConnectUserPlatformAppErrorCode =
   | "developer_app_mount_failed"
   | "developer_app_connect_failed"
   | "developer_app_catalog_connect_rejected"
+  | "developer_app_oauth_flow_required"
   | "server_unavailable";
 
 type ConnectUserPlatformAppResultRecord = {
@@ -285,6 +287,8 @@ function buildConnectErrorMessage(
       return `Validation succeeded, but we couldn't mount ${appName} into your personal layer.`;
     case "developer_app_catalog_connect_rejected":
       return `${appName} is not ready for this connection path.`;
+    case "developer_app_oauth_flow_required":
+      return `Connect ${appName} through OAuth instead.`;
     case "server_unavailable":
       return "The personal app service is unavailable right now. Try again.";
     case "developer_app_connect_failed":
@@ -546,6 +550,7 @@ export const findExistingUserPlatformMountByIdentityInternal = internalQuery({
       v.literal("none"),
       v.literal("api_key"),
       v.literal("bearer"),
+      v.literal("oauth"),
     ),
   },
   handler: async (ctx, args) => {
@@ -593,7 +598,7 @@ async function resolveExistingMountForConnect(args: {
   userId: any;
   catalogAppId?: string;
   endpointUrl: string;
-  authType: "none" | "api_key" | "bearer";
+  authType: "none" | "api_key" | "bearer" | "oauth";
 }): Promise<{
   mount: UserPlatformAppMountRow;
   app: DeveloperAppRow;
@@ -624,6 +629,7 @@ async function upsertConnectedSecretForConnect(args: {
   await args.ctx.runMutation(internal.appConnections.upsertAppConnectionInternal, {
     developerAppId: args.developerAppId,
     connectionStatus: "connected",
+    authKind: "secret",
     encryptedSecretHex: encryptedSecret.encryptedSecretHex,
     secretIvHex: encryptedSecret.secretIvHex,
     secretVersion: encryptedSecret.secretVersion,
@@ -915,8 +921,8 @@ export const executeUserPlatformMountedAppToolInternal = internalAction({
       };
     }
 
-    const connectionBundle = (await ctx.runQuery(
-      internal.appConnections.getDecryptedDeveloperAppConnectionBundleInternal,
+    const connectionBundle = (await ctx.runAction(
+      internal.appOAuth.getFreshDeveloperAppConnectionBundleInternal,
       {
         developerAppId: mountedTool.developer_app_id,
       },
@@ -972,7 +978,11 @@ export const executeUserPlatformMountedAppToolInternal = internalAction({
           ? (callResult as Record<string, unknown>)
           : null;
       const isError = record?.isError === true;
-      const outputText = formatMcpToolResultOutput(callResult);
+      const boundedOutput = applyDiscoverAppResultPolicyToText(
+        mountedTool.catalog_app_id,
+        formatMcpToolResultOutput(callResult),
+      );
+      const outputText = boundedOutput.outputText;
       return {
         status: isError ? ("error" as const) : ("ok" as const),
         exitCode: isError ? null : 0,
@@ -990,6 +1000,8 @@ export const executeUserPlatformMountedAppToolInternal = internalAction({
             tool_name: mountedTool.tool_name,
             namespaced_tool_name: mountedTool.namespaced_tool_name,
             risk_level: mountedTool.risk_level,
+            result_truncated: boundedOutput.truncated,
+            max_result_bytes: boundedOutput.maxResultBytes,
           },
         },
       };
@@ -1065,6 +1077,7 @@ export const connectUserPlatformApp = action({
       v.literal("none"),
       v.literal("api_key"),
       v.literal("bearer"),
+      v.literal("oauth"),
     ),
     description: v.optional(v.string()),
     secret: v.optional(v.string()),
@@ -1100,6 +1113,22 @@ export const connectUserPlatformApp = action({
       });
       return buildConnectFailure({
         code: "authenticated_user_required",
+        appName: args.name,
+        connectAttemptId,
+      });
+    }
+
+    if (args.authType === "oauth") {
+      emitPersonalAppConnectTrace("personal_app_connect.oauth_rejected", {
+        connectAttemptId,
+        appName: args.name,
+        endpointUrl: args.endpointUrl,
+        authType: args.authType,
+        ok: false,
+        code: "developer_app_oauth_flow_required",
+      });
+      return buildConnectFailure({
+        code: "developer_app_oauth_flow_required",
         appName: args.name,
         connectAttemptId,
       });
@@ -1948,6 +1977,7 @@ export const ensureUserHarnessAppInternal = internalAction({
       v.literal("none"),
       v.literal("api_key"),
       v.literal("bearer"),
+      v.literal("oauth"),
     ),
     toolSnapshotId: v.optional(v.id("appToolSnapshots")),
     enabled: v.optional(v.boolean()),

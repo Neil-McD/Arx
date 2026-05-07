@@ -784,6 +784,14 @@ function scrubCurrentRouteSearchParams(paramNames: readonly string[]): void {
   window.history.replaceState(window.history.state ?? {}, document.title, nextPath);
 }
 
+const APP_OAUTH_RETURN_PARAM_NAMES = [
+  "app_oauth",
+  "app_oauth_state",
+  "app_oauth_finalize_token",
+  "app_oauth_message",
+  "catalog_app_id",
+] as const;
+
 function formatModelSignature(
   modelId: string | null | undefined,
   inferenceSource: string | null | undefined,
@@ -2092,6 +2100,8 @@ export default function App() {
     clearUserPlatformAppMounts,
     loadUserPlatformAppMounts,
     connectUserPlatformApp,
+    beginUserPlatformAppOAuth,
+    finalizeUserPlatformAppOAuth,
     updateUserPlatformAppMount,
     refreshUserPlatformApp,
     reconnectUserPlatformApp,
@@ -2683,6 +2693,7 @@ export default function App() {
   const [inferenceToast] = useState<string | null>(null);
   const [appToast, setAppToast] = useState<string | null>(null);
   const appToastTimeoutRef = useRef<number | null>(null);
+  const appOAuthFinalizeInFlightRef = useRef<string | null>(null);
   const lastShownAuthErrorRef = useRef<string | null>(null);
   const [previewAccessGateModal, setPreviewAccessGateModal] = useState<
     NonNullable<WebGlobalOverlayHostProps["previewAccessGateModalProps"]>["previewAccessGateModal"]
@@ -2966,7 +2977,7 @@ export default function App() {
       catalog_app_id?: string;
       name: string;
       endpoint_url: string;
-      auth_type: "none" | "api_key" | "bearer";
+      auth_type: "none" | "api_key" | "bearer" | "oauth";
       description?: string;
       secret?: string;
     }) => {
@@ -2975,6 +2986,20 @@ export default function App() {
       return result;
     },
     [connectUserPlatformApp, reloadEffectiveMcpApps],
+  );
+
+  const handleBeginUserPlatformAppOAuth = useCallback(
+    async (catalogAppId: string) => {
+      const result = await beginUserPlatformAppOAuth({
+        catalogAppId,
+        returnToPath: `${window.location.pathname}${window.location.search}`,
+      });
+      if (result.ok && result.authorize_url) {
+        window.location.assign(result.authorize_url);
+      }
+      return result;
+    },
+    [beginUserPlatformAppOAuth],
   );
 
   const handleUpdateUserPlatformAppMount = useCallback(
@@ -3714,6 +3739,90 @@ export default function App() {
     setBuilderBillingReturn,
     buildAppRoutePath: (state) => applyShellVariantToAppPath(buildAppRoutePath(state) ?? "", shellVariant) || null,
   });
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const status = params.get("app_oauth");
+    if (!status) return;
+
+    if (status === "error") {
+      showAppToastMessage(
+        params.get("app_oauth_message")?.trim() ||
+          "App connection was not completed.",
+      );
+      scrubCurrentRouteSearchParams(APP_OAUTH_RETURN_PARAM_NAMES);
+      applyLocationToState();
+      return;
+    }
+
+    if (status === "connected") {
+      showAppToastMessage("App connected.");
+      if (session) {
+        userPlatformAppMountsLoadedUserIdRef.current = null;
+        void loadUserPlatformAppMounts(session);
+      }
+      void reloadEffectiveMcpApps();
+      scrubCurrentRouteSearchParams(APP_OAUTH_RETURN_PARAM_NAMES);
+      applyLocationToState();
+      return;
+    }
+
+    if (status !== "pending") return;
+    const state = params.get("app_oauth_state")?.trim() ?? "";
+    const finalizeToken = params.get("app_oauth_finalize_token")?.trim() ?? "";
+    if (!state || !finalizeToken) {
+      showAppToastMessage("App connection could not be finalized.");
+      scrubCurrentRouteSearchParams(APP_OAUTH_RETURN_PARAM_NAMES);
+      applyLocationToState();
+      return;
+    }
+    if (!session) return;
+    const inFlightKey = `${state}:${finalizeToken}`;
+    if (appOAuthFinalizeInFlightRef.current === inFlightKey) return;
+    appOAuthFinalizeInFlightRef.current = inFlightKey;
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const result = await finalizeUserPlatformAppOAuth({
+          state,
+          finalizeToken,
+        });
+        if (cancelled) return;
+        if (result.ok) {
+          showAppToastMessage("App connected.");
+          userPlatformAppMountsLoadedUserIdRef.current = null;
+          void loadUserPlatformAppMounts(session);
+          void reloadEffectiveMcpApps();
+        } else {
+          showAppToastMessage(
+            result.error_message || "App connection could not be finalized.",
+          );
+        }
+        scrubCurrentRouteSearchParams(APP_OAUTH_RETURN_PARAM_NAMES);
+        applyLocationToState();
+      } finally {
+        if (appOAuthFinalizeInFlightRef.current === inFlightKey) {
+          appOAuthFinalizeInFlightRef.current = null;
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      if (appOAuthFinalizeInFlightRef.current === inFlightKey) {
+        appOAuthFinalizeInFlightRef.current = null;
+      }
+    };
+  }, [
+    applyLocationToState,
+    finalizeUserPlatformAppOAuth,
+    loadUserPlatformAppMounts,
+    reloadEffectiveMcpApps,
+    session,
+    showAppToastMessage,
+    userPlatformAppMountsLoadedUserIdRef,
+  ]);
 
   useEffect(() => {
     if (shellVariant !== "standard" || !isLikelyMobileDevice) return;
@@ -7170,6 +7279,7 @@ export default function App() {
       userPlatformAppMutationError,
       isConnectingUserPlatformApp,
       onConnectUserPlatformApp: handleConnectUserPlatformApp,
+      onBeginUserPlatformAppOAuth: handleBeginUserPlatformAppOAuth,
       manageableCommunityTargetName: canManageMembersActiveCommunity
         ? (activeCommunity?.name ?? null)
         : null,

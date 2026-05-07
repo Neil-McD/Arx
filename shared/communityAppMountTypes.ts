@@ -1,4 +1,4 @@
-export type DeveloperAppAuthType = "none" | "api_key" | "bearer";
+export type DeveloperAppAuthType = "none" | "api_key" | "bearer" | "oauth";
 
 export type AppMountLiveStatus = "live" | "not_live";
 

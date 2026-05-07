@@ -1,12 +1,16 @@
 import { useCallback, useRef, useState } from "react";
 
 import type {
+  BeginUserPlatformAppOAuthResult,
   ConnectUserPlatformAppResult,
   ConnectUserPlatformAppInput,
+  FinalizeUserPlatformAppOAuthResult,
   UserPlatformMountedApp,
 } from "../../../../shared/userPlatformAppMountTypes";
 import {
+  beginCloudUserPlatformAppOAuth,
   connectCloudUserPlatformApp,
+  finalizeCloudUserPlatformAppOAuth,
   listCloudUserPlatformAppMounts,
   reconnectCloudUserPlatformApp,
   refreshCloudUserPlatformApp,
@@ -141,6 +145,102 @@ export function useWebUserPlatformAppMountsController<
           error_code: "server_unavailable",
           error_message: message,
           connect_attempt_id: input.connect_attempt_id ?? null,
+        };
+      } finally {
+        setIsConnectingUserPlatformApp(false);
+      }
+    },
+    [],
+  );
+
+  const beginUserPlatformAppOAuth = useCallback(
+    async (params: {
+      catalogAppId: string;
+      returnToPath?: string | null;
+    }): Promise<BeginUserPlatformAppOAuthResult> => {
+      const current = argsRef.current;
+      const usableSession = await resolveUsableSession(
+        current.session,
+        current.ensureSession,
+      );
+      if (!usableSession) {
+        return {
+          ok: false,
+          catalog_app_id: params.catalogAppId,
+          authorize_url: null,
+          error_message: "Sign in to connect this app.",
+        };
+      }
+      setIsConnectingUserPlatformApp(true);
+      setUserPlatformAppMutationError(null);
+      try {
+        const result = await beginCloudUserPlatformAppOAuth({
+          session: usableSession,
+          catalogAppId: params.catalogAppId,
+          returnToPath: params.returnToPath,
+        });
+        if (!result.ok && result.error_message) {
+          setUserPlatformAppMutationError(result.error_message);
+        }
+        return result;
+      } catch (error) {
+        const message = toErrorMessage(
+          error,
+          "Failed to start OAuth connection.",
+        );
+        setUserPlatformAppMutationError(message);
+        return {
+          ok: false,
+          catalog_app_id: params.catalogAppId,
+          authorize_url: null,
+          error_message: message,
+        };
+      } finally {
+        setIsConnectingUserPlatformApp(false);
+      }
+    },
+    [],
+  );
+
+  const finalizeUserPlatformAppOAuth = useCallback(
+    async (params: {
+      state: string;
+      finalizeToken: string;
+    }): Promise<FinalizeUserPlatformAppOAuthResult> => {
+      const current = argsRef.current;
+      const usableSession = await resolveUsableSession(
+        current.session,
+        current.ensureSession,
+      );
+      if (!usableSession) {
+        return {
+          ok: false,
+          catalog_app_id: null,
+          error_message: "Sign in to finish connecting this app.",
+        };
+      }
+      setIsConnectingUserPlatformApp(true);
+      setUserPlatformAppMutationError(null);
+      try {
+        const result = await finalizeCloudUserPlatformAppOAuth({
+          session: usableSession,
+          state: params.state,
+          finalizeToken: params.finalizeToken,
+        });
+        if (!result.ok && result.error_message) {
+          setUserPlatformAppMutationError(result.error_message);
+        }
+        return result;
+      } catch (error) {
+        const message = toErrorMessage(
+          error,
+          "Failed to finish OAuth connection.",
+        );
+        setUserPlatformAppMutationError(message);
+        return {
+          ok: false,
+          catalog_app_id: null,
+          error_message: message,
         };
       } finally {
         setIsConnectingUserPlatformApp(false);
@@ -304,6 +404,8 @@ export function useWebUserPlatformAppMountsController<
     clearUserPlatformAppMounts,
     loadUserPlatformAppMounts,
     connectUserPlatformApp,
+    beginUserPlatformAppOAuth,
+    finalizeUserPlatformAppOAuth,
     updateUserPlatformAppMount,
     refreshUserPlatformApp,
     reconnectUserPlatformApp,

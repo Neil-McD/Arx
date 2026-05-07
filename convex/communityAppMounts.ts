@@ -210,6 +210,7 @@ export const findExistingCommunityAppMountByIdentityInternal = internalQuery({
       v.literal("none"),
       v.literal("api_key"),
       v.literal("bearer"),
+      v.literal("oauth"),
     ),
   },
   handler: async (ctx, args) => {
@@ -600,7 +601,12 @@ export const connectCommunityApp = action({
     catalogAppId: v.optional(v.string()),
     name: v.string(),
     endpointUrl: v.string(),
-    authType: v.union(v.literal("none"), v.literal("api_key"), v.literal("bearer")),
+    authType: v.union(
+      v.literal("none"),
+      v.literal("api_key"),
+      v.literal("bearer"),
+      v.literal("oauth"),
+    ),
     description: v.optional(v.string()),
   },
   handler: async (ctx, args): Promise<unknown> => {

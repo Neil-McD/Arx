@@ -12,6 +12,7 @@ import {
   sendInitializedNotification,
 } from "./mcpHttpClient.ts";
 import type { NativeToolExecutionResult } from "../shared/nativeToolLoop.ts";
+import { applyDiscoverAppResultPolicyToText } from "../shared/discoverCatalog.ts";
 
 export type RuntimeMountedMcpTool = {
   scope: "user" | "community";
@@ -422,7 +423,12 @@ export function createRuntimeMcpManager(params: {
             ? (callResult as Record<string, unknown>)
             : null;
         const isError = record?.isError === true;
-        const outputText = transport.formatToolResultOutput(callResult);
+        const rawOutputText = transport.formatToolResultOutput(callResult);
+        const boundedOutput = applyDiscoverAppResultPolicyToText(
+          tool.catalog_app_id,
+          rawOutputText,
+        );
+        const outputText = boundedOutput.outputText;
         const status: "error" | "ok" = isError ? "error" : "ok";
         const result = {
           status,
@@ -436,7 +442,11 @@ export function createRuntimeMcpManager(params: {
                   ? "Community app tool failed."
                   : "Platform app tool failed.")
               : null,
-          details: buildToolDetails(tool),
+          details: {
+            ...buildToolDetails(tool),
+            result_truncated: boundedOutput.truncated,
+            max_result_bytes: boundedOutput.maxResultBytes,
+          },
         };
         await emitExecutionCompleted({
           status: result.status,

@@ -294,7 +294,8 @@ function buildPersonalOptInInput(args: {
   const authType =
     args.mount.app.auth_type === "none" ||
     args.mount.app.auth_type === "api_key" ||
-    args.mount.app.auth_type === "bearer"
+    args.mount.app.auth_type === "bearer" ||
+    args.mount.app.auth_type === "oauth"
       ? args.mount.app.auth_type
       : "bearer";
   return {

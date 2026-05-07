@@ -205,7 +205,7 @@ export function buildDeveloperAppAuthHeaders(params: {
   secret: string | null;
 }): Record<string, string> {
   const merged: Record<string, string> = {};
-  if (params.app.authType === "bearer") {
+  if (params.app.authType === "bearer" || params.app.authType === "oauth") {
     if (!params.secret) throw new Error("developer_app_connection_secret_required");
     merged.Authorization = `Bearer ${params.secret}`;
   } else if (params.app.authType === "api_key") {

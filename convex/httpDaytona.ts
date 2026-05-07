@@ -913,8 +913,8 @@ async function executeRetrievalAgentLoop(
     appendRunEvent: params.appendRunEvent,
     touchRunHeartbeat: params.touchRunHeartbeat,
     loadConnectionBundle: async ({ developerAppId }) =>
-      (await params.ctx.runQuery(
-        internal.appConnections.getDecryptedDeveloperAppConnectionBundleInternal,
+      (await params.ctx.runAction(
+        internal.appOAuth.getFreshDeveloperAppConnectionBundleInternal,
         {
           developerAppId: developerAppId as any,
         },

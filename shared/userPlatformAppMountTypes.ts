@@ -76,6 +76,7 @@ export type ConnectUserPlatformAppErrorCode =
   | "developer_app_mount_failed"
   | "developer_app_connect_failed"
   | "developer_app_catalog_connect_rejected"
+  | "developer_app_oauth_flow_required"
   | "server_unavailable";
 
 export type ConnectUserPlatformAppResult = {
@@ -85,4 +86,20 @@ export type ConnectUserPlatformAppResult = {
   error_code: ConnectUserPlatformAppErrorCode | null;
   error_message: string | null;
   connect_attempt_id: string | null;
+};
+
+export type BeginUserPlatformAppOAuthResult = {
+  ok: boolean;
+  catalog_app_id: string | null;
+  authorize_url: string | null;
+  redirect_uri?: string | null;
+  error_message?: string | null;
+};
+
+export type FinalizeUserPlatformAppOAuthResult = {
+  ok: boolean;
+  catalog_app_id: string | null;
+  mount_id?: string | null;
+  validation_status?: string | null;
+  error_message?: string | null;
 };

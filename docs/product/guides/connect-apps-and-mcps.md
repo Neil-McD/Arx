@@ -33,7 +33,7 @@ For personal platform apps:
 
 1. Open Discover Apps or Integrations.
 2. Add the app where a direct personal connection path exists.
-3. If credentials are required, complete setup in the personal harness state.
+3. If credentials are required, complete setup in the personal harness state. Token apps use a pasted secret; OAuth apps redirect through a server-side callback, then finish through an authenticated Polynet finalization step before tokens are stored.
 
 ## System Model
 
@@ -57,7 +57,7 @@ An app is not useful merely because it appears in a catalog.
 Capability is real only when:
 
 1. the endpoint or app definition exists
-2. the integration profile declares the adapter, identity scope, context strategy, intended result bounds, declared intents, risk floor, and readiness contract
+2. the integration profile declares the adapter, identity scope, context strategy, result bounds, declared intents, risk floor, and readiness contract
 3. connection/auth state is valid
 4. tools are discovered or known
 5. the app is present in the user's canonical harness state
@@ -83,6 +83,7 @@ Capability is real only when:
 16. Before broad release, operators should audit existing app rows for uncataloged or catalog-policy-blocked endpoints.
 17. Prefer direct API adapters when the product workflow needs token-efficient structured snapshots instead of broad tool discovery.
 18. Prefer sandboxed CLI adapters when the app produces artifacts, renders, builds, or previews.
+19. Notion is the first ready OAuth remote MCP app; it uses `https://mcp.notion.com/mcp`, PKCE OAuth, MCP `resource` audience binding, authenticated finalization, encrypted token storage, token refresh, and user-owned harness state.
 
 ## Common Mistakes
 

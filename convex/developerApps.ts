@@ -105,7 +105,12 @@ export const createDeveloperAppInternal = internalMutation({
     slug: v.optional(v.string()),
     description: v.optional(v.string()),
     endpointUrl: v.string(),
-    authType: v.union(v.literal("api_key"), v.literal("bearer"), v.literal("none")),
+    authType: v.union(
+      v.literal("api_key"),
+      v.literal("bearer"),
+      v.literal("none"),
+      v.literal("oauth"),
+    ),
     nowMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {

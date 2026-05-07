@@ -14,6 +14,7 @@ export type DiscoverAppAdapterKind =
   | "catalog_only";
 export type DiscoverAppReadiness =
   | "ready_token"
+  | "ready_oauth"
   | "ready_no_auth"
   | "custom_endpoint"
   | "oauth_planned"
@@ -97,11 +98,22 @@ type DiscoverAppReadyTokenConnectTemplate = {
   authMethod: "token";
   connectionStrategy: DiscoverAppConnectionStrategy;
   endpointUrl: string;
-  authType: Exclude<DeveloperAppAuthType, "none">;
+  authType: Exclude<DeveloperAppAuthType, "none" | "oauth">;
   authLabel: string;
   secretLabel: string;
   tokenHelpUrl: string;
   tokenHelpLabel: string;
+  note: string;
+};
+
+type DiscoverAppReadyOAuthConnectTemplate = {
+  connectionKind: "known";
+  availability: "ready";
+  authMethod: "oauth";
+  connectionStrategy: DiscoverAppConnectionStrategy;
+  endpointUrl: string;
+  authType: "oauth";
+  authLabel: string;
   note: string;
 };
 
@@ -149,6 +161,7 @@ type DiscoverAppLaterConnectTemplate = {
 
 export type DiscoverAppPersonalConnectTemplate =
   | DiscoverAppReadyTokenConnectTemplate
+  | DiscoverAppReadyOAuthConnectTemplate
   | DiscoverAppReadyNoAuthConnectTemplate
   | DiscoverAppReadyCustomConnectTemplate
   | DiscoverAppLaterConnectTemplate;
@@ -251,6 +264,22 @@ export const DISCOVER_APP_INTEGRATION_PROFILE_OVERRIDES = {
     runtimePolicy: buildDiscoverAppRuntimePolicy({
       defaultToolRisk: "write",
       declaredIntents: ["issue_search", "issue_update", "project_context"],
+    }),
+  },
+  notion: {
+    adapterKind: "remote_mcp_oauth",
+    readiness: "ready_oauth",
+    identityScope: "catalog_singleton",
+    authMode: "oauth",
+    validationKind: "mcp_initialize_tools_list",
+    contextStrategy: "search_then_fetch",
+    resultPolicy: buildDiscoverAppResultPolicy({
+      maxToolCount: 24,
+      maxResultBytes: 12_000,
+    }),
+    runtimePolicy: buildDiscoverAppRuntimePolicy({
+      defaultToolRisk: "write",
+      declaredIntents: ["page_search", "page_fetch", "database_context"],
     }),
   },
   airtable: {
@@ -615,6 +644,39 @@ export function applyDiscoverAppDefaultToolRiskFloor(
     : riskFloor;
 }
 
+export function resolveDiscoverAppResultPolicyForCatalogAppId(
+  catalogAppId: unknown,
+): DiscoverAppResultPolicy | null {
+  const app = findDiscoverAppCatalogEntryById(catalogAppId);
+  if (!app) return null;
+  return resolveDiscoverAppIntegrationProfile(app).resultPolicy;
+}
+
+export function applyDiscoverAppResultPolicyToText(
+  catalogAppId: unknown,
+  text: string,
+): {
+  outputText: string;
+  truncated: boolean;
+  maxResultBytes: number | null;
+} {
+  const policy = resolveDiscoverAppResultPolicyForCatalogAppId(catalogAppId);
+  const maxResultBytes = policy?.maxResultBytes ?? null;
+  if (!policy || typeof maxResultBytes !== "number" || maxResultBytes <= 0) {
+    return { outputText: text, truncated: false, maxResultBytes };
+  }
+  const encoder = new TextEncoder();
+  const encoded = encoder.encode(text);
+  if (encoded.byteLength <= maxResultBytes) {
+    return { outputText: text, truncated: false, maxResultBytes };
+  }
+  const suffix = "\n\n[Polynet truncated this app result to the catalog result limit.]";
+  const suffixBytes = encoder.encode(suffix);
+  const budget = Math.max(0, maxResultBytes - suffixBytes.byteLength);
+  const outputText = `${new TextDecoder().decode(encoded.slice(0, budget))}${suffix}`;
+  return { outputText, truncated: true, maxResultBytes };
+}
+
 export function resolveDiscoverAppCatalogConnectPolicy(args: {
   catalogAppId?: unknown;
   name?: unknown;
@@ -721,6 +783,8 @@ export function buildDiscoverAppIntegrationReadinessLabel(
   switch (profile.readiness) {
     case "ready_token":
       return "Ready with token";
+    case "ready_oauth":
+      return "Ready with OAuth";
     case "ready_no_auth":
       return "Ready without auth";
     case "custom_endpoint":
@@ -822,6 +886,7 @@ export function isDiscoverAppPersonallyConnectable(
 ): app is DiscoverAppCatalogEntry & {
   personalConnect:
     | DiscoverAppReadyTokenConnectTemplate
+    | DiscoverAppReadyOAuthConnectTemplate
     | DiscoverAppReadyNoAuthConnectTemplate
     | DiscoverAppReadyCustomConnectTemplate;
 } {
@@ -963,6 +1028,9 @@ export function buildDiscoverAppPersonalConnectModalCopy(
       return `Add ${app.name} now. Paste your ${app.personalConnect.secretLabel} to make it live immediately; OAuth support will come later.`;
     }
     return `Add ${app.name} now. Paste your ${app.personalConnect.secretLabel} to make it live immediately.`;
+  }
+  if (app.personalConnect.authMethod === "oauth") {
+    return `Connect ${app.name} with OAuth to make it live in your personal harness.`;
   }
   return `Review the connection requirements, then connect ${app.name} to your personal platform tools.`;
 }
@@ -1116,33 +1184,33 @@ export const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
     name: "Notion",
     tagline: "Pages, docs, databases, and workspace context",
     description:
-      "High-value knowledge surface for teams and personal work, but it is better treated as catalog-first until a richer auth path exists.",
-    supportLabel: "Needs richer auth",
+      "High-value knowledge surface for teams and personal work through Notion's hosted remote MCP endpoint.",
+    supportLabel: "Ready with OAuth",
     supportNote:
-      "Notion is a strong app page candidate now, but it should not pretend to be one-click connectable under the current alpha connector contract.",
+      "Notion exposes a hosted remote MCP endpoint with OAuth, so members can connect their own workspace into the personal harness.",
     heroNote:
       "Best for shared workspace context, docs, pages, and structured databases.",
     capabilities: [
       "Read workspace docs, pages, and structured knowledge.",
       "Give personal and community agents richer memory context.",
-      "Stay catalog-first until the auth path is fully honest.",
+      "Connect a user-owned Notion workspace through OAuth before it becomes live in the harness.",
     ],
     websiteUrl: "https://www.notion.com",
     docsUrl: "https://developers.notion.com/guides/mcp/get-started-with-mcp",
     logoUrl: "/app-logos/notion.svg",
     personalConnect: {
       connectionKind: "known",
-      availability: "later",
+      availability: "ready",
       authMethod: "oauth",
       connectionStrategy: {
         defaultMode: "oauth",
         supportedModes: ["oauth"],
       },
       endpointUrl: "https://mcp.notion.com/mcp",
-      authType: null,
-      authLabel: "OAuth or managed auth",
+      authType: "oauth",
+      authLabel: "OAuth",
       note:
-        "Notion needs a richer auth flow before personal connection is honest in PolyNet.",
+        "Connects to your personal harness through Notion OAuth. Community recommendations still require each member to authorize their own workspace.",
     },
   },
   {

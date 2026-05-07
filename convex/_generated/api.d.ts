@@ -12,6 +12,7 @@ import type * as account from "../account.js";
 import type * as appConnections from "../appConnections.js";
 import type * as appCore from "../appCore.js";
 import type * as appFetchPolicy from "../appFetchPolicy.js";
+import type * as appOAuth from "../appOAuth.js";
 import type * as appValidation from "../appValidation.js";
 import type * as auth from "../auth.js";
 import type * as authActor from "../authActor.js";
@@ -72,6 +73,7 @@ import type * as fallbackHtmlSearchTransport from "../fallbackHtmlSearchTranspor
 import type * as gates from "../gates.js";
 import type * as harnessMounts from "../harnessMounts.js";
 import type * as http from "../http.js";
+import type * as httpAppOAuth from "../httpAppOAuth.js";
 import type * as httpAuth from "../httpAuth.js";
 import type * as httpAuthBridge from "../httpAuthBridge.js";
 import type * as httpBilling from "../httpBilling.js";
@@ -145,6 +147,7 @@ declare const fullApi: ApiFromModules<{
   appConnections: typeof appConnections;
   appCore: typeof appCore;
   appFetchPolicy: typeof appFetchPolicy;
+  appOAuth: typeof appOAuth;
   appValidation: typeof appValidation;
   auth: typeof auth;
   authActor: typeof authActor;
@@ -205,6 +208,7 @@ declare const fullApi: ApiFromModules<{
   gates: typeof gates;
   harnessMounts: typeof harnessMounts;
   http: typeof http;
+  httpAppOAuth: typeof httpAppOAuth;
   httpAuth: typeof httpAuth;
   httpAuthBridge: typeof httpAuthBridge;
   httpBilling: typeof httpBilling;

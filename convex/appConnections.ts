@@ -55,6 +55,7 @@ export const upsertAppConnectionInternal = internalMutation({
   args: {
     developerAppId: v.id("developerApps"),
     connectionStatus: v.union(v.literal("connected"), v.literal("error")),
+    authKind: v.optional(v.union(v.literal("secret"), v.literal("oauth_tokens"))),
     encryptedSecretHex: v.optional(v.string()),
     secretIvHex: v.optional(v.string()),
     secretVersion: v.optional(v.number()),
@@ -66,6 +67,7 @@ export const upsertAppConnectionInternal = internalMutation({
     const nowMs = args.nowMs ?? Date.now();
     const existing = await getDeveloperAppConnectionByAppId(ctx, args.developerAppId);
     const patch = {
+      authKind: args.authKind ?? existing?.authKind,
       connectionStatus: args.connectionStatus,
       encryptedSecretHex: args.encryptedSecretHex ?? existing?.encryptedSecretHex,
       secretIvHex: args.secretIvHex ?? existing?.secretIvHex,

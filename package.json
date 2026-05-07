@@ -44,6 +44,7 @@
     "check:discover-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/discover_contract_proof.ts",
     "check:discover-integration-profile-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/discover_integration_profile_proof.ts",
     "check:discover-connect-policy-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/discover_connect_policy_proof.ts",
+    "check:app-oauth-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/app_oauth_contract_proof.ts",
     "check:mcp-endpoint-security-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/mcp_endpoint_security_proof.ts",
     "check:runtime-profile-policy-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_profile_policy_proof.ts",
     "check:developer-app-policy-audit-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/developer_app_policy_audit_proof.ts",

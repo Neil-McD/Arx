@@ -781,7 +781,12 @@ export default defineSchema({
     slug: v.string(),
     description: v.optional(v.string()),
     endpointUrl: v.string(),
-    authType: v.union(v.literal("api_key"), v.literal("bearer"), v.literal("none")),
+    authType: v.union(
+      v.literal("api_key"),
+      v.literal("bearer"),
+      v.literal("none"),
+      v.literal("oauth"),
+    ),
     status: v.union(
       v.literal("draft"),
       v.literal("valid"),
@@ -800,6 +805,7 @@ export default defineSchema({
 
   appConnections: defineTable({
     developerAppId: v.id("developerApps"),
+    authKind: v.optional(v.union(v.literal("secret"), v.literal("oauth_tokens"))),
     connectionStatus: v.union(v.literal("connected"), v.literal("error")),
     encryptedSecretHex: v.optional(v.string()),
     secretIvHex: v.optional(v.string()),
@@ -810,6 +816,34 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_app", ["developerAppId"]),
+
+  appOAuthStates: defineTable({
+    userId: v.id("users"),
+    catalogAppId: v.string(),
+    state: v.string(),
+    codeVerifier: v.string(),
+    redirectUri: v.string(),
+    returnToPath: v.string(),
+    endpointUrl: v.string(),
+    clientId: v.string(),
+    clientSecretEncryptedHex: v.optional(v.string()),
+    clientSecretIvHex: v.optional(v.string()),
+    clientSecretVersion: v.optional(v.number()),
+    authorizationEndpoint: v.string(),
+    tokenEndpoint: v.string(),
+    resource: v.string(),
+    issuer: v.optional(v.string()),
+    scope: v.optional(v.string()),
+    callbackCodeEncryptedHex: v.optional(v.string()),
+    callbackCodeIvHex: v.optional(v.string()),
+    callbackCodeVersion: v.optional(v.number()),
+    finalizeTokenHash: v.optional(v.string()),
+    callbackReceivedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    expiresAt: v.number(),
+  })
+    .index("by_state", ["state"])
+    .index("by_user_catalogAppId", ["userId", "catalogAppId"]),
 
   appToolSnapshots: defineTable({
     developerAppId: v.id("developerApps"),
