@@ -122,8 +122,13 @@ function main() {
   );
   assertIncludes(
     contract,
-    "Removing the app from the community stops future distribution but does not uninstall existing user harness apps.",
+    "Removing the app from the community stops future distribution, removes or promotes the community source row, and does not uninstall existing user harness apps.",
     "MCP app architecture contract community removal rule",
+  );
+  assertIncludes(
+    contract,
+    "Source rows explain why a user app exists: direct personal add or community seed.",
+    "MCP app architecture contract source provenance rule",
   );
   assertIncludes(
     contract,

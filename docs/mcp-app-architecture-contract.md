@@ -82,7 +82,7 @@ Current code:
 
 Rules:
 - User app state is the only source for live/setup-needed/not-live status shown to that user.
-- Source rows explain durable user ownership for current distribution installs.
+- Source rows explain why a user app exists: direct personal add or community seed.
 - Personal credentials live in user connection state.
 - OAuth tokens live in encrypted user connection state and must not be stored in community app bundle records; callback results must not attach provider tokens to a Polynet user until an authenticated finalization action verifies the state owner.
 - If a user already has Linear live personally and a community adds Linear, every surface must resolve to that same effective Linear state for that user.
@@ -123,9 +123,9 @@ Adding an app to a community creates or reuses the community app record and seed
 - Reuse an existing community app record by `catalogAppId` first, then endpoint/auth fallback.
 - Do not ask for or store a shared member secret.
 - Reuse matching user app state by stable identity.
-- Record user-owned app state for seeded installs.
+- Record community provenance for seeded installs while keeping runtime execution on user app state.
 - Surface any setup-needed state from the user's effective app state, not from a separate community runtime.
-- Removing the app from the community stops future distribution but does not uninstall existing user harness apps.
+- Removing the app from the community stops future distribution, removes or promotes the community source row, and does not uninstall existing user harness apps.
 
 ### Community join
 
@@ -141,6 +141,7 @@ Joining a community grants access to that community's app bundle.
 Leaving a community revokes community access, not previously installed user-owned MCP apps.
 
 - Do not delete user-owned app state when community access ends.
+- Remove or promote community source provenance instead of deleting the user harness app.
 - Existing user harness apps remain available until the user removes them.
 - Future community-managed app access is a separate primitive with explicit shared/community authentication, metering, billing, and revocation semantics.
 

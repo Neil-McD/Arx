@@ -2194,7 +2194,9 @@ export const seedCommunityAppGrantIntoUserHarnessInternal = internalAction({
         enabledTools: Array.isArray(seedSource.mount.enabledTools)
           ? seedSource.mount.enabledTools
           : undefined,
-        sourceType: "personal",
+        sourceType: "community",
+        communityId: seedSource.mount.communityId,
+        communityAppMountId: seedSource.mount._id,
         updateExistingMount: false,
         nowMs: args.nowMs,
       },
@@ -2319,7 +2321,9 @@ export const seedCommunityAppGrantsForUserInternal = internalAction({
             enabledTools: Array.isArray(seedSource.mount.enabledTools)
               ? seedSource.mount.enabledTools
               : undefined,
-            sourceType: "personal",
+            sourceType: "community",
+            communityId: seedSource.mount.communityId,
+            communityAppMountId: seedSource.mount._id,
             updateExistingMount: false,
             nowMs: args.nowMs,
           },

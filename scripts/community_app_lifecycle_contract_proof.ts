@@ -147,7 +147,7 @@ function main() {
   assertIncludes(
     communityAppMounts,
     "seedCommunityAppGrantIntoUserHarnessInternal",
-    "community add seeds the builder personal harness",
+    "community add seeds the builder user harness",
   );
   assertIncludes(
     communityAppMounts,
@@ -201,8 +201,33 @@ function main() {
   );
   assertIncludes(
     userPlatformAppMounts,
-    "sourceType: \"personal\"",
-    "community distribution installs record user-owned app provenance",
+    `sourceType: "community",
+        communityId: seedSource.mount.communityId,
+        communityAppMountId: seedSource.mount._id,`,
+    "single community app seed records community source provenance",
+  );
+  assertIncludes(
+    userPlatformAppMounts,
+    `sourceType: "community",
+            communityId: seedSource.mount.communityId,
+            communityAppMountId: seedSource.mount._id,`,
+    "community join bulk-add records community source provenance",
+  );
+  assertNotIncludes(
+    userPlatformAppMounts,
+    `enabledTools: Array.isArray(seedSource.mount.enabledTools)
+          ? seedSource.mount.enabledTools
+          : undefined,
+        sourceType: "personal",`,
+    "single community app seed does not masquerade as a personal add",
+  );
+  assertNotIncludes(
+    userPlatformAppMounts,
+    `enabledTools: Array.isArray(seedSource.mount.enabledTools)
+              ? seedSource.mount.enabledTools
+              : undefined,
+            sourceType: "personal",`,
+    "community join bulk-add does not masquerade as a personal add",
   );
   assertIncludes(
     userPlatformAppMounts,
