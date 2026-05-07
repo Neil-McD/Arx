@@ -5,6 +5,7 @@ import type {
   OperatorAuthAccessDiagnosticsSnapshot,
   OperatorBuilderRecord,
   OperatorEventRecord,
+  OperatorFrontendErrorDiagnosticsSnapshot,
   OperatorMonetizationSnapshot,
   OperatorOverviewSnapshot,
   OperatorRange,
@@ -267,6 +268,21 @@ export async function loadOperatorRuntimeToolDiagnosticsCanonical(params: {
     authSubject,
     range: params.range ?? "30d",
   })) as OperatorRuntimeToolDiagnosticsSnapshot;
+}
+
+export async function loadOperatorFrontendErrorDiagnosticsCanonical(params: {
+  session: AuthSessionLike;
+  range?: OperatorRange;
+}): Promise<OperatorFrontendErrorDiagnosticsSnapshot> {
+  const { client, authSubject } = await withOperatorAuth(params.session);
+  const build = canRunBrowserWebDeployProbes()
+    ? await readCurrentBuildFromVersionJson()
+    : { buildId: null, checkedAt: Date.now(), reachable: false };
+  return (await client.action("operatorSentryDiagnostics:getOperatorFrontendErrorDiagnostics" as any, {
+    authSubject,
+    range: params.range ?? "30d",
+    currentBuildId: build.buildId ?? undefined,
+  })) as OperatorFrontendErrorDiagnosticsSnapshot;
 }
 
 export async function loadOperatorRisksCanonical(params: {

@@ -143,8 +143,8 @@ assert.match(
 );
 assert.match(
   operatorPanel,
-  /Crash counts are first-party deploy diagnostics only[\s\S]*Sentry-backed frontend totals are not connected yet/,
-  "operator panel must label frontend crash coverage limits",
+  /Crash counts here are first-party deploy diagnostics only[\s\S]*Sentry-backed issue totals are shown in Frontend errors/,
+  "operator panel must label frontend crash coverage limits and point to Sentry-backed issue totals",
 );
 assert.match(
   operatorPanel,

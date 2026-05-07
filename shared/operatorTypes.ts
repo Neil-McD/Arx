@@ -260,6 +260,53 @@ export type OperatorRuntimeToolDiagnosticsSnapshot = {
   };
 };
 
+export type OperatorFrontendErrorIssue = {
+  id: string;
+  shortId: string | null;
+  title: string;
+  culprit: string | null;
+  permalink: string | null;
+  level: "fatal" | "error" | "warning" | "info" | "unknown";
+  status: string;
+  count: number;
+  userCount: number | null;
+  firstSeen: string | null;
+  lastSeen: string | null;
+  release: string | null;
+};
+
+export type OperatorFrontendErrorDiagnosticsSnapshot = {
+  computedAt: number;
+  range: OperatorRange;
+  health: "healthy" | "degraded" | "incident" | "unknown";
+  release: {
+    currentBuildId: string | null;
+    sentryRelease: string | null;
+    matchesCurrentBuild: boolean | null;
+  };
+  totals: {
+    issues: number;
+    events: number;
+    affectedUsers: number | null;
+    unresolvedIssues: number;
+  };
+  topIssues: OperatorFrontendErrorIssue[];
+  evidence: {
+    source: "sentry";
+    endpointMode: "organization_issues" | "project_issues";
+    org: string | null;
+    project: string | null;
+    projectId: string | null;
+    environment: string | null;
+    query: string;
+    statsPeriod: string;
+    configured: boolean;
+    unavailableReason: string | null;
+    sampled: boolean;
+    isTruncated: boolean;
+  };
+};
+
 export type OperatorWebDeployRouteCheck = {
   label: string;
   path: string;

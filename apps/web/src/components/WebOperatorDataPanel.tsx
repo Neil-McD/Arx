@@ -5,6 +5,7 @@ import {
   loadOperatorAuthAccessDiagnosticsCanonical,
   loadOperatorBuildersCanonical,
   loadOperatorEventsCanonical,
+  loadOperatorFrontendErrorDiagnosticsCanonical,
   loadOperatorMonetizationCanonical,
   loadOperatorOverviewCanonical,
   loadOperatorRisksCanonical,
@@ -17,6 +18,7 @@ import type {
   OperatorAuthAccessDiagnosticsSnapshot,
   OperatorBuilderRecord,
   OperatorEventRecord,
+  OperatorFrontendErrorDiagnosticsSnapshot,
   OperatorMonetizationSnapshot,
   OperatorOverviewSnapshot,
   OperatorRiskItem,
@@ -45,6 +47,7 @@ export type OperatorDashboardState = {
   authAccess: OperatorAuthAccessDiagnosticsSnapshot | null;
   securityAudit: OperatorSecurityAuditDiagnosticsSnapshot | null;
   runtimeTools: OperatorRuntimeToolDiagnosticsSnapshot | null;
+  frontendErrors: OperatorFrontendErrorDiagnosticsSnapshot | null;
   builders: OperatorBuilderRecord[];
   risks: OperatorRiskItem[];
   events: OperatorEventRecord[];
@@ -58,6 +61,7 @@ export function createEmptyOperatorDashboardState(): OperatorDashboardState {
     authAccess: null,
     securityAudit: null,
     runtimeTools: null,
+    frontendErrors: null,
     builders: [],
     risks: [],
     events: [],
@@ -118,11 +122,23 @@ export function useOperatorDashboardData(params: {
           loadOperatorAuthAccessDiagnosticsCanonical({ session, range: "30d" }),
           loadOperatorSecurityAuditDiagnosticsCanonical({ session, range: "30d" }),
           loadOperatorRuntimeToolDiagnosticsCanonical({ session, range: "30d" }),
+          loadOperatorFrontendErrorDiagnosticsCanonical({ session, range: "30d" }),
           loadOperatorBuildersCanonical({ session, limit: 12 }),
           loadOperatorRisksCanonical({ session, limit: 12 }),
           loadOperatorEventsCanonical({ session, limit: 12 }),
         ] as const);
-        const [overview, monetization, webDeploy, authAccess, securityAudit, runtimeTools, builders, risks, events] = results;
+        const [
+          overview,
+          monetization,
+          webDeploy,
+          authAccess,
+          securityAudit,
+          runtimeTools,
+          frontendErrors,
+          builders,
+          risks,
+          events,
+        ] = results;
         [
           ["overview", overview],
           ["monetization", monetization],
@@ -130,6 +146,7 @@ export function useOperatorDashboardData(params: {
           ["auth_access", authAccess],
           ["security_audit", securityAudit],
           ["runtime_tools", runtimeTools],
+          ["frontend_errors", frontendErrors],
           ["builders", builders],
           ["risks", risks],
           ["events", events],
@@ -141,6 +158,7 @@ export function useOperatorDashboardData(params: {
           authAccess: fulfilledValue(authAccess),
           securityAudit: fulfilledValue(securityAudit),
           runtimeTools: fulfilledValue(runtimeTools),
+          frontendErrors: fulfilledValue(frontendErrors),
           builders: fulfilledList(builders),
           risks: fulfilledList(risks),
           events: fulfilledList(events),
@@ -156,6 +174,7 @@ export function useOperatorDashboardData(params: {
             authAccess: nextState.authAccess ?? prev.authAccess,
             securityAudit: nextState.securityAudit ?? prev.securityAudit,
             runtimeTools: nextState.runtimeTools ?? prev.runtimeTools,
+            frontendErrors: nextState.frontendErrors ?? prev.frontendErrors,
             builders: nextState.builders ?? prev.builders,
             risks: nextState.risks ?? prev.risks,
             events: nextState.events ?? prev.events,
@@ -249,6 +268,7 @@ export function WebOperatorDataPanel(props: {
             authAccess={props.state.authAccess}
             securityAudit={props.state.securityAudit}
             runtimeTools={props.state.runtimeTools}
+            frontendErrors={props.state.frontendErrors}
             risks={props.state.risks}
             events={props.state.events}
           />
@@ -338,6 +358,7 @@ function formatHealth(
     | OperatorSecurityAuditDiagnosticsSnapshot["health"]
     | OperatorRuntimeToolDiagnosticsSnapshot["health"]
     | OperatorWebDeployDiagnosticsSnapshot["health"]
+    | OperatorFrontendErrorDiagnosticsSnapshot["health"]
     | null
     | undefined,
 ): string {
@@ -420,6 +441,13 @@ function formatEventTime(createdAt: number): string {
   }).format(new Date(createdAt));
 }
 
+function formatIsoEventTime(value: string | null): string {
+  if (!value) return "";
+  const timestamp = Date.parse(value);
+  if (!Number.isFinite(timestamp)) return "";
+  return formatEventTime(timestamp);
+}
+
 function OperatorPlatformInsights(props: {
   overview: OperatorOverviewSnapshot | null;
   monetization: OperatorMonetizationSnapshot | null;
@@ -427,6 +455,7 @@ function OperatorPlatformInsights(props: {
   authAccess: OperatorAuthAccessDiagnosticsSnapshot | null;
   securityAudit: OperatorSecurityAuditDiagnosticsSnapshot | null;
   runtimeTools: OperatorRuntimeToolDiagnosticsSnapshot | null;
+  frontendErrors: OperatorFrontendErrorDiagnosticsSnapshot | null;
   risks: OperatorRiskItem[];
   events: OperatorEventRecord[];
 }) {
@@ -508,11 +537,67 @@ function OperatorPlatformInsights(props: {
           ) : null}
           {props.webDeploy && !props.webDeploy.evidence.sentryBacked ? (
             <div className="operator-dashboard__empty">
-              Crash counts are first-party deploy diagnostics only. Sentry-backed frontend totals are not connected yet.
+              Crash counts here are first-party deploy diagnostics only. Sentry-backed issue totals are shown in Frontend errors.
             </div>
           ) : null}
           {props.webDeploy?.evidence.isTruncated ? (
             <div className="operator-dashboard__empty">Web and deploy diagnostics are sampled for this window.</div>
+          ) : null}
+        </div>
+      </section>
+
+      <section className="operator-dashboard__panel">
+        <h2>Frontend errors</h2>
+        <div className="operator-dashboard__table">
+          <div className="operator-dashboard__row">
+            <span>Health</span>
+            <strong>{formatHealth(props.frontendErrors?.health)}</strong>
+          </div>
+          <div className="operator-dashboard__row">
+            <span>Open issues</span>
+            <strong>{props.frontendErrors?.totals.unresolvedIssues ?? 0}</strong>
+          </div>
+          <div className="operator-dashboard__row">
+            <span>Issue events</span>
+            <strong>{props.frontendErrors?.totals.events ?? 0}</strong>
+          </div>
+          <div className="operator-dashboard__row">
+            <span>Affected users</span>
+            <strong>{props.frontendErrors?.totals.affectedUsers ?? "-"}</strong>
+          </div>
+          <div className="operator-dashboard__row">
+            <span>Sentry release</span>
+            <strong>{props.frontendErrors?.release.sentryRelease?.slice(0, 12) ?? "Unknown"}</strong>
+          </div>
+          {props.frontendErrors?.evidence.unavailableReason ? (
+            <div className="operator-dashboard__empty">
+              Sentry frontend diagnostics unavailable: {props.frontendErrors.evidence.unavailableReason}.
+            </div>
+          ) : props.frontendErrors?.topIssues.length ? (
+            props.frontendErrors.topIssues.slice(0, 3).map((issue) => (
+              <div className="operator-dashboard__row" key={issue.id}>
+                <div>
+                  <strong>{issue.shortId ? `${issue.shortId}: ${issue.title}` : issue.title}</strong>
+                  <span>
+                    {[issue.level, `${issue.count} events`, formatIsoEventTime(issue.lastSeen), issue.culprit]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </span>
+                </div>
+                <span>{issue.status}</span>
+              </div>
+            ))
+          ) : (
+            <div className="operator-dashboard__empty">No unresolved frontend Sentry issues returned.</div>
+          )}
+          {props.frontendErrors?.release.matchesCurrentBuild === false ? (
+            <div className="operator-dashboard__empty">Sentry release evidence does not match the current build id.</div>
+          ) : null}
+          {props.frontendErrors?.evidence.sampled ? (
+            <div className="operator-dashboard__empty">Frontend error diagnostics are sampled from top Sentry issues.</div>
+          ) : null}
+          {props.frontendErrors?.evidence.isTruncated ? (
+            <div className="operator-dashboard__empty">Sentry returned more issues than the operator panel displays.</div>
           ) : null}
         </div>
       </section>
