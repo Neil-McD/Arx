@@ -31,6 +31,9 @@ function main() {
   const integrationsSettings = readText(
     join(root, "apps/web/src/components/WebIntegrationsSettingsSection.tsx"),
   );
+  const personalAppSetupModal = readText(
+    join(root, "apps/web/src/components/PersonalAppSetupModal.tsx"),
+  );
   const communityAppsEditor = readText(
     join(root, "apps/web/src/components/WebCommunityAiAgentAppsEditor.tsx"),
   );
@@ -206,13 +209,38 @@ function main() {
   );
   assertIncludes(
     communitySettings,
-    "setupTargetsExistingPersonalMount",
-    "Community Settings setup reuses existing personal app identity",
+    "PersonalAppSetupModal",
+    "Community Settings uses canonical personal app setup modal",
+  );
+  assertIncludes(
+    integrationsSettings,
+    "PersonalAppSetupModal",
+    "Integrations Settings uses canonical personal app setup modal",
+  );
+  assertIncludes(
+    personalAppSetupModal,
+    "personalAppSetupTargetsExistingPersonalMount",
+    "Canonical personal app setup reuses existing personal app identity",
   );
   assertIncludes(
     communitySettings,
     "integration-mounted-setup-action",
     "Community Settings renders setup action for setup-needed community apps",
+  );
+  assertIncludes(
+    personalAppSetupModal,
+    "buildDiscoverAppPersonalConnectRequirements",
+    "Canonical personal app setup modal renders catalog-driven requirements",
+  );
+  assertNotIncludes(
+    communitySettings,
+    "function setupTargetsExistingPersonalMount",
+    "Community Settings local duplicate personal setup identity helper",
+  );
+  assertNotIncludes(
+    integrationsSettings,
+    "function setupTargetsExistingPersonalMount",
+    "Integrations Settings local duplicate personal setup identity helper",
   );
   for (const legacyCopy of [
     "recommended by this community",
