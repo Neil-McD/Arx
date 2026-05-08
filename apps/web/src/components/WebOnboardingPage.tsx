@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState, type DragEvent } from "react";
-import { Bot, Check, CircleUserRound, Compass, PlugZap, X } from "lucide-react";
+import { useEffect, useMemo, useState, type DragEvent, type ReactNode } from "react";
+import { ArrowRight, Bot, Check, CircleUserRound, Compass, PlugZap, PlusCircle, Search, X } from "lucide-react";
 import type { AccountSetupStatus, AccountSetupStep } from "../../../../shared/accountSetup";
 
 type OnboardingStep = Exclude<AccountSetupStep, "complete">;
@@ -90,14 +90,27 @@ function DirectionButton(props: {
   title: string;
   details: string;
   action: string;
+  icon: ReactNode;
+  tone: "build" | "discover";
   disabled: boolean;
   onClick: () => void;
 }) {
   return (
-    <button type="button" disabled={props.disabled} onClick={props.onClick}>
-      <span>{props.title}</span>
-      <p>{props.details}</p>
-      <em>{props.action}</em>
+    <button
+      className={`polynet-onboarding-direction-card ${props.tone}`}
+      type="button"
+      disabled={props.disabled}
+      onClick={props.onClick}
+    >
+      <span className="polynet-onboarding-direction-icon">{props.icon}</span>
+      <span className="polynet-onboarding-direction-copy">
+        <strong>{props.title}</strong>
+        <p>{props.details}</p>
+      </span>
+      <span className="polynet-onboarding-direction-action">
+        {props.action}
+        <ArrowRight size={14} strokeWidth={2.2} aria-hidden="true" />
+      </span>
     </button>
   );
 }
@@ -499,6 +512,8 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
                 title="Build my first community"
                 details="Create a community, configure access, and launch your agent."
                 action="Start building"
+                icon={<PlusCircle size={18} strokeWidth={2} aria-hidden="true" />}
+                tone="build"
                 disabled={props.isSaving}
                 onClick={() => chooseDirection("build_community")}
               />
@@ -506,6 +521,8 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
                 title="Discover communities"
                 details="Explore communities, join one, and start using shared agents."
                 action="Explore communities"
+                icon={<Search size={18} strokeWidth={2} aria-hidden="true" />}
+                tone="discover"
                 disabled={props.isSaving}
                 onClick={() => chooseDirection("discover_community")}
               />
