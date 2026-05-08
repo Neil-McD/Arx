@@ -2797,6 +2797,7 @@ body {
   border: 1px solid var(--border-muted);
   border-radius: 14px;
   min-height: 220px;
+  aspect-ratio: 1 / 1;
   padding: 18px;
   display: grid;
   grid-template-rows: auto 1fr auto;
@@ -3557,6 +3558,11 @@ body {
   .polynet-onboarding-provider-option {
     grid-template-columns: 1fr;
     align-items: start;
+    aspect-ratio: auto;
+    min-height: 188px;
+  }
+
+  .polynet-onboarding-direction-card {
     aspect-ratio: auto;
     min-height: 188px;
   }
