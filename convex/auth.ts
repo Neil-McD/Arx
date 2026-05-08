@@ -106,8 +106,6 @@ function normalizeOptionalString(raw: unknown): string | null {
 function seedAuthenticatedProfile(args: {
   identity: Awaited<ReturnType<typeof resolveAuthenticatedIdentityProfile>>;
   email?: string;
-  displayName?: string;
-  avatarUrl?: string;
 }): {
   email: string | null;
   emailVerified: boolean;
@@ -120,8 +118,8 @@ function seedAuthenticatedProfile(args: {
     email: args.identity.email ?? hintedEmail,
     emailVerified: args.identity.emailVerified,
     emailVerificationSource: args.identity.emailVerified ? args.identity.emailVerificationSource : null,
-    displayName: args.identity.displayName ?? normalizeOptionalString(args.displayName),
-    avatarUrl: args.identity.avatarUrl ?? normalizeOptionalString(args.avatarUrl),
+    displayName: null,
+    avatarUrl: null,
   };
 }
 
@@ -145,8 +143,6 @@ export const bootstrapActor = mutation({
       const seededProfile = seedAuthenticatedProfile({
         identity,
         email: args.email,
-        displayName: args.displayName,
-        avatarUrl: args.avatarUrl,
       });
       const { actor, continuity } = await ensureAuthenticatedActorDetailed({
         ctx,

@@ -376,6 +376,8 @@ export default defineSchema({
 
   userProfileDetails: defineTable({
     userId: v.id("users"),
+    displayName: v.optional(v.string()),
+    avatarUrl: v.optional(v.string()),
     bio: v.optional(v.string()),
     onboardingDirection: v.optional(
       v.union(

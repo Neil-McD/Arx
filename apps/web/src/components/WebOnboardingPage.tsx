@@ -3,7 +3,6 @@ import { Bot, Check, CircleUserRound, Compass, PlugZap, X } from "lucide-react";
 import type { AccountSetupStatus, AccountSetupStep } from "../../../../shared/accountSetup";
 
 type OnboardingStep = Exclude<AccountSetupStep, "complete">;
-type OnboardingDirection = "build_community" | "discover_community" | "learn_about_polynet";
 
 type WebOnboardingPageProps = {
   variant?: "page" | "modal";
@@ -39,7 +38,6 @@ type WebOnboardingPageProps = {
   onSaveAgent: (next: { agentName: string; agentSoul: string }) => Promise<boolean> | boolean;
   onBuildCommunity: () => void;
   onDiscoverCommunity: () => void;
-  onLearnAboutPolynet: () => void;
   onClose?: () => void;
 };
 
@@ -113,6 +111,9 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
   const progress = props.accountSetupStatus?.percent ?? 0;
   const progressCircumference = 2 * Math.PI * 17;
   const progressDashOffset = progressCircumference - (progress / 100) * progressCircumference;
+  const hasInferenceProvider = props.chatgptConnected || props.openAiConnected;
+  const profileReady = props.displayName.trim().length > 0 && Boolean(props.avatarUrl?.trim());
+  const agentReady = agentNameDraft.trim().length > 0;
   const stepOrder = useMemo<OnboardingStep[]>(
     () => ["identity", "inference", "agent", "direction"],
     [],
@@ -133,14 +134,21 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
       return;
     }
     if (step === "inference") {
+      if (!hasInferenceProvider) return;
       setStep("agent");
     }
   };
 
-  const chooseDirection = (direction: OnboardingDirection) => {
+  const nextDisabled =
+    props.isSaving ||
+    props.isSavingAgent ||
+    (step === "identity" && !profileReady) ||
+    (step === "inference" && !hasInferenceProvider) ||
+    (step === "agent" && !agentReady);
+
+  const chooseDirection = (direction: "build_community" | "discover_community") => {
     if (direction === "build_community") props.onBuildCommunity();
     if (direction === "discover_community") props.onDiscoverCommunity();
-    if (direction === "learn_about_polynet") props.onLearnAboutPolynet();
   };
 
   const handleClose = () => {
@@ -248,6 +256,7 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
                   placeholder="Your name"
                 />
               </label>
+              <small>Name and profile photo are required.</small>
             </div>
           ) : null}
 
@@ -255,9 +264,10 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
             <div className="polynet-onboarding-provider-grid">
               <div className="polynet-onboarding-provider-option primary">
                 <div>
-                  <span>ChatGPT</span>
-                  <strong>{props.chatgptStatus}</strong>
-                  <p>Use your ChatGPT Plus or Pro rate limits for personal inference on Polynet.</p>
+                  <span>ChatGPT OAuth</span>
+                  <strong>Use ChatGPT Plus/Pro rate limits</strong>
+                  <p>Connect ChatGPT so Polynet can use your personal OpenAI account limits.</p>
+                  <small>{props.chatgptStatus}</small>
                 </div>
                 <button
                   className="platform-save-button platform-save-button--compact"
@@ -277,8 +287,9 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
               <div className="polynet-onboarding-provider-option">
                 <div>
                   <span>OpenAI API</span>
-                  <strong>{props.openAiStatus}</strong>
-                  <p>Add an API key billed directly through OpenAI.</p>
+                  <strong>Use your API key</strong>
+                  <p>Paste an OpenAI API key billed directly through OpenAI.</p>
+                  <small>{props.openAiStatus}</small>
                 </div>
                 <div className="polynet-onboarding-provider-key">
                   <input
@@ -307,6 +318,10 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
 
           {step === "agent" ? (
             <div className="polynet-onboarding-agent">
+              <div className="polynet-onboarding-step-intro">
+                <strong>Give your agent a name and a personality.</strong>
+                <p>The name is required. The personality can stay light for now.</p>
+              </div>
               <label>
                 Agent name
                 <input
@@ -316,7 +331,7 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
                 />
               </label>
               <label>
-                Soul (optional)
+                Personality (optional)
                 <textarea
                   value={agentSoulDraft}
                   onChange={(event) => setAgentSoulDraft(event.target.value)}
@@ -341,12 +356,6 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
                 disabled={props.isSaving}
                 onClick={() => chooseDirection("discover_community")}
               />
-              <DirectionButton
-                title="Learn about Polynet"
-                details="Open a workspace thread that explains the platform."
-                disabled={props.isSaving}
-                onClick={() => chooseDirection("learn_about_polynet")}
-              />
             </div>
           ) : null}
 
@@ -369,7 +378,7 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
                 <button
                   type="button"
                   className="polynet-onboarding-next"
-                  disabled={props.isSaving || props.isSavingAgent}
+                  disabled={nextDisabled}
                   onClick={() => void goNext()}
                 >
                   {props.isSaving || props.isSavingAgent ? "Saving..." : "Next"}

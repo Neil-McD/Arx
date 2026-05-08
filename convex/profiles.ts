@@ -49,6 +49,8 @@ async function hasEstablishedAccountEvidence(ctx: any, userId: any): Promise<boo
 function mapProfileDetail(user: UserRow, detail: ProfileDetailRow | null) {
   return {
     ...mapProfileBase(user),
+    display_name: detail?.displayName ?? null,
+    avatar_url: detail?.avatarUrl ?? null,
     bio: detail?.bio ?? null,
     onboarding_direction: detail?.onboardingDirection ?? null,
     onboarding_completed_at:
@@ -250,6 +252,14 @@ export const upsertProfileDetail = mutation({
       .query("userProfileDetails")
       .withIndex("by_user", (q: any) => q.eq("userId", actor.dbUserId))
       .first()) as ProfileDetailRow | null;
+    const nextDisplayName =
+      args.displayName !== undefined
+        ? String(args.displayName ?? "").trim() || undefined
+        : existingDetail?.displayName;
+    const nextAvatarUrl =
+      args.avatarUrl !== undefined
+        ? String(args.avatarUrl ?? "").trim() || undefined
+        : existingDetail?.avatarUrl;
     const nextBio = args.bio !== undefined ? String(args.bio ?? "").trim() || undefined : existingDetail?.bio;
     const nextOnboardingDirection =
       args.onboardingDirection === undefined
@@ -259,6 +269,8 @@ export const upsertProfileDetail = mutation({
     if (!existingDetail) {
       await ctx.db.insert("userProfileDetails", {
         userId: actor.dbUserId,
+        displayName: nextDisplayName,
+        avatarUrl: nextAvatarUrl,
         bio: nextBio,
         onboardingDirection: nextOnboardingDirection,
         ...(args.completeOnboarding ? { onboardingCompletedAt: nowMs } : null),
@@ -267,6 +279,8 @@ export const upsertProfileDetail = mutation({
       });
     } else {
       await ctx.db.patch(existingDetail._id, {
+        displayName: nextDisplayName,
+        avatarUrl: nextAvatarUrl,
         bio: nextBio,
         onboardingDirection: nextOnboardingDirection,
         ...(args.completeOnboarding && !existingDetail.onboardingCompletedAt

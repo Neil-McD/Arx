@@ -15,6 +15,8 @@ export type AccountSetupUserRow = {
 export type AccountSetupProfileDetailRow = {
   _id: any;
   userId: any;
+  displayName?: string;
+  avatarUrl?: string;
   bio?: string;
   onboardingDirection?: "build_community" | "discover_community" | "learn_about_polynet";
   onboardingCompletedAt?: number;
@@ -43,9 +45,9 @@ export function buildAccountSetupStatusForRows(params: {
     (row) => row?.provider === "chatgpt" || row?.provider === "openai",
   );
   return buildAccountSetupStatus({
-    displayName: params.user.displayName ?? null,
+    displayName: params.detail?.displayName ?? null,
     handle: params.user.handle ?? null,
-    avatarUrl: params.user.avatarUrl ?? null,
+    avatarUrl: params.detail?.avatarUrl ?? null,
     bio: params.detail?.bio ?? null,
     hasInferenceProvider,
     agentName: params.memorySettings?.agentName ?? null,

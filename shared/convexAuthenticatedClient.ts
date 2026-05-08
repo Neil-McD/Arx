@@ -2,8 +2,6 @@ import { ConvexHttpClient } from "convex/browser";
 import {
   resolveAuthSubject,
   resolveAuthIdentityToken,
-  resolveAuthSessionAvatarUrl,
-  resolveAuthSessionDisplayName,
   resolveAuthSessionEmail,
   type AuthSessionLike,
 } from "./authSession";
@@ -147,8 +145,6 @@ export async function bootstrapConvexAuthenticatedClient(
         authState: "authenticated",
         authSubject,
         email: resolveAuthSessionEmail(session),
-        displayName: resolveAuthSessionDisplayName(session),
-        avatarUrl: resolveAuthSessionAvatarUrl(session),
       })) as Record<string, unknown>;
     } catch (error) {
       rethrowBootstrapActorError(error);

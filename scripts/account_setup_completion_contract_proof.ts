@@ -8,8 +8,10 @@ function read(path: string): string {
 const schema = read("convex/schema.ts");
 const profiles = read("convex/profiles.ts");
 const accountSetupCore = read("convex/accountSetupCore.ts");
+const authBootstrap = read("convex/auth.ts");
 const settings = read("convex/settings.ts");
 const profileGateway = read("shared/cloudProfilesGateway.ts");
+const convexAuthenticatedClient = read("shared/convexAuthenticatedClient.ts");
 const settingsGateway = read("shared/cloudUserSettingsGateway.ts");
 const communityTypes = read("shared/communityTypes.ts");
 const accountSetup = read("shared/accountSetup.ts");
@@ -22,6 +24,8 @@ assert.match(schema, /handle: v\.optional\(v\.string\(\)\)/, "users table must s
 assert.match(schema, /normalizedHandle: v\.optional\(v\.string\(\)\)/, "users table must store normalized handle");
 assert.match(schema, /\.index\("by_normalizedHandle", \["normalizedHandle"\]\)/, "normalized handle must be indexed");
 assert.match(schema, /onboardingDirection: v\.optional\(/, "profile details must store onboarding direction");
+assert.match(schema, /displayName: v\.optional\(v\.string\(\)\)/, "profile details must store first-party display name evidence");
+assert.match(schema, /avatarUrl: v\.optional\(v\.string\(\)\)/, "profile details must store first-party avatar evidence");
 assert.match(schema, /agentName: v\.optional\(v\.string\(\)\)/, "user memory settings must store agent name");
 
 assert.match(profileHandle, /export function validateProfileHandle/, "profile handle validator must be shared");
@@ -52,6 +56,12 @@ assert.match(profiles, /withIndex\("by_normalizedHandle"/, "handle uniqueness ch
 assert.match(profiles, /export const getMyAccountSetupStatus = query/, "profiles must expose authenticated setup status");
 assert.match(profiles, /loadAccountSetupStatusForUser/, "profiles must use the shared Convex setup derivation helper");
 assert.match(accountSetupCore, /buildAccountSetupStatusForRows/, "Convex setup derivation must support bulk operator attribution");
+assert.match(accountSetupCore, /displayName: params\.detail\?\.displayName \?\? null/, "profile completion must use first-party profile detail display name");
+assert.match(accountSetupCore, /avatarUrl: params\.detail\?\.avatarUrl \?\? null/, "profile completion must use first-party profile detail avatar");
+assert.doesNotMatch(accountSetupCore, /displayName: params\.user\.displayName/, "auth-seeded display name must not complete account setup");
+assert.doesNotMatch(accountSetupCore, /avatarUrl: params\.user\.avatarUrl/, "auth-seeded avatar must not complete account setup");
+assert.doesNotMatch(convexAuthenticatedClient, /resolveAuthSessionDisplayName|resolveAuthSessionAvatarUrl/, "Convex bootstrap must not send provider profile metadata");
+assert.doesNotMatch(authBootstrap, /args\.identity\.displayName|args\.identity\.avatarUrl/, "auth bootstrap must not seed provider profile metadata");
 assert.match(accountSetupCore, /query\("userProviderConnections"\)/, "inference completion must derive from provider connections");
 assert.match(accountSetupCore, /query\("userMemorySettings"\)/, "agent completion must derive from user memory settings");
 assert.match(profiles, /account_setup: await loadAccountSetupStatusForUser/, "onboarding profile responses must include setup status");
@@ -76,6 +86,8 @@ assert.match(onboardingPage, /accountSetupStatus: AccountSetupStatus \| null/, "
 assert.doesNotMatch(onboardingPage, /profileHandleHint|polynet-onboarding-handle-field/, "onboarding profile step must not require handle");
 assert.match(onboardingPage, /onConnectChatgpt/, "onboarding inference step must reuse ChatGPT provider flow");
 assert.match(onboardingPage, /onConnectOpenAi/, "onboarding inference step must reuse OpenAI provider flow");
+assert.match(onboardingPage, /Use ChatGPT Plus\/Pro rate limits/, "onboarding inference choice should clearly name ChatGPT rate limits");
+assert.doesNotMatch(onboardingPage, /Learn about Polynet|onLearnAboutPolynet/, "onboarding direction should only offer build or discover");
 assert.match(onboardingPage, /onSaveAgent/, "onboarding agent step must persist canonical agent settings");
 assert.match(setupCard, /Finish account setup/, "workspace setup card must replace provider-only nudge");
 assert.match(workspaceLandingProjection, /WebAccountSetupCard/, "workspace empty state must render the account setup card");

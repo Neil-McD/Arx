@@ -28,8 +28,6 @@ import {
 import {
   readProfileDraftForUser, writeProfileDraftForUser, } from "../../../shared/profileDraftStorage";
 import {
-  resolveAuthSessionAvatarUrl,
-  resolveAuthSessionDisplayName,
   resolveAuthSessionEmail,
   resolveAuthSubject,
 } from "../../../shared/authSession";
@@ -1461,35 +1459,6 @@ export default function App() {
     }
   }, [ensureUsableAuthSession, session, sessionRef]);
   const authProfileEmail = useMemo(() => resolveAuthSessionEmail(session) ?? null, [session]);
-  const authProfileDisplayName = useMemo(
-    () => resolveAuthSessionDisplayName(session) ?? "",
-    [session],
-  );
-  const authProfileAvatarUrl = useMemo(
-    () => resolveAuthSessionAvatarUrl(session) ?? null,
-    [session],
-  );
-
-  useEffect(() => {
-    if (!session) return;
-    if (cloudProfile) return;
-    if (!authProfileDisplayName && !authProfileAvatarUrl) return;
-    if (!profileUi.profileName.trim() && authProfileDisplayName) {
-      profileUi.setProfileName(authProfileDisplayName);
-    }
-    if (!profileUi.profileAvatarUrl && authProfileAvatarUrl) {
-      profileUi.setProfileAvatarUrl(authProfileAvatarUrl);
-    }
-  }, [
-    authProfileAvatarUrl,
-    authProfileDisplayName,
-    cloudProfile,
-    profileUi.profileAvatarUrl,
-    profileUi.profileName,
-    profileUi.setProfileAvatarUrl,
-    profileUi.setProfileName,
-    session,
-  ]);
 
   const publicCommunityUi = useWebPublicCommunityUiController<
     PublicCommunityRecord,
@@ -2417,7 +2386,7 @@ export default function App() {
   }
 
   async function completeOnboarding(
-    destination: "build_community" | "discover_community" | "learn_about_polynet",
+    destination: "build_community" | "discover_community",
   ): Promise<void> {
     const activeSession = await ensureUsableAuthSession();
     if (!activeSession) {
@@ -2431,7 +2400,7 @@ export default function App() {
       return;
     }
 
-    const displayName = profileUi.profileName.trim() || authProfileDisplayName.trim() || null;
+    const displayName = profileUi.profileName.trim() || null;
     const handle = cloudProfile?.handle ?? null;
     const bio = cloudProfile?.bio ?? null;
     const avatarUrl = profileUi.profileAvatarUrl?.trim() || null;
@@ -2465,11 +2434,6 @@ export default function App() {
         return;
       }
 
-      if (destination === "learn_about_polynet") {
-        navigateTo("/workspace?starter=platform");
-        return;
-      }
-
       navigateTo("/workspace");
     } catch (error) {
       const message = formatProfileMutationError(error, "Failed to save onboarding.");
@@ -2492,10 +2456,14 @@ export default function App() {
       return false;
     }
 
-    const displayName = profileUi.profileName.trim() || authProfileDisplayName.trim() || null;
+    const displayName = profileUi.profileName.trim();
     const handle = cloudProfile?.handle ?? null;
     const bio = cloudProfile?.bio ?? null;
     const avatarUrl = profileUi.profileAvatarUrl?.trim() || null;
+    if (!displayName || !avatarUrl) {
+      setOnboardingError("Add your display name and profile photo to continue.");
+      return false;
+    }
 
     setIsSavingOnboarding(true);
     setOnboardingError(null);
@@ -2534,10 +2502,15 @@ export default function App() {
       requireSignIn({ reason: "try_polynet_free", payload: {} });
       return false;
     }
+    const agentName = next.agentName.trim();
+    if (!agentName) {
+      setOnboardingError("Give your agent a name to continue.");
+      return false;
+    }
     setOnboardingError(null);
     await saveUserMemorySettingsAndRefreshSetup({
       ...userMemorySettings,
-      agent_name: next.agentName,
+      agent_name: agentName,
       agent_soul: next.agentSoul,
     });
     return true;
@@ -7290,9 +7263,6 @@ export default function App() {
       },
       onDiscoverCommunity: () => {
         void completeOnboarding("discover_community");
-      },
-      onLearnAboutPolynet: () => {
-        void completeOnboarding("learn_about_polynet");
       },
       onClose: () => setIsOnboardingModalOpen(false),
     },

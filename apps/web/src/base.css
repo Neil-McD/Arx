@@ -2578,6 +2578,26 @@ body {
   gap: 14px;
 }
 
+.polynet-onboarding-step-intro {
+  display: grid;
+  gap: 5px;
+  padding-bottom: 2px;
+}
+
+.polynet-onboarding-step-intro strong {
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 850;
+}
+
+.polynet-onboarding-step-intro p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.4;
+  font-weight: 600;
+}
+
 .polynet-onboarding-avatar {
   width: 74px;
   height: 74px;
@@ -2716,12 +2736,11 @@ body {
 
 .polynet-onboarding-choice {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
 }
 
-.polynet-onboarding-choice button,
-.polynet-onboarding-learn {
+.polynet-onboarding-choice button {
   border: 1px solid var(--border-muted);
   border-radius: 12px;
   min-height: 46px;
@@ -2733,15 +2752,17 @@ body {
 }
 
 .polynet-onboarding-choice button {
-  min-height: 166px;
+  min-height: 154px;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   justify-content: flex-start;
-  gap: 12px;
-  padding: 16px;
+  gap: 14px;
+  padding: 18px;
   text-align: left;
-  background: rgba(255, 255, 255, 0.045);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.032)),
+    rgba(255, 255, 255, 0.035);
   transition:
     background 160ms ease,
     border-color 160ms ease,
@@ -2783,22 +2804,31 @@ body {
 
 .polynet-onboarding-provider-grid {
   display: grid;
-  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  align-items: stretch;
 }
 
 .polynet-onboarding-provider-option {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 14px;
+  grid-template-columns: 1fr;
+  align-content: space-between;
+  align-items: stretch;
+  gap: 16px;
   border: 1px solid var(--border-muted);
   border-radius: 12px;
-  padding: 14px;
-  background: color-mix(in srgb, var(--bg-card-alt) 54%, transparent);
+  min-height: 190px;
+  padding: 16px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.03)),
+    color-mix(in srgb, var(--bg-card-alt) 44%, transparent);
 }
 
 .polynet-onboarding-provider-option.primary {
   border-color: color-mix(in srgb, var(--accent-gold) 34%, var(--border-muted));
+  background:
+    linear-gradient(180deg, rgba(255, 60, 142, 0.09), rgba(255, 255, 255, 0.028)),
+    color-mix(in srgb, var(--bg-card-alt) 44%, transparent);
 }
 
 .polynet-onboarding-provider-option span,
@@ -2817,27 +2847,36 @@ body {
 .polynet-onboarding-provider-option strong {
   margin-top: 3px;
   color: var(--text-primary);
-  font-size: 14px;
-  font-weight: 700;
+  font-size: 15px;
+  line-height: 1.18;
+  font-weight: 850;
 }
 
 .polynet-onboarding-provider-option p {
-  margin: 8px 0 0;
+  margin: 9px 0 0;
   color: var(--text-secondary);
   font-size: 13px;
   line-height: 1.45;
 }
 
+.polynet-onboarding-provider-option small {
+  display: block;
+  margin-top: 10px;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  line-height: 1.35;
+  font-weight: 700;
+}
+
 .polynet-onboarding-provider-key {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
   gap: 8px;
-  align-items: center;
+  align-items: stretch;
 }
 
 .polynet-onboarding-provider-key .provider-connection-input {
-  min-width: min(100%, 280px);
-  flex: 1 1 260px;
+  min-width: 0;
+  width: 100%;
 }
 
 .polynet-onboarding-finish-later {
@@ -3294,6 +3333,7 @@ body {
   .polynet-landing-flow,
   .polynet-landing-offer-actions,
   .polynet-onboarding-shell,
+  .polynet-onboarding-provider-grid,
   .polynet-onboarding-choice {
     grid-template-columns: 1fr;
   }
