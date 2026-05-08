@@ -1,3 +1,5 @@
+import { KeyRound } from "lucide-react";
+
 type WebChatgptEmptyStateCardProps = {
   chatgptButtonLabel: string;
   isChatgptDisabled: boolean;
@@ -34,11 +36,12 @@ export function WebChatgptEmptyStateCard(props: WebChatgptEmptyStateCardProps) {
             {chatgptButtonLabel}
           </button>
           <button
-            className="secondary"
+            className="web-empty-thread-openai-key-button"
             type="button"
             onClick={onAddOpenAiKey}
           >
-            Add OpenAI key
+            <KeyRound size={14} strokeWidth={2} aria-hidden="true" />
+            <span>Add OpenAI key</span>
           </button>
         </div>
       </div>
