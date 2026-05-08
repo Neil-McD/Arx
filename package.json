@@ -26,6 +26,8 @@
     "check:convex-verified-identity-guard": "bash scripts/convex_verified_identity_guard.sh",
     "check:auth-bootstrap-public-identity-guard": "bash scripts/auth_bootstrap_public_identity_guard.sh",
     "check:auth-billing-public-identity-guard": "bash scripts/auth_billing_public_identity_guard.sh",
+    "check:account-setup-completion-contract": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/account_setup_completion_contract_proof.ts",
+    "check:account-setup-operator-visibility": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/account_setup_operator_visibility_proof.ts",
     "check:critical-audit-events-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/critical_audit_events_proof.ts",
     "check:security-audit-diagnostics-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/security_audit_diagnostics_proof.ts",
     "check:runtime-tool-diagnostics-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_tool_diagnostics_proof.ts",

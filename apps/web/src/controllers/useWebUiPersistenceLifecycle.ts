@@ -3,6 +3,7 @@ import { applyAppThemeAttributes, type AppTheme } from "../../../../shared/theme
 
 type ProfileDraftLike = {
   name: string;
+  handle: string;
   bio: string;
 };
 
@@ -11,6 +12,7 @@ export function useWebUiPersistenceLifecycle<TModelToggles>(params: {
   appTheme: AppTheme;
   profileStorageUserId: string | null;
   profileName: string;
+  profileHandle: string;
   profileBio: string;
   modelToggles: TModelToggles;
   activeModelId: string | null;
@@ -21,6 +23,7 @@ export function useWebUiPersistenceLifecycle<TModelToggles>(params: {
   writeProfileDraftForUser: (userId: string | null, draft: ProfileDraftLike) => void;
   storeGuestModelId: (modelId: string) => void;
   setProfileName: Dispatch<SetStateAction<string>>;
+  setProfileHandle: Dispatch<SetStateAction<string>>;
   setProfileBio: Dispatch<SetStateAction<string>>;
 }) {
   useEffect(() => {
@@ -43,17 +46,20 @@ export function useWebUiPersistenceLifecycle<TModelToggles>(params: {
   useLayoutEffect(() => {
     const nextDraft = params.readProfileDraftForUser(params.profileStorageUserId);
     params.setProfileName(nextDraft.name);
+    params.setProfileHandle(nextDraft.handle);
     params.setProfileBio(nextDraft.bio);
   }, [params.profileStorageUserId]);
 
   useEffect(() => {
     params.writeProfileDraftForUser(params.profileStorageUserId, {
       name: params.profileName,
+      handle: params.profileHandle,
       bio: params.profileBio,
     });
   }, [
     params.profileStorageUserId,
     params.profileName,
+    params.profileHandle,
     params.profileBio,
   ]);
 

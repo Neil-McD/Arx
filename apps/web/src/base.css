@@ -2372,9 +2372,7 @@ body {
   place-items: center;
   padding: 48px 20px;
   color: var(--text-primary);
-  background:
-    radial-gradient(circle at 50% 0%, rgba(255, 60, 142, 0.14), transparent 32%),
-    var(--bg-app);
+  background: var(--bg-app);
 }
 
 .polynet-onboarding-modal-backdrop {
@@ -2384,55 +2382,86 @@ body {
   display: grid;
   place-items: center;
   padding: 24px;
-  background: rgba(0, 0, 0, 0.62);
+  background: rgba(0, 0, 0, 0.66);
   backdrop-filter: blur(12px);
 }
 
 .polynet-onboarding-modal {
-  width: min(100%, 760px);
-  max-height: min(860px, calc(100vh - 48px));
+  width: min(100%, 900px);
+  max-height: min(820px, calc(100vh - 48px));
   overflow: auto;
   border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 28px;
-  padding: 32px;
-  background:
-    radial-gradient(circle at 50% 0%, rgba(255, 60, 142, 0.12), transparent 40%),
-    rgba(18, 18, 20, 0.96);
+  border-radius: 18px;
+  padding: 24px;
+  background: color-mix(in srgb, var(--bg-card) 92%, #000000 8%);
   box-shadow: 0 30px 90px rgba(0, 0, 0, 0.52);
 }
 
 .polynet-onboarding-panel {
-  width: min(100%, 620px);
+  width: min(100%, 820px);
   display: grid;
-  gap: 24px;
+  gap: 18px;
 }
 
 .polynet-onboarding-modal .polynet-onboarding-panel {
   width: 100%;
 }
 
+.polynet-onboarding-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
 .polynet-onboarding-brand {
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  font-weight: 800;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 750;
 }
 
 .polynet-onboarding-brand img {
-  width: 38px;
-  height: 38px;
-  border-radius: 12px;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+}
+
+.polynet-onboarding-close {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border-muted);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--bg-card-alt) 72%, transparent);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition:
+    border-color 140ms ease,
+    color 140ms ease,
+    background 140ms ease;
+}
+
+.polynet-onboarding-close:hover {
+  border-color: var(--border-default);
+  background: var(--bg-card-alt);
+  color: var(--text-primary);
 }
 
 .polynet-onboarding-header {
-  display: grid;
-  gap: 10px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
 }
 
 .polynet-onboarding-header h1 {
   margin: 0;
-  font-size: clamp(38px, 6vw, 64px);
-  line-height: 0.98;
+  font-size: clamp(26px, 4vw, 38px);
+  line-height: 1;
+  letter-spacing: 0;
 }
 
 .polynet-onboarding-header p,
@@ -2442,13 +2471,111 @@ body {
   line-height: 1.5;
 }
 
-.polynet-onboarding-profile {
+.polynet-onboarding-progress-ring {
+  width: 56px;
+  height: 56px;
+  position: relative;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  color: var(--text-primary);
+}
+
+.polynet-onboarding-progress-ring svg {
+  position: absolute;
+  inset: 0;
+  width: 56px;
+  height: 56px;
+  transform: rotate(-90deg);
+}
+
+.polynet-onboarding-progress-ring circle {
+  fill: none;
+  stroke-width: 3.5;
+}
+
+.polynet-onboarding-progress-ring .track {
+  stroke: color-mix(in srgb, var(--border-muted) 82%, transparent);
+}
+
+.polynet-onboarding-progress-ring .value {
+  stroke: color-mix(in srgb, var(--accent-pink, var(--accent)) 76%, #ffffff 12%);
+  stroke-linecap: round;
+  transition: stroke-dashoffset 180ms ease;
+}
+
+.polynet-onboarding-progress-ring span {
+  position: relative;
+  color: var(--text-primary);
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.polynet-onboarding-shell {
+  display: grid;
+  grid-template-columns: 178px minmax(0, 1fr);
+  gap: 18px;
+  align-items: stretch;
+}
+
+.polynet-onboarding-steps {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  padding-top: 2px;
+}
+
+.polynet-onboarding-steps button {
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  padding: 0 10px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  text-align: left;
+  cursor: pointer;
+}
+
+.polynet-onboarding-steps button:hover,
+.polynet-onboarding-steps button.active {
+  border-color: var(--border-muted);
+  background: color-mix(in srgb, var(--bg-card-alt) 68%, transparent);
+  color: var(--text-primary);
+}
+
+.polynet-onboarding-steps button.complete {
+  color: color-mix(in srgb, var(--accent-gold) 72%, var(--text-primary));
+}
+
+.polynet-onboarding-step-icon {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border-muted);
+  border-radius: 8px;
+  color: currentColor;
+}
+
+.polynet-onboarding-step-body {
   display: grid;
   gap: 14px;
   border: 1px solid var(--border-muted);
-  border-radius: 20px;
-  padding: 18px;
+  border-radius: 14px;
+  padding: 16px;
   background: rgba(255, 255, 255, 0.035);
+}
+
+.polynet-onboarding-profile,
+.polynet-onboarding-agent {
+  display: grid;
+  gap: 14px;
 }
 
 .polynet-onboarding-avatar {
@@ -2491,7 +2618,8 @@ body {
   gap: 10px;
 }
 
-.polynet-onboarding-profile label {
+.polynet-onboarding-profile label,
+.polynet-onboarding-agent label {
   display: grid;
   gap: 7px;
   color: var(--text-secondary);
@@ -2500,10 +2628,12 @@ body {
 }
 
 .polynet-onboarding-profile input,
-.polynet-onboarding-profile textarea {
+.polynet-onboarding-profile textarea,
+.polynet-onboarding-agent input,
+.polynet-onboarding-agent textarea {
   width: 100%;
   border: 1px solid var(--border-muted);
-  border-radius: 12px;
+  border-radius: 10px;
   background: rgba(0, 0, 0, 0.2);
   color: var(--text-primary);
   font: inherit;
@@ -2511,14 +2641,18 @@ body {
   resize: vertical;
 }
 
-.polynet-onboarding-actions {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+.polynet-onboarding-profile input:focus,
+.polynet-onboarding-profile textarea:focus,
+.polynet-onboarding-agent input:focus,
+.polynet-onboarding-agent textarea:focus {
+  outline: none;
+  border-color: var(--accent-gold);
 }
 
-.polynet-onboarding-actions.one {
-  grid-template-columns: minmax(0, 1fr);
+.polynet-onboarding-profile small {
+  color: var(--text-tertiary);
+  font-size: 12px;
+  font-weight: 550;
 }
 
 .polynet-onboarding-profile-footer {
@@ -2526,6 +2660,12 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 14px;
+}
+
+.polynet-onboarding-footer-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .polynet-onboarding-next {
@@ -2556,13 +2696,30 @@ body {
   opacity: 0.58;
 }
 
-.polynet-onboarding-choice {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
+.polynet-onboarding-back {
+  min-height: 38px;
+  min-width: 76px;
+  border: 1px solid var(--border-muted);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 750;
+  cursor: pointer;
 }
 
-.polynet-onboarding-actions button,
+.polynet-onboarding-back:hover:not(:disabled) {
+  border-color: var(--border-default);
+  color: var(--text-primary);
+}
+
+.polynet-onboarding-choice {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
 .polynet-onboarding-choice button,
 .polynet-onboarding-learn {
   border: 1px solid var(--border-muted);
@@ -2576,13 +2733,13 @@ body {
 }
 
 .polynet-onboarding-choice button {
-  min-height: 260px;
+  min-height: 166px;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   justify-content: flex-start;
-  gap: 22px;
-  padding: 28px;
+  gap: 12px;
+  padding: 16px;
   text-align: left;
   background: rgba(255, 255, 255, 0.045);
   transition:
@@ -2599,56 +2756,16 @@ body {
 
 .polynet-onboarding-choice button span {
   color: var(--text-primary);
-  font-size: 24px;
-  line-height: 1.05;
+  font-size: 18px;
+  line-height: 1.1;
   font-weight: 850;
 }
 
-.polynet-onboarding-choice button ul {
-  display: grid;
-  gap: 12px;
+.polynet-onboarding-choice button p {
   margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.polynet-onboarding-choice button li {
-  position: relative;
-  max-width: 30ch;
-  padding-left: 18px;
   color: var(--text-secondary);
   font-size: 14px;
-  line-height: 1.35;
-  font-weight: 650;
-}
-
-.polynet-onboarding-choice button li::before {
-  content: "";
-  position: absolute;
-  top: 0.55em;
-  left: 0;
-  width: 5px;
-  height: 5px;
-  border-radius: 999px;
-  background: currentColor;
-  opacity: 0.82;
-}
-
-.polynet-onboarding-actions button.primary,
-.polynet-onboarding-choice button.primary {
-  background: rgba(255, 60, 142, 0.13);
-  border-color: rgba(255, 60, 142, 0.34);
-  color: var(--text-primary);
-}
-
-.polynet-onboarding-learn {
-  justify-self: end;
-  min-height: 0;
-  border: 0;
-  padding: 0;
-  background: transparent;
-  color: var(--text-tertiary);
-  font-size: 13px;
+  line-height: 1.42;
   font-weight: 650;
 }
 
@@ -2656,6 +2773,86 @@ body {
   margin: 0;
   color: var(--accent-error, #c75a4a);
   font-size: 13px;
+}
+
+.polynet-onboarding-success {
+  margin: 0;
+  color: var(--accent-success, #66b786);
+  font-size: 13px;
+}
+
+.polynet-onboarding-provider-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.polynet-onboarding-provider-option {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  border: 1px solid var(--border-muted);
+  border-radius: 12px;
+  padding: 14px;
+  background: color-mix(in srgb, var(--bg-card-alt) 54%, transparent);
+}
+
+.polynet-onboarding-provider-option.primary {
+  border-color: color-mix(in srgb, var(--accent-gold) 34%, var(--border-muted));
+}
+
+.polynet-onboarding-provider-option span,
+.polynet-onboarding-provider-option strong {
+  display: block;
+}
+
+.polynet-onboarding-provider-option span {
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.polynet-onboarding-provider-option strong {
+  margin-top: 3px;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.polynet-onboarding-provider-option p {
+  margin: 8px 0 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.polynet-onboarding-provider-key {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.polynet-onboarding-provider-key .provider-connection-input {
+  min-width: min(100%, 280px);
+  flex: 1 1 260px;
+}
+
+.polynet-onboarding-finish-later {
+  justify-self: end;
+  border: 0;
+  background: transparent;
+  color: var(--text-tertiary);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.polynet-onboarding-finish-later:hover {
+  color: var(--text-primary);
 }
 
 @media (max-width: 980px) {
@@ -3096,8 +3293,24 @@ body {
   .polynet-landing-actions,
   .polynet-landing-flow,
   .polynet-landing-offer-actions,
-  .polynet-onboarding-actions {
+  .polynet-onboarding-shell,
+  .polynet-onboarding-choice {
     grid-template-columns: 1fr;
+  }
+
+  .polynet-onboarding-steps {
+    display: flex;
+    overflow-x: auto;
+    padding-bottom: 2px;
+  }
+
+  .polynet-onboarding-steps button {
+    flex: 0 0 auto;
+  }
+
+  .polynet-onboarding-provider-option {
+    grid-template-columns: 1fr;
+    align-items: start;
   }
 
 }
@@ -16257,6 +16470,11 @@ button.message-citation-chip:hover {
   flex-wrap: wrap;
 }
 
+.agent-name-input {
+  margin-bottom: 10px;
+  font-family: inherit;
+}
+
 .provider-disconnect-btn {
   min-height: 40px;
   padding: 0 16px;
@@ -16521,6 +16739,37 @@ button.message-citation-chip:hover {
 .profile-row input:focus {
   outline: none;
   border-color: var(--accent-gold);
+}
+
+.profile-handle-row {
+  flex-wrap: nowrap;
+  border: 1px solid var(--border-muted);
+  border-radius: 8px;
+  background: var(--bg-card-alt);
+  overflow: hidden;
+}
+
+.profile-handle-row:focus-within {
+  border-color: var(--accent-gold);
+}
+
+.profile-handle-prefix {
+  flex: 0 0 auto;
+  padding-left: 12px;
+  color: var(--text-tertiary);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.profile-handle-row input {
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  padding-left: 4px;
+}
+
+.profile-handle-row input:focus {
+  border-color: transparent;
 }
 
 .profile-block {
@@ -18944,122 +19193,109 @@ button.message-citation-chip:hover {
   stroke-linejoin: round;
 }
 
-.web-empty-thread-chatgpt-card-wrap {
+.web-empty-thread-setup-card-wrap {
   width: min(100%, 860px);
   margin-top: 4px;
 }
 
-.web-empty-thread-chatgpt-card {
+.web-empty-thread-setup-card {
   width: 100%;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 14px;
-  padding: 14px 16px;
-  border-radius: 18px;
+  padding: 12px 14px;
+  border-radius: 16px;
   border: 1px solid var(--border-muted);
   background: color-mix(in srgb, var(--bg-card) 78%, transparent);
   text-align: left;
 }
 
-.web-empty-thread-chatgpt-copy {
-  min-width: 0;
-  display: block;
+.web-empty-thread-setup-progress {
+  width: 50px;
+  height: 50px;
+  position: relative;
+  display: grid;
+  place-items: center;
+  color: var(--text-primary);
 }
 
-.web-empty-thread-chatgpt-text {
+.web-empty-thread-setup-progress svg {
+  position: absolute;
+  inset: 0;
+  width: 50px;
+  height: 50px;
+  transform: rotate(-90deg);
+}
+
+.web-empty-thread-setup-progress circle {
+  fill: none;
+  stroke-width: 3.5;
+}
+
+.web-empty-thread-setup-progress .track {
+  stroke: color-mix(in srgb, var(--border-muted) 82%, transparent);
+}
+
+.web-empty-thread-setup-progress .value {
+  stroke: color-mix(in srgb, var(--accent-pink, var(--accent)) 76%, #ffffff 12%);
+  stroke-linecap: round;
+  transition: stroke-dashoffset 180ms ease;
+}
+
+.web-empty-thread-setup-progress span {
+  position: relative;
+  font-size: 11px;
+  font-weight: 850;
+  color: var(--text-primary);
+}
+
+.web-empty-thread-setup-copy {
   min-width: 0;
   display: grid;
   gap: 2px;
 }
 
-.web-empty-thread-chatgpt-title {
-  font-size: 15px;
-  font-weight: 600;
+.web-empty-thread-setup-title {
+  font-size: 16px;
+  font-weight: 700;
   letter-spacing: -0.015em;
   line-height: 1.2;
   color: var(--text-primary);
 }
 
-.web-empty-thread-chatgpt-description {
+.web-empty-thread-setup-description {
   font-size: 13px;
   line-height: 1.4;
   color: var(--text-secondary);
 }
 
-.web-empty-thread-chatgpt-actions {
+.web-empty-thread-setup-actions {
   display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
 }
 
-.web-empty-thread-chatgpt-actions .platform-save-button {
-  min-width: 120px;
-}
-
-.web-empty-thread-openai-key-button {
-  height: 36px;
-  min-width: 130px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  padding: 0 14px;
-  border-radius: 12px;
-  border: 1px solid color-mix(in srgb, var(--border-muted) 78%, var(--text-primary) 22%);
-  background: color-mix(in srgb, var(--bg-card) 86%, var(--text-primary) 5%);
-  color: var(--text-primary);
-  font-size: 12px;
-  font-weight: 650;
-  line-height: 1;
-  white-space: nowrap;
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text-primary) 8%, transparent);
-  transition:
-    background 0.16s ease,
-    border-color 0.16s ease,
-    color 0.16s ease,
-    transform 0.16s ease;
-}
-
-.web-empty-thread-openai-key-button svg {
-  flex: 0 0 auto;
-  color: var(--text-secondary);
-}
-
-.web-empty-thread-openai-key-button:hover:not(:disabled) {
-  transform: translateY(-1px);
-  border-color: color-mix(in srgb, var(--text-primary) 34%, var(--border-muted));
-  background: color-mix(in srgb, var(--bg-card) 72%, var(--text-primary) 11%);
-}
-
-.web-empty-thread-openai-key-button:focus-visible {
-  outline: 2px solid var(--accent-pink);
-  outline-offset: 2px;
-}
-
-.web-empty-thread-openai-key-button:disabled {
-  cursor: not-allowed;
-  opacity: 0.55;
-  transform: none;
+.web-empty-thread-setup-actions .platform-save-button {
+  min-width: 88px;
 }
 
 @media (max-width: 820px) {
-  .web-empty-thread-chatgpt-card {
-    grid-template-columns: 1fr;
+  .web-empty-thread-setup-card {
+    grid-template-columns: auto minmax(0, 1fr);
     align-items: start;
     gap: 10px;
     padding: 14px;
   }
 
-  .web-empty-thread-chatgpt-actions {
+  .web-empty-thread-setup-actions {
+    grid-column: 1 / -1;
     width: 100%;
-    flex-direction: column;
     align-items: stretch;
   }
 
-  .web-empty-thread-chatgpt-actions .platform-save-button,
-  .web-empty-thread-openai-key-button {
+  .web-empty-thread-setup-actions .platform-save-button {
     width: 100%;
   }
 }
@@ -20097,8 +20333,8 @@ button.message-citation-chip:hover {
   line-height: 1.45;
 }
 
-.app-root.mobile-shell .web-empty-thread-chatgpt-card-wrap,
-.app-root.mobile-shell .web-empty-thread-chatgpt-card {
+.app-root.mobile-shell .web-empty-thread-setup-card-wrap,
+.app-root.mobile-shell .web-empty-thread-setup-card {
   order: 3;
 }
 

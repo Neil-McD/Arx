@@ -118,7 +118,7 @@ export type WebWorkspaceHostProps = {
   emptyThreadTitle: ReactNode;
   emptyThreadSubtitle: ReactNode;
   guestSignupRail: ReactNode;
-  emptyThreadChatgptCard: ReactNode;
+  emptyThreadSetupCard: ReactNode;
   initialComposerDraft: WorkspaceComposerDraft;
   onComposerDraftChange: (draft: WorkspaceComposerDraft) => void;
   onRegisterComposerApi: (api: WorkspaceComposerApi | null) => void;
@@ -480,7 +480,7 @@ const WorkspaceTimelinePane = memo(function WorkspaceTimelinePane(props: {
   emptyThreadAvatar: ReactNode;
   emptyThreadTitle: ReactNode;
   emptyThreadSubtitle: ReactNode;
-  emptyThreadChatgptCard: ReactNode;
+  emptyThreadSetupCard: ReactNode;
   landingActionButtons: LandingActionButton[];
   hasSession: boolean;
   hasAuthenticatedPresentation: boolean;
@@ -604,7 +604,7 @@ const WorkspaceTimelinePane = memo(function WorkspaceTimelinePane(props: {
                   </button>
                 ))}
               </div>
-              {props.emptyThreadChatgptCard}
+              {props.emptyThreadSetupCard}
             </div>
           )}
         </>
@@ -1793,7 +1793,7 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
                 emptyThreadAvatar={props.emptyThreadAvatar}
                 emptyThreadTitle={props.emptyThreadTitle}
                 emptyThreadSubtitle={props.emptyThreadSubtitle}
-                emptyThreadChatgptCard={props.emptyThreadChatgptCard}
+                emptyThreadSetupCard={props.emptyThreadSetupCard}
                 landingActionButtons={props.landingActionButtons}
                 hasSession={props.hasSession}
                 hasAuthenticatedPresentation={props.hasAuthenticatedPresentation}

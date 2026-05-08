@@ -2,6 +2,7 @@ import type { AuthSessionLike } from "./authSession";
 import { bootstrapConvexAuthenticatedClient, requireConvexUrl } from "./convexAuthenticatedClient";
 import type {
   OperatorAccessSnapshot,
+  OperatorAccountSetupSnapshot,
   OperatorAuthAccessDiagnosticsSnapshot,
   OperatorBuilderRecord,
   OperatorEventRecord,
@@ -226,6 +227,23 @@ export async function loadOperatorBuildersCanonical(params: {
     query: params.query,
     limit: params.limit ?? 25,
   })) as OperatorBuilderRecord[];
+}
+
+export async function loadOperatorAccountSetupSnapshotCanonical(params: {
+  session: AuthSessionLike;
+  query?: string;
+  currentStep?: OperatorAccountSetupSnapshot["users"]["rows"][number]["setup"]["current_step"];
+  completed?: boolean;
+  limit?: number;
+}): Promise<OperatorAccountSetupSnapshot> {
+  const { client, authSubject } = await withOperatorAuth(params.session);
+  return (await client.query("operatorDashboard:getOperatorAccountSetupSnapshot" as any, {
+    authSubject,
+    query: params.query,
+    currentStep: params.currentStep,
+    completed: params.completed,
+    limit: params.limit ?? 25,
+  })) as OperatorAccountSetupSnapshot;
 }
 
 export async function loadOperatorMonetizationCanonical(params: {

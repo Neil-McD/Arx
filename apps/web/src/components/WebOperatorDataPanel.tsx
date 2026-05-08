@@ -3,6 +3,7 @@ import type { AuthSessionLike } from "../../../../shared/authSession";
 import { buildPlatformSwitcherStyle } from "../../../../shared/platformSwitcherUi";
 import { buildOperatorPlatformHealthCards } from "../../../../shared/operatorPlatformHealth";
 import {
+  loadOperatorAccountSetupSnapshotCanonical,
   loadOperatorAuthAccessDiagnosticsCanonical,
   loadOperatorBuildersCanonical,
   loadOperatorEventsCanonical,
@@ -16,6 +17,8 @@ import {
   recordOperatorDashboardAccessCanonical,
 } from "../../../../shared/cloudOperatorDashboardGateway";
 import type {
+  OperatorAccountSetupSnapshot,
+  OperatorAccountSetupUserRecord,
   OperatorAuthAccessDiagnosticsSnapshot,
   OperatorBuilderRecord,
   OperatorEventRecord,
@@ -28,7 +31,7 @@ import type {
   OperatorWebDeployDiagnosticsSnapshot,
 } from "../../../../shared/operatorTypes";
 
-export type OperatorInsightTab = "platform" | "business" | "communities";
+export type OperatorInsightTab = "platform" | "business" | "accounts" | "communities";
 
 export const OPERATOR_RIGHT_PANEL_DEFAULT_WIDTH = 560;
 export const OPERATOR_RIGHT_PANEL_MIN_WIDTH = 380;
@@ -39,8 +42,16 @@ export const OPERATOR_RIGHT_PANEL_KEYBOARD_STEP = 32;
 const OPERATOR_INSIGHT_TABS: Array<{ id: OperatorInsightTab; label: string }> = [
   { id: "platform", label: "Platform" },
   { id: "business", label: "Business" },
+  { id: "accounts", label: "Accounts" },
   { id: "communities", label: "Communities" },
 ];
+const OPERATOR_ACCOUNT_SETUP_STEP_ORDER = ["identity", "inference", "agent", "complete"] as const;
+const OPERATOR_ACCOUNT_SETUP_MISSING_ORDER = [
+  "display_name",
+  "avatar",
+  "inference_provider",
+  "agent_name",
+] as const;
 
 export type OperatorDashboardState = {
   overview: OperatorOverviewSnapshot | null;
@@ -50,6 +61,7 @@ export type OperatorDashboardState = {
   securityAudit: OperatorSecurityAuditDiagnosticsSnapshot | null;
   runtimeTools: OperatorRuntimeToolDiagnosticsSnapshot | null;
   frontendErrors: OperatorFrontendErrorDiagnosticsSnapshot | null;
+  accountSetup: OperatorAccountSetupSnapshot | null;
   builders: OperatorBuilderRecord[];
   risks: OperatorRiskItem[];
   events: OperatorEventRecord[];
@@ -64,6 +76,7 @@ export function createEmptyOperatorDashboardState(): OperatorDashboardState {
     securityAudit: null,
     runtimeTools: null,
     frontendErrors: null,
+    accountSetup: null,
     builders: [],
     risks: [],
     events: [],
@@ -125,6 +138,7 @@ export function useOperatorDashboardData(params: {
           loadOperatorSecurityAuditDiagnosticsCanonical({ session, range: "30d" }),
           loadOperatorRuntimeToolDiagnosticsCanonical({ session, range: "30d" }),
           loadOperatorFrontendErrorDiagnosticsCanonical({ session, range: "30d" }),
+          loadOperatorAccountSetupSnapshotCanonical({ session, completed: false, limit: 24 }),
           loadOperatorBuildersCanonical({ session, limit: 12 }),
           loadOperatorRisksCanonical({ session, limit: 12 }),
           loadOperatorEventsCanonical({ session, limit: 12 }),
@@ -137,6 +151,7 @@ export function useOperatorDashboardData(params: {
           securityAudit,
           runtimeTools,
           frontendErrors,
+          accountSetup,
           builders,
           risks,
           events,
@@ -149,6 +164,7 @@ export function useOperatorDashboardData(params: {
           ["security_audit", securityAudit],
           ["runtime_tools", runtimeTools],
           ["frontend_errors", frontendErrors],
+          ["account_setup", accountSetup],
           ["builders", builders],
           ["risks", risks],
           ["events", events],
@@ -161,6 +177,7 @@ export function useOperatorDashboardData(params: {
           securityAudit: fulfilledValue(securityAudit),
           runtimeTools: fulfilledValue(runtimeTools),
           frontendErrors: fulfilledValue(frontendErrors),
+          accountSetup: fulfilledValue(accountSetup),
           builders: fulfilledList(builders),
           risks: fulfilledList(risks),
           events: fulfilledList(events),
@@ -177,6 +194,7 @@ export function useOperatorDashboardData(params: {
             securityAudit: nextState.securityAudit ?? prev.securityAudit,
             runtimeTools: nextState.runtimeTools ?? prev.runtimeTools,
             frontendErrors: nextState.frontendErrors ?? prev.frontendErrors,
+            accountSetup: nextState.accountSetup ?? prev.accountSetup,
             builders: nextState.builders ?? prev.builders,
             risks: nextState.risks ?? prev.risks,
             events: nextState.events ?? prev.events,
@@ -278,6 +296,8 @@ export function WebOperatorDataPanel(props: {
             risks={props.state.risks}
             events={props.state.events}
           />
+        ) : props.activeInsightTab === "accounts" ? (
+          <OperatorAccountSetupInsights snapshot={props.state.accountSetup} />
         ) : (
           <OperatorCommunityInsights overview={props.state.overview} builders={props.topBuilders} />
         )}
@@ -322,6 +342,38 @@ function formatEntryPolicy(value: OperatorBuilderRecord["community"]["entryPolic
       return "Free";
     default:
       return "Unknown";
+  }
+}
+
+function formatAccountSetupStep(value: OperatorAccountSetupUserRecord["setup"]["current_step"]): string {
+  switch (value) {
+    case "identity":
+      return "Profile";
+    case "inference":
+      return "Inference";
+    case "agent":
+      return "Agent";
+    case "direction":
+      return "Direction";
+    case "complete":
+      return "Complete";
+    default:
+      return "Unknown";
+  }
+}
+
+function formatAccountSetupMissing(value: OperatorAccountSetupUserRecord["setup"]["missing"][number]): string {
+  switch (value) {
+    case "display_name":
+      return "Name";
+    case "avatar":
+      return "Avatar";
+    case "inference_provider":
+      return "Inference";
+    case "agent_name":
+      return "Agent name";
+    default:
+      return value;
   }
 }
 
@@ -1044,6 +1096,128 @@ function OperatorBusinessInsights(props: {
                 <span>{event.severity}</span>
               </div>
             ))
+          )}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function OperatorAccountSetupInsights(props: { snapshot: OperatorAccountSetupSnapshot | null }) {
+  const overview = props.snapshot?.overview ?? null;
+  const userList = props.snapshot?.users ?? null;
+  const users = userList?.rows ?? [];
+  const setupCompletionRate =
+    overview && overview.totals.users > 0
+      ? overview.totals.completed / overview.totals.users
+      : null;
+  const missingRows = OPERATOR_ACCOUNT_SETUP_MISSING_ORDER
+    .map((field) => ({
+      field,
+      count: overview?.byMissing[field] ?? 0,
+    }))
+    .filter((row) => row.count > 0);
+  const showingLabel = userList
+    ? `Showing ${users.length} of ${userList.totalMatching} matching users`
+    : "Showing 0 of 0 matching users";
+
+  return (
+    <div className="operator-data-panel__grid">
+      <section className="operator-dashboard__metrics" aria-label="Account setup overview">
+        <div>
+          <span>Total users</span>
+          <strong>{overview?.totals.users ?? 0}</strong>
+          <span className="operator-dashboard__metric-note">Canonical account records.</span>
+        </div>
+        <div>
+          <span>Complete</span>
+          <strong>{overview?.totals.completed ?? 0}</strong>
+          <span className="operator-dashboard__metric-note">{formatPercent(setupCompletionRate)} setup completion.</span>
+        </div>
+        <div>
+          <span>Need setup</span>
+          <strong>{overview?.totals.incomplete ?? 0}</strong>
+          <span className="operator-dashboard__metric-note">Users missing required setup fields.</span>
+        </div>
+        <div>
+          <span>Average</span>
+          <strong>{overview?.totals.averagePercent ?? 0}%</strong>
+          <span className="operator-dashboard__metric-note">Mean setup completion.</span>
+        </div>
+      </section>
+
+      <section className="operator-dashboard__panel">
+        <h2>Current step</h2>
+        <div className="operator-dashboard__table">
+          {OPERATOR_ACCOUNT_SETUP_STEP_ORDER.map((step) => (
+            <div className="operator-dashboard__row" key={step}>
+              <span>{formatAccountSetupStep(step)}</span>
+              <strong>{overview?.byStep[step] ?? 0}</strong>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="operator-dashboard__panel">
+        <h2>Missing fields</h2>
+        <div className="operator-dashboard__table">
+          {missingRows.length === 0 ? (
+            <div className="operator-dashboard__empty">No missing setup fields returned.</div>
+          ) : (
+            missingRows.map((row) => (
+              <div className="operator-dashboard__row" key={row.field}>
+                <span>{formatAccountSetupMissing(row.field)}</span>
+                <strong>{row.count}</strong>
+              </div>
+            ))
+          )}
+        </div>
+      </section>
+
+      <section className="operator-dashboard__panel operator-dashboard__panel--full">
+        <h2>People needing setup</h2>
+        <div className="operator-dashboard__table">
+          {userList && userList.totalMatching > 0 ? (
+            <div className="operator-dashboard__empty">{showingLabel}</div>
+          ) : null}
+          {users.length === 0 ? (
+            <div className="operator-dashboard__empty">No incomplete account setup records returned.</div>
+          ) : (
+            users.map((record) => {
+              const missing = record.setup.missing.slice(0, 4);
+              const extraMissingCount = Math.max(0, record.setup.missing.length - missing.length);
+              return (
+                <div className="operator-dashboard__row operator-dashboard__community-row" key={record.user.dbUserId}>
+                  <div className="operator-dashboard__community-main">
+                    <strong>{record.user.displayName ?? record.user.email ?? record.user.userId}</strong>
+                    <span>
+                      {[
+                        record.user.email,
+                        record.user.handle ? `@${record.user.handle}` : null,
+                        formatAccountSetupStep(record.setup.current_step),
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </span>
+                    <div className="operator-dashboard__chips" aria-label="Missing setup fields">
+                      {missing.map((field) => (
+                        <span className="operator-dashboard__chip operator-dashboard__chip--warning" key={field}>
+                          {formatAccountSetupMissing(field)}
+                        </span>
+                      ))}
+                      {extraMissingCount > 0 ? (
+                        <span className="operator-dashboard__chip">+{extraMissingCount}</span>
+                      ) : null}
+                    </div>
+                  </div>
+                  <div className="operator-dashboard__community-stats">
+                    <strong>{record.setup.percent}%</strong>
+                    <span>{record.communities.owned} owned</span>
+                    <span>{record.communities.joined} joined</span>
+                  </div>
+                </div>
+              );
+            })
           )}
         </div>
       </section>

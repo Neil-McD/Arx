@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { CommunityAvatar } from "../../../../shared/CommunityAvatar";
-import { WebChatgptEmptyStateCard } from "../components/WebChatgptEmptyStateCard";
+import type { AccountSetupStatus } from "../../../../shared/accountSetup";
+import { WebAccountSetupCard } from "../components/WebAccountSetupCard";
 import { WebGuestSignupRail } from "../components/WebGuestSignupRail";
 
 type WorkspaceLandingCommunity = {
@@ -19,12 +20,9 @@ type BuildWebWorkspaceLandingProjectionParams = {
   onRequireSignIn: () => void;
   onOpenLandingCommunity: () => void;
   onOpenLandingProject: () => void;
-  shouldShowEmptyThreadChatgptCard: boolean;
-  isConnectingChatgpt: boolean;
-  hasPendingChatgptAuth: boolean;
-  isPollingChatgptConnection: boolean;
-  onConnectChatgpt: () => void;
-  onAddOpenAiKey: () => void;
+  shouldShowAccountSetupCard: boolean;
+  accountSetupStatus: AccountSetupStatus | null;
+  onContinueAccountSetup: () => void;
 };
 
 export function buildWebWorkspaceLandingProjection(
@@ -78,18 +76,10 @@ export function buildWebWorkspaceLandingProjection(
       </div>
     ) : null;
 
-  const emptyThreadChatgptCard = params.shouldShowEmptyThreadChatgptCard ? (
-    <WebChatgptEmptyStateCard
-      chatgptButtonLabel={
-        params.isConnectingChatgpt
-          ? "Starting..."
-          : params.hasPendingChatgptAuth || params.isPollingChatgptConnection
-            ? "Continue auth"
-            : "Connect ChatGPT"
-      }
-      isChatgptDisabled={params.isConnectingChatgpt}
-      onConnectChatgpt={params.onConnectChatgpt}
-      onAddOpenAiKey={params.onAddOpenAiKey}
+  const emptyThreadSetupCard = params.shouldShowAccountSetupCard && params.accountSetupStatus ? (
+    <WebAccountSetupCard
+      status={params.accountSetupStatus}
+      onContinueSetup={params.onContinueAccountSetup}
     />
   ) : null;
 
@@ -99,6 +89,6 @@ export function buildWebWorkspaceLandingProjection(
     emptyThreadAvatar,
     emptyThreadTitle,
     emptyThreadSubtitle,
-    emptyThreadChatgptCard,
+    emptyThreadSetupCard,
   };
 }

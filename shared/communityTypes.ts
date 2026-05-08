@@ -1,3 +1,5 @@
+import type { AccountSetupStatus } from "./accountSetup";
+
 export type CommunityEntryPolicy = "open" | "approval" | "paid_subscription";
 export type CommunityBillingPeriod = "monthly" | "annual";
 
@@ -224,10 +226,14 @@ export type CommunityPricingMode = "free" | "monthly" | "annual";
 export type UserProfile = {
   user_id: string;
   display_name: string | null;
+  handle?: string | null;
+  normalized_handle?: string | null;
   avatar_url: string | null;
 };
 
 export type UserProfileDetail = UserProfile & {
   bio: string | null;
+  onboarding_direction?: "build_community" | "discover_community" | "learn_about_polynet" | null;
   onboarding_completed_at?: string | null;
+  account_setup?: AccountSetupStatus | null;
 };

@@ -95,12 +95,14 @@ export type WebSettingsPanelsProps = {
     userMemorySettings: {
       memory_mode: "off" | "suggest" | "auto";
       remember_intent_enabled: boolean;
+      agent_name: string;
       agent_soul: string;
     };
     isLoadingUserMemorySettings: boolean;
     saveUserMemorySettings: (next: {
       memory_mode: "off" | "suggest" | "auto";
       remember_intent_enabled: boolean;
+      agent_name: string;
       agent_soul: string;
     }) => Promise<void> | void;
     formatRelativeTime: (value: string) => string;
@@ -200,6 +202,7 @@ export function WebSettingsPanels(props: WebSettingsPanelsProps) {
     cloudProfile: profile.cloudProfile,
     profileAvatarUrl: profile.profileUi.profileAvatarUrl,
     profileName: profile.profileUi.profileName,
+    profileHandle: profile.profileUi.profileHandle,
     profileBio: profile.profileUi.profileBio,
     isProfileAvatarDragOver: profile.profileUi.isProfileAvatarDragOver,
     profileNeedsSave: profile.profileUi.profileNeedsSave,
@@ -213,6 +216,7 @@ export function WebSettingsPanels(props: WebSettingsPanelsProps) {
     setProfileAvatarUrl: profile.profileUi.setProfileAvatarUrl,
     getInitials: profile.getInitials,
     setProfileName: profile.profileUi.setProfileName,
+    setProfileHandle: profile.profileUi.setProfileHandle,
     setProfileBio: profile.profileUi.setProfileBio,
     saveProfileToCloud: profile.saveProfileToCloud,
   };

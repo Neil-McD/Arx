@@ -1,10 +1,11 @@
 export type LocalProfileDraft = {
   name: string;
+  handle: string;
   bio: string;
 };
 
 function emptyDraft(): LocalProfileDraft {
-  return { name: "", bio: "" };
+  return { name: "", handle: "", bio: "" };
 }
 
 function profileStorageScopeForUser(userId: string | null | undefined): {
@@ -38,9 +39,11 @@ export function readProfileDraftForUser(userId: string | null | undefined): Loca
   }
   try {
     const name = localStorage.getItem(keys.name) ?? "";
+    const handle = localStorage.getItem(keys.username) ?? "";
     const bio = localStorage.getItem(keys.bio) ?? "";
     const scopedDraft: LocalProfileDraft = {
       name,
+      handle,
       bio,
     };
     return scopedDraft;
@@ -63,11 +66,13 @@ export function writeProfileDraftForUser(userId: string | null | undefined, draf
     return;
   }
   const name = draft.name.trim();
+  const handle = draft.handle.trim();
   const bio = draft.bio.trim();
   try {
     if (name) localStorage.setItem(keys.name, name);
     else localStorage.removeItem(keys.name);
-    localStorage.removeItem(keys.username);
+    if (handle) localStorage.setItem(keys.username, handle);
+    else localStorage.removeItem(keys.username);
     if (bio) localStorage.setItem(keys.bio, bio);
     else localStorage.removeItem(keys.bio);
     localStorage.removeItem(keys.avatar);

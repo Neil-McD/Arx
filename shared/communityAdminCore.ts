@@ -1,3 +1,5 @@
+import type { AccountSetupStatus } from "./accountSetup";
+
 export type SessionLike = {
   user: {
     id: string;
@@ -11,11 +13,15 @@ export type CommunityMemberLike = {
 export type UserProfileLike = {
   user_id: string;
   display_name: string | null;
+  handle?: string | null;
+  normalized_handle?: string | null;
   avatar_url: string | null;
 };
 
 export type UserProfileDetailLike = UserProfileLike & {
   bio: string | null;
+  onboarding_direction?: "build_community" | "discover_community" | "learn_about_polynet" | null;
+  account_setup?: AccountSetupStatus | null;
 };
 
 export type AnalyticsSummaryLike = {
@@ -181,12 +187,14 @@ export function emptyAnalyticsSummary(): AnalyticsSummaryLike {
   };
 }
 
-export function trimProfileFields(profileName: string, profileBio: string): {
+export function trimProfileFields(profileName: string, profileHandle: string, profileBio: string): {
   trimmedName: string;
+  trimmedHandle: string;
   trimmedBio: string;
 } {
   return {
     trimmedName: profileName.trim(),
+    trimmedHandle: profileHandle.trim(),
     trimmedBio: profileBio.trim(),
   };
 }

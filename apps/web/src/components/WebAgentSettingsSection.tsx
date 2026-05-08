@@ -53,12 +53,14 @@ type WebAgentSettingsSectionProps = {
   userMemorySettings: {
     memory_mode: "off" | "suggest" | "auto";
     remember_intent_enabled: boolean;
+    agent_name: string;
     agent_soul: string;
   };
   isLoadingUserMemorySettings: boolean;
   saveUserMemorySettings: (next: {
     memory_mode: "off" | "suggest" | "auto";
     remember_intent_enabled: boolean;
+    agent_name: string;
     agent_soul: string;
   }) => Promise<void> | void;
   personalMemoryError: string | null;
@@ -127,11 +129,17 @@ export function WebAgentSettingsSection(props: WebAgentSettingsSectionProps) {
     workspaceCreditTopupError,
     startWorkspaceCreditTopupCheckout,
   } = props;
+  const [agentNameDraft, setAgentNameDraft] = useState(userMemorySettings.agent_name);
   const [agentSoulDraft, setAgentSoulDraft] = useState(userMemorySettings.agent_soul);
+  useEffect(() => {
+    setAgentNameDraft(userMemorySettings.agent_name);
+  }, [userMemorySettings.agent_name]);
   useEffect(() => {
     setAgentSoulDraft(userMemorySettings.agent_soul);
   }, [userMemorySettings.agent_soul]);
-  const agentSoulNeedsSave = agentSoulDraft !== userMemorySettings.agent_soul;
+  const agentSoulNeedsSave =
+    agentNameDraft !== userMemorySettings.agent_name ||
+    agentSoulDraft !== userMemorySettings.agent_soul;
 
   return (
     <>
@@ -148,6 +156,13 @@ export function WebAgentSettingsSection(props: WebAgentSettingsSectionProps) {
           <div className="settings-section-desc">
             Personal instructions for your agent. Community system prompts add on top when a community lens is active.
           </div>
+          <input
+            className="provider-connection-input agent-name-input"
+            value={agentNameDraft}
+            onChange={(event) => setAgentNameDraft(event.target.value)}
+            placeholder="Agent name"
+            disabled={!session || isLoadingUserMemorySettings}
+          />
           <textarea
             className="profile-bio"
             value={agentSoulDraft}
@@ -163,6 +178,7 @@ export function WebAgentSettingsSection(props: WebAgentSettingsSectionProps) {
               onClick={() =>
                 void saveUserMemorySettings({
                   ...userMemorySettings,
+                  agent_name: agentNameDraft,
                   agent_soul: agentSoulDraft,
                 })
               }

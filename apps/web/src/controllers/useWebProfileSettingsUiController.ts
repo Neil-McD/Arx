@@ -9,12 +9,14 @@ type SessionLike = {
 
 type CloudProfileLike = {
   display_name?: string | null;
+  handle?: string | null;
   bio?: string | null;
   avatar_url?: string | null;
 } | null;
 
 type ProfileDraftLike = {
   name: string;
+  handle: string;
   bio: string;
 };
 
@@ -31,6 +33,7 @@ export function useWebProfileSettingsUiController(
   const { profileStorageUserId, initialProfileDraft, session, cloudProfile } = params;
 
   const [profileName, setProfileName] = useState(() => initialProfileDraft.name);
+  const [profileHandle, setProfileHandle] = useState(() => initialProfileDraft.handle);
   const [profileBio, setProfileBio] = useState(() => initialProfileDraft.bio);
   const [profileAvatarUrl, setProfileAvatarUrl] = useState<string | null>(null);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
@@ -50,14 +53,16 @@ export function useWebProfileSettingsUiController(
 
   useEffect(() => {
     if (session) return;
-    if (!profileName && !profileBio && !profileAvatarUrl) return;
+    if (!profileName && !profileHandle && !profileBio && !profileAvatarUrl) return;
     setProfileName("");
+    setProfileHandle("");
     setProfileBio("");
     setProfileAvatarUrl(null);
-  }, [profileAvatarUrl, profileBio, profileName, session]);
+  }, [profileAvatarUrl, profileBio, profileHandle, profileName, session]);
 
   const applyLoadedProfileToLocal = (profile: NonNullable<CloudProfileLike>) => {
     setProfileName((prev) => (prev.trim() ? prev : profile.display_name ?? ""));
+    setProfileHandle((prev) => (prev.trim() ? prev : profile.handle ?? ""));
     setProfileBio((prev) => (prev.trim() ? prev : profile.bio ?? ""));
     setProfileAvatarUrl((prev) => prev ?? profile.avatar_url ?? null);
   };
@@ -65,22 +70,26 @@ export function useWebProfileSettingsUiController(
   const isProfileDirty = useMemo(() => {
     if (!session) return false;
     const nextName = profileName.trim();
+    const nextHandle = profileHandle.trim();
     const nextBio = profileBio.trim();
     const nextAvatar = profileAvatarUrl ?? null;
     const prevName = (cloudProfile?.display_name ?? "").trim();
+    const prevHandle = (cloudProfile?.handle ?? "").trim();
     const prevBio = (cloudProfile?.bio ?? "").trim();
     const prevAvatar = cloudProfile?.avatar_url ?? null;
     if (!cloudProfile) {
-      return Boolean(nextName || nextBio || nextAvatar);
+      return Boolean(nextName || nextHandle || nextBio || nextAvatar);
     }
-    return nextName !== prevName || nextBio !== prevBio || nextAvatar !== prevAvatar;
-  }, [cloudProfile, profileAvatarUrl, profileBio, profileName, session]);
+    return nextName !== prevName || nextHandle !== prevHandle || nextBio !== prevBio || nextAvatar !== prevAvatar;
+  }, [cloudProfile, profileAvatarUrl, profileBio, profileHandle, profileName, session]);
 
   const profileNeedsSave = Boolean(session && (isProfileDirty || cloudProfile === null));
 
   return {
     profileName,
     setProfileName,
+    profileHandle,
+    setProfileHandle,
     profileBio,
     setProfileBio,
     profileAvatarUrl,

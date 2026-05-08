@@ -1,25 +1,12 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
-import { ensureAuthenticatedActor } from "./authActor";
-
-type UserRow = {
-  _id: any;
-  authSubject: string;
-  email?: string;
-  displayName?: string;
-  avatarUrl?: string;
-  createdAt: number;
-  updatedAt: number;
-};
-
-type ProfileDetailRow = {
-  _id: any;
-  userId: any;
-  bio?: string;
-  onboardingCompletedAt?: number;
-  createdAt: number;
-  updatedAt: number;
-};
+import { ensureAuthenticatedActor, resolveUserIdForAuthenticatedRequest } from "./authActor";
+import { validateProfileHandle } from "../shared/profileHandle";
+import {
+  loadAccountSetupStatusForUser,
+  type AccountSetupProfileDetailRow as ProfileDetailRow,
+  type AccountSetupUserRow as UserRow,
+} from "./accountSetupCore";
 
 function normalizeSubject(value: unknown): string {
   return String(value ?? "").trim();
@@ -39,6 +26,8 @@ function mapProfileBase(row: UserRow) {
   return {
     user_id: row.authSubject,
     display_name: row.displayName ?? null,
+    handle: row.handle ?? null,
+    normalized_handle: row.normalizedHandle ?? null,
     avatar_url: row.avatarUrl ?? null,
   };
 }
@@ -61,11 +50,33 @@ function mapProfileDetail(user: UserRow, detail: ProfileDetailRow | null) {
   return {
     ...mapProfileBase(user),
     bio: detail?.bio ?? null,
+    onboarding_direction: detail?.onboardingDirection ?? null,
     onboarding_completed_at:
       typeof detail?.onboardingCompletedAt === "number"
         ? new Date(detail.onboardingCompletedAt).toISOString()
         : null,
   };
+}
+
+async function mapProfileDetailWithSetup(
+  ctx: any,
+  user: UserRow,
+  detail: ProfileDetailRow | null,
+) {
+  return {
+    ...mapProfileDetail(user, detail),
+    account_setup: await loadAccountSetupStatusForUser(ctx, user, detail),
+  };
+}
+
+async function assertHandleAvailable(ctx: any, normalizedHandle: string, userId: any): Promise<void> {
+  const existing = await ctx.db
+    .query("users")
+    .withIndex("by_normalizedHandle", (q: any) => q.eq("normalizedHandle", normalizedHandle))
+    .first();
+  if (existing && existing._id !== userId) {
+    throw new Error("profile_handle_taken");
+  }
 }
 
 export const listProfilesByUserIds = query({
@@ -79,6 +90,8 @@ export const listProfilesByUserIds = query({
     const rows: Array<{
       user_id: string;
       display_name: string | null;
+      handle: string | null;
+      normalized_handle: string | null;
       avatar_url: string | null;
     }> = [];
     for (const userId of normalizedUserIds) {
@@ -132,7 +145,7 @@ export const resolveOnboardingProfileDetail = mutation({
       .first()) as ProfileDetailRow | null;
 
     if (existingDetail?.onboardingCompletedAt) {
-      return mapProfileDetail(user, existingDetail);
+      return await mapProfileDetailWithSetup(ctx, user, existingDetail);
     }
 
     if (await hasEstablishedAccountEvidence(ctx, actor.dbUserId)) {
@@ -155,7 +168,26 @@ export const resolveOnboardingProfileDetail = mutation({
       .query("userProfileDetails")
       .withIndex("by_user", (q: any) => q.eq("userId", actor.dbUserId))
       .first()) as ProfileDetailRow | null;
-    return mapProfileDetail(user, detail);
+    return await mapProfileDetailWithSetup(ctx, user, detail);
+  },
+});
+
+export const getMyAccountSetupStatus = query({
+  args: {
+    authSubject: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      authSubject: args.authSubject ?? null,
+    });
+    const user = (await ctx.db.get(userId)) as UserRow | null;
+    if (!user) throw new Error("user_not_found");
+    const detail = (await ctx.db
+      .query("userProfileDetails")
+      .withIndex("by_user", (q: any) => q.eq("userId", userId))
+      .first()) as ProfileDetailRow | null;
+    return await loadAccountSetupStatusForUser(ctx, user, detail);
   },
 });
 
@@ -164,8 +196,17 @@ export const upsertProfileDetail = mutation({
     authSubject: v.optional(v.string()),
     userId: v.optional(v.string()),
     displayName: v.optional(v.union(v.string(), v.null())),
+    handle: v.optional(v.union(v.string(), v.null())),
     avatarUrl: v.optional(v.union(v.string(), v.null())),
     bio: v.optional(v.union(v.string(), v.null())),
+    onboardingDirection: v.optional(
+      v.union(
+        v.literal("build_community"),
+        v.literal("discover_community"),
+        v.literal("learn_about_polynet"),
+        v.null(),
+      ),
+    ),
     completeOnboarding: v.optional(v.boolean()),
     nowMs: v.optional(v.number()),
   },
@@ -187,6 +228,19 @@ export const upsertProfileDetail = mutation({
     if (args.displayName !== undefined) {
       userPatch.displayName = String(args.displayName ?? "").trim() || undefined;
     }
+    if (args.handle !== undefined) {
+      const rawHandle = String(args.handle ?? "").trim();
+      if (!rawHandle) {
+        userPatch.handle = undefined;
+        userPatch.normalizedHandle = undefined;
+      } else {
+        const handle = validateProfileHandle(rawHandle);
+        if (!handle.ok) throw new Error(`profile_handle_${handle.reason}`);
+        await assertHandleAvailable(ctx, handle.normalizedHandle, actor.dbUserId);
+        userPatch.handle = handle.handle;
+        userPatch.normalizedHandle = handle.normalizedHandle;
+      }
+    }
     if (args.avatarUrl !== undefined) {
       userPatch.avatarUrl = String(args.avatarUrl ?? "").trim() || undefined;
     }
@@ -197,11 +251,16 @@ export const upsertProfileDetail = mutation({
       .withIndex("by_user", (q: any) => q.eq("userId", actor.dbUserId))
       .first()) as ProfileDetailRow | null;
     const nextBio = args.bio !== undefined ? String(args.bio ?? "").trim() || undefined : existingDetail?.bio;
+    const nextOnboardingDirection =
+      args.onboardingDirection === undefined
+        ? existingDetail?.onboardingDirection
+        : args.onboardingDirection ?? undefined;
 
     if (!existingDetail) {
       await ctx.db.insert("userProfileDetails", {
         userId: actor.dbUserId,
         bio: nextBio,
+        onboardingDirection: nextOnboardingDirection,
         ...(args.completeOnboarding ? { onboardingCompletedAt: nowMs } : null),
         createdAt: nowMs,
         updatedAt: nowMs,
@@ -209,6 +268,7 @@ export const upsertProfileDetail = mutation({
     } else {
       await ctx.db.patch(existingDetail._id, {
         bio: nextBio,
+        onboardingDirection: nextOnboardingDirection,
         ...(args.completeOnboarding && !existingDetail.onboardingCompletedAt
           ? { onboardingCompletedAt: nowMs }
           : null),
@@ -224,6 +284,6 @@ export const upsertProfileDetail = mutation({
 
     if (!refreshedUser) throw new Error("user_not_found");
 
-    return mapProfileDetail(refreshedUser, detail);
+    return await mapProfileDetailWithSetup(ctx, refreshedUser, detail);
   },
 });

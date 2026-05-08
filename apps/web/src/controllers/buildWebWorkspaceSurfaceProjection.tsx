@@ -54,7 +54,7 @@ type BuildWebWorkspaceSurfaceProjectionParams = {
   emptyThreadTitle: ReactNode;
   emptyThreadSubtitle: ReactNode;
   guestSignupRail: ReactNode;
-  emptyThreadChatgptCard: ReactNode;
+  emptyThreadSetupCard: ReactNode;
   initialComposerDraft: WorkspaceComposerDraft;
   onComposerDraftChange: (draft: WorkspaceComposerDraft) => void;
   onRegisterComposerApi: WebWorkspaceHostProps["onRegisterComposerApi"];
@@ -278,7 +278,7 @@ export function buildWebWorkspaceSurfaceProjection(
     emptyThreadTitle: params.emptyThreadTitle,
     emptyThreadSubtitle: params.emptyThreadSubtitle,
     guestSignupRail: params.guestSignupRail,
-    emptyThreadChatgptCard: params.emptyThreadChatgptCard,
+    emptyThreadSetupCard: params.emptyThreadSetupCard,
     initialComposerDraft: params.initialComposerDraft,
     onComposerDraftChange: params.onComposerDraftChange,
     onRegisterComposerApi: params.onRegisterComposerApi,

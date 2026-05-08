@@ -56,6 +56,7 @@ type UseCommunityAdminControllerArgs<
 
   getProfileSaveSession: () => SessionT | null;
   profileName: string;
+  profileHandle: string;
   profileBio: string;
   profileAvatarUrl: string | null;
   profileSaveTimeoutRef: MutableRefObject<number | null>;
@@ -70,6 +71,7 @@ type UseCommunityAdminControllerArgs<
   setProfilesByUserId: Dispatch<SetStateAction<Record<string, UserProfileT>>>;
   setCloudProfile: Dispatch<SetStateAction<UserProfileDetailT | null>>;
   setProfileName: Dispatch<SetStateAction<string>>;
+  setProfileHandle: Dispatch<SetStateAction<string>>;
   setProfileBio: Dispatch<SetStateAction<string>>;
   setProfileAvatarUrl: Dispatch<SetStateAction<string | null>>;
   setIsSavingProfile: Dispatch<SetStateAction<boolean>>;
@@ -199,7 +201,13 @@ export function useCommunityAdminController<
       current.setCloudProfile(row);
       current.setProfilesByUserId((prev) => ({
         ...prev,
-        [row.user_id]: { user_id: row.user_id, display_name: row.display_name, avatar_url: row.avatar_url } as UserProfileT,
+        [row.user_id]: {
+          user_id: row.user_id,
+          display_name: row.display_name,
+          handle: row.handle ?? null,
+          normalized_handle: row.normalized_handle ?? null,
+          avatar_url: row.avatar_url,
+        } as UserProfileT,
       }));
       current.applyLoadedProfileToLocal?.(row);
     } catch {
@@ -216,8 +224,13 @@ export function useCommunityAdminController<
       return;
     }
 
-    const { trimmedName, trimmedBio } = trimProfileFields(current.profileName, current.profileBio);
+    const { trimmedName, trimmedHandle, trimmedBio } = trimProfileFields(
+      current.profileName,
+      current.profileHandle,
+      current.profileBio,
+    );
     if (trimmedName !== current.profileName) current.setProfileName(trimmedName);
+    if (trimmedHandle !== current.profileHandle) current.setProfileHandle(trimmedHandle);
     if (trimmedBio !== current.profileBio) current.setProfileBio(trimmedBio);
 
     if (current.profileSaveTimeoutRef.current) {
@@ -235,6 +248,7 @@ export function useCommunityAdminController<
         session,
         userId: profileUserId,
         displayName: trimmedName || null,
+        handle: trimmedHandle || null,
         avatarUrl: current.profileAvatarUrl ?? null,
         bio: trimmedBio || null,
       });
@@ -245,10 +259,13 @@ export function useCommunityAdminController<
           [saved.user_id]: {
             user_id: saved.user_id,
             display_name: saved.display_name,
+            handle: saved.handle ?? null,
+            normalized_handle: saved.normalized_handle ?? null,
             avatar_url: saved.avatar_url,
           } as UserProfileT,
         }));
         current.setProfileName(saved.display_name ?? "");
+        current.setProfileHandle(saved.handle ?? "");
         current.setProfileBio(saved.bio ?? "");
         current.setProfileAvatarUrl(saved.avatar_url ?? null);
       }

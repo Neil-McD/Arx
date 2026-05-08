@@ -12,6 +12,7 @@ type WebProfileSettingsSectionProps = {
   cloudProfile: unknown | null;
   profileAvatarUrl: string | null;
   profileName: string;
+  profileHandle: string;
   profileBio: string;
   isProfileAvatarDragOver: boolean;
   profileNeedsSave: boolean;
@@ -25,6 +26,7 @@ type WebProfileSettingsSectionProps = {
   setProfileAvatarUrl: (value: string | null) => void;
   getInitials: (value: string) => string;
   setProfileName: (value: string) => void;
+  setProfileHandle: (value: string) => void;
   setProfileBio: (value: string) => void;
   saveProfileToCloud: () => Promise<void> | void;
 };
@@ -35,6 +37,7 @@ export function WebProfileSettingsSection(props: WebProfileSettingsSectionProps)
     cloudProfile,
     profileAvatarUrl,
     profileName,
+    profileHandle,
     profileBio,
     isProfileAvatarDragOver,
     profileNeedsSave,
@@ -48,6 +51,7 @@ export function WebProfileSettingsSection(props: WebProfileSettingsSectionProps)
     setProfileAvatarUrl,
     getInitials,
     setProfileName,
+    setProfileHandle,
     setProfileBio,
     saveProfileToCloud,
   } = props;
@@ -112,6 +116,17 @@ export function WebProfileSettingsSection(props: WebProfileSettingsSectionProps)
           placeholder="Name"
           value={profileName}
           onChange={(event) => setProfileName(event.target.value)}
+        />
+      </div>
+      <div className="profile-row profile-handle-row">
+        <span className="profile-handle-prefix" aria-hidden="true">@</span>
+        <input
+          type="text"
+          placeholder="handle"
+          value={profileHandle}
+          onChange={(event) => setProfileHandle(event.target.value)}
+          autoCapitalize="none"
+          autoCorrect="off"
         />
       </div>
       <textarea

@@ -1,3 +1,5 @@
+import type { AccountSetupMissing, AccountSetupStatus, AccountSetupStep } from "./accountSetup";
+
 export type OperatorRange = "7d" | "30d" | "90d" | "all";
 
 export type OperatorAccessSnapshot = {
@@ -71,6 +73,55 @@ export type OperatorOverviewSnapshot = {
   evidence: {
     sourceTables: string[];
   };
+};
+
+export type OperatorAccountSetupOverviewSnapshot = {
+  computedAt: number;
+  totals: {
+    users: number;
+    completed: number;
+    incomplete: number;
+    averagePercent: number;
+  };
+  byStep: Record<AccountSetupStep, number>;
+  byMissing: Record<AccountSetupMissing, number>;
+  evidence: {
+    sourceTables: string[];
+  };
+};
+
+export type OperatorAccountSetupUserRecord = {
+  user: {
+    userId: string;
+    dbUserId: string;
+    email: string | null;
+    displayName: string | null;
+    handle: string | null;
+    avatarUrl: string | null;
+    createdAt: number;
+    updatedAt: number;
+  };
+  setup: AccountSetupStatus;
+  communities: {
+    owned: number;
+    joined: number;
+  };
+  evidence: {
+    sourceTables: string[];
+    computedAt: number;
+  };
+};
+
+export type OperatorAccountSetupUserList = {
+  rows: OperatorAccountSetupUserRecord[];
+  totalMatching: number;
+  isTruncated: boolean;
+  limit: number;
+};
+
+export type OperatorAccountSetupSnapshot = {
+  overview: OperatorAccountSetupOverviewSnapshot;
+  users: OperatorAccountSetupUserList;
 };
 
 export type OperatorMonetizationSnapshot = {

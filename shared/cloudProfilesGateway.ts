@@ -1,5 +1,6 @@
 import { bootstrapConvexAuthenticatedClient, type ConvexClient } from "./convexAuthenticatedClient";
 import { coerceGatewayRows, firstGatewayRow } from "./cloudGateway";
+import type { AccountSetupStatus } from "./accountSetup";
 
 type CloudProfilesGatewayParams<SessionT> = {
   session: SessionT;
@@ -8,12 +9,16 @@ type CloudProfilesGatewayParams<SessionT> = {
 type CloudProfileBase = {
   user_id: string;
   display_name: string | null;
+  handle?: string | null;
+  normalized_handle?: string | null;
   avatar_url: string | null;
 };
 
 export type CloudProfileDetailRow = CloudProfileBase & {
   bio: string | null;
+  onboarding_direction?: "build_community" | "discover_community" | "learn_about_polynet" | null;
   onboarding_completed_at?: string | null;
+  account_setup?: AccountSetupStatus | null;
 };
 
 async function bootstrapConvexUser(sessionRaw: unknown): Promise<{
@@ -63,12 +68,23 @@ export async function resolveCloudOnboardingProfileDetail<SessionT, TProfile ext
   return firstGatewayRow<TProfile>(payload);
 }
 
+export async function loadCloudAccountSetupStatus<SessionT>(
+  params: CloudProfilesGatewayParams<SessionT>,
+): Promise<AccountSetupStatus | null> {
+  const { client, authSubject } = await bootstrapConvexUser(params.session);
+  return (await client.query("profiles:getMyAccountSetupStatus" as any, {
+    authSubject,
+  })) as AccountSetupStatus | null;
+}
+
 export async function upsertCloudProfileDetail<SessionT, TProfile extends CloudProfileDetailRow = CloudProfileDetailRow>(
   params: CloudProfilesGatewayParams<SessionT> & {
     userId: string;
     displayName: string | null;
+    handle?: string | null;
     avatarUrl: string | null;
     bio: string | null;
+    onboardingDirection?: "build_community" | "discover_community" | "learn_about_polynet" | null;
     completeOnboarding?: boolean;
   },
 ): Promise<TProfile | null> {
@@ -77,8 +93,10 @@ export async function upsertCloudProfileDetail<SessionT, TProfile extends CloudP
     authSubject,
     userId: params.userId,
     displayName: params.displayName,
+    handle: params.handle,
     avatarUrl: params.avatarUrl,
     bio: params.bio,
+    onboardingDirection: params.onboardingDirection,
     completeOnboarding: params.completeOnboarding,
   });
   return firstGatewayRow<TProfile>(payload);

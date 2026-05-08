@@ -6,6 +6,15 @@ import { requireOperatorRole } from "./operatorAccess";
 
 const operatorRange = v.optional(v.union(v.literal("7d"), v.literal("30d"), v.literal("90d"), v.literal("all")));
 const operatorSeverity = v.optional(v.union(v.literal("info"), v.literal("warning"), v.literal("error")));
+const accountSetupStep = v.optional(
+  v.union(
+    v.literal("identity"),
+    v.literal("inference"),
+    v.literal("agent"),
+    v.literal("direction"),
+    v.literal("complete"),
+  ),
+);
 
 async function requireOperatorAccess(ctx: any, authSubject: string | null | undefined) {
   return await requireOperatorRole(ctx, authSubject, "readonly");
@@ -57,6 +66,25 @@ export const listOperatorBuilders = query({
     await requireOperatorAccess(ctx, args.authSubject);
     return await ctx.runQuery((internal as any).operatorIntelligence.listOperatorBuildersInternal, {
       query: args.query,
+      limit: args.limit,
+    });
+  },
+});
+
+export const getOperatorAccountSetupSnapshot = query({
+  args: {
+    authSubject: v.optional(v.string()),
+    query: v.optional(v.string()),
+    currentStep: accountSetupStep,
+    completed: v.optional(v.boolean()),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args): Promise<any> => {
+    await requireOperatorAccess(ctx, args.authSubject);
+    return await ctx.runQuery((internal as any).operatorIntelligence.getOperatorAccountSetupSnapshotInternal, {
+      query: args.query,
+      currentStep: args.currentStep,
+      completed: args.completed,
       limit: args.limit,
     });
   },

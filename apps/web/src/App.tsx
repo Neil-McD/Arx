@@ -101,9 +101,11 @@ import {
   saveCloudCommunityPublicPresentation,
 } from "../../../shared/cloudCommunityFunnelGateway";
 import {
+  loadCloudAccountSetupStatus,
   resolveCloudOnboardingProfileDetail,
   upsertCloudProfileDetail,
 } from "../../../shared/cloudProfilesGateway";
+import type { AccountSetupStatus } from "../../../shared/accountSetup";
 import { deleteCloudOwnAccount } from "../../../shared/cloudAccountGateway";
 import { listEnabledCloudModelRegistryRows } from "../../../shared/cloudModelRegistryGateway";
 import {
@@ -459,8 +461,21 @@ type ThreadMessage = {
 type UserMemorySettings = {
   memory_mode: "off" | "suggest" | "auto";
   remember_intent_enabled: boolean;
+  agent_name: string;
   agent_soul: string;
 };
+
+function formatProfileMutationError(error: unknown, fallback: string): string {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  if (message.includes("profile_handle_taken")) return "That handle is already taken.";
+  if (message.includes("profile_handle_reserved")) return "That handle is reserved.";
+  if (message.includes("profile_handle_too_short")) return "Handle must be at least 3 characters.";
+  if (message.includes("profile_handle_too_long")) return "Handle must be 32 characters or less.";
+  if (message.includes("profile_handle_invalid_format")) {
+    return "Handle can use lowercase letters, numbers, underscores, and hyphens.";
+  }
+  return message || fallback;
+}
 
 type MobileOverlay = "agent" | "community" | "community_selector";
 
@@ -1019,6 +1034,11 @@ export default function App() {
         setIsSettingsAvatarDragOver,
         setDiscoverCommunities,
       });
+      setCloudProfile(null);
+      setAccountSetupStatus(null);
+      setIsLoadingAccountSetupStatus(false);
+      setHasLoadedOnboardingProfile(false);
+      setIsOnboardingModalOpen(false);
       emitWorkspaceEvent({
         scope: "lifecycle",
         name: "auth_full_signed_out_reset",
@@ -1100,6 +1120,8 @@ export default function App() {
       setPendingPurchasesError(null);
       setPendingPurchasesSuccess(null);
       setCloudProfile(null);
+      setAccountSetupStatus(null);
+      setIsLoadingAccountSetupStatus(false);
       setHasLoadedOnboardingProfile(false);
       setIsOnboardingModalOpen(false);
       setWorkspaceCreditBalance(null);
@@ -1408,6 +1430,8 @@ export default function App() {
     }
   }, [appTheme]);
   const [cloudProfile, setCloudProfile] = useState<UserProfileDetail | null>(null);
+  const [accountSetupStatus, setAccountSetupStatus] = useState<AccountSetupStatus | null>(null);
+  const [isLoadingAccountSetupStatus, setIsLoadingAccountSetupStatus] = useState(false);
   const [hasLoadedOnboardingProfile, setHasLoadedOnboardingProfile] = useState(false);
   const [isOnboardingModalOpen, setIsOnboardingModalOpen] = useState(false);
   const profileUi = useWebProfileSettingsUiController({
@@ -1418,6 +1442,24 @@ export default function App() {
   });
   const [isSavingOnboarding, setIsSavingOnboarding] = useState(false);
   const [onboardingError, setOnboardingError] = useState<string | null>(null);
+  const refreshAccountSetupStatus = useCallback(async (activeSession: AuthSession | null = sessionRef.current ?? session) => {
+    if (!activeSession) {
+      setAccountSetupStatus(null);
+      return null;
+    }
+    const usableSession = await ensureUsableAuthSession(activeSession);
+    if (!usableSession) return null;
+    setIsLoadingAccountSetupStatus(true);
+    try {
+      const status = await loadCloudAccountSetupStatus<AuthSession>({ session: usableSession });
+      setAccountSetupStatus(status);
+      return status;
+    } catch {
+      return null;
+    } finally {
+      setIsLoadingAccountSetupStatus(false);
+    }
+  }, [ensureUsableAuthSession, session, sessionRef]);
   const authProfileEmail = useMemo(() => resolveAuthSessionEmail(session) ?? null, [session]);
   const authProfileDisplayName = useMemo(
     () => resolveAuthSessionDisplayName(session) ?? "",
@@ -2352,6 +2394,7 @@ export default function App() {
     setHasLoadedOnboardingProfile(true);
     if (row) {
       setCloudProfile(row);
+      if (row.account_setup) setAccountSetupStatus(row.account_setup);
       profileUi.applyLoadedProfileToLocal(row);
     }
     return row;
@@ -2365,7 +2408,7 @@ export default function App() {
 
     try {
       const row = await loadProfileForOnboarding(activeSession);
-      setIsOnboardingModalOpen(!row?.onboarding_completed_at);
+      setIsOnboardingModalOpen(!row?.account_setup?.completed);
       navigateTo("/workspace");
     } catch {
       setIsOnboardingModalOpen(true);
@@ -2389,7 +2432,8 @@ export default function App() {
     }
 
     const displayName = profileUi.profileName.trim() || authProfileDisplayName.trim() || null;
-    const bio = profileUi.profileBio.trim() || null;
+    const handle = cloudProfile?.handle ?? null;
+    const bio = cloudProfile?.bio ?? null;
     const avatarUrl = profileUi.profileAvatarUrl?.trim() || null;
 
     setIsSavingOnboarding(true);
@@ -2399,15 +2443,21 @@ export default function App() {
         session: activeSession,
         userId,
         displayName,
+        handle,
         avatarUrl,
         bio,
+        onboardingDirection: destination,
         completeOnboarding: true,
       });
       if (saved) {
         setCloudProfile(saved);
+        if (saved.account_setup) setAccountSetupStatus(saved.account_setup);
         setHasLoadedOnboardingProfile(true);
         setIsOnboardingModalOpen(false);
-        profileUi.applyLoadedProfileToLocal(saved);
+        profileUi.setProfileName(saved.display_name ?? "");
+        profileUi.setProfileHandle(saved.handle ?? "");
+        profileUi.setProfileBio(saved.bio ?? "");
+        profileUi.setProfileAvatarUrl(saved.avatar_url ?? null);
       }
 
       if (destination === "discover_community") {
@@ -2422,7 +2472,7 @@ export default function App() {
 
       navigateTo("/workspace");
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to save onboarding.";
+      const message = formatProfileMutationError(error, "Failed to save onboarding.");
       setOnboardingError(message);
     } finally {
       setIsSavingOnboarding(false);
@@ -2443,7 +2493,8 @@ export default function App() {
     }
 
     const displayName = profileUi.profileName.trim() || authProfileDisplayName.trim() || null;
-    const bio = profileUi.profileBio.trim() || null;
+    const handle = cloudProfile?.handle ?? null;
+    const bio = cloudProfile?.bio ?? null;
     const avatarUrl = profileUi.profileAvatarUrl?.trim() || null;
 
     setIsSavingOnboarding(true);
@@ -2453,23 +2504,43 @@ export default function App() {
         session: activeSession,
         userId,
         displayName,
+        handle,
         avatarUrl,
         bio,
         completeOnboarding: false,
       });
       if (saved) {
         setCloudProfile(saved);
+        if (saved.account_setup) setAccountSetupStatus(saved.account_setup);
         setHasLoadedOnboardingProfile(true);
-        profileUi.applyLoadedProfileToLocal(saved);
+        profileUi.setProfileName(saved.display_name ?? "");
+        profileUi.setProfileHandle(saved.handle ?? "");
+        profileUi.setProfileBio(saved.bio ?? "");
+        profileUi.setProfileAvatarUrl(saved.avatar_url ?? null);
       }
       return true;
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to save your profile.";
+      const message = formatProfileMutationError(error, "Failed to save your profile.");
       setOnboardingError(message);
       return false;
     } finally {
       setIsSavingOnboarding(false);
     }
+  }
+
+  async function saveOnboardingAgent(next: { agentName: string; agentSoul: string }): Promise<boolean> {
+    const activeSession = await ensureUsableAuthSession();
+    if (!activeSession) {
+      requireSignIn({ reason: "try_polynet_free", payload: {} });
+      return false;
+    }
+    setOnboardingError(null);
+    await saveUserMemorySettingsAndRefreshSetup({
+      ...userMemorySettings,
+      agent_name: next.agentName,
+      agent_soul: next.agentSoul,
+    });
+    return true;
   }
 
   async function deleteOwnAccountFromSettings(): Promise<void> {
@@ -2594,7 +2665,7 @@ export default function App() {
     if (!session) return;
     void (async () => {
       const row = cloudProfile ?? (await loadProfileForOnboarding(session));
-      if (row?.onboarding_completed_at) {
+      if (row?.account_setup?.completed) {
         setIsOnboardingModalOpen(false);
       } else {
         setIsOnboardingModalOpen(true);
@@ -2609,16 +2680,12 @@ export default function App() {
     if (!session) return;
     if (cloudProfile) {
       setHasLoadedOnboardingProfile(true);
-      setIsOnboardingModalOpen(!cloudProfile.onboarding_completed_at);
       return;
     }
     if (hasLoadedOnboardingProfile) {
-      setIsOnboardingModalOpen(true);
       return;
     }
-    void loadProfileForOnboarding(session).then((row) => {
-      if (!row?.onboarding_completed_at) setIsOnboardingModalOpen(true);
-    });
+    void loadProfileForOnboarding(session);
   }, [
     activePage,
     cloudProfile,
@@ -2819,6 +2886,7 @@ export default function App() {
   const [userMemorySettings, setUserMemorySettings] = useState<UserMemorySettings>({
     memory_mode: "auto",
     remember_intent_enabled: true,
+    agent_name: "",
     agent_soul: "",
   });
   const [communityAiAgentPreferredTab, setCommunityAiAgentPreferredTab] = useState<
@@ -2844,7 +2912,6 @@ export default function App() {
     updated_at: null,
   });
   const [isLoadingChatgptConnection, setIsLoadingChatgptConnection] = useState(false);
-  const [hasResolvedProviderConnections, setHasResolvedProviderConnections] = useState(false);
   const [contextModal, setContextModal] = useState<
     MessageContextModalPayload<MemoryUsedItem, HistoryUsedItem, MemorySuggestion> | null
   >(null);
@@ -2988,6 +3055,7 @@ export default function App() {
     loadUserProfiles: (userIds, session) => loadUserProfiles(userIds, session),
     getProfileSaveSession: () => sessionRef.current ?? session,
     profileName: profileUi.profileName,
+    profileHandle: profileUi.profileHandle,
     profileBio: profileUi.profileBio,
     profileAvatarUrl: profileUi.profileAvatarUrl,
     profileSaveTimeoutRef: profileUi.profileSaveTimeoutRef,
@@ -3003,6 +3071,7 @@ export default function App() {
     setProfilesByUserId,
     setCloudProfile,
     setProfileName: profileUi.setProfileName,
+    setProfileHandle: profileUi.setProfileHandle,
     setProfileBio: profileUi.setProfileBio,
     setProfileAvatarUrl: profileUi.setProfileAvatarUrl,
     setIsSavingProfile: profileUi.setIsSavingProfile,
@@ -3533,6 +3602,10 @@ export default function App() {
     setNewPersonalMemoryContent: personalMemoryUi.setNewPersonalMemoryContent,
     setNewPersonalMemoryPinned: personalMemoryUi.setNewPersonalMemoryPinned,
   });
+  const saveUserMemorySettingsAndRefreshSetup = useCallback(async (next: UserMemorySettings): Promise<void> => {
+    await saveUserMemorySettings(next);
+    await refreshAccountSetupStatus();
+  }, [refreshAccountSetupStatus, saveUserMemorySettings]);
 
   const { createThread, updateThreadModel, maybeSetThreadTitleFromText, setThreadCommunityLens } =
     workspaceCore.threadMutation;
@@ -3951,6 +4024,7 @@ export default function App() {
     appTheme,
     profileStorageUserId,
     profileName: profileUi.profileName,
+    profileHandle: profileUi.profileHandle,
     profileBio: profileUi.profileBio,
     modelToggles,
     activeModelId,
@@ -3961,6 +4035,7 @@ export default function App() {
     writeProfileDraftForUser,
     storeGuestModelId,
     setProfileName: profileUi.setProfileName,
+    setProfileHandle: profileUi.setProfileHandle,
     setProfileBio: profileUi.setProfileBio,
   });
 
@@ -3968,6 +4043,8 @@ export default function App() {
 
   useEffect(() => {
     setCloudProfile(null);
+    setAccountSetupStatus(null);
+    setIsLoadingAccountSetupStatus(false);
     setHasLoadedOnboardingProfile(false);
     setIsOnboardingModalOpen(false);
   }, [profileStorageUserId]);
@@ -3994,6 +4071,8 @@ export default function App() {
       [canonicalSessionUserId]: {
         user_id: canonicalSessionUserId,
         display_name: cloudProfile.display_name,
+        handle: cloudProfile.handle ?? null,
+        normalized_handle: cloudProfile.normalized_handle ?? null,
         avatar_url: cloudProfile.avatar_url,
       },
     } satisfies Record<string, UserProfile>;
@@ -4531,6 +4610,7 @@ export default function App() {
     onConnectionsUpdated: (connections) => {
       setOpenAiConnection(connections.openai);
       setChatgptConnection(connections.chatgpt);
+      void refreshAccountSetupStatus();
     },
     chatgptSecuritySettingsUrl: CHATGPT_SECURITY_SETTINGS_URL,
     getReturnToPath: () => `${window.location.pathname}${window.location.search}`,
@@ -4559,7 +4639,7 @@ export default function App() {
   useEffect(() => {
     if (!session) {
       navStackRef.current = [];
-      setUserMemorySettings({ memory_mode: "auto", remember_intent_enabled: true, agent_soul: "" });
+      setUserMemorySettings({ memory_mode: "auto", remember_intent_enabled: true, agent_name: "", agent_soul: "" });
       setChatgptConnection({
         provider: "chatgpt",
         auth_kind: "oauth_tokens",
@@ -4578,24 +4658,21 @@ export default function App() {
         validated_at: null,
         updated_at: null,
       });
+      setAccountSetupStatus(null);
+      setIsLoadingAccountSetupStatus(false);
       setIsLoadingChatgptConnection(false);
-      setHasResolvedProviderConnections(false);
       return;
     }
-    setHasResolvedProviderConnections(false);
     void (async () => {
       const usableSession = await ensureUsableAuthSession(session);
       if (!usableSession) return;
-      try {
-        await Promise.all([
-          loadUserMemorySettings(usableSession),
-          loadProviderConnections(usableSession),
-        ]);
-      } finally {
-        setHasResolvedProviderConnections(true);
-      }
+      await Promise.all([
+        loadUserMemorySettings(usableSession),
+        loadProviderConnections(usableSession),
+        refreshAccountSetupStatus(usableSession),
+      ]);
     })();
-  }, [session, loadProviderConnections]);
+  }, [session, loadProviderConnections, refreshAccountSetupStatus]);
 
   const {
     cancelMyPendingJoinRequest,
@@ -5336,13 +5413,13 @@ export default function App() {
 
   const hasUserKeyConnection = Boolean(session) && openAiConnection.connected;
   const hasUserChatgptConnection = Boolean(session) && chatgptConnection.connected;
-  const hasPersonalInferenceProvider = hasUserKeyConnection || hasUserChatgptConnection;
   const hasPendingChatgptAuth = providerConnectionUi.hasPendingChatgptAuth;
-  const shouldShowEmptyThreadChatgptCard =
+  const effectiveAccountSetupStatus = accountSetupStatus ?? cloudProfile?.account_setup ?? null;
+  const shouldShowAccountSetupCard =
     Boolean(session) &&
-    hasResolvedProviderConnections &&
-    !hasPersonalInferenceProvider &&
-    !isLoadingChatgptConnection;
+    Boolean(effectiveAccountSetupStatus) &&
+    !effectiveAccountSetupStatus?.completed &&
+    !isLoadingAccountSetupStatus;
 
   const { sendUserMessage, retryLastTurn } = useWebSendFlowController<
     AuthSession,
@@ -6823,7 +6900,7 @@ export default function App() {
       isExporting,
       userMemorySettings,
       isLoadingUserMemorySettings,
-      saveUserMemorySettings,
+      saveUserMemorySettings: saveUserMemorySettingsAndRefreshSetup,
       loadPersonalMemoryItems,
       formatRelativeTime,
       handleTogglePersonalMemoryPinned,
@@ -7062,16 +7139,10 @@ export default function App() {
     onRequireSignIn: () => requireSignIn(),
     onOpenLandingCommunity: handleOpenLandingCommunity,
     onOpenLandingProject: handleOpenLandingProject,
-    shouldShowEmptyThreadChatgptCard,
-    isConnectingChatgpt: providerConnectionUi.isConnectingChatgpt,
-    hasPendingChatgptAuth,
-    isPollingChatgptConnection: providerConnectionUi.isPollingChatgptConnection,
-    onConnectChatgpt: () => {
-      void providerConnectionUi.handleConnectChatgpt();
-    },
-    onAddOpenAiKey: () => {
-      setActiveView("settings");
-      setSettingsPage("agent");
+    shouldShowAccountSetupCard,
+    accountSetupStatus: effectiveAccountSetupStatus,
+    onContinueAccountSetup: () => {
+      setIsOnboardingModalOpen(true);
     },
   });
   const { workspaceHostProps } = buildWebWorkspaceSurfaceProjection({
@@ -7172,10 +7243,10 @@ export default function App() {
       },
     },
     onboardingPageProps: {
+      accountSetupStatus: effectiveAccountSetupStatus,
       email: authProfileEmail,
       displayName: profileUi.profileName,
       avatarUrl: profileUi.profileAvatarUrl,
-      bio: profileUi.profileBio,
       isAvatarDragOver: profileUi.isProfileAvatarDragOver,
       isSaving: isSavingOnboarding,
       error: onboardingError,
@@ -7184,8 +7255,36 @@ export default function App() {
       onAvatarUpload: handleProfileAvatarUpload,
       onRemoveAvatar: () => profileUi.setProfileAvatarUrl(null),
       onDisplayNameChange: profileUi.setProfileName,
-      onBioChange: profileUi.setProfileBio,
       onNextProfile: saveOnboardingProfile,
+      chatgptConnected: chatgptConnection.connected,
+      chatgptStatus: isLoadingChatgptConnection
+        ? "Checking..."
+        : chatgptConnection.connected
+          ? chatgptConnection.email
+            ? `Connected as ${chatgptConnection.email}`
+            : "Connected"
+          : "Not connected",
+      isConnectingChatgpt: providerConnectionUi.isConnectingChatgpt,
+      isPollingChatgptConnection: providerConnectionUi.isPollingChatgptConnection,
+      onConnectChatgpt: () => {
+        void providerConnectionUi.handleConnectChatgpt();
+      },
+      openAiConnected: openAiConnection.connected,
+      openAiStatus: isLoadingChatgptConnection
+        ? "Checking..."
+        : openAiConnection.connected
+          ? `Connected${openAiConnection.key_last_four ? ` · key ending ${openAiConnection.key_last_four}` : ""}`
+          : "Not connected",
+      openAiApiKeyDraft: providerConnectionUi.openAiApiKeyDraft,
+      setOpenAiApiKeyDraft: providerConnectionUi.setOpenAiApiKeyDraft,
+      isSavingOpenAiConnection: providerConnectionUi.isSavingOpenAiConnection,
+      openAiConnectionError: providerConnectionUi.openAiConnectionError,
+      openAiConnectionSuccess: providerConnectionUi.openAiConnectionSuccess,
+      onConnectOpenAi: providerConnectionUi.handleConnectOpenAi,
+      agentName: userMemorySettings.agent_name,
+      agentSoul: userMemorySettings.agent_soul,
+      isSavingAgent: isLoadingUserMemorySettings,
+      onSaveAgent: saveOnboardingAgent,
       onBuildCommunity: () => {
         void completeOnboarding("build_community");
       },
@@ -7195,6 +7294,7 @@ export default function App() {
       onLearnAboutPolynet: () => {
         void completeOnboarding("learn_about_polynet");
       },
+      onClose: () => setIsOnboardingModalOpen(false),
     },
     showOnboardingModal: (activePage === "workspace" || activePage === "onboarding") && isOnboardingModalOpen,
     workspaceSurfaceHostProps: {

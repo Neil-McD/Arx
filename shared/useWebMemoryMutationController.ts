@@ -11,6 +11,7 @@ import { saveCloudUserMemorySettings } from "./cloudUserSettingsGateway";
 type UserMemorySettings = {
   memory_mode: "off" | "suggest" | "auto";
   remember_intent_enabled: boolean;
+  agent_name: string;
   agent_soul: string;
 };
 
@@ -54,6 +55,7 @@ export function useWebMemoryMutationController<SessionT>(
     if (!session) return;
     const normalizedNext = {
       ...next,
+      agent_name: String(next.agent_name ?? "").trim(),
       agent_soul: String(next.agent_soul ?? "").trim(),
     };
     current.setIsLoadingUserMemorySettings(true);
@@ -62,6 +64,7 @@ export function useWebMemoryMutationController<SessionT>(
         session,
         memoryMode: normalizedNext.memory_mode,
         rememberIntentEnabled: Boolean(normalizedNext.remember_intent_enabled),
+        agentName: normalizedNext.agent_name,
         agentSoul: normalizedNext.agent_soul,
       });
       current.setUserMemorySettings(normalizedNext);

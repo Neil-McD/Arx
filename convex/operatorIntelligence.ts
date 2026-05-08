@@ -6,7 +6,14 @@ import {
   resolveDiscoverAppCatalogConnectPolicy,
 } from "../shared/discoverCatalog";
 import { WORKSPACE_CREDITS_PER_USD } from "../shared/workspaceCredits";
+import {
+  ACCOUNT_SETUP_MISSING_FIELDS,
+  ACCOUNT_SETUP_STEPS,
+  type AccountSetupMissing,
+  type AccountSetupStep,
+} from "../shared/accountSetup";
 import type { DeveloperAppAuthType } from "../shared/communityAppMountTypes";
+import { buildAccountSetupStatusForRows } from "./accountSetupCore";
 
 type MoneyMetric = {
   currency: string;
@@ -57,6 +64,14 @@ const WEB_DEPLOY_MODULE_LOAD_EVENT_TYPES = new Set([
   "deploy.module_load_recovery",
   "deploy.stale_asset_recovered",
 ]);
+const ACCOUNT_SETUP_SOURCE_TABLES = [
+  "users",
+  "userProfileDetails",
+  "userProviderConnections",
+  "userMemorySettings",
+  "communities",
+  "communityMemberships",
+];
 type DiagnosticSubsystem =
   | "auth"
   | "access"
@@ -111,6 +126,166 @@ function normalizeRangeStart(range: string | undefined, nowMs: number): number |
     default:
       return null;
   }
+}
+
+function incrementStringCount(map: Map<string, number>, key: unknown, amount = 1): void {
+  const normalized = String(key ?? "").trim();
+  if (!normalized) return;
+  map.set(normalized, (map.get(normalized) ?? 0) + amount);
+}
+
+function pushByUserId(map: Map<string, any[]>, row: any): void {
+  const key = String(row?.userId ?? "").trim();
+  if (!key) return;
+  const rows = map.get(key) ?? [];
+  rows.push(row);
+  map.set(key, rows);
+}
+
+function buildEmptyStepCounts(): Record<AccountSetupStep, number> {
+  return Object.fromEntries(ACCOUNT_SETUP_STEPS.map((step) => [step, 0])) as Record<AccountSetupStep, number>;
+}
+
+function buildEmptyMissingCounts(): Record<AccountSetupMissing, number> {
+  return Object.fromEntries(ACCOUNT_SETUP_MISSING_FIELDS.map((field) => [field, 0])) as Record<
+    AccountSetupMissing,
+    number
+  >;
+}
+
+async function buildOperatorAccountSetupRecords(ctx: any, nowMs: number) {
+  const [users, details, providerConnections, memorySettingsRows, memberships, communities] = await Promise.all([
+    ctx.db.query("users").collect(),
+    ctx.db.query("userProfileDetails").collect(),
+    ctx.db.query("userProviderConnections").collect(),
+    ctx.db.query("userMemorySettings").collect(),
+    ctx.db.query("communityMemberships").collect(),
+    ctx.db.query("communities").collect(),
+  ]);
+  const detailsByUser = new Map<string, any>();
+  const providersByUser = new Map<string, any[]>();
+  const memoryByUser = new Map<string, any>();
+  const ownedCommunitiesByUser = new Map<string, number>();
+  const joinedCommunitiesByUser = new Map<string, number>();
+
+  for (const row of details) detailsByUser.set(String(row.userId), row);
+  for (const row of providerConnections) pushByUserId(providersByUser, row);
+  for (const row of memorySettingsRows) memoryByUser.set(String(row.userId), row);
+  for (const row of communities) incrementStringCount(ownedCommunitiesByUser, row.ownerId);
+  for (const row of memberships) {
+    if (row.active === false || row.revokedAt) continue;
+    incrementStringCount(joinedCommunitiesByUser, row.userId);
+  }
+
+  return users.map((user: any) => {
+    const userId = String(user._id);
+    const setup = buildAccountSetupStatusForRows({
+      user,
+      detail: detailsByUser.get(userId) ?? null,
+      providerConnections: providersByUser.get(userId) ?? [],
+      memorySettings: memoryByUser.get(userId) ?? null,
+    });
+    return {
+      user: {
+        userId: String(user.authSubject ?? ""),
+        dbUserId: userId,
+        email: user.email ?? null,
+        displayName: user.displayName ?? null,
+        handle: user.handle ?? null,
+        avatarUrl: user.avatarUrl ?? null,
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt,
+      },
+      setup,
+      communities: {
+        owned: ownedCommunitiesByUser.get(userId) ?? 0,
+        joined: joinedCommunitiesByUser.get(userId) ?? 0,
+      },
+      evidence: {
+        sourceTables: ACCOUNT_SETUP_SOURCE_TABLES,
+        computedAt: nowMs,
+      },
+    };
+  });
+}
+
+function matchesAccountSetupUserQuery(record: any, query: string): boolean {
+  if (!query) return true;
+  const haystack = [
+    record.user.userId,
+    record.user.dbUserId,
+    record.user.email,
+    record.user.displayName,
+    record.user.handle,
+    record.setup.current_step,
+    ...record.setup.missing,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  return haystack.includes(query);
+}
+
+function sortAccountSetupRecords(a: any, b: any): number {
+  if (a.setup.completed !== b.setup.completed) return a.setup.completed ? 1 : -1;
+  if (a.setup.percent !== b.setup.percent) return a.setup.percent - b.setup.percent;
+  return Number(b.user.updatedAt ?? 0) - Number(a.user.updatedAt ?? 0);
+}
+
+function buildOperatorAccountSetupOverview(records: any[], nowMs: number) {
+  const byStep = buildEmptyStepCounts();
+  const byMissing = buildEmptyMissingCounts();
+  let completed = 0;
+  let percentTotal = 0;
+
+  for (const record of records) {
+    byStep[record.setup.current_step as AccountSetupStep] += 1;
+    percentTotal += record.setup.percent;
+    if (record.setup.completed) completed += 1;
+    for (const missing of record.setup.missing) {
+      byMissing[missing as AccountSetupMissing] += 1;
+    }
+  }
+
+  return {
+    computedAt: nowMs,
+    totals: {
+      users: records.length,
+      completed,
+      incomplete: records.length - completed,
+      averagePercent: records.length > 0 ? Math.round(percentTotal / records.length) : 0,
+    },
+    byStep,
+    byMissing,
+    evidence: {
+      sourceTables: ACCOUNT_SETUP_SOURCE_TABLES,
+    },
+  };
+}
+
+function buildOperatorAccountSetupUserList(
+  records: any[],
+  args: {
+    query?: string;
+    currentStep?: string;
+    completed?: boolean;
+    limit?: number;
+  },
+) {
+  const limit = normalizeLimit(args.limit, 50, 200);
+  const query = String(args.query ?? "").trim().toLowerCase();
+  const matching = records
+    .filter((record: any) => args.currentStep == null || record.setup.current_step === args.currentStep)
+    .filter((record: any) => typeof args.completed !== "boolean" || record.setup.completed === args.completed)
+    .filter((record: any) => matchesAccountSetupUserQuery(record, query))
+    .sort(sortAccountSetupRecords);
+
+  return {
+    rows: matching.slice(0, limit),
+    totalMatching: matching.length,
+    isTruncated: matching.length > limit,
+    limit,
+  };
 }
 
 function moneyFromPrice(price: any): MoneyMetric | null {
@@ -939,6 +1114,31 @@ export const getOperatorOverviewInternal = internalQuery({
           "criticalAuditEvents",
         ],
       },
+    };
+  },
+});
+
+export const getOperatorAccountSetupSnapshotInternal = internalQuery({
+  args: {
+    query: v.optional(v.string()),
+    currentStep: v.optional(
+      v.union(
+        v.literal("identity"),
+        v.literal("inference"),
+        v.literal("agent"),
+        v.literal("direction"),
+        v.literal("complete"),
+      ),
+    ),
+    completed: v.optional(v.boolean()),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const nowMs = Date.now();
+    const records = await buildOperatorAccountSetupRecords(ctx, nowMs);
+    return {
+      overview: buildOperatorAccountSetupOverview(records, nowMs),
+      users: buildOperatorAccountSetupUserList(records, args),
     };
   },
 });

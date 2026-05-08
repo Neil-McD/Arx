@@ -8,6 +8,7 @@ type CloudUserSettingsGatewayParams<SessionT> = {
 export type CloudUserMemorySettingsRow = {
   memory_mode?: unknown;
   remember_intent_enabled?: unknown;
+  agent_name?: unknown;
   agent_soul?: unknown;
 };
 
@@ -31,6 +32,7 @@ export async function loadCloudUserMemorySettings<SessionT>(
   return {
     memory_mode: row.memory_mode,
     remember_intent_enabled: row.remember_intent_enabled,
+    agent_name: row.agent_name,
     agent_soul: row.agent_soul,
   };
 }
@@ -39,6 +41,7 @@ export async function saveCloudUserMemorySettings<SessionT>(
   params: CloudUserSettingsGatewayParams<SessionT> & {
     memoryMode: "off" | "suggest" | "auto";
     rememberIntentEnabled: boolean;
+    agentName?: string;
     agentSoul?: string;
   },
 ): Promise<void> {
@@ -47,6 +50,7 @@ export async function saveCloudUserMemorySettings<SessionT>(
     authSubject,
     memoryMode: params.memoryMode,
     rememberIntentEnabled: Boolean(params.rememberIntentEnabled),
+    agentName: params.agentName,
     agentSoul: params.agentSoul,
   });
 }

@@ -15,13 +15,16 @@ export default defineSchema({
       ),
     ),
     displayName: v.optional(v.string()),
+    handle: v.optional(v.string()),
+    normalizedHandle: v.optional(v.string()),
     avatarUrl: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
     .index("by_authSubject", ["authSubject"])
     .index("by_email", ["email"])
-    .index("by_normalizedEmail", ["normalizedEmail"]),
+    .index("by_normalizedEmail", ["normalizedEmail"])
+    .index("by_normalizedHandle", ["normalizedHandle"]),
 
   authSessions: defineTable({
     sessionId: v.string(),
@@ -318,6 +321,7 @@ export default defineSchema({
     userId: v.id("users"),
     memoryMode: v.union(v.literal("off"), v.literal("suggest"), v.literal("auto")),
     rememberIntentEnabled: v.boolean(),
+    agentName: v.optional(v.string()),
     agentSoul: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -373,6 +377,13 @@ export default defineSchema({
   userProfileDetails: defineTable({
     userId: v.id("users"),
     bio: v.optional(v.string()),
+    onboardingDirection: v.optional(
+      v.union(
+        v.literal("build_community"),
+        v.literal("discover_community"),
+        v.literal("learn_about_polynet"),
+      ),
+    ),
     onboardingCompletedAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
