@@ -385,18 +385,18 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
           {step === "inference" ? (
             <div className="polynet-onboarding-provider-grid">
               <div
-                className={`polynet-onboarding-provider-option${chatgptSelected ? " selected" : ""}${props.chatgptConnected ? " connected" : ""}`}
+                className={`polynet-onboarding-provider-option recommended${chatgptSelected ? " selected" : ""}${props.chatgptConnected ? " connected" : ""}`}
               >
                 <div className="polynet-onboarding-provider-copy">
                   <div className="polynet-onboarding-provider-topline">
-                    <span className="polynet-onboarding-provider-label">ChatGPT Plus/Pro</span>
-                    <span className={`polynet-onboarding-provider-status ${chatgptProviderStatus.kind}`}>
-                      {chatgptProviderStatus.label}
-                    </span>
+                    <span className="polynet-onboarding-provider-label recommended">ChatGPT Plus/Pro</span>
+                    <span className="polynet-onboarding-provider-recommended">Recommended</span>
                   </div>
                   <strong>Use ChatGPT</strong>
                   <p>Use your Plus or Pro plan limits through your connected ChatGPT account.</p>
-                  {props.chatgptConnected ? <small>{props.chatgptStatus}</small> : null}
+                  <small className={`polynet-onboarding-provider-connection ${chatgptProviderStatus.kind}`}>
+                    {props.chatgptConnected ? props.chatgptStatus : chatgptProviderStatus.label}
+                  </small>
                 </div>
                 <button
                   className="platform-save-button platform-save-button--compact"
@@ -432,7 +432,7 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
                 </div>
                 {!showOpenAiKeyEntry ? (
                   <button
-                    className="secondary"
+                    className="polynet-onboarding-provider-secondary-action"
                     type="button"
                     onClick={() => setProviderChoice("openai")}
                   >
@@ -450,7 +450,7 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
                       disabled={props.isSavingOpenAiConnection}
                     />
                     <button
-                      className="secondary"
+                      className="polynet-onboarding-provider-secondary-action"
                       type="button"
                       onClick={() => {
                         void props.onConnectOpenAi();

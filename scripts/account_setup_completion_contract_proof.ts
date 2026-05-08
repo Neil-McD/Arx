@@ -91,6 +91,7 @@ assert.doesNotMatch(onboardingPage, /profileHandleHint|polynet-onboarding-handle
 assert.match(onboardingPage, /onConnectChatgpt/, "onboarding inference step must reuse ChatGPT provider flow");
 assert.match(onboardingPage, /onConnectOpenAi/, "onboarding inference step must reuse OpenAI provider flow");
 assert.match(onboardingPage, /Use your Plus or Pro plan limits/, "onboarding inference choice should clearly name ChatGPT plan limits");
+assert.match(onboardingPage, /Recommended/, "onboarding inference choice should mark ChatGPT as recommended");
 assert.match(onboardingPage, /Use a key from your OpenAI account/, "onboarding inference choice should clearly name the API key path");
 assert.doesNotMatch(onboardingPage, /Learn about Polynet|onLearnAboutPolynet/, "onboarding direction should only offer build or discover");
 assert.match(onboardingPage, /onSaveAgent/, "onboarding agent step must persist canonical agent settings");
