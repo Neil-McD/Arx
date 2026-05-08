@@ -13,6 +13,7 @@ import {
   type AccountSetupStep,
 } from "../shared/accountSetup";
 import type { DeveloperAppAuthType } from "../shared/communityAppMountTypes";
+import { isAnonymousAuthSubject } from "../shared/authRelinkPolicy";
 import { buildAccountSetupStatusForRows } from "./accountSetupCore";
 
 type MoneyMetric = {
@@ -42,6 +43,10 @@ const DESTRUCTIVE_AUDIT_EVENT_TYPES = new Set([
   "account_delete_completed",
   "operator_role_deactivated",
 ]);
+
+function isAccountUserRow(row: any): boolean {
+  return !isAnonymousAuthSubject(row?.authSubject);
+}
 const OPERATOR_ROLE_AUDIT_EVENT_TYPES = new Set(["operator_role_deactivated", "operator_role_upserted"]);
 const BILLING_TRUST_AUDIT_EVENT_TYPES = new Set([
   "community_subscription_synced",
@@ -162,6 +167,7 @@ async function buildOperatorAccountSetupRecords(ctx: any, nowMs: number) {
     ctx.db.query("communityMemberships").collect(),
     ctx.db.query("communities").collect(),
   ]);
+  const accountUsers = users.filter(isAccountUserRow);
   const detailsByUser = new Map<string, any>();
   const providersByUser = new Map<string, any[]>();
   const memoryByUser = new Map<string, any>();
@@ -177,7 +183,7 @@ async function buildOperatorAccountSetupRecords(ctx: any, nowMs: number) {
     incrementStringCount(joinedCommunitiesByUser, row.userId);
   }
 
-  return users.map((user: any) => {
+  return accountUsers.map((user: any) => {
     const userId = String(user._id);
     const setup = buildAccountSetupStatusForRows({
       user,
@@ -1223,12 +1229,14 @@ export const getOperatorMonetizationInternal = internalQuery({
       ctx.db.query("emailOutbox").collect(),
       ctx.db.query("emailDeliveries").collect(),
     ]);
+    const accountUsers = users.filter(isAccountUserRow);
+    const accountUserIds = new Set<string>(accountUsers.map((row: any) => String(row._id)));
     const inRangeCheckouts = rangeStart == null
       ? checkouts
       : checkouts.filter((row: any) => row.createdAt >= rangeStart);
     const newUsers = rangeStart == null
-      ? users
-      : users.filter((row: any) => row.createdAt >= rangeStart);
+      ? accountUsers
+      : accountUsers.filter((row: any) => row.createdAt >= rangeStart);
     const newCommunities = rangeStart == null
       ? communities
       : communities.filter((row: any) => row.createdAt >= rangeStart);
@@ -1265,11 +1273,13 @@ export const getOperatorMonetizationInternal = internalQuery({
     });
     const activePayingCustomerIds = new Set<string>();
     for (const row of activeSubscriptions) {
-      if (row.userId) activePayingCustomerIds.add(String(row.userId));
+      const userId = String(row.userId ?? "");
+      if (accountUserIds.has(userId)) activePayingCustomerIds.add(userId);
     }
     const checkoutPurchaserIds = new Set<string>();
     for (const row of inRangeCheckouts) {
-      if (row.status === "complete" && row.ownerUserId) checkoutPurchaserIds.add(String(row.ownerUserId));
+      const userId = String(row.ownerUserId ?? "");
+      if (row.status === "complete" && accountUserIds.has(userId)) checkoutPurchaserIds.add(userId);
     }
     const knownPayingCustomerIds = new Set<string>([
       ...Array.from(activePayingCustomerIds),
@@ -1277,7 +1287,8 @@ export const getOperatorMonetizationInternal = internalQuery({
     ]);
     const lifetimeCheckoutPurchaserIds = new Set<string>();
     for (const row of completedCheckouts) {
-      if (row.ownerUserId) lifetimeCheckoutPurchaserIds.add(String(row.ownerUserId));
+      const userId = String(row.ownerUserId ?? "");
+      if (accountUserIds.has(userId)) lifetimeCheckoutPurchaserIds.add(userId);
     }
     const communityCheckoutRevenueInRange = communityJoinCompletions.reduce(
       (total: MoneyMetric | null, row: any) => addMoney(total, moneyFromCheckout(row)),
@@ -1336,8 +1347,10 @@ export const getOperatorMonetizationInternal = internalQuery({
           source: "unavailable",
         },
         users: {
-          total: users.length,
+          total: accountUsers.length,
           newInRange: newUsers.length,
+          rawUserRows: users.length,
+          anonymousRows: users.length - accountUsers.length,
           activePayingCustomers: activePayingCustomerIds.size,
           checkoutPurchasersInRange: checkoutPurchaserIds.size,
           knownPayingCustomers: knownPayingCustomerIds.size,

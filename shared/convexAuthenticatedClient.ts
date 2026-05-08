@@ -42,12 +42,6 @@ type AuthenticatedBootstrapCacheEntry = {
   promise: Promise<ConvexAuthenticatedClientContext>;
 };
 
-export type ConvexAnonymousClientContext = {
-  client: ConvexHttpClient;
-  anonymousId: string;
-  convexUrl: string;
-};
-
 let authenticatedBootstrapCache: AuthenticatedBootstrapCacheEntry | null = null;
 
 export function requireConvexUrl(): string {
@@ -94,27 +88,6 @@ function buildAuthenticatedBootstrapCacheKey(session: AuthSessionLike): string |
   const identityToken = resolveAuthIdentityToken(session);
   if (!authSubject || !identityToken) return null;
   return `${authSubject}::${identityToken}`;
-}
-
-export async function bootstrapConvexAnonymousClient(
-  anonymousIdRaw: unknown,
-): Promise<ConvexAnonymousClientContext> {
-  const anonymousId = String(anonymousIdRaw ?? "").trim();
-  if (!anonymousId) {
-    throw new Error("convex_anonymous_id_required");
-  }
-
-  const convexUrl = requireConvexUrl();
-  const client = createConvexClientForUrl(convexUrl);
-  await client.mutation("auth:bootstrapActor" as any, {
-    authState: "anonymous",
-    anonymousId,
-  });
-  return {
-    client,
-    anonymousId,
-    convexUrl,
-  };
 }
 
 export async function bootstrapConvexAuthenticatedClient(

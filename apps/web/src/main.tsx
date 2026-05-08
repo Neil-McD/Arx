@@ -7,7 +7,6 @@ import "./index.css";
 import { isLoginTrampolinePathname, LoginTrampolineRoute } from "./auth/loginTrampoline";
 import { applyAppThemeAttributes, parseAppTheme } from "../../../shared/theme";
 import { bootConvexProbe } from "../../../shared/convexRuntime";
-import { bootstrapConvexAnonymousActor } from "../../../shared/convexAuthBootstrap";
 import { buildTelemetryRouteLabel } from "../../../shared/routePrivacy";
 
 type ErrorBoundaryState = {
@@ -320,7 +319,6 @@ if (typeof window !== "undefined") {
 
 if (!isLoginTrampoline) {
   bootConvexProbe();
-  bootstrapConvexAnonymousActor();
 }
 
 const rootView = isLoginTrampoline

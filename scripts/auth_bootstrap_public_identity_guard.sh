@@ -41,13 +41,16 @@ reject_multiline_match() {
 
 echo "[1/4] Ensuring bootstrapActor returns authSubject for authenticated sessions..."
 require_multiline_match "$AUTH_FILE" \
-  'export const bootstrapActor = mutation\([\s\S]*?authSubject: subject,' \
+  'export const bootstrapActor = mutation\([\s\S]*?ensureAuthenticatedActorDetailed\([\s\S]*?return \{[\s\S]*?authSubject: actor\.authSubject,' \
   "bootstrapActor returns authSubject"
 
 echo "[2/4] Ensuring getActor returns authSubject for authenticated sessions..."
 require_multiline_match "$AUTH_FILE" \
-  'export const getActor = query\([\s\S]*?authSubject: subject,' \
+  'export const getActor = query\([\s\S]*?findAuthenticatedActorState\([\s\S]*?return \{[\s\S]*?authSubject,' \
   "getActor returns authSubject"
+reject_multiline_match "$AUTH_FILE" \
+  'authSubject: subject,' \
+  "anonymous actor subject persistence removed"
 
 echo "[3/4] Ensuring authenticated bootstrap client expects authSubject-aligned actor payloads..."
 require_multiline_match "$CLIENT_FILE" \

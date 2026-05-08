@@ -7,7 +7,6 @@ import {
   resolveAuthenticatedActor,
 } from "./authActor";
 import { resolveAuthenticatedIdentityProfile } from "./authIdentity";
-import { normalizeAuthRelinkEmail } from "../shared/authRelinkPolicy";
 import { canUseCreatorDevTierOverride } from "../shared/devTierOverride";
 import { ensurePlatformHomeCommunityMembership } from "./platformHomeCommunity";
 
@@ -84,18 +83,6 @@ async function getCanonicalTierByUserIdInternal(ctx: any, userId: any, nowMs: nu
     .filter((row) => isActiveWindow(nowMs, row.startsAt, row.endsAt))
     .sort((a, b) => b.startsAt - a.startsAt);
   return normalizeCanonicalTier(activeRows[0]?.tier ?? "free");
-}
-
-function resolveAnonymousSubject(args: {
-  authState: AuthState;
-  anonymousId?: string;
-}): string {
-  if (args.authState !== "anonymous") {
-    throw new Error("auth_state_invalid");
-  }
-  const anonymousId = String(args.anonymousId ?? "").trim();
-  if (!anonymousId) throw new Error("anonymous_id_required");
-  return `anon:${anonymousId}`;
 }
 
 function normalizeOptionalString(raw: unknown): string | null {
@@ -188,68 +175,19 @@ export const bootstrapActor = mutation({
       };
     }
 
-    const subject = resolveAnonymousSubject({
-      authState: args.authState,
-      anonymousId: args.anonymousId,
-    });
-    const email = String(args.email ?? "").trim() || undefined;
-    const normalizedEmail = normalizeAuthRelinkEmail(email) ?? undefined;
-    const displayName = String(args.displayName ?? "").trim() || undefined;
-    const avatarUrl = String(args.avatarUrl ?? "").trim() || undefined;
-    const existing = await ctx.db
-      .query("users")
-      .withIndex("by_authSubject", (q) => q.eq("authSubject", subject))
-      .first();
-    let userId = existing?._id ?? null;
-    if (!existing) {
-      userId = await ctx.db.insert("users", {
-        authSubject: subject,
-        email,
-        normalizedEmail,
-        displayName,
-        avatarUrl,
-        createdAt: nowMs,
-        updatedAt: nowMs,
-      });
-    } else {
-      const patch: {
-        email?: string;
-        normalizedEmail?: string;
-        displayName?: string;
-        avatarUrl?: string;
-        updatedAt?: number;
-      } = {};
-      if (email && email !== existing.email) patch.email = email;
-      if (
-        normalizedEmail !==
-        (normalizeAuthRelinkEmail((existing as { normalizedEmail?: string }).normalizedEmail ?? existing.email) ??
-          undefined)
-      ) {
-        patch.normalizedEmail = normalizedEmail;
-      }
-      if (displayName && displayName !== existing.displayName) patch.displayName = displayName;
-      if (avatarUrl && avatarUrl !== existing.avatarUrl) patch.avatarUrl = avatarUrl;
-      if (Object.keys(patch).length > 0) {
-        patch.updatedAt = nowMs;
-        await ctx.db.patch(existing._id, patch);
-      }
-      userId = existing._id;
-    }
-    if (!userId) throw new Error("user_not_found");
-    const canonicalTier = await getCanonicalTierByUserIdInternal(ctx as never, userId, nowMs);
-    const effectiveTier = resolveEffectiveTier({ authState: args.authState, canonicalTier });
-    const user = await ctx.db.get(userId);
+    const canonicalTier = "free" as const;
 
     return {
       authState: args.authState,
-      authSubject: subject,
       canonicalTier,
-      effectiveTier,
-      email: user?.email ?? null,
-      displayName: user?.displayName ?? null,
-      avatarUrl: user?.avatarUrl ?? null,
-      createdAt: user?.createdAt ?? nowMs,
-      updatedAt: user?.updatedAt ?? nowMs,
+      effectiveTier: resolveEffectiveTier({ authState: args.authState, canonicalTier }),
+      authSubject: null,
+      dbUserId: null,
+      email: null,
+      displayName: null,
+      avatarUrl: null,
+      createdAt: nowMs,
+      updatedAt: nowMs,
     };
   },
 });
@@ -290,32 +228,16 @@ export const getActor = query({
       };
     }
 
-    const subject = resolveAnonymousSubject({
-      authState: args.authState,
-      anonymousId: args.anonymousId,
-    });
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_authSubject", (q) => q.eq("authSubject", subject))
-      .first();
-    if (!user) {
-      const canonicalTier = "free" as const;
-      return {
-        authState: args.authState,
-        authSubject: subject,
-        canonicalTier,
-        effectiveTier: resolveEffectiveTier({ authState: args.authState, canonicalTier }),
-      };
-    }
-    const canonicalTier = await getCanonicalTierByUserIdInternal(ctx, user._id, nowMs);
+    const canonicalTier = "free" as const;
     return {
       authState: args.authState,
-      authSubject: subject,
+      authSubject: null,
+      dbUserId: null,
       canonicalTier,
       effectiveTier: resolveEffectiveTier({ authState: args.authState, canonicalTier }),
-      email: user.email ?? null,
-      displayName: user.displayName ?? null,
-      avatarUrl: user.avatarUrl ?? null,
+      email: null,
+      displayName: null,
+      avatarUrl: null,
     };
   },
 });
