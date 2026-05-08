@@ -2898,17 +2898,17 @@ body {
 }
 
 .polynet-onboarding-provider-option.recommended {
-  border-color: color-mix(in srgb, var(--accent-pink, var(--accent)) 62%, var(--border-muted));
+  border-color: rgba(255, 72, 153, 0.35);
   background:
-    linear-gradient(180deg, rgba(255, 60, 142, 0.15), rgba(255, 255, 255, 0.028)),
-    color-mix(in srgb, var(--bg-card-alt) 46%, transparent);
+    linear-gradient(180deg, rgba(255, 72, 153, 0.11), rgba(255, 72, 153, 0.035)),
+    rgba(255, 255, 255, 0.03);
 }
 
 .polynet-onboarding-provider-option.recommended:hover {
-  border-color: color-mix(in srgb, var(--accent-pink, var(--accent)) 74%, var(--border-muted));
+  border-color: rgba(255, 72, 153, 0.52);
   background:
-    linear-gradient(180deg, rgba(255, 60, 142, 0.18), rgba(255, 255, 255, 0.034)),
-    color-mix(in srgb, var(--bg-card-alt) 50%, transparent);
+    linear-gradient(180deg, rgba(255, 72, 153, 0.15), rgba(255, 72, 153, 0.045)),
+    rgba(255, 255, 255, 0.035);
 }
 
 .polynet-onboarding-provider-option.selected,
@@ -2946,7 +2946,8 @@ body {
 }
 
 .polynet-onboarding-provider-label.recommended {
-  color: color-mix(in srgb, var(--accent-pink, var(--accent)) 86%, var(--text-primary));
+  color: var(--accent);
+  opacity: 0.86;
 }
 
 .polynet-onboarding-provider-status {
@@ -2963,11 +2964,11 @@ body {
 
 .polynet-onboarding-provider-recommended {
   flex: 0 0 auto;
-  border: 1px solid color-mix(in srgb, var(--accent-pink, var(--accent)) 44%, var(--border-muted));
+  border: 1px solid rgba(255, 72, 153, 0.26);
   border-radius: 999px;
   padding: 3px 8px;
-  color: color-mix(in srgb, var(--accent-pink, var(--accent)) 84%, var(--text-primary));
-  background: color-mix(in srgb, var(--accent-pink, var(--accent)) 14%, transparent);
+  color: color-mix(in srgb, var(--accent) 72%, var(--text-primary));
+  background: rgba(255, 72, 153, 0.07);
   font-size: 11px;
   font-weight: 850;
   line-height: 1;
