@@ -31,7 +31,6 @@ export type CommunityResourcesCapabilities = {
 export type CommunityResourcesState = {
   isLoadingResources: boolean;
   isLoadingResourceModules: boolean;
-  resourceSuccess: boolean;
   modules: CommunityResourceModule[];
   resources: CommunityResource[];
   openResourceEmbedId: string | null;

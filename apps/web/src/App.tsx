@@ -1014,12 +1014,10 @@ export default function App() {
         setResourcePinnedInput,
         setResourceError,
         setIsSavingResource,
-        setResourceSuccess,
         setOpenResourceEmbedId,
         setCommunityEvents: resetCommunityEventsCache,
         setIsLoadingCommunityEvents,
         setCommunityEventsError,
-        setCommunityEventsSuccess,
         setCommunityMembers,
         setCommunitySettingsName,
         setCommunitySettingsSlug,
@@ -1090,12 +1088,10 @@ export default function App() {
         setResourcePinnedInput,
         setResourceError,
         setIsSavingResource,
-        setResourceSuccess,
         setOpenResourceEmbedId,
         setCommunityEvents: resetCommunityEventsCache,
         setIsLoadingCommunityEvents,
         setCommunityEventsError,
-        setCommunityEventsSuccess,
         setCommunityMembers,
         setCommunitySettingsName,
         setCommunitySettingsSlug,
@@ -1919,7 +1915,6 @@ export default function App() {
   const [communityEventsByCacheKey, setCommunityEventsByCacheKey] = useState<Record<string, CommunityEvent[]>>({});
   const [isLoadingCommunityEvents, setIsLoadingCommunityEvents] = useState(false);
   const [communityEventsError, setCommunityEventsError] = useState<string | null>(null);
-  const [communityEventsSuccess, setCommunityEventsSuccess] = useState(false);
   const [communityEventsVisibleMonthIso, setCommunityEventsVisibleMonthIso] = useState(() =>
     normalizeCommunityEventsMonthIso(null),
   );
@@ -2056,7 +2051,6 @@ export default function App() {
 
   const {
     loadCommunityResources,
-    resourceSuccess,
     openNewModuleModal,
     handleEditModule,
     handleDeleteModule,
@@ -2072,7 +2066,6 @@ export default function App() {
     setResourcePinnedInput,
     setResourceError,
     setIsSavingResource,
-    setResourceSuccess,
     resourceModalProps,
     resourceModuleModalProps,
   } = useWebCommunityResourceUiController<AuthSession, CommunityResource, CommunityResourceModule>({
@@ -2096,7 +2089,6 @@ export default function App() {
     setCommunityEvents,
     setIsLoadingCommunityEvents,
     setCommunityEventsError,
-    setCommunityEventsSuccess,
     invalidateCommunityEventsCache: invalidateCommunityEventsCacheForCommunity,
   });
 
@@ -4158,7 +4150,6 @@ export default function App() {
     setCommunityResourceModules([]);
     setIsLoadingCommunityEvents(false);
     setCommunityEventsError(null);
-    setCommunityEventsSuccess(false);
     setReplyingToMessage(null);
     setEditingMessageId(null);
     setEditingMessageText("");
@@ -4246,6 +4237,16 @@ export default function App() {
     if (timestamps.length === 0) return null;
     return Math.max(...timestamps);
   }, [communityResources]);
+  const latestActiveCommunityEventsUpdatedAt = useMemo(() => {
+    const timestamps = communityEvents
+      .map((event) => Date.parse(event.updated_at))
+      .filter((value) => Number.isFinite(value));
+    if (timestamps.length === 0) return null;
+    return Math.max(...timestamps);
+  }, [communityEvents]);
+  const hasLoadedActiveCommunityEventsRange = Boolean(
+    communityEventsCacheKey && Object.prototype.hasOwnProperty.call(communityEventsByCacheKey, communityEventsCacheKey),
+  );
 
   useEffect(() => {
     communitySeenAcknowledgeKeyBySurfaceRef.current = {};
@@ -4334,6 +4335,42 @@ export default function App() {
     communityTab,
     isLoadingResources,
     latestActiveCommunityResourcesCreatedAt,
+    markCommunitySurfaceSeen,
+  ]);
+
+  useEffect(() => {
+    if (
+      activePage !== "community"
+      || communityTab !== "events"
+      || !activeCommunityId
+      || isLoadingCommunityEvents
+      || !hasLoadedActiveCommunityEventsRange
+      || !communityEventsCacheKey
+      || latestActiveCommunityEventsUpdatedAt === null
+    ) {
+      return;
+    }
+    const requestKey = `${activeCommunityId}:events`;
+    const markerKey = `${communityEventsCacheKey}:${latestActiveCommunityEventsUpdatedAt}`;
+    if (communitySeenAcknowledgeKeyBySurfaceRef.current[requestKey] === markerKey) return;
+    communitySeenAcknowledgeKeyBySurfaceRef.current[requestKey] = markerKey;
+    void markCommunitySurfaceSeen(activeCommunityId, "events", {
+      seenAtMs: latestActiveCommunityEventsUpdatedAt,
+      optimistic: false,
+      refreshAfter: true,
+    }).catch(() => {
+      if (communitySeenAcknowledgeKeyBySurfaceRef.current[requestKey] === markerKey) {
+        delete communitySeenAcknowledgeKeyBySurfaceRef.current[requestKey];
+      }
+    });
+  }, [
+    activeCommunityId,
+    activePage,
+    communityTab,
+    communityEventsCacheKey,
+    hasLoadedActiveCommunityEventsRange,
+    isLoadingCommunityEvents,
+    latestActiveCommunityEventsUpdatedAt,
     markCommunitySurfaceSeen,
   ]);
 
@@ -6621,7 +6658,6 @@ export default function App() {
       resourcesState: {
         isLoadingResources,
         isLoadingResourceModules,
-        resourceSuccess,
         modules: communityResourceModules,
         resources: communityResources,
         openResourceEmbedId,
@@ -6640,7 +6676,6 @@ export default function App() {
         events: communityEvents,
         isLoadingEvents: isLoadingCommunityEvents,
         eventsError: communityEventsError,
-        eventsSuccess: communityEventsSuccess,
         visibleMonthIso: communityEventsVisibleMonthIso,
       },
       eventsActions: {
@@ -6961,12 +6996,13 @@ export default function App() {
     },
   };
   const activeCommunityAttentionSummary = activeCommunityId
-    ? (attentionByCommunityId[activeCommunityId] ?? { chat: false, ai_feed: false, resources: false })
-    : { chat: false, ai_feed: false, resources: false };
+    ? (attentionByCommunityId[activeCommunityId] ?? { chat: false, ai_feed: false, resources: false, events: false })
+    : { chat: false, ai_feed: false, resources: false, events: false };
   const activeCommunityAttentionCount =
     Number(Boolean(activeCommunityAttentionSummary.chat || (activePage === "community" && activeCommunityId && unreadCount > 0))) +
     Number(Boolean(activeCommunityAttentionSummary.ai_feed)) +
-    Number(Boolean(activeCommunityAttentionSummary.resources));
+    Number(Boolean(activeCommunityAttentionSummary.resources)) +
+    Number(Boolean(activeCommunityAttentionSummary.events));
   const communityHomeButton = activeCommunity ? (
     <button
       className={`icon-button community-btn${activePage === "community" ? " active" : ""}`}
@@ -7473,17 +7509,18 @@ export default function App() {
   const globalOverlays = <WebGlobalOverlayHost {...globalOverlayHostProps} />;
   const mainSurface = <WebAppMainSurfaceHost {...mainSurfaceHostProps} />;
   const activeIndicators = activeCommunityId
-    ? (attentionByCommunityId[activeCommunityId] ?? { chat: false, ai_feed: false, resources: false })
-    : { chat: false, ai_feed: false, resources: false };
+    ? (attentionByCommunityId[activeCommunityId] ?? { chat: false, ai_feed: false, resources: false, events: false })
+    : { chat: false, ai_feed: false, resources: false, events: false };
   const localActiveCommunityChatAttention = Boolean(activePage === "community" && activeCommunityId && unreadCount > 0);
   const communityTabIndicators = {
     chat: Boolean(activeIndicators.chat || localActiveCommunityChatAttention),
     ai_feed: Boolean(activeIndicators.ai_feed),
     resources: Boolean(activeIndicators.resources),
+    events: Boolean(activeIndicators.events),
   };
   const communityRailAttentionById: Record<string, boolean> = {};
   for (const [communityId, indicators] of Object.entries(attentionByCommunityId)) {
-    if (indicators.chat || indicators.ai_feed || indicators.resources) {
+    if (indicators.chat || indicators.ai_feed || indicators.resources || indicators.events) {
       communityRailAttentionById[communityId] = true;
     }
   }

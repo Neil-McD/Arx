@@ -3,6 +3,7 @@ import {
   listCloudCommunityAttentionRows,
   markCloudCommunitySurfaceSeen,
   type CloudCommunityAttentionRow,
+  type CloudCommunityAttentionSurface,
 } from "./cloudCommunityAttentionGateway";
 import { resolveUsableSession, type EnsureSessionFn } from "./ensureUsableSession";
 
@@ -12,6 +13,7 @@ export type CommunityAttentionIndicators = {
   chat: boolean;
   ai_feed: boolean;
   resources: boolean;
+  events: boolean;
 };
 
 type UseCommunityAttentionControllerArgs<SessionT extends SessionLike> = {
@@ -19,6 +21,12 @@ type UseCommunityAttentionControllerArgs<SessionT extends SessionLike> = {
   communityIds: string[];
   ensureSession?: EnsureSessionFn<SessionT>;
   pollIntervalMs?: number;
+};
+
+type MarkCommunitySurfaceSeenOptions = {
+  seenAtMs?: number;
+  optimistic?: boolean;
+  refreshAfter?: boolean;
 };
 
 function buildAttentionMap(
@@ -31,6 +39,7 @@ function buildAttentionMap(
       chat: false,
       ai_feed: false,
       resources: false,
+      events: false,
     };
   }
   for (const row of rows) {
@@ -40,6 +49,7 @@ function buildAttentionMap(
       chat: Boolean(row.chat),
       ai_feed: Boolean(row.ai_feed),
       resources: Boolean(row.resources),
+      events: Boolean(row.events),
     };
   }
   return next;
@@ -91,7 +101,10 @@ export function useCommunityAttentionController<SessionT extends SessionLike>(
       const nextAttentionMap = buildAttentionMap(communityIds, rows);
       for (const key of inFlightMarkKeysRef.current) {
         const [communityId, surface] = key.split(":");
-        if (!communityId || (surface !== "chat" && surface !== "ai_feed" && surface !== "resources")) continue;
+        if (
+          !communityId ||
+          (surface !== "chat" && surface !== "ai_feed" && surface !== "resources" && surface !== "events")
+        ) continue;
         if (!nextAttentionMap[communityId]) continue;
         nextAttentionMap[communityId] = {
           ...nextAttentionMap[communityId],
@@ -110,31 +123,45 @@ export function useCommunityAttentionController<SessionT extends SessionLike>(
   }, []);
 
   const markCommunitySurfaceSeen = useCallback(
-    async (communityIdRaw: string, surface: "chat" | "ai_feed" | "resources") => {
+    async (
+      communityIdRaw: string,
+      surface: CloudCommunityAttentionSurface,
+      options: MarkCommunitySurfaceSeenOptions = {},
+    ) => {
       const current = argsRef.current;
       const usableSession = await resolveUsableSession(current.session, current.ensureSession);
       const communityId = String(communityIdRaw ?? "").trim();
       if (!usableSession || !communityId) return;
-      const key = `${communityId}:${surface}`;
+      const markerKey =
+        typeof options.seenAtMs === "number" && Number.isFinite(options.seenAtMs)
+          ? String(Math.floor(options.seenAtMs))
+          : "";
+      const key = `${communityId}:${surface}:${markerKey}`;
       if (inFlightMarkKeysRef.current.has(key)) return;
       inFlightMarkKeysRef.current.add(key);
-      setAttentionByCommunityId((prev) => {
-        const currentIndicators = prev[communityId];
-        if (!currentIndicators || !currentIndicators[surface]) return prev;
-        return {
-          ...prev,
-          [communityId]: {
-            ...currentIndicators,
-            [surface]: false,
-          },
-        };
-      });
+      if (options.optimistic !== false) {
+        setAttentionByCommunityId((prev) => {
+          const currentIndicators = prev[communityId];
+          if (!currentIndicators || !currentIndicators[surface]) return prev;
+          return {
+            ...prev,
+            [communityId]: {
+              ...currentIndicators,
+              [surface]: false,
+            },
+          };
+        });
+      }
       try {
         await markCloudCommunitySurfaceSeen({
           session: usableSession,
           communityId,
           surface,
+          seenAtMs: options.seenAtMs,
         });
+        if (options.refreshAfter) {
+          await refreshCommunityAttention();
+        }
       } catch (error) {
         void refreshCommunityAttention();
         throw error;

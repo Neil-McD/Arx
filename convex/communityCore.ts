@@ -178,6 +178,7 @@ export type CommunityMemberSettingsLike = {
   chatLastSeenSeq?: number;
   aiFeedLastSeenAt?: number;
   resourcesLastSeenAt?: number;
+  eventsLastSeenAt?: number;
   createdAt: number;
   updatedAt: number;
 };

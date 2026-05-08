@@ -5,11 +5,14 @@ type CloudCommunityAttentionGatewayParams<SessionT> = {
   session: SessionT;
 };
 
+export type CloudCommunityAttentionSurface = "chat" | "ai_feed" | "resources" | "events";
+
 export type CloudCommunityAttentionRow = {
   community_id: string;
   chat: boolean;
   ai_feed: boolean;
   resources: boolean;
+  events: boolean;
 };
 
 export async function listCloudCommunityAttentionRows<SessionT>(
@@ -32,7 +35,8 @@ export async function listCloudCommunityAttentionRows<SessionT>(
 export async function markCloudCommunitySurfaceSeen<SessionT>(
   params: CloudCommunityAttentionGatewayParams<SessionT> & {
     communityId: string;
-    surface: "chat" | "ai_feed" | "resources";
+    surface: CloudCommunityAttentionSurface;
+    seenAtMs?: number;
   },
 ): Promise<void> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
@@ -40,5 +44,8 @@ export async function markCloudCommunitySurfaceSeen<SessionT>(
     authSubject,
     communityId: params.communityId,
     surface: params.surface,
+    ...(typeof params.seenAtMs === "number" && Number.isFinite(params.seenAtMs)
+      ? { seenAtMs: Math.floor(params.seenAtMs) }
+      : null),
   });
 }

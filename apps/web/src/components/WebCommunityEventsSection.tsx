@@ -449,7 +449,6 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
         </div>
       </div>
 
-      {state.eventsSuccess ? <div className="success-toast">Event saved.</div> : null}
       {state.eventsError ? <div className="community-event-error">{state.eventsError}</div> : null}
       {state.isLoadingEvents && !showInitialEventsLoading ? (
         <div className="analytics-refreshing-note">Refreshing events...</div>

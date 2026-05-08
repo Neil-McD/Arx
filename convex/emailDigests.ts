@@ -2,6 +2,7 @@ import { internal } from "./_generated/api";
 import { internalAction, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
 import { buildCommunityTabPath } from "../shared/webAppRouteState";
+import { listActiveCommunityRecipientUserIds } from "./communityRecipientCore";
 import {
   buildWeeklyDigestDedupeKey,
   buildWeeklyDigestPeriod,
@@ -28,12 +29,6 @@ type CommunityMembershipRow = {
   active?: boolean;
   revokedAt?: number;
   createdAt: number;
-};
-
-type CommunityMemberSettingsRow = {
-  userId: any;
-  muted: boolean;
-  mutedUntil?: number;
 };
 
 type CommunityChatThreadRow = {
@@ -287,47 +282,6 @@ async function listRecentArchiveDocuments(ctx: any, params: {
     .sort((a, b) => b.createdAt - a.createdAt);
 }
 
-async function listActiveDigestRecipients(ctx: any, params: {
-  communityId: any;
-  communityOwnerId: any;
-  nowMs: number;
-  limit: number;
-}): Promise<any[]> {
-  const memberships = (await ctx.db
-    .query("communityMemberships" as any)
-    .withIndex("by_community", (q: any) => q.eq("communityId", params.communityId))
-    .collect()) as CommunityMembershipRow[];
-  const settingsRows = (await ctx.db
-    .query("communityMemberSettings" as any)
-    .withIndex("by_community", (q: any) => q.eq("communityId", params.communityId))
-    .collect()) as CommunityMemberSettingsRow[];
-  const settingsByUserId = new Map<string, CommunityMemberSettingsRow>();
-  for (const row of settingsRows) {
-    settingsByUserId.set(String(row.userId), row);
-  }
-  const recipientUserIds: any[] = [];
-  const ownerId = String(params.communityOwnerId ?? "").trim();
-  if (ownerId) {
-    const ownerSettings = settingsByUserId.get(ownerId);
-    if (
-      ownerSettings?.muted !== true &&
-      !(typeof ownerSettings?.mutedUntil === "number" && ownerSettings.mutedUntil > params.nowMs)
-    ) {
-      recipientUserIds.push(params.communityOwnerId);
-    }
-  }
-  for (const membership of memberships.sort((a, b) => a.createdAt - b.createdAt)) {
-    if (ownerId && String(membership.userId) === ownerId) continue;
-    if (membership.active === false || typeof membership.revokedAt === "number") continue;
-    const settings = settingsByUserId.get(String(membership.userId));
-    if (settings?.muted === true) continue;
-    if (typeof settings?.mutedUntil === "number" && settings.mutedUntil > params.nowMs) continue;
-    recipientUserIds.push(membership.userId);
-    if (recipientUserIds.length >= params.limit) break;
-  }
-  return recipientUserIds;
-}
-
 async function countNewActiveMembers(ctx: any, params: {
   communityId: any;
   periodStartMs: number;
@@ -468,7 +422,7 @@ export const buildWeeklyCommunityDigestBatchesInternal = internalQuery({
       };
       if (!shouldSendWeeklyDigest(activity)) continue;
 
-      const recipientUserIds = await listActiveDigestRecipients(ctx, {
+      const recipientUserIds = await listActiveCommunityRecipientUserIds(ctx, {
         communityId: community._id,
         communityOwnerId: community.ownerId,
         nowMs,

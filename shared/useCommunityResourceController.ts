@@ -76,7 +76,6 @@ type UseCommunityResourceControllerArgs<
   setIsSavingResourceModule: Dispatch<SetStateAction<boolean>>;
   setResourceError: Dispatch<SetStateAction<string | null>>;
   setResourceModuleError: Dispatch<SetStateAction<string | null>>;
-  setResourceSuccess: Dispatch<SetStateAction<boolean>>;
   setShowResourceModuleModal: Dispatch<SetStateAction<boolean>>;
   setShowResourceModal: Dispatch<SetStateAction<boolean>>;
   setEditingResourceId: Dispatch<SetStateAction<string | null>>;
@@ -279,8 +278,6 @@ export function useCommunityResourceController<
       current.setShowResourceModal(false);
       resetResourceEditor(true);
       await loadCommunityResources(current.activeCommunityId, session);
-      current.setResourceSuccess(true);
-      window.setTimeout(() => current.setResourceSuccess(false), 2000);
     } catch (error) {
       const message = typeof error === "string"
         ? error
@@ -333,8 +330,6 @@ export function useCommunityResourceController<
       current.setShowResourceModuleModal(false);
       resetModuleEditor(true);
       await loadCommunityResourceModules(current.activeCommunityId, session);
-      current.setResourceSuccess(true);
-      window.setTimeout(() => current.setResourceSuccess(false), 2000);
     } catch (error) {
       const message = typeof error === "string"
         ? error

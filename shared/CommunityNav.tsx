@@ -143,6 +143,7 @@ export function CommunityNav({
           </svg>
         </span>
         <span className="nav-item-label">Events</span>
+        {communityTab !== "events" && tabIndicators.events ? <span className="nav-item-dot" aria-hidden="true" /> : null}
       </button>
       {canViewMembersActiveCommunity && (
         <button

@@ -16,7 +16,6 @@ export type CommunityEventsState = {
   events: CloudCommunityEvent[];
   isLoadingEvents: boolean;
   eventsError: string | null;
-  eventsSuccess: boolean;
   visibleMonthIso: string;
 };
 

@@ -587,9 +587,6 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
           </div>
         </div>
 
-        {state.resourceSuccess ? (
-          <div className="success-toast">Resource saved successfully!</div>
-        ) : null}
         {isRefreshingResources && !showInitialResourceLoading ? (
           <div className="analytics-refreshing-note">Refreshing resources...</div>
         ) : null}

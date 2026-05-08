@@ -52,7 +52,6 @@ export type UseWebCommunityResourceUiControllerResult<
   ResourceT extends ResourceLike,
   ResourceModuleT extends ResourceModuleLike,
 > = {
-  resourceSuccess: boolean;
   setShowResourceModal: Dispatch<SetStateAction<boolean>>;
   setEditingResourceId: Dispatch<SetStateAction<string | null>>;
   setResourceTitleInput: Dispatch<SetStateAction<string>>;
@@ -62,7 +61,6 @@ export type UseWebCommunityResourceUiControllerResult<
   setResourceModuleIdInput: Dispatch<SetStateAction<string | null>>;
   setResourceError: Dispatch<SetStateAction<string | null>>;
   setIsSavingResource: Dispatch<SetStateAction<boolean>>;
-  setResourceSuccess: Dispatch<SetStateAction<boolean>>;
   openNewModuleModal: () => void;
   handleEditModule: (module: ResourceModuleT) => void;
   handleDeleteModule: (moduleId: string) => Promise<boolean>;
@@ -108,7 +106,6 @@ export function useWebCommunityResourceUiController<
   const [resourceModuleError, setResourceModuleError] = useState<string | null>(null);
   const [isSavingResource, setIsSavingResource] = useState(false);
   const [isSavingResourceModule, setIsSavingResourceModule] = useState(false);
-  const [resourceSuccess, setResourceSuccess] = useState(false);
 
   const {
     loadCommunityResourceModules,
@@ -151,7 +148,6 @@ export function useWebCommunityResourceUiController<
     setIsSavingResourceModule,
     setResourceError,
     setResourceModuleError,
-    setResourceSuccess,
     setShowResourceModuleModal,
     setShowResourceModal,
     setEditingResourceId,
@@ -266,7 +262,6 @@ export function useWebCommunityResourceUiController<
   };
 
   return {
-    resourceSuccess,
     setShowResourceModal,
     setEditingResourceId,
     setResourceTitleInput,
@@ -276,7 +271,6 @@ export function useWebCommunityResourceUiController<
     setResourceModuleIdInput,
     setResourceError,
     setIsSavingResource,
-    setResourceSuccess,
     openNewModuleModal,
     handleEditModule,
     handleDeleteModule,

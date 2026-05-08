@@ -26,6 +26,17 @@ crons.daily(
 );
 
 crons.interval(
+  "enqueue 24h event reminder emails",
+  { minutes: 15 },
+  (internal as any).eventReminders.enqueueEventReminderEmailsInternal,
+  {
+    lookaheadMs: 20 * 60 * 1000,
+    limitEvents: 500,
+    limitRecipientsPerEvent: 500,
+  },
+);
+
+crons.interval(
   "reconcile daytona orphan sandboxes",
   { minutes: 15 },
   internal.daytonaOrphanReconciler.reconcileDaytonaOrphanedSandboxesInternal,

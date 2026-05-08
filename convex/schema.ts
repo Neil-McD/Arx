@@ -1020,6 +1020,7 @@ export default defineSchema({
     chatLastSeenSeq: v.optional(v.number()),
     aiFeedLastSeenAt: v.optional(v.number()),
     resourcesLastSeenAt: v.optional(v.number()),
+    eventsLastSeenAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -1085,6 +1086,9 @@ export default defineSchema({
     .index("by_community", ["communityId"])
     .index("by_community_startsAt", ["communityId", "startsAt"])
     .index("by_community_status_startsAt", ["communityId", "status", "startsAt"])
+    .index("by_community_status_updatedAt", ["communityId", "status", "updatedAt"])
+    .index("by_status_startsAt", ["status", "startsAt"])
+    .index("by_status_recurrenceFrequency_startsAt", ["status", "recurrenceFrequency", "startsAt"])
     .index("by_createdBy", ["createdByUserId"]),
 
   communityArchiveDocuments: defineTable({

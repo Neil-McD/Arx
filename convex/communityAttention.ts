@@ -8,7 +8,7 @@ import {
   resolveUserIdForAuthenticatedRequest,
 } from "./communityCore";
 
-type CommunityAttentionSurface = "chat" | "ai_feed" | "resources";
+type CommunityAttentionSurface = "chat" | "ai_feed" | "resources" | "events";
 
 type CommunityAiFeedPostLike = {
   _id: any;
@@ -22,7 +22,20 @@ type CommunityAttentionRow = {
   chat: boolean;
   ai_feed: boolean;
   resources: boolean;
+  events: boolean;
 };
+
+type CommunityEventLike = {
+  _id: any;
+  communityId: any;
+  status: "live" | "cancelled";
+  updatedAt: number;
+};
+
+function normalizePositiveMarker(value: unknown): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return null;
+  return Math.floor(value);
+}
 
 function isSkippableCommunityAccessError(error: unknown): boolean {
   const message =
@@ -109,16 +122,39 @@ async function getLatestCommunityResourcesCreatedAt(
     : null;
 }
 
+async function getLatestCommunityEventsUpdatedAt(
+  ctx: any,
+  communityId: any,
+): Promise<number | null> {
+  const latest = (await ctx.db
+    .query("communityEvents" as any)
+    .withIndex("by_community_status_updatedAt", (q: any) =>
+      q.eq("communityId", communityId).eq("status", "live"),
+    )
+    .order("desc")
+    .take(1)) as CommunityEventLike[];
+  const updatedAt = latest[0]?.updatedAt;
+  return typeof updatedAt === "number" && Number.isFinite(updatedAt) && updatedAt > 0
+    ? Math.floor(updatedAt)
+    : null;
+}
+
 async function getCommunityAttentionRow(
   ctx: any,
   communityId: any,
   userId: any,
 ): Promise<CommunityAttentionRow> {
   const settingsRow = await getCommunityMemberSettingsRow(ctx, communityId, userId);
-  const [latestChatSeq, latestAiFeedCreatedAt, latestResourcesCreatedAt] = await Promise.all([
+  const [
+    latestChatSeq,
+    latestAiFeedCreatedAt,
+    latestResourcesCreatedAt,
+    latestEventsUpdatedAt,
+  ] = await Promise.all([
     getLatestCommunityChatSeq(ctx, communityId),
     getLatestCommunityAiFeedCreatedAt(ctx, communityId),
     getLatestCommunityResourcesCreatedAt(ctx, communityId),
+    getLatestCommunityEventsUpdatedAt(ctx, communityId),
   ]);
   return {
     community_id: String(communityId),
@@ -131,6 +167,9 @@ async function getCommunityAttentionRow(
     resources:
       typeof latestResourcesCreatedAt === "number" &&
       latestResourcesCreatedAt > Math.max(0, Math.floor(settingsRow?.resourcesLastSeenAt ?? 0)),
+    events:
+      typeof latestEventsUpdatedAt === "number" &&
+      latestEventsUpdatedAt > Math.max(0, Math.floor(settingsRow?.eventsLastSeenAt ?? 0)),
   };
 }
 
@@ -140,6 +179,7 @@ async function upsertCommunitySurfaceSeen(args: {
   userId: any;
   surface: CommunityAttentionSurface;
   nowMs: number;
+  seenAtMs?: number | null;
 }): Promise<void> {
   const { ctx, communityId, userId, surface, nowMs } = args;
   const existing = await getCommunityMemberSettingsRow(ctx, communityId, userId);
@@ -188,12 +228,37 @@ async function upsertCommunitySurfaceSeen(args: {
     return;
   }
 
-  const latestResourcesCreatedAt = await getLatestCommunityResourcesCreatedAt(ctx, communityId);
-  if (latestResourcesCreatedAt === null) return;
-  if ((existing?.resourcesLastSeenAt ?? 0) >= latestResourcesCreatedAt) return;
+  if (surface === "resources") {
+    const latestResourcesCreatedAt = await getLatestCommunityResourcesCreatedAt(ctx, communityId);
+    if (latestResourcesCreatedAt === null) return;
+    if ((existing?.resourcesLastSeenAt ?? 0) >= latestResourcesCreatedAt) return;
+    if (existing) {
+      await ctx.db.patch(existing._id as any, {
+        resourcesLastSeenAt: latestResourcesCreatedAt,
+        updatedAt: nowMs,
+      });
+      return;
+    }
+    await ctx.db.insert("communityMemberSettings" as any, {
+      communityId,
+      userId,
+      muted: false,
+      resourcesLastSeenAt: latestResourcesCreatedAt,
+      createdAt: nowMs,
+      updatedAt: nowMs,
+    });
+    return;
+  }
+
+  const latestEventsUpdatedAt = await getLatestCommunityEventsUpdatedAt(ctx, communityId);
+  if (latestEventsUpdatedAt === null) return;
+  const requestedEventsSeenAt = normalizePositiveMarker(args.seenAtMs);
+  if (requestedEventsSeenAt === null) return;
+  const nextEventsLastSeenAt = Math.min(latestEventsUpdatedAt, requestedEventsSeenAt);
+  if ((existing?.eventsLastSeenAt ?? 0) >= nextEventsLastSeenAt) return;
   if (existing) {
     await ctx.db.patch(existing._id as any, {
-      resourcesLastSeenAt: latestResourcesCreatedAt,
+      eventsLastSeenAt: nextEventsLastSeenAt,
       updatedAt: nowMs,
     });
     return;
@@ -202,7 +267,7 @@ async function upsertCommunitySurfaceSeen(args: {
     communityId,
     userId,
     muted: false,
-    resourcesLastSeenAt: latestResourcesCreatedAt,
+    eventsLastSeenAt: nextEventsLastSeenAt,
     createdAt: nowMs,
     updatedAt: nowMs,
   });
@@ -247,7 +312,8 @@ export const markCommunitySurfaceSeen = mutation({
     userId: v.optional(v.id("users")),
     authSubject: v.optional(v.string()),
     communityId: v.id("communities"),
-    surface: v.union(v.literal("chat"), v.literal("ai_feed"), v.literal("resources")),
+    surface: v.union(v.literal("chat"), v.literal("ai_feed"), v.literal("resources"), v.literal("events")),
+    seenAtMs: v.optional(v.number()),
     nowMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
@@ -266,6 +332,7 @@ export const markCommunitySurfaceSeen = mutation({
       communityId: args.communityId,
       userId,
       surface: args.surface,
+      seenAtMs: args.seenAtMs ?? null,
       nowMs: args.nowMs ?? Date.now(),
     });
     return { ok: true };

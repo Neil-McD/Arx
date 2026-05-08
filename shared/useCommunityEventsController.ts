@@ -28,7 +28,6 @@ type UseCommunityEventsControllerArgs<SessionT extends SessionLike> = {
   setCommunityEvents: Dispatch<SetStateAction<CloudCommunityEvent[]>>;
   setIsLoadingCommunityEvents: Dispatch<SetStateAction<boolean>>;
   setCommunityEventsError: Dispatch<SetStateAction<string | null>>;
-  setCommunityEventsSuccess: Dispatch<SetStateAction<boolean>>;
   invalidateCommunityEventsCache?: (communityId: string) => void;
 };
 
@@ -111,8 +110,6 @@ export function useCommunityEventsController<SessionT extends SessionLike>(
       });
       current.invalidateCommunityEventsCache?.(current.activeCommunityId);
       await loadCommunityEvents(current.activeCommunityId, session, range);
-      current.setCommunityEventsSuccess(true);
-      window.setTimeout(() => current.setCommunityEventsSuccess(false), 2000);
       return true;
     } catch (error) {
       current.setCommunityEventsError(error instanceof Error ? error.message : "Could not save community event.");
