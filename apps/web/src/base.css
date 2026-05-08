@@ -2864,8 +2864,8 @@ body {
 
 .polynet-onboarding-provider-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(2, minmax(220px, 1fr));
+  gap: 14px;
   align-items: stretch;
 }
 
@@ -2874,33 +2874,56 @@ body {
   grid-template-columns: 1fr;
   align-content: space-between;
   align-items: stretch;
-  gap: 16px;
+  gap: 18px;
   border: 1px solid var(--border-muted);
-  border-radius: 12px;
-  min-height: 190px;
+  border-radius: 14px;
+  min-height: 232px;
+  aspect-ratio: 1 / 0.92;
   padding: 16px;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.03)),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.064), rgba(255, 255, 255, 0.026)),
     color-mix(in srgb, var(--bg-card-alt) 44%, transparent);
+  transition:
+    border-color 0.16s ease,
+    background 0.16s ease,
+    transform 0.16s ease;
 }
 
-.polynet-onboarding-provider-option.primary {
-  border-color: color-mix(in srgb, var(--accent-gold) 34%, var(--border-muted));
+.polynet-onboarding-provider-option:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--text-tertiary) 36%, var(--border-muted));
   background:
-    linear-gradient(180deg, rgba(255, 60, 142, 0.09), rgba(255, 255, 255, 0.028)),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.078), rgba(255, 255, 255, 0.032)),
+    color-mix(in srgb, var(--bg-card-alt) 52%, transparent);
+}
+
+.polynet-onboarding-provider-option.selected,
+.polynet-onboarding-provider-option.connected {
+  border-color: color-mix(in srgb, var(--accent-pink, var(--accent)) 52%, var(--border-muted));
+  background:
+    linear-gradient(180deg, rgba(255, 60, 142, 0.118), rgba(255, 255, 255, 0.03)),
     color-mix(in srgb, var(--bg-card-alt) 44%, transparent);
 }
 
-.polynet-onboarding-provider-option.selected {
-  border-color: color-mix(in srgb, var(--accent-pink, var(--accent)) 44%, var(--border-muted));
+.polynet-onboarding-provider-option.has-key-entry {
+  aspect-ratio: auto;
+  min-height: 252px;
 }
 
-.polynet-onboarding-provider-option span,
-.polynet-onboarding-provider-option strong {
-  display: block;
+.polynet-onboarding-provider-copy {
+  display: grid;
+  gap: 10px;
+  align-content: start;
 }
 
-.polynet-onboarding-provider-option span {
+.polynet-onboarding-provider-topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.polynet-onboarding-provider-label {
   color: var(--text-tertiary);
   font-size: 11px;
   font-weight: 800;
@@ -2908,19 +2931,50 @@ body {
   text-transform: uppercase;
 }
 
+.polynet-onboarding-provider-status {
+  flex: 0 0 auto;
+  border: 1px solid var(--border-muted);
+  border-radius: 999px;
+  padding: 3px 8px;
+  color: var(--text-tertiary);
+  background: rgba(255, 255, 255, 0.035);
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.polynet-onboarding-provider-status.selected,
+.polynet-onboarding-provider-status.busy {
+  border-color: color-mix(in srgb, var(--accent-pink, var(--accent)) 38%, var(--border-muted));
+  color: color-mix(in srgb, var(--accent-pink, var(--accent)) 78%, var(--text-primary));
+  background: color-mix(in srgb, var(--accent-pink, var(--accent)) 13%, transparent);
+}
+
+.polynet-onboarding-provider-status.connected {
+  border-color: color-mix(in srgb, var(--accent-success, #66b786) 44%, var(--border-muted));
+  color: color-mix(in srgb, var(--accent-success, #66b786) 78%, var(--text-primary));
+  background: color-mix(in srgb, var(--accent-success, #66b786) 13%, transparent);
+}
+
 .polynet-onboarding-provider-option strong {
-  margin-top: 3px;
+  display: block;
   color: var(--text-primary);
-  font-size: 15px;
+  font-size: 18px;
   line-height: 1.18;
   font-weight: 850;
 }
 
 .polynet-onboarding-provider-option p {
-  margin: 9px 0 0;
+  margin: 0;
   color: var(--text-secondary);
   font-size: 13px;
   line-height: 1.45;
+}
+
+.polynet-onboarding-provider-option > button {
+  min-height: 42px;
+  width: 100%;
+  justify-content: center;
 }
 
 .polynet-onboarding-provider-option small {
@@ -2936,6 +2990,7 @@ body {
   display: grid;
   gap: 8px;
   align-items: stretch;
+  cursor: default;
 }
 
 .polynet-onboarding-provider-key .provider-connection-input {
@@ -3415,6 +3470,8 @@ body {
   .polynet-onboarding-provider-option {
     grid-template-columns: 1fr;
     align-items: start;
+    aspect-ratio: auto;
+    min-height: 188px;
   }
 
 }

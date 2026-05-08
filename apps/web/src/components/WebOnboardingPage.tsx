@@ -137,6 +137,17 @@ function formatHandleAvailability(
   return { kind: "idle", label: "Recommended for your public profile." };
 }
 
+function formatProviderStatus(
+  connected: boolean,
+  selected: boolean,
+  busy: boolean,
+): { kind: "connected" | "selected" | "busy" | "idle"; label: string } {
+  if (connected) return { kind: "connected", label: "Connected" };
+  if (busy) return { kind: "busy", label: "Working" };
+  if (selected) return { kind: "selected", label: "Selected" };
+  return { kind: "idle", label: "Not connected" };
+}
+
 export function WebOnboardingPage(props: WebOnboardingPageProps) {
   const [step, setStep] = useState<OnboardingStep>(() => normalizeStep(props.accountSetupStatus?.current_step));
   const [agentNameDraft, setAgentNameDraft] = useState(props.agentName);
@@ -177,6 +188,18 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
     props.isCheckingHandleAvailability,
   );
   const showOpenAiKeyEntry = providerChoice === "openai" || props.openAiConnected;
+  const chatgptSelected = providerChoice === "chatgpt";
+  const openAiSelected = providerChoice === "openai";
+  const chatgptProviderStatus = formatProviderStatus(
+    props.chatgptConnected,
+    chatgptSelected,
+    props.isConnectingChatgpt || props.isPollingChatgptConnection,
+  );
+  const openAiProviderStatus = formatProviderStatus(
+    props.openAiConnected,
+    openAiSelected,
+    props.isSavingOpenAiConnection,
+  );
   const stepOrder = useMemo<OnboardingStep[]>(
     () => ["identity", "inference", "agent", "direction"],
     [],
@@ -361,12 +384,19 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
 
           {step === "inference" ? (
             <div className="polynet-onboarding-provider-grid">
-              <div className={`polynet-onboarding-provider-option primary${providerChoice === "chatgpt" ? " selected" : ""}`}>
-                <div>
-                  <span>ChatGPT Plus/Pro</span>
-                  <strong>Use your existing ChatGPT plan limits.</strong>
-                  <p>Best if you already pay for ChatGPT and want Polynet to use that account.</p>
-                  <small>{props.chatgptStatus}</small>
+              <div
+                className={`polynet-onboarding-provider-option${chatgptSelected ? " selected" : ""}${props.chatgptConnected ? " connected" : ""}`}
+              >
+                <div className="polynet-onboarding-provider-copy">
+                  <div className="polynet-onboarding-provider-topline">
+                    <span className="polynet-onboarding-provider-label">ChatGPT Plus/Pro</span>
+                    <span className={`polynet-onboarding-provider-status ${chatgptProviderStatus.kind}`}>
+                      {chatgptProviderStatus.label}
+                    </span>
+                  </div>
+                  <strong>Use ChatGPT</strong>
+                  <p>Use your Plus or Pro plan limits through your connected ChatGPT account.</p>
+                  {props.chatgptConnected ? <small>{props.chatgptStatus}</small> : null}
                 </div>
                 <button
                   className="platform-save-button platform-save-button--compact"
@@ -386,12 +416,19 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
                         : "Connect ChatGPT"}
                 </button>
               </div>
-              <div className={`polynet-onboarding-provider-option${providerChoice === "openai" ? " selected" : ""}`}>
-                <div>
-                  <span>OpenAI API</span>
-                  <strong>Bill usage to your OpenAI API account.</strong>
-                  <p>Best if you want direct API billing and a dedicated key for Polynet.</p>
-                  <small>{props.openAiStatus}</small>
+              <div
+                className={`polynet-onboarding-provider-option${openAiSelected ? " selected" : ""}${props.openAiConnected ? " connected" : ""}${showOpenAiKeyEntry ? " has-key-entry" : ""}`}
+              >
+                <div className="polynet-onboarding-provider-copy">
+                  <div className="polynet-onboarding-provider-topline">
+                    <span className="polynet-onboarding-provider-label">OpenAI API</span>
+                    <span className={`polynet-onboarding-provider-status ${openAiProviderStatus.kind}`}>
+                      {openAiProviderStatus.label}
+                    </span>
+                  </div>
+                  <strong>Use an API key</strong>
+                  <p>Use a key from your OpenAI account and bill usage directly through OpenAI.</p>
+                  {props.openAiConnected ? <small>{props.openAiStatus}</small> : null}
                 </div>
                 {!showOpenAiKeyEntry ? (
                   <button
@@ -415,7 +452,9 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
                     <button
                       className="secondary"
                       type="button"
-                      onClick={() => void props.onConnectOpenAi()}
+                      onClick={() => {
+                        void props.onConnectOpenAi();
+                      }}
                       disabled={props.isSavingOpenAiConnection || props.openAiApiKeyDraft.trim().length === 0}
                     >
                       {props.isSavingOpenAiConnection ? "Saving..." : props.openAiConnected ? "Update key" : "Connect key"}

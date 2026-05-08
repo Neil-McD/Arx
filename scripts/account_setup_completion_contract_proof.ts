@@ -90,7 +90,8 @@ assert.match(onboardingPage, /<span>Bio<\/span>/, "onboarding profile step shoul
 assert.doesNotMatch(onboardingPage, /profileHandleHint|polynet-onboarding-handle-field|step === "identity" && !.*handle/, "onboarding profile step must not require handle");
 assert.match(onboardingPage, /onConnectChatgpt/, "onboarding inference step must reuse ChatGPT provider flow");
 assert.match(onboardingPage, /onConnectOpenAi/, "onboarding inference step must reuse OpenAI provider flow");
-assert.match(onboardingPage, /Use your existing ChatGPT plan limits/, "onboarding inference choice should clearly name ChatGPT plan limits");
+assert.match(onboardingPage, /Use your Plus or Pro plan limits/, "onboarding inference choice should clearly name ChatGPT plan limits");
+assert.match(onboardingPage, /Use a key from your OpenAI account/, "onboarding inference choice should clearly name the API key path");
 assert.doesNotMatch(onboardingPage, /Learn about Polynet|onLearnAboutPolynet/, "onboarding direction should only offer build or discover");
 assert.match(onboardingPage, /onSaveAgent/, "onboarding agent step must persist canonical agent settings");
 assert.match(setupCard, /Finish account setup/, "workspace setup card must replace provider-only nudge");
