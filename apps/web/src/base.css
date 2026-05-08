@@ -19316,39 +19316,38 @@ button.message-citation-chip:hover {
 }
 
 .web-empty-thread-setup-progress {
+  --setup-progress: 0%;
+  --setup-progress-track: color-mix(in srgb, var(--border-muted) 68%, transparent);
+  --setup-progress-accent: var(--accent-gold, var(--accent));
   width: 50px;
   height: 50px;
   position: relative;
   display: grid;
   place-items: center;
+  border-radius: 999px;
+  background:
+    conic-gradient(
+      from -90deg,
+      var(--setup-progress-accent) 0 var(--setup-progress),
+      var(--setup-progress-track) var(--setup-progress) 100%
+    );
   color: var(--text-primary);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--text-primary) 4%, transparent),
+    0 0 18px color-mix(in srgb, var(--setup-progress-accent) 12%, transparent);
 }
 
-.web-empty-thread-setup-progress svg {
+.web-empty-thread-setup-progress::before {
+  content: "";
   position: absolute;
-  inset: 0;
-  width: 50px;
-  height: 50px;
-  transform: rotate(-90deg);
-}
-
-.web-empty-thread-setup-progress circle {
-  fill: none;
-  stroke-width: 3.5;
-}
-
-.web-empty-thread-setup-progress .track {
-  stroke: color-mix(in srgb, var(--border-muted) 82%, transparent);
-}
-
-.web-empty-thread-setup-progress .value {
-  stroke: color-mix(in srgb, var(--accent-pink, var(--accent)) 76%, #ffffff 12%);
-  stroke-linecap: round;
-  transition: stroke-dashoffset 180ms ease;
+  inset: 6px;
+  border-radius: inherit;
+  background: color-mix(in srgb, var(--bg-card) 88%, #000000 12%);
 }
 
 .web-empty-thread-setup-progress span {
   position: relative;
+  z-index: 1;
   font-size: 11px;
   font-weight: 850;
   color: var(--text-primary);

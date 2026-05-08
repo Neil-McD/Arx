@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import type { AccountSetupStatus } from "../../../../shared/accountSetup";
 
 type WebAccountSetupCardProps = {
@@ -23,24 +24,15 @@ function formatSetupCardDescription(status: AccountSetupStatus): string {
 export function WebAccountSetupCard(props: WebAccountSetupCardProps) {
   const { status, onContinueSetup } = props;
   const progress = Math.max(0, Math.min(100, status.percent));
-  const circumference = 2 * Math.PI * 17;
-  const dashOffset = circumference - (progress / 100) * circumference;
 
   return (
     <div className="web-empty-thread-setup-card-wrap">
       <div className="web-empty-thread-setup-card">
-        <div className="web-empty-thread-setup-progress" aria-hidden="true">
-          <svg viewBox="0 0 40 40">
-            <circle className="track" cx="20" cy="20" r="17" />
-            <circle
-              className="value"
-              cx="20"
-              cy="20"
-              r="17"
-              strokeDasharray={circumference}
-              strokeDashoffset={dashOffset}
-            />
-          </svg>
+        <div
+          className="web-empty-thread-setup-progress"
+          style={{ "--setup-progress": `${progress}%` } as CSSProperties}
+          aria-hidden="true"
+        >
           <span>{progress}%</span>
         </div>
         <div className="web-empty-thread-setup-copy">
