@@ -25,6 +25,7 @@ import {
   getNextSmoothStreamingText,
   shouldDisableStreamingSmoothing,
 } from "./smoothStreamingText";
+import { normalizePaidToolKind } from "./workspaceCredits";
 import {
   type CreateAssistantMessageParams,
   type CreateThreadMessageParams,
@@ -41,6 +42,11 @@ import {
   mapInferenceIssueReason,
   normalizeGuestInferenceError,
 } from "./webTurnRunnerCore";
+
+function normalizePositiveNumber(value: unknown): number | null {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
 
 export function useWebTurnRunnerController<
   SessionT,
@@ -789,6 +795,8 @@ export function useWebTurnRunnerController<
                 threadId,
                 mode: params.mode === "regenerate" ? "regenerate" : "respond",
                 message: failure.message.trim() || null,
+                toolKind: failure.toolKind,
+                requiredCredits: failure.requiredCredits,
               });
               return { cancelled: false, error: null };
             }
@@ -938,6 +946,12 @@ export function useWebTurnRunnerController<
                 threadId,
                 mode: params.mode === "regenerate" ? "regenerate" : "respond",
                 message: msg.trim() || null,
+                toolKind: normalizePaidToolKind(
+                  parsed?.tool_kind ?? parsed?.toolKind ?? parsed?.paid_tool_kind,
+                ),
+                requiredCredits: normalizePositiveNumber(
+                  parsed?.required_credits ?? parsed?.requiredCredits,
+                ),
               });
               streamInferenceIssueHandled = true;
               seenDone = true;

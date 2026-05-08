@@ -12,7 +12,7 @@ import {
 import { recordCriticalAuditEventBestEffort } from "./criticalAudit";
 import { readCanonicalPublicAppOrigin } from "./publicAppUrl";
 
-const BUILDER_CONNECT_CONTEXT_VALIDATOR = v.union(
+const STRIPE_CONNECT_CONTEXT_VALIDATOR = v.union(
   v.literal("account"),
   v.literal("community"),
 );
@@ -203,7 +203,7 @@ export const startConnectOnboarding = action({
   args: {
     userId: v.optional(v.id("users")),
     authSubject: v.optional(v.string()),
-    context: BUILDER_CONNECT_CONTEXT_VALIDATOR,
+    context: STRIPE_CONNECT_CONTEXT_VALIDATOR,
     communitySlug: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
@@ -215,17 +215,17 @@ export const startConnectOnboarding = action({
     if (args.userId && String(args.userId) !== String(userId)) {
       throw new Error("user_id_mismatch");
     }
-    const builderAccess = (await ctx.runQuery(
-      internal.auth.getBuilderCommerceAccessForUserInternal as any,
+    const accountAccess = (await ctx.runQuery(
+      internal.auth.getAccountCommerceAccessForUserInternal as any,
       { userId, nowMs: Date.now() },
-    )) as { builder_tier?: unknown; has_payouts?: unknown } | null;
-    const hasBuilderPayoutAccess = builderAccess?.has_payouts === true;
-    if (!hasBuilderPayoutAccess) {
-      throw new Error("builder_connect_builder_required");
+    )) as { account_tier?: unknown; has_payouts?: unknown } | null;
+    const hasPayoutAccess = accountAccess?.has_payouts === true;
+    if (!hasPayoutAccess) {
+      throw new Error("creator_payout_access_required");
     }
 
     const existing = (await ctx.runQuery(
-      internal.builderCommerce.getUserStripeConnectAccountInternal as any,
+      internal.creatorCommerce.getUserStripeConnectAccountInternal as any,
       { userId },
     )) as {
       stripeAccountId?: string | null;
@@ -251,7 +251,7 @@ export const startConnectOnboarding = action({
 
     const nowMs = Date.now();
     const snapshot = buildStripeConnectAccountSnapshot(account, { readyAtMs: nowMs });
-    await ctx.runMutation(internal.builderCommerce.syncUserStripeConnectAccountInternal as any, {
+    await ctx.runMutation(internal.creatorCommerce.syncUserStripeConnectAccountInternal as any, {
       userId,
       stripeAccountId: snapshot.stripeAccountId,
       accountType: snapshot.accountType,
@@ -269,7 +269,7 @@ export const startConnectOnboarding = action({
     if (snapshot.status === "ready") {
       const loginLink = await stripe.accounts.createLoginLink(account.id);
       const url = String((loginLink as { url?: unknown })?.url ?? "").trim();
-      if (!url) throw new Error("builder_payout_dashboard_url_missing");
+      if (!url) throw new Error("stripe_connect_dashboard_url_missing");
       return { url };
     }
 
@@ -284,7 +284,7 @@ export const startConnectOnboarding = action({
       refresh_url: refreshUrl,
     });
     const url = String(accountLink.url ?? "").trim();
-    if (!url) throw new Error("builder_payout_onboarding_url_missing");
+    if (!url) throw new Error("stripe_connect_onboarding_url_missing");
     return { url };
   },
 });

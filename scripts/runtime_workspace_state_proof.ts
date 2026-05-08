@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 
-import { buildWorkspaceRuntimeSystemPrompt } from "../shared/runtimePrompt.ts";
+import { buildPlatformHarnessRuntimeSystemPrompt } from "../shared/runtimePrompt.ts";
 import { buildRuntimeTurnContextPacket } from "../shared/runtimeTurnContextPacket.ts";
 
 const deletedBridgePath = "/Users/neilmcdevitt/code/arx/shared/runtimeWorkspaceState.ts";
@@ -11,7 +11,7 @@ assert.equal(
   "event-derived runtime workspace state bridge should be deleted",
 );
 
-const prompt = buildWorkspaceRuntimeSystemPrompt({
+const prompt = buildPlatformHarnessRuntimeSystemPrompt({
   loopBudget: {
     maxToolSteps: 8,
     maxRepeatedIdenticalCalls: 2,

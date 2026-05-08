@@ -1,3 +1,5 @@
+import { normalizePaidToolKind, type PaidToolKind } from "./workspaceCredits";
+
 export type CloudFunctionErrorCategory =
   | "auth"
   | "rate_limited"
@@ -18,6 +20,8 @@ export type CloudFunctionError = {
   message: string;
   requestId: string | null;
   stage: string | null;
+  toolKind: PaidToolKind | null;
+  requiredCredits: number | null;
   category: CloudFunctionErrorCategory;
 };
 
@@ -121,13 +125,29 @@ export function classifyCloudFunctionErrorCategoryCore(input: {
   return "unknown";
 }
 
-async function readFunctionErrorBody(response: Response): Promise<{ code: string | null; message: string; stage: string | null }> {
+function normalizePositiveNumber(value: unknown): number | null {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+async function readFunctionErrorBody(response: Response): Promise<{
+  code: string | null;
+  message: string;
+  stage: string | null;
+  toolKind: PaidToolKind | null;
+  requiredCredits: number | null;
+}> {
   try {
     const json = (await response.clone().json()) as {
       code?: unknown;
       message?: unknown;
       error?: unknown;
       stage?: unknown;
+      tool_kind?: unknown;
+      toolKind?: unknown;
+      paid_tool_kind?: unknown;
+      required_credits?: unknown;
+      requiredCredits?: unknown;
     };
     const code = normalizeCode(json?.code);
     const message =
@@ -135,19 +155,31 @@ async function readFunctionErrorBody(response: Response): Promise<{ code: string
       (typeof json?.error === "string" && json.error.trim()) ||
       "";
     const stage = normalizeCode(json?.stage);
-    if (code || message || stage) return { code, message, stage };
+    const toolKind = normalizePaidToolKind(json?.tool_kind ?? json?.toolKind ?? json?.paid_tool_kind);
+    const requiredCredits = normalizePositiveNumber(json?.required_credits ?? json?.requiredCredits);
+    if (code || message || stage || toolKind || requiredCredits) {
+      return { code, message, stage, toolKind, requiredCredits };
+    }
   } catch {
     // ignore
   }
 
   try {
     const text = (await response.clone().text()).trim();
-    if (text) return { code: null, message: normalizePlainTextError(text, response.status), stage: null };
+    if (text) {
+      return {
+        code: null,
+        message: normalizePlainTextError(text, response.status),
+        stage: null,
+        toolKind: null,
+        requiredCredits: null,
+      };
+    }
   } catch {
     // ignore
   }
 
-  return { code: null, message: "", stage: null };
+  return { code: null, message: "", stage: null, toolKind: null, requiredCredits: null };
 }
 
 export async function readCloudFunctionErrorCore(response: Response): Promise<CloudFunctionError> {
@@ -167,6 +199,8 @@ export async function readCloudFunctionErrorCore(response: Response): Promise<Cl
     message,
     requestId,
     stage: parsed.stage ?? stageHeader,
+    toolKind: parsed.toolKind,
+    requiredCredits: parsed.requiredCredits,
     category,
   };
 }

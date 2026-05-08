@@ -7,7 +7,6 @@ cd "$ROOT_DIR"
 TARGETS=(convex apps shared scripts docs package.json AGENTS.md)
 EXCLUDES=(
   --glob '!scripts/no_builder_plan_infra_guard.sh'
-  --glob '!convex/schema.ts'
   --glob '!docs/archive/**'
   --glob '!docs/product/generated/**'
   --glob '!docs/product/llms*.txt'
@@ -54,6 +53,15 @@ FORBIDDEN_PATTERNS=(
   'setDevBuilderTier\("builder"\)'
   'return "builder";'
   'normalizeBuilderTier\(raw: unknown\): "builder"'
+  'BUILDER_MAX_PROJECTS'
+  'BuilderIncludedModal'
+  'builderIncludedModalProps'
+  'isBuilderInfoOpen'
+  'setIsBuilderInfoOpen'
+  'hasBuilderAccess'
+  'onOpenBuilderInfo'
+  'builderRailCta'
+  'showBuilderLimitInfoIfNeeded'
 )
 
 failed=0
@@ -63,6 +71,63 @@ for pattern in "${FORBIDDEN_PATTERNS[@]}"; do
     failed=1
   fi
 done
+
+ACCOUNT_NAMING_TARGETS=(convex apps shared docs package.json AGENTS.md)
+ACCOUNT_NAMING_FORBIDDEN_PATTERNS=(
+  'builderBillingStatusGateway'
+  'builderBilling'
+  'cloudBuilderBillingGateway'
+  'builderCommerce'
+  'getBuilderBillingStatus'
+  'getBuilderCommerceAccessForUserInternal'
+  'builder_tier'
+  'builderTier'
+  'BuilderBilling'
+  'BuilderTier'
+  'BuilderConnect'
+  'setDevBuilderTier'
+  'loadBuilderBillingStatus'
+  'builder billing'
+  'Builder billing'
+  'builder connect'
+  'Builder connect'
+  'builder commerce'
+  'Builder commerce'
+  'builder tier'
+  'Builder tier'
+)
+
+for pattern in "${ACCOUNT_NAMING_FORBIDDEN_PATTERNS[@]}"; do
+  if rg -n -S "$pattern" "${ACCOUNT_NAMING_TARGETS[@]}" "${EXCLUDES[@]}"; then
+    echo "Forbidden legacy Builder account-commerce naming found: $pattern" >&2
+    failed=1
+  fi
+done
+
+SCHEMA_FORBIDDEN_PATTERNS=(
+  'v\.literal\("builder"\)'
+  'builder_upgrade'
+  'targetTier'
+)
+
+for pattern in "${SCHEMA_FORBIDDEN_PATTERNS[@]}"; do
+  if rg -n -S "$pattern" convex/schema.ts; then
+    echo "Forbidden legacy Builder plan schema pattern found: $pattern" >&2
+    failed=1
+  fi
+done
+
+if node --input-type=module <<'NODE'
+import { readFileSync } from "node:fs";
+
+const source = readFileSync("convex/schema.ts", "utf8");
+const block = source.match(/userEntitlements: defineTable\(\{[\s\S]*?\n  \}\)/)?.[0] ?? "";
+process.exit(block.includes('v.literal("stripe")') ? 0 : 1);
+NODE
+then
+  echo "Forbidden legacy Builder plan entitlement source found: userEntitlements.source stripe" >&2
+  failed=1
+fi
 
 PROJECT_TIER_GATE_PATTERNS=(
   'canonicalTier === "free"'

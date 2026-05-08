@@ -1,7 +1,11 @@
 import { useEffect, useRef, useState, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
 import { blobToBase64 } from "./imageTransforms";
-import { transcribeVoice } from "./authCore";
+import {
+  transcribeVoice,
+  VoiceTranscriptionRequestError,
+} from "./authCore";
 import { resolveUsableSession } from "./ensureUsableSession";
+import type { PaidToolKind } from "./workspaceCredits";
 import {
   createWavBlobFromInt16Chunks,
   floatToInt16Pcm,
@@ -27,6 +31,11 @@ type VoiceInputIntent = {
   title: string;
 };
 
+type VoiceToolBalanceDetails = {
+  toolKind?: PaidToolKind | null;
+  requiredCredits?: number | null;
+};
+
 type UseWebVoiceInputControllerArgs<SessionT> = {
   session: SessionT | null;
   sessionRef: MutableRefObject<SessionT | null>;
@@ -34,10 +43,13 @@ type UseWebVoiceInputControllerArgs<SessionT> = {
   activeCommunity: unknown | null;
   activeCommunityFunnelAction: "checkout" | "request_access" | "join" | null;
   canPostMessagesActiveCommunity: boolean;
-  normalizedBuilderTier: "free" | "architect";
   requireSignIn: () => void;
   showAppToastMessage: (message: string) => void;
-  onToolBalanceRequired?: (surface: VoiceSurface, message: string) => void;
+  onToolBalanceRequired?: (
+    surface: VoiceSurface,
+    message: string,
+    details?: VoiceToolBalanceDetails,
+  ) => void;
   appendWorkspaceTranscript: (transcript: string) => void;
   focusWorkspaceInput: () => void;
   setCommunityMessageInput: Dispatch<SetStateAction<string>>;
@@ -330,7 +342,17 @@ export function useWebVoiceInputController<SessionT>(args: UseWebVoiceInputContr
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (isToolBalanceError(message)) {
-        args.onToolBalanceRequired?.(surface, message);
+        const details =
+          error instanceof VoiceTranscriptionRequestError
+            ? {
+                toolKind: error.toolKind ?? "voice_input",
+                requiredCredits: error.requiredCredits,
+              }
+            : {
+                toolKind: "voice_input" as const,
+                requiredCredits: null,
+              };
+        args.onToolBalanceRequired?.(surface, message, details);
         if (!args.onToolBalanceRequired) {
           args.showAppToastMessage("Add balance to use voice input.");
         }

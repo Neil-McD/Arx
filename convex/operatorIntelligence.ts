@@ -5,6 +5,7 @@ import { sanitizeCriticalAuditMetadata } from "./criticalAudit";
 import {
   resolveDiscoverAppCatalogConnectPolicy,
 } from "../shared/discoverCatalog";
+import { WORKSPACE_CREDITS_PER_USD } from "../shared/workspaceCredits";
 import type { DeveloperAppAuthType } from "../shared/communityAppMountTypes";
 
 type MoneyMetric = {
@@ -141,6 +142,38 @@ function addMoney(a: MoneyMetric | null, b: MoneyMetric | null): MoneyMetric | n
     currencyDecimals: a.currencyDecimals,
     amountBaseUnits: a.amountBaseUnits + b.amountBaseUnits,
   };
+}
+
+function divideMoney(metric: MoneyMetric | null, divisor: number): MoneyMetric | null {
+  if (!metric || !(divisor > 0)) return null;
+  return {
+    ...metric,
+    amountBaseUnits: Math.round(metric.amountBaseUnits / divisor),
+  };
+}
+
+function moneyFromUsd(value: number): MoneyMetric | null {
+  const dollars = Number(value);
+  if (!Number.isFinite(dollars) || dollars <= 0) return null;
+  return {
+    currency: "usd",
+    amountBaseUnits: Math.round(dollars * 100),
+    currencyDecimals: 2,
+  };
+}
+
+function moneyFromCheckout(row: any): MoneyMetric | null {
+  const amountBaseUnits = Number(row?.amountBaseUnits ?? 0);
+  if (!Number.isFinite(amountBaseUnits) || amountBaseUnits <= 0) return null;
+  return {
+    currency: String(row?.currency ?? "usd").toLowerCase(),
+    amountBaseUnits,
+    currencyDecimals: Number(row?.currencyDecimals ?? 2),
+  };
+}
+
+function conversionRate(completions: number, starts: number): number | null {
+  return starts > 0 ? completions / starts : null;
 }
 
 function mapEvent(row: any) {
@@ -983,10 +1016,28 @@ export const getOperatorMonetizationInternal = internalQuery({
   handler: async (ctx, args) => {
     const nowMs = Date.now();
     const rangeStart = normalizeRangeStart(args.range, nowMs);
-    const checkouts = await ctx.db.query("checkoutSessions").collect();
+    const [checkouts, users, communities, emailOutboxRows, emailDeliveryRows] = await Promise.all([
+      ctx.db.query("checkoutSessions").collect(),
+      ctx.db.query("users").collect(),
+      ctx.db.query("communities").collect(),
+      ctx.db.query("emailOutbox").collect(),
+      ctx.db.query("emailDeliveries").collect(),
+    ]);
     const inRangeCheckouts = rangeStart == null
       ? checkouts
       : checkouts.filter((row: any) => row.createdAt >= rangeStart);
+    const newUsers = rangeStart == null
+      ? users
+      : users.filter((row: any) => row.createdAt >= rangeStart);
+    const newCommunities = rangeStart == null
+      ? communities
+      : communities.filter((row: any) => row.createdAt >= rangeStart);
+    const inRangeEmailOutboxRows = rangeStart == null
+      ? emailOutboxRows
+      : emailOutboxRows.filter((row: any) => row.createdAt >= rangeStart);
+    const inRangeEmailDeliveryRows = rangeStart == null
+      ? emailDeliveryRows
+      : emailDeliveryRows.filter((row: any) => row.createdAt >= rangeStart);
     const activeSubscriptions = [];
     for (const status of ACTIVE_SUBSCRIPTION_STATUSES) {
       const rows = await ctx.db
@@ -1000,16 +1051,146 @@ export const getOperatorMonetizationInternal = internalQuery({
       const price = await ctx.db.get(row.pricePointId);
       estimatedCommunityMrr = addMoney(estimatedCommunityMrr, monthlyMoneyFromPricePoint(price));
     }
+    const completedCheckouts = checkouts.filter((row: any) => row.status === "complete");
+    const creditTopupCheckouts = inRangeCheckouts.filter((row: any) => row.mode === "workspace_credit_topup");
+    const creditTopupCompletions = creditTopupCheckouts.filter((row: any) => row.status === "complete");
+    const communityJoinCheckouts = inRangeCheckouts.filter((row: any) => row.mode === "community_join");
+    const communityJoinCompletions = communityJoinCheckouts.filter((row: any) => row.status === "complete");
+    const totalCompletions = inRangeCheckouts.filter((row: any) => row.status === "complete").length;
+    const expiredCheckouts = inRangeCheckouts.filter((row: any) => row.status === "expired");
+    const stalePendingCheckouts = inRangeCheckouts.filter((row: any) => {
+      if (row.status !== "pending") return false;
+      const expiresAt = Number(row.expiresAt ?? 0);
+      return Number.isFinite(expiresAt) && expiresAt <= nowMs;
+    });
+    const activePayingCustomerIds = new Set<string>();
+    for (const row of activeSubscriptions) {
+      if (row.userId) activePayingCustomerIds.add(String(row.userId));
+    }
+    const checkoutPurchaserIds = new Set<string>();
+    for (const row of inRangeCheckouts) {
+      if (row.status === "complete" && row.ownerUserId) checkoutPurchaserIds.add(String(row.ownerUserId));
+    }
+    const knownPayingCustomerIds = new Set<string>([
+      ...Array.from(activePayingCustomerIds),
+      ...Array.from(checkoutPurchaserIds),
+    ]);
+    const lifetimeCheckoutPurchaserIds = new Set<string>();
+    for (const row of completedCheckouts) {
+      if (row.ownerUserId) lifetimeCheckoutPurchaserIds.add(String(row.ownerUserId));
+    }
+    const communityCheckoutRevenueInRange = communityJoinCompletions.reduce(
+      (total: MoneyMetric | null, row: any) => addMoney(total, moneyFromCheckout(row)),
+      null,
+    );
+    const creditTopupRevenueInRange = creditTopupCompletions.reduce((total: MoneyMetric | null, row: any) => {
+      const credits = Number(row.workspaceCreditsAmount ?? 0);
+      const usd = credits > 0 ? credits / WORKSPACE_CREDITS_PER_USD : 0;
+      return addMoney(total, moneyFromUsd(usd));
+    }, null);
+    const lifetimeCommunityCheckoutRevenue = completedCheckouts
+      .filter((row: any) => row.mode === "community_join")
+      .reduce((total: MoneyMetric | null, row: any) => addMoney(total, moneyFromCheckout(row)), null);
+    const lifetimeCreditTopupRevenue = completedCheckouts
+      .filter((row: any) => row.mode === "workspace_credit_topup")
+      .reduce((total: MoneyMetric | null, row: any) => {
+        const credits = Number(row.workspaceCreditsAmount ?? 0);
+        const usd = credits > 0 ? credits / WORKSPACE_CREDITS_PER_USD : 0;
+        return addMoney(total, moneyFromUsd(usd));
+      }, null);
+    const lifetimeGrossRevenue = addMoney(lifetimeCommunityCheckoutRevenue, lifetimeCreditTopupRevenue);
+    const emailSent = inRangeEmailOutboxRows.filter((row: any) => row.status === "sent").length;
+    const emailDelivered = inRangeEmailDeliveryRows.filter((row: any) => {
+      const eventType = String(row.eventType ?? "").toLowerCase();
+      return eventType.includes("delivered");
+    }).length;
+    const emailOpened = inRangeEmailDeliveryRows.filter((row: any) => {
+      const eventType = String(row.eventType ?? "").toLowerCase();
+      return eventType.includes("opened");
+    }).length;
+    const emailClicked = inRangeEmailDeliveryRows.filter((row: any) => {
+      const eventType = String(row.eventType ?? "").toLowerCase();
+      return eventType.includes("clicked");
+    }).length;
+    const emailBouncedOrFailed = inRangeEmailDeliveryRows.filter((row: any) => {
+      const eventType = String(row.eventType ?? "").toLowerCase();
+      return eventType.includes("bounced") ||
+        eventType.includes("failed") ||
+        eventType.includes("suppressed") ||
+        eventType.includes("complained");
+    }).length;
+    const grossRevenueInRange = addMoney(communityCheckoutRevenueInRange, creditTopupRevenueInRange);
     return {
       computedAt: nowMs,
-      creditTopupCheckoutStarts: inRangeCheckouts.filter((row: any) => row.mode === "workspace_credit_topup").length,
-      creditTopupCheckoutCompletions: inRangeCheckouts.filter((row: any) => row.mode === "workspace_credit_topup" && row.status === "complete").length,
-      communityCheckoutStarts: inRangeCheckouts.filter((row: any) => row.mode === "community_join").length,
-      communityCheckoutCompletions: inRangeCheckouts.filter((row: any) => row.mode === "community_join" && row.status === "complete").length,
+      creditTopupCheckoutStarts: creditTopupCheckouts.length,
+      creditTopupCheckoutCompletions: creditTopupCompletions.length,
+      communityCheckoutStarts: communityJoinCheckouts.length,
+      communityCheckoutCompletions: communityJoinCompletions.length,
       activeCommunitySubscriptions: activeSubscriptions.length,
       estimatedCommunityMrr,
+      businessKpis: {
+        visitors: {
+          total: null,
+          visitorToUserConversionRate: null,
+          availability: "not_configured",
+          source: "unavailable",
+        },
+        users: {
+          total: users.length,
+          newInRange: newUsers.length,
+          activePayingCustomers: activePayingCustomerIds.size,
+          checkoutPurchasersInRange: checkoutPurchaserIds.size,
+          knownPayingCustomers: knownPayingCustomerIds.size,
+          visitorToUserConversionRate: null,
+          userToPayingCustomerConversionRate: conversionRate(checkoutPurchaserIds.size, newUsers.length),
+        },
+        communities: {
+          totalCreated: communities.length,
+          createdInRange: newCommunities.length,
+          creationRateFromNewUsers: conversionRate(newCommunities.length, newUsers.length),
+        },
+        revenue: {
+          communitySubscriptionMrr: estimatedCommunityMrr,
+          communityCheckoutRevenueInRange,
+          creditTopupRevenueInRange,
+          grossRevenueInRange,
+          averageRecordedLifetimeValue: divideMoney(lifetimeGrossRevenue, lifetimeCheckoutPurchaserIds.size),
+          platformNetRevenueInRange: null,
+          platformNetRevenueAvailability: "not_instrumented",
+        },
+        checkouts: {
+          totalStarts: inRangeCheckouts.length,
+          totalCompletions,
+          totalConversionRate: conversionRate(totalCompletions, inRangeCheckouts.length),
+          failedOrAbandoned: expiredCheckouts.length + stalePendingCheckouts.length,
+          pending: inRangeCheckouts.filter((row: any) => row.status === "pending").length,
+          expired: expiredCheckouts.length,
+          communityStarts: communityJoinCheckouts.length,
+          communityCompletions: communityJoinCompletions.length,
+          creditTopupStarts: creditTopupCheckouts.length,
+          creditTopupCompletions: creditTopupCompletions.length,
+        },
+        email: {
+          sent: emailSent,
+          delivered: emailDelivered,
+          opened: emailOpened,
+          clicked: emailClicked,
+          bouncedOrFailed: emailBouncedOrFailed,
+          clickRate: conversionRate(emailClicked, emailDelivered || emailSent),
+          conversionRate: null,
+          conversionAvailability: "not_attributed",
+        },
+      },
       evidence: {
-        sourceTables: ["checkoutSessions", "communitySubscriptions", "communityPricePoints"],
+        sourceTables: [
+          "users",
+          "communities",
+          "checkoutSessions",
+          "communitySubscriptions",
+          "communityPricePoints",
+          "emailOutbox",
+          "emailDeliveries",
+        ],
       },
     };
   },

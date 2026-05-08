@@ -1409,7 +1409,7 @@ export const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
       "Best for commerce operations, customer context, invoices, and subscription support workflows.",
     capabilities: [
       "Inspect customers, invoices, products, subscriptions, and payments.",
-      "Support builder commerce workflows without replacing PolyNet entitlement checks.",
+      "Support creator commerce workflows without replacing PolyNet entitlement checks.",
       "Use restricted permissions and audit trails before enabling write operations.",
     ],
     websiteUrl: "https://stripe.com",

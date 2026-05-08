@@ -3,7 +3,7 @@ import posthog from "posthog-js";
 type AnalyticsUiContext = {
   authState: "anonymous" | "authenticated";
   userId?: string | null;
-  builderTier?: string | null;
+  accountTier?: string | null;
   pathname?: string | null;
   publicRouteKind?: string | null;
   activePage?: string | null;
@@ -66,7 +66,7 @@ function compactProperties(properties: EventProperties): Record<string, string |
 function buildContextProperties(): Record<string, string | number | boolean> {
   return compactProperties({
     auth_state: currentUiContext.authState,
-    builder_tier: currentUiContext.builderTier,
+    account_tier: currentUiContext.accountTier,
     pathname: currentUiContext.pathname,
     route_kind: currentUiContext.publicRouteKind,
     active_page: currentUiContext.activePage,
@@ -158,7 +158,7 @@ export function updatePosthogUiContext(context: AnalyticsUiContext): void {
     context.authState === "authenticated" ? normalizeString(context.userId ?? null) : null;
   if (userId) {
     if (lastIdentifiedUserId !== userId) {
-      posthog.identify(userId, compactProperties({ builder_tier: context.builderTier }));
+      posthog.identify(userId, compactProperties({ account_tier: context.accountTier }));
       lastIdentifiedUserId = userId;
     }
     return;

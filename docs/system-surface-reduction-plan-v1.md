@@ -60,11 +60,11 @@ These are core and should remain:
 
 ### Delete Next
 
-These are legacy mirrors or redundant semantics. Active UI/controller behavior now derives a semantic `funnelAction` from `entry_policy`; remaining work is backend/schema cleanup plus route-history compatibility removal when safe.
+These are legacy mirrors or redundant semantics. Active UI/controller behavior now derives a semantic `funnelAction` from `entry_policy`; active route-history compatibility for old preview `joinMode` state has been removed.
 
 - `communities.joinMode`
 - `communities.freeJoinRequiresApproval`
-- route-history compatibility for old preview `joinMode` state
+- active route-history compatibility for old preview `joinMode` state: removed
 
 ### Delete After Owner Model Is Unified
 
@@ -74,7 +74,7 @@ These are legacy mirrors or redundant semantics. Active UI/controller behavior n
 ### Delete If No Real Requirement Appears
 
 - any remaining `mod` residue
-- legacy compatibility aliases for `builder` / `pro`
+- legacy paid-plan tier literals for `builder` / `pro`: removed from active schema and prompt/gate proofs
 - community-level fields or UI chips that imply per-member subscription analytics beyond actual backend truth
 
 ## Optimize
@@ -180,7 +180,7 @@ Before deleting a redundant surface, verify:
 ### Phase 1: Finish Consumer Migration
 
 - keep UI/controller consumers on `entry_policy`-derived `funnelAction`
-- keep old preview `joinMode` reads as route-history compatibility only
+- old preview `joinMode` route-history reads are removed from active code
 
 ### Phase 2: Run Data Backfill
 
@@ -192,8 +192,15 @@ Before deleting a redundant surface, verify:
 - remove `joinMode`
 - remove `freeJoinRequiresApproval`
 - remove compatibility helpers that only exist for those fields
+- keep `check:no-legacy-community-policy-mirrors` green
 
-### Phase 4: Unify Owner Truth
+### Phase 4: Remove Legacy Paid-Plan Tier Literals
+
+- active schema accepts only `free` and internal `architect` account tiers
+- active checkout sessions no longer expose Builder-plan upgrade mode or a legacy checkout tier field
+- keep `check:no-builder-plan-infra` green
+
+### Phase 5: Unify Owner Truth
 
 - make `communities.ownerId` the only canonical owner truth
 - stop storing owner as a normal membership row, or treat owner membership rows as purely derived/migrated compatibility
@@ -209,7 +216,7 @@ Before deleting a redundant surface, verify:
 
 1. Run the owned-community backfills.
 2. Delete the legacy policy fields after data verification.
-3. Remove route-history `joinMode` compatibility once old preview state can be ignored.
+3. Verify legacy paid-plan tier literals stay out of active schema and prompt/gate contracts.
 4. Then unify owner truth.
 
 ## Final Aim

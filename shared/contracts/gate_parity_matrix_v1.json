@@ -37,24 +37,7 @@
       }
     },
     {
-      "id": "auth_legacy_builder_platform_requires_connection_as_free",
-      "input": {
-        "authState": "authenticated",
-        "tier": "builder",
-        "executionMode": "cloud",
-        "requestedFundingSource": "platform"
-      },
-      "expected": {
-        "allowed": false,
-        "code": "provider_connection_required",
-        "cta": "connect_provider",
-        "lane": null,
-        "fundingSource": null,
-        "effectiveTier": "auth_free"
-      }
-    },
-    {
-      "id": "auth_architect_alias_platform_legacy_requires_connection",
+      "id": "auth_architect_platform_requires_connection",
       "input": {
         "authState": "authenticated",
         "tier": "architect",

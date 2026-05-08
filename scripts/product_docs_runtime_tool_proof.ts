@@ -10,7 +10,7 @@ import {
   executeSearchProductDocsTool,
 } from "../shared/productDocsRuntime.ts";
 import type { ProductDocsSearchIndex } from "../shared/productDocsSearch.ts";
-import { buildWorkspaceRuntimeSystemPrompt } from "../shared/runtimePrompt.ts";
+import { buildPlatformHarnessRuntimeSystemPrompt } from "../shared/runtimePrompt.ts";
 import { buildRuntimeTurnContextPacket } from "../shared/runtimeTurnContextPacket.ts";
 import {
   DEFAULT_RUNTIME_KERNEL_BUDGET,
@@ -51,18 +51,18 @@ function proveDocsCapabilityGate() {
     "product docs tools should not require community or workspace context",
   );
 
-  const builder = resolveCanonicalGatePolicy({
+  const architect = resolveCanonicalGatePolicy({
     surface: "web",
     authState: "authenticated",
-    tier: "builder",
+    tier: "architect",
     executionMode: "cloud",
     requestedFundingSource: "platform",
     hasCommunityContext: true,
     hasProjectContext: true,
   });
-  assert.equal(builder.entitledCapabilityFamilies.includes("product_docs"), true);
-  assert.equal(builder.activeCapabilityFamilies.includes("product_docs"), true);
-  console.log("PASS: product docs capability is available to authenticated free and paid users");
+  assert.equal(architect.entitledCapabilityFamilies.includes("product_docs"), true);
+  assert.equal(architect.activeCapabilityFamilies.includes("product_docs"), true);
+  console.log("PASS: product docs capability is available to authenticated platform users");
 }
 
 function proveDocsToolExposure() {
@@ -147,7 +147,7 @@ function proveDocsToolExecution() {
 }
 
 function provePromptGuidance() {
-  const prompt = buildWorkspaceRuntimeSystemPrompt({
+  const prompt = buildPlatformHarnessRuntimeSystemPrompt({
     harnessName: "chat_tools",
     loopBudget: DEFAULT_RUNTIME_KERNEL_BUDGET,
     allowedToolNames: ["search_product_docs", "get_product_doc"],

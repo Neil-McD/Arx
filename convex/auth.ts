@@ -15,13 +15,13 @@ type CanonicalTier = "free" | "architect";
 type EffectiveTier = "anon_free" | "auth_free" | "architect";
 type AuthState = "anonymous" | "authenticated";
 
-type BuilderTierMeta = {
+type AccountTierMeta = {
   maxCommunities: number;
   platformFeeBps: number;
   hasPayouts: boolean;
 };
 
-function builderTierMeta(tier: CanonicalTier): BuilderTierMeta {
+function accountTierMeta(tier: CanonicalTier): AccountTierMeta {
   if (tier === "architect") {
     return {
       maxCommunities: 3,
@@ -364,7 +364,7 @@ export const setDevTierOverride = mutation({
   },
 });
 
-export const getBuilderBillingStatus = query({
+export const getAccountCommerceStatus = query({
   args: {
     authSubject: v.optional(v.string()),
     nowMs: v.optional(v.number()),
@@ -374,7 +374,7 @@ export const getBuilderBillingStatus = query({
     args,
   ): Promise<{
     user_id: string;
-    builder_tier: CanonicalTier;
+    account_tier: CanonicalTier;
     max_communities: number;
     platform_fee_bps: number;
     stripe_connect: {
@@ -397,11 +397,11 @@ export const getBuilderBillingStatus = query({
     });
     if (!actor) return null;
     const canonicalTier = await getCanonicalTierByUserIdInternal(ctx as never, actor.dbUserId, nowMs);
-    const meta = builderTierMeta(canonicalTier);
+    const meta = accountTierMeta(canonicalTier);
     const hasPayoutAccess = meta.hasPayouts;
     const stripeConnect = hasPayoutAccess
       ? ((await ctx.runQuery(
-          internal.builderCommerce.getUserStripeConnectAccountInternal as any,
+          internal.creatorCommerce.getUserStripeConnectAccountInternal as any,
           { userId: actor.dbUserId },
         )) as {
           stripeAccountId?: unknown;
@@ -426,7 +426,7 @@ export const getBuilderBillingStatus = query({
 
     return {
       user_id: actor.authSubject,
-      builder_tier: canonicalTier,
+      account_tier: canonicalTier,
       max_communities: meta.maxCommunities,
       platform_fee_bps: meta.platformFeeBps,
       stripe_connect: {
@@ -467,18 +467,18 @@ export const getBuilderBillingStatus = query({
   },
 });
 
-export const getBuilderCommerceAccessForUserInternal = internalQuery({
+export const getAccountCommerceAccessForUserInternal = internalQuery({
   args: {
     userId: v.id("users"),
     nowMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const nowMs = args.nowMs ?? Date.now();
-    const builderTier = await getCanonicalTierByUserIdInternal(ctx as never, args.userId, nowMs);
-    const meta = builderTierMeta(builderTier);
+    const accountTier = await getCanonicalTierByUserIdInternal(ctx as never, args.userId, nowMs);
+    const meta = accountTierMeta(accountTier);
     return {
       user_id: String(args.userId),
-      builder_tier: builderTier,
+      account_tier: accountTier,
       max_communities: meta.maxCommunities,
       platform_fee_bps: meta.platformFeeBps,
       has_payouts: meta.hasPayouts,

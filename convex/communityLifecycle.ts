@@ -250,7 +250,7 @@ async function requirePaidCommunityPricingReady(args: {
   nowMs: number;
 }) {
   const ownerBilling = (await args.ctx.runQuery(
-    internal.auth.getBuilderCommerceAccessForUserInternal as any,
+    internal.auth.getAccountCommerceAccessForUserInternal as any,
     {
       userId: args.community.ownerId,
       nowMs: args.nowMs,
@@ -260,7 +260,7 @@ async function requirePaidCommunityPricingReady(args: {
     throw new Error("community_payout_access_required");
   }
   const connectAccount = (await args.ctx.runQuery(
-    internal.builderCommerce.getUserStripeConnectAccountInternal as any,
+    internal.creatorCommerce.getUserStripeConnectAccountInternal as any,
     {
       userId: args.community.ownerId,
     },
@@ -457,7 +457,7 @@ export const createCommunity = mutation({
       authSubject: args.authSubject ?? null,
     });
     const nowMs = Date.now();
-    const billingStatus = await ctx.runQuery(api.auth.getBuilderBillingStatus, {
+    const billingStatus = await ctx.runQuery(api.auth.getAccountCommerceStatus, {
       authSubject: args.authSubject ?? undefined,
       nowMs,
     });

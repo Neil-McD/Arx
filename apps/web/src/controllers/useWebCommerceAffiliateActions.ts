@@ -8,9 +8,9 @@ import {
 } from "../../../../shared/pay_first";
 import type { PendingAuthIntentInput } from "../../../../shared/authResumeState";
 import {
-  loadBuilderBillingStatusCanonical,
-  type BuilderBillingStatus,
-} from "../../../../shared/builderBillingStatusGateway";
+  loadAccountCommerceStatusCanonical,
+  type AccountCommerceStatus,
+} from "../../../../shared/accountCommerceStatusGateway";
 import type { AuthSession } from "../auth";
 
 type UseWebCommerceAffiliateActionsArgs = {
@@ -30,15 +30,15 @@ type UseWebCommerceAffiliateActionsArgs = {
   setPendingPurchaseClaims: Dispatch<SetStateAction<PendingPurchaseClaim[]>>;
   setIsRedeemingPendingPurchases: Dispatch<SetStateAction<boolean>>;
   setPendingPurchasesSuccess: Dispatch<SetStateAction<string | null>>;
-  setIsLoadingBuilderBilling: Dispatch<SetStateAction<boolean>>;
-  setBuilderBillingError: Dispatch<SetStateAction<string | null>>;
-  setBuilderBillingStatus: Dispatch<SetStateAction<BuilderBillingStatus | null>>;
+  setIsLoadingAccountCommerce: Dispatch<SetStateAction<boolean>>;
+  setAccountCommerceError: Dispatch<SetStateAction<string | null>>;
+  setAccountCommerceStatus: Dispatch<SetStateAction<AccountCommerceStatus | null>>;
   redeemPendingPurchasesInFlightRef: { current: boolean };
 };
 
 export function useWebCommerceAffiliateActions(args: UseWebCommerceAffiliateActionsArgs) {
-  const builderBillingLoadRequestIdRef = useRef(0);
-  const builderBillingLoadPendingCountRef = useRef(0);
+  const accountCommerceLoadRequestIdRef = useRef(0);
+  const accountCommerceLoadPendingCountRef = useRef(0);
 
   function isTransportBillingStatusError(error: unknown): boolean {
     const message =
@@ -127,26 +127,26 @@ export function useWebCommerceAffiliateActions(args: UseWebCommerceAffiliateActi
     [args],
   );
 
-  const loadBuilderBillingStatus = useCallback(
-    async (session: AuthSession): Promise<BuilderBillingStatus | null> => {
-      const requestId = ++builderBillingLoadRequestIdRef.current;
-      builderBillingLoadPendingCountRef.current += 1;
-      args.setIsLoadingBuilderBilling(true);
-      args.setBuilderBillingError((prev) => (prev === "Failed to fetch" ? null : prev));
+  const loadAccountCommerceStatus = useCallback(
+    async (session: AuthSession): Promise<AccountCommerceStatus | null> => {
+      const requestId = ++accountCommerceLoadRequestIdRef.current;
+      accountCommerceLoadPendingCountRef.current += 1;
+      args.setIsLoadingAccountCommerce(true);
+      args.setAccountCommerceError((prev) => (prev === "Failed to fetch" ? null : prev));
       try {
         const usableSession = await resolveCurrentSession(() => session, args.ensureSession);
         if (!usableSession) {
-          if (requestId === builderBillingLoadRequestIdRef.current) {
-            args.setBuilderBillingStatus(null);
+          if (requestId === accountCommerceLoadRequestIdRef.current) {
+            args.setAccountCommerceStatus(null);
           }
           return null;
         }
-        const row = await loadBuilderBillingStatusCanonical({
+        const row = await loadAccountCommerceStatusCanonical({
           session: usableSession,
         });
-        if (requestId === builderBillingLoadRequestIdRef.current) {
-          args.setBuilderBillingStatus(row);
-          args.setBuilderBillingError((prev) => (prev === "Failed to fetch" ? null : prev));
+        if (requestId === accountCommerceLoadRequestIdRef.current) {
+          args.setAccountCommerceStatus(row);
+          args.setAccountCommerceError((prev) => (prev === "Failed to fetch" ? null : prev));
         }
         return row;
       } catch (error) {
@@ -158,19 +158,19 @@ export function useWebCommerceAffiliateActions(args: UseWebCommerceAffiliateActi
               : "Failed to load billing status.";
 
         // Background billing refresh should not nuke working UI state or leak raw transport noise.
-        if (!isTransportBillingStatusError(error) && requestId === builderBillingLoadRequestIdRef.current) {
-          args.setBuilderBillingError(message);
-          args.setBuilderBillingStatus(null);
+        if (!isTransportBillingStatusError(error) && requestId === accountCommerceLoadRequestIdRef.current) {
+          args.setAccountCommerceError(message);
+          args.setAccountCommerceStatus(null);
         } else {
-          console.warn("Builder billing status refresh failed:", error);
+          console.warn("Account commerce status refresh failed:", error);
         }
         return null;
       } finally {
-        builderBillingLoadPendingCountRef.current = Math.max(
+        accountCommerceLoadPendingCountRef.current = Math.max(
           0,
-          builderBillingLoadPendingCountRef.current - 1,
+          accountCommerceLoadPendingCountRef.current - 1,
         );
-        args.setIsLoadingBuilderBilling(builderBillingLoadPendingCountRef.current > 0);
+        args.setIsLoadingAccountCommerce(accountCommerceLoadPendingCountRef.current > 0);
       }
     },
     [args],
@@ -236,7 +236,7 @@ export function useWebCommerceAffiliateActions(args: UseWebCommerceAffiliateActi
   return {
     redeemPurchaseClaim,
     loadPendingPurchaseClaims,
-    loadBuilderBillingStatus,
+    loadAccountCommerceStatus,
     redeemPendingPurchases,
   };
 }

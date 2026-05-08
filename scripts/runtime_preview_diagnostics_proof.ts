@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 
-import { buildWorkspaceRuntimeSystemPrompt } from "../shared/runtimePrompt.ts";
+import { buildPlatformHarnessRuntimeSystemPrompt } from "../shared/runtimePrompt.ts";
 import { buildRuntimeTurnContextPacket } from "../shared/runtimeTurnContextPacket.ts";
 import { deriveRuntimePreviewDiagnosis } from "../shared/runtimePreviewDiagnostics.ts";
 import type { RuntimeWorkspaceTerminalPrompt } from "../shared/runtimePrompt.ts";
@@ -91,7 +91,7 @@ assert.equal(
   "visible_content",
 );
 
-const prompt = buildWorkspaceRuntimeSystemPrompt({
+const prompt = buildPlatformHarnessRuntimeSystemPrompt({
   loopBudget: {
     maxToolSteps: 8,
     maxRepeatedIdenticalCalls: 2,

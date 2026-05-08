@@ -1,5 +1,5 @@
 import {
-  composeCloudScopedSystemPrompt,
+  composePlatformCommunityContextSystemPrompt,
   type RuntimeCommunityPromptFields,
 } from "./runtimePrompt";
 
@@ -42,7 +42,7 @@ export function buildCloudCommunityContextEnvelope(params: RuntimeCommunityPromp
     communitySlug: hasCommunityScope ? communitySlugRaw || null : null,
     communitySystemPromptSource,
     communityPromptDraftId: communityPromptDraftIdRaw || null,
-    scopedSystemPrompt: composeCloudScopedSystemPrompt({
+    scopedSystemPrompt: composePlatformCommunityContextSystemPrompt({
       communityId: hasCommunityScope ? communityIdRaw : null,
       communityName: hasCommunityScope ? communityNameRaw || null : null,
       communitySlug: hasCommunityScope ? communitySlugRaw || null : null,

@@ -12,7 +12,7 @@ type CaptureAppExceptionOptions = {
 type SentryUiContext = {
   authState: "anonymous" | "authenticated";
   userId?: string | null;
-  builderTier?: string | null;
+  accountTier?: string | null;
   pathname?: string | null;
   publicRouteKind?: string | null;
   activePage?: string | null;
@@ -125,7 +125,7 @@ export function updateSentryUiContext(context: SentryUiContext): void {
   if (!sentryEnabled) return;
 
   Sentry.setTag("auth_state", normalizeTagValue(context.authState));
-  Sentry.setTag("builder_tier", normalizeTagValue(context.builderTier));
+  Sentry.setTag("account_tier", normalizeTagValue(context.accountTier));
   Sentry.setTag("route_kind", normalizeTagValue(context.publicRouteKind));
   Sentry.setTag("active_page", normalizeTagValue(context.activePage));
   Sentry.setTag("active_view", normalizeTagValue(context.activeView));

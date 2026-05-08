@@ -19,7 +19,7 @@ import {
 } from "./daytonaWorkspaceSession";
 import { executeDaytonaCommand } from "./daytonaToolboxExecutor";
 
-const BUILDER_MAX_PROJECTS = 5;
+const ACCOUNT_MAX_PROJECTS = 5;
 const PROJECT_IMPORT_MAX_BYTES = 150 * 1024 * 1024;
 const PROJECT_IMPORT_MAX_FILES = 25_000;
 const PROJECT_IMPORT_MAX_EXTRACTED_BYTES = 500 * 1024 * 1024;
@@ -999,7 +999,7 @@ export const createCloudProjectForOwner = mutation({
       .query("cloudProjects")
       .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
       .collect();
-    if (existingRows.length >= BUILDER_MAX_PROJECTS) {
+    if (existingRows.length >= ACCOUNT_MAX_PROJECTS) {
       throw new Error("project_limit_reached");
     }
 

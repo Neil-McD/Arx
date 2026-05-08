@@ -81,7 +81,7 @@ Each diagnostic signal should be classified with one of these statuses:
 | Discover and harness | Discover apps/skills, add/like, canonical harness projection | Are apps and skills installed and projected correctly? | Convex, PostHog, Sentry | add success rate, duplicate/canonicalization conflicts, setup-needed count, validation failures, click-to-live rate | partial |
 | Community core | chat, feed, resources, events, members, settings | Are communities usable once joined? | Convex, PostHog, Sentry | message send failures, resource load failures, event creation failures, member action failures, community route errors | partial |
 | Funnel and join | public funnel, join request, paid join, claim flow | Can visitors become members? | PostHog, Convex, Stripe, Sentry | page visits, join starts, join completions, conversion rate, checkout failures, pending claim age | partial |
-| Billing and entitlements | builder billing, credits, community subscriptions, payouts | Is money state correct? | Stripe, Convex audit, Sentry | checkout completion, webhook failures, subscription sync failures, credit reservation/settlement failures, payout blocked count | partial |
+| Billing and entitlements | account commerce, credits, community subscriptions, payouts | Is money state correct? | Stripe, Convex audit, Sentry | checkout completion, webhook failures, subscription sync failures, credit reservation/settlement failures, payout blocked count | partial |
 | Operator panel health | operator panel load, snapshots, attention queue | Can the operator trust the panel? | Convex, Sentry, proof scripts | snapshot freshness, query failures, missing evidence, unknown error codes, stale diagnostics | partial |
 
 ## KPI Contract

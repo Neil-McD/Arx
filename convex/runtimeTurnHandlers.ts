@@ -27,7 +27,7 @@ import {
   throwIfRuntimeRunCancelled,
 } from "./runtimeCancellation";
 import {
-  composeCloudScopedRuntimeSystemPrompt,
+  composePlatformChatRuntimeSystemPrompt,
 } from "../shared/runtimePrompt";
 import {
   buildRuntimeTurnContextSnapshot,
@@ -1002,6 +1002,8 @@ export async function handleRuntimeTurnRequest(args: {
                 error: loopResult.message,
                 message: loopResult.message,
                 status: loopResult.status,
+                tool_kind: loopResult.toolKind ?? null,
+                required_credits: loopResult.requiredCredits ?? null,
               },
             });
             return;
@@ -1217,6 +1219,8 @@ export async function handleRuntimeTurnRequest(args: {
           code: loopResult.code,
           error: loopResult.code,
           message: loopResult.message,
+          tool_kind: loopResult.toolKind ?? null,
+          required_credits: loopResult.requiredCredits ?? null,
           run_id: runId,
         });
       }
@@ -1227,7 +1231,7 @@ export async function handleRuntimeTurnRequest(args: {
       const now = new Date();
       const runtimeTimeZone = "UTC";
       const authenticatedScopedSystemPrompt =
-        composeCloudScopedRuntimeSystemPrompt({
+        composePlatformChatRuntimeSystemPrompt({
           communityId: runtimeCommunityId,
           communityName: runtimeCommunityName,
           communitySlug: runtimeCommunitySlug,

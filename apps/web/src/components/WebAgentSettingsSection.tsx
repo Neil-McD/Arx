@@ -24,8 +24,8 @@ type PersonalMemoryItem = {
   updated_at: string;
 };
 
-type BuilderBillingStatus = {
-  builder_tier: "free" | "architect";
+type AccountCommerceStatus = {
+  account_tier: "free" | "architect";
 } | null;
 
 type OpenAiConnection = {
@@ -62,7 +62,7 @@ type WebAgentSettingsSectionProps = {
     agent_soul: string;
   }) => Promise<void> | void;
   personalMemoryError: string | null;
-  builderBillingStatus: BuilderBillingStatus;
+  accountCommerceStatus: AccountCommerceStatus;
   isLoadingPersonalMemory: boolean;
   personalMemoryItems: PersonalMemoryItem[];
   personalMemoryQuery: string;

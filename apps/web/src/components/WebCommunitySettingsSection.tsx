@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import type { DragEvent } from "react";
 import type { CommunitySettingsLayer } from "../../../../shared/communityAccessViewModel";
 import { CommunityAvatar } from "../../../../shared/CommunityAvatar";
-import type { BuilderBillingStatus } from "../../../../shared/builderBillingStatusGateway";
+import type { AccountCommerceStatus } from "../../../../shared/accountCommerceStatusGateway";
 import { getCommunityBannerImageStyle } from "../../../../shared/communityBannerUi";
 import { buildPlatformSwitcherStyle } from "../../../../shared/platformSwitcherUi";
 import { buildStripeConnectPresentation } from "../controllers/buildStripeConnectPresentation";
@@ -53,13 +53,13 @@ type WebCommunitySettingsSectionProps = {
   canManageCommunitySettings: boolean;
   canDeleteCommunity: boolean;
   requireSignIn: () => void;
-  builderBillingStatus: BuilderBillingStatus | null;
-  builderBillingError: string | null;
-  startBuilderConnectOnboarding: (opts?: {
+  accountCommerceStatus: AccountCommerceStatus | null;
+  accountCommerceError: string | null;
+  startStripeConnectOnboarding: (opts?: {
     context?: "account" | "community";
     communitySlug?: string | null;
   }) => Promise<void> | void;
-  isStartingBuilderConnectOnboarding: boolean;
+  isStartingStripeConnectOnboarding: boolean;
   communityIntegrations: {
     mounts: CommunityMountedApp[];
     effectiveMcpApps: EffectiveMcpApp[];
@@ -1030,23 +1030,23 @@ function CommunityProfileSettingsSection({ state, actions }: SharedSettingsProps
 
 function CommunityMonetizationConfigSection({
   activeCommunity,
-  builderBillingStatus,
-  builderBillingError,
-  startBuilderConnectOnboarding,
-  isStartingBuilderConnectOnboarding,
+  accountCommerceStatus,
+  accountCommerceError,
+  startStripeConnectOnboarding,
+  isStartingStripeConnectOnboarding,
   canManagePublishing,
   canManagePayoutAccount,
   state,
   actions,
 }: SharedSettingsProps & {
   activeCommunity: ActiveCommunity;
-  builderBillingStatus: BuilderBillingStatus | null;
-  builderBillingError: string | null;
-  startBuilderConnectOnboarding: (opts?: {
+  accountCommerceStatus: AccountCommerceStatus | null;
+  accountCommerceError: string | null;
+  startStripeConnectOnboarding: (opts?: {
     context?: "account" | "community";
     communitySlug?: string | null;
   }) => Promise<void> | void;
-  isStartingBuilderConnectOnboarding: boolean;
+  isStartingStripeConnectOnboarding: boolean;
   canManagePublishing: boolean;
   canManagePayoutAccount: boolean;
 }) {
@@ -1060,11 +1060,11 @@ function CommunityMonetizationConfigSection({
     pricingOptions.findIndex((opt) => opt.key === state.communitySettingsPricingMode),
   );
   const stripeConnectPresentation = buildStripeConnectPresentation({
-    builderBillingStatus,
+    accountCommerceStatus,
     surface: "community",
   });
   const canAcceptCharges = stripeConnectPresentation.isReady;
-  const canMonetizeCommunities = Number(builderBillingStatus?.platform_fee_bps ?? 0) > 0;
+  const canMonetizeCommunities = Number(accountCommerceStatus?.platform_fee_bps ?? 0) > 0;
   const needsStripeConnect = !canMonetizeCommunities || !canAcceptCharges;
 
   return (
@@ -1176,17 +1176,17 @@ function CommunityMonetizationConfigSection({
             <div className="create-community-actions" style={{ marginTop: 12 }}>
               <StripeSetupButton
                 label={
-                  isStartingBuilderConnectOnboarding
+                  isStartingStripeConnectOnboarding
                     ? "Opening…"
                     : stripeConnectPresentation.connectCtaLabel
                 }
                 onClick={() =>
-                  void startBuilderConnectOnboarding({
+                  void startStripeConnectOnboarding({
                     context: "community",
                     communitySlug: activeCommunity.slug,
                   })
                 }
-                disabled={isStartingBuilderConnectOnboarding}
+                disabled={isStartingStripeConnectOnboarding}
               />
             </div>
           ) : canAcceptCharges ? null : (
@@ -1194,9 +1194,9 @@ function CommunityMonetizationConfigSection({
               The community owner must finish Stripe setup before paid access can be changed.
             </div>
           )}
-          {builderBillingError ? (
+          {accountCommerceError ? (
             <div className="auth-error" style={{ marginTop: 10 }}>
-              {builderBillingError}
+              {accountCommerceError}
             </div>
           ) : null}
         </>
@@ -1236,10 +1236,10 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
     canManageCommunitySettings,
     canDeleteCommunity,
     requireSignIn,
-    builderBillingStatus,
-    builderBillingError,
-    startBuilderConnectOnboarding,
-    isStartingBuilderConnectOnboarding,
+    accountCommerceStatus,
+    accountCommerceError,
+    startStripeConnectOnboarding,
+    isStartingStripeConnectOnboarding,
     communityIntegrations,
     state,
     actions,
@@ -1291,10 +1291,10 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
             <CommunityProfileSettingsSection state={state} actions={actions} />
             <CommunityMonetizationConfigSection
               activeCommunity={activeCommunity}
-              builderBillingStatus={builderBillingStatus}
-              builderBillingError={builderBillingError}
-              startBuilderConnectOnboarding={startBuilderConnectOnboarding}
-              isStartingBuilderConnectOnboarding={isStartingBuilderConnectOnboarding}
+              accountCommerceStatus={accountCommerceStatus}
+              accountCommerceError={accountCommerceError}
+              startStripeConnectOnboarding={startStripeConnectOnboarding}
+              isStartingStripeConnectOnboarding={isStartingStripeConnectOnboarding}
               canManagePublishing={isOwnerSettingsLayer}
               canManagePayoutAccount={isOwnerSettingsLayer}
               state={state}

@@ -1,7 +1,7 @@
-import type { BuilderBillingStatus } from "../../../../shared/builderBillingStatusGateway";
+import type { AccountCommerceStatus } from "../../../../shared/accountCommerceStatusGateway";
 
 export type StripeConnectPresentation = {
-  status: BuilderBillingStatus["stripe_connect"]["status"];
+  status: AccountCommerceStatus["stripe_connect"]["status"];
   isReady: boolean;
   requirementsPreview: string[];
   connectCtaLabel: string;
@@ -12,15 +12,15 @@ export type StripeConnectPresentation = {
 type StripeConnectPresentationSurface = "account" | "community";
 
 export function buildStripeConnectPresentation(args: {
-  builderBillingStatus: BuilderBillingStatus | null;
+  accountCommerceStatus: AccountCommerceStatus | null;
   surface: StripeConnectPresentationSurface;
 }): StripeConnectPresentation {
-  const stripeConnect = args.builderBillingStatus?.stripe_connect ?? null;
+  const stripeConnect = args.accountCommerceStatus?.stripe_connect ?? null;
   const status = stripeConnect?.status ?? "not_connected";
   const isReady = stripeConnect?.can_accept_charges === true;
   const requirementsPreview = stripeConnect?.requirements_currently_due?.slice(0, 3) ?? [];
   const hasRequirementsPreview = requirementsPreview.length > 0;
-  const platformFeePercent = Number(args.builderBillingStatus?.platform_fee_bps ?? 0) / 100;
+  const platformFeePercent = Number(args.accountCommerceStatus?.platform_fee_bps ?? 0) / 100;
   const connectCtaLabel = isReady
     ? "Open Stripe dashboard"
     : status === "pending_requirements" || status === "restricted"

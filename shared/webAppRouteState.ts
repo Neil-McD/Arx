@@ -233,7 +233,6 @@ export function buildCommunityFunnelPreviewHistoryState(
 ): HistoryStateWithPreview {
   return {
     communityFunnelPreview: {
-      ...draft,
       slug: String(draft.slug ?? "").trim(),
       community: {
         ...draft.community,
@@ -245,10 +244,9 @@ export function buildCommunityFunnelPreviewHistoryState(
       },
       visibilityLabel: String(draft.visibilityLabel ?? "").trim() || "Unlisted",
       memberCount: typeof draft.memberCount === "number" ? draft.memberCount : null,
-      funnelAction: normalizePreviewFunnelAction(
-        draft.funnelAction ?? (draft as unknown as { joinMode?: unknown }).joinMode,
-      ),
+      funnelAction: normalizePreviewFunnelAction(draft.funnelAction),
       one_liner: normalizePreviewOneLiner(draft.one_liner),
+      funnel: draft.funnel,
       savedAt: Number.isFinite(Number(draft.savedAt)) ? Number(draft.savedAt) : Date.now(),
     },
   };
@@ -264,7 +262,6 @@ export function readCommunityFunnelPreviewHistoryState(
   const draft = state?.communityFunnelPreview ?? null;
   if (!draft || String(draft.slug ?? "").trim() !== slug) return null;
   return {
-    ...draft,
     slug,
     community: {
       ...draft.community,
@@ -276,10 +273,9 @@ export function readCommunityFunnelPreviewHistoryState(
     },
     visibilityLabel: String(draft.visibilityLabel ?? "").trim() || "Unlisted",
     memberCount: typeof draft.memberCount === "number" ? draft.memberCount : null,
-    funnelAction: normalizePreviewFunnelAction(
-      draft.funnelAction ?? (draft as unknown as { joinMode?: unknown }).joinMode,
-    ),
+    funnelAction: normalizePreviewFunnelAction(draft.funnelAction),
     one_liner: normalizePreviewOneLiner(draft.one_liner),
+    funnel: draft.funnel,
     savedAt: Number.isFinite(Number(draft.savedAt)) ? Number(draft.savedAt) : Date.now(),
   };
 }

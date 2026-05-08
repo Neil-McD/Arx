@@ -14,8 +14,8 @@ type CommunityLike = {
   id: string;
 };
 
-type BuilderBillingStatusLike = {
-  builder_tier: string;
+type AccountCommerceStatusLike = {
+  account_tier: string;
   max_communities: number;
 };
 
@@ -29,7 +29,7 @@ type ModalCommunityLike = {
 type UseWebCommunityUiControllerParams<
   SessionT extends SessionLike,
   CommunityT extends CommunityLike,
-  BillingStatusT extends BuilderBillingStatusLike,
+  BillingStatusT extends AccountCommerceStatusLike,
   PageT extends string,
   ViewT extends string,
   TabT extends string,
@@ -38,12 +38,12 @@ type UseWebCommunityUiControllerParams<
   ensureSession?: (session?: SessionT | null) => Promise<SessionT | null>;
   communities: CommunityT[];
   communityRoleById: Record<string, string>;
-  builderBillingStatus: BillingStatusT | null;
-  builderBillingError: string | null;
+  accountCommerceStatus: BillingStatusT | null;
+  accountCommerceError: string | null;
   activeCommunity: ModalCommunityLike | null;
   activeCommunityId: string | null;
   communityInitials: (value: string) => string;
-  loadBuilderBillingStatus: (session: SessionT) => Promise<BillingStatusT | null>;
+  loadAccountCommerceStatus: (session: SessionT) => Promise<BillingStatusT | null>;
   persistCreateCommunityIntent: (draft: CreateCommunityIntentDraft) => void;
   onPrimaryUnauthenticated: (draft: CreateCommunityIntentDraft) => Promise<void> | void;
   onCreateUnauthenticated?: (draft: CreateCommunityIntentDraft) => Promise<void> | void;
@@ -66,14 +66,14 @@ type UseWebCommunityUiControllerParams<
 
 type CommunityCreateModalHostProps<
   CommunityT extends CommunityLike,
-  BillingStatusT extends BuilderBillingStatusLike,
+  BillingStatusT extends AccountCommerceStatusLike,
 > = {
   isOpen: boolean;
   hasSession: boolean;
   communities: CommunityT[];
   communityRoleById: Record<string, string>;
-  builderBillingStatus: BillingStatusT | null;
-  builderBillingError: string | null;
+  accountCommerceStatus: BillingStatusT | null;
+  accountCommerceError: string | null;
   isCreateBannerDragOver: boolean;
   isCreateAvatarDragOver: boolean;
   createCommunityBannerUrl: string | null;
@@ -117,7 +117,7 @@ type CommunityDeleteModalHostProps = {
 
 export type WebCommunityModalHostPropsShape<
   CommunityT extends CommunityLike,
-  BillingStatusT extends BuilderBillingStatusLike,
+  BillingStatusT extends AccountCommerceStatusLike,
 > = {
   createModal: CommunityCreateModalHostProps<CommunityT, BillingStatusT>;
   deleteModal: CommunityDeleteModalHostProps;
@@ -125,7 +125,7 @@ export type WebCommunityModalHostPropsShape<
 
 export type UseWebCommunityUiControllerResult<
   CommunityT extends CommunityLike,
-  BillingStatusT extends BuilderBillingStatusLike,
+  BillingStatusT extends AccountCommerceStatusLike,
 > = {
   openCreateCommunityModal: (draft?: CreateCommunityIntentDraft | null) => void;
   resumeCreateCommunityIntent: (draft?: CreateCommunityIntentDraft | null) => void;
@@ -136,7 +136,7 @@ export type UseWebCommunityUiControllerResult<
 export function useWebCommunityUiController<
   SessionT extends SessionLike,
   CommunityT extends CommunityLike,
-  BillingStatusT extends BuilderBillingStatusLike,
+  BillingStatusT extends AccountCommerceStatusLike,
   PageT extends string,
   ViewT extends string,
   TabT extends string,
@@ -173,10 +173,10 @@ export function useWebCommunityUiController<
   } = useCommunityCreateController<SessionT, CommunityT, BillingStatusT>({
     session: params.session,
     ensureSession: params.ensureSession,
-    builderBillingStatus: params.builderBillingStatus,
+    accountCommerceStatus: params.accountCommerceStatus,
     communities: params.communities,
     communityRoleById: params.communityRoleById,
-    loadBuilderBillingStatus: params.loadBuilderBillingStatus,
+    loadAccountCommerceStatus: params.loadAccountCommerceStatus,
     persistCreateCommunityIntent: params.persistCreateCommunityIntent,
     onPrimaryUnauthenticated: params.onPrimaryUnauthenticated,
     onCreateUnauthenticated: params.onCreateUnauthenticated,
@@ -241,8 +241,8 @@ export function useWebCommunityUiController<
         hasSession: Boolean(params.session),
         communities: params.communities,
         communityRoleById: params.communityRoleById,
-        builderBillingStatus: params.builderBillingStatus,
-        builderBillingError: params.builderBillingError,
+        accountCommerceStatus: params.accountCommerceStatus,
+        accountCommerceError: params.accountCommerceError,
         isCreateBannerDragOver,
         isCreateAvatarDragOver,
         createCommunityBannerUrl,

@@ -46,10 +46,9 @@ export default defineSchema({
 
   userEntitlements: defineTable({
     userId: v.id("users"),
-    tier: v.union(v.literal("free"), v.literal("builder"), v.literal("architect")),
+    tier: v.union(v.literal("free"), v.literal("architect")),
     source: v.union(
       v.literal("default"),
-      v.literal("stripe"),
       v.literal("admin_override"),
       v.literal("manual_grant"),
     ),
@@ -251,8 +250,6 @@ export default defineSchema({
     sessionId: v.string(),
     mode: v.union(
       v.literal("community_join"),
-      // Historical rows only. No first-party code creates Builder plan checkout sessions.
-      v.literal("builder_upgrade"),
       v.literal("workspace_credit_topup"),
     ),
     provider: v.optional(v.literal("stripe")),
@@ -280,7 +277,6 @@ export default defineSchema({
     currencyDecimals: v.optional(v.number()),
     workspaceCreditsAmount: v.optional(v.number()),
     workspaceCreditsGrantedAt: v.optional(v.number()),
-    targetTier: v.optional(v.union(v.literal("builder"), v.literal("architect"))),
     ownerUserId: v.optional(v.id("users")),
     claimToken: v.optional(v.string()),
     status: v.union(v.literal("pending"), v.literal("complete"), v.literal("expired")),

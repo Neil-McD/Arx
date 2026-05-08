@@ -1,5 +1,6 @@
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import { sanitizeUserFacingAssistantText } from "./communityUserFacingOutputSanitizer";
+import type { PaidToolKind } from "./workspaceCredits";
 
 export type InferenceIssueModalState = {
   reason:
@@ -13,6 +14,8 @@ export type InferenceIssueModalState = {
   threadId: string;
   mode: "respond" | "regenerate";
   message: string | null;
+  toolKind?: PaidToolKind | null;
+  requiredCredits?: number | null;
 };
 
 export type WebStreamingMeta<MemoryUsedItemT, HistoryUsedItemT, CommunityEvidenceUsedT> = {

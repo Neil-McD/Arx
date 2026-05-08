@@ -1,13 +1,13 @@
 import type { CommunityBillingPeriod } from "./communityTypes";
 
-export type BuilderTierUi = "free" | "architect";
+export type AccountTierUi = "free" | "architect";
 
-export type BuilderConnectReturnAction = "refresh" | "return";
-export type BuilderConnectContext = "account" | "community";
+export type StripeConnectReturnAction = "refresh" | "return";
+export type StripeConnectContext = "account" | "community";
 
-export type BuilderConnectReturn = {
-  action: BuilderConnectReturnAction;
-  context: BuilderConnectContext;
+export type StripeConnectReturn = {
+  action: StripeConnectReturnAction;
+  context: StripeConnectContext;
   communitySlug: string | null;
 };
 
@@ -52,51 +52,51 @@ export function formatSubscriptionPrice(args: {
   return `${value.toFixed(0)} ${currency}${suffix}`;
 }
 
-function normalizeBuilderTierRaw(value: string | null | undefined): string {
+function normalizeAccountTierRaw(value: string | null | undefined): string {
   return String(value ?? "")
     .trim()
     .toLowerCase();
 }
 
-export function normalizeBuilderTierForUi(value: string | null | undefined): BuilderTierUi {
-  const raw = normalizeBuilderTierRaw(value);
+export function normalizeAccountTierForUi(value: string | null | undefined): AccountTierUi {
+  const raw = normalizeAccountTierRaw(value);
   if (raw === "architect") return "architect";
   return "free";
 }
 
-export function isBuilderTierFree(value: string | null | undefined): boolean {
-  return normalizeBuilderTierRaw(value) === "free";
+export function isAccountTierFree(value: string | null | undefined): boolean {
+  return normalizeAccountTierRaw(value) === "free";
 }
 
-export function formatBuilderTierLabel(
+export function formatAccountTierLabel(
   value: string | null | undefined,
 ): "Free" | "Architect" {
-  if (normalizeBuilderTierForUi(value) === "architect") return "Architect";
+  if (normalizeAccountTierForUi(value) === "architect") return "Architect";
   return "Free";
 }
 
-function normalizeBuilderConnectAction(
+function normalizeStripeConnectAction(
   value: string | null | undefined,
-): BuilderConnectReturnAction | null {
+): StripeConnectReturnAction | null {
   const normalized = String(value ?? "").trim().toLowerCase();
   if (normalized === "refresh" || normalized === "return") return normalized;
   return null;
 }
 
-function normalizeBuilderConnectContext(
+function normalizeStripeConnectContext(
   value: string | null | undefined,
-): BuilderConnectContext | null {
+): StripeConnectContext | null {
   const normalized = String(value ?? "").trim().toLowerCase();
   if (normalized === "account" || normalized === "community") return normalized;
   return null;
 }
 
-export function parseBuilderConnectReturn(
+export function parseStripeConnectReturn(
   searchParams: URLSearchParams,
-): BuilderConnectReturn | null {
-  const action = normalizeBuilderConnectAction(searchParams.get("connect"));
+): StripeConnectReturn | null {
+  const action = normalizeStripeConnectAction(searchParams.get("connect"));
   if (!action) return null;
-  const context = normalizeBuilderConnectContext(searchParams.get("connect_context"));
+  const context = normalizeStripeConnectContext(searchParams.get("connect_context"));
   if (!context) return null;
   const communitySlug = String(searchParams.get("community_slug") ?? "").trim() || null;
   return {
@@ -106,7 +106,7 @@ export function parseBuilderConnectReturn(
   };
 }
 
-export function clearBuilderConnectQueryParams(searchParams: URLSearchParams): void {
+export function clearStripeConnectQueryParams(searchParams: URLSearchParams): void {
   searchParams.delete("connect");
   searchParams.delete("connect_context");
   searchParams.delete("community_slug");

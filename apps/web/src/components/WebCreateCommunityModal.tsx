@@ -4,8 +4,8 @@ type CommunityRecordForModal = {
   id: string;
 };
 
-type BuilderBillingStatusForModal = {
-  builder_tier?: string | null;
+type AccountCommerceStatusForModal = {
+  account_tier?: string | null;
   max_communities?: number | null;
 } | null;
 
@@ -14,7 +14,7 @@ type WebCreateCommunityModalProps = {
   hasSession: boolean;
   communities: CommunityRecordForModal[];
   communityRoleById: Record<string, string | undefined>;
-  builderBillingStatus: BuilderBillingStatusForModal;
+  accountCommerceStatus: AccountCommerceStatusForModal;
   isCreateBannerDragOver: boolean;
   isCreateAvatarDragOver: boolean;
   createCommunityBannerUrl: string | null;
@@ -24,7 +24,7 @@ type WebCreateCommunityModalProps = {
   createCommunitySlug: string;
   createCommunityVisibility: "published" | "unlisted";
   createCommunityError: string | null;
-  builderBillingError: string | null;
+  accountCommerceError: string | null;
   isCreatingCommunity: boolean;
   communityInitials: (value: string) => string;
   onClose: () => void;
@@ -50,7 +50,7 @@ export function WebCreateCommunityModal(props: WebCreateCommunityModalProps) {
     hasSession,
     communities,
     communityRoleById,
-    builderBillingStatus,
+    accountCommerceStatus,
     isCreateBannerDragOver,
     isCreateAvatarDragOver,
     createCommunityBannerUrl,
@@ -60,7 +60,7 @@ export function WebCreateCommunityModal(props: WebCreateCommunityModalProps) {
     createCommunitySlug,
     createCommunityVisibility,
     createCommunityError,
-    builderBillingError,
+    accountCommerceError,
     isCreatingCommunity,
     communityInitials,
     onClose,
@@ -86,7 +86,7 @@ export function WebCreateCommunityModal(props: WebCreateCommunityModalProps) {
     (acc, community) => acc + (communityRoleById[community.id] === "owner" ? 1 : 0),
     0,
   );
-  const max = builderBillingStatus?.max_communities ?? 0;
+  const max = accountCommerceStatus?.max_communities ?? 0;
   const needsPlan = Boolean(hasSession && max <= 0);
   const limitReached = Boolean(hasSession && max > 0 && ownedCount >= max);
 
@@ -227,7 +227,7 @@ export function WebCreateCommunityModal(props: WebCreateCommunityModalProps) {
               </div>
             </div>
             {createCommunityError && <div className="auth-error">{createCommunityError}</div>}
-            {builderBillingError && <div className="auth-error">{builderBillingError}</div>}
+            {accountCommerceError && <div className="auth-error">{accountCommerceError}</div>}
           </div>
         </div>
         <div className="modal-footer">

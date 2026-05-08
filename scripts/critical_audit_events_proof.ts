@@ -14,7 +14,7 @@ function assertContains(source: string, pattern: RegExp, message: string) {
 
 const schema = await readRepoFile("convex/schema.ts");
 const criticalAudit = await readRepoFile("convex/criticalAudit.ts");
-const builderCommerce = await readRepoFile("convex/builderCommerce.ts");
+const creatorCommerce = await readRepoFile("convex/creatorCommerce.ts");
 const communityCommerce = await readRepoFile("convex/communityCommerce.ts");
 const billingCore = await readRepoFile("convex/billingCore.ts");
 const httpBilling = await readRepoFile("convex/httpBilling.ts");
@@ -79,8 +79,8 @@ for (const eventType of requiredEvents) {
 
 for (const [fileName, source, eventTypes] of [
   [
-    "convex/builderCommerce.ts",
-    builderCommerce,
+    "convex/creatorCommerce.ts",
+    creatorCommerce,
     [
       "stripe_connect_account_synced",
     ],

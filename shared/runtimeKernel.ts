@@ -150,9 +150,15 @@ function buildToolBalanceTerminalSignal<TToolName extends string>(
   code: RuntimeKernelFailure<TToolName>["code"];
   stopReason: RuntimeKernelStopReason;
   message: string;
+  toolKind: string | null;
+  requiredCredits: number | null;
 } | null {
   const code = normalizeToolBalanceTerminalCode(toolResult.errorCode);
   if (!code) return null;
+  const details = toolResult.details && typeof toolResult.details === "object"
+    ? toolResult.details
+    : null;
+  const rawRequiredCredits = Number(details?.required_credits ?? details?.requiredCredits ?? 0);
   const fallbackMessage =
     code === "workspace_credits_exhausted"
       ? "Premium tools use paid provider or sandbox infrastructure, so they need tool balance before they run."
@@ -162,6 +168,14 @@ function buildToolBalanceTerminalSignal<TToolName extends string>(
     code,
     stopReason: "tool_error_unrecoverable",
     message: String(toolResult.errorMessage ?? "").trim() || fallbackMessage,
+    toolKind: typeof details?.tool_kind === "string"
+      ? details.tool_kind
+      : typeof details?.toolKind === "string"
+        ? details.toolKind
+        : null,
+    requiredCredits: Number.isFinite(rawRequiredCredits) && rawRequiredCredits > 0
+      ? rawRequiredCredits
+      : null,
   };
 }
 
@@ -182,6 +196,8 @@ function toKernelFailure<TToolName extends string>(params: {
     code: params.failure.code,
     stopReason,
     message: params.failure.message,
+    toolKind: params.failure.toolKind ?? null,
+    requiredCredits: params.failure.requiredCredits ?? null,
     pendingToolCallId: params.failure.pendingToolCallId,
     pendingToolName: params.failure.pendingToolName,
     transcript: [...params.transcript],
@@ -432,6 +448,8 @@ export async function runNativeRuntimeKernel<TToolName extends string>(params: {
     code: RuntimeKernelFailure<TToolName>["code"];
     stopReason: RuntimeKernelStopReason;
     message: string;
+    toolKind?: string | null;
+    requiredCredits?: number | null;
   };
 
   const buildTerminalFailure = (
@@ -442,6 +460,8 @@ export async function runNativeRuntimeKernel<TToolName extends string>(params: {
     code: signal.code,
     stopReason: signal.stopReason,
     message: signal.message,
+    toolKind: signal.toolKind ?? null,
+    requiredCredits: signal.requiredCredits ?? null,
     promptTokens,
     completionTokens,
     transcript: [...transcript],

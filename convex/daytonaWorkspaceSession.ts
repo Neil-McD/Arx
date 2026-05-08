@@ -230,6 +230,9 @@ export async function createWorkspaceSandboxSession(params: {
       status: 402,
       code: "workspace_credits_exhausted",
       message: "Workspace tools use paid sandbox compute, so they need tool balance before they run.",
+      details: {
+        tool_kind: "workspace_tools",
+      },
     };
   }
   const remainingCredits =
@@ -241,6 +244,9 @@ export async function createWorkspaceSandboxSession(params: {
       status: 402,
       code: "workspace_credits_exhausted",
       message: "Workspace tools use paid sandbox compute, so they need tool balance before they run.",
+      details: {
+        tool_kind: "workspace_tools",
+      },
     };
   }
 
@@ -297,6 +303,10 @@ export async function createWorkspaceSandboxSession(params: {
         message === "credits_exhausted"
           ? "Workspace tools use paid sandbox compute, so they need tool balance before they run."
           : "Tool balance is unavailable for workspace tools.",
+      details: {
+        tool_kind: "workspace_tools",
+        required_credits: creditBudgetCredits,
+      },
     };
   }
 

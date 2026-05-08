@@ -1,13 +1,13 @@
 import { bootstrapGatewayAuthContext } from "./cloudGateway";
 
-type CloudBuilderBillingGatewayParams<SessionT> = {
+type CloudAccountCommerceGatewayParams<SessionT> = {
   session: SessionT;
 };
 
 // Gateway class: authenticated query/mutation bridge, caller-hardened session, fail-closed.
 
 export async function startCloudWorkspaceCreditTopupCheckout<SessionT>(
-  params: CloudBuilderBillingGatewayParams<SessionT> & {
+  params: CloudAccountCommerceGatewayParams<SessionT> & {
     successUrl: string;
     cancelUrl: string;
     packId?: string;
@@ -26,7 +26,7 @@ export async function startCloudWorkspaceCreditTopupCheckout<SessionT>(
 }
 
 export async function startCloudConnectOnboarding<SessionT>(
-  params: CloudBuilderBillingGatewayParams<SessionT> & {
+  params: CloudAccountCommerceGatewayParams<SessionT> & {
     context: "account" | "community";
     communitySlug?: string | null;
   },

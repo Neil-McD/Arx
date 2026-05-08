@@ -6,7 +6,7 @@ cd "$ROOT_DIR"
 
 echo "== No compat RPC primitive guard =="
 
-PATTERN='invokeRpcJson|invokeRestAuth|invokeCloudRpcViaRestAuth|buildCloudRestRpcUrl|get_my_product_state|dev_set_my_builder_tier|buildCloudAuthUserUrl|probeCloudAuthSession'
+PATTERN='invokeRpcJson|invokeRestAuth|invokeCloudRpcViaRestAuth|buildCloudRestRpcUrl|get_my_product_state|dev_set_my_builder_tier|dev_set_my_account_tier|buildCloudAuthUserUrl|probeCloudAuthSession'
 TARGETS=(
   src
   apps

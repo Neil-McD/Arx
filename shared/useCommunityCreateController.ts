@@ -18,7 +18,7 @@ type CommunityLike = {
 };
 
 type BillingStatusLike = {
-  builder_tier: string;
+  account_tier: string;
   max_communities: number;
 };
 
@@ -31,10 +31,10 @@ type UseCommunityCreateControllerArgs<
 > = {
   session: SessionT | null;
   ensureSession?: EnsureSessionFn<SessionT>;
-  builderBillingStatus: BillingStatusT | null;
+  accountCommerceStatus: BillingStatusT | null;
   communities: CommunityT[];
   communityRoleById: Record<string, string>;
-  loadBuilderBillingStatus: (session: SessionT) => Promise<BillingStatusT | null>;
+  loadAccountCommerceStatus: (session: SessionT) => Promise<BillingStatusT | null>;
   persistCreateCommunityIntent: (draft: CreateCommunityIntentDraft) => void;
   onPrimaryUnauthenticated: (draft: CreateCommunityIntentDraft) => Promise<void> | void;
   onCreateUnauthenticated?: (draft: CreateCommunityIntentDraft) => Promise<void> | void;
@@ -143,7 +143,7 @@ export function useCommunityCreateController<
 
   const openCreateCommunityModal = useCallback((draft: CreateCommunityIntentDraft | null = null) => {
     const current = argsRef.current;
-    const max = current.builderBillingStatus?.max_communities ?? 0;
+    const max = current.accountCommerceStatus?.max_communities ?? 0;
     const ownedCount = getOwnedCountForOpenModal();
     if (max > 0 && ownedCount >= max) {
       current.onOwnedCommunityLimitReached?.();
@@ -267,7 +267,7 @@ export function useCommunityCreateController<
       return;
     }
 
-    const status = current.builderBillingStatus ?? await current.loadBuilderBillingStatus(session);
+    const status = current.accountCommerceStatus ?? await current.loadAccountCommerceStatus(session);
     if (!status) {
       current.setCreateCommunityError("Couldn't check your account status. Try again.");
       return;

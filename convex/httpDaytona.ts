@@ -74,7 +74,7 @@ import {
   type ResponsesApiFunctionTool,
 } from "../shared/toolRegistry";
 import {
-  buildWorkspaceRuntimeSystemPrompt,
+  buildPlatformHarnessRuntimeSystemPrompt,
   type RuntimeCommunityPromptFields,
   type ThreadWorkingStatePrompt,
 } from "../shared/runtimePrompt";
@@ -494,11 +494,15 @@ async function executeRetrievalHarnessTool(params: {
         status: "error",
         exitCode: null,
         outputText: "",
-        errorCode: message === "credits_exhausted" ? "credits_exhausted" : "credits_unavailable",
+        errorCode: message === "credits_exhausted" ? "workspace_credits_exhausted" : "workspace_credits_unavailable",
         errorMessage:
           message === "credits_exhausted"
             ? "Web research uses paid provider calls, so it needs tool balance before it runs."
             : "Tool balance is unavailable for web research.",
+        details: {
+          tool_kind: "web_research",
+          required_credits: webResearchCredits,
+        },
       };
     }
 
@@ -602,6 +606,9 @@ async function executeRetrievalHarnessTool(params: {
         outputText: "",
         errorCode: "workspace_credits_exhausted",
         errorMessage: "This workspace tool budget expired. Add balance to keep using workspace tools.",
+        details: {
+          tool_kind: "workspace_tools",
+        },
       };
     }
     const budgetSignal = buildWorkspaceCreditBudgetSignal(
@@ -713,6 +720,9 @@ async function executeRetrievalHarnessTool(params: {
         outputText: "",
         errorCode: "workspace_credits_exhausted",
         errorMessage: "This workspace tool budget expired. Add balance to keep using workspace tools.",
+        details: {
+          tool_kind: "workspace_tools",
+        },
       };
     }
     if (!result.ok) {
@@ -939,7 +949,7 @@ async function executeRetrievalAgentLoop(
       threadWorkingState: params.threadWorkingState,
     })
   ).packet;
-  const baseSystemPrompt = buildWorkspaceRuntimeSystemPrompt({
+  const baseSystemPrompt = buildPlatformHarnessRuntimeSystemPrompt({
     loopBudget: params.loopBudget,
     allowedToolNames: params.allowedToolNames,
     harnessName: params.harnessName,
@@ -1681,6 +1691,7 @@ async function executeRetrievalAgentLoop(
               outputText: readFailureOutputPreview((created as any).details),
               errorCode: created.code,
               errorMessage: created.message,
+              details: (created as { details?: Record<string, unknown> | null }).details ?? null,
             };
           }
           try {

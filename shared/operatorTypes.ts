@@ -81,6 +81,59 @@ export type OperatorMonetizationSnapshot = {
   communityCheckoutCompletions: number;
   activeCommunitySubscriptions: number;
   estimatedCommunityMrr: OperatorMoneyMetric | null;
+  businessKpis?: {
+    visitors: {
+      total: number | null;
+      visitorToUserConversionRate: number | null;
+      availability: "available" | "not_configured" | "not_instrumented";
+      source: "posthog" | "vercel_analytics" | "unavailable";
+    };
+    users: {
+      total: number;
+      newInRange: number;
+      activePayingCustomers: number;
+      checkoutPurchasersInRange: number;
+      knownPayingCustomers: number;
+      visitorToUserConversionRate: number | null;
+      userToPayingCustomerConversionRate: number | null;
+    };
+    communities: {
+      totalCreated: number;
+      createdInRange: number;
+      creationRateFromNewUsers: number | null;
+    };
+    revenue: {
+      communitySubscriptionMrr: OperatorMoneyMetric | null;
+      communityCheckoutRevenueInRange: OperatorMoneyMetric | null;
+      creditTopupRevenueInRange: OperatorMoneyMetric | null;
+      grossRevenueInRange: OperatorMoneyMetric | null;
+      averageRecordedLifetimeValue: OperatorMoneyMetric | null;
+      platformNetRevenueInRange: OperatorMoneyMetric | null;
+      platformNetRevenueAvailability: "available" | "not_instrumented";
+    };
+    checkouts: {
+      totalStarts: number;
+      totalCompletions: number;
+      totalConversionRate: number | null;
+      failedOrAbandoned: number;
+      pending: number;
+      expired: number;
+      communityStarts: number;
+      communityCompletions: number;
+      creditTopupStarts: number;
+      creditTopupCompletions: number;
+    };
+    email: {
+      sent: number;
+      delivered: number;
+      opened: number;
+      clicked: number;
+      bouncedOrFailed: number;
+      clickRate: number | null;
+      conversionRate: number | null;
+      conversionAvailability: "available" | "not_attributed";
+    };
+  };
   evidence: {
     sourceTables: string[];
   };

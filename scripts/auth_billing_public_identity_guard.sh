@@ -7,7 +7,7 @@ cd "$ROOT_DIR"
 echo "== Auth and billing public identity guard =="
 
 AUTH_FILE="convex/auth.ts"
-GATEWAY_FILE="shared/builderBillingStatusGateway.ts"
+GATEWAY_FILE="shared/accountCommerceStatusGateway.ts"
 
 if [[ ! -f "$AUTH_FILE" ]]; then
   echo "FAIL: missing $AUTH_FILE"
@@ -42,26 +42,26 @@ reject_multiline_match() {
 
 echo "[1/5] Ensuring browser-facing auth/billing queries resolve authenticated subject..."
 require_multiline_match "$AUTH_FILE" \
-  'export const getBuilderBillingStatus = query\([\s\S]*?const \{ authSubject, actor \} = await findAuthenticatedActorState\(\{\s*ctx,\s*authSubject: args\.authSubject \?\? null,' \
-  "getBuilderBillingStatus resolves authenticated subject"
+  'export const getAccountCommerceStatus = query\([\s\S]*?const \{ authSubject, actor \} = await findAuthenticatedActorState\(\{\s*ctx,\s*authSubject: args\.authSubject \?\? null,' \
+  "getAccountCommerceStatus resolves authenticated subject"
 
-echo "[2/5] Ensuring builder billing status returns public user IDs..."
+echo "[2/5] Ensuring account commerce status returns public user IDs..."
 require_multiline_match "$AUTH_FILE" \
-  'export const getBuilderBillingStatus = query\([\s\S]*?user_id: actor\.authSubject' \
-  "getBuilderBillingStatus returns public user_id"
+  'export const getAccountCommerceStatus = query\([\s\S]*?user_id: actor\.authSubject' \
+  "getAccountCommerceStatus returns public user_id"
 
 echo "[3/5] Ensuring dev-tier override response stays minimal and avoids public userId residue..."
 require_multiline_match "$AUTH_FILE" \
-  'export const setDevTierOverride = mutation\([\s\S]*?return \{\s*ok: true,\s*canonicalTier,\s*effectiveTier: resolveEffectiveTier[\s\S]*?\n\}\);\n\nexport const getBuilderBillingStatus = query\(' \
+  'export const setDevTierOverride = mutation\([\s\S]*?return \{\s*ok: true,\s*canonicalTier,\s*effectiveTier: resolveEffectiveTier[\s\S]*?\n\}\);\n\nexport const getAccountCommerceStatus = query\(' \
   "setDevTierOverride returns tier-only payload"
 reject_multiline_match "$AUTH_FILE" \
-  'export const setDevTierOverride = mutation\([\s\S]*?return \{[\s\S]*?userId:[\s\S]*?\n\}\);\n\nexport const getBuilderBillingStatus = query\(' \
+  'export const setDevTierOverride = mutation\([\s\S]*?return \{[\s\S]*?userId:[\s\S]*?\n\}\);\n\nexport const getAccountCommerceStatus = query\(' \
   "setDevTierOverride omits userId"
 
-echo "[4/5] Ensuring browser billing gateway uses the canonical auth query seam..."
+echo "[4/5] Ensuring account commerce gateway uses the canonical auth query seam..."
 require_multiline_match "$GATEWAY_FILE" \
-  'const row = \(await client\.query\("auth:getBuilderBillingStatus" as any, \{\s*authSubject,\s*\}\)\) as BuilderBillingStatus \| null;' \
-  "builder billing gateway uses canonical auth query"
+  'const row = \(await client\.query\("auth:getAccountCommerceStatus" as any, \{\s*authSubject,\s*\}\)\) as AccountCommerceStatus \| null;' \
+  "account commerce gateway uses canonical auth query"
 
 echo "[5/5] Guard passed."
 echo "PASS: auth/billing browser-facing user references are normalized to public IDs."

@@ -24,14 +24,14 @@ export function useWebPostAuthBillingLifecycle<
   lastAutoRedeemPendingPurchasesUserIdRef: MutableRefObject<string | null>;
   autoRedeemPendingPurchasesAttemptRef: MutableRefObject<number>;
   autoRedeemPendingPurchasesTimeoutRef: MutableRefObject<number | null>;
-  setBuilderBillingStatus: Dispatch<SetStateAction<TBillingStatus | null>>;
-  setBuilderBillingError: Dispatch<SetStateAction<string | null>>;
-  setIsLoadingBuilderBilling: Dispatch<SetStateAction<boolean>>;
+  setAccountCommerceStatus: Dispatch<SetStateAction<TBillingStatus | null>>;
+  setAccountCommerceError: Dispatch<SetStateAction<string | null>>;
+  setIsLoadingAccountCommerce: Dispatch<SetStateAction<boolean>>;
   getAuthUid: (session: TSession) => string | null;
   redeemPurchaseClaim: (token: string) => Promise<void>;
   redeemPendingPurchases: (args: { navigate: boolean; silentNoop: boolean }) => Promise<number>;
   loadPendingPurchaseClaims: (session: TSession) => Promise<void>;
-  loadBuilderBillingStatus: (session: TSession) => Promise<TBillingStatus | null>;
+  loadAccountCommerceStatus: (session: TSession) => Promise<TBillingStatus | null>;
   joinPublicCommunity: (args: { communitySlug: string | null; communityId?: string }) => Promise<void>;
 }) {
   useEffect(() => {
@@ -103,12 +103,12 @@ export function useWebPostAuthBillingLifecycle<
   useEffect(() => {
     const session = params.session;
     if (!session) {
-      params.setBuilderBillingStatus(null);
-      params.setBuilderBillingError(null);
-      params.setIsLoadingBuilderBilling(false);
+      params.setAccountCommerceStatus(null);
+      params.setAccountCommerceError(null);
+      params.setIsLoadingAccountCommerce(false);
       return;
     }
-    void params.loadBuilderBillingStatus(session);
+    void params.loadAccountCommerceStatus(session);
   }, [params.session]);
 
   useEffect(() => {

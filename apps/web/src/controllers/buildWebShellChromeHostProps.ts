@@ -66,7 +66,7 @@ export function buildWebShellChromeHostProps(params: {
   openMobileAgentSettings: () => void;
   handleOpenDiscover: () => void;
   openMobileCreateCommunity: () => void;
-  hasBuilderAccess: boolean;
+  hasCommunityCreateAccess: boolean;
   openCreateCommunityModal: () => void;
   communities: CommunityLike[];
   railCommunities: CommunityLike[];
@@ -83,7 +83,7 @@ export function buildWebShellChromeHostProps(params: {
   draggingCommunityId: string | null;
   setCommunityRailListElement: WebShellChromeHostProps["communityShell"]["setCommunityRailListElement"];
   getCommunityRailItemBindings: WebShellChromeHostProps["communityShell"]["getCommunityRailItemBindings"];
-  setIsBuilderInfoOpen: (value: boolean) => void;
+  setIsFreeAccountInfoOpen: (value: boolean) => void;
   handleToggleWorkspaceSettings: () => void;
   settingsGroup: SettingsGroup;
   setSettingsPage: (page: WebShellChromeHostProps["settingsSidebar"]["onSelectPage"] extends (page: infer T) => void ? T : never) => void;
@@ -221,15 +221,15 @@ export function buildWebShellChromeHostProps(params: {
       draggingCommunityId: params.draggingCommunityId,
       setCommunityRailListElement: params.setCommunityRailListElement,
       getCommunityRailItemBindings: params.getCommunityRailItemBindings,
-      onOpenBuilderInfo: () => {
-        if (params.hasBuilderAccess) {
+      onOpenCommunityCreateCta: () => {
+        if (params.hasCommunityCreateAccess) {
           params.openCreateCommunityModal();
           return;
         }
-        params.setIsBuilderInfoOpen(true);
+        params.setIsFreeAccountInfoOpen(true);
       },
-      builderRailCtaLabel: "+",
-      builderRailCtaTitle: "Create community",
+      communityCreateCtaLabel: "+",
+      communityCreateCtaTitle: "Create community",
       activeView: params.activeView,
       onToggleWorkspaceSettings: params.handleToggleWorkspaceSettings,
     },

@@ -4,9 +4,9 @@ import {
   emitWorkspaceEvent,
   formatWorkspaceInstrumentationError,
 } from "../lib/workspaceInstrumentation";
-import { startCloudConnectOnboarding } from "../../../../shared/cloudBuilderBillingGateway";
+import { startCloudConnectOnboarding } from "../../../../shared/cloudAccountCommerceGateway";
 
-type UseWebBuilderBillingActionsArgs = {
+type UseWebAccountCommerceActionsArgs = {
   getSession: () => AuthSession | null;
   ensureSession?: () => Promise<AuthSession | null>;
   requireSignIn: () => void;
@@ -14,13 +14,13 @@ type UseWebBuilderBillingActionsArgs = {
     context: "account" | "community";
     communitySlug: string | null;
   }) => void;
-  setBuilderBillingError: Dispatch<SetStateAction<string | null>>;
-  setIsStartingBuilderConnectOnboarding: Dispatch<SetStateAction<boolean>>;
+  setAccountCommerceError: Dispatch<SetStateAction<string | null>>;
+  setIsStartingStripeConnectOnboarding: Dispatch<SetStateAction<boolean>>;
   navigateToUrl: (url: string) => void;
 };
 
-export function useWebBuilderBillingActions(args: UseWebBuilderBillingActionsArgs) {
-  const startBuilderConnectOnboarding = async (opts?: {
+export function useWebAccountCommerceActions(args: UseWebAccountCommerceActionsArgs) {
+  const startStripeConnectOnboarding = async (opts?: {
     context?: "account" | "community";
     communitySlug?: string | null;
   }): Promise<void> => {
@@ -29,7 +29,7 @@ export function useWebBuilderBillingActions(args: UseWebBuilderBillingActionsArg
     const session = args.getSession() ?? (args.ensureSession ? await args.ensureSession() : null);
     emitWorkspaceEvent({
       scope: "lifecycle",
-      name: "builder_connect_preflight",
+      name: "stripe_connect_preflight",
       status: session ? "success" : "skip",
       detail: { billing_context: context, community_slug: communitySlug },
       error: null,
@@ -39,11 +39,11 @@ export function useWebBuilderBillingActions(args: UseWebBuilderBillingActionsArg
       return;
     }
 
-    args.setBuilderBillingError(null);
-    args.setIsStartingBuilderConnectOnboarding(true);
+    args.setAccountCommerceError(null);
+    args.setIsStartingStripeConnectOnboarding(true);
     emitWorkspaceEvent({
       scope: "lifecycle",
-      name: "builder_connect_request",
+      name: "stripe_connect_request",
       status: "start",
       detail: { billing_context: context, community_slug: communitySlug },
       error: null,
@@ -62,7 +62,7 @@ export function useWebBuilderBillingActions(args: UseWebBuilderBillingActionsArg
       args.onConnectOnboardingStarted?.({ context, communitySlug });
       emitWorkspaceEvent({
         scope: "lifecycle",
-        name: "builder_connect_request",
+        name: "stripe_connect_request",
         status: "success",
         detail: { billing_context: context, community_slug: communitySlug },
         error: null,
@@ -76,24 +76,24 @@ export function useWebBuilderBillingActions(args: UseWebBuilderBillingActionsArg
             ? error.message
             : "Failed to start Stripe Connect onboarding.";
       const friendly =
-        message === "builder_connect_builder_required"
+        message === "creator_payout_access_required"
           ? "Community monetization is not available for this account yet."
           : message.includes("responsibilities of managing losses for connected accounts") ||
               message.includes("ongoing compliance")
             ? "Stripe Connect setup for PolyNet is still incomplete. Finish the Connect platform-profile acknowledgements in Stripe, then retry."
             : message;
-      args.setBuilderBillingError(friendly);
+      args.setAccountCommerceError(friendly);
       emitWorkspaceEvent({
         scope: "lifecycle",
-        name: "builder_connect_request",
+        name: "stripe_connect_request",
         status: "failure",
         detail: { billing_context: context, community_slug: communitySlug },
         error: formatWorkspaceInstrumentationError(friendly),
       });
     } finally {
-      args.setIsStartingBuilderConnectOnboarding(false);
+      args.setIsStartingStripeConnectOnboarding(false);
     }
   };
 
-  return { startBuilderConnectOnboarding };
+  return { startStripeConnectOnboarding };
 }

@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import type { BuilderConnectReturn } from "../../../../shared/builderBilling";
+import type { StripeConnectReturn } from "../../../../shared/accountCommerce";
 
 type SessionLike = {
   user: {
@@ -9,35 +9,35 @@ type SessionLike = {
 
 export function useWebPostAuthStripeConnectLifecycle<TSession extends SessionLike>(params: {
   session: TSession | null;
-  builderConnectReturn: BuilderConnectReturn | null;
-  clearBuilderConnectReturn: () => void;
-  setBuilderBillingError: (value: string | null) => void;
-  loadBuilderBillingStatus: (session: TSession) => Promise<unknown>;
-  startBuilderConnectOnboarding: (opts?: {
+  stripeConnectReturn: StripeConnectReturn | null;
+  clearStripeConnectReturn: () => void;
+  setAccountCommerceError: (value: string | null) => void;
+  loadAccountCommerceStatus: (session: TSession) => Promise<unknown>;
+  startStripeConnectOnboarding: (opts?: {
     context?: "account" | "community";
     communitySlug?: string | null;
   }) => Promise<void>;
 }) {
   useEffect(() => {
     const session = params.session;
-    const connectReturn = params.builderConnectReturn;
+    const connectReturn = params.stripeConnectReturn;
     if (!session || !connectReturn) return;
 
     let cancelled = false;
     const run = async () => {
       try {
         if (connectReturn.action === "refresh") {
-          await params.startBuilderConnectOnboarding({
+          await params.startStripeConnectOnboarding({
             context: connectReturn.context,
             communitySlug: connectReturn.communitySlug,
           });
           return;
         }
-        params.setBuilderBillingError(null);
-        await params.loadBuilderBillingStatus(session);
+        params.setAccountCommerceError(null);
+        await params.loadAccountCommerceStatus(session);
       } finally {
         if (!cancelled) {
-          params.clearBuilderConnectReturn();
+          params.clearStripeConnectReturn();
         }
       }
     };
@@ -45,5 +45,5 @@ export function useWebPostAuthStripeConnectLifecycle<TSession extends SessionLik
     return () => {
       cancelled = true;
     };
-  }, [params.session, params.builderConnectReturn]);
+  }, [params.session, params.stripeConnectReturn]);
 }

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-import { buildWorkspaceRuntimeSystemPrompt } from "../shared/runtimePrompt.ts";
+import { buildPlatformHarnessRuntimeSystemPrompt } from "../shared/runtimePrompt.ts";
 import { buildRuntimeTurnContextPacket } from "../shared/runtimeTurnContextPacket.ts";
 
 function indexOfBlock(prompt: string, blockName: string): number {
@@ -10,7 +10,7 @@ function indexOfBlock(prompt: string, blockName: string): number {
   return index;
 }
 
-const prompt = buildWorkspaceRuntimeSystemPrompt({
+const prompt = buildPlatformHarnessRuntimeSystemPrompt({
   loopBudget: {
     maxToolSteps: 8,
     maxRepeatedIdenticalCalls: 2,
@@ -119,7 +119,7 @@ const soulIndex = indexOfBlock(prompt, "AGENT_SOUL");
 const explanationIndex = indexOfBlock(prompt, "EXPLANATION_CONTRACT");
 const policyIndex = indexOfBlock(prompt, "AGENT_OPERATING_POLICY");
 const communityIndex = indexOfBlock(prompt, "COMMUNITY_LENS");
-const workspaceIndex = indexOfBlock(prompt, "WORKSPACE_CONTEXT");
+const platformHarnessContextIndex = indexOfBlock(prompt, "PLATFORM_HARNESS_CONTEXT");
 const workingStateIndex = indexOfBlock(prompt, "THREAD_WORKING_STATE");
 const processContextIndex = indexOfBlock(prompt, "WORKSPACE_PROCESS_CONTEXT");
 const recentProcessEventsIndex = indexOfBlock(prompt, "RECENT_BACKGROUND_PROCESS_EVENTS");
@@ -130,8 +130,8 @@ assert.ok(platformIndex < soulIndex, "platform doctrine should lead stable promp
 assert.ok(soulIndex < explanationIndex, "agent behavior should stay in stable prompt");
 assert.ok(explanationIndex < policyIndex, "explanation contract should precede operating policy");
 assert.ok(policyIndex < communityIndex, "stable policy should precede semi-stable context");
-assert.ok(communityIndex < workspaceIndex, "community identity should precede workspace identity");
-assert.ok(workspaceIndex < workingStateIndex, "working state should be volatile after workspace identity");
+assert.ok(communityIndex < platformHarnessContextIndex, "community identity should precede platform harness context");
+assert.ok(platformHarnessContextIndex < workingStateIndex, "working state should be volatile after platform harness context");
 assert.ok(workingStateIndex < processContextIndex, "process context should follow thread working state");
 assert.ok(processContextIndex < recentProcessEventsIndex, "recent process events should follow process context");
 assert.ok(recentProcessEventsIndex < recentToolAttemptsIndex, "tool attempts should follow process lifecycle events");
@@ -236,12 +236,12 @@ assert.match(
 assert.doesNotMatch(
   runtimePromptSource,
   /threadWorkingState\?: ThreadWorkingStatePrompt/,
-  "workspace runtime prompt should not accept direct working-state params outside the canonical packet",
+  "platform harness runtime prompt should not accept direct working-state params outside the canonical packet",
 );
 assert.doesNotMatch(
   runtimePromptSource,
   /activeBackgroundTerminals\?: RuntimeWorkspaceTerminalPrompt/,
-  "workspace runtime prompt should not accept direct terminal params outside the canonical packet",
+  "platform harness runtime prompt should not accept direct terminal params outside the canonical packet",
 );
 assert.match(
   runtimeTurnContextPacketSource,

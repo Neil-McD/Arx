@@ -138,10 +138,10 @@ export type UseWebSendFlowControllerArgs<
   activeModelId: string | null;
   modelToggles: ModelToggle[];
   userMemoryRememberEnabled: boolean;
-  builderTier: string | null;
+  accountTier: string | null;
   hasUserKeyConnection: boolean;
   hasUserChatgptConnection: boolean;
-  loadBuilderBillingStatus?: (session: SessionT) => Promise<{ builder_tier?: string | null } | null>;
+  loadAccountCommerceStatus?: (session: SessionT) => Promise<{ account_tier?: string | null } | null>;
   guestThreadId: string;
   guestModelId: string;
   guestModelAllowlist: ReadonlySet<string>;
@@ -172,8 +172,8 @@ export type UseWebSendFlowControllerArgs<
   ) => void;
   setThreads: (value: ThreadRecordT[] | ((prev: ThreadRecordT[]) => ThreadRecordT[])) => void;
   setActiveModelId: (value: string | null | ((prev: string | null) => string | null)) => void;
-  setBuilderBillingError: (value: string | null | ((prev: string | null) => string | null)) => void;
-  setIsBuilderInfoOpen: (value: boolean | ((prev: boolean) => boolean)) => void;
+  setAccountCommerceError: (value: string | null | ((prev: string | null) => string | null)) => void;
+  setIsFreeAccountInfoOpen: (value: boolean | ((prev: boolean) => boolean)) => void;
 };
 
 export function toErrorMessage(error: unknown, fallback: string): string {
@@ -191,15 +191,15 @@ export function getLastThreadMessageId(
   return null;
 }
 
-export function showBuilderLimitInfoIfNeeded<
+export function showAccountLimitInfoIfNeeded<
   SessionT,
   AttachmentT,
   ThreadRecordT extends ThreadRecord,
   ThreadMessageT extends ThreadMessage,
 >(args: UseWebSendFlowControllerArgs<SessionT, AttachmentT, ThreadRecordT, ThreadMessageT>, message: string): void {
   if (!message.toLowerCase().includes("cloud history limit reached")) return;
-  args.setBuilderBillingError(message);
-  args.setIsBuilderInfoOpen(true);
+  args.setAccountCommerceError(message);
+  args.setIsFreeAccountInfoOpen(true);
 }
 
 export function resolvePreferredModelSelectionFromArgs<

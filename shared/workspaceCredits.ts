@@ -2,7 +2,7 @@ export const DEFAULT_DAYTONA_SANDBOX_CPU = 1;
 export const DEFAULT_DAYTONA_SANDBOX_MEMORY_GIB = 2;
 export const DEFAULT_DAYTONA_SANDBOX_DISK_GIB = 8;
 
-export const BUILDER_INCLUDED_WORKSPACE_CREDITS = 0;
+export const DEFAULT_INCLUDED_TOOL_CREDITS = 0;
 export const WORKSPACE_CREDITS_PER_USD = 100;
 export const WORKSPACE_CREDIT_TOPUP_CREDITS = 500;
 export const WORKSPACE_CREDIT_TOPUP_PRICE_USD = 5;
@@ -61,6 +61,16 @@ export const DAYTONA_WORKSPACE_SESSION_RESERVATION_EXPIRY_MS = 2 * 60 * 60 * 100
 
 export const DAYTONA_VCPU_USD_PER_SECOND = 0.000014;
 export const DAYTONA_MEMORY_GIB_USD_PER_SECOND = 0.0000045;
+
+export type PaidToolKind = "workspace_tools" | "web_research" | "voice_input";
+
+export function normalizePaidToolKind(value: unknown): PaidToolKind | null {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  if (normalized === "workspace_tools") return "workspace_tools";
+  if (normalized === "web_research") return "web_research";
+  if (normalized === "voice_input") return "voice_input";
+  return null;
+}
 
 export function normalizePositiveInteger(raw: unknown, fallback: number, min = 1): number {
   const value = Number(raw);

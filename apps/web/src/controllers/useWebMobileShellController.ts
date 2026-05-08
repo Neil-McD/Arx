@@ -29,9 +29,9 @@ export function useWebMobileShellController(params: {
   openCommunityChat: (communitySlug: string, opts?: { clearUnread?: boolean; pushSnapshot?: boolean }) => void;
   handleOpenDiscover: () => void;
   handleTopbarBackToWorkspace: () => void;
-  hasBuilderAccess: boolean;
+  hasCommunityCreateAccess: boolean;
   openCreateCommunityModal: () => void;
-  setIsBuilderInfoOpen: Dispatch<SetStateAction<boolean>>;
+  setIsFreeAccountInfoOpen: Dispatch<SetStateAction<boolean>>;
 }) {
   const mobileShellSwipeStartRef = useRef<{ x: number; y: number } | null>(null);
   const mobileAgentDrawerSwipeEdgePx = 44;
@@ -97,15 +97,15 @@ export function useWebMobileShellController(params: {
 
   const openMobileCreateCommunity = useCallback(() => {
     params.setMobileOverlay(null);
-    if (params.hasBuilderAccess) {
+    if (params.hasCommunityCreateAccess) {
       params.openCreateCommunityModal();
       return;
     }
-    params.setIsBuilderInfoOpen(true);
+    params.setIsFreeAccountInfoOpen(true);
   }, [
-    params.hasBuilderAccess,
+    params.hasCommunityCreateAccess,
     params.openCreateCommunityModal,
-    params.setIsBuilderInfoOpen,
+    params.setIsFreeAccountInfoOpen,
     params.setMobileOverlay,
   ]);
 

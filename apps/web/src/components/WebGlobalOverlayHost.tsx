@@ -1,5 +1,5 @@
 import type { ComponentProps } from "react";
-import { BuilderIncludedModal } from "../../../../shared/BuilderIncludedModal";
+import { FreeAccountIncludedModal } from "../../../../shared/FreeAccountIncludedModal";
 import { WebCommunityModalHost } from "./WebCommunityModalHost";
 import { WebInferenceIssueModal } from "./WebInferenceIssueModal";
 import { WebMemoryImportModal } from "./WebMemoryImportModal";
@@ -7,7 +7,7 @@ import { WebMessageContextModal } from "./WebMessageContextModal";
 import { WebPreviewAccessGateModal } from "./WebPreviewAccessGateModal";
 import { WebProjectModalHost } from "./WebProjectModalHost";
 import { WebProviderConnectionModalHost } from "./WebProviderConnectionModalHost";
-import type { WorkspaceToolBalanceTopupPackId } from "../../../../shared/workspaceCredits";
+import type { PaidToolKind, WorkspaceToolBalanceTopupPackId } from "../../../../shared/workspaceCredits";
 
 type InferenceIssueReason =
   | "quota"
@@ -23,6 +23,8 @@ type InferenceIssueModalState = {
   threadId: string;
   mode: "respond" | "regenerate";
   message: string | null;
+  toolKind?: PaidToolKind | null;
+  requiredCredits?: number | null;
 } | null;
 
 type WebMemoryImportModalProps = {
@@ -70,7 +72,7 @@ export type WebGlobalOverlayHostProps = {
   >["modalHostProps"];
   previewAccessGateModalProps: WebPreviewAccessGateModalProps | null;
   inferenceIssueModalProps: WebInferenceIssueModalProps | null;
-  builderIncludedModalProps: ComponentProps<typeof BuilderIncludedModal>;
+  freeAccountIncludedModalProps: ComponentProps<typeof FreeAccountIncludedModal>;
   communityModalHostProps: ComponentProps<typeof WebCommunityModalHost>["modalHostProps"];
   appToast: string | null;
 };
@@ -98,7 +100,7 @@ export function WebGlobalOverlayHost(props: WebGlobalOverlayHostProps) {
         <WebInferenceIssueModal {...props.inferenceIssueModalProps} />
       ) : null}
 
-      <BuilderIncludedModal {...props.builderIncludedModalProps} />
+      <FreeAccountIncludedModal {...props.freeAccountIncludedModalProps} />
 
       <WebCommunityModalHost modalHostProps={props.communityModalHostProps} />
 

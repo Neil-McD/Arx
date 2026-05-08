@@ -1,7 +1,7 @@
 import type { DragEvent } from "react";
 import type { SettingsGroup } from "../../../../shared/appShellNavigation";
 import type { AppTheme } from "../../../../shared/theme";
-import type { BuilderBillingStatus } from "../../../../shared/builderBillingStatusGateway";
+import type { AccountCommerceStatus } from "../../../../shared/accountCommerceStatusGateway";
 import type { WorkspaceCreditBalance } from "../../../../shared/workspaceCreditsGateway";
 import type { WorkspaceToolBalanceTopupPackId } from "../../../../shared/workspaceCredits";
 import type { PendingPurchaseClaim } from "../../../../shared/pay_first";
@@ -66,17 +66,17 @@ export type WebSettingsPanelsProps = {
     communityRoleById: Record<string, string>;
     openOwnedCommunitySettings: (communityId: string) => void;
     communityInitials: (value: string) => string;
-    startBuilderConnectOnboarding: (opts?: {
+    startStripeConnectOnboarding: (opts?: {
       context?: "account" | "community";
       communitySlug?: string | null;
     }) => Promise<void> | void;
     canUseDevTierOverride: boolean;
-    setDevBuilderTier: (tier: "free" | "architect") => Promise<void> | void;
+    setDevAccountTier: (tier: "free" | "architect") => Promise<void> | void;
     redeemPendingPurchases: () => Promise<void> | void;
     ensureSession: () => Promise<SessionLike>;
     loadPendingPurchaseClaims: (session: NonNullable<SessionLike>) => Promise<void>;
     providerConnectionUi: UseWebProviderConnectionUiControllerResult;
-    billingUi: UseWebBillingUiControllerResult<BuilderBillingStatus, WorkspaceCreditBalance, PendingPurchaseClaim>;
+    billingUi: UseWebBillingUiControllerResult<AccountCommerceStatus, WorkspaceCreditBalance, PendingPurchaseClaim>;
   };
   agent: {
     session: SessionLike;
@@ -118,7 +118,7 @@ export type WebSettingsPanelsProps = {
     loadPersonalMemoryItems: () => Promise<void> | void;
     startWorkspaceCreditTopupCheckout: (packId?: WorkspaceToolBalanceTopupPackId) => Promise<void> | void;
     personalMemoryUi: ReturnType<typeof useWebPersonalMemoryUiController>;
-    billingUi: UseWebBillingUiControllerResult<BuilderBillingStatus, WorkspaceCreditBalance, PendingPurchaseClaim>;
+    billingUi: UseWebBillingUiControllerResult<AccountCommerceStatus, WorkspaceCreditBalance, PendingPurchaseClaim>;
   };
   integrations: {
     session: SessionLike;
@@ -234,18 +234,18 @@ export function WebSettingsPanels(props: WebSettingsPanelsProps) {
     chatgptConnectionError: account.providerConnectionUi.chatgptConnectionError,
     chatgptConnectionSuccess: account.providerConnectionUi.chatgptConnectionSuccess,
     formatRelativeTime: account.formatRelativeTime,
-    builderBillingStatus: account.billingUi.builderBillingStatus,
+    accountCommerceStatus: account.billingUi.accountCommerceStatus,
     communities: account.communities,
     communityRoleById: account.communityRoleById,
     openOwnedCommunitySettings: account.openOwnedCommunitySettings,
     communityInitials: account.communityInitials,
-    startBuilderConnectOnboarding: account.startBuilderConnectOnboarding,
-    builderBillingError: account.billingUi.builderBillingError,
-    isStartingBuilderConnectOnboarding: account.billingUi.isStartingBuilderConnectOnboarding,
+    startStripeConnectOnboarding: account.startStripeConnectOnboarding,
+    accountCommerceError: account.billingUi.accountCommerceError,
+    isStartingStripeConnectOnboarding: account.billingUi.isStartingStripeConnectOnboarding,
     canUseDevTierOverride: account.canUseDevTierOverride,
-    isSettingDevBuilderTier: account.billingUi.isSettingDevBuilderTier,
-    setDevBuilderTier: account.setDevBuilderTier,
-    devBuilderTierError: account.billingUi.devBuilderTierError,
+    isSettingDevAccountTier: account.billingUi.isSettingDevAccountTier,
+    setDevAccountTier: account.setDevAccountTier,
+    devAccountTierError: account.billingUi.devAccountTierError,
     pendingPurchaseClaims: account.billingUi.pendingPurchaseClaims,
     isLoadingPendingPurchases: account.billingUi.isLoadingPendingPurchases,
     isRedeemingPendingPurchases: account.billingUi.isRedeemingPendingPurchases,
@@ -279,7 +279,7 @@ export function WebSettingsPanels(props: WebSettingsPanelsProps) {
     isLoadingUserMemorySettings: agent.isLoadingUserMemorySettings,
     saveUserMemorySettings: agent.saveUserMemorySettings,
     personalMemoryError: agent.personalMemoryUi.personalMemoryError,
-    builderBillingStatus: agent.billingUi.builderBillingStatus,
+    accountCommerceStatus: agent.billingUi.accountCommerceStatus,
     isLoadingPersonalMemory: agent.personalMemoryUi.isLoadingPersonalMemory,
     personalMemoryItems: agent.personalMemoryUi.personalMemoryItems,
     personalMemoryQuery: agent.personalMemoryUi.personalMemoryQuery,

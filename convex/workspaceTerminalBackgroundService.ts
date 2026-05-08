@@ -301,6 +301,10 @@ export async function ensureProjectBackgroundSandbox(params: {
         message === "credits_exhausted"
           ? "Workspace tools use paid sandbox compute, so they need tool balance before they run."
           : "Tool balance is unavailable for workspace tools.",
+      details: {
+        tool_kind: "workspace_tools",
+        required_credits: creditBudgetCredits,
+      },
     };
   }
 
@@ -491,6 +495,7 @@ export async function resolveProjectBackgroundSandboxIfReady(params: {
       status: number;
       code: string;
       message: string;
+      details?: Record<string, unknown>;
     }
 > {
   const project = await params.ctx.runQuery(api.projects.getCloudProjectById as any, {
@@ -532,6 +537,9 @@ export async function resolveProjectBackgroundSandboxIfReady(params: {
       status: 402,
       code: "workspace_credits_exhausted",
       message: "This workspace tool budget expired. Add balance to keep using workspace tools.",
+      details: {
+        tool_kind: "workspace_tools",
+      },
     };
   }
 
@@ -626,6 +634,7 @@ export async function resolveTerminalSandboxContext(params: {
       status: number;
       code: string;
       message: string;
+      details?: Record<string, unknown>;
     }
 > {
   const project = await params.ctx.runQuery(
@@ -647,6 +656,9 @@ export async function resolveTerminalSandboxContext(params: {
         status: 402,
         code: "workspace_credits_exhausted",
         message: "This workspace tool budget expired. Add balance to keep using workspace tools.",
+        details: {
+          tool_kind: "workspace_tools",
+        },
       };
     }
   }

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { formatBuilderTierLabel, isBuilderTierFree } from "../../../../shared/builderBilling";
-import type { BuilderBillingStatus } from "../../../../shared/builderBillingStatusGateway";
+import { formatAccountTierLabel, isAccountTierFree } from "../../../../shared/accountCommerce";
+import type { AccountCommerceStatus } from "../../../../shared/accountCommerceStatusGateway";
 import { CommunityAvatar } from "../../../../shared/CommunityAvatar";
 import { buildStripeConnectPresentation } from "../controllers/buildStripeConnectPresentation";
 import { StripeSetupButton } from "./StripeSetupButton";
@@ -53,21 +53,21 @@ type WebAccountSettingsSectionProps = {
   chatgptConnectionError: string | null;
   chatgptConnectionSuccess: string | null;
   formatRelativeTime: (value: string) => string;
-  builderBillingStatus: BuilderBillingStatus | null;
+  accountCommerceStatus: AccountCommerceStatus | null;
   communities: OwnedCommunity[];
   communityRoleById: Record<string, string>;
   openOwnedCommunitySettings: (communityId: string) => void;
   communityInitials: (value: string) => string;
-  startBuilderConnectOnboarding: (opts?: {
+  startStripeConnectOnboarding: (opts?: {
     context?: "account" | "community";
     communitySlug?: string | null;
   }) => Promise<void> | void;
-  builderBillingError: string | null;
-  isStartingBuilderConnectOnboarding: boolean;
+  accountCommerceError: string | null;
+  isStartingStripeConnectOnboarding: boolean;
   canUseDevTierOverride: boolean;
-  isSettingDevBuilderTier: boolean;
-  setDevBuilderTier: (tier: "free" | "architect") => Promise<void> | void;
-  devBuilderTierError: string | null;
+  isSettingDevAccountTier: boolean;
+  setDevAccountTier: (tier: "free" | "architect") => Promise<void> | void;
+  devAccountTierError: string | null;
   pendingPurchaseClaims: PendingPurchaseClaim[];
   isLoadingPendingPurchases: boolean;
   isRedeemingPendingPurchases: boolean;
@@ -119,18 +119,18 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
     chatgptConnectionError,
     chatgptConnectionSuccess,
     formatRelativeTime,
-    builderBillingStatus,
+    accountCommerceStatus,
     communities,
     communityRoleById,
     openOwnedCommunitySettings,
     communityInitials,
-    startBuilderConnectOnboarding,
-    builderBillingError,
-    isStartingBuilderConnectOnboarding,
+    startStripeConnectOnboarding,
+    accountCommerceError,
+    isStartingStripeConnectOnboarding,
     canUseDevTierOverride,
-    isSettingDevBuilderTier,
-    setDevBuilderTier,
-    devBuilderTierError,
+    isSettingDevAccountTier,
+    setDevAccountTier,
+    devAccountTierError,
     pendingPurchaseClaims,
     isLoadingPendingPurchases,
     isRedeemingPendingPurchases,
@@ -284,8 +284,8 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
       {session && (
         <div className="settings-section">
           {(() => {
-            const status = builderBillingStatus;
-            const tier = status?.builder_tier ?? "free";
+            const status = accountCommerceStatus;
+            const tier = status?.account_tier ?? "free";
             const ownedCount = communities.reduce(
               (acc, community) => acc + (communityRoleById[community.id] === "owner" ? 1 : 0),
               0,
@@ -294,11 +294,11 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
             const communityWord = (max > 0 ? max : ownedCount) === 1 ? "community" : "communities";
             const communitiesLabel =
               max > 0 ? `${ownedCount}/${max} owned ${communityWord}` : `${ownedCount} owned ${communityWord}`;
-            const tierLabel = formatBuilderTierLabel(tier);
-            const builderStatusLabel = isBuilderTierFree(tier) ? "Free account" : `${tierLabel} (internal)`;
+            const tierLabel = formatAccountTierLabel(tier);
+            const accountStatusLabel = isAccountTierFree(tier) ? "Free account" : `${tierLabel} (internal)`;
             const canMonetizeCommunities = Number(status?.platform_fee_bps ?? 0) > 0;
             const stripeConnectPresentation = buildStripeConnectPresentation({
-              builderBillingStatus: status,
+              accountCommerceStatus: status,
               surface: "account",
             });
             return (
@@ -307,7 +307,7 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
                   <div className="account-identity">
                     <span>Account status</span>
                     <strong>
-                      {builderStatusLabel} · {communitiesLabel}
+                      {accountStatusLabel} · {communitiesLabel}
                     </strong>
                   </div>
                   <div className="auth-actions">
@@ -324,12 +324,12 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
                       <span className="auth-status">{stripeConnectPresentation.statusMessage}</span>
                       <StripeSetupButton
                         label={
-                          isStartingBuilderConnectOnboarding
+                          isStartingStripeConnectOnboarding
                             ? "Opening…"
                             : stripeConnectPresentation.connectCtaLabel
                         }
-                        onClick={() => void startBuilderConnectOnboarding({ context: "account" })}
-                        disabled={isStartingBuilderConnectOnboarding}
+                        onClick={() => void startStripeConnectOnboarding({ context: "account" })}
+                        disabled={isStartingStripeConnectOnboarding}
                       />
                     </div>
                   </div>
@@ -351,17 +351,17 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
                       <div className="auth-actions">
                         <button
                           type="button"
-                          className={isBuilderTierFree(tier) ? "" : "secondary"}
-                          onClick={() => void setDevBuilderTier("free")}
-                          disabled={isSettingDevBuilderTier || isBuilderTierFree(tier)}
+                          className={isAccountTierFree(tier) ? "" : "secondary"}
+                          onClick={() => void setDevAccountTier("free")}
+                          disabled={isSettingDevAccountTier || isAccountTierFree(tier)}
                         >
                           Free
                         </button>
                         <button
                           type="button"
                           className={tier === "architect" ? "" : "secondary"}
-                          onClick={() => void setDevBuilderTier("architect")}
-                          disabled={isSettingDevBuilderTier || tier === "architect"}
+                          onClick={() => void setDevAccountTier("architect")}
+                          disabled={isSettingDevAccountTier || tier === "architect"}
                         >
                           Architect
                         </button>
@@ -372,8 +372,8 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
               </>
             );
           })()}
-          {builderBillingError && <div className="auth-error">{builderBillingError}</div>}
-          {devBuilderTierError && <div className="auth-error">{devBuilderTierError}</div>}
+          {accountCommerceError && <div className="auth-error">{accountCommerceError}</div>}
+          {devAccountTierError && <div className="auth-error">{devAccountTierError}</div>}
         </div>
       )}
 

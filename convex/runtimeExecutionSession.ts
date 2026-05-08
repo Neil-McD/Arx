@@ -141,6 +141,8 @@ function buildTerminalToolResultDetails(
     "output_tail",
     "code",
     "message",
+    "tool_kind",
+    "required_credits",
   ]) {
     const value = payload[key];
     if (value !== undefined && value !== null && value !== "") {
@@ -318,6 +320,7 @@ export function createPolyNetExecutionSession(params: {
     status: number;
     code: string;
     message: string;
+    details?: Record<string, unknown> | null;
   } | null = null;
   let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   let heartbeatInFlight = false;
@@ -482,6 +485,7 @@ export function createPolyNetExecutionSession(params: {
             status: workspaceSessionFailure.status,
             code: workspaceSessionFailure.code,
             message: workspaceSessionFailure.message,
+            details: workspaceSessionFailure.details ?? undefined,
           };
         }
         if (isWorkspaceCreditBudgetExpired(workspaceSession)) {
@@ -489,12 +493,16 @@ export function createPolyNetExecutionSession(params: {
             status: 402,
             code: "workspace_credits_exhausted",
             message: "This workspace tool budget expired. Add balance to keep using workspace tools.",
+            details: {
+              tool_kind: "workspace_tools",
+            },
           };
           return {
             ok: false as const,
             status: workspaceSessionFailure.status,
             code: workspaceSessionFailure.code,
             message: workspaceSessionFailure.message,
+            details: workspaceSessionFailure.details ?? undefined,
           };
         }
         return {
@@ -546,6 +554,7 @@ export function createPolyNetExecutionSession(params: {
           status: backgroundSandbox.status,
           code: backgroundSandbox.code,
           message: backgroundSandbox.message,
+          details: ((backgroundSandbox as { details?: Record<string, unknown> | null }).details ?? null),
         };
         return {
           ok: false as const,
@@ -596,6 +605,7 @@ export function createPolyNetExecutionSession(params: {
           status: 500,
           code: "workspace_session_persist_failed",
           message: "Failed to persist workspace session metadata.",
+          details: null,
         };
         return {
           ok: false as const,
@@ -1147,6 +1157,7 @@ export function createPolyNetExecutionSession(params: {
             ),
             errorCode: created.code,
             errorMessage: created.message,
+            details: (created as { details?: Record<string, unknown> | null }).details ?? null,
           };
         }
         activeWorkspaceSession = created.session;
@@ -1158,6 +1169,9 @@ export function createPolyNetExecutionSession(params: {
           outputText: "",
           errorCode: "workspace_credits_exhausted",
           errorMessage: "This workspace tool budget expired. Add balance to keep using workspace tools.",
+          details: {
+            tool_kind: "workspace_tools",
+          },
         };
       }
       const budgetSignal = buildWorkspaceCreditBudgetSignal(
@@ -1188,6 +1202,9 @@ export function createPolyNetExecutionSession(params: {
           outputText: "",
           errorCode: "workspace_credits_exhausted",
           errorMessage: "This workspace tool budget expired. Add balance to keep using workspace tools.",
+          details: {
+            tool_kind: "workspace_tools",
+          },
         };
       }
       const enriched = await enrichComputerUseToolResult({

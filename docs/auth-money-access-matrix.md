@@ -23,7 +23,7 @@ Scope: canonical web runtime, community monetization, provider-funded inference,
    - not a product-facing subscription tier
    - does not define the default monetization model
 
-The product-facing model is a free authenticated account plus tool balance. Legacy `builder` and `pro` tier labels may still exist in historical data, but runtime normalization treats them as free unless an internal `architect` override is present.
+The product-facing model is a free authenticated account plus tool balance. The active account-tier contract is `free` plus the internal/dev-only `architect` label.
 
 ## 1) Irreducible Contract
 
@@ -83,7 +83,17 @@ Active capability families are narrower than entitled capability families:
 
 Tool exposure is not free usage. Workspace tools, web research, and voice input must reserve and settle tool balance.
 
-## 4) Community Money Rules
+## 4) Prompt Context Rules
+
+Prompt injection is not tiered. Authenticated free and internal architect accounts use the same platform harness prompt stack.
+
+1. Community prompt context is injected only after backend community access validation.
+2. Workspace/project context is injected only when the thread has an active project context.
+3. Capability families decide active tools; account labels do not select a different prompt stack.
+4. Tool balance must not hide paid tools from the harness. Workspace tools, web research, and voice input can be requested with zero credits, then fail through the balance-required top-up flow when they execute.
+5. Prompt code must not branch on Builder, Pro, or product-facing paid-plan labels.
+
+## 5) Community Money Rules
 
 1. Free authenticated users can create one community.
 2. Community creation is limited by `max_communities`, not by requiring a new platform-plan checkout.
@@ -100,7 +110,7 @@ Tool exposure is not free usage. Workspace tools, web research, and voice input 
 9. The default platform fee for free-account community revenue is 10%.
 10. Legacy paid creator billing does not create or renew platform-plan access.
 
-## 5) Paid-Tool Balance Rules
+## 6) Paid-Tool Balance Rules
 
 Tool balance is the product-facing meter for premium tools. Internally it is tracked as credit units.
 
@@ -113,12 +123,13 @@ Tool balance is the product-facing meter for premium tools. Internally it is tra
 7. Failed tool calls should refund reserved balance when no paid tool result was delivered.
 8. Expired reservations are reconciled by scheduled backend cleanup.
 
-## 6) Canonical Files
+## 7) Canonical Files
 
 - Gate engine: `/Users/neilmcdevitt/code/arx/shared/canonicalGateEngine.ts`
 - Gate parity matrix: `/Users/neilmcdevitt/code/arx/shared/contracts/gate_parity_matrix_v1.json`
+- Prompt/context projection: `/Users/neilmcdevitt/code/arx/shared/runtimePrompt.ts`
 - Billing/product truth: `/Users/neilmcdevitt/code/arx/docs/product/reference/billing-entitlements.md`
-- Builder commerce and Stripe Connect: `/Users/neilmcdevitt/code/arx/convex/builderCommerce.ts`
+- Creator commerce and Stripe Connect: `/Users/neilmcdevitt/code/arx/convex/creatorCommerce.ts`
 - Community checkout: `/Users/neilmcdevitt/code/arx/convex/communityCommerce.ts`
 - Stripe webhook handling: `/Users/neilmcdevitt/code/arx/convex/httpBilling.ts`
 - Tool-balance pricing: `/Users/neilmcdevitt/code/arx/shared/workspaceCredits.ts`
@@ -127,7 +138,7 @@ Tool balance is the product-facing meter for premium tools. Internally it is tra
 - Web research charge path: `/Users/neilmcdevitt/code/arx/convex/httpDaytona.ts`
 - Voice charge path: `/Users/neilmcdevitt/code/arx/convex/httpVoice.ts`
 
-## 7) Drift Policy
+## 8) Drift Policy
 
 Any change to tier semantics, runtime lane routing, paid community checkout, Stripe Connect payout authority, or paid-tool balance must:
 
@@ -136,4 +147,5 @@ Any change to tier semantics, runtime lane routing, paid community checkout, Str
 3. Keep `npm run check:gate-parity` green.
 4. Keep `npm run check:no-builder-plan-infra` green.
 5. Keep `npm run check:workspace-credit-accounting-proof` green.
-6. Keep `npm run check:product-docs-index-proof` green.
+6. Keep `npm run check:platform-harness-prompt-contract` green.
+7. Keep `npm run check:product-docs-index-proof` green.

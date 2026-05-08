@@ -1,9 +1,9 @@
 import { useEffect, useRef, type Dispatch, type SetStateAction } from "react";
 import {
-  clearBuilderConnectQueryParams,
-  parseBuilderConnectReturn,
-  type BuilderConnectReturn,
-} from "../../../../shared/builderBilling";
+  clearStripeConnectQueryParams,
+  parseStripeConnectReturn,
+  type StripeConnectReturn,
+} from "../../../../shared/accountCommerce";
 import type { AppPage, AppView, CommunityTab, DiscoverTab, SettingsPage } from "../../../../shared/appShellNavigation";
 import type { PublicRoute } from "../../../../shared/webAppRouteState";
 
@@ -33,7 +33,7 @@ export function useWebPathRouteLifecycle(params: {
   docsSlug: string | null;
   activeThreadId: string | null;
   applyLocationToState: () => void;
-  setBuilderConnectReturn: Dispatch<SetStateAction<BuilderConnectReturn | null>>;
+  setStripeConnectReturn: Dispatch<SetStateAction<StripeConnectReturn | null>>;
   buildAppRoutePath: (state: {
     page: AppPage;
     view: AppView;
@@ -52,11 +52,11 @@ export function useWebPathRouteLifecycle(params: {
 
   useEffect(() => {
     const url = new URL(window.location.href);
-    const connectReturn = parseBuilderConnectReturn(url.searchParams);
+    const connectReturn = parseStripeConnectReturn(url.searchParams);
     if (!connectReturn) return;
 
-    params.setBuilderConnectReturn(connectReturn);
-    clearBuilderConnectQueryParams(url.searchParams);
+    params.setStripeConnectReturn(connectReturn);
+    clearStripeConnectQueryParams(url.searchParams);
 
     window.history.replaceState({}, "", `${url.pathname}${url.search}`);
     paramsRef.current.applyLocationToState();

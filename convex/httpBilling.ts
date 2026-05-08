@@ -672,7 +672,7 @@ export function registerRuntimeBillingRoutes(
           const nowMs =
             Number(event.created ?? 0) > 0 ? Number(event.created) * 1000 : Date.now();
           const existingConnectAccount = await (ctx as any).runQuery(
-            internal.builderCommerce.getUserStripeConnectAccountByStripeAccountIdInternal as any,
+            internal.creatorCommerce.getUserStripeConnectAccountByStripeAccountIdInternal as any,
             {
               stripeAccountId: account.id,
             },
@@ -689,7 +689,7 @@ export function registerRuntimeBillingRoutes(
           }
           const snapshot = buildStripeConnectAccountSnapshot(account, { readyAtMs: nowMs });
           await (ctx as any).runMutation(
-            internal.builderCommerce.syncUserStripeConnectAccountInternal as any,
+            internal.creatorCommerce.syncUserStripeConnectAccountInternal as any,
             {
               userId,
               stripeAccountId: snapshot.stripeAccountId,

@@ -4,13 +4,13 @@ import {
 
 export type AccessSurface = "web";
 export type AccessAuthState = "anonymous" | "authenticated";
-export type BuilderTier = "free" | "architect" | "unknown";
+export type AccountTier = "free" | "architect" | "unknown";
 export type ThreadMode = "single_guest" | "multi_cloud";
 
 export type UserAccessPolicy = {
   surface: AccessSurface;
   authState: AccessAuthState;
-  tier: BuilderTier;
+  tier: AccountTier;
   threadMode: ThreadMode;
   allowMultipleThreads: boolean;
   allowGuestInference: boolean;
@@ -26,7 +26,7 @@ export type UserAccessPolicy = {
 export function resolveUserAccessPolicy(input: {
   surface: "web";
   authState: AccessAuthState;
-  builderTier?: string | null;
+  accountTier?: string | null;
   userEmail?: string | null;
   hasUserChatGptConnection?: boolean;
 }): UserAccessPolicy {
@@ -36,14 +36,14 @@ export function resolveUserAccessPolicy(input: {
 function resolveUserAccessPolicyViaCanonicalGate(input: {
   surface: "web";
   authState: AccessAuthState;
-  builderTier?: string | null;
+  accountTier?: string | null;
   userEmail?: string | null;
   hasUserChatGptConnection?: boolean;
 }): UserAccessPolicy {
   const policy = resolveCanonicalGatePolicy({
     surface: input.surface,
     authState: input.authState,
-    tier: input.builderTier ?? null,
+    tier: input.accountTier ?? null,
     executionMode: "cloud",
     requestedFundingSource: "demo_public",
   });
@@ -52,7 +52,7 @@ function resolveUserAccessPolicyViaCanonicalGate(input: {
   const isAnonymous = effectiveTier === "anon_free";
   const isAuthenticated = !isAnonymous;
 
-  const tier: BuilderTier = isAnonymous
+  const tier: AccountTier = isAnonymous
     ? "unknown"
     : effectiveTier === "architect"
       ? effectiveTier

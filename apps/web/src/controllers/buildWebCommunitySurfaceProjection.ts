@@ -29,12 +29,12 @@ type BuildWebCommunitySurfaceProjectionParams = {
   canManageCommunitySettings: WebCommunitySecondaryPanelsProps["settings"]["canManageCommunitySettings"];
   canDeleteActiveCommunity: WebCommunitySecondaryPanelsProps["settings"]["canDeleteCommunity"];
   requireSignIn: WebCommunitySecondaryPanelsProps["settings"]["requireSignIn"];
-  builderBillingStatus: WebCommunitySecondaryPanelsProps["settings"]["builderBillingStatus"];
-  builderBillingError: WebCommunitySecondaryPanelsProps["settings"]["builderBillingError"];
-  startBuilderConnectOnboarding:
-    WebCommunitySecondaryPanelsProps["settings"]["startBuilderConnectOnboarding"];
-  isStartingBuilderConnectOnboarding:
-    WebCommunitySecondaryPanelsProps["settings"]["isStartingBuilderConnectOnboarding"];
+  accountCommerceStatus: WebCommunitySecondaryPanelsProps["settings"]["accountCommerceStatus"];
+  accountCommerceError: WebCommunitySecondaryPanelsProps["settings"]["accountCommerceError"];
+  startStripeConnectOnboarding:
+    WebCommunitySecondaryPanelsProps["settings"]["startStripeConnectOnboarding"];
+  isStartingStripeConnectOnboarding:
+    WebCommunitySecondaryPanelsProps["settings"]["isStartingStripeConnectOnboarding"];
   communityIntegrations:
     WebCommunitySecondaryPanelsProps["settings"]["communityIntegrations"];
   settingsState: WebCommunitySecondaryPanelsProps["settings"]["state"];
@@ -163,10 +163,10 @@ export function buildWebCommunitySurfaceProjection(
       canManageCommunitySettings: params.canManageCommunitySettings,
       canDeleteCommunity: params.canDeleteActiveCommunity,
       requireSignIn: params.requireSignIn,
-      builderBillingStatus: params.builderBillingStatus,
-      builderBillingError: params.builderBillingError,
-      startBuilderConnectOnboarding: params.startBuilderConnectOnboarding,
-      isStartingBuilderConnectOnboarding: params.isStartingBuilderConnectOnboarding,
+      accountCommerceStatus: params.accountCommerceStatus,
+      accountCommerceError: params.accountCommerceError,
+      startStripeConnectOnboarding: params.startStripeConnectOnboarding,
+      isStartingStripeConnectOnboarding: params.isStartingStripeConnectOnboarding,
       communityIntegrations: params.communityIntegrations,
       state: params.settingsState,
       actions: params.settingsActions,

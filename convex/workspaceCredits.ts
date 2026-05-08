@@ -2,7 +2,7 @@ import { internal } from "./_generated/api";
 import { action, internalMutation, internalQuery, query } from "./_generated/server";
 import { v } from "convex/values";
 import {
-  BUILDER_INCLUDED_WORKSPACE_CREDITS,
+  DEFAULT_INCLUDED_TOOL_CREDITS,
   CREDIT_RESERVATION_EXPIRY_MS,
   estimateDaytonaWorkspaceComputeUsd,
   formatWorkspaceToolBalanceUsdFromCredits,
@@ -173,7 +173,7 @@ export const upsertWorkspaceCreditBalanceInternal = internalMutation({
       includedCreditsBalance:
         typeof args.includedCreditsBalance === "number"
           ? roundCredits(args.includedCreditsBalance)
-          : existing?.includedCreditsBalance ?? BUILDER_INCLUDED_WORKSPACE_CREDITS,
+          : existing?.includedCreditsBalance ?? DEFAULT_INCLUDED_TOOL_CREDITS,
       purchasedCreditsBalance:
         typeof args.purchasedCreditsBalance === "number"
           ? roundCredits(args.purchasedCreditsBalance)
@@ -181,7 +181,7 @@ export const upsertWorkspaceCreditBalanceInternal = internalMutation({
       includedCycleCredits:
         typeof args.includedCycleCredits === "number"
           ? roundCredits(args.includedCycleCredits)
-          : existing?.includedCycleCredits ?? BUILDER_INCLUDED_WORKSPACE_CREDITS,
+          : existing?.includedCycleCredits ?? DEFAULT_INCLUDED_TOOL_CREDITS,
       includedCycleStartedAt:
         typeof args.includedCycleStartedAt === "number"
           ? args.includedCycleStartedAt

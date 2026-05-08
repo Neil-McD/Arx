@@ -81,6 +81,31 @@ assert.match(
   /row\.mode === "workspace_credit_topup"/,
   "operator monetization should treat credits as the paid-tool checkout signal",
 );
+assert.match(
+  operatorTypes,
+  /businessKpis\?:/,
+  "operator monetization should expose the canonical business KPI contract",
+);
+assert.match(
+  operatorTypes,
+  /activePayingCustomers: number/,
+  "operator business KPIs should expose active paying users",
+);
+assert.match(
+  operatorTypes,
+  /averageRecordedLifetimeValue: OperatorMoneyMetric \| null/,
+  "operator business KPIs should label first-party checkout LTV explicitly",
+);
+assert.match(
+  operatorIntelligence,
+  /availability: "not_configured"/,
+  "operator visitor KPIs must stay unavailable until visitor ingestion is wired",
+);
+assert.match(
+  operatorIntelligence,
+  /platformNetRevenueAvailability: "not_instrumented"/,
+  "operator platform net revenue must not be fabricated before fee attribution exists",
+);
 assert.doesNotMatch(
   operatorIntelligence,
   /builderPlanCheckoutStarts|builderPlanCheckoutCompletions/,

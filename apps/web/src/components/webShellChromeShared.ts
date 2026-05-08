@@ -85,9 +85,9 @@ export type WebCommunityShellProps = {
   draggingCommunityId: string | null;
   setCommunityRailListElement: (node: HTMLDivElement | null) => void;
   getCommunityRailItemBindings: (communityId: string) => CommunityRailBindings;
-  onOpenBuilderInfo: () => void;
-  builderRailCtaLabel: string;
-  builderRailCtaTitle: string;
+  onOpenCommunityCreateCta: () => void;
+  communityCreateCtaLabel: string;
+  communityCreateCtaTitle: string;
   activeView: AppView;
   onToggleWorkspaceSettings: () => void;
 };

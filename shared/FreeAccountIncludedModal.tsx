@@ -1,21 +1,21 @@
-type BuilderIncludedModalProps = {
+type FreeAccountIncludedModalProps = {
   isOpen: boolean;
-  builderBillingError: string | null;
+  accountAccessError: string | null;
   onClose: () => void;
 };
 
-export function BuilderIncludedModal({
+export function FreeAccountIncludedModal({
   isOpen,
-  builderBillingError,
+  accountAccessError,
   onClose,
-}: BuilderIncludedModalProps) {
+}: FreeAccountIncludedModalProps) {
   if (!isOpen) return null;
 
-  const builderInfoLead = "Free accounts can create one community. Tool balance covers workspace tools, web research, and voice input.";
+  const accountInfoLead = "Free accounts can create one community. Tool balance covers workspace tools, web research, and voice input.";
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal modal-builder-info" onClick={(event) => event.stopPropagation()}>
+      <div className="modal modal-account-info" onClick={(event) => event.stopPropagation()}>
         <div className="modal-header">
           <div className="modal-title">Free account</div>
           <button className="modal-close" type="button" onClick={onClose} title="Close">
@@ -23,10 +23,10 @@ export function BuilderIncludedModal({
           </button>
         </div>
         <div className="modal-body">
-          <div className="builder-info-copy">
-            <div className="builder-info-lead">{builderInfoLead}</div>
+          <div className="account-info-copy">
+            <div className="account-info-lead">{accountInfoLead}</div>
           </div>
-          {builderBillingError && <div className="auth-error">{builderBillingError}</div>}
+          {accountAccessError && <div className="auth-error">{accountAccessError}</div>}
           <div className="plan-grid">
             <div className="plan-card free current">
               <div className="plan-card-header">
@@ -44,7 +44,7 @@ export function BuilderIncludedModal({
               </ul>
             </div>
 
-            <div className="plan-card builder">
+            <div className="plan-card tool-balance">
               <div className="plan-card-header">
                 <div className="plan-name">Tool balance</div>
               </div>

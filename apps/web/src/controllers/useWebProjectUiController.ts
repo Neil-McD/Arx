@@ -76,12 +76,12 @@ type UseWebProjectUiControllerParams<TSession> = {
   onStartDraftInProject: (projectId: string) => void;
 };
 
-const BUILDER_MAX_PROJECTS = 5;
+const ACCOUNT_MAX_PROJECTS = 5;
 const PROJECT_IMPORT_MAX_BYTES = 150 * 1024 * 1024;
 const PROJECT_IMPORT_MAX_FILES = 25_000;
 const PROJECT_IMPORT_MAX_EXTRACTED_BYTES = 500 * 1024 * 1024;
 const PROJECT_ERROR_MESSAGE_OPTIONS = {
-  maxProjects: BUILDER_MAX_PROJECTS,
+  maxProjects: ACCOUNT_MAX_PROJECTS,
   maxImportFiles: PROJECT_IMPORT_MAX_FILES,
   maxExtractedBytes: PROJECT_IMPORT_MAX_EXTRACTED_BYTES,
 } as const;
@@ -179,7 +179,7 @@ export function useWebProjectUiController<TSession>(
   const [deleteProjectError, setDeleteProjectError] = useState<string | null>(null);
 
   const canCreateAdditionalCloudProjects = Boolean(session);
-  const projectQuotaReached = cloudProjects.length >= BUILDER_MAX_PROJECTS;
+  const projectQuotaReached = cloudProjects.length >= ACCOUNT_MAX_PROJECTS;
   const deletingProject = deletingProjectId
     ? cloudProjects.find((project) => project.id === deletingProjectId) ?? null
     : null;
@@ -256,7 +256,7 @@ export function useWebProjectUiController<TSession>(
     }
     const usableSession = await ensureSession(session);
     if (!usableSession) return;
-    if (cloudProjects.length >= BUILDER_MAX_PROJECTS || isCreatingProject) {
+    if (cloudProjects.length >= ACCOUNT_MAX_PROJECTS || isCreatingProject) {
       return;
     }
     const importFileError = getProjectImportFileError(createProjectImportFile);
@@ -439,7 +439,7 @@ export function useWebProjectUiController<TSession>(
   ]);
 
   return {
-    maxProjects: BUILDER_MAX_PROJECTS,
+    maxProjects: ACCOUNT_MAX_PROJECTS,
     canCreateAdditionalCloudProjects,
     projectQuotaReached,
     isCreatingProject,

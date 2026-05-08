@@ -3,7 +3,7 @@ import { WebCreateCommunityModal } from "./WebCreateCommunityModal";
 import { WebDeleteCommunityModal } from "./WebDeleteCommunityModal";
 
 type WebCommunityModalHostProps = {
-  modalHostProps: WebCommunityModalHostPropsShape<{ id: string }, { builder_tier: string; max_communities: number }>;
+  modalHostProps: WebCommunityModalHostPropsShape<{ id: string }, { account_tier: string; max_communities: number }>;
 };
 
 export function WebCommunityModalHost(props: WebCommunityModalHostProps) {
@@ -17,7 +17,7 @@ export function WebCommunityModalHost(props: WebCommunityModalHostProps) {
           hasSession={createModal.hasSession}
           communities={createModal.communities}
           communityRoleById={createModal.communityRoleById}
-          builderBillingStatus={createModal.builderBillingStatus}
+          accountCommerceStatus={createModal.accountCommerceStatus}
           isCreateBannerDragOver={createModal.isCreateBannerDragOver}
           isCreateAvatarDragOver={createModal.isCreateAvatarDragOver}
           createCommunityBannerUrl={createModal.createCommunityBannerUrl}
@@ -27,7 +27,7 @@ export function WebCommunityModalHost(props: WebCommunityModalHostProps) {
           createCommunitySlug={createModal.createCommunitySlug}
           createCommunityVisibility={createModal.createCommunityVisibility}
           createCommunityError={createModal.createCommunityError}
-          builderBillingError={createModal.builderBillingError}
+          accountCommerceError={createModal.accountCommerceError}
           isCreatingCommunity={createModal.isCreatingCommunity}
           communityInitials={createModal.communityInitials}
           onClose={createModal.onClose}

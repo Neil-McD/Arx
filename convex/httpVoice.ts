@@ -490,8 +490,10 @@ export function registerRuntimeVoiceRoutes(args: RegisterRuntimeVoiceRoutesArgs)
           const message = error instanceof Error ? error.message : String(error);
           return jsonResponse(req, 402, {
             ok: false,
-            error: message === "credits_exhausted" ? "credits_exhausted" : "credits_unavailable",
-            code: message === "credits_exhausted" ? "credits_exhausted" : "credits_unavailable",
+            error: message === "credits_exhausted" ? "workspace_credits_exhausted" : "workspace_credits_unavailable",
+            code: message === "credits_exhausted" ? "workspace_credits_exhausted" : "workspace_credits_unavailable",
+            tool_kind: "voice_input",
+            required_credits: voiceCredits,
             message:
               message === "credits_exhausted"
                 ? "Add balance to use voice input."

@@ -257,17 +257,17 @@ export const resolvePublicCommunityCheckoutConfigInternal = internalQuery({
     });
     if (!pricePoint) throw new Error("paid_plan_required");
     const ownerBilling = (await ctx.runQuery(
-      internal.auth.getBuilderCommerceAccessForUserInternal as any,
+      internal.auth.getAccountCommerceAccessForUserInternal as any,
       {
         userId: community.ownerId,
         nowMs,
       },
-    )) as { builder_tier?: unknown; platform_fee_bps?: unknown; has_payouts?: unknown } | null;
+    )) as { account_tier?: unknown; platform_fee_bps?: unknown; has_payouts?: unknown } | null;
     if (ownerBilling?.has_payouts !== true) {
       throw new Error("community_checkout_unavailable");
     }
     const connectAccount = (await ctx.runQuery(
-      internal.builderCommerce.getUserStripeConnectAccountInternal as any,
+      internal.creatorCommerce.getUserStripeConnectAccountInternal as any,
       {
         userId: community.ownerId,
       },

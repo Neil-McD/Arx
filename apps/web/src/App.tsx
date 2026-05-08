@@ -50,7 +50,7 @@ import { normalizeCommunityFunnelConfig } from "../../../shared/communityFunnel"
 import {
   buildCsv, dateKeyLocal, formatChatTime, formatCount, formatMoneyBaseUnits, formatPercent, formatRelativeTimeFromIso as formatRelativeTime, parseContentRangeTotal, } from "../../../shared/contentFormatting";
 import {
-  formatBuilderTierLabel, isBuilderTierFree, normalizeBuilderTierForUi, formatPlanPrice, formatSubscriptionPrice, type BuilderConnectReturn, } from "../../../shared/builderBilling";
+  formatAccountTierLabel, isAccountTierFree, formatPlanPrice, formatSubscriptionPrice, type StripeConnectReturn, } from "../../../shared/accountCommerce";
 import { canUseCreatorDevTierOverride } from "../../../shared/devTierOverride";
 import { useCheckoutFinalizeController } from "../../../shared/useCheckoutFinalizeController";
 import {
@@ -310,23 +310,23 @@ import {
   formatModelAttributionLabel,
 } from "../../../shared/modelAttributionUi";
 import {
-  loadBuilderBillingStatusCanonical,
-  setDevBuilderTierCanonical,
-  type BuilderBillingStatus,
-} from "../../../shared/builderBillingStatusGateway";
-import { startCloudWorkspaceCreditTopupCheckout } from "../../../shared/cloudBuilderBillingGateway";
+  loadAccountCommerceStatusCanonical,
+  setDevAccountTierCanonical,
+  type AccountCommerceStatus,
+} from "../../../shared/accountCommerceStatusGateway";
+import { startCloudWorkspaceCreditTopupCheckout } from "../../../shared/cloudAccountCommerceGateway";
 import { loadOperatorAccessCanonical } from "../../../shared/cloudOperatorDashboardGateway";
 import type { OperatorAccessSnapshot } from "../../../shared/operatorTypes";
 import { loadWorkspaceCreditBalanceCanonical, type WorkspaceCreditBalance } from "../../../shared/workspaceCreditsGateway";
 import { formatUsdCents, toEpochSeconds } from "../../../shared/displayFormatting";
-import type { WorkspaceToolBalanceTopupPackId } from "../../../shared/workspaceCredits";
+import type { PaidToolKind, WorkspaceToolBalanceTopupPackId } from "../../../shared/workspaceCredits";
 import {
   deriveCommunityFunnelAction,
   deriveCommunityMembersJoinReviewMode,
   type CommunityFunnelAction,
   type CommunityMembersJoinReviewMode,
 } from "./communityJoinPolicy";
-import { useWebBuilderBillingActions } from "./controllers/useWebBuilderBillingActions";
+import { useWebAccountCommerceActions } from "./controllers/useWebAccountCommerceActions";
 import { useWebCommerceAffiliateActions } from "./controllers/useWebCommerceAffiliateActions";
 import { useWebPublicFunnelActions } from "./controllers/useWebPublicFunnelActions";
 import { useWebCommunityChatPreloadLifecycle } from "./controllers/useWebCommunityChatPreloadLifecycle";
@@ -896,7 +896,7 @@ export default function App() {
       detail: { phase },
     });
     try {
-      await loadBuilderBillingStatus(session);
+      await loadAccountCommerceStatus(session);
       emitWorkspaceEvent({
         scope: "lifecycle",
         name: "billing_status_load",
@@ -1456,7 +1456,7 @@ export default function App() {
     MyCommunityJoinRequest
   >();
   const billingUi = useWebBillingUiController<
-    BuilderBillingStatus,
+    AccountCommerceStatus,
     WorkspaceCreditBalance,
     PendingPurchaseClaim
   >();
@@ -1471,11 +1471,11 @@ export default function App() {
     setIsRedeemingPendingPurchases,
     pendingPurchasesSuccess,
     setPendingPurchasesSuccess,
-    builderBillingStatus,
-    setBuilderBillingStatus,
-    setIsLoadingBuilderBilling,
-    builderBillingError,
-    setBuilderBillingError,
+    accountCommerceStatus,
+    setAccountCommerceStatus,
+    setIsLoadingAccountCommerce,
+    accountCommerceError,
+    setAccountCommerceError,
     workspaceCreditBalance,
     setWorkspaceCreditBalance,
     isLoadingWorkspaceCreditBalance,
@@ -1486,12 +1486,12 @@ export default function App() {
     setIsStartingWorkspaceCreditTopupCheckout,
     workspaceCreditTopupError,
     setWorkspaceCreditTopupError,
-    isSettingDevBuilderTier,
-    setIsSettingDevBuilderTier,
-    devBuilderTierError,
-    setDevBuilderTierError,
-    isStartingBuilderConnectOnboarding,
-    setIsStartingBuilderConnectOnboarding,
+    isSettingDevAccountTier,
+    setIsSettingDevAccountTier,
+    devAccountTierError,
+    setDevAccountTierError,
+    isStartingStripeConnectOnboarding,
+    setIsStartingStripeConnectOnboarding,
     checkoutStatus,
     setCheckoutStatus,
     checkoutError,
@@ -1510,8 +1510,8 @@ export default function App() {
   const [, setIsPendingPurchasesBannerDismissed] = useState(false);
   const workspaceCreditLoadRequestIdRef = useRef(0);
   const lastTrackedAuthSessionUserIdRef = useRef<string | null>(null);
-  const [isBuilderInfoOpen, setIsBuilderInfoOpen] = useState(false);
-  const [builderConnectReturn, setBuilderConnectReturn] = useState<BuilderConnectReturn | null>(null);
+  const [isFreeAccountInfoOpen, setIsFreeAccountInfoOpen] = useState(false);
+  const [stripeConnectReturn, setStripeConnectReturn] = useState<StripeConnectReturn | null>(null);
   const lastAutoRedeemPendingPurchasesUserIdRef = useRef<string | null>(null);
   const autoRedeemPendingPurchasesAttemptRef = useRef(0);
   const autoRedeemPendingPurchasesTimeoutRef = useRef<number | null>(null);
@@ -2812,6 +2812,8 @@ export default function App() {
     threadId: string;
     mode: "respond" | "regenerate";
     message: string | null;
+    toolKind?: PaidToolKind | null;
+    requiredCredits?: number | null;
   } | null>(null);
   const [isInferenceIssueModalRunning] = useState(false);
   const [userMemorySettings, setUserMemorySettings] = useState<UserMemorySettings>({
@@ -3841,7 +3843,7 @@ export default function App() {
     docsSlug: activePage === "docs" ? selectedProductDocSlug : null,
     activeThreadId,
     applyLocationToState,
-    setBuilderConnectReturn,
+    setStripeConnectReturn,
     buildAppRoutePath: (state) => applyShellVariantToAppPath(buildAppRoutePath(state) ?? "", shellVariant) || null,
   });
 
@@ -4637,27 +4639,27 @@ export default function App() {
     navigateToUrl: (url) => window.location.assign(url),
   });
 
-  const { startBuilderConnectOnboarding } =
-    useWebBuilderBillingActions({
+  const { startStripeConnectOnboarding } =
+    useWebAccountCommerceActions({
       getSession: () => sessionRef.current,
       ensureSession: ensureUsableAuthSession,
       requireSignIn: () => requireSignIn(),
       onConnectOnboardingStarted: ({ context, communitySlug }) => {
-        captureProductAnalyticsEvent("builder stripe connect onboarding started", {
+        captureProductAnalyticsEvent("stripe connect onboarding started", {
           billing_context: context,
           community_slug: communitySlug,
           surface: context === "community" ? "community_settings" : "account_settings",
         });
       },
-      setBuilderBillingError,
-      setIsStartingBuilderConnectOnboarding,
+      setAccountCommerceError,
+      setIsStartingStripeConnectOnboarding,
       navigateToUrl: (url) => window.location.assign(url),
     });
 
   const {
     redeemPurchaseClaim,
     loadPendingPurchaseClaims,
-    loadBuilderBillingStatus,
+    loadAccountCommerceStatus,
     redeemPendingPurchases,
   } = useWebCommerceAffiliateActions({
     getSession: () => sessionRef.current,
@@ -4678,33 +4680,33 @@ export default function App() {
     setPendingPurchaseClaims,
     setIsRedeemingPendingPurchases,
     setPendingPurchasesSuccess,
-    setIsLoadingBuilderBilling,
-    setBuilderBillingError,
-    setBuilderBillingStatus,
+    setIsLoadingAccountCommerce,
+    setAccountCommerceError,
+    setAccountCommerceStatus,
     redeemPendingPurchasesInFlightRef,
   });
 
-  async function setDevBuilderTier(tier: "free" | "architect"): Promise<void> {
+  async function setDevAccountTier(tier: "free" | "architect"): Promise<void> {
     const session = await ensureUsableAuthSession();
     if (!session || !canUseDevTierOverride) return;
-    setIsSettingDevBuilderTier(true);
-    setDevBuilderTierError(null);
+    setIsSettingDevAccountTier(true);
+    setDevAccountTierError(null);
     try {
-      await setDevBuilderTierCanonical({
+      await setDevAccountTierCanonical({
         session,
         tier,
       });
-      await loadBuilderBillingStatus(session);
+      await loadAccountCommerceStatus(session);
     } catch (error) {
       const message =
         typeof error === "string"
           ? error
           : error instanceof Error
             ? error.message
-            : "Failed to set dev builder tier.";
-      setDevBuilderTierError(message);
+            : "Failed to set dev account tier.";
+      setDevAccountTierError(message);
     } finally {
-      setIsSettingDevBuilderTier(false);
+      setIsSettingDevAccountTier(false);
     }
   }
 
@@ -4757,7 +4759,7 @@ export default function App() {
   const communityUi = useWebCommunityUiController<
     AuthSession,
     CommunityRecord,
-    BuilderBillingStatus,
+    AccountCommerceStatus,
     AppPage,
     AppView,
     CommunityTab
@@ -4765,12 +4767,12 @@ export default function App() {
     ...authenticatedSessionArg,
     communities,
     communityRoleById,
-    builderBillingStatus,
-    builderBillingError,
+    accountCommerceStatus,
+    accountCommerceError,
     activeCommunity,
     activeCommunityId,
     communityInitials,
-    loadBuilderBillingStatus,
+    loadAccountCommerceStatus,
     persistCreateCommunityIntent,
     onPrimaryUnauthenticated: (draft) => {
       requireSignIn({ reason: "create_community", payload: { draft } });
@@ -4870,24 +4872,24 @@ export default function App() {
     lastAutoRedeemPendingPurchasesUserIdRef,
     autoRedeemPendingPurchasesAttemptRef,
     autoRedeemPendingPurchasesTimeoutRef,
-    setBuilderBillingStatus,
-    setBuilderBillingError,
-    setIsLoadingBuilderBilling,
+    setAccountCommerceStatus,
+    setAccountCommerceError,
+    setIsLoadingAccountCommerce,
     getAuthUid: getAuthUid,
     redeemPurchaseClaim,
     redeemPendingPurchases,
     loadPendingPurchaseClaims,
-    loadBuilderBillingStatus,
+    loadAccountCommerceStatus,
     joinPublicCommunity,
   });
 
   useWebPostAuthStripeConnectLifecycle({
     session,
-    builderConnectReturn,
-    clearBuilderConnectReturn: () => setBuilderConnectReturn(null),
-    setBuilderBillingError,
-    loadBuilderBillingStatus,
-    startBuilderConnectOnboarding,
+    stripeConnectReturn,
+    clearStripeConnectReturn: () => setStripeConnectReturn(null),
+    setAccountCommerceError,
+    loadAccountCommerceStatus,
+    startStripeConnectOnboarding,
   });
 
   const { retryCheckoutFinalize } = useCheckoutFinalizeController({
@@ -5428,8 +5430,8 @@ export default function App() {
     modelToggles: platformModelToggles,
     userMemoryRememberEnabled:
       userMemorySettings.memory_mode !== "off" && userMemorySettings.remember_intent_enabled !== false,
-    builderTier: builderBillingStatus?.builder_tier ?? null,
-    loadBuilderBillingStatus,
+    accountTier: accountCommerceStatus?.account_tier ?? null,
+    loadAccountCommerceStatus,
     hasUserKeyConnection,
     hasUserChatgptConnection,
     guestThreadId: GUEST_THREAD_ID,
@@ -5449,8 +5451,8 @@ export default function App() {
     setThreadMessages,
     setThreads,
     setActiveModelId,
-    setBuilderBillingError,
-    setIsBuilderInfoOpen,
+    setAccountCommerceError,
+    setIsFreeAccountInfoOpen,
   });
 
   const { resetGuestThread: resetGuestThreadBase, exportThreadsCsv, exportMessagesCsv, exportMemoryCsv } =
@@ -5510,10 +5512,6 @@ export default function App() {
     setAuthError,
   });
 
-  const normalizedBuilderTier = useMemo<"free" | "architect">(
-    () => normalizeBuilderTierForUi(builderBillingStatus?.builder_tier),
-    [builderBillingStatus?.builder_tier],
-  );
   const canUseDevTierOverride = useMemo(
     () =>
       canUseCreatorDevTierOverride({
@@ -5528,10 +5526,10 @@ export default function App() {
       resolveUserAccessPolicy({
         surface: "web",
         authState: session ? "authenticated" : "anonymous",
-        builderTier: builderBillingStatus?.builder_tier ?? null,
+        accountTier: accountCommerceStatus?.account_tier ?? null,
         userEmail: session?.user?.email ?? null,
       }),
-    [session, builderBillingStatus?.builder_tier],
+    [session, accountCommerceStatus?.account_tier],
   );
 
   const activeCommunityFunnelAction = useMemo<CommunityFunnelAction | null>(() => {
@@ -5553,15 +5551,16 @@ export default function App() {
     activeCommunity,
     activeCommunityFunnelAction,
     canPostMessagesActiveCommunity,
-    normalizedBuilderTier,
     requireSignIn: () => requireSignIn(),
     showAppToastMessage,
-    onToolBalanceRequired: (_surface, message) => {
+    onToolBalanceRequired: (_surface, message, details) => {
       setInferenceIssueModal({
         reason: "workspace_credits",
         threadId: activeThreadId ?? GUEST_THREAD_ID,
         mode: "respond",
         message: message.trim() || null,
+        toolKind: details?.toolKind ?? "voice_input",
+        requiredCredits: details?.requiredCredits ?? null,
       });
     },
     appendWorkspaceTranscript: (transcript) => workspaceComposerApiRef.current?.appendTranscript(transcript),
@@ -5943,7 +5942,7 @@ export default function App() {
     updateSentryUiContext({
       authState: session ? "authenticated" : "anonymous",
       userId: canonicalSessionUserId,
-      builderTier: builderBillingStatus?.builder_tier ?? null,
+      accountTier: accountCommerceStatus?.account_tier ?? null,
       pathname: telemetryPathname,
       publicRouteKind: publicRoute.kind,
       activePage,
@@ -5957,7 +5956,7 @@ export default function App() {
     updatePosthogUiContext({
       authState: session ? "authenticated" : "anonymous",
       userId: canonicalSessionUserId,
-      builderTier: builderBillingStatus?.builder_tier ?? null,
+      accountTier: accountCommerceStatus?.account_tier ?? null,
       pathname: telemetryPathname,
       publicRouteKind: publicRoute.kind,
       activePage,
@@ -5975,7 +5974,7 @@ export default function App() {
     activeThreadId,
     activeThreadStreamingRunId,
     activeView,
-    builderBillingStatus?.builder_tier,
+    accountCommerceStatus?.account_tier,
     canonicalSessionUserId,
     publicRoute.kind,
     session,
@@ -6240,9 +6239,9 @@ export default function App() {
       openCommunityChat,
       handleOpenDiscover,
       handleTopbarBackToWorkspace,
-      hasBuilderAccess: Number(builderBillingStatus?.max_communities ?? 0) > 0,
+      hasCommunityCreateAccess: Number(accountCommerceStatus?.max_communities ?? 0) > 0,
       openCreateCommunityModal: () => openCreateCommunityModal(),
-      setIsBuilderInfoOpen,
+      setIsFreeAccountInfoOpen,
     });
     useEffect(() => {
       if (shellPublicRoute.kind !== "app") return;
@@ -6316,10 +6315,10 @@ export default function App() {
       canManageCommunitySettings,
       canDeleteActiveCommunity,
       requireSignIn,
-      builderBillingStatus,
-      builderBillingError,
-      startBuilderConnectOnboarding,
-      isStartingBuilderConnectOnboarding,
+      accountCommerceStatus,
+      accountCommerceError,
+      startStripeConnectOnboarding,
+      isStartingStripeConnectOnboarding,
       communityIntegrations: {
         mounts: communityAppMounts,
         effectiveMcpApps,
@@ -6794,14 +6793,14 @@ export default function App() {
         openCommunityTab(nextCommunitySlug, "settings", { pushSnapshot: false });
       },
       communityInitials,
-      startBuilderConnectOnboarding: (opts) => {
-        void startBuilderConnectOnboarding({
+      startStripeConnectOnboarding: (opts) => {
+        void startStripeConnectOnboarding({
           context: opts?.context ?? "account",
           communitySlug: opts?.communitySlug ?? null,
         });
       },
       canUseDevTierOverride,
-      setDevBuilderTier,
+      setDevAccountTier,
       redeemPendingPurchases: async () => {
         await redeemPendingPurchases();
       },
@@ -6984,9 +6983,9 @@ export default function App() {
     createPersonalMemoryItemDirect,
     showMemoryToastMessage,
     requireSignIn,
-    builderBillingStatus,
-    setBuilderBillingError,
-    setIsBuilderInfoOpen,
+    accountCommerceStatus,
+    setAccountCommerceError,
+    setIsFreeAccountInfoOpen,
     personalMemoryUi,
     handleImportExternalMemory,
     projectModalHostProps: projectUiController.modalHostProps,
@@ -7004,8 +7003,8 @@ export default function App() {
     startWorkspaceCreditTopupCheckout,
     setActiveView,
     setSettingsPage,
-    isBuilderInfoOpen,
-    builderBillingError,
+    isFreeAccountInfoOpen,
+    accountCommerceError,
     communityModalHostProps: communityUi.modalHostProps,
     appToast,
   });
@@ -7430,7 +7429,7 @@ export default function App() {
     openMobileAgentSettings,
     handleOpenDiscover,
     openMobileCreateCommunity,
-    hasBuilderAccess: Number(builderBillingStatus?.max_communities ?? 0) > 0,
+    hasCommunityCreateAccess: Number(accountCommerceStatus?.max_communities ?? 0) > 0,
     openCreateCommunityModal: () => openCreateCommunityModal(),
     communities,
     railCommunities,
@@ -7452,7 +7451,7 @@ export default function App() {
     draggingCommunityId,
     setCommunityRailListElement,
     getCommunityRailItemBindings,
-    setIsBuilderInfoOpen,
+    setIsFreeAccountInfoOpen,
     handleToggleWorkspaceSettings,
     settingsGroup: settingsGroup as SettingsGroup,
     setSettingsPage,

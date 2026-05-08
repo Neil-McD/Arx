@@ -56,6 +56,8 @@ export type RuntimeKernelFailureInput = {
   status: number;
   code: string;
   message: string;
+  toolKind?: string | null;
+  requiredCredits?: number | null;
   pendingToolCallId?: string;
   pendingToolName?: string;
   stopReason?: RuntimeKernelStopReason;
@@ -129,6 +131,8 @@ export type RuntimeKernelFailure<TToolName extends string = string> =
     code: string;
     stopReason: RuntimeKernelStopReason;
     message: string;
+    toolKind?: string | null;
+    requiredCredits?: number | null;
     pendingToolCallId?: string;
     pendingToolName?: string;
   };

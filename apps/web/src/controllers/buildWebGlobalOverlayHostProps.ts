@@ -19,9 +19,9 @@ export function buildWebGlobalOverlayHostProps(params: {
   }) => Promise<unknown>;
   showMemoryToastMessage: (message: string) => void;
   requireSignIn: (intentInput?: unknown) => void;
-  builderBillingStatus: { builder_tier?: string | null } | null;
-  setBuilderBillingError: (value: string | null) => void;
-  setIsBuilderInfoOpen: (value: boolean) => void;
+  accountCommerceStatus: { account_tier?: string | null } | null;
+  setAccountCommerceError: (value: string | null) => void;
+  setIsFreeAccountInfoOpen: (value: boolean) => void;
   personalMemoryUi: {
     isMemoryImportModalOpen: boolean;
     memoryImportText: string;
@@ -50,8 +50,8 @@ export function buildWebGlobalOverlayHostProps(params: {
   startWorkspaceCreditTopupCheckout: (packId?: WorkspaceToolBalanceTopupPackId) => void | Promise<void>;
   setActiveView: (value: AppView) => void;
   setSettingsPage: (value: SettingsPage) => void;
-  isBuilderInfoOpen: boolean;
-  builderBillingError: string | null;
+  isFreeAccountInfoOpen: boolean;
+  accountCommerceError: string | null;
   communityModalHostProps: WebGlobalOverlayHostProps["communityModalHostProps"];
   appToast: string | null;
 }): WebGlobalOverlayHostProps {
@@ -123,10 +123,10 @@ export function buildWebGlobalOverlayHostProps(params: {
           },
         }
       : null,
-    builderIncludedModalProps: {
-      isOpen: params.isBuilderInfoOpen,
-      builderBillingError: params.builderBillingError,
-      onClose: () => params.setIsBuilderInfoOpen(false),
+    freeAccountIncludedModalProps: {
+      isOpen: params.isFreeAccountInfoOpen,
+      accountAccessError: params.accountCommerceError,
+      onClose: () => params.setIsFreeAccountInfoOpen(false),
     },
     communityModalHostProps: params.communityModalHostProps,
     appToast: params.appToast,

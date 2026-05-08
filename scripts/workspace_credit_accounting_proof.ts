@@ -31,6 +31,7 @@ async function proveWorkspaceCreditAccountingContract() {
   const runtimeTurnHandlersSource = await readRepoFile("convex/runtimeTurnHandlers.ts");
   const cronsSource = await readRepoFile("convex/crons.ts");
   const accountSource = await readRepoFile("convex/account.ts");
+  const authCoreSource = await readRepoFile("shared/authCore.ts");
   const voiceControllerSource = await readRepoFile("shared/useWebVoiceInputController.ts");
   const turnRunnerSource = await readRepoFile("shared/useWebTurnRunnerController.ts");
   const appSource = await readRepoFile("apps/web/src/App.tsx");
@@ -74,8 +75,13 @@ async function proveWorkspaceCreditAccountingContract() {
   );
   assert.match(
     sharedCreditsSource,
-    /BUILDER_INCLUDED_WORKSPACE_CREDITS\s*=\s*0/,
+    /DEFAULT_INCLUDED_TOOL_CREDITS\s*=\s*0/,
     "expected free-account default to include no paid-tool credits",
+  );
+  assert.doesNotMatch(
+    sharedCreditsSource,
+    /BUILDER_INCLUDED_WORKSPACE_CREDITS/,
+    "default included tool credits must not carry legacy Builder plan naming",
   );
   assert.match(
     sharedCreditsSource,
@@ -325,14 +331,34 @@ async function proveWorkspaceCreditAccountingContract() {
     "expected voice transcription to use shared margin-aware fixed-tool pricing with ledger cost evidence",
   );
   assert.match(
+    httpVoiceSource,
+    /tool_kind:\s*"voice_input"[\s\S]*required_credits:\s*voiceCredits/,
+    "expected voice input balance failures to identify voice_input and required credits",
+  );
+  assert.match(
+    authCoreSource,
+    /VoiceTranscriptionRequestError[\s\S]*toolKind:[\s\S]*requiredCredits:[\s\S]*readVoiceTranscriptionRequestError[\s\S]*tool_kind[\s\S]*required_credits/,
+    "expected voice transcription client errors to preserve paid-tool metadata",
+  );
+  assert.match(
+    httpDaytonaSource,
+    /tool_kind:\s*"web_research"[\s\S]*required_credits:\s*webResearchCredits/,
+    "expected web research balance failures to identify web_research and required credits",
+  );
+  assert.match(
+    daytonaSessionSource,
+    /tool_kind:\s*"workspace_tools"[\s\S]*required_credits:\s*creditBudgetCredits/,
+    "expected workspace tool balance failures to identify workspace_tools and required credits",
+  );
+  assert.match(
     voiceControllerSource,
-    /onToolBalanceRequired\?:[\s\S]*isToolBalanceError[\s\S]*args\.onToolBalanceRequired\?\.\(surface,\s*message\)/,
-    "expected voice input to surface exhausted tool balance through the add-balance modal path",
+    /onToolBalanceRequired\?:[\s\S]*details\?:\s*VoiceToolBalanceDetails[\s\S]*VoiceTranscriptionRequestError[\s\S]*args\.onToolBalanceRequired\?\.\(surface,\s*message,\s*details\)/,
+    "expected voice input to surface exhausted tool balance metadata through the add-balance modal path",
   );
   assert.match(
     appSource,
-    /onToolBalanceRequired:[\s\S]*setInferenceIssueModal\(\{[\s\S]*reason:\s*"workspace_credits"/,
-    "expected voice input tool-balance failures to open the workspace issue modal",
+    /onToolBalanceRequired:[\s\S]*setInferenceIssueModal\(\{[\s\S]*reason:\s*"workspace_credits"[\s\S]*toolKind:\s*details\?\.toolKind\s*\?\?\s*"voice_input"[\s\S]*requiredCredits:\s*details\?\.requiredCredits\s*\?\?\s*null/,
+    "expected voice input tool-balance failures to open the workspace issue modal with metadata",
   );
   assert.match(
     runtimeKernelSource,
@@ -351,8 +377,18 @@ async function proveWorkspaceCreditAccountingContract() {
   );
   assert.match(
     inferenceIssueModalSource,
-    /Premium tools use paid provider or sandbox infrastructure, so they need tool balance before they run/,
-    "expected the add-balance modal to explain why paid tools need balance",
+    /workspace_tools[\s\S]*paid sandbox compute/,
+    "expected the add-balance modal to explain why workspace tools need balance",
+  );
+  assert.match(
+    inferenceIssueModalSource,
+    /web_research[\s\S]*paid provider calls/,
+    "expected the add-balance modal to explain why web research needs balance",
+  );
+  assert.match(
+    inferenceIssueModalSource,
+    /voice_input[\s\S]*paid transcription/,
+    "expected the add-balance modal to explain why each paid tool kind needs balance",
   );
   assert.doesNotMatch(
     httpDaytonaSource,

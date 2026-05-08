@@ -212,7 +212,7 @@ function buildCommunityLensPrompt(params: RuntimeCommunityPromptFields): string 
   ]);
 }
 
-function buildToolContextPrompt(params: {
+function buildPlatformHarnessContextPrompt(params: {
   harnessName: "chat_tools";
   allowedToolNames: readonly RetrievalToolName[];
   projectLabel?: string | null;
@@ -231,7 +231,7 @@ function buildToolContextPrompt(params: {
     ].includes(toolName),
   );
   return [
-    "WORKSPACE_CONTEXT",
+    "PLATFORM_HARNESS_CONTEXT",
     `Active harness: ${params.harnessName}.`,
     hasWorkspaceTools
       ? "This run can inspect and modify files in the active project when needed."
@@ -287,16 +287,16 @@ function buildCommunityFeedContextPrompt(params: {
   ].join("\n");
 }
 
-function buildPlatformChatContextPrompt(): string {
+function buildPlatformChatHarnessContextPrompt(): string {
   return [
-    "WORKSPACE_CONTEXT",
+    "PLATFORM_HARNESS_CONTEXT",
     "Active harness: chat.",
     "This is a chat-only platform run.",
     "No workspace tools are active in this run.",
   ].join("\n");
 }
 
-function buildWorkspaceOperatingPolicyPrompt(params: {
+function buildPlatformHarnessOperatingPolicyPrompt(params: {
   loopBudget: RuntimeKernelBudget;
   allowedToolNames: readonly RetrievalToolName[];
 }): string {
@@ -415,7 +415,7 @@ function buildChatOperatingPolicyPrompt(): string {
   ].join("\n");
 }
 
-export function buildWorkspaceRuntimeSystemPrompt(params: RuntimeCommunityPromptFields & {
+export function buildPlatformHarnessRuntimeSystemPrompt(params: RuntimeCommunityPromptFields & {
   loopBudget: RuntimeKernelBudget;
   allowedToolNames: readonly RetrievalToolName[];
   harnessName: "chat_tools";
@@ -430,7 +430,7 @@ export function buildWorkspaceRuntimeSystemPrompt(params: RuntimeCommunityPrompt
     buildPlatformDoctrinePrompt(),
     buildAgentSoulPrompt(params.agentSoul),
     buildExplanationContractPrompt(),
-    buildWorkspaceOperatingPolicyPrompt({
+    buildPlatformHarnessOperatingPolicyPrompt({
       loopBudget: params.loopBudget,
       allowedToolNames: params.allowedToolNames,
     }),
@@ -447,7 +447,7 @@ export function buildWorkspaceRuntimeSystemPrompt(params: RuntimeCommunityPrompt
     buildCommunityFeedContextPrompt({
       allowedToolNames: params.allowedToolNames,
     }),
-    buildToolContextPrompt({
+    buildPlatformHarnessContextPrompt({
       harnessName: params.harnessName,
       allowedToolNames: params.allowedToolNames,
       projectLabel: params.projectLabel,
@@ -469,7 +469,7 @@ export function buildWorkspaceRuntimeSystemPrompt(params: RuntimeCommunityPrompt
   ]);
 }
 
-export function composeCloudScopedRuntimeSystemPrompt(
+export function composePlatformChatRuntimeSystemPrompt(
   params: RuntimeCommunityPromptFields & RuntimeTemporalContextPromptFields,
 ): string {
   return joinPromptBlocks([
@@ -483,7 +483,7 @@ export function composeCloudScopedRuntimeSystemPrompt(
       communityAbout: params.communityAbout,
       communitySystemPrompt: params.communitySystemPrompt,
     }),
-    buildPlatformChatContextPrompt(),
+    buildPlatformChatHarnessContextPrompt(),
     buildRuntimeTemporalContextPrompt({
       currentDateTimeIso: params.currentDateTimeIso,
       currentDateLabel: params.currentDateLabel,
@@ -493,7 +493,7 @@ export function composeCloudScopedRuntimeSystemPrompt(
   ]);
 }
 
-export function composeCloudScopedSystemPrompt(params: RuntimeCommunityPromptFields): string {
+export function composePlatformCommunityContextSystemPrompt(params: RuntimeCommunityPromptFields): string {
   return joinPromptBlocks([
     buildPlatformDoctrinePrompt(),
     buildAgentSoulPrompt(params.agentSoul),
@@ -505,7 +505,7 @@ export function composeCloudScopedSystemPrompt(params: RuntimeCommunityPromptFie
       communityAbout: params.communityAbout,
       communitySystemPrompt: params.communitySystemPrompt,
     }),
-    buildPlatformChatContextPrompt(),
+    buildPlatformChatHarnessContextPrompt(),
     buildChatOperatingPolicyPrompt(),
   ]);
 }

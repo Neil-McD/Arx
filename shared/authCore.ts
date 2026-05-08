@@ -4,6 +4,7 @@ import {
 } from "./convexAuthSessionProbe";
 import { readConvexRuntimeUrl } from "./convexRuntime";
 import { isStandaloneWebApp } from "./browserRuntimeMode";
+import { normalizePaidToolKind, type PaidToolKind } from "./workspaceCredits";
 
 export type AuthUser = {
   id: string;
@@ -52,6 +53,28 @@ export type AuthSessionEnsureResult =
   | { status: "transient_failure"; reason: string }
   | { status: "terminal_failure"; reason: string };
 
+export class VoiceTranscriptionRequestError extends Error {
+  readonly status: number;
+  readonly code: string | null;
+  readonly toolKind: PaidToolKind | null;
+  readonly requiredCredits: number | null;
+
+  constructor(args: {
+    message: string;
+    status: number;
+    code?: string | null;
+    toolKind?: PaidToolKind | null;
+    requiredCredits?: number | null;
+  }) {
+    super(args.message);
+    this.name = "VoiceTranscriptionRequestError";
+    this.status = args.status;
+    this.code = args.code ?? null;
+    this.toolKind = args.toolKind ?? null;
+    this.requiredCredits = args.requiredCredits ?? null;
+  }
+}
+
 function readFirstNonEmptyEnv(keys: readonly string[]): string | null {
   for (const key of keys) {
     const value = (import.meta.env[key as keyof ImportMetaEnv] as string | undefined) ?? "";
@@ -84,6 +107,48 @@ export async function readAuthError(response: Response): Promise<string> {
     // ignore
   }
   return `Cloud error (${response.status})`;
+}
+
+function normalizePositiveCredits(value: unknown): number | null {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+async function readVoiceTranscriptionRequestError(
+  response: Response,
+): Promise<VoiceTranscriptionRequestError> {
+  try {
+    const json = (await response.clone().json()) as {
+      code?: unknown;
+      error?: unknown;
+      message?: unknown;
+      tool_kind?: unknown;
+      toolKind?: unknown;
+      paid_tool_kind?: unknown;
+      required_credits?: unknown;
+      requiredCredits?: unknown;
+    };
+    const message =
+      readString(json.message) ??
+      readString(json.error) ??
+      `Cloud error (${response.status})`;
+    return new VoiceTranscriptionRequestError({
+      message,
+      status: response.status,
+      code: readString(json.code) ?? readString(json.error),
+      toolKind: normalizePaidToolKind(
+        json.tool_kind ?? json.toolKind ?? json.paid_tool_kind,
+      ),
+      requiredCredits: normalizePositiveCredits(
+        json.required_credits ?? json.requiredCredits,
+      ),
+    });
+  } catch {
+    return new VoiceTranscriptionRequestError({
+      message: await readAuthError(response),
+      status: response.status,
+    });
+  }
 }
 
 export function decodeAuthJwtPayload(token: string): unknown | null {
@@ -479,7 +544,7 @@ export async function transcribeVoice(params: {
     }),
   });
   if (!response.ok) {
-    throw new Error(await readAuthError(response));
+    throw await readVoiceTranscriptionRequestError(response);
   }
   let payload: unknown = null;
   try {

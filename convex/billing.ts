@@ -1,6 +1,6 @@
 export {
   startConnectOnboarding,
-} from "./builderCommerce";
+} from "./creatorCommerce";
 
 export {
   startWorkspaceCreditTopupCheckout,

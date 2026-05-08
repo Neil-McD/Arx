@@ -1,4 +1,6 @@
 import {
+  formatWorkspaceToolBalanceUsdFromCredits,
+  type PaidToolKind,
   WORKSPACE_TOOL_BALANCE_TOPUP_PACKS,
   type WorkspaceToolBalanceTopupPackId,
 } from "../../../../shared/workspaceCredits";
@@ -17,6 +19,8 @@ type InferenceIssueModalState = {
   threadId: string;
   mode: "respond" | "regenerate";
   message: string | null;
+  toolKind?: PaidToolKind | null;
+  requiredCredits?: number | null;
 } | null;
 
 type WebInferenceIssueModalProps = {
@@ -43,12 +47,42 @@ export function WebInferenceIssueModal(props: WebInferenceIssueModalProps) {
   } = props;
 
   if (!hasSession || !inferenceIssueModal) return null;
+  const paidToolKind = inferenceIssueModal.toolKind ?? null;
+  const requiredCredits =
+    typeof inferenceIssueModal.requiredCredits === "number" &&
+    Number.isFinite(inferenceIssueModal.requiredCredits) &&
+    inferenceIssueModal.requiredCredits > 0
+      ? inferenceIssueModal.requiredCredits
+      : null;
+
+  const paidToolTitle =
+    paidToolKind === "voice_input"
+      ? "Add balance to use voice input"
+      : paidToolKind === "web_research"
+        ? "Add balance to research the web"
+      : paidToolKind === "workspace_tools"
+        ? "Add balance to use workspace tools"
+      : "Add balance to use premium tools";
+
+  const paidToolPrimaryMessage =
+    paidToolKind === "voice_input"
+      ? "Voice input uses paid transcription so you can dictate into chats and workspace threads."
+      : paidToolKind === "web_research"
+        ? "Web research uses paid provider calls to search, open pages, and bring current web context into a run."
+      : paidToolKind === "workspace_tools"
+        ? "Workspace tools use paid sandbox compute for project, file, terminal, browser, and computer-use work."
+      : inferenceIssueModal.message || "Premium tools use paid provider or sandbox infrastructure, so they need tool balance before they run.";
+
+  const paidToolFollowupMessage =
+    requiredCredits !== null
+      ? `This call needs at least ${formatWorkspaceToolBalanceUsdFromCredits(requiredCredits)} in tool balance. Add balance below, then retry from the same thread.`
+      : "Add balance below, then retry from the same thread. Chat still uses your connected ChatGPT account or OpenAI API key.";
 
   const title =
     inferenceIssueModal.reason === "provider_connection_required"
       ? "Connect a provider"
-      : inferenceIssueModal.reason === "workspace_credits"
-        ? "Add balance to use premium tools"
+    : inferenceIssueModal.reason === "workspace_credits"
+        ? paidToolTitle
       : inferenceIssueModal.reason === "quota"
         ? "Provider quota reached"
         : inferenceIssueModal.reason === "plan"
@@ -62,8 +96,8 @@ export function WebInferenceIssueModal(props: WebInferenceIssueModalProps) {
   const primaryMessage =
     inferenceIssueModal.reason === "provider_connection_required"
       ? inferenceIssueModal.message || "Connect ChatGPT or add an OpenAI API key to use agent runs."
-      : inferenceIssueModal.reason === "workspace_credits"
-        ? inferenceIssueModal.message || "Premium tools use paid provider or sandbox infrastructure, so they need tool balance before they run."
+    : inferenceIssueModal.reason === "workspace_credits"
+        ? paidToolPrimaryMessage
       : inferenceIssueModal.reason === "quota"
         ? inferenceIssueModal.message || "Your connected provider has run out of available quota or credits for this model."
         : inferenceIssueModal.reason === "plan"
@@ -77,8 +111,8 @@ export function WebInferenceIssueModal(props: WebInferenceIssueModalProps) {
   const followupMessage =
     inferenceIssueModal.reason === "provider_connection_required"
       ? "Use ChatGPT Plus / Pro rate limits with no extra Polynet inference charge, or add an OpenAI API key billed directly through OpenAI."
-      : inferenceIssueModal.reason === "workspace_credits"
-        ? "Add balance to continue. Chat still uses your connected ChatGPT account or OpenAI API key."
+    : inferenceIssueModal.reason === "workspace_credits"
+        ? paidToolFollowupMessage
       : inferenceIssueModal.reason === "quota"
         ? "To continue, check your connected provider in Account Settings."
         : inferenceIssueModal.reason === "plan"

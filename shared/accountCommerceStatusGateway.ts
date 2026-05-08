@@ -1,9 +1,9 @@
 import { type AuthSessionLike } from "./authSession";
 import { bootstrapConvexAuthenticatedClient, requireConvexUrl } from "./convexAuthenticatedClient";
 
-export type BuilderBillingStatus = {
+export type AccountCommerceStatus = {
   user_id: string;
-  builder_tier: "free" | "architect";
+  account_tier: "free" | "architect";
   max_communities: number;
   platform_fee_bps: number;
   stripe_connect: {
@@ -20,25 +20,25 @@ export type BuilderBillingStatus = {
   };
 };
 
-export type DevBuilderTier = "free" | "architect";
+export type DevAccountTier = "free" | "architect";
 
-function normalizeBuilderTier(raw: unknown): BuilderBillingStatus["builder_tier"] {
+function normalizeAccountTier(raw: unknown): AccountCommerceStatus["account_tier"] {
   const value = String(raw ?? "").trim().toLowerCase();
   if (value === "architect") return "architect";
   return "free";
 }
 
-async function loadBuilderBillingStatusViaConvex(session: AuthSessionLike): Promise<BuilderBillingStatus | null> {
+async function loadAccountCommerceStatusViaConvex(session: AuthSessionLike): Promise<AccountCommerceStatus | null> {
   requireConvexUrl();
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(session);
 
-  const row = (await client.query("auth:getBuilderBillingStatus" as any, {
+  const row = (await client.query("auth:getAccountCommerceStatus" as any, {
     authSubject,
-  })) as BuilderBillingStatus | null;
+  })) as AccountCommerceStatus | null;
   if (!row) return null;
   return {
     ...row,
-    builder_tier: normalizeBuilderTier(row.builder_tier),
+    account_tier: normalizeAccountTier(row.account_tier),
     max_communities: Number(row.max_communities ?? 0),
     platform_fee_bps: Number(row.platform_fee_bps ?? 0),
     stripe_connect: {
@@ -81,7 +81,7 @@ async function loadBuilderBillingStatusViaConvex(session: AuthSessionLike): Prom
   };
 }
 
-async function setDevBuilderTierViaConvex(session: AuthSessionLike, tier: DevBuilderTier): Promise<void> {
+async function setDevAccountTierViaConvex(session: AuthSessionLike, tier: DevAccountTier): Promise<void> {
   requireConvexUrl();
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(session);
   await client.mutation("auth:setDevTierOverride" as any, {
@@ -90,15 +90,15 @@ async function setDevBuilderTierViaConvex(session: AuthSessionLike, tier: DevBui
   });
 }
 
-export async function loadBuilderBillingStatusCanonical(params: {
+export async function loadAccountCommerceStatusCanonical(params: {
   session: AuthSessionLike;
-}): Promise<BuilderBillingStatus | null> {
-  return await loadBuilderBillingStatusViaConvex(params.session);
+}): Promise<AccountCommerceStatus | null> {
+  return await loadAccountCommerceStatusViaConvex(params.session);
 }
 
-export async function setDevBuilderTierCanonical(params: {
+export async function setDevAccountTierCanonical(params: {
   session: AuthSessionLike;
-  tier: DevBuilderTier;
+  tier: DevAccountTier;
 }): Promise<void> {
-  await setDevBuilderTierViaConvex(params.session, params.tier);
+  await setDevAccountTierViaConvex(params.session, params.tier);
 }

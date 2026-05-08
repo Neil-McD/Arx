@@ -15,12 +15,12 @@ export type UseWebBillingUiControllerResult<
   setIsRedeemingPendingPurchases: Dispatch<SetStateAction<boolean>>;
   pendingPurchasesSuccess: string | null;
   setPendingPurchasesSuccess: Dispatch<SetStateAction<string | null>>;
-  builderBillingStatus: BillingStatusT | null;
-  setBuilderBillingStatus: Dispatch<SetStateAction<BillingStatusT | null>>;
-  isLoadingBuilderBilling: boolean;
-  setIsLoadingBuilderBilling: Dispatch<SetStateAction<boolean>>;
-  builderBillingError: string | null;
-  setBuilderBillingError: Dispatch<SetStateAction<string | null>>;
+  accountCommerceStatus: BillingStatusT | null;
+  setAccountCommerceStatus: Dispatch<SetStateAction<BillingStatusT | null>>;
+  isLoadingAccountCommerce: boolean;
+  setIsLoadingAccountCommerce: Dispatch<SetStateAction<boolean>>;
+  accountCommerceError: string | null;
+  setAccountCommerceError: Dispatch<SetStateAction<string | null>>;
   workspaceCreditBalance: WorkspaceCreditBalanceT | null;
   setWorkspaceCreditBalance: Dispatch<SetStateAction<WorkspaceCreditBalanceT | null>>;
   isLoadingWorkspaceCreditBalance: boolean;
@@ -31,12 +31,12 @@ export type UseWebBillingUiControllerResult<
   setIsStartingWorkspaceCreditTopupCheckout: Dispatch<SetStateAction<boolean>>;
   workspaceCreditTopupError: string | null;
   setWorkspaceCreditTopupError: Dispatch<SetStateAction<string | null>>;
-  isSettingDevBuilderTier: boolean;
-  setIsSettingDevBuilderTier: Dispatch<SetStateAction<boolean>>;
-  devBuilderTierError: string | null;
-  setDevBuilderTierError: Dispatch<SetStateAction<string | null>>;
-  isStartingBuilderConnectOnboarding: boolean;
-  setIsStartingBuilderConnectOnboarding: Dispatch<SetStateAction<boolean>>;
+  isSettingDevAccountTier: boolean;
+  setIsSettingDevAccountTier: Dispatch<SetStateAction<boolean>>;
+  devAccountTierError: string | null;
+  setDevAccountTierError: Dispatch<SetStateAction<string | null>>;
+  isStartingStripeConnectOnboarding: boolean;
+  setIsStartingStripeConnectOnboarding: Dispatch<SetStateAction<boolean>>;
   checkoutStatus: "idle" | "loading" | "pending" | "succeeded" | "error";
   setCheckoutStatus: Dispatch<SetStateAction<"idle" | "loading" | "pending" | "succeeded" | "error">>;
   checkoutError: string | null;
@@ -63,17 +63,17 @@ export function useWebBillingUiController<
   const [isRedeemingPendingPurchases, setIsRedeemingPendingPurchases] = useState(false);
   const [pendingPurchasesSuccess, setPendingPurchasesSuccess] = useState<string | null>(null);
 
-  const [builderBillingStatus, setBuilderBillingStatus] = useState<BillingStatusT | null>(null);
-  const [isLoadingBuilderBilling, setIsLoadingBuilderBilling] = useState(false);
-  const [builderBillingError, setBuilderBillingError] = useState<string | null>(null);
+  const [accountCommerceStatus, setAccountCommerceStatus] = useState<BillingStatusT | null>(null);
+  const [isLoadingAccountCommerce, setIsLoadingAccountCommerce] = useState(false);
+  const [accountCommerceError, setAccountCommerceError] = useState<string | null>(null);
   const [workspaceCreditBalance, setWorkspaceCreditBalance] = useState<WorkspaceCreditBalanceT | null>(null);
   const [isLoadingWorkspaceCreditBalance, setIsLoadingWorkspaceCreditBalance] = useState(false);
   const [workspaceCreditBalanceError, setWorkspaceCreditBalanceError] = useState<string | null>(null);
   const [isStartingWorkspaceCreditTopupCheckout, setIsStartingWorkspaceCreditTopupCheckout] = useState(false);
   const [workspaceCreditTopupError, setWorkspaceCreditTopupError] = useState<string | null>(null);
-  const [isSettingDevBuilderTier, setIsSettingDevBuilderTier] = useState(false);
-  const [devBuilderTierError, setDevBuilderTierError] = useState<string | null>(null);
-  const [isStartingBuilderConnectOnboarding, setIsStartingBuilderConnectOnboarding] = useState(false);
+  const [isSettingDevAccountTier, setIsSettingDevAccountTier] = useState(false);
+  const [devAccountTierError, setDevAccountTierError] = useState<string | null>(null);
+  const [isStartingStripeConnectOnboarding, setIsStartingStripeConnectOnboarding] = useState(false);
 
   const [checkoutStatus, setCheckoutStatus] = useState<"idle" | "loading" | "pending" | "succeeded" | "error">(
     "idle",
@@ -97,12 +97,12 @@ export function useWebBillingUiController<
     setIsRedeemingPendingPurchases,
     pendingPurchasesSuccess,
     setPendingPurchasesSuccess,
-    builderBillingStatus,
-    setBuilderBillingStatus,
-    isLoadingBuilderBilling,
-    setIsLoadingBuilderBilling,
-    builderBillingError,
-    setBuilderBillingError,
+    accountCommerceStatus,
+    setAccountCommerceStatus,
+    isLoadingAccountCommerce,
+    setIsLoadingAccountCommerce,
+    accountCommerceError,
+    setAccountCommerceError,
     workspaceCreditBalance,
     setWorkspaceCreditBalance,
     isLoadingWorkspaceCreditBalance,
@@ -113,12 +113,12 @@ export function useWebBillingUiController<
     setIsStartingWorkspaceCreditTopupCheckout,
     workspaceCreditTopupError,
     setWorkspaceCreditTopupError,
-    isSettingDevBuilderTier,
-    setIsSettingDevBuilderTier,
-    devBuilderTierError,
-    setDevBuilderTierError,
-    isStartingBuilderConnectOnboarding,
-    setIsStartingBuilderConnectOnboarding,
+    isSettingDevAccountTier,
+    setIsSettingDevAccountTier,
+    devAccountTierError,
+    setDevAccountTierError,
+    isStartingStripeConnectOnboarding,
+    setIsStartingStripeConnectOnboarding,
     checkoutStatus,
     setCheckoutStatus,
     checkoutError,
