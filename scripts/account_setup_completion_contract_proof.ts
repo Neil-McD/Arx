@@ -52,6 +52,7 @@ assert.doesNotMatch(accountSetup, /directionMissing/, "path selection must not g
 
 assert.match(profiles, /validateProfileHandle/, "profile mutations must validate handles");
 assert.match(profiles, /assertHandleAvailable/, "profile mutations must enforce handle availability");
+assert.match(profiles, /export const checkHandleAvailability = query/, "profile handle availability must be queryable before save");
 assert.match(profiles, /withIndex\("by_normalizedHandle"/, "handle uniqueness check must use normalized handle index");
 assert.match(profiles, /export const getMyAccountSetupStatus = query/, "profiles must expose authenticated setup status");
 assert.match(profiles, /loadAccountSetupStatusForUser/, "profiles must use the shared Convex setup derivation helper");
@@ -74,6 +75,7 @@ assert.match(profileGateway, /type \{ AccountSetupStatus \}/, "profile gateway m
 assert.match(profileGateway, /handle\?: string \| null/, "profile gateway must expose handle");
 assert.match(profileGateway, /account_setup\?: AccountSetupStatus \| null/, "profile gateway must expose account setup status");
 assert.match(profileGateway, /profiles:getMyAccountSetupStatus/, "profile gateway must load setup status");
+assert.match(profileGateway, /profiles:checkHandleAvailability/, "profile gateway must expose handle availability");
 assert.match(profileGateway, /onboardingDirection\?: "build_community"/, "profile gateway must save onboarding direction");
 
 assert.match(settingsGateway, /agent_name\?: unknown/, "settings gateway must load agent_name");
@@ -83,10 +85,12 @@ assert.match(communityTypes, /AccountSetupStatus/, "shared profile types must ex
 assert.match(communityTypes, /account_setup\?: AccountSetupStatus \| null/, "profile details must carry setup status");
 
 assert.match(onboardingPage, /accountSetupStatus: AccountSetupStatus \| null/, "onboarding UI must consume canonical setup status");
-assert.doesNotMatch(onboardingPage, /profileHandleHint|polynet-onboarding-handle-field/, "onboarding profile step must not require handle");
+assert.match(onboardingPage, /handleAvailability: ProfileHandleAvailability \| null/, "onboarding profile step should show handle availability");
+assert.match(onboardingPage, /<span>Bio<\/span>/, "onboarding profile step should expose bio");
+assert.doesNotMatch(onboardingPage, /profileHandleHint|polynet-onboarding-handle-field|step === "identity" && !.*handle/, "onboarding profile step must not require handle");
 assert.match(onboardingPage, /onConnectChatgpt/, "onboarding inference step must reuse ChatGPT provider flow");
 assert.match(onboardingPage, /onConnectOpenAi/, "onboarding inference step must reuse OpenAI provider flow");
-assert.match(onboardingPage, /Use ChatGPT Plus\/Pro rate limits/, "onboarding inference choice should clearly name ChatGPT rate limits");
+assert.match(onboardingPage, /Use your existing ChatGPT plan limits/, "onboarding inference choice should clearly name ChatGPT plan limits");
 assert.doesNotMatch(onboardingPage, /Learn about Polynet|onLearnAboutPolynet/, "onboarding direction should only offer build or discover");
 assert.match(onboardingPage, /onSaveAgent/, "onboarding agent step must persist canonical agent settings");
 assert.match(setupCard, /Finish account setup/, "workspace setup card must replace provider-only nudge");

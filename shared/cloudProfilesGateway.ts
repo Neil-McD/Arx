@@ -21,6 +21,13 @@ export type CloudProfileDetailRow = CloudProfileBase & {
   account_setup?: AccountSetupStatus | null;
 };
 
+export type CloudProfileHandleAvailability = {
+  available: boolean;
+  status: "empty" | "too_short" | "too_long" | "invalid_format" | "reserved" | "available" | "taken";
+  handle: string | null;
+  normalized_handle: string | null;
+};
+
 async function bootstrapConvexUser(sessionRaw: unknown): Promise<{
   client: ConvexClient;
   authSubject: string;
@@ -75,6 +82,18 @@ export async function loadCloudAccountSetupStatus<SessionT>(
   return (await client.query("profiles:getMyAccountSetupStatus" as any, {
     authSubject,
   })) as AccountSetupStatus | null;
+}
+
+export async function checkCloudProfileHandleAvailability<SessionT>(
+  params: CloudProfilesGatewayParams<SessionT> & {
+    handle: string;
+  },
+): Promise<CloudProfileHandleAvailability> {
+  const { client, authSubject } = await bootstrapConvexUser(params.session);
+  return (await client.query("profiles:checkHandleAvailability" as any, {
+    authSubject,
+    handle: params.handle,
+  })) as CloudProfileHandleAvailability;
 }
 
 export async function upsertCloudProfileDetail<SessionT, TProfile extends CloudProfileDetailRow = CloudProfileDetailRow>(

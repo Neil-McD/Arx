@@ -4,12 +4,22 @@ import type { AccountSetupStatus, AccountSetupStep } from "../../../../shared/ac
 
 type OnboardingStep = Exclude<AccountSetupStep, "complete">;
 
+type ProfileHandleAvailability = {
+  available: boolean;
+  status: "empty" | "too_short" | "too_long" | "invalid_format" | "reserved" | "available" | "taken";
+  handle: string | null;
+  normalized_handle: string | null;
+};
+
 type WebOnboardingPageProps = {
   variant?: "page" | "modal";
   accountSetupStatus: AccountSetupStatus | null;
-  email: string | null;
   displayName: string;
+  handle: string;
+  bio: string;
   avatarUrl: string | null;
+  handleAvailability: ProfileHandleAvailability | null;
+  isCheckingHandleAvailability: boolean;
   isAvatarDragOver: boolean;
   isSaving: boolean;
   error: string | null;
@@ -18,6 +28,8 @@ type WebOnboardingPageProps = {
   onAvatarUpload: (file: File | null) => Promise<void> | void;
   onRemoveAvatar: () => void;
   onDisplayNameChange: (value: string) => void;
+  onHandleChange: (value: string) => void;
+  onBioChange: (value: string) => void;
   onNextProfile: () => Promise<boolean> | boolean;
   chatgptConnected: boolean;
   chatgptStatus: string;
@@ -77,6 +89,7 @@ function StepIcon(props: { step: OnboardingStep }) {
 function DirectionButton(props: {
   title: string;
   details: string;
+  action: string;
   disabled: boolean;
   onClick: () => void;
 }) {
@@ -84,14 +97,53 @@ function DirectionButton(props: {
     <button type="button" disabled={props.disabled} onClick={props.onClick}>
       <span>{props.title}</span>
       <p>{props.details}</p>
+      <em>{props.action}</em>
     </button>
   );
+}
+
+function formatHandleAvailability(
+  handle: string,
+  availability: ProfileHandleAvailability | null,
+  isChecking: boolean,
+): { kind: "idle" | "checking" | "success" | "error"; label: string } {
+  if (!handle.trim()) {
+    return { kind: "idle", label: "Recommended for your public profile." };
+  }
+  if (isChecking) {
+    return { kind: "checking", label: "Checking handle..." };
+  }
+  if (!availability) {
+    return { kind: "idle", label: "Use 3-32 letters, numbers, underscores, or hyphens." };
+  }
+  if (availability.status === "available") {
+    return { kind: "success", label: `@${availability.handle} is available.` };
+  }
+  if (availability.status === "taken") {
+    return { kind: "error", label: "That handle is already taken." };
+  }
+  if (availability.status === "reserved") {
+    return { kind: "error", label: "That handle is reserved." };
+  }
+  if (availability.status === "too_short") {
+    return { kind: "error", label: "Use at least 3 characters." };
+  }
+  if (availability.status === "too_long") {
+    return { kind: "error", label: "Use 32 characters or less." };
+  }
+  if (availability.status === "invalid_format") {
+    return { kind: "error", label: "Start and end with a letter or number." };
+  }
+  return { kind: "idle", label: "Recommended for your public profile." };
 }
 
 export function WebOnboardingPage(props: WebOnboardingPageProps) {
   const [step, setStep] = useState<OnboardingStep>(() => normalizeStep(props.accountSetupStatus?.current_step));
   const [agentNameDraft, setAgentNameDraft] = useState(props.agentName);
   const [agentSoulDraft, setAgentSoulDraft] = useState(props.agentSoul);
+  const [providerChoice, setProviderChoice] = useState<"chatgpt" | "openai" | null>(() =>
+    props.openAiConnected ? "openai" : props.chatgptConnected ? "chatgpt" : null,
+  );
   const isModal = props.variant === "modal";
 
   useEffect(() => {
@@ -108,12 +160,23 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
     if (step === "inference" && currentStep === "agent") setStep("agent");
   }, [props.accountSetupStatus?.current_step, step]);
 
+  useEffect(() => {
+    if (props.openAiConnected) setProviderChoice("openai");
+    else if (props.chatgptConnected) setProviderChoice("chatgpt");
+  }, [props.chatgptConnected, props.openAiConnected]);
+
   const progress = props.accountSetupStatus?.percent ?? 0;
   const progressCircumference = 2 * Math.PI * 17;
   const progressDashOffset = progressCircumference - (progress / 100) * progressCircumference;
   const hasInferenceProvider = props.chatgptConnected || props.openAiConnected;
   const profileReady = props.displayName.trim().length > 0 && Boolean(props.avatarUrl?.trim());
   const agentReady = agentNameDraft.trim().length > 0;
+  const handleAvailability = formatHandleAvailability(
+    props.handle,
+    props.handleAvailability,
+    props.isCheckingHandleAvailability,
+  );
+  const showOpenAiKeyEntry = providerChoice === "openai" || props.openAiConnected;
   const stepOrder = useMemo<OnboardingStep[]>(
     () => ["identity", "inference", "agent", "direction"],
     [],
@@ -230,7 +293,11 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
                   onDragLeave={() => props.setIsAvatarDragOver(false)}
                   onDrop={props.onAvatarDrop}
                 >
-                  {props.avatarUrl ? <img src={props.avatarUrl} alt="Profile avatar" /> : <span>P</span>}
+                  {props.avatarUrl ? (
+                    <img src={props.avatarUrl} alt="Profile avatar" />
+                  ) : (
+                    <span>{props.displayName.trim().charAt(0).toUpperCase() || "P"}</span>
+                  )}
                 </div>
                 <div className="polynet-onboarding-avatar-actions">
                   <label className="create-avatar-btn">
@@ -256,23 +323,58 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
                   placeholder="Your name"
                 />
               </label>
+              <label>
+                <span className="polynet-onboarding-label-row">
+                  <span>Handle</span>
+                  <em>Recommended</em>
+                </span>
+                <div className="polynet-onboarding-handle-row">
+                  <span aria-hidden="true">@</span>
+                  <input
+                    value={props.handle}
+                    onChange={(event) => props.onHandleChange(event.target.value)}
+                    placeholder="yourhandle"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
+                  />
+                </div>
+              </label>
+              <small className={`polynet-onboarding-handle-status ${handleAvailability.kind}`}>
+                {handleAvailability.label}
+              </small>
+              <label>
+                <span className="polynet-onboarding-label-row">
+                  <span>Bio</span>
+                  <em>Optional</em>
+                </span>
+                <textarea
+                  value={props.bio}
+                  onChange={(event) => props.onBioChange(event.target.value)}
+                  placeholder="A short line about who you are or what you build."
+                  rows={3}
+                />
+              </label>
               <small>Name and profile photo are required.</small>
             </div>
           ) : null}
 
           {step === "inference" ? (
             <div className="polynet-onboarding-provider-grid">
-              <div className="polynet-onboarding-provider-option primary">
+              <div className={`polynet-onboarding-provider-option primary${providerChoice === "chatgpt" ? " selected" : ""}`}>
                 <div>
-                  <span>ChatGPT OAuth</span>
-                  <strong>Use ChatGPT Plus/Pro rate limits</strong>
-                  <p>Connect ChatGPT so Polynet can use your personal OpenAI account limits.</p>
+                  <span>ChatGPT Plus/Pro</span>
+                  <strong>Use your existing ChatGPT plan limits.</strong>
+                  <p>Best if you already pay for ChatGPT and want Polynet to use that account.</p>
                   <small>{props.chatgptStatus}</small>
                 </div>
                 <button
                   className="platform-save-button platform-save-button--compact"
                   type="button"
-                  onClick={props.onConnectChatgpt}
+                  onClick={() => {
+                    setProviderChoice("chatgpt");
+                    props.onConnectChatgpt();
+                  }}
                   disabled={props.isConnectingChatgpt}
                 >
                   {props.isConnectingChatgpt
@@ -281,35 +383,45 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
                       ? "Continue auth"
                       : props.chatgptConnected
                         ? "Manage"
-                        : "Connect"}
+                        : "Connect ChatGPT"}
                 </button>
               </div>
-              <div className="polynet-onboarding-provider-option">
+              <div className={`polynet-onboarding-provider-option${providerChoice === "openai" ? " selected" : ""}`}>
                 <div>
                   <span>OpenAI API</span>
-                  <strong>Use your API key</strong>
-                  <p>Paste an OpenAI API key billed directly through OpenAI.</p>
+                  <strong>Bill usage to your OpenAI API account.</strong>
+                  <p>Best if you want direct API billing and a dedicated key for Polynet.</p>
                   <small>{props.openAiStatus}</small>
                 </div>
-                <div className="polynet-onboarding-provider-key">
-                  <input
-                    className="provider-connection-input"
-                    type="password"
-                    value={props.openAiApiKeyDraft}
-                    onChange={(event) => props.setOpenAiApiKeyDraft(event.target.value)}
-                    placeholder="Paste OpenAI API key"
-                    autoComplete="off"
-                    disabled={props.isSavingOpenAiConnection}
-                  />
+                {!showOpenAiKeyEntry ? (
                   <button
                     className="secondary"
                     type="button"
-                    onClick={() => void props.onConnectOpenAi()}
-                    disabled={props.isSavingOpenAiConnection || props.openAiApiKeyDraft.trim().length === 0}
+                    onClick={() => setProviderChoice("openai")}
                   >
-                    {props.isSavingOpenAiConnection ? "Saving..." : props.openAiConnected ? "Update key" : "Connect key"}
+                    Use API key
                   </button>
-                </div>
+                ) : (
+                  <div className="polynet-onboarding-provider-key">
+                    <input
+                      className="provider-connection-input"
+                      type="password"
+                      value={props.openAiApiKeyDraft}
+                      onChange={(event) => props.setOpenAiApiKeyDraft(event.target.value)}
+                      placeholder="Paste OpenAI API key"
+                      autoComplete="off"
+                      disabled={props.isSavingOpenAiConnection}
+                    />
+                    <button
+                      className="secondary"
+                      type="button"
+                      onClick={() => void props.onConnectOpenAi()}
+                      disabled={props.isSavingOpenAiConnection || props.openAiApiKeyDraft.trim().length === 0}
+                    >
+                      {props.isSavingOpenAiConnection ? "Saving..." : props.openAiConnected ? "Update key" : "Connect key"}
+                    </button>
+                  </div>
+                )}
                 {props.openAiConnectionError ? <p className="polynet-onboarding-error">{props.openAiConnectionError}</p> : null}
                 {props.openAiConnectionSuccess ? <p className="polynet-onboarding-success">{props.openAiConnectionSuccess}</p> : null}
               </div>
@@ -345,14 +457,16 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
           {step === "direction" ? (
             <div className="polynet-onboarding-choice">
               <DirectionButton
-                title="Build a community"
-                details="Create a community intelligence system around your expertise."
+                title="Build my first community"
+                details="Create a community, configure access, and launch your agent."
+                action="Start building"
                 disabled={props.isSaving}
                 onClick={() => chooseDirection("build_community")}
               />
               <DirectionButton
-                title="Discover a community"
-                details="Find communities with agents, resources, and members."
+                title="Discover communities"
+                details="Explore communities, join one, and start using shared agents."
+                action="Explore communities"
                 disabled={props.isSaving}
                 onClick={() => chooseDirection("discover_community")}
               />
@@ -362,7 +476,6 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
           {props.error ? <p className="polynet-onboarding-error">{props.error}</p> : null}
 
           <div className="polynet-onboarding-profile-footer">
-            {props.email ? <p className="polynet-onboarding-email">{props.email}</p> : <span />}
             <div className="polynet-onboarding-footer-actions">
               {stepIndex(step) > 0 ? (
                 <button

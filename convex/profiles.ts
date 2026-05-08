@@ -81,6 +81,43 @@ async function assertHandleAvailable(ctx: any, normalizedHandle: string, userId:
   }
 }
 
+export const checkHandleAvailability = query({
+  args: {
+    authSubject: v.optional(v.string()),
+    handle: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const validation = validateProfileHandle(args.handle);
+    if (!validation.ok) {
+      return {
+        available: false,
+        status: validation.reason,
+        handle: null,
+        normalized_handle: null,
+      };
+    }
+
+    const currentUserId = args.authSubject
+      ? await resolveUserIdForAuthenticatedRequest({
+          ctx,
+          authSubject: args.authSubject,
+        })
+      : null;
+    const existing = await ctx.db
+      .query("users")
+      .withIndex("by_normalizedHandle", (q: any) => q.eq("normalizedHandle", validation.normalizedHandle))
+      .first();
+    const ownedByCurrentUser = Boolean(existing && currentUserId && String(existing._id) === String(currentUserId));
+    const available = !existing || ownedByCurrentUser;
+    return {
+      available,
+      status: available ? "available" : "taken",
+      handle: validation.handle,
+      normalized_handle: validation.normalizedHandle,
+    };
+  },
+});
+
 export const listProfilesByUserIds = query({
   args: {
     userIds: v.array(v.string()),

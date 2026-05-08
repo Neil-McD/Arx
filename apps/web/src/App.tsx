@@ -28,7 +28,6 @@ import {
 import {
   readProfileDraftForUser, writeProfileDraftForUser, } from "../../../shared/profileDraftStorage";
 import {
-  resolveAuthSessionEmail,
   resolveAuthSubject,
 } from "../../../shared/authSession";
 import {
@@ -99,8 +98,10 @@ import {
   saveCloudCommunityPublicPresentation,
 } from "../../../shared/cloudCommunityFunnelGateway";
 import {
+  checkCloudProfileHandleAvailability,
   loadCloudAccountSetupStatus,
   resolveCloudOnboardingProfileDetail,
+  type CloudProfileHandleAvailability,
   upsertCloudProfileDetail,
 } from "../../../shared/cloudProfilesGateway";
 import type { AccountSetupStatus } from "../../../shared/accountSetup";
@@ -1440,6 +1441,9 @@ export default function App() {
   });
   const [isSavingOnboarding, setIsSavingOnboarding] = useState(false);
   const [onboardingError, setOnboardingError] = useState<string | null>(null);
+  const [onboardingHandleAvailability, setOnboardingHandleAvailability] =
+    useState<CloudProfileHandleAvailability | null>(null);
+  const [isCheckingOnboardingHandle, setIsCheckingOnboardingHandle] = useState(false);
   const refreshAccountSetupStatus = useCallback(async (activeSession: AuthSession | null = sessionRef.current ?? session) => {
     if (!activeSession) {
       setAccountSetupStatus(null);
@@ -1458,7 +1462,38 @@ export default function App() {
       setIsLoadingAccountSetupStatus(false);
     }
   }, [ensureUsableAuthSession, session, sessionRef]);
-  const authProfileEmail = useMemo(() => resolveAuthSessionEmail(session) ?? null, [session]);
+
+  useEffect(() => {
+    const handle = profileUi.profileHandle.trim();
+    if (!session || !handle) {
+      setOnboardingHandleAvailability(null);
+      setIsCheckingOnboardingHandle(false);
+      return;
+    }
+    let cancelled = false;
+    const timeoutId = window.setTimeout(() => {
+      void (async () => {
+        const activeSession = sessionRef.current ?? session;
+        if (!activeSession) return;
+        setIsCheckingOnboardingHandle(true);
+        try {
+          const availability = await checkCloudProfileHandleAvailability<AuthSession>({
+            session: activeSession,
+            handle,
+          });
+          if (!cancelled) setOnboardingHandleAvailability(availability);
+        } catch {
+          if (!cancelled) setOnboardingHandleAvailability(null);
+        } finally {
+          if (!cancelled) setIsCheckingOnboardingHandle(false);
+        }
+      })();
+    }, 260);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeoutId);
+    };
+  }, [profileUi.profileHandle, session, sessionRef]);
 
   const publicCommunityUi = useWebPublicCommunityUiController<
     PublicCommunityRecord,
@@ -2401,8 +2436,8 @@ export default function App() {
     }
 
     const displayName = profileUi.profileName.trim() || null;
-    const handle = cloudProfile?.handle ?? null;
-    const bio = cloudProfile?.bio ?? null;
+    const handle = profileUi.profileHandle.trim() || null;
+    const bio = profileUi.profileBio.trim() || null;
     const avatarUrl = profileUi.profileAvatarUrl?.trim() || null;
 
     setIsSavingOnboarding(true);
@@ -2457,8 +2492,8 @@ export default function App() {
     }
 
     const displayName = profileUi.profileName.trim();
-    const handle = cloudProfile?.handle ?? null;
-    const bio = cloudProfile?.bio ?? null;
+    const handle = profileUi.profileHandle.trim() || null;
+    const bio = profileUi.profileBio.trim() || null;
     const avatarUrl = profileUi.profileAvatarUrl?.trim() || null;
     if (!displayName || !avatarUrl) {
       setOnboardingError("Add your display name and profile photo to continue.");
@@ -7217,9 +7252,12 @@ export default function App() {
     },
     onboardingPageProps: {
       accountSetupStatus: effectiveAccountSetupStatus,
-      email: authProfileEmail,
       displayName: profileUi.profileName,
+      handle: profileUi.profileHandle,
+      bio: profileUi.profileBio,
       avatarUrl: profileUi.profileAvatarUrl,
+      handleAvailability: onboardingHandleAvailability,
+      isCheckingHandleAvailability: isCheckingOnboardingHandle,
       isAvatarDragOver: profileUi.isProfileAvatarDragOver,
       isSaving: isSavingOnboarding,
       error: onboardingError,
@@ -7228,6 +7266,8 @@ export default function App() {
       onAvatarUpload: handleProfileAvatarUpload,
       onRemoveAvatar: () => profileUi.setProfileAvatarUrl(null),
       onDisplayNameChange: profileUi.setProfileName,
+      onHandleChange: profileUi.setProfileHandle,
+      onBioChange: profileUi.setProfileBio,
       onNextProfile: saveOnboardingProfile,
       chatgptConnected: chatgptConnection.connected,
       chatgptStatus: isLoadingChatgptConnection
