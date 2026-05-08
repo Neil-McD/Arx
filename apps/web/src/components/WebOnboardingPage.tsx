@@ -432,7 +432,7 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
                 </div>
                 {!showOpenAiKeyEntry ? (
                   <button
-                    className="polynet-onboarding-provider-secondary-action"
+                    className="platform-save-button platform-save-button--compact"
                     type="button"
                     onClick={() => setProviderChoice("openai")}
                   >
@@ -450,7 +450,7 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
                       disabled={props.isSavingOpenAiConnection}
                     />
                     <button
-                      className="polynet-onboarding-provider-secondary-action"
+                      className="platform-save-button platform-save-button--compact"
                       type="button"
                       onClick={() => {
                         void props.onConnectOpenAi();

@@ -3026,39 +3026,15 @@ body {
   color: color-mix(in srgb, var(--accent-success, #66b786) 78%, var(--text-primary));
 }
 
-.polynet-onboarding-provider-secondary-action {
-  min-height: 42px;
-  width: 100%;
-  border: 1px solid color-mix(in srgb, var(--text-tertiary) 24%, var(--border-muted));
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--bg-card-alt) 68%, rgba(255, 255, 255, 0.08));
-  color: var(--text-primary);
-  font: inherit;
-  font-size: 13px;
-  font-weight: 800;
-  cursor: pointer;
-  transition:
-    border-color 0.16s ease,
-    background 0.16s ease,
-    color 0.16s ease;
-}
-
-.polynet-onboarding-provider-secondary-action:hover:not(:disabled) {
-  border-color: color-mix(in srgb, var(--accent-pink, var(--accent)) 40%, var(--border-muted));
-  background: color-mix(in srgb, var(--accent-pink, var(--accent)) 10%, var(--bg-card-alt));
-  color: var(--text-primary);
-}
-
-.polynet-onboarding-provider-secondary-action:disabled {
-  cursor: not-allowed;
-  opacity: 0.48;
-}
-
 .polynet-onboarding-provider-key {
   display: grid;
   gap: 8px;
   align-items: stretch;
   cursor: default;
+}
+
+.polynet-onboarding-provider-key .platform-save-button {
+  min-height: 42px;
 }
 
 .polynet-onboarding-provider-key .provider-connection-input {
