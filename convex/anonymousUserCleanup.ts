@@ -73,9 +73,9 @@ const SCANNED_USER_REFERENCES: ScanReferenceSpec[] = [
 ];
 
 function normalizeLimit(raw: unknown): number {
-  const parsed = Number(raw ?? 100);
-  if (!Number.isFinite(parsed) || parsed <= 0) return 100;
-  return Math.min(250, Math.floor(parsed));
+  const parsed = Number(raw ?? 50);
+  if (!Number.isFinite(parsed) || parsed <= 0) return 50;
+  return Math.min(50, Math.floor(parsed));
 }
 
 function isAnonymousUser(row: any): boolean {
