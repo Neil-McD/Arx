@@ -12,6 +12,7 @@ const userAvatar = read("shared/UserAvatar.tsx");
 const communityAvatar = read("shared/CommunityAvatar.tsx");
 const editor = read("apps/web/src/components/WebCommunityAvatarEditorModal.tsx");
 const baseCss = read("apps/web/src/base.css");
+const indexCss = read("apps/web/src/index.css");
 
 assert.match(avatarUi, /export function computeAvatarLayout/, "avatar layout math must be shared");
 assert.match(
@@ -42,10 +43,10 @@ assert.match(
   /getAvatarLayoutImageStyle\(layout\)/,
   "stable avatar image style must come from canonical layout math",
 );
-assert.match(
+assert.doesNotMatch(
   stableAvatar,
   /position:\s*style\?\.position\s*\?\?\s*"relative"/,
-  "stable avatar must provide a positioned frame for canonical avatar images",
+  "stable avatar must not override caller-owned layout positioning",
 );
 assert.match(
   stableAvatar,
@@ -87,6 +88,15 @@ assert.match(
 );
 
 assert.match(baseCss, /\.community-rail-avatar\s*\{[\s\S]*?position:\s*relative;/);
+assert.match(baseCss, /\.discover-card-avatar\s*\{[\s\S]*?position:\s*relative;/);
+assert.match(
+  indexCss,
+  /\.mobile-community-trigger-avatar\s*\{[\s\S]*?position:\s*relative;/,
+);
+assert.match(
+  indexCss,
+  /\.mobile-community-selector-avatar\s*\{[\s\S]*?position:\s*relative;/,
+);
 assert.match(
   baseCss,
   /\.chat-avatar\s*\{[\s\S]*?position:\s*absolute;[\s\S]*?z-index:\s*2;/,

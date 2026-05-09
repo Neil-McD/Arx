@@ -2642,6 +2642,7 @@
 }
 
 .mobile-community-trigger-avatar {
+  position: relative;
   display: block;
   overflow: hidden;
 }
@@ -3076,6 +3077,7 @@
 }
 
 .mobile-community-selector-avatar {
+  position: relative;
   display: block;
   overflow: hidden;
 }

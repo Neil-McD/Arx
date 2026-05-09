@@ -106,7 +106,6 @@ export function StableAvatar(props: StableAvatarProps) {
   const rootStyle: CSSProperties | undefined = showImage && hasImageFrame
     ? {
         ...style,
-        position: style?.position ?? "relative",
         overflow: style?.overflow ?? "hidden",
       }
     : showImage
