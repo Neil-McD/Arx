@@ -117,6 +117,26 @@ assert.match(
   /activeMemberships: number/,
   "operator member contract must name membership counts honestly",
 );
+assert.match(
+  operatorTypes,
+  /averageMembersPerCommunity: number \| null/,
+  "operator community overview should expose average members per community",
+);
+assert.match(
+  operatorTypes,
+  /paidCommunityConversionRate: number \| null/,
+  "operator community overview should expose paid community conversion",
+);
+assert.match(
+  operatorTypes,
+  /setupRiskCommunities: number/,
+  "operator community overview should expose setup-risk community count",
+);
+assert.match(
+  operatorTypes,
+  /averageMrrPerCommunity: OperatorMoneyMetric \| null/,
+  "operator community overview should expose average community MRR",
+);
 
 assert.doesNotMatch(
   operatorTypes,
@@ -134,6 +154,21 @@ assert.doesNotMatch(
   operatorIntelligence,
   /query\("criticalAuditEvents"\)\.order\("desc"\)\.take\(100\)/,
   "operator overview critical event counts must not be capped at 100",
+);
+assert.match(
+  operatorIntelligence,
+  /COMMUNITY_SETUP_RISK_FLAGS/,
+  "operator community risk rollup should use an explicit setup-risk flag set",
+);
+assert.match(
+  operatorIntelligence,
+  /STALE_COMMUNITY_ACTIVITY_AGE_MS/,
+  "operator community overview should identify stale community activity",
+);
+assert.match(
+  operatorIntelligence,
+  /averageMrrPerCommunity: divideMoney\(estimatedMrr, communities\.length\)/,
+  "operator community overview should derive average MRR from total MRR",
 );
 
 assert.doesNotMatch(

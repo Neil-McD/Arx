@@ -64,9 +64,16 @@ export type OperatorOverviewSnapshot = {
   totals: {
     builders: number;
     communities: number;
+    activeCommunities: number;
+    totalCommunityMembers: number;
+    averageMembersPerCommunity: number | null;
     paidCommunities: number;
+    paidCommunityConversionRate: number | null;
     activePaidMembers: number;
     estimatedMrr: OperatorMoneyMetric | null;
+    averageMrrPerCommunity: OperatorMoneyMetric | null;
+    setupRiskCommunities: number;
+    staleCommunities: number;
     riskItems: number;
     recentCriticalEvents: number;
   };

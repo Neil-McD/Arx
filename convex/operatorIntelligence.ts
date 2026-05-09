@@ -24,6 +24,14 @@ type MoneyMetric = {
 
 const ACTIVE_SUBSCRIPTION_STATUSES = new Set(["active", "past_due", "cancel_at_period_end"]);
 const CHECKOUT_STATUSES = ["pending", "complete", "expired"] as const;
+const STALE_COMMUNITY_ACTIVITY_AGE_MS = 30 * 86400000;
+const COMMUNITY_SETUP_RISK_FLAGS = new Set([
+  "no_members",
+  "paid_missing_price",
+  "paid_enabled_no_sales",
+  "payout_not_ready",
+  "checkout_abandonment",
+]);
 const SECURITY_AUDIT_EVENT_TYPES = [
   "account_delete_blocked",
   "account_delete_completed",
@@ -874,7 +882,18 @@ async function buildBuilderRecord(ctx: any, community: any, nowMs: number) {
   const completedCheckouts = checkouts.filter((row: any) => row.status === "complete");
   const currentPrice = moneyFromPrice(price);
   const estimatedMrr = await estimateSubscriptionMrr(ctx, revenueSubscriptions);
+  const lastMemberActivityAt = activeMemberships.reduce((latest: number | null, row: any) => {
+    const updatedAt = typeof row.updatedAt === "number" ? row.updatedAt : null;
+    if (updatedAt == null) return latest;
+    return latest == null ? updatedAt : Math.max(latest, updatedAt);
+  }, null);
   const riskFlags: string[] = [];
+  if (activeMemberships.length === 0) {
+    riskFlags.push("no_members");
+  }
+  if (community.entryPolicy === "paid_subscription" && !currentPrice) {
+    riskFlags.push("paid_missing_price");
+  }
   if (community.entryPolicy === "paid_subscription" && activePaidMembers === 0) {
     riskFlags.push("paid_enabled_no_sales");
   }
@@ -884,6 +903,9 @@ async function buildBuilderRecord(ctx: any, community: any, nowMs: number) {
   }
   if (pendingCheckouts.length > completedCheckouts.length && pendingCheckouts.length >= 3) {
     riskFlags.push("checkout_abandonment");
+  }
+  if (lastMemberActivityAt != null && nowMs - lastMemberActivityAt >= STALE_COMMUNITY_ACTIVITY_AGE_MS) {
+    riskFlags.push("stale_member_activity");
   }
 
   const tier = await readActiveTier(ctx, community.ownerId, nowMs);
@@ -920,11 +942,7 @@ async function buildBuilderRecord(ctx: any, community: any, nowMs: number) {
       removedMembers: removedMemberships.length,
     },
     activity: {
-      lastMemberActivityAt: activeMemberships.reduce((latest: number | null, row: any) => {
-        const updatedAt = typeof row.updatedAt === "number" ? row.updatedAt : null;
-        if (updatedAt == null) return latest;
-        return latest == null ? updatedAt : Math.max(latest, updatedAt);
-      }, null),
+      lastMemberActivityAt,
     },
     risk: {
       flags: riskFlags,
@@ -1087,12 +1105,20 @@ export const getOperatorOverviewInternal = internalQuery({
     let estimatedMrr: MoneyMetric | null = null;
     let activePaidMembers = 0;
     let paidCommunities = 0;
+    let activeCommunities = 0;
+    let totalCommunityMembers = 0;
+    let setupRiskCommunities = 0;
+    let staleCommunities = 0;
     let riskItems = 0;
     for (const community of communities) {
       const record = await buildBuilderRecord(ctx, community, nowMs);
       activePaidMembers += record.money.activePaidMembers;
       if (record.money.activePaidMembers > 0) paidCommunities += 1;
+      totalCommunityMembers += record.members.activeMemberships;
+      if (record.members.activeMemberships > 0) activeCommunities += 1;
       estimatedMrr = addMoney(estimatedMrr, record.money.estimatedMrr);
+      if (record.risk.flags.some((flag: string) => COMMUNITY_SETUP_RISK_FLAGS.has(flag))) setupRiskCommunities += 1;
+      if (record.risk.flags.includes("stale_member_activity")) staleCommunities += 1;
       if (record.risk.flags.length > 0) riskItems += record.risk.flags.length;
     }
     const events = await ctx.db.query("criticalAuditEvents").collect();
@@ -1104,9 +1130,16 @@ export const getOperatorOverviewInternal = internalQuery({
       totals: {
         builders: new Set(communities.map((row: any) => String(row.ownerId))).size,
         communities: communities.length,
+        activeCommunities,
+        totalCommunityMembers,
+        averageMembersPerCommunity: communities.length > 0 ? totalCommunityMembers / communities.length : null,
         paidCommunities,
+        paidCommunityConversionRate: conversionRate(paidCommunities, communities.length),
         activePaidMembers,
         estimatedMrr,
+        averageMrrPerCommunity: divideMoney(estimatedMrr, communities.length),
+        setupRiskCommunities,
+        staleCommunities,
         riskItems,
         recentCriticalEvents,
       },

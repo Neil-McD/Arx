@@ -401,6 +401,12 @@ function formatRiskFlag(value: string): string {
       return "Payout not ready";
     case "checkout_abandonment":
       return "Checkout abandonment";
+    case "no_members":
+      return "No members";
+    case "paid_missing_price":
+      return "Missing price";
+    case "stale_member_activity":
+      return "No recent member activity";
     default:
       return value
         .split("_")
@@ -1226,33 +1232,44 @@ function OperatorAccountSetupInsights(props: { snapshot: OperatorAccountSetupSna
 }
 
 function OperatorCommunityInsights(props: { overview: OperatorOverviewSnapshot | null; builders: OperatorBuilderRecord[] }) {
+  const totals = props.overview?.totals;
   return (
     <div className="operator-data-panel__grid">
       <section className="operator-dashboard__metrics" aria-label="Community performance overview">
         <div>
-          <span>Builders</span>
-          <strong>{props.overview?.totals.builders ?? 0}</strong>
-          <span className="operator-dashboard__metric-note">Unique community owners.</span>
-        </div>
-        <div>
           <span>Communities</span>
-          <strong>{props.overview?.totals.communities ?? 0}</strong>
-          <span className="operator-dashboard__metric-note">All community records.</span>
+          <strong>{totals?.communities ?? 0}</strong>
+          <span className="operator-dashboard__metric-note">{totals?.builders ?? 0} unique builders.</span>
         </div>
         <div>
-          <span>Paid communities</span>
-          <strong>{props.overview?.totals.paidCommunities ?? 0}</strong>
-          <span className="operator-dashboard__metric-note">Communities with paid access configured.</span>
+          <span>Active communities</span>
+          <strong>{totals?.activeCommunities ?? 0}</strong>
+          <span className="operator-dashboard__metric-note">At least one active member.</span>
         </div>
         <div>
-          <span>Active paid members</span>
-          <strong>{props.overview?.totals.activePaidMembers ?? 0}</strong>
-          <span className="operator-dashboard__metric-note">Current paid community member base.</span>
+          <span>Active members</span>
+          <strong>{formatOptionalCount(totals?.totalCommunityMembers)}</strong>
+          <span className="operator-dashboard__metric-note">{formatOptionalCount(totals?.averageMembersPerCommunity)} average active per community.</span>
+        </div>
+        <div>
+          <span>Community MRR</span>
+          <strong>{formatMoney(totals?.estimatedMrr ?? null)}</strong>
+          <span className="operator-dashboard__metric-note">{formatMoney(totals?.averageMrrPerCommunity ?? null)} average per community.</span>
+        </div>
+        <div>
+          <span>Paid conversion</span>
+          <strong>{formatPercent(totals?.paidCommunityConversionRate)}</strong>
+          <span className="operator-dashboard__metric-note">{totals?.paidCommunities ?? 0} communities have active paid subscribers.</span>
+        </div>
+        <div>
+          <span>Setup risk</span>
+          <strong>{totals?.setupRiskCommunities ?? 0}</strong>
+          <span className="operator-dashboard__metric-note">{totals?.staleCommunities ?? 0} stale communities.</span>
         </div>
       </section>
 
       <section className="operator-dashboard__panel operator-dashboard__panel--full">
-        <h2>Communities by builder</h2>
+        <h2>Top communities</h2>
         <div className="operator-dashboard__table">
           {props.builders.map((record) => (
             <div className="operator-dashboard__row operator-dashboard__community-row" key={record.community.communityId}>
