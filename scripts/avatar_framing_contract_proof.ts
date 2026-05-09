@@ -42,10 +42,15 @@ assert.match(
   /getAvatarLayoutImageStyle\(layout\)/,
   "stable avatar image style must come from canonical layout math",
 );
-assert.doesNotMatch(
+assert.match(
   stableAvatar,
   /position:\s*style\?\.position\s*\?\?\s*"relative"/,
-  "stable avatar must not override caller-owned layout positioning",
+  "stable avatar must provide a positioned frame for canonical avatar images",
+);
+assert.match(
+  stableAvatar,
+  /overflow:\s*style\?\.overflow\s*\?\?\s*"hidden"/,
+  "stable avatar must clip canonical avatar images to the avatar frame",
 );
 
 assert.match(userAvatar, /imageFrame=\{\{/, "user avatars must pass canonical framing to StableAvatar");
@@ -81,21 +86,6 @@ assert.match(
   "avatar editor preview style must share final-render image style",
 );
 
-for (const className of [
-  "community-rail-avatar",
-  "polynet-onboarding-avatar",
-  "public-funnel-face",
-  "community-btn-avatar",
-  "profile-avatar-drop-avatar",
-  "create-community-avatar",
-  "invite-avatar",
-  "web-empty-thread-avatar",
-]) {
-  assert.match(
-    baseCss,
-    new RegExp(`\\.${className}\\s*\\{[\\s\\S]*?position:\\s*relative;`),
-    `${className} must provide a positioned frame for canonical avatar images`,
-  );
-}
+assert.match(baseCss, /\.community-rail-avatar\s*\{[\s\S]*?position:\s*relative;/);
 
 console.log("PASS: avatar framing contract is canonical.");
