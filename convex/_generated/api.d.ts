@@ -132,6 +132,7 @@ import type * as stripeCore from "../stripeCore.js";
 import type * as threads from "../threads.js";
 import type * as userPlatformAppMounts from "../userPlatformAppMounts.js";
 import type * as userPlatformSkills from "../userPlatformSkills.js";
+import type * as userProfileProjection from "../userProfileProjection.js";
 import type * as webResearchTools from "../webResearchTools.js";
 import type * as webSearchTypes from "../webSearchTypes.js";
 import type * as workspaceCredits from "../workspaceCredits.js";
@@ -272,6 +273,7 @@ declare const fullApi: ApiFromModules<{
   threads: typeof threads;
   userPlatformAppMounts: typeof userPlatformAppMounts;
   userPlatformSkills: typeof userPlatformSkills;
+  userProfileProjection: typeof userProfileProjection;
   webResearchTools: typeof webResearchTools;
   webSearchTypes: typeof webSearchTypes;
   workspaceCredits: typeof workspaceCredits;

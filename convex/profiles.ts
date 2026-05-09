@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import { ensureAuthenticatedActor, resolveUserIdForAuthenticatedRequest } from "./authActor";
 import { validateProfileHandle } from "../shared/profileHandle";
 import { maybeDeleteStorageAsset } from "./communityCore";
+import { resolveUserProfileDisplayProjectionForUser } from "./userProfileProjection";
 import {
   loadAccountSetupStatusForUser,
   type AccountSetupProfileDetailRow as ProfileDetailRow,
@@ -192,7 +193,12 @@ export const listProfilesByUserIds = query({
     for (const userId of normalizedUserIds) {
       const user = await findUserBySubject(ctx, userId);
       if (!user) continue;
-      rows.push(await mapProfileBase(ctx, user));
+      rows.push({
+        user_id: user.authSubject,
+        handle: user.handle ?? null,
+        normalized_handle: user.normalizedHandle ?? null,
+        ...(await resolveUserProfileDisplayProjectionForUser(ctx, user)),
+      });
     }
     return rows;
   },

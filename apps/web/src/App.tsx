@@ -4106,18 +4106,26 @@ export default function App() {
 
   const savedProfilesByUserId = useMemo(() => {
     if (!canonicalSessionUserId || !cloudProfile) return profilesByUserId;
+    const existingDisplayProfile = profilesByUserId[canonicalSessionUserId] ?? null;
+    const cloudHasProfileAvatar = Boolean(cloudProfile.avatar_storage_id || cloudProfile.avatar_url);
     return {
       ...profilesByUserId,
       [canonicalSessionUserId]: {
         user_id: canonicalSessionUserId,
-        display_name: cloudProfile.display_name,
+        display_name: cloudProfile.display_name ?? existingDisplayProfile?.display_name ?? null,
         handle: cloudProfile.handle ?? null,
         normalized_handle: cloudProfile.normalized_handle ?? null,
-        avatar_url: cloudProfile.avatar_url,
-        avatar_storage_id: cloudProfile.avatar_storage_id ?? null,
-        avatar_focus_x: cloudProfile.avatar_focus_x ?? 0.5,
-        avatar_focus_y: cloudProfile.avatar_focus_y ?? 0.5,
-        avatar_zoom: cloudProfile.avatar_zoom ?? 1,
+        avatar_url: cloudProfile.avatar_url ?? existingDisplayProfile?.avatar_url ?? null,
+        avatar_storage_id: cloudProfile.avatar_storage_id ?? existingDisplayProfile?.avatar_storage_id ?? null,
+        avatar_focus_x: cloudHasProfileAvatar
+          ? cloudProfile.avatar_focus_x ?? 0.5
+          : existingDisplayProfile?.avatar_focus_x ?? 0.5,
+        avatar_focus_y: cloudHasProfileAvatar
+          ? cloudProfile.avatar_focus_y ?? 0.5
+          : existingDisplayProfile?.avatar_focus_y ?? 0.5,
+        avatar_zoom: cloudHasProfileAvatar
+          ? cloudProfile.avatar_zoom ?? 1
+          : existingDisplayProfile?.avatar_zoom ?? 1,
       },
     } satisfies Record<string, UserProfile>;
   }, [canonicalSessionUserId, cloudProfile, profilesByUserId]);

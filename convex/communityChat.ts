@@ -17,6 +17,7 @@ import {
   deleteArchiveDocumentBySource,
   upsertArchiveDocumentForChatMessage,
 } from "./communityArchiveDocuments";
+import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
 
 type StoredCommunityChatAttachment = {
   id: string;
@@ -28,15 +29,6 @@ type StoredCommunityChatAttachment = {
   dataUrl?: string | null;
   text?: string | null;
   truncated?: boolean | null;
-};
-
-type CommunityChatProfileDetailLike = {
-  displayName?: string;
-  avatarUrl?: string;
-  avatarStorageId?: any;
-  avatarFocusX?: number;
-  avatarFocusY?: number;
-  avatarZoom?: number;
 };
 
 const COMMUNITY_TYPING_DISPLAY_WINDOW_MS = 5000;
@@ -74,21 +66,7 @@ async function maybeResolveStorageUrl(ctx: any, storageId: unknown): Promise<str
 }
 
 async function resolveTypingProfileFields(ctx: any, userId: any) {
-  const profile = (await ctx.db
-    .query("userProfileDetails")
-    .withIndex("by_user", (q: any) => q.eq("userId", userId))
-    .first()) as CommunityChatProfileDetailLike | null;
-  const storageAvatarUrl = profile?.avatarStorageId
-    ? await maybeResolveStorageUrl(ctx, profile.avatarStorageId)
-    : null;
-  return {
-    display_name: String(profile?.displayName ?? "").trim() || null,
-    avatar_url: storageAvatarUrl ?? profile?.avatarUrl ?? null,
-    avatar_storage_id: profile?.avatarStorageId ? String(profile.avatarStorageId) : null,
-    avatar_focus_x: typeof profile?.avatarFocusX === "number" ? profile.avatarFocusX : 0.5,
-    avatar_focus_y: typeof profile?.avatarFocusY === "number" ? profile.avatarFocusY : 0.5,
-    avatar_zoom: typeof profile?.avatarZoom === "number" ? profile.avatarZoom : 1,
-  };
+  return await resolveUserProfileDisplayProjection(ctx, userId);
 }
 
 function normalizeStoredChatAttachment(raw: unknown): StoredCommunityChatAttachment | null {

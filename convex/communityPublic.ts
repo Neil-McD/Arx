@@ -32,6 +32,7 @@ import {
   isPlatformHomeCommunity,
   readPlatformHomeAutojoinOptOut,
 } from "./platformHomeCommunity";
+import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
 
 const FUNNEL_VISIT_DEDUPE_WINDOW_MS = 30 * 60 * 1000;
 
@@ -45,36 +46,10 @@ type PublicCommunityFace = {
   avatar_zoom?: number | null;
 };
 
-type PublicProfileDetailLike = {
-  displayName?: string;
-  avatarUrl?: string;
-  avatarStorageId?: any;
-  avatarFocusX?: number;
-  avatarFocusY?: number;
-  avatarZoom?: number;
-};
-
 const COMMUNITY_ONLINE_WINDOW_MS = 90_000;
 
 async function resolvePublicProfileFaceFields(ctx: any, userId: any): Promise<Omit<PublicCommunityFace, "user_id">> {
-  const profile = (await ctx.db
-    .query("userProfileDetails")
-    .withIndex("by_user", (q: any) => q.eq("userId", userId))
-    .first()) as PublicProfileDetailLike | null;
-  const storageAvatarUrl = profile?.avatarStorageId
-    ? await ctx.storage.getUrl(profile.avatarStorageId)
-    : null;
-  return {
-    display_name: profile?.displayName ?? null,
-    avatar_url:
-      typeof storageAvatarUrl === "string" && storageAvatarUrl.trim()
-        ? storageAvatarUrl.trim()
-        : profile?.avatarUrl ?? null,
-    avatar_storage_id: profile?.avatarStorageId ? String(profile.avatarStorageId) : null,
-    avatar_focus_x: typeof profile?.avatarFocusX === "number" ? profile.avatarFocusX : 0.5,
-    avatar_focus_y: typeof profile?.avatarFocusY === "number" ? profile.avatarFocusY : 0.5,
-    avatar_zoom: typeof profile?.avatarZoom === "number" ? profile.avatarZoom : 1,
-  };
+  return await resolveUserProfileDisplayProjection(ctx, userId);
 }
 
 async function scheduleCommunityAppGrantSeedingBestEffort(args: {
