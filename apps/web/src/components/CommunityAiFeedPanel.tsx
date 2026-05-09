@@ -169,7 +169,7 @@ export function CommunityAiFeedPanel(props: CommunityAiFeedPanelProps) {
                   {post.pending ? <span className="feed-post-pending">pending sync</span> : null}
                   {capabilities.canModerateFeed ? (
                     <button
-                      className="secondary ai-feed-moderate-button"
+                      className="ai-feed-moderate-button"
                       type="button"
                       disabled={state.moderatingPostId === post.id}
                       onClick={() => actions.hidePost(post.id)}

@@ -133,11 +133,11 @@ export function WebChatgptConnectModal(props: WebChatgptConnectModalProps) {
                     </div>
                     <div className="auth-actions">
                       {manualAuthorizeUrl ? (
-                        <button className="secondary" type="button" onClick={onOpenManualAuthPage}>
+                        <button className="platform-save-button platform-save-button--compact chatgpt-connect-recovery-button" type="button" onClick={onOpenManualAuthPage}>
                           Open browser login
                         </button>
                       ) : (
-                        <button className="secondary" type="button" onClick={onStartManualFlow}>
+                        <button className="platform-save-button platform-save-button--compact chatgpt-connect-recovery-button" type="button" onClick={onStartManualFlow}>
                           Start browser fallback
                         </button>
                       )}
@@ -161,7 +161,7 @@ export function WebChatgptConnectModal(props: WebChatgptConnectModalProps) {
                         />
                         <div className="auth-actions">
                           <button
-                            className="secondary"
+                            className="platform-save-button platform-save-button--compact chatgpt-connect-recovery-button"
                             type="button"
                             onClick={onCompleteManual}
                             disabled={isCompletingManual}

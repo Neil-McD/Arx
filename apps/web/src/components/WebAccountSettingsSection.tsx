@@ -252,7 +252,7 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
                 </button>
               ) : (
                 <button
-                  className="secondary"
+                  className="platform-save-button platform-save-button--compact provider-connection-submit-button"
                   type="button"
                   onClick={() => void handleConnectChatgpt()}
                   disabled={isConnectingChatgpt}

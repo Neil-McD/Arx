@@ -237,7 +237,7 @@ export function WebAgentSettingsSection(props: WebAgentSettingsSectionProps) {
                   disabled={isSavingOpenAiConnection}
                 />
                 <button
-                  className="secondary"
+                  className="platform-save-button platform-save-button--compact provider-connection-submit-button"
                   type="button"
                   onClick={() => void handleConnectOpenAi()}
                   disabled={isSavingOpenAiConnection || openAiApiKeyDraft.trim().length === 0}

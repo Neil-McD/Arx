@@ -192,7 +192,7 @@ export function WebInferenceIssueModal(props: WebInferenceIssueModalProps) {
             {inferenceIssueModal.reason !== "plan" && (
               <button
                 type="button"
-                className="secondary"
+                className="platform-save-button platform-save-button--compact inference-issue-primary-action"
                 onClick={() => onOpenSettings(inferenceIssueModal.reason)}
                 disabled={isInferenceIssueModalRunning}
               >
