@@ -6,24 +6,16 @@ import type { AccountCommerceStatus } from "../../../../shared/accountCommerceSt
 import { getCommunityBannerImageStyle } from "../../../../shared/communityBannerUi";
 import { buildPlatformSwitcherStyle } from "../../../../shared/platformSwitcherUi";
 import { buildStripeConnectPresentation } from "../controllers/buildStripeConnectPresentation";
+import { usePersonalAppSetupController } from "../controllers/usePersonalAppSetupController";
 import {
-  buildDiscoverAppPersonalConnectInput,
   isDiscoverAppPersonallyConnectable,
   type DiscoverAppCatalogEntry,
 } from "../lib/discoverCatalog";
 import { findDiscoverCatalogEntryForAppIdentity } from "../lib/discoverCatalogMatching";
 import { DiscoverCatalogLogo } from "./DiscoverCatalogLogo";
 import { StripeSetupButton } from "./StripeSetupButton";
-import {
-  PersonalAppSetupModal,
-  personalAppSetupRequiresSecret,
-  personalAppSetupTargetsExistingPersonalMount,
-  resolveInitialPersonalAppSetupAuthType,
-} from "./PersonalAppSetupModal";
-import type {
-  CommunityMountedApp,
-  DeveloperAppAuthType,
-} from "../../../../shared/communityAppMountTypes";
+import { PersonalAppSetupModal } from "./PersonalAppSetupModal";
+import type { CommunityMountedApp } from "../../../../shared/communityAppMountTypes";
 import {
   buildMcpAppIdentityAliases,
   mcpAppIdentitySourcesOverlap,
@@ -369,168 +361,18 @@ function CommunityIntegrationsSettingsSection({
 }) {
   const [optingInMountId, setOptingInMountId] = useState<string | null>(null);
   const [optInError, setOptInError] = useState<string | null>(null);
-  const [setupMountId, setSetupMountId] = useState<string | null>(null);
-  const [setupEndpoint, setSetupEndpoint] = useState("");
-  const [setupAuthType, setSetupAuthType] =
-    useState<DeveloperAppAuthType>("bearer");
-  const [setupSecret, setSetupSecret] = useState("");
-  const [setupError, setSetupError] = useState<string | null>(null);
-
-  const setupMount = setupMountId
-    ? integrations.mounts.find((mount) => mount.id === setupMountId) ?? null
-    : null;
-  const setupCatalogEntry = setupMount
-    ? findDiscoverCatalogEntryForAppIdentity(setupMount.app)
-    : null;
-  const setupEffectiveApp = setupMount
-    ? findEffectiveMcpAppForCommunityMount(
-        setupMount,
-        integrations.effectiveMcpApps,
-      )
-    : null;
-  const isSetupOauth =
-    setupCatalogEntry &&
-    isDiscoverAppPersonallyConnectable(setupCatalogEntry) &&
-    setupCatalogEntry.personalConnect.connectionKind === "known" &&
-    setupCatalogEntry.personalConnect.authMethod === "oauth";
-  const setupPersonalMountId =
-    setupEffectiveApp?.personal_mount?.source_mount_id ?? null;
-  const isSettingUpApp =
-    integrations.isOptingIntoApp ||
-    Boolean(
-      setupPersonalMountId &&
-        (integrations.refreshingPersonalMountId === setupPersonalMountId ||
-          integrations.reconnectingPersonalMountId === setupPersonalMountId),
-    );
-
-  const closeSetupModal = () => {
-    setSetupMountId(null);
-    setSetupEndpoint("");
-    setSetupAuthType("bearer");
-    setSetupSecret("");
-    setSetupError(null);
-  };
-
-  const openSetupModalForMount = (
-    mount: CommunityMountedApp,
-    catalogEntry: DiscoverAppCatalogEntry | null,
-  ) => {
-    if (!hasSession) {
-      requireSignIn();
-      return;
-    }
-    if (!catalogEntry || !isDiscoverAppPersonallyConnectable(catalogEntry)) {
-      integrations.onBrowseCatalog();
-      return;
-    }
-    const initialAuthType = resolveInitialPersonalAppSetupAuthType(
-      mount,
-      catalogEntry,
-    );
-    const initialEndpoint =
-      catalogEntry.personalConnect.connectionKind === "custom"
-        ? mount.app.endpoint_url
-        : catalogEntry.personalConnect.endpointUrl;
-    setOptInError(null);
-    setSetupMountId(mount.id);
-    setSetupEndpoint(initialEndpoint);
-    setSetupAuthType(initialAuthType);
-    setSetupSecret("");
-    setSetupError(null);
-  };
-
-  const handleConfirmSetup = async () => {
-    if (!setupMount || !setupCatalogEntry) return;
-    setSetupError(null);
-    if (!isDiscoverAppPersonallyConnectable(setupCatalogEntry)) {
-      setSetupError("This app is not ready for setup yet.");
-      return;
-    }
-    if (isSetupOauth) {
-      const result = await integrations.onBeginPersonalAppOAuth(setupCatalogEntry.id);
-      if (!result.ok) {
-        setSetupError(
-          result.error_message ??
-            `Couldn't start ${setupCatalogEntry.name} authentication.`,
-        );
-      }
-      return;
-    }
-
-    const trimmedSecret = setupSecret.trim();
-    if (
-      personalAppSetupRequiresSecret(setupCatalogEntry, setupAuthType) &&
-      !trimmedSecret
-    ) {
-      setSetupError(`Paste your ${setupCatalogEntry.name} token to continue.`);
-      return;
-    }
-
-    const connectInput = buildDiscoverAppPersonalConnectInput(setupCatalogEntry, {
-      endpointUrl: setupEndpoint,
-      authType: setupAuthType,
-      description: setupCatalogEntry.description,
-      secret: trimmedSecret || undefined,
-    });
-    if (!connectInput) {
-      setSetupError("This app is not ready for this setup path.");
-      return;
-    }
-
-    const existingMountId =
-      setupEffectiveApp?.personal_mount?.source_mount_id ?? null;
-    const targetsExistingPersonalMount =
-      existingMountId !== null &&
-      personalAppSetupTargetsExistingPersonalMount(
-        setupEffectiveApp,
-        connectInput,
-      );
-    if (
-      existingMountId &&
-      targetsExistingPersonalMount &&
-      connectInput.auth_type !== "none" &&
-      connectInput.auth_type !== "oauth"
-    ) {
-      const ok = await integrations.onReconnectPersonalApp(
-        existingMountId,
-        trimmedSecret,
-      );
-      if (!ok) {
-        setSetupError(
-          `Couldn't finish setting up ${setupCatalogEntry.name}. Check the token and try again.`,
-        );
-        return;
-      }
-      closeSetupModal();
-      return;
-    }
-
-    if (
-      existingMountId &&
-      targetsExistingPersonalMount &&
-      connectInput.auth_type === "none"
-    ) {
-      const ok = await integrations.onRefreshPersonalApp(existingMountId);
-      if (!ok) {
-        setSetupError(
-          `Couldn't refresh ${setupCatalogEntry.name}. Try again from this setup modal.`,
-        );
-        return;
-      }
-      closeSetupModal();
-      return;
-    }
-
-    const result = await integrations.onOptInApp(connectInput);
-    if (!result.ok && !result.mount) {
-      setSetupError(
-        result.error_message ??
-          `Couldn't set up ${setupCatalogEntry.name}. Check the requirements and try again.`,
-      );
-      return;
-    }
-    closeSetupModal();
-  };
+  const personalAppSetup = usePersonalAppSetupController({
+    hasSession,
+    requireSignIn,
+    onUnavailable: integrations.onBrowseCatalog,
+    isConnecting: integrations.isOptingIntoApp,
+    refreshingPersonalMountId: integrations.refreshingPersonalMountId,
+    reconnectingPersonalMountId: integrations.reconnectingPersonalMountId,
+    onConnectApp: integrations.onOptInApp,
+    onBeginOAuth: integrations.onBeginPersonalAppOAuth,
+    onRefreshApp: integrations.onRefreshPersonalApp,
+    onReconnectApp: integrations.onReconnectPersonalApp,
+  });
 
   const handleOptIn = async (
     mount: CommunityMountedApp,
@@ -668,9 +510,14 @@ function CommunityIntegrationsSettingsSection({
                         <button
                           type="button"
                           className="settings-cta integration-mounted-setup-action"
-                          onClick={() =>
-                            openSetupModalForMount(mount, catalogEntry)
-                          }
+                          onClick={() => {
+                            setOptInError(null);
+                            personalAppSetup.open({
+                              source: mount,
+                              effectiveSource: effectiveApp,
+                              catalogEntry,
+                            });
+                          }}
                           disabled={isBusy}
                         >
                           Set up
@@ -790,29 +637,10 @@ function CommunityIntegrationsSettingsSection({
           })}
         </div>
       ) : null}
-      {setupMount &&
-      setupCatalogEntry &&
-      isDiscoverAppPersonallyConnectable(setupCatalogEntry) ? (
+      {personalAppSetup.modalProps ? (
         <PersonalAppSetupModal
           modalTitleId="community-integration-setup-modal-title"
-          catalogEntry={setupCatalogEntry}
-          endpoint={setupEndpoint}
-          authType={setupAuthType}
-          secret={setupSecret}
-          error={setupError}
-          isSubmitting={isSettingUpApp}
-          isOauth={Boolean(isSetupOauth)}
-          onEndpointChange={setSetupEndpoint}
-          onAuthTypeChange={(value) => {
-            setSetupAuthType(value);
-            setSetupSecret("");
-          }}
-          onSecretChange={setSetupSecret}
-          onClearError={() => {
-            if (setupError) setSetupError(null);
-          }}
-          onCancel={closeSetupModal}
-          onConfirm={() => void handleConfirmSetup()}
+          {...personalAppSetup.modalProps}
         />
       ) : null}
     </div>

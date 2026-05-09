@@ -35,6 +35,9 @@ function main() {
   const personalAppSetupModal = readText(
     join(root, "apps/web/src/components/PersonalAppSetupModal.tsx"),
   );
+  const personalAppSetupController = readText(
+    join(root, "apps/web/src/controllers/usePersonalAppSetupController.ts"),
+  );
   const discoverCatalogMatching = readText(
     join(root, "apps/web/src/lib/discoverCatalogMatching.ts"),
   );
@@ -64,7 +67,7 @@ function main() {
   );
   assertIncludes(
     contract,
-    "A ready app profile must declare adapter kind, readiness, auth mode, validation kind, identity, context strategy, result policy, declared intents, and risk metadata.",
+    "A ready app profile must declare adapter kind, readiness, auth mode, validation kind, identity, context strategy, result policy, declared intents, risk metadata, and any provider-owned MCP request headers.",
     "MCP app architecture contract profile metadata rule",
   );
   assertIncludes(
@@ -99,6 +102,16 @@ function main() {
   );
   assertIncludes(
     contract,
+    "GitHub's ready profile is intentionally read-only and must use `https://api.githubcopilot.com/mcp/readonly` with catalog-owned read-only and toolset headers",
+    "MCP app architecture contract GitHub narrowed read-only rule",
+  );
+  assertIncludes(
+    contract,
+    "Vercel's MCP profile stays planned until Polynet's client approval and operation-safety path are verified.",
+    "MCP app architecture contract Vercel planned rule",
+  );
+  assertIncludes(
+    contract,
     "Uncataloged remote MCP endpoints are blocked from public server-fetch paths",
     "MCP app architecture contract uncataloged endpoint fetch rule",
   );
@@ -116,6 +129,11 @@ function main() {
     contract,
     "OAuth tokens live in encrypted user connection state and must not be stored in community app bundle records; callback results must not attach provider tokens to a Polynet user until an authenticated finalization action verifies the state owner.",
     "MCP app architecture contract OAuth credential ownership rule",
+  );
+  assertIncludes(
+    contract,
+    "Personal setup UX in Discover, Integrations, and Community Settings must route through one setup controller",
+    "MCP app architecture contract canonical setup controller rule",
   );
   assertIncludes(
     contract,
@@ -208,13 +226,13 @@ function main() {
   );
   assertIncludes(
     communitySettings,
-    "openSetupModalForMount",
-    "Community Settings can open personal setup for a community app",
+    "usePersonalAppSetupController",
+    "Community Settings uses canonical personal app setup controller",
   );
   assertIncludes(
     communitySettings,
-    "onBeginPersonalAppOAuth",
-    "Community Settings setup can start personal OAuth",
+    "personalAppSetup.open",
+    "Community Settings can open personal setup for a community app",
   );
   assertIncludes(
     communitySettings,
@@ -223,13 +241,33 @@ function main() {
   );
   assertIncludes(
     integrationsSettings,
+    "usePersonalAppSetupController",
+    "Integrations Settings uses canonical personal app setup controller",
+  );
+  assertIncludes(
+    integrationsSettings,
     "PersonalAppSetupModal",
     "Integrations Settings uses canonical personal app setup modal",
   );
   assertIncludes(
-    personalAppSetupModal,
+    personalAppSetupController,
+    "onBeginOAuth",
+    "Canonical personal app setup controller can start personal OAuth",
+  );
+  assertIncludes(
+    personalAppSetupController,
     "personalAppSetupTargetsExistingPersonalMount",
-    "Canonical personal app setup reuses existing personal app identity",
+    "Canonical personal app setup controller reuses existing personal app identity",
+  );
+  assertNotIncludes(
+    communitySettings,
+    "const handleConfirmSetup",
+    "Community Settings should not duplicate personal app setup branching",
+  );
+  assertNotIncludes(
+    integrationsSettings,
+    "const handleConfirmSetup",
+    "Integrations Settings should not duplicate personal app setup branching",
   );
   assertIncludes(
     communitySettings,

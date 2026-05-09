@@ -7,12 +7,14 @@ import {
   hasPlannedDiscoverAppIntegrationProfileKind,
   resolveDiscoverAppExecutionSurface,
   resolveDiscoverAppIntegrationProfile,
+  resolveDiscoverAppMcpRequestHeadersForCatalogAppId,
   type DiscoverAppCatalogEntry,
   type DiscoverAppIntegrationProfile,
 } from "../shared/discoverCatalog.ts";
 
 const READY_APP_IDS = new Set([
   "airtable",
+  "github",
   "linear",
   "notion",
   "shopify",
@@ -240,6 +242,48 @@ function main() {
     [...READY_APP_IDS].sort(),
     "ready Discover app set should stay intentional",
   );
+
+  const github = DISCOVER_APP_CATALOG.find((app) => app.id === "github");
+  assert.ok(github, "GitHub must exist in the Discover catalog");
+  assert.equal(
+    github.personalConnect.availability,
+    "ready",
+    "GitHub should be intentionally ready as a read-only token MCP",
+  );
+  assert.equal(
+    github.personalConnect.endpointUrl,
+    "https://api.githubcopilot.com/mcp/readonly",
+    "GitHub must use the hosted read-only MCP endpoint",
+  );
+  const githubProfile = resolveDiscoverAppIntegrationProfile(github);
+  assert.equal(githubProfile.runtimePolicy.defaultToolRisk, "sensitive");
+  assert.deepEqual(
+    resolveDiscoverAppMcpRequestHeadersForCatalogAppId("github"),
+    {
+      "X-MCP-Readonly": "true",
+      "X-MCP-Toolsets": "repos,issues,pull_requests,users",
+    },
+    "GitHub ready profile must force read-only narrowed MCP toolsets",
+  );
+  for (const intent of githubProfile.runtimePolicy.declaredIntents) {
+    assert.equal(
+      intent.includes("write"),
+      false,
+      "GitHub ready profile should not declare write intent",
+    );
+  }
+
+  const vercel = DISCOVER_APP_CATALOG.find((app) => app.id === "vercel");
+  assert.ok(vercel, "Vercel must exist in the Discover catalog");
+  assert.equal(
+    vercel.personalConnect.availability,
+    "later",
+    "Vercel should stay non-connectable until client approval and operation safety are verified",
+  );
+  const vercelProfile = resolveDiscoverAppIntegrationProfile(vercel);
+  assert.equal(vercelProfile.adapterKind, "remote_mcp_oauth");
+  assert.equal(vercelProfile.readiness, "oauth_planned");
+  assert.equal(vercelProfile.authMode, "oauth");
 
   console.log(
     "PASS: Discover apps have explicit integration profiles, and ready apps declare adapter, validation, and risk metadata.",

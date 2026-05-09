@@ -3,25 +3,16 @@ import { useEffect, useMemo, useState } from "react";
 import type { CreateSkillPackageInput } from "../../../../shared/skillPackageTypes";
 import type { UserPlatformInstalledSkill } from "../../../../shared/userPlatformSkillTypes";
 import type { EffectiveMcpApp } from "../../../../shared/effectiveMcpApps";
-import type { DeveloperAppAuthType } from "../../../../shared/communityAppMountTypes";
 import type {
   BeginUserPlatformAppOAuthResult,
   ConnectUserPlatformAppInput,
   ConnectUserPlatformAppResult,
 } from "../../../../shared/userPlatformAppMountTypes";
-import {
-  buildDiscoverAppPersonalConnectInput,
-  isDiscoverAppPersonallyConnectable,
-  type DiscoverAppCatalogEntry,
-} from "../lib/discoverCatalog";
+import { isDiscoverAppPersonallyConnectable } from "../lib/discoverCatalog";
+import { usePersonalAppSetupController } from "../controllers/usePersonalAppSetupController";
 import { findDiscoverCatalogEntryForAppIdentity } from "../lib/discoverCatalogMatching";
 import { DiscoverCatalogLogo } from "./DiscoverCatalogLogo";
-import {
-  PersonalAppSetupModal,
-  personalAppSetupRequiresSecret,
-  personalAppSetupTargetsExistingPersonalMount,
-  resolveInitialPersonalAppSetupAuthType,
-} from "./PersonalAppSetupModal";
+import { PersonalAppSetupModal } from "./PersonalAppSetupModal";
 
 type SessionLike = {
   user: {
@@ -224,14 +215,6 @@ export function WebIntegrationsSettingsSection(
     useState<CreateSkillPackageInput>(buildInitialSkillDraft);
   const [reconnectSecret, setReconnectSecret] = useState("");
   const [reconnectError, setReconnectError] = useState<string | null>(null);
-  const [setupAppIdentityKey, setSetupAppIdentityKey] = useState<string | null>(
-    null,
-  );
-  const [setupEndpoint, setSetupEndpoint] = useState("");
-  const [setupAuthType, setSetupAuthType] =
-    useState<DeveloperAppAuthType>("bearer");
-  const [setupSecret, setSetupSecret] = useState("");
-  const [setupError, setSetupError] = useState<string | null>(null);
 
   const busyMountIds = useMemo(
     () =>
@@ -258,28 +241,18 @@ export function WebIntegrationsSettingsSection(
       ),
     [effectiveMcpApps],
   );
-  const setupEffectiveApp = useMemo(
-    () =>
-      setupAppIdentityKey
-        ? visibleEffectiveMcpApps.find(
-            (app) => app.app_identity_key === setupAppIdentityKey,
-          ) ?? null
-        : null,
-    [setupAppIdentityKey, visibleEffectiveMcpApps],
-  );
-  const setupCatalogEntry = setupEffectiveApp
-    ? findDiscoverCatalogEntryForAppIdentity(setupEffectiveApp.app)
-    : null;
-  const isSetupOauth =
-    setupCatalogEntry &&
-    isDiscoverAppPersonallyConnectable(setupCatalogEntry) &&
-    setupCatalogEntry.personalConnect.connectionKind === "known" &&
-    setupCatalogEntry.personalConnect.authMethod === "oauth";
-  const isSettingUpApp = isConnectingUserPlatformApp || Boolean(
-    setupEffectiveApp?.personal_mount?.source_mount_id &&
-      reconnectingUserPlatformAppMountId ===
-        setupEffectiveApp.personal_mount.source_mount_id,
-  );
+  const personalAppSetup = usePersonalAppSetupController({
+    hasSession: Boolean(session),
+    requireSignIn,
+    onUnavailable: openDiscoverApps,
+    isConnecting: isConnectingUserPlatformApp,
+    refreshingPersonalMountId: refreshingUserPlatformAppMountId,
+    reconnectingPersonalMountId: reconnectingUserPlatformAppMountId,
+    onConnectApp: onConnectUserPlatformApp,
+    onBeginOAuth: onBeginUserPlatformAppOAuth,
+    onRefreshApp: onRefreshUserPlatformApp,
+    onReconnectApp: onReconnectUserPlatformApp,
+  });
 
   useEffect(() => {
     if (!openMountMenuId) return;
@@ -324,134 +297,6 @@ export function WebIntegrationsSettingsSection(
     if (!ok) return;
     setEditingUserPlatformSkillInstallId(null);
     setEditingSkillDraft(buildInitialSkillDraft());
-  };
-
-  const closeSetupModal = () => {
-    setSetupAppIdentityKey(null);
-    setSetupEndpoint("");
-    setSetupAuthType("bearer");
-    setSetupSecret("");
-    setSetupError(null);
-  };
-
-  const openSetupModalForApp = (
-    app: EffectiveMcpApp,
-    catalogEntry: DiscoverAppCatalogEntry | null,
-  ) => {
-    if (!session) {
-      requireSignIn();
-      return;
-    }
-    if (!catalogEntry || !isDiscoverAppPersonallyConnectable(catalogEntry)) {
-      openDiscoverApps();
-      return;
-    }
-    const initialAuthType = resolveInitialPersonalAppSetupAuthType(
-      app,
-      catalogEntry,
-    );
-    const initialEndpoint =
-      catalogEntry.personalConnect.connectionKind === "custom"
-        ? app.app.endpoint_url
-        : catalogEntry.personalConnect.endpointUrl;
-    setOpenMountMenuId(null);
-    setReconnectDraftMountId(null);
-    setReconnectSecret("");
-    setReconnectError(null);
-    setSetupAppIdentityKey(app.app_identity_key);
-    setSetupEndpoint(initialEndpoint);
-    setSetupAuthType(initialAuthType);
-    setSetupSecret("");
-    setSetupError(null);
-  };
-
-  const handleConfirmSetup = async () => {
-    if (!setupEffectiveApp || !setupCatalogEntry) return;
-    setSetupError(null);
-    if (!isDiscoverAppPersonallyConnectable(setupCatalogEntry)) {
-      setSetupError("This app is not ready for setup yet.");
-      return;
-    }
-    if (isSetupOauth) {
-      const result = await onBeginUserPlatformAppOAuth(setupCatalogEntry.id);
-      if (!result.ok) {
-        setSetupError(
-          result.error_message ??
-            `Couldn't start ${setupCatalogEntry.name} authentication.`,
-        );
-      }
-      return;
-    }
-
-    const trimmedSecret = setupSecret.trim();
-    if (
-      personalAppSetupRequiresSecret(setupCatalogEntry, setupAuthType) &&
-      !trimmedSecret
-    ) {
-      setSetupError(`Paste your ${setupCatalogEntry.name} token to continue.`);
-      return;
-    }
-
-    const connectInput = buildDiscoverAppPersonalConnectInput(setupCatalogEntry, {
-      endpointUrl: setupEndpoint,
-      authType: setupAuthType,
-      description: setupCatalogEntry.description,
-      secret: trimmedSecret || undefined,
-    });
-    if (!connectInput) {
-      setSetupError("This app is not ready for this setup path.");
-      return;
-    }
-
-    const existingMountId = setupEffectiveApp.personal_mount?.source_mount_id ?? null;
-    const targetsExistingPersonalMount =
-      existingMountId !== null &&
-      personalAppSetupTargetsExistingPersonalMount(
-        setupEffectiveApp,
-        connectInput,
-      );
-    if (
-      existingMountId &&
-      targetsExistingPersonalMount &&
-      connectInput.auth_type !== "none" &&
-      connectInput.auth_type !== "oauth"
-    ) {
-      const ok = await onReconnectUserPlatformApp(existingMountId, trimmedSecret);
-      if (!ok) {
-        setSetupError(
-          `Couldn't finish setting up ${setupCatalogEntry.name}. Check the token and try again.`,
-        );
-        return;
-      }
-      closeSetupModal();
-      return;
-    }
-
-    if (
-      existingMountId &&
-      targetsExistingPersonalMount &&
-      connectInput.auth_type === "none"
-    ) {
-      const ok = await onRefreshUserPlatformApp(existingMountId);
-      if (!ok) {
-        setSetupError(
-          `Couldn't refresh ${setupCatalogEntry.name}. Try again from this setup modal.`,
-        );
-        return;
-      }
-      closeSetupModal();
-      return;
-    }
-
-    const result = await onConnectUserPlatformApp(connectInput);
-    if (!result.ok && !result.mount) {
-      setSetupError(
-        result.error_message ??
-          `Couldn't set up ${setupCatalogEntry.name}. Check the requirements and try again.`,
-      );
-      return;
-    }
-    closeSetupModal();
   };
 
   return (
@@ -592,9 +437,16 @@ export function WebIntegrationsSettingsSection(
                             type="button"
                             className="settings-cta integration-mounted-setup-action"
                             disabled={isBusy || isConnectingUserPlatformApp}
-                            onClick={() =>
-                              openSetupModalForApp(effectiveApp, catalogEntry)
-                            }
+                            onClick={() => {
+                              setOpenMountMenuId(null);
+                              setReconnectDraftMountId(null);
+                              setReconnectSecret("");
+                              setReconnectError(null);
+                              personalAppSetup.open({
+                                source: effectiveApp,
+                                catalogEntry,
+                              });
+                            }}
                           >
                             Set up
                           </button>
@@ -714,9 +566,16 @@ export function WebIntegrationsSettingsSection(
                             type="button"
                             className="settings-cta integration-mounted-setup-action"
                             disabled={isConnectingUserPlatformApp}
-                            onClick={() =>
-                              openSetupModalForApp(effectiveApp, catalogEntry)
-                            }
+                            onClick={() => {
+                              setOpenMountMenuId(null);
+                              setReconnectDraftMountId(null);
+                              setReconnectSecret("");
+                              setReconnectError(null);
+                              personalAppSetup.open({
+                                source: effectiveApp,
+                                catalogEntry,
+                              });
+                            }}
                           >
                             Set up
                           </button>
@@ -785,29 +644,10 @@ export function WebIntegrationsSettingsSection(
         ) : null}
       </div>
 
-      {setupEffectiveApp &&
-      setupCatalogEntry &&
-      isDiscoverAppPersonallyConnectable(setupCatalogEntry) ? (
+      {personalAppSetup.modalProps ? (
         <PersonalAppSetupModal
           modalTitleId="integration-setup-modal-title"
-          catalogEntry={setupCatalogEntry}
-          endpoint={setupEndpoint}
-          authType={setupAuthType}
-          secret={setupSecret}
-          error={setupError}
-          isSubmitting={isSettingUpApp}
-          isOauth={Boolean(isSetupOauth)}
-          onEndpointChange={setSetupEndpoint}
-          onAuthTypeChange={(value) => {
-            setSetupAuthType(value);
-            setSetupSecret("");
-          }}
-          onSecretChange={setSetupSecret}
-          onClearError={() => {
-            if (setupError) setSetupError(null);
-          }}
-          onCancel={closeSetupModal}
-          onConfirm={() => void handleConfirmSetup()}
+          {...personalAppSetup.modalProps}
         />
       ) : null}
 

@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import {
   applyDiscoverAppDefaultToolRiskFloor,
   applyDiscoverAppResultPolicyToText,
+  resolveDiscoverAppMcpRequestHeadersForCatalogAppId,
   resolveDiscoverAppResultPolicyForCatalogAppId,
 } from "../shared/discoverCatalog.ts";
 
@@ -35,6 +36,24 @@ function main() {
     applyDiscoverAppDefaultToolRiskFloor("notion", "read"),
     "write",
     "Notion tools must not classify below the write profile floor",
+  );
+  assert.equal(
+    applyDiscoverAppDefaultToolRiskFloor("github", "read"),
+    "sensitive",
+    "GitHub read-only tools can still expose private repository data and must keep a sensitive floor",
+  );
+  assert.deepEqual(
+    resolveDiscoverAppMcpRequestHeadersForCatalogAppId("github"),
+    {
+      "X-MCP-Readonly": "true",
+      "X-MCP-Toolsets": "repos,issues,pull_requests,users",
+    },
+    "GitHub validation/runtime requests must include catalog-owned MCP narrowing headers",
+  );
+  assert.equal(
+    applyDiscoverAppDefaultToolRiskFloor("vercel", "read"),
+    "sensitive",
+    "Vercel tools can expose deployment and project data and must keep a sensitive floor",
   );
 
   const notionPolicy = resolveDiscoverAppResultPolicyForCatalogAppId("notion");
@@ -71,6 +90,12 @@ function main() {
   assert.ok(
     runtimeSource.includes("applyDiscoverAppResultPolicyToText"),
     "Runtime MCP execution must enforce result byte bounds",
+  );
+
+  const mcpHttpSource = readText(new URL("../convex/mcpHttpClient.ts", import.meta.url));
+  assert.ok(
+    mcpHttpSource.includes("resolveDiscoverAppMcpRequestHeadersForCatalogAppId"),
+    "MCP HTTP client must merge catalog-owned request headers into validation and runtime requests",
   );
 
   console.log(

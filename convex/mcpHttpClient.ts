@@ -2,6 +2,9 @@ import {
   type DeveloperAppRow,
   normalizeString,
 } from "./appCore.ts";
+import {
+  resolveDiscoverAppMcpRequestHeadersForCatalogAppId,
+} from "../shared/discoverCatalog.ts";
 
 export type JsonRpcSuccess = {
   result?: any;
@@ -201,10 +204,12 @@ export function errorMessageFromRpc(response: {
 }
 
 export function buildDeveloperAppAuthHeaders(params: {
-  app: Pick<DeveloperAppRow, "authType">;
+  app: Pick<DeveloperAppRow, "authType" | "catalogAppId">;
   secret: string | null;
 }): Record<string, string> {
-  const merged: Record<string, string> = {};
+  const merged: Record<string, string> = {
+    ...resolveDiscoverAppMcpRequestHeadersForCatalogAppId(params.app.catalogAppId),
+  };
   if (params.app.authType === "bearer" || params.app.authType === "oauth") {
     if (!params.secret) throw new Error("developer_app_connection_secret_required");
     merged.Authorization = `Bearer ${params.secret}`;

@@ -56,6 +56,29 @@ function main() {
     "Notion OAuth must not fall back to bearer-token identity",
   );
 
+  const vercel = findDiscoverAppCatalogEntryById("vercel");
+  assert.ok(vercel, "Vercel must exist in the Discover catalog");
+  const vercelProfile = resolveDiscoverAppIntegrationProfile(vercel);
+  assert.equal(vercelProfile.adapterKind, "remote_mcp_oauth");
+  assert.equal(vercelProfile.readiness, "oauth_planned");
+  assert.equal(vercelProfile.authMode, "oauth");
+  assert.equal(vercel.personalConnect.availability, "later");
+  assert.equal(vercel.personalConnect.authMethod, "oauth");
+  assert.equal(vercel.personalConnect.endpointUrl, "https://mcp.vercel.com");
+  assert.deepEqual(resolveDiscoverAppOAuthClientConfig(vercel), {
+    mode: "dynamic_registration",
+  });
+  assert.equal(
+    resolveDiscoverAppCatalogConnectPolicy({
+      catalogAppId: "vercel",
+      name: "untrusted name",
+      endpointUrl: "https://mcp.vercel.com",
+      authType: "oauth",
+    }).ok,
+    false,
+    "Vercel OAuth must stay non-connectable until client approval and operation safety are verified",
+  );
+
   const asana = findDiscoverAppCatalogEntryById("asana");
   assert.ok(asana, "Asana must exist in the Discover catalog");
   const asanaProfile = resolveDiscoverAppIntegrationProfile(asana);

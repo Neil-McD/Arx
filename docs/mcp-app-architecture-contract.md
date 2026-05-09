@@ -37,7 +37,7 @@ Current code:
 Rules:
 - Every Discover app must resolve to one profile.
 - Ready apps must have an explicit profile override.
-- A ready app profile must declare adapter kind, readiness, auth mode, validation kind, identity, context strategy, result policy, declared intents, and risk metadata.
+- A ready app profile must declare adapter kind, readiness, auth mode, validation kind, identity, context strategy, result policy, declared intents, risk metadata, and any provider-owned MCP request headers.
 - Planned apps must remain disabled at the profile layer until their adapter contract exists.
 - Adapter categories are MCP, connector backplane, direct API, sandboxed CLI, or catalog-only.
 - Context strategy must say whether the harness should use manifest-only context, search-then-fetch, structured snapshots, or artifact references.
@@ -46,6 +46,8 @@ Rules:
 - Catalog app connection policy is server-authoritative; the frontend cannot choose a catalog app endpoint, auth mode, or display name as authority.
 - Catalog singleton apps reuse by `catalogAppId`; endpoint-instance apps, such as Shopify Storefront MCP, reuse by endpoint/auth identity.
 - Shopify's ready profile accepts only the standard Storefront MCP `/api/mcp` endpoint; UCP catalog endpoints such as `/api/ucp/mcp` require a separate reviewed profile before they are connectable.
+- GitHub's ready profile is intentionally read-only and must use `https://api.githubcopilot.com/mcp/readonly` with catalog-owned read-only and toolset headers; the general GitHub MCP endpoint is not part of the ready contract.
+- Vercel's MCP profile stays planned until Polynet's client approval and operation-safety path are verified.
 - Uncataloged remote MCP endpoints are blocked from public server-fetch paths until they have a reviewed catalog policy or a network-layer egress guard.
 - Operator audit must identify uncataloged or catalog-policy-blocked developer app rows before broad release.
 - Integration profile default risk is applied as a floor during MCP tool snapshot classification.
@@ -92,6 +94,7 @@ Rules:
 - If a user already has Linear live personally and a community adds Linear, every surface must resolve to that same effective Linear state for that user.
 - If a user lacks required credentials, the app can be present but must show setup needed.
 - If auth is not required and validation succeeds, the app can become live after seeding.
+- Personal setup UX in Discover, Integrations, and Community Settings must route through one setup controller so OAuth, token, no-auth, reconnect, and refresh behavior cannot drift by surface.
 
 ### Runtime Harness
 

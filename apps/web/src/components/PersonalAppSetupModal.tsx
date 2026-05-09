@@ -1,25 +1,9 @@
 import type { DeveloperAppAuthType } from "../../../../shared/communityAppMountTypes";
-import type { ConnectUserPlatformAppInput } from "../../../../shared/userPlatformAppMountTypes";
 import {
   buildDiscoverAppPersonalConnectModalCopy,
   buildDiscoverAppPersonalConnectRequirements,
   type DiscoverAppCatalogEntry,
 } from "../lib/discoverCatalog";
-
-type PersonalAppSetupSource = {
-  app: {
-    auth_type?: string | null;
-  };
-};
-
-type PersonalAppSetupEffectiveSource = {
-  personal_mount?: {
-    app: {
-      endpoint_url?: string | null;
-      auth_type?: string | null;
-    };
-  } | null;
-} | null | undefined;
 
 type PersonalAppSetupCatalogEntry = DiscoverAppCatalogEntry & {
   personalConnect: Extract<
@@ -44,65 +28,6 @@ type PersonalAppSetupModalProps = {
   onCancel: () => void;
   onConfirm: () => void;
 };
-
-function isDeveloperAppAuthType(value: string): value is DeveloperAppAuthType {
-  return (
-    value === "none" ||
-    value === "api_key" ||
-    value === "bearer" ||
-    value === "oauth"
-  );
-}
-
-export function resolveInitialPersonalAppSetupAuthType(
-  source: PersonalAppSetupSource,
-  catalogEntry: PersonalAppSetupCatalogEntry,
-): DeveloperAppAuthType {
-  if (catalogEntry.personalConnect.connectionKind === "custom") {
-    const currentAuthType = source.app.auth_type;
-    if (
-      currentAuthType &&
-      isDeveloperAppAuthType(currentAuthType) &&
-      catalogEntry.personalConnect.supportedAuthTypes.some(
-        (option) => option.value === currentAuthType,
-      )
-    ) {
-      return currentAuthType;
-    }
-    return catalogEntry.personalConnect.supportedAuthTypes[0]?.value ?? "none";
-  }
-  return catalogEntry.personalConnect.authType;
-}
-
-export function personalAppSetupRequiresSecret(
-  catalogEntry: PersonalAppSetupCatalogEntry,
-  authType: DeveloperAppAuthType,
-): boolean {
-  if (catalogEntry.personalConnect.connectionKind === "custom") {
-    return authType !== "none";
-  }
-  return catalogEntry.personalConnect.authMethod === "token";
-}
-
-function normalizeSetupIdentityPart(value: string | null | undefined): string {
-  return String(value ?? "")
-    .trim()
-    .toLowerCase();
-}
-
-export function personalAppSetupTargetsExistingPersonalMount(
-  source: PersonalAppSetupEffectiveSource,
-  connectInput: ConnectUserPlatformAppInput,
-): boolean {
-  const personalMount = source?.personal_mount;
-  if (!personalMount) return false;
-  return (
-    normalizeSetupIdentityPart(personalMount.app.endpoint_url) ===
-      normalizeSetupIdentityPart(connectInput.endpoint_url) &&
-    normalizeSetupIdentityPart(personalMount.app.auth_type) ===
-      normalizeSetupIdentityPart(connectInput.auth_type)
-  );
-}
 
 export function PersonalAppSetupModal({
   modalTitleId,

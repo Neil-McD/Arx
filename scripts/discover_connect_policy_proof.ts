@@ -68,6 +68,53 @@ function main() {
     },
     "catalog_app_auth_mismatch",
   );
+  const github = resolveDiscoverAppCatalogConnectPolicy({
+    catalogAppId: "github",
+    name: "Not GitHub",
+    endpointUrl: "https://api.githubcopilot.com/mcp/readonly",
+    authType: "bearer",
+  });
+  assert.equal(github.ok, true);
+  assert.deepEqual(
+    github,
+    {
+      ok: true,
+      catalogAppId: "github",
+      name: "GitHub",
+      endpointUrl: "https://api.githubcopilot.com/mcp/readonly",
+      authType: "bearer",
+      identityScope: "catalog_singleton",
+    },
+    "GitHub catalog policy should force the read-only hosted MCP endpoint",
+  );
+  assertRejected(
+    {
+      catalogAppId: "github",
+      name: "GitHub",
+      endpointUrl: "https://api.githubcopilot.com/mcp/",
+      authType: "bearer",
+    },
+    "catalog_app_endpoint_mismatch",
+  );
+  assertRejected(
+    {
+      catalogAppId: "github",
+      name: "GitHub",
+      endpointUrl: "https://api.githubcopilot.com/mcp/readonly",
+      authType: "oauth",
+    },
+    "catalog_app_auth_mismatch",
+  );
+
+  assertRejected(
+    {
+      catalogAppId: "vercel",
+      name: "Not Vercel",
+      endpointUrl: "https://mcp.vercel.com",
+      authType: "oauth",
+    },
+    "catalog_app_not_ready",
+  );
   assertRejected(
     {
       catalogAppId: "vercel",

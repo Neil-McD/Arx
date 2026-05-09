@@ -779,6 +779,7 @@ Each catalog app should resolve to an integration profile: MCP, connector backpl
 10. Apps should expose compact harness context first, then retrieve external context lazily through bounded tool calls.
 11. CLI-shaped apps should run through sandboxed command wrappers and return artifact references instead of raw shell access.
 12. OAuth MCP apps must bind tokens to the MCP resource, store tokens server-side only after authenticated Polynet finalization, refresh tokens before validation/runtime execution, and keep community app records credential-free. Providers can use dynamic registration or static deployment-owned OAuth clients, but the client mode must be explicit in the integration profile and static client secrets must stay in deployment env.
+13. Provider-specific endpoint variants and request headers are part of the app contract. For example, GitHub is ready only through its hosted read-only MCP endpoint with catalog-owned read-only/toolset headers, not the general write-capable MCP surface.
 
 ## Non-Goals
 
@@ -1497,7 +1498,9 @@ Capability is real only when:
 16. Before broad release, operators should audit existing app rows for uncataloged or catalog-policy-blocked endpoints.
 17. Prefer direct API adapters when the product workflow needs token-efficient structured snapshots instead of broad tool discovery.
 18. Prefer sandboxed CLI adapters when the app produces artifacts, renders, builds, or previews.
-19. Ready OAuth remote MCP apps use PKCE OAuth, MCP `resource` audience binding, authenticated finalization, encrypted token storage, token refresh, and user-owned harness state. Notion uses dynamic client registration against `https://mcp.notion.com/mcp`; Asana is the first static-client OAuth MCP target and remains non-connectable until the deployment has `ASANA_MCP_CLIENT_ID` and `ASANA_MCP_CLIENT_SECRET` configured for `https://mcp.asana.com/v2/mcp`.
+19. Ready OAuth remote MCP apps use PKCE OAuth, MCP `resource` audience binding, authenticated finalization, encrypted token storage, token refresh, and user-owned harness state. Notion uses dynamic client registration against its hosted MCP endpoint; Asana is the first static-client OAuth MCP target and remains non-connectable until the deployment has `ASANA_MCP_CLIENT_ID` and `ASANA_MCP_CLIENT_SECRET` configured for `https://mcp.asana.com/v2/mcp`.
+20. GitHub is ready only through its hosted read-only MCP endpoint, `https://api.githubcopilot.com/mcp/readonly`, with a user-owned bearer token and catalog-owned read-only/toolset headers. Do not switch GitHub to the general remote MCP endpoint without a separate write-safety review.
+21. Vercel's hosted MCP endpoint is catalog-known, but it remains non-connectable until Polynet's client approval and operation-safety path are verified.
 
 ## Common Mistakes
 

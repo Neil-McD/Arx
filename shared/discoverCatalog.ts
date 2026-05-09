@@ -53,6 +53,8 @@ export type DiscoverAppRuntimePolicy = {
   declaredIntents: string[];
 };
 
+export type DiscoverAppMcpRequestHeaders = Record<string, string>;
+
 export type DiscoverAppOAuthClientConfig =
   | {
       mode: "dynamic_registration";
@@ -72,6 +74,7 @@ export type DiscoverAppIntegrationProfile = {
   contextStrategy: DiscoverAppContextStrategy;
   resultPolicy: DiscoverAppResultPolicy;
   runtimePolicy: DiscoverAppRuntimePolicy;
+  mcpRequestHeaders?: DiscoverAppMcpRequestHeaders;
   oauthClient?: DiscoverAppOAuthClientConfig;
 };
 
@@ -243,8 +246,66 @@ function buildDiscoverAppRuntimePolicy(args: {
   };
 }
 
+const FORBIDDEN_PROFILE_MCP_HEADER_NAMES = new Set([
+  "accept",
+  "authorization",
+  "content-type",
+  "cookie",
+  "mcp-protocol-version",
+  "mcp-session-id",
+  "set-cookie",
+  "x-api-key",
+]);
+
+function buildDiscoverAppMcpRequestHeaders(
+  headers: DiscoverAppMcpRequestHeaders,
+): DiscoverAppMcpRequestHeaders {
+  const normalized: DiscoverAppMcpRequestHeaders = {};
+  for (const [rawName, rawValue] of Object.entries(headers)) {
+    const name = rawName.trim();
+    const value = String(rawValue ?? "").trim();
+    const lowerName = name.toLowerCase();
+    if (!name || !/^[A-Za-z0-9-]+$/.test(name)) {
+      throw new Error(`Invalid MCP profile header name: ${rawName}`);
+    }
+    if (FORBIDDEN_PROFILE_MCP_HEADER_NAMES.has(lowerName)) {
+      throw new Error(`MCP profile header cannot set transport/auth header: ${name}`);
+    }
+    if (!value || /[\r\n]/.test(value) || value.length > 500) {
+      throw new Error(`Invalid MCP profile header value for ${name}`);
+    }
+    normalized[name] = value;
+  }
+  return normalized;
+}
+
 // Profiles describe integration intent. Runtime enforcement still lives in the harness policy layer.
 export const DISCOVER_APP_INTEGRATION_PROFILE_OVERRIDES = {
+  github: {
+    adapterKind: "remote_mcp_token",
+    readiness: "ready_token",
+    identityScope: "catalog_singleton",
+    authMode: "token",
+    validationKind: "mcp_initialize_tools_list",
+    contextStrategy: "search_then_fetch",
+    resultPolicy: buildDiscoverAppResultPolicy({
+      maxToolCount: 40,
+      maxResultBytes: 12_000,
+    }),
+    runtimePolicy: buildDiscoverAppRuntimePolicy({
+      defaultToolRisk: "sensitive",
+      declaredIntents: [
+        "repo_context_read",
+        "issue_read",
+        "pull_request_read",
+        "user_context_read",
+      ],
+    }),
+    mcpRequestHeaders: buildDiscoverAppMcpRequestHeaders({
+      "X-MCP-Readonly": "true",
+      "X-MCP-Toolsets": "repos,issues,pull_requests,users",
+    }),
+  },
   supabase: {
     adapterKind: "remote_mcp_token",
     readiness: "ready_token",
@@ -276,6 +337,29 @@ export const DISCOVER_APP_INTEGRATION_PROFILE_OVERRIDES = {
       defaultToolRisk: "write",
       declaredIntents: ["issue_search", "issue_update", "project_context"],
     }),
+  },
+  vercel: {
+    adapterKind: "remote_mcp_oauth",
+    readiness: "oauth_planned",
+    identityScope: "catalog_singleton",
+    authMode: "oauth",
+    validationKind: "hosted_oauth_mcp_planned",
+    contextStrategy: "search_then_fetch",
+    resultPolicy: buildDiscoverAppResultPolicy({
+      maxToolCount: 40,
+      maxResultBytes: 12_000,
+    }),
+    runtimePolicy: buildDiscoverAppRuntimePolicy({
+      defaultToolRisk: "sensitive",
+      declaredIntents: [
+        "deployment_read",
+        "project_context",
+        "log_inspection",
+      ],
+    }),
+    oauthClient: {
+      mode: "dynamic_registration",
+    },
   },
   notion: {
     adapterKind: "remote_mcp_oauth",
@@ -363,9 +447,6 @@ type PlannedDiscoverAppProfileKind =
   | "catalog_only";
 
 const DISCOVER_APP_PLANNED_PROFILE_KINDS = {
-  github: "remote_mcp_oauth",
-  vercel: "remote_mcp_oauth",
-  notion: "remote_mcp_oauth",
   "google-drive": "backplane_mcp",
   "google-sheets": "backplane_mcp",
   "google-calendar": "backplane_mcp",
@@ -694,6 +775,16 @@ export function resolveDiscoverAppResultPolicyForCatalogAppId(
   const app = findDiscoverAppCatalogEntryById(catalogAppId);
   if (!app) return null;
   return resolveDiscoverAppIntegrationProfile(app).resultPolicy;
+}
+
+export function resolveDiscoverAppMcpRequestHeadersForCatalogAppId(
+  catalogAppId: unknown,
+): DiscoverAppMcpRequestHeaders {
+  const app = findDiscoverAppCatalogEntryById(catalogAppId);
+  if (!app) return {};
+  return {
+    ...(resolveDiscoverAppIntegrationProfile(app).mcpRequestHeaders ?? {}),
+  };
 }
 
 export function applyDiscoverAppResultPolicyToText(
@@ -1085,34 +1176,36 @@ export const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
     name: "GitHub",
     tagline: "Issues, PRs, repos, and CI context",
     description:
-      "Curated GitHub app template for software context, triage, and later shared operating workflows.",
-    supportLabel: "Catalog only for now",
+      "Read-only GitHub MCP access for repositories, issues, pull requests, users, and workflow context.",
+    supportLabel: "Ready read-only",
     supportNote:
-      "Keep GitHub as a known app in the catalog, but do not imply a direct personal connection path until its generic remote MCP setup is explicitly verified for PolyNet.",
+      "GitHub connects through its hosted remote MCP server in read-only mode using a personal token.",
     heroNote:
-      "Best for triaging repos, pull requests, issues, and CI workflows.",
+      "Best for reading repos, pull requests, issues, and users without enabling write tools.",
     capabilities: [
-      "Inspect repos, issues, pull requests, and checks.",
-      "Give agents shared software project context.",
-      "Later support both personal and community software workflows.",
+      "Inspect repositories, files, issues, pull requests, and users.",
+      "Give agents software project context while keeping GitHub writes disabled.",
+      "Use a user-owned token so each member controls their own repository access.",
     ],
     websiteUrl: "https://github.com",
     docsUrl: "https://github.com/github/github-mcp-server",
     logoUrl: "/app-logos/github.svg",
     personalConnect: {
       connectionKind: "known",
-      availability: "later",
+      availability: "ready",
       authMethod: "token",
       connectionStrategy: {
-        defaultMode: "oauth",
-        supportedModes: ["oauth", "token"],
+        defaultMode: "token",
+        supportedModes: ["token"],
       },
-      endpointUrl: null,
-      authType: null,
+      endpointUrl: "https://api.githubcopilot.com/mcp/readonly",
+      authType: "bearer",
       authLabel: "Bearer token",
       secretLabel: "GitHub token",
+      tokenHelpUrl: "https://github.com/settings/personal-access-tokens",
+      tokenHelpLabel: "Create fine-grained token",
       note:
-        "GitHub stays catalog-first until the generic hosted MCP path is verified end to end for PolyNet.",
+        "Use a fine-grained token with only the repository read permissions you want Polynet to access. The GitHub MCP endpoint is read-only.",
     },
   },
   {
@@ -1157,16 +1250,16 @@ export const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
     name: "Vercel",
     tagline: "Deployments, logs, env, and project ops",
     description:
-      "High-value platform operations surface, but the cleanest path still depends on a fuller auth story than the current alpha connector contract provides.",
-    supportLabel: "Needs richer auth",
+      "OAuth remote MCP access for Vercel projects, deployments, logs, and documentation.",
+    supportLabel: "Client approval needed",
     supportNote:
-      "Keep Vercel in the catalog as a known app, but treat direct personal connection as later work until the auth path is fully honest.",
+      "Vercel's hosted MCP server supports OAuth, but Polynet should not expose it until the client approval and operation-safety path is verified.",
     heroNote:
       "Best for deployments, environment state, logs, and project operations.",
     capabilities: [
       "Inspect deployments, projects, logs, and environment state.",
-      "Support platform and builder workflows once auth is handled cleanly.",
-      "Hide MCP mechanics behind a real known-app template later.",
+      "Search Vercel documentation and project context from the harness.",
+      "Use OAuth later once Polynet's Vercel MCP client path is approved and gated.",
     ],
     websiteUrl: "https://vercel.com",
     docsUrl: "https://vercel.com/docs/agent-resources/vercel-mcp",
@@ -1181,9 +1274,9 @@ export const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
       },
       endpointUrl: "https://mcp.vercel.com",
       authType: null,
-      authLabel: "OAuth or managed auth",
+      authLabel: "OAuth",
       note:
-        "Vercel belongs in the known-app catalog, but not in the live personal connect path yet.",
+        "Vercel stays catalog-first until client approval and operation safety are verified.",
     },
   },
   {
