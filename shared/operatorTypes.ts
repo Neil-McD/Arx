@@ -159,6 +159,13 @@ export type OperatorMonetizationSnapshot = {
       totalCreated: number;
       createdInRange: number;
       creationRateFromNewUsers: number | null;
+      totalBuilders: number;
+      activatedBuilders: number;
+      builderActivationRate: number | null;
+      communitiesWithFirstMember: number;
+      communityActivationRate: number | null;
+      createdInRangeWithFirstMember: number;
+      createdInRangeActivationRate: number | null;
     };
     revenue: {
       communitySubscriptionMrr: OperatorMoneyMetric | null;

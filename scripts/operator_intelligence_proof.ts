@@ -5,9 +5,23 @@ function read(relativePath: string): string {
   return readFileSync(new URL(`../${relativePath}`, import.meta.url), "utf8");
 }
 
+function extractBetween(source: string, startMarker: string, endMarker: string, label: string): string {
+  const start = source.indexOf(startMarker);
+  assert.notEqual(start, -1, `${label} start marker is missing`);
+  const end = source.indexOf(endMarker, start + startMarker.length);
+  assert.notEqual(end, -1, `${label} end marker is missing`);
+  return source.slice(start, end);
+}
+
 const schema = read("convex/schema.ts");
 const operatorIntelligence = read("convex/operatorIntelligence.ts");
 const operatorTypes = read("shared/operatorTypes.ts");
+const monetizationQuery = extractBetween(
+  operatorIntelligence,
+  "export const getOperatorMonetizationInternal = internalQuery",
+  "export const listOperatorEventsInternal = internalQuery",
+  "operator monetization query",
+);
 
 for (const [table, indexes] of [
   ["checkoutSessions", ["by_mode_status", "by_community_status"]],
@@ -93,6 +107,21 @@ assert.match(
 );
 assert.match(
   operatorTypes,
+  /activatedBuilders: number/,
+  "operator business KPIs should expose activated builders",
+);
+assert.match(
+  operatorTypes,
+  /builderActivationRate: number \| null/,
+  "operator business KPIs should expose builder activation rate",
+);
+assert.match(
+  operatorTypes,
+  /communitiesWithFirstMember: number/,
+  "operator business KPIs should expose community first-member activation",
+);
+assert.match(
+  operatorTypes,
   /averageRecordedLifetimeValue: OperatorMoneyMetric \| null/,
   "operator business KPIs should label first-party checkout LTV explicitly",
 );
@@ -100,6 +129,31 @@ assert.match(
   operatorIntelligence,
   /availability: "not_configured"/,
   "operator visitor KPIs must stay unavailable until visitor ingestion is wired",
+);
+assert.match(
+  monetizationQuery,
+  /String\(membership\.userId\) === String\(community\.ownerId\)/,
+  "operator builder activation must exclude owner self-membership",
+);
+assert.match(
+  monetizationQuery,
+  /const \[checkouts, users, communities, communityMemberships, emailOutboxRows, emailDeliveryRows\] = await Promise\.all\(\[[\s\S]*ctx\.db\.query\("communityMemberships"\)\.collect\(\)/,
+  "operator business activation should be derived from community memberships",
+);
+assert.match(
+  monetizationQuery,
+  /const totalCompletions = inRangeCheckouts\.filter\(\(row: any\) => row\.status === "complete"\)\.length/,
+  "operator checkout completions should use the selected business window",
+);
+assert.match(
+  monetizationQuery,
+  /totalConversionRate: conversionRate\(totalCompletions, inRangeCheckouts\.length\)/,
+  "operator checkout conversion should use starts and completions from the same window",
+);
+assert.match(
+  monetizationQuery,
+  /const grossRevenueInRange = addMoney\(communityCheckoutRevenueInRange, creditTopupRevenueInRange\)/,
+  "operator gross revenue should combine community checkout and credit top-up revenue",
 );
 assert.match(
   operatorIntelligence,

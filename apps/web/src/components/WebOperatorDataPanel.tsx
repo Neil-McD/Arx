@@ -869,14 +869,14 @@ function OperatorBusinessInsights(props: {
           <span className="operator-dashboard__metric-note">Accounts created in the selected operator window.</span>
         </div>
         <div>
-          <span>Active paying users</span>
-          <strong>{businessKpis?.users.activePayingCustomers ?? 0}</strong>
-          <span className="operator-dashboard__metric-note">Users with active paid community subscriptions.</span>
+          <span>Activated builders</span>
+          <strong>{businessKpis?.communities.activatedBuilders ?? 0}</strong>
+          <span className="operator-dashboard__metric-note">Builders with a community that has a non-owner member.</span>
         </div>
         <div>
-          <span>Platform MRR</span>
+          <span>Community MRR</span>
           <strong>{formatMoney(businessKpis?.revenue.communitySubscriptionMrr ?? props.monetization?.estimatedCommunityMrr ?? null)}</strong>
-          <span className="operator-dashboard__metric-note">Current subscription run-rate from paid communities.</span>
+          <span className="operator-dashboard__metric-note">Current gross run-rate from paid community subscriptions.</span>
         </div>
       </section>
 
@@ -910,6 +910,41 @@ function OperatorBusinessInsights(props: {
           {businessKpis?.visitors.availability !== "available" ? (
             <div className="operator-dashboard__empty">Visitor analytics need PostHog or Vercel Analytics ingestion before conversion is available.</div>
           ) : null}
+        </div>
+      </section>
+
+      <section className="operator-dashboard__panel">
+        <h2>Activation</h2>
+        <div className="operator-dashboard__table">
+          <div className="operator-dashboard__row">
+            <span>Builder users</span>
+            <strong>{businessKpis?.communities.totalBuilders ?? 0}</strong>
+          </div>
+          <div className="operator-dashboard__row">
+            <span>Activated builders</span>
+            <strong>{businessKpis?.communities.activatedBuilders ?? 0}</strong>
+          </div>
+          <div className="operator-dashboard__row">
+            <span>Builder activation</span>
+            <strong>{formatPercent(businessKpis?.communities.builderActivationRate ?? null)}</strong>
+          </div>
+          <div className="operator-dashboard__row">
+            <span>Communities with first member</span>
+            <strong>{businessKpis?.communities.communitiesWithFirstMember ?? 0}</strong>
+          </div>
+          <div className="operator-dashboard__row">
+            <span>Community activation</span>
+            <strong>{formatPercent(businessKpis?.communities.communityActivationRate ?? null)}</strong>
+          </div>
+          <div className="operator-dashboard__row">
+            <span>New communities activated</span>
+            <strong>{businessKpis?.communities.createdInRangeWithFirstMember ?? 0}</strong>
+          </div>
+          <div className="operator-dashboard__row">
+            <span>New community activation</span>
+            <strong>{formatPercent(businessKpis?.communities.createdInRangeActivationRate ?? null)}</strong>
+          </div>
+          <div className="operator-dashboard__empty">Activation requires at least one active member who is not the community owner.</div>
         </div>
       </section>
 

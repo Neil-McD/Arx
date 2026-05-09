@@ -1255,15 +1255,29 @@ export const getOperatorMonetizationInternal = internalQuery({
   handler: async (ctx, args) => {
     const nowMs = Date.now();
     const rangeStart = normalizeRangeStart(args.range, nowMs);
-    const [checkouts, users, communities, emailOutboxRows, emailDeliveryRows] = await Promise.all([
+    const [checkouts, users, communities, communityMemberships, emailOutboxRows, emailDeliveryRows] = await Promise.all([
       ctx.db.query("checkoutSessions").collect(),
       ctx.db.query("users").collect(),
       ctx.db.query("communities").collect(),
+      ctx.db.query("communityMemberships").collect(),
       ctx.db.query("emailOutbox").collect(),
       ctx.db.query("emailDeliveries").collect(),
     ]);
     const accountUsers = users.filter(isAccountUserRow);
     const accountUserIds = new Set<string>(accountUsers.map((row: any) => String(row._id)));
+    const communityById = new Map<string, any>(communities.map((row: any) => [String(row._id), row]));
+    const builderUserIds = new Set<string>(communities.map((row: any) => String(row.ownerId)));
+    const communitiesWithFirstMemberIds = new Set<string>();
+    const activatedBuilderIds = new Set<string>();
+    for (const membership of communityMemberships) {
+      if (membership.active === false || membership.revokedAt) continue;
+      const communityId = String(membership.communityId ?? "");
+      const community = communityById.get(communityId);
+      if (!community) continue;
+      if (String(membership.userId) === String(community.ownerId)) continue;
+      communitiesWithFirstMemberIds.add(communityId);
+      activatedBuilderIds.add(String(community.ownerId));
+    }
     const inRangeCheckouts = rangeStart == null
       ? checkouts
       : checkouts.filter((row: any) => row.createdAt >= rangeStart);
@@ -1273,6 +1287,9 @@ export const getOperatorMonetizationInternal = internalQuery({
     const newCommunities = rangeStart == null
       ? communities
       : communities.filter((row: any) => row.createdAt >= rangeStart);
+    const newCommunitiesWithFirstMember = newCommunities.filter((row: any) =>
+      communitiesWithFirstMemberIds.has(String(row._id)),
+    );
     const inRangeEmailOutboxRows = rangeStart == null
       ? emailOutboxRows
       : emailOutboxRows.filter((row: any) => row.createdAt >= rangeStart);
@@ -1382,8 +1399,6 @@ export const getOperatorMonetizationInternal = internalQuery({
         users: {
           total: accountUsers.length,
           newInRange: newUsers.length,
-          rawUserRows: users.length,
-          anonymousRows: users.length - accountUsers.length,
           activePayingCustomers: activePayingCustomerIds.size,
           checkoutPurchasersInRange: checkoutPurchaserIds.size,
           knownPayingCustomers: knownPayingCustomerIds.size,
@@ -1394,6 +1409,13 @@ export const getOperatorMonetizationInternal = internalQuery({
           totalCreated: communities.length,
           createdInRange: newCommunities.length,
           creationRateFromNewUsers: conversionRate(newCommunities.length, newUsers.length),
+          totalBuilders: builderUserIds.size,
+          activatedBuilders: activatedBuilderIds.size,
+          builderActivationRate: conversionRate(activatedBuilderIds.size, builderUserIds.size),
+          communitiesWithFirstMember: communitiesWithFirstMemberIds.size,
+          communityActivationRate: conversionRate(communitiesWithFirstMemberIds.size, communities.length),
+          createdInRangeWithFirstMember: newCommunitiesWithFirstMember.length,
+          createdInRangeActivationRate: conversionRate(newCommunitiesWithFirstMember.length, newCommunities.length),
         },
         revenue: {
           communitySubscriptionMrr: estimatedCommunityMrr,
@@ -1431,6 +1453,7 @@ export const getOperatorMonetizationInternal = internalQuery({
         sourceTables: [
           "users",
           "communities",
+          "communityMemberships",
           "checkoutSessions",
           "communitySubscriptions",
           "communityPricePoints",
