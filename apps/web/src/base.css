@@ -5120,8 +5120,9 @@ body {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  transform: translateY(-1px) scale(1.08);
-  transform-origin: center center;
+  border-radius: 50%;
+  user-select: none;
+  -webkit-user-drag: none;
 }
 
 .public-funnel-face + .public-funnel-face {
