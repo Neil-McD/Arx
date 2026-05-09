@@ -5110,9 +5110,11 @@ body {
   overflow: hidden;
   object-fit: cover;
   flex-shrink: 0;
-  border: 2px solid color-mix(in srgb, var(--bg-card) 92%, transparent);
+  border: 0;
   background: color-mix(in srgb, var(--bg-card-alt) 90%, transparent);
-  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.16);
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--bg-card) 92%, transparent),
+    0 8px 18px rgba(0, 0, 0, 0.16);
 }
 
 .public-funnel-face img {
