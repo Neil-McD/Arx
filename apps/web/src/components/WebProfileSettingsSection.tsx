@@ -1,4 +1,6 @@
 import type { DragEvent } from "react";
+import { UserAvatar } from "../../../../shared/UserAvatar";
+import { WebCommunityAvatarEditorModal } from "./WebCommunityAvatarEditorModal";
 
 type SessionLike = {
   user: {
@@ -11,6 +13,9 @@ type WebProfileSettingsSectionProps = {
   session: SessionLike;
   cloudProfile: unknown | null;
   profileAvatarUrl: string | null;
+  profileAvatarFocusX: number;
+  profileAvatarFocusY: number;
+  profileAvatarZoom: number;
   profileName: string;
   profileHandle: string;
   profileBio: string;
@@ -20,10 +25,15 @@ type WebProfileSettingsSectionProps = {
   isProfileDirty: boolean;
   profileSaveError: string | null;
   profileSaveSuccess: boolean;
+  isProfileAvatarFocusModalOpen: boolean;
   setIsProfileAvatarDragOver: (value: boolean) => void;
+  setProfileAvatarFocusX: (value: number) => void;
+  setProfileAvatarFocusY: (value: number) => void;
+  setProfileAvatarZoom: (value: number) => void;
+  setIsProfileAvatarFocusModalOpen: (value: boolean) => void;
   handleProfileAvatarDrop: (event: DragEvent<HTMLDivElement>) => void;
   handleProfileAvatarUpload: (file: File | null) => Promise<void> | void;
-  setProfileAvatarUrl: (value: string | null) => void;
+  onRemoveProfileAvatar: () => void;
   getInitials: (value: string) => string;
   setProfileName: (value: string) => void;
   setProfileHandle: (value: string) => void;
@@ -36,6 +46,9 @@ export function WebProfileSettingsSection(props: WebProfileSettingsSectionProps)
     session,
     cloudProfile,
     profileAvatarUrl,
+    profileAvatarFocusX,
+    profileAvatarFocusY,
+    profileAvatarZoom,
     profileName,
     profileHandle,
     profileBio,
@@ -45,10 +58,15 @@ export function WebProfileSettingsSection(props: WebProfileSettingsSectionProps)
     isProfileDirty,
     profileSaveError,
     profileSaveSuccess,
+    isProfileAvatarFocusModalOpen,
     setIsProfileAvatarDragOver,
+    setProfileAvatarFocusX,
+    setProfileAvatarFocusY,
+    setProfileAvatarZoom,
+    setIsProfileAvatarFocusModalOpen,
     handleProfileAvatarDrop,
     handleProfileAvatarUpload,
-    setProfileAvatarUrl,
+    onRemoveProfileAvatar,
     getInitials,
     setProfileName,
     setProfileHandle,
@@ -77,14 +95,24 @@ export function WebProfileSettingsSection(props: WebProfileSettingsSectionProps)
           onDragLeave={() => setIsProfileAvatarDragOver(false)}
           onDrop={handleProfileAvatarDrop}
         >
-          {session && profileAvatarUrl ? (
-            <img src={profileAvatarUrl} alt="Profile avatar" draggable={false} />
-          ) : session ? (
-            <span>
-              {getInitials(
-                (profileName || session.user.email || "AR").replace(/^@/, ""),
-              )}
-            </span>
+          {session ? (
+            <UserAvatar
+              className="profile-avatar-drop-avatar"
+              readyClassName="has-image"
+              name={(profileName || session.user.email || "AR").replace(/^@/, "")}
+              imageUrl={profileAvatarUrl}
+              focusX={profileAvatarFocusX}
+              focusY={profileAvatarFocusY}
+              zoom={profileAvatarZoom}
+              alt="Profile avatar"
+              fallback={
+                <span>
+                  {getInitials(
+                    (profileName || session.user.email || "AR").replace(/^@/, ""),
+                  )}
+                </span>
+              }
+            />
           ) : (
             <span className="profile-avatar-placeholder" aria-hidden="true">
               <svg viewBox="0 0 24 24">
@@ -104,9 +132,18 @@ export function WebProfileSettingsSection(props: WebProfileSettingsSectionProps)
             />
           </label>
           {session && profileAvatarUrl && (
-            <button className="create-avatar-remove" type="button" onClick={() => setProfileAvatarUrl(null)}>
-              Remove
-            </button>
+            <>
+              <button
+                className="create-avatar-btn"
+                type="button"
+                onClick={() => setIsProfileAvatarFocusModalOpen(true)}
+              >
+                Adjust
+              </button>
+              <button className="create-avatar-remove" type="button" onClick={onRemoveProfileAvatar}>
+                Remove
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -156,6 +193,21 @@ export function WebProfileSettingsSection(props: WebProfileSettingsSectionProps)
       </div>
       {profileSaveError && <div className="auth-error">{profileSaveError}</div>}
       {profileSaveSuccess && <div className="auth-success">Saved.</div>}
+      <WebCommunityAvatarEditorModal
+        isOpen={isProfileAvatarFocusModalOpen}
+        avatarUrl={profileAvatarUrl}
+        focusX={profileAvatarFocusX}
+        focusY={profileAvatarFocusY}
+        zoom={profileAvatarZoom}
+        title="Adjust profile photo"
+        imageAlt="Profile photo preview"
+        hint="Drag the image to frame it inside your profile avatar."
+        onChangeFocusX={setProfileAvatarFocusX}
+        onChangeFocusY={setProfileAvatarFocusY}
+        onChangeZoom={setProfileAvatarZoom}
+        onDirty={() => undefined}
+        onClose={() => setIsProfileAvatarFocusModalOpen(false)}
+      />
     </div>
   );
 }

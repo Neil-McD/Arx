@@ -310,7 +310,8 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
                   const showMeta = shouldShowCommunitySenderMeta(communityMessages, index);
                   const dateSeparator = shouldShowDateSeparator(communityMessages, index);
                   const senderLabel = displayName(message.sender_id);
-                  const avatarUrl = profilesByUserId[message.sender_id]?.avatar_url ?? null;
+                  const senderProfile = profilesByUserId[message.sender_id] ?? null;
+                  const avatarUrl = senderProfile?.avatar_url ?? null;
                   const avatarColor = getAvatarColor(message.sender_id);
                   const shortTime = new Date(message.created_at).toLocaleTimeString([], {
                     hour: "numeric",
@@ -330,6 +331,9 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
                       canModerateContent={canModerateMessages}
                       senderLabel={senderLabel}
                       avatarUrl={avatarUrl}
+                      avatarFocusX={senderProfile?.avatar_focus_x ?? 0.5}
+                      avatarFocusY={senderProfile?.avatar_focus_y ?? 0.5}
+                      avatarZoom={senderProfile?.avatar_zoom ?? 1}
                       avatarColor={avatarColor}
                       shortTime={shortTime}
                       formattedTime={formatChatTime(message.created_at)}

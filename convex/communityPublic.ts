@@ -39,9 +39,43 @@ type PublicCommunityFace = {
   user_id: string;
   display_name: string | null;
   avatar_url: string | null;
+  avatar_storage_id?: string | null;
+  avatar_focus_x?: number | null;
+  avatar_focus_y?: number | null;
+  avatar_zoom?: number | null;
+};
+
+type PublicProfileDetailLike = {
+  displayName?: string;
+  avatarUrl?: string;
+  avatarStorageId?: any;
+  avatarFocusX?: number;
+  avatarFocusY?: number;
+  avatarZoom?: number;
 };
 
 const COMMUNITY_ONLINE_WINDOW_MS = 90_000;
+
+async function resolvePublicProfileFaceFields(ctx: any, userId: any): Promise<Omit<PublicCommunityFace, "user_id">> {
+  const profile = (await ctx.db
+    .query("userProfileDetails")
+    .withIndex("by_user", (q: any) => q.eq("userId", userId))
+    .first()) as PublicProfileDetailLike | null;
+  const storageAvatarUrl = profile?.avatarStorageId
+    ? await ctx.storage.getUrl(profile.avatarStorageId)
+    : null;
+  return {
+    display_name: profile?.displayName ?? null,
+    avatar_url:
+      typeof storageAvatarUrl === "string" && storageAvatarUrl.trim()
+        ? storageAvatarUrl.trim()
+        : profile?.avatarUrl ?? null,
+    avatar_storage_id: profile?.avatarStorageId ? String(profile.avatarStorageId) : null,
+    avatar_focus_x: typeof profile?.avatarFocusX === "number" ? profile.avatarFocusX : 0.5,
+    avatar_focus_y: typeof profile?.avatarFocusY === "number" ? profile.avatarFocusY : 0.5,
+    avatar_zoom: typeof profile?.avatarZoom === "number" ? profile.avatarZoom : 1,
+  };
+}
 
 async function scheduleCommunityAppGrantSeedingBestEffort(args: {
   ctx: any;
@@ -130,8 +164,7 @@ async function resolvePublicCommunityStats(ctx: any, community: CommunityLike): 
         if (!user) return null;
         return {
           user_id: (await resolvePublicUserId(ctx, user._id, userIdCache)) ?? String(user._id),
-          display_name: user.displayName ?? null,
-          avatar_url: user.avatarUrl ?? null,
+          ...(await resolvePublicProfileFaceFields(ctx, user._id)),
         };
       }),
     )

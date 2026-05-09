@@ -1,33 +1,24 @@
-import type { CSSProperties } from "react";
+import {
+  DEFAULT_AVATAR_FOCUS,
+  DEFAULT_AVATAR_ZOOM,
+  MAX_AVATAR_ZOOM,
+  MIN_AVATAR_ZOOM,
+  clampAvatarFocus,
+  clampAvatarZoom,
+  computeAvatarLayout,
+  focusFromAvatarLayoutPosition,
+  getAvatarLayoutImageStyle,
+  getAvatarImageStyle,
+} from "./avatarUi";
 
-export const DEFAULT_COMMUNITY_AVATAR_FOCUS = 0.5;
-export const DEFAULT_COMMUNITY_AVATAR_ZOOM = 1;
-export const MIN_COMMUNITY_AVATAR_ZOOM = 1;
-export const MAX_COMMUNITY_AVATAR_ZOOM = 2.5;
+export const DEFAULT_COMMUNITY_AVATAR_FOCUS = DEFAULT_AVATAR_FOCUS;
+export const DEFAULT_COMMUNITY_AVATAR_ZOOM = DEFAULT_AVATAR_ZOOM;
+export const MIN_COMMUNITY_AVATAR_ZOOM = MIN_AVATAR_ZOOM;
+export const MAX_COMMUNITY_AVATAR_ZOOM = MAX_AVATAR_ZOOM;
 
-export function clampCommunityAvatarFocus(raw: unknown): number {
-  const parsed = Number(raw);
-  if (!Number.isFinite(parsed)) return DEFAULT_COMMUNITY_AVATAR_FOCUS;
-  return Math.max(0, Math.min(1, parsed));
-}
-
-export function clampCommunityAvatarZoom(raw: unknown): number {
-  const parsed = Number(raw);
-  if (!Number.isFinite(parsed)) return DEFAULT_COMMUNITY_AVATAR_ZOOM;
-  return Math.max(MIN_COMMUNITY_AVATAR_ZOOM, Math.min(MAX_COMMUNITY_AVATAR_ZOOM, parsed));
-}
-
-export function getCommunityAvatarImageStyle(args: {
-  focusX?: number | null;
-  focusY?: number | null;
-  zoom?: number | null;
-}): CSSProperties {
-  const focusX = clampCommunityAvatarFocus(args.focusX);
-  const focusY = clampCommunityAvatarFocus(args.focusY);
-  const zoom = clampCommunityAvatarZoom(args.zoom);
-  return {
-    objectPosition: `${Math.round(focusX * 100)}% ${Math.round(focusY * 100)}%`,
-    transform: zoom === 1 ? undefined : `scale(${zoom})`,
-    transformOrigin: "center center",
-  };
-}
+export const clampCommunityAvatarFocus = clampAvatarFocus;
+export const clampCommunityAvatarZoom = clampAvatarZoom;
+export const computeCommunityAvatarLayout = computeAvatarLayout;
+export const focusFromCommunityAvatarLayoutPosition = focusFromAvatarLayoutPosition;
+export const getCommunityAvatarLayoutImageStyle = getAvatarLayoutImageStyle;
+export const getCommunityAvatarImageStyle = getAvatarImageStyle;

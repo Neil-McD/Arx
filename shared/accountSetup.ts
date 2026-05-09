@@ -37,6 +37,7 @@ export type AccountSetupStatusInput = {
   displayName?: string | null;
   handle?: string | null;
   avatarUrl?: string | null;
+  avatarStorageId?: string | null;
   bio?: string | null;
   hasInferenceProvider?: boolean | null;
   agentName?: string | null;
@@ -65,7 +66,7 @@ function buildStepStatus(
 export function buildAccountSetupStatus(input: AccountSetupStatusInput): AccountSetupStatus {
   const identityMissing: AccountSetupMissing[] = [];
   if (!hasText(input.displayName)) identityMissing.push("display_name");
-  if (!hasText(input.avatarUrl)) identityMissing.push("avatar");
+  if (!hasText(input.avatarUrl) && !hasText(input.avatarStorageId)) identityMissing.push("avatar");
 
   const inferenceMissing: AccountSetupMissing[] = input.hasInferenceProvider
     ? []

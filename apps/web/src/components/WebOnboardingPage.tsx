@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState, type DragEvent, type ReactNode } from "react";
 import { ArrowRight, Bot, Check, CircleUserRound, Compass, PlugZap, PlusCircle, Search, X } from "lucide-react";
 import type { AccountSetupStatus, AccountSetupStep } from "../../../../shared/accountSetup";
+import { UserAvatar } from "../../../../shared/UserAvatar";
+import { WebCommunityAvatarEditorModal } from "./WebCommunityAvatarEditorModal";
 
 type OnboardingStep = Exclude<AccountSetupStep, "complete">;
 
@@ -18,12 +20,20 @@ type WebOnboardingPageProps = {
   handle: string;
   bio: string;
   avatarUrl: string | null;
+  avatarFocusX: number;
+  avatarFocusY: number;
+  avatarZoom: number;
+  isAvatarFocusModalOpen: boolean;
   handleAvailability: ProfileHandleAvailability | null;
   isCheckingHandleAvailability: boolean;
   isAvatarDragOver: boolean;
   isSaving: boolean;
   error: string | null;
   setIsAvatarDragOver: (value: boolean) => void;
+  setAvatarFocusX: (value: number) => void;
+  setAvatarFocusY: (value: number) => void;
+  setAvatarZoom: (value: number) => void;
+  setIsAvatarFocusModalOpen: (value: boolean) => void;
   onAvatarDrop: (event: DragEvent<HTMLDivElement>) => void;
   onAvatarUpload: (file: File | null) => Promise<void> | void;
   onRemoveAvatar: () => void;
@@ -320,21 +330,23 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
           {step === "identity" ? (
             <div className="polynet-onboarding-profile">
               <div className="polynet-onboarding-avatar-row">
-                <div
+                <UserAvatar
                   className={`polynet-onboarding-avatar${props.isAvatarDragOver ? " drag-over" : ""}`}
+                  readyClassName="has-image"
+                  name={props.displayName || props.handle || "Profile"}
+                  imageUrl={props.avatarUrl}
+                  focusX={props.avatarFocusX}
+                  focusY={props.avatarFocusY}
+                  zoom={props.avatarZoom}
+                  alt="Profile avatar"
+                  fallback={<span>{props.displayName.trim().charAt(0).toUpperCase() || "P"}</span>}
                   onDragOver={(event) => {
                     event.preventDefault();
                     props.setIsAvatarDragOver(true);
                   }}
                   onDragLeave={() => props.setIsAvatarDragOver(false)}
                   onDrop={props.onAvatarDrop}
-                >
-                  {props.avatarUrl ? (
-                    <img src={props.avatarUrl} alt="Profile avatar" />
-                  ) : (
-                    <span>{props.displayName.trim().charAt(0).toUpperCase() || "P"}</span>
-                  )}
-                </div>
+                />
                 <div className="polynet-onboarding-avatar-actions">
                   <label className="create-avatar-btn">
                     Upload photo
@@ -345,9 +357,18 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
                     />
                   </label>
                   {props.avatarUrl ? (
-                    <button className="create-avatar-remove" type="button" onClick={props.onRemoveAvatar}>
-                      Remove
-                    </button>
+                    <>
+                      <button
+                        className="create-avatar-btn"
+                        type="button"
+                        onClick={() => props.setIsAvatarFocusModalOpen(true)}
+                      >
+                        Adjust
+                      </button>
+                      <button className="create-avatar-remove" type="button" onClick={props.onRemoveAvatar}>
+                        Remove
+                      </button>
+                    </>
                   ) : null}
                 </div>
               </div>
@@ -563,6 +584,22 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
           Finish later
         </button>
       ) : null}
+
+      <WebCommunityAvatarEditorModal
+        isOpen={props.isAvatarFocusModalOpen}
+        avatarUrl={props.avatarUrl}
+        focusX={props.avatarFocusX}
+        focusY={props.avatarFocusY}
+        zoom={props.avatarZoom}
+        title="Adjust profile photo"
+        imageAlt="Profile photo preview"
+        hint="Drag the image to frame it inside your profile avatar."
+        onChangeFocusX={props.setAvatarFocusX}
+        onChangeFocusY={props.setAvatarFocusY}
+        onChangeZoom={props.setAvatarZoom}
+        onDirty={() => undefined}
+        onClose={() => props.setIsAvatarFocusModalOpen(false)}
+      />
     </section>
   );
 

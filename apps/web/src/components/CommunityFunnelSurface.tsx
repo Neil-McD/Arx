@@ -1,6 +1,7 @@
 import { useState, type CSSProperties, type ReactNode } from "react";
 
 import { CommunityAvatar } from "../../../../shared/CommunityAvatar";
+import { UserAvatar } from "../../../../shared/UserAvatar";
 import type { CommunityFunnelHeroMediaKind } from "../../../../shared/communityTypes";
 import {
   formatCompactStat,
@@ -12,6 +13,9 @@ export type CommunityFunnelSurfaceFace = {
   user_id: string;
   display_name: string | null;
   avatar_url: string | null;
+  avatar_focus_x?: number | null;
+  avatar_focus_y?: number | null;
+  avatar_zoom?: number | null;
 };
 
 export type CommunityFunnelSurfaceAction = {
@@ -289,13 +293,18 @@ function CommunityFunnelActionModule(props: {
         {action.onlineFaces.length > 0 ? (
           <div className="public-funnel-face-strip" aria-label="People online now">
             {action.onlineFaces.map((face) => (
-              <img
+              <UserAvatar
                 key={face.user_id}
                 className="public-funnel-face"
-                src={face.avatar_url ?? ""}
+                readyClassName="has-image"
+                name={face.display_name ?? face.user_id}
+                imageUrl={face.avatar_url}
+                focusX={face.avatar_focus_x ?? 0.5}
+                focusY={face.avatar_focus_y ?? 0.5}
+                zoom={face.avatar_zoom ?? 1}
                 alt=""
-                aria-hidden="true"
-                draggable={false}
+                aria-hidden={true}
+                fallback={null}
               />
             ))}
           </div>

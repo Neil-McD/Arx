@@ -34,6 +34,9 @@ export type PublicCommunityFunnelCommunityLike = {
     user_id: string;
     display_name: string | null;
     avatar_url: string | null;
+    avatar_focus_x?: number | null;
+    avatar_focus_y?: number | null;
+    avatar_zoom?: number | null;
   }> | null;
   funnel?: CommunityFunnelConfig | null;
 };

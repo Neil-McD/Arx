@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import type { CloudCommunityMembershipAdminRow } from "../../../../shared/cloudCommunityMembershipGateway";
-import { StableAvatar } from "../../../../shared/StableAvatar";
+import { UserAvatar } from "../../../../shared/UserAvatar";
 import { type CommunityMembersJoinReviewMode } from "../communityJoinPolicy";
 
 type CommunityMember = CloudCommunityMembershipAdminRow;
@@ -23,6 +23,9 @@ type ActiveCommunity = {
 type UserProfile = {
   display_name?: string | null;
   avatar_url?: string | null;
+  avatar_focus_x?: number | null;
+  avatar_focus_y?: number | null;
+  avatar_zoom?: number | null;
 };
 
 type WebCommunityMembersSectionProps = {
@@ -104,6 +107,9 @@ export function WebCommunityMembersSection(props: WebCommunityMembersSectionProp
     ).trim() || actions.displayName(selectedMember.user_id)
     : "";
   const selectedMemberAvatarUrl = selectedMemberProfile?.avatar_url ?? null;
+  const selectedMemberAvatarFocusX = selectedMemberProfile?.avatar_focus_x ?? 0.5;
+  const selectedMemberAvatarFocusY = selectedMemberProfile?.avatar_focus_y ?? 0.5;
+  const selectedMemberAvatarZoom = selectedMemberProfile?.avatar_zoom ?? 1;
   const selectedMemberInitials = selectedMemberDisplayName
     ? actions.communityInitials(selectedMemberDisplayName)
     : selectedMember
@@ -418,10 +424,14 @@ export function WebCommunityMembersSection(props: WebCommunityMembersSectionProp
                           : (["member"] as const);
                   return (
                     <div key={member.id} className="member-item">
-                      <StableAvatar
+                      <UserAvatar
                         className="member-avatar"
                         readyClassName="has-image"
+                        name={displayName}
                         imageUrl={avatarUrl}
+                        focusX={profile?.avatar_focus_x ?? 0.5}
+                        focusY={profile?.avatar_focus_y ?? 0.5}
+                        zoom={profile?.avatar_zoom ?? 1}
                         alt={displayName}
                         fallback={initials}
                         fallbackStyle={{ backgroundColor: actions.getAvatarColor(member.user_id) }}
@@ -546,10 +556,14 @@ export function WebCommunityMembersSection(props: WebCommunityMembersSectionProp
               {memberSettingsTab === "status" ? (
                 <div className="member-settings-section">
                   <div className="member-settings-summary">
-                    <StableAvatar
+                    <UserAvatar
                       className="member-avatar member-settings-avatar"
                       readyClassName="has-image"
+                      name={selectedMemberDisplayName}
                       imageUrl={selectedMemberAvatarUrl}
+                      focusX={selectedMemberAvatarFocusX}
+                      focusY={selectedMemberAvatarFocusY}
+                      zoom={selectedMemberAvatarZoom}
                       alt={selectedMemberDisplayName}
                       fallback={selectedMemberInitials}
                       fallbackStyle={

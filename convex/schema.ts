@@ -378,6 +378,10 @@ export default defineSchema({
     userId: v.id("users"),
     displayName: v.optional(v.string()),
     avatarUrl: v.optional(v.string()),
+    avatarStorageId: v.optional(v.id("_storage")),
+    avatarFocusX: v.optional(v.number()),
+    avatarFocusY: v.optional(v.number()),
+    avatarZoom: v.optional(v.number()),
     bio: v.optional(v.string()),
     onboardingDirection: v.optional(
       v.union(

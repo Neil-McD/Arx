@@ -1,7 +1,7 @@
 import { Fragment, type ReactNode } from "react";
 import { AttachmentChipButton } from "./AttachmentChipButton";
 import { CommunityChatMediaGrid, type CommunityChatMediaImage } from "./CommunityChatMediaGrid";
-import { StableAvatar } from "./StableAvatar";
+import { UserAvatar } from "./UserAvatar";
 import { partitionCommunityAttachments } from "./communityAttachmentUi";
 
 type CommunityMessageAttachment = {
@@ -43,6 +43,9 @@ type CommunityChatMessageRowProps = {
   canModerateContent: boolean;
   senderLabel: string;
   avatarUrl: string | null;
+  avatarFocusX?: number | null;
+  avatarFocusY?: number | null;
+  avatarZoom?: number | null;
   avatarColor: string;
   shortTime: string;
   formattedTime: string;
@@ -82,6 +85,9 @@ export function CommunityChatMessageRow({
   canModerateContent,
   senderLabel,
   avatarUrl,
+  avatarFocusX,
+  avatarFocusY,
+  avatarZoom,
   avatarColor,
   shortTime,
   formattedTime,
@@ -138,10 +144,14 @@ export function CommunityChatMessageRow({
         className={`chat-message${isPending ? " pending" : ""}${!showMeta ? " grouped" : ""}`}
         data-time={shortTime}
       >
-        <StableAvatar
+        <UserAvatar
           className="chat-avatar"
           readyClassName="has-image"
+          name={senderLabel}
           imageUrl={avatarUrl}
+          focusX={avatarFocusX}
+          focusY={avatarFocusY}
+          zoom={avatarZoom}
           alt={senderLabel}
           fallback={<span>{getInitials(senderLabel)}</span>}
           fallbackStyle={{ backgroundColor: avatarColor }}

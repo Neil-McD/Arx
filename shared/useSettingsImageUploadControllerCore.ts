@@ -1,7 +1,6 @@
 import { useCallback, type Dispatch, type DragEvent, type SetStateAction } from "react";
 import {
   readCommunityAvatarFileAsDataUrlWithinLimit,
-  readAvatarFileAsSquareDataUrl,
   readBannerFileAsWideDataUrlWithinLimit,
 } from "./imageTransforms";
 
@@ -26,7 +25,12 @@ type UseSettingsImageUploadControllerCoreArgs = {
   isLikelyCommunityBannerImageFile: (file: File) => boolean;
   maxCommunityImageDataUrlChars: number;
   setProfileAvatarUrl: Dispatch<SetStateAction<string | null>>;
+  setProfileAvatarStorageId?: Dispatch<SetStateAction<string | null>>;
+  setProfileAvatarFocusX?: Dispatch<SetStateAction<number>>;
+  setProfileAvatarFocusY?: Dispatch<SetStateAction<number>>;
+  setProfileAvatarZoom?: Dispatch<SetStateAction<number>>;
   setAuthError: Dispatch<SetStateAction<string | null>>;
+  onProfileAvatarUploadSuccess?: () => void;
   enforceCommunityAvatarDataUrlLimit?: boolean;
   communityAvatarReadErrorFallback: string;
   communityBannerReadErrorFallback: string;
@@ -74,7 +78,12 @@ export function useSettingsImageUploadControllerCore(
     isLikelyCommunityBannerImageFile,
     maxCommunityImageDataUrlChars,
     setProfileAvatarUrl,
+    setProfileAvatarStorageId,
+    setProfileAvatarFocusX,
+    setProfileAvatarFocusY,
+    setProfileAvatarZoom,
     setAuthError,
+    onProfileAvatarUploadSuccess,
     enforceCommunityAvatarDataUrlLimit,
     communityAvatarReadErrorFallback,
     communityBannerReadErrorFallback,
@@ -157,13 +166,27 @@ export function useSettingsImageUploadControllerCore(
     async (file: File | null) => {
       if (!file) return;
       try {
-        const dataUrl = await readAvatarFileAsSquareDataUrl(file, 128);
+        const dataUrl = await readCommunityAvatarFileAsDataUrlWithinLimit(file, maxCommunityImageDataUrlChars);
         setProfileAvatarUrl(dataUrl);
+        setProfileAvatarStorageId?.(null);
+        setProfileAvatarFocusX?.(0.5);
+        setProfileAvatarFocusY?.(0.5);
+        setProfileAvatarZoom?.(1);
+        onProfileAvatarUploadSuccess?.();
       } catch (error) {
         setAuthError(getErrorMessage(error, "Failed to load image."));
       }
     },
-    [setAuthError, setProfileAvatarUrl],
+    [
+      maxCommunityImageDataUrlChars,
+      onProfileAvatarUploadSuccess,
+      setAuthError,
+      setProfileAvatarFocusX,
+      setProfileAvatarFocusY,
+      setProfileAvatarStorageId,
+      setProfileAvatarUrl,
+      setProfileAvatarZoom,
+    ],
   );
 
   const handleSettingsBannerDrop = useCallback(

@@ -17,6 +17,10 @@ export type AccountSetupProfileDetailRow = {
   userId: any;
   displayName?: string;
   avatarUrl?: string;
+  avatarStorageId?: any;
+  avatarFocusX?: number;
+  avatarFocusY?: number;
+  avatarZoom?: number;
   bio?: string;
   onboardingDirection?: "build_community" | "discover_community" | "learn_about_polynet";
   onboardingCompletedAt?: number;
@@ -48,6 +52,7 @@ export function buildAccountSetupStatusForRows(params: {
     displayName: params.detail?.displayName ?? null,
     handle: params.user.handle ?? null,
     avatarUrl: params.detail?.avatarUrl ?? null,
+    avatarStorageId: params.detail?.avatarStorageId ? String(params.detail.avatarStorageId) : null,
     bio: params.detail?.bio ?? null,
     hasInferenceProvider,
     agentName: params.memorySettings?.agentName ?? null,

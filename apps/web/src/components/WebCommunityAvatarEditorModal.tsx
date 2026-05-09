@@ -7,8 +7,10 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import {
-  clampCommunityAvatarFocus,
   clampCommunityAvatarZoom,
+  computeCommunityAvatarLayout,
+  focusFromCommunityAvatarLayoutPosition,
+  getCommunityAvatarLayoutImageStyle,
 } from "../../../../shared/communityAvatarUi";
 
 type WebCommunityAvatarEditorModalProps = {
@@ -17,22 +19,14 @@ type WebCommunityAvatarEditorModalProps = {
   focusX: number;
   focusY: number;
   zoom: number;
+  title?: string;
+  imageAlt?: string;
+  hint?: string;
   onChangeFocusX: (value: number) => void;
   onChangeFocusY: (value: number) => void;
   onChangeZoom: (value: number) => void;
   onDirty: () => void;
   onClose: () => void;
-};
-
-type AvatarLayout = {
-  viewportWidth: number;
-  viewportHeight: number;
-  renderWidth: number;
-  renderHeight: number;
-  left: number;
-  top: number;
-  minLeft: number;
-  minTop: number;
 };
 
 type DragState = {
@@ -42,50 +36,6 @@ type DragState = {
   startLeft: number;
   startTop: number;
 };
-
-function computeAvatarLayout(args: {
-  viewportWidth: number;
-  viewportHeight: number;
-  naturalWidth: number;
-  naturalHeight: number;
-  focusX: number;
-  focusY: number;
-  zoom: number;
-}): AvatarLayout | null {
-  const viewportWidth = Math.max(0, args.viewportWidth);
-  const viewportHeight = Math.max(0, args.viewportHeight);
-  const naturalWidth = Math.max(0, args.naturalWidth);
-  const naturalHeight = Math.max(0, args.naturalHeight);
-  if (!viewportWidth || !viewportHeight || !naturalWidth || !naturalHeight) {
-    return null;
-  }
-  const baseScale = Math.max(viewportWidth / naturalWidth, viewportHeight / naturalHeight);
-  const renderWidth = naturalWidth * baseScale * clampCommunityAvatarZoom(args.zoom);
-  const renderHeight = naturalHeight * baseScale * clampCommunityAvatarZoom(args.zoom);
-  const unclampedLeft = viewportWidth / 2 - clampCommunityAvatarFocus(args.focusX) * renderWidth;
-  const unclampedTop = viewportHeight / 2 - clampCommunityAvatarFocus(args.focusY) * renderHeight;
-  const minLeft = Math.min(0, viewportWidth - renderWidth);
-  const minTop = Math.min(0, viewportHeight - renderHeight);
-  const left = Math.max(minLeft, Math.min(0, unclampedLeft));
-  const top = Math.max(minTop, Math.min(0, unclampedTop));
-  return {
-    viewportWidth,
-    viewportHeight,
-    renderWidth,
-    renderHeight,
-    left,
-    top,
-    minLeft,
-    minTop,
-  };
-}
-
-function focusFromLeftTop(layout: AvatarLayout, left: number, top: number) {
-  return {
-    focusX: clampCommunityAvatarFocus((layout.viewportWidth / 2 - left) / layout.renderWidth),
-    focusY: clampCommunityAvatarFocus((layout.viewportHeight / 2 - top) / layout.renderHeight),
-  };
-}
 
 export function WebCommunityAvatarEditorModal(props: WebCommunityAvatarEditorModalProps) {
   const {
@@ -136,7 +86,7 @@ export function WebCommunityAvatarEditorModal(props: WebCommunityAvatarEditorMod
 
   const layout = useMemo(
     () =>
-      computeAvatarLayout({
+      computeCommunityAvatarLayout({
         viewportWidth: viewportSize.width,
         viewportHeight: viewportSize.height,
         naturalWidth: naturalSize.width,
@@ -153,7 +103,7 @@ export function WebCommunityAvatarEditorModal(props: WebCommunityAvatarEditorMod
       if (!layout) return;
       const clampedLeft = Math.max(layout.minLeft, Math.min(0, nextLeft));
       const clampedTop = Math.max(layout.minTop, Math.min(0, nextTop));
-      const nextFocus = focusFromLeftTop(layout, clampedLeft, clampedTop);
+      const nextFocus = focusFromCommunityAvatarLayoutPosition(layout, clampedLeft, clampedTop);
       onChangeFocusX(nextFocus.focusX);
       onChangeFocusY(nextFocus.focusY);
       onDirty();
@@ -207,7 +157,7 @@ export function WebCommunityAvatarEditorModal(props: WebCommunityAvatarEditorMod
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal banner-focus-modal avatar-focus-modal" onClick={(event) => event.stopPropagation()}>
         <div className="modal-header">
-          <div className="modal-title">Adjust logo framing</div>
+          <div className="modal-title">{props.title ?? "Adjust logo framing"}</div>
           <button className="modal-close" type="button" onClick={onClose} title="Close">
             ×
           </button>
@@ -225,7 +175,7 @@ export function WebCommunityAvatarEditorModal(props: WebCommunityAvatarEditorMod
               <img
                 className="banner-editor-image"
                 src={avatarUrl}
-                alt="Community avatar preview"
+                alt={props.imageAlt ?? "Community avatar preview"}
                 draggable={false}
                 onLoad={(event) => {
                   const target = event.currentTarget;
@@ -234,20 +184,11 @@ export function WebCommunityAvatarEditorModal(props: WebCommunityAvatarEditorMod
                     height: target.naturalHeight || target.height || 0,
                   });
                 }}
-                style={
-                  layout
-                    ? {
-                        width: `${layout.renderWidth}px`,
-                        height: `${layout.renderHeight}px`,
-                        left: `${layout.left}px`,
-                        top: `${layout.top}px`,
-                      }
-                    : undefined
-                }
+                style={layout ? getCommunityAvatarLayoutImageStyle(layout) : undefined}
               />
             </div>
             <div className="create-community-hint banner-editor-hint">
-              Drag the image to frame it inside the logo.
+              {props.hint ?? "Drag the image to frame it inside the logo."}
             </div>
           </div>
           <div className="banner-editor-controls">

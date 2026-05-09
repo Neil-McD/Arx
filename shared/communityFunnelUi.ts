@@ -16,6 +16,9 @@ export type CommunityFunnelUiFaceLike = {
   user_id: string;
   display_name: string | null;
   avatar_url: string | null;
+  avatar_focus_x?: number | null;
+  avatar_focus_y?: number | null;
+  avatar_zoom?: number | null;
 };
 
 export type CommunityFunnelUiMode = "enter" | "join" | "request_access" | "checkout" | "private";

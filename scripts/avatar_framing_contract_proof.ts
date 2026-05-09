@@ -1,0 +1,78 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+
+function read(path: string): string {
+  return readFileSync(path, "utf8");
+}
+
+const avatarUi = read("shared/avatarUi.ts");
+const communityAvatarUi = read("shared/communityAvatarUi.ts");
+const stableAvatar = read("shared/StableAvatar.tsx");
+const userAvatar = read("shared/UserAvatar.tsx");
+const communityAvatar = read("shared/CommunityAvatar.tsx");
+const editor = read("apps/web/src/components/WebCommunityAvatarEditorModal.tsx");
+
+assert.match(avatarUi, /export function computeAvatarLayout/, "avatar layout math must be shared");
+assert.match(
+  avatarUi,
+  /export function focusFromAvatarLayoutPosition/,
+  "dragged avatar focus derivation must be shared",
+);
+assert.match(
+  avatarUi,
+  /export function getAvatarLayoutImageStyle/,
+  "rendered avatar image style must be derived from shared layout math",
+);
+assert.match(
+  communityAvatarUi,
+  /export const computeCommunityAvatarLayout = computeAvatarLayout/,
+  "community avatar editor must use the shared layout implementation",
+);
+assert.match(
+  communityAvatarUi,
+  /export const focusFromCommunityAvatarLayoutPosition = focusFromAvatarLayoutPosition/,
+  "community avatar editor must use shared focus derivation",
+);
+
+assert.match(stableAvatar, /imageFrame\?: AvatarFrame/, "stable avatar must accept canonical framing input");
+assert.match(stableAvatar, /computeAvatarLayout\(/, "stable avatar must render with canonical layout math");
+assert.match(
+  stableAvatar,
+  /getAvatarLayoutImageStyle\(layout\)/,
+  "stable avatar image style must come from canonical layout math",
+);
+
+assert.match(userAvatar, /imageFrame=\{\{/, "user avatars must pass canonical framing to StableAvatar");
+assert.doesNotMatch(
+  userAvatar,
+  /getAvatarImageStyle/,
+  "user avatars must not use object-position fallback framing",
+);
+assert.match(
+  communityAvatar,
+  /imageFrame=\{\{/,
+  "community avatars must pass canonical framing to StableAvatar",
+);
+assert.doesNotMatch(
+  communityAvatar,
+  /getCommunityAvatarImageStyle/,
+  "community avatars must not use object-position fallback framing",
+);
+
+assert.match(
+  editor,
+  /computeCommunityAvatarLayout\(/,
+  "avatar editor preview must share final-render layout math",
+);
+assert.match(
+  editor,
+  /focusFromCommunityAvatarLayoutPosition\(/,
+  "avatar editor drag output must share final-render focus math",
+);
+assert.match(
+  editor,
+  /getCommunityAvatarLayoutImageStyle\(layout\)/,
+  "avatar editor preview style must share final-render image style",
+);
+
+console.log("PASS: avatar framing contract is canonical.");

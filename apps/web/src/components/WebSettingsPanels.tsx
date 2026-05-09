@@ -201,6 +201,9 @@ export function WebSettingsPanels(props: WebSettingsPanelsProps) {
     session: profile.session,
     cloudProfile: profile.cloudProfile,
     profileAvatarUrl: profile.profileUi.profileAvatarUrl,
+    profileAvatarFocusX: profile.profileUi.profileAvatarFocusX,
+    profileAvatarFocusY: profile.profileUi.profileAvatarFocusY,
+    profileAvatarZoom: profile.profileUi.profileAvatarZoom,
     profileName: profile.profileUi.profileName,
     profileHandle: profile.profileUi.profileHandle,
     profileBio: profile.profileUi.profileBio,
@@ -210,10 +213,21 @@ export function WebSettingsPanels(props: WebSettingsPanelsProps) {
     isProfileDirty: profile.profileUi.isProfileDirty,
     profileSaveError: profile.profileUi.profileSaveError,
     profileSaveSuccess: profile.profileUi.profileSaveSuccess,
+    isProfileAvatarFocusModalOpen: profile.profileUi.isProfileAvatarFocusModalOpen,
     setIsProfileAvatarDragOver: profile.profileUi.setIsProfileAvatarDragOver,
+    setProfileAvatarFocusX: profile.profileUi.setProfileAvatarFocusX,
+    setProfileAvatarFocusY: profile.profileUi.setProfileAvatarFocusY,
+    setProfileAvatarZoom: profile.profileUi.setProfileAvatarZoom,
+    setIsProfileAvatarFocusModalOpen: profile.profileUi.setIsProfileAvatarFocusModalOpen,
     handleProfileAvatarDrop: profile.handleProfileAvatarDrop,
     handleProfileAvatarUpload: profile.handleProfileAvatarUpload,
-    setProfileAvatarUrl: profile.profileUi.setProfileAvatarUrl,
+    onRemoveProfileAvatar: () => {
+      profile.profileUi.setProfileAvatarUrl(null);
+      profile.profileUi.setProfileAvatarStorageId(null);
+      profile.profileUi.setProfileAvatarFocusX(0.5);
+      profile.profileUi.setProfileAvatarFocusY(0.5);
+      profile.profileUi.setProfileAvatarZoom(1);
+    },
     getInitials: profile.getInitials,
     setProfileName: profile.profileUi.setProfileName,
     setProfileHandle: profile.profileUi.setProfileHandle,

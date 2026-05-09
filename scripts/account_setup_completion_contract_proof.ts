@@ -26,6 +26,9 @@ assert.match(schema, /\.index\("by_normalizedHandle", \["normalizedHandle"\]\)/,
 assert.match(schema, /onboardingDirection: v\.optional\(/, "profile details must store onboarding direction");
 assert.match(schema, /displayName: v\.optional\(v\.string\(\)\)/, "profile details must store first-party display name evidence");
 assert.match(schema, /avatarUrl: v\.optional\(v\.string\(\)\)/, "profile details must store first-party avatar evidence");
+assert.match(schema, /avatarStorageId: v\.optional\(v\.id\("_storage"\)\)/, "profile details must support storage-backed avatars");
+assert.match(schema, /avatarFocusX: v\.optional\(v\.number\(\)\)/, "profile details must store avatar framing");
+assert.match(schema, /avatarZoom: v\.optional\(v\.number\(\)\)/, "profile details must store avatar zoom");
 assert.match(schema, /agentName: v\.optional\(v\.string\(\)\)/, "user memory settings must store agent name");
 
 assert.match(profileHandle, /export function validateProfileHandle/, "profile handle validator must be shared");
@@ -56,9 +59,12 @@ assert.match(profiles, /export const checkHandleAvailability = query/, "profile 
 assert.match(profiles, /withIndex\("by_normalizedHandle"/, "handle uniqueness check must use normalized handle index");
 assert.match(profiles, /export const getMyAccountSetupStatus = query/, "profiles must expose authenticated setup status");
 assert.match(profiles, /loadAccountSetupStatusForUser/, "profiles must use the shared Convex setup derivation helper");
+assert.match(profiles, /assertProfileAvatarStorageResolvable/, "profile avatar storage must be validated before save");
+assert.match(profiles, /profile_avatar_invalid/, "invalid profile avatar storage must fail with a stable error code");
 assert.match(accountSetupCore, /buildAccountSetupStatusForRows/, "Convex setup derivation must support bulk operator attribution");
 assert.match(accountSetupCore, /displayName: params\.detail\?\.displayName \?\? null/, "profile completion must use first-party profile detail display name");
 assert.match(accountSetupCore, /avatarUrl: params\.detail\?\.avatarUrl \?\? null/, "profile completion must use first-party profile detail avatar");
+assert.match(accountSetupCore, /avatarStorageId: params\.detail\?\.avatarStorageId/, "profile completion must support storage-backed avatars");
 assert.doesNotMatch(accountSetupCore, /displayName: params\.user\.displayName/, "auth-seeded display name must not complete account setup");
 assert.doesNotMatch(accountSetupCore, /avatarUrl: params\.user\.avatarUrl/, "auth-seeded avatar must not complete account setup");
 assert.doesNotMatch(convexAuthenticatedClient, /resolveAuthSessionDisplayName|resolveAuthSessionAvatarUrl/, "Convex bootstrap must not send provider profile metadata");
@@ -77,6 +83,7 @@ assert.match(profileGateway, /account_setup\?: AccountSetupStatus \| null/, "pro
 assert.match(profileGateway, /profiles:getMyAccountSetupStatus/, "profile gateway must load setup status");
 assert.match(profileGateway, /profiles:checkHandleAvailability/, "profile gateway must expose handle availability");
 assert.match(profileGateway, /onboardingDirection\?: "build_community"/, "profile gateway must save onboarding direction");
+assert.match(profileGateway, /prepareCloudProfileAvatarField/, "profile gateway must upload first-party avatar files");
 
 assert.match(settingsGateway, /agent_name\?: unknown/, "settings gateway must load agent_name");
 assert.match(settingsGateway, /agentName\?: string/, "settings gateway must save agentName");

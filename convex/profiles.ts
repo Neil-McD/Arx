@@ -2,6 +2,7 @@ import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { ensureAuthenticatedActor, resolveUserIdForAuthenticatedRequest } from "./authActor";
 import { validateProfileHandle } from "../shared/profileHandle";
+import { maybeDeleteStorageAsset } from "./communityCore";
 import {
   loadAccountSetupStatusForUser,
   type AccountSetupProfileDetailRow as ProfileDetailRow,
@@ -10,6 +11,40 @@ import {
 
 function normalizeSubject(value: unknown): string {
   return String(value ?? "").trim();
+}
+
+function normalizeOptionalText(value: unknown): string | undefined {
+  const normalized = String(value ?? "").trim();
+  return normalized || undefined;
+}
+
+function normalizeAvatarFocus(raw: unknown): number {
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed)) return 0.5;
+  return Math.max(0, Math.min(1, parsed));
+}
+
+function normalizeAvatarZoom(raw: unknown): number {
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed)) return 1;
+  return Math.max(1, Math.min(2.5, parsed));
+}
+
+async function maybeResolveStorageUrl(ctx: any, storageId: unknown): Promise<string | null> {
+  if (!storageId) return null;
+  const resolved = await ctx.storage.getUrl(storageId);
+  return typeof resolved === "string" && resolved.trim() ? resolved.trim() : null;
+}
+
+async function assertProfileAvatarStorageResolvable(ctx: any, storageId: unknown): Promise<void> {
+  if (!storageId) return;
+  try {
+    const resolved = await maybeResolveStorageUrl(ctx, storageId);
+    if (resolved) return;
+  } catch {
+    // Normalize storage errors into the profile mutation contract.
+  }
+  throw new Error("profile_avatar_invalid");
 }
 
 async function findUserBySubject(ctx: any, authSubject: string): Promise<UserRow | null> {
@@ -22,13 +57,32 @@ async function findUserBySubject(ctx: any, authSubject: string): Promise<UserRow
   return row;
 }
 
-function mapProfileBase(row: UserRow) {
+async function findProfileDetailByUserId(ctx: any, userId: any): Promise<ProfileDetailRow | null> {
+  return (await ctx.db
+    .query("userProfileDetails")
+    .withIndex("by_user", (q: any) => q.eq("userId", userId))
+    .first()) as ProfileDetailRow | null;
+}
+
+async function resolveProfileAvatarFields(ctx: any, detail: ProfileDetailRow | null) {
+  const avatarUrl = await maybeResolveStorageUrl(ctx, detail?.avatarStorageId);
   return {
-    user_id: row.authSubject,
-    display_name: row.displayName ?? null,
-    handle: row.handle ?? null,
-    normalized_handle: row.normalizedHandle ?? null,
-    avatar_url: row.avatarUrl ?? null,
+    avatar_url: avatarUrl ?? detail?.avatarUrl ?? null,
+    avatar_storage_id: detail?.avatarStorageId ? String(detail.avatarStorageId) : null,
+    avatar_focus_x: normalizeAvatarFocus(detail?.avatarFocusX),
+    avatar_focus_y: normalizeAvatarFocus(detail?.avatarFocusY),
+    avatar_zoom: normalizeAvatarZoom(detail?.avatarZoom),
+  };
+}
+
+async function mapProfileBase(ctx: any, user: UserRow, detail?: ProfileDetailRow | null) {
+  const resolvedDetail = detail === undefined ? await findProfileDetailByUserId(ctx, user._id) : detail;
+  return {
+    user_id: user.authSubject,
+    display_name: resolvedDetail?.displayName ?? null,
+    handle: user.handle ?? null,
+    normalized_handle: user.normalizedHandle ?? null,
+    ...(await resolveProfileAvatarFields(ctx, resolvedDetail)),
   };
 }
 
@@ -46,11 +100,9 @@ async function hasEstablishedAccountEvidence(ctx: any, userId: any): Promise<boo
   return rows.some(Boolean);
 }
 
-function mapProfileDetail(user: UserRow, detail: ProfileDetailRow | null) {
+async function mapProfileDetail(ctx: any, user: UserRow, detail: ProfileDetailRow | null) {
   return {
-    ...mapProfileBase(user),
-    display_name: detail?.displayName ?? null,
-    avatar_url: detail?.avatarUrl ?? null,
+    ...(await mapProfileBase(ctx, user, detail)),
     bio: detail?.bio ?? null,
     onboarding_direction: detail?.onboardingDirection ?? null,
     onboarding_completed_at:
@@ -66,7 +118,7 @@ async function mapProfileDetailWithSetup(
   detail: ProfileDetailRow | null,
 ) {
   return {
-    ...mapProfileDetail(user, detail),
+    ...(await mapProfileDetail(ctx, user, detail)),
     account_setup: await loadAccountSetupStatusForUser(ctx, user, detail),
   };
 }
@@ -132,11 +184,15 @@ export const listProfilesByUserIds = query({
       handle: string | null;
       normalized_handle: string | null;
       avatar_url: string | null;
+      avatar_storage_id: string | null;
+      avatar_focus_x: number;
+      avatar_focus_y: number;
+      avatar_zoom: number;
     }> = [];
     for (const userId of normalizedUserIds) {
       const user = await findUserBySubject(ctx, userId);
       if (!user) continue;
-      rows.push(mapProfileBase(user));
+      rows.push(await mapProfileBase(ctx, user));
     }
     return rows;
   },
@@ -149,11 +205,23 @@ export const getProfileDetailByUserId = query({
   handler: async (ctx, args) => {
     const user = await findUserBySubject(ctx, args.userId);
     if (!user) return null;
-    const detail = (await ctx.db
-      .query("userProfileDetails")
-      .withIndex("by_user", (q: any) => q.eq("userId", user._id))
-      .first()) as ProfileDetailRow | null;
-    return mapProfileDetail(user, detail);
+    const detail = await findProfileDetailByUserId(ctx, user._id);
+    return await mapProfileDetail(ctx, user, detail);
+  },
+});
+
+export const generateProfileAvatarUploadUrl = mutation({
+  args: {
+    authSubject: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      authSubject: args.authSubject ?? null,
+    });
+    return {
+      uploadUrl: await ctx.storage.generateUploadUrl(),
+    };
   },
 });
 
@@ -236,7 +304,11 @@ export const upsertProfileDetail = mutation({
     userId: v.optional(v.string()),
     displayName: v.optional(v.union(v.string(), v.null())),
     handle: v.optional(v.union(v.string(), v.null())),
+    avatarStorageId: v.optional(v.union(v.id("_storage"), v.null())),
     avatarUrl: v.optional(v.union(v.string(), v.null())),
+    avatarFocusX: v.optional(v.number()),
+    avatarFocusY: v.optional(v.number()),
+    avatarZoom: v.optional(v.number()),
     bio: v.optional(v.union(v.string(), v.null())),
     onboardingDirection: v.optional(
       v.union(
@@ -256,7 +328,7 @@ export const upsertProfileDetail = mutation({
       authSubject: args.authSubject ?? null,
       nowMs,
       displayName: args.displayName,
-      avatarUrl: args.avatarUrl,
+      avatarUrl: args.avatarStorageId ? undefined : args.avatarUrl,
     });
     const requestedSubject = normalizeSubject(args.userId ?? actor.authSubject);
     if (requestedSubject !== actor.authSubject) {
@@ -280,8 +352,8 @@ export const upsertProfileDetail = mutation({
         userPatch.normalizedHandle = handle.normalizedHandle;
       }
     }
-    if (args.avatarUrl !== undefined) {
-      userPatch.avatarUrl = String(args.avatarUrl ?? "").trim() || undefined;
+    if (args.avatarUrl !== undefined || args.avatarStorageId !== undefined) {
+      userPatch.avatarUrl = args.avatarStorageId ? undefined : normalizeOptionalText(args.avatarUrl);
     }
     await ctx.db.patch(actor.dbUserId, userPatch);
 
@@ -289,14 +361,35 @@ export const upsertProfileDetail = mutation({
       .query("userProfileDetails")
       .withIndex("by_user", (q: any) => q.eq("userId", actor.dbUserId))
       .first()) as ProfileDetailRow | null;
+    if (args.avatarStorageId) {
+      await assertProfileAvatarStorageResolvable(ctx, args.avatarStorageId);
+    }
     const nextDisplayName =
       args.displayName !== undefined
         ? String(args.displayName ?? "").trim() || undefined
         : existingDetail?.displayName;
+    const nextAvatarStorageId =
+      args.avatarStorageId !== undefined
+        ? args.avatarStorageId ?? undefined
+        : existingDetail?.avatarStorageId;
     const nextAvatarUrl =
-      args.avatarUrl !== undefined
-        ? String(args.avatarUrl ?? "").trim() || undefined
-        : existingDetail?.avatarUrl;
+      nextAvatarStorageId
+        ? undefined
+        : args.avatarUrl !== undefined || args.avatarStorageId !== undefined
+          ? normalizeOptionalText(args.avatarUrl)
+          : existingDetail?.avatarUrl;
+    const nextAvatarFocusX =
+      args.avatarFocusX !== undefined
+        ? normalizeAvatarFocus(args.avatarFocusX)
+        : normalizeAvatarFocus(existingDetail?.avatarFocusX);
+    const nextAvatarFocusY =
+      args.avatarFocusY !== undefined
+        ? normalizeAvatarFocus(args.avatarFocusY)
+        : normalizeAvatarFocus(existingDetail?.avatarFocusY);
+    const nextAvatarZoom =
+      args.avatarZoom !== undefined
+        ? normalizeAvatarZoom(args.avatarZoom)
+        : normalizeAvatarZoom(existingDetail?.avatarZoom);
     const nextBio = args.bio !== undefined ? String(args.bio ?? "").trim() || undefined : existingDetail?.bio;
     const nextOnboardingDirection =
       args.onboardingDirection === undefined
@@ -308,6 +401,10 @@ export const upsertProfileDetail = mutation({
         userId: actor.dbUserId,
         displayName: nextDisplayName,
         avatarUrl: nextAvatarUrl,
+        avatarStorageId: nextAvatarStorageId,
+        avatarFocusX: nextAvatarFocusX,
+        avatarFocusY: nextAvatarFocusY,
+        avatarZoom: nextAvatarZoom,
         bio: nextBio,
         onboardingDirection: nextOnboardingDirection,
         ...(args.completeOnboarding ? { onboardingCompletedAt: nowMs } : null),
@@ -318,6 +415,10 @@ export const upsertProfileDetail = mutation({
       await ctx.db.patch(existingDetail._id, {
         displayName: nextDisplayName,
         avatarUrl: nextAvatarUrl,
+        avatarStorageId: nextAvatarStorageId,
+        avatarFocusX: nextAvatarFocusX,
+        avatarFocusY: nextAvatarFocusY,
+        avatarZoom: nextAvatarZoom,
         bio: nextBio,
         onboardingDirection: nextOnboardingDirection,
         ...(args.completeOnboarding && !existingDetail.onboardingCompletedAt
@@ -327,11 +428,15 @@ export const upsertProfileDetail = mutation({
       });
     }
 
+    if (
+      existingDetail?.avatarStorageId &&
+      String(existingDetail.avatarStorageId) !== String(nextAvatarStorageId ?? "")
+    ) {
+      await maybeDeleteStorageAsset(ctx, existingDetail.avatarStorageId);
+    }
+
     const refreshedUser = (await ctx.db.get(actor.dbUserId)) as UserRow | null;
-    const detail = (await ctx.db
-      .query("userProfileDetails")
-      .withIndex("by_user", (q: any) => q.eq("userId", actor.dbUserId))
-      .first()) as ProfileDetailRow | null;
+    const detail = await findProfileDetailByUserId(ctx, actor.dbUserId);
 
     if (!refreshedUser) throw new Error("user_not_found");
 

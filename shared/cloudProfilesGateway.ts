@@ -12,6 +12,15 @@ type CloudProfileBase = {
   handle?: string | null;
   normalized_handle?: string | null;
   avatar_url: string | null;
+  avatar_storage_id?: string | null;
+  avatar_focus_x?: number | null;
+  avatar_focus_y?: number | null;
+  avatar_zoom?: number | null;
+};
+
+export type CloudProfileAvatarFieldInput = {
+  storageId?: string | null;
+  url?: string | null;
 };
 
 export type CloudProfileDetailRow = CloudProfileBase & {
@@ -34,6 +43,100 @@ async function bootstrapConvexUser(sessionRaw: unknown): Promise<{
 }> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(sessionRaw);
   return { client, authSubject };
+}
+
+function isInlineImageDataUrl(raw: unknown): raw is string {
+  return String(raw ?? "").trim().toLowerCase().startsWith("data:image/");
+}
+
+function dataUrlToUploadPayload(dataUrl: string): { blob: Blob; mimeType: string } {
+  const trimmed = dataUrl.trim();
+  const match = /^data:([^;,]+);base64,(.+)$/i.exec(trimmed);
+  if (!match) throw new Error("Invalid image data URL.");
+  const mimeType = match[1]!.trim() || "application/octet-stream";
+  const base64 = match[2]!.trim();
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return {
+    blob: new Blob([bytes], { type: mimeType }),
+    mimeType,
+  };
+}
+
+async function requestCloudProfileAvatarUploadUrl<SessionT>(
+  params: CloudProfilesGatewayParams<SessionT>,
+): Promise<string> {
+  const { client, authSubject } = await bootstrapConvexUser(params.session);
+  const payload = (await client.mutation("profiles:generateProfileAvatarUploadUrl" as any, {
+    authSubject,
+  })) as { uploadUrl?: string | null };
+  const uploadUrl = String(payload?.uploadUrl ?? "").trim();
+  if (!uploadUrl) throw new Error("Failed to prepare profile photo upload.");
+  return uploadUrl;
+}
+
+async function uploadCloudProfileAvatarDataUrl<SessionT>(
+  params: CloudProfilesGatewayParams<SessionT> & {
+    dataUrl: string;
+  },
+): Promise<string> {
+  const uploadUrl = await requestCloudProfileAvatarUploadUrl({
+    session: params.session,
+  });
+  const { blob, mimeType } = dataUrlToUploadPayload(params.dataUrl);
+  const response = await fetch(uploadUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": mimeType,
+    },
+    body: blob,
+  });
+  if (!response.ok) throw new Error("Failed to upload profile photo.");
+  const payload = (await response.json()) as { storageId?: string | null };
+  const storageId = String(payload?.storageId ?? "").trim();
+  if (!storageId) throw new Error("Failed to upload profile photo.");
+  return storageId;
+}
+
+export async function prepareCloudProfileAvatarField<SessionT>(
+  params: CloudProfilesGatewayParams<SessionT> & {
+    nextValue: string | null | undefined;
+    currentStorageId?: string | null;
+    currentResolvedUrl?: string | null;
+  },
+): Promise<CloudProfileAvatarFieldInput> {
+  const trimmedNext = String(params.nextValue ?? "").trim();
+  if (!trimmedNext) {
+    return {
+      storageId: null,
+      url: null,
+    };
+  }
+  if (isInlineImageDataUrl(trimmedNext)) {
+    const storageId = await uploadCloudProfileAvatarDataUrl({
+      session: params.session,
+      dataUrl: trimmedNext,
+    });
+    return {
+      storageId,
+      url: null,
+    };
+  }
+  const currentStorageId = String(params.currentStorageId ?? "").trim();
+  const currentResolvedUrl = String(params.currentResolvedUrl ?? "").trim();
+  if (currentStorageId && currentResolvedUrl && trimmedNext === currentResolvedUrl) {
+    return {
+      storageId: currentStorageId,
+      url: null,
+    };
+  }
+  return {
+    storageId: null,
+    url: trimmedNext,
+  };
 }
 
 export async function listCloudProfileRowsByUserIds<SessionT, TProfile extends CloudProfileBase = CloudProfileBase>(
@@ -101,7 +204,11 @@ export async function upsertCloudProfileDetail<SessionT, TProfile extends CloudP
     userId: string;
     displayName: string | null;
     handle?: string | null;
+    avatarStorageId?: string | null;
     avatarUrl: string | null;
+    avatarFocusX?: number | null;
+    avatarFocusY?: number | null;
+    avatarZoom?: number | null;
     bio: string | null;
     onboardingDirection?: "build_community" | "discover_community" | "learn_about_polynet" | null;
     completeOnboarding?: boolean;
@@ -113,7 +220,11 @@ export async function upsertCloudProfileDetail<SessionT, TProfile extends CloudP
     userId: params.userId,
     displayName: params.displayName,
     handle: params.handle,
+    avatarStorageId: params.avatarStorageId ?? null,
     avatarUrl: params.avatarUrl,
+    avatarFocusX: params.avatarFocusX ?? 0.5,
+    avatarFocusY: params.avatarFocusY ?? 0.5,
+    avatarZoom: params.avatarZoom ?? 1,
     bio: params.bio,
     onboardingDirection: params.onboardingDirection,
     completeOnboarding: params.completeOnboarding,

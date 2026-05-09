@@ -229,6 +229,10 @@ export type UserProfile = {
   handle?: string | null;
   normalized_handle?: string | null;
   avatar_url: string | null;
+  avatar_storage_id?: string | null;
+  avatar_focus_x?: number | null;
+  avatar_focus_y?: number | null;
+  avatar_zoom?: number | null;
 };
 
 export type UserProfileDetail = UserProfile & {

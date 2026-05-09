@@ -33,6 +33,7 @@ import {
 import {
   fetchCloudProfileDetailByUserId,
   listCloudProfileRowsByUserIds,
+  prepareCloudProfileAvatarField,
   upsertCloudProfileDetail,
 } from "./cloudProfilesGateway";
 import { preloadImageUrls } from "./preloadImageUrls";
@@ -59,6 +60,10 @@ type UseCommunityAdminControllerArgs<
   profileHandle: string;
   profileBio: string;
   profileAvatarUrl: string | null;
+  profileAvatarStorageId: string | null;
+  profileAvatarFocusX: number;
+  profileAvatarFocusY: number;
+  profileAvatarZoom: number;
   profileSaveTimeoutRef: MutableRefObject<number | null>;
   profileSaveFailureMessage: string;
   profileSaveUnauthenticatedErrorMessage: string | null;
@@ -74,6 +79,10 @@ type UseCommunityAdminControllerArgs<
   setProfileHandle: Dispatch<SetStateAction<string>>;
   setProfileBio: Dispatch<SetStateAction<string>>;
   setProfileAvatarUrl: Dispatch<SetStateAction<string | null>>;
+  setProfileAvatarStorageId: Dispatch<SetStateAction<string | null>>;
+  setProfileAvatarFocusX: Dispatch<SetStateAction<number>>;
+  setProfileAvatarFocusY: Dispatch<SetStateAction<number>>;
+  setProfileAvatarZoom: Dispatch<SetStateAction<number>>;
   setIsSavingProfile: Dispatch<SetStateAction<boolean>>;
   setProfileSaveError: Dispatch<SetStateAction<string | null>>;
   setProfileSaveSuccess: Dispatch<SetStateAction<boolean>>;
@@ -83,6 +92,19 @@ type UseCommunityAdminControllerArgs<
   setCommunityAnalyticsSummary: Dispatch<SetStateAction<AnalyticsSummaryLike>>;
   setCommunityAnalyticsSeries: Dispatch<SetStateAction<AnalyticsMetricSeriesLike>>;
 };
+
+function formatProfileSaveError(error: unknown, fallback: string): string {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  if (message.includes("profile_handle_taken")) return "That handle is already taken.";
+  if (message.includes("profile_handle_reserved")) return "That handle is reserved.";
+  if (message.includes("profile_handle_too_short")) return "Handle must be at least 3 characters.";
+  if (message.includes("profile_handle_too_long")) return "Handle must be 32 characters or less.";
+  if (message.includes("profile_handle_invalid_format")) {
+    return "Handle can use lowercase letters, numbers, underscores, and hyphens.";
+  }
+  if (message.includes("profile_avatar_invalid")) return "Upload a valid profile photo and try again.";
+  return message || fallback;
+}
 
 export function useCommunityAdminController<
   SessionT extends SessionLike,
@@ -135,6 +157,10 @@ export function useCommunityAdminController<
           const profileLike = row as unknown as UserProfileT & {
             display_name?: string | null;
             avatar_url?: string | null;
+            avatar_storage_id?: string | null;
+            avatar_focus_x?: number | null;
+            avatar_focus_y?: number | null;
+            avatar_zoom?: number | null;
           };
           if (!profileLike.user_id) continue;
           if (profileLike.display_name == null && profileLike.avatar_url == null) continue;
@@ -143,6 +169,10 @@ export function useCommunityAdminController<
             user_id: profileLike.user_id,
             display_name: profileLike.display_name ?? null,
             avatar_url: profileLike.avatar_url ?? null,
+            avatar_storage_id: profileLike.avatar_storage_id ?? null,
+            avatar_focus_x: profileLike.avatar_focus_x ?? 0.5,
+            avatar_focus_y: profileLike.avatar_focus_y ?? 0.5,
+            avatar_zoom: profileLike.avatar_zoom ?? 1,
           } as UserProfileT;
           changed = true;
         }
@@ -207,6 +237,10 @@ export function useCommunityAdminController<
           handle: row.handle ?? null,
           normalized_handle: row.normalized_handle ?? null,
           avatar_url: row.avatar_url,
+          avatar_storage_id: row.avatar_storage_id ?? null,
+          avatar_focus_x: row.avatar_focus_x ?? 0.5,
+          avatar_focus_y: row.avatar_focus_y ?? 0.5,
+          avatar_zoom: row.avatar_zoom ?? 1,
         } as UserProfileT,
       }));
       current.applyLoadedProfileToLocal?.(row);
@@ -244,12 +278,22 @@ export function useCommunityAdminController<
     try {
       const profileUserId = resolveCanonicalProfileUserId(session);
       if (!profileUserId) throw new Error("profile_user_id_required");
+      const avatarField = await prepareCloudProfileAvatarField({
+        session,
+        nextValue: current.profileAvatarUrl,
+        currentStorageId: current.profileAvatarStorageId,
+        currentResolvedUrl: current.profileAvatarUrl,
+      });
       const saved = await upsertCloudProfileDetail<SessionT, UserProfileDetailT>({
         session,
         userId: profileUserId,
         displayName: trimmedName || null,
         handle: trimmedHandle || null,
-        avatarUrl: current.profileAvatarUrl ?? null,
+        avatarStorageId: avatarField.storageId ?? null,
+        avatarUrl: avatarField.url ?? null,
+        avatarFocusX: current.profileAvatarFocusX,
+        avatarFocusY: current.profileAvatarFocusY,
+        avatarZoom: current.profileAvatarZoom,
         bio: trimmedBio || null,
       });
       if (saved) {
@@ -262,22 +306,25 @@ export function useCommunityAdminController<
             handle: saved.handle ?? null,
             normalized_handle: saved.normalized_handle ?? null,
             avatar_url: saved.avatar_url,
+            avatar_storage_id: saved.avatar_storage_id ?? null,
+            avatar_focus_x: saved.avatar_focus_x ?? 0.5,
+            avatar_focus_y: saved.avatar_focus_y ?? 0.5,
+            avatar_zoom: saved.avatar_zoom ?? 1,
           } as UserProfileT,
         }));
         current.setProfileName(saved.display_name ?? "");
         current.setProfileHandle(saved.handle ?? "");
         current.setProfileBio(saved.bio ?? "");
         current.setProfileAvatarUrl(saved.avatar_url ?? null);
+        current.setProfileAvatarStorageId(saved.avatar_storage_id ?? null);
+        current.setProfileAvatarFocusX(saved.avatar_focus_x ?? 0.5);
+        current.setProfileAvatarFocusY(saved.avatar_focus_y ?? 0.5);
+        current.setProfileAvatarZoom(saved.avatar_zoom ?? 1);
       }
       current.setProfileSaveSuccess(true);
       current.profileSaveTimeoutRef.current = window.setTimeout(() => current.setProfileSaveSuccess(false), 2000);
     } catch (error) {
-      const message = typeof error === "string"
-        ? error
-        : error instanceof Error
-          ? error.message
-          : current.profileSaveFailureMessage;
-      current.setProfileSaveError(message);
+      current.setProfileSaveError(formatProfileSaveError(error, current.profileSaveFailureMessage));
     } finally {
       current.setIsSavingProfile(false);
     }

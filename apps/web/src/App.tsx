@@ -100,6 +100,7 @@ import {
 import {
   checkCloudProfileHandleAvailability,
   loadCloudAccountSetupStatus,
+  prepareCloudProfileAvatarField,
   resolveCloudOnboardingProfileDetail,
   type CloudProfileHandleAvailability,
   upsertCloudProfileDetail,
@@ -429,6 +430,9 @@ type PublicCommunityRecord = {
     user_id: string;
     display_name: string | null;
     avatar_url: string | null;
+    avatar_focus_x?: number | null;
+    avatar_focus_y?: number | null;
+    avatar_zoom?: number | null;
   }> | null;
 };
 
@@ -473,6 +477,7 @@ function formatProfileMutationError(error: unknown, fallback: string): string {
   if (message.includes("profile_handle_invalid_format")) {
     return "Handle can use lowercase letters, numbers, underscores, and hyphens.";
   }
+  if (message.includes("profile_avatar_invalid")) return "Upload a valid profile photo and try again.";
   return message || fallback;
 }
 
@@ -2430,17 +2435,26 @@ export default function App() {
     const displayName = profileUi.profileName.trim() || null;
     const handle = profileUi.profileHandle.trim() || null;
     const bio = profileUi.profileBio.trim() || null;
-    const avatarUrl = profileUi.profileAvatarUrl?.trim() || null;
 
     setIsSavingOnboarding(true);
     setOnboardingError(null);
     try {
+      const avatarField = await prepareCloudProfileAvatarField<AuthSession>({
+        session: activeSession,
+        nextValue: profileUi.profileAvatarUrl,
+        currentStorageId: profileUi.profileAvatarStorageId,
+        currentResolvedUrl: profileUi.profileAvatarUrl,
+      });
       const saved = await upsertCloudProfileDetail<AuthSession, UserProfileDetail>({
         session: activeSession,
         userId,
         displayName,
         handle,
-        avatarUrl,
+        avatarStorageId: avatarField.storageId ?? null,
+        avatarUrl: avatarField.url ?? null,
+        avatarFocusX: profileUi.profileAvatarFocusX,
+        avatarFocusY: profileUi.profileAvatarFocusY,
+        avatarZoom: profileUi.profileAvatarZoom,
         bio,
         onboardingDirection: destination,
         completeOnboarding: true,
@@ -2454,6 +2468,10 @@ export default function App() {
         profileUi.setProfileHandle(saved.handle ?? "");
         profileUi.setProfileBio(saved.bio ?? "");
         profileUi.setProfileAvatarUrl(saved.avatar_url ?? null);
+        profileUi.setProfileAvatarStorageId(saved.avatar_storage_id ?? null);
+        profileUi.setProfileAvatarFocusX(saved.avatar_focus_x ?? 0.5);
+        profileUi.setProfileAvatarFocusY(saved.avatar_focus_y ?? 0.5);
+        profileUi.setProfileAvatarZoom(saved.avatar_zoom ?? 1);
       }
 
       if (destination === "discover_community") {
@@ -2495,12 +2513,22 @@ export default function App() {
     setIsSavingOnboarding(true);
     setOnboardingError(null);
     try {
+      const avatarField = await prepareCloudProfileAvatarField<AuthSession>({
+        session: activeSession,
+        nextValue: profileUi.profileAvatarUrl,
+        currentStorageId: profileUi.profileAvatarStorageId,
+        currentResolvedUrl: profileUi.profileAvatarUrl,
+      });
       const saved = await upsertCloudProfileDetail<AuthSession, UserProfileDetail>({
         session: activeSession,
         userId,
         displayName,
         handle,
-        avatarUrl,
+        avatarStorageId: avatarField.storageId ?? null,
+        avatarUrl: avatarField.url ?? null,
+        avatarFocusX: profileUi.profileAvatarFocusX,
+        avatarFocusY: profileUi.profileAvatarFocusY,
+        avatarZoom: profileUi.profileAvatarZoom,
         bio,
         completeOnboarding: false,
       });
@@ -2512,6 +2540,10 @@ export default function App() {
         profileUi.setProfileHandle(saved.handle ?? "");
         profileUi.setProfileBio(saved.bio ?? "");
         profileUi.setProfileAvatarUrl(saved.avatar_url ?? null);
+        profileUi.setProfileAvatarStorageId(saved.avatar_storage_id ?? null);
+        profileUi.setProfileAvatarFocusX(saved.avatar_focus_x ?? 0.5);
+        profileUi.setProfileAvatarFocusY(saved.avatar_focus_y ?? 0.5);
+        profileUi.setProfileAvatarZoom(saved.avatar_zoom ?? 1);
       }
       return true;
     } catch (error) {
@@ -3058,6 +3090,10 @@ export default function App() {
     profileHandle: profileUi.profileHandle,
     profileBio: profileUi.profileBio,
     profileAvatarUrl: profileUi.profileAvatarUrl,
+    profileAvatarStorageId: profileUi.profileAvatarStorageId,
+    profileAvatarFocusX: profileUi.profileAvatarFocusX,
+    profileAvatarFocusY: profileUi.profileAvatarFocusY,
+    profileAvatarZoom: profileUi.profileAvatarZoom,
     profileSaveTimeoutRef: profileUi.profileSaveTimeoutRef,
     profileSaveFailureMessage: "Failed to save profile.",
     profileSaveUnauthenticatedErrorMessage: null,
@@ -3074,6 +3110,10 @@ export default function App() {
     setProfileHandle: profileUi.setProfileHandle,
     setProfileBio: profileUi.setProfileBio,
     setProfileAvatarUrl: profileUi.setProfileAvatarUrl,
+    setProfileAvatarStorageId: profileUi.setProfileAvatarStorageId,
+    setProfileAvatarFocusX: profileUi.setProfileAvatarFocusX,
+    setProfileAvatarFocusY: profileUi.setProfileAvatarFocusY,
+    setProfileAvatarZoom: profileUi.setProfileAvatarZoom,
     setIsSavingProfile: profileUi.setIsSavingProfile,
     setProfileSaveError: profileUi.setProfileSaveError,
     setProfileSaveSuccess: profileUi.setProfileSaveSuccess,
@@ -4074,6 +4114,10 @@ export default function App() {
         handle: cloudProfile.handle ?? null,
         normalized_handle: cloudProfile.normalized_handle ?? null,
         avatar_url: cloudProfile.avatar_url,
+        avatar_storage_id: cloudProfile.avatar_storage_id ?? null,
+        avatar_focus_x: cloudProfile.avatar_focus_x ?? 0.5,
+        avatar_focus_y: cloudProfile.avatar_focus_y ?? 0.5,
+        avatar_zoom: cloudProfile.avatar_zoom ?? 1,
       },
     } satisfies Record<string, UserProfile>;
   }, [canonicalSessionUserId, cloudProfile, profilesByUserId]);
@@ -5631,7 +5675,12 @@ export default function App() {
     isLikelyImageFile,
     maxWebImageDataUrlChars: MAX_WEB_IMAGE_DATA_URL_CHARS,
     setProfileAvatarUrl: profileUi.setProfileAvatarUrl,
+    setProfileAvatarStorageId: profileUi.setProfileAvatarStorageId,
+    setProfileAvatarFocusX: profileUi.setProfileAvatarFocusX,
+    setProfileAvatarFocusY: profileUi.setProfileAvatarFocusY,
+    setProfileAvatarZoom: profileUi.setProfileAvatarZoom,
     setAuthError,
+    onProfileAvatarUploadSuccess: () => profileUi.setIsProfileAvatarFocusModalOpen(true),
   });
 
   const canUseDevTierOverride = useMemo(
@@ -7292,15 +7341,29 @@ export default function App() {
       handle: profileUi.profileHandle,
       bio: profileUi.profileBio,
       avatarUrl: profileUi.profileAvatarUrl,
+      avatarFocusX: profileUi.profileAvatarFocusX,
+      avatarFocusY: profileUi.profileAvatarFocusY,
+      avatarZoom: profileUi.profileAvatarZoom,
+      isAvatarFocusModalOpen: profileUi.isProfileAvatarFocusModalOpen,
       handleAvailability: onboardingHandleAvailability,
       isCheckingHandleAvailability: isCheckingOnboardingHandle,
       isAvatarDragOver: profileUi.isProfileAvatarDragOver,
       isSaving: isSavingOnboarding,
       error: onboardingError,
       setIsAvatarDragOver: profileUi.setIsProfileAvatarDragOver,
+      setAvatarFocusX: profileUi.setProfileAvatarFocusX,
+      setAvatarFocusY: profileUi.setProfileAvatarFocusY,
+      setAvatarZoom: profileUi.setProfileAvatarZoom,
+      setIsAvatarFocusModalOpen: profileUi.setIsProfileAvatarFocusModalOpen,
       onAvatarDrop: handleProfileAvatarDrop,
       onAvatarUpload: handleProfileAvatarUpload,
-      onRemoveAvatar: () => profileUi.setProfileAvatarUrl(null),
+      onRemoveAvatar: () => {
+        profileUi.setProfileAvatarUrl(null);
+        profileUi.setProfileAvatarStorageId(null);
+        profileUi.setProfileAvatarFocusX(0.5);
+        profileUi.setProfileAvatarFocusY(0.5);
+        profileUi.setProfileAvatarZoom(1);
+      },
       onDisplayNameChange: profileUi.setProfileName,
       onHandleChange: profileUi.setProfileHandle,
       onBioChange: profileUi.setProfileBio,

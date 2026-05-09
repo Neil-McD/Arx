@@ -36,6 +36,10 @@ export type CloudCommunityMembershipAdminRow = {
   user_id: string;
   display_name?: string | null;
   avatar_url?: string | null;
+  avatar_storage_id?: string | null;
+  avatar_focus_x?: number | null;
+  avatar_focus_y?: number | null;
+  avatar_zoom?: number | null;
   role: string;
   price_point_id?: string | null;
   billing_period?: CommunityBillingPeriod | null;

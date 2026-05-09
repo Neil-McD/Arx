@@ -25,7 +25,12 @@ type UseWebSettingsImageUploadControllerArgs = {
   isLikelyImageFile: (file: File) => boolean;
   maxWebImageDataUrlChars: number;
   setProfileAvatarUrl: Dispatch<SetStateAction<string | null>>;
+  setProfileAvatarStorageId: Dispatch<SetStateAction<string | null>>;
+  setProfileAvatarFocusX: Dispatch<SetStateAction<number>>;
+  setProfileAvatarFocusY: Dispatch<SetStateAction<number>>;
+  setProfileAvatarZoom: Dispatch<SetStateAction<number>>;
   setAuthError: Dispatch<SetStateAction<string | null>>;
+  onProfileAvatarUploadSuccess?: () => void;
 };
 
 export function useWebSettingsImageUploadController(
@@ -52,7 +57,12 @@ export function useWebSettingsImageUploadController(
     isLikelyCommunityBannerImageFile: args.isLikelyImageFile,
     maxCommunityImageDataUrlChars: args.maxWebImageDataUrlChars,
     setProfileAvatarUrl: args.setProfileAvatarUrl,
+    setProfileAvatarStorageId: args.setProfileAvatarStorageId,
+    setProfileAvatarFocusX: args.setProfileAvatarFocusX,
+    setProfileAvatarFocusY: args.setProfileAvatarFocusY,
+    setProfileAvatarZoom: args.setProfileAvatarZoom,
     setAuthError: args.setAuthError,
+    onProfileAvatarUploadSuccess: args.onProfileAvatarUploadSuccess,
     enforceCommunityAvatarDataUrlLimit: true,
     communityAvatarReadErrorFallback: "Failed to read avatar file.",
     communityBannerReadErrorFallback: "Failed to read banner file.",
