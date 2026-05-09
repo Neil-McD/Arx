@@ -151,6 +151,7 @@ function provePromptEntrypoints() {
     communityOneLiner: "One prompt stack.",
     communityAbout: "Used to prove the one-platform-harness context model.",
     communitySystemPrompt: "Answer through the community lens when relevant.",
+    agentName: "James",
     agentSoul: "Keep the product simple.",
     projectLabel: "Unified project",
     projectDescription: "Project context activates workspace tools.",
@@ -161,6 +162,7 @@ function provePromptEntrypoints() {
   });
   assert.match(platformHarnessPrompt, /PLATFORM_DOCTRINE/);
   assert.match(platformHarnessPrompt, /AGENT_SOUL/);
+  assert.match(platformHarnessPrompt, /Configured agent name: James/);
   assert.match(platformHarnessPrompt, /COMMUNITY_LENS/);
   assert.match(platformHarnessPrompt, /PLATFORM_HARNESS_CONTEXT/);
   assert.match(platformHarnessPrompt, /AGENT_OPERATING_POLICY/);
@@ -183,12 +185,14 @@ function provePromptEntrypoints() {
     communityOneLiner: "One prompt stack.",
     communityAbout: "Used to prove the one-platform-harness context model.",
     communitySystemPrompt: "Answer through the community lens when relevant.",
+    agentName: "James",
     agentSoul: "Keep the product simple.",
     currentDateTimeIso: "2026-05-07T12:00:00.000Z",
     currentDateLabel: "Thursday, May 7, 2026 at 8:00:00 AM EDT",
     currentTimeZone: "America/New_York",
   });
   assert.match(platformChatPrompt, /This is a chat-only platform run/);
+  assert.match(platformChatPrompt, /Configured agent name: James/);
   assert.match(platformChatPrompt, /No workspace tools are active in this run/);
   assert.doesNotMatch(platformChatPrompt, /This run can inspect and modify files/);
   assert.doesNotMatch(
@@ -248,6 +252,16 @@ async function proveSourceContract() {
     runtimeTurnHandlersSource,
     /composePlatformChatRuntimeSystemPrompt/,
     "chat runtime path should call the platform chat prompt entrypoint",
+  );
+  assert.match(
+    runtimeTurnHandlersSource,
+    /agentName: runtimeAgentProfile\.agentName/,
+    "runtime turn handlers must pass the saved agent name into prompt composition",
+  );
+  assert.match(
+    httpDaytonaSource,
+    /agentName: params\.agentName/,
+    "agentic runtime loop must pass the saved agent name into platform harness prompts",
   );
   assert.doesNotMatch(
     runtimeTurnHandlersSource,

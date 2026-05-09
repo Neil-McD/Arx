@@ -86,15 +86,25 @@ function isRuntimeCompletionFailure(
   return "ok" in completion && completion.ok === false;
 }
 
-async function loadUserAgentSoulForRuntime(ctx: any, userId: string): Promise<string | null> {
+async function loadUserAgentProfileForRuntime(
+  ctx: any,
+  userId: string,
+): Promise<{ agentName: string | null; agentSoul: string | null }> {
   try {
     const row = (await ctx.runQuery(internal.settings.getUserAgentSoulInternal as any, {
       userId: userId as any,
-    })) as { agent_soul?: unknown } | null;
+    })) as { agent_name?: unknown; agent_soul?: unknown } | null;
+    const agentName = String(row?.agent_name ?? "").trim();
     const agentSoul = String(row?.agent_soul ?? "").trim();
-    return agentSoul || null;
+    return {
+      agentName: agentName || null,
+      agentSoul: agentSoul || null,
+    };
   } catch {
-    return null;
+    return {
+      agentName: null,
+      agentSoul: null,
+    };
   }
 }
 
@@ -441,7 +451,7 @@ export async function handleRuntimeTurnRequest(args: {
       resolvedRuntimeHarnessProfile,
       runtimeExecutionMode,
     } = resolved.value;
-    const runtimeAgentSoul = await loadUserAgentSoulForRuntime(ctx, actor.dbUserId);
+    const runtimeAgentProfile = await loadUserAgentProfileForRuntime(ctx, actor.dbUserId);
     const runId =
       String(input.idempotency_key ?? "").trim() ||
       `convex_runtime:${crypto.randomUUID()}`;
@@ -921,7 +931,8 @@ export async function handleRuntimeTurnRequest(args: {
               communityOneLiner: runtimeCommunityOneLiner,
               communityAbout: runtimeCommunityAbout,
               communitySystemPrompt: runtimeCommunitySystemPrompt,
-              agentSoul: runtimeAgentSoul,
+              agentName: runtimeAgentProfile.agentName,
+              agentSoul: runtimeAgentProfile.agentSoul,
               threadWorkingState: ownedThread.workingState ?? null,
               allowedToolNames,
               apiKeyOverride: providerApiKeyOverride,
@@ -1133,7 +1144,8 @@ export async function handleRuntimeTurnRequest(args: {
           communityOneLiner: runtimeCommunityOneLiner,
           communityAbout: runtimeCommunityAbout,
           communitySystemPrompt: runtimeCommunitySystemPrompt,
-          agentSoul: runtimeAgentSoul,
+          agentName: runtimeAgentProfile.agentName,
+          agentSoul: runtimeAgentProfile.agentSoul,
           threadWorkingState: ownedThread.workingState ?? null,
           allowedToolNames,
           apiKeyOverride: providerApiKeyOverride,
@@ -1238,7 +1250,8 @@ export async function handleRuntimeTurnRequest(args: {
           communityOneLiner: runtimeCommunityOneLiner,
           communityAbout: runtimeCommunityAbout,
           communitySystemPrompt: runtimeCommunitySystemPrompt,
-          agentSoul: runtimeAgentSoul,
+          agentName: runtimeAgentProfile.agentName,
+          agentSoul: runtimeAgentProfile.agentSoul,
           currentDateTimeIso: now.toISOString(),
           currentDateLabel: new Intl.DateTimeFormat("en-US", {
             dateStyle: "full",

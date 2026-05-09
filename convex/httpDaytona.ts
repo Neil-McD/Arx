@@ -959,6 +959,7 @@ async function executeRetrievalAgentLoop(
     communityOneLiner: params.communityOneLiner,
     communityAbout: params.communityAbout,
     communitySystemPrompt: params.communitySystemPrompt,
+    agentName: params.agentName,
     agentSoul: params.agentSoul,
     projectLabel: projectContext.label,
     projectDescription: projectContext.description,

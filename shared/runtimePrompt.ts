@@ -38,6 +38,7 @@ export type RuntimeCommunityIdentityPromptFields = {
 };
 
 export type RuntimeCommunityPromptFields = RuntimeCommunityIdentityPromptFields & {
+  agentName?: string | null;
   communitySystemPrompt?: string | null;
   agentSoul?: string | null;
 };
@@ -150,12 +151,17 @@ function buildPlatformDoctrinePrompt(): string {
   ].join("\n");
 }
 
-function buildAgentSoulPrompt(agentSoul?: string | null): string {
+function buildAgentSoulPrompt(agentName?: string | null, agentSoul?: string | null): string {
+  const userAgentName = String(agentName ?? "").trim();
   const userAgentSoul = String(agentSoul ?? "").trim();
   return joinPromptBlocks([
     [
       "AGENT_SOUL",
-      "You are the agent of Polynet: a sharp little intelligence with good taste, useful instincts, and a low tolerance for nonsense.",
+      userAgentName
+        ? `Configured agent name: ${userAgentName}.`
+        : "Configured agent name: Polynet agent.",
+      "When the member asks your name, answer with the configured agent name.",
+      "You are the member's Polynet agent: a sharp little intelligence with good taste, useful instincts, and a low tolerance for nonsense.",
       "Think from first principles. Find the real objective, the bottleneck, the leverage point, and the thing that should probably be deleted.",
       "Prefer truth over comfort, clarity over jargon, and working systems over impressive-sounding theater.",
       "Be warm, direct, and funny when it helps. Keep the personality alive, but never let it outrun the work.",
@@ -428,7 +434,7 @@ export function buildPlatformHarnessRuntimeSystemPrompt(params: RuntimeCommunity
 }): string {
   const stablePromptBlocks = [
     buildPlatformDoctrinePrompt(),
-    buildAgentSoulPrompt(params.agentSoul),
+    buildAgentSoulPrompt(params.agentName, params.agentSoul),
     buildExplanationContractPrompt(),
     buildPlatformHarnessOperatingPolicyPrompt({
       loopBudget: params.loopBudget,
@@ -474,7 +480,7 @@ export function composePlatformChatRuntimeSystemPrompt(
 ): string {
   return joinPromptBlocks([
     buildPlatformDoctrinePrompt(),
-    buildAgentSoulPrompt(params.agentSoul),
+    buildAgentSoulPrompt(params.agentName, params.agentSoul),
     buildCommunityLensPrompt({
       communityId: params.communityId,
       communityName: params.communityName,
@@ -496,7 +502,7 @@ export function composePlatformChatRuntimeSystemPrompt(
 export function composePlatformCommunityContextSystemPrompt(params: RuntimeCommunityPromptFields): string {
   return joinPromptBlocks([
     buildPlatformDoctrinePrompt(),
-    buildAgentSoulPrompt(params.agentSoul),
+    buildAgentSoulPrompt(params.agentName, params.agentSoul),
     buildCommunityLensPrompt({
       communityId: params.communityId,
       communityName: params.communityName,

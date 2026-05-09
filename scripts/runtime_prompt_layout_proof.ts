@@ -27,6 +27,8 @@ const prompt = buildPlatformHarnessRuntimeSystemPrompt({
   communityOneLiner: "A proof community.",
   communityAbout: "Used to prove prompt layout.",
   communitySystemPrompt: "Prefer proof-grounded answers.",
+  agentName: "James",
+  agentSoul: "Keep proofs tight.",
   runtimeTurnContext: buildRuntimeTurnContextPacket({
     threadWorkingState: {
       version: 3,
@@ -178,7 +180,10 @@ assert.doesNotMatch(prompt, /WORKSPACE_RUNTIME_STATE/);
 assert.doesNotMatch(prompt, /BACKGROUND_TERMINAL_STATE/);
 assert.match(prompt, /Polynet helps builders create, deploy, and monetize AI agents, communities, and apps/);
 assert.match(prompt, /For exact product truth, setup flows, roles, access, billing, memory/);
-assert.match(prompt, /You are the agent of Polynet: a sharp little intelligence/);
+assert.match(prompt, /Configured agent name: James/);
+assert.match(prompt, /When the member asks your name, answer with the configured agent name/);
+assert.match(prompt, /You are the member's Polynet agent: a sharp little intelligence/);
+assert.match(prompt, /Keep proofs tight/);
 assert.match(prompt, /Use this lens as background context/);
 assert.match(prompt, /Use community_search when community activity, archive memory, resources, or learned context matter/);
 assert.doesNotMatch(
