@@ -36,6 +36,21 @@ assertContains(
 );
 assertContains(
   handler,
+  "isRecoverableRuntimeKernelStopReason",
+  "runtime handler classifies recoverable tool-loop stops",
+);
+assertContains(
+  handler,
+  "markPartialRun: !recoverableLoopStop",
+  "recoverable tool-loop stops persist normal assistant diagnostics",
+);
+assertContains(
+  handler,
+  "persistVisibleAssistantMessage && !partialAssistant",
+  "recoverable tool-loop stops require assistant message persistence",
+);
+assertContains(
+  handler,
   'import { loadRuntimeTurnContextPacketForRun } from "./runtimeTurnContext";',
   "runtime handler imports canonical context loader",
 );

@@ -30,6 +30,9 @@ import {
   composePlatformChatRuntimeSystemPrompt,
 } from "../shared/runtimePrompt";
 import {
+  isRecoverableRuntimeKernelStopReason,
+} from "../shared/runtimeKernelTypes";
+import {
   buildRuntimeTurnContextSnapshot,
   renderRuntimeTurnContextForFailureFinalizer,
   type RuntimeTurnContextSnapshotV1,
@@ -720,6 +723,7 @@ export async function handleRuntimeTurnRequest(args: {
       reason?: string;
       errorCode?: string;
       errorMessage?: string;
+      markPartialRun?: boolean;
       inferenceSourceOverride?: "free" | "platform" | "user_key" | "chatgpt";
       inferenceLaneFallbacksOverride?: Array<{
         from: "chatgpt" | "platform" | "public";
@@ -730,6 +734,7 @@ export async function handleRuntimeTurnRequest(args: {
       assistantMessageId: string | null;
       assistantMessageKey: string | null;
       assistantMessageSeq: number | null;
+      content: string;
     } | null> => {
       if (!persistVisibleAssistantMessage) return null;
       const hasPartialContent = String(params.content ?? "").trim().length > 0;
@@ -814,7 +819,7 @@ export async function handleRuntimeTurnRequest(args: {
         errorMessage: params.errorMessage ?? null,
       });
       try {
-        return await persistRuntimeAssistantMessage({
+        const persisted = await persistRuntimeAssistantMessage({
           ctx,
           ownerId: actor.dbUserId,
           threadId: ownedThread._id,
@@ -827,13 +832,20 @@ export async function handleRuntimeTurnRequest(args: {
             params.inferenceLaneFallbacksOverride ?? inferenceLaneFallbacks,
           runId,
           content: finalAnswer.content,
-          partialRun: {
-            status: params.status,
-            reason: params.reason ?? null,
-            errorCode: params.errorCode ?? null,
-            errorMessage: params.errorMessage ?? null,
-          },
+          partialRun:
+            params.markPartialRun === false
+              ? null
+              : {
+                  status: params.status,
+                  reason: params.reason ?? null,
+                  errorCode: params.errorCode ?? null,
+                  errorMessage: params.errorMessage ?? null,
+                },
         });
+        return {
+          ...persisted,
+          content: finalAnswer.content,
+        };
       } catch {
         return null;
       }
@@ -991,15 +1003,80 @@ export async function handleRuntimeTurnRequest(args: {
               await finishCancelledRun();
               return;
             }
-            await persistPartialAssistantMessageBestEffort({
-              content: streamedContent,
-              status: "error",
-              reason: loopResult.code,
-              errorCode: loopResult.code,
-              errorMessage: loopResult.message,
-              inferenceSourceOverride: streamedInferenceSource,
-              inferenceLaneFallbacksOverride: streamedInferenceLaneFallbacks,
-            });
+            const recoverableLoopStop = isRecoverableRuntimeKernelStopReason(
+              loopResult.code,
+            );
+            const partialAssistant =
+              await persistPartialAssistantMessageBestEffort({
+                content: streamedContent,
+                status: "error",
+                reason: loopResult.code,
+                errorCode: loopResult.code,
+                errorMessage: loopResult.message,
+                markPartialRun: !recoverableLoopStop,
+                inferenceSourceOverride: streamedInferenceSource,
+                inferenceLaneFallbacksOverride: streamedInferenceLaneFallbacks,
+              });
+            if (recoverableLoopStop) {
+              if (persistVisibleAssistantMessage && !partialAssistant) {
+                const persistMessage = "Failed to persist assistant message.";
+                await finishRunBestEffortForRun({
+                  status: "error",
+                  reason: "assistant_message_persist_failed",
+                  errorCode: "assistant_message_persist_failed",
+                  errorMessage: persistMessage,
+                });
+                writer.send({
+                  event: "error",
+                  data: {
+                    code: "assistant_message_persist_failed",
+                    error: persistMessage,
+                    message: persistMessage,
+                    status: 500,
+                  },
+                });
+                return;
+              }
+              const finalContent =
+                partialAssistant?.content ??
+                (streamedContent || loopResult.message);
+              if (!streamedContent && finalContent) {
+                emitBufferedAssistantText({
+                  content: finalContent,
+                  emitDelta,
+                });
+              }
+              await finishRunBestEffortForRun({
+                status: "ok",
+                reason: loopResult.code,
+                errorCode: loopResult.code,
+                errorMessage: loopResult.message,
+              });
+              writer.send({
+                event: "done",
+                data: {
+                  run_id: runId,
+                  lane,
+                  engine_id: "runtime_convex",
+                  model_id: requestedModelId,
+                  inference_source: streamedInferenceSource,
+                  inference_lane_fallbacks: streamedInferenceLaneFallbacks ?? null,
+                  full_content: streamedContent || finalContent,
+                  prompt_tokens: streamedPromptTokens,
+                  completion_tokens: streamedCompletionTokens,
+                  user_message_id: userMessageId,
+                  user_message_key: userMessageKey,
+                  user_message_seq: userMessageSeq,
+                  assistant_message_id:
+                    partialAssistant?.assistantMessageId ?? null,
+                  assistant_message_key:
+                    partialAssistant?.assistantMessageKey ?? null,
+                  assistant_message_seq:
+                    partialAssistant?.assistantMessageSeq ?? null,
+                },
+              });
+              return;
+            }
             await finishRunBestEffortForRun({
               status: "error",
               reason: loopResult.code,
@@ -1213,13 +1290,54 @@ export async function handleRuntimeTurnRequest(args: {
             run_id: runId,
           });
         }
-        await persistPartialAssistantMessageBestEffort({
+        const recoverableLoopStop = isRecoverableRuntimeKernelStopReason(
+          loopResult.code,
+        );
+        const partialAssistant = await persistPartialAssistantMessageBestEffort({
           content,
           status: "error",
           reason: loopResult.code,
           errorCode: loopResult.code,
           errorMessage: loopResult.message,
+          markPartialRun: !recoverableLoopStop,
         });
+        if (recoverableLoopStop) {
+          if (persistVisibleAssistantMessage && !partialAssistant) {
+            const persistMessage = "Failed to persist assistant message.";
+            await finishRunBestEffortForRun({
+              status: "error",
+              reason: "assistant_message_persist_failed",
+              errorCode: "assistant_message_persist_failed",
+              errorMessage: persistMessage,
+            });
+            return runtimeJsonResponse(500, {
+              ok: false,
+              code: "assistant_message_persist_failed",
+              error: "assistant_message_persist_failed",
+              message: persistMessage,
+              run_id: runId,
+            });
+          }
+          await finishRunBestEffortForRun({
+            status: "ok",
+            reason: loopResult.code,
+            errorCode: loopResult.code,
+            errorMessage: loopResult.message,
+          });
+          return successResponse({
+            content: partialAssistant?.content ?? (content || loopResult.message),
+            promptTokens,
+            completionTokens,
+            resolvedInferenceSource,
+            inferenceLaneFallbacks,
+            userMessageId,
+            userMessageKey,
+            userMessageSeq,
+            assistantMessageId: partialAssistant?.assistantMessageId ?? null,
+            assistantMessageKey: partialAssistant?.assistantMessageKey ?? null,
+            assistantMessageSeq: partialAssistant?.assistantMessageSeq ?? null,
+          });
+        }
         await finishRunBestEffortForRun({
           status: "error",
           reason: loopResult.code,

@@ -17,6 +17,23 @@ export type RuntimeKernelStopReason =
   | "model_error"
   | "tool_error_unrecoverable";
 
+export const RECOVERABLE_RUNTIME_KERNEL_STOP_REASONS: RuntimeKernelStopReason[] = [
+  "tool_budget_exhausted",
+  "repeated_call_blocked",
+  "consecutive_failures_exhausted",
+  "no_progress_exhausted",
+];
+
+const RECOVERABLE_RUNTIME_KERNEL_STOP_REASON_SET = new Set<string>(
+  RECOVERABLE_RUNTIME_KERNEL_STOP_REASONS,
+);
+
+export function isRecoverableRuntimeKernelStopReason(value: unknown): boolean {
+  return RECOVERABLE_RUNTIME_KERNEL_STOP_REASON_SET.has(
+    String(value ?? "").trim(),
+  );
+}
+
 export type RuntimeKernelBudget = {
   maxToolSteps: number;
   maxRepeatedIdenticalCalls: number;
@@ -27,8 +44,8 @@ export type RuntimeKernelBudget = {
 export const DEFAULT_RUNTIME_KERNEL_BUDGET: RuntimeKernelBudget = {
   maxToolSteps: 50,
   maxRepeatedIdenticalCalls: 2,
-  maxConsecutiveFailures: 2,
-  maxNoProgressSteps: 3,
+  maxConsecutiveFailures: 5,
+  maxNoProgressSteps: 5,
 };
 
 export type RuntimeKernelToolExecutionResult = {

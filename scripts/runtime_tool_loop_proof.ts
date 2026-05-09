@@ -810,9 +810,9 @@ async function proveFailureBudget() {
   if (!result.ok) {
     assert.equal(result.code, "consecutive_failures_exhausted");
     assert.equal(result.stopReason, "consecutive_failures_exhausted");
-    assert.equal(result.stepCount, 2);
-    assert.equal(result.steps.length, 2);
-    assert.equal(result.steps[1]?.consecutiveFailureCount, 2);
+    assert.equal(result.stepCount, 5);
+    assert.equal(result.steps.length, 5);
+    assert.equal(result.steps[4]?.consecutiveFailureCount, 5);
   }
 
   console.log("PASS: runtime tool loop failure-budget proof");

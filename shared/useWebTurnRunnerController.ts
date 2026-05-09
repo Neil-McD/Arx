@@ -42,6 +42,7 @@ import {
   mapInferenceIssueReason,
   normalizeGuestInferenceError,
 } from "./webTurnRunnerCore";
+import { isRecoverableRuntimeKernelStopReason } from "./runtimeKernelTypes";
 
 function normalizePositiveNumber(value: unknown): number | null {
   const parsed = Number(value);
@@ -926,6 +927,10 @@ export function useWebTurnRunnerController<
             const code =
               (typeof parsed?.code === "string" && parsed.code.trim()) ||
               null;
+            if (isRecoverableRuntimeKernelStopReason(code)) {
+              seenDone = true;
+              return;
+            }
             const status = Number(parsed?.status);
             const category = classifyCloudFunctionErrorCategory({
               status: Number.isFinite(status) ? Math.max(0, Math.floor(status)) : 500,

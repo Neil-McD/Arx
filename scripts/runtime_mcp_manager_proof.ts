@@ -200,5 +200,106 @@ async function proveReadToolSessionRefreshRetry() {
   console.log("PASS: runtime MCP manager read-session refresh proof");
 }
 
+async function proveOptionalNullArgumentsArePruned() {
+  let seenArguments: Record<string, unknown> | null = null;
+
+  const manager = createRuntimeMcpManager({
+    runId: "run-mcp-proof-3",
+    mountedTools: [
+      {
+        scope: "user",
+        mount_id: "mount-3",
+        runtime_tool_name: "me__linear_labels",
+        developer_app_id: "app-3",
+        catalog_app_id: "linear",
+        app_name: "Linear",
+        endpoint_url: "https://mcp.linear.app/mcp",
+        auth_type: "bearer",
+        tool_name: "list_issue_labels",
+        namespaced_tool_name: "linear__list_issue_labels",
+        description: "List labels",
+        input_schema: {
+          type: "object",
+          additionalProperties: false,
+          required: ["query", "required_nullable"],
+          properties: {
+            query: { type: "string" },
+            cursor: { type: "string" },
+            required_nullable: { type: ["string", "null"] },
+            filters: {
+              type: "object",
+              additionalProperties: false,
+              required: ["state"],
+              properties: {
+                owner: { type: "string" },
+                state: { type: "string" },
+              },
+            },
+          },
+        },
+        risk_level: "read",
+      },
+    ],
+    loadConnectionBundle: async () => ({
+      app: {
+        _id: "app-3",
+        ownerUserId: "user-1",
+        catalogAppId: "linear",
+        name: "Linear",
+        slug: "linear",
+        endpointUrl: "https://mcp.linear.app/mcp",
+        authType: "bearer",
+        status: "valid",
+        createdAt: 0,
+        updatedAt: 0,
+      },
+      connection: null,
+      secret: "secret-token",
+    }),
+    transport: {
+      buildAuthHeaders: () => ({
+        Authorization: "Bearer secret-token",
+      }),
+      initializeSession: async () => ({
+        protocolVersion: "2025-06-18",
+        sessionId: "session-optional-null",
+      }),
+      sendInitializedNotification: async () => {},
+      callTool: async (params) => {
+        seenArguments = params.argumentsObject;
+        return {
+          content: [{ type: "text", text: "ok" }],
+        };
+      },
+      formatToolResultOutput: (value) => JSON.stringify(value),
+    },
+  });
+
+  const result = await manager.execute({
+    runtimeToolName: "me__linear_labels",
+    argumentsObject: {
+      query: "bug",
+      cursor: null,
+      required_nullable: null,
+      filters: {
+        owner: null,
+        state: "open",
+      },
+    },
+  });
+
+  assert.equal(result.status, "ok");
+  assert.deepEqual(seenArguments, {
+    query: "bug",
+    required_nullable: null,
+    filters: {
+      state: "open",
+    },
+  });
+
+  console.log("PASS: runtime MCP manager optional-null argument pruning proof");
+}
+
 await proveLazyAuthAndSessionReuse();
 await proveReadToolSessionRefreshRetry();
+await proveOptionalNullArgumentsArePruned();

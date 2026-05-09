@@ -31,7 +31,7 @@ type OpenAiFunctionTool = {
     name: string;
     description: string;
     parameters: JsonSchema;
-    strict: true;
+    strict: boolean;
   };
 };
 
@@ -643,7 +643,48 @@ function withNullableType(value: JsonSchema): JsonSchema {
   return value;
 }
 
-function sanitizeResponsesApiSchema(schema: JsonSchema): JsonSchema {
+function looseToolSchemaShouldDefaultProperties(
+  schema: Record<string, unknown>,
+): boolean {
+  const typeList = normalizeSchemaTypeList(schema.type);
+  if (typeList.includes("object")) return true;
+  return (
+    "properties" in schema ||
+    "required" in schema ||
+    "additionalProperties" in schema ||
+    "patternProperties" in schema ||
+    "propertyNames" in schema
+  );
+}
+
+const LOOSE_SCHEMA_MAP_KEYS = new Set([
+  "properties",
+  "$defs",
+  "definitions",
+  "patternProperties",
+  "dependentSchemas",
+]);
+
+const LOOSE_SCHEMA_ARRAY_KEYS = new Set([
+  "anyOf",
+  "allOf",
+  "oneOf",
+  "prefixItems",
+]);
+
+const LOOSE_SCHEMA_VALUE_KEYS = new Set([
+  "items",
+  "additionalProperties",
+  "not",
+  "if",
+  "then",
+  "else",
+  "contains",
+  "propertyNames",
+  "unevaluatedProperties",
+]);
+
+export function sanitizeResponsesApiSchema(schema: JsonSchema): JsonSchema {
   if (typeof schema === "boolean") return schema;
   if (!isSchemaRecord(schema)) return schema;
   const next: Record<string, unknown> = {};
@@ -688,6 +729,63 @@ function sanitizeResponsesApiSchema(schema: JsonSchema): JsonSchema {
     next[key] = value;
   }
   return next;
+}
+
+export function sanitizeLooseToolSchema(schema: JsonSchema): JsonSchema {
+  if (typeof schema === "boolean") return schema;
+  if (!isSchemaRecord(schema)) return schema;
+  const next: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(schema)) {
+    if (key === "$schema" || key === "$id") continue;
+    if (LOOSE_SCHEMA_MAP_KEYS.has(key)) {
+      if (!value || typeof value !== "object" || Array.isArray(value)) {
+        next[key] = value;
+        continue;
+      }
+      next[key] = Object.fromEntries(
+        Object.entries(value as Record<string, JsonSchema>).map(
+          ([childKey, childValue]) => [
+            childKey,
+            sanitizeLooseToolSchema(childValue),
+          ],
+        ),
+      );
+      continue;
+    }
+    if (LOOSE_SCHEMA_ARRAY_KEYS.has(key)) {
+      next[key] = Array.isArray(value)
+        ? value.map((entry) => sanitizeLooseToolSchema(entry as JsonSchema))
+        : value;
+      continue;
+    }
+    if (LOOSE_SCHEMA_VALUE_KEYS.has(key)) {
+      next[key] =
+        typeof value === "boolean" || isSchemaRecord(value as JsonSchema)
+          ? sanitizeLooseToolSchema(value as JsonSchema)
+          : value;
+      continue;
+    }
+    next[key] = value;
+  }
+  if (
+    (!("properties" in next) || next.properties === null) &&
+    looseToolSchemaShouldDefaultProperties(schema)
+  ) {
+    next.properties = {};
+  }
+  return next;
+}
+
+export function sanitizeMountedMcpToolSchema(schema: JsonSchema): JsonSchema {
+  const sanitized = sanitizeLooseToolSchema(schema);
+  if (!isSchemaRecord(sanitized)) return sanitized;
+  if (!("properties" in sanitized) || sanitized.properties === null) {
+    return {
+      ...sanitized,
+      properties: {},
+    };
+  }
+  return sanitized;
 }
 
 function hasStrictResponsesApiSchemaRisk(schema: JsonSchema): boolean {

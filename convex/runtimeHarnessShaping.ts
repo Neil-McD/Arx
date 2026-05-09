@@ -8,7 +8,7 @@ import {
 } from "../shared/personalSkillOverlayRuntime.ts";
 import {
   buildOpenAiFunctionTools,
-  projectResponsesApiToolSchema,
+  sanitizeMountedMcpToolSchema,
   type ResponsesApiFunctionTool,
 } from "../shared/toolRegistry.ts";
 import type { RuntimeMountedMcpTool } from "./runtimeMcpManager.ts";
@@ -355,8 +355,10 @@ export function buildMountedAppOpenAiTools(
     function: {
       name: tool.runtime_tool_name,
       description: buildMountedAppToolDescription(tool),
-      parameters: normalizeMountedToolSchema(tool.input_schema),
-      strict: true,
+      parameters: sanitizeMountedMcpToolSchema(
+        normalizeMountedToolSchema(tool.input_schema),
+      ),
+      strict: false,
     },
   }));
 }
@@ -364,21 +366,15 @@ export function buildMountedAppOpenAiTools(
 export function buildMountedAppResponsesTools(
   mountedTools: RuntimeMountedMcpTool[],
 ): ResponsesApiFunctionTool[] {
-  return mountedTools.map((tool) => {
-    const projection = projectResponsesApiToolSchema(
+  return mountedTools.map((tool) => ({
+    type: "function",
+    name: tool.runtime_tool_name,
+    description: buildMountedAppToolDescription(tool),
+    parameters: sanitizeMountedMcpToolSchema(
       normalizeMountedToolSchema(tool.input_schema),
-      {
-        allowBestEffortFallback: true,
-      },
-    );
-    return {
-      type: "function",
-      name: tool.runtime_tool_name,
-      description: buildMountedAppToolDescription(tool),
-      parameters: projection.parameters,
-      strict: projection.strict,
-    };
-  });
+    ),
+    strict: false,
+  }));
 }
 
 export function buildUserPlatformMountedAppsPromptBlock(

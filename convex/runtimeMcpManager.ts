@@ -101,6 +101,74 @@ function buildToolFailedCode(tool: RuntimeMountedMcpTool): string {
     : "user_platform_app_tool_failed";
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function normalizeToolInputSchema(value: unknown): unknown {
+  if (typeof value !== "string") return value;
+  try {
+    return JSON.parse(value) as unknown;
+  } catch {
+    return value;
+  }
+}
+
+function normalizeRequiredKeys(value: unknown): Set<string> {
+  if (!Array.isArray(value)) return new Set();
+  return new Set(
+    value
+      .map((entry) => String(entry ?? "").trim())
+      .filter((entry) => entry.length > 0),
+  );
+}
+
+function schemaDescribesObject(schema: Record<string, unknown>): boolean {
+  const type = schema.type;
+  if (type === "object") return true;
+  if (Array.isArray(type) && type.includes("object")) return true;
+  return isRecord(schema.properties);
+}
+
+function sanitizeOptionalNullsForSchema(value: unknown, schema: unknown): unknown {
+  const schemaRecord = isRecord(schema) ? schema : null;
+  if (Array.isArray(value)) {
+    const items = schemaRecord?.items;
+    if (Array.isArray(items)) {
+      return value.map((entry, index) =>
+        sanitizeOptionalNullsForSchema(entry, items[index] ?? null),
+      );
+    }
+    return value.map((entry) => sanitizeOptionalNullsForSchema(entry, items));
+  }
+  if (!isRecord(value) || !schemaRecord || !schemaDescribesObject(schemaRecord)) {
+    return value;
+  }
+  const properties = isRecord(schemaRecord.properties)
+    ? schemaRecord.properties
+    : null;
+  if (!properties) return value;
+  const required = normalizeRequiredKeys(schemaRecord.required);
+  const next: Record<string, unknown> = {};
+  for (const [key, entry] of Object.entries(value)) {
+    const propertySchema = properties[key];
+    if (entry === null && !required.has(key)) continue;
+    next[key] = sanitizeOptionalNullsForSchema(entry, propertySchema);
+  }
+  return next;
+}
+
+function sanitizeMountedMcpArguments(
+  args: Record<string, unknown>,
+  inputSchema: unknown,
+): Record<string, unknown> {
+  const sanitized = sanitizeOptionalNullsForSchema(
+    args,
+    normalizeToolInputSchema(inputSchema),
+  );
+  return isRecord(sanitized) ? sanitized : args;
+}
+
 function buildSessionCacheKey(tool: RuntimeMountedMcpTool): string {
   return [
     tool.scope,
@@ -369,6 +437,10 @@ export function createRuntimeMcpManager(params: {
         };
       }
       const executionStartedAt = Date.now();
+      const argumentsObject = sanitizeMountedMcpArguments(
+        params.argumentsObject,
+        tool.input_schema,
+      );
 
       const emitExecutionCompleted = async (payload: {
         status: "ok" | "error";
@@ -414,7 +486,7 @@ export function createRuntimeMcpManager(params: {
         const { callResult, refreshedSession } = await executeWithSession({
           tool,
           bundle,
-          argumentsObject: params.argumentsObject,
+          argumentsObject,
           signal: params.signal,
           allowFreshSessionRetry: true,
         });

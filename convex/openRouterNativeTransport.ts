@@ -12,7 +12,7 @@ type OpenAiCompatibleFunctionTool = {
     name: string;
     description: string;
     parameters: Record<string, unknown> | boolean;
-    strict: true;
+    strict: boolean;
   };
 };
 
