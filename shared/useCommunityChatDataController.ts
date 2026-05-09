@@ -36,6 +36,7 @@ type UseCommunityChatDataControllerArgs<
   ReactionT extends {
     id: string;
     message_id: string;
+    user_id: string;
   },
 > = {
   extractTextFromContentJson: (contentJson: unknown) => string;
@@ -103,6 +104,7 @@ export function useCommunityChatDataController<
   ReactionT extends {
     id: string;
     message_id: string;
+    user_id: string;
   },
 >(args: UseCommunityChatDataControllerArgs<SessionT, AttachmentT, MessageT, ReactionT>) {
   const argsRef = useRef(args);
@@ -250,6 +252,17 @@ export function useCommunityChatDataController<
           init: { signal: reactionsFetchController.signal },
         });
         if (isStale(guard.communityId, guard.generation)) return;
+        const reactionUserIds = Array.from(
+          new Set(rows.map((reaction) => reaction.user_id.trim()).filter(Boolean)),
+        );
+        if (reactionUserIds.length > 0) {
+          try {
+            await argsRef.current.onHydrateProfiles?.(reactionUserIds, usableSession);
+          } catch {
+            // Reactions are still usable if profile hydration is temporarily unavailable.
+          }
+          if (isStale(guard.communityId, guard.generation)) return;
+        }
         argsRef.current.setMessageReactions((prev) => {
           if (prev.length === 0) return rows;
           const byId = new Map<string, ReactionT>();

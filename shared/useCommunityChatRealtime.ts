@@ -27,6 +27,7 @@ type ChatMessageLike = {
 type ReactionLike = {
   id: string;
   message_id: string;
+  user_id: string;
 };
 
 type UseCommunityChatRealtimeArgs<
@@ -141,6 +142,14 @@ export function useCommunityChatRealtime<
             messageIds: normalizedIds,
             onUpdate: (rows) => {
               if (cancelled) return;
+              const reactionUserIds = Array.from(
+                new Set(rows.map((reaction) => reaction.user_id.trim()).filter(Boolean)),
+              );
+              if (reactionUserIds.length > 0) {
+                void Promise.resolve(onLoadProfilesRef.current?.(reactionUserIds, usableSession)).catch(() => {
+                  // Realtime reactions should remain visible even if profile hydration fails.
+                });
+              }
               latestArgs.setMessageReactions((prev) =>
                 reconcileWatchedReactions(prev, rows, watchedMessageIds),
               );
