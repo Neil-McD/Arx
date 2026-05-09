@@ -86,6 +86,7 @@ type BuildWebCommunitySurfaceProjectionParams = {
   resourceModuleModalProps: WebCommunitySecondaryPanelsProps["resourceModuleModal"];
   resourceModalProps: WebCommunitySecondaryPanelsProps["resourceModal"];
   canPostMessagesActiveCommunity: WebCommunityChatPanelProps["canPostMessages"];
+  isProfileSetupComplete: WebCommunityChatPanelProps["isProfileSetupComplete"];
   isLoadingChat: WebCommunityChatPanelProps["isLoadingChat"];
   hasResolvedCommunityChat: WebCommunityChatPanelProps["hasResolvedCommunityChat"];
   isLoadingMoreChat: WebCommunityChatPanelProps["isLoadingMoreChat"];
@@ -111,6 +112,7 @@ type BuildWebCommunitySurfaceProjectionParams = {
   fileInputRef: WebCommunityChatPanelProps["fileInputRef"];
   chatInputRef: WebCommunityChatPanelProps["chatInputRef"];
   onChatScroll: WebCommunityChatPanelProps["onChatScroll"];
+  onFinishProfileSetup: WebCommunityChatPanelProps["onFinishProfileSetup"];
   onScrollToBottom: WebCommunityChatPanelProps["onScrollToBottom"];
   onSetReplyingToMessage: WebCommunityChatPanelProps["onSetReplyingToMessage"];
   onRemoveCommunityAttachment: WebCommunityChatPanelProps["onRemoveCommunityAttachment"];
@@ -297,6 +299,7 @@ export function buildWebCommunitySurfaceProjection(
     hasSession: params.hasSession,
     sessionUserId: params.sessionUserId,
     canPostMessages: params.canPostMessagesActiveCommunity,
+    isProfileSetupComplete: params.isProfileSetupComplete,
     canModerateMessages: params.canModerateContentActiveCommunity,
     isLoadingChat: params.isLoadingChat,
     hasResolvedCommunityChat: params.hasResolvedCommunityChat,
@@ -324,6 +327,7 @@ export function buildWebCommunitySurfaceProjection(
     chatInputRef: params.chatInputRef,
     onChatScroll: params.onChatScroll,
     onRequireSignIn: params.requireSignIn,
+    onFinishProfileSetup: params.onFinishProfileSetup,
     onScrollToBottom: params.onScrollToBottom,
     onSetReplyingToMessage: params.onSetReplyingToMessage,
     onRemoveCommunityAttachment: params.onRemoveCommunityAttachment,

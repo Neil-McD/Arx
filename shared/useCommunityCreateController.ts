@@ -32,12 +32,14 @@ type UseCommunityCreateControllerArgs<
   session: SessionT | null;
   ensureSession?: EnsureSessionFn<SessionT>;
   accountCommerceStatus: BillingStatusT | null;
+  isProfileSetupComplete: boolean;
   communities: CommunityT[];
   communityRoleById: Record<string, string>;
   loadAccountCommerceStatus: (session: SessionT) => Promise<BillingStatusT | null>;
   persistCreateCommunityIntent: (draft: CreateCommunityIntentDraft) => void;
   onPrimaryUnauthenticated: (draft: CreateCommunityIntentDraft) => Promise<void> | void;
   onCreateUnauthenticated?: (draft: CreateCommunityIntentDraft) => Promise<void> | void;
+  onProfileSetupRequired?: () => void;
   onOwnedCommunityLimitReached?: () => void;
   onCommunityCreated: (community: CommunityT) => void;
   getOwnedCountForOpenModal?: (communities: CommunityT[], communityRoleById: Record<string, string>) => number;
@@ -86,6 +88,9 @@ function mapCreateCommunityErrorMessage(error: unknown): string {
       : "Failed to create community.";
   if (message === "community_builder_required") {
     return "Your account cannot create a community yet.";
+  }
+  if (message.includes("profile_setup_required")) {
+    return "Finish your profile before creating a community.";
   }
   if (message === "community_owner_limit_reached") {
     return "You've reached your community limit.";
@@ -143,6 +148,10 @@ export function useCommunityCreateController<
 
   const openCreateCommunityModal = useCallback((draft: CreateCommunityIntentDraft | null = null) => {
     const current = argsRef.current;
+    if (current.session && !current.isProfileSetupComplete) {
+      current.onProfileSetupRequired?.();
+      return;
+    }
     const max = current.accountCommerceStatus?.max_communities ?? 0;
     const ownedCount = getOwnedCountForOpenModal();
     if (max > 0 && ownedCount >= max) {
@@ -197,6 +206,11 @@ export function useCommunityCreateController<
       } else {
         current.setCreateCommunityError(current.createUnauthenticatedErrorMessage);
       }
+      return;
+    }
+    if (!current.isProfileSetupComplete) {
+      current.setCreateCommunityError("Finish your profile before creating a community.");
+      current.onProfileSetupRequired?.();
       return;
     }
 
@@ -264,6 +278,11 @@ export function useCommunityCreateController<
       if (!draft) return;
       closeCreateCommunityModal();
       await current.onPrimaryUnauthenticated(draft);
+      return;
+    }
+    if (!current.isProfileSetupComplete) {
+      current.setCreateCommunityError("Finish your profile before creating a community.");
+      current.onProfileSetupRequired?.();
       return;
     }
 

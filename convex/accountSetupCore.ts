@@ -1,4 +1,8 @@
-import { buildAccountSetupStatus, type AccountSetupStatus } from "../shared/accountSetup";
+import {
+  buildAccountSetupStatus,
+  isAccountSetupIdentityComplete,
+  type AccountSetupStatus,
+} from "../shared/accountSetup";
 
 export type AccountSetupUserRow = {
   _id: any;
@@ -48,6 +52,7 @@ export function buildAccountSetupStatusForRows(params: {
   const hasInferenceProvider = params.providerConnections.some(
     (row) => row?.provider === "chatgpt" || row?.provider === "openai",
   );
+  // Account setup requires first-party profile evidence, not auth/provider display fallbacks.
   return buildAccountSetupStatus({
     displayName: params.detail?.displayName ?? null,
     handle: params.user.handle ?? null,
@@ -59,6 +64,24 @@ export function buildAccountSetupStatusForRows(params: {
     agentSoul: params.memorySettings?.agentSoul ?? null,
     onboardingDirection: params.detail?.onboardingDirection ?? null,
   });
+}
+
+export function isProfileSetupCompleteForDetail(detail: AccountSetupProfileDetailRow | null): boolean {
+  return isAccountSetupIdentityComplete({
+    displayName: detail?.displayName ?? null,
+    avatarUrl: detail?.avatarUrl ?? null,
+    avatarStorageId: detail?.avatarStorageId ? String(detail.avatarStorageId) : null,
+  });
+}
+
+export async function requireProfileSetupCompleteForUser(ctx: any, userId: any): Promise<void> {
+  const detail = (await ctx.db
+    .query("userProfileDetails")
+    .withIndex("by_user", (q: any) => q.eq("userId", userId))
+    .first()) as AccountSetupProfileDetailRow | null;
+  if (!isProfileSetupCompleteForDetail(detail)) {
+    throw new Error("profile_setup_required");
+  }
 }
 
 export async function loadAccountSetupStatusForUser(

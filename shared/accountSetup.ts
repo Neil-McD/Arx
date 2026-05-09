@@ -49,6 +49,25 @@ function hasText(value: unknown): boolean {
   return String(value ?? "").trim().length > 0;
 }
 
+export function getAccountSetupIdentityMissingFields(
+  input: Pick<AccountSetupStatusInput, "displayName" | "avatarUrl" | "avatarStorageId">,
+): AccountSetupMissing[] {
+  const missing: AccountSetupMissing[] = [];
+  if (!hasText(input.displayName)) missing.push("display_name");
+  if (!hasText(input.avatarUrl) && !hasText(input.avatarStorageId)) missing.push("avatar");
+  return missing;
+}
+
+export function isAccountSetupIdentityComplete(
+  input: Pick<AccountSetupStatusInput, "displayName" | "avatarUrl" | "avatarStorageId">,
+): boolean {
+  return getAccountSetupIdentityMissingFields(input).length === 0;
+}
+
+export function isAccountSetupStatusIdentityComplete(status: AccountSetupStatus | null | undefined): boolean {
+  return Boolean(status?.steps.find((step) => step.step === "identity")?.completed);
+}
+
 function buildStepStatus(
   step: AccountSetupStepStatus["step"],
   missing: AccountSetupMissing[],
@@ -64,9 +83,7 @@ function buildStepStatus(
 }
 
 export function buildAccountSetupStatus(input: AccountSetupStatusInput): AccountSetupStatus {
-  const identityMissing: AccountSetupMissing[] = [];
-  if (!hasText(input.displayName)) identityMissing.push("display_name");
-  if (!hasText(input.avatarUrl) && !hasText(input.avatarStorageId)) identityMissing.push("avatar");
+  const identityMissing = getAccountSetupIdentityMissingFields(input);
 
   const inferenceMissing: AccountSetupMissing[] = input.hasInferenceProvider
     ? []

@@ -5099,7 +5099,14 @@ body {
 .public-funnel-face-strip {
   display: flex;
   align-items: center;
+  justify-content: center;
+  min-height: 34px;
   padding-left: 2px;
+}
+
+.public-funnel-action-stat .public-funnel-face-strip {
+  margin-top: 8px;
+  padding-left: 0;
 }
 
 .public-funnel-face {
@@ -10222,6 +10229,30 @@ button.chat-reply-quote:hover {
   flex-shrink: 0;
   min-width: 0;
   position: relative;
+}
+
+.community-chat-profile-gate {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin: -4px 12px 12px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 560;
+  flex-shrink: 0;
+}
+
+.community-chat-profile-gate button {
+  border: none;
+  background: transparent;
+  color: var(--accent-gold);
+  font: inherit;
+  cursor: pointer;
+}
+
+.community-chat-profile-gate button:hover {
+  color: var(--text-primary);
 }
 
 .ask-icon-btn {
@@ -20900,6 +20931,7 @@ button.message-citation-chip:hover {
 .app-root.mobile-shell .community-chat .chat-replying-bar,
 .app-root.mobile-shell .community-chat .chat-typing-indicator,
 .app-root.mobile-shell .community-chat .community-attachments-preview,
+.app-root.mobile-shell .community-chat .community-chat-profile-gate,
 .app-root.mobile-shell .community-chat .chat-input-bar {
   margin-inline: 12px;
 }

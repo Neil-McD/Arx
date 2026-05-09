@@ -82,10 +82,15 @@ export async function fetchActiveCloudCommunityAgentLanding<SessionT>(
 ): Promise<unknown | null> {
   void params.init;
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  return await client.query("community:getActiveCommunityAgentLanding" as any, {
+  const payload = await client.query("community:getActiveCommunityAgentLanding" as any, {
     authSubject,
     communityId: params.communityId,
   });
+  const row = firstObjectRow(payload);
+  if (row && Object.prototype.hasOwnProperty.call(row, "landing_json")) {
+    return row.landing_json ?? null;
+  }
+  return payload ?? null;
 }
 
 export async function fetchCloudCommunityAgentConfig<SessionT, TConfig = unknown>(

@@ -18,6 +18,7 @@ import {
   upsertArchiveDocumentForChatMessage,
 } from "./communityArchiveDocuments";
 import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
+import { requireProfileSetupCompleteForUser } from "./accountSetupCore";
 
 type StoredCommunityChatAttachment = {
   id: string;
@@ -275,6 +276,7 @@ export const generateCommunityChatAttachmentUploadUrl = mutation({
       communityId: args.communityId,
       userId,
     });
+    await requireProfileSetupCompleteForUser(ctx, userId);
     return {
       uploadUrl: await ctx.storage.generateUploadUrl(),
     };
@@ -442,6 +444,7 @@ export const createThreadUserMessage = mutation({
       communityId: thread.communityId,
       userId: args.userId,
     });
+    await requireProfileSetupCompleteForUser(ctx, userId);
 
     const seq = Math.max(0, Math.floor(thread.lastSeq ?? 0) + 1);
     const text = String(args.text ?? "").trim();

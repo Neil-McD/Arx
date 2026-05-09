@@ -88,6 +88,18 @@ type UseCommunityChatMutationControllerArgs<
   setCommunityChatError: Dispatch<SetStateAction<string | null>>;
 };
 
+function mapCommunityChatMutationErrorMessage(error: unknown): string {
+  const message = typeof error === "string"
+    ? error
+    : error instanceof Error
+      ? error.message
+      : "Failed to send message.";
+  if (message.includes("profile_setup_required")) {
+    return "Finish your profile before posting in communities.";
+  }
+  return message;
+}
+
 export function useCommunityChatMutationController<
   SessionT extends SessionLike,
   RowT,
@@ -345,12 +357,7 @@ export function useCommunityChatMutationController<
         hasReply: Boolean(replyToId),
       });
     } catch (error) {
-      const message = typeof error === "string"
-        ? error
-        : error instanceof Error
-          ? error.message
-          : "Failed to send message.";
-      current.setCommunityChatError(message);
+      current.setCommunityChatError(mapCommunityChatMutationErrorMessage(error));
       current.setCommunityMessages((prev) => prev.filter((message) => message.id !== optimisticId));
       restoreDraft();
     } finally {

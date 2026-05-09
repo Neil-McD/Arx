@@ -105,7 +105,10 @@ import {
   type CloudProfileHandleAvailability,
   upsertCloudProfileDetail,
 } from "../../../shared/cloudProfilesGateway";
-import type { AccountSetupStatus } from "../../../shared/accountSetup";
+import {
+  isAccountSetupStatusIdentityComplete,
+  type AccountSetupStatus,
+} from "../../../shared/accountSetup";
 import { deleteCloudOwnAccount } from "../../../shared/cloudAccountGateway";
 import { listEnabledCloudModelRegistryRows } from "../../../shared/cloudModelRegistryGateway";
 import {
@@ -1868,6 +1871,12 @@ export default function App() {
     loadCommunityChat,
     parseReplyPrefix,
     buildReplyPrefix,
+    beforeSendValidate: async () => {
+      if (!isProfileSetupCompleteForPublicActions) {
+        return "Finish your profile before posting in communities.";
+      }
+      return null;
+    },
     prepareAttachmentsForSend: prepareCommunityAttachmentsForSend,
     serializeAttachmentsForWrite: serializeCommunityAttachmentsForWrite,
     onOptimisticSendScrollIntent: () => {
@@ -3147,6 +3156,17 @@ export default function App() {
     loadFailureMessage: "Failed to load AI agent config.",
     saveFailureMessage: "Failed to save AI agent changes.",
   });
+  const handleSaveCommunityAgentConfigAndRefreshLanding = useCallback(async (): Promise<boolean> => {
+    const communityIdAtSave = activeCommunityId;
+    const normalizedLanding = normalizeCommunityAgentDraftForSave(communityAgentConfigLanding);
+    const saved = await handleSaveCommunityAgentConfig();
+    if (!saved || !communityIdAtSave || !normalizedLanding) return saved;
+    if (activeCommunityIdRef.current !== communityIdAtSave) return saved;
+    communityAgentLandingFetchSeqRef.current += 1;
+    activeCommunityAgentLandingCommunityIdRef.current = communityIdAtSave;
+    setActiveCommunityAgentLanding(normalizedLanding);
+    return saved;
+  }, [activeCommunityId, communityAgentConfigLanding, handleSaveCommunityAgentConfig]);
 
   const reloadEffectiveMcpApps = useCallback(async () => {
     if (!session) {
@@ -4934,6 +4954,16 @@ export default function App() {
     }
   }, [ensureUsableAuthSession, requireSignIn, workspaceCreditBalance]);
 
+  const effectiveAccountSetupStatus = accountSetupStatus ?? cloudProfile?.account_setup ?? null;
+  const isProfileSetupKnownIncompleteForPublicActions = Boolean(
+    session && effectiveAccountSetupStatus && !isAccountSetupStatusIdentityComplete(effectiveAccountSetupStatus),
+  );
+  const isProfileSetupCompleteForPublicActions = !isProfileSetupKnownIncompleteForPublicActions;
+  const openProfileSetup = useCallback(() => {
+    setOnboardingError(null);
+    setIsOnboardingModalOpen(true);
+  }, []);
+
   const communityUi = useWebCommunityUiController<
     AuthSession,
     CommunityRecord,
@@ -4947,6 +4977,7 @@ export default function App() {
     communityRoleById,
     accountCommerceStatus,
     accountCommerceError,
+    isProfileSetupComplete: isProfileSetupCompleteForPublicActions,
     activeCommunity,
     activeCommunityId,
     communityInitials,
@@ -4958,6 +4989,7 @@ export default function App() {
     onCreateUnauthenticated: (draft) => {
       requireSignIn({ reason: "create_community", payload: { draft } });
     },
+    onProfileSetupRequired: openProfileSetup,
     onOwnedCommunityLimitReached: () => {
       showAppToastMessage("You've built the maximum number of communities");
     },
@@ -5515,7 +5547,6 @@ export default function App() {
   const hasUserKeyConnection = Boolean(session) && openAiConnection.connected;
   const hasUserChatgptConnection = Boolean(session) && chatgptConnection.connected;
   const hasPendingChatgptAuth = providerConnectionUi.hasPendingChatgptAuth;
-  const effectiveAccountSetupStatus = accountSetupStatus ?? cloudProfile?.account_setup ?? null;
   const shouldShowAccountSetupCard =
     Boolean(session) &&
     Boolean(effectiveAccountSetupStatus) &&
@@ -6620,7 +6651,7 @@ export default function App() {
       isActiveCommunityOwner,
       aiAgentWorkspaceEditorProps: {
         communityAgentConfigDirtyRef,
-        handleSaveCommunityAgentConfig,
+        handleSaveCommunityAgentConfig: handleSaveCommunityAgentConfigAndRefreshLanding,
         handleResetCommunityAgentConfig,
         isSavingCommunityAgentConfig,
         communityAgentConfigSaveError,
@@ -6789,6 +6820,7 @@ export default function App() {
       resourceModuleModalProps,
       resourceModalProps,
       canPostMessagesActiveCommunity,
+      isProfileSetupComplete: isProfileSetupCompleteForPublicActions,
       isLoadingChat,
       hasResolvedCommunityChat,
       isLoadingMoreChat,
@@ -6814,6 +6846,7 @@ export default function App() {
       fileInputRef: communityFileInputRef,
       chatInputRef,
       onChatScroll: handleChatScroll,
+      onFinishProfileSetup: openProfileSetup,
       onScrollToBottom: () => {
         setIsUserAtBottom(true);
         isUserAtBottomRef.current = true;
@@ -6860,8 +6893,16 @@ export default function App() {
       onCancelEdit: handleCancelEdit,
       voiceButtonProps: {
         state: communityVoiceUiState,
-        title: communityVoiceIntent.title,
-        onClick: () => void handleVoiceInputClick("community"),
+        title: isProfileSetupCompleteForPublicActions
+          ? communityVoiceIntent.title
+          : "Finish your profile to use voice input in community chat.",
+        onClick: () => {
+          if (!isProfileSetupCompleteForPublicActions) {
+            openProfileSetup();
+            return;
+          }
+          void handleVoiceInputClick("community");
+        },
       },
       lightboxModalProps: {
         isOpen: isCommunityChatLightboxOpen,
@@ -7417,7 +7458,7 @@ export default function App() {
       },
       onClose: () => setIsOnboardingModalOpen(false),
     },
-    showOnboardingModal: (activePage === "workspace" || activePage === "onboarding") && isOnboardingModalOpen,
+    showOnboardingModal: shellPublicRoute.kind === "app" && isOnboardingModalOpen,
     workspaceSurfaceHostProps: {
       activeView,
       settingsGroup: settingsGroup as SettingsGroup,

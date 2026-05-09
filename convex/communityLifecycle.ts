@@ -35,6 +35,7 @@ import {
   normalizeCommunityFunnelConfigInput,
   saveCommunityFunnelConfigInternal,
 } from "./communityFunnel";
+import { requireProfileSetupCompleteForUser } from "./accountSetupCore";
 
 async function mapCommunityRecord(ctx: any, row: CommunityLike): Promise<{
   id: string;
@@ -456,6 +457,7 @@ export const createCommunity = mutation({
       userId: args.ownerId,
       authSubject: args.authSubject ?? null,
     });
+    await requireProfileSetupCompleteForUser(ctx, ownerId);
     const nowMs = Date.now();
     const billingStatus = await ctx.runQuery(api.auth.getAccountCommerceStatus, {
       authSubject: args.authSubject ?? undefined,
@@ -518,10 +520,11 @@ export const generateCommunityBrandingUploadUrl = mutation({
     kind: v.union(v.literal("avatar"), v.literal("banner")),
   },
   handler: async (ctx, args) => {
-    await resolveUserIdForAuthenticatedRequest({
+    const userId = await resolveUserIdForAuthenticatedRequest({
       ctx,
       authSubject: args.authSubject ?? null,
     });
+    await requireProfileSetupCompleteForUser(ctx, userId);
     const uploadUrl = await ctx.storage.generateUploadUrl();
     return {
       kind: args.kind,

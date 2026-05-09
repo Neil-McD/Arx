@@ -58,6 +58,7 @@ export type WebCommunityChatPanelProps = {
   hasSession: boolean;
   sessionUserId: string | null;
   canPostMessages: boolean;
+  isProfileSetupComplete: boolean;
   canModerateMessages: boolean;
   isLoadingChat: boolean;
   hasResolvedCommunityChat: boolean;
@@ -85,6 +86,7 @@ export type WebCommunityChatPanelProps = {
   chatInputRef: MutableRefObject<HTMLTextAreaElement | null>;
   onChatScroll: UIEventHandler<HTMLDivElement>;
   onRequireSignIn: () => void;
+  onFinishProfileSetup: () => void;
   onScrollToBottom: () => void;
   onSetReplyingToMessage: (message: CommunityChatMessage | null) => void;
   onRemoveCommunityAttachment: (id: string) => void;
@@ -130,6 +132,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     hasSession,
     sessionUserId,
     canPostMessages,
+    isProfileSetupComplete,
     canModerateMessages,
     isLoadingChat,
     hasResolvedCommunityChat,
@@ -157,6 +160,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     chatInputRef,
     onChatScroll,
     onRequireSignIn,
+    onFinishProfileSetup,
     onScrollToBottom,
     onSetReplyingToMessage,
     onRemoveCommunityAttachment,
@@ -192,6 +196,8 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     voiceButtonProps,
     lightboxModalProps,
   } = props;
+  const isProfileSetupGateActive = hasSession && Boolean(activeCommunity) && canPostMessages && !isProfileSetupComplete;
+  const canUseComposer = canPostMessages && !isProfileSetupGateActive;
 
   const typingUsers = typingPresence.users;
   const typingTotalCount = Math.max(typingUsers.length, Math.floor(Number(typingPresence.total_count ?? 0)));
@@ -294,12 +300,12 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     <>
       <div
         className={`community-chat community-attachment-drop-surface${isCommunityAttachmentDragOver ? " drag-over" : ""}`}
-        onDrop={onCommunityAttachmentDrop}
-        onDragEnter={onCommunityAttachmentDragEnter}
-        onDragOver={onCommunityAttachmentDragOver}
-        onDragLeave={onCommunityAttachmentDragLeave}
+        onDrop={canUseComposer ? onCommunityAttachmentDrop : undefined}
+        onDragEnter={canUseComposer ? onCommunityAttachmentDragEnter : undefined}
+        onDragOver={canUseComposer ? onCommunityAttachmentDragOver : undefined}
+        onDragLeave={canUseComposer ? onCommunityAttachmentDragLeave : undefined}
       >
-        {isCommunityAttachmentDragOver ? (
+        {canUseComposer && isCommunityAttachmentDragOver ? (
           <div className="drop-overlay community-drop-overlay" aria-hidden="true">
             <svg viewBox="0 0 24 24">
               <path d="M12 5v14" />
@@ -536,7 +542,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
               isAuthRecoveringSignedIn ||
               !hasSession ||
               !activeCommunity ||
-              !canPostMessages ||
+              !canUseComposer ||
               isSendingCommunityMessage
             }
             aria-label="Attach files"
@@ -570,6 +576,8 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
                   ? "Loading community..."
                 : !activeCommunity
                   ? "Select a community to chat..."
+                  : isProfileSetupGateActive
+                    ? "Finish your profile to chat..."
                   : !canPostMessages
                     ? "Join this community to chat..."
                     : "Message the community..."
@@ -584,7 +592,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
                 void onSendCommunityMessage();
               }
             }}
-            disabled={isAuthRecoveringSignedIn || !hasSession || !activeCommunity || !canPostMessages}
+            disabled={isAuthRecoveringSignedIn || !hasSession || !activeCommunity || !canUseComposer}
             rows={1}
           />
           <VoiceInputButton {...voiceButtonProps} />
@@ -595,7 +603,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
               isAuthRecoveringSignedIn ||
               !hasSession ||
               !activeCommunity ||
-              !canPostMessages ||
+              !canUseComposer ||
               isSendingCommunityMessage ||
               (communityMessageInput.trim().length === 0 && communityAttachments.length === 0)
             }
@@ -608,6 +616,15 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
             </svg>
           </button>
         </div>
+
+        {isProfileSetupGateActive ? (
+          <div className="community-chat-profile-gate">
+            <span>Finish your profile before posting in communities.</span>
+            <button type="button" onClick={onFinishProfileSetup}>
+              Finish profile
+            </button>
+          </div>
+        ) : null}
 
         {communityChatError && <div className="auth-error">{communityChatError}</div>}
       </div>

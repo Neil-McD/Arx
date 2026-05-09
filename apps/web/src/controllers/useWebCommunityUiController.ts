@@ -40,6 +40,7 @@ type UseWebCommunityUiControllerParams<
   communityRoleById: Record<string, string>;
   accountCommerceStatus: BillingStatusT | null;
   accountCommerceError: string | null;
+  isProfileSetupComplete: boolean;
   activeCommunity: ModalCommunityLike | null;
   activeCommunityId: string | null;
   communityInitials: (value: string) => string;
@@ -47,6 +48,7 @@ type UseWebCommunityUiControllerParams<
   persistCreateCommunityIntent: (draft: CreateCommunityIntentDraft) => void;
   onPrimaryUnauthenticated: (draft: CreateCommunityIntentDraft) => Promise<void> | void;
   onCreateUnauthenticated?: (draft: CreateCommunityIntentDraft) => Promise<void> | void;
+  onProfileSetupRequired?: () => void;
   onOwnedCommunityLimitReached?: () => void;
   onCommunityCreated: (community: CommunityT) => void;
   readBannerFileAsWideDataUrlWithinLimit: (file: File, maxChars: number) => Promise<string>;
@@ -174,12 +176,14 @@ export function useWebCommunityUiController<
     session: params.session,
     ensureSession: params.ensureSession,
     accountCommerceStatus: params.accountCommerceStatus,
+    isProfileSetupComplete: params.isProfileSetupComplete,
     communities: params.communities,
     communityRoleById: params.communityRoleById,
     loadAccountCommerceStatus: params.loadAccountCommerceStatus,
     persistCreateCommunityIntent: params.persistCreateCommunityIntent,
     onPrimaryUnauthenticated: params.onPrimaryUnauthenticated,
     onCreateUnauthenticated: params.onCreateUnauthenticated,
+    onProfileSetupRequired: params.onProfileSetupRequired,
     onOwnedCommunityLimitReached: params.onOwnedCommunityLimitReached,
     onCommunityCreated: params.onCommunityCreated,
     createCommunityName,

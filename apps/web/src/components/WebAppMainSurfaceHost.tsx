@@ -47,12 +47,7 @@ export function WebAppMainSurfaceHost(props: WebAppMainSurfaceHostProps) {
           </div>
         </div>
       ) : props.activePage === "workspace" || props.activePage === "onboarding" ? (
-        <>
-          <WebWorkspaceSurfaceHost {...props.workspaceSurfaceHostProps} />
-          {props.showOnboardingModal ? (
-            <WebOnboardingPage {...props.onboardingPageProps} variant="modal" />
-          ) : null}
-        </>
+        <WebWorkspaceSurfaceHost {...props.workspaceSurfaceHostProps} />
       ) : props.showCommunitySurface ? (
         <WebCommunityHost {...props.communityHostProps} />
       ) : (
@@ -64,6 +59,9 @@ export function WebAppMainSurfaceHost(props: WebAppMainSurfaceHostProps) {
           ) : null}
         </div>
       )}
+      {props.showOnboardingModal ? (
+        <WebOnboardingPage {...props.onboardingPageProps} variant="modal" />
+      ) : null}
     </main>
   );
 }
