@@ -7,8 +7,6 @@ function read(path: string): string {
 
 const gateway = read("shared/cloudCommunityAgentGateway.ts");
 const app = read("apps/web/src/App.tsx");
-const funnelSurface = read("apps/web/src/components/CommunityFunnelSurface.tsx");
-const baseCss = read("apps/web/src/base.css");
 
 assert.match(
   gateway,
@@ -28,16 +26,4 @@ assert.match(
   "AI Agent workspace editor must use the cache-refreshing save handler",
 );
 
-assert.match(
-  funnelSurface,
-  /const onlineFaceStrip = action\.onlineFaces\.length > 0[\s\S]*?className="public-funnel-face-strip"[\s\S]*?typeof action\.onlineCount === "number"[\s\S]*?<div className="public-funnel-action-stat">[\s\S]*?Online[\s\S]*?\{onlineFaceStrip\}/,
-  "online face avatars must render inside the Online stat column",
-);
-
-assert.match(
-  baseCss,
-  /\.public-funnel-action-stat \.public-funnel-face-strip \{[\s\S]*?margin-top: 8px;[\s\S]*?padding-left: 0;/,
-  "online face strip must be centered by the stat layout instead of floating under the stats row",
-);
-
-console.log("PASS: community agent landing sync and funnel online faces layout are canonical.");
+console.log("PASS: community agent landing sync is canonical.");

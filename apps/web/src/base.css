@@ -5099,14 +5099,7 @@ body {
 .public-funnel-face-strip {
   display: flex;
   align-items: center;
-  justify-content: center;
-  min-height: 34px;
   padding-left: 2px;
-}
-
-.public-funnel-action-stat .public-funnel-face-strip {
-  margin-top: 8px;
-  padding-left: 0;
 }
 
 .public-funnel-face {

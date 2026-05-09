@@ -224,25 +224,6 @@ function CommunityFunnelActionModule(props: {
     heroArtImageStyle = null,
     action,
   } = props;
-  const onlineFaceStrip = action.onlineFaces.length > 0 ? (
-    <div className="public-funnel-face-strip" aria-label="People online now">
-      {action.onlineFaces.map((face) => (
-        <UserAvatar
-          key={face.user_id}
-          className="public-funnel-face"
-          readyClassName="has-image"
-          name={face.display_name ?? face.user_id}
-          imageUrl={face.avatar_url}
-          focusX={face.avatar_focus_x ?? 0.5}
-          focusY={face.avatar_focus_y ?? 0.5}
-          zoom={face.avatar_zoom ?? 1}
-          alt=""
-          aria-hidden={true}
-          fallback={null}
-        />
-      ))}
-    </div>
-  ) : null;
 
   return (
     <div className={className}>
@@ -299,7 +280,6 @@ function CommunityFunnelActionModule(props: {
             <div className="public-funnel-action-stat">
               <div className="public-funnel-action-stat-value">{formatCompactStat(action.onlineCount)}</div>
               <div className="public-funnel-action-stat-label">Online</div>
-              {onlineFaceStrip}
             </div>
           ) : null}
           {typeof action.adminCount === "number" ? (
@@ -310,7 +290,25 @@ function CommunityFunnelActionModule(props: {
           ) : null}
         </div>
 
-        {typeof action.onlineCount !== "number" ? onlineFaceStrip : null}
+        {action.onlineFaces.length > 0 ? (
+          <div className="public-funnel-face-strip" aria-label="People online now">
+            {action.onlineFaces.map((face) => (
+              <UserAvatar
+                key={face.user_id}
+                className="public-funnel-face"
+                readyClassName="has-image"
+                name={face.display_name ?? face.user_id}
+                imageUrl={face.avatar_url}
+                focusX={face.avatar_focus_x ?? 0.5}
+                focusY={face.avatar_focus_y ?? 0.5}
+                zoom={face.avatar_zoom ?? 1}
+                alt=""
+                aria-hidden={true}
+                fallback={null}
+              />
+            ))}
+          </div>
+        ) : null}
 
         <button
           className="public-funnel-primary platform-save-button"
