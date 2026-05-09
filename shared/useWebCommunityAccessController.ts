@@ -26,6 +26,10 @@ type UseWebCommunityAccessControllerArgs<SessionT, CommunityRecordT, UserProfile
   ensureSession?: EnsureSessionFn<SessionT>;
 };
 
+type LoadUserProfilesOptions = {
+  force?: boolean;
+};
+
 export function useWebCommunityAccessController<
   SessionT,
   CommunityRecordT extends { id: string; slug?: string | null; visibility: string },
@@ -36,9 +40,11 @@ export function useWebCommunityAccessController<
   const fetchAbortControllersRef = useRef<Map<string, AbortController>>(new Map());
   const loadCommunitiesSeqRef = useRef(0);
   const hasCompletedInitialLoadRef = useRef(false);
+  const hydratedProfileIdsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     hasCompletedInitialLoadRef.current = false;
+    hydratedProfileIdsRef.current = new Set();
   }, [args.loadingResetKey]);
 
   const loadCommunities = useCallback(async (session: SessionT): Promise<void> => {
@@ -112,21 +118,31 @@ export function useWebCommunityAccessController<
     }
   }, []);
 
-  const loadUserProfiles = useCallback(async (userIds: string[], session: SessionT): Promise<void> => {
+  const loadUserProfiles = useCallback(async (
+    userIds: string[],
+    session: SessionT,
+    options: LoadUserProfilesOptions = {},
+  ): Promise<void> => {
     const current = argsRef.current;
     const usableSession = await resolveUsableSession(session, current.ensureSession);
     if (!usableSession) return;
     const unique = Array.from(new Set(userIds.map((id) => id.trim()).filter(Boolean)));
-    if (unique.length === 0) return;
+    const idsToFetch = options.force
+      ? unique
+      : unique.filter((id) => !hydratedProfileIdsRef.current.has(id));
+    if (idsToFetch.length === 0) return;
     try {
       const profiles = (await listCloudProfileRowsByUserIds<SessionT>({
         session: usableSession,
-        userIds: unique,
+        userIds: idsToFetch,
       })) as unknown as UserProfileT[];
+      for (const id of idsToFetch) {
+        hydratedProfileIdsRef.current.add(id);
+      }
       if (profiles.length === 0) return;
       await preloadImageUrls(
         profiles.map((profile: any) => profile?.avatar_url ?? null),
-        { maxUrls: unique.length, timeoutMs: 1200 },
+        { maxUrls: profiles.length, timeoutMs: 1200 },
       );
       current.setProfilesByUserId((prev) => {
         const next = { ...prev };

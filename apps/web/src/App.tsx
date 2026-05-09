@@ -4132,8 +4132,12 @@ export default function App() {
 
   useEffect(() => {
     if (!session || activePage !== "community" || visibleCommunityProfileIds.length === 0) return;
-    const refreshVisibleProfiles = () => {
+    const hydrateVisibleProfiles = () => {
       void loadUserProfiles(visibleCommunityProfileIds, session);
+      void loadSelfProfile(session);
+    };
+    const refreshVisibleProfiles = () => {
+      void loadUserProfiles(visibleCommunityProfileIds, session, { force: true });
       void loadSelfProfile(session);
     };
     const handleVisibilityChange = () => {
@@ -4141,7 +4145,7 @@ export default function App() {
         refreshVisibleProfiles();
       }
     };
-    refreshVisibleProfiles();
+    hydrateVisibleProfiles();
     window.addEventListener("focus", refreshVisibleProfiles);
     document.addEventListener("visibilitychange", handleVisibilityChange);
     return () => {

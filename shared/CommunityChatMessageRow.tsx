@@ -1,4 +1,4 @@
-import { Fragment, type ReactNode } from "react";
+import { Fragment, memo, useMemo, type ReactNode } from "react";
 import { AttachmentChipButton } from "./AttachmentChipButton";
 import { CommunityChatMediaGrid, type CommunityChatMediaImage } from "./CommunityChatMediaGrid";
 import { UserAvatar } from "./UserAvatar";
@@ -49,9 +49,9 @@ type CommunityChatMessageRowProps = {
   avatarColor: string;
   shortTime: string;
   formattedTime: string;
-  editingMessageId: string | null;
+  isEditing: boolean;
   editingMessageText: string;
-  reactionPickerMessageId: string | null;
+  isReactionPickerOpen: boolean;
   messageReactions: MessageReactionRecord[];
   sessionUserId: string | null | undefined;
   replyToId: string | null;
@@ -75,7 +75,7 @@ type CommunityChatMessageRowProps = {
   onCancelEdit: () => void;
 };
 
-export function CommunityChatMessageRow({
+function CommunityChatMessageRowComponent({
   message,
   copied,
   dateSeparator,
@@ -91,9 +91,9 @@ export function CommunityChatMessageRow({
   avatarColor,
   shortTime,
   formattedTime,
-  editingMessageId,
+  isEditing,
   editingMessageText,
-  reactionPickerMessageId,
+  isReactionPickerOpen,
   messageReactions,
   sessionUserId,
   replyToId,
@@ -116,21 +116,26 @@ export function CommunityChatMessageRow({
   onSaveEdit,
   onCancelEdit,
 }: CommunityChatMessageRowProps) {
-  const { imageAttachments, fileAttachments } = partitionCommunityAttachments(message.attachments);
-  const lightboxImages: CommunityChatMediaImage[] = imageAttachments.map((item) => ({
-    url: item.url,
-    name: item.name,
-  }));
+  const { imageAttachments, fileAttachments } = useMemo(
+    () => partitionCommunityAttachments(message.attachments),
+    [message.attachments],
+  );
+  const lightboxImages: CommunityChatMediaImage[] = useMemo(
+    () => imageAttachments.map((item) => ({
+      url: item.url,
+      name: item.name,
+    })),
+    [imageAttachments],
+  );
 
-  const msgReactions = messageReactions.filter((reaction) => reaction.message_id === message.id);
-  const groupedReactions = (() => {
+  const groupedReactions = useMemo(() => {
     const groups: Record<string, MessageReactionRecord[]> = {};
-    for (const reaction of msgReactions) {
+    for (const reaction of messageReactions) {
       if (!groups[reaction.emoji]) groups[reaction.emoji] = [];
       groups[reaction.emoji].push(reaction);
     }
     return groups;
-  })();
+  }, [messageReactions]);
 
   return (
     <Fragment>
@@ -162,7 +167,7 @@ export function CommunityChatMessageRow({
             <span className="chat-sender">{senderLabel}</span>
             <span className="chat-time">{formattedTime}</span>
           </div>
-          {editingMessageId === message.id ? (
+          {isEditing ? (
             <div className="chat-edit-form">
               <textarea
                 className="chat-edit-input"
@@ -285,7 +290,7 @@ export function CommunityChatMessageRow({
             </div>
           )}
 
-          {reactionPickerMessageId === message.id && (
+          {isReactionPickerOpen && (
             <div className="reaction-picker">
               {reactionEmojis.map((emoji) => (
                 <button
@@ -301,7 +306,7 @@ export function CommunityChatMessageRow({
             </div>
           )}
 
-          {msgReactions.length > 0 && (
+          {messageReactions.length > 0 && (
             <div className="chat-reactions">
               {Object.entries(groupedReactions).map(([emoji, reactions]) => {
                 const hasOwn = reactions.some((reaction) => reaction.user_id === sessionUserId);
@@ -326,7 +331,7 @@ export function CommunityChatMessageRow({
           <button
             className="chat-action-btn"
             onClick={() =>
-              onSetReactionPickerMessageId(reactionPickerMessageId === message.id ? null : message.id)
+              onSetReactionPickerMessageId(isReactionPickerOpen ? null : message.id)
             }
             title="Add reaction"
           >
@@ -387,3 +392,5 @@ export function CommunityChatMessageRow({
     </Fragment>
   );
 }
+
+export const CommunityChatMessageRow = memo(CommunityChatMessageRowComponent);

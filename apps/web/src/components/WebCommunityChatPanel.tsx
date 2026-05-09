@@ -7,6 +7,7 @@ import type {
   ReactNode,
   UIEventHandler,
 } from "react";
+import { useMemo } from "react";
 import { CommunityChatMessageRow } from "../../../../shared/CommunityChatMessageRow";
 import type { CommunityChatMediaImage } from "../../../../shared/CommunityChatMediaGrid";
 import type {
@@ -29,6 +30,25 @@ type MessageReaction = SharedMessageReaction;
 type CommunityTypingPresenceBundle = SharedCommunityTypingPresenceBundle;
 type CommunityTypingPresenceUser = SharedCommunityTypingPresenceUser;
 type UserProfile = SharedUserProfile;
+
+type CommunityChatMessageViewModel = {
+  message: CommunityChatMessage;
+  dateSeparator: string | null;
+  showMeta: boolean;
+  isOwn: boolean;
+  isPending: boolean;
+  senderLabel: string;
+  senderProfile: UserProfile | null;
+  avatarUrl: string | null;
+  avatarColor: string;
+  shortTime: string;
+  formattedTime: string;
+  replyToId: string | null;
+  replyTarget: CommunityChatMessage | null;
+  reactions: MessageReaction[];
+};
+
+const EMPTY_MESSAGE_REACTIONS: MessageReaction[] = [];
 
 export type WebCommunityChatPanelProps = {
   activeCommunity: { name: string } | null;
@@ -186,6 +206,56 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
             ? `${typingUsers[0].display_name || displayName(typingUsers[0].user_id)} and ${typingTotalCount - 1} others are typing...`
             : `${typingTotalCount} people are typing...`;
 
+  const reactionsByMessageId = useMemo(() => {
+    const byMessageId = new Map<string, MessageReaction[]>();
+    for (const reaction of messageReactions) {
+      const reactions = byMessageId.get(reaction.message_id);
+      if (reactions) {
+        reactions.push(reaction);
+      } else {
+        byMessageId.set(reaction.message_id, [reaction]);
+      }
+    }
+    return byMessageId;
+  }, [messageReactions]);
+
+  const messageViewModels = useMemo<CommunityChatMessageViewModel[]>(() => {
+    return communityMessages.map((message, index) => {
+      const senderProfile = profilesByUserId[message.sender_id] ?? null;
+      const replyToId = message.reply_to_id ?? null;
+      return {
+        message,
+        dateSeparator: shouldShowDateSeparator(communityMessages, index),
+        showMeta: shouldShowCommunitySenderMeta(communityMessages, index),
+        isOwn: message.sender_id === sessionUserId,
+        isPending: message.id.startsWith("pending-"),
+        senderLabel: displayName(message.sender_id),
+        senderProfile,
+        avatarUrl: senderProfile?.avatar_url ?? null,
+        avatarColor: getAvatarColor(message.sender_id),
+        shortTime: new Date(message.created_at).toLocaleTimeString([], {
+          hour: "numeric",
+          minute: "2-digit",
+        }),
+        formattedTime: formatChatTime(message.created_at),
+        replyToId,
+        replyTarget: replyToId ? communityMessageById.get(replyToId) ?? null : null,
+        reactions: reactionsByMessageId.get(message.id) ?? EMPTY_MESSAGE_REACTIONS,
+      };
+    });
+  }, [
+    communityMessageById,
+    communityMessages,
+    displayName,
+    formatChatTime,
+    getAvatarColor,
+    profilesByUserId,
+    reactionsByMessageId,
+    sessionUserId,
+    shouldShowCommunitySenderMeta,
+    shouldShowDateSeparator,
+  ]);
+
   const showCommunityChatBootstrap =
     hasAuthenticatedPresentation &&
     (isAuthRecoveringSignedIn ||
@@ -304,46 +374,33 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
               )}
               {activeCommunity &&
                 !isLoadingChat &&
-                communityMessages.map((message, index) => {
-                  const isOwn = message.sender_id === sessionUserId;
-                  const isPending = message.id.startsWith("pending-");
-                  const showMeta = shouldShowCommunitySenderMeta(communityMessages, index);
-                  const dateSeparator = shouldShowDateSeparator(communityMessages, index);
-                  const senderLabel = displayName(message.sender_id);
-                  const senderProfile = profilesByUserId[message.sender_id] ?? null;
-                  const avatarUrl = senderProfile?.avatar_url ?? null;
-                  const avatarColor = getAvatarColor(message.sender_id);
-                  const shortTime = new Date(message.created_at).toLocaleTimeString([], {
-                    hour: "numeric",
-                    minute: "2-digit",
-                  });
-                  const replyToId = message.reply_to_id ?? null;
-                  const replyTarget = replyToId ? communityMessageById.get(replyToId) ?? null : null;
+                messageViewModels.map((viewModel) => {
+                  const { message, senderProfile } = viewModel;
                   return (
                     <CommunityChatMessageRow
                       key={message.id}
                       message={message}
                       copied={copiedCommunityMessageId === message.id}
-                      dateSeparator={dateSeparator}
-                      isPending={isPending}
-                      showMeta={showMeta}
-                      isOwn={isOwn}
+                      dateSeparator={viewModel.dateSeparator}
+                      isPending={viewModel.isPending}
+                      showMeta={viewModel.showMeta}
+                      isOwn={viewModel.isOwn}
                       canModerateContent={canModerateMessages}
-                      senderLabel={senderLabel}
-                      avatarUrl={avatarUrl}
+                      senderLabel={viewModel.senderLabel}
+                      avatarUrl={viewModel.avatarUrl}
                       avatarFocusX={senderProfile?.avatar_focus_x ?? 0.5}
                       avatarFocusY={senderProfile?.avatar_focus_y ?? 0.5}
                       avatarZoom={senderProfile?.avatar_zoom ?? 1}
-                      avatarColor={avatarColor}
-                      shortTime={shortTime}
-                      formattedTime={formatChatTime(message.created_at)}
-                      editingMessageId={editingMessageId}
+                      avatarColor={viewModel.avatarColor}
+                      shortTime={viewModel.shortTime}
+                      formattedTime={viewModel.formattedTime}
+                      isEditing={editingMessageId === message.id}
                       editingMessageText={editingMessageText}
-                      reactionPickerMessageId={reactionPickerMessageId}
-                      messageReactions={messageReactions}
+                      isReactionPickerOpen={reactionPickerMessageId === message.id}
+                      messageReactions={viewModel.reactions}
                       sessionUserId={sessionUserId}
-                      replyToId={replyToId}
-                      replyTarget={replyTarget}
+                      replyToId={viewModel.replyToId}
+                      replyTarget={viewModel.replyTarget}
                       reactionEmojis={reactionEmojis}
                       getInitials={getInitials}
                       displayName={displayName}
