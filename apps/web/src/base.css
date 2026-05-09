@@ -5099,7 +5099,10 @@ body {
 .public-funnel-face-strip {
   display: flex;
   align-items: center;
-  padding-left: 2px;
+  justify-self: center;
+  width: fit-content;
+  max-width: 100%;
+  padding-left: 0;
 }
 
 .public-funnel-face {
