@@ -6092,6 +6092,7 @@ body {
 /* Avatar - positioned absolute on left */
 .chat-avatar {
   position: absolute;
+  z-index: 2;
   left: 16px;
   top: 4px;
   width: 40px;

@@ -87,5 +87,10 @@ assert.match(
 );
 
 assert.match(baseCss, /\.community-rail-avatar\s*\{[\s\S]*?position:\s*relative;/);
+assert.match(
+  baseCss,
+  /\.chat-avatar\s*\{[\s\S]*?position:\s*absolute;[\s\S]*?z-index:\s*2;/,
+  "chat avatars must render above message content in absolute-positioned chat rows",
+);
 
 console.log("PASS: avatar framing contract is canonical.");
