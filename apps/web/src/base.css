@@ -5099,10 +5099,7 @@ body {
 .public-funnel-face-strip {
   display: flex;
   align-items: center;
-  justify-self: center;
-  width: fit-content;
-  max-width: 100%;
-  padding-left: 0;
+  padding-left: 2px;
 }
 
 .public-funnel-face {
@@ -5123,6 +5120,8 @@ body {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  transform: translateY(-1px) scale(1.08);
+  transform-origin: center center;
 }
 
 .public-funnel-face + .public-funnel-face {
