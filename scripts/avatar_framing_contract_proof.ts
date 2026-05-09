@@ -35,6 +35,11 @@ assert.match(
   /export const focusFromCommunityAvatarLayoutPosition = focusFromAvatarLayoutPosition/,
   "community avatar editor must use shared focus derivation",
 );
+assert.match(
+  communityAvatarUi,
+  /export const getCommunityAvatarImageStyle = getAvatarImageStyle/,
+  "community avatar surfaces must use community-specific object-position rendering",
+);
 
 assert.match(stableAvatar, /imageFrame\?: AvatarFrame/, "stable avatar must accept canonical framing input");
 assert.match(stableAvatar, /computeAvatarLayout\(/, "stable avatar must render with canonical layout math");
@@ -62,13 +67,13 @@ assert.doesNotMatch(
 );
 assert.match(
   communityAvatar,
-  /imageFrame=\{\{/,
-  "community avatars must pass canonical framing to StableAvatar",
+  /getCommunityAvatarImageStyle\(\{/,
+  "community avatars must use the app-icon object-position render path",
 );
 assert.doesNotMatch(
   communityAvatar,
-  /getCommunityAvatarImageStyle/,
-  "community avatars must not use object-position fallback framing",
+  /imageFrame=\{\{/,
+  "community avatars must not use the user/photo absolute-frame render path",
 );
 
 assert.match(
@@ -84,7 +89,7 @@ assert.match(
 assert.match(
   editor,
   /getCommunityAvatarLayoutImageStyle\(layout\)/,
-  "avatar editor preview style must share final-render image style",
+  "avatar editor preview must use deterministic draggable image layout",
 );
 
 assert.match(baseCss, /\.community-rail-avatar\s*\{[\s\S]*?position:\s*relative;/);

@@ -1,4 +1,5 @@
 import type { CSSProperties, DragEventHandler, ReactNode } from "react";
+import { getCommunityAvatarImageStyle } from "./communityAvatarUi";
 import { communityInitials } from "./messageMetadataUi";
 import { StableAvatar } from "./StableAvatar";
 
@@ -31,11 +32,11 @@ export function CommunityAvatar(props: CommunityAvatarProps) {
       fallbackClassName={props.fallbackClassName}
       imageClassName={props.imageClassName ?? "community-avatar-image"}
       imageUrl={props.imageUrl}
-      imageFrame={{
+      imageStyle={getCommunityAvatarImageStyle({
         focusX: props.focusX,
         focusY: props.focusY,
         zoom: props.zoom,
-      }}
+      })}
       alt={props.alt ?? props.name}
       fallback={props.fallback ?? communityInitials(props.name)}
       style={props.style}
