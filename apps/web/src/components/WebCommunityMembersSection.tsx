@@ -72,6 +72,15 @@ type WebCommunityMembersSectionProps = {
   };
 };
 
+type MemberInitialActions = Pick<WebCommunityMembersSectionProps["actions"], "communityInitials" | "getInitials">;
+
+function memberFallbackInitials(displayName: string, userId: string, actions: MemberInitialActions): string {
+  const trimmed = displayName.trim();
+  const anonymousMatch = /^Member\s+#([A-Za-z0-9]{2,})$/.exec(trimmed);
+  if (anonymousMatch) return anonymousMatch[1]!.slice(0, 2).toUpperCase();
+  return trimmed ? actions.communityInitials(trimmed) : actions.getInitials(userId);
+}
+
 export function WebCommunityMembersSection(props: WebCommunityMembersSectionProps) {
   const { activeCommunity, capabilities, state, actions } = props;
   const canManageMembers = capabilities.canManageMembers;
@@ -110,11 +119,9 @@ export function WebCommunityMembersSection(props: WebCommunityMembersSectionProp
   const selectedMemberAvatarFocusX = selectedMemberProfile?.avatar_focus_x ?? 0.5;
   const selectedMemberAvatarFocusY = selectedMemberProfile?.avatar_focus_y ?? 0.5;
   const selectedMemberAvatarZoom = selectedMemberProfile?.avatar_zoom ?? 1;
-  const selectedMemberInitials = selectedMemberDisplayName
-    ? actions.communityInitials(selectedMemberDisplayName)
-    : selectedMember
-      ? actions.getInitials(selectedMember.user_id)
-      : "";
+  const selectedMemberInitials = selectedMember
+    ? memberFallbackInitials(selectedMemberDisplayName, selectedMember.user_id, actions)
+    : "";
   const visibleMembers = canManageMembers ? state.filteredCommunityMembers : state.communityMembers;
 
   const handleCopyJoinPath = async () => {
@@ -400,9 +407,7 @@ export function WebCommunityMembersSection(props: WebCommunityMembersSectionProp
                     String(profile?.display_name ?? actions.displayName(member.user_id) ?? "").trim()
                     || actions.displayName(member.user_id);
                   const avatarUrl = profile?.avatar_url ?? null;
-                  const initials = displayName
-                    ? actions.communityInitials(displayName)
-                    : actions.getInitials(member.user_id);
+                  const initials = memberFallbackInitials(displayName, member.user_id, actions);
                   const memberIsOwner = Boolean(
                     activeCommunity && activeCommunity.owner_id === member.user_id,
                   );

@@ -11,6 +11,7 @@ const stableAvatar = read("shared/StableAvatar.tsx");
 const userAvatar = read("shared/UserAvatar.tsx");
 const communityAvatar = read("shared/CommunityAvatar.tsx");
 const editor = read("apps/web/src/components/WebCommunityAvatarEditorModal.tsx");
+const baseCss = read("apps/web/src/base.css");
 
 assert.match(avatarUi, /export function computeAvatarLayout/, "avatar layout math must be shared");
 assert.match(
@@ -40,6 +41,11 @@ assert.match(
   stableAvatar,
   /getAvatarLayoutImageStyle\(layout\)/,
   "stable avatar image style must come from canonical layout math",
+);
+assert.doesNotMatch(
+  stableAvatar,
+  /position:\s*style\?\.position\s*\?\?\s*"relative"/,
+  "stable avatar must not override caller-owned layout positioning",
 );
 
 assert.match(userAvatar, /imageFrame=\{\{/, "user avatars must pass canonical framing to StableAvatar");
@@ -74,5 +80,22 @@ assert.match(
   /getCommunityAvatarLayoutImageStyle\(layout\)/,
   "avatar editor preview style must share final-render image style",
 );
+
+for (const className of [
+  "community-rail-avatar",
+  "polynet-onboarding-avatar",
+  "public-funnel-face",
+  "community-btn-avatar",
+  "profile-avatar-drop-avatar",
+  "create-community-avatar",
+  "invite-avatar",
+  "web-empty-thread-avatar",
+]) {
+  assert.match(
+    baseCss,
+    new RegExp(`\\.${className}\\s*\\{[\\s\\S]*?position:\\s*relative;`),
+    `${className} must provide a positioned frame for canonical avatar images`,
+  );
+}
 
 console.log("PASS: avatar framing contract is canonical.");
