@@ -1,6 +1,6 @@
 import type { DragEvent } from "react";
 import { UserAvatar } from "../../../../shared/UserAvatar";
-import { WebCommunityAvatarEditorModal } from "./WebCommunityAvatarEditorModal";
+import { WebUserAvatarEditorModal } from "./WebUserAvatarEditorModal";
 
 type SessionLike = {
   user: {
@@ -193,7 +193,7 @@ export function WebProfileSettingsSection(props: WebProfileSettingsSectionProps)
       </div>
       {profileSaveError && <div className="auth-error">{profileSaveError}</div>}
       {profileSaveSuccess && <div className="auth-success">Saved.</div>}
-      <WebCommunityAvatarEditorModal
+      <WebUserAvatarEditorModal
         isOpen={isProfileAvatarFocusModalOpen}
         avatarUrl={profileAvatarUrl}
         focusX={profileAvatarFocusX}

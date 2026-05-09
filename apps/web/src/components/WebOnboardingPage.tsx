@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type DragEvent, type ReactNode } from "re
 import { ArrowRight, Bot, Check, CircleUserRound, Compass, PlugZap, PlusCircle, Search, X } from "lucide-react";
 import type { AccountSetupStatus, AccountSetupStep } from "../../../../shared/accountSetup";
 import { UserAvatar } from "../../../../shared/UserAvatar";
-import { WebCommunityAvatarEditorModal } from "./WebCommunityAvatarEditorModal";
+import { WebUserAvatarEditorModal } from "./WebUserAvatarEditorModal";
 
 type OnboardingStep = Exclude<AccountSetupStep, "complete">;
 
@@ -585,7 +585,7 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
         </button>
       ) : null}
 
-      <WebCommunityAvatarEditorModal
+      <WebUserAvatarEditorModal
         isOpen={props.isAvatarFocusModalOpen}
         avatarUrl={props.avatarUrl}
         focusX={props.avatarFocusX}
