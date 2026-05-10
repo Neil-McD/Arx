@@ -860,7 +860,7 @@ function OperatorBusinessInsights(props: {
           <span>Visitors</span>
           <strong>{formatOptionalCount(businessKpis?.visitors.total)}</strong>
           <span className="operator-dashboard__metric-note">
-            {businessKpis?.visitors.availability === "available" ? "Tracked visitor volume." : "PostHog visitor source not connected yet."}
+            {businessKpis?.visitors.availability === "available" ? "First-party unique visitors in the selected window." : "Visitor source not connected yet."}
           </span>
         </div>
         <div>
@@ -888,6 +888,10 @@ function OperatorBusinessInsights(props: {
             <strong>{formatOptionalCount(businessKpis?.visitors.total)}</strong>
           </div>
           <div className="operator-dashboard__row">
+            <span>Identified visitors</span>
+            <strong>{businessKpis?.visitors.identified ?? 0}</strong>
+          </div>
+          <div className="operator-dashboard__row">
             <span>Total users</span>
             <strong>{businessKpis?.users.total ?? 0}</strong>
           </div>
@@ -896,7 +900,7 @@ function OperatorBusinessInsights(props: {
             <strong>{businessKpis?.users.newInRange ?? 0}</strong>
           </div>
           <div className="operator-dashboard__row">
-            <span>Visitor to user</span>
+            <span>Tracked visitor to account</span>
             <strong>{formatPercent(businessKpis?.users.visitorToUserConversionRate ?? null)}</strong>
           </div>
           <div className="operator-dashboard__row">
@@ -908,8 +912,10 @@ function OperatorBusinessInsights(props: {
             <strong>{formatPercent(businessKpis?.communities.creationRateFromNewUsers ?? null)}</strong>
           </div>
           {businessKpis?.visitors.availability !== "available" ? (
-            <div className="operator-dashboard__empty">Visitor analytics need PostHog or Vercel Analytics ingestion before conversion is available.</div>
-          ) : null}
+            <div className="operator-dashboard__empty">Visitor analytics need first-party ingestion before conversion is available.</div>
+          ) : (
+            <div className="operator-dashboard__empty">Visitor count is deduped by anonymous visitor key across first-party business surfaces.</div>
+          )}
         </div>
       </section>
 

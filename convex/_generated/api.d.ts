@@ -22,6 +22,8 @@ import type * as authIdentity from "../authIdentity.js";
 import type * as authSessions from "../authSessions.js";
 import type * as billing from "../billing.js";
 import type * as billingCore from "../billingCore.js";
+import type * as businessAnalytics from "../businessAnalytics.js";
+import type * as businessAnalyticsCore from "../businessAnalyticsCore.js";
 import type * as chatgptAuth from "../chatgptAuth.js";
 import type * as chatgptResponsesTransport from "../chatgptResponsesTransport.js";
 import type * as community from "../community.js";
@@ -163,6 +165,8 @@ declare const fullApi: ApiFromModules<{
   authSessions: typeof authSessions;
   billing: typeof billing;
   billingCore: typeof billingCore;
+  businessAnalytics: typeof businessAnalytics;
+  businessAnalyticsCore: typeof businessAnalyticsCore;
   chatgptAuth: typeof chatgptAuth;
   chatgptResponsesTransport: typeof chatgptResponsesTransport;
   community: typeof community;

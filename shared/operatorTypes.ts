@@ -142,9 +142,10 @@ export type OperatorMonetizationSnapshot = {
   businessKpis?: {
     visitors: {
       total: number | null;
+      identified: number;
       visitorToUserConversionRate: number | null;
       availability: "available" | "not_configured" | "not_instrumented";
-      source: "posthog" | "vercel_analytics" | "unavailable";
+      source: "first_party" | "posthog" | "vercel_analytics" | "unavailable";
     };
     users: {
       total: number;

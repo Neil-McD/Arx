@@ -1255,11 +1255,26 @@ export const getOperatorMonetizationInternal = internalQuery({
   handler: async (ctx, args) => {
     const nowMs = Date.now();
     const rangeStart = normalizeRangeStart(args.range, nowMs);
-    const [checkouts, users, communities, communityMemberships, emailOutboxRows, emailDeliveryRows] = await Promise.all([
+    const businessVisitRowsPromise = rangeStart == null
+      ? ctx.db.query("platformBusinessVisits" as any).collect()
+      : ctx.db
+        .query("platformBusinessVisits" as any)
+        .withIndex("by_createdAt", (q: any) => q.gte("createdAt", rangeStart))
+        .collect();
+    const [
+      checkouts,
+      users,
+      communities,
+      communityMemberships,
+      businessVisitRows,
+      emailOutboxRows,
+      emailDeliveryRows,
+    ] = await Promise.all([
       ctx.db.query("checkoutSessions").collect(),
       ctx.db.query("users").collect(),
       ctx.db.query("communities").collect(),
       ctx.db.query("communityMemberships").collect(),
+      businessVisitRowsPromise,
       ctx.db.query("emailOutbox").collect(),
       ctx.db.query("emailDeliveries").collect(),
     ]);
@@ -1290,6 +1305,19 @@ export const getOperatorMonetizationInternal = internalQuery({
     const newCommunitiesWithFirstMember = newCommunities.filter((row: any) =>
       communitiesWithFirstMemberIds.has(String(row._id)),
     );
+    const uniqueVisitorHashes = new Set(
+      businessVisitRows
+        .map((row: any) => String(row.visitorKeyHash ?? "").trim())
+        .filter(Boolean),
+    );
+    const uniqueVisitorCount = uniqueVisitorHashes.size;
+    const identifiedVisitorHashes = new Set(
+      businessVisitRows
+        .filter((row: any) => row.userId)
+        .map((row: any) => String(row.visitorKeyHash ?? "").trim())
+        .filter(Boolean),
+    );
+    const identifiedVisitorCount = identifiedVisitorHashes.size;
     const inRangeEmailOutboxRows = rangeStart == null
       ? emailOutboxRows
       : emailOutboxRows.filter((row: any) => row.createdAt >= rangeStart);
@@ -1391,10 +1419,11 @@ export const getOperatorMonetizationInternal = internalQuery({
       estimatedCommunityMrr,
       businessKpis: {
         visitors: {
-          total: null,
-          visitorToUserConversionRate: null,
-          availability: "not_configured",
-          source: "unavailable",
+          total: uniqueVisitorCount,
+          identified: identifiedVisitorCount,
+          visitorToUserConversionRate: conversionRate(identifiedVisitorCount, uniqueVisitorCount),
+          availability: "available",
+          source: "first_party",
         },
         users: {
           total: accountUsers.length,
@@ -1402,7 +1431,7 @@ export const getOperatorMonetizationInternal = internalQuery({
           activePayingCustomers: activePayingCustomerIds.size,
           checkoutPurchasersInRange: checkoutPurchaserIds.size,
           knownPayingCustomers: knownPayingCustomerIds.size,
-          visitorToUserConversionRate: null,
+          visitorToUserConversionRate: conversionRate(identifiedVisitorCount, uniqueVisitorCount),
           userToPayingCustomerConversionRate: conversionRate(checkoutPurchaserIds.size, newUsers.length),
         },
         communities: {
@@ -1454,6 +1483,7 @@ export const getOperatorMonetizationInternal = internalQuery({
           "users",
           "communities",
           "communityMemberships",
+          "platformBusinessVisits",
           "checkoutSessions",
           "communitySubscriptions",
           "communityPricePoints",

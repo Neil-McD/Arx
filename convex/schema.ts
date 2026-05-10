@@ -683,12 +683,37 @@ export default defineSchema({
     communityId: v.id("communities"),
     eventType: v.union(v.literal("funnel_visit")),
     visitorKey: v.optional(v.string()),
+    visitorKeyHash: v.optional(v.string()),
     userId: v.optional(v.id("users")),
     createdAt: v.number(),
   })
     .index("by_community_createdAt", ["communityId", "createdAt"])
     .index("by_community_event_createdAt", ["communityId", "eventType", "createdAt"])
+    .index("by_community_visitor_hash_event", ["communityId", "visitorKeyHash", "eventType"])
     .index("by_community_visitor_event", ["communityId", "visitorKey", "eventType"]),
+
+  platformBusinessVisits: defineTable({
+    pathKind: v.union(v.literal("home"), v.literal("community_funnel")),
+    scopeKey: v.string(),
+    communityId: v.optional(v.id("communities")),
+    visitorKeyHash: v.string(),
+    userId: v.optional(v.id("users")),
+    source: v.union(
+      v.literal("direct"),
+      v.literal("search"),
+      v.literal("social"),
+      v.literal("referral"),
+      v.literal("unknown"),
+    ),
+    visitBucketStartAt: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_createdAt", ["createdAt"])
+    .index("by_path_createdAt", ["pathKind", "createdAt"])
+    .index("by_scope_createdAt", ["scopeKey", "createdAt"])
+    .index("by_visitor_hash_createdAt", ["visitorKeyHash", "createdAt"])
+    .index("by_visitor_scope_bucket", ["visitorKeyHash", "pathKind", "scopeKey", "visitBucketStartAt"]),
 
   communityPricePoints: defineTable({
     communityId: v.id("communities"),

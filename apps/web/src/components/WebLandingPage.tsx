@@ -1,5 +1,6 @@
 import { type CSSProperties, useEffect, useRef, useState } from "react";
 import { Brain, Play } from "lucide-react";
+import { recordCloudBusinessPageVisit } from "../../../../shared/cloudBusinessAnalyticsGateway";
 
 type WebLandingPageProps = {
   onTryFree: () => void;
@@ -420,6 +421,14 @@ export function WebLandingPage(props: WebLandingPageProps) {
   const [isFlowPinned, setIsFlowPinned] = useState(false);
   const mobileFlowRef = useRef<HTMLDivElement | null>(null);
   const activeFlow = flowCards[activeFlowIndex] ?? flowCards[0];
+
+  useEffect(() => {
+    void recordCloudBusinessPageVisit({
+      pathKind: "home",
+    }).catch((error) => {
+      console.warn("Failed to record business page visit:", error);
+    });
+  }, []);
 
   useEffect(() => {
     if (isFlowPinned || typeof window === "undefined") {

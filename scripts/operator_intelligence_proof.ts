@@ -16,11 +16,42 @@ function extractBetween(source: string, startMarker: string, endMarker: string, 
 const schema = read("convex/schema.ts");
 const operatorIntelligence = read("convex/operatorIntelligence.ts");
 const operatorTypes = read("shared/operatorTypes.ts");
+const businessAnalytics = read("convex/businessAnalytics.ts");
+const businessAnalyticsCore = read("convex/businessAnalyticsCore.ts");
+const communityPublic = read("convex/communityPublic.ts");
+const cloudBusinessAnalyticsGateway = read("shared/cloudBusinessAnalyticsGateway.ts");
+const cloudPublicFunnelGateway = read("shared/cloudPublicFunnelGateway.ts");
+const webApp = read("apps/web/src/App.tsx");
+const webLandingPage = read("apps/web/src/components/WebLandingPage.tsx");
 const monetizationQuery = extractBetween(
   operatorIntelligence,
   "export const getOperatorMonetizationInternal = internalQuery",
   "export const listOperatorEventsInternal = internalQuery",
   "operator monetization query",
+);
+const platformBusinessVisitSchema = extractBetween(
+  schema,
+  "platformBusinessVisits: defineTable",
+  "communityPricePoints: defineTable",
+  "platform business visit schema",
+);
+const recordBusinessVisitMutation = extractBetween(
+  businessAnalytics,
+  "export const recordBusinessPageVisit = mutation",
+  "export const identifyBusinessVisitor = mutation",
+  "business visit record mutation",
+);
+const publicFunnelVisitMutation = extractBetween(
+  communityPublic,
+  "export const recordPublicFunnelVisitBySlug = mutation",
+  "export const heartbeatCommunityPresence = mutation",
+  "public funnel visit mutation",
+);
+const publicFunnelAnalyticsInsert = extractBetween(
+  publicFunnelVisitMutation,
+  'await ctx.db.insert("communityAnalyticsEvents"',
+  "});",
+  "public funnel analytics insert",
 );
 
 for (const [table, indexes] of [
@@ -126,9 +157,164 @@ assert.match(
   "operator business KPIs should label first-party checkout LTV explicitly",
 );
 assert.match(
-  operatorIntelligence,
-  /availability: "not_configured"/,
-  "operator visitor KPIs must stay unavailable until visitor ingestion is wired",
+  schema,
+  /platformBusinessVisits: defineTable/,
+  "operator visitor KPIs should have a first-party business visit table",
+);
+assert.match(
+  platformBusinessVisitSchema,
+  /visitorKeyHash: v\.string\(\)/,
+  "business visit table must store hashed visitor keys only",
+);
+assert.doesNotMatch(
+  platformBusinessVisitSchema,
+  /visitorKey(?!Hash)|rawUrl|fullUrl|queryString|searchParams|referrer|userAgent|ipAddress/i,
+  "business visit table must not store raw visitor keys, URLs, queries, referrers, user agents, or IP addresses",
+);
+assert.match(
+  platformBusinessVisitSchema,
+  /by_visitor_scope_bucket/,
+  "business visits should dedupe by visitor, path, scope, and bucket",
+);
+assert.match(
+  platformBusinessVisitSchema,
+  /by_visitor_hash_createdAt/,
+  "business visitor identification should have an efficient visitor-hash lookup",
+);
+assert.match(
+  businessAnalyticsCore,
+  /crypto\.subtle\.digest\("SHA-256"/,
+  "business visitor keys should be hashed server-side",
+);
+assert.match(
+  businessAnalytics,
+  /pathKind: v\.union\(v\.literal\("home"\), v\.literal\("community_funnel"\)\)/,
+  "business visit ingestion should only accept known path kinds",
+);
+assert.doesNotMatch(
+  recordBusinessVisitMutation,
+  /authSubject|resolveAuthenticatedSubject|ctx\.db\.patch|\buserId\b/,
+  "public business visit ingestion must not trust client-supplied identity",
+);
+assert.match(
+  cloudBusinessAnalyticsGateway,
+  /source: resolveBusinessVisitSource\(\)/,
+  "business visit client should send only a source bucket",
+);
+assert.match(
+  cloudBusinessAnalyticsGateway,
+  /visitorKey: visitorKey \?\? undefined/,
+  "business visit client should omit unavailable visitor keys instead of sending null",
+);
+assert.match(
+  businessAnalytics,
+  /export const identifyBusinessVisitor = mutation/,
+  "business analytics should expose a dedicated visitor identification mutation",
+);
+assert.match(
+  businessAnalytics,
+  /resolveAuthenticatedSubject\(\{[\s\S]*ctx,[\s\S]*authSubject: args\.authSubject/,
+  "business visitor identification should require the verified authenticated subject",
+);
+assert.match(
+  businessAnalytics,
+  /withIndex\("by_visitor_hash_createdAt"/,
+  "business visitor identification should patch visits through the visitor hash index",
+);
+assert.match(
+  businessAnalytics,
+  /ctx\.db\.patch\(row\._id, \{ userId, updatedAt: nowMs \}\)/,
+  "business visitor identification should attach user id to prior visit rows",
+);
+assert.match(
+  cloudBusinessAnalyticsGateway,
+  /bootstrapConvexAuthenticatedClient/,
+  "business visitor identification should use an authenticated Convex client",
+);
+assert.match(
+  cloudBusinessAnalyticsGateway,
+  /businessAnalytics:identifyBusinessVisitor/,
+  "business visitor client should call the dedicated identification mutation",
+);
+assert.match(
+  webApp,
+  /identifyCloudBusinessVisitor\(\{ session \}\)/,
+  "app session lifecycle should identify the current business visitor",
+);
+assert.doesNotMatch(
+  businessAnalytics,
+  /rawUrl|fullUrl|queryString|searchParams|referrer|userAgent|ipAddress/i,
+  "business visit ingestion must not accept content-level analytics fields",
+);
+assert.match(
+  webLandingPage,
+  /recordCloudBusinessPageVisit\(\{[\s\S]*pathKind: "home"/,
+  "landing page should record first-party home visits",
+);
+assert.match(
+  cloudPublicFunnelGateway,
+  /recordCloudBusinessPageVisit<SessionT>\(\{[\s\S]*pathKind: "community_funnel"/,
+  "public community funnels should record first-party business visits",
+);
+assert.match(
+  publicFunnelVisitMutation,
+  /visitorKeyHash = visitorKey \? await hashBusinessVisitorKey\(visitorKey\) : undefined/,
+  "community funnel analytics should hash visitor keys before storage",
+);
+assert.match(
+  publicFunnelAnalyticsInsert,
+  /visitorKeyHash,/,
+  "community funnel analytics should write the hashed visitor key",
+);
+assert.doesNotMatch(
+  publicFunnelAnalyticsInsert,
+  /visitorKey\s*,/,
+  "community funnel analytics should not write raw visitor keys",
+);
+assert.match(
+  cloudPublicFunnelGateway,
+  /visitorKey: visitorKey \?\? undefined/,
+  "public funnel client should omit unavailable visitor keys instead of sending null",
+);
+assert.match(
+  operatorTypes,
+  /source: "first_party" \| "posthog" \| "vercel_analytics" \| "unavailable"/,
+  "operator visitor source contract should include first-party analytics",
+);
+assert.match(
+  monetizationQuery,
+  /ctx\.db\s*\.query\("platformBusinessVisits" as any\)/,
+  "operator business KPIs should read first-party business visits",
+);
+assert.match(
+  monetizationQuery,
+  /const uniqueVisitorHashes = new Set\([\s\S]*businessVisitRows[\s\S]*visitorKeyHash/,
+  "operator business KPIs should count deduped visitor hashes",
+);
+assert.match(
+  monetizationQuery,
+  /const identifiedVisitorHashes = new Set\([\s\S]*businessVisitRows[\s\S]*row\.userId[\s\S]*visitorKeyHash/,
+  "operator business KPIs should count identified visitor hashes",
+);
+assert.match(
+  operatorTypes,
+  /identified: number/,
+  "operator visitor KPI contract should expose identified visitor count",
+);
+assert.match(
+  monetizationQuery,
+  /visitorToUserConversionRate: conversionRate\(identifiedVisitorCount, uniqueVisitorCount\)/,
+  "operator visitor-to-user conversion should use identified visitors, not all new users",
+);
+assert.doesNotMatch(
+  monetizationQuery,
+  /visitorToUserConversionRate: conversionRate\(newUsers\.length, uniqueVisitorCount\)/,
+  "operator visitor-to-user conversion must not divide all new users by tracked visitors",
+);
+assert.match(
+  monetizationQuery,
+  /source: "first_party"/,
+  "operator visitor KPIs should report the first-party source",
 );
 assert.match(
   monetizationQuery,
@@ -137,7 +323,7 @@ assert.match(
 );
 assert.match(
   monetizationQuery,
-  /const \[checkouts, users, communities, communityMemberships, emailOutboxRows, emailDeliveryRows\] = await Promise\.all\(\[[\s\S]*ctx\.db\.query\("communityMemberships"\)\.collect\(\)/,
+  /ctx\.db\.query\("communityMemberships"\)\.collect\(\)/,
   "operator business activation should be derived from community memberships",
 );
 assert.match(

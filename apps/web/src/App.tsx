@@ -31,6 +31,9 @@ import {
   resolveAuthSubject,
 } from "../../../shared/authSession";
 import {
+  identifyCloudBusinessVisitor,
+} from "../../../shared/cloudBusinessAnalyticsGateway";
+import {
   buildContextFallbackThreadTitle, deriveThreadTitleFromUserText, isMissingThreadTitleValue, traceThreadContext, } from "../../../shared/threadTitleUi";
 import { CommunityAvatar } from "../../../shared/CommunityAvatar";
 import {
@@ -879,6 +882,7 @@ export default function App() {
   const initialPublicRoute = readPublicRouteFromLocation();
   const initialAppRoute = initialPublicRoute.kind === "app" ? readAppRouteFromLocation() : null;
   const hasResolvedInitialStandaloneSignedOutLaunchRef = useRef(false);
+  const lastIdentifiedBusinessVisitorSubjectRef = useRef<string | null>(null);
   const [accountGraphHydrationPhase, setAccountGraphHydrationPhase] =
     useState<AccountGraphHydrationPhase>("idle");
   const accountGraphHydrationRunIdRef = useRef(0);
@@ -1317,6 +1321,23 @@ export default function App() {
     () => resolveAuthSubject(session),
     [session?.access_token, session?.id_token, session?.user?.id],
   );
+
+  useEffect(() => {
+    const subject = String(canonicalSessionUserId ?? "").trim();
+    if (!session || !subject) {
+      lastIdentifiedBusinessVisitorSubjectRef.current = null;
+      return;
+    }
+    if (lastIdentifiedBusinessVisitorSubjectRef.current === subject) return;
+    lastIdentifiedBusinessVisitorSubjectRef.current = subject;
+    void identifyCloudBusinessVisitor({ session }).catch((error) => {
+      if (lastIdentifiedBusinessVisitorSubjectRef.current === subject) {
+        lastIdentifiedBusinessVisitorSubjectRef.current = null;
+      }
+      console.warn("Failed to identify business visitor:", error);
+    });
+  }, [canonicalSessionUserId, session]);
+
   const [operatorAccessState, setOperatorAccessState] = useState<{
     subject: string;
     access: OperatorAccessSnapshot;

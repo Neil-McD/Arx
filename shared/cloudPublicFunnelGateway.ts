@@ -5,6 +5,10 @@ import {
 import type { CommunityBillingPeriod } from "./communityTypes";
 import { resolveAuthSubject } from "./authSession";
 import { firstGatewayRow } from "./cloudGateway";
+import {
+  getBusinessVisitorKey,
+  recordCloudBusinessPageVisit,
+} from "./cloudBusinessAnalyticsGateway";
 
 type CloudPublicFunnelAuthParams<SessionT> = {
   session: SessionT;
@@ -73,24 +77,6 @@ export async function fetchCloudPublicFunnelStats<SessionT, TPublicCommunityStat
   };
 }
 
-const COMMUNITY_FUNNEL_VISITOR_KEY = "polynet-community-funnel-visitor-key";
-
-function getCommunityFunnelVisitorKey(): string | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const existing = window.localStorage.getItem(COMMUNITY_FUNNEL_VISITOR_KEY);
-    if (existing) return existing;
-    const next =
-      typeof crypto !== "undefined" && "randomUUID" in crypto
-        ? crypto.randomUUID()
-        : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
-    window.localStorage.setItem(COMMUNITY_FUNNEL_VISITOR_KEY, next);
-    return next;
-  } catch {
-    return null;
-  }
-}
-
 export async function recordCloudPublicFunnelVisit<SessionT>(
   params: CloudPublicFunnelParams<SessionT> & {
     session?: SessionT | null;
@@ -98,10 +84,17 @@ export async function recordCloudPublicFunnelVisit<SessionT>(
   },
 ): Promise<void> {
   const client = createConvexClient();
+  const visitorKey = getBusinessVisitorKey();
+  const authSubject = params.session ? resolveAuthSubject(params.session as any) : undefined;
   await client.mutation("community:recordPublicFunnelVisitBySlug" as any, {
     communitySlug: params.communitySlug,
-    visitorKey: getCommunityFunnelVisitorKey(),
-    authSubject: params.session ? resolveAuthSubject(params.session as any) : undefined,
+    visitorKey: visitorKey ?? undefined,
+    authSubject: authSubject ?? undefined,
+  });
+  await recordCloudBusinessPageVisit<SessionT>({
+    session: params.session ?? null,
+    pathKind: "community_funnel",
+    communitySlug: params.communitySlug,
   });
 }
 

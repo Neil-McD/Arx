@@ -33,6 +33,7 @@ import {
   readPlatformHomeAutojoinOptOut,
 } from "./platformHomeCommunity";
 import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
+import { hashBusinessVisitorKey } from "./businessAnalyticsCore";
 
 const FUNNEL_VISIT_DEDUPE_WINDOW_MS = 30 * 60 * 1000;
 
@@ -255,12 +256,13 @@ export const recordPublicFunnelVisitBySlug = mutation({
     }
 
     const nowMs = Date.now();
-    const visitorKey = String(args.visitorKey ?? "").trim() || undefined;
-    if (visitorKey) {
+    const visitorKey = String(args.visitorKey ?? "").trim();
+    const visitorKeyHash = visitorKey ? await hashBusinessVisitorKey(visitorKey) : undefined;
+    if (visitorKeyHash) {
       const recentRows = (await ctx.db
         .query("communityAnalyticsEvents" as any)
-        .withIndex("by_community_visitor_event", (q: any) =>
-          q.eq("communityId", community._id).eq("visitorKey", visitorKey).eq("eventType", "funnel_visit"),
+        .withIndex("by_community_visitor_hash_event", (q: any) =>
+          q.eq("communityId", community._id).eq("visitorKeyHash", visitorKeyHash).eq("eventType", "funnel_visit"),
         )
         .collect()) as Array<{ createdAt: number }>;
       const dedupeAfterMs = nowMs - FUNNEL_VISIT_DEDUPE_WINDOW_MS;
@@ -272,7 +274,7 @@ export const recordPublicFunnelVisitBySlug = mutation({
     await ctx.db.insert("communityAnalyticsEvents", {
       communityId: community._id,
       eventType: "funnel_visit",
-      visitorKey,
+      visitorKeyHash,
       userId,
       createdAt: nowMs,
     });
