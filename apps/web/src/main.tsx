@@ -22,9 +22,22 @@ const MODULE_LOAD_ERROR_PATTERNS = [
   "failed to fetch dynamically imported module",
   "error loading dynamically imported module",
   "failed to load module script",
+  "module script load",
+  "dynamically imported module",
+  "dynamic import",
+  "loading chunk",
+  "chunk load failed",
+  "loading css chunk",
+  "css chunk load failed",
   "unable to preload css",
+  "preloaderror",
+  "vite:preloaderror",
+  "network error",
+  "networkerror",
+  "load failed",
   "chunkloaderror",
 ];
+const IS_PRODUCTION_BUILD = String(import.meta.env.MODE ?? "").trim().toLowerCase() === "production";
 
 type ModuleLoadRecoveryMarker = {
   target?: unknown;
@@ -37,18 +50,38 @@ type ServedVersionPayload = {
 };
 
 function readErrorMessage(error: unknown): string {
+  return readErrorMessageAtDepth(error, 0);
+}
+
+function readErrorMessageAtDepth(error: unknown, depth: number): string {
+  if (depth > 2) return "";
   if (error instanceof Error) {
     return `${error.name}: ${error.message}`.trim();
   }
   if (typeof error === "string") return error.trim();
   if (!error || typeof error !== "object") return "";
   const record = error as Record<string, unknown>;
-  const message = String(record.message ?? "").trim();
-  const name = String(record.name ?? "").trim();
-  return [name, message].filter(Boolean).join(": ");
+  const messageParts = [
+    record.name,
+    record.message,
+    record.reason,
+    record.type,
+    record.href,
+    record.src,
+    record.url,
+  ]
+    .map((value) => String(value ?? "").trim())
+    .filter(Boolean);
+  const nestedPayloadMessage = readErrorMessageAtDepth(record.payload, depth + 1);
+  const nestedDetailMessage = readErrorMessageAtDepth(record.detail, depth + 1);
+  const nestedErrorMessage = readErrorMessageAtDepth(record.error, depth + 1);
+  return [...messageParts, nestedPayloadMessage, nestedDetailMessage, nestedErrorMessage]
+    .filter(Boolean)
+    .join(": ");
 }
 
-function isLikelyModuleLoadFailure(error: unknown): boolean {
+function isLikelyModuleLoadFailure(error: unknown, options?: { force?: boolean }): boolean {
+  if (options?.force) return true;
   const message = readErrorMessage(error).toLowerCase();
   if (!message) return false;
   return MODULE_LOAD_ERROR_PATTERNS.some((pattern) => message.includes(pattern));
@@ -139,9 +172,9 @@ async function reloadAfterVersionProbe(): Promise<void> {
   }, delayMs);
 }
 
-function attemptModuleLoadRecovery(error: unknown): boolean {
+function attemptModuleLoadRecovery(error: unknown, options?: { force?: boolean }): boolean {
   if (typeof window === "undefined") return false;
-  if (!isLikelyModuleLoadFailure(error)) return false;
+  if (!isLikelyModuleLoadFailure(error, options)) return false;
   if (!shouldAttemptModuleReload()) return false;
   markModuleReloadAttempt();
   void reloadAfterVersionProbe();
@@ -193,46 +226,17 @@ class ErrorBoundary extends React.Component<
   render() {
     if (!this.state.error) return this.props.children;
 
-    if (this.state.isRecoveringModuleLoad) {
-      return (
-        <div
-          style={{
-            display: "grid",
-            placeItems: "center",
-            minHeight: "100vh",
-            background: "#111113",
-            color: "rgba(245,245,247,0.92)",
-            fontFamily: "ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif",
-            padding: 24,
-          }}
-        >
-          <div style={{ maxWidth: 360 }}>
-            <div style={{ fontSize: 15, fontWeight: 650 }}>Updating Polynet</div>
-            <p style={{ margin: "8px 0 0", color: "rgba(245,245,247,0.62)", lineHeight: 1.45 }}>
-              The app loaded stale files from a previous deploy. Refreshing should restore the latest version.
-            </p>
-            <button
-              style={{
-                marginTop: 16,
-                padding: "8px 12px",
-                borderRadius: 10,
-                border: "1px solid rgba(255,255,255,0.12)",
-                background: "rgba(255,255,255,0.08)",
-                color: "rgba(245,245,247,0.92)",
-                cursor: "pointer",
-              }}
-              onClick={() => window.location.reload()}
-              type="button"
-            >
-              Refresh
-            </button>
-          </div>
-        </div>
-      );
-    }
-
     const message = this.state.error?.message ?? "Unknown error";
     const stack = this.state.error?.stack ?? "";
+    const title = this.state.isRecoveringModuleLoad ? "Updating Polynet" : "Refresh Polynet";
+    const copy = this.state.isRecoveringModuleLoad
+      ? "The app loaded stale files from a previous deploy. Refreshing should restore the latest version."
+      : "Something interrupted the web app. Refreshing usually restores the current session.";
+
+    if (IS_PRODUCTION_BUILD || this.state.isRecoveringModuleLoad) {
+      return <CrashRecoveryScreen title={title} copy={copy} buttonLabel="Refresh" />;
+    }
+
     return (
       <div style={{ padding: 24, fontFamily: "ui-sans-serif, system-ui, sans-serif" }}>
         <h1 style={{ margin: 0, fontSize: 18 }}>Polynet Web UI crashed</h1>
@@ -268,6 +272,44 @@ class ErrorBoundary extends React.Component<
   }
 }
 
+function CrashRecoveryScreen(props: { title: string; copy: string; buttonLabel: string }) {
+  return (
+    <div
+      style={{
+        display: "grid",
+        placeItems: "center",
+        minHeight: "100vh",
+        background: "#111113",
+        color: "rgba(245,245,247,0.92)",
+        fontFamily: "ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif",
+        padding: 24,
+      }}
+    >
+      <div style={{ maxWidth: 360 }}>
+        <div style={{ fontSize: 15, fontWeight: 650 }}>{props.title}</div>
+        <p style={{ margin: "8px 0 0", color: "rgba(245,245,247,0.62)", lineHeight: 1.45 }}>
+          {props.copy}
+        </p>
+        <button
+          style={{
+            marginTop: 16,
+            padding: "8px 12px",
+            borderRadius: 10,
+            border: "1px solid rgba(255,255,255,0.12)",
+            background: "rgba(255,255,255,0.08)",
+            color: "rgba(245,245,247,0.92)",
+            cursor: "pointer",
+          }}
+          onClick={() => window.location.reload()}
+          type="button"
+        >
+          {props.buttonLabel}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 try {
   const savedTheme = parseAppTheme(localStorage.getItem("polynet-theme") ?? localStorage.getItem("arx-theme"));
   applyAppThemeAttributes(savedTheme ?? "polynet", document.documentElement);
@@ -287,13 +329,14 @@ if (typeof window !== "undefined") {
     const detail =
       preloadEvent.payload ??
       ((preloadEvent.detail as Record<string, unknown> | null)?.payload ?? preloadEvent.detail);
-    if (attemptModuleLoadRecovery(detail)) {
-      captureAppException(detail, {
+    const recoveryError = detail ?? new Error("vite:preloadError");
+    if (attemptModuleLoadRecovery(recoveryError, { force: true })) {
+      captureAppException(recoveryError, {
         tags: {
           preload_error: true,
           module_load_recovery: true,
         },
-        extras: buildModuleLoadRecoveryExtras(detail),
+        extras: buildModuleLoadRecoveryExtras(recoveryError),
       });
       preloadEvent.preventDefault?.();
     }
