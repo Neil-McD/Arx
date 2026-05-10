@@ -12,7 +12,11 @@ import {
   sendInitializedNotification,
 } from "./mcpHttpClient.ts";
 import type { NativeToolExecutionResult } from "../shared/nativeToolLoop.ts";
-import { applyDiscoverAppResultPolicyToText } from "../shared/discoverCatalog.ts";
+import {
+  applyDiscoverAppResultPolicyToText,
+  getDiscoverAppDisabledToolReason,
+  validateDiscoverAppSecretForCatalogAppId,
+} from "../shared/discoverCatalog.ts";
 
 export type RuntimeMountedMcpTool = {
   scope: "user" | "community";
@@ -436,6 +440,23 @@ export function createRuntimeMcpManager(params: {
           details: null,
         };
       }
+      const policyDisabledReason = getDiscoverAppDisabledToolReason(
+        tool.catalog_app_id,
+        tool.tool_name,
+      );
+      if (policyDisabledReason) {
+        return {
+          status: "error",
+          exitCode: null,
+          outputText: "",
+          errorCode: "mounted_app_tool_blocked_by_policy",
+          errorMessage: policyDisabledReason,
+          details: {
+            ...buildToolDetails(tool),
+            policy_blocked: true,
+          },
+        };
+      }
       const executionStartedAt = Date.now();
       const argumentsObject = sanitizeMountedMcpArguments(
         params.argumentsObject,
@@ -474,6 +495,30 @@ export function createRuntimeMcpManager(params: {
                 ? "Mounted community app not found."
                 : "Mounted platform app not found.",
             details: buildToolDetails(tool),
+          };
+          await emitExecutionCompleted({
+            status: result.status,
+            latencyMs: Date.now() - executionStartedAt,
+            errorCode: result.errorCode,
+            refreshedSession: false,
+          });
+          return result;
+        }
+        const secretPolicy = validateDiscoverAppSecretForCatalogAppId(
+          bundle.app.catalogAppId ?? tool.catalog_app_id,
+          bundle.secret,
+        );
+        if (!secretPolicy.ok) {
+          const result = {
+            status: "error" as const,
+            exitCode: null,
+            outputText: "",
+            errorCode: "mounted_app_connection_secret_policy_rejected",
+            errorMessage: secretPolicy.message,
+            details: {
+              ...buildToolDetails(tool),
+              policy_blocked: true,
+            },
           };
           await emitExecutionCompleted({
             status: result.status,

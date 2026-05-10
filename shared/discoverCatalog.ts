@@ -55,6 +55,20 @@ export type DiscoverAppRuntimePolicy = {
 
 export type DiscoverAppMcpRequestHeaders = Record<string, string>;
 
+export type DiscoverAppToolPolicy = {
+  defaultEnabledNamePrefixes?: string[];
+  allowOnlyDefaultEnabled?: boolean;
+  disabledNamePrefixes?: string[];
+  disabledNameSegments?: string[];
+  disabledReason: string;
+};
+
+export type DiscoverAppCredentialPolicy = {
+  allowedSecretPrefixes?: string[];
+  rejectedSecretPrefixes?: string[];
+  rejectionMessage: string;
+};
+
 export type DiscoverAppOAuthClientConfig =
   | {
       mode: "dynamic_registration";
@@ -74,6 +88,8 @@ export type DiscoverAppIntegrationProfile = {
   contextStrategy: DiscoverAppContextStrategy;
   resultPolicy: DiscoverAppResultPolicy;
   runtimePolicy: DiscoverAppRuntimePolicy;
+  toolPolicy?: DiscoverAppToolPolicy;
+  credentialPolicy?: DiscoverAppCredentialPolicy;
   mcpRequestHeaders?: DiscoverAppMcpRequestHeaders;
   oauthClient?: DiscoverAppOAuthClientConfig;
 };
@@ -221,6 +237,7 @@ export type DiscoverAppCatalogEntry = {
   docsUrl: string;
   logoUrl: string | null;
   logoUrlDark?: string | null;
+  relatedSkillCatalogId?: string;
   personalConnect: DiscoverAppPersonalConnectTemplate;
 };
 
@@ -243,6 +260,27 @@ function buildDiscoverAppRuntimePolicy(args: {
   return {
     defaultToolRisk: args.defaultToolRisk,
     declaredIntents: args.declaredIntents,
+  };
+}
+
+function buildMediaGenerationOAuthProfile(args: {
+  declaredIntents: string[];
+}): DiscoverAppIntegrationProfile {
+  return {
+    adapterKind: "remote_mcp_oauth",
+    readiness: "oauth_planned",
+    identityScope: "catalog_singleton",
+    authMode: "oauth",
+    validationKind: "hosted_oauth_mcp_planned",
+    contextStrategy: "artifact_reference",
+    resultPolicy: buildDiscoverAppResultPolicy({
+      maxToolCount: 16,
+      maxResultBytes: 6_000,
+    }),
+    runtimePolicy: buildDiscoverAppRuntimePolicy({
+      defaultToolRisk: "sensitive",
+      declaredIntents: args.declaredIntents,
+    }),
   };
 }
 
@@ -401,6 +439,44 @@ export const DISCOVER_APP_INTEGRATION_PROFILE_OVERRIDES = {
       clientSecretEnv: "ASANA_MCP_CLIENT_SECRET",
     },
   },
+  heygen: buildMediaGenerationOAuthProfile({
+    declaredIntents: [
+      "avatar_video_generate",
+      "video_translate",
+      "media_job_poll",
+      "artifact_export",
+    ],
+  }),
+  higgsfield: buildMediaGenerationOAuthProfile({
+    declaredIntents: [
+      "image_generate",
+      "video_generate",
+      "generation_history",
+      "asset_reference",
+      "credit_metered_generation",
+    ],
+  }),
+  hyperframes: {
+    adapterKind: "cli_sandbox",
+    readiness: "cli_sandbox_planned",
+    identityScope: "catalog_singleton",
+    authMode: "custom",
+    validationKind: "sandbox_bridge_planned",
+    contextStrategy: "artifact_reference",
+    resultPolicy: buildDiscoverAppResultPolicy({
+      maxToolCount: 8,
+      maxResultBytes: 4_000,
+    }),
+    runtimePolicy: buildDiscoverAppRuntimePolicy({
+      defaultToolRisk: "sensitive",
+      declaredIntents: [
+        "html_video_compose",
+        "video_preview",
+        "video_render",
+        "artifact_export",
+      ],
+    }),
+  },
   airtable: {
     adapterKind: "remote_mcp_token",
     readiness: "ready_token",
@@ -416,6 +492,81 @@ export const DISCOVER_APP_INTEGRATION_PROFILE_OVERRIDES = {
       defaultToolRisk: "write",
       declaredIntents: ["record_search", "record_update", "base_context"],
     }),
+  },
+  stripe: {
+    adapterKind: "remote_mcp_token",
+    readiness: "ready_token",
+    identityScope: "catalog_singleton",
+    authMode: "token",
+    validationKind: "mcp_initialize_tools_list",
+    contextStrategy: "search_then_fetch",
+    resultPolicy: buildDiscoverAppResultPolicy({
+      maxToolCount: 32,
+      maxResultBytes: 10_000,
+    }),
+    runtimePolicy: buildDiscoverAppRuntimePolicy({
+      defaultToolRisk: "sensitive",
+      declaredIntents: [
+        "stripe_account_read",
+        "customer_context_read",
+        "subscription_context_read",
+        "invoice_context_read",
+        "payment_context_read",
+        "stripe_docs_search",
+      ],
+    }),
+    toolPolicy: {
+      allowOnlyDefaultEnabled: true,
+      defaultEnabledNamePrefixes: [
+        "get_",
+        "list_",
+        "query_",
+        "read_",
+        "retrieve_",
+        "search_",
+      ],
+      disabledNamePrefixes: [
+        "approve_",
+        "cancel_",
+        "capture_",
+        "close_",
+        "confirm_",
+        "create_",
+        "delete_",
+        "expire_",
+        "finalize_",
+        "pay_",
+        "refund_",
+        "reverse_",
+        "submit_",
+        "update_",
+        "void_",
+      ],
+      disabledNameSegments: [
+        "approve",
+        "cancel",
+        "capture",
+        "close",
+        "confirm",
+        "create",
+        "delete",
+        "expire",
+        "finalize",
+        "pay",
+        "reverse",
+        "submit",
+        "update",
+        "void",
+      ],
+      disabledReason:
+        "Stripe MCP mutation tools are disabled until Polynet has explicit per-tool approval and provider permission controls.",
+    },
+    credentialPolicy: {
+      allowedSecretPrefixes: ["rk_test_", "rk_live_"],
+      rejectedSecretPrefixes: ["sk_test_", "sk_live_", "pk_test_", "pk_live_"],
+      rejectionMessage:
+        "Use a Stripe restricted API key that starts with rk_test_ or rk_live_. Secret and publishable keys are not accepted for Polynet's Stripe MCP harness.",
+    },
   },
   shopify: {
     adapterKind: "custom_remote_mcp",
@@ -450,7 +601,6 @@ const DISCOVER_APP_PLANNED_PROFILE_KINDS = {
   "google-drive": "backplane_mcp",
   "google-sheets": "backplane_mcp",
   "google-calendar": "backplane_mcp",
-  stripe: "remote_mcp_oauth",
   figma: "remote_mcp_oauth",
   canva: "remote_mcp_oauth",
   youtube: "direct_api",
@@ -470,8 +620,6 @@ const DISCOVER_APP_PLANNED_PROFILE_KINDS = {
   zendesk: "backplane_mcp",
   n8n: "backplane_mcp",
   make: "backplane_mcp",
-  heygen: "remote_mcp_oauth",
-  hyperframes: "cli_sandbox",
   remotion: "cli_sandbox",
   slack: "remote_mcp_oauth",
   discord: "backplane_mcp",
@@ -810,6 +958,135 @@ export function applyDiscoverAppResultPolicyToText(
   const budget = Math.max(0, maxResultBytes - suffixBytes.byteLength);
   const outputText = `${new TextDecoder().decode(encoded.slice(0, budget))}${suffix}`;
   return { outputText, truncated: true, maxResultBytes };
+}
+
+function normalizeDiscoverAppToolName(value: unknown): string {
+  return String(value ?? "").trim().toLowerCase();
+}
+
+function splitDiscoverAppToolNameSegments(value: string): string[] {
+  return value.split(/[^a-z0-9]+/g).filter(Boolean);
+}
+
+function getDiscoverAppToolPolicy(
+  catalogAppId: unknown,
+): DiscoverAppToolPolicy | null {
+  const app = findDiscoverAppCatalogEntryById(catalogAppId);
+  return app ? resolveDiscoverAppIntegrationProfile(app).toolPolicy ?? null : null;
+}
+
+function getDiscoverAppCredentialPolicy(
+  catalogAppId: unknown,
+): DiscoverAppCredentialPolicy | null {
+  const app = findDiscoverAppCatalogEntryById(catalogAppId);
+  return app ? resolveDiscoverAppIntegrationProfile(app).credentialPolicy ?? null : null;
+}
+
+function discoverAppToolNameMatchesPrefixes(
+  toolName: string,
+  prefixes: readonly string[] | undefined,
+): boolean {
+  if (!prefixes?.length) return false;
+  return prefixes.some((prefix) => toolName.startsWith(prefix.toLowerCase()));
+}
+
+function discoverAppToolNameHasDisabledSegment(
+  toolName: string,
+  segments: readonly string[] | undefined,
+): boolean {
+  if (!segments?.length) return false;
+  const disabled = new Set(segments.map((segment) => segment.toLowerCase()));
+  return splitDiscoverAppToolNameSegments(toolName).some((segment) =>
+    disabled.has(segment),
+  );
+}
+
+export function getDiscoverAppDisabledToolReason(
+  catalogAppId: unknown,
+  toolName: unknown,
+): string | null {
+  const policy = getDiscoverAppToolPolicy(catalogAppId);
+  if (!policy) return null;
+  const normalizedToolName = normalizeDiscoverAppToolName(toolName);
+  if (!normalizedToolName) return policy.disabledReason;
+  if (
+    discoverAppToolNameMatchesPrefixes(
+      normalizedToolName,
+      policy.disabledNamePrefixes,
+    ) ||
+    discoverAppToolNameHasDisabledSegment(
+      normalizedToolName,
+      policy.disabledNameSegments,
+    )
+  ) {
+    return policy.disabledReason;
+  }
+  if (
+    policy.allowOnlyDefaultEnabled &&
+    policy.defaultEnabledNamePrefixes?.length &&
+    !discoverAppToolNameMatchesPrefixes(
+      normalizedToolName,
+      policy.defaultEnabledNamePrefixes,
+    )
+  ) {
+    return policy.disabledReason;
+  }
+  return null;
+}
+
+export function isDiscoverAppToolDisabledByPolicy(
+  catalogAppId: unknown,
+  toolName: unknown,
+): boolean {
+  return getDiscoverAppDisabledToolReason(catalogAppId, toolName) !== null;
+}
+
+export function filterDiscoverAppEnabledToolNames(
+  catalogAppId: unknown,
+  toolNames: readonly string[],
+): string[] {
+  return toolNames.filter(
+    (toolName) => !isDiscoverAppToolDisabledByPolicy(catalogAppId, toolName),
+  );
+}
+
+export function buildDiscoverAppDefaultEnabledToolNames(
+  catalogAppId: unknown,
+  tools: readonly { tool_name?: unknown }[],
+): string[] {
+  const policy = getDiscoverAppToolPolicy(catalogAppId);
+  const names = tools
+    .map((tool) => String(tool.tool_name ?? "").trim())
+    .filter(Boolean);
+  const allowed = filterDiscoverAppEnabledToolNames(catalogAppId, names);
+  if (!policy?.defaultEnabledNamePrefixes?.length) return allowed;
+  return allowed.filter((toolName) =>
+    discoverAppToolNameMatchesPrefixes(
+      normalizeDiscoverAppToolName(toolName),
+      policy.defaultEnabledNamePrefixes,
+    ),
+  );
+}
+
+export function validateDiscoverAppSecretForCatalogAppId(
+  catalogAppId: unknown,
+  secret: unknown,
+): { ok: true } | { ok: false; message: string } {
+  const policy = getDiscoverAppCredentialPolicy(catalogAppId);
+  if (!policy) return { ok: true };
+  const normalizedSecret = String(secret ?? "").trim();
+  if (!normalizedSecret) return { ok: true };
+  const rejected = policy.rejectedSecretPrefixes?.some((prefix) =>
+    normalizedSecret.startsWith(prefix),
+  );
+  if (rejected) return { ok: false, message: policy.rejectionMessage };
+  if (policy.allowedSecretPrefixes?.length) {
+    const allowed = policy.allowedSecretPrefixes.some((prefix) =>
+      normalizedSecret.startsWith(prefix),
+    );
+    if (!allowed) return { ok: false, message: policy.rejectionMessage };
+  }
+  return { ok: true };
 }
 
 export function resolveDiscoverAppCatalogConnectPolicy(args: {
@@ -1495,33 +1772,35 @@ export const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
     tagline: "Customers, subscriptions, invoices, and payments",
     description:
       "Important billing and commerce context surface, but PolyNet billing authority must remain entitlement-driven and server-verified.",
-    supportLabel: "Needs richer auth",
+    supportLabel: "Ready with restricted key",
     supportNote:
-      "Stripe hosts a remote OAuth MCP server and also supports a local restricted-key MCP server; PolyNet should not expose it as ready until hosted auth and permission scoping are explicit.",
+      "Stripe's hosted remote MCP server accepts a restricted API key as a bearer token. Secret and publishable keys are rejected.",
     heroNote:
       "Best for commerce operations, customer context, invoices, and subscription support workflows.",
     capabilities: [
       "Inspect customers, invoices, products, subscriptions, and payments.",
       "Support creator commerce workflows without replacing PolyNet entitlement checks.",
-      "Use restricted permissions and audit trails before enabling write operations.",
+      "Keep mutation-shaped Stripe MCP tools blocked until explicit per-tool approval exists.",
     ],
     websiteUrl: "https://stripe.com",
-    docsUrl: "https://github.com/stripe/ai",
+    docsUrl: "https://docs.stripe.com/mcp",
     logoUrl: "/app-logos/stripe.svg",
     personalConnect: {
       connectionKind: "known",
-      availability: "later",
-      authMethod: "oauth",
+      availability: "ready",
+      authMethod: "token",
       connectionStrategy: {
-        defaultMode: "oauth",
-        supportedModes: ["oauth", "token"],
+        defaultMode: "token",
+        supportedModes: ["token"],
       },
-      endpointUrl: "https://mcp.stripe.com",
-      authType: null,
-      authLabel: "OAuth or restricted key",
-      secretLabel: "Stripe restricted key",
+      endpointUrl: "https://mcp.stripe.com/",
+      authType: "bearer",
+      authLabel: "Bearer token",
+      secretLabel: "Stripe restricted API key",
+      tokenHelpUrl: "https://dashboard.stripe.com/apikeys",
+      tokenHelpLabel: "Create restricted key",
       note:
-        "Catalog-first until PolyNet can separate Stripe MCP operations from PolyNet's own authoritative billing and entitlement contract.",
+        "Connects to Stripe through your own restricted API key. Secret and publishable keys are rejected, mutation-shaped Stripe tools stay blocked, and Stripe MCP does not become authoritative for PolyNet billing, entitlements, or payouts.",
     },
   },
   {
@@ -2245,24 +2524,59 @@ export const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
     },
   },
   {
+    id: "higgsfield",
+    name: "Higgsfield",
+    tagline: "Agentic image, video, and creative asset generation",
+    description:
+      "Creative-generation MCP surface for producing images, videos, character assets, and campaign visuals from an agent workflow.",
+    supportLabel: "Media MCP planned",
+    supportNote:
+      "Higgsfield publishes a hosted MCP URL, but PolyNet should make it live only after media-job polling, artifact references, and credit/cost controls are wired.",
+    heroNote:
+      "Best for creator and marketing communities that want image and video generation inside the harness.",
+    capabilities: [
+      "Generate images, videos, and character-driven creative assets from natural language briefs.",
+      "Use previous generations and history as references for iterative creative work.",
+      "Route outputs through artifact references instead of dumping binary media into chat context.",
+    ],
+    websiteUrl: "https://higgsfield.ai",
+    docsUrl: "https://higgsfield.ai/mcp",
+    logoUrl: null,
+    personalConnect: {
+      connectionKind: "known",
+      availability: "later",
+      authMethod: "oauth",
+      connectionStrategy: {
+        defaultMode: "oauth",
+        supportedModes: ["oauth"],
+      },
+      endpointUrl: "https://mcp.higgsfield.ai",
+      authType: "oauth",
+      authLabel: "OAuth",
+      note:
+        "Higgsfield should stay planned until PolyNet has an async media job contract, provider credit guardrails, and artifact storage/display flow.",
+    },
+  },
+  {
     id: "hyperframes",
     name: "HyperFrames",
     tagline: "HTML, CSS, and JS video compositions",
     description:
       "Agent-oriented video authoring framework for composing videos as web documents and rendering them into production media.",
-    supportLabel: "Skill path",
+    supportLabel: "Sandbox CLI planned",
     supportNote:
-      "HyperFrames currently looks more like an agent skill and local rendering toolchain than a normal hosted MCP server.",
+      "HyperFrames fits PolyNet as a sandboxed CLI/media-job adapter, not as a hosted remote MCP connector.",
     heroNote:
       "Best for builder communities that want agents to generate video from structured HTML scenes.",
     capabilities: [
-      "Compose videos from HTML, CSS, and JavaScript.",
-      "Render agent-authored scenes into MP4/WebM outputs.",
-      "Pair with creative MCP apps when PolyNet supports local or sandboxed rendering tools.",
+      "Compose videos from HTML, CSS, and JavaScript using agent-friendly project files.",
+      "Run preview, lint, inspect, snapshot, and render commands through a future sandbox bridge.",
+      "Return preview and rendered media artifact references instead of raw process output.",
     ],
     websiteUrl: "https://hyperframes.heygen.com",
-    docsUrl: "https://hyperframes.heygen.com",
+    docsUrl: "https://hyperframes.heygen.com/packages/cli",
     logoUrl: "/app-logos/hyperframes.svg",
+    relatedSkillCatalogId: "hyperframes",
     personalConnect: {
       connectionKind: "known",
       availability: "later",
@@ -2273,9 +2587,9 @@ export const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
       },
       endpointUrl: null,
       authType: null,
-      authLabel: "Skill or local toolchain",
+      authLabel: "Sandboxed CLI",
       note:
-        "Keep HyperFrames informational until PolyNet has a safe skill/runtime path for rendering, rather than pretending it is a hosted MCP endpoint.",
+        "Keep HyperFrames non-connectable until PolyNet can run the CLI in bounded sandbox compute and store generated video artifacts.",
     },
   },
   {

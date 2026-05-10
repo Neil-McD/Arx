@@ -1,5 +1,11 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import {
+  DISCOVER_SKILL_CATALOG,
+  deriveDiscoverSkillMentionToken,
+  formatDiscoverSkillInvocation,
+} from "../shared/discoverSkillCatalog.ts";
+import { buildSkillMentionToken } from "../shared/skillMentionToken.ts";
 
 function readText(path: string | URL): string {
   return readFileSync(path, "utf8");
@@ -48,6 +54,9 @@ function main() {
   const webDiscoverAppCatalog = readText(new URL("../apps/web/src/lib/discoverCatalog.ts", import.meta.url));
   const webDiscoverSkillCatalog = readText(
     new URL("../apps/web/src/lib/discoverSkillCatalog.ts", import.meta.url),
+  );
+  const sharedDiscoverSkillCatalog = readText(
+    new URL("../shared/discoverSkillCatalog.ts", import.meta.url),
   );
   const cloudCommunityAccessGateway = readText(
     new URL("../shared/cloudCommunityAccessGateway.ts", import.meta.url),
@@ -451,6 +460,60 @@ function main() {
     'export * from "../../../../shared/discoverSkillCatalog";',
     "web skill catalog module delegates to shared canonical catalog",
   );
+  assertIncludes(
+    sharedDiscoverSkillCatalog,
+    'catalogSkillId: "hyperframes"',
+    "Discover skill catalog includes canonical HyperFrames skill",
+  );
+  assertIncludes(
+    sharedDiscoverSkillCatalog,
+    "If execution tools are not available, produce the composition plan and code/file structure, but do not claim a preview or render completed.",
+    "HyperFrames video skill keeps execution claims tied to verified tools",
+  );
+  assertNotIncludes(
+    sharedDiscoverSkillCatalog,
+    "invocation:",
+    "Discover skills do not keep invocation as a second source of truth",
+  );
+  assertNotIncludes(
+    discoverPanel,
+    ".invocation",
+    "Discover UI does not read manual skill invocation fields",
+  );
+  assertIncludes(
+    discoverPanel,
+    "selectedAppRelatedSkillActionLabel",
+    "Discover app detail can project a related skill action",
+  );
+  assertIncludes(
+    discoverPanel,
+    "findRelatedDiscoverSkillForApp(selectedApp, discoverSkills)",
+    "Discover app detail resolves one related skill until bundle UX exists",
+  );
+  assertNotIncludes(
+    discoverPanel,
+    "listRelatedDiscoverSkillsForApp",
+    "Discover app detail does not carry a multi-skill helper before bundle UX exists",
+  );
+  assertIncludes(
+    discoverPanel,
+    "handleAddSkill(selectedAppPrimaryRelatedSkill)",
+    "Discover related app skill action reuses the canonical skill install flow",
+  );
+  for (const skill of DISCOVER_SKILL_CATALOG) {
+    if (!skill.installInput) continue;
+    const expectedToken = buildSkillMentionToken(skill.installInput.name, "");
+    assert.equal(
+      deriveDiscoverSkillMentionToken(skill),
+      expectedToken,
+      `expected ${skill.id} invocation token to derive from installInput.name`,
+    );
+    assert.equal(
+      formatDiscoverSkillInvocation(skill),
+      `$${expectedToken}`,
+      `expected ${skill.id} display invocation to match derived token`,
+    );
+  }
 
   console.log(
     "PASS: Discover lists only published communities, routes access through funnel gates, and reads marketplace catalog through the server gateway.",

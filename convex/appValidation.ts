@@ -27,6 +27,7 @@ import { sha256HexText } from "./providerConnections";
 import {
   applyDiscoverAppDefaultToolRiskFloor,
   resolveDiscoverAppResultPolicyForCatalogAppId,
+  validateDiscoverAppSecretForCatalogAppId,
 } from "../shared/discoverCatalog";
 
 type ValidationStageId =
@@ -65,6 +66,36 @@ function createBaseValidationStages(): ValidationStage[] {
       detail: null,
     }),
   );
+}
+
+function createErrorValidationReport(
+  validationError: string,
+): ValidationReport {
+  return {
+    validation_status: "error",
+    validation_error: validationError,
+    tool_count: 0,
+    stages: [
+      {
+        id: "endpoint_reachable",
+        label: VALIDATION_STAGE_LABELS.endpoint_reachable,
+        status: "error",
+        detail: validationError,
+      },
+      {
+        id: "mcp_initialized",
+        label: VALIDATION_STAGE_LABELS.mcp_initialized,
+        status: "skipped",
+        detail: null,
+      },
+      {
+        id: "tools_discovered",
+        label: VALIDATION_STAGE_LABELS.tools_discovered,
+        status: "skipped",
+        detail: null,
+      },
+    ],
+  };
 }
 
 function setValidationStage(
@@ -385,49 +416,38 @@ export const validateDeveloperAppInternal = internalAction({
       stages: createBaseValidationStages(),
     };
 
-    try {
-      const result = await validateStreamableHttpApp({
-        app,
-        secret,
-      });
-      validationStatus = result.validationStatus;
-      validationError = result.validationError;
-      toolsJson = result.toolsJson;
-      fetchedAt = result.fetchedAt;
-      snapshotVersion = result.snapshotVersion;
-      validationReport = result.validationReport;
-    } catch (error) {
+    const secretPolicy = validateDiscoverAppSecretForCatalogAppId(
+      app.catalogAppId,
+      secret,
+    );
+    if (!secretPolicy.ok) {
       validationStatus = "error";
-      validationError =
-        error instanceof Error ? normalizeString(error.message, 2_000) : "developer_app_validation_failed";
+      validationError = secretPolicy.message;
       toolsJson = [];
       fetchedAt = Date.now();
       snapshotVersion = `error-${fetchedAt}`;
-      validationReport = {
-        validation_status: "error",
-        validation_error: validationError,
-        tool_count: 0,
-        stages: [
-          {
-            id: "endpoint_reachable",
-            label: VALIDATION_STAGE_LABELS.endpoint_reachable,
-            status: "error",
-            detail: validationError,
-          },
-          {
-            id: "mcp_initialized",
-            label: VALIDATION_STAGE_LABELS.mcp_initialized,
-            status: "skipped",
-            detail: null,
-          },
-          {
-            id: "tools_discovered",
-            label: VALIDATION_STAGE_LABELS.tools_discovered,
-            status: "skipped",
-            detail: null,
-          },
-        ],
-      };
+      validationReport = createErrorValidationReport(validationError);
+    } else {
+      try {
+        const result = await validateStreamableHttpApp({
+          app,
+          secret,
+        });
+        validationStatus = result.validationStatus;
+        validationError = result.validationError;
+        toolsJson = result.toolsJson;
+        fetchedAt = result.fetchedAt;
+        snapshotVersion = result.snapshotVersion;
+        validationReport = result.validationReport;
+      } catch (error) {
+        validationStatus = "error";
+        validationError =
+          error instanceof Error ? normalizeString(error.message, 2_000) : "developer_app_validation_failed";
+        toolsJson = [];
+        fetchedAt = Date.now();
+        snapshotVersion = `error-${fetchedAt}`;
+        validationReport = createErrorValidationReport(validationError);
+      }
     }
 
     const snapshotId: any = await ctx.runMutation(internal.appValidation.createAppToolSnapshotInternal, {

@@ -23,7 +23,10 @@ import type {
 import type { UserPlatformInstalledSkill } from "../../../../shared/userPlatformSkillTypes";
 import { DiscoverCommunityCard } from "../../../../shared/DiscoverCommunityCard";
 import {
+  deriveDiscoverSkillMentionToken,
   findMatchingDiscoverSkillInstall,
+  findRelatedDiscoverSkillForApp,
+  formatDiscoverSkillInvocation,
   type DiscoverSkillCatalogEntry,
 } from "../lib/discoverSkillCatalog";
 import {
@@ -293,13 +296,6 @@ function findMatchingDiscoverAppMount<TMount extends DiscoverAppMountCandidate>(
   );
 }
 
-function readDiscoverSkillInvocationToken(invocation: string): string | null {
-  const trimmed = invocation.trim();
-  if (!trimmed.startsWith("$")) return null;
-  const token = trimmed.slice(1).trim().toLowerCase();
-  return token || null;
-}
-
 function findMatchingOwnedSkillPackage(
   skill: DiscoverSkillCatalogEntry,
   packages: SkillPackageSummary[],
@@ -310,7 +306,7 @@ function findMatchingOwnedSkillPackage(
       null;
     if (catalogMatch) return catalogMatch;
   }
-  const token = readDiscoverSkillInvocationToken(skill.invocation);
+  const token = deriveDiscoverSkillMentionToken(skill);
   if (!token) return null;
   return (
     packages.find(
@@ -484,6 +480,17 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
       communityAppMounts,
     );
   }, [communityAppMounts, discoverApps, selectedApp]);
+  const selectedAppPrimaryRelatedSkill = useMemo(() => {
+    if (!selectedApp) return null;
+    return findRelatedDiscoverSkillForApp(selectedApp, discoverSkills);
+  }, [discoverSkills, selectedApp]);
+  const selectedAppRelatedSkillInstall = useMemo(() => {
+    if (!selectedAppPrimaryRelatedSkill) return null;
+    return findMatchingDiscoverSkillInstall(
+      selectedAppPrimaryRelatedSkill,
+      userPlatformSkills,
+    );
+  }, [selectedAppPrimaryRelatedSkill, userPlatformSkills]);
   const selectedPersonalSkillInstall = useMemo(() => {
     if (!selectedSkill) return null;
     return findMatchingDiscoverSkillInstall(selectedSkill, userPlatformSkills);
@@ -539,6 +546,7 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
     setCommunityConnectResult(null);
     setAppConnectTarget("personal");
     setIsPersonalConnectModalOpen(false);
+    setSelectedSkillActionError(null);
   }, [selectedApp]);
 
   useEffect(() => {
@@ -579,6 +587,14 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
         : isDiscoverAppPersonallyConnectable(selectedApp)
           ? `Add to ${manageableCommunityTargetName}`
           : null
+      : null;
+  const selectedAppRelatedSkillActionLabel =
+    selectedApp &&
+    selectedAppPrimaryRelatedSkill &&
+    !isDiscoverAppPersonallyConnectable(selectedApp)
+      ? selectedAppRelatedSkillInstall
+        ? `Manage ${selectedAppPrimaryRelatedSkill.name} skill`
+        : `Add ${selectedAppPrimaryRelatedSkill.name} skill`
       : null;
   const selectedSkillPersonalActionLabel = selectedSkill
     ? selectedPersonalSkillInstall
@@ -622,6 +638,10 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
         communitySkillAttachmentError ??
         ownedSkillPackagesError
       : null);
+  const selectedAppRelatedSkillErrorMessage =
+    selectedAppPrimaryRelatedSkill && !selectedSkill
+      ? selectedSkillActionError
+      : null;
 
   const resetAppConnectFeedback = () => {
     setPersonalConnectError(null);
@@ -906,6 +926,26 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
               {selectedApp.name}
             </div>
             <div className="agent-capability-toolbar-actions">
+              {selectedAppRelatedSkillActionLabel && selectedAppPrimaryRelatedSkill ? (
+                <button
+                  type="button"
+                  className="settings-cta discover-app-detail-action"
+                  onClick={() => void handleAddSkill(selectedAppPrimaryRelatedSkill)}
+                  disabled={
+                    isAuthRecoveringSignedIn ||
+                    isLoadingUserPlatformSkills ||
+                    isCreatingUserPlatformSkill
+                  }
+                >
+                  {isAuthRecoveringSignedIn
+                    ? "Restoring account…"
+                    : isCreatingUserPlatformSkill
+                      ? "Adding…"
+                      : isLoadingUserPlatformSkills && !selectedAppRelatedSkillInstall
+                        ? "Checking…"
+                        : selectedAppRelatedSkillActionLabel}
+                </button>
+              ) : null}
               {selectedAppPersonalActionLabel ? (
                 <button
                   type="button"
@@ -978,6 +1018,9 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
           <div className="discover-card-desc">
             {selectedApp.description}
           </div>
+          {selectedAppRelatedSkillErrorMessage ? (
+            <div className="auth-error">{selectedAppRelatedSkillErrorMessage}</div>
+          ) : null}
         </div>
       </div>
     );
@@ -1183,6 +1226,15 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
                       {buildDiscoverAppSupportedModesLabel(selectedApp)}
                     </div>
                   </div>
+                  {selectedAppPrimaryRelatedSkill ? (
+                    <div className="discover-info-row">
+                      <div className="discover-info-label">Skill</div>
+                      <div className="discover-info-value">
+                        {selectedAppPrimaryRelatedSkill.name} ·{" "}
+                        {formatDiscoverSkillInvocation(selectedAppPrimaryRelatedSkill)}
+                      </div>
+                    </div>
+                  ) : null}
                   <div className="discover-info-row">
                     <div className="discover-info-label">Auth now</div>
                     <div className="discover-info-value">
@@ -1223,7 +1275,7 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
                   <div className="discover-info-row">
                     <div className="discover-info-label">Invocation</div>
                     <div className="discover-info-value">
-                      {selectedSkill.invocation}
+                      {formatDiscoverSkillInvocation(selectedSkill)}
                     </div>
                   </div>
                   <div className="discover-info-row">
@@ -1392,7 +1444,7 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
                               </div>
                               <div className="discover-skill-row-meta">
                                 <span className="discover-skill-row-token">
-                                  {skill.installInput ? skill.invocation : "Name-derived token"}
+                                  {formatDiscoverSkillInvocation(skill)}
                                 </span>
                                 <span>{skill.surface}</span>
                               </div>

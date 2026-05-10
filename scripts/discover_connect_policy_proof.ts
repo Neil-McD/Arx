@@ -164,6 +164,44 @@ function main() {
     "catalog_app_not_ready",
   );
 
+  const stripe = resolveDiscoverAppCatalogConnectPolicy({
+    catalogAppId: "stripe",
+    name: "Not Stripe",
+    endpointUrl: "https://mcp.stripe.com/",
+    authType: "bearer",
+  });
+  assert.equal(stripe.ok, true);
+  assert.deepEqual(
+    stripe,
+    {
+      ok: true,
+      catalogAppId: "stripe",
+      name: "Stripe",
+      endpointUrl: "https://mcp.stripe.com/",
+      authType: "bearer",
+      identityScope: "catalog_singleton",
+    },
+    "Stripe catalog policy should force the hosted restricted-key MCP endpoint",
+  );
+  assertRejected(
+    {
+      catalogAppId: "stripe",
+      name: "Stripe",
+      endpointUrl: "https://api.stripe.com",
+      authType: "bearer",
+    },
+    "catalog_app_endpoint_mismatch",
+  );
+  assertRejected(
+    {
+      catalogAppId: "stripe",
+      name: "Stripe",
+      endpointUrl: "https://mcp.stripe.com/",
+      authType: "oauth",
+    },
+    "catalog_app_auth_mismatch",
+  );
+
   const shopify = resolveDiscoverAppCatalogConnectPolicy({
     catalogAppId: "shopify",
     name: "Anything",

@@ -87,6 +87,11 @@ function main() {
   );
   assertIncludes(
     contract,
+    "Tool policy uses the Codex-style irreducible model: default-enabled tools, disabled tools, and a final execution-time deny check.",
+    "MCP app architecture contract tool policy rule",
+  );
+  assertIncludes(
+    contract,
     "Catalog app connection policy is server-authoritative",
     "MCP app architecture contract server-authoritative catalog policy rule",
   );
@@ -107,8 +112,18 @@ function main() {
   );
   assertIncludes(
     contract,
+    "Stripe's ready profile uses `https://mcp.stripe.com` with a user-owned restricted API key",
+    "MCP app architecture contract Stripe restricted-key rule",
+  );
+  assertIncludes(
+    contract,
     "Vercel's MCP profile stays planned until Polynet's client approval and operation-safety path are verified.",
     "MCP app architecture contract Vercel planned rule",
+  );
+  assertIncludes(
+    contract,
+    "Media-production apps must use an artifact/job contract.",
+    "MCP app architecture contract media production artifact rule",
   );
   assertIncludes(
     contract,
@@ -347,6 +362,26 @@ function main() {
       "Discover catalog app/community copy drift",
     );
   }
+  assertIncludes(
+    discoverCatalog,
+    "id: \"higgsfield\"",
+    "Discover catalog includes Higgsfield as a planned media MCP app",
+  );
+  assertIncludes(
+    discoverCatalog,
+    "https://mcp.higgsfield.ai",
+    "Discover catalog preserves Higgsfield provider MCP URL",
+  );
+  assertIncludes(
+    discoverCatalog,
+    "docsUrl: \"https://hyperframes.heygen.com/packages/cli\"",
+    "Discover catalog points HyperFrames at CLI docs",
+  );
+  assertIncludes(
+    discoverCatalog,
+    "Keep HyperFrames non-connectable until PolyNet can run the CLI in bounded sandbox compute and store generated video artifacts.",
+    "Discover catalog keeps HyperFrames non-connectable until sandbox artifact execution exists",
+  );
   assertNotIncludes(
     communitySettings,
     "No apps are attached to this community lens yet.",

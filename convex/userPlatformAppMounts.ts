@@ -30,8 +30,11 @@ import {
 } from "./mcpHttpClient";
 import {
   applyDiscoverAppResultPolicyToText,
+  buildDiscoverAppDefaultEnabledToolNames,
+  filterDiscoverAppEnabledToolNames,
   isDiscoverAppCatalogSingletonIdentity,
   resolveDiscoverAppCatalogConnectPolicy,
+  validateDiscoverAppSecretForCatalogAppId,
 } from "../shared/discoverCatalog";
 
 function coerceValidationReport(
@@ -202,6 +205,7 @@ type ConnectUserPlatformAppErrorCode =
   | "authenticated_user_required"
   | "connect_lookup_failed"
   | "developer_app_connection_secret_required"
+  | "developer_app_connection_secret_policy_rejected"
   | "developer_app_create_failed"
   | "developer_app_secret_store_failed"
   | "developer_app_validation_failed"
@@ -558,6 +562,8 @@ function buildConnectErrorMessage(
       return "Couldn't check your existing personal apps right now. Try again.";
     case "developer_app_connection_secret_required":
       return `Paste your ${appName} secret and try again.`;
+    case "developer_app_connection_secret_policy_rejected":
+      return `Use a valid ${appName} secret for this connection path.`;
     case "developer_app_create_failed":
       return `Couldn't prepare ${appName} for connection right now. Try again.`;
     case "developer_app_secret_store_failed":
@@ -676,11 +682,20 @@ function normalizeRuntimeSnapshotTools(
 function computeSelectedToolNames(
   mount: UserPlatformAppMountRow,
   tools: Array<{ tool_name: string }>,
+  catalogAppId?: string | null,
 ): string[] {
   const allToolNames = tools.map((tool) => tool.tool_name);
-  if (!Array.isArray(mount.enabledTools)) return allToolNames;
+  if (!Array.isArray(mount.enabledTools)) {
+    return buildDiscoverAppDefaultEnabledToolNames(
+      catalogAppId ?? null,
+      tools,
+    );
+  }
   const enabled = normalizeStringList(mount.enabledTools);
-  return enabled.filter((toolName) => allToolNames.includes(toolName));
+  return filterDiscoverAppEnabledToolNames(
+    catalogAppId ?? null,
+    enabled.filter((toolName) => allToolNames.includes(toolName)),
+  );
 }
 
 function deriveUserPlatformMountLiveState(args: {
@@ -721,7 +736,9 @@ function mapUserPlatformAppMountReadModel(args: {
   snapshot: AppToolSnapshotRow | null;
 }) {
   const tools = normalizeSnapshotTools(args.snapshot);
-  const selectedToolNames = new Set(computeSelectedToolNames(args.mount, tools));
+  const selectedToolNames = new Set(
+    computeSelectedToolNames(args.mount, tools, args.app.catalogAppId ?? null),
+  );
   const enabledTools = Array.from(selectedToolNames);
   const liveState = deriveUserPlatformMountLiveState({
     mount: args.mount,
@@ -759,7 +776,9 @@ function resolveRuntimeMountedUserPlatformAppTools(args: {
     return [];
   }
   const tools = normalizeRuntimeSnapshotTools(args.snapshot);
-  const selectedToolNames = new Set(computeSelectedToolNames(args.mount, tools));
+  const selectedToolNames = new Set(
+    computeSelectedToolNames(args.mount, tools, args.app.catalogAppId ?? null),
+  );
   return tools
     .filter((tool) => selectedToolNames.has(tool.tool_name))
     .map((tool) => ({
@@ -1074,6 +1093,7 @@ async function requireExistingUserPlatformMount(args: {
 
 function buildValidatedMountPatch(args: {
   mount: UserPlatformAppMountRow;
+  catalogAppId?: string | null;
   snapshot: AppToolSnapshotRow | null;
   enabled?: boolean;
   enabledTools?: unknown;
@@ -1082,10 +1102,13 @@ function buildValidatedMountPatch(args: {
   const tools = normalizeSnapshotTools(args.snapshot);
   const allToolNames = tools.map((tool) => tool.tool_name);
   const nextEnabledTools = Array.isArray(args.enabledTools)
-    ? normalizeStringList(args.enabledTools).filter((toolName) =>
-        allToolNames.includes(toolName),
+    ? filterDiscoverAppEnabledToolNames(
+        args.catalogAppId ?? null,
+        normalizeStringList(args.enabledTools).filter((toolName) =>
+          allToolNames.includes(toolName),
+        ),
       )
-    : computeSelectedToolNames(args.mount, tools);
+    : computeSelectedToolNames(args.mount, tools, args.catalogAppId ?? null);
   return {
     enabled: args.enabled ?? args.mount.enabled,
     enabledTools: nextEnabledTools,
@@ -1157,6 +1180,8 @@ export const getUserPlatformAppMountLifecycleContextInternal = internalQuery({
     return {
       mountId: mount._id,
       developerAppId: mount.developerAppId,
+      catalogAppId: app.catalogAppId ?? null,
+      appName: app.name,
       authType: app.authType,
     };
   },
@@ -1273,6 +1298,32 @@ export const executeUserPlatformMountedAppToolInternal = internalAction({
         details: null,
       };
     }
+    const secretPolicy = validateDiscoverAppSecretForCatalogAppId(
+      connectionBundle.app.catalogAppId ?? mountedTool.catalog_app_id,
+      connectionBundle.secret,
+    );
+    if (!secretPolicy.ok) {
+      return {
+        status: "error" as const,
+        exitCode: null,
+        outputText: "",
+        errorCode: "user_platform_app_connection_secret_policy_rejected",
+        errorMessage: secretPolicy.message,
+        details: {
+          user_platform_app: {
+            user_platform_app_mount_id: String(
+              mountedTool.user_platform_app_mount_id,
+            ),
+            developer_app_id: String(mountedTool.developer_app_id),
+            app_name: mountedTool.app_name,
+            tool_name: mountedTool.tool_name,
+            namespaced_tool_name: mountedTool.namespaced_tool_name,
+            risk_level: mountedTool.risk_level,
+            policy_blocked: true,
+          },
+        },
+      };
+    }
 
     try {
       const headers = buildDeveloperAppAuthHeaders({
@@ -1375,6 +1426,7 @@ export const patchUserPlatformAppMountsForDeveloperAppSnapshotInternal =
     handler: async (ctx, args) => {
       const snapshot = await getAppToolSnapshotById(ctx, args.toolSnapshotId);
       if (!snapshot) throw new Error("user_platform_app_snapshot_not_found");
+      const app = await getDeveloperAppById(ctx, args.developerAppId);
       const mounts = (await ctx.db
         .query("userPlatformAppMounts")
         .withIndex("by_app", (q: any) =>
@@ -1385,6 +1437,7 @@ export const patchUserPlatformAppMountsForDeveloperAppSnapshotInternal =
       for (const mount of mounts) {
         const patch = buildValidatedMountPatch({
           mount,
+          catalogAppId: app?.catalogAppId ?? null,
           snapshot,
           nowMs,
         });
@@ -1493,6 +1546,26 @@ export const connectUserPlatformApp = action({
     const endpointUrl = connectPolicy.endpointUrl;
     const authType = connectPolicy.authType;
     const normalizedSecret = normalizeString(args.secret, 10_000);
+    const secretPolicy = validateDiscoverAppSecretForCatalogAppId(
+      catalogAppId,
+      normalizedSecret,
+    );
+    if (!secretPolicy.ok) {
+      emitPersonalAppConnectTrace("personal_app_connect.secret_policy_rejected", {
+        connectAttemptId,
+        appName,
+        endpointUrl,
+        authType,
+        ok: false,
+        code: "developer_app_connection_secret_policy_rejected",
+      });
+      return buildConnectFailure({
+        code: "developer_app_connection_secret_policy_rejected",
+        appName,
+        connectAttemptId,
+        errorMessage: secretPolicy.message,
+      });
+    }
     let existingMount: {
       mount: UserPlatformAppMountRow;
       app: DeveloperAppRow;
@@ -1835,9 +1908,12 @@ export const connectUserPlatformApp = action({
           ),
         });
       }
-      const enabledTools = validation.snapshotTools
-        .map((tool) => normalizeString(tool.tool_name, 200))
-        .filter(Boolean);
+      const enabledTools = buildDiscoverAppDefaultEnabledToolNames(
+        catalogAppId,
+        validation.snapshotTools.map((tool) => ({
+          tool_name: normalizeString(tool.tool_name, 200),
+        })),
+      );
       if (enabledTools.length === 0) {
         const mount = await mountSetupNeededDeveloperAppForUser({
           ctx,
@@ -1947,6 +2023,8 @@ export const refreshUserPlatformApp = action({
     )) as {
       mountId: any;
       developerAppId: any;
+      catalogAppId: string | null;
+      appName: string;
       authType: string;
     };
 
@@ -2002,6 +2080,8 @@ export const reconnectUserPlatformApp = action({
     )) as {
       mountId: any;
       developerAppId: any;
+      catalogAppId: string | null;
+      appName: string;
       authType: string;
     };
 
@@ -2010,6 +2090,13 @@ export const reconnectUserPlatformApp = action({
     }
     const secret = normalizeString(args.secret, 10_000);
     if (!secret) throw new Error("developer_app_connection_secret_required");
+    const secretPolicy = validateDiscoverAppSecretForCatalogAppId(
+      lifecycle.catalogAppId,
+      secret,
+    );
+    if (!secretPolicy.ok) {
+      throw new Error(secretPolicy.message);
+    }
     const encryptedSecret = await encryptSecret(secret);
     await ctx.runMutation(internal.appConnections.upsertAppConnectionInternal, {
       developerAppId: lifecycle.developerAppId,
@@ -2072,9 +2159,14 @@ export const updateUserPlatformAppMount = mutation({
       userId,
       userPlatformAppMountId: args.userPlatformAppMountId,
     });
+    const app = await getDeveloperAppById(ctx, mount.developerAppId);
+    if (!app) {
+      throw new Error("user_platform_app_mount_missing_dependency");
+    }
     const snapshot = await getAppToolSnapshotById(ctx, mount.toolSnapshotId);
     const patch = buildValidatedMountPatch({
       mount,
+      catalogAppId: app.catalogAppId ?? null,
       snapshot,
       enabled: args.enabled,
       enabledTools: args.enabledTools,
@@ -2082,7 +2174,6 @@ export const updateUserPlatformAppMount = mutation({
     });
     await ctx.db.patch(mount._id, patch);
     const updated = await getUserPlatformAppMountById(ctx, mount._id);
-    const app = await getDeveloperAppById(ctx, mount.developerAppId);
     const connection = await getAppConnectionByDeveloperAppId(
       ctx,
       mount.developerAppId,

@@ -43,11 +43,14 @@ Rules:
 - Context strategy must say whether the harness should use manifest-only context, search-then-fetch, structured snapshots, or artifact references.
 - Execution surface is derived from adapter kind: remote MCP and direct API use server HTTP, backplane uses connector backplane, sandboxed CLI uses sandboxed commands, and catalog-only has no executable surface.
 - Result policy declares active tool-count and result-byte bounds; validation caps discovered tool snapshots and runtime truncates oversized tool output to the app profile budget.
+- Tool policy uses the Codex-style irreducible model: default-enabled tools, disabled tools, and a final execution-time deny check. Provider profiles own these rules; UI surfaces only project them.
 - Catalog app connection policy is server-authoritative; the frontend cannot choose a catalog app endpoint, auth mode, or display name as authority.
 - Catalog singleton apps reuse by `catalogAppId`; endpoint-instance apps, such as Shopify Storefront MCP, reuse by endpoint/auth identity.
 - Shopify's ready profile accepts only the standard Storefront MCP `/api/mcp` endpoint; UCP catalog endpoints such as `/api/ucp/mcp` require a separate reviewed profile before they are connectable.
 - GitHub's ready profile is intentionally read-only and must use `https://api.githubcopilot.com/mcp/readonly` with catalog-owned read-only and toolset headers; the general GitHub MCP endpoint is not part of the ready contract.
+- Stripe's ready profile uses `https://mcp.stripe.com` with a user-owned restricted API key. Secret and publishable Stripe keys are rejected, mutation-shaped Stripe MCP tools are blocked by provider policy, and Stripe MCP must not replace Polynet's server-authoritative billing, entitlement, payout, or webhook flows.
 - Vercel's MCP profile stays planned until Polynet's client approval and operation-safety path are verified.
+- Media-production apps must use an artifact/job contract. HyperFrames is a sandboxed CLI profile, not a hosted MCP endpoint; Higgsfield and HeyGen stay planned until async media polling, credit controls, and artifact references are part of the runtime path.
 - Uncataloged remote MCP endpoints are blocked from public server-fetch paths until they have a reviewed catalog policy or a network-layer egress guard.
 - Operator audit must identify uncataloged or catalog-policy-blocked developer app rows before broad release.
 - Integration profile default risk is applied as a floor during MCP tool snapshot classification.
@@ -160,6 +163,7 @@ Leaving a community revokes community access, not previously installed user-owne
 - Do not infer that a community app record provides a member's bearer token, OAuth token, or secret.
 - Do not treat endpoint string equality alone as canonical when a catalog identity is available.
 - Do not remove an existing user harness app just because a builder removes it from the community app bundle.
+- Do not mark a media-generation app connectable just because a provider has an MCP URL; media generation needs artifact storage, async polling, credit/cost guardrails, and bounded result projection first.
 
 ## Current migration stance
 

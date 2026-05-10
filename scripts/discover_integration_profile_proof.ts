@@ -5,12 +5,18 @@ import {
   buildDiscoverAppIntegrationReadinessLabel,
   hasExplicitDiscoverAppIntegrationProfile,
   hasPlannedDiscoverAppIntegrationProfileKind,
+  isDiscoverAppPersonallyConnectable,
   resolveDiscoverAppExecutionSurface,
   resolveDiscoverAppIntegrationProfile,
   resolveDiscoverAppMcpRequestHeadersForCatalogAppId,
   type DiscoverAppCatalogEntry,
   type DiscoverAppIntegrationProfile,
 } from "../shared/discoverCatalog.ts";
+import {
+  DISCOVER_SKILL_CATALOG,
+  deriveDiscoverSkillMentionToken,
+  findRelatedDiscoverSkillForApp,
+} from "../shared/discoverSkillCatalog.ts";
 
 const READY_APP_IDS = new Set([
   "airtable",
@@ -18,6 +24,7 @@ const READY_APP_IDS = new Set([
   "linear",
   "notion",
   "shopify",
+  "stripe",
   "supabase",
 ]);
 
@@ -50,7 +57,7 @@ function assertReadyProfileMatchesConnection(
     READY_APP_IDS.has(app.id),
     `${app.id} is marked ready but is not in the explicit ready app allowlist`,
   );
-  assert.equal(
+  assert.deepEqual(
     hasExplicitDiscoverAppIntegrationProfile(app),
     true,
     `${app.id} ready app must have an explicit integration profile override`,
@@ -273,6 +280,66 @@ function main() {
     );
   }
 
+  const stripe = DISCOVER_APP_CATALOG.find((app) => app.id === "stripe");
+  assert.ok(stripe, "Stripe must exist in the Discover catalog");
+  assert.equal(
+    stripe.personalConnect.availability,
+    "ready",
+    "Stripe should be intentionally ready through the restricted-key bearer path",
+  );
+  assert.equal(
+    stripe.personalConnect.endpointUrl,
+    "https://mcp.stripe.com/",
+    "Stripe must use the hosted remote MCP endpoint",
+  );
+  assert.equal(
+    stripe.personalConnect.authMethod,
+    "token",
+    "Stripe ready path should use user-owned restricted API keys",
+  );
+  assert.equal(
+    stripe.personalConnect.authType,
+    "bearer",
+    "Stripe ready path should send restricted API keys as bearer tokens",
+  );
+  assert.ok(
+    stripe.personalConnect.note.includes("does not become authoritative"),
+    "Stripe copy must preserve the PolyNet billing authority boundary",
+  );
+  const stripeProfile = resolveDiscoverAppIntegrationProfile(stripe);
+  assert.equal(stripeProfile.adapterKind, "remote_mcp_token");
+  assert.equal(stripeProfile.readiness, "ready_token");
+  assert.equal(stripeProfile.runtimePolicy.defaultToolRisk, "sensitive");
+  assert.ok(stripeProfile.toolPolicy, "Stripe must declare a provider-owned tool policy");
+  assert.equal(
+    stripeProfile.toolPolicy.allowOnlyDefaultEnabled,
+    true,
+    "Stripe should positively allow only the default read/search/retrieve tool family",
+  );
+  assert.ok(
+    stripeProfile.toolPolicy.defaultEnabledNamePrefixes?.includes("retrieve_"),
+    "Stripe default-enabled tool policy should include read/retrieve style tools",
+  );
+  assert.ok(
+    stripeProfile.toolPolicy.disabledNamePrefixes?.includes("create_"),
+    "Stripe tool policy should disable mutation-shaped tools",
+  );
+  assert.ok(
+    stripeProfile.credentialPolicy?.allowedSecretPrefixes?.includes("rk_live_"),
+    "Stripe credential policy should require restricted API keys",
+  );
+  assert.ok(
+    stripeProfile.resultPolicy.maxResultBytes <= 10_000,
+    "Stripe MCP results should stay tightly bounded",
+  );
+  for (const intent of stripeProfile.runtimePolicy.declaredIntents) {
+    assert.equal(
+      intent.includes("write"),
+      false,
+      "Stripe ready profile should not declare write intent",
+    );
+  }
+
   const vercel = DISCOVER_APP_CATALOG.find((app) => app.id === "vercel");
   assert.ok(vercel, "Vercel must exist in the Discover catalog");
   assert.equal(
@@ -284,6 +351,81 @@ function main() {
   assert.equal(vercelProfile.adapterKind, "remote_mcp_oauth");
   assert.equal(vercelProfile.readiness, "oauth_planned");
   assert.equal(vercelProfile.authMode, "oauth");
+
+  const hyperframes = DISCOVER_APP_CATALOG.find((app) => app.id === "hyperframes");
+  assert.ok(hyperframes, "HyperFrames must exist in the Discover catalog");
+  assert.equal(
+    hyperframes.personalConnect.availability,
+    "later",
+    "HyperFrames should stay non-connectable until the sandbox CLI bridge exists",
+  );
+  assert.equal(
+    isDiscoverAppPersonallyConnectable(hyperframes),
+    false,
+    "HyperFrames must not expose a personal add button before sandbox execution exists",
+  );
+  assert.equal(
+    hyperframes.docsUrl,
+    "https://hyperframes.heygen.com/packages/cli",
+    "HyperFrames catalog entry should point at the CLI docs",
+  );
+  assert.equal(
+    hyperframes.relatedSkillCatalogId,
+    "hyperframes",
+    "HyperFrames app should point to the immediately installable HyperFrames skill",
+  );
+  const hyperframesSkill = findRelatedDiscoverSkillForApp(
+    hyperframes,
+    DISCOVER_SKILL_CATALOG,
+  );
+  assert.ok(hyperframesSkill, "HyperFrames related skill must exist");
+  assert.ok(
+    hyperframesSkill.installInput,
+    "HyperFrames related skill must be installable",
+  );
+  assert.equal(
+    deriveDiscoverSkillMentionToken(hyperframesSkill),
+    "hyperframes",
+    "HyperFrames related skill should derive the $hyperframes runtime token",
+  );
+  const hyperframesProfile = resolveDiscoverAppIntegrationProfile(hyperframes);
+  assert.equal(hyperframesProfile.adapterKind, "cli_sandbox");
+  assert.equal(hyperframesProfile.readiness, "cli_sandbox_planned");
+  assert.equal(hyperframesProfile.contextStrategy, "artifact_reference");
+  assert.ok(
+    hyperframesProfile.runtimePolicy.declaredIntents.includes("video_render"),
+    "HyperFrames profile should declare render intent as an artifact-producing sandbox action",
+  );
+
+  const higgsfield = DISCOVER_APP_CATALOG.find((app) => app.id === "higgsfield");
+  assert.ok(higgsfield, "Higgsfield must exist in the Discover catalog");
+  assert.equal(
+    higgsfield.personalConnect.availability,
+    "later",
+    "Higgsfield should stay non-connectable until media job guardrails exist",
+  );
+  assert.equal(
+    higgsfield.personalConnect.endpointUrl,
+    "https://mcp.higgsfield.ai",
+    "Higgsfield catalog entry should preserve the provider MCP URL without making it ready",
+  );
+  const higgsfieldProfile = resolveDiscoverAppIntegrationProfile(higgsfield);
+  assert.equal(higgsfieldProfile.adapterKind, "remote_mcp_oauth");
+  assert.equal(higgsfieldProfile.readiness, "oauth_planned");
+  assert.equal(higgsfieldProfile.contextStrategy, "artifact_reference");
+  assert.ok(
+    higgsfieldProfile.runtimePolicy.declaredIntents.includes("credit_metered_generation"),
+    "Higgsfield profile should preserve the media credit/cost guardrail requirement",
+  );
+
+  const heygen = DISCOVER_APP_CATALOG.find((app) => app.id === "heygen");
+  assert.ok(heygen, "HeyGen must exist in the Discover catalog");
+  const heygenProfile = resolveDiscoverAppIntegrationProfile(heygen);
+  assert.equal(heygenProfile.contextStrategy, "artifact_reference");
+  assert.ok(
+    heygenProfile.runtimePolicy.declaredIntents.includes("media_job_poll"),
+    "HeyGen profile should preserve async media job polling as a planned requirement",
+  );
 
   console.log(
     "PASS: Discover apps have explicit integration profiles, and ready apps declare adapter, validation, and risk metadata.",

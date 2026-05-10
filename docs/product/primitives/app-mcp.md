@@ -3,7 +3,7 @@ id: product.app_mcp
 title: Apps and MCPs
 audience: builder, llm, operator
 status: alpha-current
-last_verified: 2026-05-08
+last_verified: 2026-05-10
 ---
 
 # Apps and MCPs
@@ -24,7 +24,7 @@ Apps are things a user can connect to their harness so the agent has more useful
 
 Apps and MCPs should be explicit, permissioned, and scoped. They are not ambient global powers.
 
-Each catalog app should resolve to an integration profile: MCP, connector backplane, direct API, sandboxed CLI, or catalog-only. That profile describes readiness, adapter intent, identity scope, context strategy, result bounds, declared intents, and default tool risk; the adapter determines the execution surface, and the user's harness state still decides what can actually run.
+Each catalog app should resolve to an integration profile: MCP, connector backplane, direct API, sandboxed CLI, or catalog-only. That profile describes readiness, adapter intent, identity scope, context strategy, result bounds, declared intents, default tool risk, and tool policy; the adapter determines the execution surface, and the user's harness state still decides what can actually run.
 
 ## Rules
 
@@ -41,6 +41,9 @@ Each catalog app should resolve to an integration profile: MCP, connector backpl
 11. CLI-shaped apps should run through sandboxed command wrappers and return artifact references instead of raw shell access.
 12. OAuth MCP apps must bind tokens to the MCP resource, store tokens server-side only after authenticated Polynet finalization, refresh tokens before validation/runtime execution, and keep community app records credential-free. Providers can use dynamic registration or static deployment-owned OAuth clients, but the client mode must be explicit in the integration profile and static client secrets must stay in deployment env.
 13. Provider-specific endpoint variants and request headers are part of the app contract. For example, GitHub is ready only through its hosted read-only MCP endpoint with catalog-owned read-only/toolset headers, not the general write-capable MCP surface.
+14. Payment-provider MCPs must not become product authority. Stripe can be connected through a user-owned restricted API key to its hosted MCP endpoint; mutation-shaped Stripe tools stay provider-blocked, and Polynet billing, entitlements, payouts, and webhook verification remain owned by Polynet's server-side billing system.
+15. Tool exposure follows the Codex-style core: default-enabled tools, disabled tools, and a runtime deny check. Provider profiles own those rules; Discover, Settings, and Community Settings only project the resulting harness state.
+16. Media-production apps should be modeled as artifact/job adapters. HyperFrames belongs behind a sandboxed CLI bridge; Higgsfield and HeyGen stay planned until media jobs have async polling, credit controls, artifact references, and bounded result projection.
 
 ## Non-Goals
 

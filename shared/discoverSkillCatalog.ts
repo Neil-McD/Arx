@@ -1,4 +1,8 @@
 import type { CreateSkillPackageInput } from "./skillPackageTypes";
+import {
+  buildSkillMentionToken,
+  formatSkillMentionToken,
+} from "./skillMentionToken.ts";
 import type { UserPlatformInstalledSkill } from "./userPlatformSkillTypes";
 
 export type DiscoverSkillCatalogIcon =
@@ -14,7 +18,6 @@ export type DiscoverSkillCatalogEntry = {
   name: string;
   tagline: string;
   description: string;
-  invocation: string;
   surface: string;
   category: string;
   icon: DiscoverSkillCatalogIcon;
@@ -32,7 +35,6 @@ export const DISCOVER_SKILL_CATALOG: DiscoverSkillCatalogEntry[] = [
     tagline: "Scan, synthesize, and surface signal",
     description:
       "Reusable research behavior for scouting trends, extracting signal, and organizing follow-up questions.",
-    invocation: "$weekly-research",
     surface: "Community first",
     category: "Curated",
     icon: "research",
@@ -59,7 +61,6 @@ export const DISCOVER_SKILL_CATALOG: DiscoverSkillCatalogEntry[] = [
     tagline: "Executive compression for updates",
     description:
       "Turns long discussions into concise executive bullets with decisions, risks, and next actions.",
-    invocation: "$board-summary",
     surface: "Community first",
     category: "Curated",
     icon: "summary",
@@ -86,7 +87,6 @@ export const DISCOVER_SKILL_CATALOG: DiscoverSkillCatalogEntry[] = [
     tagline: "Compose repeatable operating patterns",
     description:
       "A reusable skill package for turning goals into step-based execution workflows.",
-    invocation: "$workflow-builder",
     surface: "Personal or community",
     category: "Curated",
     icon: "workflow",
@@ -106,6 +106,32 @@ export const DISCOVER_SKILL_CATALOG: DiscoverSkillCatalogEntry[] = [
     },
   },
   {
+    id: "hyperframes",
+    kind: "curated",
+    catalogSkillId: "hyperframes",
+    name: "HyperFrames",
+    tagline: "Create HTML-first video compositions",
+    description:
+      "Reusable production behavior for turning a video brief into scene structure, HyperFrames composition files, verification steps, and artifact-aware render plans.",
+    surface: "Personal or community",
+    category: "Media production",
+    icon: "workflow",
+    heroNote:
+      "A media-production skill for shaping HyperFrames videos without confusing reusable instructions with live rendering permission.",
+    detailBullets: [
+      "Reduces a video request into scenes, assets, timing, and output format.",
+      "Drafts HyperFrames-friendly HTML, CSS, and JavaScript composition structure.",
+      "Uses CLI or sandbox tools only when they are actually available and verified.",
+    ],
+    installInput: {
+      catalog_skill_id: "hyperframes",
+      name: "HyperFrames",
+      description:
+        "Plan, draft, and verify HTML-first HyperFrames video compositions.",
+      instructions_md: `Use this skill when the user wants to plan, draft, inspect, or render a HyperFrames HTML video composition.\n\nOperating rules:\n1. Start by reducing the brief into scenes, duration, aspect ratio, assets, motion, captions, and target output.\n2. Treat HyperFrames as an artifact workflow: project files, preview links, frame snapshots, and rendered video paths are the useful outputs.\n3. Encode HyperFrames-specific structure explicitly: composition roots need data-composition-id, dimensions, timed clip attributes, and registered paused timelines when animation is used.\n4. If CLI, workspace, or sandbox tools are available, use the smallest verified loop: doctor when environment is unknown, init when no project exists, lint/inspect before preview or render, and report the exact artifact path or preview URL that tool output proves.\n5. If execution tools are not available, produce the composition plan and code/file structure, but do not claim a preview or render completed.\n6. Keep binary media out of chat context. Summarize outputs and link or reference artifacts instead.\n7. Before finalizing, call out missing assets, unsafe assumptions, render blockers, and the smallest next verification step.`,
+    },
+  },
+  {
     id: "custom-skill",
     kind: "custom",
     catalogSkillId: null,
@@ -113,7 +139,6 @@ export const DISCOVER_SKILL_CATALOG: DiscoverSkillCatalogEntry[] = [
     tagline: "Author your own reusable behavior package",
     description:
       "Fallback path for creating and attaching your own skills when the curated set does not fit the workflow.",
-    invocation: "Name-derived",
     surface: "Advanced",
     category: "Manual",
     icon: "custom",
@@ -128,11 +153,33 @@ export const DISCOVER_SKILL_CATALOG: DiscoverSkillCatalogEntry[] = [
   },
 ];
 
-function readSkillInvocationToken(invocation: string): string | null {
-  const trimmed = invocation.trim();
-  if (!trimmed.startsWith("$")) return null;
-  const token = trimmed.slice(1).trim().toLowerCase();
-  return token || null;
+export function deriveDiscoverSkillMentionToken(
+  skill: DiscoverSkillCatalogEntry,
+): string | null {
+  if (!skill.installInput?.name) return null;
+  return buildSkillMentionToken(skill.installInput.name, "");
+}
+
+export function formatDiscoverSkillInvocation(
+  skill: DiscoverSkillCatalogEntry,
+): string {
+  return formatSkillMentionToken(skill.installInput?.name ?? "") ?? "Name-derived token";
+}
+
+export function findRelatedDiscoverSkillForApp(
+  app: { relatedSkillCatalogId?: string | null },
+  skills: DiscoverSkillCatalogEntry[],
+): DiscoverSkillCatalogEntry | null {
+  const relatedId = String(app.relatedSkillCatalogId ?? "").trim().toLowerCase();
+  if (!relatedId) return null;
+  return (
+    skills.find((skill) => {
+      const catalogSkillId = String(skill.catalogSkillId ?? "")
+        .trim()
+        .toLowerCase();
+      return Boolean(catalogSkillId && catalogSkillId === relatedId);
+    }) ?? null
+  );
 }
 
 export function findMatchingDiscoverSkillInstall(
@@ -146,7 +193,7 @@ export function findMatchingDiscoverSkillInstall(
       ) ?? null;
     if (catalogMatch) return catalogMatch;
   }
-  const token = readSkillInvocationToken(skill.invocation);
+  const token = deriveDiscoverSkillMentionToken(skill);
   if (!token) return null;
   return (
     installs.find(

@@ -3,7 +3,7 @@ id: product.guide.connect_apps_and_mcps
 title: Connect Apps and MCPs
 audience: builder, llm, operator
 status: alpha-current
-last_verified: 2026-05-08
+last_verified: 2026-05-10
 ---
 
 # Connect Apps and MCPs
@@ -44,6 +44,7 @@ The system should keep these concepts separate:
 - server-side catalog connect policy
 - app connection and secret state
 - tool snapshot discovered during validation
+- provider tool policy for default-enabled and disabled tools
 - community app record
 - user app source/provenance
 - enabled tools for the user's harness app
@@ -86,6 +87,9 @@ Capability is real only when:
 19. Ready OAuth remote MCP apps use PKCE OAuth, MCP `resource` audience binding, authenticated finalization, encrypted token storage, token refresh, and user-owned harness state. Notion uses dynamic client registration against its hosted MCP endpoint; Asana is the first static-client OAuth MCP target and remains non-connectable until the deployment has `ASANA_MCP_CLIENT_ID` and `ASANA_MCP_CLIENT_SECRET` configured for `https://mcp.asana.com/v2/mcp`.
 20. GitHub is ready only through its hosted read-only MCP endpoint, `https://api.githubcopilot.com/mcp/readonly`, with a user-owned bearer token and catalog-owned read-only/toolset headers. Do not switch GitHub to the general remote MCP endpoint without a separate write-safety review.
 21. Vercel's hosted MCP endpoint is catalog-known, but it remains non-connectable until Polynet's client approval and operation-safety path are verified.
+22. Stripe is ready only through its hosted MCP endpoint, `https://mcp.stripe.com`, with a user-owned restricted API key. Secret and publishable Stripe keys are rejected, mutation-shaped Stripe MCP tools are blocked by provider policy, and Stripe MCP must not become authoritative for Polynet billing, entitlements, payouts, or webhook-verified access decisions.
+23. Tool exposure follows the same irreducible shape as Codex MCP filtering: profile default-enabled tools, profile disabled tools, user mount selection, and a final runtime deny check.
+24. Media-production apps need an artifact/job path before connectability. HyperFrames should run through a sandboxed CLI bridge, while Higgsfield and HeyGen need async job polling, credit/cost guardrails, and artifact references before they become live harness apps.
 
 ## Common Mistakes
 
@@ -95,6 +99,7 @@ Capability is real only when:
 - Adding apps before knowing the member workflow.
 - Letting prompts describe tools that are not executable.
 - Showing a community app as broken when the same user's effective personal harness app is live.
+- Marking image or video generation MCPs live before the runtime can store artifacts and cap generated-media costs.
 
 ## Related Concepts
 

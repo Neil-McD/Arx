@@ -300,6 +300,167 @@ async function proveOptionalNullArgumentsArePruned() {
   console.log("PASS: runtime MCP manager optional-null argument pruning proof");
 }
 
+async function proveProviderBlockedToolDoesNotExecute() {
+  let sessionInitializations = 0;
+  let toolCalls = 0;
+
+  const manager = createRuntimeMcpManager({
+    runId: "run-mcp-proof-4",
+    mountedTools: [
+      {
+        scope: "user",
+        mount_id: "mount-4",
+        runtime_tool_name: "me__stripe_create_customer",
+        developer_app_id: "app-4",
+        catalog_app_id: "stripe",
+        app_name: "Stripe",
+        endpoint_url: "https://mcp.stripe.com/",
+        auth_type: "bearer",
+        tool_name: "create_customer",
+        namespaced_tool_name: "stripe__create_customer",
+        description: "Create a customer",
+        input_schema: {
+          type: "object",
+          properties: {
+            email: { type: "string" },
+          },
+        },
+        risk_level: "sensitive",
+      },
+    ],
+    loadConnectionBundle: async () => ({
+      app: {
+        _id: "app-4",
+        ownerUserId: "user-1",
+        catalogAppId: "stripe",
+        name: "Stripe",
+        slug: "stripe",
+        endpointUrl: "https://mcp.stripe.com/",
+        authType: "bearer",
+        status: "valid",
+        createdAt: 0,
+        updatedAt: 0,
+      },
+      connection: null,
+      secret: "rk_test_123",
+    }),
+    transport: {
+      buildAuthHeaders: () => ({
+        Authorization: "Bearer rk_test_123",
+      }),
+      initializeSession: async () => {
+        sessionInitializations += 1;
+        return {
+          protocolVersion: "2025-06-18",
+          sessionId: "session-blocked",
+        };
+      },
+      sendInitializedNotification: async () => {},
+      callTool: async () => {
+        toolCalls += 1;
+        return { content: [{ type: "text", text: "unexpected" }] };
+      },
+      formatToolResultOutput: (value) => JSON.stringify(value),
+    },
+  });
+
+  const result = await manager.execute({
+    runtimeToolName: "me__stripe_create_customer",
+    argumentsObject: { email: "a@example.com" },
+  });
+
+  assert.equal(result.status, "error");
+  assert.equal(result.errorCode, "mounted_app_tool_blocked_by_policy");
+  assert.match(String(result.errorMessage ?? ""), /Stripe MCP mutation tools are disabled/);
+  assert.equal(sessionInitializations, 0);
+  assert.equal(toolCalls, 0);
+
+  console.log("PASS: runtime MCP manager provider-blocked tool proof");
+}
+
+async function proveProviderRejectedSecretDoesNotExecute() {
+  let connectionBundleLoads = 0;
+  let sessionInitializations = 0;
+  let toolCalls = 0;
+
+  const manager = createRuntimeMcpManager({
+    runId: "run-mcp-proof-5",
+    mountedTools: [
+      {
+        scope: "user",
+        mount_id: "mount-5",
+        runtime_tool_name: "me__stripe_list_customers",
+        developer_app_id: "app-5",
+        catalog_app_id: "stripe",
+        app_name: "Stripe",
+        endpoint_url: "https://mcp.stripe.com/",
+        auth_type: "bearer",
+        tool_name: "list_customers",
+        namespaced_tool_name: "stripe__list_customers",
+        description: "List customers",
+        input_schema: {
+          type: "object",
+          properties: {},
+        },
+        risk_level: "sensitive",
+      },
+    ],
+    loadConnectionBundle: async () => {
+      connectionBundleLoads += 1;
+      return {
+        app: {
+          _id: "app-5",
+          ownerUserId: "user-1",
+          catalogAppId: "stripe",
+          name: "Stripe",
+          slug: "stripe",
+          endpointUrl: "https://mcp.stripe.com/",
+          authType: "bearer",
+          status: "valid",
+          createdAt: 0,
+          updatedAt: 0,
+        },
+        connection: null,
+        secret: "sk_test_123",
+      };
+    },
+    transport: {
+      buildAuthHeaders: () => ({
+        Authorization: "Bearer sk_test_123",
+      }),
+      initializeSession: async () => {
+        sessionInitializations += 1;
+        return {
+          protocolVersion: "2025-06-18",
+          sessionId: "session-secret-policy",
+        };
+      },
+      sendInitializedNotification: async () => {},
+      callTool: async () => {
+        toolCalls += 1;
+        return { content: [{ type: "text", text: "unexpected" }] };
+      },
+      formatToolResultOutput: (value) => JSON.stringify(value),
+    },
+  });
+
+  const result = await manager.execute({
+    runtimeToolName: "me__stripe_list_customers",
+    argumentsObject: {},
+  });
+
+  assert.equal(result.status, "error");
+  assert.equal(result.errorCode, "mounted_app_connection_secret_policy_rejected");
+  assert.match(String(result.errorMessage ?? ""), /restricted API key/);
+  assert.equal(connectionBundleLoads, 1);
+  assert.equal(sessionInitializations, 0);
+  assert.equal(toolCalls, 0);
+
+  console.log("PASS: runtime MCP manager provider-secret policy proof");
+}
+
 await proveLazyAuthAndSessionReuse();
 await proveReadToolSessionRefreshRetry();
 await proveOptionalNullArgumentsArePruned();
+await proveProviderBlockedToolDoesNotExecute();
+await proveProviderRejectedSecretDoesNotExecute();
