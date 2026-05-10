@@ -4,7 +4,7 @@ import type {
   OperatorAccessSnapshot,
   OperatorAccountSetupSnapshot,
   OperatorAuthAccessDiagnosticsSnapshot,
-  OperatorBuilderRecord,
+  OperatorCommunityRecord,
   OperatorEventRecord,
   OperatorFrontendErrorDiagnosticsSnapshot,
   OperatorMonetizationSnapshot,
@@ -216,17 +216,17 @@ export async function loadOperatorOverviewCanonical(params: {
   })) as OperatorOverviewSnapshot;
 }
 
-export async function loadOperatorBuildersCanonical(params: {
+export async function loadOperatorCommunitiesCanonical(params: {
   session: AuthSessionLike;
   query?: string;
   limit?: number;
-}): Promise<OperatorBuilderRecord[]> {
+}): Promise<OperatorCommunityRecord[]> {
   const { client, authSubject } = await withOperatorAuth(params.session);
-  return (await client.query("operatorDashboard:listOperatorBuilders" as any, {
+  return (await client.query("operatorDashboard:listOperatorCommunities" as any, {
     authSubject,
     query: params.query,
     limit: params.limit ?? 25,
-  })) as OperatorBuilderRecord[];
+  })) as OperatorCommunityRecord[];
 }
 
 export async function loadOperatorAccountSetupSnapshotCanonical(params: {

@@ -863,7 +863,7 @@ async function estimateSubscriptionMrr(ctx: any, subscriptions: any[]): Promise<
   return total;
 }
 
-async function buildBuilderRecord(ctx: any, community: any, nowMs: number) {
+async function buildOperatorCommunityRecord(ctx: any, community: any, nowMs: number) {
   const owner = await ctx.db.get(community.ownerId);
   const memberships = await ctx.db
     .query("communityMemberships")
@@ -911,7 +911,7 @@ async function buildBuilderRecord(ctx: any, community: any, nowMs: number) {
   const tier = await readActiveTier(ctx, community.ownerId, nowMs);
   const checkoutStarts = checkouts.length;
   return {
-    builder: {
+    creator: {
       userId: String(community.ownerId),
       displayName: owner?.displayName ?? null,
       email: owner?.email ?? null,
@@ -965,7 +965,7 @@ async function buildBuilderRecord(ctx: any, community: any, nowMs: number) {
   };
 }
 
-export const listOperatorBuildersInternal = internalQuery({
+export const listOperatorCommunitiesInternal = internalQuery({
   args: {
     query: v.optional(v.string()),
     limit: v.optional(v.number()),
@@ -977,11 +977,11 @@ export const listOperatorBuildersInternal = internalQuery({
     const records = [];
     const normalizedQuery = String(args.query ?? "").trim().toLowerCase();
     for (const community of rows) {
-      const record = await buildBuilderRecord(ctx, community, nowMs);
+      const record = await buildOperatorCommunityRecord(ctx, community, nowMs);
       if (normalizedQuery) {
         const haystack = [
-          record.builder.displayName,
-          record.builder.email,
+          record.creator.displayName,
+          record.creator.email,
           record.community.name,
           record.community.slug,
         ].join(" ").toLowerCase();
@@ -1076,21 +1076,21 @@ export const listOperatorDeveloperAppPolicyAuditInternal = internalQuery({
   },
 });
 
-export const getOperatorBuilderSnapshotInternal = internalQuery({
+export const getOperatorCommunitySnapshotInternal = internalQuery({
   args: {
     communityId: v.optional(v.id("communities")),
-    builderUserId: v.optional(v.id("users")),
+    communityCreatorUserId: v.optional(v.id("users")),
   },
   handler: async (ctx, args) => {
     let community = args.communityId ? await ctx.db.get(args.communityId) : null;
-    if (!community && args.builderUserId) {
+    if (!community && args.communityCreatorUserId) {
       community = await ctx.db
         .query("communities")
-        .withIndex("by_owner", (q: any) => q.eq("ownerId", args.builderUserId))
+        .withIndex("by_owner", (q: any) => q.eq("ownerId", args.communityCreatorUserId))
         .first();
     }
     if (!community) return null;
-    return await buildBuilderRecord(ctx, community, Date.now());
+    return await buildOperatorCommunityRecord(ctx, community, Date.now());
   },
 });
 
@@ -1111,7 +1111,7 @@ export const getOperatorOverviewInternal = internalQuery({
     let staleCommunities = 0;
     let riskItems = 0;
     for (const community of communities) {
-      const record = await buildBuilderRecord(ctx, community, nowMs);
+      const record = await buildOperatorCommunityRecord(ctx, community, nowMs);
       activePaidMembers += record.money.activePaidMembers;
       if (record.money.activePaidMembers > 0) paidCommunities += 1;
       totalCommunityMembers += record.members.activeMemberships;
@@ -1128,7 +1128,7 @@ export const getOperatorOverviewInternal = internalQuery({
     return {
       computedAt: nowMs,
       totals: {
-        builders: new Set(communities.map((row: any) => String(row.ownerId))).size,
+        communityCreators: new Set(communities.map((row: any) => String(row.ownerId))).size,
         communities: communities.length,
         activeCommunities,
         totalCommunityMembers,
@@ -1269,6 +1269,9 @@ export const getOperatorMonetizationInternal = internalQuery({
       businessVisitRows,
       emailOutboxRows,
       emailDeliveryRows,
+      userProfileDetails,
+      providerConnections,
+      memorySettingsRows,
     ] = await Promise.all([
       ctx.db.query("checkoutSessions").collect(),
       ctx.db.query("users").collect(),
@@ -1277,13 +1280,31 @@ export const getOperatorMonetizationInternal = internalQuery({
       businessVisitRowsPromise,
       ctx.db.query("emailOutbox").collect(),
       ctx.db.query("emailDeliveries").collect(),
+      ctx.db.query("userProfileDetails").collect(),
+      ctx.db.query("userProviderConnections").collect(),
+      ctx.db.query("userMemorySettings").collect(),
     ]);
     const accountUsers = users.filter(isAccountUserRow);
     const accountUserIds = new Set<string>(accountUsers.map((row: any) => String(row._id)));
+    const userProfileDetailsByUser = new Map<string, any>();
+    const providerConnectionsByUser = new Map<string, any[]>();
+    const memorySettingsByUser = new Map<string, any>();
+    for (const row of userProfileDetails) userProfileDetailsByUser.set(String(row.userId), row);
+    for (const row of providerConnections) pushByUserId(providerConnectionsByUser, row);
+    for (const row of memorySettingsRows) memorySettingsByUser.set(String(row.userId), row);
+    const accountSetupCompletedCount = accountUsers.filter((user: any) => {
+      const userId = String(user._id);
+      return buildAccountSetupStatusForRows({
+        user,
+        detail: userProfileDetailsByUser.get(userId) ?? null,
+        providerConnections: providerConnectionsByUser.get(userId) ?? [],
+        memorySettings: memorySettingsByUser.get(userId) ?? null,
+      }).completed;
+    }).length;
     const communityById = new Map<string, any>(communities.map((row: any) => [String(row._id), row]));
-    const builderUserIds = new Set<string>(communities.map((row: any) => String(row.ownerId)));
+    const communityCreatorUserIds = new Set<string>(communities.map((row: any) => String(row.ownerId)));
     const communitiesWithFirstMemberIds = new Set<string>();
-    const activatedBuilderIds = new Set<string>();
+    const activatedCommunityCreatorIds = new Set<string>();
     for (const membership of communityMemberships) {
       if (membership.active === false || membership.revokedAt) continue;
       const communityId = String(membership.communityId ?? "");
@@ -1291,7 +1312,7 @@ export const getOperatorMonetizationInternal = internalQuery({
       if (!community) continue;
       if (String(membership.userId) === String(community.ownerId)) continue;
       communitiesWithFirstMemberIds.add(communityId);
-      activatedBuilderIds.add(String(community.ownerId));
+      activatedCommunityCreatorIds.add(String(community.ownerId));
     }
     const inRangeCheckouts = rangeStart == null
       ? checkouts
@@ -1337,6 +1358,14 @@ export const getOperatorMonetizationInternal = internalQuery({
       const price = await ctx.db.get(row.pricePointId);
       estimatedCommunityMrr = addMoney(estimatedCommunityMrr, monthlyMoneyFromPricePoint(price));
     }
+    const activePaidCommunityIds = new Set<string>(
+      activeSubscriptions
+        .map((row: any) => String(row.communityId ?? "").trim())
+        .filter(Boolean),
+    );
+    const paidCommunitiesWithMembers = Array.from(activePaidCommunityIds).filter((communityId) =>
+      communitiesWithFirstMemberIds.has(communityId),
+    ).length;
     const completedCheckouts = checkouts.filter((row: any) => row.status === "complete");
     const creditTopupCheckouts = inRangeCheckouts.filter((row: any) => row.mode === "workspace_credit_topup");
     const creditTopupCompletions = creditTopupCheckouts.filter((row: any) => row.status === "complete");
@@ -1358,6 +1387,11 @@ export const getOperatorMonetizationInternal = internalQuery({
     for (const row of inRangeCheckouts) {
       const userId = String(row.ownerUserId ?? "");
       if (row.status === "complete" && accountUserIds.has(userId)) checkoutPurchaserIds.add(userId);
+    }
+    const usageBuyerIds = new Set<string>();
+    for (const row of creditTopupCompletions) {
+      const userId = String(row.ownerUserId ?? "");
+      if (accountUserIds.has(userId)) usageBuyerIds.add(userId);
     }
     const knownPayingCustomerIds = new Set<string>([
       ...Array.from(activePayingCustomerIds),
@@ -1428,7 +1462,10 @@ export const getOperatorMonetizationInternal = internalQuery({
         users: {
           total: accountUsers.length,
           newInRange: newUsers.length,
+          accountSetupCompleted: accountSetupCompletedCount,
+          accountSetupCompletionRate: conversionRate(accountSetupCompletedCount, accountUsers.length),
           activePayingCustomers: activePayingCustomerIds.size,
+          usageBuyersInRange: usageBuyerIds.size,
           checkoutPurchasersInRange: checkoutPurchaserIds.size,
           knownPayingCustomers: knownPayingCustomerIds.size,
           visitorToUserConversionRate: conversionRate(identifiedVisitorCount, uniqueVisitorCount),
@@ -1438,11 +1475,16 @@ export const getOperatorMonetizationInternal = internalQuery({
           totalCreated: communities.length,
           createdInRange: newCommunities.length,
           creationRateFromNewUsers: conversionRate(newCommunities.length, newUsers.length),
-          totalBuilders: builderUserIds.size,
-          activatedBuilders: activatedBuilderIds.size,
-          builderActivationRate: conversionRate(activatedBuilderIds.size, builderUserIds.size),
+          totalCommunityCreators: communityCreatorUserIds.size,
+          activatedCommunityCreators: activatedCommunityCreatorIds.size,
+          communityCreatorActivationRate: conversionRate(
+            activatedCommunityCreatorIds.size,
+            communityCreatorUserIds.size,
+          ),
           communitiesWithFirstMember: communitiesWithFirstMemberIds.size,
           communityActivationRate: conversionRate(communitiesWithFirstMemberIds.size, communities.length),
+          paidCommunitiesWithMembers,
+          paidCommunityMemberActivationRate: conversionRate(paidCommunitiesWithMembers, activePaidCommunityIds.size),
           createdInRangeWithFirstMember: newCommunitiesWithFirstMember.length,
           createdInRangeActivationRate: conversionRate(newCommunitiesWithFirstMember.length, newCommunities.length),
         },
@@ -1487,6 +1529,9 @@ export const getOperatorMonetizationInternal = internalQuery({
           "checkoutSessions",
           "communitySubscriptions",
           "communityPricePoints",
+          "userProfileDetails",
+          "userProviderConnections",
+          "userMemorySettings",
           "emailOutbox",
           "emailDeliveries",
         ],
@@ -1912,7 +1957,7 @@ export const listOperatorRisksInternal = internalQuery({
       severity: "error",
       kind: event.eventType,
       title: `${event.eventType} ${event.status}`,
-      builderUserId: event.subjectUserId ? String(event.subjectUserId) : null,
+      communityCreatorUserId: event.subjectUserId ? String(event.subjectUserId) : null,
       communityId: event.communityId ? String(event.communityId) : null,
       eventId: String(event._id),
       createdAt: event.createdAt,
@@ -1924,14 +1969,14 @@ export const listOperatorRisksInternal = internalQuery({
 
     const communities = await ctx.db.query("communities").collect();
     for (const community of communities) {
-      const record = await buildBuilderRecord(ctx, community, nowMs);
+      const record = await buildOperatorCommunityRecord(ctx, community, nowMs);
       for (const flag of record.risk.flags) {
         riskItems.push({
-          id: `builder:${record.community.communityId}:${flag}`,
+          id: `community_creator:${record.community.communityId}:${flag}`,
           severity: "warning",
           kind: flag,
           title: `${record.community.name}: ${flag}`,
-          builderUserId: record.builder.userId,
+          communityCreatorUserId: record.creator.userId,
           communityId: record.community.communityId,
           eventId: null,
           createdAt: record.community.updatedAt,

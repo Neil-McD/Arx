@@ -56,7 +56,7 @@ export const getOperatorOverview = query({
   },
 });
 
-export const listOperatorBuilders = query({
+export const listOperatorCommunities = query({
   args: {
     authSubject: v.optional(v.string()),
     query: v.optional(v.string()),
@@ -64,7 +64,7 @@ export const listOperatorBuilders = query({
   },
   handler: async (ctx, args): Promise<any> => {
     await requireOperatorAccess(ctx, args.authSubject);
-    return await ctx.runQuery((internal as any).operatorIntelligence.listOperatorBuildersInternal, {
+    return await ctx.runQuery((internal as any).operatorIntelligence.listOperatorCommunitiesInternal, {
       query: args.query,
       limit: args.limit,
     });

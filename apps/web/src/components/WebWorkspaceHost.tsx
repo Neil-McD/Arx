@@ -1937,7 +1937,7 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
         >
           <WebOperatorDataPanel
             state={operatorData.state}
-            topBuilders={operatorData.topBuilders}
+            topCommunities={operatorData.topCommunities}
             isLoading={operatorData.isLoading}
             error={operatorData.error}
             activeInsightTab={operatorActiveInsightTab}

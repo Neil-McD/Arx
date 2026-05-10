@@ -14,8 +14,8 @@ export type OperatorMoneyMetric = {
   currencyDecimals: number;
 };
 
-export type OperatorBuilderRecord = {
-  builder: {
+export type OperatorCommunityRecord = {
+  creator: {
     userId: string;
     displayName: string | null;
     email: string | null;
@@ -62,7 +62,7 @@ export type OperatorBuilderRecord = {
 export type OperatorOverviewSnapshot = {
   computedAt: number;
   totals: {
-    builders: number;
+    communityCreators: number;
     communities: number;
     activeCommunities: number;
     totalCommunityMembers: number;
@@ -150,7 +150,10 @@ export type OperatorMonetizationSnapshot = {
     users: {
       total: number;
       newInRange: number;
+      accountSetupCompleted: number;
+      accountSetupCompletionRate: number | null;
       activePayingCustomers: number;
+      usageBuyersInRange: number;
       checkoutPurchasersInRange: number;
       knownPayingCustomers: number;
       visitorToUserConversionRate: number | null;
@@ -160,11 +163,13 @@ export type OperatorMonetizationSnapshot = {
       totalCreated: number;
       createdInRange: number;
       creationRateFromNewUsers: number | null;
-      totalBuilders: number;
-      activatedBuilders: number;
-      builderActivationRate: number | null;
+      totalCommunityCreators: number;
+      activatedCommunityCreators: number;
+      communityCreatorActivationRate: number | null;
       communitiesWithFirstMember: number;
       communityActivationRate: number | null;
+      paidCommunitiesWithMembers: number;
+      paidCommunityMemberActivationRate: number | null;
       createdInRangeWithFirstMember: number;
       createdInRangeActivationRate: number | null;
     };
@@ -210,7 +215,7 @@ export type OperatorRiskItem = {
   severity: "warning" | "error";
   kind: string;
   title: string;
-  builderUserId: string | null;
+  communityCreatorUserId: string | null;
   communityId: string | null;
   eventId: string | null;
   createdAt: number;

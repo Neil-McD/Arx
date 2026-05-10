@@ -5,7 +5,7 @@ import { buildOperatorPlatformHealthCards } from "../../../../shared/operatorPla
 import {
   loadOperatorAccountSetupSnapshotCanonical,
   loadOperatorAuthAccessDiagnosticsCanonical,
-  loadOperatorBuildersCanonical,
+  loadOperatorCommunitiesCanonical,
   loadOperatorEventsCanonical,
   loadOperatorFrontendErrorDiagnosticsCanonical,
   loadOperatorMonetizationCanonical,
@@ -20,7 +20,7 @@ import type {
   OperatorAccountSetupSnapshot,
   OperatorAccountSetupUserRecord,
   OperatorAuthAccessDiagnosticsSnapshot,
-  OperatorBuilderRecord,
+  OperatorCommunityRecord,
   OperatorEventRecord,
   OperatorFrontendErrorDiagnosticsSnapshot,
   OperatorMonetizationSnapshot,
@@ -62,7 +62,7 @@ export type OperatorDashboardState = {
   runtimeTools: OperatorRuntimeToolDiagnosticsSnapshot | null;
   frontendErrors: OperatorFrontendErrorDiagnosticsSnapshot | null;
   accountSetup: OperatorAccountSetupSnapshot | null;
-  builders: OperatorBuilderRecord[];
+  communityRows: OperatorCommunityRecord[];
   risks: OperatorRiskItem[];
   events: OperatorEventRecord[];
 };
@@ -77,7 +77,7 @@ export function createEmptyOperatorDashboardState(): OperatorDashboardState {
     runtimeTools: null,
     frontendErrors: null,
     accountSetup: null,
-    builders: [],
+    communityRows: [],
     risks: [],
     events: [],
   };
@@ -139,7 +139,7 @@ export function useOperatorDashboardData(params: {
           loadOperatorRuntimeToolDiagnosticsCanonical({ session, range: "30d" }),
           loadOperatorFrontendErrorDiagnosticsCanonical({ session, range: "30d" }),
           loadOperatorAccountSetupSnapshotCanonical({ session, completed: false, limit: 24 }),
-          loadOperatorBuildersCanonical({ session, limit: 12 }),
+          loadOperatorCommunitiesCanonical({ session, limit: 12 }),
           loadOperatorRisksCanonical({ session, limit: 12 }),
           loadOperatorEventsCanonical({ session, limit: 12 }),
         ] as const);
@@ -152,7 +152,7 @@ export function useOperatorDashboardData(params: {
           runtimeTools,
           frontendErrors,
           accountSetup,
-          builders,
+          communityRows,
           risks,
           events,
         ] = results;
@@ -165,7 +165,7 @@ export function useOperatorDashboardData(params: {
           ["runtime_tools", runtimeTools],
           ["frontend_errors", frontendErrors],
           ["account_setup", accountSetup],
-          ["builders", builders],
+          ["communities", communityRows],
           ["risks", risks],
           ["events", events],
         ].forEach(([label, result]) => logRejectedOperatorSection(String(label), result as PromiseSettledResult<unknown>));
@@ -178,7 +178,7 @@ export function useOperatorDashboardData(params: {
           runtimeTools: fulfilledValue(runtimeTools),
           frontendErrors: fulfilledValue(frontendErrors),
           accountSetup: fulfilledValue(accountSetup),
-          builders: fulfilledList(builders),
+          communityRows: fulfilledList(communityRows),
           risks: fulfilledList(risks),
           events: fulfilledList(events),
         };
@@ -195,7 +195,7 @@ export function useOperatorDashboardData(params: {
             runtimeTools: nextState.runtimeTools ?? prev.runtimeTools,
             frontendErrors: nextState.frontendErrors ?? prev.frontendErrors,
             accountSetup: nextState.accountSetup ?? prev.accountSetup,
-            builders: nextState.builders ?? prev.builders,
+            communityRows: nextState.communityRows ?? prev.communityRows,
             risks: nextState.risks ?? prev.risks,
             events: nextState.events ?? prev.events,
           }));
@@ -218,20 +218,20 @@ export function useOperatorDashboardData(params: {
     };
   }, [params.enabled, params.session, params.surface]);
 
-  const topBuilders = useMemo(
+  const topCommunities = useMemo(
     () =>
-      [...state.builders].sort(
+      [...state.communityRows].sort(
         (a, b) => (b.money.estimatedMrr?.amountBaseUnits ?? 0) - (a.money.estimatedMrr?.amountBaseUnits ?? 0),
       ),
-    [state.builders],
+    [state.communityRows],
   );
 
-  return { state, topBuilders, isLoading, error };
+  return { state, topCommunities, isLoading, error };
 }
 
 export function WebOperatorDataPanel(props: {
   state: OperatorDashboardState;
-  topBuilders: OperatorBuilderRecord[];
+  topCommunities: OperatorCommunityRecord[];
   isLoading: boolean;
   error: string | null;
   activeInsightTab: OperatorInsightTab;
@@ -299,7 +299,7 @@ export function WebOperatorDataPanel(props: {
         ) : props.activeInsightTab === "accounts" ? (
           <OperatorAccountSetupInsights snapshot={props.state.accountSetup} />
         ) : (
-          <OperatorCommunityInsights overview={props.state.overview} builders={props.topBuilders} />
+          <OperatorCommunityInsights overview={props.state.overview} communities={props.topCommunities} />
         )}
       </div>
     </>
@@ -321,7 +321,7 @@ function formatPercent(value: number | null | undefined): string {
   return `${Math.round(value * 100)}%`;
 }
 
-function formatVisibility(value: OperatorBuilderRecord["community"]["visibility"]): string {
+function formatVisibility(value: OperatorCommunityRecord["community"]["visibility"]): string {
   switch (value) {
     case "published":
       return "Published";
@@ -332,7 +332,7 @@ function formatVisibility(value: OperatorBuilderRecord["community"]["visibility"
   }
 }
 
-function formatEntryPolicy(value: OperatorBuilderRecord["community"]["entryPolicy"]): string {
+function formatEntryPolicy(value: OperatorCommunityRecord["community"]["entryPolicy"]): string {
   switch (value) {
     case "paid_subscription":
       return "Paid";
@@ -377,7 +377,7 @@ function formatAccountSetupMissing(value: OperatorAccountSetupUserRecord["setup"
   }
 }
 
-function formatPayoutStatus(value: OperatorBuilderRecord["builder"]["payoutStatus"]): string {
+function formatPayoutStatus(value: OperatorCommunityRecord["creator"]["payoutStatus"]): string {
   switch (value) {
     case "ready":
       return "Payout ready";
@@ -869,9 +869,9 @@ function OperatorBusinessInsights(props: {
           <span className="operator-dashboard__metric-note">Accounts created in the selected operator window.</span>
         </div>
         <div>
-          <span>Activated builders</span>
-          <strong>{businessKpis?.communities.activatedBuilders ?? 0}</strong>
-          <span className="operator-dashboard__metric-note">Builders with a community that has a non-owner member.</span>
+          <span>Activated creators</span>
+          <strong>{businessKpis?.communities.activatedCommunityCreators ?? 0}</strong>
+          <span className="operator-dashboard__metric-note">Community creators with at least one non-owner member.</span>
         </div>
         <div>
           <span>Community MRR</span>
@@ -904,6 +904,14 @@ function OperatorBusinessInsights(props: {
             <strong>{formatPercent(businessKpis?.users.visitorToUserConversionRate ?? null)}</strong>
           </div>
           <div className="operator-dashboard__row">
+            <span>Accounts completed</span>
+            <strong>{businessKpis?.users.accountSetupCompleted ?? 0}</strong>
+          </div>
+          <div className="operator-dashboard__row">
+            <span>Account completion</span>
+            <strong>{formatPercent(businessKpis?.users.accountSetupCompletionRate ?? null)}</strong>
+          </div>
+          <div className="operator-dashboard__row">
             <span>Communities created</span>
             <strong>{businessKpis?.communities.createdInRange ?? 0}</strong>
           </div>
@@ -923,16 +931,16 @@ function OperatorBusinessInsights(props: {
         <h2>Activation</h2>
         <div className="operator-dashboard__table">
           <div className="operator-dashboard__row">
-            <span>Builder users</span>
-            <strong>{businessKpis?.communities.totalBuilders ?? 0}</strong>
+            <span>Community creators</span>
+            <strong>{businessKpis?.communities.totalCommunityCreators ?? 0}</strong>
           </div>
           <div className="operator-dashboard__row">
-            <span>Activated builders</span>
-            <strong>{businessKpis?.communities.activatedBuilders ?? 0}</strong>
+            <span>Activated creators</span>
+            <strong>{businessKpis?.communities.activatedCommunityCreators ?? 0}</strong>
           </div>
           <div className="operator-dashboard__row">
-            <span>Builder activation</span>
-            <strong>{formatPercent(businessKpis?.communities.builderActivationRate ?? null)}</strong>
+            <span>Creator activation</span>
+            <strong>{formatPercent(businessKpis?.communities.communityCreatorActivationRate ?? null)}</strong>
           </div>
           <div className="operator-dashboard__row">
             <span>Communities with first member</span>
@@ -941,6 +949,14 @@ function OperatorBusinessInsights(props: {
           <div className="operator-dashboard__row">
             <span>Community activation</span>
             <strong>{formatPercent(businessKpis?.communities.communityActivationRate ?? null)}</strong>
+          </div>
+          <div className="operator-dashboard__row">
+            <span>Paid communities with members</span>
+            <strong>{businessKpis?.communities.paidCommunitiesWithMembers ?? 0}</strong>
+          </div>
+          <div className="operator-dashboard__row">
+            <span>Paid community activation</span>
+            <strong>{formatPercent(businessKpis?.communities.paidCommunityMemberActivationRate ?? null)}</strong>
           </div>
           <div className="operator-dashboard__row">
             <span>New communities activated</span>
@@ -964,6 +980,10 @@ function OperatorBusinessInsights(props: {
           <div className="operator-dashboard__row">
             <span>Active paying users</span>
             <strong>{businessKpis?.users.activePayingCustomers ?? 0}</strong>
+          </div>
+          <div className="operator-dashboard__row">
+            <span>Usage buyers</span>
+            <strong>{businessKpis?.users.usageBuyersInRange ?? 0}</strong>
           </div>
           <div className="operator-dashboard__row">
             <span>Checkout purchasers</span>
@@ -1272,7 +1292,10 @@ function OperatorAccountSetupInsights(props: { snapshot: OperatorAccountSetupSna
   );
 }
 
-function OperatorCommunityInsights(props: { overview: OperatorOverviewSnapshot | null; builders: OperatorBuilderRecord[] }) {
+function OperatorCommunityInsights(props: {
+  overview: OperatorOverviewSnapshot | null;
+  communities: OperatorCommunityRecord[];
+}) {
   const totals = props.overview?.totals;
   return (
     <div className="operator-data-panel__grid">
@@ -1280,7 +1303,9 @@ function OperatorCommunityInsights(props: { overview: OperatorOverviewSnapshot |
         <div>
           <span>Communities</span>
           <strong>{totals?.communities ?? 0}</strong>
-          <span className="operator-dashboard__metric-note">{totals?.builders ?? 0} unique builders.</span>
+          <span className="operator-dashboard__metric-note">
+            {totals?.communityCreators ?? 0} unique community creators.
+          </span>
         </div>
         <div>
           <span>Active communities</span>
@@ -1312,15 +1337,15 @@ function OperatorCommunityInsights(props: { overview: OperatorOverviewSnapshot |
       <section className="operator-dashboard__panel operator-dashboard__panel--full">
         <h2>Top communities</h2>
         <div className="operator-dashboard__table">
-          {props.builders.map((record) => (
+          {props.communities.map((record) => (
             <div className="operator-dashboard__row operator-dashboard__community-row" key={record.community.communityId}>
               <div className="operator-dashboard__community-main">
                 <strong>{record.community.name}</strong>
-                <span>{record.builder.displayName ?? record.builder.email ?? record.builder.userId}</span>
+                <span>{record.creator.displayName ?? record.creator.email ?? record.creator.userId}</span>
                 <div className="operator-dashboard__chips" aria-label={`${record.community.name} state`}>
                   <span className="operator-dashboard__chip">{formatVisibility(record.community.visibility)}</span>
                   <span className="operator-dashboard__chip">{formatEntryPolicy(record.community.entryPolicy)}</span>
-                  <span className="operator-dashboard__chip">{formatPayoutStatus(record.builder.payoutStatus)}</span>
+                  <span className="operator-dashboard__chip">{formatPayoutStatus(record.creator.payoutStatus)}</span>
                   {record.risk.flags.map((flag) => (
                     <span className="operator-dashboard__chip operator-dashboard__chip--warning" key={flag}>
                       {formatRiskFlag(flag)}

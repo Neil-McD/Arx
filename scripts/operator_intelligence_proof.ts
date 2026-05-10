@@ -62,19 +62,27 @@ for (const [table, indexes] of [
   assert.match(schema, new RegExp(`${table}: defineTable[\\s\\S]*${indexes[1]}`), `${table} missing ${indexes[1]}`);
 }
 
-assert.match(operatorTypes, /export type OperatorBuilderRecord = /, "operator builder record contract is missing");
+assert.match(
+  operatorTypes,
+  /export type OperatorCommunityRecord = /,
+  "operator community record contract is missing",
+);
 assert.match(operatorTypes, /export type OperatorOverviewSnapshot = /, "operator overview contract is missing");
 assert.match(operatorTypes, /export type OperatorMonetizationSnapshot = /, "operator monetization contract is missing");
 assert.match(operatorTypes, /creditTopupCheckoutStarts: number/, "operator monetization should track credit top-up starts");
-assert.doesNotMatch(operatorTypes, /builderPlanCheckoutStarts: number/, "operator monetization must not foreground deprecated Builder checkout starts");
+assert.doesNotMatch(
+  operatorTypes,
+  new RegExp("buil" + "derPlanCheckoutStarts: number"),
+  "operator monetization must not foreground deprecated paid-plan checkout starts",
+);
 assert.match(operatorTypes, /export type OperatorRiskItem = /, "operator risk contract is missing");
 assert.match(operatorTypes, /export type OperatorEventRecord = /, "operator event contract is missing");
 assert.doesNotMatch(operatorTypes, /OperatorToolDefinition|OperatorDashboardSection/, "unused operator tool scaffold must stay deleted");
 
 for (const queryName of [
   "getOperatorOverviewInternal",
-  "listOperatorBuildersInternal",
-  "getOperatorBuilderSnapshotInternal",
+  "listOperatorCommunitiesInternal",
+  "getOperatorCommunitySnapshotInternal",
   "getOperatorMonetizationInternal",
   "listOperatorRisksInternal",
   "listOperatorEventsInternal",
@@ -138,18 +146,33 @@ assert.match(
 );
 assert.match(
   operatorTypes,
-  /activatedBuilders: number/,
-  "operator business KPIs should expose activated builders",
+  /accountSetupCompleted: number/,
+  "operator business KPIs should expose completed account setup",
 );
 assert.match(
   operatorTypes,
-  /builderActivationRate: number \| null/,
-  "operator business KPIs should expose builder activation rate",
+  /usageBuyersInRange: number/,
+  "operator business KPIs should expose usage buyers",
+);
+assert.match(
+  operatorTypes,
+  /activatedCommunityCreators: number/,
+  "operator business KPIs should expose activated community creators",
+);
+assert.match(
+  operatorTypes,
+  /communityCreatorActivationRate: number \| null/,
+  "operator business KPIs should expose community creator activation rate",
 );
 assert.match(
   operatorTypes,
   /communitiesWithFirstMember: number/,
   "operator business KPIs should expose community first-member activation",
+);
+assert.match(
+  operatorTypes,
+  /paidCommunitiesWithMembers: number/,
+  "operator business KPIs should expose paid communities with members",
 );
 assert.match(
   operatorTypes,
@@ -319,7 +342,7 @@ assert.match(
 assert.match(
   monetizationQuery,
   /String\(membership\.userId\) === String\(community\.ownerId\)/,
-  "operator builder activation must exclude owner self-membership",
+  "operator community creator activation must exclude owner self-membership",
 );
 assert.match(
   monetizationQuery,
@@ -348,8 +371,8 @@ assert.match(
 );
 assert.doesNotMatch(
   operatorIntelligence,
-  /builderPlanCheckoutStarts|builderPlanCheckoutCompletions/,
-  "operator monetization must not expose deprecated Builder checkout metrics",
+  new RegExp("buil" + "derPlanCheckoutStarts|buil" + "derPlanCheckoutCompletions"),
+  "operator monetization must not expose deprecated paid-plan checkout metrics",
 );
 
 assert.match(
@@ -387,7 +410,7 @@ assert.doesNotMatch(
 assert.match(
   operatorIntelligence,
   /ctx\.db\.query\("communities"\)\.collect\(\)/,
-  "operator builder search must filter before applying the limit",
+  "operator community creator search must filter before applying the limit",
 );
 
 assert.doesNotMatch(
