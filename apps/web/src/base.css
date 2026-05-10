@@ -21509,7 +21509,7 @@ button.message-citation-chip:hover {
 .workspace-operator-data-toggle {
   position: fixed;
   top: 12px;
-  right: calc(62px + var(--operator-right-panel-chrome-offset, 0px));
+  right: 62px;
   z-index: 35;
   width: 32px;
   height: 32px;

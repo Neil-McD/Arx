@@ -106,6 +106,10 @@
   pointer-events: none;
 }
 
+.app-root.web-header-islands .app-topbar {
+  z-index: 40;
+}
+
 /* Make the header container click-through; only the controls are interactive. */
 .app-topbar .topbar-left,
 .app-topbar .topbar-center,

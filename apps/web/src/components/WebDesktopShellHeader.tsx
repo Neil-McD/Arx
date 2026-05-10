@@ -4,9 +4,6 @@ export function WebDesktopShellHeader(props: WebDesktopShellHeaderProps) {
   if (props.activePage === "landing" || props.activePage === "onboarding") return null;
 
   const topbarRightClassName = `topbar-right${props.hasWorkspaceOperatorControl ? " has-workspace-operator-control" : ""}`;
-  const topbarRightStyle = props.workspaceOperatorChromeOffset > 0
-    ? { marginRight: props.workspaceOperatorChromeOffset }
-    : undefined;
 
   return (
     <header className="app-topbar">
@@ -93,7 +90,7 @@ export function WebDesktopShellHeader(props: WebDesktopShellHeaderProps) {
         )}
       </div>
 
-      <div className={topbarRightClassName} style={topbarRightStyle}>
+      <div className={topbarRightClassName}>
         {props.isPublicCommunityFunnel ? null : props.communityHomeButton}
       </div>
     </header>

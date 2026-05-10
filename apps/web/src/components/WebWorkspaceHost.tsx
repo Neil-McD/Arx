@@ -1020,9 +1020,6 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
   const operatorDataPanelStyle = {
     "--operator-right-panel-width": `${operatorRightPanelWidth}px`,
     "--operator-right-panel-gutter": `${OPERATOR_RIGHT_PANEL_GUTTER}px`,
-    "--operator-right-panel-chrome-offset": `${
-      isOperatorDataPanelVisible ? operatorRightPanelWidth + OPERATOR_RIGHT_PANEL_GUTTER : 0
-    }px`,
   } as CSSProperties;
   const operatorData = useOperatorDashboardData({
     session: props.operatorDataPanelSession ?? null,
@@ -1733,7 +1730,6 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
           type="button"
           className={`icon-button workspace-operator-data-toggle${isOperatorDataPanelOpen ? " active" : ""}`}
           onClick={() => setIsOperatorDataPanelOpen((value) => !value)}
-          style={operatorDataPanelStyle}
           aria-expanded={isOperatorDataPanelOpen}
           aria-controls="workspace-operator-data-panel"
           aria-label={isOperatorDataPanelOpen ? "Close operator data panel" : "Open operator data panel"}
