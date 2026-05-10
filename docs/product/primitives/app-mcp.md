@@ -43,7 +43,7 @@ Each catalog app should resolve to an integration profile: MCP, connector backpl
 13. Provider-specific endpoint variants and request headers are part of the app contract. For example, GitHub is ready only through its hosted read-only MCP endpoint with catalog-owned read-only/toolset headers, not the general write-capable MCP surface.
 14. Payment-provider MCPs must not become product authority. Stripe can be connected through a user-owned restricted API key to its hosted MCP endpoint; mutation-shaped Stripe tools stay provider-blocked, and Polynet billing, entitlements, payouts, and webhook verification remain owned by Polynet's server-side billing system.
 15. Tool exposure follows the Codex-style core: default-enabled tools, disabled tools, and a runtime deny check. Provider profiles own those rules; Discover, Settings, and Community Settings only project the resulting harness state.
-16. Media-production apps should be modeled as artifact/job adapters. HyperFrames belongs behind a sandboxed CLI bridge; Higgsfield and HeyGen stay planned until media jobs have async polling, credit controls, artifact references, and bounded result projection.
+16. Media-production apps should be modeled as artifact/job adapters. HyperFrames belongs behind a sandboxed CLI bridge; Higgsfield is skill-first while its MCP/CLI execution stays planned, and HeyGen stays planned until media jobs have async polling, credit controls, artifact references, and bounded result projection.
 
 ## Non-Goals
 

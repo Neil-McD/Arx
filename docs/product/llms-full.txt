@@ -782,7 +782,7 @@ Each catalog app should resolve to an integration profile: MCP, connector backpl
 13. Provider-specific endpoint variants and request headers are part of the app contract. For example, GitHub is ready only through its hosted read-only MCP endpoint with catalog-owned read-only/toolset headers, not the general write-capable MCP surface.
 14. Payment-provider MCPs must not become product authority. Stripe can be connected through a user-owned restricted API key to its hosted MCP endpoint; mutation-shaped Stripe tools stay provider-blocked, and Polynet billing, entitlements, payouts, and webhook verification remain owned by Polynet's server-side billing system.
 15. Tool exposure follows the Codex-style core: default-enabled tools, disabled tools, and a runtime deny check. Provider profiles own those rules; Discover, Settings, and Community Settings only project the resulting harness state.
-16. Media-production apps should be modeled as artifact/job adapters. HyperFrames belongs behind a sandboxed CLI bridge; Higgsfield and HeyGen stay planned until media jobs have async polling, credit controls, artifact references, and bounded result projection.
+16. Media-production apps should be modeled as artifact/job adapters. HyperFrames belongs behind a sandboxed CLI bridge; Higgsfield is skill-first while its MCP/CLI execution stays planned, and HeyGen stays planned until media jobs have async polling, credit controls, artifact references, and bounded result projection.
 
 ## Non-Goals
 
@@ -1507,7 +1507,7 @@ Capability is real only when:
 21. Vercel's hosted MCP endpoint is catalog-known, but it remains non-connectable until Polynet's client approval and operation-safety path are verified.
 22. Stripe is ready only through its hosted MCP endpoint, `https://mcp.stripe.com`, with a user-owned restricted API key. Secret and publishable Stripe keys are rejected, mutation-shaped Stripe MCP tools are blocked by provider policy, and Stripe MCP must not become authoritative for Polynet billing, entitlements, payouts, or webhook-verified access decisions.
 23. Tool exposure follows the same irreducible shape as Codex MCP filtering: profile default-enabled tools, profile disabled tools, user mount selection, and a final runtime deny check.
-24. Media-production apps need an artifact/job path before connectability. HyperFrames should run through a sandboxed CLI bridge, while Higgsfield and HeyGen need async job polling, credit/cost guardrails, and artifact references before they become live harness apps.
+24. Media-production apps need an artifact/job path before connectability. HyperFrames should run through a sandboxed CLI bridge, Higgsfield is currently skill-first while MCP/CLI execution remains planned, and HeyGen needs async job polling, credit/cost guardrails, and artifact references before it becomes a live harness app.
 
 ## Common Mistakes
 

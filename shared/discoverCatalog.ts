@@ -2529,9 +2529,9 @@ export const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
     tagline: "Agentic image, video, and creative asset generation",
     description:
       "Creative-generation MCP surface for producing images, videos, character assets, and campaign visuals from an agent workflow.",
-    supportLabel: "Media MCP planned",
+    supportLabel: "Skill ready, MCP planned",
     supportNote:
-      "Higgsfield publishes a hosted MCP URL, but PolyNet should make it live only after media-job polling, artifact references, and credit/cost controls are wired.",
+      "Add the Higgsfield skill now for artifact-first creative planning. MCP/CLI execution stays planned until media-job polling, artifact references, and credit/cost controls are wired.",
     heroNote:
       "Best for creator and marketing communities that want image and video generation inside the harness.",
     capabilities: [
@@ -2542,6 +2542,7 @@ export const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
     websiteUrl: "https://higgsfield.ai",
     docsUrl: "https://higgsfield.ai/mcp",
     logoUrl: null,
+    relatedSkillCatalogId: "higgsfield",
     personalConnect: {
       connectionKind: "known",
       availability: "later",

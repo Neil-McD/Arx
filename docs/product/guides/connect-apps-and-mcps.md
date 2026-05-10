@@ -89,7 +89,7 @@ Capability is real only when:
 21. Vercel's hosted MCP endpoint is catalog-known, but it remains non-connectable until Polynet's client approval and operation-safety path are verified.
 22. Stripe is ready only through its hosted MCP endpoint, `https://mcp.stripe.com`, with a user-owned restricted API key. Secret and publishable Stripe keys are rejected, mutation-shaped Stripe MCP tools are blocked by provider policy, and Stripe MCP must not become authoritative for Polynet billing, entitlements, payouts, or webhook-verified access decisions.
 23. Tool exposure follows the same irreducible shape as Codex MCP filtering: profile default-enabled tools, profile disabled tools, user mount selection, and a final runtime deny check.
-24. Media-production apps need an artifact/job path before connectability. HyperFrames should run through a sandboxed CLI bridge, while Higgsfield and HeyGen need async job polling, credit/cost guardrails, and artifact references before they become live harness apps.
+24. Media-production apps need an artifact/job path before connectability. HyperFrames should run through a sandboxed CLI bridge, Higgsfield is currently skill-first while MCP/CLI execution remains planned, and HeyGen needs async job polling, credit/cost guardrails, and artifact references before it becomes a live harness app.
 
 ## Common Mistakes
 

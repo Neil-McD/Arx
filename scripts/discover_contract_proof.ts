@@ -467,8 +467,23 @@ function main() {
   );
   assertIncludes(
     sharedDiscoverSkillCatalog,
+    'catalogSkillId: "higgsfield"',
+    "Discover skill catalog includes canonical Higgsfield skill",
+  );
+  assertIncludes(
+    sharedDiscoverSkillCatalog,
     "If execution tools are not available, produce the composition plan and code/file structure, but do not claim a preview or render completed.",
     "HyperFrames video skill keeps execution claims tied to verified tools",
+  );
+  assertIncludes(
+    sharedDiscoverSkillCatalog,
+    "If execution tools are not available, produce the creative brief, prompt set, reference-asset checklist, generation plan, and validation checklist, but do not claim an image or video was generated.",
+    "Higgsfield media skill keeps generation claims tied to verified tools",
+  );
+  assertIncludes(
+    sharedDiscoverSkillCatalog,
+    "Be credit-aware. Call out actions that may spend provider credits before execution",
+    "Higgsfield media skill keeps provider credit spend explicit",
   );
   assertNotIncludes(
     sharedDiscoverSkillCatalog,

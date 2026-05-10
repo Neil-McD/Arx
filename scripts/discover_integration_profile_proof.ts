@@ -409,6 +409,30 @@ function main() {
     "https://mcp.higgsfield.ai",
     "Higgsfield catalog entry should preserve the provider MCP URL without making it ready",
   );
+  assert.equal(
+    isDiscoverAppPersonallyConnectable(higgsfield),
+    false,
+    "Higgsfield must not expose a personal add button before media job guardrails exist",
+  );
+  assert.equal(
+    higgsfield.relatedSkillCatalogId,
+    "higgsfield",
+    "Higgsfield app should point to the immediately installable Higgsfield skill",
+  );
+  const higgsfieldSkill = findRelatedDiscoverSkillForApp(
+    higgsfield,
+    DISCOVER_SKILL_CATALOG,
+  );
+  assert.ok(higgsfieldSkill, "Higgsfield related skill must exist");
+  assert.ok(
+    higgsfieldSkill.installInput,
+    "Higgsfield related skill must be installable",
+  );
+  assert.equal(
+    deriveDiscoverSkillMentionToken(higgsfieldSkill),
+    "higgsfield",
+    "Higgsfield related skill should derive the $higgsfield runtime token",
+  );
   const higgsfieldProfile = resolveDiscoverAppIntegrationProfile(higgsfield);
   assert.equal(higgsfieldProfile.adapterKind, "remote_mcp_oauth");
   assert.equal(higgsfieldProfile.readiness, "oauth_planned");

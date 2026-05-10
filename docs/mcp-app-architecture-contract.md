@@ -50,7 +50,7 @@ Rules:
 - GitHub's ready profile is intentionally read-only and must use `https://api.githubcopilot.com/mcp/readonly` with catalog-owned read-only and toolset headers; the general GitHub MCP endpoint is not part of the ready contract.
 - Stripe's ready profile uses `https://mcp.stripe.com` with a user-owned restricted API key. Secret and publishable Stripe keys are rejected, mutation-shaped Stripe MCP tools are blocked by provider policy, and Stripe MCP must not replace Polynet's server-authoritative billing, entitlement, payout, or webhook flows.
 - Vercel's MCP profile stays planned until Polynet's client approval and operation-safety path are verified.
-- Media-production apps must use an artifact/job contract. HyperFrames is a sandboxed CLI profile, not a hosted MCP endpoint; Higgsfield and HeyGen stay planned until async media polling, credit controls, and artifact references are part of the runtime path.
+- Media-production apps must use an artifact/job contract. HyperFrames is a sandboxed CLI profile, not a hosted MCP endpoint; Higgsfield is skill-first while MCP/CLI execution remains planned; HeyGen stays planned until async media polling, credit controls, and artifact references are part of the runtime path.
 - Uncataloged remote MCP endpoints are blocked from public server-fetch paths until they have a reviewed catalog policy or a network-layer egress guard.
 - Operator audit must identify uncataloged or catalog-policy-blocked developer app rows before broad release.
 - Integration profile default risk is applied as a floor during MCP tool snapshot classification.

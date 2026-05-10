@@ -132,6 +132,32 @@ export const DISCOVER_SKILL_CATALOG: DiscoverSkillCatalogEntry[] = [
     },
   },
   {
+    id: "higgsfield",
+    kind: "curated",
+    catalogSkillId: "higgsfield",
+    name: "Higgsfield",
+    tagline: "Plan artifact-first AI image and video generation",
+    description:
+      "Reusable production behavior for turning creative briefs into Higgsfield-ready image, video, Soul ID, product photoshoot, and marketplace-card workflows.",
+    surface: "Personal or community",
+    category: "Media production",
+    icon: "workflow",
+    heroNote:
+      "A media-generation skill for shaping Higgsfield work without confusing creative planning with live credit-spending execution.",
+    detailBullets: [
+      "Reduces creative requests into prompt, reference, model, format, and delivery constraints.",
+      "Supports Soul ID, product photoshoot, marketplace-card, and campaign asset planning.",
+      "Keeps generation outputs artifact-first and only claims execution when a verified tool proves it.",
+    ],
+    installInput: {
+      catalog_skill_id: "higgsfield",
+      name: "Higgsfield",
+      description:
+        "Plan and verify Higgsfield image, video, character, product, and marketplace creative workflows.",
+      instructions_md: `Use this skill when the user wants to plan, draft, inspect, or execute a Higgsfield image/video generation workflow.\n\nOperating rules:\n1. Start by reducing the brief into the fewest useful creative inputs: goal, audience, format, aspect ratio, duration if video, visual references, brand constraints, subject/character identity, product details, and delivery channel.\n2. Treat Higgsfield as an artifact workflow. The useful outputs are prompts, model/workflow choices, uploaded/reference assets, job ids, preview URLs, generated asset URLs, and concise result summaries.\n3. Support the core Higgsfield workflow families explicitly: image generation, video generation, Soul ID or character consistency, product photoshoots, marketplace cards, and campaign/ad creative variations.\n4. If CLI, MCP, workspace, or sandbox tools are available, use the smallest verified loop: check auth/account/workspace when needed, inspect available models or workflow options when uncertain, generate only with explicit user intent, then report the exact job id or artifact URL that tool output proves.\n5. If execution tools are not available, produce the creative brief, prompt set, reference-asset checklist, generation plan, and validation checklist, but do not claim an image or video was generated.\n6. Keep binary media out of chat context. Summarize outputs and link or reference artifacts instead.\n7. Be credit-aware. Call out actions that may spend provider credits before execution, avoid unnecessary variant explosions, and prefer a small test generation before a large batch.\n8. Before finalizing, call out missing assets, unsafe assumptions, rights/likeness risks, generation blockers, and the smallest next verification step.`,
+    },
+  },
+  {
     id: "custom-skill",
     kind: "custom",
     catalogSkillId: null,
