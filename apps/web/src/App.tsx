@@ -7700,6 +7700,9 @@ export default function App() {
       activePage === "workspace" &&
       activeView === "home",
     ),
+    workspaceOperatorChromeOffset: workspaceOperatorPanelLayout.open
+      ? workspaceOperatorPanelLayout.width + workspaceOperatorPanelLayout.gutter
+      : 0,
     communityHomeButton,
     handleExitPublicFunnelPreview,
     handleTopbarBackFromPublicFunnel,
