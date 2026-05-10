@@ -336,6 +336,13 @@ function buildPlatformHarnessOperatingPolicyPrompt(params: {
       "- Use short, specific search queries. Refine noisy searches instead of overstuffing the first query.",
     );
   }
+  toolGuidance.push(
+    "- When a connected app/MCP tool fails, treat the failure as app-specific evidence rather than a platform break: identify the app, classify auth/permission/argument/rate-limit/provider issues, and say what is verified versus unknown.",
+    "- Do not repeatedly call the same failing connected-app tool. Correct invalid arguments once when the schema/error makes the fix clear; otherwise skip that app and continue with other apps when the task spans multiple integrations.",
+    params.allowedToolNames.includes("web_research")
+      ? "- If connected-app provider behavior is unclear and the answer depends on it, use web_research against official provider docs/status before making a provider-specific claim."
+      : "- If connected-app provider behavior is unclear and research tools are unavailable, name the uncertainty and the setup/permission detail needed to resolve it.",
+  );
   if (params.allowedToolNames.includes("list_dir")) {
     toolGuidance.push(
       "- Use list_dir to discover files and folders before claiming workspace knowledge you have not inspected.",

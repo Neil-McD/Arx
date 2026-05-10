@@ -38,7 +38,10 @@ import {
   type RuntimeTurnContextSnapshotV1,
   type RuntimeTurnContextPacket,
 } from "../shared/runtimeTurnContextPacket";
-import { buildRuntimeFailureFinalAnswer } from "../shared/runtimeFailureFinalizer";
+import {
+  buildRuntimeFailureFinalAnswer,
+  hasConnectedAppFailureEvidence,
+} from "../shared/runtimeFailureFinalizer";
 import { loadRuntimeTurnContextPacketForRun } from "./runtimeTurnContext";
 import {
   PublicTurnInput,
@@ -758,7 +761,10 @@ export async function handleRuntimeTurnRequest(args: {
           },
         });
         failureContextPacket = loadedFailureContext.packet;
-        if (params.status === "error") {
+        if (
+          params.status === "error" &&
+          !hasConnectedAppFailureEvidence(failureContextPacket)
+        ) {
           try {
             const finalizationMessages = buildAdaptiveFailureFinalizationMessages({
               runtimeTurnContext: failureContextPacket,
@@ -1037,9 +1043,15 @@ export async function handleRuntimeTurnRequest(args: {
                 });
                 return;
               }
+              const fallbackFinalAnswer = buildRuntimeFailureFinalAnswer({
+                partialContent: streamedContent,
+                status: "error",
+                reason: loopResult.code,
+                errorCode: loopResult.code,
+                errorMessage: loopResult.message,
+              });
               const finalContent =
-                partialAssistant?.content ??
-                (streamedContent || loopResult.message);
+                partialAssistant?.content ?? fallbackFinalAnswer.content;
               if (!streamedContent && finalContent) {
                 emitBufferedAssistantText({
                   content: finalContent,
@@ -1324,8 +1336,15 @@ export async function handleRuntimeTurnRequest(args: {
             errorCode: loopResult.code,
             errorMessage: loopResult.message,
           });
+          const fallbackFinalAnswer = buildRuntimeFailureFinalAnswer({
+            partialContent: content,
+            status: "error",
+            reason: loopResult.code,
+            errorCode: loopResult.code,
+            errorMessage: loopResult.message,
+          });
           return successResponse({
-            content: partialAssistant?.content ?? (content || loopResult.message),
+            content: partialAssistant?.content ?? fallbackFinalAnswer.content,
             promptTokens,
             completionTokens,
             resolvedInferenceSource,

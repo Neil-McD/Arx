@@ -2,13 +2,46 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 import { buildPlatformHarnessRuntimeSystemPrompt } from "../shared/runtimePrompt.ts";
-import { buildRuntimeTurnContextPacket } from "../shared/runtimeTurnContextPacket.ts";
+import {
+  buildRuntimeRecentToolAttemptsFromEvents,
+  buildRuntimeTurnContextPacket,
+} from "../shared/runtimeTurnContextPacket.ts";
 
 function indexOfBlock(prompt: string, blockName: string): number {
   const index = prompt.indexOf(blockName);
   assert.notEqual(index, -1, `expected ${blockName} block`);
   return index;
 }
+
+const connectedAppAttempts = buildRuntimeRecentToolAttemptsFromEvents({
+  events: [
+    {
+      eventType: "tool_call_finished",
+      createdAt: 1_774_000_000_006,
+      payload: {
+        tool_name: "me__airtable_3__list_bases",
+        status: "error",
+        error_code: "user_platform_app_tool_failed",
+        error_message: '{"error":"FORBIDDEN","message":"Forbidden"}',
+        output_preview: '{"error":"FORBIDDEN","message":"Forbidden"}',
+        failure_semantics: {
+          kind: "app_permission_denied",
+          summary:
+            "Airtable tool list_bases was rejected by the provider because of permissions or scopes.",
+          suggested_recovery:
+            "Check the connected account, workspace/resource permissions, and OAuth/token scopes. Skip this app and continue testing others when it is not required.",
+          app_name: "Airtable",
+          app_scope: "user_platform_app",
+          app_tool_name: "list_bases",
+        },
+      },
+    },
+  ],
+});
+assert.equal(connectedAppAttempts[0]?.connectedAppName, "Airtable");
+assert.equal(connectedAppAttempts[0]?.connectedAppToolName, "list_bases");
+assert.equal(connectedAppAttempts[0]?.failureKind, "app_permission_denied");
+assert.equal(connectedAppAttempts[0]?.commandOrTarget, "Airtable.list_bases");
 
 const prompt = buildPlatformHarnessRuntimeSystemPrompt({
   loopBudget: {
@@ -109,6 +142,24 @@ const prompt = buildPlatformHarnessRuntimeSystemPrompt({
         errorMessage: "The sandbox browser could not reach localhost.",
         outputPreview: "curl: (7) Failed to connect to localhost port 3000",
       },
+      {
+        toolCallId: "runtime_tools:run_1:chat_tools:6",
+        providerCallId: "call_6",
+        toolName: "me__airtable_3__list_bases",
+        status: "error",
+        commandOrTarget: "Airtable.list_bases",
+        errorCode: "user_platform_app_tool_failed",
+        errorMessage: '{"error":"FORBIDDEN","message":"Forbidden"}',
+        outputPreview: '{"error":"FORBIDDEN","message":"Forbidden"}',
+        failureKind: "app_permission_denied",
+        connectedAppName: "Airtable",
+        connectedAppScope: "user_platform_app",
+        connectedAppToolName: "list_bases",
+        failureSummary:
+          "Airtable tool list_bases was rejected by the provider because of permissions or scopes.",
+        suggestedRecovery:
+          "Check the connected account, workspace/resource permissions, and OAuth/token scopes. Skip this app and continue testing others when it is not required.",
+      },
     ],
   }),
   currentDateTimeIso: "2026-04-25T20:00:00.000Z",
@@ -175,7 +226,14 @@ assert.match(prompt, /bash error; target=npm run build; cwd=\.; exit=127/);
 assert.match(prompt, /error_code=shell_nonzero_exit/);
 assert.match(prompt, /output=sh: vite: not found/);
 assert.match(prompt, /computer_open_url error; target=http:\/\/localhost:3000\//);
+assert.match(prompt, /me__airtable_3__list_bases error; target=Airtable\.list_bases/);
+assert.match(prompt, /failure_kind=app_permission_denied/);
+assert.match(prompt, /app=Airtable/);
+assert.match(prompt, /app_tool=list_bases/);
+assert.match(prompt, /recovery=Check the connected account, workspace\/resource permissions/);
 assert.match(prompt, /Do not say exact failed tool calls are unavailable when they are listed here/);
+assert.match(prompt, /When a connected app\/MCP tool fails/);
+assert.match(prompt, /Do not repeatedly call the same failing connected-app tool/);
 assert.doesNotMatch(prompt, /WORKSPACE_RUNTIME_STATE/);
 assert.doesNotMatch(prompt, /BACKGROUND_TERMINAL_STATE/);
 assert.match(prompt, /Polynet helps builders create, deploy, and monetize AI agents, communities, and apps/);

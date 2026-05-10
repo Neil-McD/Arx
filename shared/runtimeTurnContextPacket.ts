@@ -56,7 +56,11 @@ export type RuntimeRecentToolAttemptPrompt = {
   errorMessage?: string | null;
   outputPreview?: string | null;
   failureSummary?: string | null;
+  failureKind?: string | null;
   suggestedRecovery?: string | null;
+  connectedAppName?: string | null;
+  connectedAppScope?: string | null;
+  connectedAppToolName?: string | null;
   createdAt?: number | null;
 };
 
@@ -186,6 +190,15 @@ function readToolAttemptCommandOrTarget(params: {
   if (toolName.startsWith("computer_")) {
     return readAttemptString(params.details, "summary", "browser_window_title");
   }
+  const connectedAppName = readAttemptString(params.failureSemantics, "app_name", "appName");
+  const connectedAppToolName = readAttemptString(
+    params.failureSemantics,
+    "app_tool_name",
+    "appToolName",
+  );
+  if (connectedAppName || connectedAppToolName) {
+    return [connectedAppName, connectedAppToolName].filter(Boolean).join(".");
+  }
   return readAttemptString(params.args, "path", "url", "query", "command");
 }
 
@@ -233,7 +246,11 @@ function normalizeRuntimeRecentToolAttempt(
     failureSummary:
       readAttemptString(failureSemantics, "summary") ??
       readAttemptString(payload, "top_diagnostic_summary"),
+    failureKind: readAttemptString(failureSemantics, "kind"),
     suggestedRecovery: readAttemptString(failureSemantics, "suggested_recovery", "suggestedRecovery"),
+    connectedAppName: readAttemptString(failureSemantics, "app_name", "appName"),
+    connectedAppScope: readAttemptString(failureSemantics, "app_scope", "appScope"),
+    connectedAppToolName: readAttemptString(failureSemantics, "app_tool_name", "appToolName"),
     createdAt:
       typeof event.createdAt === "number" && Number.isFinite(event.createdAt)
         ? Math.floor(event.createdAt)
@@ -724,6 +741,13 @@ function buildRecentToolAttemptsPrompt(packet: RuntimeTurnContextPacket): string
       attempt.cwd ? `cwd=${truncatePromptSnippet(attempt.cwd, 80)}` : null,
       typeof attempt.exitCode === "number" ? `exit=${attempt.exitCode}` : null,
       attempt.errorCode ? `error_code=${truncatePromptSnippet(attempt.errorCode, 80)}` : null,
+      attempt.failureKind ? `failure_kind=${truncatePromptSnippet(attempt.failureKind, 80)}` : null,
+      attempt.connectedAppName
+        ? `app=${truncatePromptSnippet(attempt.connectedAppName, 80)}`
+        : null,
+      attempt.connectedAppToolName
+        ? `app_tool=${truncatePromptSnippet(attempt.connectedAppToolName, 100)}`
+        : null,
       attempt.errorMessage
         ? `error=${truncatePromptSnippet(attempt.errorMessage, 140)}`
         : null,
