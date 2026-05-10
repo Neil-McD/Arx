@@ -47,6 +47,7 @@ export function buildWebShellChromeHostProps(params: {
   backTargetLabel: string | null;
   activeView: "home" | "settings";
   userWantsSessions: boolean;
+  hasWorkspaceOperatorControl: boolean;
   communityHomeButton: ReactNode;
   handleExitPublicFunnelPreview: () => void;
   handleTopbarBackFromPublicFunnel: () => void;
@@ -146,6 +147,7 @@ export function buildWebShellChromeHostProps(params: {
       activePage: params.activePage,
       activeView: params.activeView,
       userWantsSessions: params.userWantsSessions,
+      hasWorkspaceOperatorControl: params.hasWorkspaceOperatorControl,
       communityHomeButton: params.communityHomeButton,
       onExitPublicFunnelPreview: params.handleExitPublicFunnelPreview,
       onBackFromPublicFunnel: params.handleTopbarBackFromPublicFunnel,

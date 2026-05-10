@@ -43,6 +43,7 @@ export type WebDesktopShellHeaderProps = {
   activePage: AppPage;
   activeView: AppView;
   userWantsSessions: boolean;
+  hasWorkspaceOperatorControl: boolean;
   communityHomeButton: ReactNode;
   onExitPublicFunnelPreview: () => void;
   onBackFromPublicFunnel: () => void;

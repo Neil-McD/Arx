@@ -21508,8 +21508,8 @@ button.message-citation-chip:hover {
 
 .workspace-operator-data-toggle {
   position: fixed;
-  top: 8px;
-  right: 54px;
+  top: 12px;
+  right: 62px;
   z-index: 35;
   width: 32px;
   height: 32px;
@@ -21998,7 +21998,7 @@ button.message-citation-chip:hover {
 
 .community-events-shell {
   display: grid;
-  grid-template-columns: minmax(0, 1.45fr) minmax(260px, 0.72fr);
+  grid-template-columns: minmax(500px, 1fr) minmax(180px, 0.36fr);
   gap: 14px;
   margin-top: 22px;
 }
@@ -22129,6 +22129,7 @@ button.message-citation-chip:hover {
 .community-events-agenda {
   padding: 14px;
   min-height: 0;
+  min-width: 0;
 }
 
 .community-events-agenda-title {

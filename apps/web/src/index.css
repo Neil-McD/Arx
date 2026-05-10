@@ -138,8 +138,8 @@
   -webkit-backdrop-filter: blur(14px) saturate(120%);
 }
 
-/* Keep the top-right community shortcut as a plain avatar (no glass card). */
-.app-root.web-header-islands .app-topbar .topbar-right {
+/* Keep the top-right community shortcut plain unless it is paired with the operator panel toggle. */
+.app-root.web-header-islands .app-topbar .topbar-right:not(.has-workspace-operator-control) {
   padding: 0;
   border-radius: 0;
   background: transparent;
@@ -148,13 +148,17 @@
   -webkit-backdrop-filter: none;
 }
 
+.app-root.web-header-islands .app-topbar .topbar-right.has-workspace-operator-control {
+  padding-left: 48px;
+}
+
 .app-topbar .topbar-right .community-btn:hover,
 .app-topbar .topbar-right .community-btn:active {
   background: transparent;
 }
 
 .app-topbar .topbar-right .community-btn {
-  transform: translateY(-2px);
+  transform: none;
 }
 
 .app-topbar .icon-button,

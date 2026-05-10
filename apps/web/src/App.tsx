@@ -7694,6 +7694,12 @@ export default function App() {
     backTargetLabel: backTargetLabel ?? null,
     activeView,
     userWantsSessions,
+    hasWorkspaceOperatorControl: Boolean(
+      hasOperatorDataPanelAccess &&
+      session &&
+      activePage === "workspace" &&
+      activeView === "home",
+    ),
     communityHomeButton,
     handleExitPublicFunnelPreview,
     handleTopbarBackFromPublicFunnel,
