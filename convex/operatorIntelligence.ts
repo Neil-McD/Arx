@@ -1269,9 +1269,6 @@ export const getOperatorMonetizationInternal = internalQuery({
       businessVisitRows,
       emailOutboxRows,
       emailDeliveryRows,
-      userProfileDetails,
-      providerConnections,
-      memorySettingsRows,
     ] = await Promise.all([
       ctx.db.query("checkoutSessions").collect(),
       ctx.db.query("users").collect(),
@@ -1280,27 +1277,9 @@ export const getOperatorMonetizationInternal = internalQuery({
       businessVisitRowsPromise,
       ctx.db.query("emailOutbox").collect(),
       ctx.db.query("emailDeliveries").collect(),
-      ctx.db.query("userProfileDetails").collect(),
-      ctx.db.query("userProviderConnections").collect(),
-      ctx.db.query("userMemorySettings").collect(),
     ]);
     const accountUsers = users.filter(isAccountUserRow);
     const accountUserIds = new Set<string>(accountUsers.map((row: any) => String(row._id)));
-    const userProfileDetailsByUser = new Map<string, any>();
-    const providerConnectionsByUser = new Map<string, any[]>();
-    const memorySettingsByUser = new Map<string, any>();
-    for (const row of userProfileDetails) userProfileDetailsByUser.set(String(row.userId), row);
-    for (const row of providerConnections) pushByUserId(providerConnectionsByUser, row);
-    for (const row of memorySettingsRows) memorySettingsByUser.set(String(row.userId), row);
-    const accountSetupCompletedCount = accountUsers.filter((user: any) => {
-      const userId = String(user._id);
-      return buildAccountSetupStatusForRows({
-        user,
-        detail: userProfileDetailsByUser.get(userId) ?? null,
-        providerConnections: providerConnectionsByUser.get(userId) ?? [],
-        memorySettings: memorySettingsByUser.get(userId) ?? null,
-      }).completed;
-    }).length;
     const communityById = new Map<string, any>(communities.map((row: any) => [String(row._id), row]));
     const communityCreatorUserIds = new Set<string>(communities.map((row: any) => String(row.ownerId)));
     const communitiesWithFirstMemberIds = new Set<string>();
@@ -1462,8 +1441,6 @@ export const getOperatorMonetizationInternal = internalQuery({
         users: {
           total: accountUsers.length,
           newInRange: newUsers.length,
-          accountSetupCompleted: accountSetupCompletedCount,
-          accountSetupCompletionRate: conversionRate(accountSetupCompletedCount, accountUsers.length),
           activePayingCustomers: activePayingCustomerIds.size,
           usageBuyersInRange: usageBuyerIds.size,
           checkoutPurchasersInRange: checkoutPurchaserIds.size,
@@ -1529,9 +1506,6 @@ export const getOperatorMonetizationInternal = internalQuery({
           "checkoutSessions",
           "communitySubscriptions",
           "communityPricePoints",
-          "userProfileDetails",
-          "userProviderConnections",
-          "userMemorySettings",
           "emailOutbox",
           "emailDeliveries",
         ],

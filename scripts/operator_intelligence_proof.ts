@@ -144,10 +144,10 @@ assert.match(
   /activePayingCustomers: number/,
   "operator business KPIs should expose active paying users",
 );
-assert.match(
+assert.doesNotMatch(
   operatorTypes,
-  /accountSetupCompleted: number/,
-  "operator business KPIs should expose completed account setup",
+  /accountSetupCompleted: number|accountSetupCompletionRate: number \| null/,
+  "operator monetization KPIs must not duplicate account setup snapshot fields",
 );
 assert.match(
   operatorTypes,
@@ -338,6 +338,11 @@ assert.match(
   monetizationQuery,
   /source: "first_party"/,
   "operator visitor KPIs should report the first-party source",
+);
+assert.doesNotMatch(
+  monetizationQuery,
+  /accountSetupCompleted|accountSetupCompletionRate|userProfileDetails|userProviderConnections|userMemorySettings/,
+  "operator monetization must not duplicate account setup derivation",
 );
 assert.match(
   monetizationQuery,

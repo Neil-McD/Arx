@@ -66,8 +66,10 @@ assert.doesNotMatch(operatorIntelligence, /accountSetupEvents/, "operator setup 
 assert.doesNotMatch(operatorTypes, /OperatorAccountSetupEventSummary/, "operator setup types should not expose event analytics");
 assert.doesNotMatch(operatorPanel, /Setup activity|Setup funnel|Recent setup events/, "operator setup UI should stay focused on current setup state");
 assert.match(operatorGateway, /loadOperatorAccountSetupSnapshotCanonical/, "web gateway must load setup snapshot");
-assert.match(operatorPanel, /"accounts"/, "operator panel must expose the account setup tab");
-assert.match(operatorPanel, /OperatorAccountSetupInsights/, "operator panel must render account setup insights");
+assert.doesNotMatch(operatorPanel, /"accounts"/, "operator panel must merge account setup into Business, not expose a separate Accounts tab");
+assert.match(operatorPanel, /accountSetup=\{props\.state\.accountSetup\}/, "business tab must receive account setup state");
+assert.match(operatorPanel, /<h2>Account setup<\/h2>/, "business tab must include an account setup section boundary");
+assert.match(operatorPanel, /<OperatorAccountSetupInsights snapshot=\{props\.accountSetup\} \/>/, "business tab must render account setup insights");
 assert.match(operatorPanel, /Showing \$\{users\.length\} of \$\{userList\.totalMatching\}/, "operator setup UI must disclose list truncation context");
 
 const existingWithoutProfileDetail = buildAccountSetupStatus({
@@ -85,7 +87,7 @@ const missingProvider = buildAccountSetupStatus({
   displayName: "Ready Profile",
   handle: "ready",
   avatarUrl: "https://example.com/avatar.png",
-  bio: "Builder.",
+  bio: "Creator.",
   hasInferenceProvider: false,
   agentName: "Poly",
   agentSoul: "Helpful.",

@@ -150,8 +150,6 @@ export type OperatorMonetizationSnapshot = {
     users: {
       total: number;
       newInRange: number;
-      accountSetupCompleted: number;
-      accountSetupCompletionRate: number | null;
       activePayingCustomers: number;
       usageBuyersInRange: number;
       checkoutPurchasersInRange: number;

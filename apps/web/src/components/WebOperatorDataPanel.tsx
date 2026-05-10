@@ -31,7 +31,7 @@ import type {
   OperatorWebDeployDiagnosticsSnapshot,
 } from "../../../../shared/operatorTypes";
 
-export type OperatorInsightTab = "platform" | "business" | "accounts" | "communities";
+export type OperatorInsightTab = "platform" | "business" | "communities";
 
 export const OPERATOR_RIGHT_PANEL_DEFAULT_WIDTH = 560;
 export const OPERATOR_RIGHT_PANEL_MIN_WIDTH = 380;
@@ -42,7 +42,6 @@ export const OPERATOR_RIGHT_PANEL_KEYBOARD_STEP = 32;
 const OPERATOR_INSIGHT_TABS: Array<{ id: OperatorInsightTab; label: string }> = [
   { id: "platform", label: "Platform" },
   { id: "business", label: "Business" },
-  { id: "accounts", label: "Accounts" },
   { id: "communities", label: "Communities" },
 ];
 const OPERATOR_ACCOUNT_SETUP_STEP_ORDER = ["identity", "inference", "agent", "complete"] as const;
@@ -292,12 +291,11 @@ export function WebOperatorDataPanel(props: {
           <OperatorBusinessInsights
             overview={props.state.overview}
             monetization={props.state.monetization}
+            accountSetup={props.state.accountSetup}
             runtimeTools={props.state.runtimeTools}
             risks={props.state.risks}
             events={props.state.events}
           />
-        ) : props.activeInsightTab === "accounts" ? (
-          <OperatorAccountSetupInsights snapshot={props.state.accountSetup} />
         ) : (
           <OperatorCommunityInsights overview={props.state.overview} communities={props.topCommunities} />
         )}
@@ -839,11 +837,17 @@ function OperatorPlatformInsights(props: {
 function OperatorBusinessInsights(props: {
   overview: OperatorOverviewSnapshot | null;
   monetization: OperatorMonetizationSnapshot | null;
+  accountSetup: OperatorAccountSetupSnapshot | null;
   runtimeTools: OperatorRuntimeToolDiagnosticsSnapshot | null;
   risks: OperatorRiskItem[];
   events: OperatorEventRecord[];
 }) {
   const businessKpis = props.monetization?.businessKpis ?? null;
+  const accountSetupOverview = props.accountSetup?.overview ?? null;
+  const accountSetupCompletionRate =
+    accountSetupOverview && accountSetupOverview.totals.users > 0
+      ? accountSetupOverview.totals.completed / accountSetupOverview.totals.users
+      : null;
   const creditTopupConversion =
     props.monetization && props.monetization.creditTopupCheckoutStarts > 0
       ? props.monetization.creditTopupCheckoutCompletions / props.monetization.creditTopupCheckoutStarts
@@ -905,11 +909,11 @@ function OperatorBusinessInsights(props: {
           </div>
           <div className="operator-dashboard__row">
             <span>Accounts completed</span>
-            <strong>{businessKpis?.users.accountSetupCompleted ?? 0}</strong>
+            <strong>{accountSetupOverview?.totals.completed ?? 0}</strong>
           </div>
           <div className="operator-dashboard__row">
             <span>Account completion</span>
-            <strong>{formatPercent(businessKpis?.users.accountSetupCompletionRate ?? null)}</strong>
+            <strong>{formatPercent(accountSetupCompletionRate)}</strong>
           </div>
           <div className="operator-dashboard__row">
             <span>Communities created</span>
@@ -926,6 +930,15 @@ function OperatorBusinessInsights(props: {
           )}
         </div>
       </section>
+
+      <section className="operator-dashboard__panel operator-dashboard__panel--full" aria-label="Account setup">
+        <h2>Account setup</h2>
+        <div className="operator-dashboard__empty">
+          Current user setup state from canonical account records, provider connections, and agent settings.
+        </div>
+      </section>
+
+      <OperatorAccountSetupInsights snapshot={props.accountSetup} />
 
       <section className="operator-dashboard__panel">
         <h2>Activation</h2>
@@ -1189,7 +1202,7 @@ function OperatorAccountSetupInsights(props: { snapshot: OperatorAccountSetupSna
     : "Showing 0 of 0 matching users";
 
   return (
-    <div className="operator-data-panel__grid">
+    <>
       <section className="operator-dashboard__metrics" aria-label="Account setup overview">
         <div>
           <span>Total users</span>
@@ -1288,7 +1301,7 @@ function OperatorAccountSetupInsights(props: { snapshot: OperatorAccountSetupSna
           )}
         </div>
       </section>
-    </div>
+    </>
   );
 }
 
