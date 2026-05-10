@@ -38,12 +38,12 @@ Each catalog app should resolve to an integration profile: MCP, connector backpl
 8. Endpoint-instance apps must not collapse by catalog id alone.
 9. Uncataloged remote MCP endpoints should not be server-fetched until they have a reviewed catalog policy or network egress guard.
 10. Apps should expose compact harness context first, then retrieve external context lazily through bounded tool calls.
-11. CLI-shaped apps should run through sandboxed command wrappers and return artifact references instead of raw shell access.
+11. CLI-shaped apps should use the existing project-bound Daytona workspace tools when those tools are active, and return artifact references instead of raw shell access.
 12. OAuth MCP apps must bind tokens to the MCP resource, store tokens server-side only after authenticated Polynet finalization, refresh tokens before validation/runtime execution, and keep community app records credential-free. Providers can use dynamic registration or static deployment-owned OAuth clients, but the client mode must be explicit in the integration profile and static client secrets must stay in deployment env.
 13. Provider-specific endpoint variants and request headers are part of the app contract. For example, GitHub is ready only through its hosted read-only MCP endpoint with catalog-owned read-only/toolset headers, not the general write-capable MCP surface.
 14. Payment-provider MCPs must not become product authority. Stripe can be connected through a user-owned restricted API key to its hosted MCP endpoint; mutation-shaped Stripe tools stay provider-blocked, and Polynet billing, entitlements, payouts, and webhook verification remain owned by Polynet's server-side billing system.
 15. Tool exposure follows the Codex-style core: default-enabled tools, disabled tools, and a runtime deny check. Provider profiles own those rules; Discover, Settings, and Community Settings only project the resulting harness state.
-16. Media-production apps should be modeled as artifact/job adapters. HyperFrames belongs behind a sandboxed CLI bridge; Higgsfield is skill-first while its MCP/CLI execution stays planned, and HeyGen stays planned until media jobs have async polling, credit controls, artifact references, and bounded result projection.
+16. Media-production apps should be modeled as artifact/job workflows. HyperFrames is a skill plus workspace CLI workflow that uses the existing Daytona workspace tools; Higgsfield is skill-first while its MCP/CLI execution stays planned, and HeyGen stays planned until media jobs have async polling, credit controls, artifact references, and bounded result projection.
 
 ## Non-Goals
 

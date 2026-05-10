@@ -27,7 +27,7 @@ export type DiscoverAppValidationKind =
   | "hosted_oauth_mcp_planned"
   | "backplane_mcp_planned"
   | "direct_api_adapter_planned"
-  | "sandbox_bridge_planned"
+  | "workspace_cli_planned"
   | "catalog_only";
 export type DiscoverAppDefaultToolRisk = "read" | "write" | "sensitive";
 export type DiscoverAppIdentityScope = "catalog_singleton" | "endpoint_instance";
@@ -461,7 +461,7 @@ export const DISCOVER_APP_INTEGRATION_PROFILE_OVERRIDES = {
     readiness: "cli_sandbox_planned",
     identityScope: "catalog_singleton",
     authMode: "custom",
-    validationKind: "sandbox_bridge_planned",
+    validationKind: "workspace_cli_planned",
     contextStrategy: "artifact_reference",
     resultPolicy: buildDiscoverAppResultPolicy({
       maxToolCount: 8,
@@ -714,7 +714,7 @@ function buildPlannedDiscoverAppIntegrationProfile(
         readiness: "cli_sandbox_planned",
         identityScope: "catalog_singleton",
         authMode: "custom",
-        validationKind: "sandbox_bridge_planned",
+        validationKind: "workspace_cli_planned",
         contextStrategy: "artifact_reference",
         resultPolicy: buildPlannedDiscoverAppResultPolicy(kind),
         runtimePolicy: buildDiscoverAppRuntimePolicy({
@@ -1208,7 +1208,7 @@ export function buildDiscoverAppIntegrationReadinessLabel(
     case "api_planned":
       return "API adapter planned";
     case "cli_sandbox_planned":
-      return "Sandbox bridge planned";
+      return "Workspace CLI skill";
     case "catalog_only":
       return "Catalog only";
     default:
@@ -2564,14 +2564,14 @@ export const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
     tagline: "HTML, CSS, and JS video compositions",
     description:
       "Agent-oriented video authoring framework for composing videos as web documents and rendering them into production media.",
-    supportLabel: "Sandbox CLI planned",
+    supportLabel: "Workspace CLI skill",
     supportNote:
-      "HyperFrames fits PolyNet as a sandboxed CLI/media-job adapter, not as a hosted remote MCP connector.",
+      "HyperFrames uses PolyNet's existing project workspace tools in Daytona when a workspace is active. It is not a hosted remote MCP connector.",
     heroNote:
       "Best for builder communities that want agents to generate video from structured HTML scenes.",
     capabilities: [
       "Compose videos from HTML, CSS, and JavaScript using agent-friendly project files.",
-      "Run preview, lint, inspect, snapshot, and render commands through a future sandbox bridge.",
+      "Use project workspace tools for npx hyperframes doctor, lint, inspect, preview, and render when workspace tools are active.",
       "Return preview and rendered media artifact references instead of raw process output.",
     ],
     websiteUrl: "https://hyperframes.heygen.com",
@@ -2590,7 +2590,7 @@ export const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
       authType: null,
       authLabel: "Sandboxed CLI",
       note:
-        "Keep HyperFrames non-connectable until PolyNet can run the CLI in bounded sandbox compute and store generated video artifacts.",
+        "No separate app credentials are required. Add the HyperFrames skill, then use it in a project-bound thread where workspace tools can run the CLI in Daytona and return artifact references.",
     },
   },
   {

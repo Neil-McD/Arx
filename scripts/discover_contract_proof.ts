@@ -472,8 +472,13 @@ function main() {
   );
   assertIncludes(
     sharedDiscoverSkillCatalog,
-    "If execution tools are not available, produce the composition plan and code/file structure, but do not claim a preview or render completed.",
-    "HyperFrames video skill keeps execution claims tied to verified tools",
+    "If project workspace tools are not active, produce the composition plan and code/file structure, but do not claim a preview or render completed.",
+    "HyperFrames video skill keeps execution claims tied to active workspace tools",
+  );
+  assertIncludes(
+    sharedDiscoverSkillCatalog,
+    "bash for short npx hyperframes commands",
+    "HyperFrames video skill reuses the existing workspace command tool instead of a bespoke execution surface",
   );
   assertIncludes(
     sharedDiscoverSkillCatalog,
@@ -497,8 +502,13 @@ function main() {
   );
   assertIncludes(
     discoverPanel,
-    "selectedAppRelatedSkillActionLabel",
-    "Discover app detail can project a related skill action",
+    "selectedAppRelatedSkillPersonalActionLabel",
+    "Discover app detail can project a related skill personal action",
+  );
+  assertIncludes(
+    discoverPanel,
+    "selectedAppRelatedSkillCommunityActionLabel",
+    "Discover app detail can project a related skill community action",
   );
   assertIncludes(
     discoverPanel,
@@ -514,6 +524,16 @@ function main() {
     discoverPanel,
     "handleAddSkill(selectedAppPrimaryRelatedSkill)",
     "Discover related app skill action reuses the canonical skill install flow",
+  );
+  assertIncludes(
+    discoverPanel,
+    "handleAddSkillToCommunity(selectedAppPrimaryRelatedSkill)",
+    "Discover related app skill action reuses the canonical community skill install flow",
+  );
+  assertNotIncludes(
+    discoverPanel,
+    "Add ${selectedAppPrimaryRelatedSkill.name} skill",
+    "Discover related app primary CTA should use app-style Add copy, not implementation-specific skill copy",
   );
   for (const skill of DISCOVER_SKILL_CATALOG) {
     if (!skill.installInput) continue;

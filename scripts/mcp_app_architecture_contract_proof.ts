@@ -77,7 +77,7 @@ function main() {
   );
   assertIncludes(
     contract,
-    "Execution surface is derived from adapter kind: remote MCP and direct API use server HTTP, backplane uses connector backplane, sandboxed CLI uses sandboxed commands, and catalog-only has no executable surface.",
+    "Execution surface is derived from adapter kind: remote MCP and direct API use server HTTP, backplane uses connector backplane, workspace CLI uses the existing project-bound Daytona workspace tools, and catalog-only has no executable surface.",
     "MCP app architecture contract execution surface rule",
   );
   assertIncludes(
@@ -379,8 +379,8 @@ function main() {
   );
   assertIncludes(
     discoverCatalog,
-    "Keep HyperFrames non-connectable until PolyNet can run the CLI in bounded sandbox compute and store generated video artifacts.",
-    "Discover catalog keeps HyperFrames non-connectable until sandbox artifact execution exists",
+    "No separate app credentials are required. Add the HyperFrames skill, then use it in a project-bound thread where workspace tools can run the CLI in Daytona and return artifact references.",
+    "Discover catalog routes HyperFrames through skill plus existing project workspace tools",
   );
   assertNotIncludes(
     communitySettings,

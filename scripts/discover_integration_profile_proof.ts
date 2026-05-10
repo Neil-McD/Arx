@@ -357,12 +357,12 @@ function main() {
   assert.equal(
     hyperframes.personalConnect.availability,
     "later",
-    "HyperFrames should stay non-connectable until the sandbox CLI bridge exists",
+    "HyperFrames should stay non-connectable because it is a skill plus project workspace CLI workflow, not an app credential connector",
   );
   assert.equal(
     isDiscoverAppPersonallyConnectable(hyperframes),
     false,
-    "HyperFrames must not expose a personal add button before sandbox execution exists",
+    "HyperFrames must not expose a personal app connect button for an execution surface that is already covered by workspace tools",
   );
   assert.equal(
     hyperframes.docsUrl,
@@ -391,7 +391,12 @@ function main() {
   const hyperframesProfile = resolveDiscoverAppIntegrationProfile(hyperframes);
   assert.equal(hyperframesProfile.adapterKind, "cli_sandbox");
   assert.equal(hyperframesProfile.readiness, "cli_sandbox_planned");
+  assert.equal(hyperframesProfile.validationKind, "workspace_cli_planned");
   assert.equal(hyperframesProfile.contextStrategy, "artifact_reference");
+  assert.ok(
+    hyperframes.personalConnect.note.includes("project-bound thread"),
+    "HyperFrames catalog copy should route execution through project-bound workspace tools",
+  );
   assert.ok(
     hyperframesProfile.runtimePolicy.declaredIntents.includes("video_render"),
     "HyperFrames profile should declare render intent as an artifact-producing sandbox action",

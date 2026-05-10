@@ -491,6 +491,23 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
       userPlatformSkills,
     );
   }, [selectedAppPrimaryRelatedSkill, userPlatformSkills]);
+  const selectedAppRelatedOwnedSkillPackage = useMemo(() => {
+    if (!selectedAppPrimaryRelatedSkill) return null;
+    return findMatchingOwnedSkillPackage(
+      selectedAppPrimaryRelatedSkill,
+      ownedSkillPackages,
+    );
+  }, [ownedSkillPackages, selectedAppPrimaryRelatedSkill]);
+  const selectedAppRelatedCommunitySkillAttachment = useMemo(() => {
+    if (!selectedAppPrimaryRelatedSkill) return null;
+    return findMatchingCommunitySkillAttachment(
+      selectedAppPrimaryRelatedSkill,
+      communitySkillAttachments,
+    );
+  }, [
+    communitySkillAttachments,
+    selectedAppPrimaryRelatedSkill,
+  ]);
   const selectedPersonalSkillInstall = useMemo(() => {
     if (!selectedSkill) return null;
     return findMatchingDiscoverSkillInstall(selectedSkill, userPlatformSkills);
@@ -588,13 +605,24 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
           ? `Add to ${manageableCommunityTargetName}`
           : null
       : null;
-  const selectedAppRelatedSkillActionLabel =
+  const selectedAppRelatedSkillPersonalActionLabel =
     selectedApp &&
     selectedAppPrimaryRelatedSkill &&
     !isDiscoverAppPersonallyConnectable(selectedApp)
       ? selectedAppRelatedSkillInstall
-        ? `Manage ${selectedAppPrimaryRelatedSkill.name} skill`
-        : `Add ${selectedAppPrimaryRelatedSkill.name} skill`
+        ? "Manage"
+        : "Add"
+      : null;
+  const selectedAppRelatedSkillCommunityActionLabel =
+    selectedApp &&
+    selectedAppPrimaryRelatedSkill &&
+    !isDiscoverAppPersonallyConnectable(selectedApp) &&
+    hasManageableCommunityTarget
+      ? selectedAppRelatedCommunitySkillAttachment
+        ? `Manage ${manageableCommunityTargetName}`
+        : selectedAppPrimaryRelatedSkill.installInput
+          ? `Add to ${manageableCommunityTargetName}`
+          : `Create in ${manageableCommunityTargetName}`
       : null;
   const selectedSkillPersonalActionLabel = selectedSkill
     ? selectedPersonalSkillInstall
@@ -836,7 +864,12 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
       return;
     }
     if (!hasManageableCommunityTarget) return;
-    if (selectedCommunitySkillAttachment) {
+    const existingAttachment = findMatchingCommunitySkillAttachment(
+      skill,
+      communitySkillAttachments,
+    );
+    const ownedPackage = findMatchingOwnedSkillPackage(skill, ownedSkillPackages);
+    if (existingAttachment) {
       onOpenActiveCommunityAiAgentSkills();
       return;
     }
@@ -845,8 +878,8 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
       return;
     }
     setSelectedSkillActionError(null);
-    const ok = selectedOwnedSkillPackage
-      ? await onAttachSkillPackageToCommunity(selectedOwnedSkillPackage.id)
+    const ok = ownedPackage
+      ? await onAttachSkillPackageToCommunity(ownedPackage.id)
       : await onCreateCommunitySkill(skill.installInput);
     if (!ok) {
       setSelectedSkillActionError(
@@ -926,7 +959,8 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
               {selectedApp.name}
             </div>
             <div className="agent-capability-toolbar-actions">
-              {selectedAppRelatedSkillActionLabel && selectedAppPrimaryRelatedSkill ? (
+              {selectedAppRelatedSkillPersonalActionLabel &&
+              selectedAppPrimaryRelatedSkill ? (
                 <button
                   type="button"
                   className="settings-cta discover-app-detail-action"
@@ -943,7 +977,40 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
                       ? "Adding…"
                       : isLoadingUserPlatformSkills && !selectedAppRelatedSkillInstall
                         ? "Checking…"
-                        : selectedAppRelatedSkillActionLabel}
+                        : selectedAppRelatedSkillPersonalActionLabel}
+                </button>
+              ) : null}
+              {selectedAppRelatedSkillCommunityActionLabel &&
+              selectedAppPrimaryRelatedSkill ? (
+                <button
+                  type="button"
+                  className="settings-cta discover-app-detail-action"
+                  onClick={() =>
+                    void handleAddSkillToCommunity(selectedAppPrimaryRelatedSkill)
+                  }
+                  disabled={
+                    isAuthRecoveringSignedIn ||
+                    isLoadingCommunitySkillAttachments ||
+                    isLoadingOwnedSkillPackages ||
+                    isCreatingCommunitySkill ||
+                    (selectedAppRelatedOwnedSkillPackage
+                      ? attachingCommunitySkillPackageId ===
+                        selectedAppRelatedOwnedSkillPackage.id
+                      : false)
+                  }
+                >
+                  {selectedAppRelatedCommunitySkillAttachment
+                    ? selectedAppRelatedSkillCommunityActionLabel
+                    : isLoadingCommunitySkillAttachments ||
+                        isLoadingOwnedSkillPackages
+                      ? "Checking…"
+                      : isCreatingCommunitySkill ||
+                          (selectedAppRelatedOwnedSkillPackage
+                            ? attachingCommunitySkillPackageId ===
+                              selectedAppRelatedOwnedSkillPackage.id
+                            : false)
+                        ? "Adding…"
+                        : selectedAppRelatedSkillCommunityActionLabel}
                 </button>
               ) : null}
               {selectedAppPersonalActionLabel ? (
