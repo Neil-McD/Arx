@@ -1,9 +1,11 @@
 import {
   useCallback,
   useEffect,
+  lazy,
   useMemo,
   useRef,
   useState,
+  Suspense,
   type ChangeEvent,
   type Dispatch,
   type ReactNode,
@@ -379,14 +381,24 @@ import {
   WebGlobalOverlayHost,
   type WebGlobalOverlayHostProps,
 } from "./components/WebGlobalOverlayHost";
-import { WebAppMainSurfaceHost } from "./components/WebAppMainSurfaceHost";
-import { WebStandalonePublicRouteShell } from "./components/WebStandalonePublicRouteShell";
 import { WebShellChromeHost } from "./components/WebShellChromeHost";
 import { WebWorkspaceShellPanelsHost } from "./components/WebWorkspaceShellPanelsHost";
 import { buildWebStandalonePublicRouteViewProps } from "./controllers/buildWebStandalonePublicRouteViewProps";
 import { buildWebGlobalOverlayHostProps } from "./controllers/buildWebGlobalOverlayHostProps";
 import { buildWebAppMainSurfaceHostProps } from "./controllers/buildWebAppMainSurfaceHostProps";
 import { buildWebShellChromeHostProps } from "./controllers/buildWebShellChromeHostProps";
+
+const WebAppMainSurfaceHost = lazy(() =>
+  import("./components/WebAppMainSurfaceHost").then((module) => ({
+    default: module.WebAppMainSurfaceHost,
+  })),
+);
+
+const WebStandalonePublicRouteShell = lazy(() =>
+  import("./components/WebStandalonePublicRouteShell").then((module) => ({
+    default: module.WebStandalonePublicRouteShell,
+  })),
+);
 
 type CommunityRecord = {
   id: string;
@@ -7200,7 +7212,11 @@ export default function App() {
   });
 
   if (standalonePublicRouteViewProps) {
-    return <WebStandalonePublicRouteShell {...standalonePublicRouteViewProps} />;
+    return (
+      <Suspense fallback={<div className="landing-auth-hold" aria-hidden="true" />}>
+        <WebStandalonePublicRouteShell {...standalonePublicRouteViewProps} />
+      </Suspense>
+    );
   }
 
   const handleStartNewWorkspaceThreadFromShell = () => {
@@ -7644,7 +7660,23 @@ export default function App() {
     },
   });
   const globalOverlays = <WebGlobalOverlayHost {...globalOverlayHostProps} />;
-  const mainSurface = <WebAppMainSurfaceHost {...mainSurfaceHostProps} />;
+  const mainSurfaceFallback = (
+    <main
+      className={`workspace${
+        mainSurfaceHostProps.showPublicCommunityFunnel ||
+        mainSurfaceHostProps.activePage !== "workspace"
+          ? " community-mode"
+          : ""
+      }`}
+    >
+      <div className="landing-auth-hold" aria-hidden="true" />
+    </main>
+  );
+  const mainSurface = (
+    <Suspense fallback={mainSurfaceFallback}>
+      <WebAppMainSurfaceHost {...mainSurfaceHostProps} />
+    </Suspense>
+  );
   const activeIndicators = activeCommunityId
     ? (attentionByCommunityId[activeCommunityId] ?? { chat: false, ai_feed: false, resources: false, events: false })
     : { chat: false, ai_feed: false, resources: false, events: false };

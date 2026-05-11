@@ -6,7 +6,7 @@ const assetsDir = join(appDir, "dist", "assets");
 
 const limits = {
   maxSingleJsBytes: readLimit("WEB_BUNDLE_MAX_SINGLE_JS_BYTES", 1_600_000),
-  maxIndexJsBytes: readLimit("WEB_BUNDLE_MAX_INDEX_JS_BYTES", 1_600_000),
+  maxIndexJsBytes: readLimit("WEB_BUNDLE_MAX_INDEX_JS_BYTES", 1_000_000),
   maxTotalJsBytes: readLimit("WEB_BUNDLE_MAX_TOTAL_JS_BYTES", 3_400_000),
 };
 
