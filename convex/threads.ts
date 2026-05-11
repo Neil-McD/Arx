@@ -22,6 +22,7 @@ import {
   mergeRuntimeWorkingStateTaskLedger,
   summarizeRuntimeWorkingStateFromEvents,
 } from "../shared/runtimeWorkingStateLedger";
+import { formatDefaultComputerName } from "../shared/projectNaming";
 import { requireCommunityChatAccess } from "./communityCore";
 
 type ThreadLike = {
@@ -703,7 +704,7 @@ async function ensureDefaultProjectId(args: {
 
   return await args.ctx.db.insert("cloudProjects", {
     ownerId: args.ownerId,
-    name: "Project 1",
+    name: formatDefaultComputerName(1),
     status: "active",
     providerVolumeId: undefined,
     createdAt: args.nowMs,

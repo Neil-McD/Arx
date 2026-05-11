@@ -1,5 +1,6 @@
 import { type AuthSessionLike } from "./authSession";
 import { bootstrapGatewayAuthContext } from "./cloudGateway";
+import { normalizeComputerDisplayName } from "./projectNaming";
 
 type DaytonaCloudProjectsWarn = (message: string, error?: unknown) => void;
 
@@ -30,19 +31,12 @@ type ConvexCloudProjectRow = {
 
 // Gateway class: authenticated read/mutation/action bridge, caller-hardened session, fail-closed.
 
-function normalizeProjectDisplayName(raw: string | null | undefined): string {
-  const normalized = String(raw ?? "").trim();
-  if (!normalized) return "Project 1";
-  if (normalized.toLowerCase() === "workspace") return "Project 1";
-  return normalized;
-}
-
 function mapConvexProjectRowToRecord(row: ConvexCloudProjectRow): DaytonaCloudProjectRecord {
   const id = String(row._id ?? "").trim();
   const createdAtMs = Number(row.createdAt ?? Date.now());
   const updatedAtMs = Number(row.updatedAt ?? Date.now());
   const slug = typeof row.slug === "string" && row.slug.trim() ? row.slug.trim() : null;
-  const name = normalizeProjectDisplayName(typeof row.name === "string" ? row.name : null);
+  const name = normalizeComputerDisplayName(typeof row.name === "string" ? row.name : null);
   return {
     id,
     name,

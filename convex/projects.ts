@@ -18,6 +18,7 @@ import {
   type WorkspaceSandboxSession,
 } from "./daytonaWorkspaceSession";
 import { executeDaytonaCommand } from "./daytonaToolboxExecutor";
+import { buildNextDefaultComputerName, formatDefaultComputerName } from "../shared/projectNaming";
 
 const ACCOUNT_MAX_PROJECTS = 5;
 const PROJECT_IMPORT_MAX_BYTES = 150 * 1024 * 1024;
@@ -62,7 +63,7 @@ async function ensureDefaultProjectInternal(args: {
 
   const id = await args.ctx.db.insert("cloudProjects", {
     ownerId: args.ownerId,
-    name: "Project 1",
+    name: formatDefaultComputerName(1),
     status: "active",
     providerVolumeId: undefined,
     createdAt: args.nowMs,
@@ -99,16 +100,7 @@ function normalizeOptionalProjectString(raw: unknown): string | undefined {
 }
 
 function buildNextProjectName(existingProjects: Array<{ name?: string | null }>): string {
-  const used = new Set(
-    existingProjects
-      .map((project) => String(project.name ?? "").trim().toLowerCase())
-      .filter(Boolean),
-  );
-  let nextIndex = 1;
-  while (used.has(`Project ${nextIndex}`.toLowerCase())) {
-    nextIndex += 1;
-  }
-  return `Project ${nextIndex}`;
+  return buildNextDefaultComputerName(existingProjects.map((project) => project.name ?? null));
 }
 
 function shellQuote(value: string): string {

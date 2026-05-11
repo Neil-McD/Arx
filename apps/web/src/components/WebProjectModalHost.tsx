@@ -10,13 +10,13 @@ export function WebProjectModalHost(props: WebProjectModalHostProps) {
       {createModal.isOpen ? (
         <WebCreateProjectModal
           isOpen={createModal.isOpen}
-          title="New project"
-          subtitle="Create a fresh project container and optionally import a zipped repo or project folder."
-          submitLabel="Create project"
+          title="New computer"
+          subtitle="Create a fresh Daytona computer and optionally import a zipped repo or workspace folder."
+          submitLabel="Create computer"
           projectName={createModal.projectName}
           projectDescription={createModal.projectDescription}
           importFileName={createModal.importFileName}
-          importHint="Upload a single .zip file. Project files like .env can be imported; personal credential material like SSH keys and cloud CLI creds is blocked."
+          importHint="Upload a single .zip file. Workspace files like .env can be imported; personal credential material like SSH keys and cloud CLI creds is blocked."
           showImportSection
           isSubmitting={createModal.isSubmitting}
           error={createModal.error}
@@ -31,9 +31,9 @@ export function WebProjectModalHost(props: WebProjectModalHostProps) {
       {editModal.isOpen ? (
         <WebCreateProjectModal
           isOpen={editModal.isOpen}
-          title="Edit project"
-          subtitle="Update the project details and optionally import a zipped repo or project folder into this workspace."
-          submitLabel="Save project"
+          title="Edit computer"
+          subtitle="Update the computer details and optionally import a zipped repo or workspace folder into this workspace."
+          submitLabel="Save computer"
           projectName={editModal.projectName}
           projectDescription={editModal.projectDescription}
           importFileName={editModal.importFileName}

@@ -22,13 +22,13 @@ type WebCreateProjectModalProps = {
 export function WebCreateProjectModal(props: WebCreateProjectModalProps) {
   const {
     isOpen,
-    title = "New project",
-    subtitle = "Create a fresh project container for a workspace. Imports are staged here next.",
-    submitLabel = "Create project",
+    title = "New computer",
+    subtitle = "Create a fresh Daytona computer for a workspace. Imports are staged here next.",
+    submitLabel = "Create computer",
     projectName,
     projectDescription,
     importFileName = null,
-    importHint = "Upload a .zip of an existing repo or project folder.",
+    importHint = "Upload a .zip of an existing repo or workspace folder.",
     showImportSection = true,
     isSubmitting,
     error,
@@ -61,19 +61,19 @@ export function WebCreateProjectModal(props: WebCreateProjectModalProps) {
         <div className="modal-body">
           <div className="create-project-form">
             <label className="create-project-field">
-              <span>Project name</span>
+              <span>Computer name</span>
               <input
                 type="text"
-                placeholder="Project name"
+                placeholder="Computer name"
                 value={projectName}
                 onChange={(event) => onChangeName(event.target.value)}
                 maxLength={120}
               />
             </label>
             <label className="create-project-field">
-              <span>Project description</span>
+              <span>Computer description</span>
               <textarea
-                placeholder="A short description of what this project is for"
+                placeholder="A short description of what this computer is for"
                 rows={4}
                 value={projectDescription}
                 onChange={(event) => onChangeDescription(event.target.value)}

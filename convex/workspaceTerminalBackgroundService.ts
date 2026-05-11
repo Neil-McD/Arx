@@ -187,7 +187,7 @@ export async function ensureProjectBackgroundSandbox(params: {
       ok: false,
       status: 404,
       code: "project_not_found",
-      message: "Project not found.",
+      message: "Computer not found.",
     };
   }
 
@@ -219,7 +219,7 @@ export async function ensureProjectBackgroundSandbox(params: {
       status: 409,
       code: "background_sandbox_creation_in_progress",
       message:
-        "A background workspace is already starting for this project. Retry once it finishes.",
+        "A background workspace is already starting for this computer. Retry once it finishes.",
     };
   }
 
@@ -508,7 +508,7 @@ export async function resolveProjectBackgroundSandboxIfReady(params: {
       ok: false,
       status: 404,
       code: "project_not_found",
-      message: "Project not found.",
+      message: "Computer not found.",
     };
   }
 
@@ -518,7 +518,7 @@ export async function resolveProjectBackgroundSandboxIfReady(params: {
       ok: false,
       status: 404,
       code: "background_sandbox_not_found",
-      message: "No active project background sandbox is registered.",
+      message: "No active computer background sandbox is registered.",
     };
   }
   const credit = readBackgroundCreditReservation(project);

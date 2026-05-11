@@ -648,7 +648,7 @@ async function executeRetrievalHarnessTool(params: {
         exitCode: null,
         outputText: "",
         errorCode: "project_required",
-        errorMessage: `${params.toolName} requires a bound project workspace.`,
+        errorMessage: `${params.toolName} requires a bound computer workspace.`,
       };
     }
     if (isWorkspaceCreditBudgetExpired(workspaceSession)) {

@@ -22,6 +22,7 @@ import {
   PAID_TOOL_TARGET_GROSS_MARGIN_BPS,
   priceDaytonaWorkspaceUsageCredits,
 } from "../shared/workspaceCredits";
+import { normalizeComputerDisplayName } from "../shared/projectNaming";
 
 export type DaytonaProbeExecution =
   | {
@@ -120,11 +121,7 @@ export async function resolveWorkspaceProjectContext(params: {
   if (!row) {
     return { label: null, description: null };
   }
-  const normalizedLabel = String(row.name ?? "").trim();
-  const label =
-    !normalizedLabel || normalizedLabel.toLowerCase() === "workspace"
-      ? "Project 1"
-      : normalizedLabel;
+  const label = normalizeComputerDisplayName(typeof row.name === "string" ? row.name : null);
   const description = String(row.description ?? "").trim() || null;
   return { label, description };
 }

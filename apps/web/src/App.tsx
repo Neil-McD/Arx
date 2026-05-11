@@ -5902,12 +5902,12 @@ export default function App() {
         disabled={projectUiController.isCreatingProject || projectUiController.projectQuotaReached}
         title={
           projectUiController.projectQuotaReached
-            ? `Projects are capped at ${projectUiController.maxProjects}.`
+            ? `Computers are capped at ${projectUiController.maxProjects}.`
             : projectUiController.isCreatingProject
-              ? "Creating project…"
-              : "Create a new project"
+              ? "Creating computer…"
+              : "Create a new computer"
         }
-        aria-label="Create a new project"
+        aria-label="Create a new computer"
       >
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <path d="M12 5v14" />

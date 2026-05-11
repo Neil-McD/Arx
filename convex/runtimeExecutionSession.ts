@@ -517,7 +517,7 @@ export function createPolyNetExecutionSession(params: {
           ok: false as const,
           status: 400,
           code: "project_required",
-          message: "Workspace session requires a bound project workspace.",
+          message: "Workspace session requires a bound computer workspace.",
         };
       }
       const createStartedAt = Date.now();
@@ -778,7 +778,7 @@ export function createPolyNetExecutionSession(params: {
           exitCode: null,
           outputText: "",
           errorCode: "project_required",
-          errorMessage: `${paramsForTool.toolName} requires a bound project workspace.`,
+          errorMessage: `${paramsForTool.toolName} requires a bound computer workspace.`,
         };
       }
       if (

@@ -37,9 +37,9 @@ export function WebDeleteProjectModal(props: WebDeleteProjectModalProps) {
       <div className="modal delete-project-modal" onClick={(event) => event.stopPropagation()}>
         <div className="modal-header">
           <div className="create-project-heading">
-            <div className="modal-title">Delete project</div>
+            <div className="modal-title">Delete computer</div>
             <div className="create-project-subtitle">
-              Type <strong>{normalizedProjectName || "this project"}</strong> to permanently delete this project,
+              Type <strong>{normalizedProjectName || "this computer"}</strong> to permanently delete this computer,
               archive its threads, and remove its workspace volume.
             </div>
           </div>
@@ -50,10 +50,10 @@ export function WebDeleteProjectModal(props: WebDeleteProjectModalProps) {
         <div className="modal-body">
           <div className="create-project-form">
             <label className="create-project-field">
-              <span>Confirm project name</span>
+              <span>Confirm computer name</span>
               <input
                 type="text"
-                placeholder={normalizedProjectName || "Project name"}
+                placeholder={normalizedProjectName || "Computer name"}
                 value={confirmationValue}
                 onChange={handleChange}
                 autoFocus
@@ -75,7 +75,7 @@ export function WebDeleteProjectModal(props: WebDeleteProjectModalProps) {
             onClick={() => void onConfirm()}
             disabled={!canDelete}
           >
-            {isDeleting ? "Deleting…" : "Delete project"}
+            {isDeleting ? "Deleting…" : "Delete computer"}
           </button>
         </div>
       </div>

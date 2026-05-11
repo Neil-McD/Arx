@@ -104,7 +104,7 @@ export function useWebWorkspaceProjectStateController<SessionT, ThreadT extends 
           name: "projects_load",
           status: "failure",
           error: formatWorkspaceInstrumentationError(
-            formatWorkspaceRestoreErrorMessage(error, "Couldn't load your projects right now."),
+            formatWorkspaceRestoreErrorMessage(error, "Couldn't load your computers right now."),
           ),
         });
       }

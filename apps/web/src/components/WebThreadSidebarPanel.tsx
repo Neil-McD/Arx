@@ -4,6 +4,7 @@ import type {
   ThreadSidebarPanelActions,
   ThreadSidebarPanelState,
 } from "./threadSidebarContracts";
+import { normalizeComputerDisplayName } from "../../../../shared/projectNaming";
 
 const PROJECT_THREAD_PREVIEW_LIMIT = 7;
 
@@ -130,7 +131,7 @@ export function WebThreadSidebarPanel<TThread, TProject extends ProjectLike>(
         hasProjectToolbar &&
         (threadLaneFilter === "agent" || (threadLaneFilter === "chat" && !showChatSignInPrompt)) && (
           <div className="project-toolbar">
-            <div className="project-toolbar-label">Projects</div>
+            <div className="project-toolbar-label">Computers</div>
             {projectToolbarAction ? (
               <div className="project-toolbar-actions">{projectToolbarAction}</div>
             ) : null}
@@ -164,9 +165,10 @@ export function WebThreadSidebarPanel<TThread, TProject extends ProjectLike>(
               <>
                 {projectThreadGroups.map(({ project, threads }) => {
                   const expanded = projectExpandedById[project.id] ?? true;
-                  const label =
+                  const label = normalizeComputerDisplayName(
                     (project.name ?? "").trim() ||
-                    (project.root_path.split("/").pop() ?? project.root_path);
+                      (project.root_path.split("/").pop() ?? project.root_path),
+                  );
                   const showAllThreads = showAllThreadsByProjectId[project.id] === true;
                   const visibleThreads = showAllThreads
                     ? threads
@@ -180,7 +182,7 @@ export function WebThreadSidebarPanel<TThread, TProject extends ProjectLike>(
                           className="project-group-label"
                           onClick={() => actions.onToggleProjectExpanded(project.id)}
                           aria-expanded={expanded}
-                          title={expanded ? "Collapse project" : "Expand project"}
+                          title={expanded ? "Collapse computer" : "Expand computer"}
                         >
                           <span className="project-group-icon-wrap" aria-hidden="true">
                             <svg className="project-group-icon project-group-icon-folder" viewBox="0 0 24 24">
@@ -202,7 +204,7 @@ export function WebThreadSidebarPanel<TThread, TProject extends ProjectLike>(
                               type="button"
                               className="project-group-menu-trigger"
                               aria-expanded={openProjectMenuId === project.id}
-                              title="Project options"
+                              title="Computer options"
                               onClick={() =>
                                 setOpenProjectMenuId((current) =>
                                   current === project.id ? null : project.id,
@@ -226,7 +228,7 @@ export function WebThreadSidebarPanel<TThread, TProject extends ProjectLike>(
                                       void actions.onEditProject?.(project);
                                     }}
                                   >
-                                    Edit project
+                                    Edit computer
                                   </button>
                                 ) : null}
                                 {actions.onDeleteProject ? (
@@ -238,7 +240,7 @@ export function WebThreadSidebarPanel<TThread, TProject extends ProjectLike>(
                                       void actions.onDeleteProject?.(project);
                                     }}
                                   >
-                                    Delete project
+                                    Delete computer
                                   </button>
                                 ) : null}
                               </div>
@@ -249,7 +251,7 @@ export function WebThreadSidebarPanel<TThread, TProject extends ProjectLike>(
                           type="button"
                           className="project-group-new"
                           onClick={() => actions.onStartDraftInProject(project)}
-                          title="Start a new thread in this project"
+                          title="Start a new thread in this computer"
                         >
                           <svg viewBox="0 0 24 24" aria-hidden="true">
                             <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
@@ -313,14 +315,14 @@ export function WebThreadSidebarPanel<TThread, TProject extends ProjectLike>(
                   ? agentThreadsCount === 0 && (
                       <div className="empty-state">
                         {projectThreadGroups.length > 0
-                          ? "No local threads yet. Pick a project and start one."
+                          ? "No local threads yet. Pick a computer and start one."
                           : "No local threads yet. Start one after your workspace is ready."}
                       </div>
                     )
                   : chatThreadsCount === 0 && (
                       <div className="empty-state">
                         {projectThreadGroups.length > 0
-                          ? "No cloud chats yet. Pick a project and start one."
+                          ? "No cloud chats yet. Pick a computer and start one."
                           : "No cloud chats yet. Start one."}
                       </div>
                     )}

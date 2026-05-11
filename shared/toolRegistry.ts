@@ -495,12 +495,12 @@ const TOOL_REGISTRY: Record<RetrievalToolName, ToolRegistryEntry> = {
   },
   list_dir: {
     name: "list_dir",
-    description: "List files and directories under a project-bound workspace path.",
+    description: "List files and directories under a computer workspace path.",
     inputSchema: PATH_ONLY_TOOL_SCHEMA,
   },
   read: {
     name: "read",
-    description: "Read a UTF-8 text file or directory listing from a project-bound workspace path.",
+    description: "Read a UTF-8 text file or directory listing from a computer workspace path.",
     inputSchema: READ_TOOL_SCHEMA,
   },
   glob: {
@@ -530,12 +530,12 @@ const TOOL_REGISTRY: Record<RetrievalToolName, ToolRegistryEntry> = {
   },
   bash: {
     name: "bash",
-    description: "Run a shell command inside the bound project workspace.",
+    description: "Run a shell command inside the bound computer workspace.",
     inputSchema: BASH_TOOL_SCHEMA,
   },
   terminal_start: {
     name: "terminal_start",
-    description: "Start a persistent background terminal command inside the bound project workspace.",
+    description: "Start a persistent background terminal command inside the bound computer workspace.",
     inputSchema: TERMINAL_START_TOOL_SCHEMA,
   },
   terminal_read: {

@@ -85,9 +85,9 @@ function isTransientServerCode(code: string | null): boolean {
 }
 
 function getProjectFallback(operation: ProjectOperation): string {
-  if (operation === "create") return "Failed to create project.";
-  if (operation === "update") return "Failed to save project.";
-  return "Failed to delete project.";
+  if (operation === "create") return "Failed to create computer.";
+  if (operation === "update") return "Failed to save computer.";
+  return "Failed to delete computer.";
 }
 
 export function formatProjectOperationErrorMessage(
@@ -99,35 +99,35 @@ export function formatProjectOperationErrorMessage(
   const code = readErrorCode(text);
 
   if (isAuthBootstrapCode(code)) return "Session expired. Please sign in again.";
-  if (code === "project_limit_reached") return `Projects are capped at ${options.maxProjects}.`;
-  if (code === "project_name_required") return "Project name is required.";
+  if (code === "project_limit_reached") return `Computers are capped at ${options.maxProjects}.`;
+  if (code === "project_name_required") return "Computer name is required.";
   if (code === "project_import_in_progress") {
-    return "This project is already importing in another tab or session.";
+    return "This computer is already importing in another tab or session.";
   }
   if (code === "project_run_in_progress") {
-    return "Stop the active run in this project before deleting it.";
+    return "Stop the active run in this computer before deleting it.";
   }
-  if (code === "project_import_too_large") return "Project imports are limited to 150 MB zipped.";
-  if (code === "project_import_upload_failed") return "Failed to upload the project archive.";
+  if (code === "project_import_too_large") return "Computer imports are limited to 150 MB zipped.";
+  if (code === "project_import_upload_failed") return "Failed to upload the computer archive.";
   if (code === "project_import_download_failed") {
-    return "Failed to download the project archive for import.";
+    return "Failed to download the computer archive for import.";
   }
   if (code === "project_import_too_many_files") {
-    return `Project imports are limited to ${options.maxImportFiles.toLocaleString()} extracted files.`;
+    return `Computer imports are limited to ${options.maxImportFiles.toLocaleString()} extracted files.`;
   }
   if (code === "project_import_extracted_bytes_exceeded") {
-    return `Project imports are limited to ${Math.round(options.maxExtractedBytes / (1024 * 1024))} MB after extraction.`;
+    return `Computer imports are limited to ${Math.round(options.maxExtractedBytes / (1024 * 1024))} MB after extraction.`;
   }
   if (code === "project_import_storage_full") {
-    return "The workspace ran out of space while importing this project.";
+    return "The workspace ran out of space while importing this computer.";
   }
   if (code === "project_import_unsafe_entry") {
     return "This archive contains unsupported entries such as symlinks or duplicate paths.";
   }
   if (code === "project_import_zip_required") return "Upload a single .zip file.";
-  if (code === "project_create_failed") return "Failed to create project.";
-  if (code === "project_update_failed") return "Failed to save project.";
-  if (code === "default_project_missing_id") return "Failed to resolve the default project.";
+  if (code === "project_create_failed") return "Failed to create computer.";
+  if (code === "project_update_failed") return "Failed to save computer.";
+  if (code === "default_project_missing_id") return "Failed to resolve the default computer.";
 
   if (code) return fallback;
   return text || fallback;

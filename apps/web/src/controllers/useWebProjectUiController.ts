@@ -7,6 +7,7 @@ import {
   importMappedDaytonaCloudProjectZip,
   updateMappedDaytonaCloudProject,
 } from "../../../../shared/daytonaCloudProjects";
+import { normalizeComputerDisplayName } from "../../../../shared/projectNaming";
 
 export type WebCloudProjectRecord = {
   id: string;
@@ -102,7 +103,7 @@ function getProjectImportFileError(file: File | null): string | null {
     return "Upload a single .zip file.";
   }
   if (file.size > PROJECT_IMPORT_MAX_BYTES) {
-    return "Project imports are limited to 150 MB zipped.";
+    return "Computer imports are limited to 150 MB zipped.";
   }
   return null;
 }
@@ -235,7 +236,7 @@ export function useWebProjectUiController<TSession>(
 
   const openEditProjectModal = useCallback((project: WebCloudProjectRecord) => {
     setEditingProjectId(project.id);
-    setEditProjectName(project.name ?? "");
+    setEditProjectName(normalizeComputerDisplayName(project.name));
     setEditProjectDescription(project.description ?? "");
     setEditProjectImportFile(null);
     setEditProjectError(null);
@@ -301,10 +302,10 @@ export function useWebProjectUiController<TSession>(
         onProjectCreated(createdProject);
         resetCreateProjectModal();
         setEditingProjectId(createdProject.id);
-        setEditProjectName(createdProject.name ?? "");
+        setEditProjectName(normalizeComputerDisplayName(createdProject.name));
         setEditProjectDescription(createdProject.description ?? "");
         setEditProjectImportFile(createProjectImportFile);
-        setEditProjectError("Project created, but the zip import failed. You can try the import again here.");
+        setEditProjectError("Computer created, but the zip import failed. You can try the import again here.");
         setIsEditProjectModalOpen(true);
       } else {
         setCreateProjectError(
@@ -366,7 +367,7 @@ export function useWebProjectUiController<TSession>(
       console.warn("Failed to update cloud project:", error);
       setEditProjectError(
         metadataUpdated && editProjectImportFile
-          ? "Project details were saved, but the zip import failed."
+          ? "Computer details were saved, but the zip import failed."
           : formatProjectOperationErrorMessage(error, {
               operation: "update",
               ...PROJECT_ERROR_MESSAGE_OPTIONS,
@@ -392,12 +393,12 @@ export function useWebProjectUiController<TSession>(
     if (!session || !deletingProjectId || isDeletingProject) return;
     const project = cloudProjects.find((entry) => entry.id === deletingProjectId) ?? null;
     if (!project) {
-      setDeleteProjectError("Project no longer exists.");
+      setDeleteProjectError("Computer no longer exists.");
       return;
     }
-    const expectedName = (project.name ?? "").trim();
+    const expectedName = normalizeComputerDisplayName(project.name);
     if (!expectedName || deleteProjectConfirmationValue.trim() !== expectedName) {
-      setDeleteProjectError("Type the exact project name to confirm deletion.");
+      setDeleteProjectError("Type the exact computer name to confirm deletion.");
       return;
     }
     const usableSession = await ensureSession(session);
@@ -481,7 +482,7 @@ export function useWebProjectUiController<TSession>(
       },
       deleteModal: {
         isOpen: isDeleteProjectModalOpen,
-        projectName: deletingProject?.name ?? "",
+        projectName: deletingProject ? normalizeComputerDisplayName(deletingProject.name) : "",
         confirmationValue: deleteProjectConfirmationValue,
         error: deleteProjectError,
         isDeleting: isDeletingProject,
