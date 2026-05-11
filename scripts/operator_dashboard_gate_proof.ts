@@ -61,21 +61,46 @@ assert.match(seedScript, /multiple matching users found/, "operator seed must fa
 assert.match(seedScript, /runConvexImport\("criticalAuditEvents"/, "operator seed must write an audit event");
 assert.doesNotMatch(seedScript, /first owner|bootstrap/i, "operator seed must not implement runtime bootstrap authority");
 
+const operatorQueryNames = [...operatorDashboard.matchAll(/export const (\w+) = query/g)].map((match) => match[1]);
 for (const queryName of [
   "getOperatorAccess",
   "getOperatorOverview",
-  "listOperatorBuilders",
+  "listOperatorCommunities",
+  "getOperatorAccountSetupSnapshot",
   "getOperatorMonetization",
+  "getOperatorWebDeployDiagnostics",
+  "getOperatorAuthAccessDiagnostics",
+  "getOperatorSecurityAuditDiagnostics",
+  "getOperatorRuntimeToolDiagnostics",
   "listOperatorRisks",
   "listOperatorEvents",
 ]) {
-  assert.match(operatorDashboard, new RegExp(`export const ${queryName} = query`), `${queryName} must be public query`);
+  assert.ok(operatorQueryNames.includes(queryName), `${queryName} must be public query`);
 }
 
-assert.doesNotMatch(
+for (const queryName of operatorQueryNames) {
+  assert.match(
+    operatorDashboard,
+    new RegExp(`export const ${queryName} = query\\([\\s\\S]*?await requireOperatorAccess\\(ctx, args\\.authSubject\\)`),
+    `${queryName} must route through requireOperatorAccess`,
+  );
+}
+
+assert.doesNotMatch(operatorDashboard, /export const \w+ = action/, "operator dashboard must not expose public actions");
+assert.deepEqual(
+  [...operatorDashboard.matchAll(/export const (\w+) = mutation/g)].map((match) => match[1]),
+  ["backfillHarnessAppSourceProvenance"],
+  "operator dashboard mutations must stay limited to explicit operator maintenance jobs",
+);
+assert.match(
   operatorDashboard,
-  /mutation|action|ctx\.db\.insert|ctx\.db\.patch|ctx\.db\.delete/,
-  "operator dashboard must remain read-only",
+  /export const backfillHarnessAppSourceProvenance = mutation\([\s\S]*const operator = await requireOperatorWriteAccess\(ctx, args\.authSubject\)/,
+  "operator dashboard maintenance mutations must require operator write access",
+);
+assert.match(
+  operatorDashboard,
+  /export const backfillHarnessAppSourceProvenance = mutation\([\s\S]*recordCriticalAuditEventBestEffort/,
+  "operator dashboard maintenance mutations must write critical audit evidence",
 );
 
 assert.match(

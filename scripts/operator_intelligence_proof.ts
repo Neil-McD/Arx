@@ -29,6 +29,12 @@ const monetizationQuery = extractBetween(
   "export const listOperatorEventsInternal = internalQuery",
   "operator monetization query",
 );
+const communityListQuery = extractBetween(
+  operatorIntelligence,
+  "export const listOperatorCommunitiesInternal = internalQuery",
+  "export const listOperatorDeveloperAppPolicyAuditInternal = internalQuery",
+  "operator communities query",
+);
 const platformBusinessVisitSchema = extractBetween(
   schema,
   "platformBusinessVisits: defineTable",
@@ -66,6 +72,16 @@ assert.match(
   operatorTypes,
   /export type OperatorCommunityRecord = /,
   "operator community record contract is missing",
+);
+assert.match(communityListQuery, /records\.sort\(/, "operator communities should sort before applying the limit");
+assert.match(
+  communityListQuery,
+  /estimatedMrr\?\.amountBaseUnits/,
+  "operator communities should rank by estimated MRR",
+);
+assert.ok(
+  communityListQuery.indexOf("records.sort(") < communityListQuery.indexOf("return records.slice(0, limit)"),
+  "operator communities must sort all matching records before slicing to the panel limit",
 );
 assert.match(operatorTypes, /export type OperatorOverviewSnapshot = /, "operator overview contract is missing");
 assert.match(operatorTypes, /export type OperatorMonetizationSnapshot = /, "operator monetization contract is missing");

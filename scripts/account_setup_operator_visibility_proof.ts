@@ -70,6 +70,16 @@ assert.doesNotMatch(operatorPanel, /"accounts"/, "operator panel must merge acco
 assert.match(operatorPanel, /accountSetup=\{props\.state\.accountSetup\}/, "business tab must receive account setup state");
 assert.match(operatorPanel, /<h2>Account setup<\/h2>/, "business tab must include an account setup section boundary");
 assert.match(operatorPanel, /<OperatorAccountSetupInsights snapshot=\{props\.accountSetup\} \/>/, "business tab must render account setup insights");
+assert.equal(
+  operatorPanel.match(/<h2>Account setup<\/h2>/g)?.length ?? 0,
+  1,
+  "business tab must render exactly one account setup section boundary",
+);
+assert.equal(
+  operatorPanel.match(/<OperatorAccountSetupInsights snapshot=\{props\.accountSetup\} \/>/g)?.length ?? 0,
+  1,
+  "business tab must render account setup insights exactly once",
+);
 assert.match(operatorPanel, /Showing \$\{users\.length\} of \$\{userList\.totalMatching\}/, "operator setup UI must disclose list truncation context");
 
 const existingWithoutProfileDetail = buildAccountSetupStatus({

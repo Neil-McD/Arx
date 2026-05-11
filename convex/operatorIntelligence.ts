@@ -989,6 +989,21 @@ export const listOperatorCommunitiesInternal = internalQuery({
       }
       records.push(record);
     }
+    records.sort((left: any, right: any) => {
+      const mrrDelta =
+        Number(right.money?.estimatedMrr?.amountBaseUnits ?? 0) -
+        Number(left.money?.estimatedMrr?.amountBaseUnits ?? 0);
+      if (mrrDelta !== 0) return mrrDelta;
+      const memberDelta =
+        Number(right.members?.activeMemberships ?? 0) -
+        Number(left.members?.activeMemberships ?? 0);
+      if (memberDelta !== 0) return memberDelta;
+      const updatedDelta =
+        Number(right.community?.updatedAt ?? 0) -
+        Number(left.community?.updatedAt ?? 0);
+      if (updatedDelta !== 0) return updatedDelta;
+      return String(left.community?.name ?? "").localeCompare(String(right.community?.name ?? ""));
+    });
     return records.slice(0, limit);
   },
 });
