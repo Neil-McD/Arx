@@ -49,6 +49,7 @@ function proveFixedPolicyBoundaries() {
   const parallelReadTools: RetrievalToolName[] = [
     "search_product_docs",
     "get_product_doc",
+    "get_active_community_context",
     "community_search",
     "web_research",
     "list_dir",
@@ -92,6 +93,14 @@ function proveFixedPolicyBoundaries() {
   assert.equal(getFixedRuntimeToolPolicy("search_product_docs").requiresWorkspace, false);
   assert.equal(getFixedRuntimeToolPolicy("get_product_doc").category, "docs");
   assert.equal(getFixedRuntimeToolPolicy("get_product_doc").requiresCommunity, false);
+  assert.equal(
+    getFixedRuntimeToolPolicy("get_active_community_context").category,
+    "community",
+  );
+  assert.equal(
+    getFixedRuntimeToolPolicy("get_active_community_context").requiresCommunity,
+    true,
+  );
   assert.equal(getFixedRuntimeToolPolicy("community_write").mutatesState, true);
   assert.equal(getFixedRuntimeToolPolicy("community_write").requiresCommunity, true);
   assert.equal(

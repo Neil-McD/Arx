@@ -184,6 +184,7 @@ function classifyTool(toolName: string, args: Record<string, unknown> | null): A
     toolName === "web_research" ||
     toolName === "search_product_docs" ||
     toolName === "get_product_doc" ||
+    toolName === "get_active_community_context" ||
     toolName.startsWith("community_")
   ) return "exploring";
   if (toolName === "terminal_start" || toolName === "terminal_read" || toolName === "terminal_write") {
@@ -240,6 +241,7 @@ function buildToolTitle(toolName: string, args: Record<string, unknown> | null):
   }
   if (toolName === "search_product_docs") return `Searched docs${query ? ` for ${truncateLabel(query, 48)}` : ""}`;
   if (toolName === "get_product_doc") return `Read docs${slug ? ` ${truncateLabel(slug, 48)}` : ""}`;
+  if (toolName === "get_active_community_context") return "Read community context";
   if (toolName === "community_search") return `Searched community${query ? ` for ${truncateLabel(query, 48)}` : ""}`;
   if (toolName === "community_write") return "Updated community";
   return toolName;

@@ -49,6 +49,9 @@ import {
   executeGetProductDocTool,
   executeSearchProductDocsTool,
 } from "../shared/productDocsRuntime.ts";
+import {
+  buildActiveCommunityContextToolPayload,
+} from "../shared/communityContextTool.ts";
 import type { ProductDocsSearchIndex } from "../shared/productDocsSearch.ts";
 import {
   getNativeToolCompletionToolCalls,
@@ -353,6 +356,55 @@ async function executeRetrievalHarnessTool(params: {
       errorCode: null,
       errorMessage: null,
     };
+  }
+
+  if (params.toolName === "get_active_community_context") {
+    if (!params.communityId) {
+      return {
+        status: "error",
+        exitCode: null,
+        outputText: "",
+        errorCode: "community_required",
+        errorMessage:
+          "get_active_community_context requires an active community context.",
+      };
+    }
+    try {
+      const resolvedCommunity = await params.ctx.runQuery(
+        internal.communityAgent.resolveRuntimeCommunityPromptContextInternal as any,
+        {
+          userId: params.userId,
+          authSubject: params.authSubject ?? undefined,
+          communityId: params.communityId,
+        },
+      );
+      const resolvedCommunityId = String(
+        (resolvedCommunity as { community_id?: unknown } | null)?.community_id ??
+          "",
+      ).trim();
+      if (!resolvedCommunityId) {
+        throw new Error("community_context_unavailable");
+      }
+      const payload = buildActiveCommunityContextToolPayload(
+        (resolvedCommunity ?? {}) as Record<string, unknown>,
+      );
+      return {
+        status: "ok",
+        exitCode: 0,
+        outputText: formatJsonToolOutput(payload),
+        errorCode: null,
+        errorMessage: null,
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return {
+        status: "error",
+        exitCode: null,
+        outputText: "",
+        errorCode: "community_context_failed",
+        errorMessage: message || "Community context lookup failed.",
+      };
+    }
   }
 
   if (params.toolName === "community_search") {

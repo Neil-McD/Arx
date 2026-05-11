@@ -25,6 +25,9 @@ function main() {
   const runtimeHarnessComposition = readText(
     "/Users/neilmcdevitt/code/arx/convex/runtimeHarnessComposition.ts",
   );
+  const personalSkillOverlayRuntime = readText(
+    "/Users/neilmcdevitt/code/arx/shared/personalSkillOverlayRuntime.ts",
+  );
   const settingsSection = readText(
     "/Users/neilmcdevitt/code/arx/apps/web/src/components/WebIntegrationsSettingsSection.tsx",
   );
@@ -70,6 +73,21 @@ function main() {
     runtimeHarnessComposition,
     "buildPersonalSkillOverlayRuntimeState({",
     "personal overlay runtime composition",
+  );
+  assertIncludes(
+    personalSkillOverlayRuntime,
+    "PERSONAL_WORKFLOW_CONTEXT",
+    "personal workflow context prompt block",
+  );
+  assertIncludes(
+    personalSkillOverlayRuntime,
+    "Personal skill packages remain available across community lenses.",
+    "personal skills stay available with a community lens",
+  );
+  assertIncludes(
+    personalSkillOverlayRuntime,
+    "prefer them; use personal skills as supporting or fallback workflows",
+    "community workflows are preferred without making personal skills exclusive",
   );
   assertIncludes(
     httpDaytona,

@@ -260,7 +260,7 @@ function categoryForTool(toolName: string): RuntimeToolCategory {
   }
   if (toolName === "search_product_docs" || toolName === "get_product_doc") return "docs";
   if (toolName === "web_research") return "web";
-  if (toolName.startsWith("community_")) return "community";
+  if (toolName === "get_active_community_context" || toolName.startsWith("community_")) return "community";
   return "other";
 }
 
@@ -274,6 +274,7 @@ function buildCallTitle(toolName: string, args: Record<string, unknown> | null):
   const shortPath = path ? path.split("/").filter(Boolean).pop() || path : null;
   if (toolName === "search_product_docs") return `Docs search${query ? `: ${query}` : ""}`;
   if (toolName === "get_product_doc") return `Read docs${slug ? `: ${slug}` : ""}`;
+  if (toolName === "get_active_community_context") return "Community context";
   if (toolName === "community_search") return `Community search${query ? `: ${query}` : ""}`;
   if (toolName === "community_write") return "Community write";
   if (toolName === "list_dir") return `Listed ${path || "."}`;

@@ -43,6 +43,13 @@ assert.equal(connectedAppAttempts[0]?.connectedAppToolName, "list_bases");
 assert.equal(connectedAppAttempts[0]?.failureKind, "app_permission_denied");
 assert.equal(connectedAppAttempts[0]?.commandOrTarget, "Airtable.list_bases");
 
+const longCommunityAbout = [
+  "Used to prove prompt layout.",
+  "This sentence should appear in the compact about excerpt.",
+  "Long community about detail. ".repeat(80),
+  "FULL_ABOUT_TAIL_SHOULD_NOT_RENDER",
+].join(" ");
+
 const prompt = buildPlatformHarnessRuntimeSystemPrompt({
   loopBudget: {
     maxToolSteps: 8,
@@ -50,7 +57,13 @@ const prompt = buildPlatformHarnessRuntimeSystemPrompt({
     maxConsecutiveFailures: 3,
     maxNoProgressSteps: 3,
   },
-  allowedToolNames: ["read", "write", "bash"],
+  allowedToolNames: [
+    "get_active_community_context",
+    "community_search",
+    "read",
+    "write",
+    "bash",
+  ],
   harnessName: "chat_tools",
   projectLabel: "Prompt proof",
   projectDescription: "Prompt ordering test project",
@@ -58,7 +71,7 @@ const prompt = buildPlatformHarnessRuntimeSystemPrompt({
   communityName: "Prompt Community",
   communitySlug: "prompt-community",
   communityOneLiner: "A proof community.",
-  communityAbout: "Used to prove prompt layout.",
+  communityAbout: longCommunityAbout,
   communitySystemPrompt: "Prefer proof-grounded answers.",
   agentName: "James",
   agentSoul: "Keep proofs tight.",
@@ -243,7 +256,12 @@ assert.match(prompt, /When the member asks your name, answer with the configured
 assert.match(prompt, /You are the member's Polynet agent: a sharp little intelligence/);
 assert.match(prompt, /Keep proofs tight/);
 assert.match(prompt, /Use this lens as background context/);
+assert.match(prompt, /Use get_active_community_context when the answer depends on the active community's identity/);
 assert.match(prompt, /Use community_search when community activity, archive memory, resources, or learned context matter/);
+assert.match(prompt, /About excerpt: Used to prove prompt layout/);
+assert.match(prompt, /The about excerpt is not a complete knowledge base/);
+assert.doesNotMatch(prompt, /About: Used to prove prompt layout/);
+assert.doesNotMatch(prompt, /FULL_ABOUT_TAIL_SHOULD_NOT_RENDER/);
 assert.doesNotMatch(
   prompt,
   /When community_search returns recent_context/,

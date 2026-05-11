@@ -14,8 +14,10 @@ export function buildPersonalSkillsPromptBlock(
   if (installedSkills.length === 0) return "";
   const lines = [
     "",
-    "Personal skill packages are installed in your personal runtime guidance.",
-    "A personal skill package is injected only when you explicitly mention it, like `$weekly-research`.",
+    "PERSONAL_WORKFLOW_CONTEXT",
+    "Personal skill packages remain available across community lenses.",
+    "When active community workflows match the request, prefer them; use personal skills as supporting or fallback workflows when useful.",
+    "Full personal skill instructions are injected only when the user explicitly mentions the skill under the current activation rules, like `$weekly-research`.",
   ];
   for (const skill of installedSkills.slice(0, 12)) {
     lines.push(`- $${skill.mentionToken}: ${skill.description || skill.name}`);

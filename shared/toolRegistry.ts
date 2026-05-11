@@ -91,6 +91,12 @@ const COMMUNITY_SEARCH_TOOL_SCHEMA: JsonSchema = {
   },
 };
 
+const EMPTY_TOOL_SCHEMA: JsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {},
+};
+
 const SEARCH_PRODUCT_DOCS_TOOL_SCHEMA: JsonSchema = {
   type: "object",
   additionalProperties: false,
@@ -466,6 +472,11 @@ const TOOL_REGISTRY: Record<RetrievalToolName, ToolRegistryEntry> = {
     name: "get_product_doc",
     description: "Read one canonical Polynet product documentation page, or one heading section from that page.",
     inputSchema: GET_PRODUCT_DOC_TOOL_SCHEMA,
+  },
+  get_active_community_context: {
+    name: "get_active_community_context",
+    description: "Read bounded profile context for the active community lens. The active community is server-selected from the thread context.",
+    inputSchema: EMPTY_TOOL_SCHEMA,
   },
   community_search: {
     name: "community_search",
@@ -979,6 +990,9 @@ export function normalizeToolArguments(
     const query = normalizeString(args.query);
     if (!query) throw new Error("community_search requires query.");
     return { query: query.slice(0, 240) };
+  }
+  if (toolName === "get_active_community_context") {
+    return {};
   }
   if (toolName === "search_product_docs") {
     const query = normalizeString(args.query);

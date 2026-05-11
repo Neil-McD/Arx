@@ -3,7 +3,7 @@ id: product.reference.context_model
 title: Context Model
 audience: builder, llm, operator
 status: alpha-current
-last_verified: 2026-05-07
+last_verified: 2026-05-11
 ---
 
 # Context Model
@@ -30,7 +30,7 @@ The stack above defines authority order. The runtime can also use explicit input
 - user/session state
 - thread history
 - community resources
-- community skills
+- community skills and community workflow indexes
 - connected apps/MCP tools
 - runtime/tool policy
 - paid-tool balance state
@@ -41,6 +41,7 @@ These inputs do not outrank the canonical context stack.
 
 - Personal prompts are not part of the canonical context stack.
 - Community intelligence evidence is not the same thing as community doctrine.
+- Long community profile/about content is not always-on doctrine; runtime prompts should carry compact identity and retrieve deeper active-community profile context through `get_active_community_context`, with archive/resource/activity lookup handled by `community_search`.
 - Daytona snapshots are not the community lens.
 - Community evidence should be gathered or injected through explicit, bounded runtime paths.
 - There is no free-vs-architect context branch. Account labels normalize before runtime prompt composition.

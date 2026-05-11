@@ -136,6 +136,8 @@ require_match_in_file "$TOOL_TYPES_FILE" '"search_product_docs"' \
   "tool name type includes search_product_docs"
 require_match_in_file "$TOOL_TYPES_FILE" '"get_product_doc"' \
   "tool name type includes get_product_doc"
+require_match_in_file "$TOOL_TYPES_FILE" '"get_active_community_context"' \
+  "tool name type includes get_active_community_context"
 require_match_in_file "$TOOL_TYPES_FILE" '"community_write"' \
   "tool name type includes community_write"
 require_match_in_file "$TOOL_TYPES_FILE" '"list_dir"' \
@@ -162,7 +164,11 @@ require_match_in_file "$NATIVE_LOOP_FILE" 'providerCallId' \
   "native tool loop treats provider call id as first-class"
 require_match_in_file "$NATIVE_LOOP_FILE" 'buildToolResultEnvelope' \
   "native tool loop uses a canonical tool result envelope"
-require_match_in_file "$RESOLUTION_FILE" 'toolNames.push\("community_search", "community_write"\)' \
+require_match_in_file "$RESOLUTION_FILE" '"get_active_community_context"' \
+  "runtime capability resolution includes active community context tool"
+require_match_in_file "$RESOLUTION_FILE" '"community_search"' \
+  "runtime capability resolution includes community search tool"
+require_match_in_file "$RESOLUTION_FILE" '"community_write"' \
   "runtime capability resolution includes community tools"
 require_match_in_file "$RESOLUTION_FILE" 'toolNames.push\("search_product_docs", "get_product_doc"\)' \
   "runtime capability resolution includes product docs tools"

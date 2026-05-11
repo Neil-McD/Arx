@@ -43,11 +43,12 @@ function proveFixedToolSchemasAreStrictSafe() {
   const tools = buildResponsesApiFunctionTools([
     "search_product_docs",
     "get_product_doc",
+    "get_active_community_context",
     "read",
     "web_research",
     "bash",
   ]);
-  assert.equal(tools.length, 5);
+  assert.equal(tools.length, 6);
   for (const tool of tools) {
     assert.equal(tool.strict, true, `expected ${tool.name} to stay strict`);
     assertStrictObjectSchema(tool.parameters);

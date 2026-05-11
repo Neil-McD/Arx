@@ -42,6 +42,26 @@ function main() {
   );
   assertIncludes(
     communityAState.systemPromptSuffix,
+    "COMMUNITY_WORKFLOW_CONTEXT",
+    "Community A workflow context prompt",
+  );
+  assertIncludes(
+    communityAState.systemPromptSuffix,
+    "Prefer these community workflows for community-relevant work",
+    "Community A priority guidance",
+  );
+  assertIncludes(
+    communityAState.systemPromptSuffix,
+    "personal skills and connected apps remain available",
+    "Community A non-exclusive harness guidance",
+  );
+  assertIncludes(
+    communityAState.systemPromptSuffix,
+    "Full community skill instructions are injected only when the user explicitly mentions",
+    "Community A deterministic activation guidance",
+  );
+  assertIncludes(
+    communityAState.systemPromptSuffix,
     "$weekly-research",
     "Community A skill inventory/injection prompt",
   );

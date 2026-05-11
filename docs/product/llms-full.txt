@@ -1968,7 +1968,7 @@ The stack above defines authority order. The runtime can also use explicit input
 - user/session state
 - thread history
 - community resources
-- community skills
+- community skills and community workflow indexes
 - connected apps/MCP tools
 - runtime/tool policy
 - paid-tool balance state
@@ -1979,6 +1979,7 @@ These inputs do not outrank the canonical context stack.
 
 - Personal prompts are not part of the canonical context stack.
 - Community intelligence evidence is not the same thing as community doctrine.
+- Long community profile/about content is not always-on doctrine; runtime prompts should carry compact identity and retrieve deeper active-community profile context through `get_active_community_context`, with archive/resource/activity lookup handled by `community_search`.
 - Daytona snapshots are not the community lens.
 - Community evidence should be gathered or injected through explicit, bounded runtime paths.
 - There is no free-vs-architect context branch. Account labels normalize before runtime prompt composition.
@@ -2053,7 +2054,7 @@ Prompt injection is contextual, not subscription-tiered:
 
 1. Anonymous chat receives only the public/demo path.
 2. Authenticated users use the same platform harness stack.
-3. A backend-validated community lens adds community identity, community prompt, community tools, and community skill context.
+3. A backend-validated community lens adds compact community identity, community prompt, community tools, and community workflow context.
 4. A project-bound thread adds workspace/project context and workspace tools.
 5. Web research can be exposed for authenticated runs, but execution still depends on tool balance.
 6. Tool balance is enforced when a paid tool executes. A zero-credit user can still see and request the tool; the tool call returns a balance-required error that drives the top-up modal.
@@ -2064,10 +2065,12 @@ Prompt injection is contextual, not subscription-tiered:
 2. Owner instructions cannot grant access.
 3. Skills cannot grant tools by themselves.
 4. Resource context should be bounded and relevant.
-5. Prompt changes should be versioned or auditable where practical.
-6. Prompts should prefer references to docs and resources over copying huge blobs.
-7. Prompt code must not branch on Builder, Pro, or product-facing paid-plan labels.
-8. This file does not define a separate precedence model from `reference/context-model.md`.
+5. Community workflow context should prefer active-lens workflows when relevant without hiding personal skills or connected apps.
+6. Deeper active-community profile context should come from `get_active_community_context`; archive, resource, activity, and memory evidence should come from `community_search`.
+7. Prompt changes should be versioned or auditable where practical.
+8. Prompts should prefer references to docs and resources over copying huge blobs.
+9. Prompt code must not branch on Builder, Pro, or product-facing paid-plan labels.
+10. This file does not define a separate precedence model from `reference/context-model.md`.
 
 ## Related Concepts
 

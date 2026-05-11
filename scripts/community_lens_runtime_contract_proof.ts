@@ -31,6 +31,10 @@ function main() {
   const runtimeHarnessComposition = readText(
     join(root, "convex/runtimeHarnessComposition.ts"),
   );
+  const runtimePrompt = readText(join(root, "shared/runtimePrompt.ts"));
+  const communityOverlayRuntime = readText(
+    join(root, "shared/communityOverlayRuntime.ts"),
+  );
 
   assertNotIncludes(
     httpDaytona,
@@ -116,6 +120,26 @@ function main() {
     runtimeTurnHandlers,
     "communityContextVersion",
     "runtime run snapshots community context version",
+  );
+  assertIncludes(
+    runtimePrompt,
+    "About excerpt:",
+    "community lens prompt keeps about content compact",
+  );
+  assertIncludes(
+    runtimePrompt,
+    "The about excerpt is not a complete knowledge base.",
+    "community lens prompt distinguishes identity excerpt from retrievable knowledge",
+  );
+  assertIncludes(
+    communityOverlayRuntime,
+    "COMMUNITY_WORKFLOW_CONTEXT",
+    "community workflow context prompt block",
+  );
+  assertIncludes(
+    communityOverlayRuntime,
+    "personal skills and connected apps remain available",
+    "community workflow context is priority, not exclusive",
   );
   assertIncludes(
     app,

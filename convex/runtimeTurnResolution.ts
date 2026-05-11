@@ -228,7 +228,11 @@ export function resolveAllowedToolNames(params: {
     toolNames.push("search_product_docs", "get_product_doc");
   }
   if (params.activeCapabilityFamilies.includes("community_tools")) {
-    toolNames.push("community_search", "community_write");
+    toolNames.push(
+      "get_active_community_context",
+      "community_search",
+      "community_write",
+    );
   }
   if (params.activeCapabilityFamilies.includes("web_research")) {
     toolNames.push("web_research");
@@ -465,7 +469,6 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
         community_one_liner?: unknown;
         community_about?: unknown;
         community_system_prompt?: unknown;
-        system_prompt?: unknown;
       } | null;
       runtimeCommunityId =
         String(resolvedCommunity?.community_id ?? "").trim() || null;
@@ -478,11 +481,7 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
       runtimeCommunityAbout =
         String(resolvedCommunity?.community_about ?? "").trim() || null;
       runtimeCommunitySystemPrompt =
-        String(
-          resolvedCommunity?.community_system_prompt ??
-            resolvedCommunity?.system_prompt ??
-            "",
-        ).trim() || null;
+        String(resolvedCommunity?.community_system_prompt ?? "").trim() || null;
       if (!runtimeCommunityId) {
         throw new Error("community_lens_unavailable");
       }

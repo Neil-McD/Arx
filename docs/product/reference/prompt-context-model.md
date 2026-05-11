@@ -3,7 +3,7 @@ id: product.reference.prompt_context_model
 title: Prompt Context Model
 audience: builder, llm, operator
 status: alpha-current
-last_verified: 2026-05-07
+last_verified: 2026-05-11
 ---
 
 # Prompt Context Model
@@ -47,7 +47,7 @@ Prompt injection is contextual, not subscription-tiered:
 
 1. Anonymous chat receives only the public/demo path.
 2. Authenticated users use the same platform harness stack.
-3. A backend-validated community lens adds community identity, community prompt, community tools, and community skill context.
+3. A backend-validated community lens adds compact community identity, community prompt, community tools, and community workflow context.
 4. A project-bound thread adds workspace/project context and workspace tools.
 5. Web research can be exposed for authenticated runs, but execution still depends on tool balance.
 6. Tool balance is enforced when a paid tool executes. A zero-credit user can still see and request the tool; the tool call returns a balance-required error that drives the top-up modal.
@@ -58,10 +58,12 @@ Prompt injection is contextual, not subscription-tiered:
 2. Owner instructions cannot grant access.
 3. Skills cannot grant tools by themselves.
 4. Resource context should be bounded and relevant.
-5. Prompt changes should be versioned or auditable where practical.
-6. Prompts should prefer references to docs and resources over copying huge blobs.
-7. Prompt code must not branch on Builder, Pro, or product-facing paid-plan labels.
-8. This file does not define a separate precedence model from `reference/context-model.md`.
+5. Community workflow context should prefer active-lens workflows when relevant without hiding personal skills or connected apps.
+6. Deeper active-community profile context should come from `get_active_community_context`; archive, resource, activity, and memory evidence should come from `community_search`.
+7. Prompt changes should be versioned or auditable where practical.
+8. Prompts should prefer references to docs and resources over copying huge blobs.
+9. Prompt code must not branch on Builder, Pro, or product-facing paid-plan labels.
+10. This file does not define a separate precedence model from `reference/context-model.md`.
 
 ## Related Concepts
 

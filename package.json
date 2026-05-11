@@ -87,6 +87,7 @@
     "check:runtime-activity-timeline-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_activity_timeline_proof.ts",
     "check:runtime-tool-scheduler-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_tool_scheduler_proof.ts",
     "check:runtime-provider-tool-surface-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_provider_tool_surface_proof.ts",
+    "check:community-context-tool-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_context_tool_proof.ts",
     "check:native-tool-provider-parser-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/native_tool_provider_parser_proof.ts",
     "check:runtime-workspace-session-authority-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_workspace_session_authority_proof.ts",
     "check:runtime-workspace-lazy-creation-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_workspace_lazy_creation_proof.ts",
