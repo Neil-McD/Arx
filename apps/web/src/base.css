@@ -21614,6 +21614,24 @@ button.message-citation-chip:hover {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.operator-dashboard__section-heading {
+  display: grid;
+  gap: 4px;
+  margin: 2px 0 -2px;
+}
+
+.operator-dashboard__section-heading h2 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.operator-dashboard__section-heading p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
 .operator-dashboard {
   width: min(1180px, calc(100vw - 96px));
   margin: 0 auto;

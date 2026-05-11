@@ -68,12 +68,14 @@ assert.doesNotMatch(operatorPanel, /Setup activity|Setup funnel|Recent setup eve
 assert.match(operatorGateway, /loadOperatorAccountSetupSnapshotCanonical/, "web gateway must load setup snapshot");
 assert.doesNotMatch(operatorPanel, /"accounts"/, "operator panel must merge account setup into Business, not expose a separate Accounts tab");
 assert.match(operatorPanel, /accountSetup=\{props\.state\.accountSetup\}/, "business tab must receive account setup state");
-assert.match(operatorPanel, /<h2>Account setup<\/h2>/, "business tab must include an account setup section boundary");
+assert.doesNotMatch(operatorPanel, /<h2>Account setup<\/h2>/, "operator panel should present this as user readiness, not account setup");
+assert.doesNotMatch(operatorPanel, /Current user setup state from canonical account records/, "operator panel must not render the old empty account setup intro card");
+assert.match(operatorPanel, /<h2>User readiness<\/h2>/, "business tab must include a user readiness section boundary");
 assert.match(operatorPanel, /<OperatorAccountSetupInsights snapshot=\{props\.accountSetup\} \/>/, "business tab must render account setup insights");
 assert.equal(
-  operatorPanel.match(/<h2>Account setup<\/h2>/g)?.length ?? 0,
+  operatorPanel.match(/<h2>User readiness<\/h2>/g)?.length ?? 0,
   1,
-  "business tab must render exactly one account setup section boundary",
+  "business tab must render exactly one user readiness section boundary",
 );
 assert.equal(
   operatorPanel.match(/<OperatorAccountSetupInsights snapshot=\{props\.accountSetup\} \/>/g)?.length ?? 0,

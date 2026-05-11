@@ -908,11 +908,11 @@ function OperatorBusinessInsights(props: {
             <strong>{formatPercent(businessKpis?.users.visitorToUserConversionRate ?? null)}</strong>
           </div>
           <div className="operator-dashboard__row">
-            <span>Accounts completed</span>
+            <span>Ready users</span>
             <strong>{accountSetupOverview?.totals.completed ?? 0}</strong>
           </div>
           <div className="operator-dashboard__row">
-            <span>Account completion</span>
+            <span>Readiness</span>
             <strong>{formatPercent(accountSetupCompletionRate)}</strong>
           </div>
           <div className="operator-dashboard__row">
@@ -928,13 +928,6 @@ function OperatorBusinessInsights(props: {
           ) : (
             <div className="operator-dashboard__empty">Visitor count is deduped by anonymous visitor key across first-party business surfaces.</div>
           )}
-        </div>
-      </section>
-
-      <section className="operator-dashboard__panel operator-dashboard__panel--full" aria-label="Account setup">
-        <h2>Account setup</h2>
-        <div className="operator-dashboard__empty">
-          Current user setup state from canonical account records, provider connections, and agent settings.
         </div>
       </section>
 
@@ -1203,31 +1196,36 @@ function OperatorAccountSetupInsights(props: { snapshot: OperatorAccountSetupSna
 
   return (
     <>
-      <section className="operator-dashboard__metrics" aria-label="Account setup overview">
+      <div className="operator-dashboard__section-heading" aria-label="User readiness">
+        <h2>User readiness</h2>
+        <p>Profile, provider, and personal agent readiness across real users.</p>
+      </div>
+
+      <section className="operator-dashboard__metrics" aria-label="User readiness overview">
         <div>
           <span>Total users</span>
           <strong>{overview?.totals.users ?? 0}</strong>
-          <span className="operator-dashboard__metric-note">Canonical account records.</span>
+          <span className="operator-dashboard__metric-note">Real account records.</span>
         </div>
         <div>
-          <span>Complete</span>
+          <span>Ready</span>
           <strong>{overview?.totals.completed ?? 0}</strong>
-          <span className="operator-dashboard__metric-note">{formatPercent(setupCompletionRate)} setup completion.</span>
+          <span className="operator-dashboard__metric-note">{formatPercent(setupCompletionRate)} ready.</span>
         </div>
         <div>
           <span>Need setup</span>
           <strong>{overview?.totals.incomplete ?? 0}</strong>
-          <span className="operator-dashboard__metric-note">Users missing required setup fields.</span>
+          <span className="operator-dashboard__metric-note">Users missing readiness fields.</span>
         </div>
         <div>
-          <span>Average</span>
+          <span>Average readiness</span>
           <strong>{overview?.totals.averagePercent ?? 0}%</strong>
-          <span className="operator-dashboard__metric-note">Mean setup completion.</span>
+          <span className="operator-dashboard__metric-note">Mean readiness across users.</span>
         </div>
       </section>
 
       <section className="operator-dashboard__panel">
-        <h2>Current step</h2>
+        <h2>Current blocker</h2>
         <div className="operator-dashboard__table">
           {OPERATOR_ACCOUNT_SETUP_STEP_ORDER.map((step) => (
             <div className="operator-dashboard__row" key={step}>
@@ -1242,7 +1240,7 @@ function OperatorAccountSetupInsights(props: { snapshot: OperatorAccountSetupSna
         <h2>Missing fields</h2>
         <div className="operator-dashboard__table">
           {missingRows.length === 0 ? (
-            <div className="operator-dashboard__empty">No missing setup fields returned.</div>
+            <div className="operator-dashboard__empty">No missing readiness fields returned.</div>
           ) : (
             missingRows.map((row) => (
               <div className="operator-dashboard__row" key={row.field}>
@@ -1261,7 +1259,7 @@ function OperatorAccountSetupInsights(props: { snapshot: OperatorAccountSetupSna
             <div className="operator-dashboard__empty">{showingLabel}</div>
           ) : null}
           {users.length === 0 ? (
-            <div className="operator-dashboard__empty">No incomplete account setup records returned.</div>
+            <div className="operator-dashboard__empty">No users needing readiness work returned.</div>
           ) : (
             users.map((record) => {
               const missing = record.setup.missing.slice(0, 4);
@@ -1279,7 +1277,7 @@ function OperatorAccountSetupInsights(props: { snapshot: OperatorAccountSetupSna
                         .filter(Boolean)
                         .join(" · ")}
                     </span>
-                    <div className="operator-dashboard__chips" aria-label="Missing setup fields">
+                    <div className="operator-dashboard__chips" aria-label="Missing readiness fields">
                       {missing.map((field) => (
                         <span className="operator-dashboard__chip operator-dashboard__chip--warning" key={field}>
                           {formatAccountSetupMissing(field)}
