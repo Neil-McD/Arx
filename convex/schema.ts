@@ -102,29 +102,26 @@ export default defineSchema({
 
   builderPartners: defineTable({
     userId: v.id("users"),
-    sourceCommunityId: v.optional(v.id("communities")),
     code: v.string(),
     status: v.union(
-      v.literal("pending_review"),
       v.literal("active"),
       v.literal("paused"),
       v.literal("disabled"),
     ),
     acceptedTermsAt: v.optional(v.number()),
+    acceptedTermsVersion: v.optional(v.string()),
     disabledReason: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
     .index("by_user", ["userId"])
     .index("by_code", ["code"])
-    .index("by_sourceCommunity", ["sourceCommunityId"])
     .index("by_status_createdAt", ["status", "createdAt"]),
 
   partnerAttributions: defineTable({
     attributionKey: v.string(),
     partnerId: v.id("builderPartners"),
     partnerUserId: v.id("users"),
-    sourceCommunityId: v.optional(v.id("communities")),
     referralCode: v.string(),
     anonymousVisitorKeyHash: v.optional(v.string()),
     referredUserId: v.optional(v.id("users")),
@@ -137,6 +134,8 @@ export default defineSchema({
       v.literal("voided"),
     ),
     voidReason: v.optional(v.string()),
+    referredUserHadOwnedCommunityAtBind: v.optional(v.boolean()),
+    eligibleForCommunityRevenue: v.optional(v.boolean()),
     firstTouchAt: v.number(),
     lastTouchAt: v.number(),
     expiresAt: v.number(),
@@ -184,6 +183,7 @@ export default defineSchema({
   })
     .index("by_commissionKey", ["commissionKey"])
     .index("by_partner_status", ["partnerId", "status"])
+    .index("by_referredUser", ["referredUserId"])
     .index("by_status_holdUntil", ["status", "holdUntil"])
     .index("by_checkout_session", ["sourceCheckoutSessionId"])
     .index("by_credit_ledger_entry", ["sourceCreditLedgerEntryId"]),

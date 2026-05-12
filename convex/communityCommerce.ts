@@ -32,6 +32,7 @@ import {
 } from "./communityCore";
 import { enqueueCommunityBillingIssueEmailInternal } from "./emailEvents";
 import { recordCriticalAuditEventBestEffort } from "./criticalAudit";
+import { recordCommunityRevenuePartnerCommission } from "./builderPartners";
 
 type CommunityCheckoutSessionRow = {
   _id: any;
@@ -553,6 +554,22 @@ export const syncPendingCommunityCheckoutSubscriptionInternal = internalMutation
       },
       createdAt: nowMs,
     });
+    if (
+      args.markComplete &&
+      row.communityId &&
+      communitySubscriptionStatusGrantsAccess(communitySubscriptionStatus)
+    ) {
+      await recordCommunityRevenuePartnerCommission(ctx, {
+        communityId: row.communityId,
+        sourceCheckoutSessionId: row.sessionId,
+        sourceProviderSubscriptionId:
+          String(args.providerSubscriptionId ?? row.providerSubscriptionId ?? "").trim() || undefined,
+        amountBaseUnits: row.amountBaseUnits,
+        currency: row.currency,
+        currencyDecimals: row.currencyDecimals,
+        nowMs,
+      });
+    }
   },
 });
 

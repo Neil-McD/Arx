@@ -1,4 +1,5 @@
 export const BUILDER_PARTNER_PROGRAM_VERSION = "builder_partner_v1";
+export const BUILDER_PARTNER_TERMS_VERSION = "builder_partner_terms_v1";
 export const BUILDER_PARTNER_COMMUNITY_PLATFORM_FEE_BPS = 1500;
 export const BUILDER_PARTNER_PLATFORM_FEE_SHARE_BPS = 4000;
 export const BUILDER_PARTNER_TOOL_GROSS_MARGIN_SHARE_BPS = 2000;
@@ -6,7 +7,7 @@ export const BUILDER_PARTNER_ATTRIBUTION_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
 export const BUILDER_PARTNER_COMMISSION_HOLD_MS = 30 * 24 * 60 * 60 * 1000;
 export const BUILDER_PARTNER_MIN_PAYOUT_USD = 50;
 
-export type BuilderPartnerStatus = "pending_review" | "active" | "paused" | "disabled";
+export type BuilderPartnerStatus = "active" | "paused" | "disabled";
 export type BuilderPartnerAttributionStatus = "active" | "bound" | "expired" | "voided";
 export type BuilderPartnerCommissionBasisType = "community_platform_fee" | "tool_gross_margin";
 export type BuilderPartnerCommissionStatus = "pending" | "locked" | "payable" | "paid" | "voided";

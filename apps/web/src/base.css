@@ -15326,6 +15326,187 @@ button.message-citation-chip:hover {
   line-height: 1.45;
 }
 
+.builder-partner-requirements,
+.builder-partner-dashboard {
+  display: grid;
+  gap: 12px;
+}
+
+.builder-partner-requirement {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid var(--border-muted);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-card-alt) 82%, transparent);
+}
+
+.builder-partner-requirement-icon {
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent-rose);
+}
+
+.builder-partner-requirement-icon.is-ready {
+  color: #7adf9a;
+}
+
+.builder-partner-requirement-icon svg {
+  width: 17px;
+  height: 17px;
+  stroke-width: 2;
+}
+
+.builder-partner-requirement-copy {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.builder-partner-requirement-copy strong {
+  color: var(--text-primary);
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.builder-partner-requirement-copy span {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.builder-partner-requirement-action {
+  min-width: max-content;
+}
+
+.builder-partner-requirement-action button,
+.builder-partner-link-card button,
+.builder-partner-requirements > button {
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border-muted);
+  background: color-mix(in srgb, var(--bg-card-hover) 82%, transparent);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.builder-partner-requirement-action button:hover:not(:disabled),
+.builder-partner-link-card button:hover:not(:disabled),
+.builder-partner-requirements > button:hover:not(:disabled) {
+  border-color: var(--border-default);
+  background: var(--bg-card-hover);
+}
+
+.builder-partner-requirement-action button:disabled,
+.builder-partner-link-card button:disabled,
+.builder-partner-requirements > button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.builder-partner-requirements > button {
+  width: fit-content;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.builder-partner-requirements > button svg,
+.builder-partner-link-card button svg {
+  width: 14px;
+  height: 14px;
+  stroke-width: 2;
+}
+
+.builder-partner-link-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 14px;
+  border: 1px solid var(--border-muted);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-card-alt) 82%, transparent);
+}
+
+.builder-partner-link-copy {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+}
+
+.builder-partner-link-copy span,
+.builder-partner-dashboard-card span {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.builder-partner-link-copy strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--text-primary);
+  font-size: 13px;
+  line-height: 1.4;
+  font-weight: 600;
+}
+
+.builder-partner-link-card button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.builder-partner-dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.builder-partner-dashboard-card {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 7px 10px;
+  padding: 14px;
+  border: 1px solid var(--border-muted);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-card-alt) 82%, transparent);
+}
+
+.builder-partner-dashboard-card svg {
+  width: 17px;
+  height: 17px;
+  color: var(--text-muted);
+  stroke-width: 1.8;
+}
+
+.builder-partner-dashboard-card strong,
+.builder-partner-dashboard-card small {
+  grid-column: 2;
+}
+
+.builder-partner-dashboard-card strong {
+  color: var(--text-primary);
+  font-size: 18px;
+  line-height: 1.15;
+}
+
+.builder-partner-dashboard-card small {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .integrations-header {
   display: flex;
   align-items: center;
@@ -21252,8 +21433,23 @@ button.message-citation-chip:hover {
 }
 
 .app-root.mobile-settings-shell .builder-partner-status-stack,
-.app-root.mobile-settings-shell .builder-partner-metrics {
+.app-root.mobile-settings-shell .builder-partner-metrics,
+.app-root.mobile-settings-shell .builder-partner-dashboard-grid {
   grid-template-columns: minmax(0, 1fr);
+}
+
+.app-root.mobile-settings-shell .builder-partner-requirement,
+.app-root.mobile-settings-shell .builder-partner-link-card {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.app-root.mobile-settings-shell .builder-partner-requirement-action {
+  min-width: 0;
+}
+
+.app-root.mobile-settings-shell .builder-partner-requirement-action button,
+.app-root.mobile-settings-shell .builder-partner-link-card button {
+  width: 100%;
 }
 
 .app-root.mobile-settings-shell .mobile-settings-index,

@@ -7,10 +7,12 @@ import {
   BUILDER_PARTNER_MIN_PAYOUT_USD,
   BUILDER_PARTNER_PLATFORM_FEE_SHARE_BPS,
   BUILDER_PARTNER_PROGRAM_VERSION,
+  BUILDER_PARTNER_TERMS_VERSION,
   BUILDER_PARTNER_TOOL_GROSS_MARGIN_SHARE_BPS,
   calculateBuilderPartnerCommunityRevenueCommission,
   calculateBuilderPartnerToolGrossMarginCommission,
 } from "../shared/builderPartnerProgram.ts";
+import { buildAttributionRouteLabel } from "../shared/routePrivacy.ts";
 
 function readText(path: string | URL): string {
   return readFileSync(path, "utf8");
@@ -22,6 +24,7 @@ function assertIncludes(haystack: string, needle: string, label: string) {
 
 function proveConstants() {
   assert.equal(BUILDER_PARTNER_PROGRAM_VERSION, "builder_partner_v1");
+  assert.equal(BUILDER_PARTNER_TERMS_VERSION, "builder_partner_terms_v1");
   assert.equal(BUILDER_PARTNER_COMMUNITY_PLATFORM_FEE_BPS, 1500);
   assert.equal(BUILDER_PARTNER_PLATFORM_FEE_SHARE_BPS, 4000);
   assert.equal(BUILDER_PARTNER_TOOL_GROSS_MARGIN_SHARE_BPS, 2000);
@@ -67,13 +70,18 @@ function proveSchemaContract(schemaSource: string) {
   assertIncludes(schemaSource, "partnerCommissionLedger: defineTable", "schema");
   assert.match(
     schemaSource,
-    /builderPartners:[\s\S]*sourceCommunityId:\s*v\.optional\(v\.id\("communities"\)\)[\s\S]*acceptedTermsAt:\s*v\.optional\(v\.number\(\)\)/,
-    "expected partner records to bind a partner user to an optional source community and accepted terms",
+    /builderPartners:[\s\S]*userId:\s*v\.id\("users"\)[\s\S]*acceptedTermsAt:\s*v\.optional\(v\.number\(\)\)[\s\S]*acceptedTermsVersion:\s*v\.optional\(v\.string\(\)\)/,
+    "expected partner records to bind a partner user to versioned accepted terms",
+  );
+  assert.doesNotMatch(
+    schemaSource,
+    /sourceCommunityId|by_sourceCommunity|pending_review/,
+    "platform-level partners should not keep community-source fields or unused manual-review states",
   );
   assert.match(
     schemaSource,
-    /partnerAttributions:[\s\S]*attributionKey:\s*v\.string\(\)[\s\S]*referralCode:\s*v\.string\(\)[\s\S]*anonymousVisitorKeyHash:\s*v\.optional\(v\.string\(\)\)[\s\S]*referredUserId:\s*v\.optional\(v\.id\("users"\)\)[\s\S]*expiresAt:\s*v\.number\(\)/,
-    "expected attribution records to support anonymous first-touch, auth binding, and expiry",
+    /partnerAttributions:[\s\S]*attributionKey:\s*v\.string\(\)[\s\S]*referralCode:\s*v\.string\(\)[\s\S]*anonymousVisitorKeyHash:\s*v\.optional\(v\.string\(\)\)[\s\S]*referredUserId:\s*v\.optional\(v\.id\("users"\)\)[\s\S]*referredUserHadOwnedCommunityAtBind:\s*v\.optional\(v\.boolean\(\)\)[\s\S]*eligibleForCommunityRevenue:\s*v\.optional\(v\.boolean\(\)\)[\s\S]*expiresAt:\s*v\.number\(\)/,
+    "expected attribution records to support anonymous first-touch, auth binding, expiry, and creator eligibility snapshots",
   );
   assert.match(
     schemaSource,
@@ -89,6 +97,11 @@ function proveSchemaContract(schemaSource: string) {
     schemaSource,
     /\.index\("by_commissionKey",\s*\["commissionKey"\]\)/,
     "expected commission idempotency key index",
+  );
+  assert.match(
+    schemaSource,
+    /\.index\("by_referredUser",\s*\["referredUserId"\]\)/,
+    "expected commission ledger rows to be cleanup-addressable by referred user",
   );
 }
 
@@ -130,14 +143,18 @@ function proveUiContract(uiSource: string) {
   );
   assertIncludes(
     uiSource,
-    "Earn {formatBps(toolGrossMarginShareBps)} of referred creators' tool usage",
+    "Earn {formatBps(toolUsageShareBps)} of referred creators' tool usage",
     "partner settings UI",
   );
   assertIncludes(
     uiSource,
-    "Attribution and commission reporting will appear here once enrollment opens.",
+    "Accept and unlock",
     "partner settings UI",
   );
+  assertIncludes(uiSource, "Copy link", "partner settings UI");
+  assertIncludes(uiSource, "Referred builders", "partner settings UI");
+  assertIncludes(uiSource, "Appears after referred revenue is processed.", "partner settings UI");
+  assertIncludes(uiSource, "Complete the requirements to unlock your partner link and dashboard.", "partner settings UI");
   assert.doesNotMatch(
     uiSource,
     /Builder Partners must be actively building|invite-list|CommunityAvatar/,
@@ -160,13 +177,191 @@ function proveUiContract(uiSource: string) {
   );
   assert.doesNotMatch(
     uiSource,
-    /Request enrollment|Copy link|your-code/,
-    "partner settings UI should not ship enrollment mechanics before the flow is planned",
+    /Request enrollment|your-code|Available after enrollment|enrollment opens/i,
+    "partner settings UI should not retain placeholder enrollment copy",
   );
   assert.doesNotMatch(
     uiSource,
     /backend ledger ships/i,
     "partner settings UI must not expose implementation phrasing",
+  );
+  assert.doesNotMatch(
+    uiSource,
+    /Ledger-backed|commission rows|ready for payout/i,
+    "partner settings UI should not imply commission ledger production exists before revenue processing is wired",
+  );
+}
+
+function proveAutomaticUnlockContract(convexSource: string, gatewaySource: string, appSource: string) {
+  assertIncludes(
+    convexSource,
+    "getMyBuilderPartnerProgram",
+    "Builder Partner Convex module",
+  );
+  assertIncludes(
+    convexSource,
+    "acceptBuilderPartnerTermsAndEnsure",
+    "Builder Partner Convex module",
+  );
+  assertIncludes(
+    convexSource,
+    "recordBuilderPartnerAttribution",
+    "Builder Partner Convex module",
+  );
+  assertIncludes(
+    convexSource,
+    "findOptionalAuthenticatedActorState",
+    "Builder Partner Convex module",
+  );
+  assertIncludes(
+    convexSource,
+    ".withIndex(\"by_owner\", (q: any) => q.eq(\"ownerId\", userId))",
+    "Builder Partner Convex module",
+  );
+  assertIncludes(
+    convexSource,
+    "status: \"active\"",
+    "Builder Partner Convex module",
+  );
+  assertIncludes(
+    convexSource,
+    "self_referral_ignored",
+    "Builder Partner Convex module",
+  );
+  assertIncludes(
+    convexSource,
+    "superseded_by_new_referral",
+    "Builder Partner Convex module",
+  );
+  assertIncludes(
+    convexSource,
+    "resolveBuilderPartnerProgramState",
+    "Builder Partner Convex module",
+  );
+  assertIncludes(
+    convexSource,
+    "partnerProgramState.state !== \"active\"",
+    "Builder Partner Convex module",
+  );
+  assertIncludes(
+    convexSource,
+    "acceptedTermsVersion: BUILDER_PARTNER_TERMS_VERSION",
+    "Builder Partner Convex module",
+  );
+  assertIncludes(
+    convexSource,
+    "expireClosedAttributions(ctx, candidateRows, nowMs)",
+    "Builder Partner Convex module",
+  );
+  assertIncludes(
+    convexSource,
+    "isOpenAttribution(row, nowMs)",
+    "Builder Partner Convex module",
+  );
+  assertIncludes(
+    convexSource,
+    "referredUserHadOwnedCommunityAtBind",
+    "Builder Partner Convex module",
+  );
+  assertIncludes(
+    convexSource,
+    "eligibleForCommunityRevenue",
+    "Builder Partner Convex module",
+  );
+  assertIncludes(
+    gatewaySource,
+    "polynet-builder-partner-referral",
+    "Builder Partner gateway",
+  );
+  assertIncludes(
+    gatewaySource,
+    "captureBuilderPartnerAttributionFromCurrentUrl",
+    "Builder Partner gateway",
+  );
+  assertIncludes(
+    gatewaySource,
+    "buildAttributionRouteLabel",
+    "Builder Partner gateway",
+  );
+  assert.doesNotMatch(
+    gatewaySource,
+    /window\.location\.href/,
+    "Builder Partner gateway must not persist raw browser hrefs for attribution",
+  );
+  assertIncludes(
+    gatewaySource,
+    "builderPartners:getMyBuilderPartnerProgram",
+    "Builder Partner gateway",
+  );
+  assert.doesNotMatch(
+    gatewaySource,
+    /pending_review|params\.get\("affiliate"\)/,
+    "Builder Partner gateway should stay on the branded platform-partner contract",
+  );
+  assertIncludes(
+    appSource,
+    "captureBuilderPartnerAttributionFromCurrentUrl({",
+    "App shell",
+  );
+  assertIncludes(
+    appSource,
+    "settingsGroup !== \"partners\"",
+    "App shell",
+  );
+}
+
+function proveReductionAndCleanupContract(accountSource: string, docsSource: string) {
+  assertIncludes(
+    accountSource,
+    "\"partnerAttributions\", \"by_referredUser\", \"referredUserId\"",
+    "account deletion cleanup",
+  );
+  assertIncludes(
+    accountSource,
+    "\"partnerCommissionLedger\", \"by_referredUser\", \"referredUserId\"",
+    "account deletion cleanup",
+  );
+  assertIncludes(
+    accountSource,
+    "\"builderPartners\"",
+    "account deletion cleanup",
+  );
+  assertIncludes(
+    accountSource,
+    "\"partnerAttributions\", \"by_partner_status\", \"partnerId\"",
+    "account deletion cleanup",
+  );
+  assertIncludes(
+    accountSource,
+    "\"partnerCommissionLedger\", \"by_partner_status\", \"partnerId\"",
+    "account deletion cleanup",
+  );
+  assertIncludes(
+    docsSource,
+    "A narrow platform-level Builder Partner Program can exist only when it directly helps builders bring new communities to Polynet",
+    "product doctrine",
+  );
+}
+
+function proveAttributionRoutePrivacy() {
+  assert.equal(
+    buildAttributionRouteLabel({
+      href: "https://www.polynet.ai/claim?token=secret&partner=bob&ok=1#access_token=bad",
+    }),
+    "/claim?ok=1",
+  );
+  assert.equal(
+    buildAttributionRouteLabel({
+      pathname: "/checkout/success",
+      search: "?session_id=cs_secret&ref=bob&plan=builder",
+    }),
+    "/checkout/success?plan=builder",
+  );
+  assert.equal(
+    buildAttributionRouteLabel({
+      href: "/settings/integrations?app_oauth_finalize_token=secret&state=state&tab=apps",
+    }),
+    "/settings/integrations?tab=apps",
   );
 }
 
@@ -183,20 +378,118 @@ function provePricingFoundation(authSource: string, workspaceCreditsSource: stri
   );
 }
 
+function proveCommissionProducerContract(
+  builderPartnersSource: string,
+  communityCommerceSource: string,
+  workspaceCreditsSource: string,
+) {
+  assertIncludes(
+    builderPartnersSource,
+    "recordCommunityRevenuePartnerCommission",
+    "Builder Partner commission producer",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "community_platform_fee:${sourceCheckoutSessionId}",
+    "Builder Partner commission producer",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "const referredUserId = community.ownerId",
+    "Builder Partner commission producer",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "requireCommunityRevenueEligibility: true",
+    "Builder Partner commission producer",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "recordToolUsagePartnerCommission",
+    "Builder Partner commission producer",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "tool_gross_margin:${String(args.creditLedgerEntryId)}",
+    "Builder Partner commission producer",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "status: \"locked\"",
+    "Builder Partner commission producer",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "holdUntil: args.nowMs + BUILDER_PARTNER_COMMISSION_HOLD_MS",
+    "Builder Partner commission producer",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "advancePartnerCommissionsToPayableInternal",
+    "Builder Partner commission producer",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "status: \"payable\"",
+    "Builder Partner commission producer",
+  );
+  assertIncludes(
+    communityCommerceSource,
+    "recordCommunityRevenuePartnerCommission(ctx,",
+    "community checkout settlement",
+  );
+  assertIncludes(
+    communityCommerceSource,
+    "sourceCheckoutSessionId: row.sessionId",
+    "community checkout settlement",
+  );
+  assertIncludes(
+    communityCommerceSource,
+    "communitySubscriptionStatusGrantsAccess(communitySubscriptionStatus)",
+    "community checkout settlement",
+  );
+  assert.match(
+    workspaceCreditsSource,
+    /recordToolUsagePartnerCommission\(ctx,[\s\S]*creditLedgerEntryId:\s*(reservation|entry)\._id[\s\S]*paidUsageRatio/,
+    "expected paid tool usage settlement to emit partner commissions from credit ledger evidence",
+  );
+  const toolCommissionCalls = workspaceCreditsSource.match(/recordToolUsagePartnerCommission\(ctx,/g)?.length ?? 0;
+  assert.ok(
+    toolCommissionCalls >= 2,
+    "expected both generic credit settlement and workspace compute reservation settlement to emit partner commissions",
+  );
+  assertIncludes(
+    workspaceCreditsSource,
+    "split.purchasedSettled / Number(entry.creditsReserved ?? 0)",
+    "paid tool usage settlement",
+  );
+}
+
 function main() {
   const schemaSource = readText(new URL("../convex/schema.ts", import.meta.url));
   const uiSource = readText(
     new URL("../apps/web/src/components/WebBuilderPartnerSettingsSection.tsx", import.meta.url),
   );
+  const builderPartnersSource = readText(new URL("../convex/builderPartners.ts", import.meta.url));
+  const gatewaySource = readText(new URL("../shared/builderPartnerProgramGateway.ts", import.meta.url));
+  const appSource = readText(new URL("../apps/web/src/App.tsx", import.meta.url));
+  const accountSource = readText(new URL("../convex/account.ts", import.meta.url));
+  const docsSource = readText(new URL("../docs/product/primitives/polynet.md", import.meta.url));
   const authSource = readText(new URL("../convex/auth.ts", import.meta.url));
-  const workspaceCreditsSource = readText(new URL("../shared/workspaceCredits.ts", import.meta.url));
+  const sharedWorkspaceCreditsSource = readText(new URL("../shared/workspaceCredits.ts", import.meta.url));
+  const communityCommerceSource = readText(new URL("../convex/communityCommerce.ts", import.meta.url));
+  const workspaceCreditsSource = readText(new URL("../convex/workspaceCredits.ts", import.meta.url));
 
   proveConstants();
   proveCommunityCommissionMath();
   proveToolCommissionMath();
+  proveAttributionRoutePrivacy();
   proveSchemaContract(schemaSource);
   proveUiContract(uiSource);
-  provePricingFoundation(authSource, workspaceCreditsSource);
+  proveAutomaticUnlockContract(builderPartnersSource, gatewaySource, appSource);
+  proveReductionAndCleanupContract(accountSource, docsSource);
+  provePricingFoundation(authSource, sharedWorkspaceCreditsSource);
+  proveCommissionProducerContract(builderPartnersSource, communityCommerceSource, workspaceCreditsSource);
   console.log("PASS: builder partner program contract proof passed");
 }
 

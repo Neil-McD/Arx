@@ -127,7 +127,7 @@ Polynet is not only:
 - a standalone assistant
 - an IDE replacement
 
-During MVP, Polynet should also avoid expanding into broad affiliate systems, advanced automations, duplicate surfaces, or speculative platform features that do not support creator setup and member participation.
+During MVP, Polynet should avoid expanding into broad affiliate systems, advanced automations, duplicate surfaces, or speculative platform features that do not support creator setup and member participation. A narrow platform-level Builder Partner Program can exist only when it directly helps builders bring new communities to Polynet and stays separate from community-level affiliate complexity.
 
 ## Common Mistakes
 

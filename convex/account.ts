@@ -156,6 +156,19 @@ export const deleteOwnAccount = mutation({
     await record("userPlatformAppMounts", await deleteRowsByIndex(ctx, "userPlatformAppMounts", "by_user", "userId", userId));
     await record("userPlatformSkillInstalls", await deleteRowsByIndex(ctx, "userPlatformSkillInstalls", "by_user", "userId", userId));
     await record("communityAiFeedReactions", await deleteRowsByIndex(ctx, "communityAiFeedReactions", "by_actorUser", "actorUserId", userId));
+    await record("partnerAttributions", await deleteRowsByIndex(ctx, "partnerAttributions", "by_referredUser", "referredUserId", userId));
+    await record("partnerCommissionLedger", await deleteRowsByIndex(ctx, "partnerCommissionLedger", "by_referredUser", "referredUserId", userId));
+
+    const builderPartners = await ctx.db
+      .query("builderPartners")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .collect();
+    for (const partner of builderPartners) {
+      await record("partnerAttributions", await deleteRowsByIndex(ctx, "partnerAttributions", "by_partner_status", "partnerId", partner._id));
+      await record("partnerCommissionLedger", await deleteRowsByIndex(ctx, "partnerCommissionLedger", "by_partner_status", "partnerId", partner._id));
+      await record("builderPartners", 1);
+      await ctx.db.delete(partner._id);
+    }
 
     const developerApps = await ctx.db
       .query("developerApps")

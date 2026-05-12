@@ -2,6 +2,7 @@ import type { DragEvent } from "react";
 import type { SettingsGroup } from "../../../../shared/appShellNavigation";
 import type { AppTheme } from "../../../../shared/theme";
 import type { AccountCommerceStatus } from "../../../../shared/accountCommerceStatusGateway";
+import type { BuilderPartnerProgramSnapshot } from "../../../../shared/builderPartnerProgramGateway";
 import type { WorkspaceCreditBalance } from "../../../../shared/workspaceCreditsGateway";
 import type { WorkspaceToolBalanceTopupPackId } from "../../../../shared/workspaceCredits";
 import type { PendingPurchaseClaim } from "../../../../shared/pay_first";
@@ -67,6 +68,13 @@ export type WebSettingsPanelsProps = {
     communityRoleById: Record<string, string>;
     openOwnedCommunitySettings: (communityId: string) => void;
     communityInitials: (value: string) => string;
+    builderPartnerProgram: BuilderPartnerProgramSnapshot | null;
+    isLoadingBuilderPartnerProgram: boolean;
+    builderPartnerProgramError: string | null;
+    isAcceptingBuilderPartnerTerms: boolean;
+    loadBuilderPartnerProgram: (session: NonNullable<SessionLike>) => Promise<void> | void;
+    acceptBuilderPartnerTerms: () => Promise<void> | void;
+    openCreateCommunityModal: () => void;
     startStripeConnectOnboarding: (opts?: {
       context?: "account" | "community";
       communitySlug?: string | null;
@@ -258,6 +266,13 @@ export function WebSettingsPanels(props: WebSettingsPanelsProps) {
     communityRoleById: account.communityRoleById,
     openOwnedCommunitySettings: account.openOwnedCommunitySettings,
     communityInitials: account.communityInitials,
+    builderPartnerProgram: account.builderPartnerProgram,
+    isLoadingBuilderPartnerProgram: account.isLoadingBuilderPartnerProgram,
+    builderPartnerProgramError: account.builderPartnerProgramError,
+    isAcceptingBuilderPartnerTerms: account.isAcceptingBuilderPartnerTerms,
+    loadBuilderPartnerProgram: account.loadBuilderPartnerProgram,
+    acceptBuilderPartnerTerms: account.acceptBuilderPartnerTerms,
+    openCreateCommunityModal: account.openCreateCommunityModal,
     startStripeConnectOnboarding: account.startStripeConnectOnboarding,
     accountCommerceError: account.billingUi.accountCommerceError,
     isStartingStripeConnectOnboarding: account.billingUi.isStartingStripeConnectOnboarding,

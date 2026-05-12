@@ -18,6 +18,7 @@ import { resolveAuthenticatedActor } from "./authActor";
 import {
   getStripeClient,
 } from "./stripeCore";
+import { recordToolUsagePartnerCommission } from "./builderPartners";
 
 function roundCurrency(value: number): number {
   return Math.round((Number(value) || 0) * 10000) / 10000;
@@ -472,6 +473,17 @@ export const recordWorkspaceComputeChargeInternal = internalMutation({
           settledAt: nowMs,
           updatedAt: nowMs,
         });
+        const paidUsageRatio = Number(reservation.creditsReserved ?? 0) > 0
+          ? split.purchasedSettled / Number(reservation.creditsReserved ?? 0)
+          : 0;
+        await recordToolUsagePartnerCommission(ctx, {
+          creditLedgerEntryId: reservation._id,
+          referredUserId: reservation.userId,
+          polynetPriceUsd: reservation.polynetPriceUsd,
+          rawVendorCostUsd: reservation.rawVendorCostUsd,
+          paidUsageRatio,
+          nowMs,
+        });
         debitIncluded = split.includedSettled;
         debitPurchased = split.purchasedSettled;
       } else if (reservation?.status === "succeeded") {
@@ -711,6 +723,19 @@ export const settleCreditsInternal = internalMutation({
       settledAt: nowMs,
       updatedAt: nowMs,
     });
+    if (args.status === "succeeded") {
+      const paidUsageRatio = Number(entry.creditsReserved ?? 0) > 0
+        ? split.purchasedSettled / Number(entry.creditsReserved ?? 0)
+        : 0;
+      await recordToolUsagePartnerCommission(ctx, {
+        creditLedgerEntryId: entry._id,
+        referredUserId: entry.userId,
+        polynetPriceUsd: entry.polynetPriceUsd,
+        rawVendorCostUsd: entry.rawVendorCostUsd,
+        paidUsageRatio,
+        nowMs,
+      });
+    }
     return await ctx.db.get(entry._id);
   },
 });

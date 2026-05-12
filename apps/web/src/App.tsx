@@ -324,6 +324,12 @@ import {
   setDevAccountTierCanonical,
   type AccountCommerceStatus,
 } from "../../../shared/accountCommerceStatusGateway";
+import {
+  acceptBuilderPartnerTermsCanonical,
+  captureBuilderPartnerAttributionFromCurrentUrl,
+  loadBuilderPartnerProgramCanonical,
+  type BuilderPartnerProgramSnapshot,
+} from "../../../shared/builderPartnerProgramGateway";
 import { startCloudWorkspaceCreditTopupCheckout } from "../../../shared/cloudAccountCommerceGateway";
 import { loadOperatorAccessCanonical } from "../../../shared/cloudOperatorDashboardGateway";
 import type { OperatorAccessSnapshot } from "../../../shared/operatorTypes";
@@ -1593,6 +1599,15 @@ export default function App() {
   } = billingUi;
 
   const [, setIsPendingPurchasesBannerDismissed] = useState(false);
+  const [builderPartnerProgram, setBuilderPartnerProgram] =
+    useState<BuilderPartnerProgramSnapshot | null>(null);
+  const [isLoadingBuilderPartnerProgram, setIsLoadingBuilderPartnerProgram] =
+    useState(false);
+  const [builderPartnerProgramError, setBuilderPartnerProgramError] =
+    useState<string | null>(null);
+  const [isAcceptingBuilderPartnerTerms, setIsAcceptingBuilderPartnerTerms] =
+    useState(false);
+  const builderPartnerProgramLoadRequestIdRef = useRef(0);
   const workspaceCreditLoadRequestIdRef = useRef(0);
   const lastTrackedAuthSessionUserIdRef = useRef<string | null>(null);
   const [isFreeAccountInfoOpen, setIsFreeAccountInfoOpen] = useState(false);
@@ -4919,6 +4934,99 @@ export default function App() {
     redeemPendingPurchasesInFlightRef,
   });
 
+  const loadBuilderPartnerProgram = useCallback(
+    async (nextSession?: AuthSession | null): Promise<BuilderPartnerProgramSnapshot | null> => {
+      const requestId = ++builderPartnerProgramLoadRequestIdRef.current;
+      const usableSession = nextSession ?? await ensureUsableAuthSession();
+      if (!usableSession) {
+        if (requestId === builderPartnerProgramLoadRequestIdRef.current) {
+          setBuilderPartnerProgram(null);
+        }
+        return null;
+      }
+      setIsLoadingBuilderPartnerProgram(true);
+      setBuilderPartnerProgramError(null);
+      try {
+        const snapshot = await loadBuilderPartnerProgramCanonical({
+          session: usableSession,
+        });
+        if (requestId === builderPartnerProgramLoadRequestIdRef.current) {
+          setBuilderPartnerProgram(snapshot);
+        }
+        return snapshot;
+      } catch (error) {
+        const message =
+          typeof error === "string"
+            ? error
+            : error instanceof Error
+              ? error.message
+              : "Failed to load Builder Partner status.";
+        if (requestId === builderPartnerProgramLoadRequestIdRef.current) {
+          setBuilderPartnerProgramError(message);
+          setBuilderPartnerProgram(null);
+        }
+        return null;
+      } finally {
+        if (requestId === builderPartnerProgramLoadRequestIdRef.current) {
+          setIsLoadingBuilderPartnerProgram(false);
+        }
+      }
+    },
+    [ensureUsableAuthSession],
+  );
+
+  const acceptBuilderPartnerTerms = useCallback(async (): Promise<void> => {
+    const usableSession = await ensureUsableAuthSession();
+    if (!usableSession) {
+      requireSignIn();
+      return;
+    }
+    setIsAcceptingBuilderPartnerTerms(true);
+    setBuilderPartnerProgramError(null);
+    try {
+      const snapshot = await acceptBuilderPartnerTermsCanonical({
+        session: usableSession,
+      });
+      setBuilderPartnerProgram(snapshot);
+    } catch (error) {
+      const message =
+        typeof error === "string"
+          ? error
+          : error instanceof Error
+            ? error.message
+            : "Failed to unlock Builder Partner Program.";
+      setBuilderPartnerProgramError(message);
+    } finally {
+      setIsAcceptingBuilderPartnerTerms(false);
+    }
+  }, [ensureUsableAuthSession, requireSignIn]);
+
+  useEffect(() => {
+    void captureBuilderPartnerAttributionFromCurrentUrl({
+      session,
+    }).catch((error) => {
+      console.warn("Failed to capture Builder Partner attribution:", error);
+    });
+  }, [canonicalSessionUserId, session]);
+
+  useEffect(() => {
+    if (!session) {
+      setBuilderPartnerProgram(null);
+      setBuilderPartnerProgramError(null);
+      setIsLoadingBuilderPartnerProgram(false);
+      return;
+    }
+    if (activeView !== "settings" || settingsGroup !== "partners") return;
+    void loadBuilderPartnerProgram(session as AuthSession);
+  }, [
+    activeView,
+    canonicalSessionUserId,
+    communities.length,
+    loadBuilderPartnerProgram,
+    session,
+    settingsGroup,
+  ]);
+
   async function setDevAccountTier(tier: "free" | "architect"): Promise<void> {
     const session = await ensureUsableAuthSession();
     if (!session || !canUseDevTierOverride) return;
@@ -7050,6 +7158,15 @@ export default function App() {
         openCommunityTab(nextCommunitySlug, "settings", { pushSnapshot: false });
       },
       communityInitials,
+      builderPartnerProgram,
+      isLoadingBuilderPartnerProgram,
+      builderPartnerProgramError,
+      isAcceptingBuilderPartnerTerms,
+      loadBuilderPartnerProgram: async (nextSession) => {
+        await loadBuilderPartnerProgram(nextSession as AuthSession);
+      },
+      acceptBuilderPartnerTerms,
+      openCreateCommunityModal: () => openCreateCommunityModal(),
       startStripeConnectOnboarding: (opts) => {
         void startStripeConnectOnboarding({
           context: opts?.context ?? "account",
