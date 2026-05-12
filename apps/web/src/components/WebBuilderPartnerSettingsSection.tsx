@@ -76,8 +76,7 @@ function formatPayoutStatus(value: string): string {
   if (normalized === "succeeded") return "Settled";
   if (normalized === "processing") return "Processing";
   if (normalized === "failed") return "Needs review";
-  if (normalized === "draft") return "Queued";
-  return "Queued";
+  return "Review pending";
 }
 
 function requirementLabel(requirement: BuilderPartnerProgramRequirement): string {

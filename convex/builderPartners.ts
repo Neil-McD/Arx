@@ -261,11 +261,15 @@ async function readCommissionPayoutItemTotalUsd(
   ctx: any,
   commissionId: any,
   statuses: ReadonlySet<PartnerPayoutItemStatus>,
+  excludeBatchId?: any,
 ) {
   const rows = await collectPartnerPayoutItemsByCommission(ctx, commissionId);
   return roundSignedPartnerMoney(
     rows
       .filter((row: any) => partnerPayoutItemStatusIsOneOf(row, statuses))
+      .filter((row: any) =>
+        excludeBatchId ? String(row.batchId) !== String(excludeBatchId) : true,
+      )
       .reduce((total: number, row: any) => total + Number(row.amountUsd ?? 0), 0),
   );
 }
@@ -1206,9 +1210,12 @@ async function readPayoutHistory(ctx: any, partner: any) {
     .query("partnerPayoutTransfers" as any)
     .withIndex("by_partner_createdAt", (q: any) => q.eq("partnerId", partner._id))
     .collect();
-  rows.sort((a: any, b: any) => Number(b.createdAt ?? 0) - Number(a.createdAt ?? 0));
+  const visibleRows = rows.filter((row: any) =>
+    row.status === "processing" || row.status === "succeeded" || row.status === "failed",
+  );
+  visibleRows.sort((a: any, b: any) => Number(b.createdAt ?? 0) - Number(a.createdAt ?? 0));
   return {
-    transfers: rows.slice(0, 10).map((row: any) => ({
+    transfers: visibleRows.slice(0, 10).map((row: any) => ({
       id: String(row._id),
       amountUsd: roundBuilderPartnerMoney(Number(row.amountUsd ?? 0)),
       currency: String(row.currency ?? "usd"),
@@ -1321,9 +1328,21 @@ function normalizeMinimumPayoutUsd(value: unknown): number {
   return minimumUsd;
 }
 
+function usdToSettlementCents(amountUsd: number): number {
+  const cents = Math.floor(roundBuilderPartnerMoney(amountUsd) * 100 + 0.000001);
+  if (!Number.isFinite(cents) || cents <= 0) return 0;
+  return cents;
+}
+
+function settlementCentsToUsd(cents: number): number {
+  const normalized = Math.floor(Number(cents ?? 0));
+  if (!Number.isFinite(normalized) || normalized <= 0) return 0;
+  return roundBuilderPartnerMoney(normalized / 100);
+}
+
 function usdToStripeCents(amountUsd: number): number {
-  const cents = Math.round(roundBuilderPartnerMoney(amountUsd) * 100);
-  if (!Number.isFinite(cents) || cents <= 0) {
+  const cents = usdToSettlementCents(amountUsd);
+  if (cents <= 0) {
     throw new Error("partner_payout_amount_invalid");
   }
   return cents;
@@ -1413,10 +1432,12 @@ async function readPartnerPayablePayoutEntries(ctx: any, partner: any) {
         reservedOrSettledPayoutUsd,
       ),
     );
-    if (amountUsd <= 0) continue;
+    const settlementCents = usdToSettlementCents(amountUsd);
+    if (settlementCents <= 0) continue;
     entries.push({
       commissionId: row._id,
-      amountUsd,
+      amountUsd: settlementCentsToUsd(settlementCents),
+      settlementCents,
       currency: "usd",
     });
   }
@@ -1504,6 +1525,163 @@ async function readPartnerPayoutBatchSnapshot(ctx: any, batchId: any) {
       createdAt: Number(row.createdAt ?? 0),
     })),
   };
+}
+
+async function validatePartnerPayoutBatchStillPayable(ctx: any, batchId: any) {
+  const [batch, transfers, items] = await Promise.all([
+    ctx.db.get(batchId),
+    ctx.db
+      .query("partnerPayoutTransfers" as any)
+      .withIndex("by_batch", (q: any) => q.eq("batchId", batchId))
+      .collect(),
+    ctx.db
+      .query("partnerPayoutItems" as any)
+      .withIndex("by_batch", (q: any) => q.eq("batchId", batchId))
+      .collect(),
+  ]);
+  if (!batch) return { ok: false, reason: "partner_payout_batch_not_found" };
+  if (items.some((item: any) => item.status === "voided")) {
+    return { ok: false, reason: "partner_payout_batch_has_voided_item" };
+  }
+
+  const reservedItems = items.filter((item: any) => item.status === "reserved");
+  if (reservedItems.length <= 0) {
+    return { ok: false, reason: "partner_payout_batch_no_reserved_items" };
+  }
+
+  const itemCentsByTransferId = new Map<string, number>();
+  const itemTotalByCommissionId = new Map<string, { commissionId: any; amountUsd: number }>();
+  for (const item of reservedItems) {
+    const itemCents = usdToSettlementCents(Number(item.amountUsd ?? 0));
+    if (itemCents <= 0) {
+      return { ok: false, reason: "partner_payout_item_amount_invalid" };
+    }
+    const transferId = String(item.transferId);
+    itemCentsByTransferId.set(
+      transferId,
+      Number(itemCentsByTransferId.get(transferId) ?? 0) + itemCents,
+    );
+
+    const commissionId = String(item.commissionId);
+    const existing = itemTotalByCommissionId.get(commissionId) ?? {
+      commissionId: item.commissionId,
+      amountUsd: 0,
+    };
+    existing.amountUsd = roundBuilderPartnerMoney(existing.amountUsd + Number(item.amountUsd ?? 0));
+    itemTotalByCommissionId.set(commissionId, existing);
+  }
+
+  for (const transfer of transfers) {
+    if (transfer.status === "succeeded") continue;
+    const transferCents = usdToSettlementCents(Number(transfer.amountUsd ?? 0));
+    const itemCents = Number(itemCentsByTransferId.get(String(transfer._id)) ?? 0);
+    if (transferCents <= 0 || itemCents <= 0 || transferCents !== itemCents) {
+      return { ok: false, reason: "partner_payout_transfer_amount_mismatch" };
+    }
+    const currentStripeAccount = await readReadyStripeConnectPayoutAccount(ctx, transfer.partnerUserId);
+    if (
+      !currentStripeAccount ||
+      String(currentStripeAccount.stripeAccountId) !== String(transfer.stripeAccountId)
+    ) {
+      return { ok: false, reason: "partner_payout_account_not_ready" };
+    }
+  }
+
+  const reservedOrSettledStatuses = new Set<PartnerPayoutItemStatus>(["reserved", "settled"]);
+  for (const itemTotal of itemTotalByCommissionId.values()) {
+    const commission = await ctx.db.get(itemTotal.commissionId);
+    if (!commission) {
+      return { ok: false, reason: "partner_payout_commission_missing" };
+    }
+    if (commission.status !== "payable") {
+      return { ok: false, reason: "partner_payout_commission_not_payable" };
+    }
+    if (normalizeUsdCurrency(commission.currency) !== "usd") {
+      return { ok: false, reason: "partner_payout_commission_currency_invalid" };
+    }
+    const partner = await ctx.db.get(commission.partnerId);
+    if (!partner || partner.status !== "active") {
+      return { ok: false, reason: "partner_payout_partner_not_active" };
+    }
+    const adjustmentTotalUsd = await readAppliedCommissionAdjustmentTotalUsd(ctx, commission._id);
+    const otherReservedOrSettledPayoutUsd = await readCommissionPayoutItemTotalUsd(
+      ctx,
+      commission._id,
+      reservedOrSettledStatuses,
+      batchId,
+    );
+    const availableUsd = Math.max(
+      0,
+      roundBuilderPartnerMoney(
+        Number(commission.commissionAmountUsd ?? 0) +
+        adjustmentTotalUsd -
+        otherReservedOrSettledPayoutUsd,
+      ),
+    );
+    const requestedCents = usdToSettlementCents(itemTotal.amountUsd);
+    const availableCents = usdToSettlementCents(availableUsd);
+    if (requestedCents <= 0 || requestedCents > availableCents) {
+      return { ok: false, reason: "partner_payout_stale_payable_balance" };
+    }
+  }
+
+  return { ok: true, reason: null };
+}
+
+async function markPartnerPayoutBatchStale(ctx: any, args: {
+  batch: any;
+  batchId: any;
+  reason: string;
+  actorUserId?: any;
+  nowMs: number;
+}) {
+  const failureReason = `stale_payable_balance:${String(args.reason ?? "unknown").slice(0, 220)}`;
+  const [transfers, items] = await Promise.all([
+    ctx.db
+      .query("partnerPayoutTransfers" as any)
+      .withIndex("by_batch", (q: any) => q.eq("batchId", args.batchId))
+      .collect(),
+    ctx.db
+      .query("partnerPayoutItems" as any)
+      .withIndex("by_batch", (q: any) => q.eq("batchId", args.batchId))
+      .collect(),
+  ]);
+  await ctx.db.patch(args.batchId, {
+    status: "failed",
+    processedByUserId: args.actorUserId,
+    processedAt: args.nowMs,
+    failureReason,
+    updatedAt: args.nowMs,
+  });
+  for (const transfer of transfers) {
+    if (transfer.status === "succeeded") continue;
+    await ctx.db.patch(transfer._id, {
+      status: "failed",
+      failureReason,
+      processedAt: args.nowMs,
+      updatedAt: args.nowMs,
+    });
+  }
+  for (const item of items) {
+    if (item.status !== "reserved") continue;
+    await ctx.db.patch(item._id, {
+      status: "voided",
+      updatedAt: args.nowMs,
+    });
+  }
+  await recordPartnerPayoutAudit(ctx, {
+    eventType: "builder_partner_payout_batch_finalized",
+    status: "failed",
+    actorUserId: args.actorUserId,
+    metadata: {
+      batchId: String(args.batchId),
+      transferCount: transfers.length,
+      failedTransferCount: transfers.filter((transfer: any) => transfer.status !== "succeeded").length,
+      totalAmountUsd: Number(args.batch.totalAmountUsd ?? 0),
+    },
+    nowMs: args.nowMs,
+  });
+  return { ok: false, reason: failureReason };
 }
 
 export const getMyBuilderPartnerProgram = query({
@@ -1855,6 +2033,10 @@ export const approvePartnerPayoutBatch = mutation({
     const batch = await ctx.db.get(args.batchId);
     if (!batch) throw new Error("partner_payout_batch_not_found");
     if (batch.status !== "draft") throw new Error("partner_payout_batch_not_draft");
+    const validation = await validatePartnerPayoutBatchStillPayable(ctx, args.batchId);
+    if (!validation.ok) {
+      throw new Error(validation.reason ?? "partner_payout_batch_stale");
+    }
     const nowMs = Date.now();
     await ctx.db.patch(args.batchId, {
       status: "approved",
@@ -1954,6 +2136,21 @@ export const beginPartnerPayoutBatchExecution = mutation({
       return { transfers: [] };
     }
     const nowMs = Date.now();
+    const validation = await validatePartnerPayoutBatchStillPayable(ctx, args.batchId);
+    if (!validation.ok) {
+      await markPartnerPayoutBatchStale(ctx, {
+        batch,
+        batchId: args.batchId,
+        reason: validation.reason ?? "partner_payout_batch_stale",
+        actorUserId: operator.dbUserId,
+        nowMs,
+      });
+      return {
+        blocked: true,
+        reason: validation.reason ?? "partner_payout_batch_stale",
+        transfers: [],
+      };
+    }
     await ctx.db.patch(args.batchId, {
       status: "processing",
       processedByUserId: operator.dbUserId,
@@ -2124,6 +2321,12 @@ export const executePartnerPayoutBatch = action({
       authSubject: args.authSubject,
       batchId: args.batchId,
     });
+    if (begin?.blocked) {
+      return await ctx.runQuery((api as any).builderPartners.getPartnerPayoutBatchForOperator, {
+        authSubject: args.authSubject,
+        batchId: args.batchId,
+      });
+    }
     const transfers = Array.isArray(begin?.transfers) ? begin.transfers : [];
     if (transfers.length > 0) {
       const stripe = getStripeClient();

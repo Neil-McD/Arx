@@ -730,6 +730,41 @@ function provePartnerPayoutSettlementContract(
   );
   assertIncludes(
     builderPartnersSource,
+    "validatePartnerPayoutBatchStillPayable",
+    "Builder Partner payout settlement must revalidate stale payable balances",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "const validation = await validatePartnerPayoutBatchStillPayable(ctx, args.batchId);",
+    "Builder Partner payout approval and execution must call validation",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "markPartnerPayoutBatchStale",
+    "Builder Partner payout execution must fail stale batches before Stripe",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "if (begin?.blocked)",
+    "Builder Partner payout action must return before Stripe on stale batches",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "excludeBatchId",
+    "Builder Partner payout validation must exclude current batch items from reserved math",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "usdToSettlementCents",
+    "Builder Partner payout settlement must normalize settlement amounts to cents",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "settlementCentsToUsd",
+    "Builder Partner payout settlement must store cent-normalized USD amounts",
+  );
+  assertIncludes(
+    builderPartnersSource,
     "idempotencyKey: String(transfer.idempotencyKey ?? \"\").trim()",
     "Builder Partner payout settlement must use transfer idempotency keys",
   );
@@ -774,13 +809,28 @@ function provePartnerPayoutSettlementContract(
     "Builder Partner gateway",
   );
   assertIncludes(
+    builderPartnersSource,
+    "row.status === \"processing\" || row.status === \"succeeded\" || row.status === \"failed\"",
+    "Builder Partner payout history must hide draft transfer rows",
+  );
+  assertIncludes(
     uiSource,
     "No partner payouts have been settled yet.",
     "Builder Partner payout history UI",
   );
+  assert.doesNotMatch(
+    uiSource,
+    /normalized === "draft"/,
+    "partner-facing UI should not render draft transfer status copy",
+  );
   assertIncludes(
     docsSource,
     "Partner payout settlement runs through manual operator-reviewed batches",
+    "Builder Partner payout docs",
+  );
+  assertIncludes(
+    docsSource,
+    "settlement amounts are normalized to cents",
     "Builder Partner payout docs",
   );
   assertIncludes(
