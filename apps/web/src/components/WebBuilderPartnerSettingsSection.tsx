@@ -167,13 +167,11 @@ export function WebBuilderPartnerSettingsSection(props: WebBuilderPartnerSetting
   const payoutReady = program?.payout.ready === true;
   const commissionSummary = program?.commissionSummary ?? {
     pendingUsd: 0,
-    payableUsd: 0,
     bufferedUsd: 0,
     readyUsd: 0,
     paidUsd: 0,
     totalUsd: 0,
     pendingCount: 0,
-    payableCount: 0,
     bufferedCount: 0,
     readyCount: 0,
     paidCount: 0,

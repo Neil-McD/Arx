@@ -65,6 +65,9 @@ function proveToolCommissionMath() {
 }
 
 function proveSchemaContract(schemaSource: string) {
+  const commissionSchemaStart = schemaSource.indexOf("partnerCommissionLedger: defineTable");
+  const commissionSchemaEnd = schemaSource.indexOf("partnerCommissionAdjustments: defineTable");
+  const commissionSchemaSource = schemaSource.slice(commissionSchemaStart, commissionSchemaEnd);
   assertIncludes(schemaSource, "builderPartners: defineTable", "schema");
   assertIncludes(schemaSource, "partnerAttributions: defineTable", "schema");
   assertIncludes(schemaSource, "partnerCommissionLedger: defineTable", "schema");
@@ -101,6 +104,11 @@ function proveSchemaContract(schemaSource: string) {
     schemaSource,
     /partnerCommissionLedger:[\s\S]*v\.literal\("risk_hold"\)/,
     "expected commission rows to support refund and dispute risk holds",
+  );
+  assert.doesNotMatch(
+    commissionSchemaSource,
+    /v\.literal\("pending"\)|v\.literal\("paid"\)|paidAt/,
+    "commission rows should not keep unused pending or paid states; payout items are settlement truth",
   );
   assert.match(
     schemaSource,
@@ -636,6 +644,16 @@ function proveRefundDisputeContract(
     builderPartnersSource,
     "getDisputeAdjustmentState",
     "Builder Partner dispute reducer",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "readCommissionSettledPayoutTotalUsd",
+    "Builder Partner reversal ledger should use payout items as settlement truth",
+  );
+  assert.doesNotMatch(
+    builderPartnersSource,
+    /row\.status\s*===\s*"paid"|row\.status\s*!==\s*"paid"/,
+    "Builder Partner reversal ledger must not rely on legacy paid commission status",
   );
   assertIncludes(
     builderPartnersSource,
