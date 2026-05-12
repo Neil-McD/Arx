@@ -12,7 +12,9 @@ const schema = read("convex/schema.ts");
 const webRouteState = read("shared/webAppRouteState.ts");
 const app = read("apps/web/src/App.tsx");
 const appMainSurfaceHost = read("apps/web/src/components/WebAppMainSurfaceHost.tsx");
+const webDesktopShellHeader = read("apps/web/src/components/WebDesktopShellHeader.tsx");
 const workspaceHost = read("apps/web/src/components/WebWorkspaceHost.tsx");
+const baseCss = read("apps/web/src/base.css");
 const packageJson = read("package.json");
 const seedScript = read("scripts/seed_operator_owner.ts");
 
@@ -160,6 +162,36 @@ assert.match(
   workspaceHost,
   /useOperatorDashboardData\([\s\S]*enabled: isOperatorDataPanelVisible/,
   "operator data loading must be disabled unless the operator panel is visible",
+);
+assert.match(
+  app,
+  /showWorkspaceOperatorDataPanelControl = Boolean\([\s\S]*hasOperatorDataPanelAccess[\s\S]*activePage === "workspace"[\s\S]*activeView === "home"[\s\S]*\)/,
+  "operator panel toggle must remain owner/operator workspace-home scoped",
+);
+assert.match(
+  app,
+  /workspaceOperatorDataToggle = showWorkspaceOperatorDataPanelControl \? \([\s\S]*workspace-operator-data-toggle/,
+  "operator panel toggle should be built only from the gated workspace control flag",
+);
+assert.match(
+  app,
+  /workspaceOperatorDataToggle,[\s\S]*communityHomeButton,/,
+  "desktop shell props must receive the optional operator toggle next to the community button",
+);
+assert.match(
+  webDesktopShellHeader,
+  /props\.workspaceOperatorDataToggle[\s\S]*props\.communityHomeButton/,
+  "desktop header must render the optional operator toggle before the community button so the community button owns the right edge",
+);
+assert.doesNotMatch(
+  workspaceHost,
+  /workspace-operator-data-toggle/,
+  "workspace host must not position its own top-right operator toggle outside the shared header",
+);
+assert.doesNotMatch(
+  baseCss,
+  /\.workspace-operator-data-toggle\s*\{[^}]*position:\s*(fixed|absolute)/,
+  "workspace operator toggle must be laid out by the shared header, not fixed-position CSS",
 );
 
 console.log("operator_dashboard_gate_proof: ok");

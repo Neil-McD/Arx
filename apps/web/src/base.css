@@ -21499,18 +21499,7 @@ button.message-citation-chip:hover {
   text-align: center;
 }
 
-.operator-data-toggle {
-  position: absolute;
-  top: 12px;
-  right: 62px;
-  z-index: 35;
-}
-
 .workspace-operator-data-toggle {
-  position: fixed;
-  top: 12px;
-  right: 62px;
-  z-index: 45;
   width: 32px;
   height: 32px;
   border-radius: 8px;

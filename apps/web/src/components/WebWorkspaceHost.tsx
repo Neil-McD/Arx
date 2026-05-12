@@ -164,6 +164,7 @@ export type WebWorkspaceHostProps = {
   copyTextToClipboard: (text: string) => Promise<void> | void;
   showOperatorDataPanel?: boolean;
   operatorDataPanelSession?: AuthSessionLike | null;
+  operatorDataPanelOpen?: boolean;
 };
 
 function parsePreviewRunAnchor(
@@ -968,7 +969,6 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
   const [isDesktopViewport, setIsDesktopViewport] = useState<boolean>(() =>
     typeof window === "undefined" ? true : window.matchMedia("(min-width: 901px)").matches,
   );
-  const [isOperatorDataPanelOpen, setIsOperatorDataPanelOpen] = useState(false);
   const [operatorActiveInsightTab, setOperatorActiveInsightTab] = useState<OperatorInsightTab>("platform");
   const [operatorRightPanelWidth, setOperatorRightPanelWidth] = useState(OPERATOR_RIGHT_PANEL_DEFAULT_WIDTH);
   const savedThreadScrollTopRef = useRef<number | null>(null);
@@ -1016,6 +1016,7 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
     ingestAttachmentsFromFileList: props.ingestWorkspaceAttachmentsFromFileList,
   });
   const showOperatorDataPanel = Boolean(props.showOperatorDataPanel && props.operatorDataPanelSession);
+  const isOperatorDataPanelOpen = Boolean(props.operatorDataPanelOpen);
   const isOperatorDataPanelVisible = Boolean(showOperatorDataPanel && isOperatorDataPanelOpen);
   const operatorDataPanelStyle = {
     "--operator-right-panel-width": `${operatorRightPanelWidth}px`,
@@ -1725,22 +1726,6 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
 
   return (
     <>
-      {showOperatorDataPanel ? (
-        <button
-          type="button"
-          className={`icon-button workspace-operator-data-toggle${isOperatorDataPanelOpen ? " active" : ""}`}
-          onClick={() => setIsOperatorDataPanelOpen((value) => !value)}
-          aria-expanded={isOperatorDataPanelOpen}
-          aria-controls="workspace-operator-data-panel"
-          aria-label={isOperatorDataPanelOpen ? "Close operator data panel" : "Open operator data panel"}
-          title={isOperatorDataPanelOpen ? "Close data panel" : "Open data panel"}
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <rect x="3" y="4" width="18" height="16" rx="2" />
-            <path d="M15 4v16" />
-          </svg>
-        </button>
-      ) : null}
       <div
         className={`workspace-body workspace-attachment-drop-surface${isDesktopExpandedPreview ? " preview-expanded" : ""}${isWorkspaceAttachmentDragOver ? " drag-over" : ""}${isOperatorDataPanelVisible ? " workspace-operator-data-open" : ""}`}
         style={operatorDataPanelStyle}

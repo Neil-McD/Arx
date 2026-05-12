@@ -1423,6 +1423,8 @@ export default function App() {
   );
   const [workspaceOperatorPanelLayout, setWorkspaceOperatorPanelLayout] =
     useState<WorkspaceOperatorPanelLayout>({ open: false, width: 0, gutter: 0 });
+  const [isWorkspaceOperatorDataPanelOpen, setIsWorkspaceOperatorDataPanelOpen] =
+    useState(false);
   const handleWorkspaceOperatorPanelLayoutChange = useCallback((layout: WorkspaceOperatorPanelLayout) => {
     setWorkspaceOperatorPanelLayout((current) =>
       current.open === layout.open &&
@@ -7414,6 +7416,46 @@ export default function App() {
     formatModelSignature,
     renderMarkdown,
   });
+  const showWorkspaceOperatorDataPanelControl = Boolean(
+    hasOperatorDataPanelAccess &&
+    session &&
+    !showMobileAppShell &&
+    activePage === "workspace" &&
+    activeView === "home",
+  );
+  const handleToggleWorkspaceOperatorDataPanel = useCallback(() => {
+    setIsWorkspaceOperatorDataPanelOpen((value) => !value);
+  }, []);
+
+  useEffect(() => {
+    if (showWorkspaceOperatorDataPanelControl) return;
+    setIsWorkspaceOperatorDataPanelOpen(false);
+    handleWorkspaceOperatorPanelLayoutChange({ open: false, width: 0, gutter: 0 });
+  }, [
+    handleWorkspaceOperatorPanelLayoutChange,
+    showWorkspaceOperatorDataPanelControl,
+  ]);
+
+  const workspaceOperatorDataToggle = showWorkspaceOperatorDataPanelControl ? (
+    <button
+      type="button"
+      className={`icon-button workspace-operator-data-toggle${isWorkspaceOperatorDataPanelOpen ? " active" : ""}`}
+      onClick={handleToggleWorkspaceOperatorDataPanel}
+      aria-expanded={isWorkspaceOperatorDataPanelOpen}
+      aria-controls="workspace-operator-data-panel"
+      aria-label={
+        isWorkspaceOperatorDataPanelOpen
+          ? "Close operator data panel"
+          : "Open operator data panel"
+      }
+      title={isWorkspaceOperatorDataPanelOpen ? "Close data panel" : "Open data panel"}
+    >
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <rect x="3" y="4" width="18" height="16" rx="2" />
+        <path d="M15 4v16" />
+      </svg>
+    </button>
+  ) : null;
 
   const mainSurfaceHostProps = buildWebAppMainSurfaceHostProps({
     activePage,
@@ -7509,8 +7551,9 @@ export default function App() {
       settingsPanelsProps,
       workspaceHostProps: {
         ...workspaceHostProps,
-        showOperatorDataPanel: hasOperatorDataPanelAccess,
-        operatorDataPanelSession: hasOperatorDataPanelAccess ? session : null,
+        showOperatorDataPanel: showWorkspaceOperatorDataPanelControl,
+        operatorDataPanelSession: showWorkspaceOperatorDataPanelControl ? session : null,
+        operatorDataPanelOpen: isWorkspaceOperatorDataPanelOpen,
         onOperatorPanelLayoutChange: handleWorkspaceOperatorPanelLayoutChange,
       },
     },
@@ -7726,12 +7769,8 @@ export default function App() {
     backTargetLabel: backTargetLabel ?? null,
     activeView,
     userWantsSessions,
-    hasWorkspaceOperatorControl: Boolean(
-      hasOperatorDataPanelAccess &&
-      session &&
-      activePage === "workspace" &&
-      activeView === "home",
-    ),
+    hasWorkspaceOperatorControl: showWorkspaceOperatorDataPanelControl,
+    workspaceOperatorDataToggle,
     communityHomeButton,
     handleExitPublicFunnelPreview,
     handleTopbarBackFromPublicFunnel,
