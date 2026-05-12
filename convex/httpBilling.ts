@@ -184,6 +184,18 @@ function readStripeLocalSessionIdFromCheckoutSession(
   return readStripeMetadataString(session.metadata, "local_session_id");
 }
 
+function readStripeInvoiceSubscriptionId(invoice: Stripe.Invoice): string | null {
+  const parentSubscription = (invoice.parent as any)?.subscription_details?.subscription;
+  if (typeof parentSubscription === "string" && parentSubscription.trim()) {
+    return parentSubscription.trim();
+  }
+  const legacySubscription = (invoice as any)?.subscription;
+  if (typeof legacySubscription === "string" && legacySubscription.trim()) {
+    return legacySubscription.trim();
+  }
+  return null;
+}
+
 function toStripeTimestampMs(value: unknown): number | null {
   if (typeof value !== "number" || !Number.isFinite(value) || value <= 0)
     return null;
@@ -565,6 +577,62 @@ export function registerRuntimeBillingRoutes(
             event: event.type,
             reason: "checkout_session_not_found",
           }, "ignored");
+        }
+
+        if (
+          event.type === "invoice.paid" ||
+          event.type === "invoice.payment_succeeded"
+        ) {
+          const invoice = event.data.object as Stripe.Invoice;
+          const billingReason = String(invoice.billing_reason ?? "").trim();
+          if (billingReason !== "subscription_cycle") {
+            return processedResponse({
+              ok: true,
+              ignored: true,
+              event: event.type,
+              reason: "invoice_not_subscription_cycle",
+              billingReason,
+            }, "ignored");
+          }
+          const providerSubscriptionId = readStripeInvoiceSubscriptionId(invoice);
+          if (!providerSubscriptionId) {
+            return processedResponse({
+              ok: true,
+              ignored: true,
+              event: event.type,
+              reason: "invoice_subscription_missing",
+            }, "ignored");
+          }
+          const amountBaseUnits = Number(invoice.amount_paid ?? 0);
+          const currency = String(invoice.currency ?? "").trim().toLowerCase();
+          if (!Number.isFinite(amountBaseUnits) || amountBaseUnits <= 0 || !currency) {
+            return processedResponse({
+              ok: true,
+              ignored: true,
+              event: event.type,
+              reason: "invoice_paid_amount_missing",
+            }, "ignored");
+          }
+          const result = await (ctx as any).runMutation(
+            internal.builderPartners
+              .recordCommunitySubscriptionInvoicePartnerCommissionInternal as any,
+            {
+              providerSubscriptionId,
+              sourceProviderInvoiceId: invoice.id,
+              amountBaseUnits,
+              currency,
+              nowMs:
+                Number(event.created ?? 0) > 0
+                  ? Number(event.created) * 1000
+                  : Date.now(),
+            },
+          );
+          return processedResponse({
+            ok: true,
+            received: true,
+            event: event.type,
+            result,
+          });
         }
 
         if (

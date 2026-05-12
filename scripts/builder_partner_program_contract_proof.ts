@@ -90,8 +90,8 @@ function proveSchemaContract(schemaSource: string) {
   );
   assert.match(
     schemaSource,
-    /partnerCommissionLedger:[\s\S]*sourceCheckoutSessionId:\s*v\.optional\(v\.string\(\)\)[\s\S]*sourceCreditLedgerEntryId:\s*v\.optional\(v\.id\("creditLedgerEntries"\)\)/,
-    "expected commission rows to point at checkout and paid-tool evidence",
+    /partnerCommissionLedger:[\s\S]*sourceCheckoutSessionId:\s*v\.optional\(v\.string\(\)\)[\s\S]*sourceProviderInvoiceId:\s*v\.optional\(v\.string\(\)\)[\s\S]*sourceCreditLedgerEntryId:\s*v\.optional\(v\.id\("creditLedgerEntries"\)\)/,
+    "expected commission rows to point at checkout, invoice, and paid-tool evidence",
   );
   assert.match(
     schemaSource,
@@ -102,6 +102,11 @@ function proveSchemaContract(schemaSource: string) {
     schemaSource,
     /\.index\("by_referredUser",\s*\["referredUserId"\]\)/,
     "expected commission ledger rows to be cleanup-addressable by referred user",
+  );
+  assert.match(
+    schemaSource,
+    /\.index\("by_provider_invoice",\s*\["sourceProviderInvoiceId"\]\)/,
+    "expected commission ledger rows to be searchable by Stripe invoice evidence",
   );
 }
 
@@ -395,6 +400,11 @@ function proveCommissionProducerContract(
   );
   assertIncludes(
     builderPartnersSource,
+    "community_platform_fee:invoice:${sourceProviderInvoiceId}",
+    "Builder Partner commission producer",
+  );
+  assertIncludes(
+    builderPartnersSource,
     "const referredUserId = community.ownerId",
     "Builder Partner commission producer",
   );
@@ -426,6 +436,11 @@ function proveCommissionProducerContract(
   assertIncludes(
     builderPartnersSource,
     "advancePartnerCommissionsToPayableInternal",
+    "Builder Partner commission producer",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "recordCommunitySubscriptionInvoicePartnerCommissionInternal",
     "Builder Partner commission producer",
   );
   assertIncludes(
@@ -465,6 +480,39 @@ function proveCommissionProducerContract(
   );
 }
 
+function proveRecurringInvoiceContract(httpBillingSource: string) {
+  assertIncludes(
+    httpBillingSource,
+    "event.type === \"invoice.paid\"",
+    "Stripe recurring invoice webhook",
+  );
+  assertIncludes(
+    httpBillingSource,
+    "event.type === \"invoice.payment_succeeded\"",
+    "Stripe recurring invoice webhook",
+  );
+  assertIncludes(
+    httpBillingSource,
+    "billingReason !== \"subscription_cycle\"",
+    "Stripe recurring invoice webhook",
+  );
+  assertIncludes(
+    httpBillingSource,
+    "readStripeInvoiceSubscriptionId(invoice)",
+    "Stripe recurring invoice webhook",
+  );
+  assertIncludes(
+    httpBillingSource,
+    "recordCommunitySubscriptionInvoicePartnerCommissionInternal",
+    "Stripe recurring invoice webhook",
+  );
+  assert.doesNotMatch(
+    httpBillingSource,
+    /billingReason\s*!==\s*"subscription_create"[\s\S]*recordCommunitySubscriptionInvoicePartnerCommissionInternal/,
+    "recurring invoice hook should not double count initial subscription_create invoices",
+  );
+}
+
 function main() {
   const schemaSource = readText(new URL("../convex/schema.ts", import.meta.url));
   const uiSource = readText(
@@ -479,6 +527,7 @@ function main() {
   const sharedWorkspaceCreditsSource = readText(new URL("../shared/workspaceCredits.ts", import.meta.url));
   const communityCommerceSource = readText(new URL("../convex/communityCommerce.ts", import.meta.url));
   const workspaceCreditsSource = readText(new URL("../convex/workspaceCredits.ts", import.meta.url));
+  const httpBillingSource = readText(new URL("../convex/httpBilling.ts", import.meta.url));
 
   proveConstants();
   proveCommunityCommissionMath();
@@ -490,6 +539,7 @@ function main() {
   proveReductionAndCleanupContract(accountSource, docsSource);
   provePricingFoundation(authSource, sharedWorkspaceCreditsSource);
   proveCommissionProducerContract(builderPartnersSource, communityCommerceSource, workspaceCreditsSource);
+  proveRecurringInvoiceContract(httpBillingSource);
   console.log("PASS: builder partner program contract proof passed");
 }
 

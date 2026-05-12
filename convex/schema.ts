@@ -172,6 +172,7 @@ export default defineSchema({
     ),
     sourceCheckoutSessionId: v.optional(v.string()),
     sourceProviderSubscriptionId: v.optional(v.string()),
+    sourceProviderInvoiceId: v.optional(v.string()),
     sourceCreditLedgerEntryId: v.optional(v.id("creditLedgerEntries")),
     holdUntil: v.optional(v.number()),
     payableAt: v.optional(v.number()),
@@ -186,6 +187,7 @@ export default defineSchema({
     .index("by_referredUser", ["referredUserId"])
     .index("by_status_holdUntil", ["status", "holdUntil"])
     .index("by_checkout_session", ["sourceCheckoutSessionId"])
+    .index("by_provider_invoice", ["sourceProviderInvoiceId"])
     .index("by_credit_ledger_entry", ["sourceCreditLedgerEntryId"]),
 
   workspaceCreditBalances: defineTable({

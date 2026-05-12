@@ -287,6 +287,7 @@ async function insertPartnerCommissionIfEligible(ctx: any, args: {
   commissionAmountUsd: number;
   sourceCheckoutSessionId?: string;
   sourceProviderSubscriptionId?: string;
+  sourceProviderInvoiceId?: string;
   sourceCreditLedgerEntryId?: any;
   nowMs: number;
 }) {
@@ -310,6 +311,7 @@ async function insertPartnerCommissionIfEligible(ctx: any, args: {
     status: "locked",
     sourceCheckoutSessionId: args.sourceCheckoutSessionId,
     sourceProviderSubscriptionId: args.sourceProviderSubscriptionId,
+    sourceProviderInvoiceId: args.sourceProviderInvoiceId,
     sourceCreditLedgerEntryId: args.sourceCreditLedgerEntryId,
     holdUntil: args.nowMs + BUILDER_PARTNER_COMMISSION_HOLD_MS,
     createdAt: args.nowMs,
@@ -320,8 +322,9 @@ async function insertPartnerCommissionIfEligible(ctx: any, args: {
 
 export async function recordCommunityRevenuePartnerCommission(ctx: any, args: {
   communityId: any;
-  sourceCheckoutSessionId: string;
+  sourceCheckoutSessionId?: string | null;
   sourceProviderSubscriptionId?: string | null;
+  sourceProviderInvoiceId?: string | null;
   amountBaseUnits?: number | null;
   currency?: string | null;
   currencyDecimals?: number | null;
@@ -329,8 +332,11 @@ export async function recordCommunityRevenuePartnerCommission(ctx: any, args: {
 }) {
   const nowMs = args.nowMs ?? Date.now();
   const sourceCheckoutSessionId = String(args.sourceCheckoutSessionId ?? "").trim();
-  if (!sourceCheckoutSessionId) return null;
-  const commissionKey = `community_platform_fee:${sourceCheckoutSessionId}`;
+  const sourceProviderInvoiceId = String(args.sourceProviderInvoiceId ?? "").trim();
+  if (!sourceCheckoutSessionId && !sourceProviderInvoiceId) return null;
+  const commissionKey = sourceProviderInvoiceId
+    ? `community_platform_fee:invoice:${sourceProviderInvoiceId}`
+    : `community_platform_fee:${sourceCheckoutSessionId}`;
   const existing = await getCommissionByKey(ctx, commissionKey);
   if (existing) return existing;
   const community = await ctx.db.get(args.communityId);
@@ -368,11 +374,62 @@ export async function recordCommunityRevenuePartnerCommission(ctx: any, args: {
     basisAmountUsd: commission.platformFeeUsd,
     commissionRateBps: BUILDER_PARTNER_PLATFORM_FEE_SHARE_BPS,
     commissionAmountUsd: commission.commissionAmountUsd,
-    sourceCheckoutSessionId,
+    sourceCheckoutSessionId: sourceCheckoutSessionId || undefined,
     sourceProviderSubscriptionId: String(args.sourceProviderSubscriptionId ?? "").trim() || undefined,
+    sourceProviderInvoiceId: sourceProviderInvoiceId || undefined,
     nowMs,
   });
 }
+
+export const recordCommunitySubscriptionInvoicePartnerCommissionInternal = internalMutation({
+  args: {
+    providerSubscriptionId: v.string(),
+    sourceProviderInvoiceId: v.string(),
+    amountBaseUnits: v.number(),
+    currency: v.string(),
+    currencyDecimals: v.optional(v.number()),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const providerSubscriptionId = String(args.providerSubscriptionId ?? "").trim();
+    const sourceProviderInvoiceId = String(args.sourceProviderInvoiceId ?? "").trim();
+    if (!providerSubscriptionId || !sourceProviderInvoiceId) {
+      return { ok: false, reason: "invoice_source_missing" };
+    }
+    const subscription = await ctx.db
+      .query("communitySubscriptions" as any)
+      .withIndex("by_providerSubscriptionId", (q: any) =>
+        q.eq("providerSubscriptionId", providerSubscriptionId),
+      )
+      .first();
+    if (!subscription?.communityId) {
+      return { ok: false, reason: "community_subscription_not_found" };
+    }
+    const pricePoint = (subscription.pricePointId
+      ? await ctx.db.get(subscription.pricePointId)
+      : null) as any | null;
+    const currencyDecimals =
+      typeof args.currencyDecimals === "number" && Number.isFinite(args.currencyDecimals)
+        ? args.currencyDecimals
+        : typeof pricePoint?.currencyDecimals === "number"
+          ? pricePoint.currencyDecimals
+          : 2;
+    const row = await recordCommunityRevenuePartnerCommission(ctx, {
+      communityId: subscription.communityId,
+      sourceProviderSubscriptionId: providerSubscriptionId,
+      sourceProviderInvoiceId,
+      amountBaseUnits: args.amountBaseUnits,
+      currency: args.currency,
+      currencyDecimals,
+      nowMs: args.nowMs,
+    });
+    return {
+      ok: true,
+      recorded: Boolean(row),
+      commissionId: row?._id ? String(row._id) : null,
+    };
+  },
+});
 
 export async function recordToolUsagePartnerCommission(ctx: any, args: {
   creditLedgerEntryId: any;
