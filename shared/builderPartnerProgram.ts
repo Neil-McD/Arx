@@ -10,7 +10,13 @@ export const BUILDER_PARTNER_MIN_PAYOUT_USD = 50;
 export type BuilderPartnerStatus = "active" | "paused" | "disabled";
 export type BuilderPartnerAttributionStatus = "active" | "bound" | "expired" | "voided";
 export type BuilderPartnerCommissionBasisType = "community_platform_fee" | "tool_gross_margin";
-export type BuilderPartnerCommissionStatus = "pending" | "locked" | "payable" | "paid" | "voided";
+export type BuilderPartnerCommissionStatus =
+  | "pending"
+  | "locked"
+  | "risk_hold"
+  | "payable"
+  | "paid"
+  | "voided";
 
 function normalizeBps(value: number): number {
   const normalized = Number(value);

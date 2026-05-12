@@ -166,6 +166,7 @@ export default defineSchema({
     status: v.union(
       v.literal("pending"),
       v.literal("locked"),
+      v.literal("risk_hold"),
       v.literal("payable"),
       v.literal("paid"),
       v.literal("voided"),
@@ -173,6 +174,8 @@ export default defineSchema({
     sourceCheckoutSessionId: v.optional(v.string()),
     sourceProviderSubscriptionId: v.optional(v.string()),
     sourceProviderInvoiceId: v.optional(v.string()),
+    sourceProviderPaymentIntentId: v.optional(v.string()),
+    sourceProviderChargeId: v.optional(v.string()),
     sourceCreditLedgerEntryId: v.optional(v.id("creditLedgerEntries")),
     holdUntil: v.optional(v.number()),
     payableAt: v.optional(v.number()),
@@ -188,7 +191,41 @@ export default defineSchema({
     .index("by_status_holdUntil", ["status", "holdUntil"])
     .index("by_checkout_session", ["sourceCheckoutSessionId"])
     .index("by_provider_invoice", ["sourceProviderInvoiceId"])
+    .index("by_payment_intent", ["sourceProviderPaymentIntentId"])
+    .index("by_charge", ["sourceProviderChargeId"])
     .index("by_credit_ledger_entry", ["sourceCreditLedgerEntryId"]),
+
+  partnerCommissionAdjustments: defineTable({
+    adjustmentKey: v.string(),
+    commissionId: v.id("partnerCommissionLedger"),
+    partnerId: v.id("builderPartners"),
+    partnerUserId: v.id("users"),
+    adjustmentType: v.union(
+      v.literal("refund"),
+      v.literal("dispute_opened"),
+      v.literal("dispute_won"),
+      v.literal("dispute_lost"),
+      v.literal("dispute_funds_reinstated"),
+      v.literal("manual_adjustment"),
+    ),
+    amountUsd: v.number(),
+    currency: v.string(),
+    status: v.union(v.literal("applied"), v.literal("voided")),
+    sourceProviderRefundId: v.optional(v.string()),
+    sourceProviderDisputeId: v.optional(v.string()),
+    sourceProviderChargeId: v.optional(v.string()),
+    sourceProviderPaymentIntentId: v.optional(v.string()),
+    sourceProviderInvoiceId: v.optional(v.string()),
+    reason: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_adjustmentKey", ["adjustmentKey"])
+    .index("by_commission", ["commissionId"])
+    .index("by_partner_createdAt", ["partnerId", "createdAt"])
+    .index("by_refund", ["sourceProviderRefundId"])
+    .index("by_dispute", ["sourceProviderDisputeId"])
+    .index("by_charge", ["sourceProviderChargeId"]),
 
   workspaceCreditBalances: defineTable({
     userId: v.id("users"),

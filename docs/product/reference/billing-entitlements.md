@@ -3,7 +3,7 @@ id: product.reference.billing_entitlements
 title: Billing and Entitlements
 audience: builder, member, llm, operator
 status: alpha-current
-last_verified: 2026-05-07
+last_verified: 2026-05-12
 ---
 
 # Billing and Entitlements
@@ -33,6 +33,8 @@ The current default platform fee for free-account community revenue is 15%. Lega
 
 Paid-tool usage is priced through tool balance. Workspace tool usage targets 60% gross margin by charging roughly 2.5x estimated vendor compute cost, then settling actual usage and refunding unused reservations. Web research and voice input use simple alpha tariffs with centralized vendor-cost estimates, and should still write tool, vendor, Polynet price, raw cost estimate, and settlement evidence into the internal credit ledger.
 
+Builder Partner commissions should not become payable from gross promises alone. Community-revenue commissions need provider invoice, payment, or charge evidence, and refunds or disputes must create explicit partner commission adjustments before payout execution.
+
 ## Payout Readiness
 
 Paid communities need payout state to be understandable before launch. Stripe Connect or the active payout provider handles regulated payout setup, verification, and payout ability. Polynet should expose whether payouts are ready, pending, restricted, or require onboarding.
@@ -50,6 +52,7 @@ Payout readiness does not grant community access. It determines whether the buil
 7. Builders should be shown payout readiness before they rely on paid community revenue.
 8. Paid access, management authority, and payout readiness are separate concepts.
 9. Tool balance, not a platform subscription, is the source of truth for paid tool access.
+10. Partner commission payouts must account for refunds, disputes, and chargeback outcomes before money movement.
 
 ## Common Mistakes
 
@@ -59,6 +62,7 @@ Payout readiness does not grant community access. It determines whether the buil
 - showing frontend access before backend entitlement exists
 - treating payout setup as proof that a member has access
 - letting a paid community launch with unclear payout readiness
+- treating pending partner commission as withdrawable before refund and dispute risk has cleared
 
 ## Related Concepts
 

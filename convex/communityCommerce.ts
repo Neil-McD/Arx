@@ -51,6 +51,9 @@ type CommunityCheckoutSessionRow = {
   providerCheckoutSessionId?: string;
   providerCustomerId?: string;
   providerSubscriptionId?: string;
+  sourceProviderInvoiceId?: string;
+  sourceProviderPaymentIntentId?: string;
+  sourceProviderChargeId?: string;
   providerPriceId?: string;
   currentPeriodStartAt?: number;
   currentPeriodEndAt?: number;
@@ -493,6 +496,9 @@ export const syncPendingCommunityCheckoutSubscriptionInternal = internalMutation
     providerCheckoutSessionId: v.optional(v.union(v.string(), v.null())),
     providerCustomerId: v.optional(v.union(v.string(), v.null())),
     providerSubscriptionId: v.optional(v.union(v.string(), v.null())),
+    sourceProviderInvoiceId: v.optional(v.union(v.string(), v.null())),
+    sourceProviderPaymentIntentId: v.optional(v.union(v.string(), v.null())),
+    sourceProviderChargeId: v.optional(v.union(v.string(), v.null())),
     providerPriceId: v.optional(v.union(v.string(), v.null())),
     subscriptionStatus: v.string(),
     currentPeriodStartAt: v.optional(v.union(v.number(), v.null())),
@@ -564,6 +570,12 @@ export const syncPendingCommunityCheckoutSubscriptionInternal = internalMutation
         sourceCheckoutSessionId: row.sessionId,
         sourceProviderSubscriptionId:
           String(args.providerSubscriptionId ?? row.providerSubscriptionId ?? "").trim() || undefined,
+        sourceProviderInvoiceId:
+          String(args.sourceProviderInvoiceId ?? row.sourceProviderInvoiceId ?? "").trim() || undefined,
+        sourceProviderPaymentIntentId:
+          String(args.sourceProviderPaymentIntentId ?? row.sourceProviderPaymentIntentId ?? "").trim() || undefined,
+        sourceProviderChargeId:
+          String(args.sourceProviderChargeId ?? row.sourceProviderChargeId ?? "").trim() || undefined,
         amountBaseUnits: row.amountBaseUnits,
         currency: row.currency,
         currencyDecimals: row.currencyDecimals,

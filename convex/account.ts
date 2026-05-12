@@ -157,6 +157,13 @@ export const deleteOwnAccount = mutation({
     await record("userPlatformSkillInstalls", await deleteRowsByIndex(ctx, "userPlatformSkillInstalls", "by_user", "userId", userId));
     await record("communityAiFeedReactions", await deleteRowsByIndex(ctx, "communityAiFeedReactions", "by_actorUser", "actorUserId", userId));
     await record("partnerAttributions", await deleteRowsByIndex(ctx, "partnerAttributions", "by_referredUser", "referredUserId", userId));
+    const referredPartnerCommissions = await ctx.db
+      .query("partnerCommissionLedger")
+      .withIndex("by_referredUser", (q: any) => q.eq("referredUserId", userId))
+      .collect();
+    for (const commission of referredPartnerCommissions) {
+      await record("partnerCommissionAdjustments", await deleteRowsByIndex(ctx, "partnerCommissionAdjustments", "by_commission", "commissionId", commission._id));
+    }
     await record("partnerCommissionLedger", await deleteRowsByIndex(ctx, "partnerCommissionLedger", "by_referredUser", "referredUserId", userId));
 
     const builderPartners = await ctx.db
@@ -165,6 +172,7 @@ export const deleteOwnAccount = mutation({
       .collect();
     for (const partner of builderPartners) {
       await record("partnerAttributions", await deleteRowsByIndex(ctx, "partnerAttributions", "by_partner_status", "partnerId", partner._id));
+      await record("partnerCommissionAdjustments", await deleteRowsByIndex(ctx, "partnerCommissionAdjustments", "by_partner_createdAt", "partnerId", partner._id));
       await record("partnerCommissionLedger", await deleteRowsByIndex(ctx, "partnerCommissionLedger", "by_partner_status", "partnerId", partner._id));
       await record("builderPartners", 1);
       await ctx.db.delete(partner._id);

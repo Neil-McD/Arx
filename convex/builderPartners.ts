@@ -98,6 +98,12 @@ function baseUnitsToUsd(args: {
   return roundBuilderPartnerMoney(amountBaseUnits / (10 ** Math.floor(currencyDecimals)));
 }
 
+function roundSignedPartnerMoney(value: number): number {
+  const normalized = Number(value);
+  if (!Number.isFinite(normalized)) return 0;
+  return Math.round(normalized * 10000) / 10000;
+}
+
 async function listOwnedCommunities(ctx: any, userId: any) {
   return await ctx.db
     .query("communities")
@@ -117,6 +123,181 @@ async function getCommissionByKey(ctx: any, commissionKey: string) {
     .query("partnerCommissionLedger")
     .withIndex("by_commissionKey", (q: any) => q.eq("commissionKey", commissionKey))
     .first();
+}
+
+function normalizeProviderEvidenceId(value: unknown): string {
+  return String(value ?? "").trim();
+}
+
+async function getCommissionByCheckoutSession(ctx: any, sourceCheckoutSessionId: string) {
+  const normalized = normalizeProviderEvidenceId(sourceCheckoutSessionId);
+  if (!normalized) return null;
+  return await ctx.db
+    .query("partnerCommissionLedger")
+    .withIndex("by_checkout_session", (q: any) =>
+      q.eq("sourceCheckoutSessionId", normalized),
+    )
+    .first();
+}
+
+async function patchCommissionSourceEvidence(ctx: any, row: any, evidence: {
+  sourceCheckoutSessionId?: string | null;
+  sourceProviderSubscriptionId?: string | null;
+  sourceProviderInvoiceId?: string | null;
+  sourceProviderPaymentIntentId?: string | null;
+  sourceProviderChargeId?: string | null;
+  nowMs: number;
+}) {
+  const patch: Record<string, unknown> = {};
+  const sourceCheckoutSessionId = normalizeProviderEvidenceId(evidence.sourceCheckoutSessionId);
+  const sourceProviderSubscriptionId = normalizeProviderEvidenceId(evidence.sourceProviderSubscriptionId);
+  const sourceProviderInvoiceId = normalizeProviderEvidenceId(evidence.sourceProviderInvoiceId);
+  const sourceProviderPaymentIntentId = normalizeProviderEvidenceId(evidence.sourceProviderPaymentIntentId);
+  const sourceProviderChargeId = normalizeProviderEvidenceId(evidence.sourceProviderChargeId);
+  if (sourceCheckoutSessionId && !row.sourceCheckoutSessionId) {
+    patch.sourceCheckoutSessionId = sourceCheckoutSessionId;
+  }
+  if (sourceProviderSubscriptionId && !row.sourceProviderSubscriptionId) {
+    patch.sourceProviderSubscriptionId = sourceProviderSubscriptionId;
+  }
+  if (sourceProviderInvoiceId && !row.sourceProviderInvoiceId) {
+    patch.sourceProviderInvoiceId = sourceProviderInvoiceId;
+  }
+  if (sourceProviderPaymentIntentId && !row.sourceProviderPaymentIntentId) {
+    patch.sourceProviderPaymentIntentId = sourceProviderPaymentIntentId;
+  }
+  if (sourceProviderChargeId && !row.sourceProviderChargeId) {
+    patch.sourceProviderChargeId = sourceProviderChargeId;
+  }
+  if (Object.keys(patch).length <= 0) return row;
+  await ctx.db.patch(row._id, {
+    ...patch,
+    updatedAt: evidence.nowMs,
+  });
+  return await ctx.db.get(row._id);
+}
+
+async function collectPartnerCommissionsByProviderEvidence(ctx: any, evidence: {
+  sourceProviderChargeId?: string | null;
+  sourceProviderPaymentIntentId?: string | null;
+  sourceProviderInvoiceId?: string | null;
+}) {
+  const chargeId = normalizeProviderEvidenceId(evidence.sourceProviderChargeId);
+  const paymentIntentId = normalizeProviderEvidenceId(evidence.sourceProviderPaymentIntentId);
+  const invoiceId = normalizeProviderEvidenceId(evidence.sourceProviderInvoiceId);
+  const groups: any[][] = [];
+  if (chargeId) {
+    groups.push(await ctx.db
+      .query("partnerCommissionLedger")
+      .withIndex("by_charge", (q: any) => q.eq("sourceProviderChargeId", chargeId))
+      .collect());
+  }
+  if (paymentIntentId) {
+    groups.push(await ctx.db
+      .query("partnerCommissionLedger")
+      .withIndex("by_payment_intent", (q: any) =>
+        q.eq("sourceProviderPaymentIntentId", paymentIntentId),
+      )
+      .collect());
+  }
+  if (invoiceId) {
+    groups.push(await ctx.db
+      .query("partnerCommissionLedger")
+      .withIndex("by_provider_invoice", (q: any) =>
+        q.eq("sourceProviderInvoiceId", invoiceId),
+      )
+      .collect());
+  }
+  return groups
+    .flat()
+    .filter((row, index, rows) =>
+      rows.findIndex((candidate) => String(candidate._id) === String(row._id)) === index,
+    );
+}
+
+async function getCommissionAdjustmentByKey(ctx: any, adjustmentKey: string) {
+  return await ctx.db
+    .query("partnerCommissionAdjustments" as any)
+    .withIndex("by_adjustmentKey", (q: any) => q.eq("adjustmentKey", adjustmentKey))
+    .first();
+}
+
+function calculateProportionalCommissionAdjustmentUsd(args: {
+  commissionAmountUsd: number;
+  sourceAmountBaseUnits?: number | null;
+  sourceTotalBaseUnits?: number | null;
+}) {
+  const commissionAmountUsd = roundBuilderPartnerMoney(args.commissionAmountUsd);
+  const sourceAmountBaseUnits = Number(args.sourceAmountBaseUnits ?? 0);
+  const sourceTotalBaseUnits = Number(args.sourceTotalBaseUnits ?? 0);
+  if (
+    Number.isFinite(sourceAmountBaseUnits) &&
+    Number.isFinite(sourceTotalBaseUnits) &&
+    sourceAmountBaseUnits > 0 &&
+    sourceTotalBaseUnits > 0
+  ) {
+    return roundBuilderPartnerMoney(
+      commissionAmountUsd * Math.min(1, sourceAmountBaseUnits / sourceTotalBaseUnits),
+    );
+  }
+  return commissionAmountUsd;
+}
+
+function riskReleaseStatusForCommission(row: any, nowMs: number): "locked" | "payable" {
+  return Number(row?.holdUntil ?? Infinity) <= nowMs ? "payable" : "locked";
+}
+
+async function insertPartnerCommissionAdjustmentIfMissing(ctx: any, args: {
+  adjustmentKey: string;
+  commission: any;
+  adjustmentType:
+    | "refund"
+    | "dispute_opened"
+    | "dispute_won"
+    | "dispute_lost"
+    | "dispute_funds_reinstated"
+    | "manual_adjustment";
+  amountUsd: number;
+  sourceProviderRefundId?: string | null;
+  sourceProviderDisputeId?: string | null;
+  sourceProviderChargeId?: string | null;
+  sourceProviderPaymentIntentId?: string | null;
+  sourceProviderInvoiceId?: string | null;
+  reason?: string;
+  nowMs: number;
+}) {
+  const adjustmentKey = String(args.adjustmentKey ?? "").trim();
+  if (!adjustmentKey) throw new Error("partner_commission_adjustment_key_required");
+  const existing = await getCommissionAdjustmentByKey(ctx, adjustmentKey);
+  if (existing) return existing;
+  const id = await ctx.db.insert("partnerCommissionAdjustments" as any, {
+    adjustmentKey,
+    commissionId: args.commission._id,
+    partnerId: args.commission.partnerId,
+    partnerUserId: args.commission.partnerUserId,
+    adjustmentType: args.adjustmentType,
+    amountUsd: roundSignedPartnerMoney(Number(args.amountUsd ?? 0)),
+    currency: "usd",
+    status: "applied",
+    sourceProviderRefundId: normalizeProviderEvidenceId(args.sourceProviderRefundId) || undefined,
+    sourceProviderDisputeId: normalizeProviderEvidenceId(args.sourceProviderDisputeId) || undefined,
+    sourceProviderChargeId:
+      normalizeProviderEvidenceId(args.sourceProviderChargeId) ||
+      normalizeProviderEvidenceId(args.commission.sourceProviderChargeId) ||
+      undefined,
+    sourceProviderPaymentIntentId:
+      normalizeProviderEvidenceId(args.sourceProviderPaymentIntentId) ||
+      normalizeProviderEvidenceId(args.commission.sourceProviderPaymentIntentId) ||
+      undefined,
+    sourceProviderInvoiceId:
+      normalizeProviderEvidenceId(args.sourceProviderInvoiceId) ||
+      normalizeProviderEvidenceId(args.commission.sourceProviderInvoiceId) ||
+      undefined,
+    reason: args.reason,
+    createdAt: args.nowMs,
+    updatedAt: args.nowMs,
+  });
+  return await ctx.db.get(id);
 }
 
 async function codeIsAvailable(ctx: any, code: string, existingPartnerId?: any): Promise<boolean> {
@@ -288,6 +469,8 @@ async function insertPartnerCommissionIfEligible(ctx: any, args: {
   sourceCheckoutSessionId?: string;
   sourceProviderSubscriptionId?: string;
   sourceProviderInvoiceId?: string;
+  sourceProviderPaymentIntentId?: string;
+  sourceProviderChargeId?: string;
   sourceCreditLedgerEntryId?: any;
   nowMs: number;
 }) {
@@ -312,6 +495,8 @@ async function insertPartnerCommissionIfEligible(ctx: any, args: {
     sourceCheckoutSessionId: args.sourceCheckoutSessionId,
     sourceProviderSubscriptionId: args.sourceProviderSubscriptionId,
     sourceProviderInvoiceId: args.sourceProviderInvoiceId,
+    sourceProviderPaymentIntentId: args.sourceProviderPaymentIntentId,
+    sourceProviderChargeId: args.sourceProviderChargeId,
     sourceCreditLedgerEntryId: args.sourceCreditLedgerEntryId,
     holdUntil: args.nowMs + BUILDER_PARTNER_COMMISSION_HOLD_MS,
     createdAt: args.nowMs,
@@ -325,6 +510,8 @@ export async function recordCommunityRevenuePartnerCommission(ctx: any, args: {
   sourceCheckoutSessionId?: string | null;
   sourceProviderSubscriptionId?: string | null;
   sourceProviderInvoiceId?: string | null;
+  sourceProviderPaymentIntentId?: string | null;
+  sourceProviderChargeId?: string | null;
   amountBaseUnits?: number | null;
   currency?: string | null;
   currencyDecimals?: number | null;
@@ -338,7 +525,29 @@ export async function recordCommunityRevenuePartnerCommission(ctx: any, args: {
     ? `community_platform_fee:invoice:${sourceProviderInvoiceId}`
     : `community_platform_fee:${sourceCheckoutSessionId}`;
   const existing = await getCommissionByKey(ctx, commissionKey);
-  if (existing) return existing;
+  if (existing) {
+    return await patchCommissionSourceEvidence(ctx, existing, {
+      sourceCheckoutSessionId,
+      sourceProviderSubscriptionId: args.sourceProviderSubscriptionId,
+      sourceProviderInvoiceId,
+      sourceProviderPaymentIntentId: args.sourceProviderPaymentIntentId,
+      sourceProviderChargeId: args.sourceProviderChargeId,
+      nowMs,
+    });
+  }
+  const existingByCheckout = sourceCheckoutSessionId
+    ? await getCommissionByCheckoutSession(ctx, sourceCheckoutSessionId)
+    : null;
+  if (existingByCheckout) {
+    return await patchCommissionSourceEvidence(ctx, existingByCheckout, {
+      sourceCheckoutSessionId,
+      sourceProviderSubscriptionId: args.sourceProviderSubscriptionId,
+      sourceProviderInvoiceId,
+      sourceProviderPaymentIntentId: args.sourceProviderPaymentIntentId,
+      sourceProviderChargeId: args.sourceProviderChargeId,
+      nowMs,
+    });
+  }
   const community = await ctx.db.get(args.communityId);
   if (!community?.ownerId) return null;
   const referredUserId = community.ownerId;
@@ -377,6 +586,9 @@ export async function recordCommunityRevenuePartnerCommission(ctx: any, args: {
     sourceCheckoutSessionId: sourceCheckoutSessionId || undefined,
     sourceProviderSubscriptionId: String(args.sourceProviderSubscriptionId ?? "").trim() || undefined,
     sourceProviderInvoiceId: sourceProviderInvoiceId || undefined,
+    sourceProviderPaymentIntentId:
+      String(args.sourceProviderPaymentIntentId ?? "").trim() || undefined,
+    sourceProviderChargeId: String(args.sourceProviderChargeId ?? "").trim() || undefined,
     nowMs,
   });
 }
@@ -385,6 +597,8 @@ export const recordCommunitySubscriptionInvoicePartnerCommissionInternal = inter
   args: {
     providerSubscriptionId: v.string(),
     sourceProviderInvoiceId: v.string(),
+    sourceProviderPaymentIntentId: v.optional(v.string()),
+    sourceProviderChargeId: v.optional(v.string()),
     amountBaseUnits: v.number(),
     currency: v.string(),
     currencyDecimals: v.optional(v.number()),
@@ -418,6 +632,8 @@ export const recordCommunitySubscriptionInvoicePartnerCommissionInternal = inter
       communityId: subscription.communityId,
       sourceProviderSubscriptionId: providerSubscriptionId,
       sourceProviderInvoiceId,
+      sourceProviderPaymentIntentId: args.sourceProviderPaymentIntentId,
+      sourceProviderChargeId: args.sourceProviderChargeId,
       amountBaseUnits: args.amountBaseUnits,
       currency: args.currency,
       currencyDecimals,
@@ -471,6 +687,243 @@ export async function recordToolUsagePartnerCommission(ctx: any, args: {
   });
 }
 
+export const recordPartnerCommissionRefundAdjustmentInternal = internalMutation({
+  args: {
+    sourceProviderRefundId: v.string(),
+    sourceProviderChargeId: v.optional(v.string()),
+    sourceProviderPaymentIntentId: v.optional(v.string()),
+    sourceProviderInvoiceId: v.optional(v.string()),
+    refundAmountBaseUnits: v.optional(v.number()),
+    chargeAmountBaseUnits: v.optional(v.number()),
+    currency: v.optional(v.string()),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const nowMs = args.nowMs ?? Date.now();
+    const refundId = normalizeProviderEvidenceId(args.sourceProviderRefundId);
+    if (!refundId) return { ok: false, reason: "refund_id_missing" };
+    const currency = String(args.currency ?? "").trim().toLowerCase();
+    if (currency && currency !== "usd") {
+      return { ok: true, ignored: true, reason: "refund_currency_unsupported" };
+    }
+    const rows = await collectPartnerCommissionsByProviderEvidence(ctx, {
+      sourceProviderChargeId: args.sourceProviderChargeId,
+      sourceProviderPaymentIntentId: args.sourceProviderPaymentIntentId,
+      sourceProviderInvoiceId: args.sourceProviderInvoiceId,
+    });
+    let adjusted = 0;
+    let voided = 0;
+    for (const row of rows) {
+      if (row.status === "voided") continue;
+      await patchCommissionSourceEvidence(ctx, row, {
+        sourceProviderInvoiceId: args.sourceProviderInvoiceId,
+        sourceProviderPaymentIntentId: args.sourceProviderPaymentIntentId,
+        sourceProviderChargeId: args.sourceProviderChargeId,
+        nowMs,
+      });
+      const reversalUsd = calculateProportionalCommissionAdjustmentUsd({
+        commissionAmountUsd: row.commissionAmountUsd,
+        sourceAmountBaseUnits: args.refundAmountBaseUnits,
+        sourceTotalBaseUnits: args.chargeAmountBaseUnits,
+      });
+      const isFullReversal =
+        reversalUsd >= roundBuilderPartnerMoney(Number(row.commissionAmountUsd ?? 0) - 0.0001);
+      const amountUsd = row.status === "paid" || !isFullReversal ? -reversalUsd : 0;
+      await insertPartnerCommissionAdjustmentIfMissing(ctx, {
+        adjustmentKey: `partner_refund:${refundId}:${String(row._id)}`,
+        commission: row,
+        adjustmentType: "refund",
+        amountUsd,
+        sourceProviderRefundId: refundId,
+        sourceProviderChargeId: args.sourceProviderChargeId,
+        sourceProviderPaymentIntentId: args.sourceProviderPaymentIntentId,
+        sourceProviderInvoiceId: args.sourceProviderInvoiceId,
+        reason: "stripe_refund",
+        nowMs,
+      });
+      adjusted += 1;
+      if (row.status !== "paid" && isFullReversal) {
+        await ctx.db.patch(row._id, {
+          status: "voided",
+          voidedAt: nowMs,
+          voidReason: `stripe_refund:${refundId}`,
+          updatedAt: nowMs,
+        });
+        voided += 1;
+      }
+    }
+    return { ok: true, matched: rows.length, adjusted, voided };
+  },
+});
+
+export const recordPartnerCommissionDisputeOpenedInternal = internalMutation({
+  args: {
+    sourceProviderDisputeId: v.string(),
+    sourceProviderChargeId: v.optional(v.string()),
+    sourceProviderPaymentIntentId: v.optional(v.string()),
+    sourceProviderInvoiceId: v.optional(v.string()),
+    disputeAmountBaseUnits: v.optional(v.number()),
+    chargeAmountBaseUnits: v.optional(v.number()),
+    currency: v.optional(v.string()),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const nowMs = args.nowMs ?? Date.now();
+    const disputeId = normalizeProviderEvidenceId(args.sourceProviderDisputeId);
+    if (!disputeId) return { ok: false, reason: "dispute_id_missing" };
+    const currency = String(args.currency ?? "").trim().toLowerCase();
+    if (currency && currency !== "usd") {
+      return { ok: true, ignored: true, reason: "dispute_currency_unsupported" };
+    }
+    const rows = await collectPartnerCommissionsByProviderEvidence(ctx, {
+      sourceProviderChargeId: args.sourceProviderChargeId,
+      sourceProviderPaymentIntentId: args.sourceProviderPaymentIntentId,
+      sourceProviderInvoiceId: args.sourceProviderInvoiceId,
+    });
+    let adjusted = 0;
+    let held = 0;
+    for (const row of rows) {
+      if (row.status === "voided") continue;
+      await patchCommissionSourceEvidence(ctx, row, {
+        sourceProviderInvoiceId: args.sourceProviderInvoiceId,
+        sourceProviderPaymentIntentId: args.sourceProviderPaymentIntentId,
+        sourceProviderChargeId: args.sourceProviderChargeId,
+        nowMs,
+      });
+      const reversalUsd = calculateProportionalCommissionAdjustmentUsd({
+        commissionAmountUsd: row.commissionAmountUsd,
+        sourceAmountBaseUnits: args.disputeAmountBaseUnits,
+        sourceTotalBaseUnits: args.chargeAmountBaseUnits,
+      });
+      await insertPartnerCommissionAdjustmentIfMissing(ctx, {
+        adjustmentKey: `partner_dispute_opened:${disputeId}:${String(row._id)}`,
+        commission: row,
+        adjustmentType: "dispute_opened",
+        amountUsd: row.status === "paid" ? -reversalUsd : 0,
+        sourceProviderDisputeId: disputeId,
+        sourceProviderChargeId: args.sourceProviderChargeId,
+        sourceProviderPaymentIntentId: args.sourceProviderPaymentIntentId,
+        sourceProviderInvoiceId: args.sourceProviderInvoiceId,
+        reason: "stripe_dispute_opened",
+        nowMs,
+      });
+      adjusted += 1;
+      if (row.status !== "paid" && row.status !== "risk_hold") {
+        await ctx.db.patch(row._id, {
+          status: "risk_hold",
+          updatedAt: nowMs,
+        });
+        held += 1;
+      }
+    }
+    return { ok: true, matched: rows.length, adjusted, held };
+  },
+});
+
+export const recordPartnerCommissionDisputeClosedInternal = internalMutation({
+  args: {
+    sourceProviderDisputeId: v.string(),
+    outcome: v.union(
+      v.literal("won"),
+      v.literal("lost"),
+      v.literal("funds_reinstated"),
+      v.literal("unknown"),
+    ),
+    sourceProviderChargeId: v.optional(v.string()),
+    sourceProviderPaymentIntentId: v.optional(v.string()),
+    sourceProviderInvoiceId: v.optional(v.string()),
+    disputeAmountBaseUnits: v.optional(v.number()),
+    chargeAmountBaseUnits: v.optional(v.number()),
+    currency: v.optional(v.string()),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const nowMs = args.nowMs ?? Date.now();
+    const disputeId = normalizeProviderEvidenceId(args.sourceProviderDisputeId);
+    if (!disputeId) return { ok: false, reason: "dispute_id_missing" };
+    if (args.outcome === "unknown") {
+      return { ok: true, ignored: true, reason: "dispute_outcome_unknown" };
+    }
+    const currency = String(args.currency ?? "").trim().toLowerCase();
+    if (currency && currency !== "usd") {
+      return { ok: true, ignored: true, reason: "dispute_currency_unsupported" };
+    }
+    const rows = await collectPartnerCommissionsByProviderEvidence(ctx, {
+      sourceProviderChargeId: args.sourceProviderChargeId,
+      sourceProviderPaymentIntentId: args.sourceProviderPaymentIntentId,
+      sourceProviderInvoiceId: args.sourceProviderInvoiceId,
+    });
+    let adjusted = 0;
+    let released = 0;
+    let voided = 0;
+    const adjustmentType =
+      args.outcome === "funds_reinstated"
+        ? "dispute_funds_reinstated"
+        : args.outcome === "won"
+          ? "dispute_won"
+          : "dispute_lost";
+    for (const row of rows) {
+      if (row.status === "voided") continue;
+      await patchCommissionSourceEvidence(ctx, row, {
+        sourceProviderInvoiceId: args.sourceProviderInvoiceId,
+        sourceProviderPaymentIntentId: args.sourceProviderPaymentIntentId,
+        sourceProviderChargeId: args.sourceProviderChargeId,
+        nowMs,
+      });
+      const openedAdjustment = await getCommissionAdjustmentByKey(
+        ctx,
+        `partner_dispute_opened:${disputeId}:${String(row._id)}`,
+      );
+      const reversalUsd = calculateProportionalCommissionAdjustmentUsd({
+        commissionAmountUsd: row.commissionAmountUsd,
+        sourceAmountBaseUnits: args.disputeAmountBaseUnits,
+        sourceTotalBaseUnits: args.chargeAmountBaseUnits,
+      });
+      let amountUsd = 0;
+      if (row.status === "paid") {
+        if (args.outcome === "lost") {
+          amountUsd = openedAdjustment ? 0 : -reversalUsd;
+        } else if (openedAdjustment && Number(openedAdjustment.amountUsd ?? 0) < 0) {
+          amountUsd = Math.abs(Number(openedAdjustment.amountUsd ?? 0));
+        }
+      }
+      await insertPartnerCommissionAdjustmentIfMissing(ctx, {
+        adjustmentKey: `partner_${adjustmentType}:${disputeId}:${String(row._id)}`,
+        commission: row,
+        adjustmentType,
+        amountUsd,
+        sourceProviderDisputeId: disputeId,
+        sourceProviderChargeId: args.sourceProviderChargeId,
+        sourceProviderPaymentIntentId: args.sourceProviderPaymentIntentId,
+        sourceProviderInvoiceId: args.sourceProviderInvoiceId,
+        reason: `stripe_${adjustmentType}`,
+        nowMs,
+      });
+      adjusted += 1;
+      if (row.status !== "paid") {
+        if (args.outcome === "lost") {
+          await ctx.db.patch(row._id, {
+            status: "voided",
+            voidedAt: nowMs,
+            voidReason: `stripe_dispute_lost:${disputeId}`,
+            updatedAt: nowMs,
+          });
+          voided += 1;
+        } else if (row.status === "risk_hold") {
+          const nextStatus = riskReleaseStatusForCommission(row, nowMs);
+          await ctx.db.patch(row._id, {
+            status: nextStatus,
+            payableAt: nextStatus === "payable" ? nowMs : row.payableAt,
+            updatedAt: nowMs,
+          });
+          released += 1;
+        }
+      }
+    }
+    return { ok: true, matched: rows.length, adjusted, released, voided };
+  },
+});
+
 export const advancePartnerCommissionsToPayableInternal = internalMutation({
   args: {
     nowMs: v.optional(v.number()),
@@ -489,6 +942,14 @@ export const advancePartnerCommissionsToPayableInternal = internalMutation({
     let advanced = 0;
     for (const row of rows) {
       if (row.status !== "locked" || Number(row.holdUntil ?? Infinity) > nowMs) continue;
+      if (
+        row.basisType === "community_platform_fee" &&
+        !row.sourceProviderInvoiceId &&
+        !row.sourceProviderPaymentIntentId &&
+        !row.sourceProviderChargeId
+      ) {
+        continue;
+      }
       await ctx.db.patch(row._id, {
         status: "payable",
         payableAt: nowMs,
@@ -529,7 +990,7 @@ async function readCommissionSummary(ctx: any, partner: any) {
       paidCount: 0,
     };
   }
-  const statuses = ["pending", "locked", "payable", "paid"] as const;
+  const statuses = ["pending", "locked", "risk_hold", "payable", "paid"] as const;
   const rows = (
     await Promise.all(
       statuses.map((status) =>
@@ -542,11 +1003,37 @@ async function readCommissionSummary(ctx: any, partner: any) {
       ),
     )
   ).flat();
+  const adjustments = await ctx.db
+    .query("partnerCommissionAdjustments" as any)
+    .withIndex("by_partner_createdAt", (q: any) => q.eq("partnerId", partner._id))
+    .collect();
+  const rowById = new Map(rows.map((row: any) => [String(row._id), row]));
+  const adjustmentTotalByCommissionId = new Map<string, number>();
+  for (const adjustment of adjustments) {
+    if (adjustment.status !== "applied") continue;
+    const commissionId = String(adjustment.commissionId ?? "");
+    if (!rowById.has(commissionId)) continue;
+    adjustmentTotalByCommissionId.set(
+      commissionId,
+      roundSignedPartnerMoney(
+        Number(adjustmentTotalByCommissionId.get(commissionId) ?? 0) +
+        Number(adjustment.amountUsd ?? 0),
+      ),
+    );
+  }
+  const rowNetAmount = (row: any) =>
+    Math.max(
+      0,
+      roundBuilderPartnerMoney(
+        Number(row.commissionAmountUsd ?? 0) +
+        Number(adjustmentTotalByCommissionId.get(String(row._id)) ?? 0),
+      ),
+    );
   const sum = (statusSet: ReadonlySet<string>) =>
     rows
       .filter((row: any) => statusSet.has(String(row.status ?? "")))
-      .reduce((total: number, row: any) => total + Math.max(0, Number(row.commissionAmountUsd ?? 0)), 0);
-  const pendingSet = new Set(["pending", "locked"]);
+      .reduce((total: number, row: any) => total + rowNetAmount(row), 0);
+  const pendingSet = new Set(["pending", "locked", "risk_hold"]);
   const payableSet = new Set(["payable"]);
   const paidSet = new Set(["paid"]);
   const pendingUsd = sum(pendingSet);

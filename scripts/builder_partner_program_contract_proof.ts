@@ -68,6 +68,7 @@ function proveSchemaContract(schemaSource: string) {
   assertIncludes(schemaSource, "builderPartners: defineTable", "schema");
   assertIncludes(schemaSource, "partnerAttributions: defineTable", "schema");
   assertIncludes(schemaSource, "partnerCommissionLedger: defineTable", "schema");
+  assertIncludes(schemaSource, "partnerCommissionAdjustments: defineTable", "schema");
   assert.match(
     schemaSource,
     /builderPartners:[\s\S]*userId:\s*v\.id\("users"\)[\s\S]*acceptedTermsAt:\s*v\.optional\(v\.number\(\)\)[\s\S]*acceptedTermsVersion:\s*v\.optional\(v\.string\(\)\)/,
@@ -90,8 +91,13 @@ function proveSchemaContract(schemaSource: string) {
   );
   assert.match(
     schemaSource,
-    /partnerCommissionLedger:[\s\S]*sourceCheckoutSessionId:\s*v\.optional\(v\.string\(\)\)[\s\S]*sourceProviderInvoiceId:\s*v\.optional\(v\.string\(\)\)[\s\S]*sourceCreditLedgerEntryId:\s*v\.optional\(v\.id\("creditLedgerEntries"\)\)/,
-    "expected commission rows to point at checkout, invoice, and paid-tool evidence",
+    /partnerCommissionLedger:[\s\S]*sourceCheckoutSessionId:\s*v\.optional\(v\.string\(\)\)[\s\S]*sourceProviderInvoiceId:\s*v\.optional\(v\.string\(\)\)[\s\S]*sourceProviderPaymentIntentId:\s*v\.optional\(v\.string\(\)\)[\s\S]*sourceProviderChargeId:\s*v\.optional\(v\.string\(\)\)[\s\S]*sourceCreditLedgerEntryId:\s*v\.optional\(v\.id\("creditLedgerEntries"\)\)/,
+    "expected commission rows to point at checkout, invoice, payment, charge, and paid-tool evidence",
+  );
+  assert.match(
+    schemaSource,
+    /partnerCommissionLedger:[\s\S]*v\.literal\("risk_hold"\)/,
+    "expected commission rows to support refund and dispute risk holds",
   );
   assert.match(
     schemaSource,
@@ -107,6 +113,16 @@ function proveSchemaContract(schemaSource: string) {
     schemaSource,
     /\.index\("by_provider_invoice",\s*\["sourceProviderInvoiceId"\]\)/,
     "expected commission ledger rows to be searchable by Stripe invoice evidence",
+  );
+  assert.match(
+    schemaSource,
+    /\.index\("by_payment_intent",\s*\["sourceProviderPaymentIntentId"\]\)[\s\S]*\.index\("by_charge",\s*\["sourceProviderChargeId"\]\)/,
+    "expected commission ledger rows to be searchable by Stripe payment and charge evidence",
+  );
+  assert.match(
+    schemaSource,
+    /partnerCommissionAdjustments:[\s\S]*adjustmentKey:\s*v\.string\(\)[\s\S]*adjustmentType:\s*v\.union\([\s\S]*v\.literal\("refund"\)[\s\S]*v\.literal\("dispute_opened"\)[\s\S]*v\.literal\("dispute_won"\)[\s\S]*v\.literal\("dispute_lost"\)[\s\S]*amountUsd:\s*v\.number\(\)/,
+    "expected partner adjustment ledger to record refunds and disputes as signed money events",
   );
 }
 
@@ -328,6 +344,16 @@ function proveReductionAndCleanupContract(accountSource: string, docsSource: str
   );
   assertIncludes(
     accountSource,
+    "\"partnerCommissionAdjustments\", \"by_commission\", \"commissionId\"",
+    "account deletion cleanup",
+  );
+  assertIncludes(
+    accountSource,
+    "\"partnerCommissionAdjustments\", \"by_partner_createdAt\", \"partnerId\"",
+    "account deletion cleanup",
+  );
+  assertIncludes(
+    accountSource,
     "\"builderPartners\"",
     "account deletion cleanup",
   );
@@ -445,6 +471,16 @@ function proveCommissionProducerContract(
   );
   assertIncludes(
     builderPartnersSource,
+    "patchCommissionSourceEvidence",
+    "Builder Partner commission producer",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "sourceProviderChargeId",
+    "Builder Partner commission producer",
+  );
+  assertIncludes(
+    builderPartnersSource,
     "status: \"payable\"",
     "Builder Partner commission producer",
   );
@@ -456,6 +492,11 @@ function proveCommissionProducerContract(
   assertIncludes(
     communityCommerceSource,
     "sourceCheckoutSessionId: row.sessionId",
+    "community checkout settlement",
+  );
+  assertIncludes(
+    communityCommerceSource,
+    "sourceProviderInvoiceId:",
     "community checkout settlement",
   );
   assertIncludes(
@@ -513,6 +554,72 @@ function proveRecurringInvoiceContract(httpBillingSource: string) {
   );
 }
 
+function proveRefundDisputeContract(
+  builderPartnersSource: string,
+  httpBillingSource: string,
+) {
+  assertIncludes(
+    builderPartnersSource,
+    "recordPartnerCommissionRefundAdjustmentInternal",
+    "Builder Partner reversal ledger",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "recordPartnerCommissionDisputeOpenedInternal",
+    "Builder Partner reversal ledger",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "recordPartnerCommissionDisputeClosedInternal",
+    "Builder Partner reversal ledger",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "partnerCommissionAdjustments",
+    "Builder Partner reversal ledger",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "status: \"risk_hold\"",
+    "Builder Partner reversal ledger",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "voidReason: `stripe_refund:${refundId}`",
+    "Builder Partner reversal ledger",
+  );
+  assertIncludes(
+    httpBillingSource,
+    "event.type === \"refund.created\"",
+    "Stripe reversal webhook",
+  );
+  assertIncludes(
+    httpBillingSource,
+    "event.type === \"charge.refunded\"",
+    "Stripe reversal webhook",
+  );
+  assertIncludes(
+    httpBillingSource,
+    "event.type === \"charge.dispute.created\"",
+    "Stripe dispute webhook",
+  );
+  assertIncludes(
+    httpBillingSource,
+    "event.type === \"charge.dispute.closed\"",
+    "Stripe dispute webhook",
+  );
+  assertIncludes(
+    httpBillingSource,
+    "readStripeInvoiceEvidence",
+    "Stripe source evidence capture",
+  );
+  assertIncludes(
+    httpBillingSource,
+    "retrieveStripeInvoiceForEvidence",
+    "Stripe initial checkout evidence capture",
+  );
+}
+
 function main() {
   const schemaSource = readText(new URL("../convex/schema.ts", import.meta.url));
   const uiSource = readText(
@@ -540,6 +647,7 @@ function main() {
   provePricingFoundation(authSource, sharedWorkspaceCreditsSource);
   proveCommissionProducerContract(builderPartnersSource, communityCommerceSource, workspaceCreditsSource);
   proveRecurringInvoiceContract(httpBillingSource);
+  proveRefundDisputeContract(builderPartnersSource, httpBillingSource);
   console.log("PASS: builder partner program contract proof passed");
 }
 

@@ -196,6 +196,106 @@ function readStripeInvoiceSubscriptionId(invoice: Stripe.Invoice): string | null
   return null;
 }
 
+function readStripeObjectId(value: unknown): string | null {
+  if (typeof value === "string" && value.trim()) return value.trim();
+  if (value && typeof value === "object") {
+    const id = (value as { id?: unknown }).id;
+    if (typeof id === "string" && id.trim()) return id.trim();
+  }
+  return null;
+}
+
+function readStripeInvoiceEvidence(invoice: Stripe.Invoice | null | undefined): {
+  sourceProviderInvoiceId: string | null;
+  sourceProviderPaymentIntentId: string | null;
+  sourceProviderChargeId: string | null;
+} {
+  if (!invoice) {
+    return {
+      sourceProviderInvoiceId: null,
+      sourceProviderPaymentIntentId: null,
+      sourceProviderChargeId: null,
+    };
+  }
+  const latestCharge = readStripeObjectId((invoice as any).latest_charge);
+  const directCharge = readStripeObjectId((invoice as any).charge);
+  const directPaymentIntent = readStripeObjectId((invoice as any).payment_intent);
+  const firstInvoicePayment = (invoice as any)?.payments?.data?.[0]?.payment;
+  return {
+    sourceProviderInvoiceId: readStripeObjectId(invoice),
+    sourceProviderPaymentIntentId:
+      directPaymentIntent ||
+      readStripeObjectId(firstInvoicePayment?.payment_intent) ||
+      null,
+    sourceProviderChargeId:
+      latestCharge ||
+      directCharge ||
+      readStripeObjectId((invoice as any).payment_intent?.latest_charge) ||
+      readStripeObjectId(firstInvoicePayment?.charge) ||
+      null,
+  };
+}
+
+function readStripeSubscriptionLatestInvoice(subscription: Stripe.Subscription): Stripe.Invoice | null {
+  const latestInvoice = (subscription as any)?.latest_invoice;
+  if (latestInvoice && typeof latestInvoice === "object") return latestInvoice as Stripe.Invoice;
+  return null;
+}
+
+function readStripeChargeEvidence(charge: Stripe.Charge): {
+  sourceProviderChargeId: string | null;
+  sourceProviderPaymentIntentId: string | null;
+  sourceProviderInvoiceId: string | null;
+} {
+  return {
+    sourceProviderChargeId: readStripeObjectId(charge),
+    sourceProviderPaymentIntentId: readStripeObjectId((charge as any).payment_intent),
+    sourceProviderInvoiceId: readStripeObjectId((charge as any).invoice),
+  };
+}
+
+function readStripeRefundEvidence(refund: Stripe.Refund): {
+  sourceProviderRefundId: string | null;
+  sourceProviderChargeId: string | null;
+  sourceProviderPaymentIntentId: string | null;
+} {
+  return {
+    sourceProviderRefundId: readStripeObjectId(refund),
+    sourceProviderChargeId: readStripeObjectId((refund as any).charge),
+    sourceProviderPaymentIntentId: readStripeObjectId((refund as any).payment_intent),
+  };
+}
+
+function readStripeDisputeEvidence(dispute: Stripe.Dispute): {
+  sourceProviderDisputeId: string | null;
+  sourceProviderChargeId: string | null;
+  sourceProviderPaymentIntentId: string | null;
+} {
+  return {
+    sourceProviderDisputeId: readStripeObjectId(dispute),
+    sourceProviderChargeId: readStripeObjectId((dispute as any).charge),
+    sourceProviderPaymentIntentId: readStripeObjectId((dispute as any).payment_intent),
+  };
+}
+
+async function retrieveStripeChargeForEvidence(chargeId: string | null): Promise<Stripe.Charge | null> {
+  if (!chargeId) return null;
+  try {
+    return await getStripeClient().charges.retrieve(chargeId);
+  } catch {
+    return null;
+  }
+}
+
+async function retrieveStripeInvoiceForEvidence(invoiceId: string | null): Promise<Stripe.Invoice | null> {
+  if (!invoiceId) return null;
+  try {
+    return await getStripeClient().invoices.retrieve(invoiceId);
+  } catch {
+    return null;
+  }
+}
+
 function toStripeTimestampMs(value: unknown): number | null {
   if (typeof value !== "number" || !Number.isFinite(value) || value <= 0)
     return null;
@@ -537,6 +637,14 @@ export function registerRuntimeBillingRoutes(
             const providerPriceId = subscription.items.data[0]?.price?.id ?? null;
             const { cycleStartedAt, cycleEndsAt } =
               readStripeSubscriptionCycle(subscription);
+            const latestInvoice =
+              readStripeSubscriptionLatestInvoice(subscription) ??
+              await retrieveStripeInvoiceForEvidence(
+                readStripeObjectId((subscription as any)?.latest_invoice),
+              );
+            const initialInvoiceEvidence = readStripeInvoiceEvidence(
+              latestInvoice,
+            );
             await (ctx as any).runMutation(
               internal.communityCommerce
                 .syncPendingCommunityCheckoutSubscriptionInternal as any,
@@ -550,6 +658,12 @@ export function registerRuntimeBillingRoutes(
                       ? session.customer
                       : null,
                 providerSubscriptionId: subscription.id,
+                sourceProviderInvoiceId:
+                  initialInvoiceEvidence.sourceProviderInvoiceId ?? undefined,
+                sourceProviderPaymentIntentId:
+                  initialInvoiceEvidence.sourceProviderPaymentIntentId ?? undefined,
+                sourceProviderChargeId:
+                  initialInvoiceEvidence.sourceProviderChargeId ?? undefined,
                 providerPriceId,
                 subscriptionStatus: normalizeStripeCommunitySubscriptionStatus({
                   subscriptionStatus: subscription.status,
@@ -613,14 +727,238 @@ export function registerRuntimeBillingRoutes(
               reason: "invoice_paid_amount_missing",
             }, "ignored");
           }
+          const invoiceEvidence = readStripeInvoiceEvidence(invoice);
           const result = await (ctx as any).runMutation(
             internal.builderPartners
               .recordCommunitySubscriptionInvoicePartnerCommissionInternal as any,
             {
               providerSubscriptionId,
               sourceProviderInvoiceId: invoice.id,
+              sourceProviderPaymentIntentId:
+                invoiceEvidence.sourceProviderPaymentIntentId ?? undefined,
+              sourceProviderChargeId:
+                invoiceEvidence.sourceProviderChargeId ?? undefined,
               amountBaseUnits,
               currency,
+              nowMs:
+                Number(event.created ?? 0) > 0
+                  ? Number(event.created) * 1000
+                  : Date.now(),
+            },
+          );
+          return processedResponse({
+            ok: true,
+            received: true,
+            event: event.type,
+            result,
+          });
+        }
+
+        if (
+          event.type === "refund.created" ||
+          event.type === "refund.updated" ||
+          event.type === "refund.failed"
+        ) {
+          const refund = event.data.object as Stripe.Refund;
+          if (event.type === "refund.failed") {
+            return processedResponse({
+              ok: true,
+              ignored: true,
+              event: event.type,
+              reason: "refund_failed_no_reversal",
+            }, "ignored");
+          }
+          const refundEvidence = readStripeRefundEvidence(refund);
+          if (!refundEvidence.sourceProviderRefundId) {
+            return processedResponse({
+              ok: true,
+              ignored: true,
+              event: event.type,
+              reason: "refund_id_missing",
+            }, "ignored");
+          }
+          const charge = await retrieveStripeChargeForEvidence(
+            refundEvidence.sourceProviderChargeId,
+          );
+          const chargeEvidence = charge ? readStripeChargeEvidence(charge) : null;
+          const result = await (ctx as any).runMutation(
+            internal.builderPartners
+              .recordPartnerCommissionRefundAdjustmentInternal as any,
+            {
+              sourceProviderRefundId: refundEvidence.sourceProviderRefundId,
+              sourceProviderChargeId:
+                refundEvidence.sourceProviderChargeId ??
+                chargeEvidence?.sourceProviderChargeId ??
+                undefined,
+              sourceProviderPaymentIntentId:
+                refundEvidence.sourceProviderPaymentIntentId ??
+                chargeEvidence?.sourceProviderPaymentIntentId ??
+                undefined,
+              sourceProviderInvoiceId:
+                chargeEvidence?.sourceProviderInvoiceId ?? undefined,
+              refundAmountBaseUnits:
+                typeof refund.amount === "number" ? refund.amount : undefined,
+              chargeAmountBaseUnits:
+                typeof charge?.amount === "number" ? charge.amount : undefined,
+              currency: String(refund.currency ?? charge?.currency ?? "")
+                .trim()
+                .toLowerCase() || undefined,
+              nowMs:
+                Number(event.created ?? 0) > 0
+                  ? Number(event.created) * 1000
+                  : Date.now(),
+            },
+          );
+          return processedResponse({
+            ok: true,
+            received: true,
+            event: event.type,
+            result,
+          });
+        }
+
+        if (event.type === "charge.refunded") {
+          const charge = event.data.object as Stripe.Charge;
+          const chargeEvidence = readStripeChargeEvidence(charge);
+          const refunds = Array.isArray((charge as any)?.refunds?.data)
+            ? (charge as any).refunds.data as Stripe.Refund[]
+            : [];
+          const refundRows = refunds.length > 0
+            ? refunds
+            : [{
+                id: `charge_refunded:${charge.id}:${String((charge as any).amount_refunded ?? "")}`,
+                amount: (charge as any).amount_refunded,
+                currency: charge.currency,
+              } as Stripe.Refund];
+          const results = [];
+          for (const refund of refundRows) {
+            const refundEvidence = readStripeRefundEvidence(refund);
+            const result = await (ctx as any).runMutation(
+              internal.builderPartners
+                .recordPartnerCommissionRefundAdjustmentInternal as any,
+              {
+                sourceProviderRefundId:
+                  refundEvidence.sourceProviderRefundId ?? String(refund.id ?? ""),
+                sourceProviderChargeId:
+                  refundEvidence.sourceProviderChargeId ??
+                  chargeEvidence.sourceProviderChargeId ??
+                  undefined,
+                sourceProviderPaymentIntentId:
+                  refundEvidence.sourceProviderPaymentIntentId ??
+                  chargeEvidence.sourceProviderPaymentIntentId ??
+                  undefined,
+                sourceProviderInvoiceId:
+                  chargeEvidence.sourceProviderInvoiceId ?? undefined,
+                refundAmountBaseUnits:
+                  typeof refund.amount === "number" ? refund.amount : undefined,
+                chargeAmountBaseUnits:
+                  typeof charge.amount === "number" ? charge.amount : undefined,
+                currency: String(refund.currency ?? charge.currency ?? "")
+                  .trim()
+                  .toLowerCase() || undefined,
+                nowMs:
+                  Number(event.created ?? 0) > 0
+                    ? Number(event.created) * 1000
+                    : Date.now(),
+              },
+            );
+            results.push(result);
+          }
+          return processedResponse({
+            ok: true,
+            received: true,
+            event: event.type,
+            results,
+          });
+        }
+
+        if (
+          event.type === "charge.dispute.created" ||
+          event.type === "charge.dispute.closed" ||
+          event.type === "charge.dispute.funds_reinstated"
+        ) {
+          const dispute = event.data.object as Stripe.Dispute;
+          const disputeEvidence = readStripeDisputeEvidence(dispute);
+          if (!disputeEvidence.sourceProviderDisputeId) {
+            return processedResponse({
+              ok: true,
+              ignored: true,
+              event: event.type,
+              reason: "dispute_id_missing",
+            }, "ignored");
+          }
+          const charge = await retrieveStripeChargeForEvidence(
+            disputeEvidence.sourceProviderChargeId,
+          );
+          const chargeEvidence = charge ? readStripeChargeEvidence(charge) : null;
+          if (event.type === "charge.dispute.created") {
+            const result = await (ctx as any).runMutation(
+              internal.builderPartners
+                .recordPartnerCommissionDisputeOpenedInternal as any,
+              {
+                sourceProviderDisputeId: disputeEvidence.sourceProviderDisputeId,
+                sourceProviderChargeId:
+                  disputeEvidence.sourceProviderChargeId ??
+                  chargeEvidence?.sourceProviderChargeId ??
+                  undefined,
+                sourceProviderPaymentIntentId:
+                  disputeEvidence.sourceProviderPaymentIntentId ??
+                  chargeEvidence?.sourceProviderPaymentIntentId ??
+                  undefined,
+                sourceProviderInvoiceId:
+                  chargeEvidence?.sourceProviderInvoiceId ?? undefined,
+                disputeAmountBaseUnits:
+                  typeof dispute.amount === "number" ? dispute.amount : undefined,
+                chargeAmountBaseUnits:
+                  typeof charge?.amount === "number" ? charge.amount : undefined,
+                currency: String(dispute.currency ?? charge?.currency ?? "")
+                  .trim()
+                  .toLowerCase() || undefined,
+                nowMs:
+                  Number(event.created ?? 0) > 0
+                    ? Number(event.created) * 1000
+                    : Date.now(),
+              },
+            );
+            return processedResponse({
+              ok: true,
+              received: true,
+              event: event.type,
+              result,
+            });
+          }
+          const disputeStatus = String(dispute.status ?? "").trim().toLowerCase();
+          const outcome =
+            event.type === "charge.dispute.funds_reinstated"
+              ? "funds_reinstated"
+              : disputeStatus === "won"
+                ? "won"
+                : disputeStatus === "lost"
+                  ? "lost"
+                  : "unknown";
+          const result = await (ctx as any).runMutation(
+            internal.builderPartners
+              .recordPartnerCommissionDisputeClosedInternal as any,
+            {
+              sourceProviderDisputeId: disputeEvidence.sourceProviderDisputeId,
+              outcome,
+              sourceProviderChargeId:
+                disputeEvidence.sourceProviderChargeId ??
+                chargeEvidence?.sourceProviderChargeId ??
+                undefined,
+              sourceProviderPaymentIntentId:
+                disputeEvidence.sourceProviderPaymentIntentId ??
+                chargeEvidence?.sourceProviderPaymentIntentId ??
+                undefined,
+              sourceProviderInvoiceId:
+                chargeEvidence?.sourceProviderInvoiceId ?? undefined,
+              disputeAmountBaseUnits:
+                typeof dispute.amount === "number" ? dispute.amount : undefined,
+              chargeAmountBaseUnits:
+                typeof charge?.amount === "number" ? charge.amount : undefined,
+              currency: String(dispute.currency ?? charge?.currency ?? "")
+                .trim()
+                .toLowerCase() || undefined,
               nowMs:
                 Number(event.created ?? 0) > 0
                   ? Number(event.created) * 1000
