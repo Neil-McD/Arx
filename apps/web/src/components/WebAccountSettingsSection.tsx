@@ -92,22 +92,38 @@ type WebAccountSettingsSectionProps = {
   pendingPurchasesSuccess: string | null;
 };
 
-function formatDeleteAccountError(message: string): string {
-  if (message.includes("account_delete_owned_communities_blocked")) {
-    return "Delete or transfer owned communities before deleting your account.";
+const deleteAccountErrorMessages: Record<string, string> = {
+  account_delete_owned_communities_blocked: "Delete or transfer owned communities before deleting your account.",
+  account_delete_active_community_subscription_blocked: "Cancel active community memberships before deleting your account.",
+  account_delete_active_payout_account_blocked: "Resolve active payout setup before deleting your account.",
+  account_delete_mounted_apps_blocked: "Remove your apps from communities before deleting your account.",
+  account_delete_attached_skills_blocked: "Remove your skills from communities before deleting your account.",
+};
+
+function readDeleteAccountErrorCode(value: unknown): string | null {
+  if (value && typeof value === "object") {
+    const data = (value as { data?: unknown }).data;
+    if (data && typeof data === "object") {
+      const code = (data as { code?: unknown }).code;
+      if (typeof code === "string" && code in deleteAccountErrorMessages) return code;
+      const reason = (data as { reason?: unknown }).reason;
+      if (typeof reason === "string" && reason in deleteAccountErrorMessages) return reason;
+    }
+
+    const code = (value as { code?: unknown }).code;
+    if (typeof code === "string" && code in deleteAccountErrorMessages) return code;
   }
-  if (message.includes("account_delete_active_community_subscription_blocked")) {
-    return "Cancel active community memberships before deleting your account.";
+
+  const message = value instanceof Error ? value.message : String(value ?? "");
+  for (const code of Object.keys(deleteAccountErrorMessages)) {
+    if (message.includes(code)) return code;
   }
-  if (message.includes("account_delete_active_payout_account_blocked")) {
-    return "Resolve active payout setup before deleting your account.";
-  }
-  if (message.includes("account_delete_mounted_apps_blocked")) {
-    return "Remove your apps from communities before deleting your account.";
-  }
-  if (message.includes("account_delete_attached_skills_blocked")) {
-    return "Remove your skills from communities before deleting your account.";
-  }
+  return null;
+}
+
+function formatDeleteAccountError(error: unknown): string {
+  const code = readDeleteAccountErrorCode(error);
+  if (code) return deleteAccountErrorMessages[code];
   return "Account could not be deleted. Please try again.";
 }
 
@@ -191,8 +207,7 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
     try {
       await deleteAccount();
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error ?? "");
-      setDeleteAccountError(formatDeleteAccountError(message));
+      setDeleteAccountError(formatDeleteAccountError(error));
       setIsDeletingAccount(false);
     }
   };

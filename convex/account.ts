@@ -1,7 +1,47 @@
 import { mutation } from "./_generated/server";
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { ensureAuthenticatedActor } from "./authActor";
 import { recordCriticalAuditEventBestEffort } from "./criticalAudit";
+
+type AccountDeleteBlockerCode =
+  | "account_delete_owned_communities_blocked"
+  | "account_delete_active_community_subscription_blocked"
+  | "account_delete_active_payout_account_blocked"
+  | "account_delete_mounted_apps_blocked"
+  | "account_delete_attached_skills_blocked";
+
+const accountDeleteBlockerCodes = new Set<string>([
+  "account_delete_owned_communities_blocked",
+  "account_delete_active_community_subscription_blocked",
+  "account_delete_active_payout_account_blocked",
+  "account_delete_mounted_apps_blocked",
+  "account_delete_attached_skills_blocked",
+]);
+
+function throwAccountDeleteBlocker(code: AccountDeleteBlockerCode): never {
+  throw new ConvexError({ code, reason: code });
+}
+
+function readAccountDeleteBlockerReason(error: unknown): string {
+  const data =
+    error instanceof ConvexError
+      ? error.data
+      : typeof error === "object" && error !== null && "data" in error
+        ? (error as { data?: unknown }).data
+        : null;
+  if (typeof data === "object" && data !== null) {
+    const code = (data as { code?: unknown }).code;
+    if (typeof code === "string" && accountDeleteBlockerCodes.has(code)) return code;
+    const reason = (data as { reason?: unknown }).reason;
+    if (typeof reason === "string" && accountDeleteBlockerCodes.has(reason)) return reason;
+  }
+
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  for (const code of accountDeleteBlockerCodes) {
+    if (message.includes(code)) return code;
+  }
+  return message || "unknown";
+}
 
 async function deleteRowsByIndex(ctx: any, tableName: string, indexName: string, fieldName: string, value: any) {
   const rows = await ctx.db
@@ -28,7 +68,7 @@ async function assertAccountDeletionAllowed(ctx: any, userId: any) {
     .withIndex("by_owner", (q: any) => q.eq("ownerId", userId))
     .first();
   if (ownedCommunity) {
-    throw new Error("account_delete_owned_communities_blocked");
+    throwAccountDeleteBlocker("account_delete_owned_communities_blocked");
   }
 
   const communitySubscriptions = await ctx.db
@@ -36,7 +76,7 @@ async function assertAccountDeletionAllowed(ctx: any, userId: any) {
     .withIndex("by_user", (q: any) => q.eq("userId", userId))
     .collect();
   if (communitySubscriptions.some(isActiveCommunitySubscription)) {
-    throw new Error("account_delete_active_community_subscription_blocked");
+    throwAccountDeleteBlocker("account_delete_active_community_subscription_blocked");
   }
 
   const stripeConnectAccounts = await ctx.db
@@ -44,7 +84,7 @@ async function assertAccountDeletionAllowed(ctx: any, userId: any) {
     .withIndex("by_user", (q: any) => q.eq("userId", userId))
     .collect();
   if (stripeConnectAccounts.some(hasPayoutAccountState)) {
-    throw new Error("account_delete_active_payout_account_blocked");
+    throwAccountDeleteBlocker("account_delete_active_payout_account_blocked");
   }
 
   const developerApps = await ctx.db
@@ -57,14 +97,14 @@ async function assertAccountDeletionAllowed(ctx: any, userId: any) {
       .withIndex("by_app", (q: any) => q.eq("developerAppId", app._id))
       .first();
     if (communityMount) {
-      throw new Error("account_delete_mounted_apps_blocked");
+      throwAccountDeleteBlocker("account_delete_mounted_apps_blocked");
     }
     const otherUserMounts = await ctx.db
       .query("userPlatformAppMounts")
       .withIndex("by_app", (q: any) => q.eq("developerAppId", app._id))
       .collect();
     if (otherUserMounts.some((mount: any) => mount.userId !== userId)) {
-      throw new Error("account_delete_mounted_apps_blocked");
+      throwAccountDeleteBlocker("account_delete_mounted_apps_blocked");
     }
   }
 
@@ -78,14 +118,14 @@ async function assertAccountDeletionAllowed(ctx: any, userId: any) {
       .withIndex("by_skill", (q: any) => q.eq("skillPackageId", skill._id))
       .first();
     if (communityAttachment) {
-      throw new Error("account_delete_attached_skills_blocked");
+      throwAccountDeleteBlocker("account_delete_attached_skills_blocked");
     }
     const otherUserInstalls = await ctx.db
       .query("userPlatformSkillInstalls")
       .withIndex("by_skill", (q: any) => q.eq("skillPackageId", skill._id))
       .collect();
     if (otherUserInstalls.some((install: any) => install.userId !== userId)) {
-      throw new Error("account_delete_attached_skills_blocked");
+      throwAccountDeleteBlocker("account_delete_attached_skills_blocked");
     }
   }
 }
@@ -106,8 +146,9 @@ export const deleteOwnAccount = mutation({
     try {
       await assertAccountDeletionAllowed(ctx, userId);
     } catch (error) {
+      const blockerReason = readAccountDeleteBlockerReason(error);
       await recordCriticalAuditEventBestEffort(ctx, {
-        eventKey: `account_delete_blocked:${userId}:${error instanceof Error ? error.message : String(error)}:${nowMs}`,
+        eventKey: `account_delete_blocked:${userId}:${blockerReason}:${nowMs}`,
         eventType: "account_delete_blocked",
         severity: "warning",
         status: "blocked",
@@ -115,7 +156,7 @@ export const deleteOwnAccount = mutation({
         subjectUserId: userId,
         provider: "polynet",
         metadata: {
-          reason: error instanceof Error ? error.message : String(error),
+          reason: blockerReason,
         },
         createdAt: nowMs,
       });
