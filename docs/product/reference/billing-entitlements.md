@@ -29,9 +29,9 @@ The simple cash path is:
 
 This is the product value loop: the builder packages expertise into a community intelligence system, members pay for access to that system, and Polynet keeps access and payout state explicit.
 
-The current default platform fee for free-account community revenue is 10%. Legacy paid creator billing does not create or renew platform-plan access.
+The current default platform fee for free-account community revenue is 15%. Legacy paid creator billing does not create or renew platform-plan access.
 
-Paid-tool usage is priced through tool balance. Workspace tool usage targets 50% gross margin by charging roughly 2x estimated vendor compute cost, then settling actual usage and refunding unused reservations. Web research and voice input use simple alpha tariffs with centralized vendor-cost estimates, and should still write tool, vendor, Polynet price, raw cost estimate, and settlement evidence into the internal credit ledger.
+Paid-tool usage is priced through tool balance. Workspace tool usage targets 60% gross margin by charging roughly 2.5x estimated vendor compute cost, then settling actual usage and refunding unused reservations. Web research and voice input use simple alpha tariffs with centralized vendor-cost estimates, and should still write tool, vendor, Polynet price, raw cost estimate, and settlement evidence into the internal credit ledger.
 
 ## Payout Readiness
 

@@ -1,0 +1,82 @@
+export const BUILDER_PARTNER_PROGRAM_VERSION = "builder_partner_v1";
+export const BUILDER_PARTNER_PLATFORM_FEE_SHARE_BPS = 4000;
+export const BUILDER_PARTNER_TOOL_GROSS_MARGIN_SHARE_BPS = 2000;
+export const BUILDER_PARTNER_ATTRIBUTION_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
+export const BUILDER_PARTNER_COMMISSION_HOLD_MS = 30 * 24 * 60 * 60 * 1000;
+export const BUILDER_PARTNER_MIN_PAYOUT_USD = 50;
+
+export type BuilderPartnerStatus = "pending_review" | "active" | "paused" | "disabled";
+export type BuilderPartnerAttributionStatus = "active" | "bound" | "expired" | "voided";
+export type BuilderPartnerCommissionBasisType = "community_platform_fee" | "tool_gross_margin";
+export type BuilderPartnerCommissionStatus = "pending" | "locked" | "payable" | "paid" | "voided";
+
+function normalizeBps(value: number): number {
+  const normalized = Number(value);
+  if (!Number.isFinite(normalized)) return 0;
+  return Math.min(10000, Math.max(0, Math.round(normalized)));
+}
+
+export function roundBuilderPartnerMoney(value: number): number {
+  const normalized = Number(value);
+  if (!Number.isFinite(normalized)) return 0;
+  return Math.round(Math.max(0, normalized) * 10000) / 10000;
+}
+
+export function calculateBuilderPartnerCommunityRevenueCommission(params: {
+  communityRevenueUsd: number;
+  platformFeeBps: number;
+  partnerPlatformFeeShareBps?: number;
+}): {
+  platformFeeUsd: number;
+  commissionAmountUsd: number;
+  effectiveCommunityRevenueShareBps: number;
+} {
+  const platformFeeBps = normalizeBps(params.platformFeeBps);
+  const partnerPlatformFeeShareBps = normalizeBps(
+    params.partnerPlatformFeeShareBps ?? BUILDER_PARTNER_PLATFORM_FEE_SHARE_BPS,
+  );
+  const communityRevenueUsd = roundBuilderPartnerMoney(params.communityRevenueUsd);
+  const platformFeeUsd = roundBuilderPartnerMoney(
+    communityRevenueUsd * (platformFeeBps / 10000),
+  );
+  const commissionAmountUsd = roundBuilderPartnerMoney(
+    platformFeeUsd * (partnerPlatformFeeShareBps / 10000),
+  );
+  return {
+    platformFeeUsd,
+    commissionAmountUsd,
+    effectiveCommunityRevenueShareBps: Math.round(
+      platformFeeBps * (partnerPlatformFeeShareBps / 10000),
+    ),
+  };
+}
+
+export function calculateBuilderPartnerToolGrossMarginCommission(params: {
+  polynetPriceUsd: number;
+  rawVendorCostUsd: number;
+  partnerToolGrossMarginShareBps?: number;
+}): {
+  grossMarginUsd: number;
+  commissionAmountUsd: number;
+  grossMarginBps: number;
+} {
+  const polynetPriceUsd = roundBuilderPartnerMoney(params.polynetPriceUsd);
+  const rawVendorCostUsd = roundBuilderPartnerMoney(params.rawVendorCostUsd);
+  const partnerToolGrossMarginShareBps = normalizeBps(
+    params.partnerToolGrossMarginShareBps ?? BUILDER_PARTNER_TOOL_GROSS_MARGIN_SHARE_BPS,
+  );
+  const grossMarginUsd = roundBuilderPartnerMoney(
+    Math.max(0, polynetPriceUsd - rawVendorCostUsd),
+  );
+  const commissionAmountUsd = roundBuilderPartnerMoney(
+    grossMarginUsd * (partnerToolGrossMarginShareBps / 10000),
+  );
+  return {
+    grossMarginUsd,
+    commissionAmountUsd,
+    grossMarginBps:
+      polynetPriceUsd > 0
+        ? Math.round((grossMarginUsd / polynetPriceUsd) * 10000)
+        : 0,
+  };
+}

@@ -18,6 +18,7 @@ function sliceBetween(source: string, startNeedle: string, endNeedle: string): s
 
 async function proveWorkspaceCreditAccountingContract() {
   const schemaSource = await readRepoFile("convex/schema.ts");
+  const authSource = await readRepoFile("convex/auth.ts");
   const sharedCreditsSource = await readRepoFile("shared/workspaceCredits.ts");
   const creditsSource = await readRepoFile("convex/workspaceCredits.ts");
   const daytonaSessionSource = await readRepoFile("convex/daytonaWorkspaceSession.ts");
@@ -36,6 +37,8 @@ async function proveWorkspaceCreditAccountingContract() {
   const turnRunnerSource = await readRepoFile("shared/useWebTurnRunnerController.ts");
   const appSource = await readRepoFile("apps/web/src/App.tsx");
   const inferenceIssueModalSource = await readRepoFile("apps/web/src/components/WebInferenceIssueModal.tsx");
+  const billingEntitlementsDoc = await readRepoFile("docs/product/reference/billing-entitlements.md");
+  const authMoneyAccessDoc = await readRepoFile("docs/auth-money-access-matrix.md");
 
   assert.match(
     schemaSource,
@@ -110,8 +113,28 @@ async function proveWorkspaceCreditAccountingContract() {
   );
   assert.match(
     sharedCreditsSource,
-    /PAID_TOOL_TARGET_GROSS_MARGIN_BPS\s*=\s*5000/,
-    "expected paid tools to target 50% gross margin",
+    /PAID_TOOL_TARGET_GROSS_MARGIN_BPS\s*=\s*6000/,
+    "expected paid tools to target 60% gross margin",
+  );
+  assert.match(
+    authSource,
+    /platformFeeBps:\s*1500/,
+    "expected free-account paid community revenue to use a 15% platform fee",
+  );
+  assert.match(
+    billingEntitlementsDoc,
+    /default platform fee for free-account community revenue is 15%/,
+    "expected billing docs to describe the current 15% platform fee",
+  );
+  assert.match(
+    authMoneyAccessDoc,
+    /default 15% Polynet platform fee/,
+    "expected auth-money matrix to describe the current 15% platform fee",
+  );
+  assert.match(
+    billingEntitlementsDoc,
+    /targets 60% gross margin/,
+    "expected billing docs to describe the current 60% paid-tool margin target",
   );
   assert.match(
     sharedCreditsSource,

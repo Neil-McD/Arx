@@ -20,6 +20,7 @@ import type { UseWebBillingUiControllerResult } from "../controllers/useWebBilli
 import { WebAccountSettingsSection } from "./WebAccountSettingsSection";
 import { WebAgentSettingsSection } from "./WebAgentSettingsSection";
 import { WebAppearanceSettingsSection } from "./WebAppearanceSettingsSection";
+import { WebBuilderPartnerSettingsSection } from "./WebBuilderPartnerSettingsSection";
 import { WebIntegrationsSettingsSection } from "./WebIntegrationsSettingsSection";
 import { WebProfileSettingsSection } from "./WebProfileSettingsSection";
 
@@ -371,6 +372,7 @@ export function WebSettingsPanels(props: WebSettingsPanelsProps) {
     <>
       {settingsGroup === "profile" ? <WebProfileSettingsSection {...profileSectionProps} /> : null}
       {settingsGroup === "account" ? <WebAccountSettingsSection {...accountSectionProps} /> : null}
+      {settingsGroup === "partners" ? <WebBuilderPartnerSettingsSection {...accountSectionProps} /> : null}
       {settingsGroup === "agent" ? <WebAgentSettingsSection {...agentSectionProps} /> : null}
       {settingsGroup === "integrations" ? (
         <WebIntegrationsSettingsSection {...integrationsSectionProps} />

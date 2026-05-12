@@ -308,6 +308,11 @@ function parseSettingsPage(value: string | null | undefined): SettingsPage {
       return "profile";
     case "account":
       return "account";
+    case "partner":
+    case "partners":
+    case "affiliate":
+    case "affiliates":
+      return "partners";
     case "integrations":
       return "integrations";
     case "appearance":

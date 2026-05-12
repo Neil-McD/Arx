@@ -100,6 +100,94 @@ export default defineSchema({
     .index("by_user", ["userId"])
     .index("by_stripeAccountId", ["stripeAccountId"]),
 
+  builderPartners: defineTable({
+    userId: v.id("users"),
+    sourceCommunityId: v.optional(v.id("communities")),
+    code: v.string(),
+    status: v.union(
+      v.literal("pending_review"),
+      v.literal("active"),
+      v.literal("paused"),
+      v.literal("disabled"),
+    ),
+    acceptedTermsAt: v.optional(v.number()),
+    disabledReason: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_code", ["code"])
+    .index("by_sourceCommunity", ["sourceCommunityId"])
+    .index("by_status_createdAt", ["status", "createdAt"]),
+
+  partnerAttributions: defineTable({
+    attributionKey: v.string(),
+    partnerId: v.id("builderPartners"),
+    partnerUserId: v.id("users"),
+    sourceCommunityId: v.optional(v.id("communities")),
+    referralCode: v.string(),
+    anonymousVisitorKeyHash: v.optional(v.string()),
+    referredUserId: v.optional(v.id("users")),
+    firstTouchUrl: v.optional(v.string()),
+    lastTouchUrl: v.optional(v.string()),
+    status: v.union(
+      v.literal("active"),
+      v.literal("bound"),
+      v.literal("expired"),
+      v.literal("voided"),
+    ),
+    voidReason: v.optional(v.string()),
+    firstTouchAt: v.number(),
+    lastTouchAt: v.number(),
+    expiresAt: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_attributionKey", ["attributionKey"])
+    .index("by_referralCode_status", ["referralCode", "status"])
+    .index("by_partner_status", ["partnerId", "status"])
+    .index("by_referredUser", ["referredUserId"])
+    .index("by_visitor_hash", ["anonymousVisitorKeyHash"]),
+
+  partnerCommissionLedger: defineTable({
+    commissionKey: v.string(),
+    partnerId: v.id("builderPartners"),
+    partnerUserId: v.id("users"),
+    attributionId: v.optional(v.id("partnerAttributions")),
+    referredUserId: v.optional(v.id("users")),
+    referredCommunityId: v.optional(v.id("communities")),
+    basisType: v.union(
+      v.literal("community_platform_fee"),
+      v.literal("tool_gross_margin"),
+    ),
+    basisAmountUsd: v.number(),
+    commissionRateBps: v.number(),
+    commissionAmountUsd: v.number(),
+    currency: v.string(),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("locked"),
+      v.literal("payable"),
+      v.literal("paid"),
+      v.literal("voided"),
+    ),
+    sourceCheckoutSessionId: v.optional(v.string()),
+    sourceProviderSubscriptionId: v.optional(v.string()),
+    sourceCreditLedgerEntryId: v.optional(v.id("creditLedgerEntries")),
+    holdUntil: v.optional(v.number()),
+    payableAt: v.optional(v.number()),
+    paidAt: v.optional(v.number()),
+    voidedAt: v.optional(v.number()),
+    voidReason: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_commissionKey", ["commissionKey"])
+    .index("by_partner_status", ["partnerId", "status"])
+    .index("by_status_holdUntil", ["status", "holdUntil"])
+    .index("by_checkout_session", ["sourceCheckoutSessionId"])
+    .index("by_credit_ledger_entry", ["sourceCreditLedgerEntryId"]),
+
   workspaceCreditBalances: defineTable({
     userId: v.id("users"),
     includedCreditsBalance: v.number(),

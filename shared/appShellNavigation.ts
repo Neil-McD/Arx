@@ -1,6 +1,7 @@
 export type SettingsPage =
   | "profile"
   | "account"
+  | "partners"
   | "agent"
   | "integrations"
   | "appearance";
@@ -8,6 +9,7 @@ export type SettingsPage =
 export type SettingsGroup =
   | "profile"
   | "account"
+  | "partners"
   | "agent"
   | "integrations"
   | "appearance";
@@ -93,6 +95,7 @@ export function parseDiscoverTab(value: string | null | undefined): DiscoverTab 
 export function settingsGroupForPage(page: SettingsPage): SettingsGroup {
   if (page === "profile") return "profile";
   if (page === "account") return "account";
+  if (page === "partners") return "partners";
   if (page === "integrations") return "integrations";
   if (page === "appearance") return "appearance";
   return "agent";
@@ -104,6 +107,8 @@ export function settingsGroupLabel(group: SettingsGroup): string {
       return "Profile";
     case "account":
       return "Account";
+    case "partners":
+      return "Partners";
     case "agent":
       return "Agent";
     case "integrations":

@@ -30,7 +30,7 @@ function accountTierMeta(tier: CanonicalTier): AccountTierMeta {
   }
   return {
     maxCommunities: 1,
-    platformFeeBps: 1000,
+    platformFeeBps: 1500,
     hasPayouts: true,
   };
 }

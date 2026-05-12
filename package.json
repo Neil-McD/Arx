@@ -40,6 +40,7 @@
     "check:operator-dashboard-gate-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/operator_dashboard_gate_proof.ts",
     "check:ui-stability-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/ui_stability_contract_proof.ts",
     "check:no-builder-plan-infra": "bash scripts/no_builder_plan_infra_guard.sh",
+    "check:builder-partner-program-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/builder_partner_program_contract_proof.ts",
     "check:purchase-token-hygiene-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/purchase_token_hygiene_proof.ts",
     "check:frontend-privacy-hygiene-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/frontend_privacy_hygiene_proof.ts",
     "check:community-admin-contract-guard": "bash scripts/community_admin_contract_guard.sh",
