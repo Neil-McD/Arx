@@ -58,8 +58,81 @@ function isActiveCommunitySubscription(row: any): boolean {
   return row?.status === "active" || row?.status === "past_due" || row?.status === "cancel_at_period_end";
 }
 
-function hasPayoutAccountState(row: any): boolean {
-  return Boolean(row);
+function hasBlockingPayoutAccountState(row: any): boolean {
+  if (!row) return false;
+  return (
+    row.status === "ready" ||
+    row.detailsSubmitted === true ||
+    row.chargesEnabled === true ||
+    row.payoutsEnabled === true ||
+    Number.isFinite(row.onboardingCompleteAt)
+  );
+}
+
+async function listLiveCommunityAppMountRowsForApp(ctx: any, developerAppId: any) {
+  const mounts = await ctx.db
+    .query("communityAppMounts")
+    .withIndex("by_app", (q: any) => q.eq("developerAppId", developerAppId))
+    .collect();
+  const liveMounts: any[] = [];
+  for (const mount of mounts) {
+    const community = await ctx.db.get(mount.communityId);
+    if (community) liveMounts.push(mount);
+  }
+  return liveMounts;
+}
+
+async function deleteOrphanCommunityAppMountRowsForApp(ctx: any, developerAppId: any) {
+  const mounts = await ctx.db
+    .query("communityAppMounts")
+    .withIndex("by_app", (q: any) => q.eq("developerAppId", developerAppId))
+    .collect();
+  const deleted = {
+    communityAppMounts: 0,
+    userPlatformAppMountSources: 0,
+  };
+  for (const mount of mounts) {
+    const community = await ctx.db.get(mount.communityId);
+    if (community) continue;
+    deleted.userPlatformAppMountSources += await deleteRowsByIndex(
+      ctx,
+      "userPlatformAppMountSources",
+      "by_community_mount",
+      "communityAppMountId",
+      mount._id,
+    );
+    await ctx.db.delete(mount._id);
+    deleted.communityAppMounts += 1;
+  }
+  return deleted;
+}
+
+async function listLiveCommunitySkillAttachmentRowsForSkill(ctx: any, skillPackageId: any) {
+  const attachments = await ctx.db
+    .query("communitySkillAttachments")
+    .withIndex("by_skill", (q: any) => q.eq("skillPackageId", skillPackageId))
+    .collect();
+  const liveAttachments: any[] = [];
+  for (const attachment of attachments) {
+    const community = await ctx.db.get(attachment.communityId);
+    if (community) liveAttachments.push(attachment);
+  }
+  return liveAttachments;
+}
+
+async function deleteOrphanCommunitySkillAttachmentRowsForSkill(ctx: any, skillPackageId: any) {
+  const attachments = await ctx.db
+    .query("communitySkillAttachments")
+    .withIndex("by_skill", (q: any) => q.eq("skillPackageId", skillPackageId))
+    .collect();
+  let deleted = 0;
+  for (const attachment of attachments) {
+    const community = await ctx.db.get(attachment.communityId);
+    if (community) continue;
+    await ctx.db.delete(attachment._id);
+    deleted += 1;
+  }
+  return deleted;
 }
 
 async function assertAccountDeletionAllowed(ctx: any, userId: any) {
@@ -83,7 +156,7 @@ async function assertAccountDeletionAllowed(ctx: any, userId: any) {
     .query("userStripeConnectAccounts")
     .withIndex("by_user", (q: any) => q.eq("userId", userId))
     .collect();
-  if (stripeConnectAccounts.some(hasPayoutAccountState)) {
+  if (stripeConnectAccounts.some(hasBlockingPayoutAccountState)) {
     throwAccountDeleteBlocker("account_delete_active_payout_account_blocked");
   }
 
@@ -92,11 +165,8 @@ async function assertAccountDeletionAllowed(ctx: any, userId: any) {
     .withIndex("by_owner", (q: any) => q.eq("ownerUserId", userId))
     .collect();
   for (const app of developerApps) {
-    const communityMount = await ctx.db
-      .query("communityAppMounts")
-      .withIndex("by_app", (q: any) => q.eq("developerAppId", app._id))
-      .first();
-    if (communityMount) {
+    const liveCommunityMounts = await listLiveCommunityAppMountRowsForApp(ctx, app._id);
+    if (liveCommunityMounts.length > 0) {
       throwAccountDeleteBlocker("account_delete_mounted_apps_blocked");
     }
     const otherUserMounts = await ctx.db
@@ -113,11 +183,8 @@ async function assertAccountDeletionAllowed(ctx: any, userId: any) {
     .withIndex("by_owner", (q: any) => q.eq("ownerUserId", userId))
     .collect();
   for (const skill of skillPackages) {
-    const communityAttachment = await ctx.db
-      .query("communitySkillAttachments")
-      .withIndex("by_skill", (q: any) => q.eq("skillPackageId", skill._id))
-      .first();
-    if (communityAttachment) {
+    const liveCommunityAttachments = await listLiveCommunitySkillAttachmentRowsForSkill(ctx, skill._id);
+    if (liveCommunityAttachments.length > 0) {
       throwAccountDeleteBlocker("account_delete_attached_skills_blocked");
     }
     const otherUserInstalls = await ctx.db
@@ -194,6 +261,7 @@ export const deleteOwnAccount = mutation({
     await record("communityMemberSettings", await deleteRowsByIndex(ctx, "communityMemberSettings", "by_user", "userId", userId));
     await record("communityResources", await deleteRowsByIndex(ctx, "communityResources", "by_createdBy", "createdByUserId", userId));
     await record("communityEvents", await deleteRowsByIndex(ctx, "communityEvents", "by_createdBy", "createdByUserId", userId));
+    await record("userPlatformAppMountSources", await deleteRowsByIndex(ctx, "userPlatformAppMountSources", "by_user_mount", "userId", userId));
     await record("userPlatformAppMounts", await deleteRowsByIndex(ctx, "userPlatformAppMounts", "by_user", "userId", userId));
     await record("userPlatformSkillInstalls", await deleteRowsByIndex(ctx, "userPlatformSkillInstalls", "by_user", "userId", userId));
     await record("communityAiFeedReactions", await deleteRowsByIndex(ctx, "communityAiFeedReactions", "by_actorUser", "actorUserId", userId));
@@ -224,8 +292,11 @@ export const deleteOwnAccount = mutation({
       .withIndex("by_owner", (q) => q.eq("ownerUserId", userId))
       .collect();
     for (const app of developerApps) {
+      const staleCommunityMountDeletes = await deleteOrphanCommunityAppMountRowsForApp(ctx, app._id);
       await record("appConnections", await deleteRowsByIndex(ctx, "appConnections", "by_app", "developerAppId", app._id));
       await record("appToolSnapshots", await deleteRowsByIndex(ctx, "appToolSnapshots", "by_app", "developerAppId", app._id));
+      await record("userPlatformAppMountSources", staleCommunityMountDeletes.userPlatformAppMountSources);
+      await record("communityAppMounts", staleCommunityMountDeletes.communityAppMounts);
       await record("developerApps", 1);
       await ctx.db.delete(app._id);
     }
@@ -236,6 +307,7 @@ export const deleteOwnAccount = mutation({
       .collect();
     for (const skill of skillPackages) {
       await record("skillPackageRevisions", await deleteRowsByIndex(ctx, "skillPackageRevisions", "by_skill", "skillPackageId", skill._id));
+      await record("communitySkillAttachments", await deleteOrphanCommunitySkillAttachmentRowsForSkill(ctx, skill._id));
       await record("skillPackages", 1);
       await ctx.db.delete(skill._id);
     }
