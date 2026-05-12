@@ -149,6 +149,11 @@ function proveUiContract(uiSource: string) {
   );
   assertIncludes(
     uiSource,
+    "BUILDER_PARTNER_MIN_PAYOUT_USD",
+    "partner settings UI",
+  );
+  assertIncludes(
+    uiSource,
     "CheckCircle2",
     "partner settings UI",
   );
@@ -174,6 +179,11 @@ function proveUiContract(uiSource: string) {
   );
   assertIncludes(uiSource, "Copy link", "partner settings UI");
   assertIncludes(uiSource, "Referred builders", "partner settings UI");
+  assertIncludes(uiSource, "Partner payouts", "partner settings UI");
+  assertIncludes(uiSource, "Ready to settle", "partner settings UI");
+  assertIncludes(uiSource, "Pending hold", "partner settings UI");
+  assertIncludes(uiSource, "Minimum payout", "partner settings UI");
+  assertIncludes(uiSource, "Manual review before any transfer.", "partner settings UI");
   assertIncludes(uiSource, "Appears after referred revenue is processed.", "partner settings UI");
   assertIncludes(uiSource, "Complete the requirements to unlock your partner link and dashboard.", "partner settings UI");
   assert.doesNotMatch(

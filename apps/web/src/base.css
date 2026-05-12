@@ -15507,6 +15507,83 @@ button.message-citation-chip:hover {
   line-height: 1.45;
 }
 
+.builder-partner-payouts {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--border-muted);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-card-alt) 76%, transparent);
+}
+
+.builder-partner-payouts-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+}
+
+.builder-partner-payouts-header > div:first-child,
+.builder-partner-payouts-ready,
+.builder-partner-payout-card {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+}
+
+.builder-partner-payouts-header span,
+.builder-partner-payout-card span {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.builder-partner-payouts-header strong {
+  color: var(--text-primary);
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.builder-partner-payouts-ready {
+  justify-items: end;
+  padding: 10px 12px;
+  border: 1px solid var(--border-muted);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-card) 78%, transparent);
+}
+
+.builder-partner-payouts-ready strong {
+  font-size: 18px;
+  line-height: 1.1;
+}
+
+.builder-partner-payout-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.builder-partner-payout-card {
+  padding: 12px;
+  border: 1px solid var(--border-muted);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-card) 70%, transparent);
+}
+
+.builder-partner-payout-card strong {
+  color: var(--text-primary);
+  font-size: 17px;
+  line-height: 1.15;
+}
+
+.builder-partner-payout-card small {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
 .integrations-header {
   display: flex;
   align-items: center;
@@ -21541,13 +21618,19 @@ button.message-citation-chip:hover {
 
 .app-root.mobile-settings-shell .builder-partner-status-stack,
 .app-root.mobile-settings-shell .builder-partner-metrics,
-.app-root.mobile-settings-shell .builder-partner-dashboard-grid {
+.app-root.mobile-settings-shell .builder-partner-dashboard-grid,
+.app-root.mobile-settings-shell .builder-partner-payout-grid {
   grid-template-columns: minmax(0, 1fr);
 }
 
 .app-root.mobile-settings-shell .builder-partner-requirement,
-.app-root.mobile-settings-shell .builder-partner-link-card {
+.app-root.mobile-settings-shell .builder-partner-link-card,
+.app-root.mobile-settings-shell .builder-partner-payouts-header {
   grid-template-columns: minmax(0, 1fr);
+}
+
+.app-root.mobile-settings-shell .builder-partner-payouts-ready {
+  justify-items: start;
 }
 
 .app-root.mobile-settings-shell .builder-partner-requirement-action {

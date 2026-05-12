@@ -18,6 +18,7 @@ import type {
 } from "../../../../shared/builderPartnerProgramGateway";
 import {
   BUILDER_PARTNER_COMMUNITY_PLATFORM_FEE_BPS,
+  BUILDER_PARTNER_MIN_PAYOUT_USD,
   BUILDER_PARTNER_PLATFORM_FEE_SHARE_BPS,
   BUILDER_PARTNER_TOOL_GROSS_MARGIN_SHARE_BPS,
   calculateBuilderPartnerCommunityRevenueCommission,
@@ -141,6 +142,26 @@ export function WebBuilderPartnerSettingsSection(props: WebBuilderPartnerSetting
   const ownCommunityRequirement = program?.requirements.find((item) => item.key === "own_community");
   const canAcceptTerms = ownCommunityRequirement?.met === true;
   const payoutReady = program?.payout.ready === true;
+  const commissionSummary = program?.commissionSummary ?? {
+    pendingUsd: 0,
+    payableUsd: 0,
+    paidUsd: 0,
+    totalUsd: 0,
+    pendingCount: 0,
+    payableCount: 0,
+    paidCount: 0,
+  };
+  const payoutReadyUsd = commissionSummary.payableUsd;
+  const payoutPendingUsd = commissionSummary.pendingUsd;
+  const payoutPaidUsd = commissionSummary.paidUsd;
+  const payoutMinimumRemainingUsd = Math.max(0, BUILDER_PARTNER_MIN_PAYOUT_USD - payoutReadyUsd);
+  const payoutStatusCopy = !payoutReady
+    ? "Connect Stripe before partner payouts can be settled."
+    : payoutReadyUsd >= BUILDER_PARTNER_MIN_PAYOUT_USD
+      ? "Ready for manual settlement review."
+      : payoutReadyUsd > 0
+        ? `${formatUsd(payoutMinimumRemainingUsd)} until the minimum payout threshold.`
+        : "No payable partner balance yet.";
   const eligibilityLabel =
     !props.session
       ? "Sign in required"
@@ -309,8 +330,43 @@ export function WebBuilderPartnerSettingsSection(props: WebBuilderPartnerSetting
                 <div className="builder-partner-dashboard-card">
                   <Wallet />
                   <span>Commissions</span>
-                  <strong>{formatUsd(program.commissionSummary.totalUsd)}</strong>
+                  <strong>{formatUsd(commissionSummary.totalUsd)}</strong>
                   <small>Appears after referred revenue is processed.</small>
+                </div>
+              </div>
+
+              <div className="builder-partner-payouts" aria-label="Builder Partner payouts">
+                <div className="builder-partner-payouts-header">
+                  <div>
+                    <span>Partner payouts</span>
+                    <strong>{payoutStatusCopy}</strong>
+                  </div>
+                  <div className="builder-partner-payouts-ready">
+                    <span>Ready</span>
+                    <strong>{formatUsd(payoutReadyUsd)}</strong>
+                  </div>
+                </div>
+                <div className="builder-partner-payout-grid">
+                  <div className="builder-partner-payout-card">
+                    <span>Ready to settle</span>
+                    <strong>{formatUsd(payoutReadyUsd)}</strong>
+                    <small>{commissionSummary.payableCount} payable entries.</small>
+                  </div>
+                  <div className="builder-partner-payout-card">
+                    <span>Pending hold</span>
+                    <strong>{formatUsd(payoutPendingUsd)}</strong>
+                    <small>{commissionSummary.pendingCount} locked or risk-held entries.</small>
+                  </div>
+                  <div className="builder-partner-payout-card">
+                    <span>Paid</span>
+                    <strong>{formatUsd(payoutPaidUsd)}</strong>
+                    <small>{commissionSummary.paidCount} settled entries.</small>
+                  </div>
+                  <div className="builder-partner-payout-card">
+                    <span>Minimum payout</span>
+                    <strong>{formatUsd(BUILDER_PARTNER_MIN_PAYOUT_USD)}</strong>
+                    <small>Manual review before any transfer.</small>
+                  </div>
                 </div>
               </div>
             </div>
