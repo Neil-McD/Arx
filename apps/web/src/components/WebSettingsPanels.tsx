@@ -62,6 +62,12 @@ export type WebSettingsPanelsProps = {
       email?: string | null;
       updated_at?: string | null;
     };
+    isLoadingOpenAiConnection: boolean;
+    openAiConnection: {
+      connected: boolean;
+      key_last_four?: string | null;
+      updated_at?: string | null;
+    };
     hasPendingChatgptAuth: boolean;
     formatRelativeTime: (value: string) => string;
     communities: OwnedCommunity[];
@@ -89,13 +95,6 @@ export type WebSettingsPanelsProps = {
   };
   agent: {
     session: SessionLike;
-    isLoadingOpenAiConnection: boolean;
-    openAiConnection: {
-      connected: boolean;
-      key_last_four?: string | null;
-      updated_at?: string | null;
-    };
-    providerConnectionUi: UseWebProviderConnectionUiControllerResult;
     exportError: string | null;
     exportThreadsCsv: () => Promise<void> | void;
     exportMessagesCsv: () => Promise<void> | void;
@@ -260,6 +259,15 @@ export function WebSettingsPanels(props: WebSettingsPanelsProps) {
     chatgptDeviceUserCode: account.providerConnectionUi.chatgptDeviceUserCode,
     chatgptConnectionError: account.providerConnectionUi.chatgptConnectionError,
     chatgptConnectionSuccess: account.providerConnectionUi.chatgptConnectionSuccess,
+    isLoadingOpenAiConnection: account.isLoadingOpenAiConnection,
+    openAiConnection: account.openAiConnection,
+    openAiApiKeyDraft: account.providerConnectionUi.openAiApiKeyDraft,
+    setOpenAiApiKeyDraft: account.providerConnectionUi.setOpenAiApiKeyDraft,
+    isSavingOpenAiConnection: account.providerConnectionUi.isSavingOpenAiConnection,
+    openAiConnectionError: account.providerConnectionUi.openAiConnectionError,
+    openAiConnectionSuccess: account.providerConnectionUi.openAiConnectionSuccess,
+    handleConnectOpenAi: account.providerConnectionUi.handleConnectOpenAi,
+    handleDisconnectOpenAi: account.providerConnectionUi.handleDisconnectOpenAi,
     formatRelativeTime: account.formatRelativeTime,
     accountCommerceStatus: account.billingUi.accountCommerceStatus,
     communities: account.communities,
@@ -295,15 +303,6 @@ export function WebSettingsPanels(props: WebSettingsPanelsProps) {
 
   const agentSectionProps = {
     session: agent.session,
-    isLoadingOpenAiConnection: agent.isLoadingOpenAiConnection,
-    openAiConnection: agent.openAiConnection,
-    openAiApiKeyDraft: agent.providerConnectionUi.openAiApiKeyDraft,
-    setOpenAiApiKeyDraft: agent.providerConnectionUi.setOpenAiApiKeyDraft,
-    isSavingOpenAiConnection: agent.providerConnectionUi.isSavingOpenAiConnection,
-    openAiConnectionError: agent.providerConnectionUi.openAiConnectionError,
-    openAiConnectionSuccess: agent.providerConnectionUi.openAiConnectionSuccess,
-    handleConnectOpenAi: agent.providerConnectionUi.handleConnectOpenAi,
-    handleDisconnectOpenAi: agent.providerConnectionUi.handleDisconnectOpenAi,
     exportError: agent.exportError,
     exportThreadsCsv: agent.exportThreadsCsv,
     exportMessagesCsv: agent.exportMessagesCsv,

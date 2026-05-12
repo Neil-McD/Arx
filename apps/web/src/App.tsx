@@ -4745,8 +4745,8 @@ export default function App() {
         }
         if (payload.provider === "openai") {
           setActiveView("settings");
-          setSettingsPage("agent");
-          showAppToastMessage("Paste your OpenAI API key in Agent settings.");
+          setSettingsPage("account");
+          showAppToastMessage("Paste your OpenAI API key in Account settings.");
           return;
         }
         showAppToastMessage("Provider connection is not available.");
@@ -7133,6 +7133,8 @@ export default function App() {
       deleteAccount: deleteOwnAccountFromSettings,
       isLoadingChatgptConnection,
       chatgptConnection,
+      isLoadingOpenAiConnection: isLoadingChatgptConnection,
+      openAiConnection,
       hasPendingChatgptAuth,
       formatRelativeTime,
       communities,
@@ -7187,9 +7189,6 @@ export default function App() {
     },
     agent: {
       session: session,
-      isLoadingOpenAiConnection: isLoadingChatgptConnection,
-      openAiConnection,
-      providerConnectionUi,
       exportError,
       exportThreadsCsv,
       exportMessagesCsv,

@@ -199,7 +199,7 @@ export function WebInferenceIssueModal(props: WebInferenceIssueModalProps) {
                 {inferenceIssueModal.reason === "workspace_credits"
                   ? "Manage in Agent Settings"
                   : inferenceIssueModal.reason === "provider_connection_required"
-                    ? "Open provider settings"
+                    ? "Open Account Settings"
                   : "Open account settings"}
               </button>
             )}

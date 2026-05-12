@@ -26,6 +26,12 @@ type ChatgptConnection = {
   updated_at?: string | null;
 };
 
+type OpenAiConnection = {
+  connected: boolean;
+  key_last_four?: string | null;
+  updated_at?: string | null;
+};
+
 type OwnedCommunity = {
   id: string;
   slug: string;
@@ -52,6 +58,15 @@ type WebAccountSettingsSectionProps = {
   chatgptDeviceUserCode: string | null;
   chatgptConnectionError: string | null;
   chatgptConnectionSuccess: string | null;
+  isLoadingOpenAiConnection: boolean;
+  openAiConnection: OpenAiConnection;
+  openAiApiKeyDraft: string;
+  setOpenAiApiKeyDraft: (value: string) => void;
+  isSavingOpenAiConnection: boolean;
+  openAiConnectionError: string | null;
+  openAiConnectionSuccess: string | null;
+  handleConnectOpenAi: () => Promise<void> | void;
+  handleDisconnectOpenAi: () => Promise<void> | void;
   formatRelativeTime: (value: string) => string;
   accountCommerceStatus: AccountCommerceStatus | null;
   communities: OwnedCommunity[];
@@ -118,6 +133,15 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
     chatgptDeviceUserCode,
     chatgptConnectionError,
     chatgptConnectionSuccess,
+    isLoadingOpenAiConnection,
+    openAiConnection,
+    openAiApiKeyDraft,
+    setOpenAiApiKeyDraft,
+    isSavingOpenAiConnection,
+    openAiConnectionError,
+    openAiConnectionSuccess,
+    handleConnectOpenAi,
+    handleDisconnectOpenAi,
     formatRelativeTime,
     accountCommerceStatus,
     communities,
@@ -221,62 +245,149 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
       <div className="settings-section">
         <div className="settings-section-title">
           <svg viewBox="0 0 24 24"><path d="M5 12h14" /><path d="M12 5v14" /><circle cx="12" cy="12" r="9" /></svg>
-          ChatGPT connection
+          Inference provider
         </div>
         <div className="settings-section-desc">
-          Connect ChatGPT for personal inference. Tool balance unlocks premium tools like workspace tools, web research, and voice input.
+          Personal agent runs need one provider. Connect ChatGPT or add an OpenAI API key; you do not need both.
         </div>
         {!session ? (
           <div className="model-note">Sign in to connect a personal provider.</div>
         ) : (
           <>
-            <div className="account-row">
-              <div className="account-identity">
-                <span>ChatGPT</span>
-                <strong>
-                  {isLoadingChatgptConnection
-                    ? "Checking…"
-                    : chatgptConnection.connected
-                      ? `Connected${chatgptConnection.email ? ` · ${chatgptConnection.email}` : ""}`
-                      : "Not connected"}
-                </strong>
+            <div className="account-provider-grid">
+              <div className={`account-provider-card${chatgptConnection.connected ? " connected" : ""}`}>
+                <div className="account-provider-card-kicker">
+                  <span>ChatGPT Plus/Pro</span>
+                  <span className={`account-provider-status${chatgptConnection.connected ? " connected" : ""}`}>
+                    {isLoadingChatgptConnection
+                      ? "Checking"
+                      : chatgptConnection.connected
+                        ? "Connected"
+                        : "Not connected"}
+                  </span>
+                </div>
+                <div className="account-provider-card-title">Use ChatGPT</div>
+                <div className="account-provider-card-desc">
+                  Use your Plus or Pro plan limits through your connected ChatGPT account.
+                </div>
+                <div className="account-provider-card-body">
+                  {chatgptConnection.connected ? (
+                    <div className="auth-status">
+                      {chatgptConnection.email ? `Connected as ${chatgptConnection.email}. ` : ""}
+                      {chatgptConnection.updated_at
+                        ? `Last validated ${formatRelativeTime(chatgptConnection.updated_at)}.`
+                        : "Ready for GPT-family models."}
+                    </div>
+                  ) : (
+                    <div className="auth-status">
+                      Best if you already pay for ChatGPT and want Polynet to use that account.
+                    </div>
+                  )}
+                  {!chatgptConnection.connected && chatgptDeviceUserCode ? (
+                    <div className="auth-status">
+                      Waiting for OpenAI verification code {chatgptDeviceUserCode}.
+                    </div>
+                  ) : null}
+                  {chatgptConnectionError && <div className="auth-error">{chatgptConnectionError}</div>}
+                  {chatgptConnectionSuccess && <div className="auth-success">{chatgptConnectionSuccess}</div>}
+                </div>
+                <div className="account-provider-card-actions">
+                  {chatgptConnection.connected ? (
+                    <button
+                      className="secondary"
+                      type="button"
+                      onClick={() => void handleDisconnectChatgpt()}
+                      disabled={isConnectingChatgpt || isPollingChatgptConnection}
+                    >
+                      {isConnectingChatgpt
+                        ? "Disconnecting…"
+                        : isPollingChatgptConnection
+                          ? "Waiting…"
+                          : "Disconnect"}
+                    </button>
+                  ) : (
+                    <button
+                      className="platform-save-button platform-save-button--compact provider-connection-submit-button"
+                      type="button"
+                      onClick={() => void handleConnectChatgpt()}
+                      disabled={isConnectingChatgpt}
+                    >
+                      {isConnectingChatgpt
+                        ? "Starting…"
+                        : hasPendingChatgptAuth || isPollingChatgptConnection
+                          ? "Continue auth"
+                          : "Connect ChatGPT"}
+                    </button>
+                  )}
+                </div>
               </div>
-              {chatgptConnection.connected ? (
-                <button
-                  className="secondary"
-                  type="button"
-                  onClick={() => void handleDisconnectChatgpt()}
-                  disabled={isConnectingChatgpt || isPollingChatgptConnection}
-                >
-                  {isConnectingChatgpt ? "Disconnecting…" : isPollingChatgptConnection ? "Waiting…" : "Disconnect"}
-                </button>
-              ) : (
-                <button
-                  className="platform-save-button platform-save-button--compact provider-connection-submit-button"
-                  type="button"
-                  onClick={() => void handleConnectChatgpt()}
-                  disabled={isConnectingChatgpt}
-                >
-                  {isConnectingChatgpt
-                    ? "Starting…"
-                    : hasPendingChatgptAuth || isPollingChatgptConnection
-                      ? "Continue auth"
-                      : "Connect ChatGPT"}
-                </button>
-              )}
+
+              <div className={`account-provider-card${openAiConnection.connected ? " connected" : ""}`}>
+                <div className="account-provider-card-kicker">
+                  <span>OpenAI API</span>
+                  <span className={`account-provider-status${openAiConnection.connected ? " connected" : ""}`}>
+                    {isLoadingOpenAiConnection
+                      ? "Checking"
+                      : openAiConnection.connected
+                        ? "Connected"
+                        : "Not connected"}
+                  </span>
+                </div>
+                <div className="account-provider-card-title">Use an API key</div>
+                <div className="account-provider-card-desc">
+                  Add a key from your OpenAI account and bill model usage directly through OpenAI.
+                </div>
+                <div className="account-provider-card-body">
+                  {openAiConnection.connected ? (
+                    <div className="auth-status">
+                      {openAiConnection.key_last_four ? `Key ending ${openAiConnection.key_last_four}. ` : ""}
+                      {openAiConnection.updated_at
+                        ? `Last validated ${formatRelativeTime(openAiConnection.updated_at)}.`
+                        : "Ready for OpenAI API inference."}
+                    </div>
+                  ) : (
+                    <div className="auth-status">
+                      Best if you want a dedicated API key and direct OpenAI billing.
+                    </div>
+                  )}
+                  <input
+                    className="provider-connection-input account-provider-key-input"
+                    type="password"
+                    value={openAiApiKeyDraft}
+                    onChange={(event) => setOpenAiApiKeyDraft(event.target.value)}
+                    placeholder={openAiConnection.connected ? "Paste replacement API key" : "Paste OpenAI API key"}
+                    autoComplete="off"
+                    disabled={isSavingOpenAiConnection}
+                  />
+                  {openAiConnectionError && <div className="auth-error">{openAiConnectionError}</div>}
+                  {openAiConnectionSuccess && <div className="auth-success">{openAiConnectionSuccess}</div>}
+                </div>
+                <div className="account-provider-card-actions">
+                  <button
+                    className="platform-save-button platform-save-button--compact provider-connection-submit-button"
+                    type="button"
+                    onClick={() => void handleConnectOpenAi()}
+                    disabled={isSavingOpenAiConnection || openAiApiKeyDraft.trim().length === 0}
+                  >
+                    {isSavingOpenAiConnection
+                      ? "Saving…"
+                      : openAiConnection.connected
+                        ? "Update key"
+                        : "Use API key"}
+                  </button>
+                  {openAiConnection.connected ? (
+                    <button
+                      className="secondary"
+                      type="button"
+                      onClick={() => void handleDisconnectOpenAi()}
+                      disabled={isSavingOpenAiConnection}
+                    >
+                      {isSavingOpenAiConnection ? "Disconnecting…" : "Disconnect"}
+                    </button>
+                  ) : null}
+                </div>
+              </div>
             </div>
-            {!chatgptConnection.connected && chatgptDeviceUserCode && (
-              <div className="auth-status">Waiting for OpenAI verification code {chatgptDeviceUserCode}.</div>
-            )}
-            {chatgptConnection.connected && (
-              <div className="auth-status">
-                {chatgptConnection.updated_at
-                  ? `Last validated ${formatRelativeTime(chatgptConnection.updated_at)}.`
-                  : "Ready for GPT-family models on the ChatGPT lane."}
-              </div>
-            )}
-            {chatgptConnectionError && <div className="auth-error">{chatgptConnectionError}</div>}
-            {chatgptConnectionSuccess && <div className="auth-success">{chatgptConnectionSuccess}</div>}
           </>
         )}
       </div>
@@ -311,7 +422,7 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
                     </strong>
                   </div>
                   <div className="auth-actions">
-                    <span className="auth-status">Tool balance covers premium tools like workspace tools, web research, and voice input. Connect ChatGPT or add an OpenAI API key in Agent Settings to bring your own inference.</span>
+                    <span className="auth-status">Tool balance covers premium tools like workspace tools, web research, and voice input. Connect ChatGPT or add an OpenAI API key here to bring your own inference.</span>
                   </div>
                 </div>
                 {canMonetizeCommunities ? (
