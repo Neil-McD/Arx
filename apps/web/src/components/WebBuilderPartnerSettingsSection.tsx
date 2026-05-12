@@ -4,14 +4,14 @@ import {
   Handshake,
   Link,
   ShieldCheck,
-  Users,
 } from "lucide-react";
 import type { AccountCommerceStatus } from "../../../../shared/accountCommerceStatusGateway";
 import {
+  BUILDER_PARTNER_COMMUNITY_PLATFORM_FEE_BPS,
   BUILDER_PARTNER_PLATFORM_FEE_SHARE_BPS,
   BUILDER_PARTNER_TOOL_GROSS_MARGIN_SHARE_BPS,
+  calculateBuilderPartnerCommunityRevenueCommission,
 } from "../../../../shared/builderPartnerProgram";
-import { CommunityAvatar } from "../../../../shared/CommunityAvatar";
 import { StripeSetupButton } from "./StripeSetupButton";
 
 type SessionLike = {
@@ -23,12 +23,6 @@ type SessionLike = {
 
 type OwnedCommunity = {
   id: string;
-  slug: string;
-  name: string;
-  avatar_url: string | null;
-  avatar_focus_x?: number | null;
-  avatar_focus_y?: number | null;
-  avatar_zoom?: number | null;
 };
 
 type WebBuilderPartnerSettingsSectionProps = {
@@ -38,8 +32,6 @@ type WebBuilderPartnerSettingsSectionProps = {
   accountCommerceError: string | null;
   communities: OwnedCommunity[];
   communityRoleById: Record<string, string>;
-  openOwnedCommunitySettings: (communityId: string) => void;
-  communityInitials: (value: string) => string;
   startStripeConnectOnboarding: (opts?: {
     context?: "account" | "community";
     communitySlug?: string | null;
@@ -53,16 +45,19 @@ function formatBps(bps: number): string {
 }
 
 export function WebBuilderPartnerSettingsSection(props: WebBuilderPartnerSettingsSectionProps) {
-  const ownedCommunities = props.communities
-    .filter((community) => props.communityRoleById[community.id] === "owner")
-    .sort((a, b) => a.name.localeCompare(b.name));
-  const platformFeeBps = Math.max(0, Number(props.accountCommerceStatus?.platform_fee_bps ?? 1500) || 0);
+  const hasOwnedCommunity = props.communities.some(
+    (community) => props.communityRoleById[community.id] === "owner",
+  );
   const partnerPlatformFeeShareBps = BUILDER_PARTNER_PLATFORM_FEE_SHARE_BPS;
-  const effectiveCommunityRevenueShareBps = Math.round(platformFeeBps * (partnerPlatformFeeShareBps / 10000));
+  const communityCommission = calculateBuilderPartnerCommunityRevenueCommission({
+    communityRevenueUsd: 100,
+    platformFeeBps: BUILDER_PARTNER_COMMUNITY_PLATFORM_FEE_BPS,
+    partnerPlatformFeeShareBps,
+  });
+  const effectiveCommunityRevenueShareBps = communityCommission.effectiveCommunityRevenueShareBps;
   const toolGrossMarginShareBps = BUILDER_PARTNER_TOOL_GROSS_MARGIN_SHARE_BPS;
   const stripeConnect = props.accountCommerceStatus?.stripe_connect ?? null;
   const canReceivePayouts = stripeConnect?.payouts_enabled === true;
-  const hasOwnedCommunity = ownedCommunities.length > 0;
   const isEligible = Boolean(props.session && hasOwnedCommunity);
 
   const statusLabel = !props.session
@@ -82,7 +77,7 @@ export function WebBuilderPartnerSettingsSection(props: WebBuilderPartnerSetting
           Builder Partner Program
         </div>
         <div className="settings-section-desc">
-          Help builders launch community intelligence systems on PolyNet.
+          Platform-level partner program for builders bringing new communities to PolyNet.
         </div>
 
         <div className="builder-partner-hero">
@@ -90,8 +85,8 @@ export function WebBuilderPartnerSettingsSection(props: WebBuilderPartnerSetting
             <span className="builder-partner-kicker">Platform partner program</span>
             <h2>Bring builders to PolyNet and share in the value they create.</h2>
             <p>
-              Partner accounts are for PolyNet builders with at least one community. Enrollment,
-              partner links, attribution, and commission ledgers will live here.
+              Partners are PolyNet builders. Enrollment, partner links, attribution, and
+              commission reporting will live here.
             </p>
           </div>
           <div className="builder-partner-status-stack" aria-label="Builder Partner status">
@@ -110,7 +105,7 @@ export function WebBuilderPartnerSettingsSection(props: WebBuilderPartnerSetting
           <div className="account-row">
             <div className="account-identity">
               <span>Partner account</span>
-              <strong>Sign in to check eligibility</strong>
+              <strong>Sign in to view partner status</strong>
             </div>
             <div className="auth-actions">
               <button type="button" onClick={props.requireSignIn}>
@@ -126,7 +121,10 @@ export function WebBuilderPartnerSettingsSection(props: WebBuilderPartnerSetting
               <BadgeDollarSign />
               <span>Community revenue</span>
               <strong>{formatBps(partnerPlatformFeeShareBps)} of PolyNet fee</strong>
-              <small>{formatBps(effectiveCommunityRevenueShareBps)} of referred creator revenue at the current take rate.</small>
+              <small>
+                {formatBps(effectiveCommunityRevenueShareBps)} of referred creator revenue at
+                the {formatBps(BUILDER_PARTNER_COMMUNITY_PLATFORM_FEE_BPS)} platform take rate.
+              </small>
             </div>
             <div className="builder-partner-metric" role="listitem">
               <CircleDashed />
@@ -143,54 +141,6 @@ export function WebBuilderPartnerSettingsSection(props: WebBuilderPartnerSetting
           </div>
         ) : null}
       </div>
-
-      {props.session ? (
-        <div className="settings-section">
-          <div className="settings-section-title">
-            <Users />
-            Eligibility
-          </div>
-          <div className="settings-section-desc">
-            Builder Partners must be actively building on PolyNet.
-          </div>
-          {hasOwnedCommunity ? (
-            <div className="invite-list">
-              {ownedCommunities.map((community) => (
-                <div key={community.id} className="invite-row">
-                  <div className="invite-main with-avatar">
-                    <CommunityAvatar
-                      className="invite-avatar"
-                      imageClassName="invite-avatar-img"
-                      fallbackClassName="invite-avatar-fallback"
-                      imageUrl={community.avatar_url}
-                      focusX={community.avatar_focus_x}
-                      focusY={community.avatar_focus_y}
-                      zoom={community.avatar_zoom}
-                      name={community.name}
-                      alt=""
-                      fallback={props.communityInitials(community.name)}
-                      aria-hidden
-                    />
-                    <div className="invite-text">
-                      <div className="invite-code">{community.name}</div>
-                      <div className="invite-status">{`/c/${community.slug}`}</div>
-                    </div>
-                  </div>
-                  <div className="invite-actions">
-                    <button type="button" onClick={() => props.openOwnedCommunitySettings(community.id)}>
-                      Open settings
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="model-note">
-              Create a community to become eligible for Builder Partner enrollment.
-            </div>
-          )}
-        </div>
-      ) : null}
 
       {props.session ? (
         <div className="settings-section">

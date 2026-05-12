@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
   BUILDER_PARTNER_ATTRIBUTION_WINDOW_MS,
+  BUILDER_PARTNER_COMMUNITY_PLATFORM_FEE_BPS,
   BUILDER_PARTNER_COMMISSION_HOLD_MS,
   BUILDER_PARTNER_MIN_PAYOUT_USD,
   BUILDER_PARTNER_PLATFORM_FEE_SHARE_BPS,
@@ -21,6 +22,7 @@ function assertIncludes(haystack: string, needle: string, label: string) {
 
 function proveConstants() {
   assert.equal(BUILDER_PARTNER_PROGRAM_VERSION, "builder_partner_v1");
+  assert.equal(BUILDER_PARTNER_COMMUNITY_PLATFORM_FEE_BPS, 1500);
   assert.equal(BUILDER_PARTNER_PLATFORM_FEE_SHARE_BPS, 4000);
   assert.equal(BUILDER_PARTNER_TOOL_GROSS_MARGIN_SHARE_BPS, 2000);
   assert.equal(BUILDER_PARTNER_ATTRIBUTION_WINDOW_MS, 30 * 24 * 60 * 60 * 1000);
@@ -93,6 +95,16 @@ function proveSchemaContract(schemaSource: string) {
 function proveUiContract(uiSource: string) {
   assertIncludes(
     uiSource,
+    "BUILDER_PARTNER_COMMUNITY_PLATFORM_FEE_BPS",
+    "partner settings UI",
+  );
+  assertIncludes(
+    uiSource,
+    "calculateBuilderPartnerCommunityRevenueCommission",
+    "partner settings UI",
+  );
+  assertIncludes(
+    uiSource,
     "BUILDER_PARTNER_PLATFORM_FEE_SHARE_BPS",
     "partner settings UI",
   );
@@ -103,8 +115,23 @@ function proveUiContract(uiSource: string) {
   );
   assertIncludes(
     uiSource,
+    "the {formatBps(BUILDER_PARTNER_COMMUNITY_PLATFORM_FEE_BPS)} platform take rate.",
+    "partner settings UI",
+  );
+  assertIncludes(
+    uiSource,
     "Attribution and commission reporting will appear here once enrollment opens.",
     "partner settings UI",
+  );
+  assert.doesNotMatch(
+    uiSource,
+    />\s*Eligibility\s*</,
+    "partner settings UI should not render a separate eligibility section",
+  );
+  assert.doesNotMatch(
+    uiSource,
+    /Open settings/,
+    "partner settings UI should not list owned communities with settings shortcuts",
   );
   assert.doesNotMatch(
     uiSource,

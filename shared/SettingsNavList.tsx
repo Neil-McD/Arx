@@ -34,15 +34,6 @@ const SETTINGS_NAV_ITEMS: readonly SettingsNavItem[] = [
     ),
   },
   {
-    id: "partners",
-    page: "partners",
-    icon: (
-      <span className="nav-icon nav-icon-emphasis">
-        <Handshake />
-      </span>
-    ),
-  },
-  {
     id: "agent",
     page: "agent",
     icon: (
@@ -62,6 +53,26 @@ const SETTINGS_NAV_ITEMS: readonly SettingsNavItem[] = [
     ),
   },
   {
+    id: "appearance",
+    page: "appearance",
+    icon: (
+      <span className="nav-icon">
+        <svg viewBox="0 0 24 24">
+          <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9z" />
+        </svg>
+      </span>
+    ),
+  },
+  {
+    id: "partners",
+    page: "partners",
+    icon: (
+      <span className="nav-icon nav-icon-emphasis">
+        <Handshake />
+      </span>
+    ),
+  },
+  {
     id: "integrations",
     page: "integrations",
     icon: (
@@ -71,17 +82,6 @@ const SETTINGS_NAV_ITEMS: readonly SettingsNavItem[] = [
           <rect x="14" y="4" width="6" height="6" rx="1.5" />
           <rect x="4" y="14" width="6" height="6" rx="1.5" />
           <rect x="14" y="14" width="6" height="6" rx="1.5" />
-        </svg>
-      </span>
-    ),
-  },
-  {
-    id: "appearance",
-    page: "appearance",
-    icon: (
-      <span className="nav-icon">
-        <svg viewBox="0 0 24 24">
-          <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9z" />
         </svg>
       </span>
     ),
