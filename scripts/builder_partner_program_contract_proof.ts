@@ -115,7 +115,22 @@ function proveUiContract(uiSource: string) {
   );
   assertIncludes(
     uiSource,
-    "the {formatBps(BUILDER_PARTNER_COMMUNITY_PLATFORM_FEE_BPS)} platform take rate.",
+    "CheckCircle2",
+    "partner settings UI",
+  );
+  assertIncludes(
+    uiSource,
+    "XCircle",
+    "partner settings UI",
+  );
+  assertIncludes(
+    uiSource,
+    "Earn {formatBps(effectiveCommunityRevenueShareBps)} of referred creators'",
+    "partner settings UI",
+  );
+  assertIncludes(
+    uiSource,
+    "Earn {formatBps(toolGrossMarginShareBps)} of referred creators' tool usage",
     "partner settings UI",
   );
   assertIncludes(
@@ -125,13 +140,28 @@ function proveUiContract(uiSource: string) {
   );
   assert.doesNotMatch(
     uiSource,
-    />\s*Eligibility\s*</,
+    /Builder Partners must be actively building|invite-list|CommunityAvatar/,
     "partner settings UI should not render a separate eligibility section",
   );
   assert.doesNotMatch(
     uiSource,
     /Open settings/,
     "partner settings UI should not list owned communities with settings shortcuts",
+  );
+  assert.doesNotMatch(
+    uiSource,
+    /platform take rate/i,
+    "partner settings UI should not overexplain the 6% community revenue copy",
+  );
+  assert.doesNotMatch(
+    uiSource,
+    /20% of gross margin/i,
+    "partner settings UI should not describe tool usage as gross margin",
+  );
+  assert.doesNotMatch(
+    uiSource,
+    /Request enrollment|Copy link|your-code/,
+    "partner settings UI should not ship enrollment mechanics before the flow is planned",
   );
   assert.doesNotMatch(
     uiSource,

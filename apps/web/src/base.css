@@ -15267,17 +15267,26 @@ button.message-citation-chip:hover {
 }
 
 .builder-partner-status strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
   color: var(--text-primary);
   font-size: 14px;
   line-height: 1.25;
 }
 
-.builder-partner-status.is-ready {
-  border-color: color-mix(in srgb, #7adf9a 36%, var(--border-muted));
+.builder-partner-status strong svg {
+  width: 16px;
+  height: 16px;
+  stroke-width: 2;
 }
 
-.builder-partner-status.is-pending {
-  border-color: color-mix(in srgb, #e4b15f 32%, var(--border-muted));
+.builder-partner-status strong.is-ready svg {
+  color: #7adf9a;
+}
+
+.builder-partner-status strong.is-not-ready svg {
+  color: var(--accent-rose);
 }
 
 .builder-partner-metrics {

@@ -1,9 +1,11 @@
 import {
   BadgeDollarSign,
+  CheckCircle2,
   CircleDashed,
   Handshake,
   Link,
   ShieldCheck,
+  XCircle,
 } from "lucide-react";
 import type { AccountCommerceStatus } from "../../../../shared/accountCommerceStatusGateway";
 import {
@@ -42,6 +44,16 @@ type WebBuilderPartnerSettingsSectionProps = {
 function formatBps(bps: number): string {
   const percent = Math.max(0, Number(bps) || 0) / 100;
   return `${Number.isInteger(percent) ? percent.toFixed(0) : percent.toFixed(2)}%`;
+}
+
+function BuilderPartnerStatusValue(props: { ready: boolean; children: string }) {
+  const Icon = props.ready ? CheckCircle2 : XCircle;
+  return (
+    <strong className={props.ready ? "is-ready" : "is-not-ready"}>
+      <Icon aria-hidden />
+      {props.children}
+    </strong>
+  );
 }
 
 export function WebBuilderPartnerSettingsSection(props: WebBuilderPartnerSettingsSectionProps) {
@@ -90,13 +102,13 @@ export function WebBuilderPartnerSettingsSection(props: WebBuilderPartnerSetting
             </p>
           </div>
           <div className="builder-partner-status-stack" aria-label="Builder Partner status">
-            <div className={`builder-partner-status ${isEligible ? "is-ready" : "is-pending"}`}>
-              <span>Status</span>
-              <strong>{statusLabel}</strong>
+            <div className="builder-partner-status">
+              <span>Eligibility</span>
+              <BuilderPartnerStatusValue ready={isEligible}>{statusLabel}</BuilderPartnerStatusValue>
             </div>
-            <div className={`builder-partner-status ${canReceivePayouts ? "is-ready" : "is-pending"}`}>
+            <div className="builder-partner-status">
               <span>Payouts</span>
-              <strong>{payoutLabel}</strong>
+              <BuilderPartnerStatusValue ready={canReceivePayouts}>{payoutLabel}</BuilderPartnerStatusValue>
             </div>
           </div>
         </div>
@@ -120,17 +132,19 @@ export function WebBuilderPartnerSettingsSection(props: WebBuilderPartnerSetting
             <div className="builder-partner-metric" role="listitem">
               <BadgeDollarSign />
               <span>Community revenue</span>
-              <strong>{formatBps(partnerPlatformFeeShareBps)} of PolyNet fee</strong>
-              <small>
-                {formatBps(effectiveCommunityRevenueShareBps)} of referred creator revenue at
-                the {formatBps(BUILDER_PARTNER_COMMUNITY_PLATFORM_FEE_BPS)} platform take rate.
-              </small>
+              <strong>
+                Earn {formatBps(effectiveCommunityRevenueShareBps)} of referred creators'
+                community revenue
+              </strong>
+              <small>Outcome-based partner commission on referred communities.</small>
             </div>
             <div className="builder-partner-metric" role="listitem">
               <CircleDashed />
               <span>Tool usage</span>
-              <strong>{formatBps(toolGrossMarginShareBps)} of gross margin</strong>
-              <small>Calculated only on settled paid tool usage after vendor cost.</small>
+              <strong>
+                Earn {formatBps(toolGrossMarginShareBps)} of referred creators' tool usage
+              </strong>
+              <small>Tracked from settled usage after enrollment and approval.</small>
             </div>
             <div className="builder-partner-metric" role="listitem">
               <ShieldCheck />
