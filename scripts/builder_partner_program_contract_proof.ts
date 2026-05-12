@@ -589,6 +589,31 @@ function proveRefundDisputeContract(
     "Builder Partner reversal ledger",
   );
   assertIncludes(
+    builderPartnersSource,
+    "capNegativeCommissionAdjustmentUsd",
+    "Builder Partner reversal ledger",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "readAppliedCommissionAdjustmentTotalUsd",
+    "Builder Partner reversal ledger",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "getDisputeAdjustmentState",
+    "Builder Partner dispute reducer",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "hasTerminalAdjustment",
+    "Builder Partner dispute reducer",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "targetDisputeImpactUsd - disputeState.currentImpactUsd",
+    "Builder Partner dispute reducer",
+  );
+  assertIncludes(
     httpBillingSource,
     "event.type === \"refund.created\"",
     "Stripe reversal webhook",
@@ -597,6 +622,16 @@ function proveRefundDisputeContract(
     httpBillingSource,
     "event.type === \"charge.refunded\"",
     "Stripe reversal webhook",
+  );
+  assertIncludes(
+    httpBillingSource,
+    "charge_refunded_refunds_missing",
+    "Stripe reversal webhook",
+  );
+  assert.doesNotMatch(
+    httpBillingSource,
+    /charge_refunded:\$\{charge\.id\}/,
+    "charge.refunded must not create pseudo refund IDs that can double-adjust when refund.created arrives",
   );
   assertIncludes(
     httpBillingSource,

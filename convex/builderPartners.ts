@@ -222,6 +222,67 @@ async function getCommissionAdjustmentByKey(ctx: any, adjustmentKey: string) {
     .first();
 }
 
+async function collectAppliedCommissionAdjustments(ctx: any, commissionId: any) {
+  const rows = await ctx.db
+    .query("partnerCommissionAdjustments" as any)
+    .withIndex("by_commission", (q: any) => q.eq("commissionId", commissionId))
+    .collect();
+  return rows.filter((row: any) => row.status === "applied");
+}
+
+async function readAppliedCommissionAdjustmentTotalUsd(ctx: any, commissionId: any) {
+  const rows = await collectAppliedCommissionAdjustments(ctx, commissionId);
+  return roundSignedPartnerMoney(
+    rows.reduce((total: number, row: any) => total + Number(row.amountUsd ?? 0), 0),
+  );
+}
+
+async function capNegativeCommissionAdjustmentUsd(ctx: any, commission: any, amountUsd: number) {
+  const requestedAmountUsd = roundSignedPartnerMoney(Number(amountUsd ?? 0));
+  if (!(requestedAmountUsd < 0)) return requestedAmountUsd;
+  const commissionAmountUsd = roundBuilderPartnerMoney(Number(commission.commissionAmountUsd ?? 0));
+  if (!(commissionAmountUsd > 0)) return 0;
+  const currentAdjustmentTotalUsd = await readAppliedCommissionAdjustmentTotalUsd(ctx, commission._id);
+  const adjustmentFloorUsd = roundSignedPartnerMoney(-commissionAmountUsd);
+  if (currentAdjustmentTotalUsd <= adjustmentFloorUsd + 0.0001) return 0;
+  const lowestAllowedNewAmountUsd = roundSignedPartnerMoney(
+    adjustmentFloorUsd - currentAdjustmentTotalUsd,
+  );
+  return roundSignedPartnerMoney(
+    Math.min(0, Math.max(requestedAmountUsd, lowestAllowedNewAmountUsd)),
+  );
+}
+
+async function getDisputeAdjustmentState(ctx: any, args: {
+  sourceProviderDisputeId: string;
+  commissionId: any;
+}) {
+  const disputeId = normalizeProviderEvidenceId(args.sourceProviderDisputeId);
+  if (!disputeId) {
+    return {
+      currentImpactUsd: 0,
+      hasTerminalAdjustment: false,
+    };
+  }
+  const rows = await collectAppliedCommissionAdjustments(ctx, args.commissionId);
+  const disputeRows = rows.filter((row: any) =>
+    normalizeProviderEvidenceId(row.sourceProviderDisputeId) === disputeId,
+  );
+  const terminalTypes = new Set([
+    "dispute_lost",
+    "dispute_won",
+    "dispute_funds_reinstated",
+  ]);
+  return {
+    currentImpactUsd: roundSignedPartnerMoney(
+      disputeRows.reduce((total: number, row: any) => total + Number(row.amountUsd ?? 0), 0),
+    ),
+    hasTerminalAdjustment: disputeRows.some((row: any) =>
+      terminalTypes.has(String(row.adjustmentType ?? "")),
+    ),
+  };
+}
+
 function calculateProportionalCommissionAdjustmentUsd(args: {
   commissionAmountUsd: number;
   sourceAmountBaseUnits?: number | null;
@@ -728,7 +789,8 @@ export const recordPartnerCommissionRefundAdjustmentInternal = internalMutation(
       });
       const isFullReversal =
         reversalUsd >= roundBuilderPartnerMoney(Number(row.commissionAmountUsd ?? 0) - 0.0001);
-      const amountUsd = row.status === "paid" || !isFullReversal ? -reversalUsd : 0;
+      const requestedAmountUsd = row.status === "paid" || !isFullReversal ? -reversalUsd : 0;
+      const amountUsd = await capNegativeCommissionAdjustmentUsd(ctx, row, requestedAmountUsd);
       await insertPartnerCommissionAdjustmentIfMissing(ctx, {
         adjustmentKey: `partner_refund:${refundId}:${String(row._id)}`,
         commission: row,
@@ -795,11 +857,20 @@ export const recordPartnerCommissionDisputeOpenedInternal = internalMutation({
         sourceAmountBaseUnits: args.disputeAmountBaseUnits,
         sourceTotalBaseUnits: args.chargeAmountBaseUnits,
       });
+      const disputeState = await getDisputeAdjustmentState(ctx, {
+        sourceProviderDisputeId: disputeId,
+        commissionId: row._id,
+      });
+      const requestedAmountUsd =
+        row.status === "paid" && !disputeState.hasTerminalAdjustment
+          ? roundSignedPartnerMoney(-reversalUsd - disputeState.currentImpactUsd)
+          : 0;
+      const amountUsd = await capNegativeCommissionAdjustmentUsd(ctx, row, requestedAmountUsd);
       await insertPartnerCommissionAdjustmentIfMissing(ctx, {
         adjustmentKey: `partner_dispute_opened:${disputeId}:${String(row._id)}`,
         commission: row,
         adjustmentType: "dispute_opened",
-        amountUsd: row.status === "paid" ? -reversalUsd : 0,
+        amountUsd,
         sourceProviderDisputeId: disputeId,
         sourceProviderChargeId: args.sourceProviderChargeId,
         sourceProviderPaymentIntentId: args.sourceProviderPaymentIntentId,
@@ -870,23 +941,23 @@ export const recordPartnerCommissionDisputeClosedInternal = internalMutation({
         sourceProviderChargeId: args.sourceProviderChargeId,
         nowMs,
       });
-      const openedAdjustment = await getCommissionAdjustmentByKey(
-        ctx,
-        `partner_dispute_opened:${disputeId}:${String(row._id)}`,
-      );
+      const disputeState = await getDisputeAdjustmentState(ctx, {
+        sourceProviderDisputeId: disputeId,
+        commissionId: row._id,
+      });
       const reversalUsd = calculateProportionalCommissionAdjustmentUsd({
         commissionAmountUsd: row.commissionAmountUsd,
         sourceAmountBaseUnits: args.disputeAmountBaseUnits,
         sourceTotalBaseUnits: args.chargeAmountBaseUnits,
       });
-      let amountUsd = 0;
-      if (row.status === "paid") {
-        if (args.outcome === "lost") {
-          amountUsd = openedAdjustment ? 0 : -reversalUsd;
-        } else if (openedAdjustment && Number(openedAdjustment.amountUsd ?? 0) < 0) {
-          amountUsd = Math.abs(Number(openedAdjustment.amountUsd ?? 0));
-        }
-      }
+      const targetDisputeImpactUsd =
+        row.status === "paid" && args.outcome === "lost" ? -reversalUsd : 0;
+      const requestedAmountUsd = roundSignedPartnerMoney(
+        targetDisputeImpactUsd - disputeState.currentImpactUsd,
+      );
+      const amountUsd = requestedAmountUsd < 0
+        ? await capNegativeCommissionAdjustmentUsd(ctx, row, requestedAmountUsd)
+        : requestedAmountUsd;
       await insertPartnerCommissionAdjustmentIfMissing(ctx, {
         adjustmentKey: `partner_${adjustmentType}:${disputeId}:${String(row._id)}`,
         commission: row,

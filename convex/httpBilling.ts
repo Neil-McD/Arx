@@ -823,15 +823,17 @@ export function registerRuntimeBillingRoutes(
           const refunds = Array.isArray((charge as any)?.refunds?.data)
             ? (charge as any).refunds.data as Stripe.Refund[]
             : [];
-          const refundRows = refunds.length > 0
-            ? refunds
-            : [{
-                id: `charge_refunded:${charge.id}:${String((charge as any).amount_refunded ?? "")}`,
-                amount: (charge as any).amount_refunded,
-                currency: charge.currency,
-              } as Stripe.Refund];
+          if (refunds.length <= 0) {
+            return processedResponse({
+              ok: true,
+              ignored: true,
+              event: event.type,
+              reason: "charge_refunded_refunds_missing",
+              sourceProviderChargeId: chargeEvidence.sourceProviderChargeId,
+            }, "ignored");
+          }
           const results = [];
-          for (const refund of refundRows) {
+          for (const refund of refunds) {
             const refundEvidence = readStripeRefundEvidence(refund);
             const result = await (ctx as any).runMutation(
               internal.builderPartners
