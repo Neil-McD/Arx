@@ -62,6 +62,24 @@ function formatUsd(value: number): string {
   }).format(Math.max(0, Number(value) || 0));
 }
 
+function formatPayoutDate(value: number | null): string {
+  if (!value || !Number.isFinite(value)) return "Not processed";
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(new Date(value));
+}
+
+function formatPayoutStatus(value: string): string {
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "succeeded") return "Settled";
+  if (normalized === "processing") return "Processing";
+  if (normalized === "failed") return "Needs review";
+  if (normalized === "draft") return "Queued";
+  return "Queued";
+}
+
 function requirementLabel(requirement: BuilderPartnerProgramRequirement): string {
   if (requirement.key === "own_community") return "Build a community on PolyNet";
   if (requirement.key === "accept_terms") return "Accept Builder Partner terms";
@@ -176,6 +194,7 @@ export function WebBuilderPartnerSettingsSection(props: WebBuilderPartnerSetting
               : "Requirements open";
   const payoutLabel = program?.payout.label ?? "Stripe required before payouts";
   const partnerLink = program?.partner?.partnerLink ?? "";
+  const payoutHistory = program?.payoutHistory.transfers ?? [];
 
   async function copyPartnerLink(): Promise<void> {
     if (!partnerLink) return;
@@ -367,6 +386,29 @@ export function WebBuilderPartnerSettingsSection(props: WebBuilderPartnerSetting
                     <strong>{formatUsd(BUILDER_PARTNER_MIN_PAYOUT_USD)}</strong>
                     <small>Manual review before any transfer.</small>
                   </div>
+                </div>
+                <div className="builder-partner-payout-history">
+                  <div className="builder-partner-payout-history-title">
+                    <span>Payout history</span>
+                    <small>Manual settlements appear here after operator review.</small>
+                  </div>
+                  {payoutHistory.length > 0 ? (
+                    <div className="builder-partner-payout-history-list">
+                      {payoutHistory.map((transfer) => (
+                        <div className="builder-partner-payout-history-row" key={transfer.id}>
+                          <div>
+                            <strong>{formatUsd(transfer.amountUsd)}</strong>
+                            <span>{formatPayoutStatus(transfer.status)}</span>
+                          </div>
+                          <small>{formatPayoutDate(transfer.processedAt ?? transfer.createdAt)}</small>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="builder-partner-payout-history-empty">
+                      No partner payouts have been settled yet.
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

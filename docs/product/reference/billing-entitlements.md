@@ -33,7 +33,7 @@ The current default platform fee for free-account community revenue is 15%. Lega
 
 Paid-tool usage is priced through tool balance. Workspace tool usage targets 60% gross margin by charging roughly 2.5x estimated vendor compute cost, then settling actual usage and refunding unused reservations. Web research and voice input use simple alpha tariffs with centralized vendor-cost estimates, and should still write tool, vendor, Polynet price, raw cost estimate, and settlement evidence into the internal credit ledger.
 
-Builder Partner commissions should not become payable from gross promises alone. Community-revenue commissions need provider invoice, payment, or charge evidence, and refunds or disputes must create explicit partner commission adjustments before payout execution.
+Builder Partner commissions should not become payable from gross promises alone. Community-revenue commissions need provider invoice, payment, or charge evidence, and refunds or disputes must create explicit partner commission adjustments before payout execution. Partner payout settlement runs through manual operator-reviewed batches: payable commission rows are reserved into payout items, Stripe Connect transfers are idempotent, and items become settled only after transfer creation succeeds.
 
 ## Payout Readiness
 
@@ -53,6 +53,7 @@ Payout readiness does not grant community access. It determines whether the buil
 8. Paid access, management authority, and payout readiness are separate concepts.
 9. Tool balance, not a platform subscription, is the source of truth for paid tool access.
 10. Partner commission payouts must account for refunds, disputes, and chargeback outcomes before money movement.
+11. Partner payout batches must be operator-approved before Stripe transfer execution.
 
 ## Common Mistakes
 

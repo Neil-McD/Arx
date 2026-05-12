@@ -69,6 +69,9 @@ function proveSchemaContract(schemaSource: string) {
   assertIncludes(schemaSource, "partnerAttributions: defineTable", "schema");
   assertIncludes(schemaSource, "partnerCommissionLedger: defineTable", "schema");
   assertIncludes(schemaSource, "partnerCommissionAdjustments: defineTable", "schema");
+  assertIncludes(schemaSource, "partnerPayoutBatches: defineTable", "schema");
+  assertIncludes(schemaSource, "partnerPayoutTransfers: defineTable", "schema");
+  assertIncludes(schemaSource, "partnerPayoutItems: defineTable", "schema");
   assert.match(
     schemaSource,
     /builderPartners:[\s\S]*userId:\s*v\.id\("users"\)[\s\S]*acceptedTermsAt:\s*v\.optional\(v\.number\(\)\)[\s\S]*acceptedTermsVersion:\s*v\.optional\(v\.string\(\)\)/,
@@ -123,6 +126,21 @@ function proveSchemaContract(schemaSource: string) {
     schemaSource,
     /partnerCommissionAdjustments:[\s\S]*adjustmentKey:\s*v\.string\(\)[\s\S]*adjustmentType:\s*v\.union\([\s\S]*v\.literal\("refund"\)[\s\S]*v\.literal\("dispute_opened"\)[\s\S]*v\.literal\("dispute_won"\)[\s\S]*v\.literal\("dispute_lost"\)[\s\S]*amountUsd:\s*v\.number\(\)/,
     "expected partner adjustment ledger to record refunds and disputes as signed money events",
+  );
+  assert.match(
+    schemaSource,
+    /partnerPayoutBatches:[\s\S]*status:\s*v\.union\([\s\S]*v\.literal\("draft"\)[\s\S]*v\.literal\("approved"\)[\s\S]*v\.literal\("processing"\)[\s\S]*v\.literal\("completed"\)[\s\S]*v\.literal\("failed"\)[\s\S]*v\.literal\("voided"\)[\s\S]*createdByUserId:\s*v\.id\("users"\)/,
+    "expected partner payout batches to be manual-review settlement objects",
+  );
+  assert.match(
+    schemaSource,
+    /partnerPayoutTransfers:[\s\S]*batchId:\s*v\.id\("partnerPayoutBatches"\)[\s\S]*stripeAccountId:\s*v\.string\(\)[\s\S]*stripeTransferId:\s*v\.optional\(v\.string\(\)\)[\s\S]*idempotencyKey:\s*v\.string\(\)/,
+    "expected partner payout transfers to target Stripe Connect accounts idempotently",
+  );
+  assert.match(
+    schemaSource,
+    /partnerPayoutItems:[\s\S]*commissionId:\s*v\.id\("partnerCommissionLedger"\)[\s\S]*status:\s*v\.union\([\s\S]*v\.literal\("reserved"\)[\s\S]*v\.literal\("settled"\)[\s\S]*v\.literal\("voided"\)/,
+    "expected partner payout items to reserve and settle payable commission rows",
   );
 }
 
@@ -182,6 +200,8 @@ function proveUiContract(uiSource: string) {
   assertIncludes(uiSource, "Partner payouts", "partner settings UI");
   assertIncludes(uiSource, "Ready to settle", "partner settings UI");
   assertIncludes(uiSource, "Pending hold", "partner settings UI");
+  assertIncludes(uiSource, "Payout history", "partner settings UI");
+  assertIncludes(uiSource, "Manual settlements appear here after operator review.", "partner settings UI");
   assertIncludes(uiSource, "Minimum payout", "partner settings UI");
   assertIncludes(uiSource, "Manual review before any transfer.", "partner settings UI");
   assertIncludes(uiSource, "Appears after referred revenue is processed.", "partner settings UI");
@@ -665,6 +685,116 @@ function proveRefundDisputeContract(
   );
 }
 
+function provePartnerPayoutSettlementContract(
+  schemaSource: string,
+  builderPartnersSource: string,
+  criticalAuditSource: string,
+  gatewaySource: string,
+  uiSource: string,
+  docsSource: string,
+) {
+  assertIncludes(
+    builderPartnersSource,
+    "previewPartnerPayoutBatch",
+    "Builder Partner payout settlement",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "createPartnerPayoutBatch",
+    "Builder Partner payout settlement",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "approvePartnerPayoutBatch",
+    "Builder Partner payout settlement",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "executePartnerPayoutBatch",
+    "Builder Partner payout settlement",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "voidPartnerPayoutBatch",
+    "Builder Partner payout settlement",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "requireOperatorRole(ctx, args.authSubject, \"operator\")",
+    "Builder Partner payout settlement must be operator gated",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "stripe.transfers.create",
+    "Builder Partner payout settlement must use Stripe Connect transfers",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "idempotencyKey: String(transfer.idempotencyKey ?? \"\").trim()",
+    "Builder Partner payout settlement must use transfer idempotency keys",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "readCommissionPayoutItemTotalUsd",
+    "Builder Partner payout settlement must subtract reserved and settled payout items",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "status: \"reserved\"",
+    "Builder Partner payout settlement must reserve commission rows before execution",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "status: \"settled\"",
+    "Builder Partner payout settlement must mark items settled only after transfer success",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "recordPartnerPayoutTransferSucceededInternal",
+    "Builder Partner payout settlement must separate transfer result recording",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "recordPartnerPayoutAudit",
+    "Builder Partner payout settlement must write critical audit events",
+  );
+  assertIncludes(
+    criticalAuditSource,
+    "builder_partner_payout_transfer_succeeded",
+    "Builder Partner payout critical audit event registry",
+  );
+  assertIncludes(
+    criticalAuditSource,
+    "builder_partner_payout_transfer_failed",
+    "Builder Partner payout critical audit event registry",
+  );
+  assertIncludes(
+    gatewaySource,
+    "payoutHistory",
+    "Builder Partner gateway",
+  );
+  assertIncludes(
+    uiSource,
+    "No partner payouts have been settled yet.",
+    "Builder Partner payout history UI",
+  );
+  assertIncludes(
+    docsSource,
+    "Partner payout settlement runs through manual operator-reviewed batches",
+    "Builder Partner payout docs",
+  );
+  assertIncludes(
+    schemaSource,
+    ".index(\"by_commission\", [\"commissionId\"])",
+    "Builder Partner payout schema",
+  );
+  assert.doesNotMatch(
+    uiSource,
+    /executePartnerPayoutBatch|approvePartnerPayoutBatch|createPartnerPayoutBatch/,
+    "partner-facing UI must not expose operator settlement controls",
+  );
+}
+
 function main() {
   const schemaSource = readText(new URL("../convex/schema.ts", import.meta.url));
   const uiSource = readText(
@@ -675,11 +805,13 @@ function main() {
   const appSource = readText(new URL("../apps/web/src/App.tsx", import.meta.url));
   const accountSource = readText(new URL("../convex/account.ts", import.meta.url));
   const docsSource = readText(new URL("../docs/product/primitives/polynet.md", import.meta.url));
+  const billingDocsSource = readText(new URL("../docs/product/reference/billing-entitlements.md", import.meta.url));
   const authSource = readText(new URL("../convex/auth.ts", import.meta.url));
   const sharedWorkspaceCreditsSource = readText(new URL("../shared/workspaceCredits.ts", import.meta.url));
   const communityCommerceSource = readText(new URL("../convex/communityCommerce.ts", import.meta.url));
   const workspaceCreditsSource = readText(new URL("../convex/workspaceCredits.ts", import.meta.url));
   const httpBillingSource = readText(new URL("../convex/httpBilling.ts", import.meta.url));
+  const criticalAuditSource = readText(new URL("../convex/criticalAudit.ts", import.meta.url));
 
   proveConstants();
   proveCommunityCommissionMath();
@@ -693,6 +825,14 @@ function main() {
   proveCommissionProducerContract(builderPartnersSource, communityCommerceSource, workspaceCreditsSource);
   proveRecurringInvoiceContract(httpBillingSource);
   proveRefundDisputeContract(builderPartnersSource, httpBillingSource);
+  provePartnerPayoutSettlementContract(
+    schemaSource,
+    builderPartnersSource,
+    criticalAuditSource,
+    gatewaySource,
+    uiSource,
+    billingDocsSource,
+  );
   console.log("PASS: builder partner program contract proof passed");
 }
 

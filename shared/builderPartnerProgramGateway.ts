@@ -57,6 +57,17 @@ export type BuilderPartnerProgramSnapshot = {
     activeCount: number;
     boundCount: number;
   };
+  payoutHistory: {
+    transfers: Array<{
+      id: string;
+      amountUsd: number;
+      currency: string;
+      status: string;
+      createdAt: number;
+      processedAt: number | null;
+      failureReason: string | null;
+    }>;
+  };
 };
 
 type StoredBuilderPartnerReferral = {
@@ -161,6 +172,25 @@ function normalizeProgramSnapshot(row: BuilderPartnerProgramSnapshot): BuilderPa
     attributionSummary: {
       activeCount: Number(row.attributionSummary?.activeCount ?? 0),
       boundCount: Number(row.attributionSummary?.boundCount ?? 0),
+    },
+    payoutHistory: {
+      transfers: Array.isArray(row.payoutHistory?.transfers)
+        ? row.payoutHistory.transfers.map((transfer) => ({
+            id: String(transfer.id ?? ""),
+            amountUsd: Number(transfer.amountUsd ?? 0),
+            currency: String(transfer.currency ?? "usd"),
+            status: String(transfer.status ?? "draft"),
+            createdAt: Number(transfer.createdAt ?? 0),
+            processedAt:
+              typeof transfer.processedAt === "number" && Number.isFinite(transfer.processedAt)
+                ? transfer.processedAt
+                : null,
+            failureReason:
+              typeof transfer.failureReason === "string" && transfer.failureReason.trim()
+                ? transfer.failureReason.trim()
+                : null,
+          }))
+        : [],
     },
   };
 }

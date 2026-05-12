@@ -227,6 +227,80 @@ export default defineSchema({
     .index("by_dispute", ["sourceProviderDisputeId"])
     .index("by_charge", ["sourceProviderChargeId"]),
 
+  partnerPayoutBatches: defineTable({
+    batchKey: v.string(),
+    status: v.union(
+      v.literal("draft"),
+      v.literal("approved"),
+      v.literal("processing"),
+      v.literal("completed"),
+      v.literal("failed"),
+      v.literal("voided"),
+    ),
+    totalAmountUsd: v.number(),
+    currency: v.string(),
+    partnerCount: v.number(),
+    itemCount: v.number(),
+    createdByUserId: v.id("users"),
+    approvedByUserId: v.optional(v.id("users")),
+    processedByUserId: v.optional(v.id("users")),
+    approvedAt: v.optional(v.number()),
+    processedAt: v.optional(v.number()),
+    failureReason: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_batchKey", ["batchKey"])
+    .index("by_status_createdAt", ["status", "createdAt"])
+    .index("by_createdBy", ["createdByUserId", "createdAt"]),
+
+  partnerPayoutTransfers: defineTable({
+    batchId: v.id("partnerPayoutBatches"),
+    partnerId: v.id("builderPartners"),
+    partnerUserId: v.id("users"),
+    stripeAccountId: v.string(),
+    amountUsd: v.number(),
+    currency: v.string(),
+    status: v.union(
+      v.literal("draft"),
+      v.literal("processing"),
+      v.literal("succeeded"),
+      v.literal("failed"),
+    ),
+    stripeTransferId: v.optional(v.string()),
+    idempotencyKey: v.string(),
+    failureReason: v.optional(v.string()),
+    processedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_batch", ["batchId"])
+    .index("by_partner_createdAt", ["partnerId", "createdAt"])
+    .index("by_status_createdAt", ["status", "createdAt"])
+    .index("by_idempotencyKey", ["idempotencyKey"])
+    .index("by_stripeTransferId", ["stripeTransferId"]),
+
+  partnerPayoutItems: defineTable({
+    batchId: v.id("partnerPayoutBatches"),
+    transferId: v.id("partnerPayoutTransfers"),
+    partnerId: v.id("builderPartners"),
+    partnerUserId: v.id("users"),
+    commissionId: v.id("partnerCommissionLedger"),
+    amountUsd: v.number(),
+    currency: v.string(),
+    status: v.union(
+      v.literal("reserved"),
+      v.literal("settled"),
+      v.literal("voided"),
+    ),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_batch", ["batchId"])
+    .index("by_transfer", ["transferId"])
+    .index("by_partner_createdAt", ["partnerId", "createdAt"])
+    .index("by_commission", ["commissionId"]),
+
   workspaceCreditBalances: defineTable({
     userId: v.id("users"),
     includedCreditsBalance: v.number(),

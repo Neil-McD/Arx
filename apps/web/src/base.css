@@ -15584,6 +15584,66 @@ button.message-citation-chip:hover {
   line-height: 1.4;
 }
 
+.builder-partner-payout-history {
+  display: grid;
+  gap: 10px;
+  padding-top: 2px;
+}
+
+.builder-partner-payout-history-title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.builder-partner-payout-history-title span {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.builder-partner-payout-history-title small,
+.builder-partner-payout-history-empty,
+.builder-partner-payout-history-row small {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.builder-partner-payout-history-list {
+  display: grid;
+  gap: 8px;
+}
+
+.builder-partner-payout-history-row {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 0;
+  border-top: 1px solid var(--border-muted);
+}
+
+.builder-partner-payout-history-row > div {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.builder-partner-payout-history-row strong {
+  color: var(--text-primary);
+  font-size: 14px;
+  line-height: 1.2;
+}
+
+.builder-partner-payout-history-row span {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
 .integrations-header {
   display: flex;
   align-items: center;
@@ -21631,6 +21691,15 @@ button.message-citation-chip:hover {
 
 .app-root.mobile-settings-shell .builder-partner-payouts-ready {
   justify-items: start;
+}
+
+.app-root.mobile-settings-shell .builder-partner-payout-history-title,
+.app-root.mobile-settings-shell .builder-partner-payout-history-row {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.app-root.mobile-settings-shell .builder-partner-payout-history-title {
+  display: grid;
 }
 
 .app-root.mobile-settings-shell .builder-partner-requirement-action {

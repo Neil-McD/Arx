@@ -1,12 +1,17 @@
-import { internalMutation, mutation, query } from "./_generated/server";
+import { action, internalMutation, mutation, query } from "./_generated/server";
+import { api, internal } from "./_generated/api";
 import { v } from "convex/values";
 import { findAuthenticatedActorState, resolveAuthenticatedActor } from "./authActor";
 import { hashBusinessVisitorKey } from "./businessAnalyticsCore";
+import { recordCriticalAuditEventBestEffort } from "./criticalAudit";
+import { requireOperatorRole } from "./operatorAccess";
 import { readCanonicalPublicAppOrigin } from "./publicAppUrl";
+import { getStripeClient } from "./stripeCore";
 import {
   BUILDER_PARTNER_ATTRIBUTION_WINDOW_MS,
   BUILDER_PARTNER_COMMISSION_HOLD_MS,
   BUILDER_PARTNER_COMMUNITY_PLATFORM_FEE_BPS,
+  BUILDER_PARTNER_MIN_PAYOUT_USD,
   BUILDER_PARTNER_PROGRAM_VERSION,
   BUILDER_PARTNER_PLATFORM_FEE_SHARE_BPS,
   BUILDER_PARTNER_TERMS_VERSION,
@@ -19,6 +24,7 @@ import { buildAttributionRouteLabel } from "../shared/routePrivacy";
 
 type RequirementKey = "signed_in" | "own_community" | "accept_terms" | "account_good_standing";
 type ProgramState = "signed_out" | "locked" | "ready_to_unlock" | "active" | "paused" | "disabled";
+type PartnerPayoutItemStatus = "reserved" | "settled" | "voided";
 
 function authLookupIsOptionalFailure(error: unknown): boolean {
   const message =
@@ -234,6 +240,33 @@ async function readAppliedCommissionAdjustmentTotalUsd(ctx: any, commissionId: a
   const rows = await collectAppliedCommissionAdjustments(ctx, commissionId);
   return roundSignedPartnerMoney(
     rows.reduce((total: number, row: any) => total + Number(row.amountUsd ?? 0), 0),
+  );
+}
+
+async function collectPartnerPayoutItemsByCommission(ctx: any, commissionId: any) {
+  return await ctx.db
+    .query("partnerPayoutItems" as any)
+    .withIndex("by_commission", (q: any) => q.eq("commissionId", commissionId))
+    .collect();
+}
+
+function partnerPayoutItemStatusIsOneOf(
+  row: any,
+  statuses: ReadonlySet<PartnerPayoutItemStatus>,
+): boolean {
+  return statuses.has(String(row?.status ?? "") as PartnerPayoutItemStatus);
+}
+
+async function readCommissionPayoutItemTotalUsd(
+  ctx: any,
+  commissionId: any,
+  statuses: ReadonlySet<PartnerPayoutItemStatus>,
+) {
+  const rows = await collectPartnerPayoutItemsByCommission(ctx, commissionId);
+  return roundSignedPartnerMoney(
+    rows
+      .filter((row: any) => partnerPayoutItemStatusIsOneOf(row, statuses))
+      .reduce((total: number, row: any) => total + Number(row.amountUsd ?? 0), 0),
   );
 }
 
@@ -1078,6 +1111,10 @@ async function readCommissionSummary(ctx: any, partner: any) {
     .query("partnerCommissionAdjustments" as any)
     .withIndex("by_partner_createdAt", (q: any) => q.eq("partnerId", partner._id))
     .collect();
+  const payoutItems = await ctx.db
+    .query("partnerPayoutItems" as any)
+    .withIndex("by_partner_createdAt", (q: any) => q.eq("partnerId", partner._id))
+    .collect();
   const rowById = new Map(rows.map((row: any) => [String(row._id), row]));
   const adjustmentTotalByCommissionId = new Map<string, number>();
   for (const adjustment of adjustments) {
@@ -1092,12 +1129,37 @@ async function readCommissionSummary(ctx: any, partner: any) {
       ),
     );
   }
+  const reservedOrSettledPayoutTotalByCommissionId = new Map<string, number>();
+  const settledPayoutTotalByCommissionId = new Map<string, number>();
+  for (const item of payoutItems) {
+    const commissionId = String(item.commissionId ?? "");
+    if (item.status !== "reserved" && item.status !== "settled") continue;
+    if (rowById.has(commissionId)) {
+      reservedOrSettledPayoutTotalByCommissionId.set(
+        commissionId,
+        roundSignedPartnerMoney(
+          Number(reservedOrSettledPayoutTotalByCommissionId.get(commissionId) ?? 0) +
+          Number(item.amountUsd ?? 0),
+        ),
+      );
+    }
+    if (item.status === "settled") {
+      settledPayoutTotalByCommissionId.set(
+        commissionId,
+        roundSignedPartnerMoney(
+          Number(settledPayoutTotalByCommissionId.get(commissionId) ?? 0) +
+          Number(item.amountUsd ?? 0),
+        ),
+      );
+    }
+  }
   const rowNetAmount = (row: any) =>
     Math.max(
       0,
       roundBuilderPartnerMoney(
         Number(row.commissionAmountUsd ?? 0) +
-        Number(adjustmentTotalByCommissionId.get(String(row._id)) ?? 0),
+        Number(adjustmentTotalByCommissionId.get(String(row._id)) ?? 0) -
+        Number(reservedOrSettledPayoutTotalByCommissionId.get(String(row._id)) ?? 0),
       ),
     );
   const sum = (statusSet: ReadonlySet<string>) =>
@@ -1109,15 +1171,54 @@ async function readCommissionSummary(ctx: any, partner: any) {
   const paidSet = new Set(["paid"]);
   const pendingUsd = sum(pendingSet);
   const payableUsd = sum(payableSet);
-  const paidUsd = sum(paidSet);
+  const settledPaidUsd = roundBuilderPartnerMoney(
+    Array.from(settledPayoutTotalByCommissionId.values()).reduce(
+      (total, amount) => total + amount,
+      0,
+    ),
+  );
+  const legacyPaidUsd = sum(paidSet);
+  const paidUsd = roundBuilderPartnerMoney(settledPaidUsd + legacyPaidUsd);
   return {
     pendingUsd,
     payableUsd,
     paidUsd,
     totalUsd: pendingUsd + payableUsd + paidUsd,
-    pendingCount: rows.filter((row: any) => pendingSet.has(String(row.status ?? ""))).length,
-    payableCount: rows.filter((row: any) => payableSet.has(String(row.status ?? ""))).length,
-    paidCount: rows.filter((row: any) => paidSet.has(String(row.status ?? ""))).length,
+    pendingCount: rows.filter((row: any) => pendingSet.has(String(row.status ?? "")) && rowNetAmount(row) > 0).length,
+    payableCount: rows.filter((row: any) => payableSet.has(String(row.status ?? "")) && rowNetAmount(row) > 0).length,
+    paidCount:
+      new Set(
+        payoutItems
+          .filter((row: any) => row.status === "settled")
+          .map((row: any) => String(row.commissionId ?? "")),
+      ).size +
+      rows.filter((row: any) => paidSet.has(String(row.status ?? "")) && rowNetAmount(row) > 0).length,
+  };
+}
+
+async function readPayoutHistory(ctx: any, partner: any) {
+  if (!partner?._id) {
+    return {
+      transfers: [],
+    };
+  }
+  const rows = await ctx.db
+    .query("partnerPayoutTransfers" as any)
+    .withIndex("by_partner_createdAt", (q: any) => q.eq("partnerId", partner._id))
+    .collect();
+  rows.sort((a: any, b: any) => Number(b.createdAt ?? 0) - Number(a.createdAt ?? 0));
+  return {
+    transfers: rows.slice(0, 10).map((row: any) => ({
+      id: String(row._id),
+      amountUsd: roundBuilderPartnerMoney(Number(row.amountUsd ?? 0)),
+      currency: String(row.currency ?? "usd"),
+      status: String(row.status ?? "draft"),
+      createdAt: Number(row.createdAt ?? 0),
+      processedAt: typeof row.processedAt === "number" ? row.processedAt : null,
+      failureReason: typeof row.failureReason === "string" && row.failureReason.trim()
+        ? row.failureReason.trim().slice(0, 240)
+        : null,
+    })),
   };
 }
 
@@ -1174,6 +1275,7 @@ async function buildProgramSnapshot(ctx: any, args: { authSubject?: string | nul
       },
       commissionSummary: await readCommissionSummary(ctx, null),
       attributionSummary: await readAttributionSummary(ctx, null),
+      payoutHistory: await readPayoutHistory(ctx, null),
     };
   }
 
@@ -1203,6 +1305,204 @@ async function buildProgramSnapshot(ctx: any, args: { authSubject?: string | nul
     payout,
     commissionSummary: await readCommissionSummary(ctx, partner),
     attributionSummary: await readAttributionSummary(ctx, partner),
+    payoutHistory: await readPayoutHistory(ctx, partner),
+  };
+}
+
+function normalizePayoutLimit(value: unknown): number {
+  const limit = Math.floor(Number(value ?? 100));
+  if (!Number.isFinite(limit) || limit <= 0) return 100;
+  return Math.min(250, limit);
+}
+
+function normalizeMinimumPayoutUsd(value: unknown): number {
+  const minimumUsd = roundBuilderPartnerMoney(Number(value ?? BUILDER_PARTNER_MIN_PAYOUT_USD));
+  if (!Number.isFinite(minimumUsd) || minimumUsd < 0) return BUILDER_PARTNER_MIN_PAYOUT_USD;
+  return minimumUsd;
+}
+
+function usdToStripeCents(amountUsd: number): number {
+  const cents = Math.round(roundBuilderPartnerMoney(amountUsd) * 100);
+  if (!Number.isFinite(cents) || cents <= 0) {
+    throw new Error("partner_payout_amount_invalid");
+  }
+  return cents;
+}
+
+function normalizePayoutFailureReason(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  return message.trim().slice(0, 500) || "partner_payout_transfer_failed";
+}
+
+async function recordPartnerPayoutAudit(ctx: any, input: {
+  eventType:
+    | "builder_partner_payout_batch_created"
+    | "builder_partner_payout_batch_approved"
+    | "builder_partner_payout_batch_voided"
+    | "builder_partner_payout_execution_started"
+    | "builder_partner_payout_transfer_succeeded"
+    | "builder_partner_payout_transfer_failed"
+    | "builder_partner_payout_batch_finalized";
+  status: "started" | "succeeded" | "failed";
+  actorUserId?: unknown;
+  subjectUserId?: unknown;
+  provider?: "polynet" | "stripe";
+  providerObjectId?: string | null;
+  metadata?: Record<string, unknown>;
+  nowMs?: number;
+}) {
+  const nowMs = input.nowMs ?? Date.now();
+  const batchId = String(input.metadata?.batchId ?? "unknown");
+  const transferId = String(input.metadata?.transferId ?? "");
+  await recordCriticalAuditEventBestEffort(ctx, {
+    eventKey: [
+      input.eventType,
+      input.status,
+      batchId,
+      transferId || "batch",
+      nowMs,
+    ].join(":"),
+    eventType: input.eventType,
+    severity: input.status === "failed" ? "warning" : "info",
+    status: input.status,
+    actorUserId: input.actorUserId,
+    subjectUserId: input.subjectUserId,
+    provider: input.provider ?? "polynet",
+    providerObjectId: input.providerObjectId ?? null,
+    metadata: input.metadata,
+    createdAt: nowMs,
+  });
+}
+
+async function readReadyStripeConnectPayoutAccount(ctx: any, userId: any) {
+  const rows = await ctx.db
+    .query("userStripeConnectAccounts")
+    .withIndex("by_user", (q: any) => q.eq("userId", userId))
+    .collect();
+  return rows.find((row: any) =>
+    row.status === "ready" &&
+    row.payoutsEnabled === true &&
+    typeof row.stripeAccountId === "string" &&
+    row.stripeAccountId.trim(),
+  ) ?? null;
+}
+
+async function readPartnerPayablePayoutEntries(ctx: any, partner: any) {
+  if (!partner?._id || partner.status !== "active") return [];
+  const rows = await ctx.db
+    .query("partnerCommissionLedger")
+    .withIndex("by_partner_status", (q: any) =>
+      q.eq("partnerId", partner._id).eq("status", "payable"),
+    )
+    .collect();
+  const reservedOrSettledStatuses = new Set<PartnerPayoutItemStatus>(["reserved", "settled"]);
+  const entries = [];
+  for (const row of rows) {
+    if (normalizeUsdCurrency(row.currency) !== "usd") continue;
+    const adjustmentTotalUsd = await readAppliedCommissionAdjustmentTotalUsd(ctx, row._id);
+    const reservedOrSettledPayoutUsd = await readCommissionPayoutItemTotalUsd(
+      ctx,
+      row._id,
+      reservedOrSettledStatuses,
+    );
+    const amountUsd = Math.max(
+      0,
+      roundBuilderPartnerMoney(
+        Number(row.commissionAmountUsd ?? 0) +
+        adjustmentTotalUsd -
+        reservedOrSettledPayoutUsd,
+      ),
+    );
+    if (amountUsd <= 0) continue;
+    entries.push({
+      commissionId: row._id,
+      amountUsd,
+      currency: "usd",
+    });
+  }
+  return entries;
+}
+
+async function readPartnerPayoutPlans(ctx: any, args: {
+  minimumUsd?: number | null;
+  limit?: number | null;
+}) {
+  const minimumUsd = normalizeMinimumPayoutUsd(args.minimumUsd);
+  const limit = normalizePayoutLimit(args.limit);
+  const partners = await ctx.db
+    .query("builderPartners")
+    .withIndex("by_status_createdAt", (q: any) => q.eq("status", "active"))
+    .take(limit);
+  const plans = [];
+  for (const partner of partners) {
+    const stripeAccount = await readReadyStripeConnectPayoutAccount(ctx, partner.userId);
+    if (!stripeAccount) continue;
+    const entries = await readPartnerPayablePayoutEntries(ctx, partner);
+    const amountUsd = roundBuilderPartnerMoney(
+      entries.reduce((total: number, entry: any) => total + Number(entry.amountUsd ?? 0), 0),
+    );
+    if (amountUsd < minimumUsd) continue;
+    plans.push({
+      partner,
+      stripeAccount,
+      entries,
+      amountUsd,
+      currency: "usd",
+    });
+  }
+  return plans;
+}
+
+async function readPartnerPayoutBatchSnapshot(ctx: any, batchId: any) {
+  const batch = await ctx.db.get(batchId);
+  if (!batch) throw new Error("partner_payout_batch_not_found");
+  const [transfers, items] = await Promise.all([
+    ctx.db
+      .query("partnerPayoutTransfers" as any)
+      .withIndex("by_batch", (q: any) => q.eq("batchId", batchId))
+      .collect(),
+    ctx.db
+      .query("partnerPayoutItems" as any)
+      .withIndex("by_batch", (q: any) => q.eq("batchId", batchId))
+      .collect(),
+  ]);
+  return {
+    batch: {
+      id: String(batch._id),
+      batchKey: String(batch.batchKey ?? ""),
+      status: String(batch.status ?? "draft"),
+      totalAmountUsd: roundBuilderPartnerMoney(Number(batch.totalAmountUsd ?? 0)),
+      currency: String(batch.currency ?? "usd"),
+      partnerCount: Number(batch.partnerCount ?? 0),
+      itemCount: Number(batch.itemCount ?? 0),
+      createdAt: Number(batch.createdAt ?? 0),
+      updatedAt: Number(batch.updatedAt ?? 0),
+      approvedAt: typeof batch.approvedAt === "number" ? batch.approvedAt : null,
+      processedAt: typeof batch.processedAt === "number" ? batch.processedAt : null,
+      failureReason: typeof batch.failureReason === "string" ? batch.failureReason : null,
+    },
+    transfers: transfers.map((row: any) => ({
+      id: String(row._id),
+      partnerId: String(row.partnerId),
+      partnerUserId: String(row.partnerUserId),
+      amountUsd: roundBuilderPartnerMoney(Number(row.amountUsd ?? 0)),
+      currency: String(row.currency ?? "usd"),
+      status: String(row.status ?? "draft"),
+      stripeTransferId: typeof row.stripeTransferId === "string" ? row.stripeTransferId : null,
+      failureReason: typeof row.failureReason === "string" ? row.failureReason : null,
+      processedAt: typeof row.processedAt === "number" ? row.processedAt : null,
+      createdAt: Number(row.createdAt ?? 0),
+    })),
+    items: items.map((row: any) => ({
+      id: String(row._id),
+      transferId: String(row.transferId),
+      partnerId: String(row.partnerId),
+      commissionId: String(row.commissionId),
+      amountUsd: roundBuilderPartnerMoney(Number(row.amountUsd ?? 0)),
+      currency: String(row.currency ?? "usd"),
+      status: String(row.status ?? "reserved"),
+      createdAt: Number(row.createdAt ?? 0),
+    })),
   };
 }
 
@@ -1409,5 +1709,472 @@ export const recordBuilderPartnerAttribution = mutation({
       updatedAt: nowMs,
     });
     return { ok: true, attribution_id: String(attributionId), status: referredUserId ? "bound" : "active" };
+  },
+});
+
+export const previewPartnerPayoutBatch = query({
+  args: {
+    authSubject: v.optional(v.string()),
+    minimumUsd: v.optional(v.number()),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    await requireOperatorRole(ctx, args.authSubject, "operator");
+    const plans = await readPartnerPayoutPlans(ctx, {
+      minimumUsd: args.minimumUsd ?? null,
+      limit: args.limit ?? null,
+    });
+    const totalAmountUsd = roundBuilderPartnerMoney(
+      plans.reduce((total: number, plan: any) => total + Number(plan.amountUsd ?? 0), 0),
+    );
+    return {
+      minimumUsd: normalizeMinimumPayoutUsd(args.minimumUsd),
+      totalAmountUsd,
+      partnerCount: plans.length,
+      itemCount: plans.reduce((total: number, plan: any) => total + plan.entries.length, 0),
+      partners: plans.map((plan: any) => ({
+        partnerId: String(plan.partner._id),
+        partnerUserId: String(plan.partner.userId),
+        code: String(plan.partner.code ?? ""),
+        amountUsd: plan.amountUsd,
+        currency: plan.currency,
+        itemCount: plan.entries.length,
+        payoutReady: true,
+      })),
+    };
+  },
+});
+
+export const createPartnerPayoutBatch = mutation({
+  args: {
+    authSubject: v.optional(v.string()),
+    batchKey: v.optional(v.string()),
+    minimumUsd: v.optional(v.number()),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const operator = await requireOperatorRole(ctx, args.authSubject, "operator");
+    const nowMs = Date.now();
+    const rawBatchKey = String(args.batchKey ?? "").trim();
+    const batchKey = rawBatchKey || `partner_payout:${nowMs}:${String(operator.dbUserId)}`;
+    const existing = await ctx.db
+      .query("partnerPayoutBatches" as any)
+      .withIndex("by_batchKey", (q: any) => q.eq("batchKey", batchKey))
+      .first();
+    if (existing) {
+      return await readPartnerPayoutBatchSnapshot(ctx, existing._id);
+    }
+
+    const plans = await readPartnerPayoutPlans(ctx, {
+      minimumUsd: args.minimumUsd ?? null,
+      limit: args.limit ?? null,
+    });
+    if (plans.length <= 0) {
+      throw new Error("partner_payout_batch_empty");
+    }
+    const totalAmountUsd = roundBuilderPartnerMoney(
+      plans.reduce((total: number, plan: any) => total + Number(plan.amountUsd ?? 0), 0),
+    );
+    const itemCount = plans.reduce((total: number, plan: any) => total + plan.entries.length, 0);
+    const batchId = await ctx.db.insert("partnerPayoutBatches" as any, {
+      batchKey,
+      status: "draft",
+      totalAmountUsd,
+      currency: "usd",
+      partnerCount: plans.length,
+      itemCount,
+      createdByUserId: operator.dbUserId,
+      createdAt: nowMs,
+      updatedAt: nowMs,
+    });
+
+    for (const plan of plans) {
+      const transferId = await ctx.db.insert("partnerPayoutTransfers" as any, {
+        batchId,
+        partnerId: plan.partner._id,
+        partnerUserId: plan.partner.userId,
+        stripeAccountId: String(plan.stripeAccount.stripeAccountId).trim(),
+        amountUsd: plan.amountUsd,
+        currency: "usd",
+        status: "draft",
+        idempotencyKey: `partner_payout:${String(batchId)}:${String(plan.partner._id)}`,
+        createdAt: nowMs,
+        updatedAt: nowMs,
+      });
+      for (const entry of plan.entries) {
+        await ctx.db.insert("partnerPayoutItems" as any, {
+          batchId,
+          transferId,
+          partnerId: plan.partner._id,
+          partnerUserId: plan.partner.userId,
+          commissionId: entry.commissionId,
+          amountUsd: entry.amountUsd,
+          currency: "usd",
+          status: "reserved",
+          createdAt: nowMs,
+          updatedAt: nowMs,
+        });
+      }
+    }
+
+    await recordPartnerPayoutAudit(ctx, {
+      eventType: "builder_partner_payout_batch_created",
+      status: "succeeded",
+      actorUserId: operator.dbUserId,
+      metadata: {
+        batchId: String(batchId),
+        totalAmountUsd,
+        partnerCount: plans.length,
+        itemCount,
+      },
+      nowMs,
+    });
+
+    return await readPartnerPayoutBatchSnapshot(ctx, batchId);
+  },
+});
+
+export const getPartnerPayoutBatchForOperator = query({
+  args: {
+    authSubject: v.optional(v.string()),
+    batchId: v.id("partnerPayoutBatches"),
+  },
+  handler: async (ctx, args) => {
+    await requireOperatorRole(ctx, args.authSubject, "operator");
+    return await readPartnerPayoutBatchSnapshot(ctx, args.batchId);
+  },
+});
+
+export const approvePartnerPayoutBatch = mutation({
+  args: {
+    authSubject: v.optional(v.string()),
+    batchId: v.id("partnerPayoutBatches"),
+  },
+  handler: async (ctx, args) => {
+    const operator = await requireOperatorRole(ctx, args.authSubject, "operator");
+    const batch = await ctx.db.get(args.batchId);
+    if (!batch) throw new Error("partner_payout_batch_not_found");
+    if (batch.status !== "draft") throw new Error("partner_payout_batch_not_draft");
+    const nowMs = Date.now();
+    await ctx.db.patch(args.batchId, {
+      status: "approved",
+      approvedByUserId: operator.dbUserId,
+      approvedAt: nowMs,
+      updatedAt: nowMs,
+    });
+    await recordPartnerPayoutAudit(ctx, {
+      eventType: "builder_partner_payout_batch_approved",
+      status: "succeeded",
+      actorUserId: operator.dbUserId,
+      metadata: {
+        batchId: String(args.batchId),
+        totalAmountUsd: Number(batch.totalAmountUsd ?? 0),
+        partnerCount: Number(batch.partnerCount ?? 0),
+        itemCount: Number(batch.itemCount ?? 0),
+      },
+      nowMs,
+    });
+    return await readPartnerPayoutBatchSnapshot(ctx, args.batchId);
+  },
+});
+
+export const voidPartnerPayoutBatch = mutation({
+  args: {
+    authSubject: v.optional(v.string()),
+    batchId: v.id("partnerPayoutBatches"),
+    reason: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const operator = await requireOperatorRole(ctx, args.authSubject, "operator");
+    const batch = await ctx.db.get(args.batchId);
+    if (!batch) throw new Error("partner_payout_batch_not_found");
+    if (batch.status === "processing" || batch.status === "completed") {
+      throw new Error("partner_payout_batch_cannot_void");
+    }
+    const nowMs = Date.now();
+    const [transfers, items] = await Promise.all([
+      ctx.db
+        .query("partnerPayoutTransfers" as any)
+        .withIndex("by_batch", (q: any) => q.eq("batchId", args.batchId))
+        .collect(),
+      ctx.db
+        .query("partnerPayoutItems" as any)
+        .withIndex("by_batch", (q: any) => q.eq("batchId", args.batchId))
+        .collect(),
+    ]);
+    if (transfers.some((transfer: any) => transfer.status === "succeeded")) {
+      throw new Error("partner_payout_batch_has_settled_transfer");
+    }
+    await ctx.db.patch(args.batchId, {
+      status: "voided",
+      failureReason: String(args.reason ?? "operator_voided").trim().slice(0, 240),
+      updatedAt: nowMs,
+    });
+    for (const transfer of transfers) {
+      if (transfer.status === "succeeded") continue;
+      await ctx.db.patch(transfer._id, {
+        status: "failed",
+        failureReason: "batch_voided",
+        updatedAt: nowMs,
+      });
+    }
+    for (const item of items) {
+      if (item.status === "settled") continue;
+      await ctx.db.patch(item._id, {
+        status: "voided",
+        updatedAt: nowMs,
+      });
+    }
+    await recordPartnerPayoutAudit(ctx, {
+      eventType: "builder_partner_payout_batch_voided",
+      status: "succeeded",
+      actorUserId: operator.dbUserId,
+      metadata: {
+        batchId: String(args.batchId),
+        reason: String(args.reason ?? "operator_voided").trim().slice(0, 240),
+      },
+      nowMs,
+    });
+    return await readPartnerPayoutBatchSnapshot(ctx, args.batchId);
+  },
+});
+
+export const beginPartnerPayoutBatchExecution = mutation({
+  args: {
+    authSubject: v.optional(v.string()),
+    batchId: v.id("partnerPayoutBatches"),
+  },
+  handler: async (ctx, args) => {
+    const operator = await requireOperatorRole(ctx, args.authSubject, "operator");
+    const batch = await ctx.db.get(args.batchId);
+    if (!batch) throw new Error("partner_payout_batch_not_found");
+    if (batch.status === "draft") throw new Error("partner_payout_batch_not_approved");
+    if (batch.status === "voided") throw new Error("partner_payout_batch_voided");
+    if (batch.status === "completed") {
+      return { transfers: [] };
+    }
+    const nowMs = Date.now();
+    await ctx.db.patch(args.batchId, {
+      status: "processing",
+      processedByUserId: operator.dbUserId,
+      processedAt: batch.processedAt ?? nowMs,
+      failureReason: undefined,
+      updatedAt: nowMs,
+    });
+    const transfers = await ctx.db
+      .query("partnerPayoutTransfers" as any)
+      .withIndex("by_batch", (q: any) => q.eq("batchId", args.batchId))
+      .collect();
+    const runnableTransfers = transfers.filter((row: any) =>
+      row.status === "draft" || row.status === "failed" || row.status === "processing",
+    );
+    for (const transfer of runnableTransfers) {
+      await ctx.db.patch(transfer._id, {
+        status: "processing",
+        failureReason: undefined,
+        updatedAt: nowMs,
+      });
+    }
+    await recordPartnerPayoutAudit(ctx, {
+      eventType: "builder_partner_payout_execution_started",
+      status: "started",
+      actorUserId: operator.dbUserId,
+      metadata: {
+        batchId: String(args.batchId),
+        transferCount: runnableTransfers.length,
+        totalAmountUsd: Number(batch.totalAmountUsd ?? 0),
+      },
+      nowMs,
+    });
+    return {
+      transfers: runnableTransfers.map((row: any) => ({
+        transferId: row._id,
+        batchId: row.batchId,
+        partnerId: row.partnerId,
+        amountUsd: roundBuilderPartnerMoney(Number(row.amountUsd ?? 0)),
+        currency: String(row.currency ?? "usd").toLowerCase(),
+        stripeAccountId: String(row.stripeAccountId ?? "").trim(),
+        idempotencyKey: String(row.idempotencyKey ?? "").trim(),
+      })),
+    };
+  },
+});
+
+export const recordPartnerPayoutTransferSucceededInternal = internalMutation({
+  args: {
+    transferId: v.id("partnerPayoutTransfers"),
+    stripeTransferId: v.string(),
+    nowMs: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const transfer = await ctx.db.get(args.transferId);
+    if (!transfer) throw new Error("partner_payout_transfer_not_found");
+    if (transfer.status === "succeeded") return { ok: true };
+    await ctx.db.patch(args.transferId, {
+      status: "succeeded",
+      stripeTransferId: args.stripeTransferId,
+      failureReason: undefined,
+      processedAt: args.nowMs,
+      updatedAt: args.nowMs,
+    });
+    const items = await ctx.db
+      .query("partnerPayoutItems" as any)
+      .withIndex("by_transfer", (q: any) => q.eq("transferId", args.transferId))
+      .collect();
+    for (const item of items) {
+      await ctx.db.patch(item._id, {
+        status: "settled",
+        updatedAt: args.nowMs,
+      });
+    }
+    await recordPartnerPayoutAudit(ctx, {
+      eventType: "builder_partner_payout_transfer_succeeded",
+      status: "succeeded",
+      subjectUserId: transfer.partnerUserId,
+      provider: "stripe",
+      providerObjectId: args.stripeTransferId,
+      metadata: {
+        batchId: String(transfer.batchId),
+        transferId: String(args.transferId),
+        amountUsd: Number(transfer.amountUsd ?? 0),
+      },
+      nowMs: args.nowMs,
+    });
+    return { ok: true };
+  },
+});
+
+export const recordPartnerPayoutTransferFailedInternal = internalMutation({
+  args: {
+    transferId: v.id("partnerPayoutTransfers"),
+    failureReason: v.string(),
+    nowMs: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const transfer = await ctx.db.get(args.transferId);
+    if (!transfer) throw new Error("partner_payout_transfer_not_found");
+    if (transfer.status === "succeeded") return { ok: true };
+    await ctx.db.patch(args.transferId, {
+      status: "failed",
+      failureReason: args.failureReason.slice(0, 500),
+      processedAt: args.nowMs,
+      updatedAt: args.nowMs,
+    });
+    await recordPartnerPayoutAudit(ctx, {
+      eventType: "builder_partner_payout_transfer_failed",
+      status: "failed",
+      subjectUserId: transfer.partnerUserId,
+      provider: "stripe",
+      metadata: {
+        batchId: String(transfer.batchId),
+        transferId: String(args.transferId),
+        amountUsd: Number(transfer.amountUsd ?? 0),
+        errorMessage: args.failureReason.slice(0, 240),
+      },
+      nowMs: args.nowMs,
+    });
+    return { ok: true };
+  },
+});
+
+export const finalizePartnerPayoutBatchExecutionInternal = internalMutation({
+  args: {
+    batchId: v.id("partnerPayoutBatches"),
+    nowMs: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const batch = await ctx.db.get(args.batchId);
+    if (!batch) throw new Error("partner_payout_batch_not_found");
+    const transfers = await ctx.db
+      .query("partnerPayoutTransfers" as any)
+      .withIndex("by_batch", (q: any) => q.eq("batchId", args.batchId))
+      .collect();
+    const failedTransfers = transfers.filter((row: any) => row.status === "failed");
+    const processingTransfers = transfers.filter((row: any) => row.status === "processing");
+    const completed = transfers.length > 0 &&
+      transfers.every((row: any) => row.status === "succeeded");
+    await ctx.db.patch(args.batchId, {
+      status: completed ? "completed" : processingTransfers.length > 0 ? "processing" : "failed",
+      failureReason: failedTransfers.length > 0 ? `${failedTransfers.length} partner payout transfer(s) failed` : undefined,
+      processedAt: args.nowMs,
+      updatedAt: args.nowMs,
+    });
+    await recordPartnerPayoutAudit(ctx, {
+      eventType: "builder_partner_payout_batch_finalized",
+      status: completed ? "succeeded" : "failed",
+      metadata: {
+        batchId: String(args.batchId),
+        transferCount: transfers.length,
+        failedTransferCount: failedTransfers.length,
+        totalAmountUsd: Number(batch.totalAmountUsd ?? 0),
+      },
+      nowMs: args.nowMs,
+    });
+    return { ok: true };
+  },
+});
+
+export const executePartnerPayoutBatch = action({
+  args: {
+    authSubject: v.optional(v.string()),
+    batchId: v.id("partnerPayoutBatches"),
+  },
+  handler: async (ctx, args): Promise<any> => {
+    const begin = await ctx.runMutation((api as any).builderPartners.beginPartnerPayoutBatchExecution, {
+      authSubject: args.authSubject,
+      batchId: args.batchId,
+    });
+    const transfers = Array.isArray(begin?.transfers) ? begin.transfers : [];
+    if (transfers.length > 0) {
+      const stripe = getStripeClient();
+      for (const transfer of transfers) {
+        const nowMs = Date.now();
+        try {
+          if (String(transfer.currency ?? "").toLowerCase() !== "usd") {
+            throw new Error("partner_payout_currency_unsupported");
+          }
+          const stripeTransfer = await stripe.transfers.create(
+            {
+              amount: usdToStripeCents(Number(transfer.amountUsd ?? 0)),
+              currency: "usd",
+              destination: String(transfer.stripeAccountId ?? "").trim(),
+              description: "Polynet Builder Partner payout",
+              metadata: {
+                polynet_payout_batch_id: String(args.batchId),
+                polynet_partner_id: String(transfer.partnerId),
+              },
+            },
+            {
+              idempotencyKey: String(transfer.idempotencyKey ?? "").trim(),
+            },
+          );
+          await ctx.runMutation(
+            (internal as any).builderPartners.recordPartnerPayoutTransferSucceededInternal,
+            {
+              transferId: transfer.transferId,
+              stripeTransferId: stripeTransfer.id,
+              nowMs,
+            },
+          );
+        } catch (error) {
+          await ctx.runMutation(
+            (internal as any).builderPartners.recordPartnerPayoutTransferFailedInternal,
+            {
+              transferId: transfer.transferId,
+              failureReason: normalizePayoutFailureReason(error),
+              nowMs,
+            },
+          );
+        }
+      }
+    }
+    await ctx.runMutation((internal as any).builderPartners.finalizePartnerPayoutBatchExecutionInternal, {
+      batchId: args.batchId,
+      nowMs: Date.now(),
+    });
+    return await ctx.runQuery((api as any).builderPartners.getPartnerPayoutBatchForOperator, {
+      authSubject: args.authSubject,
+      batchId: args.batchId,
+    });
   },
 });
