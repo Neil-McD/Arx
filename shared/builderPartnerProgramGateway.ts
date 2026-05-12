@@ -47,10 +47,14 @@ export type BuilderPartnerProgramSnapshot = {
   commissionSummary: {
     pendingUsd: number;
     payableUsd: number;
+    bufferedUsd: number;
+    readyUsd: number;
     paidUsd: number;
     totalUsd: number;
     pendingCount: number;
     payableCount: number;
+    bufferedCount: number;
+    readyCount: number;
     paidCount: number;
   };
   attributionSummary: {
@@ -163,10 +167,14 @@ function normalizeProgramSnapshot(row: BuilderPartnerProgramSnapshot): BuilderPa
     commissionSummary: {
       pendingUsd: Number(row.commissionSummary?.pendingUsd ?? 0),
       payableUsd: Number(row.commissionSummary?.payableUsd ?? 0),
+      bufferedUsd: Number(row.commissionSummary?.bufferedUsd ?? 0),
+      readyUsd: Number(row.commissionSummary?.readyUsd ?? row.commissionSummary?.payableUsd ?? 0),
       paidUsd: Number(row.commissionSummary?.paidUsd ?? 0),
       totalUsd: Number(row.commissionSummary?.totalUsd ?? 0),
       pendingCount: Number(row.commissionSummary?.pendingCount ?? 0),
       payableCount: Number(row.commissionSummary?.payableCount ?? 0),
+      bufferedCount: Number(row.commissionSummary?.bufferedCount ?? 0),
+      readyCount: Number(row.commissionSummary?.readyCount ?? row.commissionSummary?.payableCount ?? 0),
       paidCount: Number(row.commissionSummary?.paidCount ?? 0),
     },
     attributionSummary: {

@@ -4,7 +4,7 @@ import {
   BUILDER_PARTNER_ATTRIBUTION_WINDOW_MS,
   BUILDER_PARTNER_COMMUNITY_PLATFORM_FEE_BPS,
   BUILDER_PARTNER_COMMISSION_HOLD_MS,
-  BUILDER_PARTNER_MIN_PAYOUT_USD,
+  BUILDER_PARTNER_PAYOUT_BUFFER_MS,
   BUILDER_PARTNER_PLATFORM_FEE_SHARE_BPS,
   BUILDER_PARTNER_PROGRAM_VERSION,
   BUILDER_PARTNER_TERMS_VERSION,
@@ -30,7 +30,7 @@ function proveConstants() {
   assert.equal(BUILDER_PARTNER_TOOL_GROSS_MARGIN_SHARE_BPS, 2000);
   assert.equal(BUILDER_PARTNER_ATTRIBUTION_WINDOW_MS, 30 * 24 * 60 * 60 * 1000);
   assert.equal(BUILDER_PARTNER_COMMISSION_HOLD_MS, 30 * 24 * 60 * 60 * 1000);
-  assert.equal(BUILDER_PARTNER_MIN_PAYOUT_USD, 50);
+  assert.equal(BUILDER_PARTNER_PAYOUT_BUFFER_MS, 14 * 24 * 60 * 60 * 1000);
 }
 
 function proveCommunityCommissionMath() {
@@ -129,8 +129,8 @@ function proveSchemaContract(schemaSource: string) {
   );
   assert.match(
     schemaSource,
-    /partnerPayoutBatches:[\s\S]*status:\s*v\.union\([\s\S]*v\.literal\("draft"\)[\s\S]*v\.literal\("approved"\)[\s\S]*v\.literal\("processing"\)[\s\S]*v\.literal\("completed"\)[\s\S]*v\.literal\("failed"\)[\s\S]*v\.literal\("voided"\)[\s\S]*createdByUserId:\s*v\.id\("users"\)/,
-    "expected partner payout batches to be manual-review settlement objects",
+    /partnerPayoutBatches:[\s\S]*status:\s*v\.union\([\s\S]*v\.literal\("draft"\)[\s\S]*v\.literal\("approved"\)[\s\S]*v\.literal\("processing"\)[\s\S]*v\.literal\("completed"\)[\s\S]*v\.literal\("failed"\)[\s\S]*v\.literal\("voided"\)[\s\S]*payableCutoffAt:\s*v\.optional\(v\.number\(\)\)[\s\S]*payoutBufferMs:\s*v\.optional\(v\.number\(\)\)[\s\S]*createdByUserId:\s*v\.id\("users"\)/,
+    "expected partner payout batches to be manual-review settlement objects with an auditable payout cutoff",
   );
   assert.match(
     schemaSource,
@@ -167,7 +167,7 @@ function proveUiContract(uiSource: string) {
   );
   assertIncludes(
     uiSource,
-    "BUILDER_PARTNER_MIN_PAYOUT_USD",
+    "BUILDER_PARTNER_PAYOUT_BUFFER_MS",
     "partner settings UI",
   );
   assertIncludes(
@@ -198,14 +198,18 @@ function proveUiContract(uiSource: string) {
   assertIncludes(uiSource, "Copy link", "partner settings UI");
   assertIncludes(uiSource, "Referred builders", "partner settings UI");
   assertIncludes(uiSource, "Partner payouts", "partner settings UI");
-  assertIncludes(uiSource, "Ready to settle", "partner settings UI");
+  assertIncludes(uiSource, "Ready for next payout", "partner settings UI");
+  assertIncludes(uiSource, "Payable soon", "partner settings UI");
   assertIncludes(uiSource, "Pending hold", "partner settings UI");
   assertIncludes(uiSource, "Payout history", "partner settings UI");
   assertIncludes(uiSource, "Manual settlements appear here after operator review.", "partner settings UI");
-  assertIncludes(uiSource, "Minimum payout", "partner settings UI");
-  assertIncludes(uiSource, "Manual review before any transfer.", "partner settings UI");
   assertIncludes(uiSource, "Appears after referred revenue is processed.", "partner settings UI");
   assertIncludes(uiSource, "Complete the requirements to unlock your partner link and dashboard.", "partner settings UI");
+  assert.doesNotMatch(
+    uiSource,
+    /Minimum payout|minimum payout threshold|BUILDER_PARTNER_MIN_PAYOUT_USD/,
+    "partner settings UI should not expose an arbitrary minimum payout threshold",
+  );
   assert.doesNotMatch(
     uiSource,
     /Builder Partners must be actively building|invite-list|CommunityAvatar/,
@@ -691,6 +695,7 @@ function provePartnerPayoutSettlementContract(
   criticalAuditSource: string,
   gatewaySource: string,
   uiSource: string,
+  cronsSource: string,
   docsSource: string,
 ) {
   assertIncludes(
@@ -732,6 +737,46 @@ function provePartnerPayoutSettlementContract(
     builderPartnersSource,
     "validatePartnerPayoutBatchStillPayable",
     "Builder Partner payout settlement must revalidate stale payable balances",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "BUILDER_PARTNER_PAYOUT_BUFFER_MS",
+    "Builder Partner payout settlement must use the payout review buffer",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "normalizePayableCutoffAt",
+    "Builder Partner payout settlement must derive an auditable payable cutoff",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "Math.min(cutoffAt, latestAllowedCutoffAt)",
+    "Builder Partner payout settlement must not allow operator arguments to bypass the payout buffer",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "row.payableAt > args.payableCutoffAt",
+    "Builder Partner payout planner must exclude commissions still inside the payout buffer",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "commission.payableAt > batchPayableCutoffAt",
+    "Builder Partner payout validation must re-check the batch payout buffer cutoff",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "partner_payout_commission_inside_payout_buffer",
+    "Builder Partner payout validation must fail stale buffered commissions before Stripe",
+  );
+  assertIncludes(
+    cronsSource,
+    "advance builder partner commissions to payable",
+    "Builder Partner commission maturity must be scheduled",
+  );
+  assertIncludes(
+    cronsSource,
+    "builderPartners.advancePartnerCommissionsToPayableInternal",
+    "Builder Partner commission maturity cron must call the canonical internal mutation",
   );
   assertIncludes(
     builderPartnersSource,
@@ -809,6 +854,16 @@ function provePartnerPayoutSettlementContract(
     "Builder Partner gateway",
   );
   assertIncludes(
+    gatewaySource,
+    "readyUsd",
+    "Builder Partner gateway must expose payout-ready balance separately from payable balance",
+  );
+  assertIncludes(
+    gatewaySource,
+    "bufferedUsd",
+    "Builder Partner gateway must expose payable balance still inside the payout buffer",
+  );
+  assertIncludes(
     builderPartnersSource,
     "row.status === \"processing\" || row.status === \"succeeded\" || row.status === \"failed\"",
     "Builder Partner payout history must hide draft transfer rows",
@@ -831,6 +886,21 @@ function provePartnerPayoutSettlementContract(
   assertIncludes(
     docsSource,
     "settlement amounts are normalized to cents",
+    "Builder Partner payout docs",
+  );
+  assertIncludes(
+    docsSource,
+    "30-day risk hold",
+    "Builder Partner payout docs",
+  );
+  assertIncludes(
+    docsSource,
+    "14-day payout review buffer",
+    "Builder Partner payout docs",
+  );
+  assertIncludes(
+    docsSource,
+    "There is no public minimum payout threshold",
     "Builder Partner payout docs",
   );
   assertIncludes(
@@ -862,6 +932,7 @@ function main() {
   const workspaceCreditsSource = readText(new URL("../convex/workspaceCredits.ts", import.meta.url));
   const httpBillingSource = readText(new URL("../convex/httpBilling.ts", import.meta.url));
   const criticalAuditSource = readText(new URL("../convex/criticalAudit.ts", import.meta.url));
+  const cronsSource = readText(new URL("../convex/crons.ts", import.meta.url));
 
   proveConstants();
   proveCommunityCommissionMath();
@@ -881,6 +952,7 @@ function main() {
     criticalAuditSource,
     gatewaySource,
     uiSource,
+    cronsSource,
     billingDocsSource,
   );
   console.log("PASS: builder partner program contract proof passed");

@@ -17,8 +17,9 @@ import type {
   BuilderPartnerProgramSnapshot,
 } from "../../../../shared/builderPartnerProgramGateway";
 import {
+  BUILDER_PARTNER_COMMISSION_HOLD_MS,
   BUILDER_PARTNER_COMMUNITY_PLATFORM_FEE_BPS,
-  BUILDER_PARTNER_MIN_PAYOUT_USD,
+  BUILDER_PARTNER_PAYOUT_BUFFER_MS,
   BUILDER_PARTNER_PLATFORM_FEE_SHARE_BPS,
   BUILDER_PARTNER_TOOL_GROSS_MARGIN_SHARE_BPS,
   calculateBuilderPartnerCommunityRevenueCommission,
@@ -60,6 +61,11 @@ function formatUsd(value: number): string {
     currency: "USD",
     maximumFractionDigits: 2,
   }).format(Math.max(0, Number(value) || 0));
+}
+
+function formatDurationDays(valueMs: number): string {
+  const days = Math.max(1, Math.round(valueMs / (24 * 60 * 60 * 1000)));
+  return `${days}-day`;
 }
 
 function formatPayoutDate(value: number | null): string {
@@ -162,23 +168,29 @@ export function WebBuilderPartnerSettingsSection(props: WebBuilderPartnerSetting
   const commissionSummary = program?.commissionSummary ?? {
     pendingUsd: 0,
     payableUsd: 0,
+    bufferedUsd: 0,
+    readyUsd: 0,
     paidUsd: 0,
     totalUsd: 0,
     pendingCount: 0,
     payableCount: 0,
+    bufferedCount: 0,
+    readyCount: 0,
     paidCount: 0,
   };
-  const payoutReadyUsd = commissionSummary.payableUsd;
+  const payoutReadyUsd = commissionSummary.readyUsd;
+  const payoutBufferedUsd = commissionSummary.bufferedUsd;
   const payoutPendingUsd = commissionSummary.pendingUsd;
   const payoutPaidUsd = commissionSummary.paidUsd;
-  const payoutMinimumRemainingUsd = Math.max(0, BUILDER_PARTNER_MIN_PAYOUT_USD - payoutReadyUsd);
   const payoutStatusCopy = !payoutReady
     ? "Connect Stripe before partner payouts can be settled."
-    : payoutReadyUsd >= BUILDER_PARTNER_MIN_PAYOUT_USD
-      ? "Ready for manual settlement review."
-      : payoutReadyUsd > 0
-        ? `${formatUsd(payoutMinimumRemainingUsd)} until the minimum payout threshold.`
-        : "No payable partner balance yet.";
+    : payoutReadyUsd > 0
+      ? "Ready for the next payout review."
+      : payoutBufferedUsd > 0
+        ? "Payable balance is in the review buffer."
+        : payoutPendingUsd > 0
+          ? "Commissions are still in the risk hold."
+          : "No partner balance yet.";
   const eligibilityLabel =
     !props.session
       ? "Sign in required"
@@ -366,24 +378,24 @@ export function WebBuilderPartnerSettingsSection(props: WebBuilderPartnerSetting
                 </div>
                 <div className="builder-partner-payout-grid">
                   <div className="builder-partner-payout-card">
-                    <span>Ready to settle</span>
+                    <span>Ready for next payout</span>
                     <strong>{formatUsd(payoutReadyUsd)}</strong>
-                    <small>{commissionSummary.payableCount} payable entries.</small>
+                    <small>{commissionSummary.readyCount} ready entries.</small>
+                  </div>
+                  <div className="builder-partner-payout-card">
+                    <span>Payable soon</span>
+                    <strong>{formatUsd(payoutBufferedUsd)}</strong>
+                    <small>{formatDurationDays(BUILDER_PARTNER_PAYOUT_BUFFER_MS)} payout review buffer.</small>
                   </div>
                   <div className="builder-partner-payout-card">
                     <span>Pending hold</span>
                     <strong>{formatUsd(payoutPendingUsd)}</strong>
-                    <small>{commissionSummary.pendingCount} locked or risk-held entries.</small>
+                    <small>{formatDurationDays(BUILDER_PARTNER_COMMISSION_HOLD_MS)} risk hold before payable.</small>
                   </div>
                   <div className="builder-partner-payout-card">
                     <span>Paid</span>
                     <strong>{formatUsd(payoutPaidUsd)}</strong>
                     <small>{commissionSummary.paidCount} settled entries.</small>
-                  </div>
-                  <div className="builder-partner-payout-card">
-                    <span>Minimum payout</span>
-                    <strong>{formatUsd(BUILDER_PARTNER_MIN_PAYOUT_USD)}</strong>
-                    <small>Manual review before any transfer.</small>
                   </div>
                 </div>
                 <div className="builder-partner-payout-history">

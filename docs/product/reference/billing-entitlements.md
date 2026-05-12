@@ -33,7 +33,7 @@ The current default platform fee for free-account community revenue is 15%. Lega
 
 Paid-tool usage is priced through tool balance. Workspace tool usage targets 60% gross margin by charging roughly 2.5x estimated vendor compute cost, then settling actual usage and refunding unused reservations. Web research and voice input use simple alpha tariffs with centralized vendor-cost estimates, and should still write tool, vendor, Polynet price, raw cost estimate, and settlement evidence into the internal credit ledger.
 
-Builder Partner commissions should not become payable from gross promises alone. Community-revenue commissions need provider invoice, payment, or charge evidence, and refunds or disputes must create explicit partner commission adjustments before payout execution. Partner payout settlement runs through manual operator-reviewed batches: payable commission rows are reserved into payout items, settlement amounts are normalized to cents, batches are revalidated before approval and execution, Stripe Connect transfers are idempotent, and items become settled only after transfer creation succeeds.
+Builder Partner commissions should not become payable from gross promises alone. Community-revenue commissions need provider invoice, payment, or charge evidence, and refunds or disputes must create explicit partner commission adjustments before payout execution. Commissions carry a 30-day risk hold before becoming payable, then must clear a 14-day payout review buffer before batch inclusion. There is no public minimum payout threshold; timing and operator review control settlement eligibility. Partner payout settlement runs through manual operator-reviewed batches: buffered payable commission rows are reserved into payout items, settlement amounts are normalized to cents, batches are revalidated before approval and execution, Stripe Connect transfers are idempotent, and items become settled only after transfer creation succeeds.
 
 ## Payout Readiness
 
@@ -54,6 +54,7 @@ Payout readiness does not grant community access. It determines whether the buil
 9. Tool balance, not a platform subscription, is the source of truth for paid tool access.
 10. Partner commission payouts must account for refunds, disputes, and chargeback outcomes before money movement.
 11. Partner payout batches must be operator-approved before Stripe transfer execution.
+12. Partner payout batches should include only payable commissions that have cleared the payout review buffer.
 
 ## Common Mistakes
 

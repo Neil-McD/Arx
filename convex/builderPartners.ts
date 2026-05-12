@@ -11,7 +11,7 @@ import {
   BUILDER_PARTNER_ATTRIBUTION_WINDOW_MS,
   BUILDER_PARTNER_COMMISSION_HOLD_MS,
   BUILDER_PARTNER_COMMUNITY_PLATFORM_FEE_BPS,
-  BUILDER_PARTNER_MIN_PAYOUT_USD,
+  BUILDER_PARTNER_PAYOUT_BUFFER_MS,
   BUILDER_PARTNER_PROGRAM_VERSION,
   BUILDER_PARTNER_PLATFORM_FEE_SHARE_BPS,
   BUILDER_PARTNER_TERMS_VERSION,
@@ -1091,13 +1091,19 @@ async function readCommissionSummary(ctx: any, partner: any) {
     return {
       pendingUsd: 0,
       payableUsd: 0,
+      bufferedUsd: 0,
+      readyUsd: 0,
       paidUsd: 0,
       totalUsd: 0,
       pendingCount: 0,
       payableCount: 0,
+      bufferedCount: 0,
+      readyCount: 0,
       paidCount: 0,
     };
   }
+  const nowMs = Date.now();
+  const payoutReadyCutoffAt = nowMs - BUILDER_PARTNER_PAYOUT_BUFFER_MS;
   const statuses = ["pending", "locked", "risk_hold", "payable", "paid"] as const;
   const rows = (
     await Promise.all(
@@ -1175,6 +1181,27 @@ async function readCommissionSummary(ctx: any, partner: any) {
   const paidSet = new Set(["paid"]);
   const pendingUsd = sum(pendingSet);
   const payableUsd = sum(payableSet);
+  const payableRows = rows.filter((row: any) =>
+    payableSet.has(String(row.status ?? "")) && rowNetAmount(row) > 0,
+  );
+  const readyPayableRows = payableRows.filter((row: any) =>
+    typeof row.payableAt === "number" &&
+    Number.isFinite(row.payableAt) &&
+    row.payableAt <= payoutReadyCutoffAt,
+  );
+  const bufferedPayableRows = payableRows.filter((row: any) =>
+    !(
+      typeof row.payableAt === "number" &&
+      Number.isFinite(row.payableAt) &&
+      row.payableAt <= payoutReadyCutoffAt
+    ),
+  );
+  const readyUsd = roundBuilderPartnerMoney(
+    readyPayableRows.reduce((total: number, row: any) => total + rowNetAmount(row), 0),
+  );
+  const bufferedUsd = roundBuilderPartnerMoney(
+    bufferedPayableRows.reduce((total: number, row: any) => total + rowNetAmount(row), 0),
+  );
   const settledPaidUsd = roundBuilderPartnerMoney(
     Array.from(settledPayoutTotalByCommissionId.values()).reduce(
       (total, amount) => total + amount,
@@ -1186,10 +1213,14 @@ async function readCommissionSummary(ctx: any, partner: any) {
   return {
     pendingUsd,
     payableUsd,
+    bufferedUsd,
+    readyUsd,
     paidUsd,
     totalUsd: pendingUsd + payableUsd + paidUsd,
     pendingCount: rows.filter((row: any) => pendingSet.has(String(row.status ?? "")) && rowNetAmount(row) > 0).length,
-    payableCount: rows.filter((row: any) => payableSet.has(String(row.status ?? "")) && rowNetAmount(row) > 0).length,
+    payableCount: payableRows.length,
+    bufferedCount: bufferedPayableRows.length,
+    readyCount: readyPayableRows.length,
     paidCount:
       new Set(
         payoutItems
@@ -1323,9 +1354,18 @@ function normalizePayoutLimit(value: unknown): number {
 }
 
 function normalizeMinimumPayoutUsd(value: unknown): number {
-  const minimumUsd = roundBuilderPartnerMoney(Number(value ?? BUILDER_PARTNER_MIN_PAYOUT_USD));
-  if (!Number.isFinite(minimumUsd) || minimumUsd < 0) return BUILDER_PARTNER_MIN_PAYOUT_USD;
+  const minimumUsd = roundBuilderPartnerMoney(Number(value ?? 0));
+  if (!Number.isFinite(minimumUsd) || minimumUsd < 0) return 0;
   return minimumUsd;
+}
+
+function normalizePayableCutoffAt(value: unknown, nowMs = Date.now()): number {
+  const latestAllowedCutoffAt = nowMs - BUILDER_PARTNER_PAYOUT_BUFFER_MS;
+  const cutoffAt = Math.floor(Number(value ?? latestAllowedCutoffAt));
+  if (!Number.isFinite(cutoffAt) || cutoffAt <= 0) {
+    return latestAllowedCutoffAt;
+  }
+  return Math.min(cutoffAt, latestAllowedCutoffAt);
 }
 
 function usdToSettlementCents(amountUsd: number): number {
@@ -1406,7 +1446,9 @@ async function readReadyStripeConnectPayoutAccount(ctx: any, userId: any) {
   ) ?? null;
 }
 
-async function readPartnerPayablePayoutEntries(ctx: any, partner: any) {
+async function readPartnerPayablePayoutEntries(ctx: any, partner: any, args: {
+  payableCutoffAt: number;
+}) {
   if (!partner?._id || partner.status !== "active") return [];
   const rows = await ctx.db
     .query("partnerCommissionLedger")
@@ -1417,6 +1459,13 @@ async function readPartnerPayablePayoutEntries(ctx: any, partner: any) {
   const reservedOrSettledStatuses = new Set<PartnerPayoutItemStatus>(["reserved", "settled"]);
   const entries = [];
   for (const row of rows) {
+    if (
+      typeof row.payableAt !== "number" ||
+      !Number.isFinite(row.payableAt) ||
+      row.payableAt > args.payableCutoffAt
+    ) {
+      continue;
+    }
     if (normalizeUsdCurrency(row.currency) !== "usd") continue;
     const adjustmentTotalUsd = await readAppliedCommissionAdjustmentTotalUsd(ctx, row._id);
     const reservedOrSettledPayoutUsd = await readCommissionPayoutItemTotalUsd(
@@ -1447,9 +1496,11 @@ async function readPartnerPayablePayoutEntries(ctx: any, partner: any) {
 async function readPartnerPayoutPlans(ctx: any, args: {
   minimumUsd?: number | null;
   limit?: number | null;
+  payableCutoffAt?: number | null;
 }) {
   const minimumUsd = normalizeMinimumPayoutUsd(args.minimumUsd);
   const limit = normalizePayoutLimit(args.limit);
+  const payableCutoffAt = normalizePayableCutoffAt(args.payableCutoffAt);
   const partners = await ctx.db
     .query("builderPartners")
     .withIndex("by_status_createdAt", (q: any) => q.eq("status", "active"))
@@ -1458,10 +1509,11 @@ async function readPartnerPayoutPlans(ctx: any, args: {
   for (const partner of partners) {
     const stripeAccount = await readReadyStripeConnectPayoutAccount(ctx, partner.userId);
     if (!stripeAccount) continue;
-    const entries = await readPartnerPayablePayoutEntries(ctx, partner);
+    const entries = await readPartnerPayablePayoutEntries(ctx, partner, { payableCutoffAt });
     const amountUsd = roundBuilderPartnerMoney(
       entries.reduce((total: number, entry: any) => total + Number(entry.amountUsd ?? 0), 0),
     );
+    if (entries.length <= 0 || amountUsd <= 0) continue;
     if (amountUsd < minimumUsd) continue;
     plans.push({
       partner,
@@ -1496,6 +1548,9 @@ async function readPartnerPayoutBatchSnapshot(ctx: any, batchId: any) {
       currency: String(batch.currency ?? "usd"),
       partnerCount: Number(batch.partnerCount ?? 0),
       itemCount: Number(batch.itemCount ?? 0),
+      payableCutoffAt: typeof batch.payableCutoffAt === "number" ? batch.payableCutoffAt : null,
+      payoutBufferMs: typeof batch.payoutBufferMs === "number" ? batch.payoutBufferMs : null,
+      minimumPayoutUsd: typeof batch.minimumPayoutUsd === "number" ? batch.minimumPayoutUsd : null,
       createdAt: Number(batch.createdAt ?? 0),
       updatedAt: Number(batch.updatedAt ?? 0),
       approvedAt: typeof batch.approvedAt === "number" ? batch.approvedAt : null,
@@ -1543,6 +1598,10 @@ async function validatePartnerPayoutBatchStillPayable(ctx: any, batchId: any) {
   if (items.some((item: any) => item.status === "voided")) {
     return { ok: false, reason: "partner_payout_batch_has_voided_item" };
   }
+  const batchPayableCutoffAt = normalizePayableCutoffAt(
+    batch.payableCutoffAt,
+    Number(batch.createdAt ?? Date.now()),
+  );
 
   const reservedItems = items.filter((item: any) => item.status === "reserved");
   if (reservedItems.length <= 0) {
@@ -1595,6 +1654,13 @@ async function validatePartnerPayoutBatchStillPayable(ctx: any, batchId: any) {
     }
     if (commission.status !== "payable") {
       return { ok: false, reason: "partner_payout_commission_not_payable" };
+    }
+    if (
+      typeof commission.payableAt !== "number" ||
+      !Number.isFinite(commission.payableAt) ||
+      commission.payableAt > batchPayableCutoffAt
+    ) {
+      return { ok: false, reason: "partner_payout_commission_inside_payout_buffer" };
     }
     if (normalizeUsdCurrency(commission.currency) !== "usd") {
       return { ok: false, reason: "partner_payout_commission_currency_invalid" };
@@ -1895,18 +1961,23 @@ export const previewPartnerPayoutBatch = query({
     authSubject: v.optional(v.string()),
     minimumUsd: v.optional(v.number()),
     limit: v.optional(v.number()),
+    payableCutoffAt: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     await requireOperatorRole(ctx, args.authSubject, "operator");
+    const payableCutoffAt = normalizePayableCutoffAt(args.payableCutoffAt);
     const plans = await readPartnerPayoutPlans(ctx, {
       minimumUsd: args.minimumUsd ?? null,
       limit: args.limit ?? null,
+      payableCutoffAt,
     });
     const totalAmountUsd = roundBuilderPartnerMoney(
       plans.reduce((total: number, plan: any) => total + Number(plan.amountUsd ?? 0), 0),
     );
     return {
       minimumUsd: normalizeMinimumPayoutUsd(args.minimumUsd),
+      payableCutoffAt,
+      payoutBufferMs: BUILDER_PARTNER_PAYOUT_BUFFER_MS,
       totalAmountUsd,
       partnerCount: plans.length,
       itemCount: plans.reduce((total: number, plan: any) => total + plan.entries.length, 0),
@@ -1929,10 +2000,13 @@ export const createPartnerPayoutBatch = mutation({
     batchKey: v.optional(v.string()),
     minimumUsd: v.optional(v.number()),
     limit: v.optional(v.number()),
+    payableCutoffAt: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const operator = await requireOperatorRole(ctx, args.authSubject, "operator");
     const nowMs = Date.now();
+    const payableCutoffAt = normalizePayableCutoffAt(args.payableCutoffAt, nowMs);
+    const minimumPayoutUsd = normalizeMinimumPayoutUsd(args.minimumUsd);
     const rawBatchKey = String(args.batchKey ?? "").trim();
     const batchKey = rawBatchKey || `partner_payout:${nowMs}:${String(operator.dbUserId)}`;
     const existing = await ctx.db
@@ -1944,8 +2018,9 @@ export const createPartnerPayoutBatch = mutation({
     }
 
     const plans = await readPartnerPayoutPlans(ctx, {
-      minimumUsd: args.minimumUsd ?? null,
+      minimumUsd: minimumPayoutUsd,
       limit: args.limit ?? null,
+      payableCutoffAt,
     });
     if (plans.length <= 0) {
       throw new Error("partner_payout_batch_empty");
@@ -1961,6 +2036,9 @@ export const createPartnerPayoutBatch = mutation({
       currency: "usd",
       partnerCount: plans.length,
       itemCount,
+      payableCutoffAt,
+      payoutBufferMs: BUILDER_PARTNER_PAYOUT_BUFFER_MS,
+      minimumPayoutUsd,
       createdByUserId: operator.dbUserId,
       createdAt: nowMs,
       updatedAt: nowMs,
