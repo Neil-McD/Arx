@@ -2332,17 +2332,6 @@ export const createPartnerPayoutCycleInternal = internalMutation({
   },
 });
 
-export const getPartnerPayoutBatchForOperator = query({
-  args: {
-    authSubject: v.optional(v.string()),
-    batchId: v.id("partnerPayoutBatches"),
-  },
-  handler: async (ctx, args) => {
-    await requireOperatorRole(ctx, args.authSubject, "operator");
-    return await readPartnerPayoutBatchSnapshot(ctx, args.batchId);
-  },
-});
-
 export const listPartnerPayoutCyclesForOperator = query({
   args: {
     authSubject: v.optional(v.string()),

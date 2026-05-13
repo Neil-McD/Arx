@@ -778,6 +778,16 @@ function provePartnerPayoutSettlementContract(
     "listPartnerPayoutCyclesForOperator",
     "Builder Partner payout settlement should expose generated cycles to operators",
   );
+  assert.doesNotMatch(
+    builderPartnersSource,
+    /export const getPartnerPayoutBatchForOperator/,
+    "Builder Partner payout diagnostics should not expose raw batch reads to operators",
+  );
+  assert.doesNotMatch(
+    builderPartnersSource,
+    /PayoutBatchForOperator/,
+    "Builder Partner payout operator APIs should use product-level cycle language",
+  );
   assertIncludes(
     builderPartnersSource,
     "approvePartnerPayoutCycle",
@@ -1085,6 +1095,11 @@ function provePartnerPayoutSettlementContract(
   );
   assertIncludes(
     operatorPanelSource,
+    "Approve and execute",
+    "Operator dashboard should confirm before executing payout approval",
+  );
+  assertIncludes(
+    operatorPanelSource,
     "Hold",
     "Operator dashboard should expose hold",
   );
@@ -1097,6 +1112,16 @@ function provePartnerPayoutSettlementContract(
     operatorPanelSource,
     /previewPartnerPayoutBatch|createPartnerPayoutBatch|executePartnerPayoutBatch|approvePartnerPayoutBatch|voidPartnerPayoutBatch/,
     "Operator dashboard must not expose manual batch internals",
+  );
+  assertIncludes(
+    operatorPanelSource,
+    "case \"held\":",
+    "Operator dashboard must render held cycles separately from failed cycles",
+  );
+  assertIncludes(
+    operatorPanelSource,
+    "return \"Held\";",
+    "Operator dashboard must label held cycles as held",
   );
   assertIncludes(
     gatewaySource,

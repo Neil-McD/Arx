@@ -1297,6 +1297,7 @@ function OperatorPartnerPayoutCycles(props: {
   actions: PartnerPayoutCycleActions;
 }) {
   const cycles = props.snapshot?.cycles ?? [];
+  const [approvalConfirmCycleId, setApprovalConfirmCycleId] = useState<string | null>(null);
   const isActing = (cycle: OperatorPartnerPayoutCycle, action?: PartnerPayoutCycleActionName) =>
     props.actions.inFlightCycleId === cycle.id &&
     (!action || props.actions.inFlightAction === action);
@@ -1347,13 +1348,45 @@ function OperatorPartnerPayoutCycles(props: {
                     </span>
                   ) : null}
                 </div>
+                {approvalConfirmCycleId === cycle.id ? (
+                  <div
+                    className="operator-dashboard__cycle-confirmation"
+                    role="group"
+                    aria-label={`${cycle.cycleKey || cycle.id} payout approval confirmation`}
+                  >
+                    <span>
+                      {formatUsdAmount(cycle.totalAmountUsd)} to {cycle.partnerCount} partner{cycle.partnerCount === 1 ? "" : "s"}.
+                    </span>
+                    <div className="operator-dashboard__cycle-confirmation-actions">
+                      <button
+                        type="button"
+                        className="operator-dashboard__action"
+                        disabled={!cycle.actions.canApprove || Boolean(props.actions.inFlightCycleId)}
+                        onClick={() => {
+                          setApprovalConfirmCycleId(null);
+                          void props.actions.approve(cycle.id);
+                        }}
+                      >
+                        Approve and execute
+                      </button>
+                      <button
+                        type="button"
+                        className="operator-dashboard__action operator-dashboard__action--secondary"
+                        disabled={Boolean(props.actions.inFlightCycleId)}
+                        onClick={() => setApprovalConfirmCycleId(null)}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
               </div>
               <div className="operator-dashboard__cycle-actions">
                 <button
                   type="button"
                   className="operator-dashboard__action"
                   disabled={!cycle.actions.canApprove || Boolean(props.actions.inFlightCycleId)}
-                  onClick={() => props.actions.approve(cycle.id)}
+                  onClick={() => setApprovalConfirmCycleId(cycle.id)}
                 >
                   {isActing(cycle, "approve") ? "Approving" : "Approve"}
                 </button>
@@ -1361,7 +1394,10 @@ function OperatorPartnerPayoutCycles(props: {
                   type="button"
                   className="operator-dashboard__action operator-dashboard__action--secondary"
                   disabled={!cycle.actions.canHold || Boolean(props.actions.inFlightCycleId)}
-                  onClick={() => props.actions.hold(cycle.id)}
+                  onClick={() => {
+                    setApprovalConfirmCycleId(null);
+                    void props.actions.hold(cycle.id);
+                  }}
                 >
                   {isActing(cycle, "hold") ? "Holding" : "Hold"}
                 </button>
@@ -1369,7 +1405,10 @@ function OperatorPartnerPayoutCycles(props: {
                   type="button"
                   className="operator-dashboard__action operator-dashboard__action--danger"
                   disabled={!cycle.actions.canReject || Boolean(props.actions.inFlightCycleId)}
-                  onClick={() => props.actions.reject(cycle.id)}
+                  onClick={() => {
+                    setApprovalConfirmCycleId(null);
+                    void props.actions.reject(cycle.id);
+                  }}
                 >
                   {isActing(cycle, "reject") ? "Rejecting" : "Reject"}
                 </button>

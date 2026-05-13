@@ -22504,6 +22504,27 @@ button.message-citation-chip:hover {
   max-width: 210px;
 }
 
+.operator-dashboard__cycle-confirmation {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 10px;
+  border: 1px solid color-mix(in srgb, var(--accent) 26%, rgba(255, 255, 255, 0.08));
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.operator-dashboard__cycle-confirmation span {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.operator-dashboard__cycle-confirmation-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
 .operator-dashboard__action {
   min-height: 28px;
   padding: 0 10px;
