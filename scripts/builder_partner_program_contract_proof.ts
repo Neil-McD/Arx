@@ -138,7 +138,7 @@ function proveSchemaContract(schemaSource: string) {
   assert.match(
     schemaSource,
     /partnerPayoutBatches:[\s\S]*status:\s*v\.union\([\s\S]*v\.literal\("draft"\)[\s\S]*v\.literal\("approved"\)[\s\S]*v\.literal\("processing"\)[\s\S]*v\.literal\("completed"\)[\s\S]*v\.literal\("failed"\)[\s\S]*v\.literal\("voided"\)[\s\S]*payableCutoffAt:\s*v\.optional\(v\.number\(\)\)[\s\S]*payoutBufferMs:\s*v\.optional\(v\.number\(\)\)[\s\S]*createdByUserId:\s*v\.id\("users"\)/,
-    "expected partner payout batches to be manual-review settlement objects with an auditable payout cutoff",
+    "expected partner payout batches to be auditable settlement objects with an auditable payout cutoff",
   );
   assert.match(
     schemaSource,
@@ -210,12 +210,12 @@ function proveUiContract(uiSource: string) {
   );
   assertIncludes(
     uiSource,
-    "Manual settlements appear here after operator review.",
+    "ready for the next payout cycle.",
     "partner settings UI",
   );
   assertIncludes(
     uiSource,
-    "Operator-reviewed Stripe transfers only.",
+    "Completed Stripe transfers.",
     "partner settings UI",
   );
   assertIncludes(
@@ -756,15 +756,15 @@ function provePartnerPayoutSettlementContract(
   cronsSource: string,
   docsSource: string,
 ) {
-  assertIncludes(
+  assert.doesNotMatch(
     builderPartnersSource,
-    "previewPartnerPayoutBatch",
-    "Builder Partner payout settlement",
+    /export const previewPartnerPayoutBatch/,
+    "manual payout preview should not be a public operator workflow",
   );
   assertIncludes(
     builderPartnersSource,
     "createPartnerPayoutBatch",
-    "Builder Partner payout settlement",
+    "Builder Partner payout settlement internal mechanics",
   );
   assertIncludes(
     builderPartnersSource,
@@ -774,7 +774,7 @@ function provePartnerPayoutSettlementContract(
   assertIncludes(
     builderPartnersSource,
     "executePartnerPayoutBatch",
-    "Builder Partner payout settlement",
+    "Builder Partner payout settlement internal mechanics",
   );
   assertIncludes(
     builderPartnersSource,
@@ -1013,7 +1013,7 @@ function provePartnerPayoutSettlementContract(
   );
   assertIncludes(
     uiSource,
-    "Manual settlements appear here after operator review.",
+    "Payouts appear here after transfer.",
     "Builder Partner payout history UI",
   );
   assert.doesNotMatch(
@@ -1023,7 +1023,17 @@ function provePartnerPayoutSettlementContract(
   );
   assertIncludes(
     docsSource,
-    "Partner payout settlement runs through manual operator-reviewed batches",
+    "Partner payout settlement should run through system-generated payout cycles",
+    "Builder Partner payout docs",
+  );
+  assertIncludes(
+    docsSource,
+    "Operators should only approve, hold, or reject generated payout cycles",
+    "Builder Partner payout docs",
+  );
+  assertIncludes(
+    docsSource,
+    "they should not manually preview, create, or execute payout internals",
     "Builder Partner payout docs",
   );
   assertIncludes(

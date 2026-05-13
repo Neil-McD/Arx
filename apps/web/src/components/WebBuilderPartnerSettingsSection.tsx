@@ -321,7 +321,7 @@ export function WebBuilderPartnerSettingsSection(props: WebBuilderPartnerSetting
                   <BadgeDollarSign />
                   <span>Ready for next payout</span>
                   <strong>{formatUsd(snapshot.commissionSummary.readyUsd)}</strong>
-                  <small>{snapshot.commissionSummary.readyCount} commission(s) ready for operator review.</small>
+                  <small>{snapshot.commissionSummary.readyCount} commission(s) ready for the next payout cycle.</small>
                 </div>
               </div>
 
@@ -380,7 +380,7 @@ export function WebBuilderPartnerSettingsSection(props: WebBuilderPartnerSetting
                 <div className="builder-partner-payout-history">
                   <div className="builder-partner-payout-history-title">
                     <span>Payout history</span>
-                    <small>Operator-reviewed Stripe transfers only.</small>
+                    <small>Completed Stripe transfers.</small>
                   </div>
                   {snapshot.payoutHistory.transfers.length > 0 ? (
                     <div className="builder-partner-payout-history-list">
@@ -396,7 +396,7 @@ export function WebBuilderPartnerSettingsSection(props: WebBuilderPartnerSetting
                     </div>
                   ) : (
                     <div className="builder-partner-payout-history-empty">
-                      Manual settlements appear here after operator review.
+                      Payouts appear here after transfer.
                     </div>
                   )}
                 </div>

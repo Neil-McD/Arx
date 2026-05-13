@@ -2078,41 +2078,6 @@ export const recordBuilderPartnerAttribution = mutation({
   },
 });
 
-export const previewPartnerPayoutBatch = query({
-  args: {
-    authSubject: v.optional(v.string()),
-    limit: v.optional(v.number()),
-    payableCutoffAt: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    await requireOperatorRole(ctx, args.authSubject, "operator");
-    const payableCutoffAt = normalizePayableCutoffAt(args.payableCutoffAt);
-    const plans = await readPartnerPayoutPlans(ctx, {
-      limit: args.limit ?? null,
-      payableCutoffAt,
-    });
-    const totalAmountUsd = roundBuilderPartnerMoney(
-      plans.reduce((total: number, plan: any) => total + Number(plan.amountUsd ?? 0), 0),
-    );
-    return {
-      payableCutoffAt,
-      payoutBufferMs: BUILDER_PARTNER_PAYOUT_BUFFER_MS,
-      totalAmountUsd,
-      partnerCount: plans.length,
-      itemCount: plans.reduce((total: number, plan: any) => total + plan.entries.length, 0),
-      partners: plans.map((plan: any) => ({
-        partnerId: String(plan.partner._id),
-        partnerUserId: String(plan.partner.userId),
-        code: String(plan.partner.code ?? ""),
-        amountUsd: plan.amountUsd,
-        currency: plan.currency,
-        itemCount: plan.entries.length,
-        payoutReady: true,
-      })),
-    };
-  },
-});
-
 export const createPartnerPayoutBatch = mutation({
   args: {
     authSubject: v.optional(v.string()),
