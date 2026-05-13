@@ -26,6 +26,10 @@ type RequirementKey = "signed_in" | "own_community" | "accept_terms" | "account_
 type ProgramState = "signed_out" | "locked" | "ready_to_unlock" | "active" | "paused" | "disabled";
 type PartnerPayoutItemStatus = "reserved" | "settled" | "voided";
 
+const BUILDER_PARTNER_MISSING_EVIDENCE_RECHECK_MS = 24 * 60 * 60 * 1000;
+const BUILDER_PARTNER_PAYOUT_PLAN_SCAN_MULTIPLIER = 5;
+const BUILDER_PARTNER_PAYOUT_PLAN_MAX_SCAN = 1000;
+
 function authLookupIsOptionalFailure(error: unknown): boolean {
   const message =
     typeof error === "string"
@@ -133,6 +137,14 @@ async function getCommissionByKey(ctx: any, commissionKey: string) {
 
 function normalizeProviderEvidenceId(value: unknown): string {
   return String(value ?? "").trim();
+}
+
+function hasCommunityRevenueProviderEvidence(row: any): boolean {
+  return Boolean(
+    normalizeProviderEvidenceId(row?.sourceProviderInvoiceId) ||
+    normalizeProviderEvidenceId(row?.sourceProviderPaymentIntentId) ||
+    normalizeProviderEvidenceId(row?.sourceProviderChargeId)
+  );
 }
 
 async function getCommissionByCheckoutSession(ctx: any, sourceCheckoutSessionId: string) {
@@ -1053,7 +1065,7 @@ export const advancePartnerCommissionsToPayableInternal = internalMutation({
   },
   handler: async (ctx, args) => {
     const nowMs = args.nowMs ?? Date.now();
-    const limit = Math.max(1, Math.min(100, Math.floor(args.limit ?? 50)));
+    const limit = Math.max(1, Math.min(250, Math.floor(args.limit ?? 50)));
     const rows = await ctx.db
       .query("partnerCommissionLedger")
       .withIndex("by_status_holdUntil", (q: any) =>
@@ -1062,14 +1074,18 @@ export const advancePartnerCommissionsToPayableInternal = internalMutation({
       .take(limit);
 
     let advanced = 0;
+    let deferredForEvidence = 0;
     for (const row of rows) {
       if (row.status !== "locked" || Number(row.holdUntil ?? Infinity) > nowMs) continue;
       if (
         row.basisType === "community_platform_fee" &&
-        !row.sourceProviderInvoiceId &&
-        !row.sourceProviderPaymentIntentId &&
-        !row.sourceProviderChargeId
+        !hasCommunityRevenueProviderEvidence(row)
       ) {
+        await ctx.db.patch(row._id, {
+          holdUntil: nowMs + BUILDER_PARTNER_MISSING_EVIDENCE_RECHECK_MS,
+          updatedAt: nowMs,
+        });
+        deferredForEvidence += 1;
         continue;
       }
       await ctx.db.patch(row._id, {
@@ -1082,6 +1098,7 @@ export const advancePartnerCommissionsToPayableInternal = internalMutation({
     return {
       ok: true,
       advanced,
+      deferredForEvidence,
     };
   },
 });
@@ -1359,6 +1376,14 @@ function normalizePayoutLimit(value: unknown): number {
   return Math.min(250, limit);
 }
 
+function normalizePayoutPartnerScanLimit(value: unknown): number {
+  const payoutLimit = normalizePayoutLimit(value);
+  return Math.min(
+    BUILDER_PARTNER_PAYOUT_PLAN_MAX_SCAN,
+    Math.max(payoutLimit, payoutLimit * BUILDER_PARTNER_PAYOUT_PLAN_SCAN_MULTIPLIER),
+  );
+}
+
 function normalizePayableCutoffAt(value: unknown, nowMs = Date.now()): number {
   const latestAllowedCutoffAt = nowMs - BUILDER_PARTNER_PAYOUT_BUFFER_MS;
   const cutoffAt = Math.floor(Number(value ?? latestAllowedCutoffAt));
@@ -1498,13 +1523,15 @@ async function readPartnerPayoutPlans(ctx: any, args: {
   payableCutoffAt?: number | null;
 }) {
   const limit = normalizePayoutLimit(args.limit);
+  const scanLimit = normalizePayoutPartnerScanLimit(args.limit);
   const payableCutoffAt = normalizePayableCutoffAt(args.payableCutoffAt);
   const partners = await ctx.db
     .query("builderPartners")
     .withIndex("by_status_createdAt", (q: any) => q.eq("status", "active"))
-    .take(limit);
+    .take(scanLimit);
   const plans = [];
   for (const partner of partners) {
+    if (plans.length >= limit) break;
     const stripeAccount = await readReadyStripeConnectPayoutAccount(ctx, partner.userId);
     if (!stripeAccount) continue;
     const entries = await readPartnerPayablePayoutEntries(ctx, partner, { payableCutoffAt });

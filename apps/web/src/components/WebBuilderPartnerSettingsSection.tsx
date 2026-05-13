@@ -406,6 +406,18 @@ export function WebBuilderPartnerSettingsSection(props: WebBuilderPartnerSetting
               </div>
             </div>
           ) : null}
+
+          {snapshot?.state === "paused" ? (
+            <div className="account-row">
+              <div className="account-identity">
+                <span>Partner account</span>
+                <strong>Paused</strong>
+              </div>
+              <div className="auth-actions">
+                <span className="auth-status">Partner links and new commissions are paused. Contact support.</span>
+              </div>
+            </div>
+          ) : null}
         </div>
       ) : null}
     </>

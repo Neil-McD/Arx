@@ -218,6 +218,11 @@ function proveUiContract(uiSource: string) {
     "Operator-reviewed Stripe transfers only.",
     "partner settings UI",
   );
+  assertIncludes(
+    uiSource,
+    "Partner links and new commissions are paused. Contact support.",
+    "partner settings UI",
+  );
   assert.doesNotMatch(
     uiSource,
     /Minimum payout|minimum payout threshold|BUILDER_PARTNER_MIN_PAYOUT_USD/,
@@ -768,6 +773,31 @@ function provePartnerPayoutSettlementContract(
   );
   assertIncludes(
     builderPartnersSource,
+    "BUILDER_PARTNER_MISSING_EVIDENCE_RECHECK_MS",
+    "Builder Partner maturity must defer missing provider evidence without starving later rows",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "holdUntil: nowMs + BUILDER_PARTNER_MISSING_EVIDENCE_RECHECK_MS",
+    "Builder Partner maturity must rotate missing-evidence rows out of the due scan",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "deferredForEvidence",
+    "Builder Partner maturity should report provider-evidence deferrals",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "Math.min(250",
+    "Builder Partner maturity limit should match the scheduled cron limit",
+  );
+  assertIncludes(
+    cronsSource,
+    "limit: 250",
+    "Builder Partner maturity cron should use the same supported batch limit",
+  );
+  assertIncludes(
+    builderPartnersSource,
     "normalizePayableCutoffAt",
     "Builder Partner payout settlement must derive an auditable payable cutoff",
   );
@@ -840,6 +870,31 @@ function provePartnerPayoutSettlementContract(
     builderPartnersSource,
     "readCommissionPayoutItemTotalUsd",
     "Builder Partner payout settlement must subtract reserved and settled payout items",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "normalizePayoutPartnerScanLimit",
+    "Builder Partner payout planning must scan beyond the returned payout limit",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "BUILDER_PARTNER_PAYOUT_PLAN_SCAN_MULTIPLIER",
+    "Builder Partner payout planning must use a bounded scan multiplier",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    ".take(scanLimit)",
+    "Builder Partner payout planning must not only take the returned payout limit",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "if (plans.length >= limit) break",
+    "Builder Partner payout planning must stop after enough payable plans are found",
+  );
+  assert.doesNotMatch(
+    builderPartnersSource,
+    /async function readPartnerPayoutPlans[\s\S]*\.take\(limit\);[\s\S]*for \(const partner of partners\)/,
+    "Builder Partner payout planning should not scan only the requested payout count before filtering",
   );
   assertIncludes(
     builderPartnersSource,
