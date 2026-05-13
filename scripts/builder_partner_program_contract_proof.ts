@@ -68,6 +68,12 @@ function proveSchemaContract(schemaSource: string) {
   const commissionSchemaStart = schemaSource.indexOf("partnerCommissionLedger: defineTable");
   const commissionSchemaEnd = schemaSource.indexOf("partnerCommissionAdjustments: defineTable");
   const commissionSchemaSource = schemaSource.slice(commissionSchemaStart, commissionSchemaEnd);
+  const adjustmentSchemaStart = schemaSource.indexOf("partnerCommissionAdjustments: defineTable");
+  const adjustmentSchemaEnd = schemaSource.indexOf("partnerPayoutBatches: defineTable");
+  const adjustmentSchemaSource = schemaSource.slice(adjustmentSchemaStart, adjustmentSchemaEnd);
+  const payoutBatchSchemaStart = schemaSource.indexOf("partnerPayoutBatches: defineTable");
+  const payoutBatchSchemaEnd = schemaSource.indexOf("partnerPayoutTransfers: defineTable");
+  const payoutBatchSchemaSource = schemaSource.slice(payoutBatchSchemaStart, payoutBatchSchemaEnd);
   assertIncludes(schemaSource, "builderPartners: defineTable", "schema");
   assertIncludes(schemaSource, "partnerAttributions: defineTable", "schema");
   assertIncludes(schemaSource, "partnerCommissionLedger: defineTable", "schema");
@@ -135,10 +141,20 @@ function proveSchemaContract(schemaSource: string) {
     /partnerCommissionAdjustments:[\s\S]*adjustmentKey:\s*v\.string\(\)[\s\S]*adjustmentType:\s*v\.union\([\s\S]*v\.literal\("refund"\)[\s\S]*v\.literal\("dispute_opened"\)[\s\S]*v\.literal\("dispute_won"\)[\s\S]*v\.literal\("dispute_lost"\)[\s\S]*amountUsd:\s*v\.number\(\)/,
     "expected partner adjustment ledger to record refunds and disputes as signed money events",
   );
+  assert.doesNotMatch(
+    adjustmentSchemaSource,
+    /manual_adjustment/,
+    "partner adjustments should not keep unused manual adjustment state",
+  );
   assert.match(
     schemaSource,
-    /partnerPayoutBatches:[\s\S]*status:\s*v\.union\([\s\S]*v\.literal\("draft"\)[\s\S]*v\.literal\("approved"\)[\s\S]*v\.literal\("processing"\)[\s\S]*v\.literal\("completed"\)[\s\S]*v\.literal\("failed"\)[\s\S]*v\.literal\("voided"\)[\s\S]*payableCutoffAt:\s*v\.optional\(v\.number\(\)\)[\s\S]*payoutBufferMs:\s*v\.optional\(v\.number\(\)\)[\s\S]*createdByUserId:\s*v\.optional\(v\.id\("users"\)\)/,
+    /partnerPayoutBatches:[\s\S]*status:\s*v\.union\([\s\S]*v\.literal\("draft"\)[\s\S]*v\.literal\("approved"\)[\s\S]*v\.literal\("processing"\)[\s\S]*v\.literal\("completed"\)[\s\S]*v\.literal\("failed"\)[\s\S]*v\.literal\("voided"\)[\s\S]*payableCutoffAt:\s*v\.optional\(v\.number\(\)\)[\s\S]*payoutBufferMs:\s*v\.optional\(v\.number\(\)\)[\s\S]*approvedByUserId:\s*v\.optional\(v\.id\("users"\)\)[\s\S]*processedByUserId:\s*v\.optional\(v\.id\("users"\)\)/,
     "expected partner payout batches to be auditable settlement objects with an auditable payout cutoff",
+  );
+  assert.doesNotMatch(
+    payoutBatchSchemaSource,
+    /createdByUserId|by_createdBy/,
+    "system-generated partner payout cycles should not keep manual creator fields or indexes",
   );
   assert.match(
     schemaSource,
@@ -787,6 +803,16 @@ function provePartnerPayoutSettlementContract(
     builderPartnersSource,
     /PayoutBatchForOperator/,
     "Builder Partner payout operator APIs should use product-level cycle language",
+  );
+  assert.doesNotMatch(
+    builderPartnersSource,
+    /readPartnerPayoutBatchSnapshot/,
+    "Builder Partner payout actions should not keep raw transfer and item snapshot responses",
+  );
+  assert.doesNotMatch(
+    builderPartnersSource,
+    /return await readPartnerPayoutBatchSnapshot/,
+    "Builder Partner payout actions should return compact acknowledgements only",
   );
   assertIncludes(
     builderPartnersSource,

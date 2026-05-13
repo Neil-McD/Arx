@@ -435,8 +435,7 @@ async function insertPartnerCommissionAdjustmentIfMissing(ctx: any, args: {
     | "dispute_opened"
     | "dispute_won"
     | "dispute_lost"
-    | "dispute_funds_reinstated"
-    | "manual_adjustment";
+    | "dispute_funds_reinstated";
   amountUsd: number;
   sourceProviderRefundId?: string | null;
   sourceProviderDisputeId?: string | null;
@@ -1690,58 +1689,19 @@ async function readPartnerPayoutPlans(ctx: any, args: {
   return plans;
 }
 
-async function readPartnerPayoutBatchSnapshot(ctx: any, batchId: any) {
-  const batch = await ctx.db.get(batchId);
-  if (!batch) throw new Error("partner_payout_batch_not_found");
-  const [transfers, items] = await Promise.all([
-    ctx.db
-      .query("partnerPayoutTransfers" as any)
-      .withIndex("by_batch", (q: any) => q.eq("batchId", batchId))
-      .collect(),
-    ctx.db
-      .query("partnerPayoutItems" as any)
-      .withIndex("by_batch", (q: any) => q.eq("batchId", batchId))
-      .collect(),
-  ]);
+function readPartnerPayoutCycleSummary(batch: any) {
   return {
-    batch: {
-      id: String(batch._id),
-      batchKey: String(batch.batchKey ?? ""),
-      status: String(batch.status ?? "draft"),
-      totalAmountUsd: roundBuilderPartnerMoney(Number(batch.totalAmountUsd ?? 0)),
-      currency: String(batch.currency ?? "usd"),
-      partnerCount: Number(batch.partnerCount ?? 0),
-      itemCount: Number(batch.itemCount ?? 0),
-      payableCutoffAt: typeof batch.payableCutoffAt === "number" ? batch.payableCutoffAt : null,
-      payoutBufferMs: typeof batch.payoutBufferMs === "number" ? batch.payoutBufferMs : null,
-      createdAt: Number(batch.createdAt ?? 0),
-      updatedAt: Number(batch.updatedAt ?? 0),
-      approvedAt: typeof batch.approvedAt === "number" ? batch.approvedAt : null,
-      processedAt: typeof batch.processedAt === "number" ? batch.processedAt : null,
-      failureReason: typeof batch.failureReason === "string" ? batch.failureReason : null,
-    },
-    transfers: transfers.map((row: any) => ({
-      id: String(row._id),
-      partnerId: String(row.partnerId),
-      partnerUserId: String(row.partnerUserId),
-      amountUsd: roundBuilderPartnerMoney(Number(row.amountUsd ?? 0)),
-      currency: String(row.currency ?? "usd"),
-      status: String(row.status ?? "draft"),
-      stripeTransferId: typeof row.stripeTransferId === "string" ? row.stripeTransferId : null,
-      failureReason: typeof row.failureReason === "string" ? row.failureReason : null,
-      processedAt: typeof row.processedAt === "number" ? row.processedAt : null,
-      createdAt: Number(row.createdAt ?? 0),
-    })),
-    items: items.map((row: any) => ({
-      id: String(row._id),
-      transferId: String(row.transferId),
-      partnerId: String(row.partnerId),
-      commissionId: String(row.commissionId),
-      amountUsd: roundBuilderPartnerMoney(Number(row.amountUsd ?? 0)),
-      currency: String(row.currency ?? "usd"),
-      status: String(row.status ?? "reserved"),
-      createdAt: Number(row.createdAt ?? 0),
-    })),
+    id: String(batch._id),
+    cycleKey: String(batch.batchKey ?? ""),
+    status: toPartnerPayoutCycleOperatorStatus(batch),
+    totalAmountUsd: roundBuilderPartnerMoney(Number(batch.totalAmountUsd ?? 0)),
+    currency: String(batch.currency ?? "usd").toLowerCase(),
+    partnerCount: Number(batch.partnerCount ?? 0),
+    itemCount: Number(batch.itemCount ?? 0),
+    payableCutoffAt: typeof batch.payableCutoffAt === "number" ? batch.payableCutoffAt : null,
+    payoutBufferMs: typeof batch.payoutBufferMs === "number" ? batch.payoutBufferMs : null,
+    createdAt: Number(batch.createdAt ?? 0),
+    updatedAt: Number(batch.updatedAt ?? 0),
   };
 }
 
@@ -2249,7 +2209,7 @@ export const createPartnerPayoutCycleInternal = internalMutation({
         ok: true,
         created: false,
         reason: "partner_payout_cycle_exists",
-        batch: await readPartnerPayoutBatchSnapshot(ctx, existing._id),
+        cycle: readPartnerPayoutCycleSummary(existing),
       };
     }
 
@@ -2327,7 +2287,7 @@ export const createPartnerPayoutCycleInternal = internalMutation({
       ok: true,
       created: true,
       reason: null,
-      batch: await readPartnerPayoutBatchSnapshot(ctx, batchId),
+      cycle: readPartnerPayoutCycleSummary(await ctx.db.get(batchId)),
     };
   },
 });
@@ -2415,7 +2375,11 @@ export const approvePartnerPayoutCycle = mutation({
     await ctx.scheduler.runAfter(0, (internal as any).builderPartners.executePartnerPayoutBatchInternal, {
       batchId: args.batchId,
     });
-    return await readPartnerPayoutBatchSnapshot(ctx, args.batchId);
+    return {
+      ok: true,
+      cycleId: String(args.batchId),
+      status: "approved",
+    };
   },
 });
 
@@ -2447,7 +2411,11 @@ export const holdPartnerPayoutCycle = mutation({
       },
       nowMs,
     });
-    return await readPartnerPayoutBatchSnapshot(ctx, args.batchId);
+    return {
+      ok: true,
+      cycleId: String(args.batchId),
+      status: "held",
+    };
   },
 });
 
@@ -2510,7 +2478,11 @@ export const rejectPartnerPayoutCycle = mutation({
       },
       nowMs,
     });
-    return await readPartnerPayoutBatchSnapshot(ctx, args.batchId);
+    return {
+      ok: true,
+      cycleId: String(args.batchId),
+      status: "rejected",
+    };
   },
 });
 

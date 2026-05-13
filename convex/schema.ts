@@ -203,7 +203,6 @@ export default defineSchema({
       v.literal("dispute_won"),
       v.literal("dispute_lost"),
       v.literal("dispute_funds_reinstated"),
-      v.literal("manual_adjustment"),
     ),
     amountUsd: v.number(),
     currency: v.string(),
@@ -240,7 +239,6 @@ export default defineSchema({
     itemCount: v.number(),
     payableCutoffAt: v.optional(v.number()),
     payoutBufferMs: v.optional(v.number()),
-    createdByUserId: v.optional(v.id("users")),
     approvedByUserId: v.optional(v.id("users")),
     processedByUserId: v.optional(v.id("users")),
     approvedAt: v.optional(v.number()),
@@ -250,8 +248,7 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_batchKey", ["batchKey"])
-    .index("by_status_createdAt", ["status", "createdAt"])
-    .index("by_createdBy", ["createdByUserId", "createdAt"]),
+    .index("by_status_createdAt", ["status", "createdAt"]),
 
   partnerPayoutTransfers: defineTable({
     batchId: v.id("partnerPayoutBatches"),
