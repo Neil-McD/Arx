@@ -175,22 +175,47 @@ function proveUiContract(uiSource: string) {
   );
   assertIncludes(
     uiSource,
-    "Builder Partner Program is coming soon.",
+    "Your Builder Partner account is active.",
     "partner settings UI",
   );
   assertIncludes(
     uiSource,
-    "Partner links, attribution, commission tracking, dashboards, and partner payouts",
+    "Partner links are generated automatically when the requirements are met.",
     "partner settings UI",
   );
   assertIncludes(
     uiSource,
-    "No partner links are currently issued.",
+    "Complete the requirements to unlock your partner link and dashboard.",
     "partner settings UI",
   );
   assertIncludes(
     uiSource,
-    "No partner commissions, balances, or payouts are active yet.",
+    "Accept and unlock",
+    "partner settings UI",
+  );
+  assertIncludes(
+    uiSource,
+    "Copy link",
+    "partner settings UI",
+  );
+  assertIncludes(
+    uiSource,
+    "Referred builders",
+    "partner settings UI",
+  );
+  assertIncludes(
+    uiSource,
+    "Ready for next payout",
+    "partner settings UI",
+  );
+  assertIncludes(
+    uiSource,
+    "Manual settlements appear here after operator review.",
+    "partner settings UI",
+  );
+  assertIncludes(
+    uiSource,
+    "Operator-reviewed Stripe transfers only.",
     "partner settings UI",
   );
   assert.doesNotMatch(
@@ -220,17 +245,7 @@ function proveUiContract(uiSource: string) {
   );
   assert.doesNotMatch(
     uiSource,
-    /Accept and unlock|Copy link|Referred builders|Ready for next payout|Payable soon|Pending hold|Manual settlements appear here after operator review/i,
-    "partner settings UI should not expose active partner dashboard controls while the program is marked coming soon",
-  );
-  assert.doesNotMatch(
-    uiSource,
-    /Complete the requirements to unlock your partner link and dashboard|Your Builder Partner account is active|Generated automatically/i,
-    "partner settings UI should not imply partner accounts or links are active",
-  );
-  assert.doesNotMatch(
-    uiSource,
-    /Request enrollment|your-code|Available after enrollment|enrollment opens/i,
+    /Builder Partner Program is coming soon|Request enrollment|your-code|Available after enrollment|enrollment opens/i,
     "partner settings UI should not retain placeholder enrollment copy",
   );
   assert.doesNotMatch(
@@ -240,8 +255,8 @@ function proveUiContract(uiSource: string) {
   );
   assert.doesNotMatch(
     uiSource,
-    /Ledger-backed|commission rows|ready for payout/i,
-    "partner settings UI should not imply commission ledger production exists before revenue processing is wired",
+    /Ledger-backed|commission rows/i,
+    "partner settings UI should not expose backend ledger implementation details",
   );
 }
 
@@ -878,8 +893,8 @@ function provePartnerPayoutSettlementContract(
   );
   assertIncludes(
     uiSource,
-    "No partner commissions, balances, or payouts are active yet.",
-    "Builder Partner coming-soon payout UI",
+    "Manual settlements appear here after operator review.",
+    "Builder Partner payout history UI",
   );
   assert.doesNotMatch(
     uiSource,
