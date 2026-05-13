@@ -1,5 +1,5 @@
-import { action, internalMutation, mutation, query } from "./_generated/server";
-import { api, internal } from "./_generated/api";
+import { internalAction, internalMutation, mutation, query } from "./_generated/server";
+import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import { findAuthenticatedActorState, resolveAuthenticatedActor } from "./authActor";
 import { hashBusinessVisitorKey } from "./businessAnalyticsCore";
@@ -1431,6 +1431,13 @@ function normalizePayableCutoffAt(value: unknown, nowMs = Date.now()): number {
   return Math.min(cutoffAt, latestAllowedCutoffAt);
 }
 
+function buildPartnerPayoutCycleKey(nowMs: number): string {
+  const date = new Date(Number.isFinite(nowMs) ? nowMs : Date.now());
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+  return `partner_payout_cycle:${year}-${month}`;
+}
+
 function usdToSettlementCents(amountUsd: number): number {
   const cents = Math.floor(roundBuilderPartnerMoney(amountUsd) * 100 + 0.000001);
   if (!Number.isFinite(cents) || cents <= 0) return 0;
@@ -2078,25 +2085,29 @@ export const recordBuilderPartnerAttribution = mutation({
   },
 });
 
-export const createPartnerPayoutBatch = mutation({
+export const createPartnerPayoutCycleInternal = internalMutation({
   args: {
-    authSubject: v.optional(v.string()),
     batchKey: v.optional(v.string()),
     limit: v.optional(v.number()),
     payableCutoffAt: v.optional(v.number()),
+    nowMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    const operator = await requireOperatorRole(ctx, args.authSubject, "operator");
-    const nowMs = Date.now();
+    const nowMs = args.nowMs ?? Date.now();
     const payableCutoffAt = normalizePayableCutoffAt(args.payableCutoffAt, nowMs);
     const rawBatchKey = String(args.batchKey ?? "").trim();
-    const batchKey = rawBatchKey || `partner_payout:${nowMs}:${String(operator.dbUserId)}`;
+    const batchKey = rawBatchKey || buildPartnerPayoutCycleKey(nowMs);
     const existing = await ctx.db
       .query("partnerPayoutBatches" as any)
       .withIndex("by_batchKey", (q: any) => q.eq("batchKey", batchKey))
       .first();
     if (existing) {
-      return await readPartnerPayoutBatchSnapshot(ctx, existing._id);
+      return {
+        ok: true,
+        created: false,
+        reason: "partner_payout_cycle_exists",
+        batch: await readPartnerPayoutBatchSnapshot(ctx, existing._id),
+      };
     }
 
     const plans = await readPartnerPayoutPlans(ctx, {
@@ -2104,7 +2115,12 @@ export const createPartnerPayoutBatch = mutation({
       payableCutoffAt,
     });
     if (plans.length <= 0) {
-      throw new Error("partner_payout_batch_empty");
+      return {
+        ok: true,
+        created: false,
+        reason: "partner_payout_cycle_empty",
+        batch: null,
+      };
     }
     const totalAmountUsd = roundBuilderPartnerMoney(
       plans.reduce((total: number, plan: any) => total + Number(plan.amountUsd ?? 0), 0),
@@ -2119,7 +2135,6 @@ export const createPartnerPayoutBatch = mutation({
       itemCount,
       payableCutoffAt,
       payoutBufferMs: BUILDER_PARTNER_PAYOUT_BUFFER_MS,
-      createdByUserId: operator.dbUserId,
       createdAt: nowMs,
       updatedAt: nowMs,
     });
@@ -2156,7 +2171,6 @@ export const createPartnerPayoutBatch = mutation({
     await recordPartnerPayoutAudit(ctx, {
       eventType: "builder_partner_payout_batch_created",
       status: "succeeded",
-      actorUserId: operator.dbUserId,
       metadata: {
         batchId: String(batchId),
         totalAmountUsd,
@@ -2166,7 +2180,12 @@ export const createPartnerPayoutBatch = mutation({
       nowMs,
     });
 
-    return await readPartnerPayoutBatchSnapshot(ctx, batchId);
+    return {
+      ok: true,
+      created: true,
+      reason: null,
+      batch: await readPartnerPayoutBatchSnapshot(ctx, batchId),
+    };
   },
 });
 
@@ -2213,6 +2232,9 @@ export const approvePartnerPayoutBatch = mutation({
         itemCount: Number(batch.itemCount ?? 0),
       },
       nowMs,
+    });
+    await ctx.scheduler.runAfter(0, (internal as any).builderPartners.executePartnerPayoutBatchInternal, {
+      batchId: args.batchId,
     });
     return await readPartnerPayoutBatchSnapshot(ctx, args.batchId);
   },
@@ -2279,13 +2301,12 @@ export const voidPartnerPayoutBatch = mutation({
   },
 });
 
-export const beginPartnerPayoutBatchExecution = mutation({
+export const beginPartnerPayoutBatchExecutionInternal = internalMutation({
   args: {
-    authSubject: v.optional(v.string()),
     batchId: v.id("partnerPayoutBatches"),
+    actorUserId: v.optional(v.id("users")),
   },
   handler: async (ctx, args) => {
-    const operator = await requireOperatorRole(ctx, args.authSubject, "operator");
     const batch = await ctx.db.get(args.batchId);
     if (!batch) throw new Error("partner_payout_batch_not_found");
     if (batch.status === "draft") throw new Error("partner_payout_batch_not_approved");
@@ -2294,13 +2315,14 @@ export const beginPartnerPayoutBatchExecution = mutation({
       return { transfers: [] };
     }
     const nowMs = Date.now();
+    const actorUserId = args.actorUserId ?? batch.approvedByUserId;
     const validation = await validatePartnerPayoutBatchStillPayable(ctx, args.batchId);
     if (!validation.ok) {
       await markPartnerPayoutBatchStale(ctx, {
         batch,
         batchId: args.batchId,
         reason: validation.reason ?? "partner_payout_batch_stale",
-        actorUserId: operator.dbUserId,
+        actorUserId,
         nowMs,
       });
       return {
@@ -2311,7 +2333,7 @@ export const beginPartnerPayoutBatchExecution = mutation({
     }
     await ctx.db.patch(args.batchId, {
       status: "processing",
-      processedByUserId: operator.dbUserId,
+      processedByUserId: actorUserId,
       processedAt: batch.processedAt ?? nowMs,
       failureReason: undefined,
       updatedAt: nowMs,
@@ -2333,7 +2355,7 @@ export const beginPartnerPayoutBatchExecution = mutation({
     await recordPartnerPayoutAudit(ctx, {
       eventType: "builder_partner_payout_execution_started",
       status: "started",
-      actorUserId: operator.dbUserId,
+      actorUserId,
       metadata: {
         batchId: String(args.batchId),
         transferCount: runnableTransfers.length,
@@ -2469,21 +2491,16 @@ export const finalizePartnerPayoutBatchExecutionInternal = internalMutation({
   },
 });
 
-export const executePartnerPayoutBatch = action({
+export const executePartnerPayoutBatchInternal = internalAction({
   args: {
-    authSubject: v.optional(v.string()),
     batchId: v.id("partnerPayoutBatches"),
   },
   handler: async (ctx, args): Promise<any> => {
-    const begin = await ctx.runMutation((api as any).builderPartners.beginPartnerPayoutBatchExecution, {
-      authSubject: args.authSubject,
+    const begin = await ctx.runMutation((internal as any).builderPartners.beginPartnerPayoutBatchExecutionInternal, {
       batchId: args.batchId,
     });
     if (begin?.blocked) {
-      return await ctx.runQuery((api as any).builderPartners.getPartnerPayoutBatchForOperator, {
-        authSubject: args.authSubject,
-        batchId: args.batchId,
-      });
+      return { ok: false, blocked: true, reason: begin.reason ?? "partner_payout_batch_stale" };
     }
     const transfers = Array.isArray(begin?.transfers) ? begin.transfers : [];
     if (transfers.length > 0) {
@@ -2533,9 +2550,6 @@ export const executePartnerPayoutBatch = action({
       batchId: args.batchId,
       nowMs: Date.now(),
     });
-    return await ctx.runQuery((api as any).builderPartners.getPartnerPayoutBatchForOperator, {
-      authSubject: args.authSubject,
-      batchId: args.batchId,
-    });
+    return { ok: true, blocked: false, batchId: String(args.batchId) };
   },
 });

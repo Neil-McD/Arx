@@ -137,7 +137,7 @@ function proveSchemaContract(schemaSource: string) {
   );
   assert.match(
     schemaSource,
-    /partnerPayoutBatches:[\s\S]*status:\s*v\.union\([\s\S]*v\.literal\("draft"\)[\s\S]*v\.literal\("approved"\)[\s\S]*v\.literal\("processing"\)[\s\S]*v\.literal\("completed"\)[\s\S]*v\.literal\("failed"\)[\s\S]*v\.literal\("voided"\)[\s\S]*payableCutoffAt:\s*v\.optional\(v\.number\(\)\)[\s\S]*payoutBufferMs:\s*v\.optional\(v\.number\(\)\)[\s\S]*createdByUserId:\s*v\.id\("users"\)/,
+    /partnerPayoutBatches:[\s\S]*status:\s*v\.union\([\s\S]*v\.literal\("draft"\)[\s\S]*v\.literal\("approved"\)[\s\S]*v\.literal\("processing"\)[\s\S]*v\.literal\("completed"\)[\s\S]*v\.literal\("failed"\)[\s\S]*v\.literal\("voided"\)[\s\S]*payableCutoffAt:\s*v\.optional\(v\.number\(\)\)[\s\S]*payoutBufferMs:\s*v\.optional\(v\.number\(\)\)[\s\S]*createdByUserId:\s*v\.optional\(v\.id\("users"\)\)/,
     "expected partner payout batches to be auditable settlement objects with an auditable payout cutoff",
   );
   assert.match(
@@ -761,20 +761,40 @@ function provePartnerPayoutSettlementContract(
     /export const previewPartnerPayoutBatch/,
     "manual payout preview should not be a public operator workflow",
   );
+  assert.doesNotMatch(
+    builderPartnersSource,
+    /export const createPartnerPayoutBatch = mutation/,
+    "manual payout creation should not be a public operator workflow",
+  );
   assertIncludes(
     builderPartnersSource,
-    "createPartnerPayoutBatch",
-    "Builder Partner payout settlement internal mechanics",
+    "createPartnerPayoutCycleInternal = internalMutation",
+    "Builder Partner payout cycle generation should be internal/system-owned",
   );
   assertIncludes(
     builderPartnersSource,
     "approvePartnerPayoutBatch",
     "Builder Partner payout settlement",
   );
+  assert.doesNotMatch(
+    builderPartnersSource,
+    /export const executePartnerPayoutBatch = action/,
+    "manual payout execution should not be a public operator workflow",
+  );
   assertIncludes(
     builderPartnersSource,
-    "executePartnerPayoutBatch",
-    "Builder Partner payout settlement internal mechanics",
+    "executePartnerPayoutBatchInternal = internalAction",
+    "Builder Partner payout execution should be internal after approval",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "beginPartnerPayoutBatchExecutionInternal = internalMutation",
+    "Builder Partner payout execution should begin through internal mechanics",
+  );
+  assert.doesNotMatch(
+    builderPartnersSource,
+    /export const beginPartnerPayoutBatchExecution = mutation/,
+    "manual payout execution begin should not be a public operator workflow",
   );
   assertIncludes(
     builderPartnersSource,
@@ -862,9 +882,34 @@ function provePartnerPayoutSettlementContract(
     "Builder Partner commission maturity cron must call the canonical internal mutation",
   );
   assertIncludes(
+    cronsSource,
+    "create builder partner payout cycle",
+    "Builder Partner payout cycles must be system-generated on schedule",
+  );
+  assertIncludes(
+    cronsSource,
+    "builderPartners.createPartnerPayoutCycleInternal",
+    "Builder Partner payout cycle cron must call the canonical internal mutation",
+  );
+  assertIncludes(
     builderPartnersSource,
     "const validation = await validatePartnerPayoutBatchStillPayable(ctx, args.batchId);",
     "Builder Partner payout approval and execution must call validation",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "buildPartnerPayoutCycleKey",
+    "Builder Partner payout cycles should use deterministic cycle keys",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "partner_payout_cycle_empty",
+    "Builder Partner payout cycle creation should no-op when there is nothing payable",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "ctx.scheduler.runAfter(0, (internal as any).builderPartners.executePartnerPayoutBatchInternal",
+    "Builder Partner approval should schedule transfer execution automatically",
   );
   assertIncludes(
     builderPartnersSource,
@@ -1023,7 +1068,7 @@ function provePartnerPayoutSettlementContract(
   );
   assertIncludes(
     docsSource,
-    "Partner payout settlement should run through system-generated payout cycles",
+    "Partner payout settlement should run through system-generated monthly payout cycles",
     "Builder Partner payout docs",
   );
   assertIncludes(
@@ -1034,6 +1079,11 @@ function provePartnerPayoutSettlementContract(
   assertIncludes(
     docsSource,
     "they should not manually preview, create, or execute payout internals",
+    "Builder Partner payout docs",
+  );
+  assertIncludes(
+    docsSource,
+    "Approval schedules transfer execution automatically.",
     "Builder Partner payout docs",
   );
   assertIncludes(

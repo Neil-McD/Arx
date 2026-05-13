@@ -240,7 +240,7 @@ export default defineSchema({
     itemCount: v.number(),
     payableCutoffAt: v.optional(v.number()),
     payoutBufferMs: v.optional(v.number()),
-    createdByUserId: v.id("users"),
+    createdByUserId: v.optional(v.id("users")),
     approvedByUserId: v.optional(v.id("users")),
     processedByUserId: v.optional(v.id("users")),
     approvedAt: v.optional(v.number()),
