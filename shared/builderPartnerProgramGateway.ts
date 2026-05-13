@@ -50,10 +50,12 @@ export type BuilderPartnerProgramSnapshot = {
     readyUsd: number;
     paidUsd: number;
     totalUsd: number;
+    clawbackDebtUsd: number;
     pendingCount: number;
     bufferedCount: number;
     readyCount: number;
     paidCount: number;
+    clawbackDebtCount: number;
   };
   attributionSummary: {
     activeCount: number;
@@ -168,10 +170,12 @@ function normalizeProgramSnapshot(row: BuilderPartnerProgramSnapshot): BuilderPa
       readyUsd: Number(row.commissionSummary?.readyUsd ?? 0),
       paidUsd: Number(row.commissionSummary?.paidUsd ?? 0),
       totalUsd: Number(row.commissionSummary?.totalUsd ?? 0),
+      clawbackDebtUsd: Number(row.commissionSummary?.clawbackDebtUsd ?? 0),
       pendingCount: Number(row.commissionSummary?.pendingCount ?? 0),
       bufferedCount: Number(row.commissionSummary?.bufferedCount ?? 0),
       readyCount: Number(row.commissionSummary?.readyCount ?? 0),
       paidCount: Number(row.commissionSummary?.paidCount ?? 0),
+      clawbackDebtCount: Number(row.commissionSummary?.clawbackDebtCount ?? 0),
     },
     attributionSummary: {
       activeCount: Number(row.attributionSummary?.activeCount ?? 0),

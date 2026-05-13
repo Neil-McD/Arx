@@ -7,6 +7,7 @@ type AccountDeleteBlockerCode =
   | "account_delete_owned_communities_blocked"
   | "account_delete_active_community_subscription_blocked"
   | "account_delete_active_payout_account_blocked"
+  | "account_delete_partner_finance_pending_blocked"
   | "account_delete_mounted_apps_blocked"
   | "account_delete_attached_skills_blocked";
 
@@ -14,6 +15,7 @@ const accountDeleteBlockerCodes = new Set<string>([
   "account_delete_owned_communities_blocked",
   "account_delete_active_community_subscription_blocked",
   "account_delete_active_payout_account_blocked",
+  "account_delete_partner_finance_pending_blocked",
   "account_delete_mounted_apps_blocked",
   "account_delete_attached_skills_blocked",
 ]);
@@ -52,6 +54,139 @@ async function deleteRowsByIndex(ctx: any, tableName: string, indexName: string,
     await ctx.db.delete(row._id);
   }
   return rows.length;
+}
+
+async function listRowsByPartnerStatus(ctx: any, tableName: string, partnerId: any, statuses: string[]) {
+  const groups = await Promise.all(
+    statuses.map((status) =>
+      ctx.db
+        .query(tableName)
+        .withIndex("by_partner_status", (q: any) => q.eq("partnerId", partnerId).eq("status", status))
+        .collect(),
+    ),
+  );
+  return groups.flat();
+}
+
+function roundSignedPartnerFinanceUsd(value: number): number {
+  const normalized = Number(value);
+  if (!Number.isFinite(normalized)) return 0;
+  return Math.round(normalized * 10000) / 10000;
+}
+
+function signedPartnerFinanceUsdToCents(amountUsd: number): number {
+  const normalized = roundSignedPartnerFinanceUsd(Number(amountUsd ?? 0));
+  if (!Number.isFinite(normalized)) return 0;
+  if (normalized > 0) return Math.floor(normalized * 100 + 0.000001);
+  if (normalized < 0) return Math.ceil(normalized * 100 - 0.000001);
+  return 0;
+}
+
+async function readBuilderPartnerFinanceDeletionState(ctx: any, partner: any) {
+  const commissionRows = await listRowsByPartnerStatus(ctx, "partnerCommissionLedger", partner._id, [
+    "locked",
+    "risk_hold",
+    "payable",
+    "voided",
+  ]);
+  const [adjustments, payoutItems, payoutTransfers] = await Promise.all([
+    ctx.db
+      .query("partnerCommissionAdjustments" as any)
+      .withIndex("by_partner_createdAt", (q: any) => q.eq("partnerId", partner._id))
+      .collect(),
+    ctx.db
+      .query("partnerPayoutItems" as any)
+      .withIndex("by_partner_createdAt", (q: any) => q.eq("partnerId", partner._id))
+      .collect(),
+    ctx.db
+      .query("partnerPayoutTransfers" as any)
+      .withIndex("by_partner_createdAt", (q: any) => q.eq("partnerId", partner._id))
+      .collect(),
+  ]);
+  const adjustmentTotalByCommissionId = new Map<string, number>();
+  for (const adjustment of adjustments) {
+    if (adjustment.status !== "applied") continue;
+    const commissionId = String(adjustment.commissionId ?? "");
+    adjustmentTotalByCommissionId.set(
+      commissionId,
+      roundSignedPartnerFinanceUsd(
+        Number(adjustmentTotalByCommissionId.get(commissionId) ?? 0) +
+          Number(adjustment.amountUsd ?? 0),
+      ),
+    );
+  }
+  const reservedOrSettledPayoutTotalByCommissionId = new Map<string, number>();
+  for (const item of payoutItems) {
+    if (item.status !== "reserved" && item.status !== "settled") continue;
+    const commissionId = String(item.commissionId ?? "");
+    reservedOrSettledPayoutTotalByCommissionId.set(
+      commissionId,
+      roundSignedPartnerFinanceUsd(
+        Number(reservedOrSettledPayoutTotalByCommissionId.get(commissionId) ?? 0) +
+          Number(item.amountUsd ?? 0),
+      ),
+    );
+  }
+  const unresolvedCommissionRows = commissionRows.filter((row: any) => {
+    if (row.status === "voided") return false;
+    const netCents = signedPartnerFinanceUsdToCents(
+      Number(row.commissionAmountUsd ?? 0) +
+        Number(adjustmentTotalByCommissionId.get(String(row._id)) ?? 0) -
+        Number(reservedOrSettledPayoutTotalByCommissionId.get(String(row._id)) ?? 0),
+    );
+    return netCents !== 0;
+  });
+  const reservedPayoutItems = payoutItems.filter((row: any) => row.status === "reserved");
+  const inFlightPayoutTransfers = payoutTransfers.filter((row: any) =>
+    row.status === "draft" || row.status === "processing",
+  );
+  const financeAttributionIds = new Set<string>();
+  for (const row of commissionRows) {
+    if (row.attributionId) financeAttributionIds.add(String(row.attributionId));
+  }
+  return {
+    hasFinanceHistory:
+      commissionRows.length > 0 ||
+      adjustments.length > 0 ||
+      payoutItems.length > 0 ||
+      payoutTransfers.length > 0,
+    hasUnresolvedFinance:
+      unresolvedCommissionRows.length > 0 ||
+      reservedPayoutItems.length > 0 ||
+      inFlightPayoutTransfers.length > 0,
+    financeAttributionIds,
+  };
+}
+
+async function listPartnerAttributions(ctx: any, partnerId: any) {
+  return await listRowsByPartnerStatus(ctx, "partnerAttributions", partnerId, [
+    "active",
+    "bound",
+    "expired",
+    "voided",
+  ]);
+}
+
+async function scrubFinanceLinkedPartnerAttribution(ctx: any, attribution: any, nowMs: number) {
+  await ctx.db.patch(attribution._id, {
+    anonymousVisitorKeyHash: undefined,
+    firstTouchUrl: undefined,
+    lastTouchUrl: undefined,
+    status:
+      attribution.status === "active" || attribution.status === "bound"
+        ? "voided"
+        : attribution.status,
+    voidReason:
+      attribution.status === "active" || attribution.status === "bound"
+        ? "account_deleted"
+        : attribution.voidReason,
+    updatedAt: nowMs,
+  });
+}
+
+function tombstoneBuilderPartnerCode(partner: any): string {
+  const raw = String(partner?._id ?? "").toLowerCase().replace(/[^a-z0-9]+/g, "");
+  return `deleted-${raw.slice(-40) || "partner"}`;
 }
 
 function isActiveCommunitySubscription(row: any): boolean {
@@ -160,6 +295,17 @@ async function assertAccountDeletionAllowed(ctx: any, userId: any) {
     throwAccountDeleteBlocker("account_delete_active_payout_account_blocked");
   }
 
+  const builderPartners = await ctx.db
+    .query("builderPartners")
+    .withIndex("by_user", (q: any) => q.eq("userId", userId))
+    .collect();
+  for (const partner of builderPartners) {
+    const financeState = await readBuilderPartnerFinanceDeletionState(ctx, partner);
+    if (financeState.hasUnresolvedFinance) {
+      throwAccountDeleteBlocker("account_delete_partner_finance_pending_blocked");
+    }
+  }
+
   const developerApps = await ctx.db
     .query("developerApps")
     .withIndex("by_owner", (q: any) => q.eq("ownerUserId", userId))
@@ -234,13 +380,41 @@ export const deleteOwnAccount = mutation({
     const record = async (tableName: string, count: number) => {
       deleted[tableName] = (deleted[tableName] ?? 0) + count;
     };
+    const preserved: Record<string, number> = {};
+    const preserve = async (tableName: string, count: number) => {
+      preserved[tableName] = (preserved[tableName] ?? 0) + count;
+    };
+
+    const referredPartnerCommissions = await ctx.db
+      .query("partnerCommissionLedger")
+      .withIndex("by_referredUser", (q: any) => q.eq("referredUserId", userId))
+      .collect();
+    const financeLinkedReferredAttributionIds = new Set<string>();
+    const financeLinkedCreditLedgerEntryIds = new Set<string>();
+    for (const commission of referredPartnerCommissions) {
+      if (commission.attributionId) financeLinkedReferredAttributionIds.add(String(commission.attributionId));
+      if (commission.sourceCreditLedgerEntryId) {
+        financeLinkedCreditLedgerEntryIds.add(String(commission.sourceCreditLedgerEntryId));
+      }
+    }
 
     await record("authSessions", await deleteRowsByIndex(ctx, "authSessions", "by_user", "userId", userId));
     await record("userEntitlements", await deleteRowsByIndex(ctx, "userEntitlements", "by_user", "userId", userId));
     await record("userStripeConnectAccounts", await deleteRowsByIndex(ctx, "userStripeConnectAccounts", "by_user", "userId", userId));
     await record("workspaceCreditBalances", await deleteRowsByIndex(ctx, "workspaceCreditBalances", "by_user", "userId", userId));
     await record("workspaceComputeCharges", await deleteRowsByIndex(ctx, "workspaceComputeCharges", "by_user", "userId", userId));
-    await record("creditLedgerEntries", await deleteRowsByIndex(ctx, "creditLedgerEntries", "by_user_createdAt", "userId", userId));
+    const creditLedgerEntries = await ctx.db
+      .query("creditLedgerEntries")
+      .withIndex("by_user_createdAt", (q) => q.eq("userId", userId))
+      .collect();
+    for (const entry of creditLedgerEntries) {
+      if (financeLinkedCreditLedgerEntryIds.has(String(entry._id))) {
+        await preserve("creditLedgerEntries", 1);
+        continue;
+      }
+      await ctx.db.delete(entry._id);
+      await record("creditLedgerEntries", 1);
+    }
     await record("checkoutSessions", await deleteRowsByIndex(ctx, "checkoutSessions", "by_owner", "ownerUserId", userId));
     await record("purchaseClaims", await deleteRowsByIndex(ctx, "purchaseClaims", "by_owner", "ownerUserId", userId));
     await record("userMemorySettings", await deleteRowsByIndex(ctx, "userMemorySettings", "by_user", "userId", userId));
@@ -265,26 +439,52 @@ export const deleteOwnAccount = mutation({
     await record("userPlatformAppMounts", await deleteRowsByIndex(ctx, "userPlatformAppMounts", "by_user", "userId", userId));
     await record("userPlatformSkillInstalls", await deleteRowsByIndex(ctx, "userPlatformSkillInstalls", "by_user", "userId", userId));
     await record("communityAiFeedReactions", await deleteRowsByIndex(ctx, "communityAiFeedReactions", "by_actorUser", "actorUserId", userId));
-    await record("partnerAttributions", await deleteRowsByIndex(ctx, "partnerAttributions", "by_referredUser", "referredUserId", userId));
-    const referredPartnerCommissions = await ctx.db
-      .query("partnerCommissionLedger")
+    const referredAttributions = await ctx.db
+      .query("partnerAttributions")
       .withIndex("by_referredUser", (q: any) => q.eq("referredUserId", userId))
       .collect();
-    for (const commission of referredPartnerCommissions) {
-      await record("partnerCommissionAdjustments", await deleteRowsByIndex(ctx, "partnerCommissionAdjustments", "by_commission", "commissionId", commission._id));
+    for (const attribution of referredAttributions) {
+      if (financeLinkedReferredAttributionIds.has(String(attribution._id))) {
+        await scrubFinanceLinkedPartnerAttribution(ctx, attribution, nowMs);
+        await preserve("partnerAttributions", 1);
+        continue;
+      }
+      await ctx.db.delete(attribution._id);
+      await record("partnerAttributions", 1);
     }
-    await record("partnerCommissionLedger", await deleteRowsByIndex(ctx, "partnerCommissionLedger", "by_referredUser", "referredUserId", userId));
+    await preserve("partnerCommissionLedger", referredPartnerCommissions.length);
 
     const builderPartners = await ctx.db
       .query("builderPartners")
       .withIndex("by_user", (q) => q.eq("userId", userId))
       .collect();
     for (const partner of builderPartners) {
-      await record("partnerAttributions", await deleteRowsByIndex(ctx, "partnerAttributions", "by_partner_status", "partnerId", partner._id));
-      await record("partnerCommissionAdjustments", await deleteRowsByIndex(ctx, "partnerCommissionAdjustments", "by_partner_createdAt", "partnerId", partner._id));
-      await record("partnerCommissionLedger", await deleteRowsByIndex(ctx, "partnerCommissionLedger", "by_partner_status", "partnerId", partner._id));
-      await record("builderPartners", 1);
+      const financeState = await readBuilderPartnerFinanceDeletionState(ctx, partner);
+      if (financeState.hasUnresolvedFinance) {
+        throwAccountDeleteBlocker("account_delete_partner_finance_pending_blocked");
+      }
+      const attributions = await listPartnerAttributions(ctx, partner._id);
+      for (const attribution of attributions) {
+        if (financeState.financeAttributionIds.has(String(attribution._id))) {
+          await scrubFinanceLinkedPartnerAttribution(ctx, attribution, nowMs);
+          await preserve("partnerAttributions", 1);
+          continue;
+        }
+        await ctx.db.delete(attribution._id);
+        await record("partnerAttributions", 1);
+      }
+      if (financeState.hasFinanceHistory) {
+        await ctx.db.patch(partner._id, {
+          code: tombstoneBuilderPartnerCode(partner),
+          status: "disabled",
+          disabledReason: "account_deleted",
+          updatedAt: nowMs,
+        });
+        await preserve("builderPartners", 1);
+        continue;
+      }
       await ctx.db.delete(partner._id);
+      await record("builderPartners", 1);
     }
 
     const developerApps = await ctx.db
@@ -375,7 +575,7 @@ export const deleteOwnAccount = mutation({
       actorUserId: userId,
       subjectUserId: userId,
       provider: "polynet",
-      metadata: { deleted },
+      metadata: { deleted, preserved },
       createdAt: nowMs,
     });
 

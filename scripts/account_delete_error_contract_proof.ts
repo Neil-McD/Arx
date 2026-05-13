@@ -12,6 +12,7 @@ const blockerCodes = [
   "account_delete_owned_communities_blocked",
   "account_delete_active_community_subscription_blocked",
   "account_delete_active_payout_account_blocked",
+  "account_delete_partner_finance_pending_blocked",
   "account_delete_mounted_apps_blocked",
   "account_delete_attached_skills_blocked",
 ];
@@ -34,6 +35,16 @@ assert.match(account, /listLiveCommunityAppMountRowsForApp/, "app deletion block
 assert.match(account, /deleteOrphanCommunityAppMountRowsForApp/, "account deletion must clean stale community app mounts");
 assert.match(account, /listLiveCommunitySkillAttachmentRowsForSkill/, "skill deletion blocker must ignore stale community skill attachments");
 assert.match(account, /deleteOrphanCommunitySkillAttachmentRowsForSkill/, "account deletion must clean stale community skill attachments");
+assert.match(account, /readBuilderPartnerFinanceDeletionState/, "account deletion must inspect Builder Partner finance before deleting");
+assert.match(account, /hasUnresolvedFinance/, "account deletion must block unresolved Builder Partner balances, debt, or payouts");
+assert.match(account, /account_delete_partner_finance_pending_blocked/, "account deletion must expose a stable Builder Partner finance blocker");
+assert.match(account, /scrubFinanceLinkedPartnerAttribution/, "account deletion must scrub attribution privacy fields while preserving finance-linked rows");
+assert.match(account, /tombstoneBuilderPartnerCode/, "account deletion must tombstone settled partner accounts instead of leaving referral links active");
+assert.match(account, /preserve\("partnerCommissionLedger", referredPartnerCommissions\.length\)/, "account deletion must preserve referred-user commission history");
+assert.match(account, /financeLinkedCreditLedgerEntryIds/, "account deletion must preserve credit ledger rows used as partner finance evidence");
+assert.match(account, /preserve\("creditLedgerEntries", 1\)/, "account deletion must preserve finance-linked credit ledger evidence");
+assert.doesNotMatch(account, /deleteRowsByIndex\(ctx, "partnerCommissionLedger", "by_referredUser"/, "account deletion must not erase referred-user partner commission history");
+assert.doesNotMatch(account, /deleteRowsByIndex\(ctx, "partnerCommissionAdjustments", "by_partner_createdAt"/, "account deletion must not erase partner adjustment audit history");
 assert.match(account, /await record\("userPlatformAppMountSources", await deleteRowsByIndex\(ctx, "userPlatformAppMountSources", "by_user_mount", "userId", userId\)\)/, "account deletion must remove user app mount source rows before user mounts");
 assert.match(account, /"by_community_mount"[\s\S]*"communityAppMountId"/, "stale community app mount cleanup must remove dependent source rows");
 assert.match(account, /await record\("userPlatformAppMountSources", staleCommunityMountDeletes\.userPlatformAppMountSources\)/, "account deletion must count stale app mount source cleanup");

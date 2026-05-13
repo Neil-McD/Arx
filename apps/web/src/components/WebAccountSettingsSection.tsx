@@ -96,6 +96,7 @@ const deleteAccountErrorMessages: Record<string, string> = {
   account_delete_owned_communities_blocked: "Delete or transfer owned communities before deleting your account.",
   account_delete_active_community_subscription_blocked: "Cancel active community memberships before deleting your account.",
   account_delete_active_payout_account_blocked: "Resolve active payout setup before deleting your account.",
+  account_delete_partner_finance_pending_blocked: "Resolve pending Builder Partner commissions or payouts before deleting your account.",
   account_delete_mounted_apps_blocked: "Remove your apps from communities before deleting your account.",
   account_delete_attached_skills_blocked: "Remove your skills from communities before deleting your account.",
 };

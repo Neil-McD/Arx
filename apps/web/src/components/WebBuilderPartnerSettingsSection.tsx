@@ -367,6 +367,15 @@ export function WebBuilderPartnerSettingsSection(props: WebBuilderPartnerSetting
                     <strong>{formatUsd(snapshot.commissionSummary.pendingUsd)}</strong>
                     <small>Waiting for refund and dispute risk to clear.</small>
                   </div>
+                  {snapshot.commissionSummary.clawbackDebtUsd > 0 ? (
+                    <div className="builder-partner-payout-card" role="listitem">
+                      <span>Carryforward adjustment</span>
+                      <strong>{formatUsd(snapshot.commissionSummary.clawbackDebtUsd)}</strong>
+                      <small>
+                        Future payouts are reduced until prior refunds or disputes are cleared.
+                      </small>
+                    </div>
+                  ) : null}
                 </div>
                 <div className="builder-partner-payout-history">
                   <div className="builder-partner-payout-history-title">

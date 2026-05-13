@@ -1125,10 +1125,12 @@ async function readCommissionSummary(ctx: any, partner: any) {
       readyUsd: 0,
       paidUsd: 0,
       totalUsd: 0,
+      clawbackDebtUsd: 0,
       pendingCount: 0,
       bufferedCount: 0,
       readyCount: 0,
       paidCount: 0,
+      clawbackDebtCount: 0,
     };
   }
   const nowMs = Date.now();
@@ -1192,43 +1194,77 @@ async function readCommissionSummary(ctx: any, partner: any) {
       );
     }
   }
-  const rowNetAmount = (row: any) =>
-    Math.max(
-      0,
-      roundBuilderPartnerMoney(
+  const rowNetSettlementCents = (row: any) =>
+    signedUsdToSettlementCents(
+      roundSignedPartnerMoney(
         Number(row.commissionAmountUsd ?? 0) +
-        Number(adjustmentTotalByCommissionId.get(String(row._id)) ?? 0) -
-        Number(reservedOrSettledPayoutTotalByCommissionId.get(String(row._id)) ?? 0),
+          Number(adjustmentTotalByCommissionId.get(String(row._id)) ?? 0) -
+          Number(reservedOrSettledPayoutTotalByCommissionId.get(String(row._id)) ?? 0),
       ),
     );
-  const sum = (statusSet: ReadonlySet<string>) =>
+  const rowPositiveSettlementCents = (row: any) => Math.max(0, rowNetSettlementCents(row));
+  const sumPositiveCents = (statusSet: ReadonlySet<string>) =>
     rows
       .filter((row: any) => statusSet.has(String(row.status ?? "")))
-      .reduce((total: number, row: any) => total + rowNetAmount(row), 0);
+      .reduce((total: number, row: any) => total + rowPositiveSettlementCents(row), 0);
+  const sortPayableCandidates = (candidates: Array<{ row: any; settlementCents: number }>) =>
+    candidates.sort(
+      (a, b) =>
+        Number(a.row.payableAt ?? 0) - Number(b.row.payableAt ?? 0) ||
+        Number(a.row.createdAt ?? 0) - Number(b.row.createdAt ?? 0) ||
+        String(a.row._id).localeCompare(String(b.row._id)),
+    );
+  const netPayoutCandidates = (
+    candidates: Array<{ row: any; settlementCents: number }>,
+    debtCents: number,
+  ) => {
+    let remainingDebtCents = debtCents;
+    let totalCents = 0;
+    let count = 0;
+    for (const candidate of candidates) {
+      const offsetCents = Math.min(remainingDebtCents, candidate.settlementCents);
+      remainingDebtCents -= offsetCents;
+      const netCents = candidate.settlementCents - offsetCents;
+      if (netCents <= 0) continue;
+      totalCents += netCents;
+      count += 1;
+    }
+    return { totalCents, count, remainingDebtCents };
+  };
   const pendingSet = new Set(["locked", "risk_hold"]);
   const payableSet = new Set(["payable"]);
-  const pendingUsd = sum(pendingSet);
-  const payableRows = rows.filter((row: any) =>
-    payableSet.has(String(row.status ?? "")) && rowNetAmount(row) > 0,
-  );
-  const readyPayableRows = payableRows.filter((row: any) =>
-    typeof row.payableAt === "number" &&
-    Number.isFinite(row.payableAt) &&
-    row.payableAt <= payoutReadyCutoffAt,
-  );
-  const bufferedPayableRows = payableRows.filter((row: any) =>
-    !(
-      typeof row.payableAt === "number" &&
-      Number.isFinite(row.payableAt) &&
-      row.payableAt <= payoutReadyCutoffAt
+  const pendingUsd = settlementCentsToUsd(sumPositiveCents(pendingSet));
+  const payableRows = rows.filter((row: any) => payableSet.has(String(row.status ?? "")));
+  const clawbackDebtCents = payableRows.reduce((total: number, row: any) => {
+    const netCents = rowNetSettlementCents(row);
+    return netCents < 0 ? total + Math.abs(netCents) : total;
+  }, 0);
+  const payablePositiveCandidates = payableRows
+    .map((row: any) => ({ row, settlementCents: rowPositiveSettlementCents(row) }))
+    .filter((candidate) => candidate.settlementCents > 0);
+  const readyPayableCandidates = sortPayableCandidates(
+    payablePositiveCandidates.filter(
+      (candidate) =>
+        typeof candidate.row.payableAt === "number" &&
+        Number.isFinite(candidate.row.payableAt) &&
+        candidate.row.payableAt <= payoutReadyCutoffAt,
     ),
   );
-  const readyUsd = roundBuilderPartnerMoney(
-    readyPayableRows.reduce((total: number, row: any) => total + rowNetAmount(row), 0),
+  const bufferedPayableCandidates = sortPayableCandidates(
+    payablePositiveCandidates.filter(
+      (candidate) =>
+        !(
+          typeof candidate.row.payableAt === "number" &&
+          Number.isFinite(candidate.row.payableAt) &&
+          candidate.row.payableAt <= payoutReadyCutoffAt
+        ),
+    ),
   );
-  const bufferedUsd = roundBuilderPartnerMoney(
-    bufferedPayableRows.reduce((total: number, row: any) => total + rowNetAmount(row), 0),
-  );
+  const readyNet = netPayoutCandidates(readyPayableCandidates, clawbackDebtCents);
+  const bufferedNet = netPayoutCandidates(bufferedPayableCandidates, readyNet.remainingDebtCents);
+  const readyUsd = settlementCentsToUsd(readyNet.totalCents);
+  const bufferedUsd = settlementCentsToUsd(bufferedNet.totalCents);
+  const clawbackDebtUsd = settlementCentsToUsd(clawbackDebtCents);
   const settledPaidUsd = roundBuilderPartnerMoney(
     Array.from(settledPayoutTotalByCommissionId.values()).reduce(
       (total, amount) => total + amount,
@@ -1241,16 +1277,18 @@ async function readCommissionSummary(ctx: any, partner: any) {
     bufferedUsd,
     readyUsd,
     paidUsd,
-    totalUsd: pendingUsd + bufferedUsd + readyUsd + paidUsd,
-    pendingCount: rows.filter((row: any) => pendingSet.has(String(row.status ?? "")) && rowNetAmount(row) > 0).length,
-    bufferedCount: bufferedPayableRows.length,
-    readyCount: readyPayableRows.length,
+    totalUsd: roundBuilderPartnerMoney(pendingUsd + bufferedUsd + readyUsd + paidUsd),
+    clawbackDebtUsd,
+    pendingCount: rows.filter((row: any) => pendingSet.has(String(row.status ?? "")) && rowPositiveSettlementCents(row) > 0).length,
+    bufferedCount: bufferedNet.count,
+    readyCount: readyNet.count,
     paidCount:
       new Set(
         payoutItems
           .filter((row: any) => row.status === "settled")
           .map((row: any) => String(row.commissionId ?? "")),
       ).size,
+    clawbackDebtCount: payableRows.filter((row: any) => rowNetSettlementCents(row) < 0).length,
   };
 }
 
@@ -1405,6 +1443,14 @@ function settlementCentsToUsd(cents: number): number {
   return roundBuilderPartnerMoney(normalized / 100);
 }
 
+function signedUsdToSettlementCents(amountUsd: number): number {
+  const normalized = roundSignedPartnerMoney(Number(amountUsd ?? 0));
+  if (!Number.isFinite(normalized)) return 0;
+  if (normalized > 0) return Math.floor(normalized * 100 + 0.000001);
+  if (normalized < 0) return Math.ceil(normalized * 100 - 0.000001);
+  return 0;
+}
+
 function usdToStripeCents(amountUsd: number): number {
   const cents = usdToSettlementCents(amountUsd);
   if (cents <= 0) {
@@ -1473,6 +1519,7 @@ async function readReadyStripeConnectPayoutAccount(ctx: any, userId: any) {
 
 async function readPartnerPayablePayoutEntries(ctx: any, partner: any, args: {
   payableCutoffAt: number;
+  excludeBatchId?: any;
 }) {
   if (!partner?._id || partner.status !== "active") return [];
   const rows = await ctx.db
@@ -1482,8 +1529,29 @@ async function readPartnerPayablePayoutEntries(ctx: any, partner: any, args: {
     )
     .collect();
   const reservedOrSettledStatuses = new Set<PartnerPayoutItemStatus>(["reserved", "settled"]);
-  const entries = [];
+  const candidates = [];
+  let carryforwardDebtCents = 0;
   for (const row of rows) {
+    if (normalizeUsdCurrency(row.currency) !== "usd") continue;
+    const adjustmentTotalUsd = await readAppliedCommissionAdjustmentTotalUsd(ctx, row._id);
+    const reservedOrSettledPayoutUsd = await readCommissionPayoutItemTotalUsd(
+      ctx,
+      row._id,
+      reservedOrSettledStatuses,
+      args.excludeBatchId,
+    );
+    const netSettlementCents = signedUsdToSettlementCents(
+      roundSignedPartnerMoney(
+        Number(row.commissionAmountUsd ?? 0) +
+          adjustmentTotalUsd -
+          reservedOrSettledPayoutUsd,
+      ),
+    );
+    if (netSettlementCents < 0) {
+      carryforwardDebtCents += Math.abs(netSettlementCents);
+      continue;
+    }
+    if (netSettlementCents <= 0) continue;
     if (
       typeof row.payableAt !== "number" ||
       !Number.isFinite(row.payableAt) ||
@@ -1491,25 +1559,27 @@ async function readPartnerPayablePayoutEntries(ctx: any, partner: any, args: {
     ) {
       continue;
     }
-    if (normalizeUsdCurrency(row.currency) !== "usd") continue;
-    const adjustmentTotalUsd = await readAppliedCommissionAdjustmentTotalUsd(ctx, row._id);
-    const reservedOrSettledPayoutUsd = await readCommissionPayoutItemTotalUsd(
-      ctx,
-      row._id,
-      reservedOrSettledStatuses,
-    );
-    const amountUsd = Math.max(
-      0,
-      roundBuilderPartnerMoney(
-        Number(row.commissionAmountUsd ?? 0) +
-        adjustmentTotalUsd -
-        reservedOrSettledPayoutUsd,
-      ),
-    );
-    const settlementCents = usdToSettlementCents(amountUsd);
+    candidates.push({
+      commissionId: row._id,
+      settlementCents: netSettlementCents,
+      payableAt: Number(row.payableAt ?? 0),
+      createdAt: Number(row.createdAt ?? 0),
+    });
+  }
+  candidates.sort(
+    (a, b) =>
+      a.payableAt - b.payableAt ||
+      a.createdAt - b.createdAt ||
+      String(a.commissionId).localeCompare(String(b.commissionId)),
+  );
+  const entries = [];
+  for (const candidate of candidates) {
+    const offsetCents = Math.min(carryforwardDebtCents, candidate.settlementCents);
+    carryforwardDebtCents -= offsetCents;
+    const settlementCents = candidate.settlementCents - offsetCents;
     if (settlementCents <= 0) continue;
     entries.push({
-      commissionId: row._id,
+      commissionId: candidate.commissionId,
       amountUsd: settlementCentsToUsd(settlementCents),
       settlementCents,
       currency: "usd",
@@ -1653,6 +1723,7 @@ async function validatePartnerPayoutBatchStillPayable(ctx: any, batchId: any) {
     itemTotalByCommissionId.set(commissionId, existing);
   }
 
+  const transferCentsByPartnerId = new Map<string, { partnerId: any; settlementCents: number }>();
   for (const transfer of transfers) {
     if (transfer.status === "succeeded") continue;
     const transferCents = usdToSettlementCents(Number(transfer.amountUsd ?? 0));
@@ -1660,6 +1731,13 @@ async function validatePartnerPayoutBatchStillPayable(ctx: any, batchId: any) {
     if (transferCents <= 0 || itemCents <= 0 || transferCents !== itemCents) {
       return { ok: false, reason: "partner_payout_transfer_amount_mismatch" };
     }
+    const partnerKey = String(transfer.partnerId);
+    const partnerTotal = transferCentsByPartnerId.get(partnerKey) ?? {
+      partnerId: transfer.partnerId,
+      settlementCents: 0,
+    };
+    partnerTotal.settlementCents += transferCents;
+    transferCentsByPartnerId.set(partnerKey, partnerTotal);
     const currentStripeAccount = await readReadyStripeConnectPayoutAccount(ctx, transfer.partnerUserId);
     if (
       !currentStripeAccount ||
@@ -1711,6 +1789,27 @@ async function validatePartnerPayoutBatchStillPayable(ctx: any, batchId: any) {
     const availableCents = usdToSettlementCents(availableUsd);
     if (requestedCents <= 0 || requestedCents > availableCents) {
       return { ok: false, reason: "partner_payout_stale_payable_balance" };
+    }
+  }
+
+  for (const partnerTotal of transferCentsByPartnerId.values()) {
+    const partner = await ctx.db.get(partnerTotal.partnerId);
+    if (!partner || partner.status !== "active") {
+      return { ok: false, reason: "partner_payout_partner_not_active" };
+    }
+    const availableEntries = await readPartnerPayablePayoutEntries(ctx, partner, {
+      payableCutoffAt: batchPayableCutoffAt,
+      excludeBatchId: batchId,
+    });
+    const availablePartnerPayoutCents = availableEntries.reduce(
+      (total: number, entry: any) => total + Number(entry.settlementCents ?? 0),
+      0,
+    );
+    if (
+      partnerTotal.settlementCents <= 0 ||
+      partnerTotal.settlementCents > availablePartnerPayoutCents
+    ) {
+      return { ok: false, reason: "partner_payout_stale_partner_balance" };
     }
   }
 

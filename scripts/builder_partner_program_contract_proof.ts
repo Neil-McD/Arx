@@ -386,38 +386,68 @@ function proveAutomaticUnlockContract(convexSource: string, gatewaySource: strin
 function proveReductionAndCleanupContract(accountSource: string, docsSource: string) {
   assertIncludes(
     accountSource,
-    "\"partnerAttributions\", \"by_referredUser\", \"referredUserId\"",
+    "withIndex(\"by_referredUser\", (q: any) => q.eq(\"referredUserId\", userId))",
     "account deletion cleanup",
   );
   assertIncludes(
     accountSource,
-    "\"partnerCommissionLedger\", \"by_referredUser\", \"referredUserId\"",
+    "readBuilderPartnerFinanceDeletionState",
+    "account deletion must classify partner finance state before deleting",
+  );
+  assertIncludes(
+    accountSource,
+    "account_delete_partner_finance_pending_blocked",
+    "account deletion must block unresolved partner finance",
+  );
+  assertIncludes(
+    accountSource,
+    "hasUnresolvedFinance",
+    "account deletion must block unresolved partner finance",
+  );
+  assertIncludes(
+    accountSource,
+    "preserve(\"partnerCommissionLedger\", referredPartnerCommissions.length)",
+    "account deletion must preserve referred-user partner commission history",
+  );
+  assertIncludes(
+    accountSource,
+    "financeLinkedCreditLedgerEntryIds",
+    "account deletion must preserve credit ledger rows used as partner finance evidence",
+  );
+  assertIncludes(
+    accountSource,
+    "preserve(\"creditLedgerEntries\", 1)",
+    "account deletion must preserve credit ledger rows used as partner finance evidence",
+  );
+  assertIncludes(
+    accountSource,
+    "scrubFinanceLinkedPartnerAttribution",
+    "account deletion must scrub attribution privacy fields while preserving finance evidence",
+  );
+  assertIncludes(
+    accountSource,
+    "tombstoneBuilderPartnerCode",
+    "account deletion must disable settled partner links instead of deleting audit history",
+  );
+  assertIncludes(
+    accountSource,
+    "listPartnerAttributions",
     "account deletion cleanup",
   );
   assertIncludes(
     accountSource,
-    "\"partnerCommissionAdjustments\", \"by_commission\", \"commissionId\"",
-    "account deletion cleanup",
+    "\"partnerCommissionLedger\", partner._id",
+    "account deletion must inspect partner ledger rows by status",
   );
-  assertIncludes(
+  assert.doesNotMatch(
     accountSource,
-    "\"partnerCommissionAdjustments\", \"by_partner_createdAt\", \"partnerId\"",
-    "account deletion cleanup",
+    /deleteRowsByIndex\(ctx, "partnerCommissionLedger", "by_referredUser"/,
+    "account deletion must not erase referred-user partner commission ledger history",
   );
-  assertIncludes(
+  assert.doesNotMatch(
     accountSource,
-    "\"builderPartners\"",
-    "account deletion cleanup",
-  );
-  assertIncludes(
-    accountSource,
-    "\"partnerAttributions\", \"by_partner_status\", \"partnerId\"",
-    "account deletion cleanup",
-  );
-  assertIncludes(
-    accountSource,
-    "\"partnerCommissionLedger\", \"by_partner_status\", \"partnerId\"",
-    "account deletion cleanup",
+    /deleteRowsByIndex\(ctx, "partnerCommissionAdjustments", "by_partner_createdAt"/,
+    "account deletion must not erase partner adjustment history",
   );
   assertIncludes(
     docsSource,
@@ -853,6 +883,31 @@ function provePartnerPayoutSettlementContract(
   );
   assertIncludes(
     builderPartnersSource,
+    "carryforwardDebtCents",
+    "Builder Partner payout planning must apply post-payout refund and dispute debt against future commissions",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "partner_payout_stale_partner_balance",
+    "Builder Partner payout validation must re-check partner-wide net balance before Stripe",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "transferCentsByPartnerId",
+    "Builder Partner payout validation must validate transfer totals against partner-wide net payout capacity",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "excludeBatchId: batchId",
+    "Builder Partner payout validation must recompute partner capacity excluding the current batch reservation",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "clawbackDebtUsd",
+    "Builder Partner dashboard summary must expose carryforward debt separately from payable balances",
+  );
+  assertIncludes(
+    builderPartnersSource,
     "usdToSettlementCents",
     "Builder Partner payout settlement must normalize settlement amounts to cents",
   );
@@ -942,6 +997,16 @@ function provePartnerPayoutSettlementContract(
     "Builder Partner gateway must expose payable balance still inside the payout buffer",
   );
   assertIncludes(
+    gatewaySource,
+    "clawbackDebtUsd",
+    "Builder Partner gateway must expose carryforward debt separately",
+  );
+  assertIncludes(
+    uiSource,
+    "Carryforward adjustment",
+    "Builder Partner UI must show carryforward debt only when present",
+  );
+  assertIncludes(
     builderPartnersSource,
     "row.status === \"processing\" || row.status === \"succeeded\" || row.status === \"failed\"",
     "Builder Partner payout history must hide draft transfer rows",
@@ -979,6 +1044,11 @@ function provePartnerPayoutSettlementContract(
   assertIncludes(
     docsSource,
     "There is no public minimum payout threshold",
+    "Builder Partner payout docs",
+  );
+  assertIncludes(
+    docsSource,
+    "negative balance carries forward against later eligible partner commissions",
     "Builder Partner payout docs",
   );
   assertIncludes(
