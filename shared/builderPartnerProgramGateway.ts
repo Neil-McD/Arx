@@ -11,13 +11,19 @@ const BUILDER_PARTNER_REFERRAL_STORAGE_KEY = "polynet-builder-partner-referral";
 const BUILDER_PARTNER_REFERRAL_STORAGE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 export type BuilderPartnerRequirementAction =
-  | "sign_in"
+  | "complete_account_setup"
   | "create_community"
+  | "finish_community_setup"
   | "accept_terms"
   | null;
 
 export type BuilderPartnerProgramRequirement = {
-  key: "signed_in" | "own_community" | "accept_terms" | "account_good_standing";
+  key:
+    | "account_setup_complete"
+    | "own_community"
+    | "community_publish_ready"
+    | "accept_terms"
+    | "account_good_standing";
   label: string;
   met: boolean;
   action: BuilderPartnerRequirementAction;

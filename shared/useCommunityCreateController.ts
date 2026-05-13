@@ -3,6 +3,7 @@ import { type CreateCommunityIntentDraft } from "./createCommunityIntent";
 import { resolveUsableSession, type EnsureSessionFn } from "./ensureUsableSession";
 
 import { createCloudCommunity, prepareCloudCommunityBrandingField } from "./cloudCommunityAdminGateway";
+import { getCommunityPublishReadinessMissingFields } from "./communityPublishReadiness";
 import { isValidCommunitySlug, slugifyCommunityName } from "./communitySlug";
 import { toCanonicalCommunityVisibility } from "./communityVisibility";
 import { readCommunityAvatarFileAsDataUrlWithinLimit } from "./imageTransforms";
@@ -32,14 +33,14 @@ type UseCommunityCreateControllerArgs<
   session: SessionT | null;
   ensureSession?: EnsureSessionFn<SessionT>;
   accountCommerceStatus: BillingStatusT | null;
-  isProfileSetupComplete: boolean;
+  isAccountSetupComplete: boolean;
   communities: CommunityT[];
   communityRoleById: Record<string, string>;
   loadAccountCommerceStatus: (session: SessionT) => Promise<BillingStatusT | null>;
   persistCreateCommunityIntent: (draft: CreateCommunityIntentDraft) => void;
   onPrimaryUnauthenticated: (draft: CreateCommunityIntentDraft) => Promise<void> | void;
   onCreateUnauthenticated?: (draft: CreateCommunityIntentDraft) => Promise<void> | void;
-  onProfileSetupRequired?: () => void;
+  onAccountSetupRequired?: () => void;
   onOwnedCommunityLimitReached?: () => void;
   onCommunityCreated: (community: CommunityT) => void;
   getOwnedCountForOpenModal?: (communities: CommunityT[], communityRoleById: Record<string, string>) => number;
@@ -89,8 +90,14 @@ function mapCreateCommunityErrorMessage(error: unknown): string {
   if (message === "community_builder_required") {
     return "Your account cannot create a community yet.";
   }
+  if (message.includes("account_setup_required")) {
+    return "Finish account setup before creating a community.";
+  }
   if (message.includes("profile_setup_required")) {
     return "Finish your profile before creating a community.";
+  }
+  if (message.includes("community_publish_ready_required")) {
+    return "Published communities need a name, one-liner, avatar, and banner.";
   }
   if (message === "community_owner_limit_reached") {
     return "You've reached your community limit.";
@@ -148,8 +155,8 @@ export function useCommunityCreateController<
 
   const openCreateCommunityModal = useCallback((draft: CreateCommunityIntentDraft | null = null) => {
     const current = argsRef.current;
-    if (current.session && !current.isProfileSetupComplete) {
-      current.onProfileSetupRequired?.();
+    if (current.session && !current.isAccountSetupComplete) {
+      current.onAccountSetupRequired?.();
       return;
     }
     const max = current.accountCommerceStatus?.max_communities ?? 0;
@@ -208,9 +215,9 @@ export function useCommunityCreateController<
       }
       return;
     }
-    if (!current.isProfileSetupComplete) {
-      current.setCreateCommunityError("Finish your profile before creating a community.");
-      current.onProfileSetupRequired?.();
+    if (!current.isAccountSetupComplete) {
+      current.setCreateCommunityError("Finish account setup before creating a community.");
+      current.onAccountSetupRequired?.();
       return;
     }
 
@@ -229,6 +236,18 @@ export function useCommunityCreateController<
     if (!["published", "unlisted"].includes(current.createCommunityVisibility)) {
       current.setCreateCommunityError("Visibility must be published or unlisted.");
       return;
+    }
+    if (current.createCommunityVisibility === "published") {
+      const missing = getCommunityPublishReadinessMissingFields({
+        name,
+        oneLiner: current.createCommunityOneLiner,
+        avatarUrl: current.createCommunityAvatarUrl,
+        bannerUrl: current.createCommunityBannerUrl,
+      });
+      if (missing.length > 0) {
+        current.setCreateCommunityError("Published communities need a name, one-liner, avatar, and banner.");
+        return;
+      }
     }
 
     current.setIsCreatingCommunity(true);
@@ -280,9 +299,9 @@ export function useCommunityCreateController<
       await current.onPrimaryUnauthenticated(draft);
       return;
     }
-    if (!current.isProfileSetupComplete) {
-      current.setCreateCommunityError("Finish your profile before creating a community.");
-      current.onProfileSetupRequired?.();
+    if (!current.isAccountSetupComplete) {
+      current.setCreateCommunityError("Finish account setup before creating a community.");
+      current.onAccountSetupRequired?.();
       return;
     }
 

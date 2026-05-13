@@ -91,6 +91,27 @@ export async function requireProfileSetupCompleteForUser(ctx: any, userId: any):
   }
 }
 
+export async function loadAccountSetupStatusForUserId(ctx: any, userId: any): Promise<AccountSetupStatus> {
+  const [user, detail] = (await Promise.all([
+    ctx.db.get(userId),
+    ctx.db
+      .query("userProfileDetails")
+      .withIndex("by_user", (q: any) => q.eq("userId", userId))
+      .first(),
+  ])) as [AccountSetupUserRow | null, AccountSetupProfileDetailRow | null];
+  if (!user) {
+    throw new Error("user_not_found");
+  }
+  return await loadAccountSetupStatusForUser(ctx, user, detail);
+}
+
+export async function requireAccountSetupCompleteForUser(ctx: any, userId: any): Promise<void> {
+  const status = await loadAccountSetupStatusForUserId(ctx, userId);
+  if (!status.completed) {
+    throw new Error("account_setup_required");
+  }
+}
+
 export async function loadAccountSetupStatusForUser(
   ctx: any,
   user: AccountSetupUserRow,

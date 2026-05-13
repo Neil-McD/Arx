@@ -1,6 +1,7 @@
 import { useCallback, useRef, type Dispatch, type SetStateAction } from "react";
 import { resolveUsableSession, type EnsureSessionFn } from "./ensureUsableSession";
 import { toCanonicalCommunityVisibility } from "./communityVisibility";
+import { getCommunityPublishReadinessMissingFields } from "./communityPublishReadiness";
 
 import {
   leaveCloudCommunity,
@@ -86,6 +87,9 @@ function formatCommunitySettingsErrorMessage(error: unknown): string {
   }
   if (message === "community_stripe_connect_not_ready") {
     return "Finish Stripe onboarding before enabling paid access for this community.";
+  }
+  if (message.includes("community_publish_ready_required")) {
+    return "Published communities need a name, one-liner, avatar, and banner.";
   }
   return message;
 }
@@ -184,6 +188,19 @@ export function useCommunitySettingsGovernanceController<SessionT extends Sessio
       return;
     }
     const visibility = toCanonicalCommunityVisibility(rawVisibility || "unlisted", "unlisted");
+    if (visibility === "published") {
+      const missing = getCommunityPublishReadinessMissingFields({
+        name,
+        oneLiner: current.communitySettingsOneLiner,
+        avatarUrl: current.communitySettingsAvatarUrl,
+        bannerUrl: current.communitySettingsBannerUrl,
+      });
+      if (missing.length > 0) {
+        current.setCommunitySettingsError("Published communities need a name, one-liner, avatar, and banner.");
+        current.setIsSavingCommunitySettings(false);
+        return;
+      }
+    }
 
     try {
       const monthlyEnabled = current.communitySettingsPricingMode === "monthly";

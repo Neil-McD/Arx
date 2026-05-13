@@ -65,6 +65,9 @@ assert.match(profiles, /assertProfileAvatarStorageResolvable/, "profile avatar s
 assert.match(profiles, /profile_avatar_invalid/, "invalid profile avatar storage must fail with a stable error code");
 assert.doesNotMatch(profiles, /hasEstablishedAccountEvidence/, "legacy account evidence must not mark onboarding complete");
 assert.match(accountSetupCore, /buildAccountSetupStatusForRows/, "Convex setup derivation must support bulk operator attribution");
+assert.match(accountSetupCore, /export async function loadAccountSetupStatusForUserId/, "Convex setup derivation must be loadable by user id");
+assert.match(accountSetupCore, /export async function requireAccountSetupCompleteForUser/, "Convex writes must have a full account setup guard");
+assert.match(accountSetupCore, /throw new Error\("account_setup_required"\)/, "full account setup guard must fail with a stable error code");
 assert.match(accountSetupCore, /displayName: params\.detail\?\.displayName \?\? null/, "profile completion must use first-party profile detail display name");
 assert.match(accountSetupCore, /handle: params\.user\.handle \?\? null/, "bulk setup completion must require the first-party account handle");
 assert.match(accountSetupCore, /handle: user\?\.handle \?\? null/, "write guard setup completion must require the first-party account handle");

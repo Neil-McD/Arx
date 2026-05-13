@@ -35,7 +35,14 @@ import {
   normalizeCommunityFunnelConfigInput,
   saveCommunityFunnelConfigInternal,
 } from "./communityFunnel";
-import { requireProfileSetupCompleteForUser } from "./accountSetupCore";
+import {
+  requireAccountSetupCompleteForUser,
+  requireProfileSetupCompleteForUser,
+} from "./accountSetupCore";
+import {
+  getCommunityPublishReadinessMissingFields,
+  type CommunityPublishReadinessInput,
+} from "../shared/communityPublishReadiness";
 
 async function mapCommunityRecord(ctx: any, row: CommunityLike): Promise<{
   id: string;
@@ -100,6 +107,13 @@ async function saveCommunityOneLinerInternal(
   const updated = (await ctx.db.get(community._id as any)) as CommunityLike | null;
   if (!updated) throw new Error("community_not_found");
   return updated;
+}
+
+function requireCommunityPublishReady(input: CommunityPublishReadinessInput): void {
+  const missing = getCommunityPublishReadinessMissingFields(input);
+  if (missing.length > 0) {
+    throw new Error(`community_publish_ready_required:${missing.join(",")}`);
+  }
 }
 
 function normalizePlanAmount(value: unknown): number | null {
@@ -205,7 +219,9 @@ function resolveCommunitySettingsState(args: any, community: CommunityLike, curr
     args.bannerFocusY !== undefined ? normalizeBannerFocus(args.bannerFocusY) : normalizeBannerFocus(community.bannerFocusY);
   const nextBannerZoom =
     args.bannerZoom !== undefined ? normalizeBannerZoom(args.bannerZoom) : normalizeBannerZoom(community.bannerZoom);
-  const nextVisibility = normalizeVisibility(args.visibility);
+  const nextVisibility = args.visibility !== undefined
+    ? normalizeVisibility(args.visibility)
+    : community.visibility;
 
   return {
     normalizedSlug,
@@ -310,6 +326,16 @@ async function requireCommunitySettingsPermissions(args: {
       ctx: args.ctx,
       communityId: args.communityId,
       userId: args.userId,
+    });
+  }
+  if (args.state.nextVisibility === "published") {
+    requireCommunityPublishReady({
+      name: args.state.nextName,
+      oneLiner: args.state.nextOneLiner,
+      avatarUrl: args.state.nextAvatarUrl,
+      avatarStorageId: args.state.nextAvatarStorageId,
+      bannerUrl: args.state.nextBannerUrl,
+      bannerStorageId: args.state.nextBannerStorageId,
     });
   }
   if (args.state.monetizationChanged && (args.state.monthlyAmount !== null || args.state.annualAmount !== null)) {
@@ -457,7 +483,7 @@ export const createCommunity = mutation({
       userId: args.ownerId,
       authSubject: args.authSubject ?? null,
     });
-    await requireProfileSetupCompleteForUser(ctx, ownerId);
+    await requireAccountSetupCompleteForUser(ctx, ownerId);
     const nowMs = Date.now();
     const billingStatus = await ctx.runQuery(api.auth.getAccountCommerceStatus, {
       authSubject: args.authSubject ?? undefined,
@@ -488,17 +514,31 @@ export const createCommunity = mutation({
     const entryPolicy = normalizeEntryPolicy(args.entryPolicy, "approval");
     const avatarStorageId = args.avatarStorageId ?? undefined;
     const bannerStorageId = args.bannerStorageId ?? undefined;
+    const name = normalizeName(args.name);
+    const oneLiner = normalizeOptionalText(args.oneLiner);
+    const avatarUrl = avatarStorageId ? undefined : normalizeOptionalCommunityImageUrl(args.avatarUrl);
+    const bannerUrl = bannerStorageId ? undefined : normalizeOptionalCommunityImageUrl(args.bannerUrl);
+    if (visibility === "published") {
+      requireCommunityPublishReady({
+        name,
+        oneLiner,
+        avatarUrl,
+        avatarStorageId,
+        bannerUrl,
+        bannerStorageId,
+      });
+    }
     const communityId = await ctx.db.insert("communities", {
       ownerId,
       slug,
-      name: normalizeName(args.name),
-      oneLiner: normalizeOptionalText(args.oneLiner),
-      avatarUrl: avatarStorageId ? undefined : normalizeOptionalCommunityImageUrl(args.avatarUrl),
+      name,
+      oneLiner,
+      avatarUrl,
       avatarStorageId,
       avatarFocusX: normalizeAvatarFocus(args.avatarFocusX),
       avatarFocusY: normalizeAvatarFocus(args.avatarFocusY),
       avatarZoom: normalizeAvatarZoom(args.avatarZoom),
-      bannerUrl: bannerStorageId ? undefined : normalizeOptionalCommunityImageUrl(args.bannerUrl),
+      bannerUrl,
       bannerStorageId,
       bannerFocusX: normalizeBannerFocus(args.bannerFocusX),
       bannerFocusY: normalizeBannerFocus(args.bannerFocusY),

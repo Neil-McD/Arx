@@ -40,7 +40,11 @@ type WebBuilderPartnerSettingsSectionProps = {
   isAcceptingBuilderPartnerTerms: boolean;
   loadBuilderPartnerProgram: (session: NonNullable<SessionLike>) => Promise<void> | void;
   acceptBuilderPartnerTerms: () => Promise<void> | void;
+  openAccountSetup: () => void;
   openCreateCommunityModal: () => void;
+  communities: Array<{ id: string; name: string }>;
+  communityRoleById: Record<string, string>;
+  openOwnedCommunitySettings: (communityId: string) => void;
   startStripeConnectOnboarding: (opts?: {
     context?: "account" | "community";
     communitySlug?: string | null;
@@ -70,10 +74,19 @@ function formatDateTime(value: number | null): string {
 }
 
 function formatRequirementDetail(requirement: BuilderPartnerProgramRequirement): string {
-  if (requirement.key === "signed_in") return "Use a signed-in PolyNet account.";
+  if (requirement.key === "account_setup_complete") return "Finish profile, inference provider, and agent setup.";
   if (requirement.key === "own_community") return "Create or own at least one community.";
+  if (requirement.key === "community_publish_ready") return "Add a community name, one-liner, avatar, and banner.";
   if (requirement.key === "accept_terms") return "Accept the Builder Partner terms.";
   if (requirement.key === "account_good_standing") return "No account restrictions are active.";
+  return requirement.label;
+}
+
+function formatRequirementAction(requirement: BuilderPartnerProgramRequirement): string {
+  if (requirement.action === "complete_account_setup") return "Finish setup";
+  if (requirement.action === "create_community") return "Create community";
+  if (requirement.action === "finish_community_setup") return "Open settings";
+  if (requirement.action === "accept_terms") return "Accept terms";
   return requirement.label;
 }
 
@@ -133,12 +146,21 @@ export function WebBuilderPartnerSettingsSection(props: WebBuilderPartnerSetting
 
   function handleRequirementAction(requirement: BuilderPartnerProgramRequirement): void {
     if (requirement.met) return;
-    if (requirement.action === "sign_in") {
-      props.requireSignIn();
+    if (requirement.action === "complete_account_setup") {
+      props.openAccountSetup();
       return;
     }
     if (requirement.action === "create_community") {
       props.openCreateCommunityModal();
+      return;
+    }
+    if (requirement.action === "finish_community_setup") {
+      const ownedCommunity = props.communities.find((community) => (
+        props.communityRoleById[community.id] === "owner"
+      ));
+      if (ownedCommunity) {
+        props.openOwnedCommunitySettings(ownedCommunity.id);
+      }
       return;
     }
     if (requirement.action === "accept_terms") {
@@ -262,11 +284,7 @@ export function WebBuilderPartnerSettingsSection(props: WebBuilderPartnerSetting
                         onClick={() => handleRequirementAction(requirement)}
                         disabled={props.isAcceptingBuilderPartnerTerms}
                       >
-                        {requirement.action === "sign_in"
-                          ? "Sign in"
-                          : requirement.action === "create_community"
-                            ? "Create community"
-                            : "Accept terms"}
+                        {formatRequirementAction(requirement)}
                       </button>
                     )}
                   </span>

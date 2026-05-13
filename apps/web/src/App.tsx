@@ -5111,6 +5111,8 @@ export default function App() {
   const effectiveAccountSetupStatus = accountSetupStatus ?? cloudProfile?.account_setup ?? null;
   const isProfileSetupCompleteForPublicActions =
     !session || Boolean(effectiveAccountSetupStatus && isAccountSetupStatusIdentityComplete(effectiveAccountSetupStatus));
+  const isAccountSetupCompleteForBuilderActions =
+    !session || Boolean(effectiveAccountSetupStatus?.completed);
 
   const communityUi = useWebCommunityUiController<
     AuthSession,
@@ -5125,7 +5127,7 @@ export default function App() {
     communityRoleById,
     accountCommerceStatus,
     accountCommerceError,
-    isProfileSetupComplete: isProfileSetupCompleteForPublicActions,
+    isAccountSetupComplete: isAccountSetupCompleteForBuilderActions,
     activeCommunity,
     activeCommunityId,
     communityInitials,
@@ -5137,7 +5139,7 @@ export default function App() {
     onCreateUnauthenticated: (draft) => {
       requireSignIn({ reason: "create_community", payload: { draft } });
     },
-    onProfileSetupRequired: openProfileSetup,
+    onAccountSetupRequired: openProfileSetup,
     onOwnedCommunityLimitReached: () => {
       showAppToastMessage("You've built the maximum number of communities");
     },
@@ -7173,6 +7175,7 @@ export default function App() {
         await loadBuilderPartnerProgram(nextSession as AuthSession);
       },
       acceptBuilderPartnerTerms,
+      openAccountSetup: openProfileSetup,
       openCreateCommunityModal: () => openCreateCommunityModal(),
       startStripeConnectOnboarding: (opts) => {
         void startStripeConnectOnboarding({

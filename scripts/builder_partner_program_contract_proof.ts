@@ -251,11 +251,6 @@ function proveUiContract(uiSource: string) {
   );
   assert.doesNotMatch(
     uiSource,
-    /Open settings/,
-    "partner settings UI should not list owned communities with settings shortcuts",
-  );
-  assert.doesNotMatch(
-    uiSource,
     /platform take rate/i,
     "partner settings UI should not overexplain the 6% community revenue copy",
   );
@@ -301,6 +296,11 @@ function proveAutomaticUnlockContract(convexSource: string, gatewaySource: strin
     convexSource,
     "findOptionalAuthenticatedActorState",
     "Builder Partner Convex module",
+  );
+  assertIncludes(
+    convexSource,
+    "requirements: [],",
+    "signed-out Builder Partner snapshot",
   );
   assertIncludes(
     convexSource,
@@ -396,6 +396,146 @@ function proveAutomaticUnlockContract(convexSource: string, gatewaySource: strin
     appSource,
     "settingsGroup !== \"partners\"",
     "App shell",
+  );
+}
+
+function proveEligibilityGateContract(
+  builderPartnersSource: string,
+  gatewaySource: string,
+  uiSource: string,
+  accountSetupCoreSource: string,
+  communityLifecycleSource: string,
+  communityPublishReadinessSource: string,
+  createControllerSource: string,
+  settingsGovernanceSource: string,
+) {
+  for (const marker of [
+    '"community_name"',
+    '"community_one_liner"',
+    '"community_avatar"',
+    '"community_banner"',
+  ]) {
+    assertIncludes(communityPublishReadinessSource, marker, "community publish readiness");
+  }
+  assertIncludes(
+    communityPublishReadinessSource,
+    "export function isCommunityPublishReady",
+    "community publish readiness",
+  );
+  assertIncludes(
+    accountSetupCoreSource,
+    "export async function requireAccountSetupCompleteForUser",
+    "account setup authority",
+  );
+  assertIncludes(
+    accountSetupCoreSource,
+    "throw new Error(\"account_setup_required\")",
+    "account setup authority",
+  );
+  assertIncludes(
+    communityLifecycleSource,
+    "await requireAccountSetupCompleteForUser(ctx, ownerId);",
+    "community creation authority",
+  );
+  assertIncludes(
+    communityLifecycleSource,
+    "if (visibility === \"published\")",
+    "community publish readiness authority",
+  );
+  assertIncludes(
+    communityLifecycleSource,
+    "if (args.state.nextVisibility === \"published\")",
+    "community publish readiness authority",
+  );
+  assertIncludes(
+    communityLifecycleSource,
+    "community_publish_ready_required",
+    "community publish readiness authority",
+  );
+  assert.match(
+    communityLifecycleSource,
+    /generateCommunityBrandingUploadUrl[\s\S]*?await requireProfileSetupCompleteForUser\(ctx, userId\);[\s\S]*?ctx\.storage\.generateUploadUrl/,
+    "community branding uploads should stay profile-gated",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "loadAccountSetupStatusForUserId",
+    "Builder Partner eligibility",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "isCommunityPublishReady",
+    "Builder Partner eligibility",
+  );
+  for (const marker of [
+    '"account_setup_complete"',
+    '"own_community"',
+    '"community_publish_ready"',
+    '"accept_terms"',
+    '"account_good_standing"',
+  ]) {
+    assertIncludes(builderPartnersSource, marker, "Builder Partner eligibility requirements");
+    assertIncludes(gatewaySource, marker, "Builder Partner gateway requirements");
+  }
+  assertIncludes(
+    builderPartnersSource,
+    "builder_partner_account_setup_required",
+    "Builder Partner terms acceptance",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "builder_partner_publish_ready_community_required",
+    "Builder Partner terms acceptance",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "accountSetupComplete && ownsCommunity && hasPublishReadyOwnedCommunity && !acceptedTerms && accountGoodStanding",
+    "Builder Partner ready-to-unlock contract",
+  );
+  assert.doesNotMatch(
+    builderPartnersSource,
+    /key:\s*"signed_in"/,
+    "Builder Partner requirements must not treat sign-in as eligibility",
+  );
+  assert.doesNotMatch(
+    gatewaySource,
+    /"signed_in"|"sign_in"/,
+    "Builder Partner gateway must not expose sign-in as an eligibility requirement",
+  );
+  assertIncludes(
+    uiSource,
+    "Finish profile, inference provider, and agent setup.",
+    "Builder Partner requirements UI",
+  );
+  assertIncludes(
+    uiSource,
+    "Add a community name, one-liner, avatar, and banner.",
+    "Builder Partner requirements UI",
+  );
+  assertIncludes(
+    uiSource,
+    "Open settings",
+    "Builder Partner requirements UI",
+  );
+  assertIncludes(
+    createControllerSource,
+    "isAccountSetupComplete: boolean;",
+    "create-community frontend gate",
+  );
+  assertIncludes(
+    createControllerSource,
+    "Finish account setup before creating a community.",
+    "create-community frontend gate",
+  );
+  assertIncludes(
+    createControllerSource,
+    "Published communities need a name, one-liner, avatar, and banner.",
+    "create-community frontend gate",
+  );
+  assertIncludes(
+    settingsGovernanceSource,
+    "Published communities need a name, one-liner, avatar, and banner.",
+    "community settings frontend gate",
   );
 }
 
@@ -1266,6 +1406,15 @@ function main() {
   const httpBillingSource = readText(new URL("../convex/httpBilling.ts", import.meta.url));
   const criticalAuditSource = readText(new URL("../convex/criticalAudit.ts", import.meta.url));
   const cronsSource = readText(new URL("../convex/crons.ts", import.meta.url));
+  const accountSetupCoreSource = readText(new URL("../convex/accountSetupCore.ts", import.meta.url));
+  const communityLifecycleSource = readText(new URL("../convex/communityLifecycle.ts", import.meta.url));
+  const communityPublishReadinessSource = readText(
+    new URL("../shared/communityPublishReadiness.ts", import.meta.url),
+  );
+  const createControllerSource = readText(new URL("../shared/useCommunityCreateController.ts", import.meta.url));
+  const settingsGovernanceSource = readText(
+    new URL("../shared/useCommunitySettingsGovernanceController.ts", import.meta.url),
+  );
 
   proveConstants();
   proveCommunityCommissionMath();
@@ -1274,6 +1423,16 @@ function main() {
   proveSchemaContract(schemaSource);
   proveUiContract(uiSource);
   proveAutomaticUnlockContract(builderPartnersSource, gatewaySource, appSource);
+  proveEligibilityGateContract(
+    builderPartnersSource,
+    gatewaySource,
+    uiSource,
+    accountSetupCoreSource,
+    communityLifecycleSource,
+    communityPublishReadinessSource,
+    createControllerSource,
+    settingsGovernanceSource,
+  );
   proveReductionAndCleanupContract(accountSource, docsSource);
   provePricingFoundation(authSource, sharedWorkspaceCreditsSource);
   proveCommissionProducerContract(builderPartnersSource, communityCommerceSource, workspaceCreditsSource);

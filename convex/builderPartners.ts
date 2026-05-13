@@ -21,8 +21,15 @@ import {
   roundBuilderPartnerMoney,
 } from "../shared/builderPartnerProgram";
 import { buildAttributionRouteLabel } from "../shared/routePrivacy";
+import { isCommunityPublishReady } from "../shared/communityPublishReadiness";
+import { loadAccountSetupStatusForUserId } from "./accountSetupCore";
 
-type RequirementKey = "signed_in" | "own_community" | "accept_terms" | "account_good_standing";
+type RequirementKey =
+  | "account_setup_complete"
+  | "own_community"
+  | "community_publish_ready"
+  | "accept_terms"
+  | "account_good_standing";
 type ProgramState = "signed_out" | "locked" | "ready_to_unlock" | "active" | "paused" | "disabled";
 type PartnerPayoutItemStatus = "reserved" | "settled" | "voided";
 type PartnerPayoutCycleOperatorStatus =
@@ -136,6 +143,19 @@ async function getPartnerByUserId(ctx: any, userId: any) {
     .query("builderPartners")
     .withIndex("by_user", (q: any) => q.eq("userId", userId))
     .first();
+}
+
+function hasPublishReadyCommunity(communities: any[]): boolean {
+  return communities.some((community: any) =>
+    isCommunityPublishReady({
+      name: community.name,
+      oneLiner: community.oneLiner,
+      avatarUrl: community.avatarUrl,
+      avatarStorageId: community.avatarStorageId,
+      bannerUrl: community.bannerUrl,
+      bannerStorageId: community.bannerStorageId,
+    }),
+  );
 }
 
 async function getCommissionByKey(ctx: any, commissionKey: string) {
@@ -500,23 +520,30 @@ async function issuePartnerCode(ctx: any, user: any, existingPartnerId?: any): P
 }
 
 function buildRequirements(args: {
-  signedIn: boolean;
+  accountSetupComplete: boolean;
   ownsCommunity: boolean;
+  hasPublishReadyCommunity: boolean;
   acceptedTerms: boolean;
   accountGoodStanding: boolean;
 }) {
   return [
     {
-      key: "signed_in" as RequirementKey,
-      label: "Sign in to PolyNet",
-      met: args.signedIn,
-      action: "sign_in",
+      key: "account_setup_complete" as RequirementKey,
+      label: "Complete account setup",
+      met: args.accountSetupComplete,
+      action: "complete_account_setup",
     },
     {
       key: "own_community" as RequirementKey,
-      label: "Own at least one community",
+      label: "Own a community",
       met: args.ownsCommunity,
       action: "create_community",
+    },
+    {
+      key: "community_publish_ready" as RequirementKey,
+      label: "Finish a publish-ready community",
+      met: args.hasPublishReadyCommunity,
+      action: args.ownsCommunity ? "finish_community_setup" : "create_community",
     },
     {
       key: "accept_terms" as RequirementKey,
@@ -572,18 +599,22 @@ async function resolveBuilderPartnerProgramState(ctx: any, args: {
   partner?: any;
   ownedCommunities?: any[];
 }) {
-  const [partner, ownedCommunities] = await Promise.all([
+  const [partner, ownedCommunities, accountSetup] = await Promise.all([
     args.partner === undefined ? getPartnerByUserId(ctx, args.userId) : args.partner,
     args.ownedCommunities === undefined
       ? listOwnedCommunities(ctx, args.userId)
       : args.ownedCommunities,
+    loadAccountSetupStatusForUserId(ctx, args.userId),
   ]);
+  const accountSetupComplete = accountSetup.completed;
   const ownsCommunity = ownedCommunities.length > 0;
+  const hasPublishReadyOwnedCommunity = hasPublishReadyCommunity(ownedCommunities);
   const acceptedTerms = hasAcceptedCurrentTerms(partner);
   const accountGoodStanding = partner?.status !== "disabled";
   const requirements = buildRequirements({
-    signedIn: true,
+    accountSetupComplete,
     ownsCommunity,
+    hasPublishReadyCommunity: hasPublishReadyOwnedCommunity,
     acceptedTerms,
     accountGoodStanding,
   });
@@ -596,7 +627,7 @@ async function resolveBuilderPartnerProgramState(ctx: any, args: {
         ? "paused"
         : partnerStatus === "active" && eligible
           ? "active"
-          : ownsCommunity && !acceptedTerms && accountGoodStanding
+          : accountSetupComplete && ownsCommunity && hasPublishReadyOwnedCommunity && !acceptedTerms && accountGoodStanding
             ? "ready_to_unlock"
             : "locked";
   return {
@@ -1421,12 +1452,7 @@ async function buildProgramSnapshot(ctx: any, args: { authSubject?: string | nul
       state: "signed_out" as ProgramState,
       isUnlocked: false,
       eligible: false,
-      requirements: buildRequirements({
-        signedIn: false,
-        ownsCommunity: false,
-        acceptedTerms: false,
-        accountGoodStanding: false,
-      }),
+      requirements: [],
       partner: null,
       payout: {
         ready: false,
@@ -2004,8 +2030,15 @@ export const acceptBuilderPartnerTermsAndEnsure = mutation({
     });
     const nowMs = Date.now();
     const ownedCommunities = await listOwnedCommunities(ctx, actor.dbUserId);
+    const accountSetup = await loadAccountSetupStatusForUserId(ctx, actor.dbUserId);
+    if (!accountSetup.completed) {
+      throw new Error("builder_partner_account_setup_required");
+    }
     if (ownedCommunities.length <= 0) {
       throw new Error("builder_partner_owned_community_required");
+    }
+    if (!hasPublishReadyCommunity(ownedCommunities)) {
+      throw new Error("builder_partner_publish_ready_community_required");
     }
 
     const existing = await getPartnerByUserId(ctx, actor.dbUserId);

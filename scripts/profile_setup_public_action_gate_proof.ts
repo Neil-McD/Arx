@@ -67,13 +67,13 @@ assert.match(
 
 assert.match(
   communityLifecycle,
-  /import \{ requireProfileSetupCompleteForUser \} from "\.\/accountSetupCore";/,
-  "community lifecycle writes must import the profile setup guard",
+  /requireAccountSetupCompleteForUser[\s\S]*requireProfileSetupCompleteForUser[\s\S]*from "\.\/accountSetupCore";/,
+  "community lifecycle writes must import both setup guards",
 );
 assert.match(
   communityLifecycle,
-  /const ownerId = await resolveUserIdForAuthenticatedRequest\([\s\S]*?await requireProfileSetupCompleteForUser\(ctx, ownerId\);[\s\S]*?const nowMs = Date\.now\(\);/,
-  "community creation must require profile setup before creating a community",
+  /const ownerId = await resolveUserIdForAuthenticatedRequest\([\s\S]*?await requireAccountSetupCompleteForUser\(ctx, ownerId\);[\s\S]*?const nowMs = Date\.now\(\);/,
+  "community creation must require full account setup before creating a community",
 );
 assert.match(
   communityLifecycle,
@@ -99,23 +99,23 @@ assert.match(
 
 assert.match(
   useCommunityCreateController,
-  /isProfileSetupComplete: boolean;/,
-  "create-community controller must receive profile setup state",
+  /isAccountSetupComplete: boolean;/,
+  "create-community controller must receive full account setup state",
 );
 assert.match(
   useCommunityCreateController,
-  /onProfileSetupRequired\?: \(\) => void;/,
-  "create-community controller must be able to open profile setup",
+  /onAccountSetupRequired\?: \(\) => void;/,
+  "create-community controller must be able to open account setup",
 );
 assert.match(
   useCommunityCreateController,
-  /message\.includes\("profile_setup_required"\)[\s\S]*?Finish your profile before creating a community/,
-  "create-community server errors must map to profile setup copy",
+  /message\.includes\("account_setup_required"\)[\s\S]*?Finish account setup before creating a community/,
+  "create-community server errors must map to account setup copy",
 );
 assert.match(
   useCommunityCreateController,
-  /if \(current\.session && !current\.isProfileSetupComplete\)[\s\S]*?current\.onProfileSetupRequired\?\.\(\);/,
-  "opening create-community must route incomplete signed-in users to profile setup",
+  /if \(current\.session && !current\.isAccountSetupComplete\)[\s\S]*?current\.onAccountSetupRequired\?\.\(\);/,
+  "opening create-community must route incomplete signed-in users to account setup",
 );
 
 assert.match(
@@ -150,8 +150,8 @@ assert.match(
 );
 assert.match(
   app,
-  /onProfileSetupRequired: openProfileSetup/,
-  "create-community flow must open profile setup when blocked",
+  /onAccountSetupRequired: openProfileSetup/,
+  "create-community flow must open account setup when blocked",
 );
 assert.match(
   app,
@@ -166,8 +166,8 @@ assert.match(
 
 assert.match(
   communityUiController,
-  /isProfileSetupComplete: boolean;/,
-  "web community UI controller must carry profile setup state",
+  /isAccountSetupComplete: boolean;/,
+  "web community UI controller must carry full account setup state for creation",
 );
 assert.match(
   communitySurfaceProjection,

@@ -1,0 +1,37 @@
+export type CommunityPublishReadinessMissing =
+  | "community_name"
+  | "community_one_liner"
+  | "community_avatar"
+  | "community_banner";
+
+export type CommunityPublishReadinessInput = {
+  name?: string | null;
+  oneLiner?: string | null;
+  avatarUrl?: string | null;
+  avatarStorageId?: unknown;
+  bannerUrl?: string | null;
+  bannerStorageId?: unknown;
+};
+
+function hasText(value: unknown): boolean {
+  return String(value ?? "").trim().length > 0;
+}
+
+export function getCommunityPublishReadinessMissingFields(
+  input: CommunityPublishReadinessInput,
+): CommunityPublishReadinessMissing[] {
+  const missing: CommunityPublishReadinessMissing[] = [];
+  if (!hasText(input.name)) missing.push("community_name");
+  if (!hasText(input.oneLiner)) missing.push("community_one_liner");
+  if (!hasText(input.avatarUrl) && !hasText(input.avatarStorageId)) {
+    missing.push("community_avatar");
+  }
+  if (!hasText(input.bannerUrl) && !hasText(input.bannerStorageId)) {
+    missing.push("community_banner");
+  }
+  return missing;
+}
+
+export function isCommunityPublishReady(input: CommunityPublishReadinessInput): boolean {
+  return getCommunityPublishReadinessMissingFields(input).length === 0;
+}

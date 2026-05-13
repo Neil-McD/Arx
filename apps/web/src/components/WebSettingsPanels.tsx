@@ -80,6 +80,7 @@ export type WebSettingsPanelsProps = {
     isAcceptingBuilderPartnerTerms: boolean;
     loadBuilderPartnerProgram: (session: NonNullable<SessionLike>) => Promise<void> | void;
     acceptBuilderPartnerTerms: () => Promise<void> | void;
+    openAccountSetup: () => void;
     openCreateCommunityModal: () => void;
     startStripeConnectOnboarding: (opts?: {
       context?: "account" | "community";
@@ -280,6 +281,7 @@ export function WebSettingsPanels(props: WebSettingsPanelsProps) {
     isAcceptingBuilderPartnerTerms: account.isAcceptingBuilderPartnerTerms,
     loadBuilderPartnerProgram: account.loadBuilderPartnerProgram,
     acceptBuilderPartnerTerms: account.acceptBuilderPartnerTerms,
+    openAccountSetup: account.openAccountSetup,
     openCreateCommunityModal: account.openCreateCommunityModal,
     startStripeConnectOnboarding: account.startStripeConnectOnboarding,
     accountCommerceError: account.billingUi.accountCommerceError,
