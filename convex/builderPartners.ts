@@ -25,10 +25,20 @@ import { buildAttributionRouteLabel } from "../shared/routePrivacy";
 type RequirementKey = "signed_in" | "own_community" | "accept_terms" | "account_good_standing";
 type ProgramState = "signed_out" | "locked" | "ready_to_unlock" | "active" | "paused" | "disabled";
 type PartnerPayoutItemStatus = "reserved" | "settled" | "voided";
+type PartnerPayoutCycleOperatorStatus =
+  | "pending_approval"
+  | "approved"
+  | "processing"
+  | "paid"
+  | "held"
+  | "failed"
+  | "rejected";
 
 const BUILDER_PARTNER_MISSING_EVIDENCE_RECHECK_MS = 24 * 60 * 60 * 1000;
 const BUILDER_PARTNER_PAYOUT_PLAN_SCAN_MULTIPLIER = 5;
 const BUILDER_PARTNER_PAYOUT_PLAN_MAX_SCAN = 1000;
+const BUILDER_PARTNER_OPERATOR_PAYOUT_CYCLE_LIMIT = 24;
+const BUILDER_PARTNER_LARGE_PAYOUT_CYCLE_USD = 1000;
 
 function authLookupIsOptionalFailure(error: unknown): boolean {
   const message =
@@ -137,6 +147,58 @@ async function getCommissionByKey(ctx: any, commissionKey: string) {
 
 function normalizeProviderEvidenceId(value: unknown): string {
   return String(value ?? "").trim();
+}
+
+function normalizePartnerPayoutCycleOperatorLimit(value: unknown): number {
+  const limit = Math.floor(Number(value ?? BUILDER_PARTNER_OPERATOR_PAYOUT_CYCLE_LIMIT));
+  if (!Number.isFinite(limit) || limit <= 0) return BUILDER_PARTNER_OPERATOR_PAYOUT_CYCLE_LIMIT;
+  return Math.min(BUILDER_PARTNER_OPERATOR_PAYOUT_CYCLE_LIMIT, limit);
+}
+
+function normalizeOperatorDecisionReason(value: unknown, fallback: string): string {
+  const normalized = String(value ?? "").trim().replace(/\s+/g, " ").slice(0, 240);
+  return normalized || fallback;
+}
+
+function isHeldPartnerPayoutCycle(batch: any): boolean {
+  return (
+    String(batch?.status ?? "") === "failed" &&
+    String(batch?.failureReason ?? "").startsWith("held:")
+  );
+}
+
+function readHeldPartnerPayoutCycleReason(batch: any): string | null {
+  if (!isHeldPartnerPayoutCycle(batch)) return null;
+  const reason = String(batch?.failureReason ?? "").replace(/^held:/, "").trim();
+  return reason || null;
+}
+
+function toPartnerPayoutCycleOperatorStatus(batch: any): PartnerPayoutCycleOperatorStatus {
+  const status = String(batch?.status ?? "draft");
+  if (status === "draft") return "pending_approval";
+  if (status === "approved") return "approved";
+  if (status === "processing") return "processing";
+  if (status === "completed") return "paid";
+  if (status === "voided") return "rejected";
+  if (isHeldPartnerPayoutCycle(batch)) return "held";
+  return "failed";
+}
+
+function partnerPayoutCycleOperatorSortRank(batch: any): number {
+  switch (toPartnerPayoutCycleOperatorStatus(batch)) {
+    case "pending_approval":
+    case "held":
+      return 0;
+    case "failed":
+      return 1;
+    case "approved":
+    case "processing":
+      return 2;
+    case "paid":
+    case "rejected":
+    default:
+      return 3;
+  }
 }
 
 function hasCommunityRevenueProviderEvidence(row: any): boolean {
@@ -1475,12 +1537,13 @@ async function recordPartnerPayoutAudit(ctx: any, input: {
   eventType:
     | "builder_partner_payout_batch_created"
     | "builder_partner_payout_batch_approved"
+    | "builder_partner_payout_cycle_held"
     | "builder_partner_payout_batch_voided"
     | "builder_partner_payout_execution_started"
     | "builder_partner_payout_transfer_succeeded"
     | "builder_partner_payout_transfer_failed"
     | "builder_partner_payout_batch_finalized";
-  status: "started" | "succeeded" | "failed";
+  status: "started" | "succeeded" | "failed" | "blocked";
   actorUserId?: unknown;
   subjectUserId?: unknown;
   provider?: "polynet" | "stripe";
@@ -1679,6 +1742,86 @@ async function readPartnerPayoutBatchSnapshot(ctx: any, batchId: any) {
       status: String(row.status ?? "reserved"),
       createdAt: Number(row.createdAt ?? 0),
     })),
+  };
+}
+
+async function readPartnerPayoutCycleRiskFlags(ctx: any, args: {
+  batch: any;
+  transfers: any[];
+  items: any[];
+}) {
+  const flags = new Set<string>();
+  if (Number(args.batch?.totalAmountUsd ?? 0) >= BUILDER_PARTNER_LARGE_PAYOUT_CYCLE_USD) {
+    flags.add("large_cycle");
+  }
+  if (String(args.batch?.status ?? "") === "failed" && !isHeldPartnerPayoutCycle(args.batch)) {
+    flags.add("failed_cycle");
+  }
+  for (const transfer of args.transfers) {
+    const partner = await ctx.db.get(transfer.partnerId);
+    if (!partner || String(partner.status ?? "") !== "active") {
+      flags.add("partner_not_active");
+    }
+    const currentStripeAccount = await readReadyStripeConnectPayoutAccount(ctx, transfer.partnerUserId);
+    if (
+      !currentStripeAccount ||
+      String(currentStripeAccount.stripeAccountId) !== String(transfer.stripeAccountId)
+    ) {
+      flags.add("payout_account_not_ready");
+    }
+  }
+  for (const item of args.items.slice(0, 50)) {
+    const adjustmentTotalUsd = await readAppliedCommissionAdjustmentTotalUsd(ctx, item.commissionId);
+    if (adjustmentTotalUsd < 0) {
+      flags.add("refund_or_dispute_adjustment");
+      break;
+    }
+  }
+  return Array.from(flags);
+}
+
+async function readPartnerPayoutCycleOperatorRow(ctx: any, batch: any) {
+  const [transfers, items] = await Promise.all([
+    ctx.db
+      .query("partnerPayoutTransfers" as any)
+      .withIndex("by_batch", (q: any) => q.eq("batchId", batch._id))
+      .collect(),
+    ctx.db
+      .query("partnerPayoutItems" as any)
+      .withIndex("by_batch", (q: any) => q.eq("batchId", batch._id))
+      .collect(),
+  ]);
+  const operatorStatus = toPartnerPayoutCycleOperatorStatus(batch);
+  const riskFlags = await readPartnerPayoutCycleRiskFlags(ctx, {
+    batch,
+    transfers,
+    items,
+  });
+  return {
+    id: String(batch._id),
+    cycleKey: String(batch.batchKey ?? ""),
+    status: operatorStatus,
+    totalAmountUsd: roundBuilderPartnerMoney(Number(batch.totalAmountUsd ?? 0)),
+    currency: String(batch.currency ?? "usd").toLowerCase(),
+    partnerCount: Number(batch.partnerCount ?? 0),
+    itemCount: Number(batch.itemCount ?? 0),
+    transferCount: transfers.length,
+    payableCutoffAt: typeof batch.payableCutoffAt === "number" ? batch.payableCutoffAt : null,
+    payoutBufferMs: typeof batch.payoutBufferMs === "number" ? batch.payoutBufferMs : null,
+    createdAt: Number(batch.createdAt ?? 0),
+    updatedAt: Number(batch.updatedAt ?? 0),
+    approvedAt: typeof batch.approvedAt === "number" ? batch.approvedAt : null,
+    processedAt: typeof batch.processedAt === "number" ? batch.processedAt : null,
+    failureReason: typeof batch.failureReason === "string" && !isHeldPartnerPayoutCycle(batch)
+      ? batch.failureReason
+      : null,
+    holdReason: readHeldPartnerPayoutCycleReason(batch),
+    riskFlags,
+    actions: {
+      canApprove: operatorStatus === "pending_approval" || operatorStatus === "held",
+      canHold: operatorStatus === "pending_approval",
+      canReject: operatorStatus === "pending_approval" || operatorStatus === "held" || operatorStatus === "failed",
+    },
   };
 }
 
@@ -2200,7 +2343,51 @@ export const getPartnerPayoutBatchForOperator = query({
   },
 });
 
-export const approvePartnerPayoutBatch = mutation({
+export const listPartnerPayoutCyclesForOperator = query({
+  args: {
+    authSubject: v.optional(v.string()),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    await requireOperatorRole(ctx, args.authSubject, "operator");
+    const limit = normalizePartnerPayoutCycleOperatorLimit(args.limit);
+    const statuses = ["draft", "failed", "approved", "processing", "completed", "voided"] as const;
+    const rows = (
+      await Promise.all(
+        statuses.map((status) =>
+          ctx.db
+            .query("partnerPayoutBatches" as any)
+            .withIndex("by_status_createdAt", (q: any) => q.eq("status", status))
+            .order("desc")
+            .take(limit),
+        ),
+      )
+    ).flat();
+    const uniqueRows = rows
+      .filter((row: any, index, allRows: any[]) =>
+        allRows.findIndex((candidate: any) => String(candidate._id) === String(row._id)) === index,
+      )
+      .sort(
+        (a: any, b: any) =>
+          partnerPayoutCycleOperatorSortRank(a) - partnerPayoutCycleOperatorSortRank(b) ||
+          Number(b.createdAt ?? 0) - Number(a.createdAt ?? 0) ||
+          String(b._id).localeCompare(String(a._id)),
+      )
+      .slice(0, limit);
+    const cycles = await Promise.all(
+      uniqueRows.map((row: any) => readPartnerPayoutCycleOperatorRow(ctx, row)),
+    );
+    return {
+      cycles,
+      evidence: {
+        sourceTables: ["partnerPayoutBatches", "partnerPayoutTransfers", "partnerPayoutItems"],
+        computedAt: Date.now(),
+      },
+    };
+  },
+});
+
+export const approvePartnerPayoutCycle = mutation({
   args: {
     authSubject: v.optional(v.string()),
     batchId: v.id("partnerPayoutBatches"),
@@ -2209,7 +2396,9 @@ export const approvePartnerPayoutBatch = mutation({
     const operator = await requireOperatorRole(ctx, args.authSubject, "operator");
     const batch = await ctx.db.get(args.batchId);
     if (!batch) throw new Error("partner_payout_batch_not_found");
-    if (batch.status !== "draft") throw new Error("partner_payout_batch_not_draft");
+    if (batch.status !== "draft" && !isHeldPartnerPayoutCycle(batch)) {
+      throw new Error("partner_payout_cycle_not_approvable");
+    }
     const validation = await validatePartnerPayoutBatchStillPayable(ctx, args.batchId);
     if (!validation.ok) {
       throw new Error(validation.reason ?? "partner_payout_batch_stale");
@@ -2219,6 +2408,7 @@ export const approvePartnerPayoutBatch = mutation({
       status: "approved",
       approvedByUserId: operator.dbUserId,
       approvedAt: nowMs,
+      failureReason: undefined,
       updatedAt: nowMs,
     });
     await recordPartnerPayoutAudit(ctx, {
@@ -2240,7 +2430,7 @@ export const approvePartnerPayoutBatch = mutation({
   },
 });
 
-export const voidPartnerPayoutBatch = mutation({
+export const holdPartnerPayoutCycle = mutation({
   args: {
     authSubject: v.optional(v.string()),
     batchId: v.id("partnerPayoutBatches"),
@@ -2250,10 +2440,44 @@ export const voidPartnerPayoutBatch = mutation({
     const operator = await requireOperatorRole(ctx, args.authSubject, "operator");
     const batch = await ctx.db.get(args.batchId);
     if (!batch) throw new Error("partner_payout_batch_not_found");
-    if (batch.status === "processing" || batch.status === "completed") {
-      throw new Error("partner_payout_batch_cannot_void");
+    if (batch.status !== "draft") throw new Error("partner_payout_cycle_not_holdable");
+    const nowMs = Date.now();
+    const reason = normalizeOperatorDecisionReason(args.reason, "operator_hold");
+    await ctx.db.patch(args.batchId, {
+      status: "failed",
+      failureReason: `held:${reason}`,
+      updatedAt: nowMs,
+    });
+    await recordPartnerPayoutAudit(ctx, {
+      eventType: "builder_partner_payout_cycle_held",
+      status: "blocked",
+      actorUserId: operator.dbUserId,
+      metadata: {
+        batchId: String(args.batchId),
+        reason,
+      },
+      nowMs,
+    });
+    return await readPartnerPayoutBatchSnapshot(ctx, args.batchId);
+  },
+});
+
+export const rejectPartnerPayoutCycle = mutation({
+  args: {
+    authSubject: v.optional(v.string()),
+    batchId: v.id("partnerPayoutBatches"),
+    reason: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const operator = await requireOperatorRole(ctx, args.authSubject, "operator");
+    const batch = await ctx.db.get(args.batchId);
+    if (!batch) throw new Error("partner_payout_batch_not_found");
+    const operatorStatus = toPartnerPayoutCycleOperatorStatus(batch);
+    if (operatorStatus !== "pending_approval" && operatorStatus !== "held" && operatorStatus !== "failed") {
+      throw new Error("partner_payout_cycle_cannot_reject");
     }
     const nowMs = Date.now();
+    const reason = normalizeOperatorDecisionReason(args.reason, "operator_rejected");
     const [transfers, items] = await Promise.all([
       ctx.db
         .query("partnerPayoutTransfers" as any)
@@ -2269,7 +2493,7 @@ export const voidPartnerPayoutBatch = mutation({
     }
     await ctx.db.patch(args.batchId, {
       status: "voided",
-      failureReason: String(args.reason ?? "operator_voided").trim().slice(0, 240),
+      failureReason: reason,
       updatedAt: nowMs,
     });
     for (const transfer of transfers) {
@@ -2293,7 +2517,7 @@ export const voidPartnerPayoutBatch = mutation({
       actorUserId: operator.dbUserId,
       metadata: {
         batchId: String(args.batchId),
-        reason: String(args.reason ?? "operator_voided").trim().slice(0, 240),
+        reason,
       },
       nowMs,
     });

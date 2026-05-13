@@ -1,20 +1,24 @@
-import { useEffect, useMemo, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from "react";
 import type { AuthSessionLike } from "../../../../shared/authSession";
 import { buildPlatformSwitcherStyle } from "../../../../shared/platformSwitcherUi";
 import { buildOperatorPlatformHealthCards } from "../../../../shared/operatorPlatformHealth";
 import {
   loadOperatorAccountSetupSnapshotCanonical,
+  approveOperatorPartnerPayoutCycleCanonical,
+  holdOperatorPartnerPayoutCycleCanonical,
   loadOperatorAuthAccessDiagnosticsCanonical,
   loadOperatorCommunitiesCanonical,
   loadOperatorEventsCanonical,
   loadOperatorFrontendErrorDiagnosticsCanonical,
   loadOperatorMonetizationCanonical,
   loadOperatorOverviewCanonical,
+  loadOperatorPartnerPayoutCyclesCanonical,
   loadOperatorRisksCanonical,
   loadOperatorRuntimeToolDiagnosticsCanonical,
   loadOperatorSecurityAuditDiagnosticsCanonical,
   loadOperatorWebDeployDiagnosticsCanonical,
   recordOperatorDashboardAccessCanonical,
+  rejectOperatorPartnerPayoutCycleCanonical,
 } from "../../../../shared/cloudOperatorDashboardGateway";
 import type {
   OperatorAccountSetupSnapshot,
@@ -25,6 +29,9 @@ import type {
   OperatorFrontendErrorDiagnosticsSnapshot,
   OperatorMonetizationSnapshot,
   OperatorOverviewSnapshot,
+  OperatorPartnerPayoutCycle,
+  OperatorPartnerPayoutCyclesSnapshot,
+  OperatorPartnerPayoutCycleStatus,
   OperatorRiskItem,
   OperatorRuntimeToolDiagnosticsSnapshot,
   OperatorSecurityAuditDiagnosticsSnapshot,
@@ -62,6 +69,7 @@ export type OperatorDashboardState = {
   runtimeTools: OperatorRuntimeToolDiagnosticsSnapshot | null;
   frontendErrors: OperatorFrontendErrorDiagnosticsSnapshot | null;
   accountSetup: OperatorAccountSetupSnapshot | null;
+  partnerPayoutCycles: OperatorPartnerPayoutCyclesSnapshot | null;
   communityRows: OperatorCommunityRecord[];
   risks: OperatorRiskItem[];
   events: OperatorEventRecord[];
@@ -77,11 +85,23 @@ export function createEmptyOperatorDashboardState(): OperatorDashboardState {
     runtimeTools: null,
     frontendErrors: null,
     accountSetup: null,
+    partnerPayoutCycles: null,
     communityRows: [],
     risks: [],
     events: [],
   };
 }
+
+type PartnerPayoutCycleActionName = "approve" | "hold" | "reject";
+
+type PartnerPayoutCycleActions = {
+  inFlightCycleId: string | null;
+  inFlightAction: PartnerPayoutCycleActionName | null;
+  error: string | null;
+  approve: (cycleId: string) => Promise<void>;
+  hold: (cycleId: string) => Promise<void>;
+  reject: (cycleId: string) => Promise<void>;
+};
 
 export function clampOperatorRightPanelWidth(width: number): number {
   if (!Number.isFinite(width)) return OPERATOR_RIGHT_PANEL_DEFAULT_WIDTH;
@@ -112,6 +132,55 @@ export function useOperatorDashboardData(params: {
   const [state, setState] = useState<OperatorDashboardState>(() => createEmptyOperatorDashboardState());
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [cycleActionState, setCycleActionState] = useState<{
+    inFlightCycleId: string | null;
+    inFlightAction: PartnerPayoutCycleActionName | null;
+    error: string | null;
+  }>({ inFlightCycleId: null, inFlightAction: null, error: null });
+
+  const refreshPartnerPayoutCycles = useCallback(async (session: AuthSessionLike) => {
+    const partnerPayoutCycles = await loadOperatorPartnerPayoutCyclesCanonical({ session, limit: 12 });
+    setState((prev) => ({ ...prev, partnerPayoutCycles }));
+  }, []);
+
+  const runPartnerPayoutCycleAction = useCallback(
+    async (action: PartnerPayoutCycleActionName, cycleId: string) => {
+      const session = params.session;
+      if (!session) {
+        setCycleActionState({ inFlightCycleId: null, inFlightAction: null, error: "Operator session required." });
+        return;
+      }
+      setCycleActionState({ inFlightCycleId: cycleId, inFlightAction: action, error: null });
+      try {
+        if (action === "approve") {
+          await approveOperatorPartnerPayoutCycleCanonical({ session, cycleId });
+        } else if (action === "hold") {
+          await holdOperatorPartnerPayoutCycleCanonical({ session, cycleId, reason: "operator_hold" });
+        } else {
+          await rejectOperatorPartnerPayoutCycleCanonical({ session, cycleId, reason: "operator_rejected" });
+        }
+        await refreshPartnerPayoutCycles(session);
+        setCycleActionState({ inFlightCycleId: null, inFlightAction: null, error: null });
+      } catch (nextError) {
+        setCycleActionState({
+          inFlightCycleId: null,
+          inFlightAction: null,
+          error: nextError instanceof Error ? nextError.message : "Partner payout cycle action failed.",
+        });
+      }
+    },
+    [params.session, refreshPartnerPayoutCycles],
+  );
+
+  const partnerPayoutCycleActions = useMemo<PartnerPayoutCycleActions>(
+    () => ({
+      ...cycleActionState,
+      approve: (cycleId: string) => runPartnerPayoutCycleAction("approve", cycleId),
+      hold: (cycleId: string) => runPartnerPayoutCycleAction("hold", cycleId),
+      reject: (cycleId: string) => runPartnerPayoutCycleAction("reject", cycleId),
+    }),
+    [cycleActionState, runPartnerPayoutCycleAction],
+  );
 
   useEffect(() => {
     let isAlive = true;
@@ -139,6 +208,7 @@ export function useOperatorDashboardData(params: {
           loadOperatorRuntimeToolDiagnosticsCanonical({ session, range: "30d" }),
           loadOperatorFrontendErrorDiagnosticsCanonical({ session, range: "30d" }),
           loadOperatorAccountSetupSnapshotCanonical({ session, completed: false, limit: 24 }),
+          loadOperatorPartnerPayoutCyclesCanonical({ session, limit: 12 }),
           loadOperatorCommunitiesCanonical({ session, limit: 12 }),
           loadOperatorRisksCanonical({ session, limit: 12 }),
           loadOperatorEventsCanonical({ session, limit: 12 }),
@@ -152,6 +222,7 @@ export function useOperatorDashboardData(params: {
           runtimeTools,
           frontendErrors,
           accountSetup,
+          partnerPayoutCycles,
           communityRows,
           risks,
           events,
@@ -165,6 +236,7 @@ export function useOperatorDashboardData(params: {
           ["runtime_tools", runtimeTools],
           ["frontend_errors", frontendErrors],
           ["account_setup", accountSetup],
+          ["partner_payout_cycles", partnerPayoutCycles],
           ["communities", communityRows],
           ["risks", risks],
           ["events", events],
@@ -178,6 +250,7 @@ export function useOperatorDashboardData(params: {
           runtimeTools: fulfilledValue(runtimeTools),
           frontendErrors: fulfilledValue(frontendErrors),
           accountSetup: fulfilledValue(accountSetup),
+          partnerPayoutCycles: fulfilledValue(partnerPayoutCycles),
           communityRows: fulfilledList(communityRows),
           risks: fulfilledList(risks),
           events: fulfilledList(events),
@@ -195,6 +268,7 @@ export function useOperatorDashboardData(params: {
             runtimeTools: nextState.runtimeTools ?? prev.runtimeTools,
             frontendErrors: nextState.frontendErrors ?? prev.frontendErrors,
             accountSetup: nextState.accountSetup ?? prev.accountSetup,
+            partnerPayoutCycles: nextState.partnerPayoutCycles ?? prev.partnerPayoutCycles,
             communityRows: nextState.communityRows ?? prev.communityRows,
             risks: nextState.risks ?? prev.risks,
             events: nextState.events ?? prev.events,
@@ -226,12 +300,13 @@ export function useOperatorDashboardData(params: {
     [state.communityRows],
   );
 
-  return { state, topCommunities, isLoading, error };
+  return { state, topCommunities, partnerPayoutCycleActions, isLoading, error };
 }
 
 export function WebOperatorDataPanel(props: {
   state: OperatorDashboardState;
   topCommunities: OperatorCommunityRecord[];
+  partnerPayoutCycleActions: PartnerPayoutCycleActions;
   isLoading: boolean;
   error: string | null;
   activeInsightTab: OperatorInsightTab;
@@ -294,6 +369,8 @@ export function WebOperatorDataPanel(props: {
             monetization={props.state.monetization}
             accountSetup={props.state.accountSetup}
             runtimeTools={props.state.runtimeTools}
+            partnerPayoutCycles={props.state.partnerPayoutCycles}
+            partnerPayoutCycleActions={props.partnerPayoutCycleActions}
             risks={props.state.risks}
             events={props.state.events}
           />
@@ -313,6 +390,15 @@ function formatMoney(metric: { currency: string; amountBaseUnits: number; curren
     currency: metric.currency || "usd",
     maximumFractionDigits: 0,
   }).format(amount);
+}
+
+function formatUsdAmount(value: number | null | undefined): string {
+  const amount = Number(value ?? 0);
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "usd",
+    maximumFractionDigits: amount < 100 ? 2 : 0,
+  }).format(Number.isFinite(amount) ? amount : 0);
 }
 
 function formatPercent(value: number | null | undefined): string {
@@ -391,6 +477,26 @@ function formatPayoutStatus(value: OperatorCommunityRecord["creator"]["payoutSta
     case "not_connected":
     default:
       return "No payout";
+  }
+}
+
+function formatPartnerPayoutCycleStatus(value: OperatorPartnerPayoutCycleStatus): string {
+  switch (value) {
+    case "pending_approval":
+      return "Needs approval";
+    case "approved":
+      return "Approved";
+    case "processing":
+      return "Processing";
+    case "paid":
+      return "Paid";
+    case "held":
+      return "Held";
+    case "rejected":
+      return "Rejected";
+    case "failed":
+    default:
+      return "Failed";
   }
 }
 
@@ -842,6 +948,8 @@ function OperatorBusinessInsights(props: {
   monetization: OperatorMonetizationSnapshot | null;
   accountSetup: OperatorAccountSetupSnapshot | null;
   runtimeTools: OperatorRuntimeToolDiagnosticsSnapshot | null;
+  partnerPayoutCycles: OperatorPartnerPayoutCyclesSnapshot | null;
+  partnerPayoutCycleActions: PartnerPayoutCycleActions;
   risks: OperatorRiskItem[];
   events: OperatorEventRecord[];
 }) {
@@ -1024,6 +1132,11 @@ function OperatorBusinessInsights(props: {
         </div>
       </section>
 
+      <OperatorPartnerPayoutCycles
+        snapshot={props.partnerPayoutCycles}
+        actions={props.partnerPayoutCycleActions}
+      />
+
       <section className="operator-dashboard__panel">
         <h2>Checkout funnel</h2>
         <div className="operator-dashboard__table">
@@ -1176,6 +1289,96 @@ function OperatorBusinessInsights(props: {
         </div>
       </section>
     </div>
+  );
+}
+
+function OperatorPartnerPayoutCycles(props: {
+  snapshot: OperatorPartnerPayoutCyclesSnapshot | null;
+  actions: PartnerPayoutCycleActions;
+}) {
+  const cycles = props.snapshot?.cycles ?? [];
+  const isActing = (cycle: OperatorPartnerPayoutCycle, action?: PartnerPayoutCycleActionName) =>
+    props.actions.inFlightCycleId === cycle.id &&
+    (!action || props.actions.inFlightAction === action);
+
+  return (
+    <section className="operator-dashboard__panel operator-dashboard__panel--full">
+      <h2>Partner payout cycles</h2>
+      <div className="operator-dashboard__table">
+        {props.actions.error ? (
+          <div className="operator-dashboard__empty">Payout cycle action failed: {props.actions.error}</div>
+        ) : null}
+        {cycles.length === 0 ? (
+          <div className="operator-dashboard__empty">No generated partner payout cycles returned.</div>
+        ) : (
+          cycles.map((cycle) => (
+            <div className="operator-dashboard__row operator-dashboard__cycle-row" key={cycle.id}>
+              <div className="operator-dashboard__community-main">
+                <strong>{cycle.cycleKey || cycle.id.slice(0, 10)}</strong>
+                <span>
+                  {[
+                    formatPartnerPayoutCycleStatus(cycle.status),
+                    formatUsdAmount(cycle.totalAmountUsd),
+                    `${cycle.partnerCount} partner${cycle.partnerCount === 1 ? "" : "s"}`,
+                    `${cycle.itemCount} commission${cycle.itemCount === 1 ? "" : "s"}`,
+                    cycle.createdAt ? formatEventTime(cycle.createdAt) : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </span>
+                <div className="operator-dashboard__chips" aria-label={`${cycle.cycleKey || cycle.id} risk flags`}>
+                  {cycle.riskFlags.length > 0 ? (
+                    cycle.riskFlags.slice(0, 4).map((flag) => (
+                      <span className="operator-dashboard__chip operator-dashboard__chip--warning" key={flag}>
+                        {formatRiskFlag(flag)}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="operator-dashboard__chip">No risk flags</span>
+                  )}
+                  {cycle.holdReason ? (
+                    <span className="operator-dashboard__chip operator-dashboard__chip--warning">
+                      {cycle.holdReason}
+                    </span>
+                  ) : null}
+                  {cycle.failureReason ? (
+                    <span className="operator-dashboard__chip operator-dashboard__chip--warning">
+                      {cycle.failureReason}
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+              <div className="operator-dashboard__cycle-actions">
+                <button
+                  type="button"
+                  className="operator-dashboard__action"
+                  disabled={!cycle.actions.canApprove || Boolean(props.actions.inFlightCycleId)}
+                  onClick={() => props.actions.approve(cycle.id)}
+                >
+                  {isActing(cycle, "approve") ? "Approving" : "Approve"}
+                </button>
+                <button
+                  type="button"
+                  className="operator-dashboard__action operator-dashboard__action--secondary"
+                  disabled={!cycle.actions.canHold || Boolean(props.actions.inFlightCycleId)}
+                  onClick={() => props.actions.hold(cycle.id)}
+                >
+                  {isActing(cycle, "hold") ? "Holding" : "Hold"}
+                </button>
+                <button
+                  type="button"
+                  className="operator-dashboard__action operator-dashboard__action--danger"
+                  disabled={!cycle.actions.canReject || Boolean(props.actions.inFlightCycleId)}
+                  onClick={() => props.actions.reject(cycle.id)}
+                >
+                  {isActing(cycle, "reject") ? "Rejecting" : "Reject"}
+                </button>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </section>
   );
 }
 

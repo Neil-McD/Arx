@@ -208,6 +208,48 @@ export type OperatorMonetizationSnapshot = {
   };
 };
 
+export type OperatorPartnerPayoutCycleStatus =
+  | "pending_approval"
+  | "approved"
+  | "processing"
+  | "paid"
+  | "held"
+  | "failed"
+  | "rejected";
+
+export type OperatorPartnerPayoutCycle = {
+  id: string;
+  cycleKey: string;
+  status: OperatorPartnerPayoutCycleStatus;
+  totalAmountUsd: number;
+  currency: string;
+  partnerCount: number;
+  itemCount: number;
+  transferCount: number;
+  payableCutoffAt: number | null;
+  payoutBufferMs: number | null;
+  createdAt: number;
+  updatedAt: number;
+  approvedAt: number | null;
+  processedAt: number | null;
+  failureReason: string | null;
+  holdReason: string | null;
+  riskFlags: string[];
+  actions: {
+    canApprove: boolean;
+    canHold: boolean;
+    canReject: boolean;
+  };
+};
+
+export type OperatorPartnerPayoutCyclesSnapshot = {
+  cycles: OperatorPartnerPayoutCycle[];
+  evidence: {
+    sourceTables: string[];
+    computedAt: number;
+  };
+};
+
 export type OperatorRiskItem = {
   id: string;
   severity: "warning" | "error";

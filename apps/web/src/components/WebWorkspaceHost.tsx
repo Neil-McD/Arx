@@ -1923,6 +1923,7 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
           <WebOperatorDataPanel
             state={operatorData.state}
             topCommunities={operatorData.topCommunities}
+            partnerPayoutCycleActions={operatorData.partnerPayoutCycleActions}
             isLoading={operatorData.isLoading}
             error={operatorData.error}
             activeInsightTab={operatorActiveInsightTab}

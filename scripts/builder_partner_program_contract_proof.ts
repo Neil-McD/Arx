@@ -753,6 +753,8 @@ function provePartnerPayoutSettlementContract(
   criticalAuditSource: string,
   gatewaySource: string,
   uiSource: string,
+  operatorPanelSource: string,
+  operatorGatewaySource: string,
   cronsSource: string,
   docsSource: string,
 ) {
@@ -773,8 +775,18 @@ function provePartnerPayoutSettlementContract(
   );
   assertIncludes(
     builderPartnersSource,
-    "approvePartnerPayoutBatch",
-    "Builder Partner payout settlement",
+    "listPartnerPayoutCyclesForOperator",
+    "Builder Partner payout settlement should expose generated cycles to operators",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "approvePartnerPayoutCycle",
+    "Builder Partner payout settlement should expose one-step operator approval",
+  );
+  assert.doesNotMatch(
+    builderPartnersSource,
+    /export const approvePartnerPayoutBatch/,
+    "Builder Partner payout approval should use product-level cycle language",
   );
   assert.doesNotMatch(
     builderPartnersSource,
@@ -798,8 +810,18 @@ function provePartnerPayoutSettlementContract(
   );
   assertIncludes(
     builderPartnersSource,
-    "voidPartnerPayoutBatch",
-    "Builder Partner payout settlement",
+    "holdPartnerPayoutCycle",
+    "Builder Partner payout settlement should expose operator hold",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "rejectPartnerPayoutCycle",
+    "Builder Partner payout settlement should expose operator reject",
+  );
+  assert.doesNotMatch(
+    builderPartnersSource,
+    /export const voidPartnerPayoutBatch/,
+    "Builder Partner payout rejection should use product-level cycle language",
   );
   assertIncludes(
     builderPartnersSource,
@@ -1027,6 +1049,56 @@ function provePartnerPayoutSettlementContract(
     "Builder Partner payout critical audit event registry",
   );
   assertIncludes(
+    criticalAuditSource,
+    "builder_partner_payout_cycle_held",
+    "Builder Partner payout hold events must be audited",
+  );
+  assertIncludes(
+    operatorGatewaySource,
+    "builderPartners:listPartnerPayoutCyclesForOperator",
+    "Operator dashboard gateway must load generated payout cycles",
+  );
+  assertIncludes(
+    operatorGatewaySource,
+    "builderPartners:approvePartnerPayoutCycle",
+    "Operator dashboard gateway must approve payout cycles",
+  );
+  assertIncludes(
+    operatorGatewaySource,
+    "builderPartners:holdPartnerPayoutCycle",
+    "Operator dashboard gateway must hold payout cycles",
+  );
+  assertIncludes(
+    operatorGatewaySource,
+    "builderPartners:rejectPartnerPayoutCycle",
+    "Operator dashboard gateway must reject payout cycles",
+  );
+  assertIncludes(
+    operatorPanelSource,
+    "Partner payout cycles",
+    "Operator dashboard should show partner payout cycles",
+  );
+  assertIncludes(
+    operatorPanelSource,
+    "Approve",
+    "Operator dashboard should expose one-step approval",
+  );
+  assertIncludes(
+    operatorPanelSource,
+    "Hold",
+    "Operator dashboard should expose hold",
+  );
+  assertIncludes(
+    operatorPanelSource,
+    "Reject",
+    "Operator dashboard should expose reject",
+  );
+  assert.doesNotMatch(
+    operatorPanelSource,
+    /previewPartnerPayoutBatch|createPartnerPayoutBatch|executePartnerPayoutBatch|approvePartnerPayoutBatch|voidPartnerPayoutBatch/,
+    "Operator dashboard must not expose manual batch internals",
+  );
+  assertIncludes(
     gatewaySource,
     "payoutHistory",
     "Builder Partner gateway",
@@ -1130,6 +1202,8 @@ function main() {
   );
   const builderPartnersSource = readText(new URL("../convex/builderPartners.ts", import.meta.url));
   const gatewaySource = readText(new URL("../shared/builderPartnerProgramGateway.ts", import.meta.url));
+  const operatorGatewaySource = readText(new URL("../shared/cloudOperatorDashboardGateway.ts", import.meta.url));
+  const operatorPanelSource = readText(new URL("../apps/web/src/components/WebOperatorDataPanel.tsx", import.meta.url));
   const appSource = readText(new URL("../apps/web/src/App.tsx", import.meta.url));
   const accountSource = readText(new URL("../convex/account.ts", import.meta.url));
   const docsSource = readText(new URL("../docs/product/primitives/polynet.md", import.meta.url));
@@ -1160,6 +1234,8 @@ function main() {
     criticalAuditSource,
     gatewaySource,
     uiSource,
+    operatorPanelSource,
+    operatorGatewaySource,
     cronsSource,
     billingDocsSource,
   );
