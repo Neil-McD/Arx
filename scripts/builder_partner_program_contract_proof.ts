@@ -175,44 +175,24 @@ function proveUiContract(uiSource: string) {
   );
   assertIncludes(
     uiSource,
-    "BUILDER_PARTNER_PAYOUT_BUFFER_MS",
+    "Builder Partner Program is coming soon.",
     "partner settings UI",
   );
   assertIncludes(
     uiSource,
-    "CheckCircle2",
+    "Partner links, attribution, commission tracking, dashboards, and partner payouts",
     "partner settings UI",
   );
   assertIncludes(
     uiSource,
-    "XCircle",
+    "No partner links are currently issued.",
     "partner settings UI",
   );
   assertIncludes(
     uiSource,
-    "Earn {formatBps(effectiveCommunityRevenueShareBps)} of referred creators'",
+    "No partner commissions, balances, or payouts are active yet.",
     "partner settings UI",
   );
-  assertIncludes(
-    uiSource,
-    "Earn {formatBps(toolUsageShareBps)} of referred creators' tool usage",
-    "partner settings UI",
-  );
-  assertIncludes(
-    uiSource,
-    "Accept and unlock",
-    "partner settings UI",
-  );
-  assertIncludes(uiSource, "Copy link", "partner settings UI");
-  assertIncludes(uiSource, "Referred builders", "partner settings UI");
-  assertIncludes(uiSource, "Partner payouts", "partner settings UI");
-  assertIncludes(uiSource, "Ready for next payout", "partner settings UI");
-  assertIncludes(uiSource, "Payable soon", "partner settings UI");
-  assertIncludes(uiSource, "Pending hold", "partner settings UI");
-  assertIncludes(uiSource, "Payout history", "partner settings UI");
-  assertIncludes(uiSource, "Manual settlements appear here after operator review.", "partner settings UI");
-  assertIncludes(uiSource, "Appears after referred revenue is processed.", "partner settings UI");
-  assertIncludes(uiSource, "Complete the requirements to unlock your partner link and dashboard.", "partner settings UI");
   assert.doesNotMatch(
     uiSource,
     /Minimum payout|minimum payout threshold|BUILDER_PARTNER_MIN_PAYOUT_USD/,
@@ -237,6 +217,16 @@ function proveUiContract(uiSource: string) {
     uiSource,
     /20% of gross margin/i,
     "partner settings UI should not describe tool usage as gross margin",
+  );
+  assert.doesNotMatch(
+    uiSource,
+    /Accept and unlock|Copy link|Referred builders|Ready for next payout|Payable soon|Pending hold|Manual settlements appear here after operator review/i,
+    "partner settings UI should not expose active partner dashboard controls while the program is marked coming soon",
+  );
+  assert.doesNotMatch(
+    uiSource,
+    /Complete the requirements to unlock your partner link and dashboard|Your Builder Partner account is active|Generated automatically/i,
+    "partner settings UI should not imply partner accounts or links are active",
   );
   assert.doesNotMatch(
     uiSource,
@@ -888,8 +878,8 @@ function provePartnerPayoutSettlementContract(
   );
   assertIncludes(
     uiSource,
-    "No partner payouts have been settled yet.",
-    "Builder Partner payout history UI",
+    "No partner commissions, balances, or payouts are active yet.",
+    "Builder Partner coming-soon payout UI",
   );
   assert.doesNotMatch(
     uiSource,
