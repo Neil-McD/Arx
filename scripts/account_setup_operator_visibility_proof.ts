@@ -83,6 +83,8 @@ assert.equal(
   "business tab must render account setup insights exactly once",
 );
 assert.match(operatorPanel, /Showing \$\{users\.length\} of \$\{userList\.totalMatching\}/, "operator setup UI must disclose list truncation context");
+assert.match(operatorPanel, /"handle"/, "operator setup missing-field ordering must include handle");
+assert.match(operatorPanel, /case "handle":[\s\S]*?return "Handle";/, "operator setup UI must label missing handles");
 
 const existingWithoutProfileDetail = buildAccountSetupStatus({
   displayName: "Existing Member",
@@ -110,6 +112,7 @@ assert.deepEqual(missingProvider.missing, ["inference_provider"]);
 
 const complete = buildAccountSetupStatus({
   displayName: "Complete",
+  handle: "complete",
   avatarUrl: "https://example.com/avatar.png",
   hasInferenceProvider: true,
   agentName: "Poly",

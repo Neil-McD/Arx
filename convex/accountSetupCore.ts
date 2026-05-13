@@ -66,20 +66,27 @@ export function buildAccountSetupStatusForRows(params: {
   });
 }
 
-export function isProfileSetupCompleteForDetail(detail: AccountSetupProfileDetailRow | null): boolean {
+export function isProfileSetupCompleteForRows(
+  user: AccountSetupUserRow | null,
+  detail: AccountSetupProfileDetailRow | null,
+): boolean {
   return isAccountSetupIdentityComplete({
     displayName: detail?.displayName ?? null,
+    handle: user?.handle ?? null,
     avatarUrl: detail?.avatarUrl ?? null,
     avatarStorageId: detail?.avatarStorageId ? String(detail.avatarStorageId) : null,
   });
 }
 
 export async function requireProfileSetupCompleteForUser(ctx: any, userId: any): Promise<void> {
-  const detail = (await ctx.db
-    .query("userProfileDetails")
-    .withIndex("by_user", (q: any) => q.eq("userId", userId))
-    .first()) as AccountSetupProfileDetailRow | null;
-  if (!isProfileSetupCompleteForDetail(detail)) {
+  const [user, detail] = (await Promise.all([
+    ctx.db.get(userId),
+    ctx.db
+      .query("userProfileDetails")
+      .withIndex("by_user", (q: any) => q.eq("userId", userId))
+      .first(),
+  ])) as [AccountSetupUserRow | null, AccountSetupProfileDetailRow | null];
+  if (!isProfileSetupCompleteForRows(user, detail)) {
     throw new Error("profile_setup_required");
   }
 }

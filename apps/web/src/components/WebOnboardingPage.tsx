@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type DragEvent, type ReactNode } from "react";
 import { ArrowRight, Bot, Check, CircleUserRound, Compass, PlugZap, PlusCircle, Search, X } from "lucide-react";
 import type { AccountSetupStatus, AccountSetupStep } from "../../../../shared/accountSetup";
+import { normalizeProfileHandle } from "../../../../shared/profileHandle";
 import { UserAvatar } from "../../../../shared/UserAvatar";
 import { WebUserAvatarEditorModal } from "./WebUserAvatarEditorModal";
 
@@ -131,7 +132,7 @@ function formatHandleAvailability(
   isChecking: boolean,
 ): { kind: "idle" | "checking" | "success" | "error"; label: string } {
   if (!handle.trim()) {
-    return { kind: "idle", label: "Recommended for your public profile." };
+    return { kind: "idle", label: "Required for your public profile." };
   }
   if (isChecking) {
     return { kind: "checking", label: "Checking handle..." };
@@ -157,7 +158,7 @@ function formatHandleAvailability(
   if (availability.status === "invalid_format") {
     return { kind: "error", label: "Start and end with a letter or number." };
   }
-  return { kind: "idle", label: "Recommended for your public profile." };
+  return { kind: "idle", label: "Required for your public profile." };
 }
 
 function formatProviderStatus(
@@ -203,7 +204,13 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
   const progressCircumference = 2 * Math.PI * 17;
   const progressDashOffset = progressCircumference - (progress / 100) * progressCircumference;
   const hasInferenceProvider = props.chatgptConnected || props.openAiConnected;
-  const profileReady = props.displayName.trim().length > 0 && Boolean(props.avatarUrl?.trim());
+  const normalizedHandle = normalizeProfileHandle(props.handle);
+  const handleAvailabilityMatches = props.handleAvailability?.normalized_handle === normalizedHandle;
+  const handleReady =
+    Boolean(normalizedHandle) &&
+    !props.isCheckingHandleAvailability &&
+    Boolean(handleAvailabilityMatches && props.handleAvailability?.available);
+  const profileReady = props.displayName.trim().length > 0 && Boolean(props.avatarUrl?.trim()) && handleReady;
   const agentReady = agentNameDraft.trim().length > 0;
   const handleAvailability = formatHandleAvailability(
     props.handle,
@@ -383,7 +390,7 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
               <label>
                 <span className="polynet-onboarding-label-row">
                   <span>Handle</span>
-                  <em>Recommended</em>
+                  <em>Required</em>
                 </span>
                 <div className="polynet-onboarding-handle-row">
                   <span aria-hidden="true">@</span>
@@ -412,7 +419,7 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
                   rows={3}
                 />
               </label>
-              <small>Name and profile photo are required.</small>
+              <small>Name, handle, and profile photo are required.</small>
             </div>
           ) : null}
 

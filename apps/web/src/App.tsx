@@ -1489,6 +1489,10 @@ export default function App() {
   const [onboardingHandleAvailability, setOnboardingHandleAvailability] =
     useState<CloudProfileHandleAvailability | null>(null);
   const [isCheckingOnboardingHandle, setIsCheckingOnboardingHandle] = useState(false);
+  const openProfileSetup = useCallback(() => {
+    setOnboardingError(null);
+    setIsOnboardingModalOpen(true);
+  }, []);
   const refreshAccountSetupStatus = useCallback(async (activeSession: AuthSession | null = sessionRef.current ?? session) => {
     if (!activeSession) {
       setAccountSetupStatus(null);
@@ -1923,10 +1927,12 @@ export default function App() {
     buildReplyPrefix,
     beforeSendValidate: async () => {
       if (!isProfileSetupCompleteForPublicActions) {
+        openProfileSetup();
         return "Finish your profile before posting in communities.";
       }
       return null;
     },
+    onProfileSetupRequired: openProfileSetup,
     prepareAttachmentsForSend: prepareCommunityAttachmentsForSend,
     serializeAttachmentsForWrite: serializeCommunityAttachmentsForWrite,
     onOptimisticSendScrollIntent: () => {
@@ -2494,6 +2500,11 @@ export default function App() {
     const displayName = profileUi.profileName.trim() || null;
     const handle = profileUi.profileHandle.trim() || null;
     const bio = profileUi.profileBio.trim() || null;
+    const avatarUrl = profileUi.profileAvatarUrl?.trim() || null;
+    if (!displayName || !handle || !avatarUrl) {
+      setOnboardingError("Add your display name, handle, and profile photo to continue.");
+      return;
+    }
 
     setIsSavingOnboarding(true);
     setOnboardingError(null);
@@ -2516,7 +2527,7 @@ export default function App() {
         avatarZoom: profileUi.profileAvatarZoom,
         bio,
         onboardingDirection: destination,
-        completeOnboarding: true,
+        markOnboardingDismissed: true,
       });
       if (saved) {
         setCloudProfile(saved);
@@ -2564,8 +2575,8 @@ export default function App() {
     const handle = profileUi.profileHandle.trim() || null;
     const bio = profileUi.profileBio.trim() || null;
     const avatarUrl = profileUi.profileAvatarUrl?.trim() || null;
-    if (!displayName || !avatarUrl) {
-      setOnboardingError("Add your display name and profile photo to continue.");
+    if (!displayName || !handle || !avatarUrl) {
+      setOnboardingError("Add your display name, handle, and profile photo to continue.");
       return false;
     }
 
@@ -2589,7 +2600,7 @@ export default function App() {
         avatarFocusY: profileUi.profileAvatarFocusY,
         avatarZoom: profileUi.profileAvatarZoom,
         bio,
-        completeOnboarding: false,
+        markOnboardingDismissed: false,
       });
       if (saved) {
         setCloudProfile(saved);
@@ -5098,14 +5109,8 @@ export default function App() {
   }, [ensureUsableAuthSession, requireSignIn, workspaceCreditBalance]);
 
   const effectiveAccountSetupStatus = accountSetupStatus ?? cloudProfile?.account_setup ?? null;
-  const isProfileSetupKnownIncompleteForPublicActions = Boolean(
-    session && effectiveAccountSetupStatus && !isAccountSetupStatusIdentityComplete(effectiveAccountSetupStatus),
-  );
-  const isProfileSetupCompleteForPublicActions = !isProfileSetupKnownIncompleteForPublicActions;
-  const openProfileSetup = useCallback(() => {
-    setOnboardingError(null);
-    setIsOnboardingModalOpen(true);
-  }, []);
+  const isProfileSetupCompleteForPublicActions =
+    !session || Boolean(effectiveAccountSetupStatus && isAccountSetupStatusIdentityComplete(effectiveAccountSetupStatus));
 
   const communityUi = useWebCommunityUiController<
     AuthSession,

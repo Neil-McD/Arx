@@ -66,6 +66,7 @@ type UseCommunityChatMutationControllerArgs<
     hasAttachments: boolean;
     hasReply: boolean;
   }) => void;
+  onProfileSetupRequired?: () => void;
   chatInputRef: MutableRefObject<HTMLTextAreaElement | null>;
   communityAttachmentsRef: MutableRefObject<AttachmentT[]>;
   communityMessageInput: string;
@@ -87,6 +88,15 @@ type UseCommunityChatMutationControllerArgs<
   setIsSendingCommunityMessage: Dispatch<SetStateAction<boolean>>;
   setCommunityChatError: Dispatch<SetStateAction<string | null>>;
 };
+
+function isProfileSetupRequiredError(error: unknown): boolean {
+  const message = typeof error === "string"
+    ? error
+    : error instanceof Error
+      ? error.message
+      : "";
+  return message.includes("profile_setup_required");
+}
 
 function mapCommunityChatMutationErrorMessage(error: unknown): string {
   const message = typeof error === "string"
@@ -357,6 +367,9 @@ export function useCommunityChatMutationController<
         hasReply: Boolean(replyToId),
       });
     } catch (error) {
+      if (isProfileSetupRequiredError(error)) {
+        current.onProfileSetupRequired?.();
+      }
       current.setCommunityChatError(mapCommunityChatMutationErrorMessage(error));
       current.setCommunityMessages((prev) => prev.filter((message) => message.id !== optimisticId));
       restoreDraft();

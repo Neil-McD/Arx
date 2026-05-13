@@ -211,6 +211,7 @@ export async function upsertCloudProfileDetail<SessionT, TProfile extends CloudP
     avatarZoom?: number | null;
     bio: string | null;
     onboardingDirection?: "build_community" | "discover_community" | "learn_about_polynet" | null;
+    markOnboardingDismissed?: boolean;
     completeOnboarding?: boolean;
   },
 ): Promise<TProfile | null> {
@@ -227,6 +228,7 @@ export async function upsertCloudProfileDetail<SessionT, TProfile extends CloudP
     avatarZoom: params.avatarZoom ?? 1,
     bio: params.bio,
     onboardingDirection: params.onboardingDirection,
+    markOnboardingDismissed: params.markOnboardingDismissed,
     completeOnboarding: params.completeOnboarding,
   });
   return firstGatewayRow<TProfile>(payload);

@@ -87,20 +87,6 @@ async function mapProfileBase(ctx: any, user: UserRow, detail?: ProfileDetailRow
   };
 }
 
-async function hasEstablishedAccountEvidence(ctx: any, userId: any): Promise<boolean> {
-  const checks = [
-    ctx.db.query("threads").withIndex("by_owner", (q: any) => q.eq("ownerId", userId)).first(),
-    ctx.db.query("communityMemberships").withIndex("by_user", (q: any) => q.eq("userId", userId)).first(),
-    ctx.db.query("communities").withIndex("by_owner", (q: any) => q.eq("ownerId", userId)).first(),
-    ctx.db.query("checkoutSessions").withIndex("by_owner", (q: any) => q.eq("ownerUserId", userId)).first(),
-    ctx.db.query("userProviderConnections").withIndex("by_user", (q: any) => q.eq("userId", userId)).first(),
-    ctx.db.query("personalMemoryItems").withIndex("by_user", (q: any) => q.eq("userId", userId)).first(),
-    ctx.db.query("cloudProjects").withIndex("by_owner", (q: any) => q.eq("ownerId", userId)).first(),
-  ];
-  const rows = await Promise.all(checks);
-  return rows.some(Boolean);
-}
-
 async function mapProfileDetail(ctx: any, user: UserRow, detail: ProfileDetailRow | null) {
   return {
     ...(await mapProfileBase(ctx, user, detail)),
@@ -212,6 +198,7 @@ export const getProfileDetailByUserId = query({
     const user = await findUserBySubject(ctx, args.userId);
     if (!user) return null;
     const detail = await findProfileDetailByUserId(ctx, user._id);
+    // Detail/setup reads expose explicit profile fields only; public display fallback lives in userProfileProjection.
     return await mapProfileDetail(ctx, user, detail);
   },
 });
@@ -257,31 +244,7 @@ export const resolveOnboardingProfileDetail = mutation({
       .withIndex("by_user", (q: any) => q.eq("userId", actor.dbUserId))
       .first()) as ProfileDetailRow | null;
 
-    if (existingDetail?.onboardingCompletedAt) {
-      return await mapProfileDetailWithSetup(ctx, user, existingDetail);
-    }
-
-    if (await hasEstablishedAccountEvidence(ctx, actor.dbUserId)) {
-      if (existingDetail) {
-        await ctx.db.patch(existingDetail._id, {
-          onboardingCompletedAt: nowMs,
-          updatedAt: nowMs,
-        });
-      } else {
-        await ctx.db.insert("userProfileDetails", {
-          userId: actor.dbUserId,
-          onboardingCompletedAt: nowMs,
-          createdAt: nowMs,
-          updatedAt: nowMs,
-        });
-      }
-    }
-
-    const detail = (await ctx.db
-      .query("userProfileDetails")
-      .withIndex("by_user", (q: any) => q.eq("userId", actor.dbUserId))
-      .first()) as ProfileDetailRow | null;
-    return await mapProfileDetailWithSetup(ctx, user, detail);
+    return await mapProfileDetailWithSetup(ctx, user, existingDetail);
   },
 });
 
@@ -324,6 +287,8 @@ export const upsertProfileDetail = mutation({
         v.null(),
       ),
     ),
+    markOnboardingDismissed: v.optional(v.boolean()),
+    // Compatibility alias for older clients. Account setup truth is the returned `account_setup`.
     completeOnboarding: v.optional(v.boolean()),
     nowMs: v.optional(v.number()),
   },
@@ -401,6 +366,8 @@ export const upsertProfileDetail = mutation({
       args.onboardingDirection === undefined
         ? existingDetail?.onboardingDirection
         : args.onboardingDirection ?? undefined;
+    const shouldMarkOnboardingDismissed =
+      args.markOnboardingDismissed === true || args.completeOnboarding === true;
 
     if (!existingDetail) {
       await ctx.db.insert("userProfileDetails", {
@@ -413,7 +380,7 @@ export const upsertProfileDetail = mutation({
         avatarZoom: nextAvatarZoom,
         bio: nextBio,
         onboardingDirection: nextOnboardingDirection,
-        ...(args.completeOnboarding ? { onboardingCompletedAt: nowMs } : null),
+        ...(shouldMarkOnboardingDismissed ? { onboardingCompletedAt: nowMs } : null),
         createdAt: nowMs,
         updatedAt: nowMs,
       });
@@ -427,7 +394,7 @@ export const upsertProfileDetail = mutation({
         avatarZoom: nextAvatarZoom,
         bio: nextBio,
         onboardingDirection: nextOnboardingDirection,
-        ...(args.completeOnboarding && !existingDetail.onboardingCompletedAt
+        ...(shouldMarkOnboardingDismissed && !existingDetail.onboardingCompletedAt
           ? { onboardingCompletedAt: nowMs }
           : null),
         updatedAt: nowMs,

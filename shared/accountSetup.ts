@@ -1,7 +1,10 @@
+import { validateProfileHandle } from "./profileHandle.ts";
+
 export type AccountSetupStep = "identity" | "inference" | "agent" | "direction" | "complete";
 
 export type AccountSetupMissing =
   | "display_name"
+  | "handle"
   | "avatar"
   | "inference_provider"
   | "agent_name";
@@ -10,6 +13,7 @@ export const ACCOUNT_SETUP_STEPS: AccountSetupStep[] = ["identity", "inference",
 
 export const ACCOUNT_SETUP_MISSING_FIELDS: AccountSetupMissing[] = [
   "display_name",
+  "handle",
   "avatar",
   "inference_provider",
   "agent_name",
@@ -50,16 +54,17 @@ function hasText(value: unknown): boolean {
 }
 
 export function getAccountSetupIdentityMissingFields(
-  input: Pick<AccountSetupStatusInput, "displayName" | "avatarUrl" | "avatarStorageId">,
+  input: Pick<AccountSetupStatusInput, "displayName" | "handle" | "avatarUrl" | "avatarStorageId">,
 ): AccountSetupMissing[] {
   const missing: AccountSetupMissing[] = [];
   if (!hasText(input.displayName)) missing.push("display_name");
+  if (!validateProfileHandle(input.handle).ok) missing.push("handle");
   if (!hasText(input.avatarUrl) && !hasText(input.avatarStorageId)) missing.push("avatar");
   return missing;
 }
 
 export function isAccountSetupIdentityComplete(
-  input: Pick<AccountSetupStatusInput, "displayName" | "avatarUrl" | "avatarStorageId">,
+  input: Pick<AccountSetupStatusInput, "displayName" | "handle" | "avatarUrl" | "avatarStorageId">,
 ): boolean {
   return getAccountSetupIdentityMissingFields(input).length === 0;
 }
@@ -93,7 +98,7 @@ export function buildAccountSetupStatus(input: AccountSetupStatusInput): Account
   if (!hasText(input.agentName)) agentMissing.push("agent_name");
 
   const steps = [
-    buildStepStatus("identity", identityMissing, 2),
+    buildStepStatus("identity", identityMissing, 3),
     buildStepStatus("inference", inferenceMissing, 1),
     buildStepStatus("agent", agentMissing, 1),
     buildStepStatus("direction", [], 0),

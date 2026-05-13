@@ -41,6 +41,7 @@ for (const marker of [
   '"agent"',
   '"direction"',
   '"display_name"',
+  '"handle"',
   '"avatar"',
   '"inference_provider"',
   '"agent_name"',
@@ -48,7 +49,8 @@ for (const marker of [
   assert.ok(accountSetup.includes(marker), `account setup model missing ${marker}`);
 }
 assert.match(accountSetup, /export function buildAccountSetupStatus/, "setup completion must be derived by one helper");
-assert.doesNotMatch(accountSetup, /identityMissing\.push\("handle"\)/, "profile setup must not require handle");
+assert.match(accountSetup, /validateProfileHandle\(input\.handle\)\.ok/, "profile setup handle completion must use the canonical validator");
+assert.match(accountSetup, /missing\.push\("handle"\)/, "profile setup must require handle");
 assert.doesNotMatch(accountSetup, /identityMissing\.push\("bio"\)/, "profile setup must not require bio");
 assert.doesNotMatch(accountSetup, /agentMissing\.push\("agent_soul"\)/, "agent setup must not require soul text");
 assert.doesNotMatch(accountSetup, /directionMissing/, "path selection must not gate account setup completion");
@@ -61,8 +63,11 @@ assert.match(profiles, /export const getMyAccountSetupStatus = query/, "profiles
 assert.match(profiles, /loadAccountSetupStatusForUser/, "profiles must use the shared Convex setup derivation helper");
 assert.match(profiles, /assertProfileAvatarStorageResolvable/, "profile avatar storage must be validated before save");
 assert.match(profiles, /profile_avatar_invalid/, "invalid profile avatar storage must fail with a stable error code");
+assert.doesNotMatch(profiles, /hasEstablishedAccountEvidence/, "legacy account evidence must not mark onboarding complete");
 assert.match(accountSetupCore, /buildAccountSetupStatusForRows/, "Convex setup derivation must support bulk operator attribution");
 assert.match(accountSetupCore, /displayName: params\.detail\?\.displayName \?\? null/, "profile completion must use first-party profile detail display name");
+assert.match(accountSetupCore, /handle: params\.user\.handle \?\? null/, "bulk setup completion must require the first-party account handle");
+assert.match(accountSetupCore, /handle: user\?\.handle \?\? null/, "write guard setup completion must require the first-party account handle");
 assert.match(accountSetupCore, /avatarUrl: params\.detail\?\.avatarUrl \?\? null/, "profile completion must use first-party profile detail avatar");
 assert.match(accountSetupCore, /avatarStorageId: params\.detail\?\.avatarStorageId/, "profile completion must support storage-backed avatars");
 assert.doesNotMatch(accountSetupCore, /displayName: params\.user\.displayName/, "auth-seeded display name must not complete account setup");
@@ -83,6 +88,7 @@ assert.match(profileGateway, /account_setup\?: AccountSetupStatus \| null/, "pro
 assert.match(profileGateway, /profiles:getMyAccountSetupStatus/, "profile gateway must load setup status");
 assert.match(profileGateway, /profiles:checkHandleAvailability/, "profile gateway must expose handle availability");
 assert.match(profileGateway, /onboardingDirection\?: "build_community"/, "profile gateway must save onboarding direction");
+assert.match(profileGateway, /markOnboardingDismissed\?: boolean/, "profile gateway may dismiss onboarding without redefining setup completion");
 assert.match(profileGateway, /prepareCloudProfileAvatarField/, "profile gateway must upload first-party avatar files");
 
 assert.match(settingsGateway, /agent_name\?: unknown/, "settings gateway must load agent_name");
@@ -94,7 +100,7 @@ assert.match(communityTypes, /account_setup\?: AccountSetupStatus \| null/, "pro
 assert.match(onboardingPage, /accountSetupStatus: AccountSetupStatus \| null/, "onboarding UI must consume canonical setup status");
 assert.match(onboardingPage, /handleAvailability: ProfileHandleAvailability \| null/, "onboarding profile step should show handle availability");
 assert.match(onboardingPage, /<span>Bio<\/span>/, "onboarding profile step should expose bio");
-assert.doesNotMatch(onboardingPage, /profileHandleHint|polynet-onboarding-handle-field|step === "identity" && !.*handle/, "onboarding profile step must not require handle");
+assert.match(onboardingPage, /handleReady[\s\S]*?profileReady[\s\S]*?handleReady/, "onboarding profile step must require an available handle");
 assert.match(onboardingPage, /onConnectChatgpt/, "onboarding inference step must reuse ChatGPT provider flow");
 assert.match(onboardingPage, /onConnectOpenAi/, "onboarding inference step must reuse OpenAI provider flow");
 assert.match(onboardingPage, /Use your Plus or Pro plan limits/, "onboarding inference choice should clearly name ChatGPT plan limits");

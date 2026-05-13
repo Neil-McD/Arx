@@ -16,6 +16,7 @@ const communitySurfaceProjection = read("apps/web/src/controllers/buildWebCommun
 const communityUiController = read("apps/web/src/controllers/useWebCommunityUiController.ts");
 const communityChatPanel = read("apps/web/src/components/WebCommunityChatPanel.tsx");
 const appMainSurfaceHost = read("apps/web/src/components/WebAppMainSurfaceHost.tsx");
+const profiles = read("convex/profiles.ts");
 
 assert.match(
   accountSetup,
@@ -37,6 +38,11 @@ assert.match(
   /const identityMissing = getAccountSetupIdentityMissingFields\(input\);/,
   "overall account setup status must use the same identity missing-field logic",
 );
+assert.match(
+  accountSetup,
+  /if \(!validateProfileHandle\(input\.handle\)\.ok\) missing\.push\("handle"\);/,
+  "identity setup must require a valid public handle",
+);
 
 assert.match(
   accountSetupCore,
@@ -47,6 +53,11 @@ assert.match(
   accountSetupCore,
   /\.query\("userProfileDetails"\)/,
   "profile setup guard must use first-party profile details, not auth fallbacks",
+);
+assert.match(
+  accountSetupCore,
+  /handle: user\?\.handle \?\? null/,
+  "profile setup guard must require the first-party account handle",
 );
 assert.match(
   accountSetupCore,
@@ -113,14 +124,29 @@ assert.match(
   "community message server errors must map to profile setup copy",
 );
 assert.match(
-  app,
-  /isProfileSetupKnownIncompleteForPublicActions[\s\S]*?effectiveAccountSetupStatus[\s\S]*?!isAccountSetupStatusIdentityComplete\(effectiveAccountSetupStatus\)/,
-  "app must block public actions only when AccountSetupStatus is known incomplete",
+  useCommunityChatMutationController,
+  /onProfileSetupRequired\?: \(\) => void;/,
+  "community message controller must be able to open profile setup",
+);
+assert.doesNotMatch(
+  profiles,
+  /hasEstablishedAccountEvidence/,
+  "legacy account activity must not auto-complete profile setup or onboarding",
 );
 assert.match(
   app,
-  /beforeSendValidate: async \(\) => \{[\s\S]*?!isProfileSetupCompleteForPublicActions[\s\S]*?Finish your profile before posting in communities/,
+  /const isProfileSetupCompleteForPublicActions =[\s\S]*?!session \|\| Boolean\(effectiveAccountSetupStatus && isAccountSetupStatusIdentityComplete\(effectiveAccountSetupStatus\)\)/,
+  "app must keep public actions blocked while signed-in setup status is unknown",
+);
+assert.match(
+  app,
+  /beforeSendValidate: async \(\) => \{[\s\S]*?!isProfileSetupCompleteForPublicActions[\s\S]*?openProfileSetup\(\);[\s\S]*?Finish your profile before posting in communities/,
   "community message sends must preflight profile setup before optimistic insert",
+);
+assert.match(
+  app,
+  /onProfileSetupRequired: openProfileSetup/,
+  "community message backend profile rejections must open profile setup",
 );
 assert.match(
   app,

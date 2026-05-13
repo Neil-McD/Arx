@@ -47,6 +47,7 @@ const OPERATOR_INSIGHT_TABS: Array<{ id: OperatorInsightTab; label: string }> = 
 const OPERATOR_ACCOUNT_SETUP_STEP_ORDER = ["identity", "inference", "agent", "complete"] as const;
 const OPERATOR_ACCOUNT_SETUP_MISSING_ORDER = [
   "display_name",
+  "handle",
   "avatar",
   "inference_provider",
   "agent_name",
@@ -364,6 +365,8 @@ function formatAccountSetupMissing(value: OperatorAccountSetupUserRecord["setup"
   switch (value) {
     case "display_name":
       return "Name";
+    case "handle":
+      return "Handle";
     case "avatar":
       return "Avatar";
     case "inference_provider":

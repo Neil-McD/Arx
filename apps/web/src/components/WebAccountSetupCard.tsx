@@ -10,9 +10,14 @@ function formatSetupCardDescription(status: AccountSetupStatus): string {
   if (status.completed) return "Account setup complete.";
   if (status.current_step === "identity") {
     const needsName = status.missing.includes("display_name");
+    const needsHandle = status.missing.includes("handle");
     const needsAvatar = status.missing.includes("avatar");
+    if (needsName && needsHandle && needsAvatar) return "Add your name, handle, and profile image.";
+    if (needsName && needsHandle) return "Add your name and handle.";
     if (needsName && needsAvatar) return "Add your name and profile image.";
+    if (needsHandle && needsAvatar) return "Choose your handle and add your profile image.";
     if (needsName) return "Add your name.";
+    if (needsHandle) return "Choose your handle.";
     if (needsAvatar) return "Add your profile image.";
     return "Finish your profile.";
   }
