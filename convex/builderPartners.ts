@@ -90,7 +90,7 @@ function normalizePartnerCodeBase(user: any): string {
   if (displayName.length >= 3) return displayName;
   const emailPrefix = normalizeReferralCode(String(user?.email ?? "").split("@")[0]);
   if (emailPrefix.length >= 3) return emailPrefix;
-  return "builder";
+  return "partner";
 }
 
 function buildPartnerLink(code: string): string {
@@ -508,7 +508,7 @@ async function codeIsAvailable(ctx: any, code: string, existingPartnerId?: any):
 }
 
 async function issuePartnerCode(ctx: any, user: any, existingPartnerId?: any): Promise<string> {
-  const base = normalizePartnerCodeBase(user).slice(0, 32).replace(/^-+|-+$/g, "") || "builder";
+  const base = normalizePartnerCodeBase(user).slice(0, 32).replace(/^-+|-+$/g, "") || "partner";
   if (await codeIsAvailable(ctx, base, existingPartnerId)) return base;
 
   for (let attempt = 0; attempt < 8; attempt += 1) {

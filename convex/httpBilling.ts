@@ -68,66 +68,11 @@ async function recordStripeWebhookAudit(
   }
 }
 
-type BillingSubscriptionSyncInput = {
-  community_id?: unknown;
-  communityId?: unknown;
-  user_id?: unknown;
-  userId?: unknown;
-  status?: unknown;
-  price_point_id?: unknown;
-  pricePointId?: unknown;
-  provider_price_id?: unknown;
-  providerPriceId?: unknown;
-  provider_subscription_id?: unknown;
-  providerSubscriptionId?: unknown;
-  provider_customer_id?: unknown;
-  providerCustomerId?: unknown;
-  current_period_start_at?: unknown;
-  currentPeriodStartAt?: unknown;
-  current_period_end_at?: unknown;
-  currentPeriodEndAt?: unknown;
-  cancel_at_period_end?: unknown;
-  cancelAtPeriodEnd?: unknown;
-  now_ms?: unknown;
-  nowMs?: unknown;
-};
-
-function readEnv(name: string): string {
-  try {
-    const value = (globalThis as any)?.process?.env?.[name];
-    if (typeof value === "string" && value.trim()) return value.trim();
-  } catch {
-    // ignore
-  }
-  return "";
-}
-
 function parseOptionalString(value: unknown, maxLen = 300): string | null {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
   if (!trimmed) return null;
   return trimmed.slice(0, maxLen);
-}
-
-function parseOptionalBoolean(value: unknown): boolean | null {
-  if (typeof value === "boolean") return value;
-  if (typeof value !== "string") return null;
-  const normalized = value.trim().toLowerCase();
-  if (
-    normalized === "true" ||
-    normalized === "1" ||
-    normalized === "yes" ||
-    normalized === "on"
-  )
-    return true;
-  if (
-    normalized === "false" ||
-    normalized === "0" ||
-    normalized === "no" ||
-    normalized === "off"
-  )
-    return false;
-  return null;
 }
 
 function parseOptionalNumber(value: unknown): number | null {
@@ -136,29 +81,6 @@ function parseOptionalNumber(value: unknown): number | null {
   if (typeof value !== "string") return null;
   const parsed = Number(value.trim());
   return Number.isFinite(parsed) ? Math.floor(parsed) : null;
-}
-
-function safeEquals(a: string, b: string): boolean {
-  const aBytes = new TextEncoder().encode(a);
-  const bBytes = new TextEncoder().encode(b);
-  if (aBytes.length !== bBytes.length) return false;
-  let diff = 0;
-  for (let index = 0; index < aBytes.length; index += 1) {
-    diff |= aBytes[index]! ^ bBytes[index]!;
-  }
-  return diff === 0;
-}
-
-function readSyncSecret(req: Request): string | null {
-  const bearer = String(req.headers.get("authorization") ?? "").trim();
-  if (bearer.toLowerCase().startsWith("bearer ")) {
-    const token = bearer.slice(7).trim();
-    if (token) return token;
-  }
-  const headerSecret = String(
-    req.headers.get("x-arx-billing-sync-secret") ?? "",
-  ).trim();
-  return headerSecret || null;
 }
 
 function readStripeSignature(req: Request): string | null {
@@ -278,12 +200,17 @@ function readStripeDisputeEvidence(dispute: Stripe.Dispute): {
   };
 }
 
+function stripeResourceMissing(error: any): boolean {
+  return error?.statusCode === 404 || error?.code === "resource_missing";
+}
+
 async function retrieveStripeChargeForEvidence(chargeId: string | null): Promise<Stripe.Charge | null> {
   if (!chargeId) return null;
   try {
     return await getStripeClient().charges.retrieve(chargeId);
-  } catch {
-    return null;
+  } catch (error: any) {
+    if (stripeResourceMissing(error)) return null;
+    throw error;
   }
 }
 
@@ -291,8 +218,9 @@ async function retrieveStripeInvoiceForEvidence(invoiceId: string | null): Promi
   if (!invoiceId) return null;
   try {
     return await getStripeClient().invoices.retrieve(invoiceId);
-  } catch {
-    return null;
+  } catch (error: any) {
+    if (stripeResourceMissing(error)) return null;
+    throw error;
   }
 }
 
@@ -337,132 +265,212 @@ function readStripePaymentReady(raw: unknown): boolean {
   return paymentStatus === "paid" || paymentStatus === "no_payment_required";
 }
 
+function readStripeEventCreatedAtMs(event: Stripe.Event): number {
+  return Number(event.created ?? 0) > 0 ? Number(event.created) * 1000 : Date.now();
+}
+
+function toIsoStringOrUndefined(ms: number | null): string | undefined {
+  return typeof ms === "number" && Number.isFinite(ms)
+    ? new Date(ms).toISOString()
+    : undefined;
+}
+
+function stripeRefundFullyRefundsCharge(refund: Stripe.Refund, charge: Stripe.Charge | null): boolean {
+  const chargeAmount = Number(charge?.amount ?? 0);
+  if (!Number.isFinite(chargeAmount) || chargeAmount <= 0) return false;
+  const totalRefunded = Number((charge as any)?.amount_refunded ?? 0);
+  if (Number.isFinite(totalRefunded) && totalRefunded >= chargeAmount) return true;
+  const refundAmount = Number(refund.amount ?? 0);
+  return Number.isFinite(refundAmount) && refundAmount >= chargeAmount;
+}
+
+async function retrieveStripeSubscriptionForEvidence(
+  subscriptionId: string | null,
+): Promise<Stripe.Subscription | null> {
+  const normalized = String(subscriptionId ?? "").trim();
+  if (!normalized) return null;
+  try {
+    return await getStripeClient().subscriptions.retrieve(normalized);
+  } catch (error: any) {
+    if (stripeResourceMissing(error)) return null;
+    throw error;
+  }
+}
+
+async function resolveStripeSubscriptionIdFromCharge(
+  charge: Stripe.Charge | null,
+): Promise<string | null> {
+  const invoiceId = readStripeObjectId((charge as any)?.invoice);
+  if (!invoiceId) return null;
+  const invoice = await retrieveStripeInvoiceForEvidence(invoiceId);
+  return invoice ? readStripeInvoiceSubscriptionId(invoice) : null;
+}
+
+async function syncCommunitySubscriptionFromStripeSubscription(
+  ctx: any,
+  event: Stripe.Event,
+  subscription: Stripe.Subscription | null,
+  options?: {
+    preserveRiskRevocation?: boolean;
+  },
+): Promise<Record<string, unknown>> {
+  const providerSubscriptionId = String(subscription?.id ?? "").trim();
+  if (!subscription || !providerSubscriptionId) {
+    return { ok: true, ignored: true, reason: "stripe_subscription_missing" };
+  }
+  const existingCommunitySubscription = await ctx.runQuery(
+    internal.communityCommerce
+      .getCommunitySubscriptionByProviderSubscriptionIdInternal as any,
+    {
+      providerSubscriptionId,
+    },
+  );
+  if (!existingCommunitySubscription?.communityId || !existingCommunitySubscription?.userId) {
+    return { ok: true, ignored: true, reason: "community_subscription_not_found" };
+  }
+  const providerPriceId = subscription.items.data[0]?.price?.id ?? null;
+  const { cycleStartedAt, cycleEndsAt } = readStripeSubscriptionCycle(subscription);
+  const normalizedCommunityStatus = normalizeStripeCommunitySubscriptionStatus({
+    subscriptionStatus: subscription.status,
+    cancelAtPeriodEnd: (subscription as any)?.cancel_at_period_end,
+  });
+  await ctx.runMutation(
+    internal.billing.syncCommunitySubscriptionLifecycleInternal as any,
+    {
+      communityId: existingCommunitySubscription.communityId,
+      userId: existingCommunitySubscription.userId,
+      source: "stripe",
+      pricePointId: existingCommunitySubscription.pricePointId ?? undefined,
+      providerPriceId,
+      providerSubscriptionId,
+      providerCustomerId:
+        typeof subscription.customer === "string" ? subscription.customer : null,
+      status: normalizedCommunityStatus,
+      currentPeriodStartIso: toIsoStringOrUndefined(cycleStartedAt),
+      currentPeriodEndIso: toIsoStringOrUndefined(cycleEndsAt),
+      cancelAtPeriodEnd: Boolean((subscription as any)?.cancel_at_period_end),
+      preserveRiskRevocation: options?.preserveRiskRevocation === true,
+      nowMs: readStripeEventCreatedAtMs(event),
+    },
+  );
+  return {
+    ok: true,
+    subscription_status: normalizedCommunityStatus,
+    provider_subscription_id: providerSubscriptionId,
+  };
+}
+
+async function syncCommunitySubscriptionRiskStatus(
+  ctx: any,
+  event: Stripe.Event,
+  args: {
+    providerSubscriptionId: string | null;
+    status: "active" | "past_due" | "cancel_at_period_end" | "canceled" | "ended";
+    revokedReason: string;
+  },
+): Promise<Record<string, unknown>> {
+  const providerSubscriptionId = String(args.providerSubscriptionId ?? "").trim();
+  if (!providerSubscriptionId) {
+    return { ok: true, ignored: true, reason: "community_subscription_id_missing" };
+  }
+  const existingCommunitySubscription = await ctx.runQuery(
+    internal.communityCommerce
+      .getCommunitySubscriptionByProviderSubscriptionIdInternal as any,
+    {
+      providerSubscriptionId,
+    },
+  );
+  if (!existingCommunitySubscription?.communityId || !existingCommunitySubscription?.userId) {
+    return { ok: true, ignored: true, reason: "community_subscription_not_found" };
+  }
+  await ctx.runMutation(
+    internal.billing.syncCommunitySubscriptionLifecycleInternal as any,
+    {
+      communityId: existingCommunitySubscription.communityId,
+      userId: existingCommunitySubscription.userId,
+      source: "stripe",
+      pricePointId: existingCommunitySubscription.pricePointId ?? undefined,
+      providerSubscriptionId,
+      status: args.status,
+      revokedReason: args.revokedReason,
+      nowMs: readStripeEventCreatedAtMs(event),
+    },
+  );
+  return {
+    ok: true,
+    provider_subscription_id: providerSubscriptionId,
+    subscription_status: args.status,
+    revoked_reason: args.revokedReason,
+  };
+}
+
+async function syncCommunityAccessForRefund(
+  ctx: any,
+  event: Stripe.Event,
+  args: {
+    refund: Stripe.Refund;
+    charge: Stripe.Charge | null;
+  },
+): Promise<Record<string, unknown>> {
+  if (!args.charge) return { ok: true, ignored: true, reason: "refund_charge_missing" };
+  const providerSubscriptionId = await resolveStripeSubscriptionIdFromCharge(args.charge);
+  if (!stripeRefundFullyRefundsCharge(args.refund, args.charge)) {
+    return {
+      ok: true,
+      ignored: true,
+      reason: "partial_refund_access_retained",
+      provider_subscription_id: providerSubscriptionId,
+    };
+  }
+  return await syncCommunitySubscriptionRiskStatus(ctx, event, {
+    providerSubscriptionId,
+    status: "ended",
+    revokedReason: "subscription_refunded",
+  });
+}
+
+async function syncCommunityAccessForDispute(
+  ctx: any,
+  event: Stripe.Event,
+  args: {
+    charge: Stripe.Charge | null;
+    outcome: "opened" | "won" | "lost" | "funds_reinstated" | "unknown";
+  },
+): Promise<Record<string, unknown>> {
+  const providerSubscriptionId = await resolveStripeSubscriptionIdFromCharge(args.charge);
+  if (!providerSubscriptionId) {
+    return { ok: true, ignored: true, reason: "dispute_subscription_missing" };
+  }
+  if (args.outcome === "opened") {
+    return await syncCommunitySubscriptionRiskStatus(ctx, event, {
+      providerSubscriptionId,
+      status: "ended",
+      revokedReason: "subscription_dispute_opened",
+    });
+  }
+  if (args.outcome === "lost") {
+    return await syncCommunitySubscriptionRiskStatus(ctx, event, {
+      providerSubscriptionId,
+      status: "ended",
+      revokedReason: "subscription_dispute_lost",
+    });
+  }
+  if (args.outcome === "won" || args.outcome === "funds_reinstated") {
+    const subscription = await retrieveStripeSubscriptionForEvidence(providerSubscriptionId);
+    return await syncCommunitySubscriptionFromStripeSubscription(ctx, event, subscription);
+  }
+  return {
+    ok: true,
+    ignored: true,
+    reason: "dispute_outcome_unknown",
+    provider_subscription_id: providerSubscriptionId,
+  };
+}
+
 export function registerRuntimeBillingRoutes(
   args: RegisterRuntimeBillingRoutesArgs,
 ): void {
-  const { http, httpAction, jsonResponse, optionsResponse } = args;
-
-  http.route({
-    path: "/billing/community_subscription_sync",
-    method: "OPTIONS",
-    handler: httpAction(async (_ctx, req) => optionsResponse(req)),
-  });
-
-  http.route({
-    path: "/billing/community_subscription_sync",
-    method: "POST",
-    handler: httpAction(async (ctx, req) => {
-      const requestPath = new URL(req.url).pathname;
-      const configuredSecret = readEnv("ARX_BILLING_SYNC_SECRET");
-      if (!configuredSecret) {
-        return jsonResponse(req, 503, {
-          ok: false,
-          code: "billing_sync_not_configured",
-          error: "billing_sync_not_configured",
-          message: "Billing sync secret is not configured.",
-        });
-      }
-
-      const providedSecret = readSyncSecret(req);
-      if (!providedSecret || !safeEquals(configuredSecret, providedSecret)) {
-        return jsonResponse(req, 401, {
-          ok: false,
-          code: "billing_sync_forbidden",
-          error: "billing_sync_forbidden",
-          message: "Billing sync request is not authorized.",
-        });
-      }
-
-      let input: BillingSubscriptionSyncInput = {};
-      try {
-        input = (await req.json()) as BillingSubscriptionSyncInput;
-      } catch {
-        input = {};
-      }
-
-      const communityId = parseOptionalString(
-        input.community_id ?? input.communityId,
-        200,
-      );
-      const userId = parseOptionalString(input.user_id ?? input.userId, 200);
-      const status = parseOptionalString(input.status, 120);
-      if (!communityId || !userId || !status) {
-        return jsonResponse(req, 400, {
-          ok: false,
-          code: "billing_sync_invalid_payload",
-          error: "billing_sync_invalid_payload",
-          message: "community_id, user_id, and status are required.",
-        });
-      }
-
-      try {
-        const result = await (ctx as any).runMutation(
-          internal.billing.syncCommunitySubscriptionLifecycleInternal as any,
-          {
-            communityId,
-            userId,
-            source: "external_sync",
-            status,
-            pricePointId:
-              parseOptionalString(
-                input.price_point_id ?? input.pricePointId,
-                200,
-              ) ?? undefined,
-            providerPriceId:
-              parseOptionalString(
-                input.provider_price_id ?? input.providerPriceId,
-                200,
-              ) ?? undefined,
-            providerSubscriptionId:
-              parseOptionalString(
-                input.provider_subscription_id ?? input.providerSubscriptionId,
-                300,
-              ) ?? undefined,
-            providerCustomerId:
-              parseOptionalString(
-                input.provider_customer_id ?? input.providerCustomerId,
-                300,
-              ) ?? undefined,
-            currentPeriodStartIso:
-              parseOptionalString(
-                input.current_period_start_at ?? input.currentPeriodStartAt,
-                120,
-              ) ?? undefined,
-            currentPeriodEndIso:
-              parseOptionalString(
-                input.current_period_end_at ?? input.currentPeriodEndAt,
-                120,
-              ) ?? undefined,
-            cancelAtPeriodEnd:
-              parseOptionalBoolean(
-                input.cancel_at_period_end ?? input.cancelAtPeriodEnd,
-              ) ?? undefined,
-            nowMs:
-              parseOptionalNumber(input.now_ms ?? input.nowMs) ?? undefined,
-          },
-        );
-        return jsonResponse(req, 200, {
-          ok: true,
-          result,
-        });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        logStructuredError("billing_sync_failed", {
-          error,
-          requestPath,
-          communityId,
-          userId,
-          subscriptionStatus: status,
-        });
-        return jsonResponse(req, 400, {
-          ok: false,
-          code: message || "billing_sync_failed",
-          error: message || "billing_sync_failed",
-          message: message || "Billing sync failed.",
-        });
-      }
-    }),
-  });
+  const { http, httpAction, jsonResponse } = args;
 
   http.route({
     path: "/billing/stripe_webhook",
@@ -728,7 +736,13 @@ export function registerRuntimeBillingRoutes(
             }, "ignored");
           }
           const invoiceEvidence = readStripeInvoiceEvidence(invoice);
-          const result = await (ctx as any).runMutation(
+          const subscription = await retrieveStripeSubscriptionForEvidence(providerSubscriptionId);
+          const communityLifecycleResult = await syncCommunitySubscriptionFromStripeSubscription(
+            ctx,
+            event,
+            subscription,
+          );
+          const partnerCommissionResult = await (ctx as any).runMutation(
             internal.builderPartners
               .recordCommunitySubscriptionInvoicePartnerCommissionInternal as any,
             {
@@ -750,7 +764,37 @@ export function registerRuntimeBillingRoutes(
             ok: true,
             received: true,
             event: event.type,
-            result,
+            communityLifecycleResult,
+            partnerCommissionResult,
+          });
+        }
+
+        if (event.type === "invoice.payment_failed") {
+          const invoice = event.data.object as Stripe.Invoice;
+          const providerSubscriptionId = readStripeInvoiceSubscriptionId(invoice);
+          if (!providerSubscriptionId) {
+            return processedResponse({
+              ok: true,
+              ignored: true,
+              event: event.type,
+              reason: "invoice_subscription_missing",
+            }, "ignored");
+          }
+          const subscription = await retrieveStripeSubscriptionForEvidence(providerSubscriptionId);
+          const communityLifecycleResult = subscription
+            ? await syncCommunitySubscriptionFromStripeSubscription(ctx, event, subscription, {
+              preserveRiskRevocation: true,
+            })
+            : await syncCommunitySubscriptionRiskStatus(ctx, event, {
+              providerSubscriptionId,
+              status: "past_due",
+              revokedReason: "subscription_payment_failed",
+            });
+          return processedResponse({
+            ok: true,
+            received: true,
+            event: event.type,
+            communityLifecycleResult,
           });
         }
 
@@ -760,13 +804,33 @@ export function registerRuntimeBillingRoutes(
           event.type === "refund.failed"
         ) {
           const refund = event.data.object as Stripe.Refund;
-          if (event.type === "refund.failed") {
+          const refundStatus = String((refund as any)?.status ?? "")
+            .trim()
+            .toLowerCase();
+          if (
+            event.type === "refund.failed" ||
+            refundStatus === "failed" ||
+            refundStatus === "canceled"
+          ) {
+            const refundEvidence = readStripeRefundEvidence(refund);
+            const charge = await retrieveStripeChargeForEvidence(
+              refundEvidence.sourceProviderChargeId,
+            );
+            const providerSubscriptionId = await resolveStripeSubscriptionIdFromCharge(charge);
+            const subscription = await retrieveStripeSubscriptionForEvidence(providerSubscriptionId);
+            const communityAccessResult = await syncCommunitySubscriptionFromStripeSubscription(
+              ctx,
+              event,
+              subscription,
+              { preserveRiskRevocation: true },
+            );
             return processedResponse({
               ok: true,
-              ignored: true,
+              received: true,
               event: event.type,
               reason: "refund_failed_no_reversal",
-            }, "ignored");
+              communityAccessResult,
+            });
           }
           const refundEvidence = readStripeRefundEvidence(refund);
           if (!refundEvidence.sourceProviderRefundId) {
@@ -781,7 +845,7 @@ export function registerRuntimeBillingRoutes(
             refundEvidence.sourceProviderChargeId,
           );
           const chargeEvidence = charge ? readStripeChargeEvidence(charge) : null;
-          const result = await (ctx as any).runMutation(
+          const partnerAdjustmentResult = await (ctx as any).runMutation(
             internal.builderPartners
               .recordPartnerCommissionRefundAdjustmentInternal as any,
             {
@@ -806,14 +870,19 @@ export function registerRuntimeBillingRoutes(
               nowMs:
                 Number(event.created ?? 0) > 0
                   ? Number(event.created) * 1000
-                  : Date.now(),
+                : Date.now(),
             },
           );
+          const communityAccessResult = await syncCommunityAccessForRefund(ctx, event, {
+            refund,
+            charge,
+          });
           return processedResponse({
             ok: true,
             received: true,
             event: event.type,
-            result,
+            partnerAdjustmentResult,
+            communityAccessResult,
           });
         }
 
@@ -835,7 +904,7 @@ export function registerRuntimeBillingRoutes(
           const results = [];
           for (const refund of refunds) {
             const refundEvidence = readStripeRefundEvidence(refund);
-            const result = await (ctx as any).runMutation(
+            const partnerAdjustmentResult = await (ctx as any).runMutation(
               internal.builderPartners
                 .recordPartnerCommissionRefundAdjustmentInternal as any,
               {
@@ -861,10 +930,17 @@ export function registerRuntimeBillingRoutes(
                 nowMs:
                   Number(event.created ?? 0) > 0
                     ? Number(event.created) * 1000
-                    : Date.now(),
+                  : Date.now(),
               },
             );
-            results.push(result);
+            const communityAccessResult = await syncCommunityAccessForRefund(ctx, event, {
+              refund,
+              charge,
+            });
+            results.push({
+              partnerAdjustmentResult,
+              communityAccessResult,
+            });
           }
           return processedResponse({
             ok: true,
@@ -894,7 +970,7 @@ export function registerRuntimeBillingRoutes(
           );
           const chargeEvidence = charge ? readStripeChargeEvidence(charge) : null;
           if (event.type === "charge.dispute.created") {
-            const result = await (ctx as any).runMutation(
+            const partnerAdjustmentResult = await (ctx as any).runMutation(
               internal.builderPartners
                 .recordPartnerCommissionDisputeOpenedInternal as any,
               {
@@ -919,14 +995,19 @@ export function registerRuntimeBillingRoutes(
                 nowMs:
                   Number(event.created ?? 0) > 0
                     ? Number(event.created) * 1000
-                    : Date.now(),
+                  : Date.now(),
               },
             );
+            const communityAccessResult = await syncCommunityAccessForDispute(ctx, event, {
+              charge,
+              outcome: "opened",
+            });
             return processedResponse({
               ok: true,
               received: true,
               event: event.type,
-              result,
+              partnerAdjustmentResult,
+              communityAccessResult,
             });
           }
           const disputeStatus = String(dispute.status ?? "").trim().toLowerCase();
@@ -938,7 +1019,7 @@ export function registerRuntimeBillingRoutes(
                 : disputeStatus === "lost"
                   ? "lost"
                   : "unknown";
-          const result = await (ctx as any).runMutation(
+          const partnerAdjustmentResult = await (ctx as any).runMutation(
             internal.builderPartners
               .recordPartnerCommissionDisputeClosedInternal as any,
             {
@@ -964,14 +1045,19 @@ export function registerRuntimeBillingRoutes(
               nowMs:
                 Number(event.created ?? 0) > 0
                   ? Number(event.created) * 1000
-                  : Date.now(),
+                : Date.now(),
             },
           );
+          const communityAccessResult = await syncCommunityAccessForDispute(ctx, event, {
+            charge,
+            outcome,
+          });
           return processedResponse({
             ok: true,
             received: true,
             event: event.type,
-            result,
+            partnerAdjustmentResult,
+            communityAccessResult,
           });
         }
 
@@ -1024,54 +1110,25 @@ export function registerRuntimeBillingRoutes(
               );
             }
           }
-          const existingCommunitySubscription = await (ctx as any).runQuery(
-            internal.communityCommerce
-              .getCommunitySubscriptionByProviderSubscriptionIdInternal as any,
-            {
-              providerSubscriptionId: subscription.id,
-            },
+          const communityLifecycleResult = await syncCommunitySubscriptionFromStripeSubscription(
+            ctx,
+            event,
+            subscription,
+            { preserveRiskRevocation: true },
           );
-          if (existingCommunitySubscription?.communityId && existingCommunitySubscription?.userId) {
-            await (ctx as any).runMutation(
-              internal.billing.syncCommunitySubscriptionLifecycleInternal as any,
-              {
-                communityId: existingCommunitySubscription.communityId,
-                userId: existingCommunitySubscription.userId,
-                source: "stripe",
-                pricePointId: existingCommunitySubscription.pricePointId ?? undefined,
-                providerPriceId,
-                providerSubscriptionId: subscription.id,
-                providerCustomerId:
-                  typeof subscription.customer === "string"
-                    ? subscription.customer
-                    : null,
-                status: normalizedCommunityStatus,
-                currentPeriodStartIso:
-                  typeof cycleStartedAt === "number"
-                    ? new Date(cycleStartedAt).toISOString()
-                    : undefined,
-                currentPeriodEndIso:
-                  typeof cycleEndsAt === "number"
-                    ? new Date(cycleEndsAt).toISOString()
-                    : undefined,
-                cancelAtPeriodEnd: Boolean((subscription as any)?.cancel_at_period_end),
-                nowMs:
-                  Number(event.created ?? 0) > 0
-                    ? Number(event.created) * 1000
-                    : Date.now(),
-              },
-            );
+          if (!communityLifecycleResult.ignored) {
             return processedResponse({
               ok: true,
               received: true,
               event: event.type,
+              communityLifecycleResult,
             });
           }
           return processedResponse({
             ok: true,
             ignored: true,
             event: event.type,
-            reason: "community_subscription_not_found",
+            reason: communityLifecycleResult.reason ?? "community_subscription_not_found",
           }, "ignored");
         }
 

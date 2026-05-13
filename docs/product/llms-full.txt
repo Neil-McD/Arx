@@ -2202,9 +2202,13 @@ This is the product value loop: the builder packages expertise into a community 
 
 The current default platform fee for free-account community revenue is 15%. Legacy paid creator billing does not create or renew platform-plan access.
 
+Community creator revenue uses Stripe Connect subscriptions, not a Polynet-managed creator payout ledger. Stripe routes the creator share to the connected account, Polynet keeps the configured application fee, and Stripe Connect remains the payout/KYC/compliance authority. The affiliate-style 30-day risk hold and 14-day payout buffer apply to Builder Partner commissions, not to ordinary community creator revenue.
+
+Community member access follows provider-backed subscription truth. Recurring invoice success refreshes the active subscription window. Payment failure follows Stripe subscription lifecycle state, usually a `past_due` grace state before terminal revocation. Full refunds revoke paid community access immediately. Partial refunds retain access unless subscription state later changes. Failed or canceled refunds restore from current Stripe subscription truth. Disputes and chargebacks suspend access when opened, remain revoked when lost, and restore only when Stripe shows a valid subscription after a win or funds reinstatement.
+
 Paid-tool usage is priced through tool balance. Workspace tool usage targets 60% gross margin by charging roughly 2.5x estimated vendor compute cost, then settling actual usage and refunding unused reservations. Web research and voice input use simple alpha tariffs with centralized vendor-cost estimates, and should still write tool, vendor, Polynet price, raw cost estimate, and settlement evidence into the internal credit ledger.
 
-Builder Partner commissions should not become payable from gross promises alone. Community-revenue commissions need provider invoice, payment, or charge evidence, and refunds or disputes must create explicit partner commission adjustments before payout execution. Commissions carry a 30-day risk hold before becoming payable, then must clear a 14-day payout review buffer before batch inclusion. There is no public minimum payout threshold; timing and operator review control settlement eligibility. Partner payout settlement runs through manual operator-reviewed batches: buffered payable commission rows are reserved into payout items, settlement amounts are normalized to cents, batches are revalidated before approval and execution, Stripe Connect transfers are idempotent, and items become settled only after transfer creation succeeds.
+Builder Partner commissions should not become payable from gross promises alone. Community-revenue commissions need provider invoice, payment, or charge evidence, and refunds or disputes must create explicit partner commission adjustments before payout execution. Commissions carry a 30-day risk hold before becoming payable, then must clear a 14-day payout review buffer before payout-cycle inclusion. There is no public minimum payout threshold; timing, risk checks, and approval policy control settlement eligibility. Partner payout settlement should run through system-generated monthly payout cycles: buffered payable commission rows are reserved into payout items, settlement amounts are normalized to cents, batches are revalidated before approval and execution, Stripe Connect transfers are idempotent, and items become settled only after transfer creation succeeds. Operators should only approve, hold, or reject generated payout cycles; they should not manually preview, create, or execute payout internals. Approval schedules transfer execution automatically. If a refund or dispute creates post-payout partner overpayment, the negative balance carries forward against later eligible partner commissions before any new transfer is allowed.
 
 ## Payout Readiness
 
@@ -2224,8 +2228,10 @@ Payout readiness does not grant community access. It determines whether the buil
 8. Paid access, management authority, and payout readiness are separate concepts.
 9. Tool balance, not a platform subscription, is the source of truth for paid tool access.
 10. Partner commission payouts must account for refunds, disputes, and chargeback outcomes before money movement.
-11. Partner payout batches must be operator-approved before Stripe transfer execution.
-12. Partner payout batches should include only payable commissions that have cleared the payout review buffer.
+11. Partner payout cycles must pass approval or clean auto-pay policy before Stripe transfer execution.
+12. Partner payout cycles should include only payable commissions that have cleared the payout review buffer.
+13. Community creator revenue stays Stripe-native unless Polynet intentionally changes to a held-funds payout architecture.
+14. Full refunds and opened disputes revoke or suspend paid community access through backend subscription lifecycle state.
 
 ## Common Mistakes
 
@@ -2236,6 +2242,7 @@ Payout readiness does not grant community access. It determines whether the buil
 - treating payout setup as proof that a member has access
 - letting a paid community launch with unclear payout readiness
 - treating pending partner commission as withdrawable before refund and dispute risk has cleared
+- applying Builder Partner payout holds to ordinary community creator revenue
 
 ## Related Concepts
 

@@ -72,6 +72,14 @@ function assertIncludes(haystack: string, needle: string, label: string) {
   assert.ok(haystack.includes(needle), `expected ${label} to include ${needle}`);
 }
 
+function assertNotIncludes(haystack: string, needle: string, label: string) {
+  assert.ok(!haystack.includes(needle), `expected ${label} not to include ${needle}`);
+}
+
+function assertMatches(haystack: string, pattern: RegExp, label: string) {
+  assert.ok(pattern.test(haystack), `expected ${label} to match ${pattern}`);
+}
+
 function subscriptionGrantsAccess(status: SubscriptionStatus | null | undefined): boolean {
   return status === "active" || status === "past_due" || status === "cancel_at_period_end";
 }
@@ -223,6 +231,8 @@ function syncLifecycle(args: {
   providerPricePointId?: string;
   pricePointId: string;
   status: SubscriptionStatus;
+  revokedReason?: string;
+  preserveRiskRevocation?: boolean;
   nowMs: number;
 }) {
   assert.equal(args.membership.accessSource, "paid_subscription");
@@ -250,10 +260,25 @@ function syncLifecycle(args: {
     });
   }
   const grantsAccess = subscriptionGrantsAccess(args.status);
+  const shouldPreserveRiskRevocation =
+    grantsAccess &&
+    args.preserveRiskRevocation === true &&
+    args.membership.active === false &&
+    (
+      args.membership.revokedReason === "subscription_refunded" ||
+      args.membership.revokedReason === "subscription_dispute_opened" ||
+      args.membership.revokedReason === "subscription_dispute_lost"
+    );
   args.membership.pricePointId = args.pricePointId;
-  args.membership.active = grantsAccess;
-  args.membership.revokedAt = grantsAccess ? undefined : args.nowMs;
-  args.membership.revokedReason = grantsAccess ? undefined : `subscription_${args.status}`;
+  args.membership.active = shouldPreserveRiskRevocation ? false : grantsAccess;
+  args.membership.revokedAt = shouldPreserveRiskRevocation
+    ? args.membership.revokedAt ?? args.nowMs
+    : grantsAccess ? undefined : args.nowMs;
+  args.membership.revokedReason = shouldPreserveRiskRevocation
+    ? args.membership.revokedReason
+    : grantsAccess
+    ? undefined
+    : args.revokedReason ?? `subscription_${args.status}`;
   args.membership.updatedAt = args.nowMs;
 }
 
@@ -380,6 +405,16 @@ function assertSourceAnchors() {
     'if (event.type === "checkout.session.completed")',
     "community checkout webhook entrypoint",
   );
+  assertNotIncludes(
+    httpBilling,
+    "/billing/community_subscription_sync",
+    "legacy external community subscription sync route is deleted",
+  );
+  assertNotIncludes(
+    httpBilling,
+    "ARX_BILLING_SYNC_SECRET",
+    "legacy external community subscription sync secret is deleted",
+  );
   assertIncludes(
     httpBilling,
     "syncPendingCommunityCheckoutSubscriptionInternal",
@@ -396,9 +431,94 @@ function assertSourceAnchors() {
     "subscription lifecycle webhook syncs access state",
   );
   assertIncludes(
+    httpBilling,
+    "syncCommunitySubscriptionFromStripeSubscription",
+    "Stripe subscription events use a shared community lifecycle sync helper",
+  );
+  assertIncludes(
+    httpBilling,
+    "function stripeResourceMissing",
+    "Stripe evidence retrieval distinguishes missing resources from transient failures",
+  );
+  assertMatches(
+    httpBilling,
+    /async function retrieveStripeChargeForEvidence[\s\S]*catch \(error: any\)[\s\S]*if \(stripeResourceMissing\(error\)\) return null;[\s\S]*throw error;/,
+    "charge evidence lookup retries transient Stripe failures",
+  );
+  assertMatches(
+    httpBilling,
+    /async function retrieveStripeInvoiceForEvidence[\s\S]*catch \(error: any\)[\s\S]*if \(stripeResourceMissing\(error\)\) return null;[\s\S]*throw error;/,
+    "invoice evidence lookup retries transient Stripe failures",
+  );
+  assertIncludes(
+    httpBilling,
+    'event.type === "invoice.payment_failed"',
+    "failed recurring invoices are wired into community subscription lifecycle",
+  );
+  assertIncludes(
+    httpBilling,
+    "syncCommunityAccessForRefund",
+    "refund events evaluate community access impact",
+  );
+  assertIncludes(
+    httpBilling,
+    "partial_refund_access_retained",
+    "partial refunds do not revoke community access",
+  );
+  assertIncludes(
+    httpBilling,
+    'refundStatus === "failed"',
+    "failed refund updates do not revoke community access",
+  );
+  assertIncludes(
+    httpBilling,
+    'refundStatus === "canceled"',
+    "canceled refund updates do not revoke community access",
+  );
+  assertMatches(
+    httpBilling,
+    /event\.type === "refund\.failed"[\s\S]*syncCommunitySubscriptionFromStripeSubscription\(\s*ctx,\s*event,\s*subscription,\s*\{\s*preserveRiskRevocation: true\s*\}/,
+    "failed or canceled refund restores preserve existing refund/dispute risk revocations",
+  );
+  assertIncludes(
+    httpBilling,
+    "subscription_refunded",
+    "full refunds have a distinct community access revocation reason",
+  );
+  assertIncludes(
+    httpBilling,
+    "syncCommunityAccessForDispute",
+    "dispute events evaluate community access impact",
+  );
+  assertIncludes(
+    httpBilling,
+    "subscription_dispute_opened",
+    "opened disputes suspend community access immediately",
+  );
+  assertIncludes(
+    httpBilling,
+    "subscription_dispute_lost",
+    "lost disputes keep community access revoked",
+  );
+  assertIncludes(
     communityCommerce,
     "export const syncCommunitySubscriptionLifecycleInternal = internalMutation({",
     "community subscription lifecycle sync seam",
+  );
+  assertIncludes(
+    communityCommerce,
+    "revokedReason: v.optional(v.string())",
+    "subscription lifecycle sync accepts explicit revocation reasons",
+  );
+  assertIncludes(
+    communityCommerce,
+    "preserveRiskRevocation: v.optional(v.boolean())",
+    "generic subscription sync can preserve refund/dispute revocations",
+  );
+  assertIncludes(
+    httpBilling,
+    "preserveRiskRevocation: true",
+    "generic subscription updates preserve refund/dispute revocations",
   );
   assertIncludes(
     communityCommerce,
@@ -623,6 +743,133 @@ function main() {
   });
   assert.equal(membership.active, true, "active lifecycle update restores membership");
   assert.equal(membership.revokedAt, undefined);
+  assert.equal(membership.revokedReason, undefined);
+
+  syncLifecycle({
+    membership,
+    subscriptions,
+    providerSubscriptionId: "sub_live",
+    providerCustomerId: "cus_live",
+    pricePointId: "price-1",
+    status: "past_due",
+    nowMs: 5_500,
+  });
+  assert.equal(membership.active, true, "past_due lifecycle state keeps grace-period access");
+  assert.equal(membership.revokedReason, undefined);
+
+  syncLifecycle({
+    membership,
+    subscriptions,
+    providerSubscriptionId: "sub_live",
+    providerCustomerId: "cus_live",
+    pricePointId: "price-1",
+    status: "ended",
+    revokedReason: "subscription_refunded",
+    nowMs: 5_600,
+  });
+  assert.equal(membership.active, false, "full refund revokes paid community access");
+  assert.equal(membership.revokedReason, "subscription_refunded");
+
+  syncLifecycle({
+    membership,
+    subscriptions,
+    providerSubscriptionId: "sub_live",
+    providerCustomerId: "cus_live",
+    pricePointId: "price-1",
+    status: "active",
+    preserveRiskRevocation: true,
+    nowMs: 5_650,
+  });
+  assert.equal(membership.active, false, "generic subscription updates do not reopen refunded access");
+  assert.equal(membership.revokedReason, "subscription_refunded");
+
+  syncLifecycle({
+    membership,
+    subscriptions,
+    providerSubscriptionId: "sub_live",
+    providerCustomerId: "cus_live",
+    pricePointId: "price-1",
+    status: "active",
+    nowMs: 5_700,
+  });
+  assert.equal(membership.active, true, "valid subscription lifecycle can restore access after refund risk clears");
+  assert.equal(membership.revokedReason, undefined);
+
+  syncLifecycle({
+    membership,
+    subscriptions,
+    providerSubscriptionId: "sub_live",
+    providerCustomerId: "cus_live",
+    pricePointId: "price-1",
+    status: "ended",
+    revokedReason: "subscription_dispute_opened",
+    nowMs: 5_800,
+  });
+  assert.equal(membership.active, false, "opened disputes suspend paid community access");
+  assert.equal(membership.revokedReason, "subscription_dispute_opened");
+
+  syncLifecycle({
+    membership,
+    subscriptions,
+    providerSubscriptionId: "sub_live",
+    providerCustomerId: "cus_live",
+    pricePointId: "price-1",
+    status: "active",
+    preserveRiskRevocation: true,
+    nowMs: 5_850,
+  });
+  assert.equal(membership.active, false, "generic subscription updates do not reopen disputed access");
+  assert.equal(membership.revokedReason, "subscription_dispute_opened");
+
+  syncLifecycle({
+    membership,
+    subscriptions,
+    providerSubscriptionId: "sub_live",
+    providerCustomerId: "cus_live",
+    pricePointId: "price-1",
+    status: "active",
+    preserveRiskRevocation: true,
+    nowMs: 5_875,
+  });
+  assert.equal(membership.active, false, "failed refund restore does not reopen open dispute access");
+  assert.equal(membership.revokedReason, "subscription_dispute_opened");
+
+  syncLifecycle({
+    membership,
+    subscriptions,
+    providerSubscriptionId: "sub_live",
+    providerCustomerId: "cus_live",
+    pricePointId: "price-1",
+    status: "ended",
+    revokedReason: "subscription_dispute_lost",
+    nowMs: 5_900,
+  });
+  assert.equal(membership.active, false, "lost disputes keep paid community access revoked");
+  assert.equal(membership.revokedReason, "subscription_dispute_lost");
+
+  syncLifecycle({
+    membership,
+    subscriptions,
+    providerSubscriptionId: "sub_live",
+    providerCustomerId: "cus_live",
+    pricePointId: "price-1",
+    status: "active",
+    preserveRiskRevocation: true,
+    nowMs: 5_925,
+  });
+  assert.equal(membership.active, false, "failed refund restore does not reopen lost dispute access");
+  assert.equal(membership.revokedReason, "subscription_dispute_lost");
+
+  syncLifecycle({
+    membership,
+    subscriptions,
+    providerSubscriptionId: "sub_live",
+    providerCustomerId: "cus_live",
+    pricePointId: "price-1",
+    status: "active",
+    nowMs: 5_950,
+  });
+  assert.equal(membership.active, true, "won or reinstated disputes restore from Stripe subscription truth");
   assert.equal(membership.revokedReason, undefined);
 
   const entitlementSubscription = resolveMostRelevantEntitlementSubscription(subscriptions);

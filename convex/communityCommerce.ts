@@ -76,6 +76,8 @@ export const syncCommunitySubscriptionLifecycleInternal = internalMutation({
     currentPeriodStartIso: v.optional(v.union(v.string(), v.null())),
     currentPeriodEndIso: v.optional(v.union(v.string(), v.null())),
     cancelAtPeriodEnd: v.optional(v.union(v.boolean(), v.null())),
+    revokedReason: v.optional(v.string()),
+    preserveRiskRevocation: v.optional(v.boolean()),
     nowMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
@@ -201,11 +203,28 @@ export const syncCommunitySubscriptionLifecycleInternal = internalMutation({
     }
 
     const grantsAccess = communitySubscriptionStatusGrantsAccess(status);
+    const revokedReason = String(args.revokedReason ?? "")
+      .trim()
+      .slice(0, 160);
+    const existingRevokedReason = String(membership.revokedReason ?? "").trim();
+    const shouldPreserveRiskRevocation =
+      grantsAccess &&
+      args.preserveRiskRevocation === true &&
+      membership.active === false &&
+      (
+        existingRevokedReason === "subscription_refunded" ||
+        existingRevokedReason === "subscription_dispute_opened" ||
+        existingRevokedReason === "subscription_dispute_lost"
+      );
     await ctx.db.patch(membership._id, {
       pricePointId,
-      active: grantsAccess,
-      revokedAt: grantsAccess ? undefined : nowMs,
-      revokedReason: grantsAccess ? undefined : `subscription_${status}`,
+      active: shouldPreserveRiskRevocation ? false : grantsAccess,
+      revokedAt: shouldPreserveRiskRevocation
+        ? membership.revokedAt ?? nowMs
+        : grantsAccess ? undefined : nowMs,
+      revokedReason: shouldPreserveRiskRevocation
+        ? existingRevokedReason
+        : grantsAccess ? undefined : revokedReason || `subscription_${status}`,
       updatedAt: nowMs,
     });
 

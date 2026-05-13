@@ -109,6 +109,10 @@ Prompt injection is not tiered. Authenticated free and internal architect accoun
 8. Community role is separate from paid access.
 9. The default platform fee for free-account community revenue is 15%.
 10. Legacy paid creator billing does not create or renew platform-plan access.
+11. Community creator revenue uses the Stripe Connect subscription path: Stripe routes creator revenue to the connected account and Polynet keeps the configured application fee. Polynet does not run an affiliate-style creator payout ledger or gestation period for community revenue.
+12. Recurring invoice success/failure, subscription changes, full refunds, and disputes must converge through backend community subscription lifecycle state.
+13. Full refunds revoke paid community access. Partial refunds retain access unless the subscription lifecycle later says otherwise. Failed or canceled refunds restore from current Stripe subscription truth.
+14. Disputes and chargebacks suspend paid community access when opened, stay revoked when lost, and restore only from valid Stripe subscription truth when won or funds are reinstated.
 
 ## 6) Paid-Tool Balance Rules
 
