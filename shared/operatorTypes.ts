@@ -316,6 +316,31 @@ export type OperatorAuthAccessDiagnosticsSnapshot = {
   computedAt: number;
   range: OperatorRange;
   health: "healthy" | "degraded" | "incident" | "unknown";
+  authAvailability?: {
+    health: "healthy" | "degraded" | "incident" | "unknown";
+    score: number | null;
+    windowMs: number;
+    attempts: number;
+    successes: number;
+    failures: number;
+    successRate: number | null;
+    affectedUsers: number;
+    unattributedFailures: number;
+    bootstrapFailures: number;
+    refreshFailures: number;
+    unknownFailures: number;
+  };
+  accessIntegrity?: {
+    health: "healthy" | "degraded" | "incident" | "unknown";
+    score: number | null;
+    accessEvents: number;
+    warnings: number;
+    errors: number;
+    operatorAccessDenied: number;
+    communityAccessDenied: number;
+    entitlementFindings: number;
+    entitlementErrorFindings: number;
+  };
   totals: {
     events: number;
     warnings: number;

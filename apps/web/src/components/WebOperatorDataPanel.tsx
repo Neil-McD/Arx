@@ -804,19 +804,43 @@ function OperatorPlatformInsights(props: {
         <h2>Auth &amp; access</h2>
         <div className="operator-dashboard__table">
           <div className="operator-dashboard__row">
-            <span>Health</span>
-            <strong>{formatHealth(props.authAccess?.health)}</strong>
+            <span>Auth availability</span>
+            <strong>{formatHealth(props.authAccess?.authAvailability?.health)}</strong>
           </div>
           <div className="operator-dashboard__row">
-            <span>Sessions established</span>
+            <span>24h auth success</span>
+            <strong>{formatPercent(props.authAccess?.authAvailability?.successRate)}</strong>
+          </div>
+          <div className="operator-dashboard__row">
+            <span>24h auth attempts</span>
+            <strong>{props.authAccess?.authAvailability?.attempts ?? 0}</strong>
+          </div>
+          <div className="operator-dashboard__row">
+            <span>24h affected users</span>
+            <strong>{props.authAccess?.authAvailability?.affectedUsers ?? 0}</strong>
+          </div>
+          <div className="operator-dashboard__row">
+            <span>Access integrity</span>
+            <strong>{formatHealth(props.authAccess?.accessIntegrity?.health)}</strong>
+          </div>
+          <div className="operator-dashboard__row">
+            <span>Access warnings</span>
+            <strong>{props.authAccess?.accessIntegrity?.warnings ?? 0}</strong>
+          </div>
+          <div className="operator-dashboard__row">
+            <span>30d diagnostic events</span>
+            <strong>{props.authAccess?.totals.events ?? 0}</strong>
+          </div>
+          <div className="operator-dashboard__row">
+            <span>30d session-start events</span>
             <strong>{props.authAccess?.totals.sessionEstablished ?? 0}</strong>
           </div>
           <div className="operator-dashboard__row">
-            <span>Auth failures</span>
+            <span>30d auth failures</span>
             <strong>{props.authAccess?.totals.authFailures ?? 0}</strong>
           </div>
           <div className="operator-dashboard__row">
-            <span>Refresh failures</span>
+            <span>30d refresh failures</span>
             <strong>{props.authAccess?.totals.sessionRefreshFailures ?? 0}</strong>
           </div>
           <div className="operator-dashboard__row">

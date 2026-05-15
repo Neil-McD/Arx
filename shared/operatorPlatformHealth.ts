@@ -9,7 +9,7 @@ import type {
 export type OperatorPlatformHealthStatus = "healthy" | "degraded" | "incident" | "unknown";
 
 export type OperatorPlatformHealthCard = {
-  id: "web" | "runtime" | "auth" | "security";
+  id: "web" | "runtime" | "auth" | "access" | "security";
   label: string;
   status: OperatorPlatformHealthStatus;
   score: number | null;
@@ -45,6 +45,13 @@ function formatPercent(value: number | null | undefined): string {
   return `${Math.round(value * 100)}%`;
 }
 
+function formatPrecisePercent(value: number | null | undefined): string {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "--";
+  const percent = value * 100;
+  const digits = percent >= 99 && percent < 100 ? 1 : 0;
+  return `${percent.toFixed(digits)}%`;
+}
+
 function formatRoutePassRate(snapshot: OperatorWebDeployDiagnosticsSnapshot): string {
   if (snapshot.totals.routeChecks <= 0) return "No route checks";
   const passed = Math.max(0, snapshot.totals.routeChecks - snapshot.totals.routeFailures);
@@ -58,17 +65,20 @@ function fallbackDrivers(drivers: string[], healthyDriver: string): string[] {
 function finalizeCard(params: {
   id: OperatorPlatformHealthCard["id"];
   label: string;
-  score: number;
+  score: number | null;
+  status?: OperatorPlatformHealthStatus;
   primaryMetric: string;
   drivers: string[];
   healthyDriver: string;
   evidenceNote: string;
 }): OperatorPlatformHealthCard {
-  const score = clampScore(params.score);
+  const score = typeof params.score === "number" && Number.isFinite(params.score)
+    ? clampScore(params.score)
+    : null;
   return {
     id: params.id,
     label: params.label,
-    status: statusFromScore(score),
+    status: params.status ?? statusFromScore(score),
     score,
     primaryMetric: params.primaryMetric,
     drivers: fallbackDrivers(params.drivers, params.healthyDriver),
@@ -153,22 +163,55 @@ function buildRuntimeCard(runtime: OperatorRuntimeToolDiagnosticsSnapshot | null
 }
 
 function buildAuthCard(auth: OperatorAuthAccessDiagnosticsSnapshot | null): OperatorPlatformHealthCard {
-  if (!auth) return buildUnknownCard("auth", "Auth", "Session, access, operator, community access, and entitlement evidence.");
+  if (!auth) return buildUnknownCard("auth", "Auth", "Bootstrap, refresh, and identity-resolution availability.");
+  const availability = auth.authAvailability;
+  if (!availability) {
+    return buildUnknownCard("auth", "Auth", "Bootstrap, refresh, and identity-resolution availability.");
+  }
   const input: ScoreInput = { score: 100, drivers: [] };
-  addPenalty(input, Math.min(36, auth.totals.errors * 12), auth.totals.errors > 0 ? `${auth.totals.errors} auth/access errors` : null);
-  addPenalty(input, Math.min(24, auth.totals.warnings * 6), auth.totals.warnings > 0 ? `${auth.totals.warnings} auth/access warnings` : null);
-  addPenalty(input, Math.min(30, auth.totals.authFailures * 10), auth.totals.authFailures > 0 ? `${auth.totals.authFailures} auth failures` : null);
-  addPenalty(input, Math.min(24, auth.totals.sessionRefreshFailures * 8), auth.totals.sessionRefreshFailures > 0 ? `${auth.totals.sessionRefreshFailures} refresh failures` : null);
-  addPenalty(input, Math.min(24, auth.totals.entitlementErrorFindings * 8), auth.totals.entitlementErrorFindings > 0 ? `${auth.totals.entitlementErrorFindings} entitlement errors` : null);
-  addPenalty(input, Math.min(15, auth.totals.unknownAuthErrors * 5), auth.totals.unknownAuthErrors > 0 ? `${auth.totals.unknownAuthErrors} unknown auth errors` : null);
+  input.score = availability.score ?? 100;
+  if (availability.attempts <= 0) {
+    input.drivers.push("No recent auth attempts");
+  } else {
+    input.drivers.push(`${availability.successes}/${availability.attempts} auth attempts succeeded`);
+    if (availability.failures > 0) input.drivers.push(`${availability.failures} recent auth failures`);
+    if (availability.refreshFailures > 0) input.drivers.push(`${availability.refreshFailures} refresh failures`);
+    if (availability.unknownFailures > 0) input.drivers.push(`${availability.unknownFailures} unknown failures`);
+    if (availability.unattributedFailures > 0) input.drivers.push(`${availability.unattributedFailures} unattributed failures`);
+  }
   return finalizeCard({
     id: "auth",
     label: "Auth",
-    primaryMetric: `${auth.totals.sessionEstablished} sessions`,
-    score: input.score,
+    primaryMetric: availability.successRate === null
+      ? "No recent auth attempts"
+      : `${formatPrecisePercent(availability.successRate)} auth success`,
+    score: availability.score,
+    status: availability.health,
     drivers: input.drivers,
-    healthyDriver: "Sessions, access checks, and entitlements clean",
-    evidenceNote: auth.evidence.isTruncated ? "Sampled auth/access diagnostics" : "Auth, access, and entitlement evidence",
+    healthyDriver: "Bootstrap and refresh events clean",
+    evidenceNote: auth.evidence.isTruncated ? "Sampled auth availability diagnostics" : "24h bootstrap and refresh evidence",
+  });
+}
+
+function buildAccessCard(auth: OperatorAuthAccessDiagnosticsSnapshot | null): OperatorPlatformHealthCard {
+  if (!auth) return buildUnknownCard("access", "Access", "Operator, community, and entitlement integrity evidence.");
+  const integrity = auth.accessIntegrity;
+  if (!integrity) return buildUnknownCard("access", "Access", "Operator, community, and entitlement integrity evidence.");
+  const input: ScoreInput = { score: integrity.score ?? 100, drivers: [] };
+  if (integrity.entitlementErrorFindings > 0) input.drivers.push(`${integrity.entitlementErrorFindings} entitlement errors`);
+  if (integrity.entitlementFindings > 0) input.drivers.push(`${integrity.entitlementFindings} entitlement findings`);
+  if (integrity.operatorAccessDenied > 0) input.drivers.push(`${integrity.operatorAccessDenied} operator access denials`);
+  if (integrity.communityAccessDenied > 0) input.drivers.push(`${integrity.communityAccessDenied} community access denials`);
+  if (integrity.warnings > 0) input.drivers.push(`${integrity.warnings} access warnings`);
+  return finalizeCard({
+    id: "access",
+    label: "Access",
+    primaryMetric: `${integrity.entitlementErrorFindings} entitlement errors`,
+    score: integrity.score,
+    status: integrity.health,
+    drivers: input.drivers,
+    healthyDriver: "Entitlements and access checks clean",
+    evidenceNote: auth.evidence.isTruncated ? "Sampled access-integrity diagnostics" : "Operator, community, and entitlement evidence",
   });
 }
 
@@ -203,6 +246,7 @@ export function buildOperatorPlatformHealthCards(params: {
     buildWebCard(params.webDeploy, params.frontendErrors),
     buildRuntimeCard(params.runtimeTools),
     buildAuthCard(params.authAccess),
+    buildAccessCard(params.authAccess),
     buildSecurityCard(params.securityAudit),
   ];
 }

@@ -40,7 +40,7 @@ assert.match(
 );
 assert.match(
   operatorPanel,
-  /setState\(\(prev\) => \(\{[\s\S]*overview: nextState\.overview \?\? prev\.overview[\s\S]*builders: nextState\.builders \?\? prev\.builders[\s\S]*\}\)\)/,
+  /setState\(\(prev\) => \(\{[\s\S]*overview: nextState\.overview \?\? prev\.overview[\s\S]*authAccess: nextState\.authAccess \?\? prev\.authAccess[\s\S]*communityRows: nextState\.communityRows \?\? prev\.communityRows[\s\S]*events: nextState\.events \?\? prev\.events[\s\S]*\}\)\)/,
   "operator panel refresh must merge loaded sections over the previous snapshot",
 );
 assert.match(

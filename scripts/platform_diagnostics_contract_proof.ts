@@ -127,6 +127,16 @@ assert.match(
   "operator diagnostics snapshot type is missing",
 );
 assert.match(
+  operatorTypes,
+  /authAvailability\?: \{[\s\S]*successRate: number \| null;[\s\S]*affectedUsers: number;[\s\S]*unattributedFailures: number;/,
+  "operator auth diagnostics must expose rate and impact based auth availability",
+);
+assert.match(
+  operatorTypes,
+  /accessIntegrity\?: \{[\s\S]*operatorAccessDenied: number;[\s\S]*communityAccessDenied: number;[\s\S]*entitlementErrorFindings: number;/,
+  "operator auth diagnostics must separate access integrity from auth availability",
+);
+assert.match(
   operatorIntelligence,
   /getOperatorAuthAccessDiagnosticsInternal = internalQuery/,
   "operator diagnostics read model must be internal and read-only",
@@ -140,6 +150,21 @@ assert.match(
   operatorIntelligence,
   /communityAccessAudit\.listCommunityAccessStateAuditFindingsInternal/,
   "operator diagnostics must include entitlement/access audit findings",
+);
+assert.match(
+  operatorIntelligence,
+  /AUTH_AVAILABILITY_RECENT_WINDOW_MS = 24 \* 60 \* 60 \* 1000/,
+  "operator auth availability must use a recent window for the headline signal",
+);
+assert.match(
+  operatorIntelligence,
+  /authSuccessRate = authAttempts > 0 \? recentAuthSuccessRows\.length \/ authAttempts : null/,
+  "operator auth availability must score by success rate, not raw failure count",
+);
+assert.match(
+  operatorIntelligence,
+  /accessIntegrity: \{[\s\S]*operatorAccessDenied:[\s\S]*communityAccessDenied:[\s\S]*entitlementErrorFindings,/,
+  "operator diagnostics must return a distinct access-integrity summary",
 );
 assert.doesNotMatch(
   operatorIntelligence,
@@ -169,8 +194,34 @@ assert.match(
 );
 assert.match(
   operatorPanel,
+  /24h auth success/,
+  "operator panel must label auth availability as a recent success-rate signal",
+);
+assert.match(
+  operatorPanel,
+  /Access integrity/,
+  "operator panel must separate access integrity from auth availability",
+);
+assert.match(
+  operatorPanel,
   /loadOperatorAuthAccessDiagnosticsCanonical/,
   "operator panel must load the canonical auth and access diagnostics snapshot",
+);
+const platformHealth = read("shared/operatorPlatformHealth.ts");
+assert.match(
+  platformHealth,
+  /id: "web" \| "runtime" \| "auth" \| "access" \| "security"/,
+  "operator platform health cards must expose a separate access card",
+);
+assert.match(
+  platformHealth,
+  /formatPrecisePercent\(availability\.successRate\).*auth success/s,
+  "operator auth card must foreground auth success rate",
+);
+assert.doesNotMatch(
+  platformHealth,
+  /primaryMetric: `\$\{auth\.totals\.sessionEstablished\} sessions`/,
+  "operator auth card must not present raw session-start events as live auth health",
 );
 assert.match(
   packageJson,

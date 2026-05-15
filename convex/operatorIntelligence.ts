@@ -77,6 +77,17 @@ const WEB_DEPLOY_MODULE_LOAD_EVENT_TYPES = new Set([
   "deploy.module_load_recovery",
   "deploy.stale_asset_recovered",
 ]);
+const AUTH_AVAILABILITY_EVENT_TYPES = new Set([
+  "auth.session_established",
+  "auth.session_refreshed",
+  "auth.bootstrap_failed",
+  "auth.session_refresh_failed",
+]);
+const AUTH_AVAILABILITY_SUCCESS_EVENT_TYPES = new Set([
+  "auth.session_established",
+  "auth.session_refreshed",
+]);
+const AUTH_AVAILABILITY_RECENT_WINDOW_MS = 24 * 60 * 60 * 1000;
 const ACCOUNT_SETUP_SOURCE_TABLES = [
   "users",
   "userProfileDetails",
@@ -120,6 +131,17 @@ type DeveloperAppPolicyAuditFinding = {
 function normalizeLimit(value: number | undefined, fallback: number, max: number): number {
   if (typeof value !== "number" || !Number.isFinite(value)) return fallback;
   return Math.min(max, Math.max(1, Math.floor(value)));
+}
+
+function clampOperatorScore(value: number): number {
+  return Math.max(0, Math.min(100, Math.round(value)));
+}
+
+function buildOperatorHealthFromScore(score: number | null): "healthy" | "degraded" | "incident" | "unknown" {
+  if (score === null) return "unknown";
+  if (score < 60) return "incident";
+  if (score < 85) return "degraded";
+  return "healthy";
 }
 
 function normalizeCatalogAppIdForAudit(value: unknown): string | null {
@@ -1580,16 +1602,69 @@ export const getOperatorAuthAccessDiagnosticsInternal = internalQuery({
     const warningRows = rows.filter((row: any) => row.severity === "warning");
     const errorRows: any[] = rows.filter((row: any) => row.severity === "error");
     const authFailureRows = rows.filter((row: any) => row.subsystem === "auth" && row.status === "failed");
+    const recentAuthRows = authRows.filter(
+      (row: any) =>
+        Number(row.createdAt ?? 0) >= nowMs - AUTH_AVAILABILITY_RECENT_WINDOW_MS &&
+        AUTH_AVAILABILITY_EVENT_TYPES.has(String(row.eventType ?? "")),
+    );
+    const recentAuthSuccessRows = recentAuthRows.filter((row: any) =>
+      AUTH_AVAILABILITY_SUCCESS_EVENT_TYPES.has(String(row.eventType ?? "")) &&
+      row.status === "succeeded",
+    );
+    const recentAuthFailureRows = recentAuthRows.filter((row: any) => row.status === "failed");
+    const recentUnknownAuthFailures = recentAuthFailureRows.filter((row: any) => {
+      const errorCode = String(row.errorCode ?? "").trim().toLowerCase();
+      return !errorCode || errorCode === "unknown" || errorCode === "auth_unknown";
+    });
+    const recentAffectedUsers = new Set(
+      recentAuthFailureRows
+        .map((row: any) => String(row.userId ?? "").trim())
+        .filter(Boolean),
+    );
+    const recentUnattributedFailures = recentAuthFailureRows.filter((row: any) => !row.userId).length;
+    const authAttempts = recentAuthRows.length;
+    const authSuccessRate = authAttempts > 0 ? recentAuthSuccessRows.length / authAttempts : null;
+    const authAvailabilityScore =
+      authSuccessRate === null
+        ? null
+        : clampOperatorScore(
+            100 -
+              Math.max(recentAuthFailureRows.length > 0 ? 1 : 0, Math.round((1 - authSuccessRate) * 70)) -
+              Math.min(20, recentUnknownAuthFailures.length * 5) -
+              Math.min(12, recentUnattributedFailures * 2),
+          );
+    const authAvailabilityHealth: "healthy" | "degraded" | "incident" | "unknown" =
+      authSuccessRate === null
+        ? "unknown"
+        : authSuccessRate < 0.95 || recentUnknownAuthFailures.length >= 3
+          ? "incident"
+          : authSuccessRate < 0.99 || recentUnknownAuthFailures.length > 0
+            ? "degraded"
+            : "healthy";
     const entitlementFindingsList = Array.isArray(entitlementFindings) ? entitlementFindings : [];
     const entitlementErrorFindings = entitlementFindingsList.filter((finding: any) => finding.severity === "error").length;
     const unknownAuthErrors = authFailureRows.filter((row: any) => {
       const errorCode = String(row.errorCode ?? "").trim().toLowerCase();
       return !errorCode || errorCode === "unknown" || errorCode === "auth_unknown";
     }).length;
-    const health: "healthy" | "degraded" | "incident" =
-      errorRows.length > 0 || entitlementErrorFindings > 0
+    const accessWarningRows = accessRows.filter((row: any) => row.severity === "warning");
+    const accessErrorRows = accessRows.filter((row: any) => row.severity === "error");
+    const accessIntegrityScore = clampOperatorScore(
+      100 -
+        Math.min(45, accessErrorRows.length * 12 + entitlementErrorFindings * 10) -
+        Math.min(30, accessWarningRows.length * 6) -
+        Math.min(25, Math.max(0, entitlementFindingsList.length - entitlementErrorFindings) * 4),
+    );
+    const accessIntegrityHealth: "healthy" | "degraded" | "incident" | "unknown" =
+      accessErrorRows.length > 0 || entitlementErrorFindings > 0
         ? "incident"
-        : warningRows.length > 0 || authFailureRows.length > 0 || entitlementFindingsList.length > 0
+        : accessWarningRows.length > 0 || entitlementFindingsList.length > 0
+          ? "degraded"
+          : buildOperatorHealthFromScore(accessIntegrityScore);
+    const health: "healthy" | "degraded" | "incident" =
+      authAvailabilityHealth === "incident" || accessIntegrityHealth === "incident" || errorRows.length > 0 || entitlementErrorFindings > 0
+        ? "incident"
+        : authAvailabilityHealth === "degraded" || accessIntegrityHealth === "degraded" || warningRows.length > 0 || authFailureRows.length > 0 || entitlementFindingsList.length > 0
           ? "degraded"
           : "healthy";
 
@@ -1597,6 +1672,31 @@ export const getOperatorAuthAccessDiagnosticsInternal = internalQuery({
       computedAt: nowMs,
       range,
       health,
+      authAvailability: {
+        health: authAvailabilityHealth,
+        score: authAvailabilityScore,
+        windowMs: AUTH_AVAILABILITY_RECENT_WINDOW_MS,
+        attempts: authAttempts,
+        successes: recentAuthSuccessRows.length,
+        failures: recentAuthFailureRows.length,
+        successRate: authSuccessRate,
+        affectedUsers: recentAffectedUsers.size,
+        unattributedFailures: recentUnattributedFailures,
+        bootstrapFailures: recentAuthFailureRows.filter((row: any) => row.eventType === "auth.bootstrap_failed").length,
+        refreshFailures: recentAuthFailureRows.filter((row: any) => row.eventType === "auth.session_refresh_failed").length,
+        unknownFailures: recentUnknownAuthFailures.length,
+      },
+      accessIntegrity: {
+        health: accessIntegrityHealth,
+        score: accessIntegrityScore,
+        accessEvents: accessRows.length,
+        warnings: accessWarningRows.length,
+        errors: accessErrorRows.length,
+        operatorAccessDenied: accessRows.filter((row: any) => row.eventType === "access.operator_access_denied").length,
+        communityAccessDenied: accessRows.filter((row: any) => row.eventType === "access.community_denied").length,
+        entitlementFindings: entitlementFindingsList.length,
+        entitlementErrorFindings,
+      },
       totals: {
         events: rows.length,
         warnings: warningRows.length,
