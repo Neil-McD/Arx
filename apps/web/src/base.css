@@ -22659,6 +22659,9 @@ button.message-citation-chip:hover {
   width: min(calc(100% - 96px), 980px);
   margin: 0 auto;
   padding-top: clamp(56px, 9dvh, 92px);
+  min-width: 0;
+  box-sizing: border-box;
+  container: community-events / inline-size;
 }
 
 .community-events-month-btn,
@@ -22713,6 +22716,9 @@ button.message-citation-chip:hover {
   align-items: center;
   gap: 8px;
   flex-shrink: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  max-width: 100%;
 }
 
 .community-events-calendar-header h3 {
@@ -22850,10 +22856,18 @@ button.message-citation-chip:hover {
   background: rgba(255, 255, 255, 0.035);
 }
 
+.community-events-agenda-item-top {
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
 .community-events-agenda-item h4 {
+  flex: 1 1 96px;
+  min-width: 0;
   margin: 0;
   color: rgba(255, 255, 255, 0.78);
   font-size: 15px;
+  overflow-wrap: anywhere;
 }
 
 .community-events-agenda-meta {
@@ -23044,6 +23058,17 @@ button.message-citation-chip:hover {
 
   .community-events-day {
     min-height: 76px;
+  }
+}
+
+@container community-events (max-width: 760px) {
+  .community-events-shell {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .community-events-calendar,
+  .community-events-agenda {
+    width: 100%;
   }
 }
 

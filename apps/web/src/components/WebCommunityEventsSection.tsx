@@ -523,20 +523,24 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
             <div className="community-events-agenda-list">
               {selectedEvents.map((event) => {
                 const isRecurring = isRecurringCommunityEvent(event);
+                const editLabel = isRecurring ? "Edit series" : "Edit event";
+                const cancelLabel = isRecurring ? "Cancel series" : "Cancel event";
                 return (
                   <article key={event.id} className="community-events-agenda-item">
                     <div className="community-events-agenda-item-top">
                       <h4>{event.title}</h4>
                       {capabilities.canManageEvents ? (
                         <div className="community-events-agenda-actions">
-                          <button type="button" onClick={() => openEditEvent(event)}>
-                            {isRecurring ? "Edit series" : "Edit event"}
+                          <button type="button" aria-label={editLabel} title={editLabel} onClick={() => openEditEvent(event)}>
+                            Edit
                           </button>
                           <button
                             type="button"
+                            aria-label={cancelLabel}
+                            title={cancelLabel}
                             onClick={() => confirmCancelEvent(event)}
                           >
-                            {isRecurring ? "Cancel series" : "Cancel event"}
+                            Cancel
                           </button>
                         </div>
                       ) : null}

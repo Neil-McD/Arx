@@ -60,8 +60,8 @@ assert.match(
 
 assert.match(
   eventsPanel,
-  /isRecurringCommunityEvent[\s\S]*Edit series[\s\S]*Cancel series/,
-  "recurring event controls must make clear that edit/cancel operates on the whole series",
+  /const editLabel = isRecurring \? "Edit series" : "Edit event";[\s\S]*const cancelLabel = isRecurring \? "Cancel series" : "Cancel event";[\s\S]*aria-label=\{editLabel\}[\s\S]*>\s*Edit\s*<\/button>[\s\S]*aria-label=\{cancelLabel\}[\s\S]*>\s*Cancel\s*<\/button>/,
+  "agenda event controls must keep compact visible labels while preserving series-aware accessible labels",
 );
 
 assert.match(
@@ -74,6 +74,12 @@ assert.match(
   styles,
   /@media \(max-width: 640px\) \{[\s\S]*\.community-events-day-marker \{[\s\S]*display: inline-flex;/,
   "mobile calendar must keep a visible event marker when event pills are hidden",
+);
+
+assert.match(
+  styles,
+  /\.community-events-panel \{[\s\S]*container: community-events \/ inline-size;[\s\S]*@container community-events \(max-width: 760px\) \{[\s\S]*\.community-events-shell \{[\s\S]*grid-template-columns: minmax\(0, 1fr\);/,
+  "agenda must stack under the calendar based on the events panel width, not only viewport width",
 );
 
 console.log("community_events_ui_contract_proof: ok");
