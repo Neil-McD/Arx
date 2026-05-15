@@ -430,6 +430,33 @@ export type OperatorRuntimeToolDiagnosticsSnapshot = {
   computedAt: number;
   range: OperatorRange;
   health: "healthy" | "degraded" | "incident" | "unknown";
+  executionAvailability?: {
+    health: "healthy" | "degraded" | "incident" | "unknown";
+    score: number | null;
+    turnsStarted: number;
+    turnsSucceeded: number;
+    turnsFailed: number;
+    turnsCancelled: number;
+    turnsRunning: number;
+    turnSuccessRate: number | null;
+    toolCalls: number;
+    toolFailures: number;
+    toolFailureRate: number | null;
+    providerFailures: number;
+    rateLimitFailures: number;
+    sandboxCreateFailures: number;
+    runtimeDiagnosticEvents: number;
+    topFailureCodes: OperatorRuntimeToolFailureBucket[];
+    topFailingTools: OperatorRuntimeToolFailureBucket[];
+  };
+  usageIntegrity?: {
+    health: "healthy" | "degraded" | "incident" | "unknown";
+    score: number | null;
+    workspaceCreditFailures: number;
+    paidToolLedgerFailures: number;
+    unbilledComputeCharges: number;
+    topFailureCodes: OperatorRuntimeToolFailureBucket[];
+  };
   totals: {
     turnsStarted: number;
     turnsSucceeded: number;

@@ -1890,50 +1890,82 @@ export const getOperatorRuntimeToolDiagnosticsInternal = internalQuery({
           "sandbox_create_failed",
       );
     });
+    const runFailureCodeRows = runFailureRows.map((row: any) => ({
+      ...row,
+      __operatorFailureCode: normalizeRuntimeFailureCode(row.errorCode ?? row.reason ?? "unknown_runtime_error"),
+    }));
+    const toolFailureCodeRows = toolFailureRows.map((row: any) => ({
+      ...row,
+      __operatorFailureCode: readToolFailureCode(row),
+    }));
+    const runtimeDiagnosticCodeRows = runtimeDiagnosticRows.map((row: any) => {
+      const payload = readPayloadRecord(row);
+      const failureSemantics =
+        payload.failure_semantics && typeof payload.failure_semantics === "object" && !Array.isArray(payload.failure_semantics)
+          ? (payload.failure_semantics as Record<string, unknown>)
+          : null;
+      return {
+        ...row,
+        __operatorFailureCode: normalizeRuntimeFailureCode(
+          failureSemantics?.kind ?? payload.diagnostic_source ?? "runtime_diagnostics_detected",
+        ),
+      };
+    });
+    const workspaceSessionCreateFailureCodeRows = workspaceSessionCreateFailureRows.map((row: any) => {
+      const payload = readPayloadRecord(row);
+      return {
+        ...row,
+        __operatorFailureCode: normalizeRuntimeFailureCode(
+          payload.code ??
+            payload.error_code ??
+            payload.errorCode ??
+            "sandbox_create_failed",
+        ),
+      };
+    });
+    const paidToolLedgerFailureRows = paidToolLedgerRows.filter(
+      (row: any) => row.status === "refunded" || row.failureReason,
+    );
+    const paidToolLedgerFailureCodeRows = paidToolLedgerFailureRows.map((row: any) => ({
+      ...row,
+      __operatorFailureCode: normalizeRuntimeFailureCode(row.failureReason ?? "paid_tool_ledger_failure"),
+    }));
+    const unbilledComputeCodeRows = unbilledComputeCharges.map((row: any) => ({
+      ...row,
+      __operatorFailureCode: "unbilled_compute",
+    }));
+    const isWorkspaceCreditFailureCodeRow = (row: any) =>
+      String(row.__operatorFailureCode ?? "").startsWith("workspace_credits_");
+    const executionRunFailureCodeRows = runFailureCodeRows.filter(
+      (row: any) => !isWorkspaceCreditFailureCodeRow(row),
+    );
+    const executionToolFailureCodeRows = toolFailureCodeRows.filter(
+      (row: any) => !isWorkspaceCreditFailureCodeRow(row),
+    );
+    const executionWorkspaceSessionCreateFailureCodeRows = workspaceSessionCreateFailureCodeRows.filter(
+      (row: any) => !isWorkspaceCreditFailureCodeRow(row),
+    );
+    const executionRuntimeDiagnosticCodeRows = runtimeDiagnosticCodeRows.filter(
+      (row: any) => !isWorkspaceCreditFailureCodeRow(row),
+    );
+    const usageRuntimeDiagnosticCodeRows = runtimeDiagnosticCodeRows.filter(isWorkspaceCreditFailureCodeRow);
+    const executionFailureCodeRows = [
+      ...executionRunFailureCodeRows,
+      ...executionToolFailureCodeRows,
+      ...executionRuntimeDiagnosticCodeRows,
+      ...executionWorkspaceSessionCreateFailureCodeRows,
+    ];
+    const usageIntegrityFailureCodeRows = [
+      ...runFailureCodeRows.filter(isWorkspaceCreditFailureCodeRow),
+      ...toolFailureCodeRows.filter(isWorkspaceCreditFailureCodeRow),
+      ...usageRuntimeDiagnosticCodeRows,
+      ...workspaceSessionCreateFailureCodeRows.filter(isWorkspaceCreditFailureCodeRow),
+      ...paidToolLedgerFailureCodeRows,
+      ...unbilledComputeCodeRows,
+    ];
     const allFailureCodeRows = [
-      ...runFailureRows.map((row: any) => ({
-        ...row,
-        __operatorFailureCode: normalizeRuntimeFailureCode(row.errorCode ?? row.reason ?? "unknown_runtime_error"),
-      })),
-      ...toolFailureRows.map((row: any) => ({
-        ...row,
-        __operatorFailureCode: readToolFailureCode(row),
-      })),
-      ...runtimeDiagnosticRows.map((row: any) => {
-        const payload = readPayloadRecord(row);
-        const failureSemantics =
-          payload.failure_semantics && typeof payload.failure_semantics === "object" && !Array.isArray(payload.failure_semantics)
-            ? (payload.failure_semantics as Record<string, unknown>)
-            : null;
-        return {
-          ...row,
-          __operatorFailureCode: normalizeRuntimeFailureCode(
-            failureSemantics?.kind ?? payload.diagnostic_source ?? "runtime_diagnostics_detected",
-          ),
-        };
-      }),
-      ...workspaceSessionCreateFailureRows.map((row: any) => {
-        const payload = readPayloadRecord(row);
-        return {
-          ...row,
-          __operatorFailureCode: normalizeRuntimeFailureCode(
-            payload.code ??
-              payload.error_code ??
-              payload.errorCode ??
-              "sandbox_create_failed",
-          ),
-        };
-      }),
-      ...paidToolLedgerRows
-        .filter((row: any) => row.status === "refunded" || row.failureReason)
-        .map((row: any) => ({
-          ...row,
-          __operatorFailureCode: normalizeRuntimeFailureCode(row.failureReason ?? "paid_tool_ledger_failure"),
-        })),
-      ...unbilledComputeCharges.map((row: any) => ({
-        ...row,
-        __operatorFailureCode: "unbilled_compute",
-      })),
+      ...executionFailureCodeRows,
+      ...usageIntegrityFailureCodeRows,
     ];
     const providerFailures =
       normalizedRunFailureCodes.filter((code) => code === "provider_failed").length +
@@ -1944,49 +1976,117 @@ export const getOperatorRuntimeToolDiagnosticsInternal = internalQuery({
     const workspaceCreditFailures =
       normalizedRunFailureCodes.filter((code) => code.startsWith("workspace_credits_")).length +
       normalizedToolFailureCodes.filter((code) => code.startsWith("workspace_credits_")).length +
+      usageRuntimeDiagnosticCodeRows.length +
       normalizedWorkspaceSessionCreateFailureCodes.filter((code) => code.startsWith("workspace_credits_")).length +
       paidToolLedgerRows.filter((row: any) =>
         String(row.failureReason ?? "").toLowerCase().includes("credits"),
       ).length;
-    const paidToolLedgerFailures = paidToolLedgerRows.filter(
-      (row: any) => row.status === "refunded" || row.failureReason,
-    ).length;
+    const paidToolLedgerFailures = paidToolLedgerFailureRows.length;
     const paidTools = buildPaidToolDiagnostics(paidToolLedgerRows, unbilledComputeCharges);
     const sandboxCreateFailures =
-      workspaceSessionCreateFailureRows.length +
+      normalizedWorkspaceSessionCreateFailureCodes.filter((code) => code === "sandbox_create_failed").length +
       normalizedToolFailureCodes.filter((code) => code === "sandbox_create_failed").length;
     const toolCalls = Math.max(toolStartedRows.length, toolFinishedRows.length);
+    const turnsSucceeded = runs.filter((row: any) => row.status === "ok").length;
+    const turnsCancelled = runs.filter((row: any) => row.status === "cancelled").length;
+    const turnsRunning = runs.filter((row: any) => row.status === "running").length;
     const turnTerminalCount = runs.filter((row: any) => row.status !== "running").length;
     const turnSuccessRate =
       turnTerminalCount > 0
-        ? runs.filter((row: any) => row.status === "ok").length / turnTerminalCount
+        ? turnsSucceeded / turnTerminalCount
         : null;
     const toolFailureRate =
       toolFinishedRows.length > 0 ? toolFailureRows.length / toolFinishedRows.length : null;
-    const incidentCount =
-      providerFailures +
-      workspaceCreditFailures +
-      paidToolLedgerFailures +
-      sandboxCreateFailures +
-      unbilledComputeCharges.length;
-    const health: "healthy" | "degraded" | "incident" =
-      incidentCount > 0
-        ? "incident"
-        : runFailureRows.length > 0 || toolFailureRows.length > 0 || runtimeDiagnosticRows.length > 0
-          ? "degraded"
-          : "healthy";
+    const executionTurnTerminalCount = turnsSucceeded + executionRunFailureCodeRows.length;
+    const executionTurnSuccessRate =
+      executionTurnTerminalCount > 0 ? turnsSucceeded / executionTurnTerminalCount : null;
+    const workspaceCreditToolFailures = toolFailureCodeRows.length - executionToolFailureCodeRows.length;
+    const executionToolFinishedCount = Math.max(0, toolFinishedRows.length - workspaceCreditToolFailures);
+    const executionToolFailureRate =
+      executionToolFinishedCount > 0 ? executionToolFailureCodeRows.length / executionToolFinishedCount : null;
+    const executionToolFailureRows = toolFailureRows.filter(
+      (row: any) => !readToolFailureCode(row).startsWith("workspace_credits_"),
+    );
+    const workspaceSessionCreateSuccessRows = workspaceSessionCreateRows.filter((row: any) => {
+      const payload = readPayloadRecord(row);
+      return normalizeOperatorKey(payload.status, "") !== "error";
+    });
+    const hasExecutionEvidence =
+      turnsSucceeded > 0 ||
+      executionRunFailureCodeRows.length > 0 ||
+      executionToolFinishedCount > 0 ||
+      workspaceSessionCreateSuccessRows.length > 0 ||
+      executionWorkspaceSessionCreateFailureCodeRows.length > 0 ||
+      executionRuntimeDiagnosticCodeRows.length > 0;
+    const executionAvailabilityScore = hasExecutionEvidence
+      ? clampOperatorScore(
+          100 -
+            (executionTurnSuccessRate == null ? 4 : Math.max(0, Math.round((1 - executionTurnSuccessRate) * 45))) -
+            Math.min(35, Math.round((executionToolFailureRate ?? 0) * 45)) -
+            Math.min(30, providerFailures * 12) -
+            Math.min(18, rateLimitFailures * 6) -
+            Math.min(30, sandboxCreateFailures * 10) -
+            Math.min(15, executionRuntimeDiagnosticCodeRows.length * 3),
+        )
+      : null;
+    const usageIntegrityScore = clampOperatorScore(
+      100 -
+        Math.min(30, workspaceCreditFailures * 10) -
+        Math.min(24, paidToolLedgerFailures * 8) -
+        Math.min(30, unbilledComputeCharges.length * 10),
+    );
+    const health = buildOperatorHealthFromScore(executionAvailabilityScore);
     const errorKeys = new Set(["provider_failed", "workspace_credits_exhausted", "sandbox_create_failed", "unbilled_compute"]);
+    const executionErrorKeys = new Set(["provider_failed", "sandbox_create_failed"]);
+    const usageErrorKeys = new Set(["workspace_credits_exhausted", "unbilled_compute"]);
 
     return {
       computedAt: nowMs,
       range,
       health,
+      executionAvailability: {
+        health,
+        score: executionAvailabilityScore,
+        turnsStarted: runs.length,
+        turnsSucceeded,
+        turnsFailed: executionRunFailureCodeRows.length,
+        turnsCancelled,
+        turnsRunning,
+        turnSuccessRate: executionTurnSuccessRate,
+        toolCalls,
+        toolFailures: executionToolFailureCodeRows.length,
+        toolFailureRate: executionToolFailureRate,
+        providerFailures,
+        rateLimitFailures,
+        sandboxCreateFailures,
+        runtimeDiagnosticEvents: executionRuntimeDiagnosticCodeRows.length,
+        topFailureCodes: buildRuntimeBucket(
+          executionFailureCodeRows,
+          (row: any) => row.__operatorFailureCode ?? "unknown_runtime_error",
+          { errorKeys: executionErrorKeys },
+        ),
+        topFailingTools: buildRuntimeBucket(executionToolFailureRows, readToolName, {
+          errorKeys: new Set(executionToolFailureRows.map(readToolName)),
+        }),
+      },
+      usageIntegrity: {
+        health: buildOperatorHealthFromScore(usageIntegrityScore),
+        score: usageIntegrityScore,
+        workspaceCreditFailures,
+        paidToolLedgerFailures,
+        unbilledComputeCharges: unbilledComputeCharges.length,
+        topFailureCodes: buildRuntimeBucket(
+          usageIntegrityFailureCodeRows,
+          (row: any) => row.__operatorFailureCode ?? "unknown_runtime_error",
+          { errorKeys: usageErrorKeys },
+        ),
+      },
       totals: {
         turnsStarted: runs.length,
-        turnsSucceeded: runs.filter((row: any) => row.status === "ok").length,
+        turnsSucceeded,
         turnsFailed: runFailureRows.length,
-        turnsCancelled: runs.filter((row: any) => row.status === "cancelled").length,
-        turnsRunning: runs.filter((row: any) => row.status === "running").length,
+        turnsCancelled,
+        turnsRunning,
         toolCalls,
         toolFailures: toolFailureRows.length,
         runtimeDiagnosticEvents: runtimeDiagnosticRows.length,

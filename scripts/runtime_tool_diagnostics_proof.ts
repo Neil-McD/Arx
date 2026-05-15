@@ -17,6 +17,7 @@ const schema = read("convex/schema.ts");
 const operatorIntelligence = read("convex/operatorIntelligence.ts");
 const operatorDashboard = read("convex/operatorDashboard.ts");
 const operatorGateway = read("shared/cloudOperatorDashboardGateway.ts");
+const operatorPlatformHealth = read("shared/operatorPlatformHealth.ts");
 const operatorTypes = read("shared/operatorTypes.ts");
 const operatorPanel = read("apps/web/src/components/WebOperatorDataPanel.tsx");
 const packageJson = read("package.json");
@@ -25,6 +26,21 @@ const runtimeDiagnosticsBlock = sliceBetween(
   operatorIntelligence,
   "getOperatorRuntimeToolDiagnosticsInternal = internalQuery",
   "export const listOperatorRisksInternal",
+);
+const runtimeCardBlock = sliceBetween(
+  operatorPlatformHealth,
+  "function buildRuntimeCard",
+  "function buildAuthCard",
+);
+const runtimePanelBlock = sliceBetween(
+  operatorPanel,
+  "<h2>Runtime execution</h2>",
+  "Runtime diagnostics are sampled for this window",
+);
+const toolBalancePanelBlock = sliceBetween(
+  operatorPanel,
+  "<h2>Tool balance revenue</h2>",
+  "<h2>Email conversion</h2>",
 );
 
 assert.match(
@@ -71,6 +87,16 @@ assert.match(
 );
 assert.match(
   operatorTypes,
+  /executionAvailability\?:[\s\S]*turnSuccessRate: number \| null[\s\S]*toolFailureRate: number \| null[\s\S]*topFailingTools: OperatorRuntimeToolFailureBucket\[\]/,
+  "runtime/tool diagnostics must expose execution availability separately",
+);
+assert.match(
+  operatorTypes,
+  /usageIntegrity\?:[\s\S]*workspaceCreditFailures: number[\s\S]*paidToolLedgerFailures: number[\s\S]*unbilledComputeCharges: number/,
+  "runtime/tool diagnostics must expose usage integrity separately",
+);
+assert.match(
+  operatorTypes,
   /export type OperatorPaidToolLane = /,
   "runtime/tool diagnostics must expose a paid-tool lane contract",
 );
@@ -108,6 +134,31 @@ assert.match(
   "runtime/tool diagnostics must return paid-tool accounting from the ledger rows",
 );
 assert.match(
+  runtimeDiagnosticsBlock,
+  /executionFailureCodeRows[\s\S]*usageIntegrityFailureCodeRows[\s\S]*executionAvailability:[\s\S]*usageIntegrity:/,
+  "runtime/tool diagnostics must split execution availability from usage integrity",
+);
+assert.match(
+  runtimeDiagnosticsBlock,
+  /executionRuntimeDiagnosticCodeRows[\s\S]*usageRuntimeDiagnosticCodeRows[\s\S]*usageIntegrityFailureCodeRows/,
+  "runtime/tool diagnostics must classify runtime diagnostic events before scoring",
+);
+assert.match(
+  runtimeDiagnosticsBlock,
+  /const executionTurnTerminalCount = turnsSucceeded \+ executionRunFailureCodeRows\.length;/,
+  "runtime execution scoring must not treat user-cancelled turns as availability failures",
+);
+assert.match(
+  runtimeDiagnosticsBlock,
+  /executionAvailability:[\s\S]*turnSuccessRate[\s\S]*toolFailureRate[\s\S]*providerFailures[\s\S]*sandboxCreateFailures[\s\S]*topFailureCodes/,
+  "runtime/tool diagnostics must return execution availability fields",
+);
+assert.match(
+  runtimeDiagnosticsBlock,
+  /usageIntegrity:[\s\S]*workspaceCreditFailures[\s\S]*paidToolLedgerFailures[\s\S]*unbilledComputeCharges[\s\S]*topFailureCodes/,
+  "runtime/tool diagnostics must return usage integrity fields",
+);
+assert.match(
   operatorIntelligence,
   /PAID_TOOL_LEDGER_NAMES = \["daytona_workspace", "web_research", "voice_transcribe"\]/,
   "runtime/tool diagnostics must include Daytona, web research, and voice paid-tool ledger rows",
@@ -134,7 +185,7 @@ assert.match(
 );
 assert.match(
   runtimeDiagnosticsBlock,
-  /workspaceSessionCreateFailureRows[\s\S]*normalizedWorkspaceSessionCreateFailureCodes[\s\S]*allFailureCodeRows[\s\S]*workspaceSessionCreateFailureRows\.map[\s\S]*workspaceCreditFailures[\s\S]*normalizedWorkspaceSessionCreateFailureCodes/,
+  /workspaceSessionCreateFailureRows[\s\S]*normalizedWorkspaceSessionCreateFailureCodes[\s\S]*workspaceSessionCreateFailureCodeRows[\s\S]*workspaceCreditFailures[\s\S]*normalizedWorkspaceSessionCreateFailureCodes/,
   "runtime/tool diagnostics must preserve workspace-session failure root causes",
 );
 assert.match(
@@ -180,8 +231,33 @@ assert.match(
 );
 assert.match(
   operatorPanel,
-  /Runtime &amp; tools/,
+  /Runtime execution/,
   "operator panel must render the runtime/tool diagnostics section",
+);
+assert.doesNotMatch(
+  operatorPanel,
+  /Runtime &amp; tools/,
+  "operator panel should use the narrowed runtime execution label",
+);
+assert.match(
+  runtimeCardBlock,
+  /runtime\.executionAvailability[\s\S]*Turns, tools, providers, and sandbox execution clean/,
+  "platform runtime card must score execution availability",
+);
+assert.doesNotMatch(
+  runtimeCardBlock,
+  /workspaceCreditFailures|paidToolLedgerFailures|unbilledComputeCharges|paid-tool ledger failures|unbilled compute charges|credit failures/,
+  "platform runtime card must not score tool-balance accounting anomalies",
+);
+assert.match(
+  runtimePanelBlock,
+  /Turn success[\s\S]*Failed turns[\s\S]*Tool failure rate[\s\S]*Provider failures[\s\S]*Rate limits[\s\S]*Sandbox create failures/,
+  "operator runtime panel must render execution availability fields",
+);
+assert.doesNotMatch(
+  runtimePanelBlock,
+  /Credit failures|Paid-tool failures|Unbilled compute/,
+  "operator runtime panel must keep usage accounting out of execution health",
 );
 assert.match(
   operatorPanel,
@@ -194,9 +270,9 @@ assert.match(
   "operator panel must label sampled runtime diagnostics",
 );
 assert.match(
-  operatorPanel,
-  /Credits settled[\s\S]*Credits refunded[\s\S]*No paid-tool credit activity returned/,
-  "operator panel must render compact paid-tool accounting",
+  toolBalancePanelBlock,
+  /Credits settled[\s\S]*Credits refunded[\s\S]*Credit failures[\s\S]*Paid-tool failures[\s\S]*Unbilled compute[\s\S]*No paid-tool credit activity returned/,
+  "operator panel must render compact paid-tool accounting and usage integrity",
 );
 assert.doesNotMatch(
   operatorPanel,

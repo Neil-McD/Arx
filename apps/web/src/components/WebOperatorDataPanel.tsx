@@ -647,6 +647,8 @@ function OperatorPlatformInsights(props: {
   frontendErrors: OperatorFrontendErrorDiagnosticsSnapshot | null;
 }) {
   const healthCards = buildOperatorPlatformHealthCards(props);
+  const runtimeExecution = props.runtimeTools?.executionAvailability ?? null;
+  const runtimeTopFailureCodes = runtimeExecution?.topFailureCodes ?? props.runtimeTools?.topFailureCodes ?? [];
   return (
     <div className="operator-data-panel__grid">
       <section className="operator-dashboard__metrics" aria-label="Platform health overview">
@@ -938,38 +940,38 @@ function OperatorPlatformInsights(props: {
       </section>
 
       <section className="operator-dashboard__panel">
-        <h2>Runtime &amp; tools</h2>
+        <h2>Runtime execution</h2>
         <div className="operator-dashboard__table">
           <div className="operator-dashboard__row">
             <span>Health</span>
-            <strong>{formatHealth(props.runtimeTools?.health)}</strong>
+            <strong>{formatHealth(runtimeExecution?.health ?? props.runtimeTools?.health)}</strong>
           </div>
           <div className="operator-dashboard__row">
             <span>Turn success</span>
-            <strong>{formatPercent(props.runtimeTools?.rates.turnSuccessRate)}</strong>
+            <strong>{formatPercent(runtimeExecution?.turnSuccessRate ?? props.runtimeTools?.rates.turnSuccessRate)}</strong>
           </div>
           <div className="operator-dashboard__row">
             <span>Failed turns</span>
-            <strong>{props.runtimeTools?.totals.turnsFailed ?? 0}</strong>
+            <strong>{runtimeExecution?.turnsFailed ?? props.runtimeTools?.totals.turnsFailed ?? 0}</strong>
           </div>
           <div className="operator-dashboard__row">
             <span>Tool failure rate</span>
-            <strong>{formatPercent(props.runtimeTools?.rates.toolFailureRate)}</strong>
+            <strong>{formatPercent(runtimeExecution?.toolFailureRate ?? props.runtimeTools?.rates.toolFailureRate)}</strong>
           </div>
           <div className="operator-dashboard__row">
-            <span>Paid-tool failures</span>
-            <strong>{props.runtimeTools?.totals.paidToolLedgerFailures ?? 0}</strong>
+            <span>Provider failures</span>
+            <strong>{runtimeExecution?.providerFailures ?? props.runtimeTools?.totals.providerFailures ?? 0}</strong>
           </div>
           <div className="operator-dashboard__row">
-            <span>Unbilled compute</span>
-            <strong>{props.runtimeTools?.totals.unbilledComputeCharges ?? 0}</strong>
+            <span>Rate limits</span>
+            <strong>{runtimeExecution?.rateLimitFailures ?? props.runtimeTools?.totals.rateLimitFailures ?? 0}</strong>
           </div>
           <div className="operator-dashboard__row">
             <span>Sandbox create failures</span>
-            <strong>{props.runtimeTools?.totals.sandboxCreateFailures ?? 0}</strong>
+            <strong>{runtimeExecution?.sandboxCreateFailures ?? props.runtimeTools?.totals.sandboxCreateFailures ?? 0}</strong>
           </div>
-          {props.runtimeTools?.topFailureCodes.length ? (
-            props.runtimeTools.topFailureCodes.slice(0, 3).map((bucket) => (
+          {runtimeTopFailureCodes.length ? (
+            runtimeTopFailureCodes.slice(0, 3).map((bucket) => (
               <div className="operator-dashboard__row" key={bucket.key}>
                 <div>
                   <strong>{bucket.label}</strong>
@@ -979,7 +981,7 @@ function OperatorPlatformInsights(props: {
               </div>
             ))
           ) : (
-            <div className="operator-dashboard__empty">No runtime or tool failures returned.</div>
+            <div className="operator-dashboard__empty">No runtime execution failures returned.</div>
           )}
           {props.runtimeTools?.evidence.isTruncated ? (
             <div className="operator-dashboard__empty">Runtime diagnostics are sampled for this window.</div>
@@ -1015,6 +1017,7 @@ function OperatorBusinessInsights(props: {
     props.monetization && props.monetization.communityCheckoutStarts > 0
       ? props.monetization.communityCheckoutCompletions / props.monetization.communityCheckoutStarts
       : null;
+  const runtimeUsage = props.runtimeTools?.usageIntegrity ?? null;
 
   return (
     <div className="operator-data-panel__grid">
@@ -1237,6 +1240,18 @@ function OperatorBusinessInsights(props: {
           <div className="operator-dashboard__row">
             <span>Still reserved</span>
             <strong>{props.runtimeTools?.paidTools.totals.stillReserved ?? 0}</strong>
+          </div>
+          <div className="operator-dashboard__row">
+            <span>Credit failures</span>
+            <strong>{runtimeUsage?.workspaceCreditFailures ?? props.runtimeTools?.totals.workspaceCreditFailures ?? 0}</strong>
+          </div>
+          <div className="operator-dashboard__row">
+            <span>Paid-tool failures</span>
+            <strong>{runtimeUsage?.paidToolLedgerFailures ?? props.runtimeTools?.totals.paidToolLedgerFailures ?? 0}</strong>
+          </div>
+          <div className="operator-dashboard__row">
+            <span>Unbilled compute</span>
+            <strong>{runtimeUsage?.unbilledComputeCharges ?? props.runtimeTools?.totals.unbilledComputeCharges ?? 0}</strong>
           </div>
           {props.runtimeTools?.paidTools.lanes.some((lane) => lane.reservations > 0) ? (
             props.runtimeTools.paidTools.lanes

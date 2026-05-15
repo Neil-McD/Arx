@@ -139,25 +139,46 @@ function buildWebCard(web: OperatorWebDeployDiagnosticsSnapshot | null): Operato
 }
 
 function buildRuntimeCard(runtime: OperatorRuntimeToolDiagnosticsSnapshot | null): OperatorPlatformHealthCard {
-  if (!runtime) return buildUnknownCard("runtime", "Runtime", "Agent turns, tool calls, provider failures, paid tools, and sandbox evidence.");
+  if (!runtime) return buildUnknownCard("runtime", "Runtime", "Agent turns, tool calls, provider failures, and sandbox evidence.");
+  const execution = runtime.executionAvailability;
+  if (execution) {
+    const drivers: string[] = [];
+    if (execution.score == null) {
+      drivers.push("No recent execution evidence");
+    } else {
+      if (execution.turnsFailed > 0) drivers.push(`${execution.turnsFailed} failed turns`);
+      if (execution.toolFailures > 0) drivers.push(`${execution.toolFailures} tool failures`);
+      if (execution.providerFailures > 0) drivers.push(`${execution.providerFailures} provider failures`);
+      if (execution.rateLimitFailures > 0) drivers.push(`${execution.rateLimitFailures} rate limits`);
+      if (execution.sandboxCreateFailures > 0) drivers.push(`${execution.sandboxCreateFailures} sandbox failures`);
+      if (execution.runtimeDiagnosticEvents > 0) drivers.push(`${execution.runtimeDiagnosticEvents} runtime diagnostics`);
+    }
+    return finalizeCard({
+      id: "runtime",
+      label: "Runtime",
+      primaryMetric: execution.turnSuccessRate == null ? "No turn evidence" : `${formatPercent(execution.turnSuccessRate)} turn success`,
+      score: execution.score,
+      status: execution.health,
+      drivers,
+      healthyDriver: "Turns, tools, providers, and sandbox execution clean",
+      evidenceNote: runtime.evidence.isTruncated ? "Sampled runtime execution diagnostics" : "Runtime execution evidence",
+    });
+  }
   const input: ScoreInput = { score: 100, drivers: [] };
   const toolFailureRate = runtime.rates.toolFailureRate ?? 0;
   addPenalty(input, runtime.rates.turnSuccessRate == null ? 4 : Math.max(0, Math.round((1 - runtime.rates.turnSuccessRate) * 45)), runtime.totals.turnsFailed > 0 ? `${runtime.totals.turnsFailed} failed turns` : null);
   addPenalty(input, Math.min(35, Math.round(toolFailureRate * 45)), runtime.totals.toolFailures > 0 ? `${runtime.totals.toolFailures} tool failures` : null);
   addPenalty(input, Math.min(30, runtime.totals.providerFailures * 12), runtime.totals.providerFailures > 0 ? `${runtime.totals.providerFailures} provider failures` : null);
   addPenalty(input, Math.min(18, runtime.totals.rateLimitFailures * 6), runtime.totals.rateLimitFailures > 0 ? `${runtime.totals.rateLimitFailures} rate limits` : null);
-  addPenalty(input, Math.min(30, runtime.totals.workspaceCreditFailures * 10), runtime.totals.workspaceCreditFailures > 0 ? `${runtime.totals.workspaceCreditFailures} credit failures` : null);
   addPenalty(input, Math.min(30, runtime.totals.sandboxCreateFailures * 10), runtime.totals.sandboxCreateFailures > 0 ? `${runtime.totals.sandboxCreateFailures} sandbox failures` : null);
-  addPenalty(input, Math.min(24, runtime.totals.paidToolLedgerFailures * 8), runtime.totals.paidToolLedgerFailures > 0 ? `${runtime.totals.paidToolLedgerFailures} paid-tool ledger failures` : null);
-  addPenalty(input, Math.min(30, runtime.totals.unbilledComputeCharges * 10), runtime.totals.unbilledComputeCharges > 0 ? `${runtime.totals.unbilledComputeCharges} unbilled compute charges` : null);
   return finalizeCard({
     id: "runtime",
     label: "Runtime",
     primaryMetric: `${formatPercent(runtime.rates.turnSuccessRate)} turn success`,
     score: input.score,
     drivers: input.drivers,
-    healthyDriver: "Turns, tools, and paid-tool accounting clean",
-    evidenceNote: runtime.evidence.isTruncated ? "Sampled runtime diagnostics" : "Runtime, tool, provider, and credit evidence",
+    healthyDriver: "Turns, tools, providers, and sandbox execution clean",
+    evidenceNote: runtime.evidence.isTruncated ? "Sampled runtime execution diagnostics" : "Runtime execution evidence",
   });
 }
 
