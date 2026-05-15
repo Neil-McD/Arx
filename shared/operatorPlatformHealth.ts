@@ -1,6 +1,5 @@
 import type {
   OperatorAuthAccessDiagnosticsSnapshot,
-  OperatorFrontendErrorDiagnosticsSnapshot,
   OperatorRuntimeToolDiagnosticsSnapshot,
   OperatorSecurityAuditDiagnosticsSnapshot,
   OperatorWebDeployDiagnosticsSnapshot,
@@ -53,9 +52,17 @@ function formatPrecisePercent(value: number | null | undefined): string {
 }
 
 function formatRoutePassRate(snapshot: OperatorWebDeployDiagnosticsSnapshot): string {
-  if (snapshot.totals.routeChecks <= 0) return "No route checks";
-  const passed = Math.max(0, snapshot.totals.routeChecks - snapshot.totals.routeFailures);
-  return `${passed}/${snapshot.totals.routeChecks} routes`;
+  const live = snapshot.liveSurface;
+  const routeChecks = live
+    ? live.criticalRoutes.total + live.importantRoutes.total + live.informationalRoutes.total
+    : snapshot.totals.routeChecks;
+  const routeFailures = live
+    ? live.criticalRoutes.failed + live.importantRoutes.failed + live.informationalRoutes.failed
+    : snapshot.totals.routeFailures;
+  if (routeChecks <= 0) return "No route checks";
+  const passed = Math.max(0, routeChecks - routeFailures);
+  const assetSuffix = live?.assetChecks ? `, ${Math.max(0, live.assetChecks - live.assetFailures)}/${live.assetChecks} assets` : "";
+  return `${passed}/${routeChecks} routes${assetSuffix}`;
 }
 
 function fallbackDrivers(drivers: string[], healthyDriver: string): string[] {
@@ -98,44 +105,36 @@ function buildUnknownCard(id: OperatorPlatformHealthCard["id"], label: string, e
   };
 }
 
-function buildWebCard(
-  web: OperatorWebDeployDiagnosticsSnapshot | null,
-  frontendErrors: OperatorFrontendErrorDiagnosticsSnapshot | null,
-): OperatorPlatformHealthCard {
+function buildWebCard(web: OperatorWebDeployDiagnosticsSnapshot | null): OperatorPlatformHealthCard {
   if (!web) return buildUnknownCard("web", "Web", "Production build, route probes, deploy events, and frontend issue evidence.");
   const input: ScoreInput = { score: 100, drivers: [] };
-  const routeFailures = web.totals.routeFailures;
-  const routeChecks = web.totals.routeChecks;
-  if (routeChecks > 0) {
-    addPenalty(input, Math.min(45, Math.round((routeFailures / routeChecks) * 45)), routeFailures > 0 ? `${routeFailures} route failures` : null);
+  const live = web.liveSurface;
+  if (live) {
+    input.score = live.score ?? 100;
+    if (live.versionJsonReachable === false) input.drivers.push("Build evidence unavailable");
+    if (live.criticalRoutes.failed > 0) input.drivers.push(`${live.criticalRoutes.failed} critical route failures`);
+    if (live.importantRoutes.failed > 0) input.drivers.push(`${live.importantRoutes.failed} important route failures`);
+    if (live.assetFailures > 0) input.drivers.push(`${live.assetFailures} asset failures`);
+    if (live.assetChecks <= 0) input.drivers.push("Asset evidence unavailable");
   } else {
-    addPenalty(input, 18, "Route probe evidence unavailable");
+    const routeFailures = web.totals.routeFailures;
+    const routeChecks = web.totals.routeChecks;
+    if (routeChecks > 0) {
+      addPenalty(input, Math.min(45, Math.round((routeFailures / routeChecks) * 45)), routeFailures > 0 ? `${routeFailures} route failures` : null);
+    } else {
+      addPenalty(input, 18, "Route probe evidence unavailable");
+    }
+    addPenalty(input, web.evidence.versionJsonReachable === false ? 12 : 0, "Build evidence unavailable");
   }
-  addPenalty(input, web.evidence.versionJsonReachable === false ? 12 : 0, "Build evidence unavailable");
-  addPenalty(input, Math.min(30, web.totals.errors * 12), web.totals.errors > 0 ? `${web.totals.errors} deploy errors` : null);
-  addPenalty(input, Math.min(15, web.totals.warnings * 5), web.totals.warnings > 0 ? `${web.totals.warnings} deploy warnings` : null);
-  addPenalty(
-    input,
-    Math.min(45, web.totals.frontendCrashEvents * 15),
-    web.totals.frontendCrashEvents > 0 ? `${web.totals.frontendCrashEvents} first-party crash events` : null,
-  );
-  addPenalty(
-    input,
-    Math.min(20, web.totals.moduleLoadRecoveries * 5),
-    web.totals.moduleLoadRecoveries > 0 ? `${web.totals.moduleLoadRecoveries} recovery events` : null,
-  );
-  addPenalty(input, Math.min(20, web.totals.staleBuildWarnings * 10), web.totals.staleBuildWarnings > 0 ? `${web.totals.staleBuildWarnings} stale build warnings` : null);
-  if (frontendErrors?.health === "incident") addPenalty(input, 18, "Sentry frontend incident");
-  if (frontendErrors?.health === "degraded") addPenalty(input, 8, "Sentry frontend degraded");
-  if (frontendErrors && !frontendErrors.evidence.configured) addPenalty(input, 8, "Sentry frontend source unavailable");
   return finalizeCard({
     id: "web",
     label: "Web",
     primaryMetric: formatRoutePassRate(web),
-    score: input.score,
+    score: live?.score ?? input.score,
+    status: live?.health,
     drivers: input.drivers,
-    healthyDriver: "Routes and deploy evidence clean",
-    evidenceNote: web.evidence.isTruncated ? "Sampled web/deploy diagnostics" : "Route, build, deploy, and frontend evidence",
+    healthyDriver: "Live routes, build, and assets reachable",
+    evidenceNote: web.evidence.isTruncated ? "Sampled web/deploy diagnostics" : "Live route, build, and asset evidence",
   });
 }
 
@@ -240,10 +239,9 @@ export function buildOperatorPlatformHealthCards(params: {
   authAccess: OperatorAuthAccessDiagnosticsSnapshot | null;
   securityAudit: OperatorSecurityAuditDiagnosticsSnapshot | null;
   runtimeTools: OperatorRuntimeToolDiagnosticsSnapshot | null;
-  frontendErrors: OperatorFrontendErrorDiagnosticsSnapshot | null;
 }): OperatorPlatformHealthCard[] {
   return [
-    buildWebCard(params.webDeploy, params.frontendErrors),
+    buildWebCard(params.webDeploy),
     buildRuntimeCard(params.runtimeTools),
     buildAuthCard(params.authAccess),
     buildAccessCard(params.authAccess),

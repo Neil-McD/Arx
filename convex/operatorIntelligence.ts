@@ -1264,15 +1264,19 @@ export const getOperatorWebDeployDiagnosticsInternal = internalQuery({
         errors: errorRows.length,
         routeChecks: 0,
         routeFailures: 0,
+        assetChecks: 0,
+        assetFailures: 0,
         frontendCrashEvents: frontendCrashEvents.length,
         moduleLoadRecoveries: moduleLoadRecoveries.length,
         staleBuildWarnings: staleBuildWarnings.length,
       },
       routeChecks: [],
+      assetChecks: [],
       latestEvents: deployRows.slice(0, 8).map(mapDiagnosticEvent),
       evidence: {
         sourceTables: ["platformDiagnosticEvents"],
         routeProbePaths: [],
+        assetProbePaths: [],
         routeProbeTimeoutMs: null,
         versionJsonReachable: null,
         frontendCrashSource: "platformDiagnosticEvents",
@@ -1661,12 +1665,14 @@ export const getOperatorAuthAccessDiagnosticsInternal = internalQuery({
         : accessWarningRows.length > 0 || entitlementFindingsList.length > 0
           ? "degraded"
           : buildOperatorHealthFromScore(accessIntegrityScore);
-    const health: "healthy" | "degraded" | "incident" =
-      authAvailabilityHealth === "incident" || accessIntegrityHealth === "incident" || errorRows.length > 0 || entitlementErrorFindings > 0
+    const health: "healthy" | "degraded" | "incident" | "unknown" =
+      authAvailabilityHealth === "incident" || accessIntegrityHealth === "incident"
         ? "incident"
-        : authAvailabilityHealth === "degraded" || accessIntegrityHealth === "degraded" || warningRows.length > 0 || authFailureRows.length > 0 || entitlementFindingsList.length > 0
-          ? "degraded"
-          : "healthy";
+        : authAvailabilityHealth === "unknown"
+          ? "unknown"
+          : authAvailabilityHealth === "degraded" || accessIntegrityHealth === "degraded"
+            ? "degraded"
+            : "healthy";
 
     return {
       computedAt: nowMs,

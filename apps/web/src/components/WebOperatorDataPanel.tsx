@@ -672,31 +672,47 @@ function OperatorPlatformInsights(props: {
         <h2>Web &amp; deploy</h2>
         <div className="operator-dashboard__table">
           <div className="operator-dashboard__row">
-            <span>Health</span>
-            <strong>{formatHealth(props.webDeploy?.health)}</strong>
+            <span>Live web surface</span>
+            <strong>{formatHealth(props.webDeploy?.liveSurface?.health ?? props.webDeploy?.health)}</strong>
           </div>
           <div className="operator-dashboard__row">
             <span>Current build</span>
             <strong>{props.webDeploy?.currentBuild.buildId?.slice(0, 12) ?? "Unknown"}</strong>
           </div>
           <div className="operator-dashboard__row">
-            <span>Route checks</span>
+            <span>Critical routes</span>
             <strong>
-              {props.webDeploy
-                ? `${Math.max(0, props.webDeploy.totals.routeChecks - props.webDeploy.totals.routeFailures)}/${props.webDeploy.totals.routeChecks}`
+              {props.webDeploy?.liveSurface
+                ? `${Math.max(0, props.webDeploy.liveSurface.criticalRoutes.total - props.webDeploy.liveSurface.criticalRoutes.failed)}/${props.webDeploy.liveSurface.criticalRoutes.total}`
                 : "0/0"}
             </strong>
           </div>
           <div className="operator-dashboard__row">
-            <span>Deploy events</span>
+            <span>Important routes</span>
+            <strong>
+              {props.webDeploy?.liveSurface
+                ? `${Math.max(0, props.webDeploy.liveSurface.importantRoutes.total - props.webDeploy.liveSurface.importantRoutes.failed)}/${props.webDeploy.liveSurface.importantRoutes.total}`
+                : "0/0"}
+            </strong>
+          </div>
+          <div className="operator-dashboard__row">
+            <span>Assets</span>
+            <strong>
+              {props.webDeploy?.liveSurface
+                ? `${Math.max(0, props.webDeploy.liveSurface.assetChecks - props.webDeploy.liveSurface.assetFailures)}/${props.webDeploy.liveSurface.assetChecks}`
+                : `${Math.max(0, (props.webDeploy?.totals.assetChecks ?? 0) - (props.webDeploy?.totals.assetFailures ?? 0))}/${props.webDeploy?.totals.assetChecks ?? 0}`}
+            </strong>
+          </div>
+          <div className="operator-dashboard__row">
+            <span>30d deploy events</span>
             <strong>{props.webDeploy?.totals.deployEvents ?? 0}</strong>
           </div>
           <div className="operator-dashboard__row">
-            <span>First-party crash events</span>
+            <span>30d first-party crash events</span>
             <strong>{props.webDeploy?.totals.frontendCrashEvents ?? 0}</strong>
           </div>
           <div className="operator-dashboard__row">
-            <span>First-party recovery events</span>
+            <span>30d first-party recovery events</span>
             <strong>{props.webDeploy?.totals.moduleLoadRecoveries ?? 0}</strong>
           </div>
           {props.webDeploy?.routeChecks.length ? (
@@ -705,7 +721,7 @@ function OperatorPlatformInsights(props: {
                 <div>
                   <strong>{check.label}</strong>
                   <span>
-                    {[check.path, check.httpStatus ? `HTTP ${check.httpStatus}` : check.errorCode, check.latencyMs != null ? `${check.latencyMs} ms` : null]
+                    {[check.criticality, check.path, check.httpStatus ? `HTTP ${check.httpStatus}` : check.errorCode, check.latencyMs != null ? `${check.latencyMs} ms` : null]
                       .filter(Boolean)
                       .join(" · ")}
                   </span>
@@ -716,13 +732,25 @@ function OperatorPlatformInsights(props: {
           ) : (
             <div className="operator-dashboard__empty">No web route probes returned.</div>
           )}
+          {props.webDeploy?.assetChecks.length ? (
+            props.webDeploy.assetChecks.map((check) => (
+              <div className="operator-dashboard__row" key={check.path}>
+                <div>
+                  <strong>{check.label}</strong>
+                  <span>
+                    {[check.type, check.path, check.httpStatus ? `HTTP ${check.httpStatus}` : check.errorCode, check.latencyMs != null ? `${check.latencyMs} ms` : null]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </span>
+                </div>
+                <span>{check.status}</span>
+              </div>
+            ))
+          ) : (
+            <div className="operator-dashboard__empty">No web asset probes returned.</div>
+          )}
           {props.webDeploy?.evidence.versionJsonReachable === false ? (
             <div className="operator-dashboard__empty">Build version evidence is unavailable.</div>
-          ) : null}
-          {props.webDeploy && !props.webDeploy.evidence.sentryBacked ? (
-            <div className="operator-dashboard__empty">
-              Crash counts here are first-party deploy diagnostics only. Sentry-backed issue totals are shown in Frontend errors.
-            </div>
           ) : null}
           {props.webDeploy?.evidence.isTruncated ? (
             <div className="operator-dashboard__empty">Web and deploy diagnostics are sampled for this window.</div>
@@ -830,10 +858,6 @@ function OperatorPlatformInsights(props: {
           <div className="operator-dashboard__row">
             <span>30d diagnostic events</span>
             <strong>{props.authAccess?.totals.events ?? 0}</strong>
-          </div>
-          <div className="operator-dashboard__row">
-            <span>30d session-start events</span>
-            <strong>{props.authAccess?.totals.sessionEstablished ?? 0}</strong>
           </div>
           <div className="operator-dashboard__row">
             <span>30d auth failures</span>

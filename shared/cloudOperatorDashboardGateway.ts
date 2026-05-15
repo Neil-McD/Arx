@@ -14,6 +14,7 @@ import type {
   OperatorRiskItem,
   OperatorRuntimeToolDiagnosticsSnapshot,
   OperatorSecurityAuditDiagnosticsSnapshot,
+  OperatorWebDeployAssetCheck,
   OperatorWebDeployDiagnosticsSnapshot,
   OperatorWebDeployRouteCheck,
 } from "./operatorTypes";
@@ -23,12 +24,18 @@ async function withOperatorAuth(session: AuthSessionLike) {
   return await bootstrapConvexAuthenticatedClient(session);
 }
 
-const OPERATOR_WEB_DEPLOY_ROUTE_PROBES: Array<{ label: string; path: string }> = [
-  { label: "Home", path: "/" },
-  { label: "Discover apps", path: "/discover/apps" },
-  { label: "Integrations", path: "/settings/integrations" },
+const OPERATOR_WEB_DEPLOY_ROUTE_PROBES: Array<{
+  label: string;
+  path: string;
+  criticality: OperatorWebDeployRouteCheck["criticality"];
+}> = [
+  { label: "Home", path: "/", criticality: "critical" },
+  { label: "Workspace", path: "/workspace", criticality: "critical" },
+  { label: "Discover apps", path: "/discover/apps", criticality: "important" },
+  { label: "Integrations", path: "/settings/integrations", criticality: "important" },
 ];
 const OPERATOR_WEB_DEPLOY_PROBE_TIMEOUT_MS = 4000;
+const OPERATOR_WEB_DEPLOY_ASSET_PROBE_LIMIT = 8;
 
 function canRunBrowserWebDeployProbes(): boolean {
   return typeof window !== "undefined" && typeof fetch === "function";
@@ -44,6 +51,55 @@ function buildVersionProbeUrl(): string {
   const url = new URL(buildSameOriginUrl("/version.json"));
   url.searchParams.set("t", String(Date.now()));
   return url.toString();
+}
+
+function normalizeSameOriginAssetPath(value: string): string | null {
+  try {
+    const url = new URL(value, window.location.origin);
+    if (url.origin !== window.location.origin) return null;
+    if (!/\.(?:js|css)(?:$|\?)/i.test(`${url.pathname}${url.search}`)) return null;
+    return `${url.pathname}${url.search}`;
+  } catch {
+    return null;
+  }
+}
+
+function readHtmlAssetAttribute(tag: string, attribute: "src" | "href"): string | null {
+  const match = tag.match(new RegExp(`\\b${attribute}=["']([^"']+)["']`, "i"));
+  return match?.[1] ? String(match[1]) : null;
+}
+
+function extractSameOriginAssetsFromHtml(html: string): Array<{
+  label: string;
+  path: string;
+  type: OperatorWebDeployAssetCheck["type"];
+}> {
+  const assets: Array<{
+    label: string;
+    path: string;
+    type: OperatorWebDeployAssetCheck["type"];
+  }> = [];
+  const seenPaths = new Set<string>();
+  const pushAsset = (label: string, value: string | null, type: OperatorWebDeployAssetCheck["type"]) => {
+    if (!value) return;
+    const path = normalizeSameOriginAssetPath(value);
+    if (!path || seenPaths.has(path)) return;
+    seenPaths.add(path);
+    assets.push({ label, path, type });
+  };
+
+  for (const match of html.matchAll(/<script\b[^>]*\bsrc=["'][^"']+["'][^>]*>/gi)) {
+    pushAsset("Script asset", readHtmlAssetAttribute(match[0], "src"), "script");
+  }
+  for (const match of html.matchAll(/<link\b[^>]*\bhref=["'][^"']+["'][^>]*>/gi)) {
+    const tag = match[0];
+    if (!/\brel=["'][^"']*(?:stylesheet|modulepreload)[^"']*["']/i.test(tag)) continue;
+    const value = readHtmlAssetAttribute(tag, "href");
+    const type = value && /\.css(?:$|\?)/i.test(value) ? "style" : "script";
+    pushAsset(type === "style" ? "Stylesheet asset" : "Preloaded script asset", value, type);
+  }
+
+  return assets.slice(0, OPERATOR_WEB_DEPLOY_ASSET_PROBE_LIMIT);
 }
 
 function readProbeErrorCode(error: unknown): string {
@@ -104,7 +160,7 @@ async function readCurrentBuildFromVersionJson(): Promise<{
 }
 
 async function probeSameOriginRoute(
-  route: { label: string; path: string },
+  route: { label: string; path: string; criticality: OperatorWebDeployRouteCheck["criticality"] },
 ): Promise<OperatorWebDeployRouteCheck> {
   const startedAt = Date.now();
   try {
@@ -117,6 +173,7 @@ async function probeSameOriginRoute(
     return {
       label: route.label,
       path: route.path,
+      criticality: route.criticality,
       status: response.ok ? "ok" : "failed",
       httpStatus: response.status,
       latencyMs,
@@ -127,6 +184,7 @@ async function probeSameOriginRoute(
     return {
       label: route.label,
       path: route.path,
+      criticality: route.criticality,
       status: "failed",
       httpStatus: null,
       latencyMs: Math.max(0, Date.now() - startedAt),
@@ -136,13 +194,124 @@ async function probeSameOriginRoute(
   }
 }
 
+async function readSameOriginAssetRefsFromHtml(): Promise<Array<{
+  label: string;
+  path: string;
+  type: OperatorWebDeployAssetCheck["type"];
+}>> {
+  try {
+    const response = await fetchSameOriginWithTimeout(buildSameOriginUrl("/"), {
+      cache: "no-store",
+      credentials: "same-origin",
+      redirect: "follow",
+    });
+    if (!response.ok) return [];
+    return extractSameOriginAssetsFromHtml(await response.text());
+  } catch {
+    return [];
+  }
+}
+
+async function probeSameOriginAsset(asset: {
+  label: string;
+  path: string;
+  type: OperatorWebDeployAssetCheck["type"];
+}): Promise<OperatorWebDeployAssetCheck> {
+  const startedAt = Date.now();
+  try {
+    const response = await fetchSameOriginWithTimeout(buildSameOriginUrl(asset.path), {
+      cache: "no-store",
+      credentials: "same-origin",
+      redirect: "follow",
+    });
+    const latencyMs = Math.max(0, Date.now() - startedAt);
+    return {
+      label: asset.label,
+      path: asset.path,
+      type: asset.type,
+      status: response.ok ? "ok" : "failed",
+      httpStatus: response.status,
+      latencyMs,
+      checkedAt: Date.now(),
+      errorCode: response.ok ? null : `http_${response.status}`,
+    };
+  } catch (error) {
+    return {
+      label: asset.label,
+      path: asset.path,
+      type: asset.type,
+      status: "failed",
+      httpStatus: null,
+      latencyMs: Math.max(0, Date.now() - startedAt),
+      checkedAt: Date.now(),
+      errorCode: readProbeErrorCode(error),
+    };
+  }
+}
+
+function countRoutesByCriticality(
+  routeChecks: OperatorWebDeployRouteCheck[],
+  criticality: OperatorWebDeployRouteCheck["criticality"],
+): { total: number; failed: number } {
+  const rows = routeChecks.filter((check) => check.criticality === criticality);
+  return {
+    total: rows.length,
+    failed: rows.filter((check) => check.status === "failed").length,
+  };
+}
+
+function buildWebLiveSurface(params: {
+  build: Awaited<ReturnType<typeof readCurrentBuildFromVersionJson>>;
+  routeChecks: OperatorWebDeployRouteCheck[];
+  assetChecks: OperatorWebDeployAssetCheck[];
+}): NonNullable<OperatorWebDeployDiagnosticsSnapshot["liveSurface"]> {
+  const criticalRoutes = countRoutesByCriticality(params.routeChecks, "critical");
+  const importantRoutes = countRoutesByCriticality(params.routeChecks, "important");
+  const informationalRoutes = countRoutesByCriticality(params.routeChecks, "informational");
+  const assetFailures = params.assetChecks.filter((check) => check.status === "failed").length;
+  const assetEvidenceMissing = params.assetChecks.length <= 0;
+  const score = Math.max(
+    0,
+    Math.min(
+      100,
+      Math.round(
+        100 -
+          criticalRoutes.failed * 40 -
+          importantRoutes.failed * 18 -
+          informationalRoutes.failed * 8 -
+          assetFailures * 16 -
+          (params.build.reachable ? 0 : 18) -
+          (assetEvidenceMissing ? 8 : 0),
+      ),
+    ),
+  );
+  const health: OperatorWebDeployDiagnosticsSnapshot["health"] =
+    criticalRoutes.failed > 0 || assetFailures > 0 || !params.build.reachable
+      ? "incident"
+      : importantRoutes.failed > 0 || informationalRoutes.failed > 0 || assetEvidenceMissing
+        ? "degraded"
+        : "healthy";
+  return {
+    health,
+    score,
+    checkedAt: Date.now(),
+    versionJsonReachable: params.build.reachable,
+    currentBuildId: params.build.buildId,
+    criticalRoutes,
+    importantRoutes,
+    informationalRoutes,
+    assetChecks: params.assetChecks.length,
+    assetFailures,
+  };
+}
+
 function chooseWebDeployHealth(
   serverHealth: OperatorWebDeployDiagnosticsSnapshot["health"],
-  routeFailures: number,
-  versionJsonReachable: boolean,
+  liveSurface: OperatorWebDeployDiagnosticsSnapshot["liveSurface"] | null,
 ): OperatorWebDeployDiagnosticsSnapshot["health"] {
-  if (routeFailures > 0 || serverHealth === "incident") return "incident";
-  if (!versionJsonReachable || serverHealth === "degraded") return "degraded";
+  if (liveSurface) return liveSurface.health;
+  if (serverHealth === "incident") return "incident";
+  if (serverHealth === "degraded") return "degraded";
   if (serverHealth === "unknown") return "unknown";
   return "healthy";
 }
@@ -155,11 +324,16 @@ async function enrichWebDeployDiagnosticsWithBrowserProbes(
     readCurrentBuildFromVersionJson(),
     Promise.all(OPERATOR_WEB_DEPLOY_ROUTE_PROBES.map(probeSameOriginRoute)),
   ]);
+  const assetRefs = await readSameOriginAssetRefsFromHtml();
+  const assetChecks = await Promise.all(assetRefs.map(probeSameOriginAsset));
   const routeFailures = routeChecks.filter((check) => check.status === "failed").length;
+  const assetFailures = assetChecks.filter((check) => check.status === "failed").length;
+  const liveSurface = buildWebLiveSurface({ build, routeChecks, assetChecks });
   return {
     ...snapshot,
     computedAt: Date.now(),
-    health: chooseWebDeployHealth(snapshot.health, routeFailures, build.reachable),
+    health: chooseWebDeployHealth(snapshot.health, liveSurface),
+    liveSurface,
     currentBuild: {
       buildId: build.buildId,
       source: build.buildId ? "version_json" : "unknown",
@@ -169,12 +343,16 @@ async function enrichWebDeployDiagnosticsWithBrowserProbes(
       ...snapshot.totals,
       routeChecks: routeChecks.length,
       routeFailures,
+      assetChecks: assetChecks.length,
+      assetFailures,
     },
     routeChecks,
+    assetChecks,
     evidence: {
       ...snapshot.evidence,
-      sourceTables: [...new Set([...snapshot.evidence.sourceTables, "version.json", "same-origin route probes"])],
+      sourceTables: [...new Set([...snapshot.evidence.sourceTables, "version.json", "same-origin route probes", "same-origin asset probes"])],
       routeProbePaths: OPERATOR_WEB_DEPLOY_ROUTE_PROBES.map((route) => route.path),
+      assetProbePaths: assetChecks.map((asset) => asset.path),
       routeProbeTimeoutMs: OPERATOR_WEB_DEPLOY_PROBE_TIMEOUT_MS,
       versionJsonReachable: build.reachable,
     },

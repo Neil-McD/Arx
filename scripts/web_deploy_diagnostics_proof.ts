@@ -17,6 +17,7 @@ const viteConfig = read("apps/web/vite.config.ts");
 const operatorIntelligence = read("convex/operatorIntelligence.ts");
 const operatorDashboard = read("convex/operatorDashboard.ts");
 const operatorGateway = read("shared/cloudOperatorDashboardGateway.ts");
+const operatorPlatformHealth = read("shared/operatorPlatformHealth.ts");
 const operatorTypes = read("shared/operatorTypes.ts");
 const operatorPanel = read("apps/web/src/components/WebOperatorDataPanel.tsx");
 const packageJson = read("package.json");
@@ -42,6 +43,8 @@ for (const field of [
   "deployEvents",
   "routeChecks",
   "routeFailures",
+  "assetChecks",
+  "assetFailures",
   "frontendCrashEvents",
   "moduleLoadRecoveries",
   "staleBuildWarnings",
@@ -50,8 +53,23 @@ for (const field of [
 }
 assert.match(
   operatorTypes,
-  /export type OperatorWebDeployRouteCheck = /,
-  "web/deploy diagnostics must expose route check records",
+  /export type OperatorWebDeployRouteCheck = [\s\S]*criticality: "critical" \| "important" \| "informational"/,
+  "web/deploy diagnostics must expose tiered route check records",
+);
+assert.match(
+  operatorTypes,
+  /export type OperatorWebDeployAssetCheck = [\s\S]*type: "script" \| "style"/,
+  "web/deploy diagnostics must expose asset check records",
+);
+assert.doesNotMatch(
+  operatorTypes,
+  /type: "script" \| "style" \| "asset"/,
+  "web/deploy asset checks must not keep unused generic asset type residue",
+);
+assert.match(
+  operatorTypes,
+  /liveSurface\?: \{[\s\S]*criticalRoutes:[\s\S]*importantRoutes:[\s\S]*assetChecks: number;[\s\S]*assetFailures: number;/,
+  "web/deploy diagnostics must expose a live web surface summary",
 );
 
 assert.match(
@@ -97,8 +115,8 @@ assert.doesNotMatch(
 );
 assert.match(
   operatorGateway,
-  /OPERATOR_WEB_DEPLOY_ROUTE_PROBES[\s\S]*"\/"[\s\S]*"\/discover\/apps"[\s\S]*"\/settings\/integrations"/,
-  "web/deploy diagnostics must probe the key same-origin routes",
+  /OPERATOR_WEB_DEPLOY_ROUTE_PROBES[\s\S]*"\/"[\s\S]*criticality: "critical"[\s\S]*"\/workspace"[\s\S]*criticality: "critical"[\s\S]*"\/discover\/apps"[\s\S]*criticality: "important"[\s\S]*"\/settings\/integrations"/,
+  "web/deploy diagnostics must probe tiered same-origin routes",
 );
 assert.match(
   operatorGateway,
@@ -107,13 +125,18 @@ assert.match(
 );
 assert.match(
   operatorGateway,
+  /extractSameOriginAssetsFromHtml[\s\S]*probeSameOriginAsset[\s\S]*same-origin asset probes/,
+  "web/deploy diagnostics must probe live same-origin assets from production HTML",
+);
+assert.match(
+  operatorGateway,
   /OPERATOR_WEB_DEPLOY_PROBE_TIMEOUT_MS\s*=\s*\d+[\s\S]*AbortController[\s\S]*controller\.abort\(\)/,
   "web/deploy diagnostics must bound browser probes with AbortController timeouts",
 );
 assert.match(
   operatorGateway,
-  /fetchSameOriginWithTimeout[\s\S]*readCurrentBuildFromVersionJson[\s\S]*fetchSameOriginWithTimeout[\s\S]*probeSameOriginRoute[\s\S]*fetchSameOriginWithTimeout/,
-  "version and route probes must both use timeout-bound fetches",
+  /fetchSameOriginWithTimeout[\s\S]*readCurrentBuildFromVersionJson[\s\S]*fetchSameOriginWithTimeout[\s\S]*probeSameOriginRoute[\s\S]*fetchSameOriginWithTimeout[\s\S]*probeSameOriginAsset[\s\S]*fetchSameOriginWithTimeout/,
+  "version, route, and asset probes must use timeout-bound fetches",
 );
 assert.match(
   operatorGateway,
@@ -133,18 +156,38 @@ assert.match(
 );
 assert.match(
   operatorPanel,
-  /Web &amp; deploy/,
-  "operator panel must render the web/deploy diagnostics section",
+  /Web &amp; deploy[\s\S]*Live web surface[\s\S]*Critical routes[\s\S]*Important routes[\s\S]*Assets/,
+  "operator panel must render live web surface details",
 );
 assert.match(
   operatorPanel,
   /Build version evidence is unavailable/,
   "operator panel must surface missing version evidence",
 );
-assert.match(
+assert.doesNotMatch(
   operatorPanel,
   /Crash counts here are first-party deploy diagnostics only[\s\S]*Sentry-backed issue totals are shown in Frontend errors/,
-  "operator panel must label frontend crash coverage limits and point to Sentry-backed issue totals",
+  "operator panel must not keep redundant Web/Sentry explanatory note",
+);
+assert.match(
+  operatorPanel,
+  /No web asset probes returned/,
+  "operator panel must label missing asset probe evidence",
+);
+assert.match(
+  operatorPlatformHealth,
+  /const live = web\.liveSurface[\s\S]*score: live\?\.score[\s\S]*status: live\?\.health/,
+  "web platform card must score from the live surface when available",
+);
+assert.doesNotMatch(
+  operatorPlatformHealth,
+  /Sentry frontend incident|Sentry frontend degraded/,
+  "web platform card must not treat Sentry issue state as live web availability",
+);
+assert.doesNotMatch(
+  operatorPlatformHealth,
+  /frontendErrors|OperatorFrontendErrorDiagnosticsSnapshot/,
+  "web platform card must not keep frontend-error coupling",
 );
 assert.match(
   operatorPanel,

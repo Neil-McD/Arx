@@ -528,6 +528,18 @@ export type OperatorFrontendErrorDiagnosticsSnapshot = {
 export type OperatorWebDeployRouteCheck = {
   label: string;
   path: string;
+  criticality: "critical" | "important" | "informational";
+  status: "ok" | "failed" | "unknown";
+  httpStatus: number | null;
+  latencyMs: number | null;
+  checkedAt: number | null;
+  errorCode: string | null;
+};
+
+export type OperatorWebDeployAssetCheck = {
+  label: string;
+  path: string;
+  type: "script" | "style";
   status: "ok" | "failed" | "unknown";
   httpStatus: number | null;
   latencyMs: number | null;
@@ -539,6 +551,27 @@ export type OperatorWebDeployDiagnosticsSnapshot = {
   computedAt: number;
   range: OperatorRange;
   health: "healthy" | "degraded" | "incident" | "unknown";
+  liveSurface?: {
+    health: "healthy" | "degraded" | "incident" | "unknown";
+    score: number | null;
+    checkedAt: number | null;
+    versionJsonReachable: boolean | null;
+    currentBuildId: string | null;
+    criticalRoutes: {
+      total: number;
+      failed: number;
+    };
+    importantRoutes: {
+      total: number;
+      failed: number;
+    };
+    informationalRoutes: {
+      total: number;
+      failed: number;
+    };
+    assetChecks: number;
+    assetFailures: number;
+  };
   currentBuild: {
     buildId: string | null;
     source: "version_json" | "unknown";
@@ -550,15 +583,19 @@ export type OperatorWebDeployDiagnosticsSnapshot = {
     errors: number;
     routeChecks: number;
     routeFailures: number;
+    assetChecks: number;
+    assetFailures: number;
     frontendCrashEvents: number;
     moduleLoadRecoveries: number;
     staleBuildWarnings: number;
   };
   routeChecks: OperatorWebDeployRouteCheck[];
+  assetChecks: OperatorWebDeployAssetCheck[];
   latestEvents: OperatorDiagnosticEventRecord[];
   evidence: {
     sourceTables: string[];
     routeProbePaths: string[];
+    assetProbePaths: string[];
     routeProbeTimeoutMs: number | null;
     versionJsonReachable: boolean | null;
     frontendCrashSource: "platformDiagnosticEvents";

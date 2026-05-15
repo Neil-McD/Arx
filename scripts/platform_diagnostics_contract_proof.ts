@@ -5,6 +5,14 @@ function read(relativePath: string): string {
   return readFileSync(new URL(`../${relativePath}`, import.meta.url), "utf8");
 }
 
+function sliceBetween(source: string, startNeedle: string, endNeedle: string): string {
+  const start = source.indexOf(startNeedle);
+  assert.notEqual(start, -1, `expected source to include ${startNeedle}`);
+  const end = source.indexOf(endNeedle, start + startNeedle.length);
+  assert.notEqual(end, -1, `expected source to include ${endNeedle}`);
+  return source.slice(start, end);
+}
+
 const schema = read("convex/schema.ts");
 const platformDiagnostics = read("convex/platformDiagnostics.ts");
 const authSessions = read("convex/authSessions.ts");
@@ -15,6 +23,11 @@ const operatorGateway = read("shared/cloudOperatorDashboardGateway.ts");
 const operatorTypes = read("shared/operatorTypes.ts");
 const operatorPanel = read("apps/web/src/components/WebOperatorDataPanel.tsx");
 const packageJson = read("package.json");
+const authAccessDiagnosticsBlock = sliceBetween(
+  operatorIntelligence,
+  "getOperatorAuthAccessDiagnosticsInternal = internalQuery",
+  "export const getOperatorSecurityAuditDiagnosticsInternal",
+);
 
 assert.match(
   schema,
@@ -166,6 +179,16 @@ assert.match(
   /accessIntegrity: \{[\s\S]*operatorAccessDenied:[\s\S]*communityAccessDenied:[\s\S]*entitlementErrorFindings,/,
   "operator diagnostics must return a distinct access-integrity summary",
 );
+assert.match(
+  authAccessDiagnosticsBlock,
+  /const health: "healthy" \| "degraded" \| "incident" \| "unknown" =[\s\S]*authAvailabilityHealth === "incident" \|\| accessIntegrityHealth === "incident"[\s\S]*authAvailabilityHealth === "degraded" \|\| accessIntegrityHealth === "degraded"/,
+  "operator auth/access compatibility health must mirror nested auth availability and access integrity",
+);
+assert.doesNotMatch(
+  authAccessDiagnosticsBlock,
+  /warningRows\.length > 0 \|\| authFailureRows\.length > 0/,
+  "operator auth/access compatibility health must not re-score 30d warning and auth failure totals",
+);
 assert.doesNotMatch(
   operatorIntelligence,
   /internalMutation|mutation|action|ctx\.db\.insert|ctx\.db\.patch|ctx\.db\.delete/,
@@ -201,6 +224,11 @@ assert.match(
   operatorPanel,
   /Access integrity/,
   "operator panel must separate access integrity from auth availability",
+);
+assert.doesNotMatch(
+  operatorPanel,
+  /30d session-start events/,
+  "operator panel must not surface raw session-start event totals as an auth-health row",
 );
 assert.match(
   operatorPanel,
