@@ -1037,6 +1037,14 @@ function OperatorBusinessInsights(props: {
       ? props.monetization.communityCheckoutCompletions / props.monetization.communityCheckoutStarts
       : null;
   const runtimeUsage = props.runtimeTools?.usageIntegrity ?? null;
+  const platformRevenueMetric =
+    businessKpis?.revenue.platformNetRevenueAvailability === "available"
+      ? businessKpis.revenue.platformNetRevenueInRange
+      : businessKpis?.revenue.creditTopupRevenueInRange ?? null;
+  const platformRevenueNote =
+    businessKpis?.revenue.platformNetRevenueAvailability === "available"
+      ? "Net platform revenue in the selected window."
+      : "Credit top-ups; take-rate pending.";
 
   return (
     <div className="operator-data-panel__grid">
@@ -1054,14 +1062,14 @@ function OperatorBusinessInsights(props: {
           <span className="operator-dashboard__metric-note">Accounts created in the selected operator window.</span>
         </div>
         <div>
-          <span>Activated creators</span>
-          <strong>{businessKpis?.communities.activatedCommunityCreators ?? 0}</strong>
-          <span className="operator-dashboard__metric-note">Community creators with at least one non-owner member.</span>
+          <span>Ready users</span>
+          <strong>{accountSetupOverview?.totals.completed ?? 0}</strong>
+          <span className="operator-dashboard__metric-note">{formatPercent(accountSetupCompletionRate)} of real accounts ready.</span>
         </div>
         <div>
-          <span>Community MRR</span>
-          <strong>{formatMoney(businessKpis?.revenue.communitySubscriptionMrr ?? props.monetization?.estimatedCommunityMrr ?? null)}</strong>
-          <span className="operator-dashboard__metric-note">Current gross run-rate from paid community subscriptions.</span>
+          <span>Platform revenue</span>
+          <strong>{formatMoney(platformRevenueMetric)}</strong>
+          <span className="operator-dashboard__metric-note">{platformRevenueNote}</span>
         </div>
       </section>
 
@@ -1096,14 +1104,6 @@ function OperatorBusinessInsights(props: {
             <span>Readiness</span>
             <strong>{formatPercent(accountSetupCompletionRate)}</strong>
           </div>
-          <div className="operator-dashboard__row">
-            <span>Communities created</span>
-            <strong>{businessKpis?.communities.createdInRange ?? 0}</strong>
-          </div>
-          <div className="operator-dashboard__row">
-            <span>User to community creation</span>
-            <strong>{formatPercent(businessKpis?.communities.creationRateFromNewUsers ?? null)}</strong>
-          </div>
           {businessKpis?.visitors.availability !== "available" ? (
             <div className="operator-dashboard__empty">Visitor analytics need first-party ingestion before conversion is available.</div>
           ) : (
@@ -1115,54 +1115,44 @@ function OperatorBusinessInsights(props: {
       <OperatorAccountSetupInsights snapshot={props.accountSetup} />
 
       <section className="operator-dashboard__panel">
-        <h2>Activation</h2>
+        <h2>Email engagement</h2>
         <div className="operator-dashboard__table">
           <div className="operator-dashboard__row">
-            <span>Community creators</span>
-            <strong>{businessKpis?.communities.totalCommunityCreators ?? 0}</strong>
+            <span>Sent</span>
+            <strong>{businessKpis?.email.sent ?? 0}</strong>
           </div>
           <div className="operator-dashboard__row">
-            <span>Activated creators</span>
-            <strong>{businessKpis?.communities.activatedCommunityCreators ?? 0}</strong>
+            <span>Delivered</span>
+            <strong>{businessKpis?.email.delivered ?? 0}</strong>
           </div>
           <div className="operator-dashboard__row">
-            <span>Creator activation</span>
-            <strong>{formatPercent(businessKpis?.communities.communityCreatorActivationRate ?? null)}</strong>
+            <span>Opened</span>
+            <strong>{businessKpis?.email.opened ?? 0}</strong>
           </div>
           <div className="operator-dashboard__row">
-            <span>Communities with first member</span>
-            <strong>{businessKpis?.communities.communitiesWithFirstMember ?? 0}</strong>
+            <span>Clicked</span>
+            <strong>{businessKpis?.email.clicked ?? 0}</strong>
           </div>
           <div className="operator-dashboard__row">
-            <span>Community activation</span>
-            <strong>{formatPercent(businessKpis?.communities.communityActivationRate ?? null)}</strong>
+            <span>Email click rate</span>
+            <strong>{formatPercent(businessKpis?.email.clickRate ?? null)}</strong>
           </div>
           <div className="operator-dashboard__row">
-            <span>Paid communities with members</span>
-            <strong>{businessKpis?.communities.paidCommunitiesWithMembers ?? 0}</strong>
+            <span>Email to conversion</span>
+            <strong>{formatPercent(businessKpis?.email.conversionRate ?? null)}</strong>
           </div>
-          <div className="operator-dashboard__row">
-            <span>Paid community activation</span>
-            <strong>{formatPercent(businessKpis?.communities.paidCommunityMemberActivationRate ?? null)}</strong>
-          </div>
-          <div className="operator-dashboard__row">
-            <span>New communities activated</span>
-            <strong>{businessKpis?.communities.createdInRangeWithFirstMember ?? 0}</strong>
-          </div>
-          <div className="operator-dashboard__row">
-            <span>New community activation</span>
-            <strong>{formatPercent(businessKpis?.communities.createdInRangeActivationRate ?? null)}</strong>
-          </div>
-          <div className="operator-dashboard__empty">Activation requires at least one active member who is not the community owner.</div>
+          {businessKpis?.email.conversionAvailability !== "available" ? (
+            <div className="operator-dashboard__empty">Resend delivery events exist, but checkout/signup attribution is not wired yet.</div>
+          ) : null}
         </div>
       </section>
 
       <section className="operator-dashboard__panel">
-        <h2>Revenue</h2>
+        <h2>Platform revenue</h2>
         <div className="operator-dashboard__table">
           <div className="operator-dashboard__row">
-            <span>Community subscription MRR</span>
-            <strong>{formatMoney(businessKpis?.revenue.communitySubscriptionMrr ?? props.monetization?.estimatedCommunityMrr ?? null)}</strong>
+            <span>Credit revenue</span>
+            <strong>{formatMoney(businessKpis?.revenue.creditTopupRevenueInRange ?? null)}</strong>
           </div>
           <div className="operator-dashboard__row">
             <span>Active paying users</span>
@@ -1177,18 +1167,6 @@ function OperatorBusinessInsights(props: {
             <strong>{businessKpis?.users.checkoutPurchasersInRange ?? 0}</strong>
           </div>
           <div className="operator-dashboard__row">
-            <span>Community checkout revenue</span>
-            <strong>{formatMoney(businessKpis?.revenue.communityCheckoutRevenueInRange ?? null)}</strong>
-          </div>
-          <div className="operator-dashboard__row">
-            <span>Credit revenue</span>
-            <strong>{formatMoney(businessKpis?.revenue.creditTopupRevenueInRange ?? null)}</strong>
-          </div>
-          <div className="operator-dashboard__row">
-            <span>Gross revenue</span>
-            <strong>{formatMoney(businessKpis?.revenue.grossRevenueInRange ?? null)}</strong>
-          </div>
-          <div className="operator-dashboard__row">
             <span>Recorded LTV</span>
             <strong>{formatMoney(businessKpis?.revenue.averageRecordedLifetimeValue ?? null)}</strong>
           </div>
@@ -1197,43 +1175,8 @@ function OperatorBusinessInsights(props: {
             <strong>{businessKpis?.revenue.platformNetRevenueAvailability === "available" ? formatMoney(businessKpis.revenue.platformNetRevenueInRange) : "--"}</strong>
           </div>
           {businessKpis?.revenue.platformNetRevenueAvailability !== "available" ? (
-            <div className="operator-dashboard__empty">Platform net revenue needs explicit fee/revenue-share attribution before it is reported. Recorded LTV uses first-party checkout records only.</div>
+            <div className="operator-dashboard__empty">Community subscription revenue stays in Communities until platform fee/revenue-share attribution is instrumented.</div>
           ) : null}
-        </div>
-      </section>
-
-      <OperatorPartnerPayoutCycles
-        snapshot={props.partnerPayoutCycles}
-        actions={props.partnerPayoutCycleActions}
-      />
-
-      <section className="operator-dashboard__panel">
-        <h2>Checkout funnel</h2>
-        <div className="operator-dashboard__table">
-          <div className="operator-dashboard__row">
-            <span>Total checkout starts</span>
-            <strong>{businessKpis?.checkouts.totalStarts ?? 0}</strong>
-          </div>
-          <div className="operator-dashboard__row">
-            <span>Total checkout completions</span>
-            <strong>{businessKpis?.checkouts.totalCompletions ?? 0}</strong>
-          </div>
-          <div className="operator-dashboard__row">
-            <span>Checkout conversion</span>
-            <strong>{formatPercent(businessKpis?.checkouts.totalConversionRate ?? null)}</strong>
-          </div>
-          <div className="operator-dashboard__row">
-            <span>Failed or abandoned</span>
-            <strong>{businessKpis?.checkouts.failedOrAbandoned ?? 0}</strong>
-          </div>
-          <div className="operator-dashboard__row">
-            <span>Community checkout conversion</span>
-            <strong>{formatPercent(communityCheckoutConversion)}</strong>
-          </div>
-          <div className="operator-dashboard__row">
-            <span>Credit top-up conversion</span>
-            <strong>{formatPercent(creditTopupConversion)}</strong>
-          </div>
         </div>
       </section>
 
@@ -1301,37 +1244,78 @@ function OperatorBusinessInsights(props: {
       </section>
 
       <section className="operator-dashboard__panel">
-        <h2>Email conversion</h2>
+        <h2>Checkout funnel</h2>
         <div className="operator-dashboard__table">
           <div className="operator-dashboard__row">
-            <span>Sent</span>
-            <strong>{businessKpis?.email.sent ?? 0}</strong>
+            <span>Total checkout starts</span>
+            <strong>{businessKpis?.checkouts.totalStarts ?? 0}</strong>
           </div>
           <div className="operator-dashboard__row">
-            <span>Delivered</span>
-            <strong>{businessKpis?.email.delivered ?? 0}</strong>
+            <span>Total checkout completions</span>
+            <strong>{businessKpis?.checkouts.totalCompletions ?? 0}</strong>
           </div>
           <div className="operator-dashboard__row">
-            <span>Opened</span>
-            <strong>{businessKpis?.email.opened ?? 0}</strong>
+            <span>Checkout conversion</span>
+            <strong>{formatPercent(businessKpis?.checkouts.totalConversionRate ?? null)}</strong>
           </div>
           <div className="operator-dashboard__row">
-            <span>Clicked</span>
-            <strong>{businessKpis?.email.clicked ?? 0}</strong>
+            <span>Failed or abandoned</span>
+            <strong>{businessKpis?.checkouts.failedOrAbandoned ?? 0}</strong>
           </div>
           <div className="operator-dashboard__row">
-            <span>Email click rate</span>
-            <strong>{formatPercent(businessKpis?.email.clickRate ?? null)}</strong>
+            <span>Community checkout conversion</span>
+            <strong>{formatPercent(communityCheckoutConversion)}</strong>
           </div>
           <div className="operator-dashboard__row">
-            <span>Email to conversion</span>
-            <strong>{formatPercent(businessKpis?.email.conversionRate ?? null)}</strong>
+            <span>Credit top-up conversion</span>
+            <strong>{formatPercent(creditTopupConversion)}</strong>
           </div>
-          {businessKpis?.email.conversionAvailability !== "available" ? (
-            <div className="operator-dashboard__empty">Resend delivery events exist, but checkout/signup attribution is not wired yet.</div>
-          ) : null}
         </div>
       </section>
+
+      <section className="operator-dashboard__panel">
+        <h2>Creator activation</h2>
+        <div className="operator-dashboard__table">
+          <div className="operator-dashboard__row">
+            <span>Community creators</span>
+            <strong>{businessKpis?.communities.totalCommunityCreators ?? 0}</strong>
+          </div>
+          <div className="operator-dashboard__row">
+            <span>Activated creators</span>
+            <strong>{businessKpis?.communities.activatedCommunityCreators ?? 0}</strong>
+          </div>
+          <div className="operator-dashboard__row">
+            <span>Creator activation</span>
+            <strong>{formatPercent(businessKpis?.communities.communityCreatorActivationRate ?? null)}</strong>
+          </div>
+          <div className="operator-dashboard__row">
+            <span>Communities created</span>
+            <strong>{businessKpis?.communities.createdInRange ?? 0}</strong>
+          </div>
+          <div className="operator-dashboard__row">
+            <span>User to community creation</span>
+            <strong>{formatPercent(businessKpis?.communities.creationRateFromNewUsers ?? null)}</strong>
+          </div>
+          <div className="operator-dashboard__row">
+            <span>Communities with first member</span>
+            <strong>{businessKpis?.communities.communitiesWithFirstMember ?? 0}</strong>
+          </div>
+          <div className="operator-dashboard__row">
+            <span>Community activation</span>
+            <strong>{formatPercent(businessKpis?.communities.communityActivationRate ?? null)}</strong>
+          </div>
+          <div className="operator-dashboard__row">
+            <span>Paid community activation</span>
+            <strong>{formatPercent(businessKpis?.communities.paidCommunityMemberActivationRate ?? null)}</strong>
+          </div>
+          <div className="operator-dashboard__empty">Community revenue details live in Communities; activation here is only the business funnel checkpoint.</div>
+        </div>
+      </section>
+
+      <OperatorPartnerPayoutCycles
+        snapshot={props.partnerPayoutCycles}
+        actions={props.partnerPayoutCycleActions}
+      />
 
       <section className="operator-dashboard__panel">
         <h2>Friction &amp; risks</h2>
@@ -1506,7 +1490,9 @@ function OperatorPartnerPayoutCycles(props: {
 function OperatorAccountSetupInsights(props: { snapshot: OperatorAccountSetupSnapshot | null }) {
   const overview = props.snapshot?.overview ?? null;
   const userList = props.snapshot?.users ?? null;
-  const users = userList?.rows ?? [];
+  const users = (userList?.rows ?? []).slice(0, 5);
+  const returnedUserCount = userList?.rows.length ?? 0;
+  const isLocallyTrimmed = returnedUserCount > users.length;
   const setupCompletionRate =
     overview && overview.totals.users > 0
       ? overview.totals.completed / overview.totals.users
@@ -1579,11 +1565,14 @@ function OperatorAccountSetupInsights(props: { snapshot: OperatorAccountSetupSna
         </div>
       </section>
 
-      <section className="operator-dashboard__panel operator-dashboard__panel--full">
-        <h2>People needing setup</h2>
+      <section className="operator-dashboard__panel">
+        <h2>Readiness queue</h2>
         <div className="operator-dashboard__table">
           {userList && userList.totalMatching > 0 ? (
-            <div className="operator-dashboard__empty">{showingLabel}</div>
+            <div className="operator-dashboard__empty">
+              {showingLabel}
+              {isLocallyTrimmed ? " in this compact view." : "."}
+            </div>
           ) : null}
           {users.length === 0 ? (
             <div className="operator-dashboard__empty">No users needing readiness work returned.</div>
