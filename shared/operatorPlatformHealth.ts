@@ -236,12 +236,29 @@ function buildAccessCard(auth: OperatorAuthAccessDiagnosticsSnapshot | null): Op
 }
 
 function buildSecurityCard(security: OperatorSecurityAuditDiagnosticsSnapshot | null): OperatorPlatformHealthCard {
-  if (!security) return buildUnknownCard("security", "Security", "Audit, webhook, blocked action, operator role, and trust-boundary evidence.");
+  if (!security) return buildUnknownCard("security", "Security", "Webhook, blocked boundary, operator access, and unknown security evidence.");
+  const trust = security.trustBoundary;
+  if (trust) {
+    const drivers: string[] = [];
+    if (trust.failedEvents > 0) drivers.push(`${trust.failedEvents} failed audit events`);
+    if (trust.webhookFailures > 0) drivers.push(`${trust.webhookFailures} webhook failures`);
+    if (trust.operatorAccessBlocks > 0) drivers.push(`${trust.operatorAccessBlocks} operator access blocks`);
+    if (trust.blockedBoundaryActions > 0) drivers.push(`${trust.blockedBoundaryActions} blocked boundary actions`);
+    if (trust.unknownSecurityEvents > 0) drivers.push(`${trust.unknownSecurityEvents} unknown security events`);
+    return finalizeCard({
+      id: "security",
+      label: "Security",
+      primaryMetric: `${trust.findings} trust findings`,
+      score: trust.score,
+      status: trust.health,
+      drivers,
+      healthyDriver: "Trust-boundary failures clear",
+      evidenceNote: security.evidence.isTruncated ? "Sampled trust-boundary diagnostics" : "Trust-boundary audit evidence",
+    });
+  }
   const input: ScoreInput = { score: 100, drivers: [] };
   addPenalty(input, Math.min(40, security.totals.errors * 12), security.totals.errors > 0 ? `${security.totals.errors} audit errors` : null);
-  addPenalty(input, Math.min(24, security.totals.warnings * 6), security.totals.warnings > 0 ? `${security.totals.warnings} audit warnings` : null);
   addPenalty(input, Math.min(36, security.totals.webhookFailures * 12), security.totals.webhookFailures > 0 ? `${security.totals.webhookFailures} webhook failures` : null);
-  addPenalty(input, Math.min(18, security.totals.blockedActions * 3), security.totals.blockedActions > 0 ? `${security.totals.blockedActions} blocked actions` : null);
   addPenalty(input, Math.min(24, security.totals.operatorAccessBlocks * 8), security.totals.operatorAccessBlocks > 0 ? `${security.totals.operatorAccessBlocks} operator access blocks` : null);
   addPenalty(input, Math.min(30, security.totals.unknownSecurityEvents * 10), security.totals.unknownSecurityEvents > 0 ? `${security.totals.unknownSecurityEvents} unknown security events` : null);
   return finalizeCard({
@@ -250,8 +267,8 @@ function buildSecurityCard(security: OperatorSecurityAuditDiagnosticsSnapshot | 
     primaryMetric: `${security.attentionItems.length} attention items`,
     score: input.score,
     drivers: input.drivers,
-    healthyDriver: "Audit and trust-boundary evidence clean",
-    evidenceNote: security.evidence.isTruncated ? "Sampled security audit diagnostics" : "Audit, webhook, role, and blocked-action evidence",
+    healthyDriver: "Trust-boundary failures clear",
+    evidenceNote: security.evidence.isTruncated ? "Sampled trust-boundary diagnostics" : "Trust-boundary audit evidence",
   });
 }
 

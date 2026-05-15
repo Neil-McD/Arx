@@ -1770,12 +1770,35 @@ export const getOperatorSecurityAuditDiagnosticsInternal = internalQuery({
       if (SECURITY_AUDIT_EVENT_TYPE_SET.has(eventType)) return false;
       return row.severity !== "info" || row.status === "failed" || row.status === "blocked";
     });
-    const health: "healthy" | "degraded" | "incident" =
-      errors.length > 0 || webhookFailures.length > 0 || unknownSecurityEvents.length > 0
-        ? "incident"
-        : warnings.length > 0 || blockedActions.length > 0
-          ? "degraded"
-          : "healthy";
+    const failedSecurityEvents = rows.filter((row: any) => row.severity === "error" || row.status === "failed");
+    const unknownSecurityEventIds = new Set(unknownSecurityEvents.map((row: any) => String(row._id)));
+    const failedTrustEvents = failedSecurityEvents.filter((row: any) => {
+      const eventType = String(row.eventType ?? "");
+      if (WEBHOOK_FAILURE_AUDIT_EVENT_TYPES.has(eventType)) return false;
+      return !unknownSecurityEventIds.has(String(row._id));
+    });
+    const operatorAccessBlockIds = new Set(operatorAccessBlocks.map((row: any) => String(row._id)));
+    const blockedBoundaryActions = blockedActions.filter((row: any) => {
+      const eventType = String(row.eventType ?? "");
+      if (eventType === "account_delete_blocked") return false;
+      return !operatorAccessBlockIds.has(String(row._id));
+    });
+    const trustBoundaryRows = dedupeAuditRows([
+      ...failedSecurityEvents,
+      ...webhookFailures,
+      ...blockedBoundaryActions,
+      ...operatorAccessBlocks,
+      ...unknownSecurityEvents,
+    ]);
+    const trustBoundaryScore = clampOperatorScore(
+      100 -
+        Math.min(45, webhookFailures.length * 18) -
+        Math.min(32, failedTrustEvents.length * 16) -
+        Math.min(32, operatorAccessBlocks.length * 16) -
+        Math.min(24, unknownSecurityEvents.length * 20) -
+        Math.min(24, blockedBoundaryActions.length * 16),
+    );
+    const health = buildOperatorHealthFromScore(trustBoundaryScore);
     const attentionRows = rows.filter((row: any) => {
       const eventType = String(row.eventType ?? "");
       return (
@@ -1793,6 +1816,26 @@ export const getOperatorSecurityAuditDiagnosticsInternal = internalQuery({
       computedAt: nowMs,
       range,
       health,
+      trustBoundary: {
+        health,
+        score: trustBoundaryScore,
+        findings: trustBoundaryRows.length,
+        failedEvents: failedTrustEvents.length,
+        webhookFailures: webhookFailures.length,
+        blockedBoundaryActions: blockedBoundaryActions.length,
+        operatorAccessBlocks: operatorAccessBlocks.length,
+        unknownSecurityEvents: unknownSecurityEvents.length,
+        attentionItems: trustBoundaryRows.slice(0, 8).map(mapSecurityAuditAttentionItem),
+      },
+      auditActivity: {
+        events: rows.length,
+        warnings: warnings.length,
+        errors: errors.length,
+        blockedActions: blockedActions.length,
+        destructiveActions: destructiveActions.length,
+        operatorRoleChanges: operatorRoleChanges.length,
+        billingTrustEvents: billingTrustEvents.length,
+      },
       totals: {
         events: rows.length,
         warnings: warnings.length,

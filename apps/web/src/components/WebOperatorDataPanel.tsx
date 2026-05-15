@@ -647,6 +647,9 @@ function OperatorPlatformInsights(props: {
   frontendErrors: OperatorFrontendErrorDiagnosticsSnapshot | null;
 }) {
   const healthCards = buildOperatorPlatformHealthCards(props);
+  const securityTrust = props.securityAudit?.trustBoundary ?? null;
+  const securityAuditActivity = props.securityAudit?.auditActivity ?? null;
+  const securityAttentionItems = securityTrust?.attentionItems ?? props.securityAudit?.attentionItems ?? [];
   const runtimeExecution = props.runtimeTools?.executionAvailability ?? null;
   const runtimeTopFailureCodes = runtimeExecution?.topFailureCodes ?? props.runtimeTools?.topFailureCodes ?? [];
   return (
@@ -894,34 +897,50 @@ function OperatorPlatformInsights(props: {
       </section>
 
       <section className="operator-dashboard__panel">
-        <h2>Security &amp; audit</h2>
+        <h2>Trust boundary</h2>
         <div className="operator-dashboard__table">
           <div className="operator-dashboard__row">
-            <span>Health</span>
-            <strong>{formatHealth(props.securityAudit?.health)}</strong>
+            <span>Trust health</span>
+            <strong>{formatHealth(securityTrust?.health ?? props.securityAudit?.health)}</strong>
+          </div>
+          <div className="operator-dashboard__row">
+            <span>Trust findings</span>
+            <strong>{securityTrust?.findings ?? props.securityAudit?.attentionItems.length ?? 0}</strong>
           </div>
           <div className="operator-dashboard__row">
             <span>Webhook failures</span>
-            <strong>{props.securityAudit?.totals.webhookFailures ?? 0}</strong>
+            <strong>{securityTrust?.webhookFailures ?? props.securityAudit?.totals.webhookFailures ?? 0}</strong>
           </div>
           <div className="operator-dashboard__row">
-            <span>Blocked actions</span>
-            <strong>{props.securityAudit?.totals.blockedActions ?? 0}</strong>
+            <span>Operator access blocks</span>
+            <strong>{securityTrust?.operatorAccessBlocks ?? props.securityAudit?.totals.operatorAccessBlocks ?? 0}</strong>
           </div>
           <div className="operator-dashboard__row">
-            <span>Destructive actions</span>
-            <strong>{props.securityAudit?.totals.destructiveActions ?? 0}</strong>
-          </div>
-          <div className="operator-dashboard__row">
-            <span>Operator role changes</span>
-            <strong>{props.securityAudit?.totals.operatorRoleChanges ?? 0}</strong>
+            <span>Blocked boundary actions</span>
+            <strong>{securityTrust?.blockedBoundaryActions ?? props.securityAudit?.totals.blockedActions ?? 0}</strong>
           </div>
           <div className="operator-dashboard__row">
             <span>Unknown security events</span>
-            <strong>{props.securityAudit?.totals.unknownSecurityEvents ?? 0}</strong>
+            <strong>{securityTrust?.unknownSecurityEvents ?? props.securityAudit?.totals.unknownSecurityEvents ?? 0}</strong>
           </div>
-          {props.securityAudit?.attentionItems.length ? (
-            props.securityAudit.attentionItems.slice(0, 3).map((item) => (
+          <div className="operator-dashboard__row">
+            <span>Audit events</span>
+            <strong>{securityAuditActivity?.events ?? props.securityAudit?.totals.events ?? 0}</strong>
+          </div>
+          <div className="operator-dashboard__row">
+            <span>Sensitive actions</span>
+            <strong>{securityAuditActivity?.destructiveActions ?? props.securityAudit?.totals.destructiveActions ?? 0}</strong>
+          </div>
+          <div className="operator-dashboard__row">
+            <span>Operator role changes</span>
+            <strong>{securityAuditActivity?.operatorRoleChanges ?? props.securityAudit?.totals.operatorRoleChanges ?? 0}</strong>
+          </div>
+          <div className="operator-dashboard__row">
+            <span>Billing trust events</span>
+            <strong>{securityAuditActivity?.billingTrustEvents ?? props.securityAudit?.totals.billingTrustEvents ?? 0}</strong>
+          </div>
+          {securityAttentionItems.length ? (
+            securityAttentionItems.slice(0, 3).map((item) => (
               <div className="operator-dashboard__row" key={item.id}>
                 <div>
                   <strong>{item.title || formatAuditEventType(item.eventType)}</strong>
@@ -931,10 +950,10 @@ function OperatorPlatformInsights(props: {
               </div>
             ))
           ) : (
-            <div className="operator-dashboard__empty">No security audit attention items returned.</div>
+            <div className="operator-dashboard__empty">No trust-boundary findings returned.</div>
           )}
           {props.securityAudit?.evidence.isTruncated ? (
-            <div className="operator-dashboard__empty">Security audit diagnostics are sampled for this window.</div>
+            <div className="operator-dashboard__empty">Trust-boundary diagnostics are sampled for this window.</div>
           ) : null}
         </div>
       </section>

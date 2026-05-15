@@ -383,6 +383,26 @@ export type OperatorSecurityAuditDiagnosticsSnapshot = {
   computedAt: number;
   range: OperatorRange;
   health: "healthy" | "degraded" | "incident" | "unknown";
+  trustBoundary?: {
+    health: "healthy" | "degraded" | "incident" | "unknown";
+    score: number | null;
+    findings: number;
+    failedEvents: number;
+    webhookFailures: number;
+    blockedBoundaryActions: number;
+    operatorAccessBlocks: number;
+    unknownSecurityEvents: number;
+    attentionItems: OperatorSecurityAuditAttentionItem[];
+  };
+  auditActivity?: {
+    events: number;
+    warnings: number;
+    errors: number;
+    blockedActions: number;
+    destructiveActions: number;
+    operatorRoleChanges: number;
+    billingTrustEvents: number;
+  };
   totals: {
     events: number;
     warnings: number;
