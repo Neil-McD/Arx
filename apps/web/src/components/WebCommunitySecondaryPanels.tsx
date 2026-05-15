@@ -11,6 +11,7 @@ import { WebCommunityMembersSection } from "./WebCommunityMembersSection";
 import { WebCommunityPolynetSection } from "./WebCommunityPolynetSection";
 import { WebCommunityFunnelSection } from "./WebCommunityFunnelSection";
 import { WebCommunityEventsSection } from "./WebCommunityEventsSection";
+import { WebDeleteResourceModuleModal } from "./WebDeleteResourceModuleModal";
 import { WebCommunityResourceModal } from "./WebCommunityResourceModal";
 import { WebCommunityResourceModuleModal } from "./WebCommunityResourceModuleModal";
 import { WebCommunityResourcesSection } from "./WebCommunityResourcesSection";
@@ -58,6 +59,7 @@ export type WebCommunitySecondaryPanelsProps = {
     actions: Omit<ComponentProps<typeof WebCommunityMembersSection>["actions"], "communityInitials">;
   };
   resourceModuleModal: ComponentProps<typeof WebCommunityResourceModuleModal>;
+  resourceModuleDeleteModal: ComponentProps<typeof WebDeleteResourceModuleModal>;
   resourceModal: ComponentProps<typeof WebCommunityResourceModal>;
 };
 
@@ -139,6 +141,7 @@ export function WebCommunitySecondaryPanels(props: WebCommunitySecondaryPanelsPr
         renderCenteredPane(<WebCommunityMembersSection {...membersSectionProps} />)}
 
       <WebCommunityResourceModuleModal {...props.resourceModuleModal} />
+      <WebDeleteResourceModuleModal {...props.resourceModuleDeleteModal} />
       <WebCommunityResourceModal {...props.resourceModal} />
     </>
   );

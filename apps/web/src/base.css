@@ -8082,6 +8082,41 @@ button.chat-reply-quote:hover {
   color: var(--text-secondary);
 }
 
+.resource-delete-confirm-fields {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.resource-delete-confirm-fields label {
+  display: grid;
+  gap: 7px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.resource-delete-confirm-fields input {
+  width: 100%;
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--bg-workspace, var(--bg-app)) 76%, transparent);
+  color: var(--text-primary);
+  padding: 11px 12px;
+  font: inherit;
+}
+
+.resource-delete-confirm-fields input:focus {
+  outline: none;
+  border-color: color-mix(in srgb, #f97316 58%, var(--border-default));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, #f97316 24%, transparent);
+}
+
+.resource-delete-confirm-fields input:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .resource-delete-confirm {
   min-height: 40px;
   padding: 0 18px;

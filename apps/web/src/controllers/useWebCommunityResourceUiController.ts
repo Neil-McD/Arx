@@ -3,6 +3,7 @@ import { useState, type ComponentProps, type Dispatch, type DragEvent, type SetS
 import { readBannerFileAsWideDataUrlWithinLimit } from "../../../../shared/imageTransforms";
 import { useCommunityResourceController } from "../../../../shared/useCommunityResourceController";
 import { useCommunityResourceEditorController } from "../../../../shared/useCommunityResourceEditorController";
+import { WebDeleteResourceModuleModal } from "../components/WebDeleteResourceModuleModal";
 import { WebCommunityResourceModal } from "../components/WebCommunityResourceModal";
 import { WebCommunityResourceModuleModal } from "../components/WebCommunityResourceModuleModal";
 
@@ -41,6 +42,8 @@ type UseWebCommunityResourceUiControllerParams<
   session: SessionT | null;
   ensureSession?: (session?: SessionT | null) => Promise<SessionT | null>;
   parseEmbedUrl: (url: string) => unknown;
+  communityResources: ResourceT[];
+  communityResourceModules: ResourceModuleT[];
   setCommunityResources: Dispatch<SetStateAction<ResourceT[]>>;
   setCommunityResourceModules: Dispatch<SetStateAction<ResourceModuleT[]>>;
   setIsLoadingResources: Dispatch<SetStateAction<boolean>>;
@@ -69,6 +72,7 @@ export type UseWebCommunityResourceUiControllerResult<
   handleEditResource: (resource: ResourceT) => void;
   handleDeleteResource: (resourceId: string) => Promise<boolean>;
   resourceModuleModalProps: ComponentProps<typeof WebCommunityResourceModuleModal>;
+  resourceModuleDeleteModalProps: ComponentProps<typeof WebDeleteResourceModuleModal>;
   resourceModalProps: ComponentProps<typeof WebCommunityResourceModal>;
   loadCommunityResourceModules: (communityId: string, session: SessionT) => Promise<void>;
   loadCommunityResources: (communityId: string, session: SessionT) => Promise<void>;
@@ -104,8 +108,13 @@ export function useWebCommunityResourceUiController<
   const [isModuleBannerFocusModalOpen, setIsModuleBannerFocusModalOpen] = useState(false);
   const [resourceError, setResourceError] = useState<string | null>(null);
   const [resourceModuleError, setResourceModuleError] = useState<string | null>(null);
+  const [resourceModuleDeleteError, setResourceModuleDeleteError] = useState<string | null>(null);
   const [isSavingResource, setIsSavingResource] = useState(false);
   const [isSavingResourceModule, setIsSavingResourceModule] = useState(false);
+  const [pendingDeleteResourceModuleId, setPendingDeleteResourceModuleId] = useState<string | null>(null);
+  const [moduleDeleteNameInput, setModuleDeleteNameInput] = useState("");
+  const [moduleDeleteWordInput, setModuleDeleteWordInput] = useState("");
+  const [isDeletingResourceModule, setIsDeletingResourceModule] = useState(false);
 
   const {
     loadCommunityResourceModules,
@@ -221,12 +230,50 @@ export function useWebCommunityResourceUiController<
     setShowResourceModuleModal(true);
   };
 
+  const pendingDeleteResourceModule =
+    params.communityResourceModules.find((module) => module.id === pendingDeleteResourceModuleId) ?? null;
+  const pendingDeleteResourceModuleResourceCount = pendingDeleteResourceModuleId
+    ? params.communityResources.filter((resource) => resource.module_id === pendingDeleteResourceModuleId).length
+    : 0;
+
+  const resetModuleDeleteState = () => {
+    setPendingDeleteResourceModuleId(null);
+    setModuleDeleteNameInput("");
+    setModuleDeleteWordInput("");
+    setResourceModuleDeleteError(null);
+  };
+
   const handleDeleteModule = async (moduleId: string) => {
-    const didConfirm = window.confirm(
-      "Delete this module? Its resources will stay in the community and move back to Resources.",
-    );
-    if (!didConfirm) return false;
-    return await handleDeleteCommunityResourceModule(moduleId);
+    const module = params.communityResourceModules.find((candidate) => candidate.id === moduleId);
+    if (!module) {
+      setResourceModuleError("Module not found. Refresh resources and try again.");
+      return false;
+    }
+    setPendingDeleteResourceModuleId(moduleId);
+    setModuleDeleteNameInput("");
+    setModuleDeleteWordInput("");
+    setResourceModuleDeleteError(null);
+    setResourceModuleError(null);
+    return false;
+  };
+
+  const confirmDeleteModule = async () => {
+    if (!pendingDeleteResourceModuleId || isDeletingResourceModule) return;
+    const moduleName = pendingDeleteResourceModule?.name.trim() ?? "";
+    if (!moduleName || moduleDeleteNameInput.trim() !== moduleName || moduleDeleteWordInput.trim() !== "delete") {
+      setResourceModuleDeleteError("Type the module name and delete to confirm.");
+      return;
+    }
+
+    setIsDeletingResourceModule(true);
+    setResourceModuleDeleteError(null);
+    setResourceModuleError(null);
+    const didDelete = await handleDeleteCommunityResourceModule(pendingDeleteResourceModuleId);
+    setIsDeletingResourceModule(false);
+    if (didDelete !== false) {
+      resetModuleDeleteState();
+      return;
+    }
   };
 
   const handleModuleBannerUpload = async (file: File | null) => {
@@ -333,6 +380,22 @@ export function useWebCommunityResourceUiController<
         setModuleBannerUploadError(null);
         setIsModuleBannerFocusModalOpen(false);
       },
+    },
+    resourceModuleDeleteModalProps: {
+      isOpen: Boolean(pendingDeleteResourceModule),
+      moduleName: pendingDeleteResourceModule?.name ?? null,
+      resourceCount: pendingDeleteResourceModuleResourceCount,
+      moduleNameInput: moduleDeleteNameInput,
+      deleteInput: moduleDeleteWordInput,
+      isDeleting: isDeletingResourceModule,
+      error: resourceModuleDeleteError ?? resourceModuleError,
+      onChangeModuleNameInput: setModuleDeleteNameInput,
+      onChangeDeleteInput: setModuleDeleteWordInput,
+      onClose: () => {
+        if (isDeletingResourceModule) return;
+        resetModuleDeleteState();
+      },
+      onConfirm: confirmDeleteModule,
     },
     resourceModalProps: {
       isOpen: showResourceModal,

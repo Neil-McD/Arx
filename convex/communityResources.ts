@@ -235,6 +235,55 @@ export const reorderCommunityResourceModules = mutation({
   },
 });
 
+export const deleteCommunityResourceModule = mutation({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    moduleId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      userId: args.userId,
+      authSubject: args.authSubject ?? null,
+    });
+    (args as { userId?: any }).userId = userId;
+    const module = (await ctx.db.get(args.moduleId as any)) as CommunityResourceModuleLike | null;
+    if (!module) return { ok: true, movedResources: 0 };
+
+    await requireCommunityManager({
+      ctx,
+      communityId: module.communityId,
+      userId: args.userId,
+    });
+
+    const nowMs = Date.now();
+    const resources = (await ctx.db
+      .query("communityResources" as any)
+      .withIndex("by_community_module", (q: any) =>
+        q.eq("communityId", module.communityId).eq("moduleId", module._id),
+      )
+      .collect()) as CommunityResourceLike[];
+
+    await Promise.all(
+      resources.map(async (resource) => {
+        await ctx.db.patch(resource._id as any, {
+          moduleId: undefined,
+          updatedAt: nowMs,
+        });
+        const updated = (await ctx.db.get(resource._id as any)) as CommunityResourceLike | null;
+        if (updated) await upsertArchiveDocumentForResource(ctx, updated);
+      }),
+    );
+
+    if (module.bannerStorageId) {
+      await maybeDeleteStorageAsset(ctx, module.bannerStorageId);
+    }
+    await ctx.db.delete(module._id as any);
+    return { ok: true, movedResources: resources.length };
+  },
+});
+
 export const listCommunityResources = query({
   args: {
     userId: v.optional(v.id("users")),

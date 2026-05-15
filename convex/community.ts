@@ -73,6 +73,7 @@ import {
   heartbeatCommunityPresence as heartbeatCommunityPresenceImpl,
   recordPublicFunnelVisitBySlug as recordPublicFunnelVisitBySlugImpl,
   deleteCommunityResource as deleteCommunityResourceImpl,
+  deleteCommunityResourceModule as deleteCommunityResourceModuleImpl,
   getMyCommunityAccess as getMyCommunityAccessImpl,
   getMyCommunityAccessBySlug as getMyCommunityAccessBySlugImpl,
   getMyJoinRequestBySlug as getMyJoinRequestBySlugImpl,
@@ -141,6 +142,7 @@ export const saveCommunityResource = saveCommunityResourceImpl;
 export const saveCommunityResourceModule = saveCommunityResourceModuleImpl;
 export const reorderCommunityResourceModules = reorderCommunityResourceModulesImpl;
 export const deleteCommunityResource = deleteCommunityResourceImpl;
+export const deleteCommunityResourceModule = deleteCommunityResourceModuleImpl;
 export const listCommunityEvents = listCommunityEventsImpl;
 export const saveCommunityEvent = saveCommunityEventImpl;
 export const cancelCommunityEvent = cancelCommunityEventImpl;
