@@ -113,28 +113,6 @@ async function proveWorkspaceCreditAccountingContract() {
   );
   assert.match(
     sharedCreditsSource,
-    /export function isWorkspaceCreditsExhaustedError[\s\S]*credits_exhausted/,
-    "expected wrapped Convex reservation errors to normalize exhausted balance instead of becoming unavailable balance",
-  );
-  for (const [label, source] of [
-    ["daytona session", daytonaSessionSource],
-    ["background sandbox", backgroundServiceSource],
-    ["web research", httpDaytonaSource],
-    ["voice input", httpVoiceSource],
-  ] as const) {
-    assert.match(
-      source,
-      /isWorkspaceCreditsExhaustedError\(error\)/,
-      `expected ${label} balance failures to use wrapped-error credit exhaustion normalization`,
-    );
-    assert.doesNotMatch(
-      source,
-      /message\s*===\s*"credits_exhausted"/,
-      `expected ${label} balance failures not to rely on exact Convex error messages`,
-    );
-  }
-  assert.match(
-    sharedCreditsSource,
     /PAID_TOOL_TARGET_GROSS_MARGIN_BPS\s*=\s*6000/,
     "expected paid tools to target 60% gross margin",
   );
@@ -303,46 +281,6 @@ async function proveWorkspaceCreditAccountingContract() {
     backgroundServiceSource,
     /providerSandboxCreditReservationKey:\s*creditReservationKey/,
     "expected background sandbox reservation keys to be persisted on the project",
-  );
-  assert.match(
-    backgroundServiceSource,
-    /BACKGROUND_SANDBOX_BUDGET_EXPIRED_CODE\s*=\s*"background_sandbox_budget_expired"/,
-    "expected expired background sandbox budgets to use a distinct internal state code",
-  );
-  assert.match(
-    backgroundServiceSource,
-    /creditBudgetExpiresAt[\s\S]*releaseProjectBackgroundSandboxIfIdle[\s\S]*code:\s*BACKGROUND_SANDBOX_BUDGET_EXPIRED_CODE[\s\S]*expired_budget_at:\s*credit\.creditBudgetExpiresAt/,
-    "expected expired background sandbox budgets to release stale sandboxes without pretending account balance is exhausted",
-  );
-  const resolveTerminalSandboxContextBlock = sliceBetween(
-    backgroundServiceSource,
-    "export async function resolveTerminalSandboxContext",
-    "const loadedConfig = loadDaytonaConfig",
-  );
-  assert.match(
-    resolveTerminalSandboxContextBlock,
-    /code:\s*BACKGROUND_SANDBOX_BUDGET_EXPIRED_CODE[\s\S]*expired_budget_at:\s*credit\.creditBudgetExpiresAt/,
-    "expected expired terminal sandbox budgets to use the distinct expired-budget state code",
-  );
-  assert.doesNotMatch(
-    resolveTerminalSandboxContextBlock,
-    /code:\s*"workspace_credits_exhausted"/,
-    "expired terminal sandbox budgets should not be reported as exhausted current balance",
-  );
-  const ensureBackgroundSandboxBlock = sliceBetween(
-    backgroundServiceSource,
-    "export async function ensureProjectBackgroundSandbox",
-    "const clearCreationLease = async () =>",
-  );
-  assert.doesNotMatch(
-    ensureBackgroundSandboxBlock,
-    /existing\.code\s*===\s*"workspace_credits_exhausted"[\s\S]*return existing/,
-    "background sandbox ensure should not stop after releasing an expired budget when current balance can reserve a fresh sandbox",
-  );
-  assert.match(
-    ensureBackgroundSandboxBlock,
-    /if \(existing\.ok\) return existing;[\s\S]*getCloudProjectById/,
-    "background sandbox ensure should reuse ready sandboxes, otherwise continue toward fresh creation",
   );
   assert.match(
     backgroundServiceSource,

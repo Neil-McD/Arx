@@ -202,16 +202,6 @@ export function estimateDaytonaWorkspaceReservationCredits(params: {
   return Math.max(1, ceilCredits(credits));
 }
 
-export function isWorkspaceCreditsExhaustedError(error: unknown): boolean {
-  const message =
-    error instanceof Error ? error.message : String(error ?? "");
-  const normalized = message.trim().toLowerCase();
-  return (
-    /\bworkspace_credits_exhausted\b/.test(normalized) ||
-    /\bcredits_exhausted\b/.test(normalized)
-  );
-}
-
 export function priceDaytonaWorkspaceUsageCredits(params: {
   computeCostUsd: number;
 }): number {

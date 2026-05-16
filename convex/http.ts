@@ -8,7 +8,6 @@ import { registerRuntimeBillingRoutes } from "./httpBilling";
 import { registerRuntimeContextRoutes } from "./httpContext";
 import { registerRuntimeMcpRoutes } from "./httpMcp";
 import { registerEmailRoutes } from "./httpEmail";
-import { registerCodexHarnessBridgeRoutes } from "./httpCodexHarnessBridge";
 import { readAuthenticatedIdentityProfile } from "./authIdentity";
 import { parseBoolish, parseOptionalString } from "./httpInferenceConfig";
 import { registerRuntimeTurnRoutes } from "./httpRuntimeRoutes";
@@ -330,13 +329,6 @@ registerRuntimeMcpRoutes({
   jsonResponse,
   optionsResponse,
   requireAuthenticatedActor,
-});
-
-registerCodexHarnessBridgeRoutes({
-  http,
-  httpAction,
-  jsonResponse,
-  optionsResponse,
 });
 
 registerRuntimeTurnRoutes({

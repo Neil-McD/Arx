@@ -432,16 +432,14 @@ export function useWebTurnRunnerController<
       threadStreamingDrainingRefById.current[params.threadId] = false;
       setThreadStreamingState(params.threadId, () => ({
         runId: params.runIdHint,
-          meta: {
-            engine_id: "public_web",
-            model_id: params.modelId,
-            inference_source: "free",
-            runtime_harness_id: "polynet_native",
-            runtime_surface: "polynet",
-            memory_used: [],
-            history_used: [],
-            community_evidence_used: null,
-          },
+        meta: {
+          engine_id: "public_web",
+          model_id: params.modelId,
+          inference_source: "free",
+          memory_used: [],
+          history_used: [],
+          community_evidence_used: null,
+        },
         content: "",
         streamTransport: "sse",
         runtimeEvents: [],
@@ -560,14 +558,6 @@ export function useWebTurnRunnerController<
                         engine_id: parsed.engine_id,
                         model_id: typeof parsed?.model_id === "string" ? parsed.model_id : params.modelId,
                         inference_source: "free",
-                        runtime_harness_id:
-                          typeof parsed?.runtime_harness_id === "string"
-                            ? parsed.runtime_harness_id
-                            : "polynet_native",
-                        runtime_surface:
-                          typeof parsed?.runtime_surface === "string"
-                            ? parsed.runtime_surface
-                            : "polynet",
                         memory_used: [],
                         history_used: [],
                         community_evidence_used: null,
@@ -662,8 +652,7 @@ export function useWebTurnRunnerController<
   const runAgentTurn = useCallback(
     async (session: SessionT, threadId: string, params: RunAgentTurnParams): Promise<{ cancelled: boolean; error: string | null }> => {
       const current = argsRef.current;
-      const streamRuntimeTurn = params.stream !== false;
-      const exposeStreamingUi = params.suppressStreamingUi !== true && streamRuntimeTurn;
+      const exposeStreamingUi = params.suppressStreamingUi !== true;
       let baseUrl: string;
       try {
         baseUrl = requireCloudRuntimeBaseUrl(current.getCloudRuntimeBaseUrl);
@@ -695,8 +684,6 @@ export function useWebTurnRunnerController<
             engine_id: "agent_web",
             model_id: params.preferredModelId,
             inference_source: params.inferenceSource ?? null,
-            runtime_harness_id: "polynet_native",
-            runtime_surface: "polynet",
             memory_used: [],
             history_used: [],
             community_evidence_used: null,
@@ -730,6 +717,7 @@ export function useWebTurnRunnerController<
       };
 
       try {
+        const streamRuntimeTurn = true;
         const laneMessages = Array.isArray(params.messages)
           ? buildPublicTurnMessages({
               messages: params.messages,
@@ -750,7 +738,6 @@ export function useWebTurnRunnerController<
               idempotency_key: params.runIdHint,
               user_message_key: params.userMessageKey ?? undefined,
               requested_agentic_tools: params.requestedAgenticTools === true,
-              codex_primary_canary: params.codexPrimaryCanary === true,
               ...(laneMessages.length > 0 ? { messages: laneMessages } : null),
             },
             signal: abort.signal,
@@ -819,25 +806,6 @@ export function useWebTurnRunnerController<
             }
             throw new Error(formatCloudFunctionErrorMessage(failure));
           }
-        }
-        if (!streamRuntimeTurn) {
-          const payload = await runtimeTurn.json().catch(() => null);
-          const parsed =
-            payload && typeof payload === "object" && !Array.isArray(payload)
-              ? (payload as Record<string, unknown>)
-              : null;
-          if (!parsed || parsed.ok !== true) {
-            const message =
-              (typeof parsed?.message === "string" && parsed.message.trim()) ||
-              (typeof parsed?.error === "string" && parsed.error.trim()) ||
-              "Runtime turn failed before producing a response.";
-            throw new Error(message);
-          }
-          const responseRunId = String(parsed.run_id ?? "").trim();
-          if (responseRunId) runIdFromServer = responseRunId;
-          await current.loadThreadMessages(threadId, session);
-          await current.loadThreads(session);
-          return { cancelled: false, error: null };
         }
         const reader = runtimeTurn.body?.getReader();
         if (!reader) throw new Error("Missing streaming response.");

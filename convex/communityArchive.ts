@@ -452,25 +452,6 @@ export const searchCommunityKnowledgeInternal = internalAction({
   },
 });
 
-export const searchCodexHarnessTrustedCommunityKnowledgeInternal = internalAction({
-  args: {
-    userId: v.id("users"),
-    authSubject: v.string(),
-    communityId: v.id("communities"),
-    query: v.string(),
-  },
-  handler: async (ctx, args): Promise<unknown> => {
-    return await searchCommunityKnowledge({
-      ctx,
-      userId: args.userId,
-      authSubject: args.authSubject,
-      communityId: args.communityId,
-      query: args.query,
-      trustedActor: true,
-    });
-  },
-});
-
 export const getCommunityArchiveHealth = query({
   args: {
     userId: v.optional(v.id("users")),

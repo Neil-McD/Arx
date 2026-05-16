@@ -21,10 +21,6 @@ import type {
   WorkspaceThreadErrorView,
   WorkspaceThreadMessageView,
 } from "../components/webWorkspaceThreadViews";
-import {
-  extractRuntimeSurfaceFromMessageContent,
-  extractRuntimeSurfaceFromRuntimeEvents,
-} from "../../../../shared/modelAttributionUi";
 
 type WorkspaceAttachmentView =
   Parameters<WebWorkspaceHostProps["ingestWorkspaceAttachmentsFromFileList"]>[1][number];
@@ -119,7 +115,6 @@ type BuildWebWorkspaceSurfaceProjectionParams = {
     modelId: string | null,
     inferenceSource: string | null,
     toggles: ModelToggle[],
-    runtimeSurface?: string | null,
   ) => string | null;
   renderMarkdown: (
     text: string,
@@ -204,16 +199,11 @@ export function buildWebWorkspaceSurfaceProjection(
             ? params.activeThreadStreamingState.runtimeEvents
             : params.runtimeEventsByRunId[message.run_id] ?? []
           : [];
-      const runtimeSurface = !isUser
-        ? extractRuntimeSurfaceFromRuntimeEvents(runtimeEvents) ??
-          extractRuntimeSurfaceFromMessageContent(message.content_json)
-        : null;
       const modelLabel = !isUser
         ? params.formatModelSignature(
             messageModelId,
             inferenceSource,
             params.modelToggles,
-            runtimeSurface,
           )
         : null;
       const requireLiveDesktop =

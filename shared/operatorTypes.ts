@@ -1,5 +1,4 @@
 import type { AccountSetupMissing, AccountSetupStatus, AccountSetupStep } from "./accountSetup";
-import type { CodexHarnessReadinessStatus } from "./codexHarnessRoute";
 
 export type OperatorRange = "7d" | "30d" | "90d" | "all";
 
@@ -447,122 +446,6 @@ export type OperatorPaidToolLane = {
   latestAt: number | null;
 };
 
-export type OperatorCodexHarnessDiagnostics = {
-  routeDecisions: number;
-  selectedRoutes: number;
-  executorDecisions: number;
-  executorCandidates: number;
-  probeStarts: number;
-  probeCompletions: number;
-  readinessEvents: number;
-  readyEvents: number;
-  executionStarts: number;
-  executionCompletions: number;
-  executionReadinessEvents: number;
-  executionReadyEvents: number;
-  shadowStarts: number;
-  shadowCompletions: number;
-  shadowReadinessEvents: number;
-  shadowReadyEvents: number;
-  shadowComparisons: number;
-  shadowComparisonMatches: number;
-  adapterSummaries: number;
-  adapterEvents: number;
-  latestRoute: {
-    selected: boolean;
-    reason: string;
-    engine: string;
-    probeMode: string;
-    runId: string | null;
-    createdAt: number | null;
-  } | null;
-  latestExecutor: {
-    selected: boolean;
-    mode: string;
-    reason: string;
-    candidateEngine: string;
-    visibleAnswerEngine: string;
-    probeMode: string;
-    runId: string | null;
-    createdAt: number | null;
-  } | null;
-  latestProbe: {
-    ok: boolean;
-    code: string | null;
-    stage: string | null;
-    runId: string | null;
-    createdAt: number | null;
-  } | null;
-  latestReadiness: {
-    status: CodexHarnessReadinessStatus;
-    ready: boolean;
-    code: string | null;
-    stage: string | null;
-    latencyMs: number | null;
-    runId: string | null;
-    createdAt: number | null;
-  } | null;
-  latestExecution: {
-    ok: boolean;
-    code: string | null;
-    stage: string | null;
-    matchedExpected: boolean;
-    runId: string | null;
-    createdAt: number | null;
-  } | null;
-  latestExecutionReadiness: {
-    status: "ready" | "not_ready";
-    ready: boolean;
-    code: string | null;
-    stage: string | null;
-    runId: string | null;
-    createdAt: number | null;
-  } | null;
-  latestShadow: {
-    ok: boolean;
-    code: string | null;
-    stage: string | null;
-    completed: boolean;
-    outputPresent: boolean;
-    outputChars: number | null;
-    outputSha256: string | null;
-    runId: string | null;
-    createdAt: number | null;
-  } | null;
-  latestShadowReadiness: {
-    status: "ready" | "not_ready";
-    ready: boolean;
-    code: string | null;
-    stage: string | null;
-    outputChars: number | null;
-    outputSha256: string | null;
-    runId: string | null;
-    createdAt: number | null;
-  } | null;
-  latestShadowComparison: {
-    exactHashMatch: boolean;
-    visibleAnswerChars: number | null;
-    shadowOutputChars: number | null;
-    lengthDelta: number | null;
-    visibleAnswerSha256: string | null;
-    shadowOutputSha256: string | null;
-    shadowReady: boolean;
-    runId: string | null;
-    createdAt: number | null;
-  } | null;
-  latestAdapterSummary: {
-    totalNotifications: number | null;
-    capturedEvents: number | null;
-    emittedEvents: number | null;
-    assistantDeltaEvents: number | null;
-    toolStartedEvents: number | null;
-    turnCompletedEvents: number | null;
-    errorEvents: number | null;
-    runId: string | null;
-    createdAt: number | null;
-  } | null;
-};
-
 export type OperatorRuntimeToolDiagnosticsSnapshot = {
   computedAt: number;
   range: OperatorRange;
@@ -630,7 +513,6 @@ export type OperatorRuntimeToolDiagnosticsSnapshot = {
     };
     lanes: OperatorPaidToolLane[];
   };
-  codexHarness: OperatorCodexHarnessDiagnostics;
   latestEvents: OperatorDiagnosticEventRecord[];
   evidence: {
     sourceTables: string[];

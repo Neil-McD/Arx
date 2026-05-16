@@ -22142,18 +22142,6 @@ button.message-citation-chip:hover {
   border-radius: 8px;
 }
 
-.workspace-codex-canary-toggle,
-.workspace-operator-data-toggle {
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-}
-
-.workspace-codex-canary-toggle.active {
-  color: var(--accent-cyan);
-}
-
-.workspace-codex-canary-toggle svg,
 .workspace-operator-data-toggle svg {
   width: 18px;
   height: 18px;

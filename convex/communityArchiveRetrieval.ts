@@ -26,24 +26,13 @@ export async function searchCommunityKnowledge(args: {
   authSubject?: string | null;
   communityId: any;
   query: string;
-  trustedActor?: boolean;
 }): Promise<unknown> {
-  const recent: any = args.trustedActor === true
-    ? await args.ctx.runQuery(
-        internal.communityRecentContext.readCodexHarnessTrustedCommunityRecentContextInternal as any,
-        {
-          userId: args.userId,
-          authSubject: args.authSubject ?? undefined,
-          communityId: args.communityId,
-          query: args.query,
-        },
-      )
-    : await args.ctx.runQuery(api.community.readCommunityRecentContext as any, {
-        userId: args.userId,
-        authSubject: args.authSubject ?? undefined,
-        communityId: args.communityId,
-        query: args.query,
-      });
+  const recent: any = await args.ctx.runQuery(api.community.readCommunityRecentContext as any, {
+    userId: args.userId,
+    authSubject: args.authSubject ?? undefined,
+    communityId: args.communityId,
+    query: args.query,
+  });
   const queryText = truncateText(args.query, 240);
   const config = resolveGeminiEmbeddingConfig();
   const diagnostics = {

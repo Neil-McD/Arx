@@ -4,10 +4,7 @@ import {
   type ChatgptFunctionTool,
   type ChatgptToolAwareMessage,
 } from "./httpChatgpt";
-import {
-  loadDaytonaConfig,
-  type DaytonaConfig,
-} from "./daytonaSandboxClient";
+import { loadDaytonaConfig, type DaytonaConfig } from "./daytonaSandboxClient";
 import {
   resolveWorkspaceProjectContext,
   type WorkspaceSandboxSession,
@@ -36,17 +33,12 @@ import { executeWebResearch } from "./webResearchTools";
 import {
   creditsToUsd,
   estimateWebResearchVendorCostUsd,
-  isWorkspaceCreditsExhaustedError,
   PAID_TOOL_PRICING_VERSION,
   PAID_TOOL_TARGET_GROSS_MARGIN_BPS,
   priceWebResearchCredits,
   type WebResearchCreditAction,
 } from "../shared/workspaceCredits";
 import { runOpenRouterNativeToolCompletion } from "./openRouterNativeTransport";
-import {
-  buildCodexAppServerRuntimeAgentHarness,
-  executeCodexHarnessProbeIfSelected,
-} from "./codexHarnessBridge";
 import {
   type RetrievalToolName,
   isComputerUseToolName,
@@ -77,17 +69,6 @@ import {
   type RuntimeKernelFailureInput,
   type RuntimeKernelSuccess,
 } from "../shared/runtimeKernelTypes";
-import {
-  POLYNET_NATIVE_RUNTIME_AGENT_HARNESS,
-  buildPolynetNativeRuntimeAgentHarness,
-  buildPreparedRuntimeAgentTurn,
-  buildPreparedRuntimeAgentTurnEventPayload,
-  buildRuntimeAgentHarnessSelectedEventPayload,
-  resolveRuntimeAgentHarnessSelection,
-  type RuntimeAgentHarnessDescriptor,
-  type RuntimeAgentHarnessExecutionPlacement,
-  type RuntimeAgentHarnessId,
-} from "../shared/runtimeAgentHarness.ts";
 import {
   buildOpenAiFunctionTools,
   buildResponsesApiFunctionTools,
@@ -133,16 +114,6 @@ import {
   classifyRuntimeToolSchedule,
   type RuntimeToolSchedulePlan,
 } from "../shared/runtimeToolPolicy";
-import {
-  isCodexHarnessExperimentEnabled,
-  isCodexHarnessPrimaryEnabled,
-  resolveCodexHarnessProbeMode,
-  resolveCodexHarnessRoute,
-} from "../shared/codexHarnessRoute.ts";
-import {
-  buildCodexMcpProjection,
-  buildCodexMcpProjectionAuditPayload,
-} from "../shared/codexMcpProjection.ts";
 
 type InferenceRole = "user" | "assistant" | "system";
 type InferenceMessage = {
@@ -150,13 +121,8 @@ type InferenceMessage = {
   content: string;
 };
 
-type RuntimeAgentLoopAttribution = {
-  runtimeHarnessId?: RuntimeAgentHarnessId;
-  runtimeHarnessLabel?: string;
-  runtimeHarnessExecutionPlacement?: RuntimeAgentHarnessExecutionPlacement;
-};
-type RuntimeAgentLoopSuccess = RuntimeKernelSuccess<string> & RuntimeAgentLoopAttribution;
-type RuntimeAgentLoopFailure = RuntimeKernelFailure<string> & RuntimeAgentLoopAttribution;
+type RuntimeAgentLoopSuccess = RuntimeKernelSuccess<string>;
+type RuntimeAgentLoopFailure = RuntimeKernelFailure<string>;
 type RuntimeAgentLoopFailureInput = RuntimeKernelFailureInput;
 
 type OpenAiCompatibleFunctionTool = ReturnType<
@@ -164,18 +130,6 @@ type OpenAiCompatibleFunctionTool = ReturnType<
 >[number];
 type ChatgptCompatibleFunctionTool = ChatgptFunctionTool;
 const productDocsIndex = productDocsIndexJson as ProductDocsSearchIndex;
-
-function withRuntimeAgentLoopAttribution(
-  result: RuntimeKernelSuccess<string> | RuntimeKernelFailure<string>,
-  harness: RuntimeAgentHarnessDescriptor,
-): RuntimeAgentLoopSuccess | RuntimeAgentLoopFailure {
-  return {
-    ...result,
-    runtimeHarnessId: harness.id,
-    runtimeHarnessLabel: harness.label,
-    runtimeHarnessExecutionPlacement: harness.executionPlacement,
-  };
-}
 
 type RuntimeInferenceSource = "free" | "platform" | "chatgpt" | "user_key";
 const CHAT_TOOLS_RUNTIME_KERNEL_BUDGET: RuntimeKernelBudget =
@@ -587,14 +541,14 @@ async function executeRetrievalHarnessTool(params: {
         nowMs: Date.now(),
       });
     } catch (error) {
-      const isCreditsExhausted = isWorkspaceCreditsExhaustedError(error);
+      const message = error instanceof Error ? error.message : String(error);
       return {
         status: "error",
         exitCode: null,
         outputText: "",
-        errorCode: isCreditsExhausted ? "workspace_credits_exhausted" : "workspace_credits_unavailable",
+        errorCode: message === "credits_exhausted" ? "workspace_credits_exhausted" : "workspace_credits_unavailable",
         errorMessage:
-          isCreditsExhausted
+          message === "credits_exhausted"
             ? "Web research uses paid provider calls, so it needs tool balance before it runs."
             : "Tool balance is unavailable for web research.",
         details: {
@@ -927,7 +881,6 @@ async function executeRetrievalAgentLoop(
     inferenceSource: RuntimeInferenceSource;
     modelRef: string;
     messages: InferenceMessage[];
-    stream?: boolean;
     maxTokens: number;
     runId: string;
     harnessName: "chat_tools";
@@ -938,7 +891,6 @@ async function executeRetrievalAgentLoop(
     threadWorkingState?: ThreadWorkingStatePrompt | null;
     authSubject?: string | null;
     workspaceSession?: WorkspaceSandboxSession | null;
-    codexPrimaryCanary?: boolean;
     apiKeyOverride?: string | null;
     appendRunEvent: (params: {
       eventType: string;
@@ -1003,20 +955,6 @@ async function executeRetrievalAgentLoop(
     personalMountedTools: runtimeMountedUserPlatformAppTools,
     skillResolution,
   });
-  const codexMcpProjection = await buildCodexMcpProjection({
-    mountedTools: resolvedHarness.runtimeMountedTools,
-  });
-  const codexMcpProjectionSummary = {
-    version: codexMcpProjection.version,
-    mode: codexMcpProjection.mode,
-    fingerprint: codexMcpProjection.fingerprint,
-    eligibleToolCount: codexMcpProjection.eligible_tool_count,
-    blockedToolCount: codexMcpProjection.blocked_tool_count,
-    serverCount: codexMcpProjection.server_count,
-    eligibleRuntimeToolNames: codexMcpProjection.tools
-      .filter((tool) => tool.status === "eligible")
-      .map((tool) => tool.runtime_tool_name),
-  };
   const installedUserPlatformSkills = resolvedHarness.personalSkillInventory;
   const selectedUserPlatformSkills = resolvedHarness.selectedPersonalSkills;
   const attachedCommunitySkills =
@@ -1104,64 +1042,6 @@ async function executeRetrievalAgentLoop(
       buildResolverResponsesTool: buildResolveMountedToolsResponsesTool,
     });
   const initialProviderTools = buildActiveProviderTools();
-  const codexPrimaryRoute = resolveCodexHarnessRoute({
-    experimentEnabled: isCodexHarnessExperimentEnabled(),
-    runtimeExecutionMode: "agentic",
-    inferenceSource: params.inferenceSource,
-    projectId: params.projectId,
-    allowedToolNames: params.allowedToolNames,
-  });
-  if (codexPrimaryRoute.experimentEnabled || codexMcpProjection.tools.length > 0) {
-    try {
-      await params.appendRunEvent({
-        eventType: "codex_mcp_projection_resolved",
-        eventKey: `${params.runId}:codex_mcp_projection_resolved:1`,
-        payload: {
-          run_id: params.runId,
-          user_scope_id: params.userId ?? null,
-          community_scope_id: params.communityId ?? null,
-          projection_owner: "polynet",
-          codex_route_selected: codexPrimaryRoute.selected,
-          ...buildCodexMcpProjectionAuditPayload(codexMcpProjection),
-        },
-      });
-    } catch {
-      // Best-effort runtime evidence only.
-    }
-  }
-  const runtimeHarnessSelection = resolveRuntimeAgentHarnessSelection({
-    codexPrimaryEnabled: isCodexHarnessPrimaryEnabled(),
-    codexRouteSelected: codexPrimaryRoute.selected,
-    codexPrimaryAdapterAvailable: true,
-    stream: params.stream ?? false,
-  });
-  const preparedRuntimeTurn = buildPreparedRuntimeAgentTurn({
-    harnessId: runtimeHarnessSelection.selectedHarness.id,
-    runId: params.runId,
-    userId: params.userId,
-    threadId: params.threadId ?? null,
-    projectId: params.projectId ?? null,
-    communityId: params.communityId ?? null,
-    requestedModelId: params.requestedModelId,
-    inferenceSource: params.inferenceSource,
-    stream: params.stream ?? false,
-    executionPlacement: runtimeHarnessSelection.selectedHarness.executionPlacement,
-    nativeTranscript,
-    activeToolNames: initialProviderTools.activeToolNames,
-    fixedAllowedToolNames: params.allowedToolNames,
-    mountedToolCount: runtimeMountedUserPlatformAppTools.length,
-    codexMcpProjection: codexMcpProjectionSummary,
-    codexPrimaryCanary: {
-      forcePolyNetReadOnlyDynamicTools: params.codexPrimaryCanary === true,
-      searchQuery: "codex primary dynamic bridge canary",
-    },
-    skillCounts: {
-      installedPersonal: installedUserPlatformSkills.length,
-      selectedPersonal: selectedUserPlatformSkills.length,
-      attachedCommunity: attachedCommunitySkills.length,
-      selectedCommunity: selectedCommunitySkills.length,
-    },
-  });
   const parallelReadToolsEnabled = readRuntimeBooleanFlag(
     RUNTIME_PARALLEL_READ_TOOLS_FLAG,
     true,
@@ -1424,76 +1304,6 @@ async function executeRetrievalAgentLoop(
     // Best-effort runtime evidence only.
   }
   try {
-    await params.appendRunEvent({
-      eventType: "runtime_agent_harness_prepared",
-      eventKey: `${params.runId}:runtime_agent_harness_prepared:1`,
-      payload: buildPreparedRuntimeAgentTurnEventPayload(preparedRuntimeTurn),
-    });
-    await params.appendRunEvent({
-      eventType: "runtime_agent_harness_selected",
-      eventKey: `${params.runId}:runtime_agent_harness_selected:1`,
-      payload: buildRuntimeAgentHarnessSelectedEventPayload({
-        runId: params.runId,
-        selection: runtimeHarnessSelection,
-      }),
-    });
-  } catch {
-    // Best-effort runtime evidence only.
-  }
-  try {
-    await executeCodexHarnessProbeIfSelected({
-      ctx: params.ctx,
-      userId: params.userId,
-      runId: params.runId,
-      projectId: params.projectId,
-      inferenceSource: params.inferenceSource,
-      allowedToolNames: params.allowedToolNames,
-      messages: params.messages,
-      stream: params.stream ?? false,
-      executionSession,
-      appendRunEvent: params.appendRunEvent,
-    });
-  } catch (error) {
-    const summary = summarizeErrorForLog(error);
-    const probeMode = resolveCodexHarnessProbeMode();
-    logStructuredError("codex_harness_probe_crashed", {
-      error,
-      runId: params.runId,
-      threadId: params.threadId ?? undefined,
-      projectId: params.projectId ?? undefined,
-      communityId: params.communityId ?? undefined,
-    });
-    try {
-      await params.appendRunEvent({
-        eventType: "codex_harness_probe_completed",
-        eventKey: `${params.runId}:codex_harness_probe_completed:unhandled`,
-        payload: {
-          run_id: params.runId,
-          status: "error",
-          code: "codex_probe_unhandled",
-          message: summary.message,
-        },
-      });
-      if (probeMode !== "off") {
-        await params.appendRunEvent({
-          eventType: "codex_harness_readiness",
-          eventKey: `${params.runId}:codex_harness_readiness:${probeMode}`,
-          payload: {
-            run_id: params.runId,
-            probe_mode: probeMode,
-            status: "not_ready",
-            ready: false,
-            code: "codex_probe_unhandled",
-            message: summary.message,
-            stage: "unhandled",
-          },
-        });
-      }
-    } catch {
-      // Best-effort runtime evidence only.
-    }
-  }
-  try {
     const throwIfCancelled = async (): Promise<void> => {
       await throwIfRuntimeRunCancelled({
         ctx: params.ctx,
@@ -1502,11 +1312,10 @@ async function executeRetrievalAgentLoop(
       });
     };
     const loopStartedAt = Date.now();
-    const nativeRuntimeHarness = buildPolynetNativeRuntimeAgentHarness({
-      execute: async () => await runNativeRuntimeKernel<string>({
-        messages: preparedRuntimeTurn.nativeTranscript,
-        budget: params.loopBudget,
-        runCompletion: async (messages) => {
+    const loopResult = await runNativeRuntimeKernel<string>({
+      messages: nativeTranscript,
+      budget: params.loopBudget,
+      runCompletion: async (messages) => {
         let completion:
           | NativeToolAwareCompletionSuccess<string>
           | RuntimeAgentLoopFailureInput;
@@ -2089,51 +1898,7 @@ async function executeRetrievalAgentLoop(
           }
         }
       },
-      }),
     });
-    const codexRuntimeHarness = buildCodexAppServerRuntimeAgentHarness({
-      ctx: params.ctx,
-      userId: params.userId,
-      authSubject: params.authSubject ?? null,
-      runId: params.runId,
-      projectId: params.projectId,
-      preparedTurn: preparedRuntimeTurn,
-      executionSession,
-      appendRunEvent: params.appendRunEvent,
-    });
-    const selectedRuntimeHarness =
-      runtimeHarnessSelection.selectedHarness.id === "codex_app_server"
-        ? codexRuntimeHarness
-        : nativeRuntimeHarness;
-    let loopResult = withRuntimeAgentLoopAttribution(
-      await selectedRuntimeHarness.execute(),
-      selectedRuntimeHarness,
-    );
-    if (
-      !loopResult.ok &&
-      selectedRuntimeHarness.id === "codex_app_server" &&
-      runtimeHarnessSelection.fallbackHarness?.id === "polynet_native"
-    ) {
-      try {
-        await params.appendRunEvent({
-          eventType: "runtime_agent_harness_fallback_started",
-          eventKey: `${params.runId}:runtime_agent_harness_fallback_started:1`,
-          payload: {
-            run_id: params.runId,
-            failed_harness_id: selectedRuntimeHarness.id,
-            fallback_harness_id: nativeRuntimeHarness.id,
-            failed_code: loopResult.code,
-            failed_message: loopResult.message,
-          },
-        });
-      } catch {
-        // Best-effort runtime evidence only.
-      }
-      loopResult = withRuntimeAgentLoopAttribution(
-        await nativeRuntimeHarness.execute(),
-        nativeRuntimeHarness,
-      );
-    }
     const loopFailure = loopResult.ok
       ? null
       : (loopResult as RuntimeKernelFailure<string>);
@@ -2164,10 +1929,6 @@ async function executeRetrievalAgentLoop(
           run_id: params.runId,
           harness: {
             kind: params.harnessName,
-            selected_agent_harness_id: selectedRuntimeHarness.id,
-            selected_agent_harness_label: selectedRuntimeHarness.label,
-            selected_agent_harness_execution_placement:
-              selectedRuntimeHarness.executionPlacement,
           },
           stop_reason: loopResult.stopReason,
           step_count: loopResult.stepCount,
@@ -2199,10 +1960,6 @@ async function executeRetrievalAgentLoop(
         transcript: [...nativeTranscript],
         stepCount: 0,
         steps: [],
-        runtimeHarnessId: POLYNET_NATIVE_RUNTIME_AGENT_HARNESS.id,
-        runtimeHarnessLabel: POLYNET_NATIVE_RUNTIME_AGENT_HARNESS.label,
-        runtimeHarnessExecutionPlacement:
-          POLYNET_NATIVE_RUNTIME_AGENT_HARNESS.executionPlacement,
       };
     }
     const summary = summarizeErrorForLog(error);
@@ -2249,10 +2006,6 @@ async function executeRetrievalAgentLoop(
       transcript: [...nativeTranscript],
       stepCount: 0,
       steps: [],
-      runtimeHarnessId: POLYNET_NATIVE_RUNTIME_AGENT_HARNESS.id,
-      runtimeHarnessLabel: POLYNET_NATIVE_RUNTIME_AGENT_HARNESS.label,
-      runtimeHarnessExecutionPlacement:
-        POLYNET_NATIVE_RUNTIME_AGENT_HARNESS.executionPlacement,
     };
   } finally {
     await executionSession.dispose();
@@ -2271,14 +2024,12 @@ async function executeChatToolsAgentLoop(
     inferenceSource: RuntimeInferenceSource;
     modelRef: string;
     messages: InferenceMessage[];
-    stream?: boolean;
     maxTokens: number;
     runId: string;
     allowedToolNames: readonly RetrievalToolName[];
     communitySystemPrompt?: string | null;
     threadWorkingState?: ThreadWorkingStatePrompt | null;
     apiKeyOverride?: string | null;
-    codexPrimaryCanary?: boolean;
     appendRunEvent: (params: {
       eventType: string;
       eventKey?: string;
@@ -2289,7 +2040,6 @@ async function executeChatToolsAgentLoop(
 ): Promise<RuntimeAgentLoopSuccess | RuntimeAgentLoopFailure> {
   return await executeRetrievalAgentLoop({
     ...params,
-    stream: params.stream ?? false,
     harnessName: "chat_tools",
     loopBudget: CHAT_TOOLS_RUNTIME_KERNEL_BUDGET,
   });

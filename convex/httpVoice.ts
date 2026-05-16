@@ -2,7 +2,6 @@ import { internal } from "./_generated/api";
 import {
   creditsToUsd,
   estimateVoiceTranscriptionVendorCostUsd,
-  isWorkspaceCreditsExhaustedError,
   PAID_TOOL_PRICING_VERSION,
   PAID_TOOL_TARGET_GROSS_MARGIN_BPS,
   priceVoiceTranscriptionCredits,
@@ -488,15 +487,15 @@ export function registerRuntimeVoiceRoutes(args: RegisterRuntimeVoiceRoutesArgs)
             nowMs: Date.now(),
           });
         } catch (error) {
-          const isCreditsExhausted = isWorkspaceCreditsExhaustedError(error);
+          const message = error instanceof Error ? error.message : String(error);
           return jsonResponse(req, 402, {
             ok: false,
-            error: isCreditsExhausted ? "workspace_credits_exhausted" : "workspace_credits_unavailable",
-            code: isCreditsExhausted ? "workspace_credits_exhausted" : "workspace_credits_unavailable",
+            error: message === "credits_exhausted" ? "workspace_credits_exhausted" : "workspace_credits_unavailable",
+            code: message === "credits_exhausted" ? "workspace_credits_exhausted" : "workspace_credits_unavailable",
             tool_kind: "voice_input",
             required_credits: voiceCredits,
             message:
-              isCreditsExhausted
+              message === "credits_exhausted"
                 ? "Add balance to use voice input."
                 : "Tool balance is unavailable for voice input.",
           });

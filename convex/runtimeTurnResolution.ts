@@ -27,7 +27,6 @@ export type RuntimeTurnInput = {
   model_id?: string | null;
   surface?: "web";
   requested_agentic_tools?: boolean | null;
-  codex_primary_canary?: boolean | null;
   requested_funding_source?:
     | "demo_public"
     | "user_key"

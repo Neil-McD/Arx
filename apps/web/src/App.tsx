@@ -318,7 +318,6 @@ import {
   extractInferenceSourceFromMessageContent,
   extractModelIdFromMessageContent,
   formatModelAttributionLabel,
-  type ModelAttributionRuntimeSurface,
 } from "../../../shared/modelAttributionUi";
 import {
   loadAccountCommerceStatusCanonical,
@@ -560,22 +559,6 @@ function readFirstLocalStorageValue(keys: readonly string[]): string | null {
     if (value !== null) return value;
   }
   return null;
-}
-
-function isStagingCodexPrimaryCanaryDebugAllowed(): boolean {
-  if (typeof window === "undefined") return false;
-  try {
-    const hostname = window.location.hostname.toLowerCase();
-    if (hostname === "polynet-staging.vercel.app") return true;
-    if (hostname !== "localhost" && hostname !== "127.0.0.1") return false;
-    const params = new URLSearchParams(window.location.search);
-    return (
-      params.get("codex_primary_canary") === "1" ||
-      params.get("codexPrimaryCanary") === "1"
-    );
-  } catch {
-    return false;
-  }
 }
 
 function loadGuestModelId(): string {
@@ -898,12 +881,10 @@ function formatModelSignature(
   modelId: string | null | undefined,
   inferenceSource: string | null | undefined,
   modelToggles: ModelToggle[],
-  runtimeSurface?: ModelAttributionRuntimeSurface | string | null,
 ): string | null {
   return formatModelAttributionLabel({
     modelId,
     inferenceSource,
-    runtimeSurface,
     modelToggles,
     freeModelAllowlist: GUEST_MODEL_ALLOWLIST,
     freeModelLabels: GUEST_MODEL_LABELS,
@@ -1449,8 +1430,6 @@ export default function App() {
   const [workspaceOperatorPanelLayout, setWorkspaceOperatorPanelLayout] =
     useState<WorkspaceOperatorPanelLayout>({ open: false, width: 0, gutter: 0 });
   const [isWorkspaceOperatorDataPanelOpen, setIsWorkspaceOperatorDataPanelOpen] =
-    useState(false);
-  const [isCodexPrimaryCanaryEnabled, setIsCodexPrimaryCanaryEnabled] =
     useState(false);
   const handleWorkspaceOperatorPanelLayoutChange = useCallback((layout: WorkspaceOperatorPanelLayout) => {
     setWorkspaceOperatorPanelLayout((current) =>
@@ -7479,10 +7458,6 @@ export default function App() {
       setIsOnboardingModalOpen(true);
     },
   });
-  const hasCodexPrimaryCanaryAccess = Boolean(
-    session &&
-    (hasOperatorDataPanelAccess || isStagingCodexPrimaryCanaryDebugAllowed())
-  );
   const { workspaceHostProps } = buildWebWorkspaceSurfaceProjection({
     session: session,
     hasAuthenticatedPresentation: hasAuthenticatedAppShellPresentation,
@@ -7516,22 +7491,11 @@ export default function App() {
     loadThreadMessages: (threadId, session) =>
       loadThreadMessages(threadId, session as AuthSession),
     onSendMessage: ({ text, attachments, clearComposer }) => {
-      const useCodexPrimaryCanaryForNextTurn = Boolean(
-        isCodexPrimaryCanaryEnabled &&
-        hasCodexPrimaryCanaryAccess &&
-        session &&
-        activePage === "workspace" &&
-        activeView === "home",
-      );
       void sendUserMessage({
         text,
         attachments: attachments as MessageAttachment[],
         clearComposer,
-        forceNonStreamingRuntimeTurn: useCodexPrimaryCanaryForNextTurn,
       });
-      if (useCodexPrimaryCanaryForNextTurn) {
-        setIsCodexPrimaryCanaryEnabled(false);
-      }
     },
     onStopStreamingTurn: () => {
       stopStreamingTurn(activeThreadId ?? undefined);
@@ -7580,86 +7544,45 @@ export default function App() {
     formatModelSignature,
     renderMarkdown,
   });
-  const showWorkspaceOperatorControl = Boolean(
-    (hasOperatorDataPanelAccess || hasCodexPrimaryCanaryAccess) &&
+  const showWorkspaceOperatorDataPanelControl = Boolean(
+    hasOperatorDataPanelAccess &&
     session &&
     !showMobileAppShell &&
     activePage === "workspace" &&
     activeView === "home",
   );
-  const showWorkspaceOperatorDataPanelControl = Boolean(
-    showWorkspaceOperatorControl && hasOperatorDataPanelAccess
-  );
   const handleToggleWorkspaceOperatorDataPanel = useCallback(() => {
     setIsWorkspaceOperatorDataPanelOpen((value) => !value);
   }, []);
-  const handleToggleCodexPrimaryCanary = useCallback(() => {
-    setIsCodexPrimaryCanaryEnabled((value) => !value);
-  }, []);
 
   useEffect(() => {
-    if (showWorkspaceOperatorControl) {
-      if (!showWorkspaceOperatorDataPanelControl) {
-        setIsWorkspaceOperatorDataPanelOpen(false);
-      }
-      return;
-    }
+    if (showWorkspaceOperatorDataPanelControl) return;
     setIsWorkspaceOperatorDataPanelOpen(false);
-    setIsCodexPrimaryCanaryEnabled(false);
     handleWorkspaceOperatorPanelLayoutChange({ open: false, width: 0, gutter: 0 });
   }, [
     handleWorkspaceOperatorPanelLayoutChange,
-    showWorkspaceOperatorControl,
     showWorkspaceOperatorDataPanelControl,
   ]);
 
-  const workspaceOperatorDataToggle = showWorkspaceOperatorControl ? (
-    <>
-      {hasCodexPrimaryCanaryAccess ? (
-        <button
-          type="button"
-          className={`icon-button workspace-codex-canary-toggle${isCodexPrimaryCanaryEnabled ? " active" : ""}`}
-          onClick={handleToggleCodexPrimaryCanary}
-          aria-pressed={isCodexPrimaryCanaryEnabled}
-          aria-label={
-            isCodexPrimaryCanaryEnabled
-              ? "Disable Codex primary canary"
-              : "Enable Codex primary canary"
-          }
-          title={
-            isCodexPrimaryCanaryEnabled
-              ? "Codex primary canary on"
-              : "Codex primary canary off"
-          }
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M8 7 4 12l4 5" />
-            <path d="M16 7l4 5-4 5" />
-            <path d="M14 4 10 20" />
-          </svg>
-        </button>
-      ) : null}
-      {showWorkspaceOperatorDataPanelControl ? (
-        <button
-          type="button"
-          className={`icon-button workspace-operator-data-toggle${isWorkspaceOperatorDataPanelOpen ? " active" : ""}`}
-          onClick={handleToggleWorkspaceOperatorDataPanel}
-          aria-expanded={isWorkspaceOperatorDataPanelOpen}
-          aria-controls="workspace-operator-data-panel"
-          aria-label={
-            isWorkspaceOperatorDataPanelOpen
-              ? "Close operator data panel"
-              : "Open operator data panel"
-          }
-          title={isWorkspaceOperatorDataPanelOpen ? "Close data panel" : "Open data panel"}
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <rect x="3" y="4" width="18" height="16" rx="2" />
-            <path d="M15 4v16" />
-          </svg>
-        </button>
-      ) : null}
-    </>
+  const workspaceOperatorDataToggle = showWorkspaceOperatorDataPanelControl ? (
+    <button
+      type="button"
+      className={`icon-button workspace-operator-data-toggle${isWorkspaceOperatorDataPanelOpen ? " active" : ""}`}
+      onClick={handleToggleWorkspaceOperatorDataPanel}
+      aria-expanded={isWorkspaceOperatorDataPanelOpen}
+      aria-controls="workspace-operator-data-panel"
+      aria-label={
+        isWorkspaceOperatorDataPanelOpen
+          ? "Close operator data panel"
+          : "Open operator data panel"
+      }
+      title={isWorkspaceOperatorDataPanelOpen ? "Close data panel" : "Open data panel"}
+    >
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <rect x="3" y="4" width="18" height="16" rx="2" />
+        <path d="M15 4v16" />
+      </svg>
+    </button>
   ) : null;
 
   const mainSurfaceHostProps = buildWebAppMainSurfaceHostProps({

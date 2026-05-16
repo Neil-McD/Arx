@@ -21,15 +21,6 @@ import {
 } from "./httpRuntimeTurnState";
 import { executeChatToolsAgentLoop } from "./httpDaytona";
 import {
-  buildCodexHarnessExecutorEventPayload,
-  buildCodexHarnessRouteEventPayload,
-  isCodexHarnessExecutorEnabled,
-  isCodexHarnessExperimentEnabled,
-  resolveCodexHarnessExecutorDecision,
-  resolveCodexHarnessProbeMode,
-  resolveCodexHarnessRoute,
-} from "../shared/codexHarnessRoute.ts";
-import {
   USER_CANCELLED_RUNTIME_CODE,
   isRuntimeRunCancelledError,
   runAbortableWithRuntimeCancellation,
@@ -170,119 +161,6 @@ function normalizeAdaptiveFailureAnswer(value: unknown): string | null {
   return normalized.length > 2400
     ? `${normalized.slice(0, 2399).trimEnd()}…`
     : normalized;
-}
-
-type RuntimeRunEventInput = {
-  eventType: string;
-  eventKey?: string;
-  payload: Record<string, unknown>;
-};
-
-type CodexHarnessShadowEvidence = {
-  route: Record<string, unknown> | null;
-  executor: Record<string, unknown> | null;
-  shadowCompleted: Record<string, unknown> | null;
-  shadowReadiness: Record<string, unknown> | null;
-};
-
-function createCodexHarnessShadowEvidence(): CodexHarnessShadowEvidence {
-  return {
-    route: null,
-    executor: null,
-    shadowCompleted: null,
-    shadowReadiness: null,
-  };
-}
-
-function captureCodexHarnessShadowEvidence(
-  evidence: CodexHarnessShadowEvidence,
-  event: RuntimeRunEventInput,
-): void {
-  if (!event.eventType.startsWith("codex_harness_")) return;
-  switch (event.eventType) {
-    case "codex_harness_route_resolved":
-      evidence.route = event.payload;
-      return;
-    case "codex_harness_executor_resolved":
-      evidence.executor = event.payload;
-      return;
-    case "codex_harness_shadow_completed":
-      evidence.shadowCompleted = event.payload;
-      return;
-    case "codex_harness_shadow_readiness":
-      evidence.shadowReadiness = event.payload;
-      return;
-    default:
-      return;
-  }
-}
-
-function readRuntimePayloadString(payload: Record<string, unknown> | null, field: string): string | null {
-  const raw = payload?.[field];
-  return typeof raw === "string" && raw.trim() ? raw.trim() : null;
-}
-
-function readRuntimePayloadBoolean(payload: Record<string, unknown> | null, field: string): boolean {
-  return payload?.[field] === true;
-}
-
-function readRuntimePayloadNumber(payload: Record<string, unknown> | null, field: string): number | null {
-  const parsed = Number(payload?.[field]);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
-async function sha256Hex(value: string): Promise<string> {
-  const encoded = new TextEncoder().encode(value);
-  const digest = await crypto.subtle.digest("SHA-256", encoded);
-  return [...new Uint8Array(digest)]
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("");
-}
-
-async function appendCodexHarnessShadowComparisonBestEffort(params: {
-  runId: string;
-  visibleContent: string;
-  evidence: CodexHarnessShadowEvidence;
-  appendRunEvent: (event: RuntimeRunEventInput) => Promise<unknown>;
-}): Promise<void> {
-  const shadow = params.evidence.shadowCompleted;
-  if (!shadow) return;
-  const shadowOutputSha256 = readRuntimePayloadString(shadow, "output_sha256");
-  if (!shadowOutputSha256) return;
-  try {
-    const visibleContent = String(params.visibleContent ?? "");
-    const visibleAnswerSha256 = await sha256Hex(visibleContent);
-    const visibleAnswerChars = visibleContent.length;
-    const shadowOutputChars = readRuntimePayloadNumber(shadow, "output_chars");
-    const shadowReady = readRuntimePayloadBoolean(params.evidence.shadowReadiness, "ready");
-    const exactHashMatch = visibleAnswerSha256 === shadowOutputSha256;
-    await params.appendRunEvent({
-      eventType: "codex_harness_shadow_comparison",
-      eventKey: `${params.runId}:codex_harness_shadow_comparison:1`,
-      payload: {
-        run_id: params.runId,
-        status: "compared",
-        comparison_policy: "hash_and_length_only",
-        visible_answer_engine: "current_harness",
-        candidate_engine: "codex_app_server",
-        route_selected: readRuntimePayloadBoolean(params.evidence.route, "selected"),
-        executor_selected: readRuntimePayloadBoolean(params.evidence.executor, "selected"),
-        shadow_ready: shadowReady,
-        shadow_completed: readRuntimePayloadBoolean(shadow, "completed"),
-        thread_id_present: readRuntimePayloadBoolean(shadow, "thread_id_present"),
-        turn_id_present: readRuntimePayloadBoolean(shadow, "turn_id_present"),
-        visible_answer_chars: visibleAnswerChars,
-        visible_answer_sha256: visibleAnswerSha256,
-        shadow_output_chars: shadowOutputChars,
-        shadow_output_sha256: shadowOutputSha256,
-        exact_hash_match: exactHashMatch,
-        length_delta:
-          shadowOutputChars == null ? null : visibleAnswerChars - shadowOutputChars,
-      },
-    });
-  } catch {
-    // Best-effort comparison telemetry must never affect the visible answer path.
-  }
 }
 
 export type JsonResponseFn = (
@@ -540,22 +418,6 @@ export async function handleRuntimeTurnRequest(args: {
     });
   }
 
-  const isStagingCodexPrimaryCanaryFallback = (): boolean => {
-    try {
-      const raw =
-        ((globalThis as any)?.process?.env?.ARX_PUBLIC_APP_URL as string | undefined) ||
-        ((globalThis as any)?.process?.env?.VITE_PUBLIC_APP_URL as string | undefined) ||
-        "";
-      const fallbackEnabled = String(
-        ((globalThis as any)?.process?.env
-          ?.POLYNET_CODEX_PRIMARY_CANARY_NON_STREAMING_FALLBACK as string | undefined) ?? "",
-      ).toLowerCase() === "true";
-      return fallbackEnabled && new URL(String(raw)).hostname.toLowerCase() === "polynet-staging.vercel.app";
-    } catch {
-      return false;
-    }
-  };
-
   runtimeTurnStage = "auth";
   try {
     const resolved = await resolveAuthenticatedRuntimeTurn({
@@ -599,9 +461,6 @@ export async function handleRuntimeTurnRequest(args: {
     const runId =
       String(input.idempotency_key ?? "").trim() ||
       `convex_runtime:${crypto.randomUUID()}`;
-    const codexPrimaryCanaryRequested =
-      input.codex_primary_canary === true ||
-      (input.stream === false && isStagingCodexPrimaryCanaryFallback());
     startedRunId = runId;
     runtimeTurnStage = "run_start";
     const explicitUserMessageKey = String(input.user_message_key ?? "").trim();
@@ -667,7 +526,7 @@ export async function handleRuntimeTurnRequest(args: {
     if (!runStart.ok) return runStart.response;
 
     const {
-      appendRunEvent: appendRunEventRaw,
+      appendRunEvent,
       finishRunBestEffort: finishRunBestEffortRaw,
       touchRunHeartbeatBestEffort,
     } = buildRuntimeRunPersistenceHelpers({
@@ -676,11 +535,6 @@ export async function handleRuntimeTurnRequest(args: {
       threadId: String(ownedThread._id),
       runId,
     });
-    const codexHarnessShadowEvidence = createCodexHarnessShadowEvidence();
-    const appendRunEvent = async (event: RuntimeRunEventInput): Promise<unknown> => {
-      captureCodexHarnessShadowEvidence(codexHarnessShadowEvidence, event);
-      return await appendRunEventRaw(event);
-    };
     const persistContextSnapshotBestEffort = async (phase: "started" | "active" | "finished"): Promise<void> => {
       try {
         const nowMs = Date.now();
@@ -861,8 +715,6 @@ export async function handleRuntimeTurnRequest(args: {
     let promptTokens: number | null = null;
     let completionTokens: number | null = null;
     let resolvedInferenceSource = inferenceSource;
-    let runtimeHarnessIdForAttribution: string | null =
-      runtimeExecutionMode === "agentic" ? null : "polynet_native";
     let inferenceLaneFallbacks: Array<{
       from: "chatgpt" | "platform" | "public";
       to: "chatgpt" | "platform" | "public";
@@ -881,7 +733,6 @@ export async function handleRuntimeTurnRequest(args: {
         to: "chatgpt" | "platform" | "public";
         reason: string;
       }> | null;
-      runtimeHarnessIdOverride?: string | null;
     }): Promise<{
       assistantMessageId: string | null;
       assistantMessageKey: string | null;
@@ -987,10 +838,6 @@ export async function handleRuntimeTurnRequest(args: {
             params.inferenceLaneFallbacksOverride ?? inferenceLaneFallbacks,
           runId,
           content: finalAnswer.content,
-          runtimeHarnessId:
-            params.runtimeHarnessIdOverride ??
-            runtimeHarnessIdForAttribution ??
-            "polynet_native",
           partialRun:
             params.markPartialRun === false
               ? null
@@ -1032,41 +879,6 @@ export async function handleRuntimeTurnRequest(args: {
         harness_profile: resolvedRuntimeHarnessProfile,
       },
     });
-    const codexHarnessRoute = resolveCodexHarnessRoute({
-      experimentEnabled: isCodexHarnessExperimentEnabled(),
-      runtimeExecutionMode,
-      inferenceSource,
-      projectId: runtimeProjectId,
-      allowedToolNames,
-    });
-    if (codexHarnessRoute.experimentEnabled) {
-      const codexHarnessProbeMode = resolveCodexHarnessProbeMode();
-      const codexHarnessExecutorDecision = resolveCodexHarnessExecutorDecision({
-        route: codexHarnessRoute,
-        executorEnabled: isCodexHarnessExecutorEnabled(),
-        runtimeExecutionMode,
-        stream,
-        probeMode: codexHarnessProbeMode,
-      });
-      await appendRunEvent({
-        eventType: "codex_harness_route_resolved",
-        eventKey: `${runId}:codex_harness_route_resolved:1`,
-        payload: buildCodexHarnessRouteEventPayload({
-          runId,
-          route: codexHarnessRoute,
-          probeMode: codexHarnessProbeMode,
-        }),
-      });
-      await appendRunEvent({
-        eventType: "codex_harness_executor_resolved",
-        eventKey: `${runId}:codex_harness_executor_resolved:1`,
-        payload: buildCodexHarnessExecutorEventPayload({
-          runId,
-          decision: codexHarnessExecutorDecision,
-          probeMode: codexHarnessProbeMode,
-        }),
-      });
-    }
     if (runtimeExecutionMode === "agentic") {
       if (stream) {
         return runtimeSseResponse(async (writer) => {
@@ -1129,7 +941,6 @@ export async function handleRuntimeTurnRequest(args: {
               inferenceSource,
               modelRef,
               messages: conversationMessages,
-              stream,
               maxTokens,
               runId,
               communityId: runtimeCommunityId,
@@ -1142,7 +953,6 @@ export async function handleRuntimeTurnRequest(args: {
               agentSoul: runtimeAgentProfile.agentSoul,
               threadWorkingState: ownedThread.workingState ?? null,
               allowedToolNames,
-              codexPrimaryCanary: codexPrimaryCanaryRequested,
               apiKeyOverride: providerApiKeyOverride,
               appendRunEvent: streamAppendRunEvent,
               touchRunHeartbeat: touchRunHeartbeatBestEffort,
@@ -1325,7 +1135,6 @@ export async function handleRuntimeTurnRequest(args: {
                 inferenceLaneFallbacks: streamedInferenceLaneFallbacks,
                 runId,
                 content: streamedContent,
-                runtimeHarnessId: runtimeHarnessIdForAttribution ?? "polynet_native",
               }));
             } catch (error) {
               if (isRuntimeRunCancelledError(error)) {
@@ -1416,7 +1225,6 @@ export async function handleRuntimeTurnRequest(args: {
           inferenceSource,
           modelRef,
           messages: conversationMessages,
-          stream,
           maxTokens,
           runId,
           communityId: runtimeCommunityId,
@@ -1429,7 +1237,6 @@ export async function handleRuntimeTurnRequest(args: {
           agentSoul: runtimeAgentProfile.agentSoul,
           threadWorkingState: ownedThread.workingState ?? null,
           allowedToolNames,
-          codexPrimaryCanary: codexPrimaryCanaryRequested,
           apiKeyOverride: providerApiKeyOverride,
           appendRunEvent: async (event): Promise<void> => {
             await appendRunEvent(event);
@@ -1477,10 +1284,6 @@ export async function handleRuntimeTurnRequest(args: {
           run_id: runId,
         });
       }
-      runtimeHarnessIdForAttribution =
-        typeof loopResult.runtimeHarnessId === "string" && loopResult.runtimeHarnessId.trim()
-          ? loopResult.runtimeHarnessId.trim()
-          : "polynet_native";
       if (!loopResult.ok) {
         if (loopResult.code === USER_CANCELLED_RUNTIME_CODE) {
           await persistPartialAssistantMessageBestEffort({
@@ -1545,7 +1348,6 @@ export async function handleRuntimeTurnRequest(args: {
             promptTokens,
             completionTokens,
             resolvedInferenceSource,
-            runtimeHarnessId: runtimeHarnessIdForAttribution,
             inferenceLaneFallbacks,
             userMessageId,
             userMessageKey,
@@ -1801,7 +1603,6 @@ export async function handleRuntimeTurnRequest(args: {
                 inferenceLaneFallbacks: streamedInferenceLaneFallbacks,
                 runId,
                 content: streamedContent,
-                runtimeHarnessId: runtimeHarnessIdForAttribution ?? "polynet_native",
               }));
             } catch (error) {
               if (isRuntimeRunCancelledError(error)) {
@@ -1998,13 +1799,6 @@ export async function handleRuntimeTurnRequest(args: {
       completionTokens = completion.completionTokens;
     }
 
-    await appendCodexHarnessShadowComparisonBestEffort({
-      runId,
-      visibleContent: content,
-      evidence: codexHarnessShadowEvidence,
-      appendRunEvent,
-    });
-
     runtimeTurnStage = "assistant_persist";
     let assistantMessageId: string | null = null;
     let assistantMessageKey: string | null = null;
@@ -2024,7 +1818,6 @@ export async function handleRuntimeTurnRequest(args: {
             inferenceLaneFallbacks,
             runId,
             content,
-            runtimeHarnessId: runtimeHarnessIdForAttribution ?? "polynet_native",
           }));
       } catch (error) {
         if (isRuntimeRunCancelledError(error)) {
@@ -2092,7 +1885,6 @@ export async function handleRuntimeTurnRequest(args: {
       promptTokens,
       completionTokens,
       resolvedInferenceSource,
-      runtimeHarnessId: runtimeHarnessIdForAttribution ?? "polynet_native",
       inferenceLaneFallbacks,
       userMessageId,
       userMessageKey,
