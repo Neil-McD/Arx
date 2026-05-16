@@ -5876,10 +5876,6 @@ body {
   gap: 0;
 }
 
-.community-chat-bootstrap .chat-feed::after {
-  display: none;
-}
-
 .community-chat-page-loading-shell {
   flex: 1;
   min-height: 0;
@@ -5969,15 +5965,8 @@ body {
   flex-direction: column;
 }
 
-.chat-feed::after {
-  content: '';
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 32px;
-  background: linear-gradient(to bottom, transparent, var(--bg-workspace, var(--bg-app)));
-  pointer-events: none;
+.workspace-body.chat-feed::after {
+  display: none;
 }
 
 .chat-messages {
