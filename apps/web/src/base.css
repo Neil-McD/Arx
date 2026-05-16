@@ -22154,13 +22154,11 @@ button.message-citation-chip:hover {
 }
 
 .workspace-operator-data-panel {
-  position: fixed;
+  top: 0;
   right: 0;
   bottom: 0;
-  top: 48px;
-  height: calc(100vh - 48px);
-  height: calc(100dvh - 48px);
   padding-right: 0;
+  padding-bottom: 0;
   opacity: 0;
   pointer-events: none;
   transform: translateX(calc(100% + var(--operator-right-panel-gutter)));
@@ -22220,7 +22218,6 @@ button.message-citation-chip:hover {
   min-height: 0;
   overflow: auto;
   padding-right: 18px;
-  padding-bottom: 18px;
   scrollbar-width: thin;
 }
 
