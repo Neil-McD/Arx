@@ -828,7 +828,8 @@ export default defineSchema({
   })
     .index("by_user", ["userId"])
     .index("by_community", ["communityId"])
-    .index("by_community_user", ["communityId", "userId"]),
+    .index("by_community_user", ["communityId", "userId"])
+    .index("by_community_createdAt", ["communityId", "createdAt"]),
 
   communityPresence: defineTable({
     communityId: v.id("communities"),
@@ -1235,6 +1236,7 @@ export default defineSchema({
     .index("by_post", ["postId"])
     .index("by_post_actorKey", ["postId", "actorKey"])
     .index("by_community", ["communityId"])
+    .index("by_community_createdAt", ["communityId", "createdAt"])
     .index("by_actorUser", ["actorUserId"])
     .index("by_actorKey", ["actorKey"]),
 
@@ -1351,6 +1353,429 @@ export default defineSchema({
       dimensions: 768,
       filterFields: ["communityId", "sourceType"],
     }),
+
+  communitySourceTraces: defineTable({
+    communityId: v.id("communities"),
+    sourceType: v.union(
+      v.literal("chat"),
+      v.literal("ai_feed"),
+      v.literal("resource"),
+      v.literal("workflow_run"),
+      v.literal("agent_run"),
+      v.literal("artifact"),
+      v.literal("tool_call"),
+      v.literal("manual"),
+      v.literal("outcome"),
+      v.literal("external"),
+    ),
+    sourceId: v.optional(v.string()),
+    title: v.optional(v.string()),
+    summary: v.string(),
+    visibilityScope: v.union(
+      v.literal("private"),
+      v.literal("admin"),
+      v.literal("community"),
+      v.literal("public"),
+    ),
+    sourceVisibility: v.union(
+      v.literal("private"),
+      v.literal("admin"),
+      v.literal("community"),
+      v.literal("public"),
+      v.literal("redacted"),
+    ),
+    workflowId: v.optional(v.string()),
+    artifactIds: v.array(v.string()),
+    outcomeObservationIds: v.array(v.id("communityOutcomeObservations")),
+    actorType: v.union(
+      v.literal("member"),
+      v.literal("admin"),
+      v.literal("agent"),
+      v.literal("compiler"),
+      v.literal("system"),
+    ),
+    actorUserId: v.optional(v.id("users")),
+    actorAgentKey: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_community", ["communityId"])
+    .index("by_community_createdAt", ["communityId", "createdAt"])
+    .index("by_community_source", ["communityId", "sourceType", "sourceId"])
+    .index("by_community_workflow", ["communityId", "workflowId"]),
+
+  communityIntelligenceNodes: defineTable({
+    communityId: v.id("communities"),
+    type: v.union(
+      v.literal("playbook"),
+      v.literal("insight"),
+      v.literal("example"),
+      v.literal("warning_failure"),
+      v.literal("decision_judgment"),
+      v.literal("open_question"),
+    ),
+    title: v.string(),
+    bodyMd: v.string(),
+    status: v.union(
+      v.literal("draft"),
+      v.literal("candidate"),
+      v.literal("promising"),
+      v.literal("validated"),
+      v.literal("canonical"),
+      v.literal("contested"),
+      v.literal("stale"),
+      v.literal("deprecated"),
+      v.literal("archived"),
+    ),
+    visibilityScope: v.union(
+      v.literal("private"),
+      v.literal("admin"),
+      v.literal("community"),
+      v.literal("public"),
+    ),
+    sourceVisibility: v.union(
+      v.literal("private"),
+      v.literal("admin"),
+      v.literal("community"),
+      v.literal("public"),
+      v.literal("redacted"),
+    ),
+    confidence: v.number(),
+    evidenceStrength: v.union(
+      v.literal("none"),
+      v.literal("anecdotal"),
+      v.literal("observed"),
+      v.literal("measured"),
+      v.literal("validated"),
+    ),
+    appliesWhen: v.optional(v.string()),
+    doesNotApplyWhen: v.optional(v.string()),
+    workflowIds: v.array(v.string()),
+    tags: v.array(v.string()),
+    sourceTraceIds: v.array(v.id("communitySourceTraces")),
+    outcomeObservationIds: v.array(v.id("communityOutcomeObservations")),
+    stalenessScore: v.number(),
+    retrievalUsefulnessScore: v.number(),
+    outcomeImpactScore: v.number(),
+    createdByActorType: v.union(
+      v.literal("member"),
+      v.literal("admin"),
+      v.literal("agent"),
+      v.literal("compiler"),
+      v.literal("system"),
+    ),
+    createdByUserId: v.optional(v.id("users")),
+    createdByAgentKey: v.optional(v.string()),
+    lastUpdatedByActorType: v.union(
+      v.literal("member"),
+      v.literal("admin"),
+      v.literal("agent"),
+      v.literal("compiler"),
+      v.literal("system"),
+    ),
+    lastUpdatedByUserId: v.optional(v.id("users")),
+    lastUpdatedByAgentKey: v.optional(v.string()),
+    lastValidatedAt: v.optional(v.number()),
+    deprecatedByNodeId: v.optional(v.id("communityIntelligenceNodes")),
+    version: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_community", ["communityId"])
+    .index("by_community_type", ["communityId", "type"])
+    .index("by_community_status", ["communityId", "status"])
+    .index("by_community_type_status", ["communityId", "type", "status"])
+    .index("by_community_status_updatedAt", ["communityId", "status", "updatedAt"]),
+
+  communityIntelligenceEdges: defineTable({
+    communityId: v.id("communities"),
+    fromNodeId: v.id("communityIntelligenceNodes"),
+    toNodeId: v.optional(v.id("communityIntelligenceNodes")),
+    toReferenceType: v.optional(
+      v.union(
+        v.literal("trace"),
+        v.literal("workflow"),
+        v.literal("artifact"),
+        v.literal("outcome"),
+        v.literal("person"),
+        v.literal("tool"),
+        v.literal("agent_run"),
+        v.literal("resource"),
+      ),
+    ),
+    toReferenceId: v.optional(v.string()),
+    type: v.union(
+      v.literal("supports"),
+      v.literal("contradicts"),
+      v.literal("derived_from"),
+      v.literal("applies_to_workflow"),
+      v.literal("has_example"),
+      v.literal("validated_by"),
+      v.literal("deprecated_by"),
+    ),
+    confidence: v.number(),
+    evidenceTraceIds: v.array(v.id("communitySourceTraces")),
+    visibilityScope: v.union(
+      v.literal("private"),
+      v.literal("admin"),
+      v.literal("community"),
+      v.literal("public"),
+    ),
+    createdByActorType: v.union(
+      v.literal("member"),
+      v.literal("admin"),
+      v.literal("agent"),
+      v.literal("compiler"),
+      v.literal("system"),
+    ),
+    createdByUserId: v.optional(v.id("users")),
+    createdByAgentKey: v.optional(v.string()),
+    compilerRunId: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_community", ["communityId"])
+    .index("by_fromNode", ["fromNodeId"])
+    .index("by_toNode", ["toNodeId"])
+    .index("by_community_type", ["communityId", "type"])
+    .index("by_community_reference", ["communityId", "toReferenceType", "toReferenceId"]),
+
+  communityIntelligenceMutations: defineTable({
+    communityId: v.id("communities"),
+    operation: v.union(
+      v.literal("create_node"),
+      v.literal("update_node"),
+      v.literal("create_edge"),
+      v.literal("attach_evidence"),
+      v.literal("attach_outcome"),
+      v.literal("promote_status"),
+      v.literal("mark_contested"),
+      v.literal("mark_stale"),
+      v.literal("deprecate_node"),
+      v.literal("update_confidence"),
+      v.literal("update_visibility"),
+    ),
+    actorType: v.union(
+      v.literal("member"),
+      v.literal("admin"),
+      v.literal("agent"),
+      v.literal("compiler"),
+      v.literal("system"),
+    ),
+    actorUserId: v.optional(v.id("users")),
+    actorAgentKey: v.optional(v.string()),
+    targetNodeIds: v.array(v.id("communityIntelligenceNodes")),
+    targetEdgeIds: v.array(v.id("communityIntelligenceEdges")),
+    primaryTargetNodeId: v.optional(v.id("communityIntelligenceNodes")),
+    primaryTargetEdgeId: v.optional(v.id("communityIntelligenceEdges")),
+    beforeSnapshot: v.optional(v.any()),
+    afterSnapshot: v.optional(v.any()),
+    sourceTraceIds: v.array(v.id("communitySourceTraces")),
+    compilerRunId: v.optional(v.string()),
+    policyDecisionId: v.optional(v.string()),
+    reason: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_community_createdAt", ["communityId", "createdAt"])
+    .index("by_primaryTargetNode", ["primaryTargetNodeId"])
+    .index("by_primaryTargetEdge", ["primaryTargetEdgeId"])
+    .index("by_community_operation", ["communityId", "operation"]),
+
+  communityIntelligenceChangeRequests: defineTable({
+    communityId: v.id("communities"),
+    operation: v.union(
+      v.literal("create_node"),
+      v.literal("update_node"),
+      v.literal("create_edge"),
+      v.literal("attach_evidence"),
+      v.literal("attach_outcome"),
+      v.literal("promote_status"),
+      v.literal("mark_contested"),
+      v.literal("mark_stale"),
+      v.literal("deprecate_node"),
+      v.literal("update_confidence"),
+      v.literal("update_visibility"),
+    ),
+    status: v.union(
+      v.literal("pending_decision"),
+      v.literal("accepted"),
+      v.literal("rejected"),
+      v.literal("applied"),
+    ),
+    sourceTraceIds: v.array(v.id("communitySourceTraces")),
+    outcomeObservationIds: v.array(v.id("communityOutcomeObservations")),
+    targetNodeIds: v.array(v.id("communityIntelligenceNodes")),
+    targetEdgeIds: v.array(v.id("communityIntelligenceEdges")),
+    primaryTargetNodeId: v.optional(v.id("communityIntelligenceNodes")),
+    primaryTargetEdgeId: v.optional(v.id("communityIntelligenceEdges")),
+    targetNodeSnapshots: v.array(
+      v.object({
+        nodeId: v.id("communityIntelligenceNodes"),
+        version: v.number(),
+        updatedAt: v.number(),
+      }),
+    ),
+    targetEdgeSnapshots: v.array(
+      v.object({
+        edgeId: v.id("communityIntelligenceEdges"),
+        updatedAt: v.number(),
+      }),
+    ),
+    requestedPayload: v.any(),
+    confidence: v.number(),
+    privacyRisk: v.number(),
+    createdByActorType: v.union(
+      v.literal("member"),
+      v.literal("admin"),
+      v.literal("agent"),
+      v.literal("compiler"),
+      v.literal("system"),
+    ),
+    createdByUserId: v.optional(v.id("users")),
+    createdByAgentKey: v.optional(v.string()),
+    decidedByActorType: v.optional(
+      v.union(
+        v.literal("admin"),
+        v.literal("agent"),
+        v.literal("compiler"),
+        v.literal("system"),
+      ),
+    ),
+    decidedByUserId: v.optional(v.id("users")),
+    decidedByAgentKey: v.optional(v.string()),
+    decisionReason: v.optional(v.string()),
+    appliedMutationId: v.optional(v.id("communityIntelligenceMutations")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    decidedAt: v.optional(v.number()),
+    appliedAt: v.optional(v.number()),
+  })
+    .index("by_community_status", ["communityId", "status"])
+    .index("by_community_createdAt", ["communityId", "createdAt"])
+    .index("by_community_type_status", ["communityId", "operation", "status"])
+    .index("by_primaryTargetNode", ["primaryTargetNodeId"])
+    .index("by_primaryTargetEdge", ["primaryTargetEdgeId"]),
+
+  communityIntelligenceRetrievalLogs: defineTable({
+    communityId: v.id("communities"),
+    userId: v.id("users"),
+    workflowId: v.optional(v.string()),
+    query: v.optional(v.string()),
+    retrievedNodeIds: v.array(v.id("communityIntelligenceNodes")),
+    injectedNodeIds: v.array(v.id("communityIntelligenceNodes")),
+    feedback: v.optional(
+      v.union(
+        v.literal("useful"),
+        v.literal("not_useful"),
+        v.literal("wrong"),
+        v.literal("stale"),
+      ),
+    ),
+    feedbackNote: v.optional(v.string()),
+    outcomeObservationIds: v.array(v.id("communityOutcomeObservations")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_community_createdAt", ["communityId", "createdAt"])
+    .index("by_community_workflow", ["communityId", "workflowId"])
+    .index("by_user", ["userId"]),
+
+  communityOutcomeObservations: defineTable({
+    communityId: v.id("communities"),
+    nodeId: v.optional(v.id("communityIntelligenceNodes")),
+    retrievalLogId: v.optional(v.id("communityIntelligenceRetrievalLogs")),
+    workflowId: v.optional(v.string()),
+    metricName: v.optional(v.string()),
+    metricValue: v.optional(v.number()),
+    baselineValue: v.optional(v.number()),
+    resultStatus: v.union(
+      v.literal("worked"),
+      v.literal("failed"),
+      v.literal("mixed"),
+      v.literal("unknown"),
+    ),
+    evidenceStrength: v.union(
+      v.literal("none"),
+      v.literal("anecdotal"),
+      v.literal("observed"),
+      v.literal("measured"),
+      v.literal("validated"),
+    ),
+    notes: v.optional(v.string()),
+    observedByActorType: v.union(
+      v.literal("member"),
+      v.literal("admin"),
+      v.literal("agent"),
+      v.literal("compiler"),
+      v.literal("system"),
+    ),
+    observedByUserId: v.optional(v.id("users")),
+    observedByAgentKey: v.optional(v.string()),
+    observedAt: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_community", ["communityId"])
+    .index("by_node", ["nodeId"])
+    .index("by_retrievalLog", ["retrievalLogId"])
+    .index("by_community_workflow", ["communityId", "workflowId"])
+    .index("by_community_observedAt", ["communityId", "observedAt"]),
+
+  communityCompilerDigests: defineTable({
+    communityId: v.id("communities"),
+    dedupeKey: v.string(),
+    windowStartedAt: v.number(),
+    windowEndedAt: v.number(),
+    summary: v.string(),
+    itemCount: v.number(),
+    items: v.array(
+      v.object({
+        category: v.union(
+          v.literal("chat_activity"),
+          v.literal("ai_feed_signal"),
+          v.literal("resource_activity"),
+          v.literal("event_activity"),
+          v.literal("member_state"),
+          v.literal("outcome_signal"),
+          v.literal("source_trace_signal"),
+          v.literal("pending_directory_decision"),
+        ),
+        title: v.string(),
+        summary: v.string(),
+        priority: v.number(),
+        confidence: v.number(),
+        sourceTypes: v.array(v.string()),
+        sourceIds: v.array(v.string()),
+        sourceTraceIds: v.array(v.id("communitySourceTraces")),
+      }),
+    ),
+    signalCounts: v.object({
+      chat: v.number(),
+      aiFeed: v.number(),
+      resources: v.number(),
+      events: v.number(),
+      sourceTraces: v.number(),
+      outcomes: v.number(),
+      pendingChangeRequests: v.number(),
+      newMembers: v.number(),
+      activeMembers: v.number(),
+      postingMembers: v.number(),
+      aiFeedReactingMembers: v.number(),
+    }),
+    createdByActorType: v.union(
+      v.literal("compiler"),
+      v.literal("agent"),
+      v.literal("system"),
+      v.literal("admin"),
+    ),
+    createdByUserId: v.optional(v.id("users")),
+    createdByAgentKey: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_community_createdAt", ["communityId", "createdAt"])
+    .index("by_community_windowEndedAt", ["communityId", "windowEndedAt"])
+    .index("by_community_dedupeKey", ["communityId", "dedupeKey"]),
 
   threads: defineTable({
     ownerId: v.id("users"),

@@ -14,6 +14,7 @@ import {
   deleteArchiveDocumentBySource,
   upsertArchiveDocumentForAiFeedPost,
 } from "./communityArchiveDocuments";
+import { upsertCommunitySourceTrace } from "./communityIntelligenceDirectory";
 
 const GOOD_WEIGHT = 1;
 const LOW_SIGNAL_WEIGHT = -1;
@@ -91,6 +92,58 @@ function normalizeFeedEvidence(raw: unknown): string[] {
   return deduped;
 }
 
+function buildAiFeedTraceSummary(post: FeedPostRow): string {
+  return [
+    post.title,
+    post.body,
+    ...(Array.isArray(post.evidence) ? post.evidence.map((entry) => `Evidence: ${entry}`) : []),
+  ]
+    .map((value) => String(value ?? "").trim())
+    .filter(Boolean)
+    .join("\n");
+}
+
+async function upsertSourceTraceForAiFeedPost(ctx: any, post: FeedPostRow, nowMs: number): Promise<void> {
+  await upsertCommunitySourceTrace({
+    ctx,
+    communityId: post.communityId,
+    sourceType: "ai_feed",
+    sourceId: normalizeIdValue(post._id),
+    title: post.title,
+    summary: buildAiFeedTraceSummary(post),
+    visibilityScope: "community",
+    sourceVisibility: "community",
+    actorType: "agent",
+    actorUserId: post.authorUserId,
+    actorAgentKey: post.agentKey ?? "community_agent",
+    nowMs,
+  });
+}
+
+async function upsertHiddenSourceTraceForAiFeedPost(args: {
+  ctx: any;
+  post: FeedPostRow;
+  actorType: "admin" | "system";
+  actorUserId?: any;
+  actorAgentKey?: string;
+  nowMs: number;
+}): Promise<void> {
+  await upsertCommunitySourceTrace({
+    ctx: args.ctx,
+    communityId: args.post.communityId,
+    sourceType: "ai_feed",
+    sourceId: normalizeIdValue(args.post._id),
+    title: args.post.title,
+    summary: "AI feed post hidden; retained as moderation evidence.",
+    visibilityScope: "admin",
+    sourceVisibility: "redacted",
+    actorType: args.actorType,
+    actorUserId: args.actorUserId,
+    actorAgentKey: args.actorAgentKey,
+    nowMs: args.nowMs,
+  });
+}
+
 function voteActorKeyForUser(userId: any): string {
   return `user:${normalizeIdValue(userId)}`;
 }
@@ -125,6 +178,13 @@ async function hideFeedPost(args: {
     hiddenAt: args.nowMs,
     updatedAt: args.nowMs,
   });
+  await upsertHiddenSourceTraceForAiFeedPost({
+    ctx: args.ctx,
+    post: nextPost,
+    actorType: "system",
+    actorAgentKey: "ai_feed_prune",
+    nowMs: args.nowMs,
+  });
   await upsertArchiveDocumentForAiFeedPost(args.ctx, nextPost);
 }
 
@@ -144,6 +204,7 @@ async function restoreFeedPostToLive(args: {
     hiddenAt: undefined,
     updatedAt: args.nowMs,
   });
+  await upsertSourceTraceForAiFeedPost(args.ctx, nextPost, args.nowMs);
   await upsertArchiveDocumentForAiFeedPost(args.ctx, nextPost);
 }
 
@@ -222,6 +283,7 @@ async function insertFeedPost(args: {
       .collect()) as FeedPostRow[];
     const existing = existingRows.find((row) => row.status === "live");
     if (existing) {
+      await upsertSourceTraceForAiFeedPost(args.ctx, existing, args.nowMs);
       return await mapFeedPostRow({
         post: existing,
         viewerReaction: null,
@@ -254,6 +316,7 @@ async function insertFeedPost(args: {
   });
   const created = await getFeedPostOrThrow(args.ctx, normalizeIdValue(id));
   await upsertArchiveDocumentForAiFeedPost(args.ctx, created);
+  await upsertSourceTraceForAiFeedPost(args.ctx, created, args.nowMs);
   return await mapFeedPostRow({
     post: created,
     viewerReaction: null,
@@ -648,12 +711,34 @@ export const hideCommunityAiFeedPost = mutation({
       communityId: post.communityId,
       userId,
     });
-    if (post.status === "hidden") return { ok: true };
     const nowMs = Date.now();
+    if (post.status === "hidden") {
+      await upsertHiddenSourceTraceForAiFeedPost({
+        ctx,
+        post,
+        actorType: "admin",
+        actorUserId: userId,
+        nowMs,
+      });
+      await deleteArchiveDocumentBySource(ctx, {
+        communityId: post.communityId,
+        sourceType: "ai_feed",
+        sourceId: normalizeIdValue(post._id),
+      });
+      return { ok: true };
+    }
     await ctx.db.patch(post._id as any, {
       status: "hidden",
       hiddenAt: nowMs,
       updatedAt: nowMs,
+    });
+    const hiddenPost = await getFeedPostOrThrow(ctx, normalizeIdValue(post._id));
+    await upsertHiddenSourceTraceForAiFeedPost({
+      ctx,
+      post: hiddenPost,
+      actorType: "admin",
+      actorUserId: userId,
+      nowMs,
     });
     await deleteArchiveDocumentBySource(ctx, {
       communityId: post.communityId,
@@ -680,7 +765,7 @@ export const publishCommunityAiFeedAgentPost = mutation({
       userId: args.userId,
       authSubject: args.authSubject ?? null,
     });
-    await requireCommunityChatAccess({
+    await requireCommunityModerator({
       ctx,
       communityId: args.communityId,
       userId,
