@@ -536,6 +536,7 @@ const COMMUNITY_ANALYTICS_RANGE_STORAGE_KEY = "polynet-community-analytics-range
 const LEGACY_COMMUNITY_ANALYTICS_RANGE_STORAGE_KEY = "arx-community-analytics-range";
 const COMMUNITY_RAIL_ORDER_STORAGE_KEY_PREFIX = "polynet-community-rail-order:web";
 const WORKSPACE_OPERATOR_DATA_PANEL_OPEN_STORAGE_KEY = "polynet-workspace-operator-data-panel-open";
+const WORKSPACE_USER_DATA_PANEL_OPEN_STORAGE_KEY = "polynet-workspace-user-data-panel-open";
 const CHATGPT_SECURITY_SETTINGS_URL = "https://chatgpt.com/#settings/Security";
 
 type GuestStoredMessageV1 = {
@@ -594,6 +595,22 @@ function storeWorkspaceOperatorDataPanelOpen(isOpen: boolean): void {
     localStorage.setItem(WORKSPACE_OPERATOR_DATA_PANEL_OPEN_STORAGE_KEY, isOpen ? "1" : "0");
   } catch {
     // Operator panel visibility is a local preference only.
+  }
+}
+
+function loadWorkspaceUserDataPanelOpen(): boolean {
+  try {
+    return localStorage.getItem(WORKSPACE_USER_DATA_PANEL_OPEN_STORAGE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function storeWorkspaceUserDataPanelOpen(isOpen: boolean): void {
+  try {
+    localStorage.setItem(WORKSPACE_USER_DATA_PANEL_OPEN_STORAGE_KEY, isOpen ? "1" : "0");
+  } catch {
+    // Workspace panel visibility is a local preference only.
   }
 }
 
@@ -1448,6 +1465,8 @@ export default function App() {
     useState<WorkspaceOperatorPanelLayout>({ open: false, width: 0, gutter: 0 });
   const [isWorkspaceOperatorDataPanelOpen, setIsWorkspaceOperatorDataPanelOpen] =
     useState(loadWorkspaceOperatorDataPanelOpen);
+  const [isWorkspaceUserDataPanelOpen, setIsWorkspaceUserDataPanelOpen] =
+    useState(loadWorkspaceUserDataPanelOpen);
   const handleWorkspaceOperatorPanelLayoutChange = useCallback((layout: WorkspaceOperatorPanelLayout) => {
     setWorkspaceOperatorPanelLayout((current) =>
       current.open === layout.open &&
@@ -1460,6 +1479,9 @@ export default function App() {
   useEffect(() => {
     storeWorkspaceOperatorDataPanelOpen(isWorkspaceOperatorDataPanelOpen);
   }, [isWorkspaceOperatorDataPanelOpen]);
+  useEffect(() => {
+    storeWorkspaceUserDataPanelOpen(isWorkspaceUserDataPanelOpen);
+  }, [isWorkspaceUserDataPanelOpen]);
   useEffect(() => {
     if (typeof window === "undefined") return;
 
@@ -7571,31 +7593,135 @@ export default function App() {
     activePage === "workspace" &&
     activeView === "home",
   );
+  const showWorkspaceUserDataPanelControl = Boolean(
+    session &&
+    !showMobileAppShell &&
+    activePage === "workspace" &&
+    activeView === "home",
+  );
+  const isWorkspaceOperatorDataPanelVisible =
+    showWorkspaceOperatorDataPanelControl && isWorkspaceOperatorDataPanelOpen;
+  const isWorkspaceUserDataPanelVisible =
+    showWorkspaceUserDataPanelControl &&
+    isWorkspaceUserDataPanelOpen &&
+    !isWorkspaceOperatorDataPanelVisible;
+  useEffect(() => {
+    if (
+      !showWorkspaceOperatorDataPanelControl ||
+      !isWorkspaceOperatorDataPanelOpen ||
+      !isWorkspaceUserDataPanelOpen
+    ) return;
+    setIsWorkspaceUserDataPanelOpen(false);
+  }, [
+    isWorkspaceOperatorDataPanelOpen,
+    isWorkspaceUserDataPanelOpen,
+    showWorkspaceOperatorDataPanelControl,
+  ]);
   const handleToggleWorkspaceOperatorDataPanel = useCallback(() => {
-    setIsWorkspaceOperatorDataPanelOpen((value) => !value);
+    setIsWorkspaceOperatorDataPanelOpen((value) => {
+      const next = !value;
+      if (next) setIsWorkspaceUserDataPanelOpen(false);
+      return next;
+    });
+  }, []);
+  const handleToggleWorkspaceUserDataPanel = useCallback(() => {
+    setIsWorkspaceUserDataPanelOpen((value) => {
+      const next = !value;
+      if (next) setIsWorkspaceOperatorDataPanelOpen(false);
+      return next;
+    });
   }, []);
 
   useEffect(() => {
-    if (showWorkspaceOperatorDataPanelControl) return;
+    if (showWorkspaceOperatorDataPanelControl || showWorkspaceUserDataPanelControl) return;
     handleWorkspaceOperatorPanelLayoutChange({ open: false, width: 0, gutter: 0 });
   }, [
     handleWorkspaceOperatorPanelLayoutChange,
     showWorkspaceOperatorDataPanelControl,
+    showWorkspaceUserDataPanelControl,
   ]);
+
+  const workspaceUserDataPanelCommunity = activeCommunity
+    ? {
+        id: activeCommunity.id,
+        slug: activeCommunity.slug ?? null,
+        name: activeCommunity.name,
+        oneLiner: activeCommunity.one_liner ?? null,
+        visibility: activeCommunity.visibility ?? null,
+        memberCount: communityMembers.length,
+        canManage: canManageMembersActiveCommunity || canViewActiveCommunitySettings,
+      }
+    : null;
+  const ownedCommunityCount = communities.reduce(
+    (acc, community) => acc + (communityRoleById[community.id] === "owner" ? 1 : 0),
+    0,
+  );
+  const maxOwnedCommunities = Number(accountCommerceStatus?.max_communities ?? 0);
+  const canCreateWorkspaceUserPanelCommunity =
+    Boolean(session) && maxOwnedCommunities > 0 && ownedCommunityCount < maxOwnedCommunities;
+
+  const workspaceUserDataPanel = {
+    accountSetupStatus: effectiveAccountSetupStatus,
+    isLoadingAccountSetupStatus,
+    workspaceCreditBalance,
+    isLoadingWorkspaceCreditBalance,
+    workspaceCreditBalanceError,
+    workspaceCreditTopupError,
+    isStartingWorkspaceCreditTopupCheckout,
+    activeProjectName: workspace.derived.resolvedActiveProjectName,
+    activeThreadTitle: activeThread ? getThreadDisplayTitle(activeThread) : null,
+    activeModelLabel: workspace.derived.activeModelLabel,
+    activeCommunity: workspaceUserDataPanelCommunity,
+    canCreateCommunity: canCreateWorkspaceUserPanelCommunity,
+    onOpenAccountSetup: openProfileSetup,
+    onTopUpWorkspaceCredits: () => {
+      void startWorkspaceCreditTopupCheckout();
+    },
+    onOpenCreateCommunity: () => openCreateCommunityModal(),
+    onOpenActiveCommunity: handleOpenLandingCommunity,
+    onOpenActiveCommunitySettings: () => {
+      const nextCommunitySlug = String(selectedActiveCommunitySlug ?? activeCommunity?.slug ?? "").trim();
+      if (!nextCommunitySlug) return;
+      openCommunityTab(nextCommunitySlug, "settings", { pushSnapshot: false });
+    },
+  };
+
+  const workspaceUserDataToggle = showWorkspaceUserDataPanelControl ? (
+    <button
+      type="button"
+      className={`icon-button workspace-user-data-toggle${isWorkspaceUserDataPanelVisible ? " active" : ""}`}
+      onClick={handleToggleWorkspaceUserDataPanel}
+      aria-expanded={isWorkspaceUserDataPanelVisible}
+      aria-controls="workspace-user-data-panel"
+      aria-label={
+        isWorkspaceUserDataPanelVisible
+          ? "Close workspace panel"
+          : "Open workspace panel"
+      }
+      title={isWorkspaceUserDataPanelVisible ? "Close workspace panel" : "Open workspace panel"}
+    >
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <rect x="3" y="4" width="18" height="16" rx="2" />
+        <path d="M8 9h8" />
+        <path d="M8 13h5" />
+        <path d="M15 4v16" />
+      </svg>
+    </button>
+  ) : null;
 
   const workspaceOperatorDataToggle = showWorkspaceOperatorDataPanelControl ? (
     <button
       type="button"
-      className={`icon-button workspace-operator-data-toggle${isWorkspaceOperatorDataPanelOpen ? " active" : ""}`}
+      className={`icon-button workspace-operator-data-toggle${isWorkspaceOperatorDataPanelVisible ? " active" : ""}`}
       onClick={handleToggleWorkspaceOperatorDataPanel}
-      aria-expanded={isWorkspaceOperatorDataPanelOpen}
+      aria-expanded={isWorkspaceOperatorDataPanelVisible}
       aria-controls="workspace-operator-data-panel"
       aria-label={
-        isWorkspaceOperatorDataPanelOpen
+        isWorkspaceOperatorDataPanelVisible
           ? "Close operator data panel"
           : "Open operator data panel"
       }
-      title={isWorkspaceOperatorDataPanelOpen ? "Close data panel" : "Open data panel"}
+      title={isWorkspaceOperatorDataPanelVisible ? "Close data panel" : "Open data panel"}
     >
       <svg viewBox="0 0 24 24" aria-hidden="true">
         <rect x="3" y="4" width="18" height="16" rx="2" />
@@ -7700,7 +7826,10 @@ export default function App() {
         ...workspaceHostProps,
         showOperatorDataPanel: showWorkspaceOperatorDataPanelControl,
         operatorDataPanelSession: showWorkspaceOperatorDataPanelControl ? session : null,
-        operatorDataPanelOpen: isWorkspaceOperatorDataPanelOpen,
+        operatorDataPanelOpen: isWorkspaceOperatorDataPanelVisible,
+        showWorkspaceUserDataPanel: showWorkspaceUserDataPanelControl,
+        workspaceUserDataPanelOpen: isWorkspaceUserDataPanelVisible,
+        workspaceUserDataPanel,
         onOperatorPanelLayoutChange: handleWorkspaceOperatorPanelLayoutChange,
       },
     },
@@ -7916,7 +8045,8 @@ export default function App() {
     backTargetLabel: backTargetLabel ?? null,
     activeView,
     userWantsSessions,
-    hasWorkspaceOperatorControl: showWorkspaceOperatorDataPanelControl,
+    hasWorkspaceOperatorControl: showWorkspaceOperatorDataPanelControl || showWorkspaceUserDataPanelControl,
+    workspaceUserDataToggle,
     workspaceOperatorDataToggle,
     communityHomeButton,
     handleExitPublicFunnelPreview,

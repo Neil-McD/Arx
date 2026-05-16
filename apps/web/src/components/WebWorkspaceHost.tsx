@@ -57,6 +57,10 @@ import {
   useOperatorDashboardData,
   WebOperatorDataPanel,
 } from "./WebOperatorDataPanel";
+import {
+  WebWorkspaceUserDataPanel,
+  type WorkspaceUserDataPanelDataProps,
+} from "./WebWorkspaceUserDataPanel";
 import type {
   WorkspaceMarkdownRenderer,
   WorkspaceStreamingMessageView,
@@ -165,6 +169,9 @@ export type WebWorkspaceHostProps = {
   showOperatorDataPanel?: boolean;
   operatorDataPanelSession?: AuthSessionLike | null;
   operatorDataPanelOpen?: boolean;
+  showWorkspaceUserDataPanel?: boolean;
+  workspaceUserDataPanelOpen?: boolean;
+  workspaceUserDataPanel?: WorkspaceUserDataPanelDataProps | null;
 };
 
 function parsePreviewRunAnchor(
@@ -1018,6 +1025,12 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
   const showOperatorDataPanel = Boolean(props.showOperatorDataPanel && props.operatorDataPanelSession);
   const isOperatorDataPanelOpen = Boolean(props.operatorDataPanelOpen);
   const isOperatorDataPanelVisible = Boolean(showOperatorDataPanel && isOperatorDataPanelOpen);
+  const showWorkspaceUserDataPanel = Boolean(props.showWorkspaceUserDataPanel && props.workspaceUserDataPanel);
+  const isWorkspaceUserDataPanelOpen = Boolean(props.workspaceUserDataPanelOpen);
+  const isWorkspaceUserDataPanelVisible = Boolean(
+    showWorkspaceUserDataPanel && isWorkspaceUserDataPanelOpen && !isOperatorDataPanelVisible,
+  );
+  const isWorkspaceRightPanelVisible = Boolean(isOperatorDataPanelVisible || isWorkspaceUserDataPanelVisible);
   const operatorDataPanelStyle = {
     "--operator-right-panel-width": `${operatorRightPanelWidth}px`,
     "--operator-right-panel-gutter": `${OPERATOR_RIGHT_PANEL_GUTTER}px`,
@@ -1030,11 +1043,11 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
 
   useEffect(() => {
     props.onOperatorPanelLayoutChange?.({
-      open: isOperatorDataPanelVisible,
-      width: isOperatorDataPanelVisible ? operatorRightPanelWidth : 0,
-      gutter: isOperatorDataPanelVisible ? OPERATOR_RIGHT_PANEL_GUTTER : 0,
+      open: isWorkspaceRightPanelVisible,
+      width: isWorkspaceRightPanelVisible ? operatorRightPanelWidth : 0,
+      gutter: isWorkspaceRightPanelVisible ? OPERATOR_RIGHT_PANEL_GUTTER : 0,
     });
-  }, [isOperatorDataPanelVisible, operatorRightPanelWidth, props.onOperatorPanelLayoutChange]);
+  }, [isWorkspaceRightPanelVisible, operatorRightPanelWidth, props.onOperatorPanelLayoutChange]);
 
   useEffect(() => {
     workspaceAttachmentsRef.current = workspaceAttachments;
@@ -1727,7 +1740,7 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
   return (
     <>
       <div
-        className={`workspace-body workspace-attachment-drop-surface${isDesktopExpandedPreview ? " preview-expanded" : ""}${isWorkspaceAttachmentDragOver ? " drag-over" : ""}${isOperatorDataPanelVisible ? " workspace-operator-data-open" : ""}`}
+        className={`workspace-body workspace-attachment-drop-surface${isDesktopExpandedPreview ? " preview-expanded" : ""}${isWorkspaceAttachmentDragOver ? " drag-over" : ""}${isWorkspaceRightPanelVisible ? " workspace-operator-data-open" : ""}`}
         style={operatorDataPanelStyle}
         onDrop={handleWorkspaceAttachmentDrop}
         onDragEnter={handleWorkspaceAttachmentDragEnter}
@@ -1856,7 +1869,7 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
       </div>
       {!props.isEmptyWorkspaceThread ? (
         <div
-          className={`workspace-composer-shell workspace-attachment-drop-surface${isDesktopExpandedPreview ? " preview-expanded" : ""}${isWorkspaceAttachmentDragOver ? " drag-over" : ""}${isOperatorDataPanelVisible ? " workspace-operator-data-open" : ""}`}
+          className={`workspace-composer-shell workspace-attachment-drop-surface${isDesktopExpandedPreview ? " preview-expanded" : ""}${isWorkspaceAttachmentDragOver ? " drag-over" : ""}${isWorkspaceRightPanelVisible ? " workspace-operator-data-open" : ""}`}
           style={operatorDataPanelStyle}
           onDrop={handleWorkspaceAttachmentDrop}
           onDragEnter={handleWorkspaceAttachmentDragEnter}
@@ -1915,10 +1928,10 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
       {showOperatorDataPanel ? (
         <aside
           id="workspace-operator-data-panel"
-          className={`operator-data-panel workspace-operator-data-panel${isOperatorDataPanelOpen ? " open" : ""}`}
+          className={`operator-data-panel workspace-operator-data-panel${isOperatorDataPanelVisible ? " open" : ""}`}
           style={operatorDataPanelStyle}
           aria-label="Operator intelligence data"
-          aria-hidden={!isOperatorDataPanelOpen}
+          aria-hidden={!isOperatorDataPanelVisible}
         >
           <WebOperatorDataPanel
             state={operatorData.state}
@@ -1928,6 +1941,25 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
             error={operatorData.error}
             activeInsightTab={operatorActiveInsightTab}
             onActiveInsightTabChange={setOperatorActiveInsightTab}
+            onResizePointerDown={handleOperatorRightPanelResizePointerDown}
+            onResizePointerMove={(event) => {
+              if (event.buttons === 1) resizeOperatorRightPanelFromPointer(event);
+            }}
+            onResizeDoubleClick={() => setOperatorRightPanelWidth(OPERATOR_RIGHT_PANEL_DEFAULT_WIDTH)}
+            onResizeKeyDown={handleOperatorRightPanelResizeKeyDown}
+          />
+        </aside>
+      ) : null}
+      {showWorkspaceUserDataPanel && props.workspaceUserDataPanel ? (
+        <aside
+          id="workspace-user-data-panel"
+          className={`operator-data-panel workspace-operator-data-panel workspace-user-data-panel${isWorkspaceUserDataPanelVisible ? " open" : ""}`}
+          style={operatorDataPanelStyle}
+          aria-label="Workspace data"
+          aria-hidden={!isWorkspaceUserDataPanelVisible}
+        >
+          <WebWorkspaceUserDataPanel
+            {...props.workspaceUserDataPanel}
             onResizePointerDown={handleOperatorRightPanelResizePointerDown}
             onResizePointerMove={(event) => {
               if (event.buttons === 1) resizeOperatorRightPanelFromPointer(event);

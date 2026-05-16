@@ -93,6 +93,7 @@ export function WebDesktopShellHeader(props: WebDesktopShellHeaderProps) {
       <div className={topbarRightClassName}>
         {props.isPublicCommunityFunnel ? null : (
           <>
+            {props.workspaceUserDataToggle}
             {props.workspaceOperatorDataToggle}
             {props.communityHomeButton}
           </>
