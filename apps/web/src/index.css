@@ -152,10 +152,6 @@
   -webkit-backdrop-filter: none;
 }
 
-.app-root.web-header-islands .app-topbar .topbar-right.has-workspace-right-panel-control {
-  padding-left: 48px;
-}
-
 .app-topbar .topbar-right .community-btn:hover,
 .app-topbar .topbar-right .community-btn:active {
   background: transparent;
