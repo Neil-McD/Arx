@@ -7611,6 +7611,8 @@ export default function App() {
     workspaceCreditBalanceError,
     workspaceCreditTopupError,
     isStartingWorkspaceCreditTopupCheckout,
+    session,
+    activeProjectId: workspace.derived.resolvedActiveProjectId,
     activeProjectName: workspace.derived.resolvedActiveProjectName,
     activeThreadTitle: activeThread ? getThreadDisplayTitle(activeThread) : null,
     activeModelLabel: workspace.derived.activeModelLabel,

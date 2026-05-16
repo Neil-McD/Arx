@@ -22355,6 +22355,217 @@ button.message-citation-chip:hover {
   opacity: 0.45;
 }
 
+.workspace-files-card {
+  align-content: start;
+  padding: 0;
+  overflow: hidden;
+}
+
+.workspace-files-card > p {
+  padding: 0 14px 14px;
+}
+
+.workspace-files-card__header {
+  width: 100%;
+  min-width: 0;
+  padding: 14px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.workspace-files-card__header:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.workspace-files-card__header > span:first-child {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.workspace-files-card__header strong {
+  min-width: 0;
+  color: var(--text-primary);
+  font-size: 14px;
+  line-height: 1.15;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-files-card__chevron {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.045);
+  color: var(--text-secondary);
+  display: inline-grid;
+  place-items: center;
+  font-size: 16px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.workspace-files-browser {
+  min-width: 0;
+  display: grid;
+  gap: 10px;
+  padding: 0 14px 14px;
+}
+
+.workspace-files-browser__toolbar {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 2px;
+}
+
+.workspace-files-browser__toolbar span {
+  min-width: 0;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-files-list {
+  min-height: 92px;
+  max-height: min(280px, 34svh);
+  overflow: auto;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.12);
+  scrollbar-width: thin;
+}
+
+.workspace-files-entry {
+  width: 100%;
+  min-width: 0;
+  min-height: 42px;
+  padding: 8px 10px;
+  border: 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  background: transparent;
+  color: var(--text-primary);
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  text-align: left;
+  cursor: pointer;
+}
+
+.workspace-files-entry:first-child {
+  border-top: 0;
+}
+
+.workspace-files-entry:hover,
+.workspace-files-entry.is-selected {
+  background: rgba(255, 255, 255, 0.055);
+}
+
+.workspace-files-entry__icon {
+  color: var(--text-faint);
+  font-size: 13px;
+  line-height: 1;
+}
+
+.workspace-files-entry span:last-child {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.workspace-files-entry strong,
+.workspace-files-entry em {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-files-entry strong {
+  font-size: 12px;
+  line-height: 1.1;
+}
+
+.workspace-files-entry em {
+  color: var(--text-faint);
+  font-size: 11px;
+  font-style: normal;
+  line-height: 1.1;
+}
+
+.workspace-files-empty {
+  padding: 12px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.workspace-file-preview {
+  min-width: 0;
+  min-height: 116px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.12);
+}
+
+.workspace-file-preview figure {
+  margin: 0;
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+}
+
+.workspace-file-preview img {
+  width: 100%;
+  max-height: min(260px, 32svh);
+  object-fit: contain;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.workspace-file-preview figcaption,
+.workspace-file-preview__meta {
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.workspace-file-preview__meta {
+  padding: 10px 10px 0;
+}
+
+.workspace-file-preview pre {
+  max-height: min(360px, 42svh);
+  margin: 0;
+  padding: 10px;
+  overflow: auto;
+  color: color-mix(in srgb, var(--text-primary) 86%, var(--text-secondary));
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  scrollbar-width: thin;
+}
+
 .operator-dashboard__section-heading {
   display: grid;
   gap: 4px;

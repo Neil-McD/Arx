@@ -144,6 +144,7 @@ import type * as userProfileProjection from "../userProfileProjection.js";
 import type * as webResearchTools from "../webResearchTools.js";
 import type * as webSearchTypes from "../webSearchTypes.js";
 import type * as workspaceCredits from "../workspaceCredits.js";
+import type * as workspaceInspector from "../workspaceInspector.js";
 import type * as workspaceTerminalBackgroundService from "../workspaceTerminalBackgroundService.js";
 import type * as workspaceTerminalProcessCore from "../workspaceTerminalProcessCore.js";
 import type * as workspaceTerminalReconciliation from "../workspaceTerminalReconciliation.js";
@@ -293,6 +294,7 @@ declare const fullApi: ApiFromModules<{
   webResearchTools: typeof webResearchTools;
   webSearchTypes: typeof webSearchTypes;
   workspaceCredits: typeof workspaceCredits;
+  workspaceInspector: typeof workspaceInspector;
   workspaceTerminalBackgroundService: typeof workspaceTerminalBackgroundService;
   workspaceTerminalProcessCore: typeof workspaceTerminalProcessCore;
   workspaceTerminalReconciliation: typeof workspaceTerminalReconciliation;
