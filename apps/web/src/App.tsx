@@ -535,6 +535,7 @@ const LEGACY_APP_THEME_STORAGE_KEY = "arx-theme";
 const COMMUNITY_ANALYTICS_RANGE_STORAGE_KEY = "polynet-community-analytics-range";
 const LEGACY_COMMUNITY_ANALYTICS_RANGE_STORAGE_KEY = "arx-community-analytics-range";
 const COMMUNITY_RAIL_ORDER_STORAGE_KEY_PREFIX = "polynet-community-rail-order:web";
+const WORKSPACE_OPERATOR_DATA_PANEL_OPEN_STORAGE_KEY = "polynet-workspace-operator-data-panel-open";
 const CHATGPT_SECURITY_SETTINGS_URL = "https://chatgpt.com/#settings/Security";
 
 type GuestStoredMessageV1 = {
@@ -577,6 +578,22 @@ function storeGuestModelId(modelId: string): void {
     localStorage.setItem(GUEST_MODEL_STORAGE_KEY, modelId);
   } catch {
     // ignore
+  }
+}
+
+function loadWorkspaceOperatorDataPanelOpen(): boolean {
+  try {
+    return localStorage.getItem(WORKSPACE_OPERATOR_DATA_PANEL_OPEN_STORAGE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function storeWorkspaceOperatorDataPanelOpen(isOpen: boolean): void {
+  try {
+    localStorage.setItem(WORKSPACE_OPERATOR_DATA_PANEL_OPEN_STORAGE_KEY, isOpen ? "1" : "0");
+  } catch {
+    // Operator panel visibility is a local preference only.
   }
 }
 
@@ -1430,7 +1447,7 @@ export default function App() {
   const [workspaceOperatorPanelLayout, setWorkspaceOperatorPanelLayout] =
     useState<WorkspaceOperatorPanelLayout>({ open: false, width: 0, gutter: 0 });
   const [isWorkspaceOperatorDataPanelOpen, setIsWorkspaceOperatorDataPanelOpen] =
-    useState(false);
+    useState(loadWorkspaceOperatorDataPanelOpen);
   const handleWorkspaceOperatorPanelLayoutChange = useCallback((layout: WorkspaceOperatorPanelLayout) => {
     setWorkspaceOperatorPanelLayout((current) =>
       current.open === layout.open &&
@@ -1440,6 +1457,9 @@ export default function App() {
         : layout,
     );
   }, []);
+  useEffect(() => {
+    storeWorkspaceOperatorDataPanelOpen(isWorkspaceOperatorDataPanelOpen);
+  }, [isWorkspaceOperatorDataPanelOpen]);
   useEffect(() => {
     if (typeof window === "undefined") return;
 
@@ -7557,7 +7577,6 @@ export default function App() {
 
   useEffect(() => {
     if (showWorkspaceOperatorDataPanelControl) return;
-    setIsWorkspaceOperatorDataPanelOpen(false);
     handleWorkspaceOperatorPanelLayoutChange({ open: false, width: 0, gutter: 0 });
   }, [
     handleWorkspaceOperatorPanelLayoutChange,
