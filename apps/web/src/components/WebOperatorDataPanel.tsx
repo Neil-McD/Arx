@@ -37,8 +37,14 @@ import type {
   OperatorSecurityAuditDiagnosticsSnapshot,
   OperatorWebDeployDiagnosticsSnapshot,
 } from "../../../../shared/operatorTypes";
+import {
+  CommunityPanelContent,
+  WorkspacePanelContent,
+  type WorkspaceUserDataPanelDataProps,
+} from "./WebWorkspaceUserDataPanel";
 
 export type OperatorInsightTab = "platform" | "business" | "communities";
+export type WorkspaceRightPanelTab = "workspace" | "community" | OperatorInsightTab;
 
 export const OPERATOR_RIGHT_PANEL_DEFAULT_WIDTH = 560;
 export const OPERATOR_RIGHT_PANEL_MIN_WIDTH = 380;
@@ -304,20 +310,37 @@ export function useOperatorDashboardData(params: {
 }
 
 export function WebOperatorDataPanel(props: {
+  workspaceUserDataPanel: WorkspaceUserDataPanelDataProps;
+  showOperatorTabs: boolean;
   state: OperatorDashboardState;
   topCommunities: OperatorCommunityRecord[];
   partnerPayoutCycleActions: PartnerPayoutCycleActions;
   isLoading: boolean;
   error: string | null;
-  activeInsightTab: OperatorInsightTab;
-  onActiveInsightTabChange: (tab: OperatorInsightTab) => void;
+  activeInsightTab: WorkspaceRightPanelTab;
+  onActiveInsightTabChange: (tab: WorkspaceRightPanelTab) => void;
   onResizePointerDown: (event: PointerEvent<HTMLDivElement>) => void;
   onResizePointerMove: (event: PointerEvent<HTMLDivElement>) => void;
   onResizeDoubleClick: () => void;
   onResizeKeyDown: (event: KeyboardEvent<HTMLDivElement>) => void;
 }) {
-  const activeInsightTabIndex = OPERATOR_INSIGHT_TABS.findIndex((tab) => tab.id === props.activeInsightTab);
-  const insightTabSwitcherStyle = buildPlatformSwitcherStyle(OPERATOR_INSIGHT_TABS.length, activeInsightTabIndex);
+  const insightTabs = useMemo<Array<{ id: WorkspaceRightPanelTab; label: string }>>(() => {
+    const communityLabel = props.workspaceUserDataPanel.activeCommunity?.name?.trim() || "Build community";
+    return [
+      { id: "workspace", label: "Workspace" },
+      { id: "community", label: communityLabel },
+      ...(props.showOperatorTabs ? OPERATOR_INSIGHT_TABS : []),
+    ];
+  }, [props.showOperatorTabs, props.workspaceUserDataPanel.activeCommunity?.name]);
+  const activeInsightTab = insightTabs.some((tab) => tab.id === props.activeInsightTab)
+    ? props.activeInsightTab
+    : "workspace";
+  const activeInsightTabIndex = insightTabs.findIndex((tab) => tab.id === activeInsightTab);
+  const insightTabSwitcherStyle = buildPlatformSwitcherStyle(insightTabs.length, activeInsightTabIndex);
+  const isOperatorInsightTab =
+    activeInsightTab === "platform" ||
+    activeInsightTab === "business" ||
+    activeInsightTab === "communities";
 
   return (
     <>
@@ -335,16 +358,16 @@ export function WebOperatorDataPanel(props: {
       <div
         className="platform-switcher platform-switcher-compact operator-data-panel__tabs"
         role="tablist"
-        aria-label="Operator data tabs"
+        aria-label="Workspace data tabs"
         style={insightTabSwitcherStyle as CSSProperties}
       >
-        {OPERATOR_INSIGHT_TABS.map((tab) => (
+        {insightTabs.map((tab) => (
           <button
             key={tab.id}
             type="button"
             role="tab"
-            className={`platform-switcher-btn${props.activeInsightTab === tab.id ? " is-active" : ""}`}
-            aria-selected={props.activeInsightTab === tab.id}
+            className={`platform-switcher-btn${activeInsightTab === tab.id ? " is-active" : ""}`}
+            aria-selected={activeInsightTab === tab.id}
             onClick={() => props.onActiveInsightTabChange(tab.id)}
           >
             {tab.label}
@@ -353,9 +376,15 @@ export function WebOperatorDataPanel(props: {
       </div>
 
       <div className="operator-data-panel__content">
-        {props.error ? <div className="operator-surface-notice">{props.error}</div> : null}
-        {props.isLoading ? <div className="operator-surface-notice">Loading operator data...</div> : null}
-        {props.activeInsightTab === "platform" ? (
+        {isOperatorInsightTab && props.error ? <div className="operator-surface-notice">{props.error}</div> : null}
+        {isOperatorInsightTab && props.isLoading ? (
+          <div className="operator-surface-notice">Loading operator data...</div>
+        ) : null}
+        {activeInsightTab === "workspace" ? (
+          <WorkspacePanelContent {...props.workspaceUserDataPanel} />
+        ) : activeInsightTab === "community" ? (
+          <CommunityPanelContent {...props.workspaceUserDataPanel} />
+        ) : activeInsightTab === "platform" ? (
           <OperatorPlatformInsights
             webDeploy={props.state.webDeploy}
             authAccess={props.state.authAccess}
@@ -363,7 +392,7 @@ export function WebOperatorDataPanel(props: {
             runtimeTools={props.state.runtimeTools}
             frontendErrors={props.state.frontendErrors}
           />
-        ) : props.activeInsightTab === "business" ? (
+        ) : activeInsightTab === "business" ? (
           <OperatorBusinessInsights
             overview={props.state.overview}
             monetization={props.state.monetization}

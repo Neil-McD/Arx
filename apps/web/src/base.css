@@ -22125,15 +22125,13 @@ button.message-citation-chip:hover {
   text-align: center;
 }
 
-.workspace-operator-data-toggle,
-.workspace-user-data-toggle {
+.workspace-operator-data-toggle {
   width: 32px;
   height: 32px;
   border-radius: 8px;
 }
 
-.workspace-operator-data-toggle svg,
-.workspace-user-data-toggle svg {
+.workspace-operator-data-toggle svg {
   width: 18px;
   height: 18px;
 }
@@ -22216,6 +22214,13 @@ button.message-citation-chip:hover {
   min-width: 208px;
 }
 
+.operator-data-panel__tabs .platform-switcher-btn {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .operator-data-panel__content {
   min-height: 0;
   overflow: auto;
@@ -22230,17 +22235,6 @@ button.message-citation-chip:hover {
 
 .operator-data-panel .operator-dashboard__metrics {
   grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.workspace-user-data-panel__tabs .platform-switcher-btn {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.workspace-user-data-panel__content {
-  color: var(--text-secondary);
 }
 
 .workspace-user-data-panel__grid {

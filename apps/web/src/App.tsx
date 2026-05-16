@@ -536,7 +536,6 @@ const COMMUNITY_ANALYTICS_RANGE_STORAGE_KEY = "polynet-community-analytics-range
 const LEGACY_COMMUNITY_ANALYTICS_RANGE_STORAGE_KEY = "arx-community-analytics-range";
 const COMMUNITY_RAIL_ORDER_STORAGE_KEY_PREFIX = "polynet-community-rail-order:web";
 const WORKSPACE_OPERATOR_DATA_PANEL_OPEN_STORAGE_KEY = "polynet-workspace-operator-data-panel-open";
-const WORKSPACE_USER_DATA_PANEL_OPEN_STORAGE_KEY = "polynet-workspace-user-data-panel-open";
 const CHATGPT_SECURITY_SETTINGS_URL = "https://chatgpt.com/#settings/Security";
 
 type GuestStoredMessageV1 = {
@@ -595,22 +594,6 @@ function storeWorkspaceOperatorDataPanelOpen(isOpen: boolean): void {
     localStorage.setItem(WORKSPACE_OPERATOR_DATA_PANEL_OPEN_STORAGE_KEY, isOpen ? "1" : "0");
   } catch {
     // Operator panel visibility is a local preference only.
-  }
-}
-
-function loadWorkspaceUserDataPanelOpen(): boolean {
-  try {
-    return localStorage.getItem(WORKSPACE_USER_DATA_PANEL_OPEN_STORAGE_KEY) === "1";
-  } catch {
-    return false;
-  }
-}
-
-function storeWorkspaceUserDataPanelOpen(isOpen: boolean): void {
-  try {
-    localStorage.setItem(WORKSPACE_USER_DATA_PANEL_OPEN_STORAGE_KEY, isOpen ? "1" : "0");
-  } catch {
-    // Workspace panel visibility is a local preference only.
   }
 }
 
@@ -1465,8 +1448,6 @@ export default function App() {
     useState<WorkspaceOperatorPanelLayout>({ open: false, width: 0, gutter: 0 });
   const [isWorkspaceOperatorDataPanelOpen, setIsWorkspaceOperatorDataPanelOpen] =
     useState(loadWorkspaceOperatorDataPanelOpen);
-  const [isWorkspaceUserDataPanelOpen, setIsWorkspaceUserDataPanelOpen] =
-    useState(loadWorkspaceUserDataPanelOpen);
   const handleWorkspaceOperatorPanelLayoutChange = useCallback((layout: WorkspaceOperatorPanelLayout) => {
     setWorkspaceOperatorPanelLayout((current) =>
       current.open === layout.open &&
@@ -1479,9 +1460,6 @@ export default function App() {
   useEffect(() => {
     storeWorkspaceOperatorDataPanelOpen(isWorkspaceOperatorDataPanelOpen);
   }, [isWorkspaceOperatorDataPanelOpen]);
-  useEffect(() => {
-    storeWorkspaceUserDataPanelOpen(isWorkspaceUserDataPanelOpen);
-  }, [isWorkspaceUserDataPanelOpen]);
   useEffect(() => {
     if (typeof window === "undefined") return;
 
@@ -7586,59 +7564,24 @@ export default function App() {
     formatModelSignature,
     renderMarkdown,
   });
-  const showWorkspaceOperatorDataPanelControl = Boolean(
-    hasOperatorDataPanelAccess &&
+  const showWorkspaceRightPanelControl = Boolean(
     session &&
     !showMobileAppShell &&
     activePage === "workspace" &&
     activeView === "home",
   );
-  const showWorkspaceUserDataPanelControl = Boolean(
-    session &&
-    !showMobileAppShell &&
-    activePage === "workspace" &&
-    activeView === "home",
-  );
-  const isWorkspaceOperatorDataPanelVisible =
-    showWorkspaceOperatorDataPanelControl && isWorkspaceOperatorDataPanelOpen;
-  const isWorkspaceUserDataPanelVisible =
-    showWorkspaceUserDataPanelControl &&
-    isWorkspaceUserDataPanelOpen &&
-    !isWorkspaceOperatorDataPanelVisible;
-  useEffect(() => {
-    if (
-      !showWorkspaceOperatorDataPanelControl ||
-      !isWorkspaceOperatorDataPanelOpen ||
-      !isWorkspaceUserDataPanelOpen
-    ) return;
-    setIsWorkspaceUserDataPanelOpen(false);
-  }, [
-    isWorkspaceOperatorDataPanelOpen,
-    isWorkspaceUserDataPanelOpen,
-    showWorkspaceOperatorDataPanelControl,
-  ]);
-  const handleToggleWorkspaceOperatorDataPanel = useCallback(() => {
-    setIsWorkspaceOperatorDataPanelOpen((value) => {
-      const next = !value;
-      if (next) setIsWorkspaceUserDataPanelOpen(false);
-      return next;
-    });
-  }, []);
-  const handleToggleWorkspaceUserDataPanel = useCallback(() => {
-    setIsWorkspaceUserDataPanelOpen((value) => {
-      const next = !value;
-      if (next) setIsWorkspaceOperatorDataPanelOpen(false);
-      return next;
-    });
+  const showWorkspaceOperatorTabs = Boolean(showWorkspaceRightPanelControl && hasOperatorDataPanelAccess);
+  const isWorkspaceRightPanelVisible = showWorkspaceRightPanelControl && isWorkspaceOperatorDataPanelOpen;
+  const handleToggleWorkspaceRightPanel = useCallback(() => {
+    setIsWorkspaceOperatorDataPanelOpen((value) => !value);
   }, []);
 
   useEffect(() => {
-    if (showWorkspaceOperatorDataPanelControl || showWorkspaceUserDataPanelControl) return;
+    if (showWorkspaceRightPanelControl) return;
     handleWorkspaceOperatorPanelLayoutChange({ open: false, width: 0, gutter: 0 });
   }, [
     handleWorkspaceOperatorPanelLayoutChange,
-    showWorkspaceOperatorDataPanelControl,
-    showWorkspaceUserDataPanelControl,
+    showWorkspaceRightPanelControl,
   ]);
 
   const workspaceUserDataPanelCommunity = activeCommunity
@@ -7686,42 +7629,19 @@ export default function App() {
     },
   };
 
-  const workspaceUserDataToggle = showWorkspaceUserDataPanelControl ? (
+  const workspaceRightPanelToggle = showWorkspaceRightPanelControl ? (
     <button
       type="button"
-      className={`icon-button workspace-user-data-toggle${isWorkspaceUserDataPanelVisible ? " active" : ""}`}
-      onClick={handleToggleWorkspaceUserDataPanel}
-      aria-expanded={isWorkspaceUserDataPanelVisible}
-      aria-controls="workspace-user-data-panel"
-      aria-label={
-        isWorkspaceUserDataPanelVisible
-          ? "Close workspace panel"
-          : "Open workspace panel"
-      }
-      title={isWorkspaceUserDataPanelVisible ? "Close workspace panel" : "Open workspace panel"}
-    >
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <rect x="3" y="4" width="18" height="16" rx="2" />
-        <path d="M8 9h8" />
-        <path d="M8 13h5" />
-        <path d="M15 4v16" />
-      </svg>
-    </button>
-  ) : null;
-
-  const workspaceOperatorDataToggle = showWorkspaceOperatorDataPanelControl ? (
-    <button
-      type="button"
-      className={`icon-button workspace-operator-data-toggle${isWorkspaceOperatorDataPanelVisible ? " active" : ""}`}
-      onClick={handleToggleWorkspaceOperatorDataPanel}
-      aria-expanded={isWorkspaceOperatorDataPanelVisible}
+      className={`icon-button workspace-operator-data-toggle${isWorkspaceRightPanelVisible ? " active" : ""}`}
+      onClick={handleToggleWorkspaceRightPanel}
+      aria-expanded={isWorkspaceRightPanelVisible}
       aria-controls="workspace-operator-data-panel"
       aria-label={
-        isWorkspaceOperatorDataPanelVisible
-          ? "Close operator data panel"
-          : "Open operator data panel"
+        isWorkspaceRightPanelVisible
+          ? "Close workspace data panel"
+          : "Open workspace data panel"
       }
-      title={isWorkspaceOperatorDataPanelVisible ? "Close data panel" : "Open data panel"}
+      title={isWorkspaceRightPanelVisible ? "Close data panel" : "Open data panel"}
     >
       <svg viewBox="0 0 24 24" aria-hidden="true">
         <rect x="3" y="4" width="18" height="16" rx="2" />
@@ -7824,11 +7744,9 @@ export default function App() {
       settingsPanelsProps,
       workspaceHostProps: {
         ...workspaceHostProps,
-        showOperatorDataPanel: showWorkspaceOperatorDataPanelControl,
-        operatorDataPanelSession: showWorkspaceOperatorDataPanelControl ? session : null,
-        operatorDataPanelOpen: isWorkspaceOperatorDataPanelVisible,
-        showWorkspaceUserDataPanel: showWorkspaceUserDataPanelControl,
-        workspaceUserDataPanelOpen: isWorkspaceUserDataPanelVisible,
+        showWorkspaceRightPanel: showWorkspaceRightPanelControl,
+        operatorDataPanelSession: showWorkspaceOperatorTabs ? session : null,
+        workspaceRightPanelOpen: isWorkspaceRightPanelVisible,
         workspaceUserDataPanel,
         onOperatorPanelLayoutChange: handleWorkspaceOperatorPanelLayoutChange,
       },
@@ -8045,9 +7963,8 @@ export default function App() {
     backTargetLabel: backTargetLabel ?? null,
     activeView,
     userWantsSessions,
-    hasWorkspaceOperatorControl: showWorkspaceOperatorDataPanelControl || showWorkspaceUserDataPanelControl,
-    workspaceUserDataToggle,
-    workspaceOperatorDataToggle,
+    hasWorkspaceRightPanelControl: showWorkspaceRightPanelControl,
+    workspaceRightPanelToggle,
     communityHomeButton,
     handleExitPublicFunnelPreview,
     handleTopbarBackFromPublicFunnel,

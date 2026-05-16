@@ -155,33 +155,48 @@ assert.doesNotMatch(
 );
 assert.match(
   workspaceHost,
-  /showOperatorDataPanel = Boolean\(props\.showOperatorDataPanel && props\.operatorDataPanelSession\)/,
-  "workspace host must require both the operator flag and an authenticated session",
+  /showOperatorTabs = Boolean\(props\.operatorDataPanelSession\)/,
+  "workspace host must derive operator tabs only from an authenticated operator data-panel session",
 );
 assert.match(
   workspaceHost,
-  /useOperatorDashboardData\([\s\S]*enabled: isOperatorDataPanelVisible/,
-  "operator data loading must be disabled unless the operator panel is visible",
+  /useOperatorDashboardData\([\s\S]*enabled: isWorkspaceRightPanelVisible && showOperatorTabs/,
+  "operator data loading must be disabled unless the unified right panel is visible and operator tabs are authorized",
 );
 assert.match(
   app,
-  /showWorkspaceOperatorDataPanelControl = Boolean\([\s\S]*hasOperatorDataPanelAccess[\s\S]*activePage === "workspace"[\s\S]*activeView === "home"[\s\S]*\)/,
-  "operator panel toggle must remain owner/operator workspace-home scoped",
+  /showWorkspaceRightPanelControl = Boolean\([\s\S]*session[\s\S]*activePage === "workspace"[\s\S]*activeView === "home"[\s\S]*\)/,
+  "workspace right-panel toggle must remain signed-in workspace-home scoped",
 );
 assert.match(
   app,
-  /workspaceOperatorDataToggle = showWorkspaceOperatorDataPanelControl \? \([\s\S]*workspace-operator-data-toggle/,
-  "operator panel toggle should be built only from the gated workspace control flag",
+  /showWorkspaceOperatorTabs = Boolean\(showWorkspaceRightPanelControl && hasOperatorDataPanelAccess\)/,
+  "operator-only tabs must remain gated by the operator access snapshot",
 );
 assert.match(
   app,
-  /workspaceOperatorDataToggle,[\s\S]*communityHomeButton,/,
-  "desktop shell props must receive the optional operator toggle next to the community button",
+  /operatorDataPanelSession: showWorkspaceOperatorTabs \? session : null/,
+  "workspace host must receive an operator data session only after operator access is confirmed",
+);
+assert.match(
+  app,
+  /workspaceRightPanelToggle = showWorkspaceRightPanelControl \? \([\s\S]*workspace-operator-data-toggle/,
+  "workspace right-panel toggle should be built only from the signed-in workspace control flag",
+);
+assert.match(
+  app,
+  /workspaceRightPanelToggle,[\s\S]*communityHomeButton,/,
+  "desktop shell props must receive the unified workspace right-panel toggle next to the community button",
 );
 assert.match(
   webDesktopShellHeader,
-  /props\.workspaceOperatorDataToggle[\s\S]*props\.communityHomeButton/,
-  "desktop header must render the optional operator toggle before the community button so the community button owns the right edge",
+  /props\.workspaceRightPanelToggle[\s\S]*props\.communityHomeButton/,
+  "desktop header must render one unified workspace right-panel toggle before the community button",
+);
+assert.doesNotMatch(
+  app,
+  /workspaceUserDataToggle|workspaceOperatorDataToggle/,
+  "workspace header must not render separate user and operator data toggles",
 );
 assert.doesNotMatch(
   workspaceHost,

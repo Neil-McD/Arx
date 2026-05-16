@@ -3,7 +3,7 @@ import type { WebDesktopShellHeaderProps } from "./webShellChromeShared";
 export function WebDesktopShellHeader(props: WebDesktopShellHeaderProps) {
   if (props.activePage === "landing" || props.activePage === "onboarding") return null;
 
-  const topbarRightClassName = `topbar-right${props.hasWorkspaceOperatorControl ? " has-workspace-operator-control" : ""}`;
+  const topbarRightClassName = `topbar-right${props.hasWorkspaceRightPanelControl ? " has-workspace-right-panel-control" : ""}`;
 
   return (
     <header className="app-topbar">
@@ -93,8 +93,7 @@ export function WebDesktopShellHeader(props: WebDesktopShellHeaderProps) {
       <div className={topbarRightClassName}>
         {props.isPublicCommunityFunnel ? null : (
           <>
-            {props.workspaceUserDataToggle}
-            {props.workspaceOperatorDataToggle}
+            {props.workspaceRightPanelToggle}
             {props.communityHomeButton}
           </>
         )}

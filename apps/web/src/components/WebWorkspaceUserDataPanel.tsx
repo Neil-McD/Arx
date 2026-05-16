@@ -1,9 +1,5 @@
-import { useMemo, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from "react";
 import type { AccountSetupMissing, AccountSetupStatus } from "../../../../shared/accountSetup";
 import type { WorkspaceCreditBalance } from "../../../../shared/workspaceCreditsGateway";
-import { buildPlatformSwitcherStyle } from "../../../../shared/platformSwitcherUi";
-
-type WorkspaceUserPanelTab = "workspace" | "community";
 
 export type WorkspaceUserPanelCommunity = {
   id: string;
@@ -34,15 +30,6 @@ export type WorkspaceUserDataPanelDataProps = {
   onOpenActiveCommunity: () => void;
   onOpenActiveCommunitySettings: () => void;
 };
-
-export type WorkspaceUserDataPanelProps = WorkspaceUserDataPanelDataProps & {
-  onResizePointerDown: (event: PointerEvent<HTMLDivElement>) => void;
-  onResizePointerMove: (event: PointerEvent<HTMLDivElement>) => void;
-  onResizeDoubleClick: () => void;
-  onResizeKeyDown: (event: KeyboardEvent<HTMLDivElement>) => void;
-};
-
-const WORKSPACE_USER_PANEL_TABS: WorkspaceUserPanelTab[] = ["workspace", "community"];
 
 const ACCOUNT_SETUP_MISSING_LABELS: Record<AccountSetupMissing, string> = {
   display_name: "Display name",
@@ -76,67 +63,7 @@ function buildMissingSetupLabel(status: AccountSetupStatus | null): string {
   return `Missing ${labels.join(", ")}`;
 }
 
-export function WebWorkspaceUserDataPanel(props: WorkspaceUserDataPanelProps) {
-  const [activeTab, setActiveTab] = useState<WorkspaceUserPanelTab>("workspace");
-  const tabItems = useMemo(
-    () =>
-      WORKSPACE_USER_PANEL_TABS.map((id) => ({
-        id,
-        label:
-          id === "workspace"
-            ? "Workspace"
-            : props.activeCommunity?.name?.trim() || "Build community",
-      })),
-    [props.activeCommunity?.name],
-  );
-  const activeTabIndex = tabItems.findIndex((tab) => tab.id === activeTab);
-  const tabSwitcherStyle = buildPlatformSwitcherStyle(tabItems.length, activeTabIndex);
-
-  return (
-    <>
-      <div
-        className="operator-data-panel__resize-handle"
-        role="separator"
-        aria-orientation="vertical"
-        aria-label="Resize workspace panel"
-        tabIndex={0}
-        onPointerDown={props.onResizePointerDown}
-        onPointerMove={props.onResizePointerMove}
-        onDoubleClick={props.onResizeDoubleClick}
-        onKeyDown={props.onResizeKeyDown}
-      />
-      <div
-        className="platform-switcher platform-switcher-compact operator-data-panel__tabs workspace-user-data-panel__tabs"
-        role="tablist"
-        aria-label="Workspace panel tabs"
-        style={tabSwitcherStyle as CSSProperties}
-      >
-        {tabItems.map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            role="tab"
-            className={`platform-switcher-btn${activeTab === tab.id ? " is-active" : ""}`}
-            aria-selected={activeTab === tab.id}
-            onClick={() => setActiveTab(tab.id)}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
-
-      <div className="operator-data-panel__content workspace-user-data-panel__content">
-        {activeTab === "workspace" ? (
-          <WorkspacePanelContent {...props} />
-        ) : (
-          <CommunityPanelContent {...props} />
-        )}
-      </div>
-    </>
-  );
-}
-
-function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps) {
+export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps) {
   const totalCredits =
     (props.workspaceCreditBalance?.includedCreditsBalance ?? 0) +
     (props.workspaceCreditBalance?.purchasedCreditsBalance ?? 0);
@@ -204,7 +131,7 @@ function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps) {
   );
 }
 
-function CommunityPanelContent(props: WorkspaceUserDataPanelDataProps) {
+export function CommunityPanelContent(props: WorkspaceUserDataPanelDataProps) {
   const community = props.activeCommunity;
   if (!community) {
     return (
