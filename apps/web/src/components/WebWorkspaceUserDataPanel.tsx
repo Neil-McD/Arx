@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AuthSessionLike } from "../../../../shared/authSession";
-import type { AccountSetupMissing, AccountSetupStatus } from "../../../../shared/accountSetup";
 import type { WorkspaceCreditBalance } from "../../../../shared/workspaceCreditsGateway";
 import {
   listWorkspaceDirectoryCanonical,
@@ -20,8 +19,6 @@ export type WorkspaceUserPanelCommunity = {
 };
 
 export type WorkspaceUserDataPanelDataProps = {
-  accountSetupStatus: AccountSetupStatus | null;
-  isLoadingAccountSetupStatus: boolean;
   workspaceCreditBalance: WorkspaceCreditBalance | null;
   isLoadingWorkspaceCreditBalance: boolean;
   workspaceCreditBalanceError: string | null;
@@ -34,19 +31,10 @@ export type WorkspaceUserDataPanelDataProps = {
   activeModelLabel: string | null;
   activeCommunity: WorkspaceUserPanelCommunity | null;
   canCreateCommunity: boolean;
-  onOpenAccountSetup: () => void;
   onTopUpWorkspaceCredits: () => void;
   onOpenCreateCommunity: () => void;
   onOpenActiveCommunity: () => void;
   onOpenActiveCommunitySettings: () => void;
-};
-
-const ACCOUNT_SETUP_MISSING_LABELS: Record<AccountSetupMissing, string> = {
-  display_name: "Display name",
-  handle: "Handle",
-  avatar: "Avatar",
-  inference_provider: "Inference provider",
-  agent_name: "Agent name",
 };
 
 const WORKSPACE_FILES_EXPANDED_STORAGE_KEY_PREFIX = "polynet-workspace-files-expanded";
@@ -99,17 +87,6 @@ function formatCommunityVisibility(value: string | null): string {
   if (normalized === "published") return "Published";
   if (normalized === "unlisted") return "Unlisted";
   return "Unlisted";
-}
-
-function buildMissingSetupLabel(status: AccountSetupStatus | null): string {
-  if (!status) return "Setup status unavailable";
-  if (status.completed) return "Account setup complete";
-  const labels = status.missing
-    .map((field) => ACCOUNT_SETUP_MISSING_LABELS[field])
-    .filter(Boolean)
-    .slice(0, 3);
-  if (labels.length === 0) return "Finish account setup";
-  return `Missing ${labels.join(", ")}`;
 }
 
 export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps) {
@@ -226,53 +203,12 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps) {
 
   return (
     <div className="workspace-user-data-panel__grid">
-      <section className="workspace-user-data-card">
-        <div className="workspace-user-data-card__meta">Account setup</div>
-        <div className="workspace-user-data-card__headline">
-          {props.isLoadingAccountSetupStatus
-            ? "Checking..."
-            : props.accountSetupStatus?.completed
-              ? "Complete"
-              : `${props.accountSetupStatus?.percent ?? 0}% complete`}
-        </div>
-        <div className="workspace-user-data-meter" aria-hidden="true">
-          <span style={{ width: `${Math.max(0, Math.min(100, props.accountSetupStatus?.percent ?? 0))}%` }} />
-        </div>
-        <p>{buildMissingSetupLabel(props.accountSetupStatus)}</p>
-        {!props.accountSetupStatus?.completed ? (
-          <button type="button" className="workspace-user-data-action" onClick={props.onOpenAccountSetup}>
-            Continue setup
-          </button>
-        ) : null}
-      </section>
-
-      <section className="workspace-user-data-card">
-        <div className="workspace-user-data-card__meta">Tool credits</div>
-        <div className="workspace-user-data-card__headline">
-          {props.isLoadingWorkspaceCreditBalance ? "Checking..." : formatCreditAmount(totalCredits)}
-        </div>
-        <p>
-          Included {formatCreditAmount(props.workspaceCreditBalance?.includedCreditsBalance ?? 0)} / Purchased{" "}
-          {formatCreditAmount(props.workspaceCreditBalance?.purchasedCreditsBalance ?? 0)}
-        </p>
-        {props.workspaceCreditBalanceError ? <p>{props.workspaceCreditBalanceError}</p> : null}
-        {props.workspaceCreditTopupError ? <p>{props.workspaceCreditTopupError}</p> : null}
-        <button
-          type="button"
-          className="workspace-user-data-action"
-          onClick={props.onTopUpWorkspaceCredits}
-          disabled={props.isStartingWorkspaceCreditTopupCheckout}
-        >
-          {props.isStartingWorkspaceCreditTopupCheckout ? "Opening checkout..." : "Top up credits"}
-        </button>
-      </section>
-
-      <section className="workspace-user-data-card">
-        <div className="workspace-user-data-card__meta">Current workspace</div>
-        <div className="workspace-user-data-card__headline">
-          {props.activeProjectName?.trim() || "Personal workspace"}
-        </div>
-        <dl className="workspace-user-data-list">
+      <section className="workspace-user-data-card workspace-summary-card">
+        <dl className="workspace-summary-list">
+          <div>
+            <dt>Computer</dt>
+            <dd>{props.activeProjectName?.trim() || "Personal workspace"}</dd>
+          </div>
           <div>
             <dt>Thread</dt>
             <dd>{props.activeThreadTitle?.trim() || "New thread"}</dd>
@@ -281,7 +217,27 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps) {
             <dt>Model</dt>
             <dd>{props.activeModelLabel?.trim() || "Default"}</dd>
           </div>
+          <div>
+            <dt>Tool credits</dt>
+            <dd className="workspace-summary-credit-value">
+              <span>{props.isLoadingWorkspaceCreditBalance ? "Checking..." : formatCreditAmount(totalCredits)}</span>
+              <button
+                type="button"
+                className="workspace-summary-credit-action"
+                onClick={props.onTopUpWorkspaceCredits}
+                disabled={props.isStartingWorkspaceCreditTopupCheckout}
+              >
+                {props.isStartingWorkspaceCreditTopupCheckout ? "Opening..." : "Top up"}
+              </button>
+            </dd>
+          </div>
         </dl>
+        {props.workspaceCreditBalanceError ? (
+          <p className="workspace-summary-note">{props.workspaceCreditBalanceError}</p>
+        ) : null}
+        {props.workspaceCreditTopupError ? (
+          <p className="workspace-summary-note">{props.workspaceCreditTopupError}</p>
+        ) : null}
       </section>
 
       <section className="workspace-user-data-card workspace-files-card">
@@ -364,38 +320,45 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps) {
                 <div className="workspace-files-empty">No files returned.</div>
               )}
             </div>
-            <div className="workspace-file-preview">
-              {isLoadingFilePreview ? (
-                <div className="workspace-files-empty">Loading preview...</div>
-              ) : filePreviewError ? (
-                <div className="workspace-files-empty">{filePreviewError}</div>
-              ) : filePreview?.ok && filePreview.previewKind === "image" ? (
-                <figure>
-                  <img src={filePreview.dataUrl} alt={filePreview.name} />
-                  <figcaption>
-                    {filePreview.name} {formatBytes(filePreview.sizeBytes)}
-                  </figcaption>
-                </figure>
-              ) : filePreview?.ok && filePreview.previewKind === "text" ? (
-                <div>
-                  <div className="workspace-file-preview__meta">
-                    {filePreview.name} {formatBytes(filePreview.sizeBytes)}
-                    {filePreview.truncated ? " - truncated" : ""}
-                  </div>
-                  <pre>{filePreview.text || "(empty file)"}</pre>
-                </div>
-              ) : filePreview?.ok && filePreview.previewKind === "unsupported" ? (
-                <div className="workspace-files-empty">
-                  {filePreview.name}: {filePreview.reason}
-                </div>
-              ) : (
-                <div className="workspace-files-empty">Select a file to preview it.</div>
-              )}
-            </div>
           </div>
-        ) : (
-          <p>Open the file inspector to understand this computer's project structure and preview safe assets.</p>
-        )}
+        ) : null}
+      </section>
+
+      <section className="workspace-user-data-card workspace-preview-card">
+        <div className="workspace-user-data-card__meta">Preview</div>
+        <div className="workspace-file-preview">
+          {isLoadingFilePreview ? (
+            <div className="workspace-files-empty">Loading preview...</div>
+          ) : filePreviewError ? (
+            <div className="workspace-files-empty">{filePreviewError}</div>
+          ) : filePreview?.ok && filePreview.previewKind === "image" ? (
+            <figure>
+              <img src={filePreview.dataUrl} alt={filePreview.name} />
+              <figcaption>
+                {filePreview.name} {formatBytes(filePreview.sizeBytes)}
+              </figcaption>
+            </figure>
+          ) : filePreview?.ok && filePreview.previewKind === "text" ? (
+            <div>
+              <div className="workspace-file-preview__meta">
+                {filePreview.name} {formatBytes(filePreview.sizeBytes)}
+                {filePreview.truncated ? " - truncated" : ""}
+              </div>
+              <pre>{filePreview.text || "(empty file)"}</pre>
+            </div>
+          ) : filePreview?.ok && filePreview.previewKind === "unsupported" ? (
+            <div className="workspace-files-empty">
+              {filePreview.name}: {filePreview.reason}
+            </div>
+          ) : (
+            <div className="workspace-files-empty">No file selected.</div>
+          )}
+        </div>
+      </section>
+
+      <section className="workspace-user-data-card workspace-evidence-card">
+        <div className="workspace-user-data-card__meta">Evidence</div>
+        <p>No recent evidence yet.</p>
       </section>
     </div>
   );

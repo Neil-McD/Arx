@@ -22276,20 +22276,6 @@ button.message-citation-chip:hover {
   line-height: 1.35;
 }
 
-.workspace-user-data-meter {
-  height: 7px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.workspace-user-data-meter span {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: var(--accent);
-}
-
 .workspace-user-data-list {
   display: grid;
   gap: 8px;
@@ -22353,6 +22339,77 @@ button.message-citation-chip:hover {
 .workspace-user-data-action:disabled {
   cursor: not-allowed;
   opacity: 0.45;
+}
+
+.workspace-summary-card {
+  gap: 8px;
+  padding: 12px 14px;
+}
+
+.workspace-summary-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.workspace-summary-list div {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 0.34fr) minmax(0, 0.66fr);
+  gap: 12px;
+  align-items: center;
+}
+
+.workspace-summary-list dt,
+.workspace-summary-list dd {
+  min-width: 0;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.workspace-summary-list dt {
+  color: var(--text-faint);
+}
+
+.workspace-summary-list dd {
+  color: var(--text-primary);
+  font-weight: 750;
+  overflow-wrap: anywhere;
+}
+
+.workspace-summary-credit-value {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.workspace-summary-credit-action {
+  flex: 0 0 auto;
+  min-height: 24px;
+  padding: 0 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.055);
+  color: var(--text-primary);
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.workspace-summary-credit-action:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 18%, rgba(255, 255, 255, 0.07));
+}
+
+.workspace-summary-credit-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.workspace-summary-note {
+  padding-top: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .workspace-files-card {
@@ -22514,6 +22571,11 @@ button.message-citation-chip:hover {
   color: var(--text-secondary);
   font-size: 12px;
   line-height: 1.35;
+}
+
+.workspace-preview-card,
+.workspace-evidence-card {
+  align-content: start;
 }
 
 .workspace-file-preview {

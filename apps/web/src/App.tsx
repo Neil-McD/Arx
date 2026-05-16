@@ -7604,8 +7604,6 @@ export default function App() {
     Boolean(session) && maxOwnedCommunities > 0 && ownedCommunityCount < maxOwnedCommunities;
 
   const workspaceUserDataPanel = {
-    accountSetupStatus: effectiveAccountSetupStatus,
-    isLoadingAccountSetupStatus,
     workspaceCreditBalance,
     isLoadingWorkspaceCreditBalance,
     workspaceCreditBalanceError,
@@ -7618,7 +7616,6 @@ export default function App() {
     activeModelLabel: workspace.derived.activeModelLabel,
     activeCommunity: workspaceUserDataPanelCommunity,
     canCreateCommunity: canCreateWorkspaceUserPanelCommunity,
-    onOpenAccountSetup: openProfileSetup,
     onTopUpWorkspaceCredits: () => {
       void startWorkspaceCreditTopupCheckout();
     },
