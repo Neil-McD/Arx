@@ -4,7 +4,10 @@ import type { AppTheme } from "../../../../shared/theme";
 import type { AccountCommerceStatus } from "../../../../shared/accountCommerceStatusGateway";
 import type { BuilderPartnerProgramSnapshot } from "../../../../shared/builderPartnerProgramGateway";
 import type { WorkspaceCreditBalance } from "../../../../shared/workspaceCreditsGateway";
-import type { WorkspaceToolBalanceTopupPackId } from "../../../../shared/workspaceCredits";
+import type {
+  WorkspaceCreditTopupSurface,
+  WorkspaceToolBalanceTopupPackId,
+} from "../../../../shared/workspaceCredits";
 import type { PendingPurchaseClaim } from "../../../../shared/pay_first";
 import type { EffectiveMcpApp } from "../../../../shared/effectiveMcpApps";
 import type { CreateSkillPackageInput } from "../../../../shared/skillPackageTypes";
@@ -127,7 +130,10 @@ export type WebSettingsPanelsProps = {
     handleDeletePersonalMemoryItem: (id: string) => Promise<void> | void;
     handleCreatePersonalMemoryItem: () => Promise<void> | void;
     loadPersonalMemoryItems: () => Promise<void> | void;
-    startWorkspaceCreditTopupCheckout: (packId?: WorkspaceToolBalanceTopupPackId) => Promise<void> | void;
+    startWorkspaceCreditTopupCheckout: (
+      packId?: WorkspaceToolBalanceTopupPackId,
+      surface?: WorkspaceCreditTopupSurface,
+    ) => Promise<void> | void;
     personalMemoryUi: ReturnType<typeof useWebPersonalMemoryUiController>;
     billingUi: UseWebBillingUiControllerResult<AccountCommerceStatus, WorkspaceCreditBalance, PendingPurchaseClaim>;
   };

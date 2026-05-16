@@ -1,6 +1,9 @@
 import { EXTERNAL_MEMORY_IMPORT_PROMPT } from "../../../../shared/externalMemoryImport";
 import type { AppView, SettingsPage } from "../../../../shared/appShellNavigation";
-import type { WorkspaceToolBalanceTopupPackId } from "../../../../shared/workspaceCredits";
+import type {
+  WorkspaceCreditTopupSurface,
+  WorkspaceToolBalanceTopupPackId,
+} from "../../../../shared/workspaceCredits";
 import type { WebGlobalOverlayHostProps } from "../components/WebGlobalOverlayHost";
 
 type InferenceIssueModalState = NonNullable<
@@ -47,7 +50,10 @@ export function buildWebGlobalOverlayHostProps(params: {
   isStartingWorkspaceCreditTopupCheckout: boolean;
   workspaceCreditTopupError: string | null;
   setInferenceIssueModal: (value: InferenceIssueModalState) => void;
-  startWorkspaceCreditTopupCheckout: (packId?: WorkspaceToolBalanceTopupPackId) => void | Promise<void>;
+  startWorkspaceCreditTopupCheckout: (
+    packId?: WorkspaceToolBalanceTopupPackId,
+    surface?: WorkspaceCreditTopupSurface,
+  ) => void | Promise<void>;
   setActiveView: (value: AppView) => void;
   setSettingsPage: (value: SettingsPage) => void;
   isFreeAccountInfoOpen: boolean;

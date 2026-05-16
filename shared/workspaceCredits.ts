@@ -39,6 +39,7 @@ export const WORKSPACE_TOOL_BALANCE_TOPUP_PACKS = [
 ] as const;
 export type WorkspaceToolBalanceTopupPack = (typeof WORKSPACE_TOOL_BALANCE_TOPUP_PACKS)[number];
 export type WorkspaceToolBalanceTopupPackId = WorkspaceToolBalanceTopupPack["id"];
+export type WorkspaceCreditTopupSurface = "settings_agent" | "tool_balance_modal";
 export const DEFAULT_WORKSPACE_TOOL_BALANCE_TOPUP_PACK_ID: WorkspaceToolBalanceTopupPackId = "tool_balance_500";
 export const WEB_RESEARCH_CREDITS_PER_CALL = 1;
 export const VOICE_TRANSCRIPTION_CREDITS_PER_REQUEST = 1;

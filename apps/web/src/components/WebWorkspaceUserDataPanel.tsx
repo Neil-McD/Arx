@@ -2,8 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AuthSessionLike } from "../../../../shared/authSession";
 import {
   formatWorkspaceToolBalanceUsdFromCredits,
-  WORKSPACE_TOOL_BALANCE_TOPUP_PACKS,
-  type WorkspaceToolBalanceTopupPackId,
 } from "../../../../shared/workspaceCredits";
 import type { WorkspaceCreditBalance } from "../../../../shared/workspaceCreditsGateway";
 import {
@@ -40,7 +38,7 @@ export type WorkspaceUserDataPanelDataProps = {
   activeModelLabel: string | null;
   activeCommunity: WorkspaceUserPanelCommunity | null;
   canCreateCommunity: boolean;
-  onTopUpWorkspaceCredits: (packId: WorkspaceToolBalanceTopupPackId) => void;
+  onOpenWorkspaceCreditTopup: () => void;
   onTurnOnComputer: () => Promise<DaytonaWorkspaceComputerStartResult>;
   onOpenCreateCommunity: () => void;
   onOpenActiveCommunity: () => void;
@@ -48,9 +46,6 @@ export type WorkspaceUserDataPanelDataProps = {
 };
 
 const WORKSPACE_FILES_EXPANDED_STORAGE_KEY_PREFIX = "polynet-workspace-files-expanded";
-const WORKSPACE_PANEL_TOPUP_PACKS = WORKSPACE_TOOL_BALANCE_TOPUP_PACKS.filter(
-  (pack) => pack.priceUsd === 5 || pack.priceUsd === 50,
-);
 
 function formatBytes(value: number | null | undefined): string {
   if (typeof value !== "number" || !Number.isFinite(value)) return "";
@@ -117,8 +112,6 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps) {
     props.isLoadingWorkspaceCreditBalance && !props.workspaceCreditBalance
       ? "Checking..."
       : formatWorkspaceToolBalanceUsdFromCredits(totalCredits);
-  const topupChooserRef = useRef<HTMLDivElement | null>(null);
-  const [isTopupChooserOpen, setIsTopupChooserOpen] = useState(false);
   const [filesExpanded, setFilesExpanded] = useState(() => loadFilesExpanded(props.activeProjectId));
   const [directoryRefreshNonce, setDirectoryRefreshNonce] = useState(0);
   const [directoryPath, setDirectoryPath] = useState(".");
@@ -255,7 +248,6 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps) {
           : result.message,
       );
       setDirectoryErrorCode(result.code);
-      if (isWorkspaceCreditStartFailure(result)) setIsTopupChooserOpen(true);
       return;
     }
     setFilesExpandedForProject(true);
@@ -265,27 +257,6 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps) {
     setDirectoryErrorCode(null);
     setDirectoryRefreshNonce((value) => value + 1);
   }, [canTurnOnComputer, props.onTurnOnComputer, setFilesExpandedForProject]);
-
-  useEffect(() => {
-    if (!isTopupChooserOpen) return;
-
-    const handlePointerDown = (event: MouseEvent) => {
-      const target = event.target;
-      if (!(target instanceof Node)) return;
-      if (topupChooserRef.current?.contains(target)) return;
-      setIsTopupChooserOpen(false);
-    };
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setIsTopupChooserOpen(false);
-    };
-
-    document.addEventListener("mousedown", handlePointerDown);
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("mousedown", handlePointerDown);
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [isTopupChooserOpen]);
 
   return (
     <div className="workspace-user-data-panel__grid">
@@ -307,37 +278,14 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps) {
             <dt>Tool credits</dt>
             <dd className="workspace-summary-credit-value">
               <span>{displayedToolBalance}</span>
-              <div className="workspace-summary-credit-topup" ref={topupChooserRef}>
-                <button
-                  type="button"
-                  className="workspace-summary-credit-action"
-                  onClick={() => setIsTopupChooserOpen((current) => !current)}
-                  disabled={props.isStartingWorkspaceCreditTopupCheckout}
-                  aria-expanded={isTopupChooserOpen}
-                >
-                  {props.isStartingWorkspaceCreditTopupCheckout ? "Opening..." : "Top up"}
-                </button>
-                {isTopupChooserOpen ? (
-                  <div className="workspace-credit-topup-popover" role="menu" aria-label="Top up tool credits">
-                    {WORKSPACE_PANEL_TOPUP_PACKS.map((pack) => (
-                      <button
-                        key={pack.id}
-                        type="button"
-                        role="menuitem"
-                        className="workspace-credit-topup-option"
-                        onClick={() => {
-                          setIsTopupChooserOpen(false);
-                          props.onTopUpWorkspaceCredits(pack.id);
-                        }}
-                        disabled={props.isStartingWorkspaceCreditTopupCheckout}
-                      >
-                        <strong>{pack.label}</strong>
-                        <span>{pack.priceUsd === 50 ? "More runway" : "Quick top up"}</span>
-                      </button>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
+              <button
+                type="button"
+                className="workspace-summary-credit-action"
+                onClick={props.onOpenWorkspaceCreditTopup}
+                disabled={props.isStartingWorkspaceCreditTopupCheckout}
+              >
+                {props.isStartingWorkspaceCreditTopupCheckout ? "Opening" : "Top up"}
+              </button>
             </dd>
           </div>
         </dl>

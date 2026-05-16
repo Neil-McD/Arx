@@ -380,8 +380,13 @@ async function proveWorkspaceCreditAccountingContract() {
   );
   assert.match(
     appSource,
-    /onToolBalanceRequired:[\s\S]*setInferenceIssueModal\(\{[\s\S]*reason:\s*"workspace_credits"[\s\S]*toolKind:\s*details\?\.toolKind\s*\?\?\s*"voice_input"[\s\S]*requiredCredits:\s*details\?\.requiredCredits\s*\?\?\s*null/,
+    /openWorkspaceCreditTopupModal[\s\S]*setInferenceIssueModal\(\{[\s\S]*reason:\s*"workspace_credits"[\s\S]*toolKind:\s*params\?\.toolKind\s*\?\?\s*"workspace_tools"[\s\S]*requiredCredits:\s*params\?\.requiredCredits\s*\?\?\s*null[\s\S]*onToolBalanceRequired:[\s\S]*openWorkspaceCreditTopupModal\(\{[\s\S]*toolKind:\s*details\?\.toolKind\s*\?\?\s*"voice_input"[\s\S]*requiredCredits:\s*details\?\.requiredCredits\s*\?\?\s*null/,
     "expected voice input tool-balance failures to open the workspace issue modal with metadata",
+  );
+  assert.match(
+    appSource,
+    /turnOnWorkspaceComputer[\s\S]*workspace_credits_exhausted[\s\S]*openWorkspaceCreditTopupModal\(\{[\s\S]*toolKind:\s*"workspace_tools"[\s\S]*requiredCredits:\s*result\.required_credits/,
+    "expected workspace computer balance failures to open the shared tool-balance modal with metadata",
   );
   assert.match(
     runtimeKernelSource,

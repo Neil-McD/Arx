@@ -3,6 +3,7 @@ import {
   formatWorkspaceToolBalanceUsdFromCredits,
   WORKSPACE_CREDIT_LOW_BALANCE_THRESHOLD,
   WORKSPACE_TOOL_BALANCE_TOPUP_PACKS,
+  type WorkspaceCreditTopupSurface,
   type WorkspaceToolBalanceTopupPackId,
 } from "../../../../shared/workspaceCredits";
 import type { WorkspaceCreditBalance } from "../../../../shared/workspaceCreditsGateway";
@@ -69,7 +70,10 @@ type WebAgentSettingsSectionProps = {
   workspaceCreditBalanceError: string | null;
   isStartingWorkspaceCreditTopupCheckout: boolean;
   workspaceCreditTopupError: string | null;
-  startWorkspaceCreditTopupCheckout: (packId?: WorkspaceToolBalanceTopupPackId) => Promise<void> | void;
+  startWorkspaceCreditTopupCheckout: (
+    packId?: WorkspaceToolBalanceTopupPackId,
+    surface?: WorkspaceCreditTopupSurface,
+  ) => Promise<void> | void;
 };
 
 export function WebAgentSettingsSection(props: WebAgentSettingsSectionProps) {

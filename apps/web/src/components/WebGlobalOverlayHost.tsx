@@ -7,7 +7,11 @@ import { WebMessageContextModal } from "./WebMessageContextModal";
 import { WebPreviewAccessGateModal } from "./WebPreviewAccessGateModal";
 import { WebProjectModalHost } from "./WebProjectModalHost";
 import { WebProviderConnectionModalHost } from "./WebProviderConnectionModalHost";
-import type { PaidToolKind, WorkspaceToolBalanceTopupPackId } from "../../../../shared/workspaceCredits";
+import type {
+  PaidToolKind,
+  WorkspaceCreditTopupSurface,
+  WorkspaceToolBalanceTopupPackId,
+} from "../../../../shared/workspaceCredits";
 
 type InferenceIssueReason =
   | "quota"
@@ -48,7 +52,10 @@ type WebInferenceIssueModalProps = {
   workspaceCreditTopupError?: string | null;
   onClose: () => void;
   onOpenSettings: (reason: InferenceIssueReason) => void;
-  onStartWorkspaceCreditTopupCheckout?: (packId?: WorkspaceToolBalanceTopupPackId) => Promise<void> | void;
+  onStartWorkspaceCreditTopupCheckout?: (
+    packId?: WorkspaceToolBalanceTopupPackId,
+    surface?: WorkspaceCreditTopupSurface,
+  ) => Promise<void> | void;
 };
 
 type PreviewAccessGateModalState = ComponentProps<

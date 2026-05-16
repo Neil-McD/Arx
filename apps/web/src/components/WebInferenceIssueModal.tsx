@@ -1,6 +1,7 @@
 import {
   formatWorkspaceToolBalanceUsdFromCredits,
   type PaidToolKind,
+  type WorkspaceCreditTopupSurface,
   WORKSPACE_TOOL_BALANCE_TOPUP_PACKS,
   type WorkspaceToolBalanceTopupPackId,
 } from "../../../../shared/workspaceCredits";
@@ -31,7 +32,10 @@ type WebInferenceIssueModalProps = {
   workspaceCreditTopupError?: string | null;
   onClose: () => void;
   onOpenSettings: (reason: InferenceIssueReason) => void;
-  onStartWorkspaceCreditTopupCheckout?: (packId?: WorkspaceToolBalanceTopupPackId) => Promise<void> | void;
+  onStartWorkspaceCreditTopupCheckout?: (
+    packId?: WorkspaceToolBalanceTopupPackId,
+    surface?: WorkspaceCreditTopupSurface,
+  ) => Promise<void> | void;
 };
 
 export function WebInferenceIssueModal(props: WebInferenceIssueModalProps) {
@@ -160,7 +164,7 @@ export function WebInferenceIssueModal(props: WebInferenceIssueModalProps) {
                     key={pack.id}
                     type="button"
                     className={`tool-balance-pack-button${pack.recommended ? " recommended" : ""}`}
-                    onClick={() => void onStartWorkspaceCreditTopupCheckout?.(pack.id)}
+                    onClick={() => void onStartWorkspaceCreditTopupCheckout?.(pack.id, "tool_balance_modal")}
                     disabled={isInferenceIssueModalRunning || isStartingWorkspaceCreditTopupCheckout}
                   >
                     <strong>{pack.label}</strong>

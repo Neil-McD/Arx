@@ -339,7 +339,11 @@ import {
   type DaytonaWorkspaceComputerStartResult,
 } from "../../../shared/daytonaWorkspaceTerminals";
 import { formatUsdCents, toEpochSeconds } from "../../../shared/displayFormatting";
-import type { PaidToolKind, WorkspaceToolBalanceTopupPackId } from "../../../shared/workspaceCredits";
+import type {
+  PaidToolKind,
+  WorkspaceCreditTopupSurface,
+  WorkspaceToolBalanceTopupPackId,
+} from "../../../shared/workspaceCredits";
 import {
   deriveCommunityFunnelAction,
   deriveCommunityMembersJoinReviewMode,
@@ -631,6 +635,12 @@ function clearPendingWorkspaceCreditTopupReturn(): void {
   } catch {
     // ignore
   }
+}
+
+function buildWorkspaceCreditTopupReturnUrl(surface: WorkspaceCreditTopupSurface): string {
+  if (surface === "settings_agent") return `${window.location.origin}/settings/agent`;
+  const pathname = window.location.pathname.startsWith("/") ? window.location.pathname : "/workspace";
+  return `${window.location.origin}${pathname}`;
 }
 
 function buildEmptyWorkspaceCreditBalance(session: AuthSession): WorkspaceCreditBalance {
@@ -5161,7 +5171,10 @@ export default function App() {
     }
   }
 
-  const startWorkspaceCreditTopupCheckout = useCallback(async (packId?: WorkspaceToolBalanceTopupPackId): Promise<void> => {
+  const startWorkspaceCreditTopupCheckout = useCallback(async (
+    packId?: WorkspaceToolBalanceTopupPackId,
+    surface: WorkspaceCreditTopupSurface = "settings_agent",
+  ): Promise<void> => {
     const session = await ensureUsableAuthSession();
     if (!session) {
       requireSignIn();
@@ -5170,7 +5183,7 @@ export default function App() {
     setWorkspaceCreditTopupError(null);
     setIsStartingWorkspaceCreditTopupCheckout(true);
     try {
-      const returnUrl = `${window.location.origin}/settings/agent`;
+      const returnUrl = buildWorkspaceCreditTopupReturnUrl(surface);
       const data = await startCloudWorkspaceCreditTopupCheckout({
         session,
         successUrl: returnUrl,
@@ -5183,6 +5196,7 @@ export default function App() {
           : "";
       if (!checkoutUrl) throw new Error("Missing checkout_url.");
       markPendingAnalyticsReturn("workspace_credit_topup", {
+        surface,
         baseline_included_credits: workspaceCreditBalance?.includedCreditsBalance ?? 0,
         baseline_purchased_credits: workspaceCreditBalance?.purchasedCreditsBalance ?? 0,
         baseline_total_credits:
@@ -5191,7 +5205,7 @@ export default function App() {
       });
       markPendingWorkspaceCreditTopupReturn();
       captureProductAnalyticsEvent("workspace credit topup started", {
-        surface: "settings_agent",
+        surface,
         pack_id: packId ?? null,
       });
       window.location.assign(checkoutUrl);
@@ -5207,6 +5221,21 @@ export default function App() {
       setIsStartingWorkspaceCreditTopupCheckout(false);
     }
   }, [ensureUsableAuthSession, requireSignIn, workspaceCreditBalance]);
+
+  const openWorkspaceCreditTopupModal = useCallback((params?: {
+    toolKind?: PaidToolKind | null;
+    message?: string | null;
+    requiredCredits?: number | null;
+  }) => {
+    setInferenceIssueModal({
+      reason: "workspace_credits",
+      threadId: activeThreadId ?? GUEST_THREAD_ID,
+      mode: "respond",
+      message: params?.message?.trim() || null,
+      toolKind: params?.toolKind ?? "workspace_tools",
+      requiredCredits: params?.requiredCredits ?? null,
+    });
+  }, [activeThreadId]);
 
   const effectiveAccountSetupStatus = accountSetupStatus ?? cloudProfile?.account_setup ?? null;
   const isProfileSetupCompleteForPublicActions =
@@ -6018,10 +6047,7 @@ export default function App() {
     requireSignIn: () => requireSignIn(),
     showAppToastMessage,
     onToolBalanceRequired: (_surface, message, details) => {
-      setInferenceIssueModal({
-        reason: "workspace_credits",
-        threadId: activeThreadId ?? GUEST_THREAD_ID,
-        mode: "respond",
+      openWorkspaceCreditTopupModal({
         message: message.trim() || null,
         toolKind: details?.toolKind ?? "voice_input",
         requiredCredits: details?.requiredCredits ?? null,
@@ -6131,6 +6157,16 @@ export default function App() {
       });
       if (!result.ok) {
         setWorkspaceComputerStartError(result.message);
+        if (
+          result.code === "workspace_credits_exhausted" ||
+          result.code === "workspace_credits_unavailable"
+        ) {
+          openWorkspaceCreditTopupModal({
+            toolKind: "workspace_tools",
+            message: result.message,
+            requiredCredits: result.required_credits,
+          });
+        }
         return result;
       }
 
@@ -6158,6 +6194,7 @@ export default function App() {
   }, [
     ensureUsableAuthSession,
     loadWorkspaceCreditBalance,
+    openWorkspaceCreditTopupModal,
     refreshCloudProjectStatuses,
     requireSignIn,
     workspace.derived.resolvedActiveProjectId,
@@ -6530,6 +6567,7 @@ export default function App() {
     const currentTotal = currentIncluded + currentPurchased;
     const baselinePurchased = Math.max(0, Number(pending.baseline_purchased_credits ?? 0) || 0);
     const baselineTotal = Math.max(0, Number(pending.baseline_total_credits ?? 0) || 0);
+    const surface = String(pending.surface ?? "").trim() || "unknown";
     const purchasedDelta = currentPurchased - baselinePurchased;
     const totalDelta = currentTotal - baselineTotal;
     if (purchasedDelta <= 0 && totalDelta <= 0) return;
@@ -6538,7 +6576,7 @@ export default function App() {
     captureProductAnalyticsEvent("workspace credit topup succeeded", {
       purchased_credit_delta: Math.max(0, purchasedDelta),
       total_credit_delta: Math.max(0, totalDelta),
-      surface: "settings_agent",
+      surface,
     });
   }, [workspaceCreditBalance]);
 
@@ -7759,9 +7797,7 @@ export default function App() {
     activeModelLabel: workspace.derived.activeModelLabel,
     activeCommunity: workspaceUserDataPanelCommunity,
     canCreateCommunity: canCreateWorkspaceUserPanelCommunity,
-    onTopUpWorkspaceCredits: (packId: WorkspaceToolBalanceTopupPackId) => {
-      void startWorkspaceCreditTopupCheckout(packId);
-    },
+    onOpenWorkspaceCreditTopup: () => openWorkspaceCreditTopupModal({ toolKind: "workspace_tools" }),
     onTurnOnComputer: turnOnWorkspaceComputer,
     onOpenCreateCommunity: () => openCreateCommunityModal(),
     onOpenActiveCommunity: handleOpenLandingCommunity,
