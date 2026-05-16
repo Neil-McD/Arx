@@ -80,6 +80,22 @@ export type DaytonaWorkspaceTerminalSnapshot = {
   recent: DaytonaWorkspaceTerminalRecord[];
 };
 
+export type DaytonaWorkspaceComputerStartResult =
+  | {
+      ok: true;
+      status: "active";
+      provider_sandbox_id: string | null;
+      credit_budget_credits: number | null;
+      credit_budget_expires_at: number | null;
+    }
+  | {
+      ok: false;
+      status: number;
+      code: string;
+      message: string;
+      required_credits: number | null;
+    };
+
 function mapWorkspaceTerminalRow(
   row: Record<string, unknown> | null | undefined,
 ): DaytonaWorkspaceTerminalRecord {
@@ -152,6 +168,52 @@ function mapWorkspaceTerminalRow(
         ? (row.preview_render_status.trim() as DaytonaWorkspaceTerminalRecord["preview_render_status"])
         : null,
   };
+}
+
+function normalizeComputerStartResult(value: unknown): DaytonaWorkspaceComputerStartResult {
+  const row = value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+  if (row.ok === true) {
+    return {
+      ok: true,
+      status: "active",
+      provider_sandbox_id:
+        typeof row.provider_sandbox_id === "string" && row.provider_sandbox_id.trim()
+          ? row.provider_sandbox_id.trim()
+          : null,
+      credit_budget_credits: Number.isFinite(Number(row.credit_budget_credits))
+        ? Number(row.credit_budget_credits)
+        : null,
+      credit_budget_expires_at: Number.isFinite(Number(row.credit_budget_expires_at))
+        ? Number(row.credit_budget_expires_at)
+        : null,
+    };
+  }
+  const details = row.details && typeof row.details === "object" && !Array.isArray(row.details)
+    ? row.details as Record<string, unknown>
+    : {};
+  return {
+    ok: false,
+    status: Number.isFinite(Number(row.status)) ? Number(row.status) : 503,
+    code: String(row.code ?? "workspace_computer_unavailable"),
+    message: String(row.message ?? "Computer is unavailable."),
+    required_credits: Number.isFinite(Number(details.required_credits))
+      ? Number(details.required_credits)
+      : null,
+  };
+}
+
+export async function startProjectWorkspaceComputer<TSession>(params: {
+  session: TSession;
+  projectId: string;
+}): Promise<DaytonaWorkspaceComputerStartResult> {
+  const { client, authSubject } = await bootstrapGatewayAuthContext(params.session as AuthSessionLike);
+  const payload = await client.action("workspaceTerminals:startProjectWorkspaceComputer" as any, {
+    authSubject,
+    projectId: params.projectId,
+  });
+  return normalizeComputerStartResult(payload);
 }
 
 export async function listProjectWorkspaceTerminalSnapshot<TSession>(params: {

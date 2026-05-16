@@ -22383,6 +22383,14 @@ button.message-citation-chip:hover {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  overflow-wrap: normal;
+}
+
+.workspace-summary-credit-value > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .workspace-summary-credit-topup {
@@ -22392,6 +22400,9 @@ button.message-citation-chip:hover {
 
 .workspace-summary-credit-action {
   flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   min-height: 24px;
   padding: 0 8px;
   border: 1px solid rgba(255, 255, 255, 0.12);
@@ -22400,6 +22411,9 @@ button.message-citation-chip:hover {
   color: var(--text-primary);
   font-size: 11px;
   font-weight: 800;
+  line-height: 1;
+  overflow-wrap: normal;
+  white-space: nowrap;
   cursor: pointer;
 }
 
@@ -22524,6 +22538,25 @@ button.message-citation-chip:hover {
   color: var(--text-secondary);
   font-size: 12px;
   line-height: 1.35;
+}
+
+.workspace-files-empty-state {
+  min-width: 0;
+  display: grid;
+  gap: 10px;
+  padding: 4px 0 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.workspace-files-empty-state p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.workspace-files-empty-state .workspace-user-data-action {
+  justify-self: start;
 }
 
 .workspace-files-browser {

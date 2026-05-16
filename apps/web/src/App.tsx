@@ -334,6 +334,10 @@ import { startCloudWorkspaceCreditTopupCheckout } from "../../../shared/cloudAcc
 import { loadOperatorAccessCanonical } from "../../../shared/cloudOperatorDashboardGateway";
 import type { OperatorAccessSnapshot } from "../../../shared/operatorTypes";
 import { loadWorkspaceCreditBalanceCanonical, type WorkspaceCreditBalance } from "../../../shared/workspaceCreditsGateway";
+import {
+  startProjectWorkspaceComputer,
+  type DaytonaWorkspaceComputerStartResult,
+} from "../../../shared/daytonaWorkspaceTerminals";
 import { formatUsdCents, toEpochSeconds } from "../../../shared/displayFormatting";
 import type { PaidToolKind, WorkspaceToolBalanceTopupPackId } from "../../../shared/workspaceCredits";
 import {
@@ -627,6 +631,20 @@ function clearPendingWorkspaceCreditTopupReturn(): void {
   } catch {
     // ignore
   }
+}
+
+function buildEmptyWorkspaceCreditBalance(session: AuthSession): WorkspaceCreditBalance {
+  const nowMs = Date.now();
+  return {
+    userId: String(getAuthUid(session) ?? session.user?.id ?? "").trim(),
+    includedCreditsBalance: 0,
+    purchasedCreditsBalance: 0,
+    includedCycleCredits: 0,
+    includedCycleStartedAt: nowMs,
+    includedCycleEndsAt: nowMs,
+    createdAt: nowMs,
+    updatedAt: nowMs,
+  };
 }
 
 function clearGuestThreadStorage(): void {
@@ -1663,6 +1681,8 @@ export default function App() {
     useState<string | null>(null);
   const [isAcceptingBuilderPartnerTerms, setIsAcceptingBuilderPartnerTerms] =
     useState(false);
+  const [isStartingWorkspaceComputer, setIsStartingWorkspaceComputer] = useState(false);
+  const [workspaceComputerStartError, setWorkspaceComputerStartError] = useState<string | null>(null);
   const builderPartnerProgramLoadRequestIdRef = useRef(0);
   const workspaceCreditLoadRequestIdRef = useRef(0);
   const lastTrackedAuthSessionUserIdRef = useRef<string | null>(null);
@@ -3985,9 +4005,10 @@ export default function App() {
           }
           return null;
         }
-        const balance = await loadWorkspaceCreditBalanceCanonical({
-          session: usableSession,
-        });
+        const balance =
+          (await loadWorkspaceCreditBalanceCanonical({
+            session: usableSession,
+          })) ?? buildEmptyWorkspaceCreditBalance(usableSession);
         if (requestId === workspaceCreditLoadRequestIdRef.current) {
           setWorkspaceCreditBalance(balance);
           setWorkspaceCreditBalanceError(null);
@@ -4016,9 +4037,11 @@ export default function App() {
 
   useEffect(() => {
     if (!session) return;
-    if (activeView !== "settings" || settingsGroup !== "agent") return;
+    const shouldLoadWorkspaceCredits =
+      activePage === "workspace" || (activeView === "settings" && settingsGroup === "agent");
+    if (!shouldLoadWorkspaceCredits) return;
     void loadWorkspaceCreditBalance(session);
-  }, [activeView, session, loadWorkspaceCreditBalance, settingsGroup]);
+  }, [activePage, activeView, session, loadWorkspaceCreditBalance, settingsGroup]);
 
   useEffect(() => {
     if (!session) return;
@@ -6075,6 +6098,70 @@ export default function App() {
     loadThreads,
     loadModelRegistry,
   });
+  const turnOnWorkspaceComputer = useCallback(async (): Promise<DaytonaWorkspaceComputerStartResult> => {
+    const session = await ensureUsableAuthSession();
+    if (!session) {
+      requireSignIn();
+      return {
+        ok: false,
+        status: 401,
+        code: "auth_required",
+        message: "Sign in to turn on computer.",
+        required_credits: null,
+      };
+    }
+
+    const projectId = workspace.derived.resolvedActiveProjectId;
+    if (!projectId) {
+      return {
+        ok: false,
+        status: 404,
+        code: "project_not_found",
+        message: "Select a computer first.",
+        required_credits: null,
+      };
+    }
+
+    setWorkspaceComputerStartError(null);
+    setIsStartingWorkspaceComputer(true);
+    try {
+      const result = await startProjectWorkspaceComputer({
+        session,
+        projectId,
+      });
+      if (!result.ok) {
+        setWorkspaceComputerStartError(result.message);
+        return result;
+      }
+
+      await loadWorkspaceCreditBalance(session);
+      refreshCloudProjectStatuses();
+      return result;
+    } catch (error) {
+      const message =
+        typeof error === "string"
+          ? error
+          : error instanceof Error
+            ? error.message
+            : "Failed to turn on computer.";
+      setWorkspaceComputerStartError(message);
+      return {
+        ok: false,
+        status: 503,
+        code: "workspace_computer_start_failed",
+        message,
+        required_credits: null,
+      };
+    } finally {
+      setIsStartingWorkspaceComputer(false);
+    }
+  }, [
+    ensureUsableAuthSession,
+    loadWorkspaceCreditBalance,
+    refreshCloudProjectStatuses,
+    requireSignIn,
+    workspace.derived.resolvedActiveProjectId,
+  ]);
   const projectUiController = useWebProjectUiController<AuthSession>({
     session: session,
     cloudProjects: workspace.state.projects,
@@ -7663,6 +7750,8 @@ export default function App() {
     workspaceCreditBalanceError,
     workspaceCreditTopupError,
     isStartingWorkspaceCreditTopupCheckout,
+    isStartingWorkspaceComputer,
+    workspaceComputerStartError,
     session,
     activeProjectId: workspace.derived.resolvedActiveProjectId,
     activeProjectName: workspace.derived.resolvedActiveProjectName,
@@ -7673,6 +7762,7 @@ export default function App() {
     onTopUpWorkspaceCredits: (packId: WorkspaceToolBalanceTopupPackId) => {
       void startWorkspaceCreditTopupCheckout(packId);
     },
+    onTurnOnComputer: turnOnWorkspaceComputer,
     onOpenCreateCommunity: () => openCreateCommunityModal(),
     onOpenActiveCommunity: handleOpenLandingCommunity,
     onOpenActiveCommunitySettings: () => {

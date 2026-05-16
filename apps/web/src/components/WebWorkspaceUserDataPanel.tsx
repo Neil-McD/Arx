@@ -13,6 +13,7 @@ import {
   type WorkspaceInspectorFailure,
   type WorkspaceInspectorFilePreview,
 } from "../../../../shared/workspaceInspectorGateway";
+import type { DaytonaWorkspaceComputerStartResult } from "../../../../shared/daytonaWorkspaceTerminals";
 
 export type WorkspaceUserPanelCommunity = {
   id: string;
@@ -30,6 +31,8 @@ export type WorkspaceUserDataPanelDataProps = {
   workspaceCreditBalanceError: string | null;
   workspaceCreditTopupError: string | null;
   isStartingWorkspaceCreditTopupCheckout: boolean;
+  isStartingWorkspaceComputer: boolean;
+  workspaceComputerStartError: string | null;
   session: AuthSessionLike | null;
   activeProjectId: string | null;
   activeProjectName: string | null;
@@ -38,6 +41,7 @@ export type WorkspaceUserDataPanelDataProps = {
   activeCommunity: WorkspaceUserPanelCommunity | null;
   canCreateCommunity: boolean;
   onTopUpWorkspaceCredits: (packId: WorkspaceToolBalanceTopupPackId) => void;
+  onTurnOnComputer: () => Promise<DaytonaWorkspaceComputerStartResult>;
   onOpenCreateCommunity: () => void;
   onOpenActiveCommunity: () => void;
   onOpenActiveCommunitySettings: () => void;
@@ -98,17 +102,30 @@ function formatWorkspaceInspectorFailure(result: WorkspaceInspectorFailure): str
   return result.message;
 }
 
+function isWorkspaceCreditStartFailure(result: DaytonaWorkspaceComputerStartResult): boolean {
+  return !result.ok && (
+    result.code === "workspace_credits_exhausted" ||
+    result.code === "workspace_credits_unavailable"
+  );
+}
+
 export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps) {
   const totalCredits =
     (props.workspaceCreditBalance?.includedCreditsBalance ?? 0) +
     (props.workspaceCreditBalance?.purchasedCreditsBalance ?? 0);
+  const displayedToolBalance =
+    props.isLoadingWorkspaceCreditBalance && !props.workspaceCreditBalance
+      ? "Checking..."
+      : formatWorkspaceToolBalanceUsdFromCredits(totalCredits);
   const topupChooserRef = useRef<HTMLDivElement | null>(null);
   const [isTopupChooserOpen, setIsTopupChooserOpen] = useState(false);
   const [filesExpanded, setFilesExpanded] = useState(() => loadFilesExpanded(props.activeProjectId));
+  const [directoryRefreshNonce, setDirectoryRefreshNonce] = useState(0);
   const [directoryPath, setDirectoryPath] = useState(".");
   const [directoryEntries, setDirectoryEntries] = useState<WorkspaceInspectorDirectoryEntry[]>([]);
   const [isLoadingDirectory, setIsLoadingDirectory] = useState(false);
   const [directoryError, setDirectoryError] = useState<string | null>(null);
+  const [directoryErrorCode, setDirectoryErrorCode] = useState<string | null>(null);
   const [selectedFilePath, setSelectedFilePath] = useState<string | null>(null);
   const [filePreview, setFilePreview] = useState<WorkspaceInspectorFilePreview | null>(null);
   const [isLoadingFilePreview, setIsLoadingFilePreview] = useState(false);
@@ -122,6 +139,7 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps) {
     setDirectoryPath(".");
     setDirectoryEntries([]);
     setDirectoryError(null);
+    setDirectoryErrorCode(null);
     setSelectedFilePath(null);
     setFilePreview(null);
     setFilePreviewError(null);
@@ -140,6 +158,7 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps) {
     if (!filesExpanded || !props.session || !props.activeProjectId) return;
     setIsLoadingDirectory(true);
     setDirectoryError(null);
+    setDirectoryErrorCode(null);
     void listWorkspaceDirectoryCanonical({
       session: props.session,
       projectId: props.activeProjectId,
@@ -150,6 +169,7 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps) {
         if (!result.ok) {
           setDirectoryEntries([]);
           setDirectoryError(formatWorkspaceInspectorFailure(result));
+          setDirectoryErrorCode(result.code);
           return;
         }
         setDirectoryEntries(result.entries);
@@ -158,6 +178,7 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps) {
         if (!isAlive) return;
         setDirectoryEntries([]);
         setDirectoryError(error instanceof Error ? error.message : "Workspace files unavailable.");
+        setDirectoryErrorCode(null);
       })
       .finally(() => {
         if (isAlive) setIsLoadingDirectory(false);
@@ -166,7 +187,7 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps) {
     return () => {
       isAlive = false;
     };
-  }, [directoryPath, filesExpanded, props.activeProjectId, props.session]);
+  }, [directoryPath, directoryRefreshNonce, filesExpanded, props.activeProjectId, props.session]);
 
   const handleSelectFile = useCallback(
     (path: string) => {
@@ -212,6 +233,38 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps) {
     [directoryEntries],
   );
   const hasFilePreviewContent = Boolean(isLoadingFilePreview || filePreviewError || filePreview?.ok);
+  const canTurnOnComputer = Boolean(props.session && props.activeProjectId);
+  const shouldShowTurnOnComputerAction =
+    canTurnOnComputer &&
+    (
+      directoryErrorCode === "background_sandbox_not_found" ||
+      directoryErrorCode === "workspace_credits_exhausted" ||
+      directoryErrorCode === "workspace_credits_unavailable"
+    );
+
+  const handleTurnOnComputer = useCallback(async () => {
+    if (!canTurnOnComputer) return;
+    setDirectoryError(null);
+    setDirectoryErrorCode(null);
+    const result = await props.onTurnOnComputer();
+    if (!result.ok) {
+      setDirectoryEntries([]);
+      setDirectoryError(
+        isWorkspaceCreditStartFailure(result)
+          ? "Add tool credits to turn on computer."
+          : result.message,
+      );
+      setDirectoryErrorCode(result.code);
+      if (isWorkspaceCreditStartFailure(result)) setIsTopupChooserOpen(true);
+      return;
+    }
+    setFilesExpandedForProject(true);
+    setDirectoryPath(".");
+    setDirectoryEntries([]);
+    setDirectoryError(null);
+    setDirectoryErrorCode(null);
+    setDirectoryRefreshNonce((value) => value + 1);
+  }, [canTurnOnComputer, props.onTurnOnComputer, setFilesExpandedForProject]);
 
   useEffect(() => {
     if (!isTopupChooserOpen) return;
@@ -253,9 +306,7 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps) {
           <div>
             <dt>Tool credits</dt>
             <dd className="workspace-summary-credit-value">
-              <span>
-                {props.isLoadingWorkspaceCreditBalance ? "Checking..." : formatWorkspaceToolBalanceUsdFromCredits(totalCredits)}
-              </span>
+              <span>{displayedToolBalance}</span>
               <div className="workspace-summary-credit-topup" ref={topupChooserRef}>
                 <button
                   type="button"
@@ -296,6 +347,9 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps) {
         {props.workspaceCreditTopupError ? (
           <p className="workspace-summary-note">{props.workspaceCreditTopupError}</p>
         ) : null}
+        {props.workspaceComputerStartError ? (
+          <p className="workspace-summary-note">{props.workspaceComputerStartError}</p>
+        ) : null}
       </section>
 
       <section className="workspace-files-section">
@@ -311,6 +365,20 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps) {
         </button>
         {!canInspectFiles ? (
           <p className="workspace-files-note">Turn on computer to view files.</p>
+        ) : filesExpanded && directoryError ? (
+          <div className="workspace-files-empty-state">
+            <p>{directoryError}</p>
+            {shouldShowTurnOnComputerAction ? (
+              <button
+                type="button"
+                className="workspace-user-data-action workspace-user-data-action--secondary"
+                onClick={() => void handleTurnOnComputer()}
+                disabled={props.isStartingWorkspaceComputer}
+              >
+                {props.isStartingWorkspaceComputer ? "Turning on..." : "Turn on computer"}
+              </button>
+            ) : null}
+          </div>
         ) : filesExpanded ? (
           <div className="workspace-files-browser">
             <div className="workspace-files-browser__toolbar">
@@ -331,7 +399,6 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps) {
               </button>
               <span>{directoryPath === "." ? "workspace" : directoryPath}</span>
             </div>
-            {directoryError ? <p>{directoryError}</p> : null}
             <div className="workspace-files-list" aria-label="Workspace files">
               {isLoadingDirectory ? (
                 <div className="workspace-files-empty">Loading files...</div>

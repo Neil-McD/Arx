@@ -14,6 +14,7 @@ import {
   readDaytonaProcessSessionCommandExitCode,
 } from "./daytonaProcessSessions";
 import {
+  ensureProjectBackgroundSandbox,
   releaseProjectBackgroundSandboxIfIdle,
   resolveTerminalSandboxContext,
 } from "./workspaceTerminalBackgroundService";
@@ -840,6 +841,36 @@ export const listProjectWorkspaceTerminalSnapshot = action({
     return {
       active: Array.isArray(snapshot?.active) ? snapshot.active : [],
       recent: Array.isArray(snapshot?.recent) ? snapshot.recent : [],
+    };
+  },
+});
+
+export const startProjectWorkspaceComputer = action({
+  args: {
+    authSubject: v.optional(v.string()),
+    projectId: v.id("cloudProjects"),
+  },
+  handler: async (ctx, args): Promise<unknown> => {
+    const { actor, project } = await resolveOwnedProject({
+      ctx,
+      authSubject: args.authSubject ?? null,
+      projectId: args.projectId,
+    });
+    void project;
+
+    const started = await ensureProjectBackgroundSandbox({
+      ctx,
+      authSubject: args.authSubject ?? null,
+      userId: actor.dbUserId,
+      projectId: args.projectId,
+    });
+    if (!started.ok) return started;
+    return {
+      ok: true,
+      status: "active",
+      provider_sandbox_id: started.providerSandboxId,
+      credit_budget_credits: started.creditBudgetCredits,
+      credit_budget_expires_at: started.creditBudgetExpiresAt,
     };
   },
 });
