@@ -17870,6 +17870,36 @@ button.message-citation-chip:hover {
   font-weight: 700;
 }
 
+.inference-issue-modal .modal-header {
+  border-bottom: 0;
+  padding-bottom: 8px;
+}
+
+.inference-issue-modal .modal-close {
+  border: 0;
+  background: transparent;
+  border-radius: 999px;
+}
+
+.inference-issue-modal .modal-body {
+  padding-top: 8px;
+}
+
+.inference-issue-modal .modal-footer {
+  border-top: 0;
+  background: transparent;
+  padding-top: 0;
+}
+
+.inference-issue-modal .tool-balance-pack-button {
+  min-height: 56px;
+  border-color: transparent;
+}
+
+.inference-issue-modal .auth-actions button.secondary {
+  border-color: transparent;
+}
+
 @media (max-width: 640px) {
   .tool-balance-pack-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -22515,6 +22545,7 @@ button.message-citation-chip:hover {
 }
 
 .workspace-files-browser__toolbar span {
+  flex: 1 1 auto;
   min-width: 0;
   color: var(--text-secondary);
   font-family: var(--font-mono);
@@ -22522,6 +22553,10 @@ button.message-citation-chip:hover {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.workspace-files-power-action {
+  flex: 0 0 auto;
 }
 
 .workspace-files-list {

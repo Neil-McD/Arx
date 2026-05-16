@@ -923,6 +923,62 @@ export const stopAllProjectWorkspaceTerminals = action({
   },
 });
 
+export const stopProjectWorkspaceComputer = action({
+  args: {
+    authSubject: v.optional(v.string()),
+    projectId: v.id("cloudProjects"),
+  },
+  handler: async (ctx, args): Promise<unknown> => {
+    const { actor, project } = await resolveOwnedProject({
+      ctx,
+      authSubject: args.authSubject ?? null,
+      projectId: args.projectId,
+    });
+    const providerSandboxId = normalizeOptionalString(project.providerSandboxId);
+    if (!providerSandboxId) {
+      return {
+        ok: true,
+        status: "inactive",
+        stopped_count: 0,
+        provider_sandbox_id: null,
+      };
+    }
+
+    const rows = (await ctx.runQuery(
+      internal.workspaceTerminals.listProjectWorkspaceTerminalSessionsInternal as any,
+      {
+        ownerId: actor.dbUserId,
+        projectId: args.projectId,
+      },
+    )) as any[];
+    const activeRows = rows.filter(
+      (row) =>
+        isTerminalActiveStatus(row.status) &&
+        normalizeOptionalString(row.providerSandboxId) === providerSandboxId,
+    );
+    for (const row of activeRows) {
+      await ctx.runAction(internal.workspaceTerminals.stopWorkspaceTerminalInternal as any, {
+        authSubject: args.authSubject ?? null,
+        terminalSessionId: row._id,
+      });
+    }
+
+    await releaseProjectBackgroundSandboxIfIdle({
+      ctx,
+      ownerId: actor.dbUserId,
+      projectId: args.projectId,
+      providerSandboxId,
+    });
+
+    return {
+      ok: true,
+      status: "inactive",
+      stopped_count: activeRows.length,
+      provider_sandbox_id: providerSandboxId,
+    };
+  },
+});
+
 export const stopWorkspaceTerminalInternal = internalAction({
   args: {
     authSubject: v.optional(v.string()),

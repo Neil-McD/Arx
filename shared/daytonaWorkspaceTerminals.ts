@@ -96,6 +96,13 @@ export type DaytonaWorkspaceComputerStartResult =
       required_credits: number | null;
     };
 
+export type DaytonaWorkspaceComputerStopResult = {
+  ok: true;
+  status: "inactive";
+  stopped_count: number;
+  provider_sandbox_id: string | null;
+};
+
 function mapWorkspaceTerminalRow(
   row: Record<string, unknown> | null | undefined,
 ): DaytonaWorkspaceTerminalRecord {
@@ -214,6 +221,29 @@ export async function startProjectWorkspaceComputer<TSession>(params: {
     projectId: params.projectId,
   });
   return normalizeComputerStartResult(payload);
+}
+
+export async function stopProjectWorkspaceComputer<TSession>(params: {
+  session: TSession;
+  projectId: string;
+}): Promise<DaytonaWorkspaceComputerStopResult> {
+  const { client, authSubject } = await bootstrapGatewayAuthContext(params.session as AuthSessionLike);
+  const payload = await client.action("workspaceTerminals:stopProjectWorkspaceComputer" as any, {
+    authSubject,
+    projectId: params.projectId,
+  });
+  const row = payload && typeof payload === "object" && !Array.isArray(payload)
+    ? payload as Record<string, unknown>
+    : {};
+  return {
+    ok: true,
+    status: "inactive",
+    stopped_count: Number.isFinite(Number(row.stopped_count)) ? Number(row.stopped_count) : 0,
+    provider_sandbox_id:
+      typeof row.provider_sandbox_id === "string" && row.provider_sandbox_id.trim()
+        ? row.provider_sandbox_id.trim()
+        : null,
+  };
 }
 
 export async function listProjectWorkspaceTerminalSnapshot<TSession>(params: {

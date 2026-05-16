@@ -30,6 +30,7 @@ export type WorkspaceUserDataPanelDataProps = {
   workspaceCreditTopupError: string | null;
   isStartingWorkspaceCreditTopupCheckout: boolean;
   isStartingWorkspaceComputer: boolean;
+  isStoppingWorkspaceComputer: boolean;
   workspaceComputerStartError: string | null;
   session: AuthSessionLike | null;
   activeProjectId: string | null;
@@ -40,6 +41,7 @@ export type WorkspaceUserDataPanelDataProps = {
   canCreateCommunity: boolean;
   onOpenWorkspaceCreditTopup: () => void;
   onTurnOnComputer: () => Promise<DaytonaWorkspaceComputerStartResult>;
+  onTurnOffComputer: () => Promise<boolean>;
   onOpenCreateCommunity: () => void;
   onOpenActiveCommunity: () => void;
   onOpenActiveCommunitySettings: () => void;
@@ -119,6 +121,7 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps) {
   const [isLoadingDirectory, setIsLoadingDirectory] = useState(false);
   const [directoryError, setDirectoryError] = useState<string | null>(null);
   const [directoryErrorCode, setDirectoryErrorCode] = useState<string | null>(null);
+  const [isComputerOnForFiles, setIsComputerOnForFiles] = useState(false);
   const [selectedFilePath, setSelectedFilePath] = useState<string | null>(null);
   const [filePreview, setFilePreview] = useState<WorkspaceInspectorFilePreview | null>(null);
   const [isLoadingFilePreview, setIsLoadingFilePreview] = useState(false);
@@ -133,6 +136,7 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps) {
     setDirectoryEntries([]);
     setDirectoryError(null);
     setDirectoryErrorCode(null);
+    setIsComputerOnForFiles(false);
     setSelectedFilePath(null);
     setFilePreview(null);
     setFilePreviewError(null);
@@ -163,15 +167,18 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps) {
           setDirectoryEntries([]);
           setDirectoryError(formatWorkspaceInspectorFailure(result));
           setDirectoryErrorCode(result.code);
+          setIsComputerOnForFiles(false);
           return;
         }
         setDirectoryEntries(result.entries);
+        setIsComputerOnForFiles(true);
       })
       .catch((error) => {
         if (!isAlive) return;
         setDirectoryEntries([]);
         setDirectoryError(error instanceof Error ? error.message : "Workspace files unavailable.");
         setDirectoryErrorCode(null);
+        setIsComputerOnForFiles(false);
       })
       .finally(() => {
         if (isAlive) setIsLoadingDirectory(false);
@@ -255,8 +262,24 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps) {
     setDirectoryEntries([]);
     setDirectoryError(null);
     setDirectoryErrorCode(null);
+    setIsComputerOnForFiles(true);
     setDirectoryRefreshNonce((value) => value + 1);
   }, [canTurnOnComputer, props.onTurnOnComputer, setFilesExpandedForProject]);
+
+  const handleTurnOffComputer = useCallback(async () => {
+    if (!canTurnOnComputer) return;
+    const stopped = await props.onTurnOffComputer();
+    if (!stopped) return;
+    filePreviewRequestId.current += 1;
+    setDirectoryEntries([]);
+    setDirectoryError("Turn on computer to view files.");
+    setDirectoryErrorCode("background_sandbox_not_found");
+    setIsComputerOnForFiles(false);
+    setSelectedFilePath(null);
+    setFilePreview(null);
+    setFilePreviewError(null);
+    setIsLoadingFilePreview(false);
+  }, [canTurnOnComputer, props.onTurnOffComputer]);
 
   return (
     <div className="workspace-user-data-panel__grid">
@@ -346,6 +369,16 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps) {
                 Up
               </button>
               <span>{directoryPath === "." ? "workspace" : directoryPath}</span>
+              {isComputerOnForFiles ? (
+                <button
+                  type="button"
+                  className="workspace-user-data-action workspace-user-data-action--secondary workspace-files-power-action"
+                  onClick={() => void handleTurnOffComputer()}
+                  disabled={props.isStoppingWorkspaceComputer}
+                >
+                  {props.isStoppingWorkspaceComputer ? "Turning off" : "Turn off"}
+                </button>
+              ) : null}
             </div>
             <div className="workspace-files-list" aria-label="Workspace files">
               {isLoadingDirectory ? (

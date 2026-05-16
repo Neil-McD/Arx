@@ -405,7 +405,7 @@ async function proveWorkspaceCreditAccountingContract() {
   );
   assert.match(
     inferenceIssueModalSource,
-    /workspace_tools[\s\S]*paid sandbox compute/,
+    /workspace_tools[\s\S]*paid computer time/,
     "expected the add-balance modal to explain why workspace tools need balance",
   );
   assert.match(

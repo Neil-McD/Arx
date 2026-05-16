@@ -60,27 +60,29 @@ export function WebInferenceIssueModal(props: WebInferenceIssueModalProps) {
       : null;
 
   const paidToolTitle =
-    paidToolKind === "voice_input"
-      ? "Add balance to use voice input"
-      : paidToolKind === "web_research"
-        ? "Add balance to research the web"
-      : paidToolKind === "workspace_tools"
-        ? "Add balance to use workspace tools"
-      : "Add balance to use premium tools";
+    inferenceIssueModal.reason === "workspace_credits"
+      ? "Add tool balance"
+      : paidToolKind === "voice_input"
+        ? "Add balance to use voice input"
+        : paidToolKind === "web_research"
+          ? "Add balance to research the web"
+        : paidToolKind === "workspace_tools"
+          ? "Add balance to use workspace tools"
+        : "Add balance to use premium tools";
 
   const paidToolPrimaryMessage =
     paidToolKind === "voice_input"
-      ? "Voice input uses paid transcription so you can dictate into chats and workspace threads."
+      ? "Voice input uses paid transcription."
       : paidToolKind === "web_research"
-        ? "Web research uses paid provider calls to search, open pages, and bring current web context into a run."
+        ? "Web research uses paid provider calls."
       : paidToolKind === "workspace_tools"
-        ? "Workspace tools use paid sandbox compute for project, file, terminal, browser, and computer-use work."
-      : inferenceIssueModal.message || "Premium tools use paid provider or sandbox infrastructure, so they need tool balance before they run.";
+        ? "Workspace tools use paid computer time."
+      : inferenceIssueModal.message || "Premium tools need tool balance.";
 
   const paidToolFollowupMessage =
     requiredCredits !== null
-      ? `This call needs at least ${formatWorkspaceToolBalanceUsdFromCredits(requiredCredits)} in tool balance. Add balance below, then retry from the same thread.`
-      : "Add balance below, then retry from the same thread. Chat still uses your connected ChatGPT account or OpenAI API key.";
+      ? `Needs ${formatWorkspaceToolBalanceUsdFromCredits(requiredCredits)}. Add balance, then retry.`
+      : "Add balance, then retry.";
 
   const title =
     inferenceIssueModal.reason === "provider_connection_required"
@@ -131,7 +133,7 @@ export function WebInferenceIssueModal(props: WebInferenceIssueModalProps) {
         onClose();
       }}
     >
-      <div className="modal" onClick={(event) => event.stopPropagation()}>
+      <div className="modal inference-issue-modal" onClick={(event) => event.stopPropagation()}>
         <div className="modal-header">
           <div className="modal-title">{title}</div>
           <button
@@ -168,12 +170,9 @@ export function WebInferenceIssueModal(props: WebInferenceIssueModalProps) {
                     disabled={isInferenceIssueModalRunning || isStartingWorkspaceCreditTopupCheckout}
                   >
                     <strong>{pack.label}</strong>
-                    <span>{pack.recommended ? "Recommended" : "Add balance"}</span>
+                    {pack.recommended ? <span>Best</span> : null}
                   </button>
                 ))}
-              </div>
-              <div className="model-note">
-                Tool balance is non-refundable and only works inside Polynet.
               </div>
               {workspaceCreditTopupError ? (
                 <div className="auth-error" style={{ marginTop: 12 }}>
@@ -201,7 +200,7 @@ export function WebInferenceIssueModal(props: WebInferenceIssueModalProps) {
                 disabled={isInferenceIssueModalRunning}
               >
                 {inferenceIssueModal.reason === "workspace_credits"
-                  ? "Manage in Agent Settings"
+                  ? "Settings"
                   : inferenceIssueModal.reason === "provider_connection_required"
                     ? "Open Account Settings"
                   : "Open account settings"}

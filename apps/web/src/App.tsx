@@ -336,6 +336,7 @@ import type { OperatorAccessSnapshot } from "../../../shared/operatorTypes";
 import { loadWorkspaceCreditBalanceCanonical, type WorkspaceCreditBalance } from "../../../shared/workspaceCreditsGateway";
 import {
   startProjectWorkspaceComputer,
+  stopProjectWorkspaceComputer,
   type DaytonaWorkspaceComputerStartResult,
 } from "../../../shared/daytonaWorkspaceTerminals";
 import { formatUsdCents, toEpochSeconds } from "../../../shared/displayFormatting";
@@ -1692,6 +1693,7 @@ export default function App() {
   const [isAcceptingBuilderPartnerTerms, setIsAcceptingBuilderPartnerTerms] =
     useState(false);
   const [isStartingWorkspaceComputer, setIsStartingWorkspaceComputer] = useState(false);
+  const [isStoppingWorkspaceComputer, setIsStoppingWorkspaceComputer] = useState(false);
   const [workspaceComputerStartError, setWorkspaceComputerStartError] = useState<string | null>(null);
   const builderPartnerProgramLoadRequestIdRef = useRef(0);
   const workspaceCreditLoadRequestIdRef = useRef(0);
@@ -6199,6 +6201,46 @@ export default function App() {
     requireSignIn,
     workspace.derived.resolvedActiveProjectId,
   ]);
+
+  const turnOffWorkspaceComputer = useCallback(async (): Promise<boolean> => {
+    const session = await ensureUsableAuthSession();
+    if (!session) {
+      requireSignIn();
+      return false;
+    }
+
+    const projectId = workspace.derived.resolvedActiveProjectId;
+    if (!projectId) return false;
+
+    setWorkspaceComputerStartError(null);
+    setIsStoppingWorkspaceComputer(true);
+    try {
+      await stopProjectWorkspaceComputer({
+        session,
+        projectId,
+      });
+      await loadWorkspaceCreditBalance(session);
+      refreshCloudProjectStatuses();
+      return true;
+    } catch (error) {
+      const message =
+        typeof error === "string"
+          ? error
+          : error instanceof Error
+            ? error.message
+            : "Failed to turn off computer.";
+      setWorkspaceComputerStartError(message);
+      return false;
+    } finally {
+      setIsStoppingWorkspaceComputer(false);
+    }
+  }, [
+    ensureUsableAuthSession,
+    loadWorkspaceCreditBalance,
+    refreshCloudProjectStatuses,
+    requireSignIn,
+    workspace.derived.resolvedActiveProjectId,
+  ]);
   const projectUiController = useWebProjectUiController<AuthSession>({
     session: session,
     cloudProjects: workspace.state.projects,
@@ -7789,6 +7831,7 @@ export default function App() {
     workspaceCreditTopupError,
     isStartingWorkspaceCreditTopupCheckout,
     isStartingWorkspaceComputer,
+    isStoppingWorkspaceComputer,
     workspaceComputerStartError,
     session,
     activeProjectId: workspace.derived.resolvedActiveProjectId,
@@ -7799,6 +7842,7 @@ export default function App() {
     canCreateCommunity: canCreateWorkspaceUserPanelCommunity,
     onOpenWorkspaceCreditTopup: () => openWorkspaceCreditTopupModal({ toolKind: "workspace_tools" }),
     onTurnOnComputer: turnOnWorkspaceComputer,
+    onTurnOffComputer: turnOffWorkspaceComputer,
     onOpenCreateCommunity: () => openCreateCommunityModal(),
     onOpenActiveCommunity: handleOpenLandingCommunity,
     onOpenActiveCommunitySettings: () => {
