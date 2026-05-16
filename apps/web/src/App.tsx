@@ -536,6 +536,8 @@ const COMMUNITY_ANALYTICS_RANGE_STORAGE_KEY = "polynet-community-analytics-range
 const LEGACY_COMMUNITY_ANALYTICS_RANGE_STORAGE_KEY = "arx-community-analytics-range";
 const COMMUNITY_RAIL_ORDER_STORAGE_KEY_PREFIX = "polynet-community-rail-order:web";
 const WORKSPACE_OPERATOR_DATA_PANEL_OPEN_STORAGE_KEY = "polynet-workspace-operator-data-panel-open";
+const WORKSPACE_CREDIT_TOPUP_RETURN_STORAGE_KEY = "polynet-workspace-credit-topup-return";
+const WORKSPACE_CREDIT_TOPUP_RETURN_MAX_AGE_MS = 2 * 60 * 60 * 1000;
 const CHATGPT_SECURITY_SETTINGS_URL = "https://chatgpt.com/#settings/Security";
 
 type GuestStoredMessageV1 = {
@@ -594,6 +596,36 @@ function storeWorkspaceOperatorDataPanelOpen(isOpen: boolean): void {
     localStorage.setItem(WORKSPACE_OPERATOR_DATA_PANEL_OPEN_STORAGE_KEY, isOpen ? "1" : "0");
   } catch {
     // Operator panel visibility is a local preference only.
+  }
+}
+
+function markPendingWorkspaceCreditTopupReturn(): void {
+  try {
+    window.sessionStorage.setItem(WORKSPACE_CREDIT_TOPUP_RETURN_STORAGE_KEY, String(Date.now()));
+  } catch {
+    // Checkout return refresh is best-effort; Stripe/webhook truth remains server-side.
+  }
+}
+
+function hasPendingWorkspaceCreditTopupReturn(): boolean {
+  try {
+    const markedAt = Number(window.sessionStorage.getItem(WORKSPACE_CREDIT_TOPUP_RETURN_STORAGE_KEY) ?? "");
+    if (!Number.isFinite(markedAt) || markedAt <= 0) return false;
+    if (Date.now() - markedAt > WORKSPACE_CREDIT_TOPUP_RETURN_MAX_AGE_MS) {
+      window.sessionStorage.removeItem(WORKSPACE_CREDIT_TOPUP_RETURN_STORAGE_KEY);
+      return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function clearPendingWorkspaceCreditTopupReturn(): void {
+  try {
+    window.sessionStorage.removeItem(WORKSPACE_CREDIT_TOPUP_RETURN_STORAGE_KEY);
+  } catch {
+    // ignore
   }
 }
 
@@ -3989,6 +4021,27 @@ export default function App() {
   }, [activeView, session, loadWorkspaceCreditBalance, settingsGroup]);
 
   useEffect(() => {
+    if (!session) return;
+
+    const refreshPendingWorkspaceCreditTopup = () => {
+      if (!hasPendingWorkspaceCreditTopupReturn()) return;
+      const activeSession = sessionRef.current ?? session;
+      void loadWorkspaceCreditBalance(activeSession).finally(() => {
+        clearPendingWorkspaceCreditTopupReturn();
+      });
+    };
+    const handlePageShow = () => {
+      refreshPendingWorkspaceCreditTopup();
+    };
+
+    refreshPendingWorkspaceCreditTopup();
+    window.addEventListener("pageshow", handlePageShow);
+    return () => {
+      window.removeEventListener("pageshow", handlePageShow);
+    };
+  }, [loadWorkspaceCreditBalance, session, sessionRef]);
+
+  useEffect(() => {
     if (!session || activePage !== "workspace") return;
     let cancelled = false;
     const refresh = async () => {
@@ -5113,6 +5166,7 @@ export default function App() {
           (workspaceCreditBalance?.includedCreditsBalance ?? 0) +
           (workspaceCreditBalance?.purchasedCreditsBalance ?? 0),
       });
+      markPendingWorkspaceCreditTopupReturn();
       captureProductAnalyticsEvent("workspace credit topup started", {
         surface: "settings_agent",
         pack_id: packId ?? null,
@@ -7616,8 +7670,8 @@ export default function App() {
     activeModelLabel: workspace.derived.activeModelLabel,
     activeCommunity: workspaceUserDataPanelCommunity,
     canCreateCommunity: canCreateWorkspaceUserPanelCommunity,
-    onTopUpWorkspaceCredits: () => {
-      void startWorkspaceCreditTopupCheckout();
+    onTopUpWorkspaceCredits: (packId: WorkspaceToolBalanceTopupPackId) => {
+      void startWorkspaceCreditTopupCheckout(packId);
     },
     onOpenCreateCommunity: () => openCreateCommunityModal(),
     onOpenActiveCommunity: handleOpenLandingCommunity,
