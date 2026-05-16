@@ -5,6 +5,7 @@ import { join } from "node:path";
 const root = process.cwd();
 const schema = readFileSync(join(root, "convex/schema.ts"), "utf8");
 const directory = readFileSync(join(root, "convex/communityIntelligenceDirectory.ts"), "utf8");
+const aiFeed = readFileSync(join(root, "convex/communityAiFeed.ts"), "utf8");
 const communityExports = readFileSync(join(root, "convex/community.ts"), "utf8");
 
 assert.doesNotMatch(directory, /communityIntelligenceProposals|reviewCommunityIntelligenceProposal|needs_review/, "directory substrate should not use legacy queue naming");
@@ -103,7 +104,65 @@ assert.match(
     /v\.literal\("agent"\)|v\.literal\("compiler"\)|v\.literal\("system"\)/,
     "public source trace writes should not claim autonomous actor identity",
   );
+  assert.match(
+    block,
+    /allowExistingUpdate: actor\.isManager/,
+    "public source trace writes should only update existing source ids when the caller is a manager",
+  );
 }
+assert.match(
+  directory,
+  /allowExistingUpdate\?: boolean[\s\S]*if \(existing\) \{[\s\S]*if \(!args\.allowExistingUpdate\) \{[\s\S]*community_source_trace_source_conflict/,
+  "source trace upserts should reject source-id collisions unless trusted overwrite is explicit",
+);
+assert.match(
+  aiFeed,
+  /upsertCommunitySourceTrace\([\s\S]*sourceType: "ai_feed"[\s\S]*allowExistingUpdate: true/,
+  "trusted product-owned AI feed traces should explicitly opt into existing-source updates",
+);
+{
+  const block = exportedFunctionBlock(directory, "createCommunityIntelligenceChangeRequest");
+  assert.match(
+    block,
+    /if \(actor\.isManager\) \{[\s\S]*requireTraceIdsBelongToCommunity[\s\S]*\} else \{[\s\S]*requireTraceIdsReadableByViewer/,
+    "member change requests should validate trace readability, not only community ownership",
+  );
+  assert.match(
+    block,
+    /requireOutcomeIdsReadableByViewer[\s\S]*requireNodeIdsReadableByViewer[\s\S]*requireEdgeIdsReadableByViewer/,
+    "member change requests should validate readable outcomes, nodes, and edges",
+  );
+}
+assert.match(
+  directory,
+  /function canViewerReadTrace[\s\S]*actorUserId[\s\S]*row\.visibilityScope === "private"[\s\S]*sourceVisibility !== "redacted"[\s\S]*community_source_trace_not_readable/,
+  "trace readability should only allow owned private non-redacted traces and reject unreadable/redacted traces",
+);
+assert.match(
+  directory,
+  /async function canViewerReadOutcome[\s\S]*observedByUserId[\s\S]*retrievalLogBelongsToUser[\s\S]*community_outcome_observation_not_readable/,
+  "outcome readability should be limited to managers, observers, or retrieval-log owners",
+);
+assert.match(
+  directory,
+  /function isSourceTraceRow[\s\S]*function isOutcomeObservationRow/,
+  "readability validators should verify referenced rows are the expected directory/evidence row shape",
+);
+assert.match(
+  directory,
+  /requireChangeRequestPayloadReferencesAllowed[\s\S]*payload\.toReferenceType[\s\S]*requireTraceIdsReadableByViewer[\s\S]*requireOutcomeIdsReadableByViewer[\s\S]*payload\.deprecatedByNodeId/,
+  "change request payload references should be validated for readability before they can enter the airlock",
+);
+assert.match(
+  directory,
+  /createCommunityIntelligenceChangeRequest[\s\S]*requireChangeRequestPayloadReferencesAllowed/,
+  "public change requests should validate payload references before insertion",
+);
+assert.match(
+  directory,
+  /requireChangeRequestReferencesAllowedForApply[\s\S]*createdByActorType === "member"[\s\S]*createdByUserId[\s\S]*requireTraceIdsReadableByViewer[\s\S]*requireOutcomeIdsReadableByViewer[\s\S]*requireNodeIdsReadableByViewer[\s\S]*requireEdgeIdsReadableByViewer[\s\S]*requireChangeRequestPayloadReferencesAllowed/,
+  "apply should revalidate member-authored change request references against the original requester readability",
+);
 assertNoAutonomousCanonicalActor("createCommunityIntelligenceNode");
 assertNoAutonomousCanonicalActor("updateCommunityIntelligenceNode");
 assertNoAutonomousCanonicalActor("createCommunityIntelligenceEdge");
@@ -132,6 +191,16 @@ assert.match(
   directory,
   /retrieveCommunityIntelligenceForWorkflow[\s\S]*communityIntelligenceRetrievalLogs/,
   "workflow retrieval should log retrieved and injected nodes",
+);
+assert.match(
+  directory,
+  /listCommunityIntelligenceEdges[\s\S]*canViewerReadEdge\(\{ ctx, communityId: args\.communityId, edge: row, userId, isManager \}\)/,
+  "edge listing should use the same readability gate as edge change request validation",
+);
+assert.match(
+  directory,
+  /recordCommunityIntelligenceRetrievalFeedback[\s\S]*community_intelligence_retrieval_log_not_found[\s\S]*requireCommunityChatAccess\(\{ ctx, communityId: log\.communityId, userId \}\)/,
+  "retrieval feedback should re-check current community access before writing",
 );
 assert.match(
   directory,

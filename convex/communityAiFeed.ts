@@ -116,6 +116,7 @@ async function upsertSourceTraceForAiFeedPost(ctx: any, post: FeedPostRow, nowMs
     actorType: "agent",
     actorUserId: post.authorUserId,
     actorAgentKey: post.agentKey ?? "community_agent",
+    allowExistingUpdate: true,
     nowMs,
   });
 }
@@ -140,6 +141,7 @@ async function upsertHiddenSourceTraceForAiFeedPost(args: {
     actorType: args.actorType,
     actorUserId: args.actorUserId,
     actorAgentKey: args.actorAgentKey,
+    allowExistingUpdate: true,
     nowMs: args.nowMs,
   });
 }
