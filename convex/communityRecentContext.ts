@@ -1,4 +1,4 @@
-import { query } from "./_generated/server";
+import { internalQuery, query } from "./_generated/server";
 import { v } from "convex/values";
 import {
   type CommunityChatMessageLike,
@@ -227,6 +227,100 @@ function mapIdentity(community: CommunityLike) {
   };
 }
 
+async function requireTrustedUserSubject(args: {
+  ctx: any;
+  userId: any;
+  authSubject: string;
+}): Promise<any> {
+  const user = await args.ctx.db.get(args.userId);
+  const expected = String(args.authSubject ?? "").trim();
+  const actual = String(user?.authSubject ?? "").trim();
+  if (!user || !expected || actual !== expected) {
+    throw new Error("trusted_identity_mismatch");
+  }
+  return user._id;
+}
+
+async function readCommunityRecentContextForResolvedUser(args: {
+  ctx: any;
+  userId: any;
+  communityId: any;
+  query: string;
+}) {
+  const startedAt = Date.now();
+  const { community } = await requireCommunityChatAccess({
+    ctx: args.ctx,
+    communityId: args.communityId,
+    userId: args.userId,
+  });
+  const queryText = normalizeQueryText(args.query);
+  const tokens = tokenizeQuery(queryText);
+
+  let chatFetchOk = false;
+  let aiFeedFetchOk = false;
+  let resourceFetchOk = false;
+  let chatItems: RecentContextItem[] = [];
+  let aiFeedItems: RecentContextItem[] = [];
+  let resourceItems: RecentContextItem[] = [];
+  let chatConsidered = 0;
+  let aiFeedConsidered = 0;
+  let resourceConsidered = 0;
+
+  const [chatResult, aiFeedResult, resourceResult] = await Promise.allSettled([
+    listRecentChatItems({ ctx: args.ctx, communityId: args.communityId, tokens }),
+    listRecentAiFeedItems({ ctx: args.ctx, communityId: args.communityId, tokens }),
+    listRecentResourceItems({ ctx: args.ctx, communityId: args.communityId, tokens }),
+  ]);
+
+  if (chatResult.status === "fulfilled") {
+    chatFetchOk = true;
+    chatItems = chatResult.value.items;
+    chatConsidered = chatResult.value.considered;
+  }
+  if (aiFeedResult.status === "fulfilled") {
+    aiFeedFetchOk = true;
+    aiFeedItems = aiFeedResult.value.items;
+    aiFeedConsidered = aiFeedResult.value.considered;
+  }
+  if (resourceResult.status === "fulfilled") {
+    resourceFetchOk = true;
+    resourceItems = resourceResult.value.items;
+    resourceConsidered = resourceResult.value.considered;
+  }
+
+  const selected = selectRecentContextItems([...chatItems, ...aiFeedItems, ...resourceItems]);
+  const retrievalLatencyMs = Math.max(0, Date.now() - startedAt);
+
+  return {
+    ok: true,
+    community_id: String(args.communityId),
+    identity: mapIdentity(community),
+    retrieved_at: toIsoString(Date.now()),
+    query: queryText,
+    source_window: {
+      chat_messages_considered: chatConsidered,
+      ai_feed_items_considered: aiFeedConsidered,
+      resources_considered: resourceConsidered,
+    },
+    source_counts: {
+      chat: selected.items.filter((item) => item.source_type === "chat").length,
+      ai_feed: selected.items.filter((item) => item.source_type === "ai_feed").length,
+      resource: selected.items.filter((item) => item.source_type === "resource").length,
+    },
+    recent_context: selected.items,
+    diagnostics: {
+      version: 1,
+      retrieval_version: "recent_context_v1",
+      retrieval_latency_ms: retrievalLatencyMs,
+      retrieved_items_used: selected.items.length,
+      fallback_used: selected.fallbackUsed,
+      chat_fetch_ok: chatFetchOk,
+      ai_feed_fetch_ok: aiFeedFetchOk,
+      resource_fetch_ok: resourceFetchOk,
+    },
+  };
+}
+
 export const readCommunityRecentContext = query({
   args: {
     userId: v.optional(v.id("users")),
@@ -235,82 +329,38 @@ export const readCommunityRecentContext = query({
     query: v.string(),
   },
   handler: async (ctx, args) => {
-    const startedAt = Date.now();
     const userId = await resolveUserIdForAuthenticatedRequest({
       ctx,
       userId: args.userId,
       authSubject: args.authSubject ?? null,
     });
-    const { community } = await requireCommunityChatAccess({
+    return await readCommunityRecentContextForResolvedUser({
       ctx,
-      communityId: args.communityId,
       userId,
+      communityId: args.communityId,
+      query: args.query,
     });
-    const queryText = normalizeQueryText(args.query);
-    const tokens = tokenizeQuery(queryText);
+  },
+});
 
-    let chatFetchOk = false;
-    let aiFeedFetchOk = false;
-    let resourceFetchOk = false;
-    let chatItems: RecentContextItem[] = [];
-    let aiFeedItems: RecentContextItem[] = [];
-    let resourceItems: RecentContextItem[] = [];
-    let chatConsidered = 0;
-    let aiFeedConsidered = 0;
-    let resourceConsidered = 0;
-
-    const [chatResult, aiFeedResult, resourceResult] = await Promise.allSettled([
-      listRecentChatItems({ ctx, communityId: args.communityId, tokens }),
-      listRecentAiFeedItems({ ctx, communityId: args.communityId, tokens }),
-      listRecentResourceItems({ ctx, communityId: args.communityId, tokens }),
-    ]);
-
-    if (chatResult.status === "fulfilled") {
-      chatFetchOk = true;
-      chatItems = chatResult.value.items;
-      chatConsidered = chatResult.value.considered;
-    }
-    if (aiFeedResult.status === "fulfilled") {
-      aiFeedFetchOk = true;
-      aiFeedItems = aiFeedResult.value.items;
-      aiFeedConsidered = aiFeedResult.value.considered;
-    }
-    if (resourceResult.status === "fulfilled") {
-      resourceFetchOk = true;
-      resourceItems = resourceResult.value.items;
-      resourceConsidered = resourceResult.value.considered;
-    }
-
-    const selected = selectRecentContextItems([...chatItems, ...aiFeedItems, ...resourceItems]);
-    const retrievalLatencyMs = Math.max(0, Date.now() - startedAt);
-
-    return {
-      ok: true,
-      community_id: String(args.communityId),
-      identity: mapIdentity(community),
-      retrieved_at: toIsoString(Date.now()),
-      query: queryText,
-      source_window: {
-        chat_messages_considered: chatConsidered,
-        ai_feed_items_considered: aiFeedConsidered,
-        resources_considered: resourceConsidered,
-      },
-      source_counts: {
-        chat: selected.items.filter((item) => item.source_type === "chat").length,
-        ai_feed: selected.items.filter((item) => item.source_type === "ai_feed").length,
-        resource: selected.items.filter((item) => item.source_type === "resource").length,
-      },
-      recent_context: selected.items,
-      diagnostics: {
-        version: 1,
-        retrieval_version: "recent_context_v1",
-        retrieval_latency_ms: retrievalLatencyMs,
-        retrieved_items_used: selected.items.length,
-        fallback_used: selected.fallbackUsed,
-        chat_fetch_ok: chatFetchOk,
-        ai_feed_fetch_ok: aiFeedFetchOk,
-        resource_fetch_ok: resourceFetchOk,
-      },
-    };
+export const readCodexHarnessTrustedCommunityRecentContextInternal = internalQuery({
+  args: {
+    userId: v.id("users"),
+    authSubject: v.string(),
+    communityId: v.id("communities"),
+    query: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const userId = await requireTrustedUserSubject({
+      ctx,
+      userId: args.userId,
+      authSubject: args.authSubject,
+    });
+    return await readCommunityRecentContextForResolvedUser({
+      ctx,
+      userId,
+      communityId: args.communityId,
+      query: args.query,
+    });
   },
 });

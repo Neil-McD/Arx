@@ -1,0 +1,1174 @@
+import { internal } from "./_generated/api";
+import { action, mutation, query } from "./_generated/server";
+import { v } from "convex/values";
+
+const DEFAULT_OWNER_EMAIL = "neilmcdevittd@gmail.com";
+const DEFAULT_PROJECT_NAME = "General";
+const STAGING_HOSTNAME = "polynet-staging.vercel.app";
+
+const expectedCommunityArg = v.object({
+  slug: v.string(),
+  name: v.string(),
+  visibility: v.optional(v.union(v.literal("published"), v.literal("unlisted"))),
+  entryPolicy: v.optional(
+    v.union(v.literal("open"), v.literal("approval"), v.literal("paid_subscription")),
+  ),
+  oneLiner: v.optional(v.string()),
+});
+
+type ExpectedCommunity = {
+  slug: string;
+  name: string;
+  visibility?: "published" | "unlisted";
+  entryPolicy?: "open" | "approval" | "paid_subscription";
+  oneLiner?: string;
+};
+
+type StagingAction = {
+  entity: string;
+  key: string;
+  action: string;
+  id?: string;
+  changedFields?: string[];
+};
+
+type CodexHarnessOperabilityFingerprint = {
+  nowMs: number;
+  bridgeSessions: {
+    activeCount: number;
+    expiredCount: number;
+    revokedActiveCount: number;
+    sampleActiveRunIds: string[];
+  };
+  bindingLocks: {
+    activeCount: number;
+    expiredCount: number;
+    duplicateActiveKeyCount: number;
+    duplicateActiveRowCount: number;
+    sampleDuplicateActiveKeys: string[];
+    sampleActiveRunIds: string[];
+  };
+  threadBindings: {
+    activeCount: number;
+    rotatedCount: number;
+    duplicateActiveKeyCount: number;
+    duplicateActiveRowCount: number;
+    duplicateAnyStatusKeyCount: number;
+    sampleDuplicateActiveKeys: string[];
+  };
+};
+
+const CODEX_THREAD_BINDING_EVIDENCE_EVENT_TYPES = new Set([
+  "runtime_agent_harness_selected",
+  "runtime_agent_harness_prepared",
+  "codex_mcp_projection_resolved",
+  "codex_thread_binding_resolved",
+  "codex_thread_binding_lock_acquired",
+  "codex_thread_binding_lock_conflict",
+  "codex_thread_binding_lock_released",
+  "codex_thread_binding_created",
+  "codex_thread_binding_resumed",
+  "codex_thread_binding_rotated",
+  "codex_thread_binding_persist_failed",
+  "codex_thread_binding_persist_skipped",
+  "codex_mcp_projection_fingerprint_changed",
+  "codex_harness_primary_completed",
+  "codex_harness_primary_dynamic_tool_event",
+  "codex_harness_dynamic_tool_bridge_call_started",
+  "codex_harness_dynamic_tool_bridge_call_completed",
+  "codex_harness_dynamic_tool_bridge_call_failed",
+  "codex_harness_dynamic_tool_bridge_call_finished",
+  "codex_harness_dynamic_tool_bridge_call_denied",
+]);
+
+function readEnv(name: string): string {
+  try {
+    const value = (globalThis as any)?.process?.env?.[name];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  } catch {
+    // Convex environments may not expose process.env in every runtime.
+  }
+  return "";
+}
+
+function normalizeEmail(raw: unknown): string {
+  return String(raw ?? "").trim().toLowerCase();
+}
+
+function normalizeSlug(raw: unknown): string {
+  return String(raw ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 96);
+}
+
+function normalizeText(raw: unknown): string {
+  return String(raw ?? "").trim().replace(/\s+/g, " ");
+}
+
+function normalizeLimit(raw: unknown, fallback: number, max: number): number {
+  const value = Math.floor(Number(raw));
+  if (!Number.isFinite(value)) return fallback;
+  return Math.max(1, Math.min(max, value));
+}
+
+function normalizeOptionalId(raw: unknown): string | null {
+  const value = String(raw ?? "").trim();
+  return value || null;
+}
+
+function pickPayloadFields(
+  payload: unknown,
+  fields: readonly string[],
+): Record<string, unknown> {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return {};
+  const record = payload as Record<string, unknown>;
+  const out: Record<string, unknown> = {};
+  for (const field of fields) {
+    if (field in record) out[field] = record[field];
+  }
+  return out;
+}
+
+function summarizeCodexThreadBindingEvidencePayload(args: {
+  eventType: string;
+  payload: unknown;
+}): Record<string, unknown> {
+  const common = [
+    "run_id",
+    "status",
+    "code",
+    "message",
+    "latency_ms",
+    "projection_fingerprint",
+    "projection_version",
+  ];
+  if (args.eventType === "runtime_agent_harness_prepared") {
+    const base = pickPayloadFields(args.payload, [
+      "run_id",
+      "harness_id",
+      "execution_placement",
+      "inference_source",
+      "stream",
+      "thread_id",
+      "project_id",
+      "community_scope_id",
+      "mounted_tool_count",
+      "active_tool_count",
+      "fixed_allowed_tool_count",
+      "codex_primary_canary",
+      "codex_mcp_projection",
+      "skill_counts",
+    ]);
+    return base;
+  }
+  if (args.eventType === "runtime_agent_harness_selected") {
+    return pickPayloadFields(args.payload, [
+      "run_id",
+      "selected_harness_id",
+      "candidate_harness_id",
+      "fallback_harness_id",
+      "execution_placement",
+      "selection_reason",
+      "codex_primary_enabled",
+      "codex_route_selected",
+      "stream",
+    ]);
+  }
+  if (args.eventType === "codex_mcp_projection_resolved") {
+    return pickPayloadFields(args.payload, [
+      "run_id",
+      "projection_owner",
+      "codex_route_selected",
+      "version",
+      "mode",
+      "fingerprint",
+      "eligible_tool_count",
+      "blocked_tool_count",
+      "server_count",
+      "eligible_runtime_tool_names",
+    ]);
+  }
+  if (args.eventType === "codex_thread_binding_resolved") {
+    return pickPayloadFields(args.payload, [
+      ...common,
+      "action",
+      "reason",
+      "binding_key_present",
+      "resume_thread_id_present",
+      "codex_home_persistent",
+      "previous_codex_thread_id_present",
+      "duplicate_binding_count",
+    ]);
+  }
+  if (
+    args.eventType === "codex_thread_binding_lock_acquired" ||
+    args.eventType === "codex_thread_binding_lock_conflict" ||
+    args.eventType === "codex_thread_binding_lock_released"
+  ) {
+    return pickPayloadFields(args.payload, [
+      ...common,
+      "status",
+      "code",
+      "reason",
+      "binding_key_present",
+      "blocking_run_id_present",
+      "lock_expires_at",
+      "duplicate_lock_count",
+      "released_lock_row_count",
+      "repaired_duplicate_lock_count",
+    ]);
+  }
+  if (
+    args.eventType === "codex_thread_binding_created" ||
+    args.eventType === "codex_thread_binding_resumed" ||
+    args.eventType === "codex_thread_binding_rotated"
+  ) {
+    return pickPayloadFields(args.payload, [
+      ...common,
+      "lifecycle_action",
+      "binding_key_present",
+      "codex_thread_id_present",
+      "observed_codex_thread_id",
+      "resume_requested_codex_thread_id",
+      "previous_codex_thread_id_present",
+      "rotated_reason",
+      "resume_attempted",
+      "resume_failed",
+      "resume_thread_id_matched",
+      "resume_error_message",
+      "duplicate_binding_count",
+      "repaired_duplicate_binding_count",
+      "codex_session_archive_strategy",
+      "codex_session_archive_present",
+      "codex_session_archive_restored",
+      "codex_session_archive_persisted",
+      "codex_session_archive_error_message",
+    ]);
+  }
+  if (
+    args.eventType === "codex_thread_binding_persist_skipped" ||
+    args.eventType === "codex_thread_binding_persist_failed"
+  ) {
+    return pickPayloadFields(args.payload, [
+      ...common,
+      "code",
+      "message",
+      "binding_key_present",
+      "codex_thread_id_present",
+      "observed_codex_thread_id",
+      "projection_fingerprint",
+      "projection_version",
+      "codex_session_archive_strategy",
+      "codex_session_archive_error_message",
+    ]);
+  }
+  if (args.eventType === "codex_harness_primary_completed") {
+    return pickPayloadFields(args.payload, [
+      ...common,
+      "model",
+      "codex_version",
+      "thread_id_present",
+      "observed_codex_thread_id",
+      "thread_lifecycle_action",
+      "thread_resume_attempted",
+      "thread_resume_failed",
+      "thread_resume_thread_id_matched",
+      "resume_requested_codex_thread_id",
+      "thread_resume_error_message",
+      "codex_home_persistent",
+      "codex_home_runtime_isolated",
+      "codex_session_archive_strategy",
+      "codex_session_archive_present",
+      "codex_session_archive_restored",
+      "codex_session_archive_persisted",
+      "codex_session_archive_error_message",
+      "binding_action",
+      "turn_id_present",
+      "sandbox_policy_type",
+      "sandbox_policy_network_access",
+      "sandbox_policy_writable_root_count",
+      "sandbox_policy_exclude_tmpdir_env_var",
+      "sandbox_policy_exclude_slash_tmp",
+      "dynamic_tool_bridge_configured",
+      "dynamic_tool_request_count",
+      "dynamic_tool_response_count",
+      "dynamic_tool_failure_count",
+      "output_sha256",
+      "stdout_chars",
+      "stage",
+      "exit_code",
+    ]);
+  }
+  if (
+    args.eventType === "codex_harness_dynamic_tool_bridge_call_started" ||
+    args.eventType === "codex_harness_dynamic_tool_bridge_call_completed" ||
+    args.eventType === "codex_harness_dynamic_tool_bridge_call_failed" ||
+    args.eventType === "codex_harness_dynamic_tool_bridge_call_finished" ||
+    args.eventType === "codex_harness_dynamic_tool_bridge_call_denied" ||
+    args.eventType === "codex_harness_primary_dynamic_tool_event"
+  ) {
+    return pickPayloadFields(args.payload, [
+      ...common,
+      "tool_name",
+      "call_id",
+      "sequence",
+      "success",
+      "args_present",
+      "output_chars",
+      "output_sha256",
+      "error_code",
+    ]);
+  }
+  return pickPayloadFields(args.payload, common);
+}
+
+function readStagingHostname(): string {
+  const raw = readEnv("ARX_PUBLIC_APP_URL") || readEnv("VITE_PUBLIC_APP_URL");
+  if (!raw) return "";
+  try {
+    return new URL(raw).hostname.toLowerCase();
+  } catch {
+    return "";
+  }
+}
+
+function readCodexDynamicToolBridgeUrl(): string {
+  const explicit = readEnv("POLYNET_CODEX_DYNAMIC_TOOL_BRIDGE_URL");
+  if (explicit) return explicit;
+  const siteUrl =
+    readEnv("CONVEX_SITE_URL") ||
+    readEnv("VITE_CONVEX_SITE_URL") ||
+    readEnv("PUBLIC_CONVEX_SITE_URL");
+  return siteUrl ? `${siteUrl.replace(/\/+$/, "")}/runtime/codex_harness_dynamic_tool` : "";
+}
+
+async function buildCodexHarnessOperabilityFingerprint(args: {
+  ctx: any;
+  nowMs: number;
+}): Promise<CodexHarnessOperabilityFingerprint> {
+  const expiredBridgeSessions = await args.ctx.db
+    .query("codexHarnessBridgeSessions")
+    .withIndex("by_expiresAt", (q: any) => q.lte("expiresAt", args.nowMs))
+    .collect();
+  const futureBridgeSessions = await args.ctx.db
+    .query("codexHarnessBridgeSessions")
+    .withIndex("by_expiresAt", (q: any) => q.gt("expiresAt", args.nowMs))
+    .collect();
+  const expiredBindingLocks = await args.ctx.db
+    .query("codexHarnessThreadBindingLocks")
+    .withIndex("by_expiresAt", (q: any) => q.lte("expiresAt", args.nowMs))
+    .collect();
+  const futureBindingLocks = await args.ctx.db
+    .query("codexHarnessThreadBindingLocks")
+    .withIndex("by_expiresAt", (q: any) => q.gt("expiresAt", args.nowMs))
+    .collect();
+  const threadBindings = await args.ctx.db
+    .query("codexHarnessThreadBindings")
+    .collect();
+  const activeBridgeSessions = futureBridgeSessions.filter(
+    (session: any) => !session.revokedAt,
+  );
+  const revokedActiveBridgeSessions = futureBridgeSessions.filter(
+    (session: any) => Boolean(session.revokedAt),
+  );
+  const activeBindingLocks = futureBindingLocks;
+  const activeBindingLockDuplicates = summarizeDuplicateRowsByKey(
+    activeBindingLocks,
+    "bindingKey",
+  );
+  const activeThreadBindings = threadBindings.filter(
+    (binding: any) => binding.status === "active",
+  );
+  const rotatedThreadBindings = threadBindings.filter(
+    (binding: any) => binding.status === "rotated",
+  );
+  const activeThreadBindingDuplicates = summarizeDuplicateRowsByKey(
+    activeThreadBindings,
+    "bindingKey",
+  );
+  const anyThreadBindingDuplicates = summarizeDuplicateRowsByKey(
+    threadBindings,
+    "bindingKey",
+  );
+  return {
+    nowMs: args.nowMs,
+    bridgeSessions: {
+      activeCount: activeBridgeSessions.length,
+      expiredCount: expiredBridgeSessions.length,
+      revokedActiveCount: revokedActiveBridgeSessions.length,
+      sampleActiveRunIds: activeBridgeSessions
+        .map((session: any) => normalizeText(session.runId))
+        .filter(Boolean)
+        .slice(0, 10),
+    },
+    bindingLocks: {
+      activeCount: activeBindingLocks.length,
+      expiredCount: expiredBindingLocks.length,
+      duplicateActiveKeyCount: activeBindingLockDuplicates.duplicateKeyCount,
+      duplicateActiveRowCount: activeBindingLockDuplicates.duplicateRowCount,
+      sampleDuplicateActiveKeys: activeBindingLockDuplicates.sampleDuplicateKeys,
+      sampleActiveRunIds: activeBindingLocks
+        .map((lock: any) => normalizeText(lock.runId))
+        .filter(Boolean)
+        .slice(0, 10),
+    },
+    threadBindings: {
+      activeCount: activeThreadBindings.length,
+      rotatedCount: rotatedThreadBindings.length,
+      duplicateActiveKeyCount: activeThreadBindingDuplicates.duplicateKeyCount,
+      duplicateActiveRowCount: activeThreadBindingDuplicates.duplicateRowCount,
+      duplicateAnyStatusKeyCount: anyThreadBindingDuplicates.duplicateKeyCount,
+      sampleDuplicateActiveKeys: activeThreadBindingDuplicates.sampleDuplicateKeys,
+    },
+  };
+}
+
+function summarizeDuplicateRowsByKey(rows: readonly any[], keyField: string): {
+  duplicateKeyCount: number;
+  duplicateRowCount: number;
+  sampleDuplicateKeys: string[];
+} {
+  const counts = new Map<string, number>();
+  for (const row of rows) {
+    const key = normalizeText(row?.[keyField]);
+    if (!key) continue;
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  const duplicateEntries = [...counts.entries()].filter(([, count]) => count > 1);
+  return {
+    duplicateKeyCount: duplicateEntries.length,
+    duplicateRowCount: duplicateEntries.reduce((sum, [, count]) => sum + count - 1, 0),
+    sampleDuplicateKeys: duplicateEntries.map(([key]) => key).slice(0, 10),
+  };
+}
+
+function assertStagingMaintenanceAllowed(args: { maintenanceToken: string }): void {
+  const enabled = readEnv("POLYNET_STAGING_MAINTENANCE_ENABLED").toLowerCase() === "true";
+  if (!enabled) throw new Error("staging_maintenance_disabled");
+
+  const hostname = readStagingHostname();
+  if (hostname !== STAGING_HOSTNAME) {
+    throw new Error("staging_maintenance_wrong_environment");
+  }
+
+  const expectedToken = readEnv("POLYNET_STAGING_MAINTENANCE_TOKEN");
+  if (!expectedToken) throw new Error("staging_maintenance_token_not_configured");
+  if (!args.maintenanceToken || args.maintenanceToken !== expectedToken) {
+    throw new Error("staging_maintenance_token_invalid");
+  }
+}
+
+function defaultExpectedCommunities(): ExpectedCommunity[] {
+  return [
+    {
+      slug: "polynet",
+      name: "Polynet",
+      visibility: "published",
+      entryPolicy: "open",
+      oneLiner: "PolyNet staging control community.",
+    },
+    {
+      slug: "distribution-engineering",
+      name: "Distribution Engineering",
+      visibility: "published",
+      entryPolicy: "open",
+      oneLiner: "Distribution Engineering staging community.",
+    },
+  ];
+}
+
+function normalizeExpectedCommunities(raw: readonly ExpectedCommunity[] | undefined): ExpectedCommunity[] {
+  const source = raw && raw.length > 0 ? raw : defaultExpectedCommunities();
+  const out: ExpectedCommunity[] = [];
+  const seen = new Set<string>();
+  for (const item of source) {
+    const slug = normalizeSlug(item.slug);
+    const name = normalizeText(item.name);
+    if (!slug || !name || seen.has(slug)) continue;
+    seen.add(slug);
+    out.push({
+      slug,
+      name,
+      visibility: item.visibility ?? "published",
+      entryPolicy: item.entryPolicy ?? "open",
+      oneLiner: normalizeText(item.oneLiner) || undefined,
+    });
+  }
+  return out;
+}
+
+async function findOwnerUser(args: {
+  ctx: any;
+  ownerId?: string | null;
+  ownerEmail?: string | null;
+  ownerAuthSubject?: string | null;
+}) {
+  const ownerId = normalizeOptionalId(args.ownerId);
+  const ownerEmail = normalizeEmail(args.ownerEmail) || DEFAULT_OWNER_EMAIL;
+  const ownerAuthSubject = normalizeText(args.ownerAuthSubject);
+  const byOwnerId = ownerId ? await args.ctx.db.get(ownerId as any) : null;
+  const byEmail = ownerEmail
+    ? await args.ctx.db
+        .query("users")
+        .withIndex("by_normalizedEmail", (q: any) => q.eq("normalizedEmail", ownerEmail))
+        .first()
+    : null;
+  const byEmailFallback =
+    !byEmail && ownerEmail
+      ? (await args.ctx.db.query("users").collect()).find(
+          (row: any) =>
+            normalizeEmail(row.normalizedEmail) === ownerEmail ||
+            normalizeEmail(row.email) === ownerEmail,
+        ) ?? null
+      : null;
+  const byAuthSubject = ownerAuthSubject
+    ? await args.ctx.db
+        .query("users")
+        .withIndex("by_authSubject", (q: any) => q.eq("authSubject", ownerAuthSubject))
+        .first()
+    : null;
+  if (byOwnerId && byEmail && String(byOwnerId._id) !== String(byEmail._id)) {
+    throw new Error("staging_owner_id_email_mismatch");
+  }
+  if (byOwnerId && byEmailFallback && String(byOwnerId._id) !== String(byEmailFallback._id)) {
+    throw new Error("staging_owner_id_email_mismatch");
+  }
+  if (byOwnerId && byAuthSubject && String(byOwnerId._id) !== String(byAuthSubject._id)) {
+    throw new Error("staging_owner_id_auth_subject_mismatch");
+  }
+  if (byEmail && byAuthSubject && String(byEmail._id) !== String(byAuthSubject._id)) {
+    throw new Error("staging_owner_identity_mismatch");
+  }
+  const owner = byOwnerId ?? byEmail ?? byEmailFallback ?? byAuthSubject;
+  if (!owner) throw new Error("staging_owner_user_missing");
+  return owner;
+}
+
+async function readCommunityBySlug(ctx: any, slug: string) {
+  return await ctx.db
+    .query("communities")
+    .withIndex("by_slug", (q: any) => q.eq("slug", slug))
+    .first();
+}
+
+async function ensureExpectedCommunity(args: {
+  ctx: any;
+  ownerId: any;
+  expected: ExpectedCommunity;
+  dryRun: boolean;
+  nowMs: number;
+}): Promise<{ row: any | null; action: StagingAction }> {
+  const existing = await readCommunityBySlug(args.ctx, args.expected.slug);
+  if (!existing) {
+    const action: StagingAction = {
+      entity: "community",
+      key: args.expected.slug,
+      action: args.dryRun ? "would_create" : "created",
+      changedFields: ["ownerId", "slug", "name", "visibility", "entryPolicy", "oneLiner"],
+    };
+    if (args.dryRun) return { row: null, action };
+    const id = await args.ctx.db.insert("communities", {
+      ownerId: args.ownerId,
+      slug: args.expected.slug,
+      name: args.expected.name,
+      oneLiner: args.expected.oneLiner,
+      visibility: args.expected.visibility ?? "published",
+      entryPolicy: args.expected.entryPolicy ?? "open",
+      createdAt: args.nowMs,
+      updatedAt: args.nowMs,
+    });
+    const row = await args.ctx.db.get(id);
+    return { row, action: { ...action, id: String(id) } };
+  }
+
+  const patch: Record<string, unknown> = {};
+  const changedFields: string[] = [];
+  if (String(existing.ownerId) !== String(args.ownerId)) {
+    patch.ownerId = args.ownerId;
+    changedFields.push("ownerId");
+  }
+  if (normalizeText(existing.name) !== args.expected.name) {
+    patch.name = args.expected.name;
+    changedFields.push("name");
+  }
+  if (existing.visibility !== (args.expected.visibility ?? "published")) {
+    patch.visibility = args.expected.visibility ?? "published";
+    changedFields.push("visibility");
+  }
+  if (existing.entryPolicy !== (args.expected.entryPolicy ?? "open")) {
+    patch.entryPolicy = args.expected.entryPolicy ?? "open";
+    changedFields.push("entryPolicy");
+  }
+  if (!normalizeText(existing.oneLiner) && args.expected.oneLiner) {
+    patch.oneLiner = args.expected.oneLiner;
+    changedFields.push("oneLiner");
+  }
+  if (changedFields.length === 0) {
+    return {
+      row: existing,
+      action: {
+        entity: "community",
+        key: args.expected.slug,
+        id: String(existing._id),
+        action: "already_ok",
+      },
+    };
+  }
+  if (!args.dryRun) {
+    await args.ctx.db.patch(existing._id, {
+      ...patch,
+      updatedAt: args.nowMs,
+    });
+  }
+  const row = args.dryRun ? existing : await args.ctx.db.get(existing._id);
+  return {
+    row,
+    action: {
+      entity: "community",
+      key: args.expected.slug,
+      id: String(existing._id),
+      action: args.dryRun ? "would_repair" : "repaired",
+      changedFields,
+    },
+  };
+}
+
+async function ensureExpectedProject(args: {
+  ctx: any;
+  ownerId: any;
+  projectName: string;
+  dryRun: boolean;
+  nowMs: number;
+}): Promise<{ row: any | null; action: StagingAction; existingCount: number }> {
+  const rows = await args.ctx.db
+    .query("cloudProjects")
+    .withIndex("by_owner", (q: any) => q.eq("ownerId", args.ownerId))
+    .collect();
+  const matching = rows
+    .filter((row: any) => normalizeText(row.name) === args.projectName)
+    .sort((a: any, b: any) => (a.createdAt ?? 0) - (b.createdAt ?? 0));
+  const existing = matching[0] ?? null;
+  if (existing) {
+    return {
+      row: existing,
+      existingCount: matching.length,
+      action: {
+        entity: "cloudProject",
+        key: args.projectName,
+        id: String(existing._id),
+        action: matching.length > 1 ? "already_ok_duplicate_names_present" : "already_ok",
+      },
+    };
+  }
+  const action: StagingAction = {
+    entity: "cloudProject",
+    key: args.projectName,
+    action: args.dryRun ? "would_create" : "created",
+    changedFields: ["ownerId", "name", "status"],
+  };
+  if (args.dryRun) return { row: null, action, existingCount: 0 };
+  const id = await args.ctx.db.insert("cloudProjects", {
+    ownerId: args.ownerId,
+    name: args.projectName,
+    status: "active",
+    createdAt: args.nowMs,
+    updatedAt: args.nowMs,
+  });
+  return {
+    row: await args.ctx.db.get(id),
+    action: { ...action, id: String(id) },
+    existingCount: 1,
+  };
+}
+
+async function buildFingerprint(args: {
+  ctx: any;
+  ownerId?: string | null;
+  ownerEmail?: string | null;
+  ownerAuthSubject?: string | null;
+  communities?: readonly ExpectedCommunity[];
+  projectName?: string | null;
+}) {
+  const owner = await findOwnerUser({
+    ctx: args.ctx,
+    ownerId: args.ownerId ?? null,
+    ownerEmail: args.ownerEmail,
+    ownerAuthSubject: args.ownerAuthSubject,
+  });
+  const expectedCommunities = normalizeExpectedCommunities(args.communities);
+  const projectName = normalizeText(args.projectName) || DEFAULT_PROJECT_NAME;
+  const communities = [];
+  for (const expected of expectedCommunities) {
+    const row = await readCommunityBySlug(args.ctx, expected.slug);
+    communities.push({
+      slug: expected.slug,
+      expectedName: expected.name,
+      id: row ? String(row._id) : null,
+      name: row?.name ?? null,
+      ownerId: row ? String(row.ownerId) : null,
+      ownedByExpectedUser: row ? String(row.ownerId) === String(owner._id) : false,
+      visibility: row?.visibility ?? null,
+      entryPolicy: row?.entryPolicy ?? null,
+      exists: Boolean(row),
+    });
+  }
+
+  const projects = await args.ctx.db
+    .query("cloudProjects")
+    .withIndex("by_owner", (q: any) => q.eq("ownerId", owner._id))
+    .collect();
+  const matchingProjects = projects
+    .filter((row: any) => normalizeText(row.name) === projectName)
+    .sort((a: any, b: any) => (a.createdAt ?? 0) - (b.createdAt ?? 0));
+  const nowMs = Date.now();
+  const codexHarnessOperability = await buildCodexHarnessOperabilityFingerprint({
+    ctx: args.ctx,
+    nowMs,
+  });
+
+  const chatgptConnections = await args.ctx.db
+    .query("userProviderConnections")
+    .withIndex("by_user_provider", (q: any) => q.eq("userId", owner._id).eq("provider", "chatgpt"))
+    .collect();
+  const pendingChatgptAuthStates = await args.ctx.db
+    .query("userProviderAuthStates")
+    .withIndex("by_user_provider", (q: any) => q.eq("userId", owner._id).eq("provider", "chatgpt"))
+    .collect();
+  const pendingChatgptDeviceStates = await args.ctx.db
+    .query("userProviderDeviceAuthStates")
+    .withIndex("by_user_provider", (q: any) => q.eq("userId", owner._id).eq("provider", "chatgpt"))
+    .collect();
+
+  return {
+    staging: {
+      hostname: readStagingHostname(),
+      appUrlConfigured: Boolean(readEnv("ARX_PUBLIC_APP_URL") || readEnv("VITE_PUBLIC_APP_URL")),
+      maintenanceEnabled: readEnv("POLYNET_STAGING_MAINTENANCE_ENABLED").toLowerCase() === "true",
+    },
+    owner: {
+      id: String(owner._id),
+      email: owner.email ?? null,
+      normalizedEmail: owner.normalizedEmail ?? null,
+      displayName: owner.displayName ?? null,
+      authSubjectPresent: Boolean(owner.authSubject),
+    },
+    communities,
+    project: {
+      expectedName: projectName,
+      exists: matchingProjects.length > 0,
+      duplicateNameCount: matchingProjects.length,
+      duplicateIds: matchingProjects.map((row: any) => String(row._id)),
+      id: matchingProjects[0] ? String(matchingProjects[0]._id) : null,
+      name: matchingProjects[0]?.name ?? null,
+    },
+    codex: {
+      harnessEnabled: readEnv("POLYNET_CODEX_HARNESS_ENABLED").toLowerCase() === "true",
+      executorEnabled: readEnv("POLYNET_CODEX_HARNESS_EXECUTOR_ENABLED").toLowerCase() === "true",
+      primaryEnabled: readEnv("POLYNET_CODEX_HARNESS_PRIMARY_ENABLED").toLowerCase() === "true",
+      probeMode: readEnv("POLYNET_CODEX_HARNESS_PROBE_MODE") || null,
+      dynamicToolBridgeUrlConfigured: Boolean(readCodexDynamicToolBridgeUrl()),
+      nonStreamingCanaryFallbackEnabled:
+        readEnv("POLYNET_CODEX_PRIMARY_CANARY_NON_STREAMING_FALLBACK").toLowerCase() === "true",
+      daytonaApiKeyPresent: Boolean(readEnv("DAYTONA_API_KEY")),
+      daytonaOrgIdPresent: Boolean(readEnv("DAYTONA_ORG_ID") || readEnv("DAYTONA_ORGANIZATION_ID")),
+      daytonaSnapshotPresent: Boolean(readEnv("DAYTONA_SNAPSHOT")),
+      openaiApiKeyPresent: Boolean(readEnv("OPENAI_API_KEY")),
+      chatgptConnectionCount: chatgptConnections.length,
+      pendingChatgptAuthStateCount: pendingChatgptAuthStates.length,
+      pendingChatgptDeviceAuthStateCount: pendingChatgptDeviceStates.length,
+      operability: codexHarnessOperability,
+    },
+  };
+}
+
+export const getStagingWorldFingerprint = query({
+  args: {
+    maintenanceToken: v.string(),
+    ownerId: v.optional(v.string()),
+    ownerEmail: v.optional(v.string()),
+    ownerAuthSubject: v.optional(v.string()),
+    projectName: v.optional(v.string()),
+    communities: v.optional(v.array(expectedCommunityArg)),
+  },
+  handler: async (ctx, args) => {
+    assertStagingMaintenanceAllowed({ maintenanceToken: args.maintenanceToken });
+    return await buildFingerprint({
+      ctx,
+      ownerId: args.ownerId ?? null,
+      ownerEmail: args.ownerEmail ?? null,
+      ownerAuthSubject: args.ownerAuthSubject ?? null,
+      projectName: args.projectName ?? null,
+      communities: args.communities,
+    });
+  },
+});
+
+export const ensureStagingWorld = mutation({
+  args: {
+    maintenanceToken: v.string(),
+    ownerId: v.optional(v.string()),
+    ownerEmail: v.optional(v.string()),
+    ownerAuthSubject: v.optional(v.string()),
+    projectName: v.optional(v.string()),
+    communities: v.optional(v.array(expectedCommunityArg)),
+    dryRun: v.optional(v.boolean()),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    assertStagingMaintenanceAllowed({ maintenanceToken: args.maintenanceToken });
+    const nowMs = Math.floor(args.nowMs ?? Date.now());
+    const dryRun = args.dryRun === true;
+    const owner = await findOwnerUser({
+      ctx,
+      ownerId: args.ownerId ?? null,
+      ownerEmail: args.ownerEmail ?? null,
+      ownerAuthSubject: args.ownerAuthSubject ?? null,
+    });
+    const expectedCommunities = normalizeExpectedCommunities(args.communities);
+    const projectName = normalizeText(args.projectName) || DEFAULT_PROJECT_NAME;
+    const actions: StagingAction[] = [];
+    for (const expected of expectedCommunities) {
+      const result = await ensureExpectedCommunity({
+        ctx,
+        ownerId: owner._id,
+        expected,
+        dryRun,
+        nowMs,
+      });
+      actions.push(result.action);
+    }
+    const project = await ensureExpectedProject({
+      ctx,
+      ownerId: owner._id,
+      projectName,
+      dryRun,
+      nowMs,
+    });
+    actions.push(project.action);
+
+    const fingerprint = await buildFingerprint({
+      ctx,
+      ownerId: args.ownerId ?? null,
+      ownerEmail: args.ownerEmail ?? null,
+      ownerAuthSubject: args.ownerAuthSubject ?? null,
+      projectName,
+      communities: expectedCommunities,
+    });
+    return {
+      ok: true,
+      dryRun,
+      actions,
+      fingerprint,
+    };
+  },
+});
+
+export const cleanupCodexHarnessOperability = action({
+  args: {
+    maintenanceToken: v.string(),
+    nowMs: v.optional(v.number()),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args): Promise<Record<string, unknown>> => {
+    assertStagingMaintenanceAllowed({ maintenanceToken: args.maintenanceToken });
+    const nowMs = Number.isFinite(args.nowMs)
+      ? Math.floor(args.nowMs as number)
+      : Date.now();
+    const limit = normalizeLimit(args.limit, 25, 100);
+    const bridgeSessions = (await ctx.runMutation(
+      (internal as any).codexHarnessDynamicToolBridge
+        .cleanupExpiredCodexHarnessBridgeSessionsInternal,
+      {
+        nowMs,
+        limit,
+      },
+    )) as Record<string, unknown>;
+    const bindingLocks = (await ctx.runMutation(
+      (internal as any).codexHarnessThreadBindings
+        .cleanupExpiredCodexHarnessThreadBindingLocksInternal,
+      {
+        nowMs,
+        limit,
+      },
+    )) as Record<string, unknown>;
+    return {
+      ok: true,
+      nowMs,
+      limit,
+      bridgeSessions,
+      bindingLocks,
+    };
+  },
+});
+
+export const runCodexHarnessLockContentionCanary = action({
+  args: {
+    maintenanceToken: v.string(),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args): Promise<Record<string, unknown>> => {
+    assertStagingMaintenanceAllowed({ maintenanceToken: args.maintenanceToken });
+    const nowMs = Number.isFinite(args.nowMs)
+      ? Math.floor(args.nowMs as number)
+      : Date.now();
+    const suffix =
+      typeof crypto.randomUUID === "function"
+        ? crypto.randomUUID()
+        : `${nowMs}-${Math.random().toString(16).slice(2)}`;
+    const bindingKey = `staging:codex-lock-canary:${suffix}`;
+    const userId = "staging-codex-lock-canary-user";
+    const threadId = `staging-codex-lock-canary-thread:${suffix}`;
+    const projectId = "staging-codex-lock-canary-project";
+    const runIdA = `staging-codex-lock-canary-run-a:${suffix}`;
+    const runIdB = `staging-codex-lock-canary-run-b:${suffix}`;
+    const releaseA = async (): Promise<Record<string, unknown>> =>
+      (await ctx.runMutation(
+        (internal as any).codexHarnessThreadBindings
+          .releaseCodexHarnessThreadBindingLockInternal,
+        {
+          bindingKey,
+          runId: runIdA,
+          nowMs: Date.now(),
+        },
+      )) as Record<string, unknown>;
+    const releaseB = async (): Promise<Record<string, unknown>> =>
+      (await ctx.runMutation(
+        (internal as any).codexHarnessThreadBindings
+          .releaseCodexHarnessThreadBindingLockInternal,
+        {
+          bindingKey,
+          runId: runIdB,
+          nowMs: Date.now(),
+        },
+      )) as Record<string, unknown>;
+
+    try {
+      const acquireA = (await ctx.runMutation(
+        (internal as any).codexHarnessThreadBindings
+          .acquireCodexHarnessThreadBindingLockInternal,
+        {
+          bindingKey,
+          userId,
+          threadId,
+          projectId,
+          runId: runIdA,
+          nowMs,
+          ttlMs: 5 * 60 * 1000,
+        },
+      )) as Record<string, unknown>;
+      const acquireBWhileLocked = (await ctx.runMutation(
+        (internal as any).codexHarnessThreadBindings
+          .acquireCodexHarnessThreadBindingLockInternal,
+        {
+          bindingKey,
+          userId,
+          threadId,
+          projectId,
+          runId: runIdB,
+          nowMs: nowMs + 1,
+          ttlMs: 5 * 60 * 1000,
+        },
+      )) as Record<string, unknown>;
+      const reenterA = (await ctx.runMutation(
+        (internal as any).codexHarnessThreadBindings
+          .acquireCodexHarnessThreadBindingLockInternal,
+        {
+          bindingKey,
+          userId,
+          threadId,
+          projectId,
+          runId: runIdA,
+          nowMs: nowMs + 2,
+          ttlMs: 5 * 60 * 1000,
+        },
+      )) as Record<string, unknown>;
+      const releaseBWhileOwnedByA = await releaseB();
+      const releaseAResult = await releaseA();
+      const acquireBAfterRelease = (await ctx.runMutation(
+        (internal as any).codexHarnessThreadBindings
+          .acquireCodexHarnessThreadBindingLockInternal,
+        {
+          bindingKey,
+          userId,
+          threadId,
+          projectId,
+          runId: runIdB,
+          nowMs: nowMs + 3,
+          ttlMs: 5 * 60 * 1000,
+        },
+      )) as Record<string, unknown>;
+      const releaseBAfterAcquire = await releaseB();
+      return {
+        ok:
+          Boolean((acquireA as any)?.acquired) &&
+          (acquireBWhileLocked as any)?.acquired === false &&
+          (acquireBWhileLocked as any)?.reason === "binding_locked" &&
+          (acquireBWhileLocked as any)?.blockingRunId === runIdA &&
+          Boolean((reenterA as any)?.acquired) &&
+          (reenterA as any)?.reason === "lock_reentered" &&
+          (releaseBWhileOwnedByA as any)?.released === false &&
+          (releaseBWhileOwnedByA as any)?.reason === "lock_owned_by_another_run" &&
+          Boolean((releaseAResult as any)?.released) &&
+          Boolean((acquireBAfterRelease as any)?.acquired) &&
+          Boolean((releaseBAfterAcquire as any)?.released),
+        bindingKeyPresent: Boolean(bindingKey),
+        acquireA,
+        acquireBWhileLocked,
+        reenterA,
+        releaseBWhileOwnedByA,
+        releaseA: releaseAResult,
+        acquireBAfterRelease,
+        releaseBAfterAcquire,
+      };
+    } finally {
+      await releaseA();
+      await releaseB();
+    }
+  },
+});
+
+export const getCodexThreadBindingCanaryEvidence = query({
+  args: {
+    maintenanceToken: v.string(),
+    ownerId: v.optional(v.string()),
+    ownerEmail: v.optional(v.string()),
+    ownerAuthSubject: v.optional(v.string()),
+    projectName: v.optional(v.string()),
+    threadId: v.optional(v.string()),
+    runId: v.optional(v.string()),
+    sinceMs: v.optional(v.number()),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    assertStagingMaintenanceAllowed({ maintenanceToken: args.maintenanceToken });
+    const owner = await findOwnerUser({
+      ctx,
+      ownerId: args.ownerId ?? null,
+      ownerEmail: args.ownerEmail ?? null,
+      ownerAuthSubject: args.ownerAuthSubject ?? null,
+    });
+    const projectName = normalizeText(args.projectName) || DEFAULT_PROJECT_NAME;
+    const requestedThreadId = normalizeOptionalId(args.threadId);
+    const requestedRunId = normalizeOptionalId(args.runId);
+    const sinceMs = Number.isFinite(args.sinceMs)
+      ? Math.floor(args.sinceMs as number)
+      : 0;
+    const safeLimit = normalizeLimit(args.limit, 20, 50);
+    const projects = await ctx.db
+      .query("cloudProjects")
+      .withIndex("by_owner", (q: any) => q.eq("ownerId", owner._id))
+      .collect();
+    const project = projects
+      .filter((row: any) => normalizeText(row.name) === projectName)
+      .sort((a: any, b: any) => (a.createdAt ?? 0) - (b.createdAt ?? 0))[0] ?? null;
+
+    const runs = (await ctx.db
+      .query("runtimeRuns")
+      .withIndex("by_owner_startedAt", (q: any) => q.eq("ownerId", owner._id))
+      .order("desc")
+      .take(Math.max(safeLimit * 4, 40)))
+      .filter((run: any) => {
+        if (requestedRunId && String(run.runId) !== requestedRunId) return false;
+        if (requestedThreadId && String(run.threadId) !== requestedThreadId) return false;
+        if (project && run.projectId && String(run.projectId) !== String(project._id)) return false;
+        if (sinceMs > 0 && Number(run.startedAt ?? 0) < sinceMs) return false;
+        return true;
+      })
+      .slice(0, safeLimit);
+
+    const runEvidence = [];
+    for (const run of runs) {
+      const events = (await ctx.db
+        .query("runtimeRunEvents")
+        .withIndex("by_owner_run_seq", (q: any) =>
+          q.eq("ownerId", owner._id).eq("runId", run.runId),
+        )
+        .collect())
+        .sort((a: any, b: any) => (a.seq ?? 0) - (b.seq ?? 0));
+      const filteredEvents = events
+        .filter((event: any) =>
+          CODEX_THREAD_BINDING_EVIDENCE_EVENT_TYPES.has(String(event.eventType ?? "")),
+        )
+        .map((event: any) => ({
+          seq: event.seq,
+          eventType: event.eventType,
+          payload: summarizeCodexThreadBindingEvidencePayload({
+            eventType: String(event.eventType ?? ""),
+            payload: event.payload,
+          }),
+          createdAt: event.createdAt,
+        }));
+      const binding =
+        project && run.threadId
+          ? await ctx.db
+              .query("codexHarnessThreadBindings")
+              .withIndex("by_user_thread_project", (q: any) =>
+                q
+                  .eq("userId", String(owner._id))
+                  .eq("threadId", String(run.threadId))
+                  .eq("projectId", String(project._id)),
+              )
+              .first()
+          : null;
+      runEvidence.push({
+        runId: run.runId,
+        status: run.status,
+        reason: run.reason ?? null,
+        errorCode: run.errorCode ?? null,
+        threadId: String(run.threadId),
+        projectId: run.projectId ? String(run.projectId) : null,
+        communityId: run.communityId ? String(run.communityId) : null,
+        visibility: run.visibility ?? null,
+        harnessProfile: run.harnessProfile ?? null,
+        runtimeHarnessTelemetrySummary: run.runtimeHarnessTelemetrySummary ?? null,
+        startedAt: run.startedAt,
+        finishedAt: run.finishedAt ?? null,
+        events: filteredEvents,
+        binding: binding
+          ? {
+              bindingKeyPresent: Boolean(binding.bindingKey),
+              codexThreadId: binding.codexThreadId,
+              codexHomePath: binding.codexHomePath,
+              codexMcpProjectionVersion: binding.codexMcpProjectionVersion,
+              codexMcpProjectionFingerprint: binding.codexMcpProjectionFingerprint,
+              status: binding.status,
+              lastRunId: binding.lastRunId ?? null,
+              lastProviderSandboxId: binding.lastProviderSandboxId ?? null,
+              lastProjectVolumeId: binding.lastProjectVolumeId ?? null,
+              previousCodexThreadId: binding.previousCodexThreadId ?? null,
+              previousCodexMcpProjectionFingerprint:
+                binding.previousCodexMcpProjectionFingerprint ?? null,
+              rotatedAt: binding.rotatedAt ?? null,
+              rotatedReason: binding.rotatedReason ?? null,
+              createdAt: binding.createdAt,
+              updatedAt: binding.updatedAt,
+            }
+          : null,
+      });
+    }
+
+    return {
+      ok: true,
+      owner: {
+        id: String(owner._id),
+        normalizedEmail: owner.normalizedEmail ?? null,
+      },
+      project: project
+        ? {
+            id: String(project._id),
+            name: project.name ?? null,
+          }
+        : null,
+      filters: {
+        threadId: requestedThreadId,
+        runId: requestedRunId,
+        sinceMs,
+        limit: safeLimit,
+      },
+      runs: runEvidence,
+    };
+  },
+});

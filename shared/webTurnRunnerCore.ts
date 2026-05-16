@@ -22,6 +22,8 @@ export type WebStreamingMeta<MemoryUsedItemT, HistoryUsedItemT, CommunityEvidenc
   engine_id: string;
   model_id: string | null;
   inference_source?: string | null;
+  runtime_harness_id?: string | null;
+  runtime_surface?: string | null;
   memory_used?: MemoryUsedItemT[];
   history_used?: HistoryUsedItemT[];
   community_evidence_used?: CommunityEvidenceUsedT | null;
@@ -111,6 +113,8 @@ export type RunAgentTurnParams = {
   replyToId?: string;
   messages?: PublicTurnThreadMessage[];
   suppressStreamingUi?: boolean;
+  stream?: boolean;
+  codexPrimaryCanary?: boolean;
 };
 
 export type CreateThreadMessageParams = {
@@ -130,6 +134,8 @@ export type CreateAssistantMessageParams = {
   modelId?: string | null;
   runId?: string | null;
   inferenceSource?: string | null;
+  runtimeHarnessId?: string | null;
+  runtimeSurface?: string | null;
   communityEvidenceUsedV1?: unknown;
   communityContextDiagnostics?: Record<string, unknown> | null;
 };
@@ -236,6 +242,8 @@ export function buildAssistantTextMessagePayload(params: CreateAssistantMessageP
 } {
   const modelId = (params.modelId ?? "").trim();
   const inferenceSource = (params.inferenceSource ?? "").trim();
+  const runtimeHarnessId = (params.runtimeHarnessId ?? "").trim();
+  const runtimeSurface = (params.runtimeSurface ?? "").trim();
   const safeText = sanitizeUserFacingAssistantText({
     text: params.text,
     blockedIds: [params.threadId, params.runId ?? null],
@@ -249,10 +257,17 @@ export function buildAssistantTextMessagePayload(params: CreateAssistantMessageP
     typeof communityContextDiagnostics === "object" &&
     !Array.isArray(communityContextDiagnostics);
   const meta =
-    modelId || inferenceSource || hasCommunityEvidenceUsed || hasCommunityContextDiagnostics
+    modelId ||
+      inferenceSource ||
+      runtimeHarnessId ||
+      runtimeSurface ||
+      hasCommunityEvidenceUsed ||
+      hasCommunityContextDiagnostics
       ? {
           ...(modelId ? { model_id: modelId } : null),
           ...(inferenceSource ? { inference_source: inferenceSource } : null),
+          ...(runtimeHarnessId ? { runtime_harness_id: runtimeHarnessId } : null),
+          ...(runtimeSurface ? { runtime_surface: runtimeSurface } : null),
           ...(hasCommunityEvidenceUsed ? { community_evidence_used_v1: rawCommunityEvidenceUsed } : null),
           ...(hasCommunityContextDiagnostics ? { community_context_diagnostics: communityContextDiagnostics } : null),
         }

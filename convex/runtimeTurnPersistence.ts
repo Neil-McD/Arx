@@ -14,6 +14,20 @@ function asRecord(value: unknown): Record<string, unknown> | null {
     : null;
 }
 
+function normalizeRuntimeHarnessId(value: unknown): "polynet_native" | "codex_app_server" | null {
+  const raw = String(value ?? "").trim();
+  if (raw === "polynet_native" || raw === "codex_app_server") return raw;
+  return null;
+}
+
+function runtimeSurfaceFromHarnessId(
+  harnessId: "polynet_native" | "codex_app_server" | null,
+): "polynet" | "codex" | null {
+  if (harnessId === "codex_app_server") return "codex";
+  if (harnessId === "polynet_native") return "polynet";
+  return null;
+}
+
 function isPartialAssistantContentJson(value: unknown): boolean {
   const record = asRecord(value);
   if (!record) return false;
@@ -151,6 +165,7 @@ export async function persistRuntimeAssistantMessage(args: {
   }> | null;
   runId: string;
   content: string;
+  runtimeHarnessId?: string | null;
   partialRun?: {
     status: "error" | "cancelled";
     reason?: string | null;
@@ -172,6 +187,8 @@ export async function persistRuntimeAssistantMessage(args: {
           item.reason.trim().length > 0,
       )
     : [];
+  const runtimeHarnessId = normalizeRuntimeHarnessId(args.runtimeHarnessId);
+  const runtimeSurface = runtimeSurfaceFromHarnessId(runtimeHarnessId);
   const persisted = (await args.ctx.runMutation(
     api.threads.upsertCloudThreadMessageByMessageKey as any,
     {
@@ -185,6 +202,8 @@ export async function persistRuntimeAssistantMessage(args: {
           model_id: args.requestedModelId,
           inference_source: args.inferenceSource,
           lane: args.lane,
+          ...(runtimeHarnessId ? { runtime_harness_id: runtimeHarnessId } : null),
+          ...(runtimeSurface ? { runtime_surface: runtimeSurface } : null),
           ...(args.partialRun
             ? {
                 partial_run: {

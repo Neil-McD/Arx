@@ -18,6 +18,7 @@ import {
   creditsToUsd,
   estimateDaytonaWorkspaceReservationCredits,
   estimateDaytonaWorkspaceComputeUsd,
+  isWorkspaceCreditsExhaustedError,
   PAID_TOOL_PRICING_VERSION,
   PAID_TOOL_TARGET_GROSS_MARGIN_BPS,
   priceDaytonaWorkspaceUsageCredits,
@@ -291,13 +292,13 @@ export async function createWorkspaceSandboxSession(params: {
       nowMs,
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const isCreditsExhausted = isWorkspaceCreditsExhaustedError(error);
     return {
       ok: false,
       status: 402,
-      code: message === "credits_exhausted" ? "workspace_credits_exhausted" : "workspace_credits_unavailable",
+      code: isCreditsExhausted ? "workspace_credits_exhausted" : "workspace_credits_unavailable",
       message:
-        message === "credits_exhausted"
+        isCreditsExhausted
           ? "Workspace tools use paid sandbox compute, so they need tool balance before they run."
           : "Tool balance is unavailable for workspace tools.",
       details: {

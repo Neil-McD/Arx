@@ -17,6 +17,7 @@ import {
   creditsToUsd,
   estimateDaytonaWorkspaceComputeUsd,
   estimateDaytonaWorkspaceReservationCredits,
+  isWorkspaceCreditsExhaustedError,
   PAID_TOOL_PRICING_VERSION,
   PAID_TOOL_TARGET_GROSS_MARGIN_BPS,
   priceDaytonaWorkspaceUsageCredits,
@@ -25,6 +26,7 @@ import {
 const PROJECT_BACKGROUND_SANDBOX_CREATE_LEASE_MS = 60_000;
 const PROJECT_BACKGROUND_SANDBOX_WAIT_MS = 65_000;
 const PROJECT_BACKGROUND_SANDBOX_WAIT_POLL_MS = 1_000;
+const BACKGROUND_SANDBOX_BUDGET_EXPIRED_CODE = "background_sandbox_budget_expired";
 
 function normalizeString(value: unknown): string {
   return String(value ?? "").trim();
@@ -175,7 +177,6 @@ export async function ensureProjectBackgroundSandbox(params: {
     projectId: params.projectId,
   });
   if (existing.ok) return existing;
-  if (existing.code === "workspace_credits_exhausted") return existing;
 
   const project = await params.ctx.runQuery(api.projects.getCloudProjectById as any, {
     authSubject: params.authSubject,
@@ -292,13 +293,13 @@ export async function ensureProjectBackgroundSandbox(params: {
     );
   } catch (error) {
     await clearCreationLease();
-    const message = error instanceof Error ? error.message : String(error ?? "");
+    const isCreditsExhausted = isWorkspaceCreditsExhaustedError(error);
     return {
       ok: false,
       status: 402,
-      code: message === "credits_exhausted" ? "workspace_credits_exhausted" : "workspace_credits_unavailable",
+      code: isCreditsExhausted ? "workspace_credits_exhausted" : "workspace_credits_unavailable",
       message:
-        message === "credits_exhausted"
+        isCreditsExhausted
           ? "Workspace tools use paid sandbox compute, so they need tool balance before they run."
           : "Tool balance is unavailable for workspace tools.",
       details: {
@@ -534,11 +535,12 @@ export async function resolveProjectBackgroundSandboxIfReady(params: {
     });
     return {
       ok: false,
-      status: 402,
-      code: "workspace_credits_exhausted",
-      message: "This workspace tool budget expired. Add balance to keep using workspace tools.",
+      status: 409,
+      code: BACKGROUND_SANDBOX_BUDGET_EXPIRED_CODE,
+      message: "The background workspace budget expired. A fresh workspace can be created if tool balance is available.",
       details: {
         tool_kind: "workspace_tools",
+        expired_budget_at: credit.creditBudgetExpiresAt,
       },
     };
   }
@@ -653,11 +655,12 @@ export async function resolveTerminalSandboxContext(params: {
     ) {
       return {
         ok: false,
-        status: 402,
-        code: "workspace_credits_exhausted",
-        message: "This workspace tool budget expired. Add balance to keep using workspace tools.",
+        status: 409,
+        code: BACKGROUND_SANDBOX_BUDGET_EXPIRED_CODE,
+        message: "The background workspace budget expired. A fresh workspace can be created if tool balance is available.",
         details: {
           tool_kind: "workspace_tools",
+          expired_budget_at: credit.creditBudgetExpiresAt,
         },
       };
     }

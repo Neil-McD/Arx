@@ -8,7 +8,21 @@
 - Canonical release branch: `main`
 - Canonical production web target: Vercel project `polynet`
 - Canonical production Convex target: production deployment for this repo
+- Canonical staging web target: `polynet-staging.vercel.app`
+- Staging pipeline contract: [`docs/staging-testing-pipeline.md`](./staging-testing-pipeline.md)
 - Legacy Vercel project `arx` is not a live target
+
+## Staging Rule
+
+Use staging before broad production rollout for changes that touch auth, billing, Daytona, Codex harness execution, MCP/app connections, runtime tools, or entitlement boundaries.
+
+The staging target is `polynet-staging.vercel.app`. It should be backed by a coherent staging stack: staging Vercel project, staging Convex deployment, staging WorkOS/AuthKit tenant, staging Google OAuth client, staging Daytona credentials, and test-mode payment providers.
+
+Do not treat a mixed stack like local web plus dev Convex plus production provider config as release evidence unless the mixed boundary is the explicit thing being tested.
+
+Direct local Vercel deploys remain forbidden as a production release path for `polynet`. They may be used intentionally against the separate `polynet-staging` project from an isolated worktree when the goal is staging validation.
+
+Follow [`docs/staging-testing-pipeline.md`](./staging-testing-pipeline.md) before promoting major changes to `main`.
 
 ## Default Release Model
 
