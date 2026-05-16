@@ -200,10 +200,11 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps) {
       }),
     [directoryEntries],
   );
+  const hasFilePreviewContent = Boolean(isLoadingFilePreview || filePreviewError || filePreview?.ok);
 
   return (
     <div className="workspace-user-data-panel__grid">
-      <section className="workspace-user-data-card workspace-summary-card">
+      <section className="workspace-summary-block">
         <dl className="workspace-summary-list">
           <div>
             <dt>Computer</dt>
@@ -240,24 +241,19 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps) {
         ) : null}
       </section>
 
-      <section className="workspace-user-data-card workspace-files-card">
+      <section className="workspace-files-section">
         <button
           type="button"
-          className="workspace-files-card__header"
+          className="workspace-files-row"
           onClick={() => setFilesExpandedForProject(!filesExpanded)}
           aria-expanded={filesExpanded}
           disabled={!canInspectFiles}
         >
-          <span>
-            <span className="workspace-user-data-card__meta">Files</span>
-            <strong>{filesExpanded ? directoryPath : "Collapsed"}</strong>
-          </span>
-          <span className="workspace-files-card__chevron" aria-hidden="true">
-            {filesExpanded ? "-" : "+"}
-          </span>
+          <span>Files</span>
+          <span className={`workspace-files-chevron${filesExpanded ? " is-open" : ""}`} aria-hidden="true" />
         </button>
         {!canInspectFiles ? (
-          <p>Start or select a computer to inspect its files.</p>
+          <p className="workspace-files-note">Start or select a computer to inspect its files.</p>
         ) : filesExpanded ? (
           <div className="workspace-files-browser">
             <div className="workspace-files-browser__toolbar">
@@ -324,8 +320,7 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps) {
         ) : null}
       </section>
 
-      <section className="workspace-user-data-card workspace-preview-card">
-        <div className="workspace-user-data-card__meta">Preview</div>
+      {hasFilePreviewContent ? (
         <div className="workspace-file-preview">
           {isLoadingFilePreview ? (
             <div className="workspace-files-empty">Loading preview...</div>
@@ -350,16 +345,9 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps) {
             <div className="workspace-files-empty">
               {filePreview.name}: {filePreview.reason}
             </div>
-          ) : (
-            <div className="workspace-files-empty">No file selected.</div>
-          )}
+          ) : null}
         </div>
-      </section>
-
-      <section className="workspace-user-data-card workspace-evidence-card">
-        <div className="workspace-user-data-card__meta">Evidence</div>
-        <p>No recent evidence yet.</p>
-      </section>
+      ) : null}
     </div>
   );
 }
