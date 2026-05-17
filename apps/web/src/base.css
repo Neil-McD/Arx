@@ -22361,7 +22361,8 @@ button.message-citation-chip:hover {
 .operator-data-panel__content {
   min-height: 0;
   overflow: auto;
-  padding-right: 18px;
+  padding: 0 18px 36px 0;
+  scroll-padding-bottom: 36px;
   scrollbar-width: thin;
 }
 
