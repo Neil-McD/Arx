@@ -84,6 +84,7 @@ import {
   listPublicDiscoverCommunities as listPublicDiscoverCommunitiesImpl,
   resolvePublicFunnelBySlug as resolvePublicFunnelBySlugImpl,
   reorderCommunityResourceModules as reorderCommunityResourceModulesImpl,
+  reorderCommunityResources as reorderCommunityResourcesImpl,
   saveCommunityResource as saveCommunityResourceImpl,
   saveCommunityResourceModule as saveCommunityResourceModuleImpl,
 } from "./communityExperience";
@@ -167,6 +168,7 @@ export const recordPublicFunnelVisitBySlug = recordPublicFunnelVisitBySlugImpl;
 export const saveCommunityResource = saveCommunityResourceImpl;
 export const saveCommunityResourceModule = saveCommunityResourceModuleImpl;
 export const reorderCommunityResourceModules = reorderCommunityResourceModulesImpl;
+export const reorderCommunityResources = reorderCommunityResourcesImpl;
 export const deleteCommunityResource = deleteCommunityResourceImpl;
 export const deleteCommunityResourceModule = deleteCommunityResourceModuleImpl;
 export const listCommunityEvents = listCommunityEventsImpl;

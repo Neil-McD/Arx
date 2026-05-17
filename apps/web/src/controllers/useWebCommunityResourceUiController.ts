@@ -19,6 +19,8 @@ type ResourceLike = {
   body_md: string | null;
   url: string | null;
   pinned: boolean;
+  sort_order?: number | null;
+  created_at?: string;
 };
 
 type ResourceModuleLike = {
@@ -68,6 +70,7 @@ export type UseWebCommunityResourceUiControllerResult<
   handleEditModule: (module: ResourceModuleT) => void;
   handleDeleteModule: (moduleId: string) => Promise<boolean>;
   handleReorderModules: (moduleIds: string[]) => Promise<boolean>;
+  handleReorderResources: (moduleId: string | null, resourceIds: string[]) => Promise<boolean>;
   openNewResourceModal: (moduleId?: string | null) => void;
   handleEditResource: (resource: ResourceT) => void;
   handleDeleteResource: (resourceId: string) => Promise<boolean>;
@@ -122,6 +125,7 @@ export function useWebCommunityResourceUiController<
     handleSaveCommunityResourceModule,
     handleDeleteCommunityResourceModule,
     handleReorderCommunityResourceModules,
+    handleReorderCommunityResources,
     handleSaveCommunityResource,
     handleDeleteResource,
   } = useCommunityResourceController<SessionT, ResourceT, ResourceModuleT>({
@@ -322,6 +326,7 @@ export function useWebCommunityResourceUiController<
     handleEditModule,
     handleDeleteModule,
     handleReorderModules: handleReorderCommunityResourceModules,
+    handleReorderResources: handleReorderCommunityResources,
     openNewResourceModal,
     handleEditResource,
     handleDeleteResource,

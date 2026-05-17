@@ -6,6 +6,7 @@ export type CommunityResource = {
   body_md: string | null;
   url: string | null;
   pinned: boolean;
+  sort_order: number | null;
   created_at: string;
 };
 
@@ -42,6 +43,7 @@ export type CommunityResourcesActions = {
   handleEditModule: (module: CommunityResourceModule) => void;
   handleDeleteModule: (moduleId: string) => Promise<boolean> | boolean;
   handleReorderModules: (moduleIds: string[]) => Promise<boolean> | boolean;
+  handleReorderResources: (moduleId: string | null, resourceIds: string[]) => Promise<boolean> | boolean;
   openNewResourceModal: (moduleId?: string | null) => void;
   handleEditResource: (resource: CommunityResource) => void;
   handleDeleteResource: (resourceId: string) => Promise<boolean> | boolean;

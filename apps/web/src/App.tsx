@@ -896,6 +896,7 @@ type CommunityResource = {
   url: string | null;
   file_key?: string | null;
   pinned: boolean;
+  sort_order: number | null;
   created_at: string;
 };
 
@@ -2327,6 +2328,7 @@ export default function App() {
     handleEditModule,
     handleDeleteModule,
     handleReorderModules,
+    handleReorderResources,
     openNewResourceModal,
     handleEditResource,
     handleDeleteResource,
@@ -7344,6 +7346,7 @@ export default function App() {
         handleEditModule,
         handleDeleteModule,
         handleReorderModules,
+        handleReorderResources,
         openNewResourceModal,
         handleEditResource,
         handleDeleteResource,

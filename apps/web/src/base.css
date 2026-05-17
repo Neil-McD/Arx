@@ -8646,6 +8646,26 @@ button.chat-reply-quote:hover {
   transform: translateY(-1px);
 }
 
+.resource-card.can-reorder {
+  cursor: grab;
+}
+
+.resource-card.can-reorder:active {
+  cursor: grabbing;
+}
+
+.resource-card.is-dragging {
+  opacity: 0.58;
+  transform: scale(0.985);
+}
+
+.resource-card.is-drop-target {
+  border-color: color-mix(in srgb, var(--accent-gold) 72%, var(--border-strong));
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--accent-gold) 42%, transparent),
+    var(--shadow-md);
+}
+
 .resource-card.is-clickable:focus-visible {
   outline: 2px solid color-mix(in srgb, var(--border-active) 58%, transparent);
   outline-offset: 2px;

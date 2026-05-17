@@ -1280,6 +1280,7 @@ export default defineSchema({
     url: v.optional(v.string()),
     fileKey: v.optional(v.string()),
     pinned: v.boolean(),
+    sortOrder: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })

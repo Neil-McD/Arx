@@ -21,6 +21,7 @@ export {
   countCommunityResources,
   deleteCommunityResourceModule,
   reorderCommunityResourceModules,
+  reorderCommunityResources,
   saveCommunityResourceModule,
   saveCommunityResource,
   deleteCommunityResource,

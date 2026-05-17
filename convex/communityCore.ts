@@ -194,6 +194,7 @@ export type CommunityResourceLike = {
   url?: string;
   fileKey?: string;
   pinned: boolean;
+  sortOrder?: number;
   createdAt: number;
   updatedAt: number;
 };
@@ -671,6 +672,7 @@ export async function mapCommunityResourceRow(
     url: row.url ?? null,
     file_key: row.fileKey ?? null,
     pinned: Boolean(row.pinned),
+    sort_order: Number.isFinite(row.sortOrder) ? row.sortOrder : null,
     created_by: (await resolvePublicUserId(ctx, row.createdByUserId, userIdCache)) ?? String(row.createdByUserId),
     created_at: toIsoString(row.createdAt),
     updated_at: toIsoString(row.updatedAt),

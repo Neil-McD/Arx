@@ -10,6 +10,7 @@ import {
   listCloudCommunityResourceRows,
   prepareCloudCommunityBrandingField,
   reorderCloudCommunityResourceModules,
+  reorderCloudCommunityResources,
   saveCloudCommunityResource,
   saveCloudCommunityResourceModule,
 } from "./cloudCommunityAdminGateway";
@@ -24,6 +25,8 @@ type ResourceLike = {
   body_md: string | null;
   url: string | null;
   pinned: boolean;
+  sort_order?: number | null;
+  created_at?: string;
 };
 
 type ResourceModuleLike = {
@@ -37,6 +40,19 @@ type ResourceModuleLike = {
   banner_zoom?: number | null;
   sort_order?: number;
 };
+
+function compareResourcesByManualOrder(a: ResourceLike, b: ResourceLike): number {
+  const aSortOrder = typeof a.sort_order === "number" && Number.isFinite(a.sort_order) ? a.sort_order : null;
+  const bSortOrder = typeof b.sort_order === "number" && Number.isFinite(b.sort_order) ? b.sort_order : null;
+  if (aSortOrder !== null || bSortOrder !== null) {
+    if (aSortOrder !== bSortOrder) {
+      return (aSortOrder ?? Number.MAX_SAFE_INTEGER) - (bSortOrder ?? Number.MAX_SAFE_INTEGER);
+    }
+  } else if (Boolean(a.pinned) !== Boolean(b.pinned)) {
+    return Boolean(a.pinned) ? -1 : 1;
+  }
+  return String(b.created_at ?? "").localeCompare(String(a.created_at ?? ""));
+}
 
 type UseCommunityResourceControllerArgs<
   SessionT extends SessionLike,
@@ -410,6 +426,53 @@ export function useCommunityResourceController<
     }
   }, [loadCommunityResourceModules]);
 
+  const handleReorderCommunityResources = useCallback(async (moduleId: string | null, resourceIds: string[]) => {
+    const current = argsRef.current;
+    const session = await resolveUsableSession(current.session, current.ensureSession);
+    if (!session || !current.activeCommunityId) return false;
+
+    const previousResources: ResourceT[] = [];
+    current.setCommunityResources((resources) => {
+      previousResources.splice(0, previousResources.length, ...resources);
+      const normalizedModuleId = moduleId ?? null;
+      const orderById = new Map(resourceIds.map((id, index) => [id, (index + 1) * 1000]));
+      return resources
+        .map((resource) => {
+          if ((resource.module_id ?? null) !== normalizedModuleId) return resource;
+          return {
+            ...resource,
+            sort_order: orderById.get(resource.id) ?? resource.sort_order ?? null,
+          };
+        })
+        .sort((a, b) => {
+          const aModule = a.module_id ?? null;
+          const bModule = b.module_id ?? null;
+          if (aModule !== bModule) return String(aModule ?? "").localeCompare(String(bModule ?? ""));
+          return compareResourcesByManualOrder(a, b);
+        });
+    });
+
+    try {
+      await reorderCloudCommunityResources({
+        session,
+        communityId: current.activeCommunityId,
+        moduleId,
+        resourceIds,
+      });
+      await loadCommunityResources(current.activeCommunityId, session);
+      return true;
+    } catch (error) {
+      current.setCommunityResources(previousResources);
+      const message = typeof error === "string"
+        ? error
+        : error instanceof Error
+          ? error.message
+          : "Failed to reorder resources.";
+      current.setResourceError(message);
+      return false;
+    }
+  }, [loadCommunityResources]);
+
   const handleDeleteResource = useCallback(async (resourceId: string) => {
     const current = argsRef.current;
     const session = await resolveUsableSession(current.session, current.ensureSession);
@@ -441,6 +504,7 @@ export function useCommunityResourceController<
     handleSaveCommunityResourceModule,
     handleDeleteCommunityResourceModule,
     handleReorderCommunityResourceModules,
+    handleReorderCommunityResources,
     handleSaveCommunityResource,
     handleDeleteResource,
   };

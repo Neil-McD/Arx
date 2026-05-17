@@ -31,6 +31,23 @@ function normalizeOptionalModuleId(raw: unknown): string | null {
   return value;
 }
 
+function resourceModuleIdentity(raw: unknown): string {
+  return normalizeOptionalModuleId(raw) ?? "";
+}
+
+function compareCommunityResources(a: CommunityResourceLike, b: CommunityResourceLike): number {
+  const aSortOrder = typeof a.sortOrder === "number" && Number.isFinite(a.sortOrder) ? a.sortOrder : null;
+  const bSortOrder = typeof b.sortOrder === "number" && Number.isFinite(b.sortOrder) ? b.sortOrder : null;
+  if (aSortOrder !== null || bSortOrder !== null) {
+    if (aSortOrder !== bSortOrder) {
+      return (aSortOrder ?? Number.MAX_SAFE_INTEGER) - (bSortOrder ?? Number.MAX_SAFE_INTEGER);
+    }
+  } else if (Boolean(a.pinned) !== Boolean(b.pinned)) {
+    return Boolean(a.pinned) ? -1 : 1;
+  }
+  return b.createdAt - a.createdAt;
+}
+
 async function requireValidResourceModule(args: {
   ctx: any;
   communityId: any;
@@ -42,6 +59,28 @@ async function requireValidResourceModule(args: {
     throw new Error("community_resource_module_not_found");
   }
   return module._id;
+}
+
+async function getNextResourceSortOrder(args: {
+  ctx: any;
+  communityId: any;
+  moduleId: any | null | undefined;
+  excludeResourceId?: any;
+}): Promise<number> {
+  const rows = (await args.ctx.db
+    .query("communityResources" as any)
+    .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
+    .collect()) as CommunityResourceLike[];
+  const targetModuleIdentity = resourceModuleIdentity(args.moduleId);
+  const excludeResourceId = args.excludeResourceId ? normalizeIdValue(args.excludeResourceId) : null;
+  return (
+    rows
+      .filter((row) => {
+        if (excludeResourceId && normalizeIdValue(row._id) === excludeResourceId) return false;
+        return resourceModuleIdentity(row.moduleId) === targetModuleIdentity;
+      })
+      .reduce((max, row) => Math.max(max, Number(row.sortOrder) || 0), 0) + 1000
+  );
 }
 
 export const listCommunityResourceModules = query({
@@ -265,10 +304,18 @@ export const deleteCommunityResourceModule = mutation({
       )
       .collect()) as CommunityResourceLike[];
 
+    const movedResources = resources.slice().sort(compareCommunityResources);
+    const nextLegacySortOrder = await getNextResourceSortOrder({
+      ctx,
+      communityId: module.communityId,
+      moduleId: null,
+    });
+
     await Promise.all(
-      resources.map(async (resource) => {
+      movedResources.map(async (resource, index) => {
         await ctx.db.patch(resource._id as any, {
           moduleId: undefined,
+          sortOrder: nextLegacySortOrder + index * 1000,
           updatedAt: nowMs,
         });
         const updated = (await ctx.db.get(resource._id as any)) as CommunityResourceLike | null;
@@ -312,10 +359,7 @@ export const listCommunityResources = query({
     return await Promise.all(
       rows
         .slice()
-        .sort((a, b) => {
-          if (Boolean(a.pinned) !== Boolean(b.pinned)) return Boolean(a.pinned) ? -1 : 1;
-          return b.createdAt - a.createdAt;
-        })
+        .sort(compareCommunityResources)
         .slice(0, limit)
         .map((row) => mapCommunityResourceRow(ctx, row, userIdCache)),
     );
@@ -401,6 +445,15 @@ export const saveCommunityResource = mutation({
         communityId: existing.communityId,
         moduleId: normalizeOptionalModuleId(nextModuleIdRaw),
       });
+      const moduleChanged = resourceModuleIdentity(existing.moduleId) !== resourceModuleIdentity(nextModuleId);
+      const nextSortOrder = moduleChanged
+        ? await getNextResourceSortOrder({
+            ctx,
+            communityId: existing.communityId,
+            moduleId: nextModuleId,
+            excludeResourceId: existing._id,
+          })
+        : existing.sortOrder;
 
       await ctx.db.patch(existing._id as any, {
         ...(nextModuleId ? { moduleId: nextModuleId } : { moduleId: undefined }),
@@ -410,6 +463,7 @@ export const saveCommunityResource = mutation({
         url: normalizeOptionalUrl(nextUrlRaw),
         fileKey: normalizeOptionalFileKey(nextFileKeyRaw),
         pinned: Boolean(nextPinnedRaw),
+        ...(typeof nextSortOrder === "number" ? { sortOrder: nextSortOrder } : {}),
         updatedAt: nowMs,
       });
       const updated = (await ctx.db.get(existing._id as any)) as CommunityResourceLike | null;
@@ -441,6 +495,11 @@ export const saveCommunityResource = mutation({
       communityId: community._id,
       moduleId: normalizeOptionalModuleId(payload.module_id),
     });
+    const nextSortOrder = await getNextResourceSortOrder({
+      ctx,
+      communityId: community._id,
+      moduleId,
+    });
 
     const id = await ctx.db.insert("communityResources" as any, {
       communityId: community._id,
@@ -452,6 +511,7 @@ export const saveCommunityResource = mutation({
       url,
       fileKey,
       pinned,
+      sortOrder: nextSortOrder,
       createdAt: nowMs,
       updatedAt: nowMs,
     });
@@ -459,6 +519,72 @@ export const saveCommunityResource = mutation({
     if (!created) throw new Error("community_resource_create_failed");
     await upsertArchiveDocumentForResource(ctx, created);
     return await mapCommunityResourceRow(ctx, created);
+  },
+});
+
+export const reorderCommunityResources = mutation({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+    moduleId: v.optional(v.union(v.id("communityResourceModules"), v.null())),
+    resourceIds: v.array(v.id("communityResources")),
+  },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      userId: args.userId,
+      authSubject: args.authSubject ?? null,
+    });
+    (args as { userId?: any }).userId = userId;
+    await requireCommunityManager({
+      ctx,
+      communityId: args.communityId,
+      userId: args.userId,
+    });
+
+    const moduleId = args.moduleId ?? null;
+    if (moduleId) {
+      await requireValidResourceModule({
+        ctx,
+        communityId: args.communityId,
+        moduleId: normalizeOptionalModuleId(moduleId),
+      });
+    }
+
+    const rows = (await ctx.db
+      .query("communityResources" as any)
+      .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
+      .collect()) as CommunityResourceLike[];
+    const targetModuleIdentity = resourceModuleIdentity(moduleId);
+    const scopedRows = rows.filter((row) => resourceModuleIdentity(row.moduleId) === targetModuleIdentity);
+    const existingIds = new Set(scopedRows.map((row) => normalizeIdValue(row._id)));
+    const requestedIds = args.resourceIds.map((id) => normalizeIdValue(id));
+    const requestedIdSet = new Set(requestedIds);
+
+    if (requestedIds.length !== requestedIdSet.size) {
+      throw new Error("community_resource_order_duplicate_id");
+    }
+    if (requestedIds.length !== existingIds.size) {
+      throw new Error("community_resource_order_stale");
+    }
+    for (const resourceId of requestedIds) {
+      if (!existingIds.has(resourceId)) {
+        throw new Error("community_resource_not_found");
+      }
+    }
+
+    const nowMs = Date.now();
+    await Promise.all(
+      requestedIds.map((resourceId, index) =>
+        ctx.db.patch(resourceId as any, {
+          sortOrder: (index + 1) * 1000,
+          updatedAt: nowMs,
+        }),
+      ),
+    );
+
+    return { ok: true };
   },
 });
 

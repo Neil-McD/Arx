@@ -64,6 +64,19 @@ function getResourceMeta(resource: CommunityResource): { primary: string; second
   return { primary: "Note", secondary: null };
 }
 
+function compareResources(a: CommunityResource, b: CommunityResource): number {
+  const aSortOrder = typeof a.sort_order === "number" && Number.isFinite(a.sort_order) ? a.sort_order : null;
+  const bSortOrder = typeof b.sort_order === "number" && Number.isFinite(b.sort_order) ? b.sort_order : null;
+  if (aSortOrder !== null || bSortOrder !== null) {
+    if (aSortOrder !== bSortOrder) {
+      return (aSortOrder ?? Number.MAX_SAFE_INTEGER) - (bSortOrder ?? Number.MAX_SAFE_INTEGER);
+    }
+  } else if (Boolean(a.pinned) !== Boolean(b.pinned)) {
+    return Boolean(a.pinned) ? -1 : 1;
+  }
+  return String(b.created_at ?? "").localeCompare(String(a.created_at ?? ""));
+}
+
 function ResourceTitle(props: ResourceTitleProps) {
   const { title } = props;
   const shellRef = useRef<HTMLDivElement | null>(null);
@@ -293,9 +306,31 @@ function ResourceCard(props: {
   onOpenViewer: () => void;
   onEdit: () => void;
   onDelete: () => void;
+  onDragStart: (event: DragEvent<HTMLElement>) => void;
+  onDragOver: (event: DragEvent<HTMLElement>) => void;
+  onDragLeave: () => void;
+  onDrop: (event: DragEvent<HTMLElement>) => void;
+  onDragEnd: () => void;
   canManage: boolean;
+  canReorder: boolean;
+  isDragging: boolean;
+  isDropTarget: boolean;
 }) {
-  const { resource, onOpenViewer, onEdit, onDelete, canManage } = props;
+  const {
+    resource,
+    onOpenViewer,
+    onEdit,
+    onDelete,
+    onDragStart,
+    onDragOver,
+    onDragLeave,
+    onDrop,
+    onDragEnd,
+    canManage,
+    canReorder,
+    isDragging,
+    isDropTarget,
+  } = props;
   const embed = resource.url ? parseEmbedUrl(resource.url) : null;
   const meta = getResourceMeta(resource);
   const summary = (resource.body_md ?? "").trim();
@@ -312,10 +347,22 @@ function ResourceCard(props: {
   return (
     <article
       id={`community-resource-${resource.id}`}
-      className={`resource-card is-clickable${resource.pinned ? " is-pinned" : ""}`}
+      className={[
+        "resource-card is-clickable",
+        resource.pinned ? "is-pinned" : "",
+        canReorder ? "can-reorder" : "",
+        isDragging ? "is-dragging" : "",
+        isDropTarget ? "is-drop-target" : "",
+      ].filter(Boolean).join(" ")}
       role="button"
       tabIndex={0}
+      draggable={canReorder}
       onClick={onOpenViewer}
+      onDragStart={onDragStart}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+      onDragEnd={onDragEnd}
       onKeyDown={handleCardKeyDown}
     >
       <div className="resource-card-topline">
@@ -334,6 +381,7 @@ function ResourceCard(props: {
                 className="resource-card-action"
                 type="button"
                 title="Edit resource"
+                onPointerDown={(event) => event.stopPropagation()}
                 onClick={(event) => {
                   event.stopPropagation();
                   onEdit();
@@ -345,6 +393,7 @@ function ResourceCard(props: {
                 className="resource-card-action danger"
                 type="button"
                 title="Delete resource"
+                onPointerDown={(event) => event.stopPropagation()}
                 onClick={(event) => {
                   event.stopPropagation();
                   onDelete();
@@ -369,6 +418,7 @@ function ResourceCard(props: {
             <button
               className="resource-card-summary-toggle"
               type="button"
+              onPointerDown={(event) => event.stopPropagation()}
               onClick={(event) => {
                 event.stopPropagation();
                 onOpenViewer();
@@ -383,7 +433,7 @@ function ResourceCard(props: {
       {embed ? (
         <div className="resource-card-preview" aria-hidden="true">
           {embed.provider === "youtube" ? (
-            <img src={embed.thumbnailUrl} alt="" loading="lazy" />
+            <img src={embed.thumbnailUrl} alt="" loading="lazy" draggable={false} />
           ) : (
             <div className="resource-card-preview-placeholder">
               <div className="resource-card-preview-provider">{meta.secondary ?? "Embed"}</div>
@@ -423,6 +473,8 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
   const [isDeletingResource, setIsDeletingResource] = useState(false);
   const [draggingModuleId, setDraggingModuleId] = useState<string | null>(null);
   const [dropTargetModuleId, setDropTargetModuleId] = useState<string | null>(null);
+  const [draggingResourceId, setDraggingResourceId] = useState<string | null>(null);
+  const [dropTargetResourceId, setDropTargetResourceId] = useState<string | null>(null);
 
   const viewerResource = useMemo(
     () => state.resources.find((resource) => resource.id === viewerResourceId) ?? null,
@@ -470,10 +522,12 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
   const visibleResources = useMemo(() => {
     if (!selectedModule) return [];
     if (selectedModule.id === LEGACY_RESOURCE_MODULE_ID) {
-      return state.resources.filter((resource) => !resource.module_id);
+      return state.resources.filter((resource) => !resource.module_id).sort(compareResources);
     }
-    return state.resources.filter((resource) => resource.module_id === selectedModule.id);
+    return state.resources.filter((resource) => resource.module_id === selectedModule.id).sort(compareResources);
   }, [selectedModule, state.resources]);
+  const reorderableResourceIds = useMemo(() => visibleResources.map((resource) => resource.id), [visibleResources]);
+  const canReorderResources = capabilities.canOperateResources && reorderableResourceIds.length > 1;
   const isRefreshingResources = state.isLoadingResources || state.isLoadingResourceModules;
   const hasResourceContent = state.modules.length > 0 || state.resources.length > 0;
   const wasRefreshingResourcesRef = useRef(false);
@@ -542,6 +596,45 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
   const handleModuleDragEnd = () => {
     setDraggingModuleId(null);
     setDropTargetModuleId(null);
+  };
+
+  const handleResourceDragStart = (event: DragEvent<HTMLElement>, resource: CommunityResource) => {
+    if (!canReorderResources) {
+      event.preventDefault();
+      return;
+    }
+    setDraggingResourceId(resource.id);
+    setDropTargetResourceId(null);
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", resource.id);
+  };
+
+  const handleResourceDragOver = (event: DragEvent<HTMLElement>, resource: CommunityResource) => {
+    if (!draggingResourceId || resource.id === draggingResourceId) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+    setDropTargetResourceId(resource.id);
+  };
+
+  const handleResourceDrop = (event: DragEvent<HTMLElement>, resource: CommunityResource) => {
+    event.preventDefault();
+    const draggedId = draggingResourceId ?? event.dataTransfer.getData("text/plain");
+    setDraggingResourceId(null);
+    setDropTargetResourceId(null);
+    if (!selectedModule || !draggedId || draggedId === resource.id) return;
+    const fromIndex = reorderableResourceIds.indexOf(draggedId);
+    const toIndex = reorderableResourceIds.indexOf(resource.id);
+    if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) return;
+    const nextIds = reorderableResourceIds.slice();
+    const [movedId] = nextIds.splice(fromIndex, 1);
+    nextIds.splice(toIndex, 0, movedId);
+    const moduleId = selectedModule.id === LEGACY_RESOURCE_MODULE_ID ? null : selectedModule.id;
+    void actions.handleReorderResources(moduleId, nextIds);
+  };
+
+  const handleResourceDragEnd = () => {
+    setDraggingResourceId(null);
+    setDropTargetResourceId(null);
   };
 
   return (
@@ -673,7 +766,17 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
                   onOpenViewer={() => setViewerResourceId(resource.id)}
                   onEdit={() => actions.handleEditResource(resource)}
                   onDelete={() => setPendingDeleteResourceId(resource.id)}
+                  onDragStart={(event) => handleResourceDragStart(event, resource)}
+                  onDragOver={(event) => handleResourceDragOver(event, resource)}
+                  onDragLeave={() => {
+                    if (dropTargetResourceId === resource.id) setDropTargetResourceId(null);
+                  }}
+                  onDrop={(event) => handleResourceDrop(event, resource)}
+                  onDragEnd={handleResourceDragEnd}
                   canManage={capabilities.canOperateResources}
+                  canReorder={canReorderResources}
+                  isDragging={draggingResourceId === resource.id}
+                  isDropTarget={dropTargetResourceId === resource.id}
                 />
               ))}
             </div>
