@@ -687,16 +687,34 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps) {
           <p className="workspace-files-note">Turn on computer to view files.</p>
         ) : filesExpanded && directoryError ? (
           <div className="workspace-files-empty-state">
-            <p>{directoryError}</p>
+            <div className="workspace-files-computer-row">
+              <p>{directoryError}</p>
+              {shouldShowTurnOnComputerAction ? (
+                <label
+                  className={`members-switch integration-mounted-switch workspace-files-computer-switch${
+                    props.isStartingWorkspaceComputer ? " is-disabled" : ""
+                  }`}
+                  title="Turn on computer"
+                >
+                  <input
+                    type="checkbox"
+                    checked={false}
+                    disabled={props.isStartingWorkspaceComputer}
+                    aria-label="Turn on computer"
+                    onChange={(event) => {
+                      if (event.target.checked) void handleTurnOnComputer();
+                    }}
+                  />
+                  <span className="members-switch-track">
+                    <span className="members-switch-thumb" />
+                  </span>
+                </label>
+              ) : null}
+            </div>
             {shouldShowTurnOnComputerAction ? (
-              <button
-                type="button"
-                className="workspace-user-data-action workspace-user-data-action--secondary"
-                onClick={() => void handleTurnOnComputer()}
-                disabled={props.isStartingWorkspaceComputer}
-              >
-                {props.isStartingWorkspaceComputer ? "Turning on..." : "Turn on computer"}
-              </button>
+              <span className="workspace-files-computer-caption">
+                {props.isStartingWorkspaceComputer ? "Turning on" : "Off"}
+              </span>
             ) : null}
           </div>
         ) : filesExpanded ? (
@@ -719,14 +737,25 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps) {
               </button>
               <span>{directoryPath === "." ? "workspace" : directoryPath}</span>
               {isComputerOnForFiles ? (
-                <button
-                  type="button"
-                  className="workspace-user-data-action workspace-user-data-action--secondary workspace-files-power-action"
-                  onClick={() => void handleTurnOffComputer()}
-                  disabled={props.isStoppingWorkspaceComputer}
+                <label
+                  className={`members-switch integration-mounted-switch workspace-files-computer-switch${
+                    props.isStoppingWorkspaceComputer ? " is-disabled" : ""
+                  }`}
+                  title="Turn off computer"
                 >
-                  {props.isStoppingWorkspaceComputer ? "Turning off" : "Turn off"}
-                </button>
+                  <input
+                    type="checkbox"
+                    checked
+                    disabled={props.isStoppingWorkspaceComputer}
+                    aria-label="Turn off computer"
+                    onChange={(event) => {
+                      if (!event.target.checked) void handleTurnOffComputer();
+                    }}
+                  />
+                  <span className="members-switch-track">
+                    <span className="members-switch-thumb" />
+                  </span>
+                </label>
               ) : null}
             </div>
             <div className="workspace-files-list" aria-label="Workspace files">

@@ -23227,11 +23227,10 @@ button.message-citation-chip:hover {
   display: grid;
   gap: 8px;
   padding: 4px 0 0;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .workspace-files-row {
-  width: 100%;
+  width: fit-content;
   min-width: 0;
   min-height: 30px;
   padding: 0;
@@ -23239,8 +23238,8 @@ button.message-citation-chip:hover {
   background: transparent;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  justify-content: flex-start;
+  gap: 7px;
   color: var(--text-primary);
   font-size: 13px;
   font-weight: 800;
@@ -23257,7 +23256,7 @@ button.message-citation-chip:hover {
   flex: 0 0 auto;
   width: 8px;
   height: 8px;
-  margin-right: 2px;
+  margin: 0 0 3px;
   border-right: 2px solid var(--text-secondary);
   border-bottom: 2px solid var(--text-secondary);
   transform: rotate(45deg);
@@ -23278,9 +23277,8 @@ button.message-citation-chip:hover {
 .workspace-files-empty-state {
   min-width: 0;
   display: grid;
-  gap: 10px;
+  gap: 5px;
   padding: 4px 0 12px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .workspace-files-empty-state p {
@@ -23290,8 +23288,26 @@ button.message-citation-chip:hover {
   line-height: 1.35;
 }
 
-.workspace-files-empty-state .workspace-user-data-action {
-  justify-self: start;
+.workspace-files-computer-row {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.workspace-files-computer-row p {
+  min-width: 0;
+}
+
+.workspace-files-computer-switch {
+  flex: 0 0 auto;
+}
+
+.workspace-files-computer-caption {
+  color: var(--text-faint);
+  font-size: 11px;
+  line-height: 1.2;
 }
 
 .workspace-files-browser {
@@ -23318,10 +23334,6 @@ button.message-citation-chip:hover {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.workspace-files-power-action {
-  flex: 0 0 auto;
 }
 
 .workspace-files-list {
