@@ -109,6 +109,22 @@ const CODEX_THREAD_BINDING_EVIDENCE_EVENT_TYPES = new Set([
   "mcp_tool_execution_completed",
 ]);
 
+const CODEX_THREAD_BINDING_COMPACT_EVIDENCE_EVENT_TYPES = new Set([
+  "codex_thread_binding_resolved",
+  "codex_thread_binding_lock_acquired",
+  "codex_thread_binding_lock_conflict",
+  "codex_thread_binding_lock_released",
+  "codex_thread_binding_created",
+  "codex_thread_binding_resumed",
+  "codex_thread_binding_rotated",
+  "codex_thread_binding_persist_failed",
+  "codex_thread_binding_persist_skipped",
+  "codex_harness_primary_completed",
+  "codex_harness_primary_dynamic_tool_event",
+  "codex_harness_dynamic_tool_bridge_call_finished",
+  "mcp_tool_execution_completed",
+]);
+
 function readEnv(name: string): string {
   try {
     const value = (globalThis as any)?.process?.env?.[name];
@@ -1576,6 +1592,7 @@ export const getCodexThreadBindingCanaryEvidence = query({
     runId: v.optional(v.string()),
     sinceMs: v.optional(v.number()),
     limit: v.optional(v.number()),
+    compact: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     assertStagingMaintenanceAllowed({ maintenanceToken: args.maintenanceToken });
@@ -1588,6 +1605,7 @@ export const getCodexThreadBindingCanaryEvidence = query({
     const projectName = normalizeText(args.projectName) || DEFAULT_PROJECT_NAME;
     const requestedThreadId = normalizeOptionalId(args.threadId);
     const requestedRunId = normalizeOptionalId(args.runId);
+    const compact = args.compact === true;
     const sinceMs = Number.isFinite(args.sinceMs)
       ? Math.floor(args.sinceMs as number)
       : 0;
@@ -1624,9 +1642,11 @@ export const getCodexThreadBindingCanaryEvidence = query({
         .collect())
         .sort((a: any, b: any) => (a.seq ?? 0) - (b.seq ?? 0));
       const filteredEvents = events
-        .filter((event: any) =>
-          CODEX_THREAD_BINDING_EVIDENCE_EVENT_TYPES.has(String(event.eventType ?? "")),
-        )
+        .filter((event: any) => {
+          const eventType = String(event.eventType ?? "");
+          if (!CODEX_THREAD_BINDING_EVIDENCE_EVENT_TYPES.has(eventType)) return false;
+          return !compact || CODEX_THREAD_BINDING_COMPACT_EVIDENCE_EVENT_TYPES.has(eventType);
+        })
         .map((event: any) => ({
           seq: event.seq,
           eventType: event.eventType,
@@ -1708,6 +1728,7 @@ export const getCodexThreadBindingCanaryEvidence = query({
         runId: requestedRunId,
         sinceMs,
         limit: safeLimit,
+        compact,
       },
       runs: runEvidence,
     };

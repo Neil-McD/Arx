@@ -274,6 +274,7 @@ const evidence = withMaintenanceToken(options, (token) =>
       limit: Number.isFinite(limit) && limit > 0 ? limit : undefined,
       threadId: threadId ?? undefined,
       runId: runId ?? undefined,
+      compact: assertResume && !rawOutput ? true : undefined,
     }),
   ),
 );
