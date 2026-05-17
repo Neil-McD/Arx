@@ -1,12 +1,8 @@
 import { useState } from "react";
 
 import type { CommunityMountedApp } from "../../../../shared/communityAppMountTypes";
-import {
-  buildMcpAppIdentityAliases,
-  mcpAppIdentitySourcesOverlap,
-  type EffectiveMcpApp,
-} from "../../../../shared/effectiveMcpApps";
-import { findDiscoverCatalogEntryForAppIdentity } from "../lib/discoverCatalogMatching";
+import type { EffectiveMcpApp } from "../../../../shared/effectiveMcpApps";
+import { buildIntegrationSurfaceRowFromCommunityMount } from "../lib/integrationSurfaceRows";
 import { DiscoverCatalogLogo } from "./DiscoverCatalogLogo";
 
 function toStatusLabel(value: string | null | undefined): string {
@@ -19,67 +15,6 @@ function toStatusLabel(value: string | null | undefined): string {
     .join(" ");
 }
 
-function pluralizeTools(count: number): string {
-  return `${count} ${count === 1 ? "tool" : "tools"}`;
-}
-
-function findEffectiveMcpAppForCommunityMount(
-  mount: CommunityMountedApp,
-  apps: EffectiveMcpApp[],
-): EffectiveMcpApp | null {
-  const aliases = new Set(buildMcpAppIdentityAliases(mount));
-  return (
-    apps.find((app) => aliases.has(app.app_identity_key)) ??
-    apps.find((app) => mcpAppIdentitySourcesOverlap(app, mount)) ??
-    null
-  );
-}
-
-function buildMountStateClassName(
-  mount: CommunityMountedApp,
-  effectiveApp: EffectiveMcpApp | null,
-): string {
-  if (!mount.enabled) return " is-disabled";
-  if (effectiveApp?.live_for_current_user) return " is-live";
-  if (effectiveApp?.credential_state === "needs_personal_setup") return " is-setup";
-  return "";
-}
-
-function buildMountStateLabel(
-  mount: CommunityMountedApp,
-  effectiveApp: EffectiveMcpApp | null,
-): string {
-  if (!mount.enabled) return "Disabled";
-  if (effectiveApp?.live_for_current_user) return "Live";
-  if (effectiveApp?.credential_state === "needs_personal_setup") {
-    return "Setup needed";
-  }
-  return "Added";
-}
-
-function buildMountStatusLabel(
-  mount: CommunityMountedApp,
-  effectiveApp: EffectiveMcpApp | null,
-): string {
-  if (effectiveApp?.live_for_current_user) {
-    return pluralizeTools(effectiveApp.effective_tool_count);
-  }
-  const enabledCount = mount.tools.filter((tool) => tool.enabled).length;
-  if (enabledCount > 0) return pluralizeTools(enabledCount);
-  return "0 tools";
-}
-
-function buildMountDetail(
-  mount: CommunityMountedApp,
-  effectiveApp: EffectiveMcpApp | null,
-): string | null {
-  if (effectiveApp?.live_for_current_user) return null;
-  if (effectiveApp?.credential_state === "needs_personal_setup") {
-    return "Set up your connection to use this app.";
-  }
-  return null;
-}
-
 export type WebCommunityAiAgentAppsEditorProps = {
   intro: string;
   emptyState: string;
@@ -87,6 +22,7 @@ export type WebCommunityAiAgentAppsEditorProps = {
   mounts: CommunityMountedApp[];
   effectiveMcpApps: EffectiveMcpApp[];
   isLoading: boolean;
+  isLoadingEffectiveMcpApps: boolean;
   error: string | null;
   mutationError: string | null;
   isConnecting: boolean;
@@ -115,6 +51,7 @@ export function WebCommunityAiAgentAppsEditor(
     mounts,
     effectiveMcpApps,
     isLoading,
+    isLoadingEffectiveMcpApps,
     error,
     mutationError,
     isConnecting,
@@ -162,39 +99,35 @@ export function WebCommunityAiAgentAppsEditor(
             const isRefreshing = refreshingMountId === mount.id;
             const isRemoving = removingMountId === mount.id;
             const isEditing = editingMountId === mount.id;
-            const catalogEntry = findDiscoverCatalogEntryForAppIdentity(
-              mount.app,
-            );
-            const effectiveApp = findEffectiveMcpAppForCommunityMount(
+            const row = buildIntegrationSurfaceRowFromCommunityMount(
               mount,
               effectiveMcpApps,
+              {
+                canToggle: true,
+                isBusy: isUpdating || isRemoving || isRefreshing,
+                isResolvingCanonicalState: isLoadingEffectiveMcpApps,
+              },
             );
-            const appDetail = buildMountDetail(mount, effectiveApp);
             return (
               <div key={mount.id} className="integration-mounted-row" role="listitem">
                 <div className="integration-mounted-top">
                   <div className="integration-mounted-identity">
                     <DiscoverCatalogLogo
-                      name={mount.app.name}
-                      logoUrl={catalogEntry?.logoUrl}
-                      logoUrlDark={catalogEntry?.logoUrlDark}
+                      name={row.name}
+                      logoUrl={row.logoUrl}
+                      logoUrlDark={row.logoUrlDark}
                     />
                     <div className="integration-mounted-main">
                       <div className="integration-mounted-title-row">
-                        <strong>{mount.app.name}</strong>
-                        <span className={`integration-state-indicator${buildMountStateClassName(mount, effectiveApp)}`}>
+                        <strong>{row.name}</strong>
+                        <span className={`integration-state-indicator is-${row.stateTone}`}>
                           <span aria-hidden="true" />
-                          {buildMountStateLabel(mount, effectiveApp)}
+                          {row.stateLabel}
                         </span>
                         <span className="integration-status-pill">
-                          {buildMountStatusLabel(mount, effectiveApp)}
+                          {row.toolCountLabel}
                         </span>
                       </div>
-                      {appDetail ? (
-                        <div className="integration-mounted-detail">
-                          {appDetail}
-                        </div>
-                      ) : null}
                     </div>
                   </div>
                   <div className="integration-mounted-rail">
@@ -304,7 +237,30 @@ export function WebCommunityAiAgentAppsEditor(
                         </div>
                       </div>
                     ) : (
-                      <div className="model-note">No tools have been discovered for this community app yet.</div>
+                      row.toolNames.length > 0 ? (
+                        <div className="agent-capability-field">
+                          <span className="agent-capability-field-label">Tools</span>
+                          <div className="community-app-tool-list" role="list">
+                            {row.toolNames.map((toolName) => (
+                              <div
+                                key={toolName}
+                                className="community-app-tool-row"
+                                role="listitem"
+                              >
+                                <div className="community-app-tool-copy">
+                                  <div className="community-app-tool-title-row">
+                                    <span className="community-app-tool-name">
+                                      {toolName}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="model-note">No tools available yet.</div>
+                      )
                     )}
                   </div>
                 ) : null}

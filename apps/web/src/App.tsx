@@ -76,10 +76,7 @@ import { useWebEffectiveMcpAppsController } from "./controllers/useWebEffectiveM
 import { useWebUserPlatformAppMountsController } from "./controllers/useWebUserPlatformAppMountsController";
 import { useWebUserPlatformSkillsController } from "./controllers/useWebUserPlatformSkillsController";
 import {
-  buildMcpAppIdentityAliases,
-  mcpAppIdentitySourcesOverlap,
   removePersonalMountFromEffectiveMcpApps,
-  type EffectiveMcpApp,
 } from "../../../shared/effectiveMcpApps";
 import { useWebWorkspaceProjectStateController } from "./controllers/useWebWorkspaceProjectStateController";
 import { useWebWorkspaceModelStateController } from "./controllers/useWebWorkspaceModelStateController";
@@ -164,13 +161,13 @@ import type {
   UserProfile as SharedUserProfile,
   UserProfileDetail as SharedUserProfileDetail,
 } from "../../../shared/communityTypes";
-import type { CommunityMountedApp, ConnectCommunityAppInput } from "../../../shared/communityAppMountTypes";
+import type { ConnectCommunityAppInput } from "../../../shared/communityAppMountTypes";
 import type { CreateSkillPackageInput } from "../../../shared/skillPackageTypes";
 import {
   DISCOVER_APP_CATALOG,
   type DiscoverAppCatalogEntry,
 } from "../../../shared/discoverCatalog";
-import { findDiscoverCatalogEntryForAppIdentity } from "./lib/discoverCatalogMatching";
+import { buildCommunityIntegrationSurfaceRows } from "./lib/integrationSurfaceRows";
 import {
   DISCOVER_SKILL_CATALOG,
   type DiscoverSkillCatalogEntry,
@@ -491,84 +488,6 @@ function normalizeWorkspacePanelCommunityRole(
 
 function formatPanelSignalCount(count: number, singular: string, plural: string): string {
   return count === 1 ? `1 ${singular}` : `${count} ${plural}`;
-}
-
-function findEffectiveMcpAppForWorkspacePanelCommunityMount(
-  mount: CommunityMountedApp,
-  apps: EffectiveMcpApp[],
-): EffectiveMcpApp | null {
-  const aliases = new Set(buildMcpAppIdentityAliases(mount));
-  return (
-    apps.find((app) => aliases.has(app.app_identity_key)) ??
-    apps.find((app) => mcpAppIdentitySourcesOverlap(app, mount)) ??
-    null
-  );
-}
-
-function buildWorkspacePanelIntegrationState(
-  mount: CommunityMountedApp,
-  effectiveApp: EffectiveMcpApp | null,
-): {
-  stateLabel: string;
-  stateTone: "live" | "setup" | "not-live" | "disabled";
-} {
-  if (!mount.enabled) return { stateLabel: "Disabled", stateTone: "disabled" };
-  if (effectiveApp?.live_for_current_user) {
-    return { stateLabel: "Live", stateTone: "live" };
-  }
-  if (
-    mount.app.auth_type !== "none" &&
-    effectiveApp?.credential_state === "needs_personal_setup"
-  ) {
-    return { stateLabel: "Setup needed", stateTone: "setup" };
-  }
-  if (mount.app.status !== "valid" || mount.not_live_reason === "validation_failed") {
-    return { stateLabel: "Validation failed", stateTone: "not-live" };
-  }
-  if (mount.enabled_tools.length === 0) {
-    return { stateLabel: "No tools", stateTone: "setup" };
-  }
-  if (mount.live_status === "live") return { stateLabel: "Live", stateTone: "live" };
-  return { stateLabel: "Not live", stateTone: "not-live" };
-}
-
-function buildWorkspacePanelIntegrationRows(
-  mounts: CommunityMountedApp[],
-  apps: EffectiveMcpApp[],
-  options: {
-    canManage: boolean;
-    busyMountIds: Set<string>;
-  },
-) {
-  return mounts
-    .map((mount) => {
-      const effectiveApp = findEffectiveMcpAppForWorkspacePanelCommunityMount(mount, apps);
-      const catalogEntry = findDiscoverCatalogEntryForAppIdentity(mount.app);
-      const state = buildWorkspacePanelIntegrationState(mount, effectiveApp);
-      const toolCount =
-        effectiveApp?.live_for_current_user && effectiveApp.effective_tool_count > 0
-          ? effectiveApp.effective_tool_count
-          : mount.enabled_tools.length || mount.tools.filter((tool) => tool.enabled).length;
-      return {
-        id: mount.id,
-        name: mount.app.name.trim() || mount.app.slug.trim() || "Connected app",
-        logoUrl: catalogEntry?.logoUrl ?? null,
-        logoUrlDark: catalogEntry?.logoUrlDark ?? null,
-        stateLabel: state.stateLabel,
-        stateTone: state.stateTone,
-        toolCountLabel: formatPanelSignalCount(toolCount, "tool", "tools"),
-        enabled: mount.enabled,
-        canToggle: options.canManage,
-        canSetup: effectiveApp?.primary_action === "setup_personal",
-        isBusy: options.busyMountIds.has(mount.id),
-      };
-    })
-    .filter(
-      (row, index, rows) =>
-        row.name &&
-        rows.findIndex((candidate) => candidate.name === row.name) === index,
-    )
-    .slice(0, 8);
 }
 
 type ThreadRecord = {
@@ -4800,6 +4719,9 @@ export default function App() {
       (activePage === "community" && communityTab === "settings") ||
       (activePage === "community" && communityTab === "ai_agent") ||
       (activePage === "workspace" &&
+        activeView === "home" &&
+        isWorkspaceOperatorDataPanelOpen) ||
+      (activePage === "workspace" &&
         activeView === "settings" &&
         settingsPage === "integrations");
     if (!shouldLoadEffectiveMcpApps) return;
@@ -4815,6 +4737,7 @@ export default function App() {
     activePage,
     activeView,
     communityTab,
+    isWorkspaceOperatorDataPanelOpen,
     session,
     settingsPage,
     clearEffectiveMcpApps,
@@ -7042,6 +6965,7 @@ export default function App() {
         mounts: communityAppMounts,
         effectiveMcpApps,
         isLoading: isLoadingCommunityAppMounts,
+        isLoadingEffectiveMcpApps,
         error: communityAppMountError,
         mutationError: communityAppMutationError,
         updatingMountId: updatingCommunityAppMountId,
@@ -7175,6 +7099,7 @@ export default function App() {
         mounts: communityAppMounts,
         effectiveMcpApps,
         isLoading: isLoadingCommunityAppMounts,
+        isLoadingEffectiveMcpApps,
         error: communityAppMountError,
         mutationError: communityAppMutationError,
         isConnecting: isConnectingCommunityApp,
@@ -7967,8 +7892,8 @@ export default function App() {
 
   const workspacePanelCommunityIntegrations = useMemo(
     () =>
-      buildWorkspacePanelIntegrationRows(communityAppMounts, effectiveMcpApps, {
-        canManage: canManageMembersActiveCommunity || canViewActiveCommunitySettings,
+      buildCommunityIntegrationSurfaceRows(communityAppMounts, effectiveMcpApps, {
+        canToggle: canManageMembersActiveCommunity || canViewActiveCommunitySettings,
         busyMountIds: new Set(
           [
             updatingCommunityAppMountId,
@@ -7976,12 +7901,15 @@ export default function App() {
             removingCommunityAppMountId,
           ].filter(Boolean) as string[],
         ),
+        isResolvingCanonicalState: isLoadingEffectiveMcpApps,
+        limit: 8,
       }),
     [
       canManageMembersActiveCommunity,
       canViewActiveCommunitySettings,
       communityAppMounts,
       effectiveMcpApps,
+      isLoadingEffectiveMcpApps,
       refreshingCommunityAppMountId,
       removingCommunityAppMountId,
       updatingCommunityAppMountId,

@@ -13,16 +13,13 @@ import {
   type DiscoverAppCatalogEntry,
 } from "../lib/discoverCatalog";
 import { findDiscoverCatalogEntryForAppIdentity } from "../lib/discoverCatalogMatching";
+import { buildIntegrationSurfaceRowFromCommunityMount } from "../lib/integrationSurfaceRows";
 import { DiscoverCatalogLogo } from "./DiscoverCatalogLogo";
 import { StripeConnectCountrySelect } from "./StripeConnectCountrySelect";
 import { StripeSetupButton } from "./StripeSetupButton";
 import { PersonalAppSetupModal } from "./PersonalAppSetupModal";
 import type { CommunityMountedApp } from "../../../../shared/communityAppMountTypes";
-import {
-  buildMcpAppIdentityAliases,
-  mcpAppIdentitySourcesOverlap,
-  type EffectiveMcpApp,
-} from "../../../../shared/effectiveMcpApps";
+import type { EffectiveMcpApp } from "../../../../shared/effectiveMcpApps";
 import type {
   BeginUserPlatformAppOAuthResult,
   ConnectUserPlatformAppInput,
@@ -59,6 +56,7 @@ type WebCommunitySettingsSectionProps = {
     mounts: CommunityMountedApp[];
     effectiveMcpApps: EffectiveMcpApp[];
     isLoading: boolean;
+    isLoadingEffectiveMcpApps: boolean;
     error: string | null;
     mutationError: string | null;
     updatingMountId: string | null;
@@ -161,10 +159,6 @@ type WebCommunitySettingsSectionProps = {
 
 type SharedSettingsProps = Pick<WebCommunitySettingsSectionProps, "state" | "actions">;
 
-function pluralizeTools(count: number): string {
-  return `${count} ${count === 1 ? "tool" : "tools"}`;
-}
-
 function toStatusLabel(value: string | null | undefined): string {
   const normalized = String(value ?? "").trim();
   if (!normalized) return "Unknown";
@@ -173,106 +167,6 @@ function toStatusLabel(value: string | null | undefined): string {
     .filter(Boolean)
     .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
     .join(" ");
-}
-
-function findEffectiveMcpAppForCommunityMount(
-  mount: CommunityMountedApp,
-  apps: EffectiveMcpApp[],
-): EffectiveMcpApp | null {
-  const aliases = new Set(buildMcpAppIdentityAliases(mount));
-  return (
-    apps.find((app) => aliases.has(app.app_identity_key)) ??
-    apps.find((app) => mcpAppIdentitySourcesOverlap(app, mount)) ??
-    null
-  );
-}
-
-function buildCommunityAppNotLiveLabel(mount: CommunityMountedApp): string {
-  switch (mount.not_live_reason) {
-    case "needs_auth":
-      return "Setup needed";
-    case "validation_failed":
-      return "Validation failed";
-    case "no_tools_discovered":
-      return "No tools discovered";
-    case "missing_snapshot":
-      return "Missing snapshot";
-    case "disabled":
-      return "Disabled";
-    case "unknown":
-    default:
-      return "Not live";
-  }
-}
-
-function buildCommunityAppStateLabel(mount: CommunityMountedApp): string {
-  if (!mount.enabled) return "Disabled";
-  if (mount.live_status !== "live") return buildCommunityAppNotLiveLabel(mount);
-  if (
-    mount.app.auth_type !== "none" &&
-    mount.connection.connection_status !== "connected"
-  ) {
-    return "Reconnect required";
-  }
-  if (mount.app.status !== "valid") return "Validation failed";
-  if (mount.enabled_tools.length === 0) return "No tools";
-  return "Live";
-}
-
-function buildCommunityAddedAppStateLabel(args: {
-  mount: CommunityMountedApp;
-  effectiveApp: EffectiveMcpApp | null;
-}): string {
-  if (!args.mount.enabled) return "Disabled";
-  if (args.effectiveApp?.live_for_current_user) return "Live";
-  if (
-    args.mount.app.status === "invalid" ||
-    args.mount.not_live_reason === "validation_failed"
-  ) {
-    return "Validation failed";
-  }
-  if (!args.effectiveApp?.has_personal_mount) return "Added";
-  if (args.effectiveApp?.credential_state === "needs_personal_setup") {
-    return "Setup needed";
-  }
-  return buildCommunityAppStateLabel(args.mount);
-}
-
-function buildCommunityAddedAppStateClassName(args: {
-  mount: CommunityMountedApp;
-  effectiveApp: EffectiveMcpApp | null;
-}): string {
-  const label = buildCommunityAddedAppStateLabel(args);
-  if (label === "Live") return " is-live";
-  if (label === "Disabled") return " is-disabled";
-  if (label === "Setup needed" || label === "Reconnect required") {
-    return " is-setup";
-  }
-  if (label === "Added") return "";
-  return " is-not-live";
-}
-
-function buildCommunityAddedAppStatusLabel(args: {
-  mount: CommunityMountedApp;
-  effectiveApp: EffectiveMcpApp | null;
-}): string {
-  const toolCount =
-    args.effectiveApp?.effective_tool_count || args.mount.enabled_tools.length;
-  return pluralizeTools(toolCount);
-}
-
-function buildCommunityAddedAppDetail(args: {
-  mount: CommunityMountedApp;
-  effectiveApp: EffectiveMcpApp | null;
-}): string | null {
-  if (args.effectiveApp?.live_for_current_user) return null;
-  if (args.effectiveApp?.credential_state === "needs_personal_setup") {
-    return "Set up your connection to use this app.";
-  }
-  if (args.mount.app.status !== "valid" || args.mount.live_status !== "live") {
-    return `Connection ${toStatusLabel(args.mount.connection.connection_status)} · Validation ${toStatusLabel(args.mount.app.status)}`;
-  }
-  return null;
 }
 
 function buildPersonalOptInInput(args: {
@@ -434,37 +328,31 @@ function CommunityIntegrationsSettingsSection({
             const catalogEntry = findDiscoverCatalogEntryForAppIdentity(
               mount.app,
             );
-            const effectiveApp = findEffectiveMcpAppForCommunityMount(
-              mount,
-              integrations.effectiveMcpApps,
-            );
-            const enabledToolNames = mount.tools
-              .filter((tool) => tool.enabled)
-              .map((tool) => tool.tool_name);
             const isUpdating = integrations.updatingMountId === mount.id;
             const isRefreshing = integrations.refreshingMountId === mount.id;
             const isRemoving = integrations.removingMountId === mount.id;
             const isOptingIn =
               integrations.isOptingIntoApp || optingInMountId === mount.id;
             const isBusy = isUpdating || isRefreshing || isRemoving || isOptingIn;
+            const row = buildIntegrationSurfaceRowFromCommunityMount(
+              mount,
+              integrations.effectiveMcpApps,
+              {
+                canToggle: canManage,
+                isBusy,
+                isResolvingCanonicalState: integrations.isLoadingEffectiveMcpApps,
+              },
+            );
+            const effectiveApp = row.effectiveApp;
+            const enabledToolNames = mount.tools
+              .filter((tool) => tool.enabled)
+              .map((tool) => tool.tool_name);
             const hasPersonalMount = effectiveApp?.has_personal_mount === true;
-            const stateLabel = buildCommunityAddedAppStateLabel({
-              mount,
-              effectiveApp,
-            });
-            const statusLabel = buildCommunityAddedAppStatusLabel({
-              mount,
-              effectiveApp,
-            });
-            const appDetail = buildCommunityAddedAppDetail({
-              mount,
-              effectiveApp,
-            });
             const canSetupPersonal =
               Boolean(
                 catalogEntry &&
                   isDiscoverAppPersonallyConnectable(catalogEntry) &&
-                  (effectiveApp?.primary_action === "setup_personal" ||
+                  (row.canSetup ||
                     (!hasPersonalMount && mount.app.auth_type !== "none")),
               );
             return (
@@ -472,31 +360,23 @@ function CommunityIntegrationsSettingsSection({
                 <div className="integration-mounted-top">
                   <div className="integration-mounted-identity">
                     <DiscoverCatalogLogo
-                      name={mount.app.name}
-                      logoUrl={catalogEntry?.logoUrl}
-                      logoUrlDark={catalogEntry?.logoUrlDark}
+                      name={row.name}
+                      logoUrl={row.logoUrl}
+                      logoUrlDark={row.logoUrlDark}
                     />
                     <div className="integration-mounted-main">
                       <div className="integration-mounted-title-row">
-                        <strong>{mount.app.name}</strong>
+                        <strong>{row.name}</strong>
                         <span
-                          className={`integration-state-indicator${buildCommunityAddedAppStateClassName({
-                            mount,
-                            effectiveApp,
-                          })}`}
+                          className={`integration-state-indicator is-${row.stateTone}`}
                         >
                           <span aria-hidden="true" />
-                          {stateLabel}
+                          {row.stateLabel}
                         </span>
                         <span className="integration-status-pill">
-                          {statusLabel}
+                          {row.toolCountLabel}
                         </span>
                       </div>
-                      {appDetail ? (
-                        <div className="integration-mounted-detail">
-                          {appDetail}
-                        </div>
-                      ) : null}
                     </div>
                   </div>
                   {canManage || !hasPersonalMount || canSetupPersonal ? (
@@ -621,11 +501,26 @@ function CommunityIntegrationsSettingsSection({
                       );
                     })}
                   </div>
-                ) : (
-                  <div className="model-note">
-                    No tools have been discovered for this community attachment
-                    yet.
+                ) : row.toolNames.length > 0 ? (
+                  <div className="community-app-tool-list" role="list">
+                    {row.toolNames.map((toolName) => (
+                      <div
+                        key={toolName}
+                        className="community-app-tool-row"
+                        role="listitem"
+                      >
+                        <div className="community-app-tool-copy">
+                          <div className="community-app-tool-title-row">
+                            <span className="community-app-tool-name">
+                              {toolName}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
                   </div>
+                ) : (
+                  <div className="model-note">No tools available yet.</div>
                 )}
               </div>
             );

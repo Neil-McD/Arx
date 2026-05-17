@@ -14,6 +14,7 @@ import {
   type WorkspaceInspectorFilePreview,
 } from "../../../../shared/workspaceInspectorGateway";
 import type { DaytonaWorkspaceComputerStartResult } from "../../../../shared/daytonaWorkspaceTerminals";
+import type { IntegrationSurfaceStateTone } from "../lib/integrationSurfaceRows";
 
 export type WorkspaceUserPanelCommunity = {
   id: string;
@@ -50,7 +51,7 @@ export type WorkspaceUserPanelIntegration = {
   logoUrl: string | null;
   logoUrlDark: string | null;
   stateLabel: string;
-  stateTone: "live" | "setup" | "not-live" | "disabled";
+  stateTone: IntegrationSurfaceStateTone;
   toolCountLabel: string;
   enabled: boolean;
   canToggle: boolean;
@@ -615,7 +616,7 @@ export function CommunityPanelContent(props: WorkspaceUserDataPanelDataProps) {
                     ) : null}
                     {integration.canToggle ? (
                       <label
-                        className={`members-switch workspace-community-integration-switch${
+                        className={`members-switch integration-mounted-switch${
                           integration.isBusy ? " is-disabled" : ""
                         }`}
                         title={integration.enabled ? "Disable app" : "Enable app"}

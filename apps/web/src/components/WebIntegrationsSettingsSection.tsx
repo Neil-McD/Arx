@@ -9,6 +9,7 @@ import type {
   ConnectUserPlatformAppResult,
 } from "../../../../shared/userPlatformAppMountTypes";
 import { isDiscoverAppPersonallyConnectable } from "../lib/discoverCatalog";
+import { buildIntegrationSurfaceRowFromEffectiveApp } from "../lib/integrationSurfaceRows";
 import { usePersonalAppSetupController } from "../controllers/usePersonalAppSetupController";
 import { findDiscoverCatalogEntryForAppIdentity } from "../lib/discoverCatalogMatching";
 import { DiscoverCatalogLogo } from "./DiscoverCatalogLogo";
@@ -105,10 +106,6 @@ function buildSkillDraftFromInstall(
   };
 }
 
-function pluralizeTools(count: number): string {
-  return `${count} ${count === 1 ? "tool" : "tools"}`;
-}
-
 function buildEffectiveHarnessSummary(apps: EffectiveMcpApp[]): string {
   const liveCount = apps.filter((app) => app.live_for_current_user).length;
   const setupCount = apps.filter(
@@ -122,38 +119,6 @@ function buildEffectiveHarnessSummary(apps: EffectiveMcpApp[]): string {
     return `${scopeLabel}. ${liveCount} live, ${setupCount} need setup.`;
   }
   return `${scopeLabel}. ${liveCount} live, ${notLiveCount} not live.`;
-}
-
-function buildEffectiveAppStateLabel(app: EffectiveMcpApp): string {
-  if (app.live_for_current_user) return "Live";
-  switch (app.credential_state) {
-    case "needs_personal_setup":
-      return "Setup needed";
-    case "not_live":
-    default:
-      return "Not live";
-  }
-}
-
-function buildEffectiveAppStateClassName(app: EffectiveMcpApp): string {
-  if (app.live_for_current_user) return " is-live";
-  if (app.credential_state === "needs_personal_setup") return " is-setup";
-  return " is-not-live";
-}
-
-function buildEffectiveAppStatusLabel(app: EffectiveMcpApp): string {
-  return pluralizeTools(app.effective_tool_count);
-}
-
-function buildEffectiveAppDetail(app: EffectiveMcpApp): string | null {
-  if (app.live_for_current_user) return null;
-  if (app.credential_state === "needs_personal_setup" && app.is_attached_to_community) {
-    return "Set up your connection to use this app.";
-  }
-  if (app.credential_state === "needs_personal_setup") {
-    return "Set up your connection to use this app.";
-  }
-  return null;
 }
 
 export function WebIntegrationsSettingsSection(
@@ -380,7 +345,14 @@ export function WebIntegrationsSettingsSection(
                   catalogEntry &&
                     isDiscoverAppPersonallyConnectable(catalogEntry),
                 );
-              const appDetail = buildEffectiveAppDetail(effectiveApp);
+              const row = buildIntegrationSurfaceRowFromEffectiveApp(effectiveApp, {
+                enabled:
+                  actionMount?.enabled ??
+                  effectiveApp.community_mount?.enabled ??
+                  true,
+                canSetup: canSetupPersonal,
+                isBusy,
+              });
               return (
                 <div
                   key={effectiveApp.app_identity_key}
@@ -389,30 +361,23 @@ export function WebIntegrationsSettingsSection(
                   <div className="integration-mounted-top">
                     <div className="integration-mounted-identity">
                       <DiscoverCatalogLogo
-                        name={effectiveApp.app.name}
-                        logoUrl={catalogEntry?.logoUrl}
-                        logoUrlDark={catalogEntry?.logoUrlDark}
+                        name={row.name}
+                        logoUrl={row.logoUrl}
+                        logoUrlDark={row.logoUrlDark}
                       />
                       <div className="integration-mounted-main">
                         <div className="integration-mounted-title-row">
-                          <strong>{effectiveApp.app.name}</strong>
+                          <strong>{row.name}</strong>
                           <span
-                            className={`integration-state-indicator${buildEffectiveAppStateClassName(
-                              effectiveApp,
-                            )}`}
+                            className={`integration-state-indicator is-${row.stateTone}`}
                           >
                             <span aria-hidden="true" />
-                            {buildEffectiveAppStateLabel(effectiveApp)}
+                            {row.stateLabel}
                           </span>
                           <span className="integration-status-pill">
-                            {buildEffectiveAppStatusLabel(effectiveApp)}
+                            {row.toolCountLabel}
                           </span>
                         </div>
-                        {appDetail ? (
-                          <div className="integration-mounted-detail">
-                            {appDetail}
-                          </div>
-                        ) : null}
                       </div>
                     </div>
                     {canManagePersonal && sourceMountId ? (
