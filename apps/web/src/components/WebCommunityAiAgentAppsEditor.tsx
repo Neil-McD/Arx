@@ -189,7 +189,7 @@ export function WebCommunityAiAgentAppsEditor(
 
                     <div className="agent-capability-toolbar">
                       <div className="model-note">
-                        Refresh only re-checks the community app and discovered tool surface. Members still use their own harness credentials.
+                        Refresh only re-checks the community app grant and discovered personal-tool surface. Members still use their own harness credentials.
                       </div>
                       <div className="agent-capability-toolbar-actions">
                         <button
@@ -204,7 +204,9 @@ export function WebCommunityAiAgentAppsEditor(
 
                     {mount.tools.length > 0 ? (
                       <div className="agent-capability-field">
-                        <span className="agent-capability-field-label">Tools</span>
+                        <span className="agent-capability-field-label">
+                          Default personal tools
+                        </span>
                         <div className="community-app-tool-list" role="list">
                           {mount.tools.map((tool) => {
                             const nextEnabledTools = tool.enabled
@@ -239,7 +241,9 @@ export function WebCommunityAiAgentAppsEditor(
                     ) : (
                       row.toolNames.length > 0 ? (
                         <div className="agent-capability-field">
-                          <span className="agent-capability-field-label">Tools</span>
+                          <span className="agent-capability-field-label">
+                            Default personal tools
+                          </span>
                           <div className="community-app-tool-list" role="list">
                             {row.toolNames.map((toolName) => (
                               <div
@@ -259,7 +263,7 @@ export function WebCommunityAiAgentAppsEditor(
                           </div>
                         </div>
                       ) : (
-                        <div className="model-note">No tools available yet.</div>
+                        <div className="model-note">No personal tools available yet.</div>
                       )
                     )}
                   </div>

@@ -42,7 +42,10 @@ export type WorkspaceUserPanelOnlineFace = {
 
 export type WorkspaceUserPanelRecentSignal = {
   id: string;
-  label: string;
+  kind: "member" | "chat" | "ai_feed" | "resource" | "event";
+  title: string;
+  iconLabel?: string | null;
+  avatar?: WorkspaceUserPanelOnlineFace | null;
 };
 
 export type WorkspaceUserPanelIntegration = {
@@ -570,7 +573,27 @@ export function CommunityPanelContent(props: WorkspaceUserDataPanelDataProps) {
           <div className="workspace-community-signal-list">
             {community.recentSignals.map((signal) => (
               <div key={signal.id} className="workspace-community-signal-row">
-                {signal.label}
+                {signal.avatar ? (
+                  <UserAvatar
+                    className="workspace-community-signal-avatar public-funnel-face"
+                    readyClassName="has-image"
+                    name={signal.avatar.displayName ?? signal.avatar.userId}
+                    imageUrl={signal.avatar.avatarUrl}
+                    focusX={signal.avatar.avatarFocusX ?? 0.5}
+                    focusY={signal.avatar.avatarFocusY ?? 0.5}
+                    zoom={signal.avatar.avatarZoom ?? 1}
+                    alt=""
+                    aria-hidden={true}
+                    fallback={null}
+                  />
+                ) : (
+                  <span className="workspace-community-signal-icon" aria-hidden="true">
+                    {signal.iconLabel ?? signal.kind.slice(0, 2).toUpperCase()}
+                  </span>
+                )}
+                <div className="workspace-community-signal-copy">
+                  <div className="workspace-community-signal-title">{signal.title}</div>
+                </div>
               </div>
             ))}
           </div>

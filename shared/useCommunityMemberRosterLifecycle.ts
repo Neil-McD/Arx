@@ -12,12 +12,13 @@ export function useCommunityMemberRosterLifecycle<SessionT>(params: {
   session: SessionT | null;
   activeCommunityId: string | null;
   loadCommunityMembers: (communityId: string, session: SessionT) => Promise<void>;
+  shouldLoad?: boolean;
 }) {
   const session = params.session;
 
   useEffect(() => {
     if (!session || !params.activeCommunityId) return;
-    if (!needsCommunityMemberRoster(params.activePage, params.communityTab)) return;
+    if (!params.shouldLoad && !needsCommunityMemberRoster(params.activePage, params.communityTab)) return;
     const communityId = params.activeCommunityId;
     void params.loadCommunityMembers(communityId, session);
   }, [
@@ -26,5 +27,6 @@ export function useCommunityMemberRosterLifecycle<SessionT>(params: {
     params.activePage,
     params.communityTab,
     params.loadCommunityMembers,
+    params.shouldLoad,
   ]);
 }

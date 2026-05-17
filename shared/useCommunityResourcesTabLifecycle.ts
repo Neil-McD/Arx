@@ -8,11 +8,14 @@ export function useCommunityResourcesTabLifecycle<SessionT>(params: {
   activeCommunityId: string | null;
   loadCommunityResources: (communityId: string, session: SessionT) => Promise<void>;
   requireCommunityPage?: boolean;
+  shouldLoad?: boolean;
 }) {
   useEffect(() => {
     if (!params.session || !params.activeCommunityId) return;
-    if ((params.requireCommunityPage ?? false) && params.activePage !== "community") return;
-    if (params.communityTab !== "resources") return;
+    if (!params.shouldLoad) {
+      if ((params.requireCommunityPage ?? false) && params.activePage !== "community") return;
+      if (params.communityTab !== "resources") return;
+    }
     void params.loadCommunityResources(params.activeCommunityId, params.session);
   }, [
     params.session,
@@ -21,5 +24,6 @@ export function useCommunityResourcesTabLifecycle<SessionT>(params: {
     params.communityTab,
     params.loadCommunityResources,
     params.requireCommunityPage,
+    params.shouldLoad,
   ]);
 }

@@ -10,11 +10,14 @@ export function useCommunityEventsTabLifecycle<SessionT>(params: {
   range: CommunityEventsRange;
   loadCommunityEvents: (communityId: string, session: SessionT, range: CommunityEventsRange) => Promise<void>;
   requireCommunityPage?: boolean;
+  shouldLoad?: boolean;
 }) {
   useEffect(() => {
     if (!params.session || !params.activeCommunityId) return;
-    if ((params.requireCommunityPage ?? false) && params.activePage !== "community") return;
-    if (params.communityTab !== "events") return;
+    if (!params.shouldLoad) {
+      if ((params.requireCommunityPage ?? false) && params.activePage !== "community") return;
+      if (params.communityTab !== "events") return;
+    }
     void params.loadCommunityEvents(params.activeCommunityId, params.session, params.range);
   }, [
     params.session,
@@ -24,5 +27,6 @@ export function useCommunityEventsTabLifecycle<SessionT>(params: {
     params.loadCommunityEvents,
     params.range,
     params.requireCommunityPage,
+    params.shouldLoad,
   ]);
 }

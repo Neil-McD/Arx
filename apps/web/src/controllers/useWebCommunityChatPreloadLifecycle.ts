@@ -7,6 +7,7 @@ export function useWebCommunityChatPreloadLifecycle<SessionT>(params: {
   activeCommunityId: string | null;
   hasResolvedCommunityChat: boolean;
   loadCommunityChat: (communityId: string, session: SessionT) => Promise<void>;
+  shouldPreload?: boolean;
 }) {
   const session = params.session;
 
@@ -14,7 +15,7 @@ export function useWebCommunityChatPreloadLifecycle<SessionT>(params: {
     if (
       !session ||
       !params.activeCommunityId ||
-      params.activePage !== "community" ||
+      (params.activePage !== "community" && !params.shouldPreload) ||
       params.hasResolvedCommunityChat
     ) {
       return;
@@ -26,5 +27,6 @@ export function useWebCommunityChatPreloadLifecycle<SessionT>(params: {
     params.activePage,
     params.hasResolvedCommunityChat,
     params.loadCommunityChat,
+    params.shouldPreload,
   ]);
 }

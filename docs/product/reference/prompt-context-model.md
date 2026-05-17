@@ -47,7 +47,7 @@ Prompt injection is contextual, not subscription-tiered:
 
 1. Anonymous chat receives only the public/demo path.
 2. Authenticated users use the same platform harness stack.
-3. A backend-validated community lens adds compact community identity, community prompt, community tools, and community workflow context.
+3. A backend-validated community lens adds compact community identity, community prompt, community app grants, and community workflow context.
 4. A project-bound thread adds workspace/project context and workspace tools.
 5. Web research can be exposed for authenticated runs, but execution still depends on tool balance.
 6. Tool balance is enforced when a paid tool executes. A zero-credit user can still see and request the tool; the tool call returns a balance-required error that drives the top-up modal.

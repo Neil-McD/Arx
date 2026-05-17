@@ -474,6 +474,33 @@ type PublicCommunityRecord = {
 
 type WorkspacePanelCommunityRole = "member" | "moderator" | "admin" | "owner";
 
+type WorkspacePanelRecentSignalKind = "member" | "chat" | "ai_feed" | "resource" | "event";
+
+type WorkspacePanelSignalAvatar = {
+  userId: string;
+  displayName: string | null;
+  avatarUrl: string | null;
+  avatarFocusX?: number | null;
+  avatarFocusY?: number | null;
+  avatarZoom?: number | null;
+};
+
+type WorkspacePanelRecentSignal = {
+  id: string;
+  kind: WorkspacePanelRecentSignalKind;
+  title: string;
+  iconLabel?: string | null;
+  avatar?: WorkspacePanelSignalAvatar | null;
+};
+
+type WorkspacePanelRecentSignalCandidate = WorkspacePanelRecentSignal & {
+  sortMs: number;
+};
+
+const WORKSPACE_PANEL_HIGHLIGHT_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
+const WORKSPACE_PANEL_HIGHLIGHT_LIMIT = 6;
+const WORKSPACE_PANEL_FALLBACK_LIMIT = 3;
+
 function normalizeWorkspacePanelCommunityRole(
   access: SharedCommunityAccess | null,
   fallbackRole: string | null | undefined,
@@ -486,8 +513,19 @@ function normalizeWorkspacePanelCommunityRole(
   return "member";
 }
 
-function formatPanelSignalCount(count: number, singular: string, plural: string): string {
-  return count === 1 ? `1 ${singular}` : `${count} ${plural}`;
+function parsePanelSignalTimestampMs(value: string | null | undefined): number | null {
+  const parsed = Date.parse(String(value ?? ""));
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function normalizePanelSignalText(value: string | null | undefined): string {
+  return String(value ?? "").replace(/\s+/g, " ").trim();
+}
+
+function truncatePanelSignalText(value: string | null | undefined, maxLength = 150): string {
+  const normalized = normalizePanelSignalText(value);
+  if (normalized.length <= maxLength) return normalized;
+  return `${normalized.slice(0, Math.max(0, maxLength - 3)).trimEnd()}...`;
 }
 
 type ThreadRecord = {
@@ -4303,7 +4341,10 @@ export default function App() {
   }, [profileStorageUserId]);
 
   const visibleCommunityProfileIds = useMemo(() => {
-    if (activePage !== "community") return [] as string[];
+    const shouldLoadCommunityProfiles =
+      activePage === "community" ||
+      (activePage === "workspace" && activeView === "home" && isWorkspaceOperatorDataPanelOpen);
+    if (!shouldLoadCommunityProfiles) return [] as string[];
     const ids = new Set<string>();
     for (const member of communityMembers) {
       const userId = String(member.user_id ?? "").trim();
@@ -4315,7 +4356,14 @@ export default function App() {
     }
     if (canonicalSessionUserId) ids.add(canonicalSessionUserId);
     return Array.from(ids);
-  }, [activePage, canonicalSessionUserId, communityMembers, communityMessages]);
+  }, [
+    activePage,
+    activeView,
+    canonicalSessionUserId,
+    communityMembers,
+    communityMessages,
+    isWorkspaceOperatorDataPanelOpen,
+  ]);
 
   const savedProfilesByUserId = useMemo(() => {
     if (!canonicalSessionUserId || !cloudProfile) return profilesByUserId;
@@ -4344,7 +4392,7 @@ export default function App() {
   }, [canonicalSessionUserId, cloudProfile, profilesByUserId]);
 
   useEffect(() => {
-    if (!session || activePage !== "community" || visibleCommunityProfileIds.length === 0) return;
+    if (!session || visibleCommunityProfileIds.length === 0) return;
     const hydrateVisibleProfiles = () => {
       void loadUserProfiles(visibleCommunityProfileIds, session);
       void loadSelfProfile(session);
@@ -4365,7 +4413,7 @@ export default function App() {
       window.removeEventListener("focus", refreshVisibleProfiles);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [activePage, session, loadSelfProfile, loadUserProfiles, visibleCommunityProfileIds]);
+  }, [session, loadSelfProfile, loadUserProfiles, visibleCommunityProfileIds]);
 
   useWebGuestThreadLifecycle<AuthSession, GuestThreadStorageV1, ThreadMessage>({
     enableGuestThreadLifecycle: isSignedOutAppPresentation,
@@ -4441,12 +4489,17 @@ export default function App() {
     lastDiscoverLoadAttemptedAt,
     loadDiscoverCommunities,
   });
+  const shouldHydrateWorkspaceCommunityPanel =
+    activePage === "workspace" &&
+    activeView === "home" &&
+    isWorkspaceOperatorDataPanelOpen;
   useWebCommunityChatPreloadLifecycle<AuthSession>({
     session: session,
     activePage,
     activeCommunityId,
     hasResolvedCommunityChat,
     loadCommunityChat,
+    shouldPreload: shouldHydrateWorkspaceCommunityPanel,
   });
 
   useCommunitySettingsAccessLifecycle<AuthSession, CommunityRecord>({
@@ -4474,7 +4527,7 @@ export default function App() {
     retry: retryCommunityAiFeed,
   } = useCommunityAiFeedController<AuthSession>({
     activeCommunityId,
-    isAiFeedTabActive: communityTab === "ai_feed",
+    isAiFeedTabActive: communityTab === "ai_feed" || shouldHydrateWorkspaceCommunityPanel,
     viewerCacheKey: session?.user?.id ?? "anonymous",
     session: session,
     ensureSession: ensureUsableAuthSession,
@@ -4817,6 +4870,7 @@ export default function App() {
     ...sessionArg,
     activeCommunityId,
     loadCommunityMembers,
+    shouldLoad: shouldHydrateWorkspaceCommunityPanel,
   });
 
   const activeCommunityMembersJoinReviewMode = useMemo<CommunityMembersJoinReviewMode | null>(() => {
@@ -4854,6 +4908,7 @@ export default function App() {
     activeCommunityId,
     loadCommunityResources,
     requireCommunityPage: true,
+    shouldLoad: shouldHydrateWorkspaceCommunityPanel,
   });
   useCommunityEventsTabLifecycle<AuthSession>({
     activePage,
@@ -4863,6 +4918,7 @@ export default function App() {
     range: communityEventsVisibleRange,
     loadCommunityEvents,
     requireCommunityPage: true,
+    shouldLoad: shouldHydrateWorkspaceCommunityPanel,
   });
 
   useCommunityAdminAnalyticsLifecycle({
@@ -7843,51 +7899,177 @@ export default function App() {
   ]);
 
   const workspacePanelCommunityRecentSignals = useMemo(() => {
-    const signals: Array<{ id: string; label: string }> = [];
-    const hasChatSignal = Boolean(
-      activeCommunityAttentionSummary.chat ||
-        (activePage === "community" && activeCommunityId && unreadCount > 0),
-    );
-    if (hasChatSignal) signals.push({ id: "chat", label: "New chats" });
-    if (activeCommunityAttentionSummary.ai_feed) {
-      signals.push({ id: "ai_feed", label: "Recent AI feeds" });
+    const highlightedSignals: WorkspacePanelRecentSignalCandidate[] = [];
+    const fallbackSignals: WorkspacePanelRecentSignalCandidate[] = [];
+    const nowMs = Date.now();
+    const recentStartMs = nowMs - WORKSPACE_PANEL_HIGHLIGHT_WINDOW_MS;
+    const upcomingEndMs = nowMs + WORKSPACE_PANEL_HIGHLIGHT_WINDOW_MS;
+    const buildAvatar = (
+      userId: string,
+      fallbackDisplayName: string | null,
+      fallbackProfile?: {
+        avatar_url?: string | null;
+        avatar_focus_x?: number | null;
+        avatar_focus_y?: number | null;
+        avatar_zoom?: number | null;
+      } | null,
+    ): WorkspacePanelSignalAvatar => {
+      const profile = savedProfilesByUserId[userId] ?? null;
+      return {
+        userId,
+        displayName: profile?.display_name ?? fallbackDisplayName,
+        avatarUrl: profile?.avatar_url ?? fallbackProfile?.avatar_url ?? null,
+        avatarFocusX: profile?.avatar_focus_x ?? fallbackProfile?.avatar_focus_x ?? null,
+        avatarFocusY: profile?.avatar_focus_y ?? fallbackProfile?.avatar_focus_y ?? null,
+        avatarZoom: profile?.avatar_zoom ?? fallbackProfile?.avatar_zoom ?? null,
+      };
+    };
+    const finalizeSignals = (signals: WorkspacePanelRecentSignalCandidate[], limit: number) =>
+      signals
+        .sort((a, b) => b.sortMs - a.sortMs)
+        .slice(0, limit)
+        .map(({ sortMs: _sortMs, ...signal }) => signal);
+
+    const sortedMessages = [...communityMessages]
+      .filter((message) => !String(message.id ?? "").startsWith("pending-"))
+      .map((message) => ({
+        message,
+        createdAtMs: parsePanelSignalTimestampMs(message.created_at),
+      }))
+      .filter((entry): entry is { message: CommunityChatMessage; createdAtMs: number } => entry.createdAtMs !== null)
+      .sort((a, b) => b.createdAtMs - a.createdAtMs);
+
+    for (const { message, createdAtMs } of sortedMessages.slice(0, 2)) {
+      const senderId = String(message.sender_id ?? "").trim();
+      const senderName = senderId ? displayName(senderId) : "Member";
+      const snippet = truncatePanelSignalText(message.body, 160);
+      if (!snippet) continue;
+      const signal: WorkspacePanelRecentSignalCandidate = {
+        id: `chat:${message.id}`,
+        kind: "chat",
+        title: `${senderName}: ${snippet}`,
+        avatar: senderId ? buildAvatar(senderId, senderName) : null,
+        sortMs: createdAtMs,
+      };
+      if (createdAtMs >= recentStartMs && createdAtMs <= nowMs) {
+        highlightedSignals.push(signal);
+      }
+      fallbackSignals.push(signal);
     }
-    if (activeCommunityAttentionSummary.resources) {
-      signals.push({ id: "resources", label: "New resources" });
+
+    const sortedAiPosts = [...activeCommunityFeedState.live]
+      .filter((post) => !post.pending)
+      .map((post) => ({
+        post,
+        createdAtMs: parsePanelSignalTimestampMs(post.created_at),
+      }))
+      .filter((entry): entry is { post: CommunityAiFeedPost; createdAtMs: number } => entry.createdAtMs !== null)
+      .sort((a, b) => b.createdAtMs - a.createdAtMs);
+    const latestAiPost = sortedAiPosts[0] ?? null;
+    const aiTitle = latestAiPost ? normalizePanelSignalText(latestAiPost.post.title) : "";
+    if (latestAiPost && aiTitle) {
+      const signal: WorkspacePanelRecentSignalCandidate = {
+        id: `ai_feed:${latestAiPost.post.id}`,
+        kind: "ai_feed",
+        title: truncatePanelSignalText(aiTitle, 120),
+        iconLabel: "AI",
+        sortMs: latestAiPost.createdAtMs,
+      };
+      if (latestAiPost.createdAtMs >= recentStartMs && latestAiPost.createdAtMs <= nowMs) {
+        highlightedSignals.push(signal);
+      }
+      fallbackSignals.push(signal);
     }
-    const hasUpcomingEvent = communityEvents.some((event) => {
-      const startsAt = Date.parse(event.starts_at);
-      return Number.isFinite(startsAt) && startsAt >= Date.now();
-    });
-    if (activeCommunityAttentionSummary.events || hasUpcomingEvent) {
-      signals.push({ id: "events", label: "Upcoming events" });
+
+    const sortedResources = [...communityResources]
+      .map((resource) => ({
+        resource,
+        createdAtMs: parsePanelSignalTimestampMs(resource.created_at),
+      }))
+      .filter((entry): entry is { resource: CommunityResource; createdAtMs: number } => entry.createdAtMs !== null)
+      .sort((a, b) => b.createdAtMs - a.createdAtMs);
+    const latestResource = sortedResources[0] ?? null;
+    const resourceTitle = latestResource ? normalizePanelSignalText(latestResource.resource.title) : "";
+    if (latestResource && resourceTitle) {
+      const signal: WorkspacePanelRecentSignalCandidate = {
+        id: `resource:${latestResource.resource.id}`,
+        kind: "resource",
+        title: truncatePanelSignalText(resourceTitle, 120),
+        iconLabel: "R",
+        sortMs: latestResource.createdAtMs,
+      };
+      if (latestResource.createdAtMs >= recentStartMs && latestResource.createdAtMs <= nowMs) {
+        highlightedSignals.push(signal);
+      }
+      fallbackSignals.push(signal);
     }
+
+    const sortedUpcomingEvents = [...communityEvents]
+      .filter((event) => String(event.status ?? "").trim().toLowerCase() !== "cancelled")
+      .map((event) => ({
+        event,
+        startsAtMs: parsePanelSignalTimestampMs(event.starts_at),
+      }))
+      .filter((entry): entry is { event: CommunityEvent; startsAtMs: number } => entry.startsAtMs !== null)
+      .filter((entry) => entry.startsAtMs >= nowMs)
+      .sort((a, b) => a.startsAtMs - b.startsAtMs);
+    const upcomingEvent = sortedUpcomingEvents[0] ?? null;
+    const eventTitle = upcomingEvent ? normalizePanelSignalText(upcomingEvent.event.title) : "";
+    if (upcomingEvent && eventTitle) {
+      const signal: WorkspacePanelRecentSignalCandidate = {
+        id: `event:${upcomingEvent.event.id}`,
+        kind: "event",
+        title: truncatePanelSignalText(eventTitle, 120),
+        iconLabel: "EV",
+        sortMs: nowMs,
+      };
+      if (upcomingEvent.startsAtMs <= upcomingEndMs) {
+        highlightedSignals.push(signal);
+      }
+      fallbackSignals.push(signal);
+    }
+
     if (hasResolvedCommunityMembers) {
-      const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
-      const newMemberCount = communityMembers.filter((member) => {
-        if (String(member.role ?? "").trim().toLowerCase() === "owner") return false;
-        const createdAt = Date.parse(member.created_at);
-        return Number.isFinite(createdAt) && createdAt >= sevenDaysAgo;
-      }).length;
-      if (newMemberCount > 0) {
-        signals.push({
-          id: "members",
-          label: formatPanelSignalCount(newMemberCount, "new member", "new members"),
-        });
+      const sortedNewMembers = [...communityMembers]
+        .filter((member) => String(member.role ?? "").trim().toLowerCase() !== "owner")
+        .map((member) => ({
+          member,
+          createdAtMs: parsePanelSignalTimestampMs(member.created_at),
+        }))
+        .filter((entry): entry is { member: CommunityMember; createdAtMs: number } => entry.createdAtMs !== null)
+        .sort((a, b) => b.createdAtMs - a.createdAtMs);
+
+      for (const { member, createdAtMs } of sortedNewMembers.slice(0, 2)) {
+        const userId = String(member.user_id ?? "").trim();
+        if (!userId) continue;
+        const memberName = normalizePanelSignalText(member.display_name) || displayName(userId);
+        const signal: WorkspacePanelRecentSignalCandidate = {
+          id: `member:${member.id}`,
+          kind: "member",
+          title: `${memberName} joined`,
+          avatar: buildAvatar(userId, memberName, member),
+          sortMs: createdAtMs,
+        };
+        if (createdAtMs >= recentStartMs && createdAtMs <= nowMs) {
+          highlightedSignals.push(signal);
+        }
+        fallbackSignals.push(signal);
       }
     }
-    return signals.slice(0, 5);
+
+    if (highlightedSignals.length > 0) {
+      return finalizeSignals(highlightedSignals, WORKSPACE_PANEL_HIGHLIGHT_LIMIT);
+    }
+    return finalizeSignals(fallbackSignals, WORKSPACE_PANEL_FALLBACK_LIMIT);
   }, [
-    activeCommunityAttentionSummary.ai_feed,
-    activeCommunityAttentionSummary.chat,
-    activeCommunityAttentionSummary.events,
-    activeCommunityAttentionSummary.resources,
-    activeCommunityId,
-    activePage,
+    activeCommunityFeedState.live,
     communityEvents,
     communityMembers,
+    communityMessages,
+    communityResources,
+    displayName,
     hasResolvedCommunityMembers,
-    unreadCount,
+    savedProfilesByUserId,
   ]);
 
   const workspacePanelCommunityIntegrations = useMemo(

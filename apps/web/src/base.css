@@ -22452,7 +22452,6 @@ button.message-citation-chip:hover {
   gap: 8px;
 }
 
-.workspace-community-signal-row,
 .workspace-community-integration-row {
   min-width: 0;
   padding: 0;
@@ -22460,16 +22459,59 @@ button.message-citation-chip:hover {
   font-size: 12px;
   font-weight: 650;
   line-height: 1.25;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .workspace-community-integration-row {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+}
+
+.workspace-community-signal-row {
+  min-width: 0;
+  min-height: 30px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.25;
+}
+
+.workspace-community-signal-avatar,
+.workspace-community-signal-icon {
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+}
+
+.workspace-community-signal-icon {
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 80%, transparent);
+  background: color-mix(in srgb, var(--bg-card) 86%, white 6%);
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.workspace-community-signal-copy {
+  min-width: 0;
+}
+
+.workspace-community-signal-title {
+  min-width: 0;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .workspace-community-integration-identity {
