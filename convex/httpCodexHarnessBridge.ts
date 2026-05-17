@@ -8,9 +8,12 @@ import {
 } from "./codexHarnessDynamicToolBridge";
 import {
   executeCodexHarnessReadOnlyPlatformTool,
+  type CodexHarnessDynamicToolCallResponse,
 } from "./codexHarnessPlatformTools";
 
 type HttpRouteMethod = "GET" | "POST" | "DELETE" | "OPTIONS" | "PUT" | "PATCH";
+
+const CODEX_HARNESS_DYNAMIC_TOOL_BRIDGE_TIMEOUT_MS = 14_000;
 
 type HttpRouterLike = {
   route: (config: {
@@ -46,6 +49,17 @@ function readArgs(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {};
+}
+
+function bridgeFailureResponse(
+  errorCode: string,
+  message: string,
+): CodexHarnessDynamicToolCallResponse {
+  return {
+    success: false,
+    contentItems: [{ type: "inputText", text: message }],
+    errorCode,
+  };
 }
 
 async function sha256Text(value: string): Promise<string> {
@@ -142,6 +156,79 @@ async function readJsonBody(req: Request): Promise<Record<string, unknown>> {
   }
 }
 
+async function executeDynamicToolWithTimeout(params: {
+  ctx: any;
+  session: Record<string, unknown>;
+  runId: string;
+  toolName: string;
+  toolArgs: Record<string, unknown>;
+  timeoutMs?: number;
+  appendRunEvent: (event: {
+    eventType: string;
+    eventKey?: string;
+    payload: Record<string, unknown>;
+  }) => Promise<void>;
+}): Promise<CodexHarnessDynamicToolCallResponse> {
+  const timeoutMs = Math.max(
+    1_000,
+    Math.min(
+      60_000,
+      Math.floor(params.timeoutMs ?? CODEX_HARNESS_DYNAMIC_TOOL_BRIDGE_TIMEOUT_MS),
+    ),
+  );
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeoutResult = new Promise<CodexHarnessDynamicToolCallResponse>((resolve) => {
+    timer = setTimeout(() => {
+      controller.abort(new Error("Codex dynamic tool bridge call timed out."));
+      resolve(
+        bridgeFailureResponse(
+          "codex_bridge_tool_timeout",
+          `Codex dynamic tool bridge call timed out after ${timeoutMs}ms.`,
+        ),
+      );
+    }, timeoutMs);
+  });
+  try {
+    return await Promise.race([
+      executeCodexHarnessReadOnlyPlatformTool({
+        ctx: params.ctx,
+        userId: String(params.session.userId ?? ""),
+        authSubject:
+          typeof params.session.authSubject === "string"
+            ? params.session.authSubject
+            : null,
+        communityId:
+          typeof params.session.communityId === "string"
+            ? params.session.communityId
+            : null,
+        runId: params.runId,
+        toolName: params.toolName,
+        args: params.toolArgs,
+        signal: controller.signal,
+        appendRunEvent: params.appendRunEvent,
+      }),
+      timeoutResult,
+    ]);
+  } catch (error) {
+    if (controller.signal.aborted) {
+      return bridgeFailureResponse(
+        "codex_bridge_tool_timeout",
+        `Codex dynamic tool bridge call timed out after ${timeoutMs}ms.`,
+      );
+    }
+    return bridgeFailureResponse(
+      "codex_bridge_tool_failed",
+      error instanceof Error ? error.message : String(error),
+    );
+  } finally {
+    if (timer) clearTimeout(timer);
+    if (!controller.signal.aborted) {
+      controller.abort(new Error("Codex dynamic tool bridge call finished."));
+    }
+  }
+}
+
 export function registerCodexHarnessBridgeRoutes(
   args: RegisterCodexHarnessBridgeRoutesArgs,
 ): void {
@@ -232,16 +319,13 @@ export function registerCodexHarnessBridgeRoutes(
           args_present: Object.keys(toolArgs).length > 0,
         },
       });
-      const result = await executeCodexHarnessReadOnlyPlatformTool({
+      const result = await executeDynamicToolWithTimeout({
         ctx,
-        userId: String(session.userId ?? ""),
-        authSubject:
-          typeof session.authSubject === "string" ? session.authSubject : null,
-        communityId:
-          typeof session.communityId === "string" ? session.communityId : null,
+        session,
         runId,
         toolName,
-        args: toolArgs,
+        toolArgs,
+        timeoutMs: CODEX_HARNESS_DYNAMIC_TOOL_BRIDGE_TIMEOUT_MS,
         appendRunEvent: async (event) =>
           await appendBridgeRuntimeRunEventBestEffort({
             ctx,
@@ -261,6 +345,7 @@ export function registerCodexHarnessBridgeRoutes(
           tool_name: toolName,
           call_id: callId || null,
           error_code: result.errorCode ?? null,
+          timeout_ms: CODEX_HARNESS_DYNAMIC_TOOL_BRIDGE_TIMEOUT_MS,
           content_item_count: outputSummary.count,
           output_chars: outputSummary.textChars,
           output_sha256: outputSummary.textSha256,

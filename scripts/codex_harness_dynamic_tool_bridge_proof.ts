@@ -6,6 +6,7 @@ import {
   CODEX_HARNESS_DYNAMIC_TOOL_BRIDGE_ROUTE,
   CODEX_HARNESS_READ_ONLY_DYNAMIC_TOOL_NAMES,
   buildCodexHarnessDynamicToolSpecs,
+  buildCodexHarnessDynamicToolSurfaceFingerprint,
   buildCodexHarnessMountedMcpDynamicToolSpecs,
   isCodexAppServerNativeToolName,
   normalizeCodexHarnessDynamicToolArguments,
@@ -124,6 +125,43 @@ function proveReadOnlyDynamicToolSurface() {
   );
 }
 
+async function proveDynamicToolSurfaceFingerprint() {
+  const platformOnly = await buildCodexHarnessDynamicToolSurfaceFingerprint({
+    dynamicToolSpecs: buildCodexHarnessDynamicToolSpecs([
+      "community_search",
+      "get_active_community_context",
+    ]),
+  });
+  const reordered = await buildCodexHarnessDynamicToolSurfaceFingerprint({
+    dynamicToolSpecs: buildCodexHarnessDynamicToolSpecs([
+      "get_active_community_context",
+      "community_search",
+    ]),
+  });
+  const changed = await buildCodexHarnessDynamicToolSurfaceFingerprint({
+    dynamicToolSpecs: buildCodexHarnessDynamicToolSpecs([
+      "get_active_community_context",
+    ]),
+  });
+
+  assert.equal(platformOnly.version, "codex_dynamic_tool_surface_v0");
+  assert.match(platformOnly.fingerprint, /^[a-f0-9]{64}$/);
+  assert.deepEqual(platformOnly.dynamicToolNames, [
+    "community_search",
+    "get_active_community_context",
+  ]);
+  assert.equal(
+    platformOnly.fingerprint,
+    reordered.fingerprint,
+    "Codex dynamic tool surface fingerprint should be stable across caller order",
+  );
+  assert.notEqual(
+    platformOnly.fingerprint,
+    changed.fingerprint,
+    "Codex dynamic tool surface fingerprint should change when active tool specs change",
+  );
+}
+
 function proveDaytonaSidecarBridgeHandling() {
   const probeScript = readText("shared/codexHarnessProbeScript.ts");
   assert.match(
@@ -170,6 +208,7 @@ function proveConvexBridgeAndRoute() {
   const schema = readText("convex/schema.ts");
   const platformTools = readText("convex/codexHarnessPlatformTools.ts");
   const stagingMaintenance = readText("convex/stagingMaintenance.ts");
+  const dynamicBridge = readText("convex/codexHarnessDynamicToolBridge.ts");
 
   assert.match(
     bridge,
@@ -274,6 +313,57 @@ function proveConvexBridgeAndRoute() {
   );
   assert.match(
     route,
+    /CODEX_HARNESS_DYNAMIC_TOOL_BRIDGE_TIMEOUT_MS = 14_000/,
+    "bridge route should enforce a bounded server-side dynamic tool timeout below the sidecar fetch timeout",
+  );
+  assert.match(
+    route,
+    /AbortController/,
+    "bridge route should create an abort signal for timed-out dynamic tool calls",
+  );
+  assert.match(
+    route,
+    /codex_bridge_tool_timeout/,
+    "bridge route should return a stable timeout error code to Codex",
+  );
+  for (const errorCode of [
+    "codex_bridge_auth_required",
+    "codex_bridge_auth_invalid",
+    "codex_bridge_session_expired",
+    "codex_bridge_tool_not_enabled",
+    "codex_bridge_tool_timeout",
+  ]) {
+    assert.match(
+      route + dynamicBridge,
+      new RegExp(errorCode),
+      `bridge session/route should preserve stable ${errorCode} failure evidence`,
+    );
+  }
+  for (const errorCode of [
+    "auth_subject_required",
+    "trusted_identity_mismatch",
+    "codex_mcp_tool_not_found",
+    "codex_mcp_tool_not_eligible",
+    "codex_mcp_tool_failed",
+  ]) {
+    assert.match(
+      platformTools,
+      new RegExp(errorCode),
+      `mounted MCP adapter should preserve stable ${errorCode} failure evidence`,
+    );
+  }
+  assert.match(
+    platformTools,
+    /signal\?: AbortSignal/,
+    "bridge platform adapter should accept an abort signal",
+  );
+  assert.match(
+    platformTools,
+    /signal: params\.signal/,
+    "mounted MCP bridge calls should pass the abort signal into PolyNet's MCP manager",
+  );
+  assert.match(
+    route,
     /codex_harness_dynamic_tool_bridge_call_started/,
     "bridge route should audit server-observed bridge call starts",
   );
@@ -312,7 +402,6 @@ function proveConvexBridgeAndRoute() {
     /revokedReason: v\.optional\(v\.string\(\)\)/,
     "bridge sessions should record revoke reason",
   );
-  const dynamicBridge = readText("convex/codexHarnessDynamicToolBridge.ts");
   assert.match(
     dynamicBridge,
     /revokeCodexHarnessBridgeSessionInternal/,
@@ -361,6 +450,7 @@ function proveConvexBridgeAndRoute() {
 }
 
 proveReadOnlyDynamicToolSurface();
+await proveDynamicToolSurfaceFingerprint();
 proveDaytonaSidecarBridgeHandling();
 proveConvexBridgeAndRoute();
 

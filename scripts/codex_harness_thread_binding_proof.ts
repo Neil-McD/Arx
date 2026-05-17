@@ -35,6 +35,11 @@ function main() {
   );
   assert.match(
     schema,
+    /codexDynamicToolSurfaceFingerprint: v\.optional\(v\.string\(\)\)/,
+    "Codex thread bindings should persist the full dynamic tool surface fingerprint when available",
+  );
+  assert.match(
+    schema,
     /\.index\("by_bindingKey", \["bindingKey"\]\)/,
     "Codex thread bindings should be keyed by a stable binding key",
   );
@@ -53,6 +58,16 @@ function main() {
     bindings,
     /projection_fingerprint_changed/,
     "changed projection fingerprints should rotate the Codex thread",
+  );
+  assert.match(
+    bindings,
+    /dynamic_tool_surface_fingerprint_match/,
+    "matching full dynamic tool surface fingerprints should resume the existing Codex thread",
+  );
+  assert.match(
+    bindings,
+    /dynamic_tool_surface_fingerprint_changed/,
+    "changed full dynamic tool surface fingerprints should rotate the Codex thread",
   );
   assert.match(
     bindings,
@@ -219,6 +234,16 @@ function main() {
     bridge,
     /POLYNET_CODEX_RESUME_THREAD_ID=\$\{shellQuote\(resumeCodexThreadId\)\}/,
     "sidecar should receive the resumable Codex thread id only when safe",
+  );
+  assert.match(
+    bridge,
+    /buildCodexHarnessDynamicToolSurfaceFingerprint/,
+    "primary harness should fingerprint the complete dynamic tool surface before resolving Codex thread continuity",
+  );
+  assert.match(
+    bridge,
+    /codexDynamicToolSurfaceFingerprint:\s*codexDynamicToolSurface\.fingerprint/,
+    "primary harness should resolve thread bindings using the full Codex dynamic tool surface fingerprint",
   );
   for (const eventName of [
     "codex_thread_binding_resolved",

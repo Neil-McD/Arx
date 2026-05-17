@@ -10,6 +10,7 @@ type BindingDecision =
       codexHomePath: string | null;
       previousCodexThreadId: null;
       previousCodexMcpProjectionFingerprint: null;
+      previousCodexDynamicToolSurfaceFingerprint: null;
       duplicateBindingCount: 0;
     }
   | {
@@ -17,12 +18,15 @@ type BindingDecision =
       reason:
         | "binding_missing"
         | "projection_fingerprint_match"
-        | "projection_fingerprint_changed";
+        | "projection_fingerprint_changed"
+        | "dynamic_tool_surface_fingerprint_match"
+        | "dynamic_tool_surface_fingerprint_changed";
       bindingKey: string;
       codexThreadId: string | null;
       codexHomePath: string;
       previousCodexThreadId: string | null;
       previousCodexMcpProjectionFingerprint: string | null;
+      previousCodexDynamicToolSurfaceFingerprint: string | null;
       duplicateBindingCount: number;
     };
 
@@ -80,6 +84,8 @@ async function rotateDuplicateBindingRows(args: {
       previousCodexThreadId: normalizeString(row?.codexThreadId, 240) || undefined,
       previousCodexMcpProjectionFingerprint:
         normalizeString(row?.codexMcpProjectionFingerprint, 240) || undefined,
+      previousCodexDynamicToolSurfaceFingerprint:
+        normalizeString(row?.codexDynamicToolSurfaceFingerprint, 240) || undefined,
       rotatedAt: args.nowMs,
       rotatedReason: "duplicate_binding_row_repaired",
     });
@@ -95,13 +101,20 @@ export const resolveCodexHarnessThreadBindingForTurnInternal = internalQuery({
     projectId: v.optional(v.string()),
     codexHomePath: v.optional(v.string()),
     codexMcpProjectionFingerprint: v.optional(v.string()),
+    codexDynamicToolSurfaceFingerprint: v.optional(v.string()),
   },
   handler: async (ctx, args): Promise<BindingDecision> => {
     const userId = normalizeString(args.userId, 240);
     const threadId = normalizeString(args.threadId, 240);
     const projectId = normalizeString(args.projectId, 240);
     const codexHomePath = normalizeString(args.codexHomePath, 1_000);
-    const fingerprint = normalizeString(args.codexMcpProjectionFingerprint, 240);
+    const mcpProjectionFingerprint = normalizeString(args.codexMcpProjectionFingerprint, 240);
+    const dynamicToolSurfaceFingerprint = normalizeString(
+      args.codexDynamicToolSurfaceFingerprint,
+      240,
+    );
+    const comparisonFingerprint =
+      dynamicToolSurfaceFingerprint || mcpProjectionFingerprint;
     if (!threadId) {
       return {
         action: "disabled",
@@ -111,6 +124,7 @@ export const resolveCodexHarnessThreadBindingForTurnInternal = internalQuery({
         codexHomePath: codexHomePath || null,
         previousCodexThreadId: null,
         previousCodexMcpProjectionFingerprint: null,
+        previousCodexDynamicToolSurfaceFingerprint: null,
         duplicateBindingCount: 0,
       };
     }
@@ -123,10 +137,11 @@ export const resolveCodexHarnessThreadBindingForTurnInternal = internalQuery({
         codexHomePath: codexHomePath || null,
         previousCodexThreadId: null,
         previousCodexMcpProjectionFingerprint: null,
+        previousCodexDynamicToolSurfaceFingerprint: null,
         duplicateBindingCount: 0,
       };
     }
-    if (!fingerprint) {
+    if (!comparisonFingerprint) {
       return {
         action: "disabled",
         reason: "projection_fingerprint_required",
@@ -135,6 +150,7 @@ export const resolveCodexHarnessThreadBindingForTurnInternal = internalQuery({
         codexHomePath: codexHomePath || null,
         previousCodexThreadId: null,
         previousCodexMcpProjectionFingerprint: null,
+        previousCodexDynamicToolSurfaceFingerprint: null,
         duplicateBindingCount: 0,
       };
     }
@@ -153,34 +169,56 @@ export const resolveCodexHarnessThreadBindingForTurnInternal = internalQuery({
         codexHomePath: effectiveCodexHomePath,
         previousCodexThreadId: null,
         previousCodexMcpProjectionFingerprint: null,
+        previousCodexDynamicToolSurfaceFingerprint: null,
         duplicateBindingCount,
       };
     }
-    const existingFingerprint = normalizeString(
+    const existingMcpProjectionFingerprint = normalizeString(
       existing.codexMcpProjectionFingerprint,
       240,
     );
+    const existingDynamicToolSurfaceFingerprint = normalizeString(
+      existing.codexDynamicToolSurfaceFingerprint,
+      240,
+    );
+    const existingComparisonFingerprint =
+      dynamicToolSurfaceFingerprint && existingDynamicToolSurfaceFingerprint
+        ? existingDynamicToolSurfaceFingerprint
+        : existingMcpProjectionFingerprint;
     const existingCodexThreadId = normalizeString(existing.codexThreadId, 240);
-    if (existing.status === "active" && existingFingerprint === fingerprint) {
+    if (
+      existing.status === "active" &&
+      existingComparisonFingerprint === comparisonFingerprint
+    ) {
       return {
         action: "resume",
-        reason: "projection_fingerprint_match",
+        reason: dynamicToolSurfaceFingerprint
+          ? "dynamic_tool_surface_fingerprint_match"
+          : "projection_fingerprint_match",
         bindingKey,
         codexThreadId: existingCodexThreadId || null,
         codexHomePath: effectiveCodexHomePath,
         previousCodexThreadId: existingCodexThreadId || null,
-        previousCodexMcpProjectionFingerprint: existingFingerprint || null,
+        previousCodexMcpProjectionFingerprint:
+          existingMcpProjectionFingerprint || null,
+        previousCodexDynamicToolSurfaceFingerprint:
+          existingDynamicToolSurfaceFingerprint || null,
         duplicateBindingCount,
       };
     }
     return {
       action: "rotate",
-      reason: "projection_fingerprint_changed",
+      reason: dynamicToolSurfaceFingerprint
+        ? "dynamic_tool_surface_fingerprint_changed"
+        : "projection_fingerprint_changed",
       bindingKey,
       codexThreadId: null,
       codexHomePath: effectiveCodexHomePath,
       previousCodexThreadId: existingCodexThreadId || null,
-      previousCodexMcpProjectionFingerprint: existingFingerprint || null,
+      previousCodexMcpProjectionFingerprint:
+        existingMcpProjectionFingerprint || null,
+      previousCodexDynamicToolSurfaceFingerprint:
+        existingDynamicToolSurfaceFingerprint || null,
       duplicateBindingCount,
     };
   },
@@ -196,6 +234,8 @@ export const upsertCodexHarnessThreadBindingAfterRunInternal = internalMutation(
     codexHomePath: v.string(),
     codexMcpProjectionVersion: v.string(),
     codexMcpProjectionFingerprint: v.string(),
+    codexDynamicToolSurfaceVersion: v.optional(v.string()),
+    codexDynamicToolSurfaceFingerprint: v.optional(v.string()),
     runId: v.string(),
     providerSandboxId: v.optional(v.string()),
     projectVolumeId: v.optional(v.string()),
@@ -206,6 +246,7 @@ export const upsertCodexHarnessThreadBindingAfterRunInternal = internalMutation(
     ),
     previousCodexThreadId: v.optional(v.string()),
     previousCodexMcpProjectionFingerprint: v.optional(v.string()),
+    previousCodexDynamicToolSurfaceFingerprint: v.optional(v.string()),
     rotatedReason: v.optional(v.string()),
     nowMs: v.optional(v.number()),
   },
@@ -218,6 +259,14 @@ export const upsertCodexHarnessThreadBindingAfterRunInternal = internalMutation(
     const codexHomePath = normalizeString(args.codexHomePath, 1_000);
     const fingerprint = normalizeString(args.codexMcpProjectionFingerprint, 240);
     const version = normalizeString(args.codexMcpProjectionVersion, 120);
+    const dynamicToolSurfaceVersion = normalizeString(
+      args.codexDynamicToolSurfaceVersion,
+      120,
+    );
+    const dynamicToolSurfaceFingerprint = normalizeString(
+      args.codexDynamicToolSurfaceFingerprint,
+      240,
+    );
     if (
       !bindingKey ||
       !userId ||
@@ -244,6 +293,9 @@ export const upsertCodexHarnessThreadBindingAfterRunInternal = internalMutation(
       codexHomePath,
       codexMcpProjectionVersion: version,
       codexMcpProjectionFingerprint: fingerprint,
+      codexDynamicToolSurfaceVersion: dynamicToolSurfaceVersion || undefined,
+      codexDynamicToolSurfaceFingerprint:
+        dynamicToolSurfaceFingerprint || undefined,
       status: "active" as const,
       updatedAt: nowMs,
       lastRunId: normalizeString(args.runId, 240) || undefined,
@@ -256,6 +308,11 @@ export const upsertCodexHarnessThreadBindingAfterRunInternal = internalMutation(
       previousCodexMcpProjectionFingerprint:
         normalizeString(args.previousCodexMcpProjectionFingerprint, 240) ||
         undefined,
+      previousCodexDynamicToolSurfaceFingerprint:
+        normalizeString(
+          args.previousCodexDynamicToolSurfaceFingerprint,
+          240,
+        ) || undefined,
       rotatedAt: args.lifecycleAction === "rotated" ? nowMs : undefined,
       rotatedReason:
         args.lifecycleAction === "rotated"

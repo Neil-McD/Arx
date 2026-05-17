@@ -157,6 +157,11 @@ function summarizeRun(run: any) {
       completed?.payload?.projection_fingerprint ??
       run.binding?.codexMcpProjectionFingerprint ??
       null,
+    dynamicToolSurfaceFingerprint:
+      resolved?.payload?.dynamic_tool_surface_fingerprint ??
+      completed?.payload?.dynamic_tool_surface_fingerprint ??
+      run.binding?.codexDynamicToolSurfaceFingerprint ??
+      null,
     bindingCodexThreadId: run.binding?.codexThreadId ?? null,
     lastRunId: run.binding?.lastRunId ?? null,
     previousCodexThreadId: run.binding?.previousCodexThreadId ?? null,
@@ -195,8 +200,10 @@ function buildResumePairingKey(run: CodexThreadBindingSummary): string | null {
   const thread = String(run.threadId ?? "").trim();
   const project = String(run.projectId ?? "").trim();
   const projection = String(run.projectionFingerprint ?? "").trim();
-  if (!thread || !project || !projection) return null;
-  return [thread, project, projection].join("::");
+  const dynamicSurface = String(run.dynamicToolSurfaceFingerprint ?? "").trim();
+  const continuityFingerprint = dynamicSurface || projection;
+  if (!thread || !project || !continuityFingerprint) return null;
+  return [thread, project, continuityFingerprint].join("::");
 }
 
 function sortByStartedAtDesc(
@@ -290,6 +297,22 @@ if (assertResume) {
   assert(
     created?.projectionFingerprint === resumed?.projectionFingerprint,
     "created and resumed runs should use the same MCP projection fingerprint",
+  );
+  assert(
+    Boolean(created?.dynamicToolSurfaceFingerprint),
+    "created run should include a Codex dynamic tool surface fingerprint",
+  );
+  assert(
+    Boolean(resumed?.dynamicToolSurfaceFingerprint),
+    "resumed run should include a Codex dynamic tool surface fingerprint",
+  );
+  assert(
+    created?.dynamicToolSurfaceFingerprint === resumed?.dynamicToolSurfaceFingerprint,
+    "created and resumed runs should use the same Codex dynamic tool surface fingerprint",
+  );
+  assert(
+    resumed?.bindingReason === "dynamic_tool_surface_fingerprint_match",
+    "resumed run should prove continuity through the Codex dynamic tool surface fingerprint",
   );
   assert(
     created?.observedCodexThreadId === resumed?.observedCodexThreadId,

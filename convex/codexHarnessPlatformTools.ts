@@ -154,6 +154,7 @@ async function executeCodexHarnessReadOnlyMountedMcpTool(params: {
   runId?: string | null;
   toolName: string;
   args: Record<string, unknown>;
+  signal?: AbortSignal;
   appendRunEvent?: (event: {
     eventType: string;
     eventKey?: string;
@@ -229,6 +230,7 @@ async function executeCodexHarnessReadOnlyMountedMcpTool(params: {
   const result = await manager.execute({
     runtimeToolName: toolName,
     argumentsObject: params.args,
+    signal: params.signal,
   });
   if (result.status !== "ok") {
     return failDynamicTool(
@@ -256,6 +258,7 @@ export async function executeCodexHarnessReadOnlyPlatformTool(params: {
   runId?: string | null;
   toolName: string;
   args: Record<string, unknown>;
+  signal?: AbortSignal;
   appendRunEvent?: (event: {
     eventType: string;
     eventKey?: string;

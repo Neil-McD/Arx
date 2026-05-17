@@ -172,6 +172,8 @@ function summarizeCodexThreadBindingEvidencePayload(args: {
     "latency_ms",
     "projection_fingerprint",
     "projection_version",
+    "dynamic_tool_surface_fingerprint",
+    "dynamic_tool_surface_version",
   ];
   if (args.eventType === "runtime_agent_harness_prepared") {
     const base = pickPayloadFields(args.payload, [
@@ -303,6 +305,7 @@ function summarizeCodexThreadBindingEvidencePayload(args: {
       "platform_tool_projection",
       "combined_tool_projection",
       "codex_mcp_projection",
+      "codex_dynamic_tool_surface",
       "codex_mcp_projection_execution",
       "dynamic_tool_bridge_configured",
       "dynamic_tool_requested_names",
@@ -1666,6 +1669,10 @@ export const getCodexThreadBindingCanaryEvidence = query({
               codexHomePath: binding.codexHomePath,
               codexMcpProjectionVersion: binding.codexMcpProjectionVersion,
               codexMcpProjectionFingerprint: binding.codexMcpProjectionFingerprint,
+              codexDynamicToolSurfaceVersion:
+                binding.codexDynamicToolSurfaceVersion ?? null,
+              codexDynamicToolSurfaceFingerprint:
+                binding.codexDynamicToolSurfaceFingerprint ?? null,
               status: binding.status,
               lastRunId: binding.lastRunId ?? null,
               lastProviderSandboxId: binding.lastProviderSandboxId ?? null,
@@ -1673,6 +1680,8 @@ export const getCodexThreadBindingCanaryEvidence = query({
               previousCodexThreadId: binding.previousCodexThreadId ?? null,
               previousCodexMcpProjectionFingerprint:
                 binding.previousCodexMcpProjectionFingerprint ?? null,
+              previousCodexDynamicToolSurfaceFingerprint:
+                binding.previousCodexDynamicToolSurfaceFingerprint ?? null,
               rotatedAt: binding.rotatedAt ?? null,
               rotatedReason: binding.rotatedReason ?? null,
               createdAt: binding.createdAt,

@@ -10,6 +10,7 @@ import type { RetrievalToolName } from "../shared/retrievalTools";
 import {
   CODEX_HARNESS_DYNAMIC_TOOL_BRIDGE_ROUTE,
   buildCodexHarnessDynamicToolSpecs,
+  buildCodexHarnessDynamicToolSurfaceFingerprint,
   buildCodexHarnessMountedMcpDynamicToolSpecs,
   type CodexHarnessDynamicToolSpec,
 } from "../shared/codexHarnessDynamicTools.ts";
@@ -541,6 +542,14 @@ export function buildCodexAppServerRuntimeAgentHarness(params: {
       const activeMountedMcpDynamicToolSpecs = dynamicToolBridgeUrl
         ? requestedMountedMcpDynamicToolSpecs
         : [];
+      const codexDynamicToolSurface =
+        await buildCodexHarnessDynamicToolSurfaceFingerprint({
+          dynamicToolSpecs: activeDynamicToolSpecs,
+          codexMcpProjection:
+            activeMountedMcpDynamicToolSpecs.length > 0
+              ? turn.codexMcpProjection
+              : null,
+        });
       const instructions = buildCodexPrimaryRuntimeInstructions({
         turn,
         dynamicToolSpecs: activeDynamicToolSpecs,
@@ -573,6 +582,7 @@ export function buildCodexAppServerRuntimeAgentHarness(params: {
             activeMountedMcpDynamicToolSpecs.length > 0
               ? "read_only_dynamic_bridge_v0"
               : "descriptor_only",
+          codex_dynamic_tool_surface: codexDynamicToolSurface,
           dynamic_tool_bridge_configured: Boolean(dynamicToolBridgeUrl),
           dynamic_tool_requested_names: requestedDynamicToolSpecs.map((tool) => tool.name),
           dynamic_platform_tool_requested_names:
@@ -659,6 +669,8 @@ export function buildCodexAppServerRuntimeAgentHarness(params: {
           codexHomePath: codexThreadHomePath,
           codexMcpProjectionFingerprint:
             turn.codexMcpProjection?.fingerprint ?? undefined,
+          codexDynamicToolSurfaceFingerprint:
+            codexDynamicToolSurface.fingerprint,
         },
       )) as Record<string, unknown>;
       const bindingAction =
@@ -692,8 +704,17 @@ export function buildCodexAppServerRuntimeAgentHarness(params: {
           projection_fingerprint:
             turn.codexMcpProjection?.fingerprint ?? null,
           projection_version: turn.codexMcpProjection?.version ?? null,
+          dynamic_tool_surface_fingerprint:
+            codexDynamicToolSurface.fingerprint,
+          dynamic_tool_surface_version: codexDynamicToolSurface.version,
           previous_codex_thread_id_present: Boolean(
             readStringField(codexThreadBindingDecision, "previousCodexThreadId"),
+          ),
+          previous_dynamic_tool_surface_fingerprint_present: Boolean(
+            readStringField(
+              codexThreadBindingDecision,
+              "previousCodexDynamicToolSurfaceFingerprint",
+            ),
           ),
           duplicate_binding_count:
             readNumberField(codexThreadBindingDecision, "duplicateBindingCount") ?? 0,
@@ -713,6 +734,14 @@ export function buildCodexAppServerRuntimeAgentHarness(params: {
               ) ?? null,
             current_fingerprint:
               turn.codexMcpProjection?.fingerprint ?? null,
+            dynamic_tool_surface_fingerprint:
+              codexDynamicToolSurface.fingerprint,
+            dynamic_tool_surface_version: codexDynamicToolSurface.version,
+            previous_dynamic_tool_surface_fingerprint:
+              readStringField(
+                codexThreadBindingDecision,
+                "previousCodexDynamicToolSurfaceFingerprint",
+              ) ?? null,
             previous_codex_thread_id_present: Boolean(
               readStringField(codexThreadBindingDecision, "previousCodexThreadId"),
             ),
@@ -1191,6 +1220,9 @@ export function buildCodexAppServerRuntimeAgentHarness(params: {
               observed_codex_thread_id: observedCodexThreadId,
               projection_fingerprint: turn.codexMcpProjection.fingerprint,
               projection_version: turn.codexMcpProjection.version,
+              dynamic_tool_surface_fingerprint:
+                codexDynamicToolSurface.fingerprint,
+              dynamic_tool_surface_version: codexDynamicToolSurface.version,
               codex_session_archive_strategy: "sessions_tar_v0",
               codex_session_archive_error_message: readStringField(
                 probeResult,
@@ -1209,7 +1241,7 @@ export function buildCodexAppServerRuntimeAgentHarness(params: {
             observedThreadLifecycle === "resume_failed_started"
               ? "resume_failed"
               : bindingAction === "rotate"
-                ? "projection_fingerprint_changed"
+                ? (bindingReason ?? "dynamic_tool_surface_fingerprint_changed")
                 : undefined;
           try {
             const persistResult = (await params.ctx.runMutation(
@@ -1225,6 +1257,10 @@ export function buildCodexAppServerRuntimeAgentHarness(params: {
                 codexMcpProjectionVersion: turn.codexMcpProjection.version,
                 codexMcpProjectionFingerprint:
                   turn.codexMcpProjection.fingerprint,
+                codexDynamicToolSurfaceVersion:
+                  codexDynamicToolSurface.version,
+                codexDynamicToolSurfaceFingerprint:
+                  codexDynamicToolSurface.fingerprint,
                 runId: params.runId,
                 providerSandboxId: session.providerSandboxId,
                 projectVolumeId: session.projectVolumeId ?? undefined,
@@ -1238,6 +1274,11 @@ export function buildCodexAppServerRuntimeAgentHarness(params: {
                   readStringField(
                     codexThreadBindingDecision,
                     "previousCodexMcpProjectionFingerprint",
+                  ) ?? undefined,
+                previousCodexDynamicToolSurfaceFingerprint:
+                  readStringField(
+                    codexThreadBindingDecision,
+                    "previousCodexDynamicToolSurfaceFingerprint",
                   ) ?? undefined,
                 rotatedReason,
                 nowMs: Date.now(),
@@ -1272,6 +1313,9 @@ export function buildCodexAppServerRuntimeAgentHarness(params: {
                 projection_fingerprint:
                   turn.codexMcpProjection.fingerprint,
                 projection_version: turn.codexMcpProjection.version,
+                dynamic_tool_surface_fingerprint:
+                  codexDynamicToolSurface.fingerprint,
+                dynamic_tool_surface_version: codexDynamicToolSurface.version,
                 rotated_reason: rotatedReason ?? null,
                 resume_attempted: readBooleanField(
                   probeResult,
@@ -1337,6 +1381,9 @@ export function buildCodexAppServerRuntimeAgentHarness(params: {
           codex_version: readStringField(probeResult, "codexVersion"),
           thread_id_present: Boolean(readStringField(probeResult, "codexThreadId")),
           observed_codex_thread_id: observedCodexThreadId,
+          dynamic_tool_surface_fingerprint:
+            codexDynamicToolSurface.fingerprint,
+          dynamic_tool_surface_version: codexDynamicToolSurface.version,
           thread_lifecycle_action: observedThreadLifecycle,
           thread_resume_attempted: readBooleanField(probeResult, "codexThreadResumeAttempted"),
           thread_resume_failed: readBooleanField(probeResult, "codexThreadResumeFailed"),

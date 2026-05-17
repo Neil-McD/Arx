@@ -1530,6 +1530,8 @@ export default defineSchema({
     codexHomePath: v.string(),
     codexMcpProjectionVersion: v.string(),
     codexMcpProjectionFingerprint: v.string(),
+    codexDynamicToolSurfaceVersion: v.optional(v.string()),
+    codexDynamicToolSurfaceFingerprint: v.optional(v.string()),
     status: v.union(v.literal("active"), v.literal("rotated")),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -1538,6 +1540,7 @@ export default defineSchema({
     lastProjectVolumeId: v.optional(v.string()),
     previousCodexThreadId: v.optional(v.string()),
     previousCodexMcpProjectionFingerprint: v.optional(v.string()),
+    previousCodexDynamicToolSurfaceFingerprint: v.optional(v.string()),
     rotatedAt: v.optional(v.number()),
     rotatedReason: v.optional(v.string()),
   })
