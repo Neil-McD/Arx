@@ -9,7 +9,7 @@ import {
   ShieldCheck,
   XCircle,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { AccountCommerceStatus } from "../../../../shared/accountCommerceStatusGateway";
 import {
   BUILDER_PARTNER_COMMUNITY_PLATFORM_FEE_BPS,
@@ -21,6 +21,7 @@ import type {
   BuilderPartnerProgramRequirement,
   BuilderPartnerProgramSnapshot,
 } from "../../../../shared/builderPartnerProgramGateway";
+import { StripeConnectCountrySelect } from "./StripeConnectCountrySelect";
 
 type SessionLike = {
   user: {
@@ -48,6 +49,7 @@ type WebBuilderPartnerSettingsSectionProps = {
   startStripeConnectOnboarding: (opts?: {
     context?: "account" | "community";
     communitySlug?: string | null;
+    country?: string | null;
   }) => Promise<void> | void;
   isStartingStripeConnectOnboarding: boolean;
 };
@@ -101,6 +103,7 @@ function formatPayoutStatus(value: string): string {
 
 export function WebBuilderPartnerSettingsSection(props: WebBuilderPartnerSettingsSectionProps) {
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
+  const [stripeConnectCountry, setStripeConnectCountry] = useState("");
   const partnerPlatformFeeShareBps = BUILDER_PARTNER_PLATFORM_FEE_SHARE_BPS;
   const communityCommission = calculateBuilderPartnerCommunityRevenueCommission({
     communityRevenueUsd: 100,
@@ -130,6 +133,13 @@ export function WebBuilderPartnerSettingsSection(props: WebBuilderPartnerSetting
               : "Requirements pending";
   const payoutReady = Boolean(snapshot?.payout.ready);
   const payoutLabel = snapshot?.payout.label || formatPayoutStatus(snapshot?.payout.status ?? "");
+  const storedStripeConnectCountry = props.accountCommerceStatus?.stripe_connect.country ?? null;
+  useEffect(() => {
+    if (storedStripeConnectCountry) {
+      setStripeConnectCountry(storedStripeConnectCountry);
+    }
+  }, [storedStripeConnectCountry]);
+  const selectedStripeConnectCountry = stripeConnectCountry || storedStripeConnectCountry || "";
 
   async function copyPartnerLink(): Promise<void> {
     const link = partner?.partnerLink;
@@ -355,14 +365,27 @@ export function WebBuilderPartnerSettingsSection(props: WebBuilderPartnerSetting
                   </div>
                 </div>
                 {!payoutReady ? (
-                  <button
-                    className="platform-save-button platform-save-button--compact"
-                    type="button"
-                    disabled={props.isStartingStripeConnectOnboarding}
-                    onClick={() => void props.startStripeConnectOnboarding({ context: "account" })}
-                  >
-                    {props.isStartingStripeConnectOnboarding ? "Opening Stripe..." : "Set up Stripe payouts"}
-                  </button>
+                  <>
+                    <StripeConnectCountrySelect
+                      value={selectedStripeConnectCountry}
+                      disabled={props.isStartingStripeConnectOnboarding}
+                      onChange={setStripeConnectCountry}
+                      style={{ margin: 0, maxWidth: 280 }}
+                    />
+                    <button
+                      className="platform-save-button platform-save-button--compact"
+                      type="button"
+                      disabled={props.isStartingStripeConnectOnboarding || !selectedStripeConnectCountry}
+                      onClick={() =>
+                        void props.startStripeConnectOnboarding({
+                          context: "account",
+                          country: selectedStripeConnectCountry || null,
+                        })
+                      }
+                    >
+                      {props.isStartingStripeConnectOnboarding ? "Opening Stripe..." : "Set up Stripe payouts"}
+                    </button>
+                  </>
                 ) : null}
                 <div className="builder-partner-payout-grid" role="list" aria-label="Partner payout balances">
                   <div className="builder-partner-payout-card" role="listitem">

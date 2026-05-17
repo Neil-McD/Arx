@@ -2,7 +2,9 @@ import { useEffect, useState } from "react";
 import { formatAccountTierLabel, isAccountTierFree } from "../../../../shared/accountCommerce";
 import type { AccountCommerceStatus } from "../../../../shared/accountCommerceStatusGateway";
 import { CommunityAvatar } from "../../../../shared/CommunityAvatar";
+import { formatStripeConnectCountry } from "../../../../shared/stripeConnectCountries";
 import { buildStripeConnectPresentation } from "../controllers/buildStripeConnectPresentation";
+import { StripeConnectCountrySelect } from "./StripeConnectCountrySelect";
 import { StripeSetupButton } from "./StripeSetupButton";
 import { WebSignOutConfirmModal } from "./WebSignOutConfirmModal";
 
@@ -76,6 +78,7 @@ type WebAccountSettingsSectionProps = {
   startStripeConnectOnboarding: (opts?: {
     context?: "account" | "community";
     communitySlug?: string | null;
+    country?: string | null;
   }) => Promise<void> | void;
   accountCommerceError: string | null;
   isStartingStripeConnectOnboarding: boolean;
@@ -134,6 +137,7 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
   const [deleteAccountError, setDeleteAccountError] = useState<string | null>(null);
+  const [stripeConnectCountry, setStripeConnectCountry] = useState("");
   const {
     session,
     authError,
@@ -180,6 +184,13 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
     pendingPurchasesError,
     pendingPurchasesSuccess,
   } = props;
+  const storedStripeConnectCountry = accountCommerceStatus?.stripe_connect.country ?? null;
+
+  useEffect(() => {
+    if (storedStripeConnectCountry) {
+      setStripeConnectCountry(storedStripeConnectCountry);
+    }
+  }, [storedStripeConnectCountry]);
 
   useEffect(() => {
     if (session) return;
@@ -428,6 +439,11 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
               accountCommerceStatus: status,
               surface: "account",
             });
+            const selectedStripeConnectCountry =
+              stripeConnectCountry || storedStripeConnectCountry || "";
+            const stripeConnectCountryLabel = formatStripeConnectCountry(selectedStripeConnectCountry);
+            const needsStripeConnectCountry =
+              !stripeConnectPresentation.isReady && !selectedStripeConnectCountry;
             return (
               <>
                 <div className="account-row">
@@ -449,14 +465,29 @@ export function WebAccountSettingsSection(props: WebAccountSettingsSectionProps)
                     </div>
                     <div className="auth-actions">
                       <span className="auth-status">{stripeConnectPresentation.statusMessage}</span>
+                      {stripeConnectPresentation.isReady && stripeConnectCountryLabel ? (
+                        <span className="auth-status">Country: {stripeConnectCountryLabel}</span>
+                      ) : (
+                        <StripeConnectCountrySelect
+                          value={selectedStripeConnectCountry}
+                          disabled={isStartingStripeConnectOnboarding}
+                          onChange={setStripeConnectCountry}
+                          style={{ margin: 0, minWidth: 220 }}
+                        />
+                      )}
                       <StripeSetupButton
                         label={
                           isStartingStripeConnectOnboarding
                             ? "Opening…"
                             : stripeConnectPresentation.connectCtaLabel
                         }
-                        onClick={() => void startStripeConnectOnboarding({ context: "account" })}
-                        disabled={isStartingStripeConnectOnboarding}
+                        onClick={() =>
+                          void startStripeConnectOnboarding({
+                            context: "account",
+                            country: selectedStripeConnectCountry || null,
+                          })
+                        }
+                        disabled={isStartingStripeConnectOnboarding || needsStripeConnectCountry}
                       />
                     </div>
                   </div>

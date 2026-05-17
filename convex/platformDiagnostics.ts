@@ -95,6 +95,7 @@ const DIAGNOSTIC_METADATA_ALLOWLIST: Record<string, readonly string[]> = {
   "billing.stripe_connect_onboarding_failed": [
     "context",
     "communitySlug",
+    "country",
     "stage",
     "stripeAccountId",
     "stripeErrorType",

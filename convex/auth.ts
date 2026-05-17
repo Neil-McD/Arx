@@ -298,6 +298,7 @@ export const getAccountCommerceStatus = query({
     stripe_connect: {
       status: "not_connected" | "onboarding_required" | "pending_requirements" | "ready" | "restricted";
       account_id: string | null;
+      country: string | null;
       details_submitted: boolean;
       charges_enabled: boolean;
       payouts_enabled: boolean;
@@ -323,6 +324,7 @@ export const getAccountCommerceStatus = query({
           { userId: actor.dbUserId },
         )) as {
           stripeAccountId?: unknown;
+          country?: unknown;
           status?: unknown;
           detailsSubmitted?: unknown;
           chargesEnabled?: unknown;
@@ -352,6 +354,10 @@ export const getAccountCommerceStatus = query({
         account_id:
           typeof stripeConnect?.stripeAccountId === "string" && stripeConnect.stripeAccountId.trim()
             ? stripeConnect.stripeAccountId.trim()
+            : null,
+        country:
+          typeof stripeConnect?.country === "string" && stripeConnect.country.trim()
+            ? stripeConnect.country.trim().toUpperCase()
             : null,
         details_submitted: stripeConnect?.detailsSubmitted === true,
         charges_enabled: stripeConnect?.chargesEnabled === true,

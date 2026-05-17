@@ -137,6 +137,7 @@ const CRITICAL_AUDIT_METADATA_ALLOWLIST: Record<string, readonly string[]> = {
   stripe_connect_onboarding_failed: [
     "context",
     "communitySlug",
+    "country",
     "stage",
     "stripeAccountId",
     "stripeErrorType",
@@ -145,7 +146,7 @@ const CRITICAL_AUDIT_METADATA_ALLOWLIST: Record<string, readonly string[]> = {
     "stripeStatusCode",
     "errorMessage",
   ],
-  stripe_connect_account_synced: ["connectStatus", "chargesEnabled", "payoutsEnabled", "detailsSubmitted"],
+  stripe_connect_account_synced: ["connectStatus", "country", "chargesEnabled", "payoutsEnabled", "detailsSubmitted"],
   stripe_webhook_failed: ["stripeEventType", "stripeEventId", "requestPath", "errorMessage"],
   stripe_webhook_processed: ["stripeEventType", "stripeEventId"],
   stripe_webhook_received: ["stripeEventType", "stripeEventId"],

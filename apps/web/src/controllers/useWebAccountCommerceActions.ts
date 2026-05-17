@@ -13,6 +13,7 @@ type UseWebAccountCommerceActionsArgs = {
   onConnectOnboardingStarted?: (details: {
     context: "account" | "community";
     communitySlug: string | null;
+    country: string | null;
   }) => void;
   setAccountCommerceError: Dispatch<SetStateAction<string | null>>;
   setIsStartingStripeConnectOnboarding: Dispatch<SetStateAction<boolean>>;
@@ -23,15 +24,17 @@ export function useWebAccountCommerceActions(args: UseWebAccountCommerceActionsA
   const startStripeConnectOnboarding = async (opts?: {
     context?: "account" | "community";
     communitySlug?: string | null;
+    country?: string | null;
   }): Promise<void> => {
     const context = opts?.context ?? "account";
     const communitySlug = opts?.communitySlug ?? null;
+    const country = String(opts?.country ?? "").trim().toUpperCase() || null;
     const session = args.getSession() ?? (args.ensureSession ? await args.ensureSession() : null);
     emitWorkspaceEvent({
       scope: "lifecycle",
       name: "stripe_connect_preflight",
       status: session ? "success" : "skip",
-      detail: { billing_context: context, community_slug: communitySlug },
+      detail: { billing_context: context, community_slug: communitySlug, country },
       error: null,
     });
     if (!session) {
@@ -45,7 +48,7 @@ export function useWebAccountCommerceActions(args: UseWebAccountCommerceActionsA
       scope: "lifecycle",
       name: "stripe_connect_request",
       status: "start",
-      detail: { billing_context: context, community_slug: communitySlug },
+      detail: { billing_context: context, community_slug: communitySlug, country },
       error: null,
     });
     try {
@@ -53,18 +56,19 @@ export function useWebAccountCommerceActions(args: UseWebAccountCommerceActionsA
         session,
         context,
         communitySlug,
+        country,
       });
       const url =
         data && typeof data === "object" && typeof data.url === "string"
           ? data.url.trim()
           : "";
       if (!url) throw new Error("Missing Stripe Connect onboarding URL.");
-      args.onConnectOnboardingStarted?.({ context, communitySlug });
+      args.onConnectOnboardingStarted?.({ context, communitySlug, country });
       emitWorkspaceEvent({
         scope: "lifecycle",
         name: "stripe_connect_request",
         status: "success",
-        detail: { billing_context: context, community_slug: communitySlug },
+        detail: { billing_context: context, community_slug: communitySlug, country },
         error: null,
       });
       args.navigateToUrl(url);
@@ -87,7 +91,7 @@ export function useWebAccountCommerceActions(args: UseWebAccountCommerceActionsA
         scope: "lifecycle",
         name: "stripe_connect_request",
         status: "failure",
-        detail: { billing_context: context, community_slug: communitySlug },
+        detail: { billing_context: context, community_slug: communitySlug, country },
         error: formatWorkspaceInstrumentationError(friendly),
       });
     } finally {

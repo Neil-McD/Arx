@@ -9,6 +9,7 @@ export type AccountCommerceStatus = {
   stripe_connect: {
     status: "not_connected" | "onboarding_required" | "pending_requirements" | "ready" | "restricted";
     account_id: string | null;
+    country: string | null;
     details_submitted: boolean;
     charges_enabled: boolean;
     payouts_enabled: boolean;
@@ -52,6 +53,10 @@ async function loadAccountCommerceStatusViaConvex(session: AuthSessionLike): Pro
       account_id:
         typeof row.stripe_connect?.account_id === "string" && row.stripe_connect.account_id.trim()
           ? row.stripe_connect.account_id.trim()
+          : null,
+      country:
+        typeof row.stripe_connect?.country === "string" && row.stripe_connect.country.trim()
+          ? row.stripe_connect.country.trim().toUpperCase()
           : null,
       details_submitted: row.stripe_connect?.details_submitted === true,
       charges_enabled: row.stripe_connect?.charges_enabled === true,

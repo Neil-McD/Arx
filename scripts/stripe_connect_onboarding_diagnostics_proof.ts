@@ -8,6 +8,10 @@ function readText(path: string): string {
 const creatorCommerce = readText("../convex/creatorCommerce.ts");
 const criticalAudit = readText("../convex/criticalAudit.ts");
 const platformDiagnostics = readText("../convex/platformDiagnostics.ts");
+const schema = readText("../convex/schema.ts");
+const stripeConnectAccountCore = readText("../convex/stripeConnectAccountCore.ts");
+const stripeConnectCountries = readText("../shared/stripeConnectCountries.ts");
+const accountStatusGateway = readText("../shared/accountCommerceStatusGateway.ts");
 
 assert.match(
   creatorCommerce,
@@ -45,6 +49,7 @@ assert.match(
 
 for (const stage of [
   "resolve_actor",
+  "validate_country",
   "check_payout_access",
   "retrieve_connect_account",
   "create_connect_account",
@@ -62,6 +67,7 @@ for (const stage of [
 for (const key of [
   "context",
   "communitySlug",
+  "country",
   "stage",
   "stripeAccountId",
   "stripeErrorType",
@@ -104,13 +110,58 @@ assert.match(
 );
 assert.match(
   creatorCommerce,
-  /polynet-connect-account:create:\$\{userId\}/,
-  "First-time Stripe Connect account creation must be idempotent per Polynet user.",
+  /polynet-connect-account:create:\$\{userId\}:\$\{country\}/,
+  "First-time Stripe Connect account creation must be idempotent per Polynet user and country.",
 );
 assert.match(
   creatorCommerce,
-  /polynet-connect-account:recover:\$\{userId\}:\$\{staleStripeAccountId\}/,
-  "Stale Stripe Connect account recovery must be idempotent per user and stale account id.",
+  /polynet-connect-account:replace:\$\{userId\}:\$\{existingStripeAccountId\}:\$\{country\}/,
+  "Stripe Connect account replacement must be idempotent per user, existing account id, and country.",
+);
+assert.match(
+  schema,
+  /userStripeConnectAccounts:[\s\S]*country: v\.optional\(v\.string\(\)\)/,
+  "Stored Stripe Connect accounts must preserve the country chosen for account creation.",
+);
+assert.match(
+  stripeConnectAccountCore,
+  /country: normalizeStripeConnectCountry\(account\.country\)/,
+  "Stripe Connect account snapshots must persist Stripe's account country.",
+);
+assert.match(
+  accountStatusGateway,
+  /country: string \| null/,
+  "Account commerce status must expose Stripe Connect country to setup surfaces.",
+);
+assert.match(
+  stripeConnectCountries,
+  /\{ code: "KW", name: "Kuwait" \}/,
+  "Stripe Connect supported countries must include Kuwait.",
+);
+assert.match(
+  creatorCommerce,
+  /country: v\.optional\(v\.string\(\)\)/,
+  "Stripe Connect onboarding action must accept an explicit country.",
+);
+assert.match(
+  creatorCommerce,
+  /!isSupportedStripeConnectCountry\(rawRequestedCountry\)/,
+  "Stripe Connect onboarding must reject unsupported country input before creating an account.",
+);
+assert.match(
+  creatorCommerce,
+  /throw new Error\("stripe_connect_country_required"\)/,
+  "Stripe Connect onboarding must require a country before creating a fresh account.",
+);
+assert.match(
+  creatorCommerce,
+  /stripe\.accounts\.create\([\s\S]*country,/,
+  "Stripe Connect account creation must pass country to Stripe.",
+);
+assert.match(
+  creatorCommerce,
+  /stripeConnectCountryCanBeRecreated\(account\)/,
+  "Stripe Connect onboarding may only replace a wrong-country account when the existing account is unfinished.",
 );
 assert.match(
   creatorCommerce,
@@ -139,7 +190,7 @@ assert.match(
 );
 assert.match(
   creatorCommerce,
-  /staleStripeAccountId: existingAccountId/,
+  /existingStripeAccountId: existingAccountId/,
   "Stale-account recovery must scope idempotency to the inaccessible account being replaced.",
 );
 assert.doesNotMatch(

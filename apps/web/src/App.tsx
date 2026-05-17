@@ -5051,10 +5051,11 @@ export default function App() {
       getSession: () => sessionRef.current,
       ensureSession: ensureUsableAuthSession,
       requireSignIn: () => requireSignIn(),
-      onConnectOnboardingStarted: ({ context, communitySlug }) => {
+      onConnectOnboardingStarted: ({ context, communitySlug, country }) => {
         captureProductAnalyticsEvent("stripe connect onboarding started", {
           billing_context: context,
           community_slug: communitySlug,
+          country,
           surface: context === "community" ? "community_settings" : "account_settings",
         });
       },
@@ -7463,6 +7464,7 @@ export default function App() {
         void startStripeConnectOnboarding({
           context: opts?.context ?? "account",
           communitySlug: opts?.communitySlug ?? null,
+          country: opts?.country ?? null,
         });
       },
       canUseDevTierOverride,

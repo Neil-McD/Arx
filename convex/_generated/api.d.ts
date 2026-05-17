@@ -137,6 +137,7 @@ import type * as skillCore from "../skillCore.js";
 import type * as skillPackages from "../skillPackages.js";
 import type * as stripeConnectAccountCore from "../stripeConnectAccountCore.js";
 import type * as stripeCore from "../stripeCore.js";
+import type * as stripeCustomers from "../stripeCustomers.js";
 import type * as threads from "../threads.js";
 import type * as userPlatformAppMounts from "../userPlatformAppMounts.js";
 import type * as userPlatformSkills from "../userPlatformSkills.js";
@@ -287,6 +288,7 @@ declare const fullApi: ApiFromModules<{
   skillPackages: typeof skillPackages;
   stripeConnectAccountCore: typeof stripeConnectAccountCore;
   stripeCore: typeof stripeCore;
+  stripeCustomers: typeof stripeCustomers;
   threads: typeof threads;
   userPlatformAppMounts: typeof userPlatformAppMounts;
   userPlatformSkills: typeof userPlatformSkills;

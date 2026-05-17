@@ -1159,6 +1159,7 @@ export function registerRuntimeBillingRoutes(
               userId,
               stripeAccountId: snapshot.stripeAccountId,
               accountType: snapshot.accountType,
+              country: snapshot.country,
               status: snapshot.status,
               detailsSubmitted: snapshot.detailsSubmitted,
               chargesEnabled: snapshot.chargesEnabled,

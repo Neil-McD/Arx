@@ -1,4 +1,5 @@
 import Stripe from "stripe";
+import { normalizeStripeConnectCountry } from "../shared/stripeConnectCountries";
 
 export type StripeConnectStatus =
   | "not_connected"
@@ -44,6 +45,7 @@ export function buildStripeConnectAccountSnapshot(
 ): {
   stripeAccountId: string;
   accountType: "express";
+  country: string | null;
   status: StoredStripeConnectStatus;
   detailsSubmitted: boolean;
   chargesEnabled: boolean;
@@ -68,6 +70,7 @@ export function buildStripeConnectAccountSnapshot(
   return {
     stripeAccountId: account.id,
     accountType: "express",
+    country: normalizeStripeConnectCountry(account.country),
     status,
     detailsSubmitted,
     chargesEnabled,
@@ -82,4 +85,3 @@ export function buildStripeConnectAccountSnapshot(
     onboardingCompleteAt: status === "ready" ? args?.readyAtMs ?? Date.now() : undefined,
   };
 }
-

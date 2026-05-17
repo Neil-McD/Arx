@@ -11,6 +11,10 @@ import {
 } from "./stripeConnectAccountCore";
 import { recordCriticalAuditEventBestEffort } from "./criticalAudit";
 import { readCanonicalPublicAppOrigin } from "./publicAppUrl";
+import {
+  isSupportedStripeConnectCountry,
+  normalizeStripeConnectCountry,
+} from "../shared/stripeConnectCountries";
 
 const STRIPE_CONNECT_CONTEXT_VALIDATOR = v.union(
   v.literal("account"),
@@ -46,6 +50,7 @@ function buildStripeConnectRedirectUrls(args: {
 
 type StripeConnectOnboardingStage =
   | "resolve_actor"
+  | "validate_country"
   | "check_payout_access"
   | "load_existing_connect_account"
   | "retrieve_connect_account"
@@ -141,13 +146,23 @@ function stripeConnectAccountCanBeRecreated(error: unknown): boolean {
 
 function buildStripeConnectAccountCreateIdempotencyKey(args: {
   userId: unknown;
-  staleStripeAccountId?: string | null;
+  country: string;
+  existingStripeAccountId?: string | null;
 }): string {
   const userId = normalizeDiagnosticString(args.userId, "unknown");
-  const staleStripeAccountId = normalizeDiagnosticString(args.staleStripeAccountId);
-  return staleStripeAccountId
-    ? `polynet-connect-account:recover:${userId}:${staleStripeAccountId}`
-    : `polynet-connect-account:create:${userId}`;
+  const country = normalizeStripeConnectCountry(args.country) ?? "unknown";
+  const existingStripeAccountId = normalizeDiagnosticString(args.existingStripeAccountId);
+  return existingStripeAccountId
+    ? `polynet-connect-account:replace:${userId}:${existingStripeAccountId}:${country}`
+    : `polynet-connect-account:create:${userId}:${country}`;
+}
+
+function stripeConnectCountryCanBeRecreated(account: Stripe.Account): boolean {
+  return (
+    account.details_submitted !== true &&
+    account.charges_enabled !== true &&
+    account.payouts_enabled !== true
+  );
 }
 
 async function recordStripeConnectOnboardingFailureDiagnostic(args: {
@@ -155,6 +170,7 @@ async function recordStripeConnectOnboardingFailureDiagnostic(args: {
   userId?: unknown;
   context: "account" | "community";
   communitySlug?: string | null;
+  country?: string | null;
   stage: StripeConnectOnboardingStage;
   stripeAccountId?: string | null;
   startedAtMs: number;
@@ -166,6 +182,7 @@ async function recordStripeConnectOnboardingFailureDiagnostic(args: {
   const metadata = {
     context: args.context,
     communitySlug: normalizeDiagnosticString(args.communitySlug),
+    country: normalizeDiagnosticString(args.country),
     stage: args.stage,
     stripeAccountId,
     stripeErrorType: normalized.stripeErrorType ?? "",
@@ -226,11 +243,15 @@ async function createStripeExpressAccountForUser(args: {
   stripe: Stripe;
   userId: unknown;
   email?: string | null;
+  country: string;
   idempotencyKey: string;
 }) {
+  const country = normalizeStripeConnectCountry(args.country);
+  if (!country) throw new Error("stripe_connect_country_required");
   return await args.stripe.accounts.create(
     {
       type: "express",
+      country,
       email: normalizeOptionalStripeConnectString(args.email, 200) ?? undefined,
       capabilities: {
         card_payments: { requested: true },
@@ -260,6 +281,7 @@ export const getUserStripeConnectAccountInternal = internalQuery({
       userId: row.userId,
       stripeAccountId: row.stripeAccountId,
       accountType: row.accountType,
+      country: row.country ?? null,
       status: row.status,
       detailsSubmitted: row.detailsSubmitted,
       chargesEnabled: row.chargesEnabled,
@@ -289,6 +311,7 @@ export const getUserStripeConnectAccountByStripeAccountIdInternal = internalQuer
     return {
       userId: row.userId,
       stripeAccountId: row.stripeAccountId,
+      country: row.country ?? null,
       status: row.status,
       chargesEnabled: row.chargesEnabled,
       payoutsEnabled: row.payoutsEnabled,
@@ -302,6 +325,7 @@ export const syncUserStripeConnectAccountInternal = internalMutation({
     userId: v.id("users"),
     stripeAccountId: v.string(),
     accountType: v.optional(v.literal("express")),
+    country: v.optional(v.union(v.string(), v.null())),
     status: v.union(
       v.literal("onboarding_required"),
       v.literal("pending_requirements"),
@@ -335,6 +359,7 @@ export const syncUserStripeConnectAccountInternal = internalMutation({
       userId: args.userId,
       stripeAccountId: String(args.stripeAccountId ?? "").trim(),
       accountType: args.accountType ?? "express",
+      country: normalizeStripeConnectCountry(args.country) ?? existing?.country,
       status: args.status,
       detailsSubmitted: args.detailsSubmitted === true,
       chargesEnabled: args.chargesEnabled === true,
@@ -361,6 +386,7 @@ export const syncUserStripeConnectAccountInternal = internalMutation({
         providerObjectId: patch.stripeAccountId,
         metadata: {
           connectStatus: patch.status,
+          country: patch.country ?? "",
           chargesEnabled: patch.chargesEnabled,
           payoutsEnabled: patch.payoutsEnabled,
           detailsSubmitted: patch.detailsSubmitted,
@@ -387,6 +413,7 @@ export const syncUserStripeConnectAccountInternal = internalMutation({
       providerObjectId: patch.stripeAccountId,
       metadata: {
         connectStatus: patch.status,
+        country: patch.country ?? "",
         chargesEnabled: patch.chargesEnabled,
         payoutsEnabled: patch.payoutsEnabled,
         detailsSubmitted: patch.detailsSubmitted,
@@ -407,13 +434,24 @@ export const startConnectOnboarding = action({
     authSubject: v.optional(v.string()),
     context: STRIPE_CONNECT_CONTEXT_VALIDATOR,
     communitySlug: v.optional(v.string()),
+    country: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const startedAtMs = Date.now();
     let stage: StripeConnectOnboardingStage = "resolve_actor";
     let diagnosticUserId: unknown;
     let diagnosticStripeAccountId: string | null = null;
+    let diagnosticCountry: string | null = null;
     try {
+      stage = "validate_country";
+      const rawRequestedCountry = String(args.country ?? "").trim();
+      if (rawRequestedCountry && !isSupportedStripeConnectCountry(rawRequestedCountry)) {
+        throw new Error("stripe_connect_country_unsupported");
+      }
+      const requestedCountry = normalizeStripeConnectCountry(rawRequestedCountry);
+      diagnosticCountry = requestedCountry;
+
+      stage = "resolve_actor";
       const actor = (await ctx.runQuery(internal.authActor.resolveAuthenticatedActorInternal as any, {
         authSubject: args.authSubject ?? null,
       })) as { dbUserId?: unknown; email?: string | null };
@@ -439,15 +477,44 @@ export const startConnectOnboarding = action({
         { userId },
       )) as {
         stripeAccountId?: string | null;
+        country?: string | null;
       } | null;
       const stripe = getStripeClient();
       let account: Stripe.Account;
       const existingAccountId = normalizeOptionalStripeConnectString(existing?.stripeAccountId);
+      const existingCountry = normalizeStripeConnectCountry(existing?.country);
+      const ensureCountryForCreate = () => {
+        const country = requestedCountry ?? existingCountry;
+        if (!country) throw new Error("stripe_connect_country_required");
+        diagnosticCountry = country;
+        return country;
+      };
       if (existingAccountId) {
         stage = "retrieve_connect_account";
         diagnosticStripeAccountId = existingAccountId;
         try {
           account = await stripe.accounts.retrieve(existingAccountId);
+          const accountCountry = normalizeStripeConnectCountry(account.country);
+          diagnosticCountry = requestedCountry ?? accountCountry ?? existingCountry;
+          if (requestedCountry && accountCountry && requestedCountry !== accountCountry) {
+            if (!stripeConnectCountryCanBeRecreated(account)) {
+              throw new Error("stripe_connect_country_locked");
+            }
+            stage = "create_connect_account";
+            account = await createStripeExpressAccountForUser({
+              stripe,
+              userId,
+              email: actor?.email ?? null,
+              country: requestedCountry,
+              idempotencyKey: buildStripeConnectAccountCreateIdempotencyKey({
+                userId,
+                country: requestedCountry,
+                existingStripeAccountId: existingAccountId,
+              }),
+            });
+            diagnosticStripeAccountId = account.id;
+            diagnosticCountry = requestedCountry;
+          }
         } catch (error) {
           if (!stripeConnectAccountCanBeRecreated(error)) throw error;
           console.warn("stripe_connect_stale_account_recovered", {
@@ -456,24 +523,29 @@ export const startConnectOnboarding = action({
             stripeErrorCode: normalizeStripeConnectOnboardingError(error).stripeErrorCode ?? "",
           });
           stage = "create_connect_account";
+          const country = ensureCountryForCreate();
           account = await createStripeExpressAccountForUser({
             stripe,
             userId,
             email: actor?.email ?? null,
+            country,
             idempotencyKey: buildStripeConnectAccountCreateIdempotencyKey({
               userId,
-              staleStripeAccountId: existingAccountId,
+              country,
+              existingStripeAccountId: existingAccountId,
             }),
           });
           diagnosticStripeAccountId = account.id;
         }
       } else {
         stage = "create_connect_account";
+        const country = ensureCountryForCreate();
         account = await createStripeExpressAccountForUser({
           stripe,
           userId,
           email: actor?.email ?? null,
-          idempotencyKey: buildStripeConnectAccountCreateIdempotencyKey({ userId }),
+          country,
+          idempotencyKey: buildStripeConnectAccountCreateIdempotencyKey({ userId, country }),
         });
         diagnosticStripeAccountId = account.id;
       }
@@ -486,6 +558,7 @@ export const startConnectOnboarding = action({
         userId,
         stripeAccountId: snapshot.stripeAccountId,
         accountType: snapshot.accountType,
+        country: snapshot.country,
         status: snapshot.status,
         detailsSubmitted: snapshot.detailsSubmitted,
         chargesEnabled: snapshot.chargesEnabled,
@@ -525,6 +598,7 @@ export const startConnectOnboarding = action({
         userId: diagnosticUserId,
         context: args.context,
         communitySlug: args.communitySlug ?? null,
+        country: diagnosticCountry,
         stage,
         stripeAccountId: diagnosticStripeAccountId,
         startedAtMs,

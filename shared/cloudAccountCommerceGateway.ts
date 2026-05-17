@@ -29,6 +29,7 @@ export async function startCloudConnectOnboarding<SessionT>(
   params: CloudAccountCommerceGatewayParams<SessionT> & {
     context: "account" | "community";
     communitySlug?: string | null;
+    country?: string | null;
   },
 ): Promise<{ url?: unknown }> {
   const { client, authSubject } = await bootstrapGatewayAuthContext(params.session);
@@ -36,6 +37,7 @@ export async function startCloudConnectOnboarding<SessionT>(
     authSubject,
     context: params.context,
     communitySlug: params.communitySlug ?? undefined,
+    country: params.country ?? undefined,
   })) as {
     url?: unknown;
   };

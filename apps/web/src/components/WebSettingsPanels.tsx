@@ -88,6 +88,7 @@ export type WebSettingsPanelsProps = {
     startStripeConnectOnboarding: (opts?: {
       context?: "account" | "community";
       communitySlug?: string | null;
+      country?: string | null;
     }) => Promise<void> | void;
     canUseDevTierOverride: boolean;
     setDevAccountTier: (tier: "free" | "architect") => Promise<void> | void;
