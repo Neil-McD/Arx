@@ -88,6 +88,41 @@ type LandingActionButton = {
   prompt: string;
 };
 
+const WORKSPACE_RIGHT_PANEL_TAB_STORAGE_KEY = "polynet-workspace-right-panel-tab";
+
+function isWorkspaceRightPanelTabAvailable(tab: WorkspaceRightPanelTab, showOperatorTabs: boolean): boolean {
+  if (tab === "workspace" || tab === "community") return true;
+  return showOperatorTabs;
+}
+
+function parseStoredWorkspaceRightPanelTab(value: string | null): WorkspaceRightPanelTab {
+  return value === "workspace" ||
+    value === "community" ||
+    value === "platform" ||
+    value === "business" ||
+    value === "communities"
+    ? value
+    : "workspace";
+}
+
+function loadWorkspaceRightPanelTab(): WorkspaceRightPanelTab {
+  try {
+    if (typeof window === "undefined") return "workspace";
+    return parseStoredWorkspaceRightPanelTab(window.localStorage.getItem(WORKSPACE_RIGHT_PANEL_TAB_STORAGE_KEY));
+  } catch {
+    return "workspace";
+  }
+}
+
+function storeWorkspaceRightPanelTab(tab: WorkspaceRightPanelTab): void {
+  try {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(WORKSPACE_RIGHT_PANEL_TAB_STORAGE_KEY, tab);
+  } catch {
+    // Right-panel tab selection is a local display preference only.
+  }
+}
+
 export type WorkspaceComposerDraft = {
   text: string;
   attachments: WorkspaceAttachmentView[];
@@ -973,7 +1008,8 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
   const [isDesktopViewport, setIsDesktopViewport] = useState<boolean>(() =>
     typeof window === "undefined" ? true : window.matchMedia("(min-width: 901px)").matches,
   );
-  const [operatorActiveInsightTab, setOperatorActiveInsightTab] = useState<WorkspaceRightPanelTab>("workspace");
+  const [operatorActiveInsightTab, setOperatorActiveInsightTab] =
+    useState<WorkspaceRightPanelTab>(loadWorkspaceRightPanelTab);
   const [operatorRightPanelWidth, setOperatorRightPanelWidth] = useState(OPERATOR_RIGHT_PANEL_DEFAULT_WIDTH);
   const savedThreadScrollTopRef = useRef<number | null>(null);
   const pendingRestoreThreadScrollTopRef = useRef<number | null>(null);
@@ -1039,6 +1075,17 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
       gutter: isWorkspaceRightPanelVisible ? OPERATOR_RIGHT_PANEL_GUTTER : 0,
     });
   }, [isWorkspaceRightPanelVisible, operatorRightPanelWidth, props.onOperatorPanelLayoutChange]);
+
+  useEffect(() => {
+    setOperatorActiveInsightTab((tab) =>
+      isWorkspaceRightPanelTabAvailable(tab, showOperatorTabs) ? tab : "workspace",
+    );
+  }, [showOperatorTabs]);
+
+  useEffect(() => {
+    if (!isWorkspaceRightPanelTabAvailable(operatorActiveInsightTab, showOperatorTabs)) return;
+    storeWorkspaceRightPanelTab(operatorActiveInsightTab);
+  }, [operatorActiveInsightTab, showOperatorTabs]);
 
   useEffect(() => {
     workspaceAttachmentsRef.current = workspaceAttachments;
