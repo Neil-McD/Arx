@@ -9630,8 +9630,37 @@ button.chat-reply-quote:hover {
   flex-shrink: 0;
 }
 
-.members-pagination-actions button {
-  min-height: 34px;
+.members-pagination-action {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.members-pagination-action:hover,
+.members-pagination-action:focus-visible {
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-primary);
+  text-decoration: underline;
+  transform: none;
+}
+
+.members-pagination-next::after {
+  content: "\2192";
+  display: inline-block;
+  text-decoration: none;
 }
 
 .members-loading-shell {
@@ -10229,8 +10258,8 @@ button.chat-reply-quote:hover {
     justify-content: stretch;
   }
 
-  .members-pagination-actions button {
-    flex: 1;
+  .members-pagination-action {
+    flex: 0 0 auto;
   }
 
   .members-policy-row {
@@ -16008,7 +16037,7 @@ button.message-citation-chip:hover {
 }
 
 /* Settings panel buttons - consistent styling */
-.settings-panel button:not(.platform-save-button):not(.integration-mounted-menu-trigger):not(.integration-mounted-menu-item):not(.platform-switcher-btn):not(.analytics-range-btn):not(.ai-feed-view-button):not(.ai-feed-moderate-button):not(.stripe-setup-button) {
+.settings-panel button:not(.platform-save-button):not(.integration-mounted-menu-trigger):not(.integration-mounted-menu-item):not(.platform-switcher-btn):not(.analytics-range-btn):not(.ai-feed-view-button):not(.ai-feed-moderate-button):not(.stripe-setup-button):not(.members-pagination-action) {
   padding: 10px 16px;
   font-size: 12px;
   font-weight: 500;
@@ -16020,12 +16049,12 @@ button.message-citation-chip:hover {
   color: var(--text-primary);
 }
 
-.settings-panel button:not(.platform-save-button):not(.integration-mounted-menu-trigger):not(.integration-mounted-menu-item):not(.platform-switcher-btn):not(.analytics-range-btn):not(.ai-feed-view-button):not(.ai-feed-moderate-button):not(.stripe-setup-button):hover:not(:disabled) {
+.settings-panel button:not(.platform-save-button):not(.integration-mounted-menu-trigger):not(.integration-mounted-menu-item):not(.platform-switcher-btn):not(.analytics-range-btn):not(.ai-feed-view-button):not(.ai-feed-moderate-button):not(.stripe-setup-button):not(.members-pagination-action):hover:not(:disabled) {
   border-color: var(--border-default);
   background: var(--bg-card-hover);
 }
 
-.settings-panel button:not(.platform-save-button):not(.integration-mounted-menu-trigger):not(.integration-mounted-menu-item):not(.platform-switcher-btn):not(.analytics-range-btn):not(.ai-feed-view-button):not(.ai-feed-moderate-button):not(.stripe-setup-button):disabled {
+.settings-panel button:not(.platform-save-button):not(.integration-mounted-menu-trigger):not(.integration-mounted-menu-item):not(.platform-switcher-btn):not(.analytics-range-btn):not(.ai-feed-view-button):not(.ai-feed-moderate-button):not(.stripe-setup-button):not(.members-pagination-action):disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }

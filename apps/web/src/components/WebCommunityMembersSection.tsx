@@ -506,7 +506,7 @@ export function WebCommunityMembersSection(props: WebCommunityMembersSectionProp
                   {canGoToPreviousMemberPage ? (
                     <button
                       type="button"
-                      className="secondary"
+                      className="members-pagination-action"
                       onClick={() =>
                         setCommunityMembersPageIndex((previous) => Math.max(0, previous - 1))
                       }
@@ -517,7 +517,7 @@ export function WebCommunityMembersSection(props: WebCommunityMembersSectionProp
                   {canGoToNextMemberPage ? (
                     <button
                       type="button"
-                      className="secondary"
+                      className="members-pagination-action members-pagination-next"
                       onClick={() =>
                         setCommunityMembersPageIndex((previous) =>
                           Math.min(maxMemberPageIndex, previous + 1),
