@@ -1052,6 +1052,7 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
     useState<WorkspaceRightPanelTab>(() => loadWorkspaceRightPanelTab(initialRightPanelStorageUserId));
   const [workspaceRightPanelCommunityLabel, setWorkspaceRightPanelCommunityLabel] =
     useState<string>(initialRightPanelCommunityLabel);
+  const [isCommunityRecentSignalsExpanded, setIsCommunityRecentSignalsExpanded] = useState(false);
   const [operatorRightPanelWidth, setOperatorRightPanelWidth] = useState(OPERATOR_RIGHT_PANEL_DEFAULT_WIDTH);
   const loadedRightPanelTabUserIdRef = useRef<string | null>(initialRightPanelStorageUserId);
   const loadedRightPanelCommunityLabelUserIdRef = useRef<string | null>(initialRightPanelStorageUserId);
@@ -1106,6 +1107,7 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
   const activeRightPanelCommunityName = normalizeWorkspaceRightPanelCommunityLabel(
     props.workspaceUserDataPanel?.activeCommunity?.name,
   );
+  const activeRightPanelCommunityId = props.workspaceUserDataPanel?.activeCommunity?.id ?? null;
   const workspaceRightPanelTabs = useMemo(
     () =>
       buildWorkspaceRightPanelTabs({
@@ -1165,6 +1167,15 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
     );
     storeWorkspaceRightPanelCommunityLabel(rightPanelStorageUserId, activeRightPanelCommunityName);
   }, [activeRightPanelCommunityName, rightPanelStorageUserId]);
+
+  useEffect(() => {
+    setIsCommunityRecentSignalsExpanded(false);
+  }, [activeRightPanelCommunityId]);
+
+  useEffect(() => {
+    if (isWorkspaceRightPanelVisible) return;
+    setIsCommunityRecentSignalsExpanded(false);
+  }, [isWorkspaceRightPanelVisible]);
 
   useEffect(() => {
     workspaceAttachmentsRef.current = workspaceAttachments;
@@ -2052,6 +2063,7 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
         >
           <WebOperatorDataPanel
             workspaceUserDataPanel={props.workspaceUserDataPanel}
+            isCommunityRecentSignalsExpanded={isCommunityRecentSignalsExpanded}
             state={operatorData.state}
             topCommunities={operatorData.topCommunities}
             partnerPayoutCycleActions={operatorData.partnerPayoutCycleActions}
@@ -2060,6 +2072,7 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
             insightTabs={workspaceRightPanelTabs}
             activeInsightTab={activeRightPanelTab}
             onActiveInsightTabChange={handleWorkspaceRightPanelTabChange}
+            onCommunityRecentSignalsExpandedChange={setIsCommunityRecentSignalsExpanded}
             onResizePointerDown={handleOperatorRightPanelResizePointerDown}
             onResizePointerMove={(event) => {
               if (event.buttons === 1) resizeOperatorRightPanelFromPointer(event);

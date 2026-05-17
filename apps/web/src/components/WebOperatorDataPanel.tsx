@@ -308,6 +308,7 @@ export function useOperatorDashboardData(params: {
 
 export function WebOperatorDataPanel(props: {
   workspaceUserDataPanel: WorkspaceUserDataPanelDataProps;
+  isCommunityRecentSignalsExpanded: boolean;
   insightTabs: WorkspaceRightPanelTabItem[];
   state: OperatorDashboardState;
   topCommunities: OperatorCommunityRecord[];
@@ -316,6 +317,7 @@ export function WebOperatorDataPanel(props: {
   error: string | null;
   activeInsightTab: WorkspaceRightPanelTab;
   onActiveInsightTabChange: (tab: WorkspaceRightPanelTab) => void;
+  onCommunityRecentSignalsExpandedChange: (expanded: boolean) => void;
   onResizePointerDown: (event: PointerEvent<HTMLDivElement>) => void;
   onResizePointerMove: (event: PointerEvent<HTMLDivElement>) => void;
   onResizeDoubleClick: () => void;
@@ -367,7 +369,11 @@ export function WebOperatorDataPanel(props: {
         {activeInsightTab === "workspace" ? (
           <WorkspacePanelContent {...props.workspaceUserDataPanel} />
         ) : activeInsightTab === "community" ? (
-          <CommunityPanelContent {...props.workspaceUserDataPanel} />
+          <CommunityPanelContent
+            {...props.workspaceUserDataPanel}
+            isRecentSignalsExpanded={props.isCommunityRecentSignalsExpanded}
+            onRecentSignalsExpandedChange={props.onCommunityRecentSignalsExpandedChange}
+          />
         ) : activeInsightTab === "platform" ? (
           <OperatorPlatformInsights
             webDeploy={props.state.webDeploy}

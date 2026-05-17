@@ -104,6 +104,11 @@ export type WorkspaceUserDataPanelDataProps = {
   onToggleCommunityMute: (muted: boolean) => Promise<void> | void;
 };
 
+type CommunityPanelContentProps = WorkspaceUserDataPanelDataProps & {
+  isRecentSignalsExpanded: boolean;
+  onRecentSignalsExpandedChange: (expanded: boolean) => void;
+};
+
 const WORKSPACE_FILES_EXPANDED_STORAGE_KEY_PREFIX = "polynet-workspace-files-expanded";
 const WORKSPACE_PANEL_COLLAPSED_SIGNAL_LIMIT = 8;
 const WORKSPACE_PANEL_EXPANDED_SIGNAL_VIEWPORT_ITEMS = 10;
@@ -527,16 +532,15 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps) {
   );
 }
 
-export function CommunityPanelContent(props: WorkspaceUserDataPanelDataProps) {
+export function CommunityPanelContent(props: CommunityPanelContentProps) {
   const community = props.activeCommunity;
-  const [isRecentSignalsExpanded, setIsRecentSignalsExpanded] = useState(false);
   const [isRecentSignalsAtBottom, setIsRecentSignalsAtBottom] = useState(true);
   const recentSignalsViewportRef = useRef<HTMLDivElement | null>(null);
+  const isRecentSignalsExpanded = props.isRecentSignalsExpanded;
 
   useEffect(() => {
-    setIsRecentSignalsExpanded(false);
     setIsRecentSignalsAtBottom(true);
-  }, [community?.id]);
+  }, [community?.id, isRecentSignalsExpanded]);
 
   const panelRecentSignals = community?.recentSignals ?? [];
   const recentSignalsCount = panelRecentSignals.length;
@@ -576,7 +580,7 @@ export function CommunityPanelContent(props: WorkspaceUserDataPanelDataProps) {
   };
   const toggleRecentSignalsExpanded = () => {
     const nextIsExpanded = !isRecentSignalsExpanded;
-    setIsRecentSignalsExpanded(nextIsExpanded);
+    props.onRecentSignalsExpandedChange(nextIsExpanded);
     if (!nextIsExpanded) {
       setIsRecentSignalsAtBottom(true);
       requestAnimationFrame(() => {
