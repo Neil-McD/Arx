@@ -1,5 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AuthSessionLike } from "../../../../shared/authSession";
+import { AnalyticsLineChart } from "../../../../shared/AnalyticsLineChart";
+import type {
+  AnalyticsRange,
+  CommunityAnalyticsSeries,
+  CommunityAnalyticsSummary,
+} from "../../../../shared/communityTypes";
+import {
+  formatCount,
+  formatMoneyBaseUnits,
+  formatPercent,
+} from "../../../../shared/contentFormatting";
+import { buildPlatformSwitcherStyle } from "../../../../shared/platformSwitcherUi";
 import { UserAvatar } from "../../../../shared/UserAvatar";
 import { DiscoverCatalogLogo } from "./DiscoverCatalogLogo";
 import {
@@ -27,8 +39,36 @@ export type WorkspaceUserPanelCommunity = {
   role: "member" | "moderator" | "admin" | "owner";
   muted: boolean;
   onlineFaces: WorkspaceUserPanelOnlineFace[];
+  analytics: WorkspaceUserPanelCommunityAnalytics;
+  operations: WorkspaceUserPanelCommunityOperations;
   recentSignals: WorkspaceUserPanelRecentSignal[];
   integrations: WorkspaceUserPanelIntegration[];
+};
+
+export type WorkspaceUserPanelCommunityAnalytics = {
+  canView: boolean;
+  range: AnalyticsRange;
+  isLoading: boolean;
+  error: string | null;
+  summary: CommunityAnalyticsSummary;
+  series: CommunityAnalyticsSeries;
+};
+
+export type WorkspaceUserPanelJoinRequest = WorkspaceUserPanelOnlineFace & {
+  id: string;
+  userId: string;
+  message: string | null;
+  createdAtLabel: string;
+};
+
+export type WorkspaceUserPanelCommunityOperations = {
+  canReviewJoinRequests: boolean;
+  joinReviewMode: "paid" | "free_auto" | "free_approval" | null;
+  pendingJoinRequests: WorkspaceUserPanelJoinRequest[];
+  hiddenJoinRequestCount: number;
+  isLoadingJoinRequests: boolean;
+  joinRequestsError: string | null;
+  decidingJoinRequestId: string | null;
 };
 
 export type WorkspaceUserPanelOnlineFace = {
@@ -94,6 +134,10 @@ export type WorkspaceUserDataPanelDataProps = {
   onTurnOffComputer: () => Promise<boolean>;
   onOpenRecentSignal: (target: WorkspaceUserPanelRecentSignal["target"]) => void;
   onOpenActiveCommunitySettings: () => void;
+  onOpenActiveCommunityMembers: () => void;
+  onSetCommunityAnalyticsRange: (value: AnalyticsRange) => void;
+  onApproveCommunityJoinRequest: (requestId: string) => Promise<void> | void;
+  onDenyCommunityJoinRequest: (requestId: string) => Promise<void> | void;
   onOpenWorkspaceIntegrationSetup: () => void;
   onToggleCommunityIntegration: (
     communityAppMountId: string,
@@ -178,6 +222,235 @@ function isWorkspaceCreditStartFailure(result: DaytonaWorkspaceComputerStartResu
   return !result.ok && (
     result.code === "workspace_credits_exhausted" ||
     result.code === "workspace_credits_unavailable"
+  );
+}
+
+function WorkspaceCommunityAnalyticsPreview(props: {
+  analytics: WorkspaceUserPanelCommunityAnalytics;
+  onSetRange: (value: AnalyticsRange) => void;
+}) {
+  const rangeOptions = ["7d", "30d", "90d", "1y", "all"] as const;
+  const chartMetricOptions = ["visits", "members", "revenue"] as const;
+  const [chartMetric, setChartMetric] = useState<(typeof chartMetricOptions)[number]>("members");
+  const rangeSwitcherStyle = buildPlatformSwitcherStyle(
+    rangeOptions.length,
+    rangeOptions.findIndex((value) => value === props.analytics.range),
+  );
+  const chartMetricSwitcherStyle = buildPlatformSwitcherStyle(
+    chartMetricOptions.length,
+    chartMetricOptions.findIndex((value) => value === chartMetric),
+  );
+  const chartPoints = props.analytics.series[chartMetric] ?? [];
+  const chartTitle =
+    chartMetric === "visits" ? "Page visits" : chartMetric === "revenue" ? "Revenue" : "New members";
+  const chartStat = useMemo(() => {
+    if (chartPoints.length === 0) return "—";
+    if (chartMetric === "revenue") {
+      const latest = chartPoints[chartPoints.length - 1]?.value ?? 0;
+      return formatMoneyBaseUnits(
+        latest,
+        props.analytics.summary.currency,
+        props.analytics.summary.currency_decimals,
+      );
+    }
+    const total = chartPoints.reduce((sum, point) => sum + point.value, 0);
+    return formatCount(total);
+  }, [
+    chartMetric,
+    chartPoints,
+    props.analytics.summary.currency,
+    props.analytics.summary.currency_decimals,
+  ]);
+
+  return (
+    <section className="workspace-community-section workspace-community-analytics">
+      <div className="workspace-community-analytics-header">
+        <div className="workspace-community-section__title">Growth + monetization</div>
+        <div
+          className="platform-switcher platform-switcher-compact workspace-community-analytics-range"
+          role="tablist"
+          aria-label="Community analytics time range"
+          style={rangeSwitcherStyle}
+        >
+          {rangeOptions.map((value) => (
+            <button
+              key={value}
+              type="button"
+              className={
+                value === props.analytics.range
+                  ? "platform-switcher-btn is-active"
+                  : "platform-switcher-btn"
+              }
+              onClick={() => props.onSetRange(value)}
+              aria-pressed={value === props.analytics.range}
+            >
+              {value}
+            </button>
+          ))}
+        </div>
+      </div>
+      {props.analytics.isLoading ? (
+        <div className="workspace-community-note">Loading analytics...</div>
+      ) : null}
+      {props.analytics.error ? (
+        <div className="workspace-community-note">{props.analytics.error}</div>
+      ) : null}
+      <div className="analytics-kpi-strip" aria-label="Community analytics">
+        {[
+          {
+            label: "Page visits",
+            value: formatCount(props.analytics.summary.page_visits_window),
+          },
+          {
+            label: "New members",
+            value: formatCount(props.analytics.summary.new_members_window),
+          },
+          {
+            label: "Conversion",
+            value: formatPercent(props.analytics.summary.conversion_rate_window),
+          },
+          {
+            label: "MRR",
+            value: formatMoneyBaseUnits(
+              props.analytics.summary.mrr_base_units,
+              props.analytics.summary.currency,
+              props.analytics.summary.currency_decimals,
+            ),
+          },
+        ].map((kpi) => (
+          <div key={kpi.label} className="analytics-kpi-tile">
+            <div className="analytics-kpi-value-big">{kpi.value}</div>
+            <div className="analytics-kpi-label">{kpi.label}</div>
+          </div>
+        ))}
+      </div>
+      <div className="analytics-chart-card">
+        <div className="analytics-chart-header">
+          <div className="analytics-chart-heading">
+            <div className="analytics-chart-title">{chartTitle}</div>
+            <div className="analytics-chart-stat">{chartStat}</div>
+          </div>
+          <div
+            className="platform-switcher platform-switcher-compact analytics-chart-metric-switcher"
+            role="tablist"
+            aria-label="Community analytics chart metric"
+            style={chartMetricSwitcherStyle}
+          >
+            {chartMetricOptions.map((value) => (
+              <button
+                key={value}
+                type="button"
+                className={value === chartMetric ? "platform-switcher-btn is-active" : "platform-switcher-btn"}
+                onClick={() => setChartMetric(value)}
+                aria-pressed={value === chartMetric}
+              >
+                {value === "visits" ? "Visits" : value === "revenue" ? "Revenue" : "Members"}
+              </button>
+            ))}
+          </div>
+        </div>
+        <AnalyticsLineChart
+          points={chartPoints}
+          valueFormatter={
+            chartMetric === "revenue"
+              ? (value) =>
+                  formatMoneyBaseUnits(
+                    value,
+                    props.analytics.summary.currency,
+                    props.analytics.summary.currency_decimals,
+                  )
+              : undefined
+          }
+        />
+      </div>
+    </section>
+  );
+}
+
+function WorkspaceCommunityOperations(props: {
+  operations: WorkspaceUserPanelCommunityOperations;
+  onApprove: (requestId: string) => Promise<void> | void;
+  onDeny: (requestId: string) => Promise<void> | void;
+  onOpenMembers: () => void;
+}) {
+  if (!props.operations.canReviewJoinRequests || props.operations.joinReviewMode !== "free_approval") {
+    return null;
+  }
+
+  return (
+    <section className="workspace-community-section workspace-community-operations">
+      <div className="workspace-community-section__title">Operations</div>
+      {props.operations.isLoadingJoinRequests ? (
+        <div className="workspace-community-note">Loading approvals...</div>
+      ) : props.operations.pendingJoinRequests.length === 0 ? (
+        <div className="workspace-community-note">No pending approvals.</div>
+      ) : (
+        <div className="workspace-community-approval-list">
+          {props.operations.pendingJoinRequests.map((request) => {
+            const isDeciding = props.operations.decidingJoinRequestId === request.id;
+            return (
+              <div key={request.id} className="workspace-community-approval-row">
+                <UserAvatar
+                  className="workspace-community-approval-avatar public-funnel-face"
+                  readyClassName="has-image"
+                  name={request.displayName ?? request.userId}
+                  imageUrl={request.avatarUrl}
+                  focusX={request.avatarFocusX ?? 0.5}
+                  focusY={request.avatarFocusY ?? 0.5}
+                  zoom={request.avatarZoom ?? 1}
+                  alt=""
+                  aria-hidden={true}
+                  fallback={null}
+                />
+                <div className="workspace-community-approval-copy">
+                  <div className="workspace-community-approval-title">
+                    <strong>{request.displayName ?? "Member"}</strong>
+                    <span>{request.createdAtLabel}</span>
+                  </div>
+                  {request.message ? (
+                    <div className="workspace-community-approval-message">{request.message}</div>
+                  ) : null}
+                </div>
+                <div className="workspace-community-approval-actions">
+                  <button
+                    type="button"
+                    className="workspace-community-approval-action"
+                    disabled={isDeciding}
+                    onClick={() => void props.onApprove(request.id)}
+                    aria-label={`Approve ${request.displayName ?? "member"}`}
+                    title="Approve"
+                  >
+                    ✓
+                  </button>
+                  <button
+                    type="button"
+                    className="workspace-community-approval-action is-danger"
+                    disabled={isDeciding}
+                    onClick={() => void props.onDeny(request.id)}
+                    aria-label={`Deny ${request.displayName ?? "member"}`}
+                    title="Deny"
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {props.operations.hiddenJoinRequestCount > 0 ? (
+        <button
+          type="button"
+          className="workspace-community-signal-view-more"
+          onClick={props.onOpenMembers}
+        >
+          {props.operations.hiddenJoinRequestCount} more
+        </button>
+      ) : null}
+      {props.operations.joinRequestsError ? (
+        <div className="workspace-community-note">{props.operations.joinRequestsError}</div>
+      ) : null}
+    </section>
   );
 }
 
@@ -563,6 +836,11 @@ export function CommunityPanelContent(props: CommunityPanelContentProps) {
   if (!community) {
     return null;
   }
+  const isOwnerAdminCommunityView =
+    community.role === "owner" ||
+    community.role === "admin" ||
+    community.analytics.canView ||
+    community.operations.canReviewJoinRequests;
 
   const visibleRecentSignals = isRecentSignalsExpanded
     ? panelRecentSignals
@@ -635,6 +913,20 @@ export function CommunityPanelContent(props: CommunityPanelContentProps) {
             ))}
           </div>
         </section>
+      ) : null}
+      {isOwnerAdminCommunityView && community.analytics.canView ? (
+        <WorkspaceCommunityAnalyticsPreview
+          analytics={community.analytics}
+          onSetRange={props.onSetCommunityAnalyticsRange}
+        />
+      ) : null}
+      {isOwnerAdminCommunityView ? (
+        <WorkspaceCommunityOperations
+          operations={community.operations}
+          onApprove={props.onApproveCommunityJoinRequest}
+          onDeny={props.onDenyCommunityJoinRequest}
+          onOpenMembers={props.onOpenActiveCommunityMembers}
+        />
       ) : null}
       {panelRecentSignals.length > 0 ? (
         <section className="workspace-community-section">

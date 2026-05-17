@@ -8,6 +8,7 @@ export function useCommunityAdminAnalyticsLifecycle<TSession>(params: {
   session: TSession | null;
   activeCommunityId: string | null;
   canViewActiveCommunityAnalytics: boolean;
+  shouldLoad?: boolean;
   communityAnalyticsRange: AnalyticsRange;
   loadCommunityAnalytics: (
     communityId: string,
@@ -28,7 +29,14 @@ export function useCommunityAdminAnalyticsLifecycle<TSession>(params: {
   }, [params.resetCommunityAnalytics]);
 
   useEffect(() => {
-    if (params.activePage !== "community" || params.communityTab !== "analytics") return;
+    resetCommunityAnalyticsRef.current();
+  }, [params.activeCommunityId]);
+
+  useEffect(() => {
+    const shouldLoadForSurface =
+      (params.activePage === "community" && params.communityTab === "analytics") ||
+      params.shouldLoad === true;
+    if (!shouldLoadForSurface) return;
     if (!params.session || !params.activeCommunityId || !params.canViewActiveCommunityAnalytics) {
       resetCommunityAnalyticsRef.current();
       return;
@@ -44,6 +52,7 @@ export function useCommunityAdminAnalyticsLifecycle<TSession>(params: {
     params.session,
     params.activeCommunityId,
     params.canViewActiveCommunityAnalytics,
+    params.shouldLoad,
     params.communityAnalyticsRange,
   ]);
 

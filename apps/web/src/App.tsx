@@ -4972,6 +4972,7 @@ export default function App() {
     communities,
     canReviewJoinRequests: canReviewJoinRequestsActiveCommunity,
     activeCommunityMembersJoinReviewMode,
+    shouldLoad: shouldHydrateWorkspaceCommunityPanel,
     isJoinRequestsModalOpen,
     loadCommunityJoinRequests,
     setCommunityJoinRequests,
@@ -5007,6 +5008,7 @@ export default function App() {
     ...sessionArg,
     activeCommunityId,
     canViewActiveCommunityAnalytics,
+    shouldLoad: shouldHydrateWorkspaceCommunityPanel,
     communityAnalyticsRange,
     loadCommunityAnalytics,
     resetCommunityAnalytics,
@@ -8280,6 +8282,36 @@ export default function App() {
           avatarFocusY: face.avatar_focus_y ?? null,
           avatarZoom: face.avatar_zoom ?? null,
         })),
+        analytics: {
+          canView: canViewActiveCommunityAnalytics,
+          range: communityAnalyticsRange,
+          isLoading: isLoadingCommunityAnalytics,
+          error: communityAnalyticsError,
+          summary: communityAnalyticsSummary,
+          series: communityAnalyticsSeries,
+        },
+        operations: {
+          canReviewJoinRequests: canReviewJoinRequestsActiveCommunity,
+          joinReviewMode: activeCommunityMembersJoinReviewMode,
+          pendingJoinRequests: communityJoinRequests.slice(0, 4).map((request) => {
+            const profile = savedProfilesByUserId[request.user_id] ?? null;
+            return {
+              id: request.id,
+              userId: request.user_id,
+              displayName: profile?.display_name ?? displayName(request.user_id),
+              avatarUrl: profile?.avatar_url ?? null,
+              avatarFocusX: profile?.avatar_focus_x ?? null,
+              avatarFocusY: profile?.avatar_focus_y ?? null,
+              avatarZoom: profile?.avatar_zoom ?? null,
+              message: (request.message ?? "").trim() || null,
+              createdAtLabel: formatRelativeTime(request.created_at),
+            };
+          }),
+          hiddenJoinRequestCount: Math.max(0, communityJoinRequests.length - 4),
+          isLoadingJoinRequests: isLoadingCommunityJoinRequests,
+          joinRequestsError: communityJoinRequestsError,
+          decidingJoinRequestId: decidingCommunityJoinRequestId,
+        },
         recentSignals: workspacePanelCommunityRecentSignals,
         integrations: workspacePanelCommunityIntegrations,
       }
@@ -8306,9 +8338,17 @@ export default function App() {
     onTurnOffComputer: turnOffWorkspaceComputer,
     onOpenRecentSignal: handleOpenWorkspacePanelCommunitySignal,
     onToggleCommunityMute: handleToggleCommunityMute,
+    onSetCommunityAnalyticsRange: setCommunityAnalyticsRange,
+    onApproveCommunityJoinRequest: handleApproveCommunityJoinRequest,
+    onDenyCommunityJoinRequest: handleDenyCommunityJoinRequest,
     onOpenWorkspaceIntegrationSetup: handleOpenIntegrationsSettings,
     onToggleCommunityIntegration: (communityAppMountId: string, enabled: boolean) =>
       handleUpdateCommunityAppMount(communityAppMountId, { enabled }),
+    onOpenActiveCommunityMembers: () => {
+      const nextCommunitySlug = String(selectedActiveCommunitySlug ?? activeCommunity?.slug ?? "").trim();
+      if (!nextCommunitySlug) return;
+      openCommunityTab(nextCommunitySlug, "members", { pushSnapshot: false });
+    },
     onOpenActiveCommunitySettings: () => {
       const nextCommunitySlug = String(selectedActiveCommunitySlug ?? activeCommunity?.slug ?? "").trim();
       if (!nextCommunitySlug) return;

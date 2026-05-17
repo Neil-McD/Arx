@@ -20,6 +20,7 @@ type LifecycleParams<
   communities: CommunityT[];
   canReviewJoinRequests: boolean;
   activeCommunityMembersJoinReviewMode: CommunityMembersJoinReviewMode | null;
+  shouldLoad?: boolean;
   isJoinRequestsModalOpen: boolean;
   loadCommunityJoinRequests: (communityId: string, session: SessionT) => Promise<void> | void;
   setCommunityJoinRequests: Dispatch<SetStateAction<JoinRequestT[]>>;
@@ -57,7 +58,10 @@ export function useCommunityMembersReviewLifecycle<
   }, [params.activePage, params.communityTab]);
 
   useEffect(() => {
-    if (params.activePage !== "community" || params.communityTab !== "members") return;
+    const shouldLoadForSurface =
+      (params.activePage === "community" && params.communityTab === "members") ||
+      params.shouldLoad === true;
+    if (!shouldLoadForSurface) return;
     const session = params.session;
     const communityId = params.activeCommunityId;
     if (!session || !communityId) {
@@ -135,6 +139,7 @@ export function useCommunityMembersReviewLifecycle<
     params.activeCommunityId,
     params.canReviewJoinRequests,
     params.activeCommunityMembersJoinReviewMode,
+    params.shouldLoad,
     params.communities,
   ]);
 
