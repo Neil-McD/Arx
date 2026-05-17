@@ -26,7 +26,7 @@ export function buildWorkspaceRightPanelTabs(params: {
   showOperatorTabs: boolean;
   communityLabel: string;
 }): WorkspaceRightPanelTabItem[] {
-  const communityLabel = params.communityLabel.trim() || "Build community";
+  const communityLabel = params.communityLabel.trim() || "Polynet";
   return [
     { id: "workspace", label: "Workspace" },
     { id: "community", label: communityLabel },

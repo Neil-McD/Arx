@@ -95,9 +95,20 @@ type LandingActionButton = {
 
 const LEGACY_WORKSPACE_RIGHT_PANEL_TAB_STORAGE_KEY = "polynet-workspace-right-panel-tab";
 const WORKSPACE_RIGHT_PANEL_TAB_STORAGE_KEY_PREFIX = "polynet-workspace-right-panel-tab:v2";
+const WORKSPACE_RIGHT_PANEL_COMMUNITY_LABEL_STORAGE_KEY_PREFIX =
+  "polynet-workspace-right-panel-community-label:v1";
+const DEFAULT_WORKSPACE_RIGHT_PANEL_COMMUNITY_LABEL = "Polynet";
 
 function buildWorkspaceRightPanelTabStorageKey(userId: string): string {
   return `${WORKSPACE_RIGHT_PANEL_TAB_STORAGE_KEY_PREFIX}:${userId}`;
+}
+
+function buildWorkspaceRightPanelCommunityLabelStorageKey(userId: string): string {
+  return `${WORKSPACE_RIGHT_PANEL_COMMUNITY_LABEL_STORAGE_KEY_PREFIX}:${userId}`;
+}
+
+function normalizeWorkspaceRightPanelCommunityLabel(value: string | null | undefined): string {
+  return String(value ?? "").replace(/\s+/g, " ").trim();
 }
 
 function loadWorkspaceRightPanelTab(userId: string | null): WorkspaceRightPanelTab {
@@ -117,12 +128,34 @@ function loadWorkspaceRightPanelTab(userId: string | null): WorkspaceRightPanelT
   }
 }
 
+function loadWorkspaceRightPanelCommunityLabel(userId: string | null): string {
+  try {
+    if (typeof window === "undefined" || !userId) return DEFAULT_WORKSPACE_RIGHT_PANEL_COMMUNITY_LABEL;
+    return normalizeWorkspaceRightPanelCommunityLabel(
+      window.localStorage.getItem(buildWorkspaceRightPanelCommunityLabelStorageKey(userId)),
+    ) || DEFAULT_WORKSPACE_RIGHT_PANEL_COMMUNITY_LABEL;
+  } catch {
+    return DEFAULT_WORKSPACE_RIGHT_PANEL_COMMUNITY_LABEL;
+  }
+}
+
 function storeWorkspaceRightPanelTab(userId: string | null, tab: WorkspaceRightPanelTab): void {
   try {
     if (typeof window === "undefined" || !userId) return;
     window.localStorage.setItem(buildWorkspaceRightPanelTabStorageKey(userId), tab);
   } catch {
     // Right-panel tab selection is a local display preference only.
+  }
+}
+
+function storeWorkspaceRightPanelCommunityLabel(userId: string | null, label: string): void {
+  const normalizedLabel = normalizeWorkspaceRightPanelCommunityLabel(label);
+  if (!normalizedLabel) return;
+  try {
+    if (typeof window === "undefined" || !userId) return;
+    window.localStorage.setItem(buildWorkspaceRightPanelCommunityLabelStorageKey(userId), normalizedLabel);
+  } catch {
+    // The community tab label cache is visual continuity only.
   }
 }
 
@@ -989,6 +1022,9 @@ function WorkspaceComposer(props: {
 
 export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
   const initialRightPanelStorageUserId = resolveAuthSubject(props.session);
+  const initialRightPanelCommunityLabel =
+    normalizeWorkspaceRightPanelCommunityLabel(props.workspaceUserDataPanel?.activeCommunity?.name) ||
+    loadWorkspaceRightPanelCommunityLabel(initialRightPanelStorageUserId);
   const [messageInput, setMessageInput] = useState(props.initialComposerDraft.text);
   const [workspaceAttachments, setWorkspaceAttachments] = useState<WorkspaceAttachmentView[]>(
     props.initialComposerDraft.attachments,
@@ -1014,8 +1050,11 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
   );
   const [requestedRightPanelTab, setRequestedRightPanelTab] =
     useState<WorkspaceRightPanelTab>(() => loadWorkspaceRightPanelTab(initialRightPanelStorageUserId));
+  const [workspaceRightPanelCommunityLabel, setWorkspaceRightPanelCommunityLabel] =
+    useState<string>(initialRightPanelCommunityLabel);
   const [operatorRightPanelWidth, setOperatorRightPanelWidth] = useState(OPERATOR_RIGHT_PANEL_DEFAULT_WIDTH);
   const loadedRightPanelTabUserIdRef = useRef<string | null>(initialRightPanelStorageUserId);
+  const loadedRightPanelCommunityLabelUserIdRef = useRef<string | null>(initialRightPanelStorageUserId);
   const savedThreadScrollTopRef = useRef<number | null>(null);
   const pendingRestoreThreadScrollTopRef = useRef<number | null>(null);
   const lastTerminalSnapshotSignatureRef = useRef<string | null>(null);
@@ -1064,13 +1103,16 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
   const isWorkspaceRightPanelVisible = Boolean(showWorkspaceRightPanel && props.workspaceRightPanelOpen);
   const showOperatorTabs = Boolean(props.operatorDataPanelSession);
   const rightPanelStorageUserId = useMemo(() => resolveAuthSubject(props.session), [props.session]);
+  const activeRightPanelCommunityName = normalizeWorkspaceRightPanelCommunityLabel(
+    props.workspaceUserDataPanel?.activeCommunity?.name,
+  );
   const workspaceRightPanelTabs = useMemo(
     () =>
       buildWorkspaceRightPanelTabs({
         showOperatorTabs,
-        communityLabel: props.workspaceUserDataPanel?.activeCommunity?.name ?? "Build community",
+        communityLabel: workspaceRightPanelCommunityLabel,
       }),
-    [props.workspaceUserDataPanel?.activeCommunity?.name, showOperatorTabs],
+    [showOperatorTabs, workspaceRightPanelCommunityLabel],
   );
   const activeRightPanelTab = resolveWorkspaceRightPanelTab(requestedRightPanelTab, workspaceRightPanelTabs);
   const handleWorkspaceRightPanelTabChange = useCallback(
@@ -1103,6 +1145,26 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
     loadedRightPanelTabUserIdRef.current = rightPanelStorageUserId;
     setRequestedRightPanelTab(loadWorkspaceRightPanelTab(rightPanelStorageUserId));
   }, [rightPanelStorageUserId]);
+
+  useEffect(() => {
+    if (
+      !rightPanelStorageUserId ||
+      loadedRightPanelCommunityLabelUserIdRef.current === rightPanelStorageUserId
+    ) {
+      return;
+    }
+    loadedRightPanelCommunityLabelUserIdRef.current = rightPanelStorageUserId;
+    if (activeRightPanelCommunityName) return;
+    setWorkspaceRightPanelCommunityLabel(loadWorkspaceRightPanelCommunityLabel(rightPanelStorageUserId));
+  }, [activeRightPanelCommunityName, rightPanelStorageUserId]);
+
+  useEffect(() => {
+    if (!activeRightPanelCommunityName) return;
+    setWorkspaceRightPanelCommunityLabel((current) =>
+      current === activeRightPanelCommunityName ? current : activeRightPanelCommunityName,
+    );
+    storeWorkspaceRightPanelCommunityLabel(rightPanelStorageUserId, activeRightPanelCommunityName);
+  }, [activeRightPanelCommunityName, rightPanelStorageUserId]);
 
   useEffect(() => {
     workspaceAttachmentsRef.current = workspaceAttachments;
