@@ -44,7 +44,11 @@ export type WorkspaceUserPanelRecentSignal = {
   id: string;
   kind: "member" | "chat" | "ai_feed" | "resource" | "event";
   title: string;
+  subtitle?: string | null;
+  metaLabel?: string | null;
   iconLabel?: string | null;
+  eventMonth?: string | null;
+  eventDay?: string | null;
   avatar?: WorkspaceUserPanelOnlineFace | null;
 };
 
@@ -572,8 +576,13 @@ export function CommunityPanelContent(props: WorkspaceUserDataPanelDataProps) {
           <div className="workspace-community-section__title">Recent signal</div>
           <div className="workspace-community-signal-list">
             {community.recentSignals.map((signal) => (
-              <div key={signal.id} className="workspace-community-signal-row">
-                {signal.avatar ? (
+              <div key={signal.id} className={`workspace-community-signal-row is-${signal.kind}`}>
+                {signal.eventMonth && signal.eventDay ? (
+                  <span className="workspace-community-signal-date" aria-hidden="true">
+                    <span>{signal.eventMonth}</span>
+                    <strong>{signal.eventDay}</strong>
+                  </span>
+                ) : signal.avatar ? (
                   <UserAvatar
                     className="workspace-community-signal-avatar public-funnel-face"
                     readyClassName="has-image"
@@ -592,7 +601,13 @@ export function CommunityPanelContent(props: WorkspaceUserDataPanelDataProps) {
                   </span>
                 )}
                 <div className="workspace-community-signal-copy">
+                  {signal.metaLabel ? (
+                    <div className="workspace-community-signal-meta">{signal.metaLabel}</div>
+                  ) : null}
                   <div className="workspace-community-signal-title">{signal.title}</div>
+                  {signal.subtitle ? (
+                    <div className="workspace-community-signal-subtitle">{signal.subtitle}</div>
+                  ) : null}
                 </div>
               </div>
             ))}

@@ -22516,21 +22516,23 @@ button.message-citation-chip:hover {
 
 .workspace-community-signal-row {
   min-width: 0;
-  min-height: 30px;
+  min-height: 34px;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 10px;
   color: var(--text-primary);
   font-size: 12px;
   font-weight: 650;
   line-height: 1.25;
+  padding: 1px 0;
 }
 
 .workspace-community-signal-avatar,
-.workspace-community-signal-icon {
+.workspace-community-signal-icon,
+.workspace-community-signal-date {
   flex: 0 0 auto;
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   border-radius: 999px;
 }
 
@@ -22540,21 +22542,92 @@ button.message-citation-chip:hover {
   border: 1px solid color-mix(in srgb, var(--border-subtle) 80%, transparent);
   background: color-mix(in srgb, var(--bg-card) 86%, white 6%);
   color: var(--text-secondary);
-  font-size: 10px;
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.workspace-community-signal-row.is-ai_feed .workspace-community-signal-icon {
+  border-color: color-mix(in srgb, #22c55e 30%, var(--border-subtle));
+  color: color-mix(in srgb, #22c55e 68%, var(--text-primary));
+}
+
+.workspace-community-signal-row.is-resource .workspace-community-signal-icon {
+  border-color: color-mix(in srgb, var(--accent-gold) 30%, var(--border-subtle));
+  color: color-mix(in srgb, var(--accent-gold) 72%, var(--text-primary));
+}
+
+.workspace-community-signal-date {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 1px;
+  border: 1px solid color-mix(in srgb, var(--accent) 34%, var(--border-subtle));
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--bg-card) 88%, var(--accent) 6%);
+  color: var(--text-primary);
+}
+
+.workspace-community-signal-date span {
+  color: var(--text-muted);
+  font-size: 8px;
+  font-weight: 800;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.workspace-community-signal-date strong {
+  color: var(--text-primary);
+  font-size: 14px;
   font-weight: 800;
   line-height: 1;
 }
 
 .workspace-community-signal-copy {
   min-width: 0;
+  display: grid;
+  gap: 2px;
+  padding-top: 1px;
+}
+
+.workspace-community-signal-meta {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 650;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .workspace-community-signal-title {
   min-width: 0;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1.25;
   overflow: hidden;
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
+}
+
+.workspace-community-signal-subtitle {
+  min-width: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.28;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.workspace-community-signal-row.is-chat .workspace-community-signal-title,
+.workspace-community-signal-row.is-member .workspace-community-signal-title {
+  -webkit-line-clamp: 1;
 }
 
 .workspace-community-integration-identity {

@@ -489,7 +489,11 @@ type WorkspacePanelRecentSignal = {
   id: string;
   kind: WorkspacePanelRecentSignalKind;
   title: string;
+  subtitle?: string | null;
+  metaLabel?: string | null;
   iconLabel?: string | null;
+  eventMonth?: string | null;
+  eventDay?: string | null;
   avatar?: WorkspacePanelSignalAvatar | null;
 };
 
@@ -526,6 +530,51 @@ function truncatePanelSignalText(value: string | null | undefined, maxLength = 1
   const normalized = normalizePanelSignalText(value);
   if (normalized.length <= maxLength) return normalized;
   return `${normalized.slice(0, Math.max(0, maxLength - 3)).trimEnd()}...`;
+}
+
+function formatPanelAiPostTypeLabel(value: CommunityAiFeedPost["post_type"]): string {
+  switch (value) {
+    case "action":
+      return "Action";
+    case "recommendation":
+      return "Recommendation";
+    case "observation":
+    default:
+      return "Observation";
+  }
+}
+
+function formatPanelResourceTypeLabel(value: CommunityResource["type"]): string {
+  switch (value) {
+    case "embed":
+      return "Embed";
+    case "file":
+      return "File";
+    case "link":
+      return "Link";
+    case "post":
+    default:
+      return "Resource";
+  }
+}
+
+function formatPanelEventDateTile(value: string): { month: string; day: string } | null {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return null;
+  return {
+    month: new Intl.DateTimeFormat(undefined, { month: "short" }).format(date),
+    day: new Intl.DateTimeFormat(undefined, { day: "numeric" }).format(date),
+  };
+}
+
+function formatPanelEventTimeLabel(value: string): string | null {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return null;
+  return new Intl.DateTimeFormat(undefined, {
+    weekday: "short",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date);
 }
 
 type ThreadRecord = {
@@ -7951,7 +8000,8 @@ export default function App() {
       const signal: WorkspacePanelRecentSignalCandidate = {
         id: `chat:${message.id}`,
         kind: "chat",
-        title: `${senderName}: ${snippet}`,
+        title: senderName,
+        subtitle: snippet,
         avatar: senderId ? buildAvatar(senderId, senderName) : null,
         sortMs: createdAtMs,
       };
@@ -7976,6 +8026,7 @@ export default function App() {
         id: `ai_feed:${latestAiPost.post.id}`,
         kind: "ai_feed",
         title: truncatePanelSignalText(aiTitle, 120),
+        metaLabel: formatPanelAiPostTypeLabel(latestAiPost.post.post_type),
         iconLabel: "AI",
         sortMs: latestAiPost.createdAtMs,
       };
@@ -7999,6 +8050,7 @@ export default function App() {
         id: `resource:${latestResource.resource.id}`,
         kind: "resource",
         title: truncatePanelSignalText(resourceTitle, 120),
+        metaLabel: formatPanelResourceTypeLabel(latestResource.resource.type),
         iconLabel: "R",
         sortMs: latestResource.createdAtMs,
       };
@@ -8020,11 +8072,16 @@ export default function App() {
     const upcomingEvent = sortedUpcomingEvents[0] ?? null;
     const eventTitle = upcomingEvent ? normalizePanelSignalText(upcomingEvent.event.title) : "";
     if (upcomingEvent && eventTitle) {
+      const eventDateTile = formatPanelEventDateTile(upcomingEvent.event.starts_at);
       const signal: WorkspacePanelRecentSignalCandidate = {
         id: `event:${upcomingEvent.event.id}`,
         kind: "event",
         title: truncatePanelSignalText(eventTitle, 120),
+        subtitle: formatPanelEventTimeLabel(upcomingEvent.event.starts_at),
+        metaLabel: "Event",
         iconLabel: "EV",
+        eventMonth: eventDateTile?.month ?? null,
+        eventDay: eventDateTile?.day ?? null,
         sortMs: nowMs,
       };
       if (upcomingEvent.startsAtMs <= upcomingEndMs) {
@@ -8050,7 +8107,8 @@ export default function App() {
         const signal: WorkspacePanelRecentSignalCandidate = {
           id: `member:${member.id}`,
           kind: "member",
-          title: `${memberName} joined`,
+          title: memberName,
+          subtitle: "joined",
           avatar: buildAvatar(userId, memberName, member),
           sortMs: createdAtMs,
         };
