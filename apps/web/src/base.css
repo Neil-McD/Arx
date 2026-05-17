@@ -4794,8 +4794,42 @@ body {
   content: "";
   position: absolute;
   inset: 0;
-  background: linear-gradient(180deg, rgba(0, 0, 0, 0.06), rgba(0, 0, 0, 0.22));
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.02), rgba(0, 0, 0, 0.08));
   pointer-events: none;
+}
+
+.public-funnel-media-play {
+  position: absolute;
+  z-index: 2;
+  left: 50%;
+  top: 50%;
+  width: 62px;
+  height: 62px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  transform: translate(-50%, -50%);
+  color: #111;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 16px 44px rgba(0, 0, 0, 0.34);
+  pointer-events: none;
+  transition:
+    transform 150ms ease,
+    background 150ms ease;
+}
+
+.public-funnel-media-play svg {
+  width: 31px;
+  height: 31px;
+  display: block;
+  margin-left: 3px;
+  fill: currentColor;
+}
+
+.public-funnel-media-deferred:hover .public-funnel-media-play,
+.public-funnel-media-deferred:focus-visible .public-funnel-media-play {
+  transform: translate(-50%, -50%) scale(1.04);
+  background: #fff;
 }
 
 .public-funnel-media-placeholder-rich {

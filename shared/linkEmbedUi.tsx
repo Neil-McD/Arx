@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 const CHAT_LINK_RE = /\b(https?:\/\/[^\s<]+|www\.[^\s<]+)/gi;
 
 export type ParsedEmbed =
-  | { provider: "youtube"; id: string; src: string; thumbnailUrl: string }
+  | { provider: "youtube"; id: string; src: string; thumbnailUrl: string; thumbnailUrls: string[] }
   | { provider: "vimeo"; id: string; src: string }
   | { provider: "loom"; id: string; src: string }
   | { provider: "wistia"; id: string; src: string };
@@ -122,6 +122,14 @@ function parseYouTubeId(url: URL): { id: string; startSeconds: number | null } |
   return { id, startSeconds };
 }
 
+function buildYouTubeThumbnailUrls(id: string): string[] {
+  return [
+    `https://i.ytimg.com/vi/${id}/maxresdefault.jpg`,
+    `https://i.ytimg.com/vi/${id}/sddefault.jpg`,
+    `https://i.ytimg.com/vi/${id}/hqdefault.jpg`,
+  ];
+}
+
 function parseWistiaId(url: URL): string | null {
   const host = url.hostname.toLowerCase();
   if (!host.includes("wistia.com") && !host.includes("wistia.net")) return null;
@@ -168,8 +176,8 @@ export function parseEmbedUrl(rawUrl: string): ParsedEmbed | null {
       params.set("start", String(youtube.startSeconds));
     }
     const src = `https://www.youtube.com/embed/${youtube.id}${params.toString() ? `?${params.toString()}` : ""}`;
-    const thumbnailUrl = `https://i.ytimg.com/vi/${youtube.id}/hqdefault.jpg`;
-    return { provider: "youtube", id: youtube.id, src, thumbnailUrl };
+    const thumbnailUrls = buildYouTubeThumbnailUrls(youtube.id);
+    return { provider: "youtube", id: youtube.id, src, thumbnailUrl: thumbnailUrls[0]!, thumbnailUrls };
   }
 
   const wistiaId = parseWistiaId(url);

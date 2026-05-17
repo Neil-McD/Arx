@@ -1,4 +1,4 @@
-import { useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 
 import { CommunityAvatar } from "../../../../shared/CommunityAvatar";
 import { UserAvatar } from "../../../../shared/UserAvatar";
@@ -150,7 +150,18 @@ function buildActivatedEmbedSrc(embed: ParsedEmbed): string {
 
 function DeferredEmbedHero(props: { embed: ParsedEmbed }) {
   const [isActive, setIsActive] = useState(false);
-  const thumbnailUrl = "thumbnailUrl" in props.embed ? props.embed.thumbnailUrl : null;
+  const thumbnailUrls =
+    "thumbnailUrls" in props.embed && props.embed.thumbnailUrls.length > 0
+      ? props.embed.thumbnailUrls
+      : "thumbnailUrl" in props.embed
+        ? [props.embed.thumbnailUrl]
+        : [];
+  const [thumbnailIndex, setThumbnailIndex] = useState(0);
+  const thumbnailUrl = thumbnailUrls[thumbnailIndex] ?? null;
+
+  useEffect(() => {
+    setThumbnailIndex(0);
+  }, [props.embed.src]);
 
   if (isActive) {
     return (
@@ -174,12 +185,26 @@ function DeferredEmbedHero(props: { embed: ParsedEmbed }) {
       aria-label="Play community funnel video"
     >
       {thumbnailUrl ? (
-        <img className="public-funnel-media-image" src={thumbnailUrl} alt="" draggable={false} loading="lazy" />
+        <img
+          className="public-funnel-media-image"
+          src={thumbnailUrl}
+          alt=""
+          draggable={false}
+          loading="lazy"
+          onError={() => {
+            setThumbnailIndex((current) => Math.min(current + 1, thumbnailUrls.length));
+          }}
+        />
       ) : (
         <div className="public-funnel-media-placeholder public-funnel-media-placeholder-rich">
           <div className="public-funnel-media-placeholder-text">Play video</div>
         </div>
       )}
+      <span className="public-funnel-media-play" aria-hidden="true">
+        <svg viewBox="0 0 24 24" focusable="false">
+          <path d="M9 7.5v9l7-4.5-7-4.5z" />
+        </svg>
+      </span>
     </button>
   );
 }
