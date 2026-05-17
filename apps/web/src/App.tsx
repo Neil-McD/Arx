@@ -474,10 +474,10 @@ type PublicCommunityRecord = {
 
 type WorkspacePanelCommunityRole = "member" | "moderator" | "admin" | "owner";
 
-type WorkspacePanelRecentSignalKind = "member" | "chat" | "ai_feed" | "resource" | "event";
+type WorkspacePanelRecentSignalKind = "chat" | "ai_feed" | "resource" | "event";
 
 type WorkspacePanelRecentSignalTarget = {
-  tab: Extract<CommunityTab, "chat" | "ai_feed" | "resources" | "events" | "members">;
+  tab: Extract<CommunityTab, "chat" | "ai_feed" | "resources" | "events">;
   itemId?: string | null;
 };
 
@@ -6974,9 +6974,7 @@ export default function App() {
 		          ? [`community-ai-feed-${itemId}`]
 		          : target.tab === "resources"
 		            ? [`community-resource-${itemId}`]
-		            : target.tab === "events"
-		              ? [`community-event-${itemId}`, `community-event-pill-${itemId}`]
-		              : [`community-member-${itemId}`];
+		            : [`community-event-${itemId}`, `community-event-pill-${itemId}`];
 		      for (const targetId of targetIds) {
 		        const node = document.getElementById(targetId);
 		        if (!node) continue;
@@ -8225,45 +8223,14 @@ export default function App() {
       }
     }
 
-    if (hasResolvedCommunityMembers) {
-      const sortedNewMembers = [...communityMembers]
-        .filter((member) => String(member.role ?? "").trim().toLowerCase() !== "owner")
-        .map((member) => ({
-          member,
-          createdAtMs: parsePanelSignalTimestampMs(member.created_at),
-        }))
-        .filter((entry): entry is { member: CommunityMember; createdAtMs: number } => entry.createdAtMs !== null)
-        .sort((a, b) => b.createdAtMs - a.createdAtMs);
-
-      for (const { member, createdAtMs } of sortedNewMembers) {
-        const userId = String(member.user_id ?? "").trim();
-        if (!userId) continue;
-        const memberName = normalizePanelSignalText(member.display_name) || displayName(userId);
-        const signal: WorkspacePanelRecentSignalCandidate = {
-          id: `member:${member.id}`,
-          kind: "member",
-          title: memberName,
-          subtitle: "joined",
-          avatar: buildAvatar(userId, memberName, member),
-          target: { tab: "members", itemId: member.id },
-          sortMs: createdAtMs,
-        };
-        if (createdAtMs >= recentStartMs && createdAtMs <= nowMs) {
-          highlightedSignals.push(signal);
-        }
-      }
-    }
-
     return finalizeSignals(highlightedSignals);
   }, [
     activeCommunityFeedState.live,
     communityEvents,
-    communityMembers,
     communityMessageById,
     communityMessages,
     communityResources,
     displayName,
-    hasResolvedCommunityMembers,
     savedProfilesByUserId,
   ]);
 
@@ -8319,14 +8286,6 @@ export default function App() {
         integrations: workspacePanelCommunityIntegrations,
       }
     : null;
-  const ownedCommunityCount = communities.reduce(
-    (acc, community) => acc + (communityRoleById[community.id] === "owner" ? 1 : 0),
-    0,
-  );
-  const maxOwnedCommunities = Number(accountCommerceStatus?.max_communities ?? 0);
-  const canCreateWorkspaceUserPanelCommunity =
-    Boolean(session) && maxOwnedCommunities > 0 && ownedCommunityCount < maxOwnedCommunities;
-
   const workspaceUserDataPanel = {
     workspaceCreditBalance,
     isLoadingWorkspaceCreditBalance,
@@ -8342,13 +8301,11 @@ export default function App() {
     activeThreadTitle: activeThread ? getThreadDisplayTitle(activeThread) : null,
     activeModelLabel: workspace.derived.activeModelLabel,
     activeCommunity: workspaceUserDataPanelCommunity,
-    canCreateCommunity: canCreateWorkspaceUserPanelCommunity,
     isLoadingCommunityMemberSettings,
     communityMemberSettingsError,
     onOpenWorkspaceCreditTopup: () => openWorkspaceCreditTopupModal({ toolKind: "workspace_tools" }),
     onTurnOnComputer: turnOnWorkspaceComputer,
     onTurnOffComputer: turnOffWorkspaceComputer,
-    onOpenCreateCommunity: () => openCreateCommunityModal(),
     onOpenRecentSignal: handleOpenWorkspacePanelCommunitySignal,
     onToggleCommunityMute: handleToggleCommunityMute,
     onOpenWorkspaceIntegrationSetup: handleOpenIntegrationsSettings,

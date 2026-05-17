@@ -42,7 +42,7 @@ export type WorkspaceUserPanelOnlineFace = {
 
 export type WorkspaceUserPanelRecentSignal = {
   id: string;
-  kind: "member" | "chat" | "ai_feed" | "resource" | "event";
+  kind: "chat" | "ai_feed" | "resource" | "event";
   title: string;
   subtitle?: string | null;
   metaLabel?: string | null;
@@ -55,7 +55,7 @@ export type WorkspaceUserPanelRecentSignal = {
     text: string;
   } | null;
   target: {
-    tab: "chat" | "ai_feed" | "resources" | "events" | "members";
+    tab: "chat" | "ai_feed" | "resources" | "events";
     itemId?: string | null;
   };
 };
@@ -89,11 +89,9 @@ export type WorkspaceUserDataPanelDataProps = {
   activeThreadTitle: string | null;
   activeModelLabel: string | null;
   activeCommunity: WorkspaceUserPanelCommunity | null;
-  canCreateCommunity: boolean;
   onOpenWorkspaceCreditTopup: () => void;
   onTurnOnComputer: () => Promise<DaytonaWorkspaceComputerStartResult>;
   onTurnOffComputer: () => Promise<boolean>;
-  onOpenCreateCommunity: () => void;
   onOpenRecentSignal: (target: WorkspaceUserPanelRecentSignal["target"]) => void;
   onOpenActiveCommunitySettings: () => void;
   onOpenWorkspaceIntegrationSetup: () => void;
@@ -540,10 +538,7 @@ export function CommunityPanelContent(props: WorkspaceUserDataPanelDataProps) {
     setIsRecentSignalsAtBottom(true);
   }, [community?.id]);
 
-  const panelRecentSignals = useMemo(
-    () => community?.recentSignals.filter((signal) => signal.kind !== "member") ?? [],
-    [community?.recentSignals],
-  );
+  const panelRecentSignals = community?.recentSignals ?? [];
   const recentSignalsCount = panelRecentSignals.length;
   const updateRecentSignalsScrollState = useCallback(() => {
     const viewport = recentSignalsViewportRef.current;
@@ -562,23 +557,7 @@ export function CommunityPanelContent(props: WorkspaceUserDataPanelDataProps) {
   }, [isRecentSignalsExpanded, recentSignalsCount, updateRecentSignalsScrollState]);
 
   if (!community) {
-    return (
-      <div className="workspace-user-data-panel__grid">
-        <section className="workspace-user-data-card">
-          <div className="workspace-user-data-card__meta">Community</div>
-          <div className="workspace-user-data-card__headline">No community selected</div>
-          <p>Build a community when your account and workspace are ready.</p>
-          <button
-            type="button"
-            className="workspace-user-data-action"
-            onClick={props.onOpenCreateCommunity}
-            disabled={!props.canCreateCommunity}
-          >
-            {props.canCreateCommunity ? "Build community" : "Community limit reached"}
-          </button>
-        </section>
-      </div>
-    );
+    return null;
   }
 
   const visibleRecentSignals = isRecentSignalsExpanded

@@ -22597,9 +22597,6 @@ button.message-citation-chip:hover {
   font-size: 12px;
   font-weight: 650;
   line-height: 1.25;
-}
-
-.workspace-community-integration-row {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -22667,41 +22664,6 @@ button.message-citation-chip:hover {
 .workspace-community-signal-row.is-ai_feed .workspace-community-signal-icon {
   border-color: color-mix(in srgb, #22c55e 30%, var(--border-subtle));
   color: color-mix(in srgb, #22c55e 68%, var(--text-primary));
-}
-
-.workspace-community-signal-row.is-member .workspace-community-signal-avatar {
-  width: 18px;
-  height: 18px;
-  margin: 0 7px;
-}
-
-.workspace-community-signal-row.is-member {
-  min-height: 22px;
-  align-items: center;
-  gap: 10px;
-}
-
-.workspace-community-signal-row.is-member .workspace-community-signal-copy {
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 5px;
-  padding-top: 0;
-}
-
-.workspace-community-signal-row.is-member .workspace-community-signal-title,
-.workspace-community-signal-row.is-member .workspace-community-signal-subtitle {
-  font-size: 11px;
-  line-height: 1.2;
-}
-
-.workspace-community-signal-row.is-member .workspace-community-signal-title {
-  flex: 0 1 auto;
-}
-
-.workspace-community-signal-row.is-member .workspace-community-signal-subtitle {
-  flex: 0 0 auto;
-  color: var(--text-muted);
 }
 
 .workspace-community-signal-row.is-chat.has-reply .workspace-community-signal-avatar {
@@ -22823,8 +22785,7 @@ button.message-citation-chip:hover {
   cursor: inherit;
 }
 
-.workspace-community-signal-row.is-chat .workspace-community-signal-title,
-.workspace-community-signal-row.is-member .workspace-community-signal-title {
+.workspace-community-signal-row.is-chat .workspace-community-signal-title {
   -webkit-line-clamp: 1;
 }
 
