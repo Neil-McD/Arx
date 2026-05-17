@@ -27,7 +27,7 @@ import {
   type DaytonaWorkspaceTerminalRecord,
   type DaytonaWorkspaceTerminalPreviewStatus,
 } from "../../../../shared/daytonaWorkspaceTerminals";
-import type { AuthSessionLike } from "../../../../shared/authSession";
+import { resolveAuthSubject, type AuthSessionLike } from "../../../../shared/authSession";
 import type { ModelToggle } from "../../../../shared/modelCatalog";
 import { useMessageAttachmentInputController } from "../../../../shared/useMessageAttachmentInputController";
 import { useWorkspaceAutoScroll } from "../../../../shared/useWorkspaceAutoScroll";
@@ -55,8 +55,13 @@ import {
   OPERATOR_RIGHT_PANEL_KEYBOARD_STEP,
   useOperatorDashboardData,
   WebOperatorDataPanel,
-  type WorkspaceRightPanelTab,
 } from "./WebOperatorDataPanel";
+import {
+  buildWorkspaceRightPanelTabs,
+  parseWorkspaceRightPanelTab,
+  resolveWorkspaceRightPanelTab,
+  type WorkspaceRightPanelTab,
+} from "./workspaceRightPanelModel";
 import {
   type WorkspaceUserDataPanelDataProps,
 } from "./WebWorkspaceUserDataPanel";
@@ -88,36 +93,34 @@ type LandingActionButton = {
   prompt: string;
 };
 
-const WORKSPACE_RIGHT_PANEL_TAB_STORAGE_KEY = "polynet-workspace-right-panel-tab";
+const LEGACY_WORKSPACE_RIGHT_PANEL_TAB_STORAGE_KEY = "polynet-workspace-right-panel-tab";
+const WORKSPACE_RIGHT_PANEL_TAB_STORAGE_KEY_PREFIX = "polynet-workspace-right-panel-tab:v2";
 
-function isWorkspaceRightPanelTabAvailable(tab: WorkspaceRightPanelTab, showOperatorTabs: boolean): boolean {
-  if (tab === "workspace" || tab === "community") return true;
-  return showOperatorTabs;
+function buildWorkspaceRightPanelTabStorageKey(userId: string): string {
+  return `${WORKSPACE_RIGHT_PANEL_TAB_STORAGE_KEY_PREFIX}:${userId}`;
 }
 
-function parseStoredWorkspaceRightPanelTab(value: string | null): WorkspaceRightPanelTab {
-  return value === "workspace" ||
-    value === "community" ||
-    value === "platform" ||
-    value === "business" ||
-    value === "communities"
-    ? value
-    : "workspace";
-}
-
-function loadWorkspaceRightPanelTab(): WorkspaceRightPanelTab {
+function loadWorkspaceRightPanelTab(userId: string | null): WorkspaceRightPanelTab {
   try {
     if (typeof window === "undefined") return "workspace";
-    return parseStoredWorkspaceRightPanelTab(window.localStorage.getItem(WORKSPACE_RIGHT_PANEL_TAB_STORAGE_KEY));
+    if (userId) {
+      const scopedTab = parseWorkspaceRightPanelTab(
+        window.localStorage.getItem(buildWorkspaceRightPanelTabStorageKey(userId)),
+      );
+      if (scopedTab) return scopedTab;
+    }
+    return parseWorkspaceRightPanelTab(
+      window.localStorage.getItem(LEGACY_WORKSPACE_RIGHT_PANEL_TAB_STORAGE_KEY),
+    ) ?? "workspace";
   } catch {
     return "workspace";
   }
 }
 
-function storeWorkspaceRightPanelTab(tab: WorkspaceRightPanelTab): void {
+function storeWorkspaceRightPanelTab(userId: string | null, tab: WorkspaceRightPanelTab): void {
   try {
-    if (typeof window === "undefined") return;
-    window.localStorage.setItem(WORKSPACE_RIGHT_PANEL_TAB_STORAGE_KEY, tab);
+    if (typeof window === "undefined" || !userId) return;
+    window.localStorage.setItem(buildWorkspaceRightPanelTabStorageKey(userId), tab);
   } catch {
     // Right-panel tab selection is a local display preference only.
   }
@@ -1008,9 +1011,10 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
   const [isDesktopViewport, setIsDesktopViewport] = useState<boolean>(() =>
     typeof window === "undefined" ? true : window.matchMedia("(min-width: 901px)").matches,
   );
-  const [operatorActiveInsightTab, setOperatorActiveInsightTab] =
-    useState<WorkspaceRightPanelTab>(loadWorkspaceRightPanelTab);
+  const [requestedRightPanelTab, setRequestedRightPanelTab] =
+    useState<WorkspaceRightPanelTab>(() => loadWorkspaceRightPanelTab(null));
   const [operatorRightPanelWidth, setOperatorRightPanelWidth] = useState(OPERATOR_RIGHT_PANEL_DEFAULT_WIDTH);
+  const loadedRightPanelTabUserIdRef = useRef<string | null>(null);
   const savedThreadScrollTopRef = useRef<number | null>(null);
   const pendingRestoreThreadScrollTopRef = useRef<number | null>(null);
   const lastTerminalSnapshotSignatureRef = useRef<string | null>(null);
@@ -1058,6 +1062,23 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
   const showWorkspaceRightPanel = Boolean(props.showWorkspaceRightPanel && props.workspaceUserDataPanel);
   const isWorkspaceRightPanelVisible = Boolean(showWorkspaceRightPanel && props.workspaceRightPanelOpen);
   const showOperatorTabs = Boolean(props.operatorDataPanelSession);
+  const rightPanelStorageUserId = useMemo(() => resolveAuthSubject(props.session), [props.session]);
+  const workspaceRightPanelTabs = useMemo(
+    () =>
+      buildWorkspaceRightPanelTabs({
+        showOperatorTabs,
+        communityLabel: props.workspaceUserDataPanel?.activeCommunity?.name ?? "Build community",
+      }),
+    [props.workspaceUserDataPanel?.activeCommunity?.name, showOperatorTabs],
+  );
+  const activeRightPanelTab = resolveWorkspaceRightPanelTab(requestedRightPanelTab, workspaceRightPanelTabs);
+  const handleWorkspaceRightPanelTabChange = useCallback(
+    (tab: WorkspaceRightPanelTab) => {
+      setRequestedRightPanelTab(tab);
+      storeWorkspaceRightPanelTab(rightPanelStorageUserId, tab);
+    },
+    [rightPanelStorageUserId],
+  );
   const operatorDataPanelStyle = {
     "--operator-right-panel-width": `${operatorRightPanelWidth}px`,
     "--operator-right-panel-gutter": `${OPERATOR_RIGHT_PANEL_GUTTER}px`,
@@ -1077,15 +1098,10 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
   }, [isWorkspaceRightPanelVisible, operatorRightPanelWidth, props.onOperatorPanelLayoutChange]);
 
   useEffect(() => {
-    setOperatorActiveInsightTab((tab) =>
-      isWorkspaceRightPanelTabAvailable(tab, showOperatorTabs) ? tab : "workspace",
-    );
-  }, [showOperatorTabs]);
-
-  useEffect(() => {
-    if (!isWorkspaceRightPanelTabAvailable(operatorActiveInsightTab, showOperatorTabs)) return;
-    storeWorkspaceRightPanelTab(operatorActiveInsightTab);
-  }, [operatorActiveInsightTab, showOperatorTabs]);
+    if (!rightPanelStorageUserId || loadedRightPanelTabUserIdRef.current === rightPanelStorageUserId) return;
+    loadedRightPanelTabUserIdRef.current = rightPanelStorageUserId;
+    setRequestedRightPanelTab(loadWorkspaceRightPanelTab(rightPanelStorageUserId));
+  }, [rightPanelStorageUserId]);
 
   useEffect(() => {
     workspaceAttachmentsRef.current = workspaceAttachments;
@@ -1973,14 +1989,14 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
         >
           <WebOperatorDataPanel
             workspaceUserDataPanel={props.workspaceUserDataPanel}
-            showOperatorTabs={showOperatorTabs}
             state={operatorData.state}
             topCommunities={operatorData.topCommunities}
             partnerPayoutCycleActions={operatorData.partnerPayoutCycleActions}
             isLoading={operatorData.isLoading}
             error={operatorData.error}
-            activeInsightTab={operatorActiveInsightTab}
-            onActiveInsightTabChange={setOperatorActiveInsightTab}
+            insightTabs={workspaceRightPanelTabs}
+            activeInsightTab={activeRightPanelTab}
+            onActiveInsightTabChange={handleWorkspaceRightPanelTabChange}
             onResizePointerDown={handleOperatorRightPanelResizePointerDown}
             onResizePointerMove={(event) => {
               if (event.buttons === 1) resizeOperatorRightPanelFromPointer(event);
