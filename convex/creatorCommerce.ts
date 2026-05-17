@@ -111,6 +111,34 @@ function normalizeStripeConnectOnboardingError(error: unknown): NormalizedStripe
   };
 }
 
+function stripeConnectAccountCanBeRecreated(error: unknown): boolean {
+  const candidate = error as {
+    code?: unknown;
+    message?: unknown;
+    statusCode?: unknown;
+    status?: unknown;
+    type?: unknown;
+  };
+  const stripeErrorCode = normalizeDiagnosticString(candidate?.code).toLowerCase();
+  const stripeErrorType = normalizeDiagnosticString(candidate?.type).toLowerCase();
+  const rawMessage =
+    normalizeDiagnosticString(candidate?.message) ||
+    (error instanceof Error ? normalizeDiagnosticString(error.message) : normalizeDiagnosticString(error));
+  const lowerMessage = rawMessage.toLowerCase();
+  const statusCandidate = Number(candidate?.statusCode ?? candidate?.status);
+  const stripeStatusCode = Number.isFinite(statusCandidate) && statusCandidate > 0
+    ? Math.floor(statusCandidate)
+    : undefined;
+
+  return (
+    stripeErrorCode === "account_invalid" ||
+    stripeErrorCode === "resource_missing" ||
+    (stripeErrorType === "stripepermissionerror" &&
+      lowerMessage.includes("does not have access to account")) ||
+    (stripeStatusCode === 403 && lowerMessage.includes("application access may have been revoked"))
+  );
+}
+
 async function recordStripeConnectOnboardingFailureDiagnostic(args: {
   ctx: any;
   userId?: unknown;
@@ -181,6 +209,24 @@ async function recordStripeConnectOnboardingFailureDiagnostic(args: {
     });
   }
   throw new Error(normalized.publicMessage);
+}
+
+async function createStripeExpressAccountForUser(args: {
+  stripe: Stripe;
+  userId: unknown;
+  email?: string | null;
+}) {
+  return await args.stripe.accounts.create({
+    type: "express",
+    email: normalizeOptionalStripeConnectString(args.email, 200) ?? undefined,
+    capabilities: {
+      card_payments: { requested: true },
+      transfers: { requested: true },
+    },
+    metadata: {
+      user_id: String(args.userId),
+    },
+  });
 }
 
 export const getUserStripeConnectAccountInternal = internalQuery({
@@ -383,19 +429,29 @@ export const startConnectOnboarding = action({
       if (existingAccountId) {
         stage = "retrieve_connect_account";
         diagnosticStripeAccountId = existingAccountId;
-        account = await stripe.accounts.retrieve(existingAccountId);
+        try {
+          account = await stripe.accounts.retrieve(existingAccountId);
+        } catch (error) {
+          if (!stripeConnectAccountCanBeRecreated(error)) throw error;
+          console.warn("stripe_connect_stale_account_recovered", {
+            stage,
+            stripeAccountId: existingAccountId,
+            stripeErrorCode: normalizeStripeConnectOnboardingError(error).stripeErrorCode ?? "",
+          });
+          stage = "create_connect_account";
+          account = await createStripeExpressAccountForUser({
+            stripe,
+            userId,
+            email: actor?.email ?? null,
+          });
+          diagnosticStripeAccountId = account.id;
+        }
       } else {
         stage = "create_connect_account";
-        account = await stripe.accounts.create({
-          type: "express",
-          email: normalizeOptionalStripeConnectString(actor?.email, 200) ?? undefined,
-          capabilities: {
-            card_payments: { requested: true },
-            transfers: { requested: true },
-          },
-          metadata: {
-            user_id: String(userId),
-          },
+        account = await createStripeExpressAccountForUser({
+          stripe,
+          userId,
+          email: actor?.email ?? null,
         });
         diagnosticStripeAccountId = account.id;
       }

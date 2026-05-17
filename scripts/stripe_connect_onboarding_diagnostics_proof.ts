@@ -92,6 +92,26 @@ assert.match(
   /Stripe Connect setup could not be opened\. We logged a diagnostic/,
   "Provider failures should surface a stable user-facing message instead of a generic server error.",
 );
+assert.match(
+  creatorCommerce,
+  /function stripeConnectAccountCanBeRecreated/,
+  "Stripe Connect onboarding must distinguish stale inaccessible account ids from unrecoverable provider failures.",
+);
+assert.match(
+  creatorCommerce,
+  /stripeErrorCode === "account_invalid"/,
+  "Stripe Connect onboarding should recover when a stored connected account is no longer accessible to this platform.",
+);
+assert.match(
+  creatorCommerce,
+  /stripe_connect_stale_account_recovered/,
+  "Stripe Connect stale account recovery should leave log evidence for operator diagnosis.",
+);
+assert.match(
+  creatorCommerce,
+  /catch \(error\) \{[\s\S]*stripeConnectAccountCanBeRecreated\(error\)[\s\S]*createStripeExpressAccountForUser/,
+  "Stripe Connect onboarding should create a fresh Express account after a recoverable stale-account retrieve failure.",
+);
 assert.doesNotMatch(
   creatorCommerce,
   /metadata:\s*error\b/,
