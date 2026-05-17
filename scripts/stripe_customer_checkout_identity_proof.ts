@@ -44,6 +44,11 @@ assert.match(
 );
 assert.match(
   stripeCustomers,
+  /idempotencyKey: `polynet-user-stripe-customer:\${String\(userId\)}`/,
+  "Stripe customer creation must be idempotent per Polynet user to avoid duplicate first-checkout customers.",
+);
+assert.match(
+  stripeCustomers,
   /throw new Error\("stripe_customer_user_conflict"\)/,
   "Provider customer ids must not silently move across Polynet users.",
 );

@@ -118,12 +118,17 @@ export async function ensureStripeCustomerForUser(args: {
     }
   }
 
-  const customer = await stripe.customers.create({
-    email,
-    metadata: {
-      user_id: String(userId),
+  const customer = await stripe.customers.create(
+    {
+      email,
+      metadata: {
+        user_id: String(userId),
+      },
     },
-  });
+    {
+      idempotencyKey: `polynet-user-stripe-customer:${String(userId)}`,
+    },
+  );
   const providerCustomerId = normalizeStripeCustomerId(customer.id);
   if (!providerCustomerId) throw new Error("stripe_customer_id_missing");
   await args.ctx.runMutation(
