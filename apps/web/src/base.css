@@ -4058,6 +4058,41 @@ body {
   padding-bottom: 24px;
 }
 
+.discover-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+.discover-breadcrumb-button {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+}
+
+.discover-breadcrumb-button:hover {
+  color: var(--text-primary);
+}
+
+.discover-breadcrumb-separator {
+  color: var(--text-faint);
+}
+
+.discover-hero-breadcrumb {
+  min-width: 0;
+  padding-bottom: 7px;
+}
+
+.discover-hero-with-app-detail .discover-hero-breadcrumb {
+  padding-bottom: 0;
+}
+
 .discover-fixed-app-detail-header {
   min-width: 0;
 }
