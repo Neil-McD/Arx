@@ -50,6 +50,14 @@ export type WorkspaceUserPanelRecentSignal = {
   eventMonth?: string | null;
   eventDay?: string | null;
   avatar?: WorkspaceUserPanelOnlineFace | null;
+  replyContext?: {
+    sender: string;
+    text: string;
+  } | null;
+  target: {
+    tab: "chat" | "ai_feed" | "resources" | "events" | "members";
+    itemId?: string | null;
+  };
 };
 
 export type WorkspaceUserPanelIntegration = {
@@ -86,7 +94,7 @@ export type WorkspaceUserDataPanelDataProps = {
   onTurnOnComputer: () => Promise<DaytonaWorkspaceComputerStartResult>;
   onTurnOffComputer: () => Promise<boolean>;
   onOpenCreateCommunity: () => void;
-  onOpenActiveCommunity: () => void;
+  onOpenRecentSignal: (target: WorkspaceUserPanelRecentSignal["target"]) => void;
   onOpenActiveCommunitySettings: () => void;
   onOpenWorkspaceIntegrationSetup: () => void;
   onToggleCommunityIntegration: (
@@ -99,6 +107,7 @@ export type WorkspaceUserDataPanelDataProps = {
 };
 
 const WORKSPACE_FILES_EXPANDED_STORAGE_KEY_PREFIX = "polynet-workspace-files-expanded";
+const WORKSPACE_PANEL_COLLAPSED_SIGNAL_LIMIT = 6;
 
 function ResourceSignalIcon() {
   return (
@@ -521,6 +530,12 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps) {
 
 export function CommunityPanelContent(props: WorkspaceUserDataPanelDataProps) {
   const community = props.activeCommunity;
+  const [isRecentSignalsExpanded, setIsRecentSignalsExpanded] = useState(false);
+
+  useEffect(() => {
+    setIsRecentSignalsExpanded(false);
+  }, [community?.id]);
+
   if (!community) {
     return (
       <div className="workspace-user-data-panel__grid">
@@ -540,6 +555,11 @@ export function CommunityPanelContent(props: WorkspaceUserDataPanelDataProps) {
       </div>
     );
   }
+
+  const visibleRecentSignals = isRecentSignalsExpanded
+    ? community.recentSignals
+    : community.recentSignals.slice(0, WORKSPACE_PANEL_COLLAPSED_SIGNAL_LIMIT);
+  const canExpandRecentSignals = community.recentSignals.length > WORKSPACE_PANEL_COLLAPSED_SIGNAL_LIMIT;
 
   return (
     <div className="workspace-user-data-panel__grid">
@@ -586,8 +606,13 @@ export function CommunityPanelContent(props: WorkspaceUserDataPanelDataProps) {
         <section className="workspace-community-section">
           <div className="workspace-community-section__title">Recent signal</div>
           <div className="workspace-community-signal-list">
-            {community.recentSignals.map((signal) => (
-              <div key={signal.id} className={`workspace-community-signal-row is-${signal.kind}`}>
+            {visibleRecentSignals.map((signal) => (
+              <button
+                key={signal.id}
+                type="button"
+                className={`workspace-community-signal-row is-${signal.kind}`}
+                onClick={() => props.onOpenRecentSignal(signal.target)}
+              >
                 {signal.eventMonth && signal.eventDay ? (
                   <span className="workspace-community-signal-date" aria-hidden="true">
                     <span>{signal.eventMonth}</span>
@@ -618,19 +643,27 @@ export function CommunityPanelContent(props: WorkspaceUserDataPanelDataProps) {
                     <div className="workspace-community-signal-meta">{signal.metaLabel}</div>
                   ) : null}
                   <div className="workspace-community-signal-title">{signal.title}</div>
+                  {signal.replyContext ? (
+                    <div className="workspace-community-signal-reply" aria-label={`Reply to ${signal.replyContext.sender}`}>
+                      <span className="workspace-community-signal-reply-sender">{signal.replyContext.sender}</span>
+                      <span className="workspace-community-signal-reply-text">{signal.replyContext.text}</span>
+                    </div>
+                  ) : null}
                   {signal.subtitle ? (
                     <div className="workspace-community-signal-subtitle">{signal.subtitle}</div>
                   ) : null}
                 </div>
-              </div>
+              </button>
             ))}
-            <button
-              type="button"
-              className="workspace-community-signal-view-more"
-              onClick={props.onOpenActiveCommunity}
-            >
-              View more
-            </button>
+            {canExpandRecentSignals ? (
+              <button
+                type="button"
+                className="workspace-community-signal-view-more"
+                onClick={() => setIsRecentSignalsExpanded((value) => !value)}
+              >
+                {isRecentSignalsExpanded ? "Show less" : "View more"}
+              </button>
+            ) : null}
           </div>
         </section>
       ) : null}

@@ -311,6 +311,7 @@ function ResourceCard(props: {
 
   return (
     <article
+      id={`community-resource-${resource.id}`}
       className={`resource-card is-clickable${resource.pinned ? " is-pinned" : ""}`}
       role="button"
       tabIndex={0}

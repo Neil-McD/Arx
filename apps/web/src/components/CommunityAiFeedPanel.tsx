@@ -153,7 +153,7 @@ export function CommunityAiFeedPanel(props: CommunityAiFeedPanelProps) {
           </div>
         ) : (
           posts.map((post) => (
-            <article key={post.id} className="ai-feed-item-card">
+            <article key={post.id} id={`community-ai-feed-${post.id}`} className="ai-feed-item-card">
               <div className="ai-feed-item-meta">
                 <div className="ai-feed-item-meta-left">
                   <span className={`ai-feed-item-type ${post.post_type}`}>

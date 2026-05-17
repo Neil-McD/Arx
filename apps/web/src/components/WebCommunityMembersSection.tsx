@@ -456,7 +456,7 @@ export function WebCommunityMembersSection(props: WebCommunityMembersSectionProp
                           ? (["moderator"] as const)
                           : (["member"] as const);
                   return (
-                    <div key={member.id} className="member-item">
+                    <div key={member.id} id={`community-member-${member.id}`} className="member-item">
                       <UserAvatar
                         className="member-avatar"
                         readyClassName="has-image"

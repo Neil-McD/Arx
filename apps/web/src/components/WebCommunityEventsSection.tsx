@@ -493,7 +493,7 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
                     </span>
                   ) : null}
                   {dayEvents.slice(0, 2).map((event) => (
-                    <span key={event.id} className="community-events-day-pill">
+                    <span key={event.id} id={`community-event-pill-${event.id}`} className="community-events-day-pill">
                       {event.title}
                     </span>
                   ))}
@@ -526,7 +526,7 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
                 const editLabel = isRecurring ? "Edit series" : "Edit event";
                 const cancelLabel = isRecurring ? "Cancel series" : "Cancel event";
                 return (
-                  <article key={event.id} className="community-events-agenda-item">
+                  <article key={event.id} id={`community-event-${event.id}`} className="community-events-agenda-item">
                     <div className="community-events-agenda-item-top">
                       <h4>{event.title}</h4>
                       {capabilities.canManageEvents ? (

@@ -476,6 +476,11 @@ type WorkspacePanelCommunityRole = "member" | "moderator" | "admin" | "owner";
 
 type WorkspacePanelRecentSignalKind = "member" | "chat" | "ai_feed" | "resource" | "event";
 
+type WorkspacePanelRecentSignalTarget = {
+  tab: Extract<CommunityTab, "chat" | "ai_feed" | "resources" | "events" | "members">;
+  itemId?: string | null;
+};
+
 type WorkspacePanelSignalAvatar = {
   userId: string;
   displayName: string | null;
@@ -495,6 +500,11 @@ type WorkspacePanelRecentSignal = {
   eventMonth?: string | null;
   eventDay?: string | null;
   avatar?: WorkspacePanelSignalAvatar | null;
+  replyContext?: {
+    sender: string;
+    text: string;
+  } | null;
+  target: WorkspacePanelRecentSignalTarget;
 };
 
 type WorkspacePanelRecentSignalCandidate = WorkspacePanelRecentSignal & {
@@ -503,9 +513,6 @@ type WorkspacePanelRecentSignalCandidate = WorkspacePanelRecentSignal & {
 
 const WORKSPACE_PANEL_HIGHLIGHT_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
 const WORKSPACE_PANEL_HIGHLIGHT_LIMIT = 10;
-const WORKSPACE_PANEL_HIGHLIGHT_CHAT_LIMIT = 4;
-const WORKSPACE_PANEL_HIGHLIGHT_MEMBER_LIMIT = 3;
-const WORKSPACE_PANEL_HIGHLIGHT_SURFACE_LIMIT = 2;
 
 function normalizeWorkspacePanelCommunityRole(
   access: SharedCommunityAccess | null,
@@ -6905,15 +6912,54 @@ export default function App() {
 	    setActiveView(transition.nextView);
 	    setActivePage(transition.nextPage);
 	  };
-	  const handleOpenLandingCommunity = () => {
-	    const communitySlug = String(activeCommunity?.slug ?? "").trim();
-	    if (!communitySlug) return;
-	    openCommunityChat(communitySlug, { clearUnread: true });
-	  };
-	  const handleOpenLandingProject = () => {
-	    if (!workspace.derived.resolvedActiveProjectId) return;
-	    handleStartDraftInCloudProject(workspace.derived.resolvedActiveProjectId);
-	  };
+		  const handleOpenLandingCommunity = () => {
+		    const communitySlug = String(activeCommunity?.slug ?? "").trim();
+		    if (!communitySlug) return;
+		    openCommunityChat(communitySlug, { clearUnread: true });
+		  };
+		  const handleOpenWorkspacePanelCommunitySignal = (target: WorkspacePanelRecentSignalTarget) => {
+		    const communitySlug = String(selectedActiveCommunitySlug ?? activeCommunity?.slug ?? "").trim();
+		    if (!communitySlug) return;
+		    const itemId = String(target.itemId ?? "").trim();
+		    if (target.tab === "chat") {
+		      openCommunityChat(communitySlug, { clearUnread: true, pushSnapshot: false });
+		    } else {
+		      if (target.tab === "events" && itemId) {
+		        const matchedEvent = communityEvents.find((event) => event.id === itemId);
+		        if (matchedEvent) {
+		          setCommunityEventsVisibleMonthIso(normalizeCommunityEventsMonthIso(matchedEvent.starts_at));
+		        }
+		      }
+		      openCommunityTab(communitySlug, target.tab, { pushSnapshot: false });
+		    }
+		    if (!itemId) return;
+		    const scrollToTarget = () => {
+		      if (target.tab === "chat") {
+		        scrollToCommunityMessage(itemId);
+		        return;
+		      }
+		      const targetIds =
+		        target.tab === "ai_feed"
+		          ? [`community-ai-feed-${itemId}`]
+		          : target.tab === "resources"
+		            ? [`community-resource-${itemId}`]
+		            : target.tab === "events"
+		              ? [`community-event-${itemId}`, `community-event-pill-${itemId}`]
+		              : [`community-member-${itemId}`];
+		      for (const targetId of targetIds) {
+		        const node = document.getElementById(targetId);
+		        if (!node) continue;
+		        node.scrollIntoView({ behavior: "smooth", block: "center" });
+		        break;
+		      }
+		    };
+		    window.setTimeout(scrollToTarget, 120);
+		    window.setTimeout(scrollToTarget, 420);
+		  };
+		  const handleOpenLandingProject = () => {
+		    if (!workspace.derived.resolvedActiveProjectId) return;
+		    handleStartDraftInCloudProject(workspace.derived.resolvedActiveProjectId);
+		  };
 	  const handleOpenDiscover = () => {
 	    const transition = deriveOpenDiscoverTransition({ activePage });
 	    if (transition.shouldPushSnapshot) pushNavSnapshot();
@@ -7980,7 +8026,11 @@ export default function App() {
     };
     const finalizeSignals = (signals: WorkspacePanelRecentSignalCandidate[], limit: number) =>
       signals
-        .sort((a, b) => b.sortMs - a.sortMs)
+        .sort((a, b) => {
+          const distance = Math.abs(a.sortMs - nowMs) - Math.abs(b.sortMs - nowMs);
+          if (distance !== 0) return distance;
+          return b.sortMs - a.sortMs;
+        })
         .slice(0, limit)
         .map(({ sortMs: _sortMs, ...signal }) => signal);
 
@@ -7993,17 +8043,30 @@ export default function App() {
       .filter((entry): entry is { message: CommunityChatMessage; createdAtMs: number } => entry.createdAtMs !== null)
       .sort((a, b) => b.createdAtMs - a.createdAtMs);
 
-    for (const { message, createdAtMs } of sortedMessages.slice(0, WORKSPACE_PANEL_HIGHLIGHT_CHAT_LIMIT)) {
+    for (const { message, createdAtMs } of sortedMessages) {
       const senderId = String(message.sender_id ?? "").trim();
       const senderName = senderId ? displayName(senderId) : "Member";
       const snippet = truncatePanelSignalText(message.body, 160);
       if (!snippet) continue;
+      const replyToId = String(message.reply_to_id ?? "").trim();
+      const replyTarget = replyToId ? communityMessageById.get(replyToId) ?? null : null;
+      const replyBody = replyTarget
+        ? normalizePanelSignalText(parseReplyPrefix(replyTarget.body)?.rest ?? replyTarget.body)
+        : "";
+      const replyPreview = truncatePanelSignalText(replyBody || (replyTarget ? "Message" : ""), 90);
       const signal: WorkspacePanelRecentSignalCandidate = {
         id: `chat:${message.id}`,
         kind: "chat",
         title: senderName,
         subtitle: snippet,
         avatar: senderId ? buildAvatar(senderId, senderName) : null,
+        replyContext: replyToId
+          ? {
+              sender: replyTarget ? displayName(replyTarget.sender_id) : "Reply",
+              text: replyPreview || "Replied message not loaded",
+            }
+          : null,
+        target: { tab: "chat", itemId: message.id },
         sortMs: createdAtMs,
       };
       if (createdAtMs >= recentStartMs && createdAtMs <= nowMs) {
@@ -8019,7 +8082,7 @@ export default function App() {
       }))
       .filter((entry): entry is { post: CommunityAiFeedPost; createdAtMs: number } => entry.createdAtMs !== null)
       .sort((a, b) => b.createdAtMs - a.createdAtMs);
-    for (const latestAiPost of sortedAiPosts.slice(0, WORKSPACE_PANEL_HIGHLIGHT_SURFACE_LIMIT)) {
+    for (const latestAiPost of sortedAiPosts) {
       const aiTitle = normalizePanelSignalText(latestAiPost.post.title);
       if (!aiTitle) continue;
       const signal: WorkspacePanelRecentSignalCandidate = {
@@ -8028,6 +8091,7 @@ export default function App() {
         title: truncatePanelSignalText(aiTitle, 120),
         metaLabel: formatPanelAiPostTypeLabel(latestAiPost.post.post_type),
         iconLabel: "AI",
+        target: { tab: "ai_feed", itemId: latestAiPost.post.id },
         sortMs: latestAiPost.createdAtMs,
       };
       if (latestAiPost.createdAtMs >= recentStartMs && latestAiPost.createdAtMs <= nowMs) {
@@ -8042,7 +8106,7 @@ export default function App() {
       }))
       .filter((entry): entry is { resource: CommunityResource; createdAtMs: number } => entry.createdAtMs !== null)
       .sort((a, b) => b.createdAtMs - a.createdAtMs);
-    for (const latestResource of sortedResources.slice(0, WORKSPACE_PANEL_HIGHLIGHT_SURFACE_LIMIT)) {
+    for (const latestResource of sortedResources) {
       const resourceTitle = normalizePanelSignalText(latestResource.resource.title);
       if (!resourceTitle) continue;
       const signal: WorkspacePanelRecentSignalCandidate = {
@@ -8050,6 +8114,7 @@ export default function App() {
         kind: "resource",
         title: truncatePanelSignalText(resourceTitle, 120),
         metaLabel: formatPanelResourceTypeLabel(latestResource.resource.type),
+        target: { tab: "resources", itemId: latestResource.resource.id },
         sortMs: latestResource.createdAtMs,
       };
       if (latestResource.createdAtMs >= recentStartMs && latestResource.createdAtMs <= nowMs) {
@@ -8066,7 +8131,7 @@ export default function App() {
       .filter((entry): entry is { event: CommunityEvent; startsAtMs: number } => entry.startsAtMs !== null)
       .filter((entry) => entry.startsAtMs >= nowMs)
       .sort((a, b) => a.startsAtMs - b.startsAtMs);
-    for (const upcomingEvent of sortedUpcomingEvents.slice(0, WORKSPACE_PANEL_HIGHLIGHT_SURFACE_LIMIT)) {
+    for (const upcomingEvent of sortedUpcomingEvents) {
       const eventTitle = normalizePanelSignalText(upcomingEvent.event.title);
       if (!eventTitle) continue;
       const eventDateTile = formatPanelEventDateTile(upcomingEvent.event.starts_at);
@@ -8079,7 +8144,8 @@ export default function App() {
         iconLabel: "EV",
         eventMonth: eventDateTile?.month ?? null,
         eventDay: eventDateTile?.day ?? null,
-        sortMs: nowMs,
+        target: { tab: "events", itemId: upcomingEvent.event.id },
+        sortMs: upcomingEvent.startsAtMs,
       };
       if (upcomingEvent.startsAtMs <= upcomingEndMs) {
         highlightedSignals.push(signal);
@@ -8096,7 +8162,7 @@ export default function App() {
         .filter((entry): entry is { member: CommunityMember; createdAtMs: number } => entry.createdAtMs !== null)
         .sort((a, b) => b.createdAtMs - a.createdAtMs);
 
-      for (const { member, createdAtMs } of sortedNewMembers.slice(0, WORKSPACE_PANEL_HIGHLIGHT_MEMBER_LIMIT)) {
+      for (const { member, createdAtMs } of sortedNewMembers) {
         const userId = String(member.user_id ?? "").trim();
         if (!userId) continue;
         const memberName = normalizePanelSignalText(member.display_name) || displayName(userId);
@@ -8106,6 +8172,7 @@ export default function App() {
           title: memberName,
           subtitle: "joined",
           avatar: buildAvatar(userId, memberName, member),
+          target: { tab: "members", itemId: member.id },
           sortMs: createdAtMs,
         };
         if (createdAtMs >= recentStartMs && createdAtMs <= nowMs) {
@@ -8119,6 +8186,7 @@ export default function App() {
     activeCommunityFeedState.live,
     communityEvents,
     communityMembers,
+    communityMessageById,
     communityMessages,
     communityResources,
     displayName,
@@ -8208,7 +8276,7 @@ export default function App() {
     onTurnOnComputer: turnOnWorkspaceComputer,
     onTurnOffComputer: turnOffWorkspaceComputer,
     onOpenCreateCommunity: () => openCreateCommunityModal(),
-    onOpenActiveCommunity: handleOpenLandingCommunity,
+    onOpenRecentSignal: handleOpenWorkspacePanelCommunitySignal,
     onToggleCommunityMute: handleToggleCommunityMute,
     onOpenWorkspaceIntegrationSetup: handleOpenIntegrationsSettings,
     onToggleCommunityIntegration: (communityAppMountId: string, enabled: boolean) =>
