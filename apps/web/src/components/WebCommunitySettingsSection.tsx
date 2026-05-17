@@ -4,6 +4,7 @@ import type { CommunitySettingsLayer } from "../../../../shared/communityAccessV
 import { CommunityAvatar } from "../../../../shared/CommunityAvatar";
 import type { AccountCommerceStatus } from "../../../../shared/accountCommerceStatusGateway";
 import { getCommunityBannerImageStyle } from "../../../../shared/communityBannerUi";
+import { formatStripeConnectCountry } from "../../../../shared/stripeConnectCountries";
 import { buildPlatformSwitcherStyle } from "../../../../shared/platformSwitcherUi";
 import { buildStripeConnectPresentation } from "../controllers/buildStripeConnectPresentation";
 import { usePersonalAppSetupController } from "../controllers/usePersonalAppSetupController";
@@ -13,6 +14,7 @@ import {
 } from "../lib/discoverCatalog";
 import { findDiscoverCatalogEntryForAppIdentity } from "../lib/discoverCatalogMatching";
 import { DiscoverCatalogLogo } from "./DiscoverCatalogLogo";
+import { StripeConnectCountrySelect } from "./StripeConnectCountrySelect";
 import { StripeSetupButton } from "./StripeSetupButton";
 import { PersonalAppSetupModal } from "./PersonalAppSetupModal";
 import type { CommunityMountedApp } from "../../../../shared/communityAppMountTypes";
@@ -50,6 +52,7 @@ type WebCommunitySettingsSectionProps = {
   startStripeConnectOnboarding: (opts?: {
     context?: "account" | "community";
     communitySlug?: string | null;
+    country?: string | null;
   }) => Promise<void> | void;
   isStartingStripeConnectOnboarding: boolean;
   communityIntegrations: {
@@ -865,6 +868,7 @@ function CommunityMonetizationConfigSection({
   startStripeConnectOnboarding: (opts?: {
     context?: "account" | "community";
     communitySlug?: string | null;
+    country?: string | null;
   }) => Promise<void> | void;
   isStartingStripeConnectOnboarding: boolean;
   canManagePublishing: boolean;
@@ -886,6 +890,16 @@ function CommunityMonetizationConfigSection({
   const canAcceptCharges = stripeConnectPresentation.isReady;
   const canMonetizeCommunities = Number(accountCommerceStatus?.platform_fee_bps ?? 0) > 0;
   const needsStripeConnect = !canMonetizeCommunities || !canAcceptCharges;
+  const storedStripeConnectCountry = accountCommerceStatus?.stripe_connect.country ?? null;
+  const [stripeConnectCountry, setStripeConnectCountry] = useState("");
+  useEffect(() => {
+    if (storedStripeConnectCountry) {
+      setStripeConnectCountry(storedStripeConnectCountry);
+    }
+  }, [storedStripeConnectCountry]);
+  const selectedStripeConnectCountry = stripeConnectCountry || storedStripeConnectCountry || "";
+  const stripeConnectCountryLabel = formatStripeConnectCountry(selectedStripeConnectCountry);
+  const needsStripeConnectCountry = !canAcceptCharges && !selectedStripeConnectCountry;
 
   return (
     <div className="settings-section">
@@ -994,6 +1008,16 @@ function CommunityMonetizationConfigSection({
           ) : null}
           {canManagePayoutAccount ? (
             <div className="create-community-actions" style={{ marginTop: 12 }}>
+              {canAcceptCharges && stripeConnectCountryLabel ? (
+                <span className="auth-status">Country: {stripeConnectCountryLabel}</span>
+              ) : (
+                <StripeConnectCountrySelect
+                  value={selectedStripeConnectCountry}
+                  disabled={isStartingStripeConnectOnboarding}
+                  onChange={setStripeConnectCountry}
+                  style={{ margin: 0, minWidth: 220 }}
+                />
+              )}
               <StripeSetupButton
                 label={
                   isStartingStripeConnectOnboarding
@@ -1004,9 +1028,10 @@ function CommunityMonetizationConfigSection({
                   void startStripeConnectOnboarding({
                     context: "community",
                     communitySlug: activeCommunity.slug,
+                    country: selectedStripeConnectCountry || null,
                   })
                 }
-                disabled={isStartingStripeConnectOnboarding}
+                disabled={isStartingStripeConnectOnboarding || needsStripeConnectCountry}
               />
             </div>
           ) : canAcceptCharges ? null : (
