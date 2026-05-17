@@ -107,7 +107,7 @@ export type WorkspaceUserDataPanelDataProps = {
 };
 
 const WORKSPACE_FILES_EXPANDED_STORAGE_KEY_PREFIX = "polynet-workspace-files-expanded";
-const WORKSPACE_PANEL_COLLAPSED_SIGNAL_LIMIT = 6;
+const WORKSPACE_PANEL_COLLAPSED_SIGNAL_LIMIT = 10;
 
 function ResourceSignalIcon() {
   return (
@@ -610,7 +610,7 @@ export function CommunityPanelContent(props: WorkspaceUserDataPanelDataProps) {
               <button
                 key={signal.id}
                 type="button"
-                className={`workspace-community-signal-row is-${signal.kind}`}
+                className={`workspace-community-signal-row is-${signal.kind}${signal.replyContext ? " has-reply" : ""}`}
                 onClick={() => props.onOpenRecentSignal(signal.target)}
               >
                 {signal.eventMonth && signal.eventDay ? (
@@ -644,9 +644,13 @@ export function CommunityPanelContent(props: WorkspaceUserDataPanelDataProps) {
                   ) : null}
                   <div className="workspace-community-signal-title">{signal.title}</div>
                   {signal.replyContext ? (
-                    <div className="workspace-community-signal-reply" aria-label={`Reply to ${signal.replyContext.sender}`}>
-                      <span className="workspace-community-signal-reply-sender">{signal.replyContext.sender}</span>
-                      <span className="workspace-community-signal-reply-text">{signal.replyContext.text}</span>
+                    <div className="workspace-community-signal-reply chat-reply-quote" aria-label={`Reply to ${signal.replyContext.sender}`}>
+                      <svg className="chat-reply-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="9 14 4 9 9 4" />
+                        <path d="M20 20v-7a4 4 0 0 0-4-4H4" />
+                      </svg>
+                      <span className="chat-reply-sender">{signal.replyContext.sender}</span>
+                      <span className="chat-reply-text">{signal.replyContext.text}</span>
                     </div>
                   ) : null}
                   {signal.subtitle ? (

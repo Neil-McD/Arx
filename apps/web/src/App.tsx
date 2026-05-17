@@ -512,7 +512,6 @@ type WorkspacePanelRecentSignalCandidate = WorkspacePanelRecentSignal & {
 };
 
 const WORKSPACE_PANEL_HIGHLIGHT_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
-const WORKSPACE_PANEL_HIGHLIGHT_LIMIT = 10;
 
 function normalizeWorkspacePanelCommunityRole(
   access: SharedCommunityAccess | null,
@@ -8024,14 +8023,13 @@ export default function App() {
         avatarZoom: profile?.avatar_zoom ?? fallbackProfile?.avatar_zoom ?? null,
       };
     };
-    const finalizeSignals = (signals: WorkspacePanelRecentSignalCandidate[], limit: number) =>
+    const finalizeSignals = (signals: WorkspacePanelRecentSignalCandidate[]) =>
       signals
         .sort((a, b) => {
           const distance = Math.abs(a.sortMs - nowMs) - Math.abs(b.sortMs - nowMs);
           if (distance !== 0) return distance;
           return b.sortMs - a.sortMs;
         })
-        .slice(0, limit)
         .map(({ sortMs: _sortMs, ...signal }) => signal);
 
     const sortedMessages = [...communityMessages]
@@ -8181,7 +8179,7 @@ export default function App() {
       }
     }
 
-    return finalizeSignals(highlightedSignals, WORKSPACE_PANEL_HIGHLIGHT_LIMIT);
+    return finalizeSignals(highlightedSignals);
   }, [
     activeCommunityFeedState.live,
     communityEvents,

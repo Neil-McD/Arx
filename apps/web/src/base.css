@@ -22606,21 +22606,20 @@ button.message-citation-chip:hover {
 .workspace-community-signal-row.is-member .workspace-community-signal-avatar {
   width: 18px;
   height: 18px;
-  margin-top: 0;
+  margin: 0 7px;
 }
 
 .workspace-community-signal-row.is-member {
   min-height: 22px;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
 }
 
 .workspace-community-signal-row.is-member .workspace-community-signal-copy {
-  width: 100%;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  justify-content: flex-start;
+  gap: 5px;
   padding-top: 0;
 }
 
@@ -22631,12 +22630,17 @@ button.message-citation-chip:hover {
 }
 
 .workspace-community-signal-row.is-member .workspace-community-signal-title {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
 }
 
 .workspace-community-signal-row.is-member .workspace-community-signal-subtitle {
   flex: 0 0 auto;
   color: var(--text-muted);
+}
+
+.workspace-community-signal-row.is-chat.has-reply .workspace-community-signal-avatar {
+  width: 36px;
+  height: 36px;
 }
 
 .workspace-community-signal-resource-icon {
@@ -22743,38 +22747,14 @@ button.message-citation-chip:hover {
   -webkit-line-clamp: 2;
 }
 
-.workspace-community-signal-reply {
+.workspace-community-signal-reply.chat-reply-quote {
   max-width: 100%;
   width: fit-content;
-  min-width: 0;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  margin: 1px 0;
-  padding: 2px 6px;
-  border-left: 2px solid color-mix(in srgb, var(--accent) 76%, var(--border-default));
-  border-radius: 5px;
-  background: color-mix(in srgb, var(--accent) 12%, var(--hover-overlay));
-  color: var(--text-muted);
-  font-size: 10px;
-  font-weight: 650;
+  margin: 1px 0 0;
+  padding: 3px 8px;
+  font-size: 11px;
   line-height: 1.2;
-}
-
-.workspace-community-signal-reply-sender {
-  max-width: 14ch;
-  overflow: hidden;
-  color: var(--text-primary);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.workspace-community-signal-reply-text {
-  min-width: 0;
-  overflow: hidden;
-  color: color-mix(in srgb, var(--text-primary) 72%, var(--text-secondary));
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  cursor: inherit;
 }
 
 .workspace-community-signal-row.is-chat .workspace-community-signal-title,
