@@ -16348,8 +16348,6 @@ button.message-citation-chip:hover {
 
 .analytics-line-chart {
   width: 100%;
-  max-width: 1180px;
-  margin-inline: auto;
   position: relative;
 }
 
@@ -16365,6 +16363,10 @@ button.message-citation-chip:hover {
   width: 100%;
   height: 180px;
   display: block;
+}
+
+.analytics-chart-placeholder {
+  width: 100%;
 }
 
 .analytics-chart-grid {
@@ -16411,7 +16413,6 @@ button.message-citation-chip:hover {
   color: var(--text-terminal);
   pointer-events: none;
   transform: translate(12px, -50%);
-  transition: left 140ms ease, transform 140ms ease;
   z-index: 2;
   white-space: nowrap;
 }
@@ -22621,10 +22622,6 @@ button.message-citation-chip:hover {
   min-height: 26px;
   padding: 4px 7px;
   font-size: 10px;
-}
-
-.workspace-community-analytics .analytics-chart-svg {
-  height: 126px;
 }
 
 .workspace-community-analytics .analytics-line-chart-empty {

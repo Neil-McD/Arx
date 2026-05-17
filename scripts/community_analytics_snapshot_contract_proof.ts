@@ -19,6 +19,8 @@ const adminGateway = read("shared/cloudCommunityAdminGateway.ts");
 const controller = read("shared/useCommunityAdminController.ts");
 const analyticsLifecycle = read("shared/useCommunityAdminAnalyticsLifecycle.ts");
 const analyticsChart = read("shared/AnalyticsLineChart.tsx");
+const workspaceUserDataPanel = read("apps/web/src/components/WebWorkspaceUserDataPanel.tsx");
+const baseStyles = read("apps/web/src/base.css");
 const adminCore = read("shared/communityAdminCore.ts");
 const communityTypes = read("shared/communityTypes.ts");
 
@@ -111,6 +113,61 @@ assertIncludes(
   analyticsChart,
   "analyticsAreaGradient-${reactId.replace(/:/g, \"\")}",
   "chart gradient id is instance-scoped",
+);
+assertIncludes(
+  analyticsChart,
+  "height = 180",
+  "chart exposes a default height prop",
+);
+assertIncludes(
+  analyticsChart,
+  "style={{ height }}",
+  "chart rendered height matches viewBox height",
+);
+assertIncludes(
+  analyticsChart,
+  "useLayoutEffect",
+  "chart measures width before paint",
+);
+assertIncludes(
+  analyticsChart,
+  "useState<number | null>(null)",
+  "chart does not render from a stale fallback width",
+);
+assertIncludes(
+  analyticsChart,
+  "chartWidth == null",
+  "chart waits for a measured width before rendering SVG geometry",
+);
+assertIncludes(
+  analyticsChart,
+  'preserveAspectRatio="none"',
+  "chart cannot letterbox its geometry inside a wider rendered SVG",
+);
+assertNotIncludes(
+  analyticsChart,
+  "useState(720)",
+  "chart does not initialize with a compressed fallback width",
+);
+assertIncludes(
+  workspaceUserDataPanel,
+  "height={126}",
+  "right panel requests compact chart height through the chart API",
+);
+assertNotIncludes(
+  baseStyles,
+  ".workspace-community-analytics .analytics-chart-svg {\n  height: 126px;",
+  "right panel does not force an SVG height that disagrees with the chart viewBox",
+);
+assertNotIncludes(
+  baseStyles,
+  "max-width: 1180px;",
+  "chart does not cap itself narrower than its container",
+);
+assertNotIncludes(
+  baseStyles,
+  "transition: left 140ms ease",
+  "chart tooltip does not animate behind the pointer",
 );
 
 console.log("community_analytics_snapshot_contract_proof: ok");

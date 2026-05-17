@@ -350,6 +350,7 @@ function WorkspaceCommunityAnalyticsPreview(props: {
           </div>
         </div>
         <AnalyticsLineChart
+          height={126}
           points={chartPoints}
           valueFormatter={
             chartMetric === "revenue"

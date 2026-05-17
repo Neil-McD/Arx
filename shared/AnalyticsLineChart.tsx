@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useId, useLayoutEffect, useRef, useState } from "react";
 import { formatCount } from "./contentFormatting";
 
 export type AnalyticsLineChartPoint = {
@@ -7,29 +7,32 @@ export type AnalyticsLineChartPoint = {
 };
 
 export function AnalyticsLineChart({
+  height = 180,
   points,
   valueFormatter,
 }: {
+  height?: number;
   points: AnalyticsLineChartPoint[];
   valueFormatter?: (value: number) => string;
 }) {
-  const height = 180;
   const paddingX = 22;
   const paddingY = 22;
   const chartRef = useRef<HTMLDivElement | null>(null);
   const reactId = useId();
-  const [chartWidth, setChartWidth] = useState(720);
+  const [chartWidth, setChartWidth] = useState<number | null>(null);
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const formatValue = valueFormatter ?? ((value: number) => formatCount(value));
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const node = chartRef.current;
     if (!node) return;
 
     const measure = () => {
-      const nextWidth = Math.round(node.clientWidth);
+      const nextWidth = node.getBoundingClientRect().width;
       if (nextWidth > 0) {
-        setChartWidth((current) => (current === nextWidth ? current : nextWidth));
+        setChartWidth((current) =>
+          current != null && Math.abs(current - nextWidth) < 0.5 ? current : nextWidth,
+        );
       }
     };
 
@@ -47,6 +50,21 @@ export function AnalyticsLineChart({
 
   if (!points || points.length === 0) {
     return <div className="analytics-line-chart analytics-line-chart-empty">No trend data yet.</div>;
+  }
+
+  const startLabel = points[0]?.label ?? "";
+  const endLabel = points[points.length - 1]?.label ?? "";
+
+  if (chartWidth == null) {
+    return (
+      <div className="analytics-line-chart" ref={chartRef} aria-hidden="true">
+        <div className="analytics-chart-placeholder" style={{ height }} />
+        <div className="analytics-chart-axis">
+          <span>{startLabel}</span>
+          <span>{endLabel}</span>
+        </div>
+      </div>
+    );
   }
 
   const width = Math.max(chartWidth, paddingX * 2 + 1);
@@ -69,8 +87,6 @@ export function AnalyticsLineChart({
     .map((coord) => `${coord.x.toFixed(2)},${coord.y.toFixed(2)}`)
     .join(" L ")} L ${coords[coords.length - 1].x.toFixed(2)},${bottomY.toFixed(2)} Z`;
 
-  const startLabel = points[0]?.label ?? "";
-  const endLabel = points[points.length - 1]?.label ?? "";
   const gradientId = `analyticsAreaGradient-${reactId.replace(/:/g, "")}`;
   const activeIndex = hoverIndex == null ? null : Math.min(Math.max(hoverIndex, 0), points.length - 1);
   const activeCoord = activeIndex == null ? null : coords[activeIndex];
@@ -85,8 +101,10 @@ export function AnalyticsLineChart({
       <svg
         className="analytics-chart-svg"
         viewBox={`0 0 ${width} ${height}`}
+        preserveAspectRatio="none"
         role="img"
         aria-label="Trend chart"
+        style={{ height }}
         onPointerLeave={() => setHoverIndex(null)}
         onPointerMove={(event) => {
           const rect = event.currentTarget.getBoundingClientRect();
