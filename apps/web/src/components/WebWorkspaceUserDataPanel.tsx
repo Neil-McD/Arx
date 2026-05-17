@@ -100,6 +100,17 @@ export type WorkspaceUserDataPanelDataProps = {
 
 const WORKSPACE_FILES_EXPANDED_STORAGE_KEY_PREFIX = "polynet-workspace-files-expanded";
 
+function ResourceSignalIcon() {
+  return (
+    <span className="workspace-community-signal-resource-icon" aria-hidden="true">
+      <svg viewBox="0 0 24 24">
+        <path d="M10 13a5 5 0 0 0 7.07 0l3.54-3.54a5 5 0 0 0-7.07-7.07L10 5" />
+        <path d="M14 11a5 5 0 0 0-7.07 0L3.4 14.54a5 5 0 0 0 7.07 7.07L14 19" />
+      </svg>
+    </span>
+  );
+}
+
 function formatBytes(value: number | null | undefined): string {
   if (typeof value !== "number" || !Number.isFinite(value)) return "";
   if (value < 1024) return `${value} B`;
@@ -582,6 +593,8 @@ export function CommunityPanelContent(props: WorkspaceUserDataPanelDataProps) {
                     <span>{signal.eventMonth}</span>
                     <strong>{signal.eventDay}</strong>
                   </span>
+                ) : signal.kind === "resource" ? (
+                  <ResourceSignalIcon />
                 ) : signal.avatar ? (
                   <UserAvatar
                     className="workspace-community-signal-avatar public-funnel-face"
@@ -611,6 +624,13 @@ export function CommunityPanelContent(props: WorkspaceUserDataPanelDataProps) {
                 </div>
               </div>
             ))}
+            <button
+              type="button"
+              className="workspace-community-signal-view-more"
+              onClick={props.onOpenActiveCommunity}
+            >
+              View more
+            </button>
           </div>
         </section>
       ) : null}

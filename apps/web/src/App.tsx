@@ -502,8 +502,10 @@ type WorkspacePanelRecentSignalCandidate = WorkspacePanelRecentSignal & {
 };
 
 const WORKSPACE_PANEL_HIGHLIGHT_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
-const WORKSPACE_PANEL_HIGHLIGHT_LIMIT = 6;
-const WORKSPACE_PANEL_FALLBACK_LIMIT = 3;
+const WORKSPACE_PANEL_HIGHLIGHT_LIMIT = 10;
+const WORKSPACE_PANEL_HIGHLIGHT_CHAT_LIMIT = 4;
+const WORKSPACE_PANEL_HIGHLIGHT_MEMBER_LIMIT = 3;
+const WORKSPACE_PANEL_HIGHLIGHT_SURFACE_LIMIT = 2;
 
 function normalizeWorkspacePanelCommunityRole(
   access: SharedCommunityAccess | null,
@@ -7953,7 +7955,6 @@ export default function App() {
 
   const workspacePanelCommunityRecentSignals = useMemo(() => {
     const highlightedSignals: WorkspacePanelRecentSignalCandidate[] = [];
-    const fallbackSignals: WorkspacePanelRecentSignalCandidate[] = [];
     const nowMs = Date.now();
     const recentStartMs = nowMs - WORKSPACE_PANEL_HIGHLIGHT_WINDOW_MS;
     const upcomingEndMs = nowMs + WORKSPACE_PANEL_HIGHLIGHT_WINDOW_MS;
@@ -7992,7 +7993,7 @@ export default function App() {
       .filter((entry): entry is { message: CommunityChatMessage; createdAtMs: number } => entry.createdAtMs !== null)
       .sort((a, b) => b.createdAtMs - a.createdAtMs);
 
-    for (const { message, createdAtMs } of sortedMessages.slice(0, 2)) {
+    for (const { message, createdAtMs } of sortedMessages.slice(0, WORKSPACE_PANEL_HIGHLIGHT_CHAT_LIMIT)) {
       const senderId = String(message.sender_id ?? "").trim();
       const senderName = senderId ? displayName(senderId) : "Member";
       const snippet = truncatePanelSignalText(message.body, 160);
@@ -8008,7 +8009,6 @@ export default function App() {
       if (createdAtMs >= recentStartMs && createdAtMs <= nowMs) {
         highlightedSignals.push(signal);
       }
-      fallbackSignals.push(signal);
     }
 
     const sortedAiPosts = [...activeCommunityFeedState.live]
@@ -8019,9 +8019,9 @@ export default function App() {
       }))
       .filter((entry): entry is { post: CommunityAiFeedPost; createdAtMs: number } => entry.createdAtMs !== null)
       .sort((a, b) => b.createdAtMs - a.createdAtMs);
-    const latestAiPost = sortedAiPosts[0] ?? null;
-    const aiTitle = latestAiPost ? normalizePanelSignalText(latestAiPost.post.title) : "";
-    if (latestAiPost && aiTitle) {
+    for (const latestAiPost of sortedAiPosts.slice(0, WORKSPACE_PANEL_HIGHLIGHT_SURFACE_LIMIT)) {
+      const aiTitle = normalizePanelSignalText(latestAiPost.post.title);
+      if (!aiTitle) continue;
       const signal: WorkspacePanelRecentSignalCandidate = {
         id: `ai_feed:${latestAiPost.post.id}`,
         kind: "ai_feed",
@@ -8033,7 +8033,6 @@ export default function App() {
       if (latestAiPost.createdAtMs >= recentStartMs && latestAiPost.createdAtMs <= nowMs) {
         highlightedSignals.push(signal);
       }
-      fallbackSignals.push(signal);
     }
 
     const sortedResources = [...communityResources]
@@ -8043,21 +8042,19 @@ export default function App() {
       }))
       .filter((entry): entry is { resource: CommunityResource; createdAtMs: number } => entry.createdAtMs !== null)
       .sort((a, b) => b.createdAtMs - a.createdAtMs);
-    const latestResource = sortedResources[0] ?? null;
-    const resourceTitle = latestResource ? normalizePanelSignalText(latestResource.resource.title) : "";
-    if (latestResource && resourceTitle) {
+    for (const latestResource of sortedResources.slice(0, WORKSPACE_PANEL_HIGHLIGHT_SURFACE_LIMIT)) {
+      const resourceTitle = normalizePanelSignalText(latestResource.resource.title);
+      if (!resourceTitle) continue;
       const signal: WorkspacePanelRecentSignalCandidate = {
         id: `resource:${latestResource.resource.id}`,
         kind: "resource",
         title: truncatePanelSignalText(resourceTitle, 120),
         metaLabel: formatPanelResourceTypeLabel(latestResource.resource.type),
-        iconLabel: "R",
         sortMs: latestResource.createdAtMs,
       };
       if (latestResource.createdAtMs >= recentStartMs && latestResource.createdAtMs <= nowMs) {
         highlightedSignals.push(signal);
       }
-      fallbackSignals.push(signal);
     }
 
     const sortedUpcomingEvents = [...communityEvents]
@@ -8069,9 +8066,9 @@ export default function App() {
       .filter((entry): entry is { event: CommunityEvent; startsAtMs: number } => entry.startsAtMs !== null)
       .filter((entry) => entry.startsAtMs >= nowMs)
       .sort((a, b) => a.startsAtMs - b.startsAtMs);
-    const upcomingEvent = sortedUpcomingEvents[0] ?? null;
-    const eventTitle = upcomingEvent ? normalizePanelSignalText(upcomingEvent.event.title) : "";
-    if (upcomingEvent && eventTitle) {
+    for (const upcomingEvent of sortedUpcomingEvents.slice(0, WORKSPACE_PANEL_HIGHLIGHT_SURFACE_LIMIT)) {
+      const eventTitle = normalizePanelSignalText(upcomingEvent.event.title);
+      if (!eventTitle) continue;
       const eventDateTile = formatPanelEventDateTile(upcomingEvent.event.starts_at);
       const signal: WorkspacePanelRecentSignalCandidate = {
         id: `event:${upcomingEvent.event.id}`,
@@ -8087,7 +8084,6 @@ export default function App() {
       if (upcomingEvent.startsAtMs <= upcomingEndMs) {
         highlightedSignals.push(signal);
       }
-      fallbackSignals.push(signal);
     }
 
     if (hasResolvedCommunityMembers) {
@@ -8100,7 +8096,7 @@ export default function App() {
         .filter((entry): entry is { member: CommunityMember; createdAtMs: number } => entry.createdAtMs !== null)
         .sort((a, b) => b.createdAtMs - a.createdAtMs);
 
-      for (const { member, createdAtMs } of sortedNewMembers.slice(0, 2)) {
+      for (const { member, createdAtMs } of sortedNewMembers.slice(0, WORKSPACE_PANEL_HIGHLIGHT_MEMBER_LIMIT)) {
         const userId = String(member.user_id ?? "").trim();
         if (!userId) continue;
         const memberName = normalizePanelSignalText(member.display_name) || displayName(userId);
@@ -8115,14 +8111,10 @@ export default function App() {
         if (createdAtMs >= recentStartMs && createdAtMs <= nowMs) {
           highlightedSignals.push(signal);
         }
-        fallbackSignals.push(signal);
       }
     }
 
-    if (highlightedSignals.length > 0) {
-      return finalizeSignals(highlightedSignals, WORKSPACE_PANEL_HIGHLIGHT_LIMIT);
-    }
-    return finalizeSignals(fallbackSignals, WORKSPACE_PANEL_FALLBACK_LIMIT);
+    return finalizeSignals(highlightedSignals, WORKSPACE_PANEL_HIGHLIGHT_LIMIT);
   }, [
     activeCommunityFeedState.live,
     communityEvents,

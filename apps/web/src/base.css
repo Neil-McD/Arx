@@ -22558,7 +22558,8 @@ button.message-citation-chip:hover {
 
 .workspace-community-signal-avatar,
 .workspace-community-signal-icon,
-.workspace-community-signal-date {
+.workspace-community-signal-date,
+.workspace-community-signal-resource-icon {
   flex: 0 0 auto;
   width: 32px;
   height: 32px;
@@ -22581,9 +22582,38 @@ button.message-citation-chip:hover {
   color: color-mix(in srgb, #22c55e 68%, var(--text-primary));
 }
 
-.workspace-community-signal-row.is-resource .workspace-community-signal-icon {
-  border-color: color-mix(in srgb, var(--accent-gold) 30%, var(--border-subtle));
-  color: color-mix(in srgb, var(--accent-gold) 72%, var(--text-primary));
+.workspace-community-signal-row.is-member .workspace-community-signal-avatar {
+  width: 24px;
+  height: 24px;
+  margin-top: 3px;
+}
+
+.workspace-community-signal-resource-icon {
+  display: grid;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--accent-gold) 22%, var(--border-default));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--accent-gold) 8%, var(--bg-workspace, var(--bg-app)));
+  color: color-mix(in srgb, var(--accent-gold) 76%, var(--text-primary));
+}
+
+.workspace-community-signal-resource-icon svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.workspace-community-signal-row.is-event {
+  min-height: 40px;
+}
+
+.workspace-community-signal-row.is-event .workspace-community-signal-date {
+  width: 40px;
+  height: 40px;
 }
 
 .workspace-community-signal-date {
@@ -22610,6 +22640,14 @@ button.message-citation-chip:hover {
   font-size: 14px;
   font-weight: 800;
   line-height: 1;
+}
+
+.workspace-community-signal-row.is-event .workspace-community-signal-date span {
+  font-size: 9px;
+}
+
+.workspace-community-signal-row.is-event .workspace-community-signal-date strong {
+  font-size: 18px;
 }
 
 .workspace-community-signal-copy {
@@ -22657,6 +22695,32 @@ button.message-citation-chip:hover {
 .workspace-community-signal-row.is-chat .workspace-community-signal-title,
 .workspace-community-signal-row.is-member .workspace-community-signal-title {
   -webkit-line-clamp: 1;
+}
+
+.workspace-community-signal-view-more {
+  width: fit-content;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1;
+  padding: 4px 0;
+  cursor: pointer;
+  transition:
+    color 120ms ease,
+    opacity 120ms ease;
+}
+
+.workspace-community-signal-view-more:hover {
+  color: var(--text-primary);
+}
+
+.workspace-community-signal-view-more:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline-offset: 3px;
 }
 
 .workspace-community-integration-identity {
