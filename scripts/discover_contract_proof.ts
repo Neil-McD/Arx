@@ -43,6 +43,7 @@ function main() {
   const pathRouteLifecycle = readText(
     new URL("../apps/web/src/controllers/useWebPathRouteLifecycle.ts", import.meta.url),
   );
+  const navSnapshot = readText(new URL("../shared/navSnapshot.ts", import.meta.url));
   const discoverMarketplace = readText(new URL("../convex/discoverMarketplace.ts", import.meta.url));
   const discoverController = readText(new URL("../shared/useWebDiscoverController.ts", import.meta.url));
   const discoverPreloadLifecycle = readText(
@@ -363,10 +364,62 @@ function main() {
     "{!isDetailView ? (",
     "Discover selector is only rendered on collection pages",
   );
-  assertIncludes(
+  assertNotIncludes(
     discoverPanel,
     'className="discover-breadcrumb discover-hero-breadcrumb"',
-    "Discover detail breadcrumb is rendered in the fixed header",
+    "Discover detail pages do not render a second local breadcrumb",
+  );
+  const discoverAppDetailNavigation = extractSection(
+    app,
+    "const handleSelectDiscoverApp = (appId: string | null) => {",
+    "const handleSelectDiscoverSkill = (skillId: string | null) => {",
+    "Discover app detail navigation handler",
+  );
+  assertIncludes(
+    discoverAppDetailNavigation,
+    '!selectedDiscoverAppId',
+    "Discover app detail navigation only pushes the Apps grid once",
+  );
+  assertIncludes(
+    discoverAppDetailNavigation,
+    "pushNavSnapshot();",
+    "Discover app detail navigation records Apps grid lineage",
+  );
+  const discoverSkillDetailNavigation = extractSection(
+    app,
+    "const handleSelectDiscoverSkill = (skillId: string | null) => {",
+    "const handleOpenIntegrationsSettings = () => {",
+    "Discover skill detail navigation handler",
+  );
+  assertIncludes(
+    discoverSkillDetailNavigation,
+    '!selectedDiscoverSkillId',
+    "Discover skill detail navigation only pushes the Skills grid once",
+  );
+  assertIncludes(
+    discoverSkillDetailNavigation,
+    "pushNavSnapshot();",
+    "Discover skill detail navigation records Skills grid lineage",
+  );
+  assertIncludes(
+    app,
+    'navigateTo("/discover/apps", { replace: true });',
+    "direct Discover app detail fallback returns to Apps",
+  );
+  assertIncludes(
+    app,
+    'navigateTo("/discover/skills", { replace: true });',
+    "direct Discover skill detail fallback returns to Skills",
+  );
+  assertIncludes(
+    navSnapshot,
+    'if (routeSegments[1] === "apps") return "apps";',
+    "Discover app grid snapshots label the top back target as Apps",
+  );
+  assertIncludes(
+    navSnapshot,
+    'if (routeSegments[1] === "skills") return "skills";',
+    "Discover skill grid snapshots label the top back target as Skills",
   );
   assertIncludes(
     discoverPanel,

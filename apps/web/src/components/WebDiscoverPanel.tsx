@@ -1182,33 +1182,6 @@ export function WebDiscoverPanel(props: WebDiscoverPanelProps) {
             <div className="discover-title">{heroTitle}</div>
             <div className="discover-subtitle">{heroSubtitle}</div>
           </div>
-        ) : selectedApp ? (
-          <div className="discover-breadcrumb discover-hero-breadcrumb">
-            <button
-              type="button"
-              className="discover-breadcrumb-button"
-              onClick={() => onSelectApp(null)}
-            >
-              Apps
-            </button>
-            <span className="discover-breadcrumb-separator">›</span>
-            <span>{selectedApp.name}</span>
-          </div>
-        ) : selectedSkill ? (
-          <div className="discover-breadcrumb discover-hero-breadcrumb">
-            <button
-              type="button"
-              className="discover-breadcrumb-button"
-              onClick={() => {
-                onSelectSkill(null);
-                setSelectedSkillActionError(null);
-              }}
-            >
-              Skills
-            </button>
-            <span className="discover-breadcrumb-separator">›</span>
-            <span>{selectedSkill.name}</span>
-          </div>
         ) : null}
         {!isDetailView ? (
           <div className="discover-hero-actions">

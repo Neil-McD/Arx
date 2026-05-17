@@ -3155,6 +3155,13 @@ export default function App() {
 
   const backTargetSnapshot = navStackRef.current.length > 0 ? navStackRef.current[navStackRef.current.length - 1] : null;
   const backTargetLabel = backTargetSnapshot ? formatBackTargetLabelShared(backTargetSnapshot) : null;
+  const discoverDetailBackTargetLabel =
+    activePage === "discover" && discoverActiveTab === "apps" && selectedDiscoverAppId
+      ? "apps"
+      : activePage === "discover" && discoverActiveTab === "skills" && selectedDiscoverSkillId
+        ? "skills"
+        : null;
+  const effectiveBackTargetLabel = backTargetLabel ?? discoverDetailBackTargetLabel;
 
   const threadsHydratedRef = useRef(false);
   const lastCloudStatusRefreshAtRef = useRef(0);
@@ -6919,6 +6926,16 @@ export default function App() {
     };
 	  const handleTopbarBackToWorkspace = () => {
 	    if (goBack()) return;
+      if (activePage === "discover") {
+        if (discoverActiveTab === "apps" && selectedDiscoverAppId) {
+          navigateTo("/discover/apps", { replace: true });
+          return;
+        }
+        if (discoverActiveTab === "skills" && selectedDiscoverSkillId) {
+          navigateTo("/discover/skills", { replace: true });
+          return;
+        }
+      }
 	    const transition = deriveBackToWorkspaceFallbackTransition(
 	      { activeView },
 	      { forceHomeView: true },
@@ -6974,40 +6991,79 @@ export default function App() {
 		    if (!workspace.derived.resolvedActiveProjectId) return;
 		    handleStartDraftInCloudProject(workspace.derived.resolvedActiveProjectId);
 		  };
-	  const handleOpenDiscover = () => {
-	    const transition = deriveOpenDiscoverTransition({ activePage });
-	    if (transition.shouldPushSnapshot) pushNavSnapshot();
-      setDiscoverActiveTab("communities");
-      setSelectedDiscoverAppId(null);
-      setSelectedDiscoverSkillId(null);
-	    setActiveView(transition.nextView);
-	    setActivePage(transition.nextPage);
-	  };
-    const handleOpenDiscoverApps = () => {
-      const transition = deriveOpenDiscoverTransition({ activePage });
-      if (transition.shouldPushSnapshot) pushNavSnapshot();
+		  const handleOpenDiscover = () => {
+		    const transition = deriveOpenDiscoverTransition({ activePage });
+		    if (transition.shouldPushSnapshot) pushNavSnapshot();
+	      setDiscoverActiveTab("communities");
+	      setSelectedDiscoverAppId(null);
+	      setSelectedDiscoverSkillId(null);
+		    setActiveView(transition.nextView);
+		    setActivePage(transition.nextPage);
+		  };
+	    const handleOpenDiscoverApps = () => {
+	      const transition = deriveOpenDiscoverTransition({ activePage });
+	      if (transition.shouldPushSnapshot) pushNavSnapshot();
       setDiscoverActiveTab("apps");
       setSelectedDiscoverAppId(null);
       setSelectedDiscoverSkillId(null);
       setActiveView(transition.nextView);
       setActivePage(transition.nextPage);
+	    };
+	    const handleOpenDiscoverSkills = () => {
+	      const transition = deriveOpenDiscoverTransition({ activePage });
+	      if (transition.shouldPushSnapshot) pushNavSnapshot();
+	      setDiscoverActiveTab("skills");
+	      setSelectedDiscoverAppId(null);
+	      setSelectedDiscoverSkillId(null);
+	      setActiveView(transition.nextView);
+	      setActivePage(transition.nextPage);
+	    };
+    const handleSelectDiscoverTab = (tab: DiscoverTab) => {
+      setDiscoverActiveTab(tab);
+      if (tab !== "apps") {
+        setSelectedDiscoverAppId(null);
+      }
+      if (tab !== "skills") {
+        setSelectedDiscoverSkillId(null);
+      }
     };
-    const handleOpenDiscoverSkills = () => {
-      const transition = deriveOpenDiscoverTransition({ activePage });
-      if (transition.shouldPushSnapshot) pushNavSnapshot();
-      setDiscoverActiveTab("skills");
-      setSelectedDiscoverAppId(null);
-      setSelectedDiscoverSkillId(null);
-      setActiveView(transition.nextView);
-      setActivePage(transition.nextPage);
+    const handleSelectDiscoverApp = (appId: string | null) => {
+      const nextAppId = String(appId ?? "").trim() || null;
+      if (
+        nextAppId &&
+        activePage === "discover" &&
+        discoverActiveTab === "apps" &&
+        !selectedDiscoverAppId
+      ) {
+        pushNavSnapshot();
+      }
+      setSelectedDiscoverAppId(nextAppId);
+      if (nextAppId) {
+        setSelectedDiscoverSkillId(null);
+      }
     };
-    const handleOpenIntegrationsSettings = () => {
-      pushNavSnapshot();
-      setShouldOpenCreatePersonalSkill(false);
-      setActivePage("workspace");
-      setActiveView("settings");
-      setSettingsPage("integrations");
+    const handleSelectDiscoverSkill = (skillId: string | null) => {
+      const nextSkillId = String(skillId ?? "").trim() || null;
+      if (
+        nextSkillId &&
+        activePage === "discover" &&
+        discoverActiveTab === "skills" &&
+        !selectedDiscoverSkillId
+      ) {
+        pushNavSnapshot();
+      }
+      setSelectedDiscoverSkillId(nextSkillId);
+      if (nextSkillId) {
+        setSelectedDiscoverAppId(null);
+      }
     };
+	    const handleOpenIntegrationsSettings = () => {
+	      pushNavSnapshot();
+	      setShouldOpenCreatePersonalSkill(false);
+	      setActivePage("workspace");
+	      setActiveView("settings");
+	      setSettingsPage("integrations");
+	    };
     const handleOpenCreatePersonalSkill = () => {
       pushNavSnapshot();
       setShouldOpenCreatePersonalSkill(true);
@@ -8484,17 +8540,9 @@ export default function App() {
       activeTab: discoverActiveTab,
       selectedAppId: selectedDiscoverAppId,
       selectedSkillId: selectedDiscoverSkillId,
-      onSelectTab: (tab) => {
-        setDiscoverActiveTab(tab);
-        if (tab !== "apps") {
-          setSelectedDiscoverAppId(null);
-        }
-        if (tab !== "skills") {
-          setSelectedDiscoverSkillId(null);
-        }
-      },
-      onSelectApp: setSelectedDiscoverAppId,
-      onSelectSkill: setSelectedDiscoverSkillId,
+      onSelectTab: handleSelectDiscoverTab,
+      onSelectApp: handleSelectDiscoverApp,
+      onSelectSkill: handleSelectDiscoverSkill,
       hasSession: Boolean(session),
       isAuthRecoveringSignedIn: isAuthRecoveringSignedInAppShell,
       onRequireAuth: () => requireSignIn(),
@@ -8636,7 +8684,7 @@ export default function App() {
     isPublicCommunityFunnel,
     isPublicFunnelPreviewRoute: publicRoute.kind === "community_funnel_preview",
     hasBackTargetSnapshot: Boolean(backTargetSnapshot),
-    backTargetLabel: backTargetLabel ?? null,
+    backTargetLabel: effectiveBackTargetLabel ?? null,
     activeView,
     userWantsSessions,
     hasWorkspaceRightPanelControl: showWorkspaceRightPanelControl,
