@@ -20,6 +20,8 @@ type ActiveCommunity = {
   owner_id: string;
 };
 
+const MEMBERS_PAGE_SIZE = 25;
+
 type UserProfile = {
   display_name?: string | null;
   avatar_url?: string | null;
@@ -44,6 +46,7 @@ type WebCommunityMembersSectionProps = {
     hasResolvedCommunityMembers: boolean;
     communityMembersRoleFilter: string;
     communityMembersPlanFilter: string;
+    communityMembersPageIndex: number;
     activeCommunityMembersJoinReviewMode: CommunityMembersJoinReviewMode | null;
     communityJoinRequests: CommunityJoinRequest[];
     communityJoinRequestsError: string | null;
@@ -56,6 +59,7 @@ type WebCommunityMembersSectionProps = {
   actions: {
     setCommunityMembersRoleFilter: (value: string) => void;
     setCommunityMembersPlanFilter: (value: string) => void;
+    setCommunityMembersPageIndex: (value: number | ((previous: number) => number)) => void;
     setIsJoinRequestsModalOpen: (isOpen: boolean) => void;
     displayName: (userId: string) => string;
     handleSetCommunityFreeAccessMode: (mode: "open" | "approval") => Promise<void> | void;
@@ -122,7 +126,31 @@ export function WebCommunityMembersSection(props: WebCommunityMembersSectionProp
   const selectedMemberInitials = selectedMember
     ? memberFallbackInitials(selectedMemberDisplayName, selectedMember.user_id, actions)
     : "";
+  const setCommunityMembersPageIndex = actions.setCommunityMembersPageIndex;
   const visibleMembers = canManageMembers ? state.filteredCommunityMembers : state.communityMembers;
+  const filterIsActive = canManageMembers && (
+    state.communityMembersRoleFilter !== "all" ||
+    state.communityMembersPlanFilter !== "all"
+  );
+  const totalVisibleMembers = visibleMembers.length;
+  const maxMemberPageIndex = Math.max(0, Math.ceil(totalVisibleMembers / MEMBERS_PAGE_SIZE) - 1);
+  const memberPageIndex = Math.min(Math.max(0, state.communityMembersPageIndex), maxMemberPageIndex);
+  const memberPageStart = memberPageIndex * MEMBERS_PAGE_SIZE;
+  const memberPageEnd = Math.min(memberPageStart + MEMBERS_PAGE_SIZE, totalVisibleMembers);
+  const pagedMembers = visibleMembers.slice(memberPageStart, memberPageEnd);
+  const memberPageSummary = totalVisibleMembers > 0
+    ? `Showing ${memberPageStart + 1}-${memberPageEnd} of ${totalVisibleMembers} ${
+        filterIsActive ? "matching " : ""
+      }members`
+    : null;
+  const canGoToPreviousMemberPage = memberPageIndex > 0;
+  const canGoToNextMemberPage = memberPageEnd < totalVisibleMembers;
+  const shouldShowMemberPagination = totalVisibleMembers > MEMBERS_PAGE_SIZE;
+  useEffect(() => {
+    if (state.communityMembersPageIndex > maxMemberPageIndex) {
+      setCommunityMembersPageIndex(maxMemberPageIndex);
+    }
+  }, [maxMemberPageIndex, setCommunityMembersPageIndex, state.communityMembersPageIndex]);
 
   const handleCopyJoinPath = async () => {
     if (!joinUrl) return;
@@ -225,8 +253,8 @@ export function WebCommunityMembersSection(props: WebCommunityMembersSectionProp
             <div className="members-header-row">
               <div className="members-header">Members</div>
               <div className="members-count">
-                {canManageMembers && state.communityMembersRoleFilter !== "all"
-                  ? `${state.filteredCommunityMembers.length} / ${state.communityMembers.length}`
+                {filterIsActive
+                  ? `${totalVisibleMembers} / ${state.communityMembers.length}`
                   : state.communityMembers.length}
               </div>
             </div>
@@ -401,7 +429,7 @@ export function WebCommunityMembersSection(props: WebCommunityMembersSectionProp
               ) : visibleMembers.length === 0 ? (
                 <div className="members-empty">No matching members.</div>
               ) : (
-                visibleMembers.map((member) => {
+                pagedMembers.map((member) => {
                   const profile = state.profilesByUserId[member.user_id] ?? null;
                   const displayName =
                     String(profile?.display_name ?? actions.displayName(member.user_id) ?? "").trim()
@@ -471,6 +499,37 @@ export function WebCommunityMembersSection(props: WebCommunityMembersSectionProp
                 })
               )}
             </div>
+            {state.hasResolvedCommunityMembers && shouldShowMemberPagination ? (
+              <div className="members-pagination">
+                <div className="members-pagination-summary">{memberPageSummary}</div>
+                <div className="members-pagination-actions">
+                  {canGoToPreviousMemberPage ? (
+                    <button
+                      type="button"
+                      className="secondary"
+                      onClick={() =>
+                        setCommunityMembersPageIndex((previous) => Math.max(0, previous - 1))
+                      }
+                    >
+                      Previous
+                    </button>
+                  ) : null}
+                  {canGoToNextMemberPage ? (
+                    <button
+                      type="button"
+                      className="secondary"
+                      onClick={() =>
+                        setCommunityMembersPageIndex((previous) =>
+                          Math.min(maxMemberPageIndex, previous + 1),
+                        )
+                      }
+                    >
+                      Show 25 more
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
           </section>
 
           {activeCommunity && canManageMembers && (

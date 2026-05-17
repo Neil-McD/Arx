@@ -18,6 +18,7 @@ export function useWebCommunityPeopleController<
   const [hasResolvedCommunityMembers, setHasResolvedCommunityMembers] = useState(false);
   const [communityMembersRoleFilter, setCommunityMembersRoleFilter] = useState<string>("all");
   const [communityMembersPlanFilter, setCommunityMembersPlanFilter] = useState<string>("all");
+  const [communityMembersPageIndex, setCommunityMembersPageIndex] = useState(0);
   const [communityJoinRequests, setCommunityJoinRequests] = useState<TCommunityJoinRequest[]>([]);
   const [isLoadingCommunityJoinRequests, setIsLoadingCommunityJoinRequests] = useState(false);
   const [communityJoinRequestsError, setCommunityJoinRequestsError] = useState<string | null>(null);
@@ -31,6 +32,7 @@ export function useWebCommunityPeopleController<
     setHasResolvedCommunityMembers(false);
     setCommunityMembersRoleFilter("all");
     setCommunityMembersPlanFilter("all");
+    setCommunityMembersPageIndex(0);
     setCommunityJoinRequests([]);
     setCommunityJoinRequestsError(null);
     setIsLoadingCommunityJoinRequests(false);
@@ -38,6 +40,10 @@ export function useWebCommunityPeopleController<
     setIsJoinRequestsModalOpen(false);
     setIsSavingFreeAccessMode(false);
   }, [params.activeCommunityId]);
+
+  useEffect(() => {
+    setCommunityMembersPageIndex(0);
+  }, [communityMembersPlanFilter, communityMembersRoleFilter]);
 
   const filteredCommunityMembers = useMemo(() => {
     const roleFilter = (communityMembersRoleFilter ?? "all").trim().toLowerCase();
@@ -68,6 +74,8 @@ export function useWebCommunityPeopleController<
     setCommunityMembersRoleFilter,
     communityMembersPlanFilter,
     setCommunityMembersPlanFilter,
+    communityMembersPageIndex,
+    setCommunityMembersPageIndex,
     communityJoinRequests,
     setCommunityJoinRequests,
     isLoadingCommunityJoinRequests,

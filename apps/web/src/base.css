@@ -9604,6 +9604,36 @@ button.chat-reply-quote:hover {
   min-width: 0;
 }
 
+.members-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--hairline);
+  min-width: 0;
+}
+
+.members-pagination-summary {
+  min-width: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.members-pagination-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.members-pagination-actions button {
+  min-height: 34px;
+}
+
 .members-loading-shell {
   display: grid;
   gap: 10px;
@@ -10188,6 +10218,19 @@ button.chat-reply-quote:hover {
   .members-queue-button,
   .invite-create-shell {
     padding: 14px;
+  }
+
+  .members-pagination {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .members-pagination-actions {
+    justify-content: stretch;
+  }
+
+  .members-pagination-actions button {
+    flex: 1;
   }
 
   .members-policy-row {
