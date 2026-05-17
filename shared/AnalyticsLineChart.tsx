@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { formatCount } from "./contentFormatting";
 
 export type AnalyticsLineChartPoint = {
@@ -17,6 +17,7 @@ export function AnalyticsLineChart({
   const paddingX = 22;
   const paddingY = 22;
   const chartRef = useRef<HTMLDivElement | null>(null);
+  const reactId = useId();
   const [chartWidth, setChartWidth] = useState(720);
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const formatValue = valueFormatter ?? ((value: number) => formatCount(value));
@@ -70,7 +71,7 @@ export function AnalyticsLineChart({
 
   const startLabel = points[0]?.label ?? "";
   const endLabel = points[points.length - 1]?.label ?? "";
-  const gradientId = "analyticsAreaGradient";
+  const gradientId = `analyticsAreaGradient-${reactId.replace(/:/g, "")}`;
   const activeIndex = hoverIndex == null ? null : Math.min(Math.max(hoverIndex, 0), points.length - 1);
   const activeCoord = activeIndex == null ? null : coords[activeIndex];
   const activePoint = activeIndex == null ? null : points[activeIndex];

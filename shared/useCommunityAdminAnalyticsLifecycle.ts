@@ -9,22 +9,15 @@ export function useCommunityAdminAnalyticsLifecycle<TSession>(params: {
   activeCommunityId: string | null;
   canViewActiveCommunityAnalytics: boolean;
   communityAnalyticsRange: AnalyticsRange;
-  getCommunityCreatedAt: () => string | null;
   loadCommunityAnalytics: (
     communityId: string,
     session: TSession,
     range: AnalyticsRange,
-    communityCreatedAt: string | null,
   ) => Promise<void> | void;
   resetCommunityAnalytics: () => void;
 }) {
-  const getCommunityCreatedAtRef = useRef(params.getCommunityCreatedAt);
   const loadCommunityAnalyticsRef = useRef(params.loadCommunityAnalytics);
   const resetCommunityAnalyticsRef = useRef(params.resetCommunityAnalytics);
-
-  useEffect(() => {
-    getCommunityCreatedAtRef.current = params.getCommunityCreatedAt;
-  }, [params.getCommunityCreatedAt]);
 
   useEffect(() => {
     loadCommunityAnalyticsRef.current = params.loadCommunityAnalytics;
@@ -40,12 +33,10 @@ export function useCommunityAdminAnalyticsLifecycle<TSession>(params: {
       resetCommunityAnalyticsRef.current();
       return;
     }
-    const createdAt = getCommunityCreatedAtRef.current();
     void loadCommunityAnalyticsRef.current(
       params.activeCommunityId,
       params.session,
       params.communityAnalyticsRange,
-      createdAt,
     );
   }, [
     params.activePage,

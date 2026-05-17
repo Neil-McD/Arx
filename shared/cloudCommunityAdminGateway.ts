@@ -1,5 +1,6 @@
 import { bootstrapConvexAuthenticatedClient } from "./convexAuthenticatedClient";
 import { coerceGatewayRows, firstGatewayRow, parseGatewayNumberLike } from "./cloudGateway";
+import type { CommunityAnalyticsSnapshot } from "./communityTypes";
 
 type CloudCommunityAdminGatewayParams<SessionT> = {
   session: SessionT;
@@ -262,6 +263,21 @@ export async function fetchCloudCommunityAnalyticsSummary<SessionT>(
     range: params.range,
   });
   return firstGatewayRow<CloudCommunityAnalyticsSummaryRow>(payload);
+}
+
+export async function fetchCloudCommunityAnalyticsSnapshot<SessionT>(
+  params: CloudCommunityAdminGatewayParams<SessionT> & {
+    communityId: string;
+    range: string;
+  },
+): Promise<CommunityAnalyticsSnapshot | null> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  const payload = await client.query("community:getCommunityAnalyticsSnapshot" as any, {
+    authSubject,
+    communityId: params.communityId,
+    range: params.range,
+  });
+  return firstGatewayRow<CommunityAnalyticsSnapshot>(payload);
 }
 
 export async function fetchCloudCommunityEntitledMemberCount<SessionT>(

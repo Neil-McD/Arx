@@ -9,24 +9,17 @@ import {
   type SessionLike,
   type UserProfileDetailLike,
   type UserProfileLike,
-  buildAnalyticsSeries,
-  buildAnalyticsValueSeries,
   emptyAnalyticsMetricSeries,
   emptyAnalyticsSummary,
-  resolveAnalyticsBucket,
-  resolveAnalyticsWindowStart,
   trimProfileFields,
 } from "./communityAdminCore";
 
 import {
   listCloudCommunityMembershipAdminRows,
-  listCloudCommunityMembershipCreatedAtRows,
 } from "./cloudCommunityMembershipGateway";
 import {
   banCloudCommunityMember,
-  fetchCloudCommunityAnalyticsSummary,
-  listCloudCommunityFunnelVisitCreatedAtRows,
-  listCloudCommunityRevenueSeriesRows,
+  fetchCloudCommunityAnalyticsSnapshot,
   removeCloudCommunityMember,
   setCloudCommunityMemberRole,
 } from "./cloudCommunityAdminGateway";
@@ -48,7 +41,6 @@ type UseCommunityAdminControllerArgs<
   session: SessionT | null;
   ensureSession?: EnsureSessionFn<SessionT>;
   parseContentRangeTotal: (value: string | null) => number | null;
-  dateKeyLocal: (date: Date) => string;
   ensureCommunityChatThread: (communityId: string, session: SessionT) => Promise<string>;
   confirmAction?: (message: string) => boolean;
   reloadCommunities: (session: SessionT) => Promise<void>;
@@ -334,7 +326,6 @@ export function useCommunityAdminController<
     communityId: string,
     session: SessionT,
     range: AnalyticsRange,
-    communityCreatedAt: string | null,
   ) => {
     const current = argsRef.current;
     const usableSession = await resolveUsableSession(session, current.ensureSession);
@@ -343,102 +334,17 @@ export function useCommunityAdminController<
     current.setIsLoadingCommunityAnalytics(true);
     current.setCommunityAnalyticsError(null);
 
-    const now = Date.now();
-    const windowStart = resolveAnalyticsWindowStart({
-      range,
-      nowMs: now,
-      communityCreatedAt,
-    });
-    const sinceWindowIso = windowStart ? windowStart.toISOString() : null;
-    const chartBucket = resolveAnalyticsBucket(range);
-
     try {
-      let summary = null;
-      try {
-        summary = await fetchCloudCommunityAnalyticsSummary({
-          session: usableSession,
-          communityId,
-          range,
-        });
-      } catch {
-        // The canonical analytics query may not be deployed yet during staged Convex releases.
-      }
-
-      let memberJoinsWindow: Array<{ created_at: string }> = [];
-      try {
-        memberJoinsWindow = await listCloudCommunityMembershipCreatedAtRows({
-          session: usableSession,
-          communityId,
-          sinceIso: sinceWindowIso,
-          limit: 5000,
-        });
-      } catch {
-        // ignore
-      }
-
-      let visitRowsWindow: Array<{ created_at: string }> = [];
-      try {
-        visitRowsWindow = await listCloudCommunityFunnelVisitCreatedAtRows({
-          session: usableSession,
-          communityId,
-          sinceIso: sinceWindowIso,
-          limit: 5000,
-        });
-      } catch {
-        // The funnel visit row query may not be deployed yet during staged Convex releases.
-      }
-
-      let revenueRows: Array<{ bucket_start: string; net_base_units: number | string | null }> = [];
-      try {
-        revenueRows = await listCloudCommunityRevenueSeriesRows({
-          session: usableSession,
-          communityId,
-          range,
-        });
-      } catch {
-        // Revenue series is best-effort until the community billing analytics query is available.
-      }
+      const snapshot = await fetchCloudCommunityAnalyticsSnapshot({
+        session: usableSession,
+        communityId,
+        range,
+      });
 
       if (communityAnalyticsLoadSeqRef.current !== seq) return;
 
-      const memberSeries = buildAnalyticsSeries({
-        rows: memberJoinsWindow,
-        start: windowStart ?? new Date(now - 30 * 86400000),
-        bucket: chartBucket,
-        dateKeyLocal: current.dateKeyLocal,
-      });
-      const visitSeries = buildAnalyticsSeries({
-        rows: visitRowsWindow,
-        start: windowStart ?? new Date(now - 30 * 86400000),
-        bucket: chartBucket,
-        dateKeyLocal: current.dateKeyLocal,
-      });
-      const revenueSeries = buildAnalyticsValueSeries({
-        rows: revenueRows.map((row) => ({
-          bucket_start: row.bucket_start,
-          value: row.net_base_units,
-        })),
-        bucket: chartBucket,
-      });
-
-      current.setCommunityAnalyticsSummary({
-        total_members: summary?.total_members ?? null,
-        page_visits_window: summary?.page_visits_window ?? null,
-        new_members_window: summary?.new_members_window ?? memberJoinsWindow.length,
-        conversion_rate_window: summary?.conversion_rate_window ?? null,
-        mrr_base_units: summary?.mrr_base_units ?? null,
-        currency: summary?.currency ?? null,
-        currency_decimals: summary?.currency_decimals ?? null,
-        active_members_window: null,
-        retention_window: null,
-        total_resources: null,
-        resources_added_window: null,
-      });
-      current.setCommunityAnalyticsSeries({
-        visits: visitSeries,
-        members: memberSeries,
-        revenue: revenueSeries,
-      });
+      current.setCommunityAnalyticsSummary(snapshot?.summary ?? emptyAnalyticsSummary());
+      current.setCommunityAnalyticsSeries(snapshot?.series ?? emptyAnalyticsMetricSeries());
     } catch (error) {
       if (communityAnalyticsLoadSeqRef.current !== seq) return;
       const message = typeof error === "string"

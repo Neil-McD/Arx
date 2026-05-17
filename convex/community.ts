@@ -4,6 +4,7 @@ import {
   countCommunityMemberships as countCommunityMembershipsImpl,
   denyCommunityJoinRequest as denyCommunityJoinRequestImpl,
   getCommunityMemberSettings as getCommunityMemberSettingsImpl,
+  getCommunityAnalyticsSnapshot as getCommunityAnalyticsSnapshotImpl,
   getCommunityAnalyticsSummary as getCommunityAnalyticsSummaryImpl,
   listCommunityFunnelVisitCreatedAtRows as listCommunityFunnelVisitCreatedAtRowsImpl,
   listCommunityPricePoints as listCommunityPricePointsImpl,
@@ -154,6 +155,7 @@ export const removeCommunityMember = removeCommunityMemberImpl;
 export const banCommunityMember = banCommunityMemberImpl;
 export const unbanCommunityUser = unbanCommunityUserImpl;
 export const getCommunityMemberSettings = getCommunityMemberSettingsImpl;
+export const getCommunityAnalyticsSnapshot = getCommunityAnalyticsSnapshotImpl;
 export const getCommunityAnalyticsSummary = getCommunityAnalyticsSummaryImpl;
 export const listCommunityFunnelVisitCreatedAtRows = listCommunityFunnelVisitCreatedAtRowsImpl;
 export const saveCommunityMemberSettings = saveCommunityMemberSettingsImpl;

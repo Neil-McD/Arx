@@ -47,6 +47,12 @@ import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
 
 type AnalyticsRangeValue = "7d" | "30d" | "90d" | "1y" | "all";
 type AnalyticsBucketValue = "day" | "week" | "month";
+type AnalyticsPointOutput = {
+  label: string;
+  value: number;
+};
+
+const MAX_ANALYTICS_SNAPSHOT_EVENT_ROWS = 10_000;
 
 const ACTIVE_RECURRING_SUBSCRIPTION_STATUSES = new Set([
   "active",
@@ -110,6 +116,66 @@ function buildAnalyticsBucketStarts(params: {
     starts.push(cursor);
   }
   return starts;
+}
+
+function analyticsBucketLabel(date: Date, bucket: AnalyticsBucketValue): string {
+  if (bucket === "month") {
+    return date.toLocaleDateString("en-US", {
+      month: "short",
+      year: "2-digit",
+      timeZone: "UTC",
+    });
+  }
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  });
+}
+
+function buildAnalyticsCountSeries(params: {
+  rows: Array<{ createdAt: number }>;
+  bucketStarts: Date[];
+  bucket: AnalyticsBucketValue;
+}): AnalyticsPointOutput[] {
+  const counts = new Map<number, number>();
+  const firstBucketStartMs = params.bucketStarts[0]?.getTime() ?? 0;
+  for (const row of params.rows) {
+    if (!Number.isFinite(row.createdAt) || row.createdAt < firstBucketStartMs) continue;
+    const bucketStartMs = startOfAnalyticsBucket(row.createdAt, params.bucket).getTime();
+    counts.set(bucketStartMs, (counts.get(bucketStartMs) ?? 0) + 1);
+  }
+  return params.bucketStarts.map((bucketStart) => ({
+    label: analyticsBucketLabel(bucketStart, params.bucket),
+    value: counts.get(bucketStart.getTime()) ?? 0,
+  }));
+}
+
+function buildAnalyticsRecurringRevenueSeries(params: {
+  rows: Array<{
+    createdAt: number;
+    endedAt: number | null;
+    amountBaseUnits: number;
+  }>;
+  bucketStarts: Date[];
+  bucket: AnalyticsBucketValue;
+  nowMs: number;
+}): AnalyticsPointOutput[] {
+  return params.bucketStarts.map((bucketStart, index) => {
+    const nextBucketStart =
+      params.bucketStarts[index + 1] ?? addAnalyticsBucket(bucketStart, params.bucket);
+    const bucketStartMs = bucketStart.getTime();
+    const bucketEndMs = Math.min(nextBucketStart.getTime() - 1, params.nowMs);
+    const value = params.rows.reduce((sum, row) => {
+      if (row.createdAt > bucketEndMs) return sum;
+      if (row.endedAt != null && row.endedAt < bucketStartMs) return sum;
+      return sum + row.amountBaseUnits;
+    }, 0);
+    return {
+      label: analyticsBucketLabel(bucketStart, params.bucket),
+      value,
+    };
+  });
 }
 
 async function resolveCommunityMemberIdentity(ctx: any, userRowId: any) {
@@ -1675,6 +1741,149 @@ export const getCommunityAnalyticsSummary = query({
       mrr_base_units: mixedCurrency ? null : mrrBaseUnits,
       currency: mixedCurrency ? null : currency,
       currency_decimals: mixedCurrency ? null : currencyDecimals,
+    };
+  },
+});
+
+export const getCommunityAnalyticsSnapshot = query({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+    range: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      userId: args.userId,
+      authSubject: args.authSubject ?? null,
+    });
+    (args as { userId?: any }).userId = userId;
+    const range = normalizeAnalyticsRange(args.range);
+    const { community, rows } = await listCommunityMembershipRowsForManager({
+      ctx,
+      communityId: args.communityId,
+      userId,
+      authSubject: args.authSubject ?? null,
+    });
+
+    const nowMs = Date.now();
+    const sinceMs = resolveAnalyticsWindowStartMs({
+      range,
+      nowMs,
+      communityCreatedAt: community.createdAt,
+    });
+    const bucket = resolveAnalyticsBucket(range);
+    const bucketStarts = buildAnalyticsBucketStarts({
+      startMs: sinceMs,
+      endMs: nowMs,
+      bucket,
+    });
+
+    const memberRowsWindow = rows.filter((row) => row.createdAt >= sinceMs);
+    const visitRows = (await ctx.db
+      .query("communityAnalyticsEvents" as any)
+      .withIndex("by_community_event_createdAt", (q: any) =>
+        q
+          .eq("communityId", args.communityId)
+          .eq("eventType", "funnel_visit")
+          .gte("createdAt", sinceMs),
+      )
+      .take(MAX_ANALYTICS_SNAPSHOT_EVENT_ROWS)) as Array<{ createdAt: number }>;
+
+    const subscriptions = (await ctx.db
+      .query("communitySubscriptions" as any)
+      .withIndex("by_community_status", (q: any) => q.eq("communityId", args.communityId))
+      .collect()) as CommunitySubscriptionLike[];
+    const pricePointCache = new Map<string, CommunityPricePointLike | null>();
+    const monthlyRows: Array<{
+      createdAt: number;
+      endedAt: number | null;
+      amountBaseUnits: number;
+    }> = [];
+    let mrrBaseUnits = 0;
+    let currency: string | null = null;
+    let currencyDecimals: number | null = null;
+    let mixedCurrency = false;
+
+    for (const subscription of subscriptions) {
+      const status = String(subscription.status ?? "");
+      const isCurrentRecurring = ACTIVE_RECURRING_SUBSCRIPTION_STATUSES.has(status);
+      const endedAtRaw = Number(subscription.endedAt ?? NaN);
+      const endedAt = Number.isFinite(endedAtRaw)
+        ? endedAtRaw
+        : isCurrentRecurring
+          ? null
+          : Number(subscription.updatedAt ?? NaN);
+      if (!isCurrentRecurring && !Number.isFinite(Number(endedAt))) continue;
+
+      const pricePointId = String(subscription.pricePointId);
+      if (!pricePointCache.has(pricePointId)) {
+        pricePointCache.set(
+          pricePointId,
+          (await ctx.db.get(subscription.pricePointId as any)) as CommunityPricePointLike | null,
+        );
+      }
+      const pricePoint = pricePointCache.get(pricePointId);
+      if (!pricePoint) continue;
+      const rowCurrency = String(pricePoint.currency ?? "").trim().toUpperCase() || null;
+      const rowDecimals = Math.max(0, Math.floor(pricePoint.currencyDecimals ?? 0));
+      if (currency && rowCurrency && currency !== rowCurrency) mixedCurrency = true;
+      currency = currency ?? rowCurrency;
+      currencyDecimals = currencyDecimals ?? rowDecimals;
+      const period = String(pricePoint.billingPeriod ?? "").trim().toLowerCase();
+      const monthlyBaseUnits =
+        period === "annual"
+          ? Math.round(Math.max(0, pricePoint.amountBaseUnits) / 12)
+          : Math.max(0, Math.floor(pricePoint.amountBaseUnits));
+      if (isCurrentRecurring) {
+        mrrBaseUnits += monthlyBaseUnits;
+      }
+      monthlyRows.push({
+        createdAt: subscription.createdAt,
+        endedAt: endedAt == null ? null : endedAt,
+        amountBaseUnits: monthlyBaseUnits,
+      });
+    }
+
+    return {
+      range,
+      bucket,
+      generated_at: toIsoString(nowMs),
+      summary: {
+        page_visits_window: visitRows.length,
+        total_members: 1 + rows.length,
+        new_members_window: memberRowsWindow.length,
+        conversion_rate_window:
+          visitRows.length > 0 ? memberRowsWindow.length / visitRows.length : null,
+        mrr_base_units: mixedCurrency ? null : mrrBaseUnits,
+        currency: mixedCurrency ? null : currency,
+        currency_decimals: mixedCurrency ? null : currencyDecimals,
+        active_members_window: null,
+        retention_window: null,
+        total_resources: null,
+        resources_added_window: null,
+      },
+      series: {
+        visits: buildAnalyticsCountSeries({
+          rows: visitRows,
+          bucketStarts,
+          bucket,
+        }),
+        members: buildAnalyticsCountSeries({
+          rows: memberRowsWindow,
+          bucketStarts,
+          bucket,
+        }),
+        revenue: mixedCurrency
+          ? []
+          : buildAnalyticsRecurringRevenueSeries({
+            rows: monthlyRows,
+            bucketStarts,
+            bucket,
+            nowMs,
+          }),
+      },
     };
   },
 });

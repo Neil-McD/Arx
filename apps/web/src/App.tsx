@@ -50,7 +50,7 @@ import {
   DEFAULT_EMPTY_THREAD_LANDING, normalizeCommunityAgentDraftForSave, normalizeCommunityAgentLanding, type CommunityAgentLanding, } from "../../../shared/communityAgentLanding";
 import { normalizeCommunityFunnelConfig } from "../../../shared/communityFunnel";
 import {
-  buildCsv, dateKeyLocal, formatChatTime, formatCount, formatMoneyBaseUnits, formatPercent, formatRelativeTimeFromIso as formatRelativeTime, parseContentRangeTotal, } from "../../../shared/contentFormatting";
+  buildCsv, formatChatTime, formatCount, formatMoneyBaseUnits, formatPercent, formatRelativeTimeFromIso as formatRelativeTime, parseContentRangeTotal, } from "../../../shared/contentFormatting";
 import {
   formatAccountTierLabel, isAccountTierFree, formatPlanPrice, formatSubscriptionPrice, type StripeConnectReturn, } from "../../../shared/accountCommerce";
 import { canUseCreatorDevTierOverride } from "../../../shared/devTierOverride";
@@ -3375,7 +3375,6 @@ export default function App() {
     activeCommunityId,
     ...authenticatedSessionArg,
     parseContentRangeTotal,
-    dateKeyLocal,
     ensureCommunityChatThread,
     confirmAction: (message) => confirm(message),
     reloadCommunities: loadCommunities,
@@ -5009,7 +5008,6 @@ export default function App() {
     activeCommunityId,
     canViewActiveCommunityAnalytics,
     communityAnalyticsRange,
-    getCommunityCreatedAt: () => communities.find((community) => community.id === activeCommunityId)?.created_at ?? null,
     loadCommunityAnalytics,
     resetCommunityAnalytics,
   });

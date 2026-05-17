@@ -220,6 +220,15 @@ export type CommunityAnalyticsSeries = {
 };
 
 export type AnalyticsRange = "7d" | "30d" | "90d" | "1y" | "all";
+export type AnalyticsBucket = "day" | "week" | "month";
+
+export type CommunityAnalyticsSnapshot = {
+  range: AnalyticsRange;
+  bucket: AnalyticsBucket;
+  generated_at: string;
+  summary: CommunityAnalyticsSummary;
+  series: CommunityAnalyticsSeries;
+};
 
 export type CommunityPricingMode = "free" | "monthly" | "annual";
 
