@@ -7867,22 +7867,26 @@ button.chat-reply-quote:hover {
   border: 0;
   padding: 0;
   background: transparent;
-  color: var(--text-faint);
+  color: var(--text-secondary);
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  font: inherit;
+  gap: 7px;
+  font-family: var(--font-mono);
   font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  line-height: 1;
   cursor: pointer;
   width: fit-content;
+  transition: color 0.15s ease;
 }
 
 .resources-back-btn svg {
-  width: 15px;
-  height: 15px;
+  width: 18px;
+  height: 18px;
   fill: none;
   stroke: currentColor;
-  stroke-width: 1.8;
+  stroke-width: 2;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
