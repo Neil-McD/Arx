@@ -468,7 +468,7 @@ function ResourceCard(props: {
 
 export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
   const { capabilities, state, actions } = props;
-  const [selectedModuleId, setSelectedModuleId] = useState<string | null>(null);
+  const selectedModuleId = state.selectedModuleId;
   const [viewerResourceId, setViewerResourceId] = useState<string | null>(null);
   const [pendingDeleteResourceId, setPendingDeleteResourceId] = useState<string | null>(null);
   const [isDeletingResource, setIsDeletingResource] = useState(false);
@@ -543,10 +543,11 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
     isRefreshingResources && !hasResourceContent && !hasCompletedResourceLoadRef.current;
 
   useEffect(() => {
-    if (selectedModuleId && !selectedModule) {
-      setSelectedModuleId(null);
+    if (selectedModuleId && !selectedModule && !isRefreshingResources) {
+      if (!hasResourceContent && !hasCompletedResourceLoadRef.current) return;
+      actions.handleSelectModule(null);
     }
-  }, [selectedModule, selectedModuleId]);
+  }, [actions, hasResourceContent, isRefreshingResources, selectedModule, selectedModuleId]);
 
   useEffect(() => {
     if (viewerResourceId && !viewerResource) {
@@ -644,7 +645,7 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
         <div className="feed-header-row">
           <div className="feed-header-copy">
             {selectedModule ? (
-              <button className="resources-back-btn" type="button" onClick={() => setSelectedModuleId(null)}>
+              <button className="resources-back-btn" type="button" onClick={() => actions.handleSelectModule(null)}>
                 <BackIcon />
                 <span>Resources</span>
               </button>
@@ -722,7 +723,7 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
                 <ResourceModuleCard
                   key={module.id}
                   module={module}
-                  onOpen={() => setSelectedModuleId(module.id)}
+                  onOpen={() => actions.handleSelectModule(module.id)}
                   onEdit={() => actions.handleEditModule(module)}
                   onDelete={() => void actions.handleDeleteModule(module.id)}
                   canManage={capabilities.canOperateResources && !module.is_virtual}

@@ -25,6 +25,7 @@ export type AppRouteState = {
   settingsPage: SettingsPage;
   communitySlug: string | null;
   communityTab: CommunityTab;
+  communityResourceModuleId?: string | null;
   discoverTab?: DiscoverTab | null;
   discoverAppId?: string | null;
   discoverSkillId?: string | null;
@@ -38,6 +39,7 @@ export type AppRoutePathState = {
   settingsPage: SettingsPage;
   communitySlug: string | null;
   communityTab: CommunityTab;
+  communityResourceModuleId?: string | null;
   discoverTab?: DiscoverTab | null;
   discoverAppId?: string | null;
   discoverSkillId?: string | null;
@@ -147,6 +149,7 @@ export function buildSettingsPath(settingsPage: SettingsPage): string {
 export function buildCommunityTabPath(
   communitySlug: string | null | undefined,
   communityTab: CommunityTab,
+  communityResourceModuleId?: string | null,
 ): string | null {
   const slug = String(communitySlug ?? "").trim();
   if (!slug) return null;
@@ -156,6 +159,10 @@ export function buildCommunityTabPath(
       : communityTab === "ai_feed"
         ? "ai-feed"
         : communityTab;
+  const moduleId = String(communityResourceModuleId ?? "").trim();
+  if (communityTab === "resources" && moduleId) {
+    return `/c/${encodeURIComponent(slug)}/${tabSegment}/${encodeURIComponent(moduleId)}`;
+  }
   return `/c/${encodeURIComponent(slug)}/${tabSegment}`;
 }
 
@@ -420,12 +427,16 @@ function parseAppRouteFromPathname(pathname: string): AppRoutePathState | null {
   if (segments[0] === "c" && segments.length >= 3) {
     const slug = String(segments[1] ?? "").trim() || null;
     if (!slug) return null;
+    const communityTab = parseCommunityTabSegment(segments[2] ?? null);
+    const communityResourceModuleId =
+      communityTab === "resources" ? String(segments[3] ?? "").trim() || null : null;
     return {
       page: "community",
       view: "home",
       settingsPage: "agent",
       communitySlug: slug,
-      communityTab: parseCommunityTabSegment(segments[2] ?? null),
+      communityTab,
+      communityResourceModuleId,
       threadId: null,
     };
   }
@@ -468,6 +479,7 @@ export function readAppRouteFromLocation(): AppRouteState {
       settingsPage: fromPath.settingsPage,
       communitySlug: fromPath.communitySlug,
       communityTab: fromPath.communityTab,
+      communityResourceModuleId: fromPath.communityResourceModuleId ?? null,
       discoverTab: fromPath.discoverTab ?? "communities",
       discoverAppId: fromPath.discoverAppId ?? null,
       discoverSkillId: fromPath.discoverSkillId ?? null,
@@ -509,7 +521,7 @@ export function buildAppRoutePath(state: AppRoutePathState): string | null {
   }
 
   if (state.page === "community") {
-    return buildCommunityTabPath(state.communitySlug, state.communityTab);
+    return buildCommunityTabPath(state.communitySlug, state.communityTab, state.communityResourceModuleId);
   }
 
   if (state.page === "docs") {

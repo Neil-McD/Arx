@@ -34,11 +34,13 @@ export type CommunityResourcesState = {
   isLoadingResourceModules: boolean;
   modules: CommunityResourceModule[];
   resources: CommunityResource[];
+  selectedModuleId: string | null;
   openResourceEmbedId: string | null;
 };
 
 export type CommunityResourcesActions = {
   setOpenResourceEmbedId: (id: string | null) => void;
+  handleSelectModule: (moduleId: string | null) => void;
   openNewModuleModal: () => void;
   handleEditModule: (module: CommunityResourceModule) => void;
   handleDeleteModule: (moduleId: string) => Promise<boolean> | boolean;

@@ -1871,6 +1871,11 @@ export default function App() {
     });
   const [profilesByUserId, setProfilesByUserId] = useState<Record<string, UserProfile>>({});
   const [communityTab, setCommunityTab] = useState<CommunityTab>(() => initialAppRoute?.communityTab ?? "chat");
+  const [communityResourceModuleId, setCommunityResourceModuleId] = useState<string | null>(() =>
+    initialAppRoute?.page === "community" && initialAppRoute.communityTab === "resources"
+      ? initialAppRoute.communityResourceModuleId ?? null
+      : null,
+  );
   const {
     activeCommunity,
     activeCommunityId,
@@ -2883,6 +2888,11 @@ export default function App() {
         communitySlug: normalizedCommunitySlug,
         communityTab: nextAppRoute.communityTab,
       });
+      setCommunityResourceModuleId(
+        nextAppRoute.communityTab === "resources" ? nextAppRoute.communityResourceModuleId ?? null : null,
+      );
+    } else {
+      setCommunityResourceModuleId(null);
     }
     if (nextAppRoute.page === "workspace" && nextAppRoute.view === "home") {
       setActiveThreadId(nextThreadId);
@@ -3033,6 +3043,8 @@ export default function App() {
         settingsPage,
         communitySlug: selectedActiveCommunitySlug,
         communityTab,
+        communityResourceModuleId:
+          activePage === "community" && communityTab === "resources" ? communityResourceModuleId : null,
         discoverTab: discoverActiveTab,
         discoverAppId: selectedDiscoverAppId,
         discoverSkillId: selectedDiscoverSkillId,
@@ -4262,6 +4274,7 @@ export default function App() {
     settingsPage,
     activeCommunitySlug: selectedActiveCommunitySlug,
     communityTab,
+    communityResourceModuleId,
     discoverTab: discoverActiveTab,
     discoverAppId: selectedDiscoverAppId,
     discoverSkillId: selectedDiscoverSkillId,
@@ -7338,10 +7351,12 @@ export default function App() {
         isLoadingResourceModules,
         modules: communityResourceModules,
         resources: communityResources,
+        selectedModuleId: communityResourceModuleId,
         openResourceEmbedId,
       },
       resourcesActions: {
         setOpenResourceEmbedId,
+        handleSelectModule: setCommunityResourceModuleId,
         openNewModuleModal,
         handleEditModule,
         handleDeleteModule,
@@ -7733,6 +7748,7 @@ export default function App() {
     </button>
   ) : null;
   const handleSelectCommunityTab = useCallback((tab: CommunityTab) => {
+    setCommunityResourceModuleId(null);
     if (tab === "chat") {
       setUnreadCount(0);
       setIsUserAtBottom(true);
