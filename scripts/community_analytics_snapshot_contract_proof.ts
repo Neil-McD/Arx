@@ -131,13 +131,8 @@ assertIncludes(
 );
 assertIncludes(
   analyticsChart,
-  "useState<number | null>(null)",
-  "chart does not render from a stale fallback width",
-);
-assertIncludes(
-  analyticsChart,
-  "chartWidth == null",
-  "chart waits for a measured width before rendering SVG geometry",
+  "useState(720)",
+  "chart renders immediately while measurement catches up",
 );
 assertIncludes(
   analyticsChart,
@@ -146,8 +141,8 @@ assertIncludes(
 );
 assertNotIncludes(
   analyticsChart,
-  "useState(720)",
-  "chart does not initialize with a compressed fallback width",
+  "chartWidth == null",
+  "chart does not get stuck in a blank measurement placeholder",
 );
 assertIncludes(
   workspaceUserDataPanel,

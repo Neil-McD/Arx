@@ -19,7 +19,7 @@ export function AnalyticsLineChart({
   const paddingY = 22;
   const chartRef = useRef<HTMLDivElement | null>(null);
   const reactId = useId();
-  const [chartWidth, setChartWidth] = useState<number | null>(null);
+  const [chartWidth, setChartWidth] = useState(720);
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const formatValue = valueFormatter ?? ((value: number) => formatCount(value));
 
@@ -54,18 +54,6 @@ export function AnalyticsLineChart({
 
   const startLabel = points[0]?.label ?? "";
   const endLabel = points[points.length - 1]?.label ?? "";
-
-  if (chartWidth == null) {
-    return (
-      <div className="analytics-line-chart" ref={chartRef} aria-hidden="true">
-        <div className="analytics-chart-placeholder" style={{ height }} />
-        <div className="analytics-chart-axis">
-          <span>{startLabel}</span>
-          <span>{endLabel}</span>
-        </div>
-      </div>
-    );
-  }
 
   const width = Math.max(chartWidth, paddingX * 2 + 1);
   const maxValue = Math.max(1, ...points.map((point) => point.value));

@@ -16365,10 +16365,6 @@ button.message-citation-chip:hover {
   display: block;
 }
 
-.analytics-chart-placeholder {
-  width: 100%;
-}
-
 .analytics-chart-grid {
   stroke: var(--border-muted);
   stroke-width: 1;
