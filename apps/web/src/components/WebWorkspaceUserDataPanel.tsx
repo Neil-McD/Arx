@@ -540,7 +540,11 @@ export function CommunityPanelContent(props: WorkspaceUserDataPanelDataProps) {
     setIsRecentSignalsAtBottom(true);
   }, [community?.id]);
 
-  const recentSignalsCount = community?.recentSignals.length ?? 0;
+  const panelRecentSignals = useMemo(
+    () => community?.recentSignals.filter((signal) => signal.kind !== "member") ?? [],
+    [community?.recentSignals],
+  );
+  const recentSignalsCount = panelRecentSignals.length;
   const updateRecentSignalsScrollState = useCallback(() => {
     const viewport = recentSignalsViewportRef.current;
     if (!viewport || !isRecentSignalsExpanded) {
@@ -578,11 +582,11 @@ export function CommunityPanelContent(props: WorkspaceUserDataPanelDataProps) {
   }
 
   const visibleRecentSignals = isRecentSignalsExpanded
-    ? community.recentSignals
-    : community.recentSignals.slice(0, WORKSPACE_PANEL_COLLAPSED_SIGNAL_LIMIT);
-  const canExpandRecentSignals = community.recentSignals.length > WORKSPACE_PANEL_COLLAPSED_SIGNAL_LIMIT;
+    ? panelRecentSignals
+    : panelRecentSignals.slice(0, WORKSPACE_PANEL_COLLAPSED_SIGNAL_LIMIT);
+  const canExpandRecentSignals = panelRecentSignals.length > WORKSPACE_PANEL_COLLAPSED_SIGNAL_LIMIT;
   const hasExtendedRecentSignals =
-    isRecentSignalsExpanded && community.recentSignals.length > WORKSPACE_PANEL_EXPANDED_SIGNAL_VIEWPORT_ITEMS;
+    isRecentSignalsExpanded && panelRecentSignals.length > WORKSPACE_PANEL_EXPANDED_SIGNAL_VIEWPORT_ITEMS;
   const scrollRecentSignalsToBottom = () => {
     const viewport = recentSignalsViewportRef.current;
     if (!viewport) return;
@@ -602,7 +606,7 @@ export function CommunityPanelContent(props: WorkspaceUserDataPanelDataProps) {
       });
       return;
     }
-    if (community.recentSignals.length > WORKSPACE_PANEL_EXPANDED_SIGNAL_VIEWPORT_ITEMS) {
+    if (panelRecentSignals.length > WORKSPACE_PANEL_EXPANDED_SIGNAL_VIEWPORT_ITEMS) {
       setIsRecentSignalsAtBottom(false);
     }
   };
@@ -649,7 +653,7 @@ export function CommunityPanelContent(props: WorkspaceUserDataPanelDataProps) {
           </div>
         </section>
       ) : null}
-      {community.recentSignals.length > 0 ? (
+      {panelRecentSignals.length > 0 ? (
         <section className="workspace-community-section">
           <div className="workspace-community-section__title">Recent signal</div>
           <div
