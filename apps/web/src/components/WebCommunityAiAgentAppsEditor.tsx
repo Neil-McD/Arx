@@ -62,25 +62,22 @@ function buildMountStatusLabel(
   effectiveApp: EffectiveMcpApp | null,
 ): string {
   if (effectiveApp?.live_for_current_user) {
-    return `${pluralizeTools(effectiveApp.effective_tool_count)} active`;
+    return pluralizeTools(effectiveApp.effective_tool_count);
   }
   const enabledCount = mount.tools.filter((tool) => tool.enabled).length;
-  if (enabledCount > 0) return `${pluralizeTools(enabledCount)} enabled`;
-  if (mount.tools.length > 0) return "0 tools enabled";
+  if (enabledCount > 0) return pluralizeTools(enabledCount);
   return "0 tools";
 }
 
 function buildMountDetail(
   mount: CommunityMountedApp,
   effectiveApp: EffectiveMcpApp | null,
-): string {
-  if (effectiveApp?.live_for_current_user) {
-    return `${pluralizeTools(effectiveApp.effective_tool_count)} available through your personal harness for this community.`;
-  }
+): string | null {
+  if (effectiveApp?.live_for_current_user) return null;
   if (effectiveApp?.credential_state === "needs_personal_setup") {
-    return `${mount.app.name} is added to this community. Connect it in your personal harness to use its tools.`;
+    return "Set up your connection to use this app.";
   }
-  return `${mount.app.name} is added to this community.`;
+  return null;
 }
 
 export type WebCommunityAiAgentAppsEditorProps = {
@@ -172,6 +169,7 @@ export function WebCommunityAiAgentAppsEditor(
               mount,
               effectiveMcpApps,
             );
+            const appDetail = buildMountDetail(mount, effectiveApp);
             return (
               <div key={mount.id} className="integration-mounted-row" role="listitem">
                 <div className="integration-mounted-top">
@@ -191,16 +189,12 @@ export function WebCommunityAiAgentAppsEditor(
                         <span className="integration-status-pill">
                           {buildMountStatusLabel(mount, effectiveApp)}
                         </span>
-                        <span className="integration-status-pill">
-                          Community app
-                        </span>
                       </div>
-                      <div className="integration-mounted-meta">
-                        {mount.app.endpoint_url}
-                      </div>
-                      <div className="integration-mounted-detail">
-                        {buildMountDetail(mount, effectiveApp)}
-                      </div>
+                      {appDetail ? (
+                        <div className="integration-mounted-detail">
+                          {appDetail}
+                        </div>
+                      ) : null}
                     </div>
                   </div>
                   <div className="integration-mounted-rail">

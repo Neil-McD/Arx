@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AuthSessionLike } from "../../../../shared/authSession";
 import { UserAvatar } from "../../../../shared/UserAvatar";
+import { DiscoverCatalogLogo } from "./DiscoverCatalogLogo";
 import {
   formatWorkspaceToolBalanceUsdFromCredits,
 } from "../../../../shared/workspaceCredits";
@@ -46,6 +47,15 @@ export type WorkspaceUserPanelRecentSignal = {
 export type WorkspaceUserPanelIntegration = {
   id: string;
   name: string;
+  logoUrl: string | null;
+  logoUrlDark: string | null;
+  stateLabel: string;
+  stateTone: "live" | "setup" | "not-live" | "disabled";
+  toolCountLabel: string;
+  enabled: boolean;
+  canToggle: boolean;
+  canSetup: boolean;
+  isBusy: boolean;
 };
 
 export type WorkspaceUserDataPanelDataProps = {
@@ -70,6 +80,11 @@ export type WorkspaceUserDataPanelDataProps = {
   onOpenCreateCommunity: () => void;
   onOpenActiveCommunity: () => void;
   onOpenActiveCommunitySettings: () => void;
+  onOpenWorkspaceIntegrationSetup: () => void;
+  onToggleCommunityIntegration: (
+    communityAppMountId: string,
+    enabled: boolean,
+  ) => Promise<boolean> | boolean | Promise<void> | void;
   isLoadingCommunityMemberSettings: boolean;
   communityMemberSettingsError: string | null;
   onToggleCommunityMute: (muted: boolean) => Promise<void> | void;
@@ -520,16 +535,15 @@ export function CommunityPanelContent(props: WorkspaceUserDataPanelDataProps) {
               disabled={props.isLoadingCommunityMemberSettings}
               onChange={(event) => void props.onToggleCommunityMute(event.target.checked)}
             />
-            <span>Mute</span>
+            <span>{community.muted ? "Unmute" : "Mute"}</span>
           </label>
         </div>
       </section>
       {props.communityMemberSettingsError ? (
         <div className="workspace-community-note">{props.communityMemberSettingsError}</div>
       ) : null}
-      <section className="workspace-community-section">
-        <div className="workspace-community-section__title">Online</div>
-        {community.onlineFaces.length > 0 ? (
+      {community.onlineFaces.length > 0 ? (
+        <section className="workspace-community-section">
           <div className="workspace-community-online-strip" aria-label="People online now">
             {community.onlineFaces.map((face) => (
               <UserAvatar
@@ -547,8 +561,8 @@ export function CommunityPanelContent(props: WorkspaceUserDataPanelDataProps) {
               />
             ))}
           </div>
-        ) : null}
-      </section>
+        </section>
+      ) : null}
       {community.recentSignals.length > 0 ? (
         <section className="workspace-community-section">
           <div className="workspace-community-section__title">Recent signal</div>
@@ -567,7 +581,66 @@ export function CommunityPanelContent(props: WorkspaceUserDataPanelDataProps) {
           <div className="workspace-community-integration-list">
             {community.integrations.map((integration) => (
               <div key={integration.id} className="workspace-community-integration-row">
-                {integration.name}
+                <div className="workspace-community-integration-identity">
+                  <DiscoverCatalogLogo
+                    name={integration.name}
+                    logoUrl={integration.logoUrl}
+                    logoUrlDark={integration.logoUrlDark}
+                  />
+                  <div className="workspace-community-integration-copy">
+                    <div className="workspace-community-integration-title-row">
+                      <strong>{integration.name}</strong>
+                      <span
+                        className={`integration-state-indicator is-${integration.stateTone}`}
+                      >
+                        <span aria-hidden="true" />
+                        {integration.stateLabel}
+                      </span>
+                    </div>
+                    <div className="workspace-community-integration-meta">
+                      {integration.toolCountLabel}
+                    </div>
+                  </div>
+                </div>
+                {integration.canSetup || integration.canToggle ? (
+                  <div className="workspace-community-integration-actions">
+                    {integration.canSetup ? (
+                      <button
+                        type="button"
+                        className="workspace-community-integration-setup"
+                        onClick={props.onOpenWorkspaceIntegrationSetup}
+                      >
+                        Set up
+                      </button>
+                    ) : null}
+                    {integration.canToggle ? (
+                      <label
+                        className={`members-switch workspace-community-integration-switch${
+                          integration.isBusy ? " is-disabled" : ""
+                        }`}
+                        title={integration.enabled ? "Disable app" : "Enable app"}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={integration.enabled}
+                          disabled={integration.isBusy}
+                          aria-label={`${integration.enabled ? "Disable" : "Enable"} ${
+                            integration.name
+                          }`}
+                          onChange={(event) =>
+                            void props.onToggleCommunityIntegration(
+                              integration.id,
+                              event.target.checked,
+                            )
+                          }
+                        />
+                        <span className="members-switch-track">
+                          <span className="members-switch-thumb" />
+                        </span>
+                      </label>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
             ))}
           </div>

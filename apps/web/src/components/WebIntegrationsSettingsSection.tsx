@@ -115,8 +115,8 @@ function buildEffectiveHarnessSummary(apps: EffectiveMcpApp[]): string {
     (app) => !app.live_for_current_user && app.credential_state === "needs_personal_setup",
   ).length;
   const notLiveCount = apps.length - liveCount;
-  const scopeLabel = `${apps.length} harness apps`;
-  if (apps.length === 0) return "No apps are connected to your harness yet.";
+  const scopeLabel = `${apps.length} ${apps.length === 1 ? "app" : "apps"}`;
+  if (apps.length === 0) return "No apps connected yet.";
   if (notLiveCount === 0) return `${scopeLabel}. ${liveCount} live.`;
   if (setupCount === notLiveCount) {
     return `${scopeLabel}. ${liveCount} live, ${setupCount} need setup.`;
@@ -142,23 +142,18 @@ function buildEffectiveAppStateClassName(app: EffectiveMcpApp): string {
 }
 
 function buildEffectiveAppStatusLabel(app: EffectiveMcpApp): string {
-  if (!app.live_for_current_user) {
-    return `${buildEffectiveAppStateLabel(app)} · ${pluralizeTools(app.effective_tool_count)}`;
-  }
-  return `${pluralizeTools(app.effective_tool_count)} active`;
+  return pluralizeTools(app.effective_tool_count);
 }
 
-function buildEffectiveAppDetail(app: EffectiveMcpApp): string {
-  if (app.live_for_current_user && app.is_attached_to_community && app.has_personal_mount) {
-    return `${pluralizeTools(app.effective_tool_count)} available through your personal harness.`;
-  }
-  if (app.live_for_current_user) {
-    return `${pluralizeTools(app.effective_tool_count)} available in your personal harness.`;
-  }
+function buildEffectiveAppDetail(app: EffectiveMcpApp): string | null {
+  if (app.live_for_current_user) return null;
   if (app.credential_state === "needs_personal_setup" && app.is_attached_to_community) {
-    return `${app.app.name} is added by this community, but needs your personal connection before tools go live for you.`;
+    return "Set up your connection to use this app.";
   }
-  return `${buildEffectiveAppStateLabel(app)} in your harness.`;
+  if (app.credential_state === "needs_personal_setup") {
+    return "Set up your connection to use this app.";
+  }
+  return null;
 }
 
 export function WebIntegrationsSettingsSection(
@@ -320,11 +315,10 @@ export function WebIntegrationsSettingsSection(
             <rect x="4" y="14" width="6" height="6" rx="1.5" />
             <rect x="14" y="14" width="6" height="6" rx="1.5" />
           </svg>
-          Active harness apps
+          Connected apps
         </div>
         <div className="settings-section-desc">
-          Your personal harness is the executable MCP source. Community
-          apps resolve to the same app state when present.
+          Apps available to workspace tools.
         </div>
         {session ? (
           <div className="model-note">
@@ -359,13 +353,11 @@ export function WebIntegrationsSettingsSection(
             !isLoadingEffectiveMcpApps &&
             visibleEffectiveMcpApps.length === 0 ? (
               <div className="model-note">
-                No apps are connected to your harness yet. Use `Connect apps` to
-                browse the catalog.
+                No apps connected yet. Use `Connect apps` to browse the catalog.
               </div>
             ) : null}
             {visibleEffectiveMcpApps.map((effectiveApp) => {
               const personalMount = effectiveApp.personal_mount;
-              const communityMount = effectiveApp.community_mount;
               const actionMount = personalMount;
               const sourceMountId = actionMount?.source_mount_id ?? null;
               const canManagePersonal = Boolean(actionMount && sourceMountId);
@@ -388,6 +380,7 @@ export function WebIntegrationsSettingsSection(
                   catalogEntry &&
                     isDiscoverAppPersonallyConnectable(catalogEntry),
                 );
+              const appDetail = buildEffectiveAppDetail(effectiveApp);
               return (
                 <div
                   key={effectiveApp.app_identity_key}
@@ -414,20 +407,12 @@ export function WebIntegrationsSettingsSection(
                           <span className="integration-status-pill">
                             {buildEffectiveAppStatusLabel(effectiveApp)}
                           </span>
-                          <span className="integration-status-pill">
-                            {effectiveApp.is_attached_to_community
-                              ? effectiveApp.has_personal_mount
-                                ? "Personal + community"
-                                : "Community"
-                              : "Personal"}
-                          </span>
                         </div>
-                        <div className="integration-mounted-meta">
-                          {effectiveApp.app.endpoint_url}
-                        </div>
-                        <div className="integration-mounted-detail">
-                          {buildEffectiveAppDetail(effectiveApp)}
-                        </div>
+                        {appDetail ? (
+                          <div className="integration-mounted-detail">
+                            {appDetail}
+                          </div>
+                        ) : null}
                       </div>
                     </div>
                     {canManagePersonal && sourceMountId ? (
@@ -579,13 +564,7 @@ export function WebIntegrationsSettingsSection(
                           >
                             Set up
                           </button>
-                        ) : (
-                          <span className="integration-status-pill">
-                            {communityMount
-                              ? "Added by community"
-                              : "Open Discover to set up"}
-                          </span>
-                        )}
+                        ) : null}
                       </div>
                     )}
                   </div>

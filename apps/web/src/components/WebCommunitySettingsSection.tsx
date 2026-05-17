@@ -4,7 +4,6 @@ import type { CommunitySettingsLayer } from "../../../../shared/communityAccessV
 import { CommunityAvatar } from "../../../../shared/CommunityAvatar";
 import type { AccountCommerceStatus } from "../../../../shared/accountCommerceStatusGateway";
 import { getCommunityBannerImageStyle } from "../../../../shared/communityBannerUi";
-import { formatStripeConnectCountry } from "../../../../shared/stripeConnectCountries";
 import { buildPlatformSwitcherStyle } from "../../../../shared/platformSwitcherUi";
 import { buildStripeConnectPresentation } from "../controllers/buildStripeConnectPresentation";
 import { usePersonalAppSetupController } from "../controllers/usePersonalAppSetupController";
@@ -14,7 +13,6 @@ import {
 } from "../lib/discoverCatalog";
 import { findDiscoverCatalogEntryForAppIdentity } from "../lib/discoverCatalogMatching";
 import { DiscoverCatalogLogo } from "./DiscoverCatalogLogo";
-import { StripeConnectCountrySelect } from "./StripeConnectCountrySelect";
 import { StripeSetupButton } from "./StripeSetupButton";
 import { PersonalAppSetupModal } from "./PersonalAppSetupModal";
 import type { CommunityMountedApp } from "../../../../shared/communityAppMountTypes";
@@ -52,7 +50,6 @@ type WebCommunitySettingsSectionProps = {
   startStripeConnectOnboarding: (opts?: {
     context?: "account" | "community";
     communitySlug?: string | null;
-    country?: string | null;
   }) => Promise<void> | void;
   isStartingStripeConnectOnboarding: boolean;
   communityIntegrations: {
@@ -256,28 +253,23 @@ function buildCommunityAddedAppStatusLabel(args: {
   mount: CommunityMountedApp;
   effectiveApp: EffectiveMcpApp | null;
 }): string {
-  if (args.effectiveApp?.live_for_current_user) {
-    return `${pluralizeTools(args.effectiveApp.effective_tool_count)} active`;
-  }
-  const stateLabel = buildCommunityAddedAppStateLabel(args);
   const toolCount =
-    args.effectiveApp?.effective_tool_count ?? args.mount.enabled_tools.length;
-  if (stateLabel === "Disabled") return `Disabled · ${pluralizeTools(toolCount)}`;
-  if (stateLabel === "Added") return `${pluralizeTools(toolCount)} available`;
-  return `${stateLabel} · ${pluralizeTools(toolCount)}`;
+    args.effectiveApp?.effective_tool_count || args.mount.enabled_tools.length;
+  return pluralizeTools(toolCount);
 }
 
 function buildCommunityAddedAppDetail(args: {
   mount: CommunityMountedApp;
   effectiveApp: EffectiveMcpApp | null;
-}): string {
-  if (args.effectiveApp?.live_for_current_user) {
-    return `${pluralizeTools(args.effectiveApp.effective_tool_count)} available through your personal harness for this community.`;
-  }
+}): string | null {
+  if (args.effectiveApp?.live_for_current_user) return null;
   if (args.effectiveApp?.credential_state === "needs_personal_setup") {
-    return `${args.mount.app.name} is added to this community. Connect it in your personal harness to use its tools.`;
+    return "Set up your connection to use this app.";
   }
-  return `Added to this community. Auth ${toStatusLabel(args.mount.app.auth_type)} · Connection ${toStatusLabel(args.mount.connection.connection_status)} · Validation ${toStatusLabel(args.mount.app.status)}`;
+  if (args.mount.app.status !== "valid" || args.mount.live_status !== "live") {
+    return `Connection ${toStatusLabel(args.mount.connection.connection_status)} · Validation ${toStatusLabel(args.mount.app.status)}`;
+  }
+  return null;
 }
 
 function buildPersonalOptInInput(args: {
@@ -461,6 +453,10 @@ function CommunityIntegrationsSettingsSection({
               mount,
               effectiveApp,
             });
+            const appDetail = buildCommunityAddedAppDetail({
+              mount,
+              effectiveApp,
+            });
             const canSetupPersonal =
               Boolean(
                 catalogEntry &&
@@ -492,19 +488,12 @@ function CommunityIntegrationsSettingsSection({
                         <span className="integration-status-pill">
                           {statusLabel}
                         </span>
-                        <span className="integration-status-pill">
-                          Added to community
-                        </span>
                       </div>
-                      <div className="integration-mounted-meta">
-                        {mount.app.endpoint_url}
-                      </div>
-                      <div className="integration-mounted-detail">
-                        {buildCommunityAddedAppDetail({
-                          mount,
-                          effectiveApp,
-                        })}
-                      </div>
+                      {appDetail ? (
+                        <div className="integration-mounted-detail">
+                          {appDetail}
+                        </div>
+                      ) : null}
                     </div>
                   </div>
                   {canManage || !hasPersonalMount || canSetupPersonal ? (
@@ -876,7 +865,6 @@ function CommunityMonetizationConfigSection({
   startStripeConnectOnboarding: (opts?: {
     context?: "account" | "community";
     communitySlug?: string | null;
-    country?: string | null;
   }) => Promise<void> | void;
   isStartingStripeConnectOnboarding: boolean;
   canManagePublishing: boolean;
@@ -898,16 +886,6 @@ function CommunityMonetizationConfigSection({
   const canAcceptCharges = stripeConnectPresentation.isReady;
   const canMonetizeCommunities = Number(accountCommerceStatus?.platform_fee_bps ?? 0) > 0;
   const needsStripeConnect = !canMonetizeCommunities || !canAcceptCharges;
-  const storedStripeConnectCountry = accountCommerceStatus?.stripe_connect.country ?? null;
-  const [stripeConnectCountry, setStripeConnectCountry] = useState("");
-  useEffect(() => {
-    if (storedStripeConnectCountry) {
-      setStripeConnectCountry(storedStripeConnectCountry);
-    }
-  }, [storedStripeConnectCountry]);
-  const selectedStripeConnectCountry = stripeConnectCountry || storedStripeConnectCountry || "";
-  const stripeConnectCountryLabel = formatStripeConnectCountry(selectedStripeConnectCountry);
-  const needsStripeConnectCountry = !canAcceptCharges && !selectedStripeConnectCountry;
 
   return (
     <div className="settings-section">
@@ -1016,16 +994,6 @@ function CommunityMonetizationConfigSection({
           ) : null}
           {canManagePayoutAccount ? (
             <div className="create-community-actions" style={{ marginTop: 12 }}>
-              {canAcceptCharges && stripeConnectCountryLabel ? (
-                <span className="auth-status">Country: {stripeConnectCountryLabel}</span>
-              ) : (
-                <StripeConnectCountrySelect
-                  value={selectedStripeConnectCountry}
-                  disabled={isStartingStripeConnectOnboarding}
-                  onChange={setStripeConnectCountry}
-                  style={{ margin: 0, minWidth: 220 }}
-                />
-              )}
               <StripeSetupButton
                 label={
                   isStartingStripeConnectOnboarding
@@ -1036,10 +1004,9 @@ function CommunityMonetizationConfigSection({
                   void startStripeConnectOnboarding({
                     context: "community",
                     communitySlug: activeCommunity.slug,
-                    country: selectedStripeConnectCountry || null,
                   })
                 }
-                disabled={isStartingStripeConnectOnboarding || needsStripeConnectCountry}
+                disabled={isStartingStripeConnectOnboarding}
               />
             </div>
           ) : canAcceptCharges ? null : (

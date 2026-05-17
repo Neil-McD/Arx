@@ -22375,19 +22375,13 @@ button.message-citation-chip:hover {
   min-width: 0;
   display: grid;
   gap: 8px;
-  padding: 4px 0 0;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.workspace-community-section:first-child {
-  border-top: 0;
-  padding-top: 0;
+  padding: 2px 0 0;
 }
 
 .workspace-community-section__title {
-  color: var(--text-primary);
-  font-size: 13px;
-  font-weight: 800;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
   line-height: 1.25;
 }
 
@@ -22399,7 +22393,7 @@ button.message-citation-chip:hover {
   gap: 12px;
   color: var(--text-primary);
   font-size: 13px;
-  font-weight: 800;
+  font-weight: 750;
 }
 
 .workspace-community-mute-toggle {
@@ -22409,7 +22403,7 @@ button.message-citation-chip:hover {
   gap: 7px;
   color: var(--text-secondary);
   font-size: 12px;
-  font-weight: 750;
+  font-weight: 550;
   line-height: 1;
   cursor: pointer;
 }
@@ -22451,14 +22445,13 @@ button.message-citation-chip:hover {
 .workspace-community-signal-list,
 .workspace-community-integration-list {
   display: grid;
-  gap: 0;
+  gap: 8px;
 }
 
 .workspace-community-signal-row,
 .workspace-community-integration-row {
   min-width: 0;
-  padding: 8px 0;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 0;
   color: var(--text-secondary);
   font-size: 12px;
   font-weight: 650;
@@ -22468,10 +22461,102 @@ button.message-citation-chip:hover {
   white-space: nowrap;
 }
 
-.workspace-community-signal-row:first-child,
-.workspace-community-integration-row:first-child {
-  border-top: 0;
-  padding-top: 2px;
+.workspace-community-integration-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.workspace-community-integration-identity {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.workspace-community-integration-identity .discover-catalog-logo {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+}
+
+.workspace-community-integration-identity .discover-catalog-logo-image {
+  width: 19px;
+  height: 19px;
+}
+
+.workspace-community-integration-identity .discover-catalog-logo-fallback {
+  font-size: 10px;
+}
+
+.workspace-community-integration-copy {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.workspace-community-integration-title-row {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.workspace-community-integration-title-row strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.workspace-community-integration-meta {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.2;
+}
+
+.workspace-community-integration-actions {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.workspace-community-integration-setup {
+  border: 0;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-card) 92%, white 8%);
+  color: var(--text-primary);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 8px 10px;
+  cursor: pointer;
+}
+
+.workspace-community-integration-setup:hover {
+  background: color-mix(in srgb, var(--bg-card) 84%, white 16%);
+}
+
+.workspace-community-integration-switch .members-switch-track {
+  width: 38px;
+  height: 23px;
+}
+
+.workspace-community-integration-switch .members-switch-thumb {
+  top: 3px;
+  left: 3px;
+  width: 17px;
+  height: 17px;
+}
+
+.workspace-community-integration-switch input:checked + .members-switch-track .members-switch-thumb {
+  transform: translateX(15px);
 }
 
 .workspace-summary-block {
