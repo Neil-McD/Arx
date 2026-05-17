@@ -17,7 +17,7 @@ export function buildStripeConnectPresentation(args: {
 }): StripeConnectPresentation {
   const stripeConnect = args.accountCommerceStatus?.stripe_connect ?? null;
   const status = stripeConnect?.status ?? "not_connected";
-  const isReady = stripeConnect?.can_accept_charges === true;
+  const isReady = stripeConnect?.can_receive_community_revenue === true;
   const requirementsPreview = stripeConnect?.requirements_currently_due?.slice(0, 3) ?? [];
   const hasRequirementsPreview = requirementsPreview.length > 0;
   const platformFeePercent = Number(args.accountCommerceStatus?.platform_fee_bps ?? 0) / 100;

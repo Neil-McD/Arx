@@ -37,6 +37,11 @@ import {
   attachStripeCustomerToUser,
   ensureStripeCustomerForUser,
 } from "./stripeCustomers";
+import {
+  canReceiveCommunityRevenue,
+  getStripeConnectDestinationAccountId,
+  type StripeConnectRevenueDestinationLike,
+} from "./stripeConnectAccountCore";
 
 type CommunityCheckoutSessionRow = {
   _id: any;
@@ -304,24 +309,9 @@ export const resolvePublicCommunityCheckoutConfigInternal = internalQuery({
       {
         userId: community.ownerId,
       },
-    )) as {
-      stripeAccountId?: unknown;
-      status?: unknown;
-      chargesEnabled?: unknown;
-      payoutsEnabled?: unknown;
-      transfersEnabled?: unknown;
-    } | null;
-    const destinationAccountId =
-      typeof connectAccount?.stripeAccountId === "string" && connectAccount.stripeAccountId.trim()
-        ? connectAccount.stripeAccountId.trim()
-        : null;
-    const connectStatus = String(connectAccount?.status ?? "").trim().toLowerCase();
-    const canAcceptCharges =
-      destinationAccountId !== null &&
-      connectStatus === "ready" &&
-      connectAccount?.payoutsEnabled === true &&
-      (connectAccount?.chargesEnabled === true || connectAccount?.transfersEnabled === true);
-    if (!canAcceptCharges) {
+    )) as StripeConnectRevenueDestinationLike | null;
+    const destinationAccountId = getStripeConnectDestinationAccountId(connectAccount);
+    if (!canReceiveCommunityRevenue(connectAccount) || destinationAccountId === null) {
       throw new Error("community_checkout_unavailable");
     }
     return {

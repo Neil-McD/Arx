@@ -13,6 +13,14 @@ export type StripeConnectStatus =
 
 export type StoredStripeConnectStatus = Exclude<StripeConnectStatus, "not_connected">;
 
+export type StripeConnectRevenueDestinationLike = {
+  stripeAccountId?: unknown;
+  status?: unknown;
+  chargesEnabled?: unknown;
+  payoutsEnabled?: unknown;
+  transfersEnabled?: unknown;
+};
+
 export function normalizeStripeConnectRequirementList(raw: unknown): string[] {
   if (!Array.isArray(raw)) return [];
   return raw
@@ -45,6 +53,25 @@ export function deriveStoredStripeConnectStatus(args: {
   if (args.requirementsDisabledReason) return "restricted";
   if (!args.detailsSubmitted) return "onboarding_required";
   return "pending_requirements";
+}
+
+export function getStripeConnectDestinationAccountId(
+  account: StripeConnectRevenueDestinationLike | null | undefined,
+): string | null {
+  const accountId = String(account?.stripeAccountId ?? "").trim();
+  return accountId || null;
+}
+
+export function canReceiveCommunityRevenue(
+  account: StripeConnectRevenueDestinationLike | null | undefined,
+): boolean {
+  const connectStatus = String(account?.status ?? "").trim().toLowerCase();
+  return (
+    getStripeConnectDestinationAccountId(account) !== null &&
+    connectStatus === "ready" &&
+    account?.payoutsEnabled === true &&
+    (account?.chargesEnabled === true || account?.transfersEnabled === true)
+  );
 }
 
 export function buildStripeConnectAccountSnapshot(

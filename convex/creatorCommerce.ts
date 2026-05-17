@@ -12,9 +12,9 @@ import {
 import { recordCriticalAuditEventBestEffort } from "./criticalAudit";
 import { readCanonicalPublicAppOrigin } from "./publicAppUrl";
 import {
+  getStripeConnectCountryPolicy,
   isSupportedStripeConnectCountry,
   normalizeStripeConnectCountry,
-  stripeConnectCountryUsesRecipientServiceAgreement,
 } from "../shared/stripeConnectCountries";
 
 const STRIPE_CONNECT_CONTEXT_VALIDATOR = v.union(
@@ -152,10 +152,20 @@ function buildStripeConnectAccountCreateIdempotencyKey(args: {
 }): string {
   const userId = normalizeDiagnosticString(args.userId, "unknown");
   const country = normalizeStripeConnectCountry(args.country) ?? "unknown";
+  const policy = getStripeConnectCountryPolicy(country);
+  const policyKey = policy
+    ? [
+        "v2",
+        policy.accountType,
+        policy.serviceAgreement,
+        policy.requestCardPayments ? "cards" : "no_cards",
+        policy.requestTransfers ? "transfers" : "no_transfers",
+      ].join(":")
+    : "v2:unknown";
   const existingStripeAccountId = normalizeDiagnosticString(args.existingStripeAccountId);
   return existingStripeAccountId
-    ? `polynet-connect-account:replace:${userId}:${existingStripeAccountId}:${country}`
-    : `polynet-connect-account:create:${userId}:${country}`;
+    ? `polynet-connect-account:replace:${policyKey}:${userId}:${existingStripeAccountId}:${country}`
+    : `polynet-connect-account:create:${policyKey}:${userId}:${country}`;
 }
 
 function stripeConnectCountryCanBeRecreated(account: Stripe.Account): boolean {
@@ -249,17 +259,18 @@ async function createStripeExpressAccountForUser(args: {
 }) {
   const country = normalizeStripeConnectCountry(args.country);
   if (!country) throw new Error("stripe_connect_country_required");
-  const usesRecipientServiceAgreement = stripeConnectCountryUsesRecipientServiceAgreement(country);
+  const policy = getStripeConnectCountryPolicy(country);
+  if (!policy) throw new Error("stripe_connect_country_required");
   return await args.stripe.accounts.create(
     {
       type: "express",
       country,
       email: normalizeOptionalStripeConnectString(args.email, 200) ?? undefined,
       capabilities: {
-        ...(usesRecipientServiceAgreement ? {} : { card_payments: { requested: true } }),
+        ...(policy.requestCardPayments ? { card_payments: { requested: true } } : {}),
         transfers: { requested: true },
       },
-      tos_acceptance: usesRecipientServiceAgreement
+      tos_acceptance: policy.serviceAgreement === "recipient"
         ? { service_agreement: "recipient" }
         : undefined,
       metadata: {

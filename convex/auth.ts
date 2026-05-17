@@ -9,6 +9,7 @@ import {
 import { resolveAuthenticatedIdentityProfile } from "./authIdentity";
 import { canUseCreatorDevTierOverride } from "../shared/devTierOverride";
 import { ensurePlatformHomeCommunityMembership } from "./platformHomeCommunity";
+import { canReceiveCommunityRevenue } from "./stripeConnectAccountCore";
 
 type CanonicalTier = "free" | "architect";
 type EffectiveTier = "anon_free" | "auth_free" | "architect";
@@ -308,6 +309,7 @@ export const getAccountCommerceStatus = query({
       requirements_eventually_due: string[];
       requirements_disabled_reason: string | null;
       onboarding_complete_at: number | null;
+      can_receive_community_revenue: boolean;
       can_accept_charges: boolean;
     };
   } | null> => {
@@ -347,6 +349,7 @@ export const getAccountCommerceStatus = query({
       stripeConnectStatusRaw === "restricted"
         ? stripeConnectStatusRaw
         : "not_connected";
+    const canReceiveRevenue = canReceiveCommunityRevenue(stripeConnect);
 
     return {
       user_id: actor.authSubject,
@@ -391,10 +394,8 @@ export const getAccountCommerceStatus = query({
           Number.isFinite(stripeConnect.onboardingCompleteAt)
             ? stripeConnect.onboardingCompleteAt
             : null,
-        can_accept_charges:
-          stripeConnectStatus === "ready" &&
-          stripeConnect?.payoutsEnabled === true &&
-          (stripeConnect?.chargesEnabled === true || stripeConnect?.transfersEnabled === true),
+        can_receive_community_revenue: canReceiveRevenue,
+        can_accept_charges: canReceiveRevenue,
       },
     };
   },

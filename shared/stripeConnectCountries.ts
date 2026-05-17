@@ -105,6 +105,15 @@ export const STRIPE_CONNECT_COUNTRIES = [
 ] as const;
 
 export type StripeConnectCountryCode = (typeof STRIPE_CONNECT_COUNTRIES)[number]["code"];
+export type StripeConnectServiceAgreement = "full" | "recipient";
+
+export type StripeConnectCountryPolicy = {
+  country: StripeConnectCountryCode;
+  accountType: "express";
+  serviceAgreement: StripeConnectServiceAgreement;
+  requestCardPayments: boolean;
+  requestTransfers: true;
+};
 
 const STRIPE_CONNECT_COUNTRY_BY_CODE = new Map(
   STRIPE_CONNECT_COUNTRIES.map((country) => [country.code, country]),
@@ -112,6 +121,18 @@ const STRIPE_CONNECT_COUNTRY_BY_CODE = new Map(
 const STRIPE_CONNECT_RECIPIENT_SERVICE_AGREEMENT_COUNTRIES = new Set<StripeConnectCountryCode>([
   "KW",
 ]);
+
+function buildStripeConnectCountryPolicy(country: StripeConnectCountryCode): StripeConnectCountryPolicy {
+  const serviceAgreement: StripeConnectServiceAgreement =
+    STRIPE_CONNECT_RECIPIENT_SERVICE_AGREEMENT_COUNTRIES.has(country) ? "recipient" : "full";
+  return {
+    country,
+    accountType: "express",
+    serviceAgreement,
+    requestCardPayments: serviceAgreement === "full",
+    requestTransfers: true,
+  };
+}
 
 export function normalizeStripeConnectCountry(raw: unknown): StripeConnectCountryCode | null {
   const value = String(raw ?? "").trim().toUpperCase();
@@ -132,6 +153,10 @@ export function formatStripeConnectCountry(raw: unknown): string {
 }
 
 export function stripeConnectCountryUsesRecipientServiceAgreement(raw: unknown): boolean {
+  return getStripeConnectCountryPolicy(raw)?.serviceAgreement === "recipient";
+}
+
+export function getStripeConnectCountryPolicy(raw: unknown): StripeConnectCountryPolicy | null {
   const code = normalizeStripeConnectCountry(raw);
-  return code ? STRIPE_CONNECT_RECIPIENT_SERVICE_AGREEMENT_COUNTRIES.has(code) : false;
+  return code ? buildStripeConnectCountryPolicy(code) : null;
 }

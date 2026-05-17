@@ -707,9 +707,9 @@ function CommunityMonetizationConfigSection({
     accountCommerceStatus,
     surface: "community",
   });
-  const canAcceptCharges = stripeConnectPresentation.isReady;
+  const canReceiveCommunityRevenue = stripeConnectPresentation.isReady;
   const canMonetizeCommunities = Number(accountCommerceStatus?.platform_fee_bps ?? 0) > 0;
-  const needsStripeConnect = !canMonetizeCommunities || !canAcceptCharges;
+  const needsStripeConnect = !canMonetizeCommunities || !canReceiveCommunityRevenue;
   const storedStripeConnectCountry = accountCommerceStatus?.stripe_connect.country ?? null;
   const [stripeConnectCountry, setStripeConnectCountry] = useState("");
   useEffect(() => {
@@ -719,7 +719,7 @@ function CommunityMonetizationConfigSection({
   }, [storedStripeConnectCountry]);
   const selectedStripeConnectCountry = stripeConnectCountry || storedStripeConnectCountry || "";
   const stripeConnectCountryLabel = formatStripeConnectCountry(selectedStripeConnectCountry);
-  const needsStripeConnectCountry = !canAcceptCharges && !selectedStripeConnectCountry;
+  const needsStripeConnectCountry = !canReceiveCommunityRevenue && !selectedStripeConnectCountry;
 
   return (
     <div className="settings-section">
@@ -821,14 +821,14 @@ function CommunityMonetizationConfigSection({
           <div className="settings-section-desc" style={{ marginTop: 12 }}>
             {stripeConnectPresentation.statusMessage}
           </div>
-          {canAcceptCharges ? null : stripeConnectPresentation.requirementsPreview.length > 0 ? (
+          {canReceiveCommunityRevenue ? null : stripeConnectPresentation.requirementsPreview.length > 0 ? (
             <div className="auth-status" style={{ marginTop: 8 }}>
               Stripe still needs: {stripeConnectPresentation.requirementsPreview.join(", ")}.
             </div>
           ) : null}
           {canManagePayoutAccount ? (
             <div className="create-community-actions" style={{ marginTop: 12 }}>
-              {canAcceptCharges && stripeConnectCountryLabel ? (
+              {canReceiveCommunityRevenue && stripeConnectCountryLabel ? (
                 <span className="auth-status">Country: {stripeConnectCountryLabel}</span>
               ) : (
                 <StripeConnectCountrySelect
@@ -854,7 +854,7 @@ function CommunityMonetizationConfigSection({
                 disabled={isStartingStripeConnectOnboarding || needsStripeConnectCountry}
               />
             </div>
-          ) : canAcceptCharges ? null : (
+          ) : canReceiveCommunityRevenue ? null : (
             <div className="auth-status" style={{ marginTop: 8 }}>
               The community owner must finish Stripe setup before paid access can be changed.
             </div>

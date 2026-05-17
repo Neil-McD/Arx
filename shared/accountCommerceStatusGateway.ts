@@ -19,6 +19,7 @@ export type AccountCommerceStatus = {
     requirements_eventually_due: string[];
     requirements_disabled_reason: string | null;
     onboarding_complete_at: number | null;
+    can_receive_community_revenue: boolean;
     can_accept_charges: boolean;
   };
 };
@@ -89,7 +90,12 @@ async function loadAccountCommerceStatusViaConvex(session: AuthSessionLike): Pro
         Number.isFinite(row.stripe_connect.onboarding_complete_at)
           ? row.stripe_connect.onboarding_complete_at
           : null,
-      can_accept_charges: row.stripe_connect?.can_accept_charges === true,
+      can_receive_community_revenue:
+        row.stripe_connect?.can_receive_community_revenue === true ||
+        row.stripe_connect?.can_accept_charges === true,
+      can_accept_charges:
+        row.stripe_connect?.can_accept_charges === true ||
+        row.stripe_connect?.can_receive_community_revenue === true,
     },
   };
 }

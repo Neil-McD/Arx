@@ -12,6 +12,10 @@ const schema = readText("../convex/schema.ts");
 const stripeConnectAccountCore = readText("../convex/stripeConnectAccountCore.ts");
 const stripeConnectCountries = readText("../shared/stripeConnectCountries.ts");
 const accountStatusGateway = readText("../shared/accountCommerceStatusGateway.ts");
+const communityCommerce = readText("../convex/communityCommerce.ts");
+const communityLifecycle = readText("../convex/communityLifecycle.ts");
+const auth = readText("../convex/auth.ts");
+const stripeConnectPresentation = readText("../apps/web/src/controllers/buildStripeConnectPresentation.ts");
 
 assert.match(
   creatorCommerce,
@@ -110,13 +114,23 @@ assert.match(
 );
 assert.match(
   creatorCommerce,
-  /polynet-connect-account:create:\$\{userId\}:\$\{country\}/,
-  "First-time Stripe Connect account creation must be idempotent per Polynet user and country.",
+  /policyKey = policy[\s\S]*policy\.accountType[\s\S]*policy\.serviceAgreement[\s\S]*policy\.requestCardPayments \? "cards" : "no_cards"[\s\S]*policy\.requestTransfers \? "transfers" : "no_transfers"/,
+  "Stripe Connect account creation idempotency keys must include the account creation policy shape.",
 );
 assert.match(
   creatorCommerce,
+  /polynet-connect-account:create:\$\{policyKey\}:\$\{userId\}:\$\{country\}/,
+  "First-time Stripe Connect account creation must be idempotent per Polynet user, country, and policy shape.",
+);
+assert.match(
+  creatorCommerce,
+  /polynet-connect-account:replace:\$\{policyKey\}:\$\{userId\}:\$\{existingStripeAccountId\}:\$\{country\}/,
+  "Stripe Connect account replacement must be idempotent per user, existing account id, country, and policy shape.",
+);
+assert.doesNotMatch(
+  creatorCommerce,
   /polynet-connect-account:replace:\$\{userId\}:\$\{existingStripeAccountId\}:\$\{country\}/,
-  "Stripe Connect account replacement must be idempotent per user, existing account id, and country.",
+  "Stripe Connect replacement idempotency must not reuse the old key shape that collides after policy changes.",
 );
 assert.match(
   schema,
@@ -149,6 +163,21 @@ assert.match(
   "Account commerce status must expose Stripe Connect country to setup surfaces.",
 );
 assert.match(
+  auth,
+  /can_receive_community_revenue: canReceiveRevenue/,
+  "Account commerce status must expose the canonical community revenue readiness field.",
+);
+assert.match(
+  accountStatusGateway,
+  /can_receive_community_revenue:/,
+  "Account commerce gateway must preserve canonical community revenue readiness.",
+);
+assert.match(
+  stripeConnectPresentation,
+  /can_receive_community_revenue === true/,
+  "Frontend Stripe setup presentation must use community revenue readiness instead of charge wording.",
+);
+assert.match(
   stripeConnectCountries,
   /\{ code: "KW", name: "Kuwait" \}/,
   "Stripe Connect supported countries must include Kuwait.",
@@ -157,6 +186,16 @@ assert.match(
   stripeConnectCountries,
   /STRIPE_CONNECT_RECIPIENT_SERVICE_AGREEMENT_COUNTRIES[\s\S]*"KW"/,
   "Kuwait must use Stripe's recipient service agreement instead of requesting card payments.",
+);
+assert.match(
+  stripeConnectCountries,
+  /export function getStripeConnectCountryPolicy/,
+  "Stripe Connect country behavior must be represented as an explicit policy, not scattered conditional checks.",
+);
+assert.match(
+  stripeConnectCountries,
+  /requestCardPayments: serviceAgreement === "full"/,
+  "Stripe Connect country policy must derive card payment requests from the account service agreement route.",
 );
 assert.match(
   creatorCommerce,
@@ -180,18 +219,53 @@ assert.match(
 );
 assert.match(
   creatorCommerce,
-  /stripeConnectCountryUsesRecipientServiceAgreement\(country\)/,
-  "Stripe Connect account creation must branch on country-specific service agreement policy.",
+  /getStripeConnectCountryPolicy\(country\)/,
+  "Stripe Connect account creation must branch on the country-specific service agreement policy.",
 );
 assert.match(
   creatorCommerce,
-  /usesRecipientServiceAgreement \? \{\} : \{ card_payments: \{ requested: true \} \}/,
+  /policy\.requestCardPayments \? \{ card_payments: \{ requested: true \} \} : \{\}/,
   "Recipient-service countries must not request card_payments.",
 );
 assert.match(
   creatorCommerce,
-  /tos_acceptance:[\s\S]*service_agreement: "recipient"/,
+  /tos_acceptance:[\s\S]*policy\.serviceAgreement === "recipient"[\s\S]*service_agreement: "recipient"/,
   "Recipient-service countries must create accounts with recipient service agreement.",
+);
+assert.match(
+  stripeConnectAccountCore,
+  /export function canReceiveCommunityRevenue/,
+  "Stripe Connect revenue-destination readiness must be centralized for checkout and paid community settings.",
+);
+assert.match(
+  stripeConnectAccountCore,
+  /account\?\.chargesEnabled === true \|\| account\?\.transfersEnabled === true/,
+  "Community revenue readiness must accept either direct charge capability or transfer capability.",
+);
+assert.match(
+  communityCommerce,
+  /canReceiveCommunityRevenue\(connectAccount\)/,
+  "Community checkout must use centralized creator revenue-destination readiness.",
+);
+assert.match(
+  communityLifecycle,
+  /canReceiveCommunityRevenue\(connectAccount\)/,
+  "Paid community settings must use the same creator revenue-destination readiness as checkout.",
+);
+assert.doesNotMatch(
+  communityLifecycle,
+  /chargesEnabled === true[\s\S]{0,120}payoutsEnabled === true/,
+  "Paid community settings must not require card charge capability and block recipient-transfer countries.",
+);
+assert.match(
+  communityCommerce,
+  /subscription_data:[\s\S]*application_fee_percent:[\s\S]*transfer_data:[\s\S]*destination:/,
+  "Community checkout must remain platform-owned marketplace checkout with transfer_data.destination.",
+);
+assert.doesNotMatch(
+  communityCommerce,
+  /Stripe-Account|stripeAccount:/,
+  "Community checkout must not create direct charges on connected accounts.",
 );
 assert.match(
   creatorCommerce,

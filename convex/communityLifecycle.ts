@@ -43,6 +43,10 @@ import {
   getCommunityPublishReadinessMissingFields,
   type CommunityPublishReadinessInput,
 } from "../shared/communityPublishReadiness";
+import {
+  canReceiveCommunityRevenue,
+  type StripeConnectRevenueDestinationLike,
+} from "./stripeConnectAccountCore";
 
 async function mapCommunityRecord(ctx: any, row: CommunityLike): Promise<{
   id: string;
@@ -281,20 +285,11 @@ async function requirePaidCommunityPricingReady(args: {
     {
       userId: args.community.ownerId,
     },
-  )) as {
-    status?: unknown;
-    chargesEnabled?: unknown;
-    payoutsEnabled?: unknown;
-  } | null;
+  )) as StripeConnectRevenueDestinationLike | null;
   if (!connectAccount) {
     throw new Error("community_stripe_connect_required");
   }
-  const connectStatus = String(connectAccount.status ?? "").trim().toLowerCase();
-  const canAcceptCharges =
-    connectStatus === "ready" &&
-    connectAccount.chargesEnabled === true &&
-    connectAccount.payoutsEnabled === true;
-  if (!canAcceptCharges) {
+  if (!canReceiveCommunityRevenue(connectAccount)) {
     throw new Error("community_stripe_connect_not_ready");
   }
 }
