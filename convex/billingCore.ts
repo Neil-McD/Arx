@@ -10,6 +10,7 @@ import {
 import { enqueueCommunityAccessGrantedEmailInternal } from "./emailEvents";
 import { recordCriticalAuditEventBestEffort } from "./criticalAudit";
 import { readCanonicalPublicAppOrigin } from "./publicAppUrl";
+import { attachStripeCustomerToUser } from "./stripeCustomers";
 
 export type CommunityLike = {
   _id: any;
@@ -282,6 +283,12 @@ export async function createCommunitySubscriptionForMembership(args: {
   const status = args.status ?? "active";
   const cancelAtPeriodEnd = Boolean(args.cancelAtPeriodEnd ?? status === "cancel_at_period_end");
   const endedAt = status === "canceled" || status === "ended" ? args.nowMs : undefined;
+  await attachStripeCustomerToUser({
+    ctx: args.ctx,
+    userId: args.userId,
+    providerCustomerId: args.providerCustomerId,
+    nowMs: args.nowMs,
+  });
   const existing = await args.ctx.db
     .query("communitySubscriptions" as any)
     .withIndex("by_membership", (q: any) => q.eq("membershipId", args.membershipId))

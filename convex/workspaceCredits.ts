@@ -19,6 +19,10 @@ import {
   getStripeClient,
 } from "./stripeCore";
 import { recordToolUsagePartnerCommission } from "./builderPartners";
+import {
+  attachStripeCustomerToUser,
+  ensureStripeCustomerForUser,
+} from "./stripeCustomers";
 
 function roundCurrency(value: number): number {
   return Math.round((Number(value) || 0) * 10000) / 10000;
@@ -262,6 +266,12 @@ export const attachWorkspaceCreditTopupStripeCheckoutSessionInternal = internalM
       .first();
     if (!row) throw new Error("workspace_credit_topup_checkout_session_not_found");
     if (row.mode !== "workspace_credit_topup") throw new Error("workspace_credit_topup_checkout_session_invalid");
+    await attachStripeCustomerToUser({
+      ctx,
+      userId: row.ownerUserId,
+      providerCustomerId: args.providerCustomerId,
+      nowMs,
+    });
     await ctx.db.patch(row._id, {
       provider: "stripe",
       providerCheckoutSessionId: args.providerCheckoutSessionId,
@@ -310,6 +320,12 @@ export const completeWorkspaceCreditTopupCheckoutSessionInternal = internalMutat
     if (row.mode !== "workspace_credit_topup") throw new Error("workspace_credit_topup_checkout_session_invalid");
     if (!row.ownerUserId) throw new Error("workspace_credit_topup_owner_missing");
     const ownerUserId = row.ownerUserId;
+    await attachStripeCustomerToUser({
+      ctx,
+      userId: ownerUserId,
+      providerCustomerId: args.providerCustomerId,
+      nowMs,
+    });
     if (typeof row.workspaceCreditsGrantedAt === "number") {
       return {
         ok: true,
@@ -832,6 +848,12 @@ export const startWorkspaceCreditTopupCheckout = action({
     })) as { dbUserId?: unknown; email?: string | null };
     const userId = actor?.dbUserId;
     if (!userId) throw new Error("user_not_found");
+    const stripeCustomerId = await ensureStripeCustomerForUser({
+      ctx,
+      userId,
+      email: actor?.email ?? null,
+      nowMs,
+    });
 
     const sessionId = newOpaqueToken("credits");
     const pack = resolveWorkspaceToolBalanceTopupPack(args.packId);
@@ -852,6 +874,7 @@ export const startWorkspaceCreditTopupCheckout = action({
       const stripe = getStripeClient();
       const checkoutSession = await stripe.checkout.sessions.create({
         mode: "payment",
+        customer: stripeCustomerId,
         success_url: successUrl,
         cancel_url: cancelUrl,
         client_reference_id: sessionId,
@@ -883,9 +906,6 @@ export const startWorkspaceCreditTopupCheckout = action({
           workspace_tool_balance_usd: String(pack.priceUsd),
           workspace_credits_amount: String(workspaceCreditsAmount),
         },
-        ...(typeof actor?.email === "string" && actor.email.trim()
-          ? { customer_email: actor.email.trim() }
-          : {}),
       });
       const checkoutUrl = String(checkoutSession.url ?? "").trim();
       if (!checkoutUrl) throw new Error("stripe_checkout_url_missing");

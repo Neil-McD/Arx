@@ -33,6 +33,10 @@ import {
 import { enqueueCommunityBillingIssueEmailInternal } from "./emailEvents";
 import { recordCriticalAuditEventBestEffort } from "./criticalAudit";
 import { recordCommunityRevenuePartnerCommission } from "./builderPartners";
+import {
+  attachStripeCustomerToUser,
+  ensureStripeCustomerForUser,
+} from "./stripeCustomers";
 
 type CommunityCheckoutSessionRow = {
   _id: any;
@@ -113,6 +117,12 @@ export const syncCommunitySubscriptionLifecycleInternal = internalMutation({
           if (aMatch !== bMatch) return aMatch ? -1 : 1;
           return Number(b.updatedAt ?? 0) - Number(a.updatedAt ?? 0);
         })[0] ?? null;
+    await attachStripeCustomerToUser({
+      ctx,
+      userId: args.userId,
+      providerCustomerId: args.providerCustomerId,
+      nowMs,
+    });
     const currentSource = String(current?.source ?? "")
       .trim()
       .toLowerCase();
@@ -480,6 +490,12 @@ export const attachCommunityStripeCheckoutSessionInternal = internalMutation({
       .first()) as CommunityCheckoutSessionRow | null;
     if (!row) throw new Error("community_checkout_session_not_found");
     if (row.mode !== "community_join") throw new Error("community_checkout_session_invalid");
+    await attachStripeCustomerToUser({
+      ctx,
+      userId: row.ownerUserId,
+      providerCustomerId: args.providerCustomerId,
+      nowMs,
+    });
     await ctx.db.patch(row._id, {
       provider: "stripe",
       providerCheckoutSessionId: String(args.providerCheckoutSessionId ?? "").trim() || undefined,
@@ -534,6 +550,12 @@ export const syncPendingCommunityCheckoutSubscriptionInternal = internalMutation
       .first()) as CommunityCheckoutSessionRow | null;
     if (!row) throw new Error("community_checkout_session_not_found");
     if (row.mode !== "community_join") throw new Error("community_checkout_session_invalid");
+    await attachStripeCustomerToUser({
+      ctx,
+      userId: row.ownerUserId,
+      providerCustomerId: args.providerCustomerId,
+      nowMs,
+    });
     const communitySubscriptionStatus = normalizeStripeCommunitySubscriptionStatus({
       subscriptionStatus: args.subscriptionStatus,
       cancelAtPeriodEnd: args.cancelAtPeriodEnd,
@@ -727,6 +749,12 @@ export const startPublicCommunityCheckout = action({
     const ownerUserId: unknown = actor?.dbUserId;
     const ownerEmail: string | null = actor?.email ?? null;
     if (!ownerUserId) throw new Error("auth_subject_required");
+    const stripeCustomerId = await ensureStripeCustomerForUser({
+      ctx,
+      userId: ownerUserId,
+      email: ownerEmail,
+      nowMs,
+    });
     await ctx.runQuery(internal.communityCommerce.requirePublicCommunityCheckoutNotBlockedInternal as any, {
       communityId: checkoutConfig.communityId,
       userId: ownerUserId,
@@ -807,6 +835,7 @@ export const startPublicCommunityCheckout = action({
       const stripe = getStripeClient();
       const checkoutSession: any = await stripe.checkout.sessions.create({
         mode: "subscription",
+        customer: stripeCustomerId,
         success_url: buildCheckoutSuccessUrl(args.successUrl, sessionId),
         cancel_url: cancelUrl,
         client_reference_id: sessionId,
@@ -838,9 +867,6 @@ export const startPublicCommunityCheckout = action({
             billing_period: billingPeriod,
           },
         },
-        ...(typeof ownerEmail === "string" && ownerEmail.trim()
-          ? { customer_email: ownerEmail.trim() }
-          : null),
       });
       const checkoutUrl: string = String(checkoutSession.url ?? "").trim();
       if (!checkoutUrl) throw new Error("stripe_checkout_url_missing");

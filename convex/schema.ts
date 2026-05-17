@@ -492,6 +492,17 @@ export default defineSchema({
     .index("by_mode_status", ["mode", "status"])
     .index("by_community_status", ["communityId", "status"]),
 
+  userStripeCustomers: defineTable({
+    userId: v.id("users"),
+    provider: v.literal("stripe"),
+    providerCustomerId: v.string(),
+    email: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_providerCustomerId", ["providerCustomerId"]),
+
   purchaseClaims: defineTable({
     claimToken: v.string(),
     communityId: v.id("communities"),
