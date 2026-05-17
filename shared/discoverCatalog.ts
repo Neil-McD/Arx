@@ -247,6 +247,7 @@ export const INTERNAL_STAGING_MCP_CANARY_ENDPOINT_PATH =
   "/staging/mcp_canary";
 export const INTERNAL_STAGING_MCP_CANARY_DEFAULT_ENDPOINT_URL =
   "https://quick-porcupine-949.convex.site/staging/mcp_canary";
+const INTERNAL_STAGING_MCP_CANARY_HOSTNAME = "polynet-staging.vercel.app";
 
 function readProcessEnv(name: string): string {
   try {
@@ -268,6 +269,26 @@ function buildUrlWithPath(baseUrl: string, pathname: string): string {
   } catch {
     return "";
   }
+}
+
+function readConfiguredPublicAppHostname(): string {
+  const raw =
+    readProcessEnv("ARX_PUBLIC_APP_URL") ||
+    readProcessEnv("VITE_PUBLIC_APP_URL");
+  if (!raw) return "";
+  try {
+    return new URL(raw).hostname.toLowerCase();
+  } catch {
+    return "";
+  }
+}
+
+export function isInternalStagingMcpCanaryCatalogLookupEnabled(): boolean {
+  return (
+    readConfiguredPublicAppHostname() === INTERNAL_STAGING_MCP_CANARY_HOSTNAME &&
+    readProcessEnv("POLYNET_STAGING_MAINTENANCE_ENABLED").toLowerCase() ===
+      "true"
+  );
 }
 
 export function resolveInternalStagingMcpCanaryEndpointUrl(): string {
@@ -939,6 +960,7 @@ export function findDiscoverAppCatalogEntryById(
   const normalizedCatalogAppId = normalizeCatalogId(catalogAppId);
   if (!normalizedCatalogAppId) return null;
   if (normalizedCatalogAppId === INTERNAL_STAGING_MCP_CANARY_CATALOG_APP_ID) {
+    if (!isInternalStagingMcpCanaryCatalogLookupEnabled()) return null;
     return {
       id: INTERNAL_STAGING_MCP_CANARY_CATALOG_APP_ID,
       name: "PolyNet staging MCP canary",

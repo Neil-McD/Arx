@@ -10,10 +10,40 @@ import {
 import {
   DISCOVER_APP_CATALOG,
   INTERNAL_STAGING_MCP_CANARY_CATALOG_APP_ID,
+  findDiscoverAppCatalogEntryById,
+  isInternalStagingMcpCanaryCatalogLookupEnabled,
   resolveInternalStagingMcpCanaryEndpointUrl,
 } from "../shared/discoverCatalog.ts";
 
 const rootDir = process.cwd();
+
+async function withProcessEnv<T>(
+  patch: Record<string, string | null>,
+  callback: () => Promise<T> | T,
+): Promise<T> {
+  const previous = new Map<string, string | undefined>();
+  for (const key of Object.keys(patch)) {
+    previous.set(key, process.env[key]);
+  }
+  try {
+    for (const [key, value] of Object.entries(patch)) {
+      if (value === null) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+    return await callback();
+  } finally {
+    for (const [key, value] of previous.entries()) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+  }
+}
 
 function readText(filePath: string): string {
   return readFileSync(path.join(rootDir, filePath), "utf8");
@@ -291,23 +321,55 @@ async function proveInternalStagingMcpCanaryIsHiddenButProjectable() {
     "staging MCP canary must not appear in the public Discover catalog",
   );
 
-  const projection = await buildCodexMcpProjection({
-    mountedTools: [
-      tool({
-        runtime_tool_name: "me__polynet_staging_canary__read_canary_record",
-        tool_name: "read_canary_record",
-        namespaced_tool_name: "polynet_staging_canary__read_canary_record",
-        catalog_app_id: INTERNAL_STAGING_MCP_CANARY_CATALOG_APP_ID,
-        app_name: "PolyNet staging MCP canary",
-        endpoint_url: resolveInternalStagingMcpCanaryEndpointUrl(),
-        auth_type: "none",
-      }),
-    ],
-  });
+  await withProcessEnv(
+    {
+      ARX_PUBLIC_APP_URL: null,
+      VITE_PUBLIC_APP_URL: null,
+      POLYNET_STAGING_MAINTENANCE_ENABLED: null,
+    },
+    () => {
+      assert.equal(isInternalStagingMcpCanaryCatalogLookupEnabled(), false);
+      assert.equal(
+        findDiscoverAppCatalogEntryById(
+          INTERNAL_STAGING_MCP_CANARY_CATALOG_APP_ID,
+        ),
+        null,
+        "exact staging MCP canary lookup must fail closed outside staging maintenance",
+      );
+    },
+  );
 
-  assert.equal(projection.eligible_tool_count, 1);
-  assert.equal(projection.blocked_tool_count, 0);
-  assert.equal(projection.tools[0]?.status, "eligible");
+  await withProcessEnv({
+    ARX_PUBLIC_APP_URL: "https://polynet-staging.vercel.app",
+    VITE_PUBLIC_APP_URL: null,
+    POLYNET_STAGING_MAINTENANCE_ENABLED: "true",
+  }, async () => {
+    assert.equal(isInternalStagingMcpCanaryCatalogLookupEnabled(), true);
+    assert.ok(
+      findDiscoverAppCatalogEntryById(
+        INTERNAL_STAGING_MCP_CANARY_CATALOG_APP_ID,
+      ),
+      "staging maintenance must be able to resolve the hidden MCP canary",
+    );
+
+    const projection = await buildCodexMcpProjection({
+      mountedTools: [
+        tool({
+          runtime_tool_name: "me__polynet_staging_canary__read_canary_record",
+          tool_name: "read_canary_record",
+          namespaced_tool_name: "polynet_staging_canary__read_canary_record",
+          catalog_app_id: INTERNAL_STAGING_MCP_CANARY_CATALOG_APP_ID,
+          app_name: "PolyNet staging MCP canary",
+          endpoint_url: resolveInternalStagingMcpCanaryEndpointUrl(),
+          auth_type: "none",
+        }),
+      ],
+    });
+
+    assert.equal(projection.eligible_tool_count, 1);
+    assert.equal(projection.blocked_tool_count, 0);
+    assert.equal(projection.tools[0]?.status, "eligible");
+  });
 }
 
 function proveRiskFloorGroundTruthIsUpstream() {
