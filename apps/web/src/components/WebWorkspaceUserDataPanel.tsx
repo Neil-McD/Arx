@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AuthSessionLike } from "../../../../shared/authSession";
+import { UserAvatar } from "../../../../shared/UserAvatar";
 import {
   formatWorkspaceToolBalanceUsdFromCredits,
 } from "../../../../shared/workspaceCredits";
@@ -21,6 +22,30 @@ export type WorkspaceUserPanelCommunity = {
   visibility: string | null;
   memberCount: number | null;
   canManage: boolean;
+  role: "member" | "moderator" | "admin" | "owner";
+  muted: boolean;
+  onlineFaces: WorkspaceUserPanelOnlineFace[];
+  recentSignals: WorkspaceUserPanelRecentSignal[];
+  integrations: WorkspaceUserPanelIntegration[];
+};
+
+export type WorkspaceUserPanelOnlineFace = {
+  userId: string;
+  displayName: string | null;
+  avatarUrl: string | null;
+  avatarFocusX?: number | null;
+  avatarFocusY?: number | null;
+  avatarZoom?: number | null;
+};
+
+export type WorkspaceUserPanelRecentSignal = {
+  id: string;
+  label: string;
+};
+
+export type WorkspaceUserPanelIntegration = {
+  id: string;
+  name: string;
 };
 
 export type WorkspaceUserDataPanelDataProps = {
@@ -45,6 +70,9 @@ export type WorkspaceUserDataPanelDataProps = {
   onOpenCreateCommunity: () => void;
   onOpenActiveCommunity: () => void;
   onOpenActiveCommunitySettings: () => void;
+  isLoadingCommunityMemberSettings: boolean;
+  communityMemberSettingsError: string | null;
+  onToggleCommunityMute: (muted: boolean) => Promise<void> | void;
 };
 
 const WORKSPACE_FILES_EXPANDED_STORAGE_KEY_PREFIX = "polynet-workspace-files-expanded";
@@ -86,11 +114,11 @@ function pathDepth(path: string): number {
   return normalized.split("/").filter(Boolean).length;
 }
 
-function formatCommunityVisibility(value: string | null): string {
-  const normalized = String(value ?? "").trim().toLowerCase();
-  if (normalized === "published") return "Published";
-  if (normalized === "unlisted") return "Unlisted";
-  return "Unlisted";
+function formatCommunityRole(value: WorkspaceUserPanelCommunity["role"]): string {
+  if (value === "owner") return "Owner";
+  if (value === "admin") return "Admin";
+  if (value === "moderator") return "Moderator";
+  return "Member";
 }
 
 function formatWorkspaceInspectorFailure(result: WorkspaceInspectorFailure): string {
@@ -481,37 +509,70 @@ export function CommunityPanelContent(props: WorkspaceUserDataPanelDataProps) {
 
   return (
     <div className="workspace-user-data-panel__grid">
-      <section className="workspace-user-data-card workspace-user-data-card--community">
-        <div className="workspace-user-data-card__meta">
-          {community.canManage ? "Builder community" : "Member community"}
-        </div>
-        <div className="workspace-user-data-card__headline">{community.name}</div>
-        <p>{community.oneLiner?.trim() || "Community workspace is ready."}</p>
-        <dl className="workspace-user-data-list">
-          <div>
-            <dt>Visibility</dt>
-            <dd>{formatCommunityVisibility(community.visibility)}</dd>
-          </div>
-          <div>
-            <dt>Members</dt>
-            <dd>{community.memberCount === null ? "Unknown" : String(community.memberCount)}</dd>
-          </div>
-        </dl>
-        <div className="workspace-user-data-actions">
-          <button type="button" className="workspace-user-data-action" onClick={props.onOpenActiveCommunity}>
-            Open community
-          </button>
-          {community.canManage ? (
-            <button
-              type="button"
-              className="workspace-user-data-action workspace-user-data-action--secondary"
-              onClick={props.onOpenActiveCommunitySettings}
-            >
-              Settings
-            </button>
-          ) : null}
+      <section className="workspace-community-section">
+        <div className="workspace-community-section__title">Status</div>
+        <div className="workspace-community-status-row">
+          <span>{formatCommunityRole(community.role)}</span>
+          <label className="workspace-community-mute-toggle">
+            <input
+              type="checkbox"
+              checked={community.muted}
+              disabled={props.isLoadingCommunityMemberSettings}
+              onChange={(event) => void props.onToggleCommunityMute(event.target.checked)}
+            />
+            <span>Mute</span>
+          </label>
         </div>
       </section>
+      {props.communityMemberSettingsError ? (
+        <div className="workspace-community-note">{props.communityMemberSettingsError}</div>
+      ) : null}
+      <section className="workspace-community-section">
+        <div className="workspace-community-section__title">Online</div>
+        {community.onlineFaces.length > 0 ? (
+          <div className="workspace-community-online-strip" aria-label="People online now">
+            {community.onlineFaces.map((face) => (
+              <UserAvatar
+                key={face.userId}
+                className="workspace-community-online-face public-funnel-face"
+                readyClassName="has-image"
+                name={face.displayName ?? face.userId}
+                imageUrl={face.avatarUrl}
+                focusX={face.avatarFocusX ?? 0.5}
+                focusY={face.avatarFocusY ?? 0.5}
+                zoom={face.avatarZoom ?? 1}
+                alt=""
+                aria-hidden={true}
+                fallback={null}
+              />
+            ))}
+          </div>
+        ) : null}
+      </section>
+      {community.recentSignals.length > 0 ? (
+        <section className="workspace-community-section">
+          <div className="workspace-community-section__title">Recent signal</div>
+          <div className="workspace-community-signal-list">
+            {community.recentSignals.map((signal) => (
+              <div key={signal.id} className="workspace-community-signal-row">
+                {signal.label}
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
+      {community.integrations.length > 0 ? (
+        <section className="workspace-community-section">
+          <div className="workspace-community-section__title">Integrations</div>
+          <div className="workspace-community-integration-list">
+            {community.integrations.map((integration) => (
+              <div key={integration.id} className="workspace-community-integration-row">
+                {integration.name}
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
     </div>
   );
 }

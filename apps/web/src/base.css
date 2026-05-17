@@ -22371,6 +22371,109 @@ button.message-citation-chip:hover {
   opacity: 0.45;
 }
 
+.workspace-community-section {
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+  padding: 4px 0 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.workspace-community-section:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.workspace-community-section__title {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.workspace-community-status-row {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.workspace-community-mute-toggle {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.workspace-community-mute-toggle input {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.workspace-community-mute-toggle:has(input:disabled) {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.workspace-community-note {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.workspace-community-online-strip {
+  display: flex;
+  align-items: center;
+  min-height: 34px;
+  padding-left: 2px;
+}
+
+.workspace-community-online-face {
+  width: 34px;
+  height: 34px;
+}
+
+.workspace-community-online-face + .workspace-community-online-face {
+  margin-left: -10px;
+}
+
+.workspace-community-signal-list,
+.workspace-community-integration-list {
+  display: grid;
+  gap: 0;
+}
+
+.workspace-community-signal-row,
+.workspace-community-integration-row {
+  min-width: 0;
+  padding: 8px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-community-signal-row:first-child,
+.workspace-community-integration-row:first-child {
+  border-top: 0;
+  padding-top: 2px;
+}
+
 .workspace-summary-block {
   min-width: 0;
   padding: 2px 0 8px;

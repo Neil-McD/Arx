@@ -25,6 +25,9 @@ type PresenceFace = {
   user_id: string;
   display_name: string | null;
   avatar_url: string | null;
+  avatar_focus_x?: number | null;
+  avatar_focus_y?: number | null;
+  avatar_zoom?: number | null;
 };
 
 type PresenceSummary = {
@@ -95,7 +98,7 @@ export function useWebActiveCommunityShellController<
   }, [params.session, params.activeCommunityId, reloadActiveCommunityAccess]);
 
   useEffect(() => {
-    if (!params.session || params.activePage !== "community" || !params.activeCommunityId) return;
+    if (!params.session || !params.activeCommunityId) return;
     let cancelled = false;
     const communityId = params.activeCommunityId;
     const tick = async () => {
@@ -121,10 +124,10 @@ export function useWebActiveCommunityShellController<
       cancelled = true;
       window.clearInterval(intervalId);
     };
-  }, [params.activeCommunityId, params.activePage, params.session, params.ensureSession]);
+  }, [params.activeCommunityId, params.session, params.ensureSession]);
 
   useEffect(() => {
-    if (!params.session || params.activePage !== "community" || params.communityTab !== "funnel" || !params.activeCommunityId) {
+    if (!params.session || !params.activeCommunityId) {
       setActiveCommunityPresenceSummary(null);
       return;
     }
@@ -156,7 +159,7 @@ export function useWebActiveCommunityShellController<
       cancelled = true;
       window.clearInterval(intervalId);
     };
-  }, [params.activeCommunityId, params.activePage, params.session, params.communityTab, params.ensureSession]);
+  }, [params.activeCommunityId, params.session, params.ensureSession]);
 
   const communityAccessCapabilities = useMemo(
     () => deriveCommunityAccessCapabilities(activeCommunityAccess),

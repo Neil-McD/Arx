@@ -159,7 +159,7 @@ import type {
   UserProfile as SharedUserProfile,
   UserProfileDetail as SharedUserProfileDetail,
 } from "../../../shared/communityTypes";
-import type { ConnectCommunityAppInput } from "../../../shared/communityAppMountTypes";
+import type { CommunityMountedApp, ConnectCommunityAppInput } from "../../../shared/communityAppMountTypes";
 import type { CreateSkillPackageInput } from "../../../shared/skillPackageTypes";
 import {
   DISCOVER_APP_CATALOG,
@@ -468,6 +468,35 @@ type PublicCommunityRecord = {
     avatar_zoom?: number | null;
   }> | null;
 };
+
+type WorkspacePanelCommunityRole = "member" | "moderator" | "admin" | "owner";
+
+function normalizeWorkspacePanelCommunityRole(
+  access: SharedCommunityAccess | null,
+  fallbackRole: string | null | undefined,
+): WorkspacePanelCommunityRole {
+  if (access?.is_owner) return "owner";
+  const candidate = String(access?.effective_role ?? fallbackRole ?? "").trim().toLowerCase();
+  if (candidate === "owner") return "owner";
+  if (candidate === "admin") return "admin";
+  if (candidate === "moderator" || candidate === "mod") return "moderator";
+  return "member";
+}
+
+function formatPanelSignalCount(count: number, singular: string, plural: string): string {
+  return count === 1 ? `1 ${singular}` : `${count} ${plural}`;
+}
+
+function buildWorkspacePanelIntegrationRows(mounts: CommunityMountedApp[]) {
+  return mounts
+    .filter((mount) => mount.enabled !== false)
+    .map((mount) => ({
+      id: mount.id,
+      name: mount.app.name.trim() || mount.app.slug.trim() || "Connected app",
+    }))
+    .filter((row, index, rows) => row.name && rows.findIndex((candidate) => candidate.name === row.name) === index)
+    .slice(0, 8);
+}
 
 type ThreadRecord = {
   id: string;
@@ -4635,15 +4664,18 @@ export default function App() {
 
   useEffect(() => {
     const shouldLoadCommunityApps =
+      (activePage === "workspace" && activeView === "home" && isWorkspaceOperatorDataPanelOpen) ||
       (activePage === "community" && communityTab === "ai_agent") ||
       (activePage === "community" && communityTab === "settings") ||
       activePage === "discover";
     if (!shouldLoadCommunityApps) return;
-    const canManageCommunityApps =
-      activePage === "community" && communityTab === "settings"
-        ? canViewActiveCommunitySettings
-        : canManageMembersActiveCommunity;
-    if (!session || !activeCommunityId || !canManageCommunityApps) {
+    const canViewCommunityApps = Boolean(
+      activeCommunityAccess?.can_enter_community ??
+        activeCommunityAccess?.can_view ??
+        canViewActiveCommunitySettings ??
+        canManageMembersActiveCommunity,
+    );
+    if (!session || !activeCommunityId || !canViewCommunityApps) {
       clearCommunityAppMounts();
       return;
     }
@@ -4651,11 +4683,16 @@ export default function App() {
     void loadCommunityAppMounts(activeCommunityId, session);
   }, [
     activePage,
+    activeView,
     communityTab,
     session,
     activeCommunityId,
+    activeCommunityAccess?.can_enter_community,
+    activeCommunityAccess?.can_view,
     canManageCommunitySettings,
+    canViewActiveCommunitySettings,
     canManageMembersActiveCommunity,
+    isWorkspaceOperatorDataPanelOpen,
     clearCommunityAppMounts,
     loadCommunityAppMounts,
     communityAppMountsLoadedCommunityIdRef,
@@ -7805,6 +7842,59 @@ export default function App() {
     showWorkspaceRightPanelControl,
   ]);
 
+  const workspacePanelCommunityRecentSignals = useMemo(() => {
+    const signals: Array<{ id: string; label: string }> = [];
+    const hasChatSignal = Boolean(
+      activeCommunityAttentionSummary.chat ||
+        (activePage === "community" && activeCommunityId && unreadCount > 0),
+    );
+    if (hasChatSignal) signals.push({ id: "chat", label: "New chats" });
+    if (activeCommunityAttentionSummary.ai_feed) {
+      signals.push({ id: "ai_feed", label: "Recent AI feeds" });
+    }
+    if (activeCommunityAttentionSummary.resources) {
+      signals.push({ id: "resources", label: "New resources" });
+    }
+    const hasUpcomingEvent = communityEvents.some((event) => {
+      const startsAt = Date.parse(event.starts_at);
+      return Number.isFinite(startsAt) && startsAt >= Date.now();
+    });
+    if (activeCommunityAttentionSummary.events || hasUpcomingEvent) {
+      signals.push({ id: "events", label: "Upcoming events" });
+    }
+    if (hasResolvedCommunityMembers) {
+      const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+      const newMemberCount = communityMembers.filter((member) => {
+        if (String(member.role ?? "").trim().toLowerCase() === "owner") return false;
+        const createdAt = Date.parse(member.created_at);
+        return Number.isFinite(createdAt) && createdAt >= sevenDaysAgo;
+      }).length;
+      if (newMemberCount > 0) {
+        signals.push({
+          id: "members",
+          label: formatPanelSignalCount(newMemberCount, "new member", "new members"),
+        });
+      }
+    }
+    return signals.slice(0, 5);
+  }, [
+    activeCommunityAttentionSummary.ai_feed,
+    activeCommunityAttentionSummary.chat,
+    activeCommunityAttentionSummary.events,
+    activeCommunityAttentionSummary.resources,
+    activeCommunityId,
+    activePage,
+    communityEvents,
+    communityMembers,
+    hasResolvedCommunityMembers,
+    unreadCount,
+  ]);
+
+  const workspacePanelCommunityIntegrations = useMemo(
+    () => buildWorkspacePanelIntegrationRows(communityAppMounts),
+    [communityAppMounts],
+  );
+
   const workspaceUserDataPanelCommunity = activeCommunity
     ? {
         id: activeCommunity.id,
@@ -7814,6 +7904,21 @@ export default function App() {
         visibility: activeCommunity.visibility ?? null,
         memberCount: communityMembers.length,
         canManage: canManageMembersActiveCommunity || canViewActiveCommunitySettings,
+        role: normalizeWorkspacePanelCommunityRole(
+          activeCommunityAccess,
+          communityRoleById[activeCommunity.id],
+        ),
+        muted: communityMemberMuted,
+        onlineFaces: funnelPreviewOnlineFaces.map((face) => ({
+          userId: face.user_id,
+          displayName: face.display_name ?? null,
+          avatarUrl: face.avatar_url ?? null,
+          avatarFocusX: face.avatar_focus_x ?? null,
+          avatarFocusY: face.avatar_focus_y ?? null,
+          avatarZoom: face.avatar_zoom ?? null,
+        })),
+        recentSignals: workspacePanelCommunityRecentSignals,
+        integrations: workspacePanelCommunityIntegrations,
       }
     : null;
   const ownedCommunityCount = communities.reduce(
@@ -7840,11 +7945,14 @@ export default function App() {
     activeModelLabel: workspace.derived.activeModelLabel,
     activeCommunity: workspaceUserDataPanelCommunity,
     canCreateCommunity: canCreateWorkspaceUserPanelCommunity,
+    isLoadingCommunityMemberSettings,
+    communityMemberSettingsError,
     onOpenWorkspaceCreditTopup: () => openWorkspaceCreditTopupModal({ toolKind: "workspace_tools" }),
     onTurnOnComputer: turnOnWorkspaceComputer,
     onTurnOffComputer: turnOffWorkspaceComputer,
     onOpenCreateCommunity: () => openCreateCommunityModal(),
     onOpenActiveCommunity: handleOpenLandingCommunity,
+    onToggleCommunityMute: handleToggleCommunityMute,
     onOpenActiveCommunitySettings: () => {
       const nextCommunitySlug = String(selectedActiveCommunitySlug ?? activeCommunity?.slug ?? "").trim();
       if (!nextCommunitySlug) return;

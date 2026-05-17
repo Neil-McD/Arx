@@ -37,26 +37,20 @@ export function useCommunitySettingsAccessLifecycle<SessionT, CommunityT>(params
   }, [params.activeCommunityId, params.communities, params.syncCommunitySettingsSelection]);
 
   useEffect(() => {
-    if (params.activePage !== "community" || params.communityTab !== "settings") return;
     if (!session || !params.activeCommunityId) {
       params.setCommunityMemberMuted(false);
       return;
     }
     if (!(params.activeCommunityAccess?.can_enter_community ?? params.activeCommunityAccess?.can_view)) return;
-    if (params.activeCommunityAccess.is_owner || params.activeCommunityAccess.can_manage_members) return;
     void params.loadCommunityMemberSettings({
       communityId: params.activeCommunityId,
       session,
     });
   }, [
-    params.activePage,
-    params.communityTab,
     session,
     params.activeCommunityId,
     params.activeCommunityAccess?.can_enter_community,
     params.activeCommunityAccess?.can_view,
-    params.activeCommunityAccess?.is_owner,
-    params.activeCommunityAccess?.can_manage_members,
     params.loadCommunityMemberSettings,
   ]);
 
