@@ -159,16 +159,6 @@ type WebCommunitySettingsSectionProps = {
 
 type SharedSettingsProps = Pick<WebCommunitySettingsSectionProps, "state" | "actions">;
 
-function toStatusLabel(value: string | null | undefined): string {
-  const normalized = String(value ?? "").trim();
-  if (!normalized) return "Unknown";
-  return normalized
-    .split(/[_\s]+/g)
-    .filter(Boolean)
-    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
-    .join(" ");
-}
-
 function buildPersonalOptInInput(args: {
   mount: CommunityMountedApp;
   catalogEntry: DiscoverAppCatalogEntry | null;
@@ -344,9 +334,6 @@ function CommunityIntegrationsSettingsSection({
               },
             );
             const effectiveApp = row.effectiveApp;
-            const enabledToolNames = mount.tools
-              .filter((tool) => tool.enabled)
-              .map((tool) => tool.tool_name);
             const hasPersonalMount = effectiveApp?.has_personal_mount === true;
             const canSetupPersonal =
               Boolean(
@@ -460,68 +447,6 @@ function CommunityIntegrationsSettingsSection({
                     </div>
                   ) : null}
                 </div>
-                {mount.tools.length > 0 ? (
-                  <div className="community-app-tool-list" role="list">
-                    {mount.tools.map((tool) => {
-                      const nextEnabledTools = tool.enabled
-                        ? enabledToolNames.filter(
-                            (toolName) => toolName !== tool.tool_name,
-                          )
-                        : [...enabledToolNames, tool.tool_name];
-                      return (
-                        <label
-                          key={tool.namespaced_tool_name}
-                          className="community-app-tool-row"
-                          role="listitem"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={tool.enabled}
-                            disabled={!canManage || isBusy}
-                            onChange={() =>
-                              void integrations.onUpdateMount(mount.id, {
-                                enabledTools: nextEnabledTools,
-                              })
-                            }
-                          />
-                          <div className="community-app-tool-copy">
-                            <div className="community-app-tool-title-row">
-                              <span className="community-app-tool-name">
-                                {tool.tool_name}
-                              </span>
-                              <span className="community-app-tool-risk">
-                                {toStatusLabel(tool.risk_level)}
-                              </span>
-                            </div>
-                            {tool.description ? (
-                              <div className="model-note">{tool.description}</div>
-                            ) : null}
-                          </div>
-                        </label>
-                      );
-                    })}
-                  </div>
-                ) : row.toolNames.length > 0 ? (
-                  <div className="community-app-tool-list" role="list">
-                    {row.toolNames.map((toolName) => (
-                      <div
-                        key={toolName}
-                        className="community-app-tool-row"
-                        role="listitem"
-                      >
-                        <div className="community-app-tool-copy">
-                          <div className="community-app-tool-title-row">
-                            <span className="community-app-tool-name">
-                              {toolName}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="model-note">No tools available yet.</div>
-                )}
               </div>
             );
           })}
