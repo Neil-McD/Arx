@@ -32,6 +32,7 @@
     "check:profile-display-fallback-contract": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/profile_display_fallback_contract_proof.ts",
     "check:account-setup-operator-visibility": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/account_setup_operator_visibility_proof.ts",
     "check:critical-audit-events-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/critical_audit_events_proof.ts",
+    "check:stripe-connect-onboarding-diagnostics-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/stripe_connect_onboarding_diagnostics_proof.ts",
     "check:security-audit-diagnostics-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/security_audit_diagnostics_proof.ts",
     "check:runtime-tool-diagnostics-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_tool_diagnostics_proof.ts",
     "check:web-deploy-diagnostics-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/web_deploy_diagnostics_proof.ts",

@@ -92,6 +92,17 @@ const DIAGNOSTIC_METADATA_ALLOWLIST: Record<string, readonly string[]> = {
   "auth.session_refresh_failed": ["recoveredWithStoredToken"],
   "access.operator_access_granted": ["role", "source"],
   "access.operator_access_denied": [],
+  "billing.stripe_connect_onboarding_failed": [
+    "context",
+    "communitySlug",
+    "stage",
+    "stripeAccountId",
+    "stripeErrorType",
+    "stripeErrorCode",
+    "stripeRequestId",
+    "stripeStatusCode",
+    "errorMessage",
+  ],
 };
 
 function cleanString(value: unknown): string | undefined {
