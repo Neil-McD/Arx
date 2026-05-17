@@ -340,7 +340,7 @@ export function WebOperatorDataPanel(props: {
         onKeyDown={props.onResizeKeyDown}
       />
       <div
-        className="platform-switcher platform-switcher-compact operator-data-panel__tabs"
+        className="platform-switcher platform-switcher-compact operator-data-panel__tabs operator-data-panel__tabs--instant"
         role="tablist"
         aria-label="Workspace data tabs"
         style={insightTabSwitcherStyle as CSSProperties}

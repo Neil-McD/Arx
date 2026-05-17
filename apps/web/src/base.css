@@ -22344,6 +22344,13 @@ button.message-citation-chip:hover {
   min-width: 208px;
 }
 
+.operator-data-panel__tabs--instant::before {
+  transition:
+    border-color 140ms ease,
+    background 140ms ease,
+    box-shadow 140ms ease;
+}
+
 .operator-data-panel__tabs .platform-switcher-btn {
   min-width: 0;
   overflow: hidden;

@@ -988,6 +988,7 @@ function WorkspaceComposer(props: {
 }
 
 export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
+  const initialRightPanelStorageUserId = resolveAuthSubject(props.session);
   const [messageInput, setMessageInput] = useState(props.initialComposerDraft.text);
   const [workspaceAttachments, setWorkspaceAttachments] = useState<WorkspaceAttachmentView[]>(
     props.initialComposerDraft.attachments,
@@ -1012,9 +1013,9 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
     typeof window === "undefined" ? true : window.matchMedia("(min-width: 901px)").matches,
   );
   const [requestedRightPanelTab, setRequestedRightPanelTab] =
-    useState<WorkspaceRightPanelTab>(() => loadWorkspaceRightPanelTab(null));
+    useState<WorkspaceRightPanelTab>(() => loadWorkspaceRightPanelTab(initialRightPanelStorageUserId));
   const [operatorRightPanelWidth, setOperatorRightPanelWidth] = useState(OPERATOR_RIGHT_PANEL_DEFAULT_WIDTH);
-  const loadedRightPanelTabUserIdRef = useRef<string | null>(null);
+  const loadedRightPanelTabUserIdRef = useRef<string | null>(initialRightPanelStorageUserId);
   const savedThreadScrollTopRef = useRef<number | null>(null);
   const pendingRestoreThreadScrollTopRef = useRef<number | null>(null);
   const lastTerminalSnapshotSignatureRef = useRef<string | null>(null);
