@@ -107,7 +107,8 @@ export type WorkspaceUserDataPanelDataProps = {
 };
 
 const WORKSPACE_FILES_EXPANDED_STORAGE_KEY_PREFIX = "polynet-workspace-files-expanded";
-const WORKSPACE_PANEL_COLLAPSED_SIGNAL_LIMIT = 10;
+const WORKSPACE_PANEL_COLLAPSED_SIGNAL_LIMIT = 8;
+const WORKSPACE_PANEL_EXPANDED_SIGNAL_VIEWPORT_ITEMS = 10;
 
 function ResourceSignalIcon() {
   return (
@@ -531,6 +532,7 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps) {
 export function CommunityPanelContent(props: WorkspaceUserDataPanelDataProps) {
   const community = props.activeCommunity;
   const [isRecentSignalsExpanded, setIsRecentSignalsExpanded] = useState(false);
+  const recentSignalsViewportRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     setIsRecentSignalsExpanded(false);
@@ -560,6 +562,13 @@ export function CommunityPanelContent(props: WorkspaceUserDataPanelDataProps) {
     ? community.recentSignals
     : community.recentSignals.slice(0, WORKSPACE_PANEL_COLLAPSED_SIGNAL_LIMIT);
   const canExpandRecentSignals = community.recentSignals.length > WORKSPACE_PANEL_COLLAPSED_SIGNAL_LIMIT;
+  const canScrollRecentSignals =
+    isRecentSignalsExpanded && community.recentSignals.length > WORKSPACE_PANEL_EXPANDED_SIGNAL_VIEWPORT_ITEMS;
+  const scrollRecentSignalsToBottom = () => {
+    const viewport = recentSignalsViewportRef.current;
+    if (!viewport) return;
+    viewport.scrollTo({ top: viewport.scrollHeight, behavior: "smooth" });
+  };
 
   return (
     <div className="workspace-user-data-panel__grid">
@@ -605,60 +614,79 @@ export function CommunityPanelContent(props: WorkspaceUserDataPanelDataProps) {
       {community.recentSignals.length > 0 ? (
         <section className="workspace-community-section">
           <div className="workspace-community-section__title">Recent signal</div>
-          <div className="workspace-community-signal-list">
-            {visibleRecentSignals.map((signal) => (
+          <div
+            ref={recentSignalsViewportRef}
+            className={`workspace-community-signal-viewport${isRecentSignalsExpanded ? " is-expanded" : ""}`}
+          >
+            <div className="workspace-community-signal-list">
+              {visibleRecentSignals.map((signal) => (
+                <button
+                  key={signal.id}
+                  type="button"
+                  className={`workspace-community-signal-row is-${signal.kind}${signal.replyContext ? " has-reply" : ""}`}
+                  onClick={() => props.onOpenRecentSignal(signal.target)}
+                >
+                  {signal.eventMonth && signal.eventDay ? (
+                    <span className="workspace-community-signal-date" aria-hidden="true">
+                      <span>{signal.eventMonth}</span>
+                      <strong>{signal.eventDay}</strong>
+                    </span>
+                  ) : signal.kind === "resource" ? (
+                    <ResourceSignalIcon />
+                  ) : signal.avatar ? (
+                    <UserAvatar
+                      className="workspace-community-signal-avatar public-funnel-face"
+                      readyClassName="has-image"
+                      name={signal.avatar.displayName ?? signal.avatar.userId}
+                      imageUrl={signal.avatar.avatarUrl}
+                      focusX={signal.avatar.avatarFocusX ?? 0.5}
+                      focusY={signal.avatar.avatarFocusY ?? 0.5}
+                      zoom={signal.avatar.avatarZoom ?? 1}
+                      alt=""
+                      aria-hidden={true}
+                      fallback={null}
+                    />
+                  ) : (
+                    <span className="workspace-community-signal-icon" aria-hidden="true">
+                      {signal.iconLabel ?? signal.kind.slice(0, 2).toUpperCase()}
+                    </span>
+                  )}
+                  <div className="workspace-community-signal-copy">
+                    {signal.metaLabel ? (
+                      <div className="workspace-community-signal-meta">{signal.metaLabel}</div>
+                    ) : null}
+                    <div className="workspace-community-signal-title">{signal.title}</div>
+                    {signal.replyContext ? (
+                      <div className="workspace-community-signal-reply chat-reply-quote" aria-label={`Reply to ${signal.replyContext.sender}`}>
+                        <svg className="chat-reply-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="9 14 4 9 9 4" />
+                          <path d="M20 20v-7a4 4 0 0 0-4-4H4" />
+                        </svg>
+                        <span className="chat-reply-sender">{signal.replyContext.sender}</span>
+                        <span className="chat-reply-text">{signal.replyContext.text}</span>
+                      </div>
+                    ) : null}
+                    {signal.subtitle ? (
+                      <div className="workspace-community-signal-subtitle">{signal.subtitle}</div>
+                    ) : null}
+                  </div>
+                </button>
+              ))}
+            </div>
+            {canScrollRecentSignals ? (
               <button
-                key={signal.id}
                 type="button"
-                className={`workspace-community-signal-row is-${signal.kind}${signal.replyContext ? " has-reply" : ""}`}
-                onClick={() => props.onOpenRecentSignal(signal.target)}
+                className="workspace-community-signal-scroll-bottom"
+                onClick={scrollRecentSignalsToBottom}
+                aria-label="Scroll recent signal to bottom"
               >
-                {signal.eventMonth && signal.eventDay ? (
-                  <span className="workspace-community-signal-date" aria-hidden="true">
-                    <span>{signal.eventMonth}</span>
-                    <strong>{signal.eventDay}</strong>
-                  </span>
-                ) : signal.kind === "resource" ? (
-                  <ResourceSignalIcon />
-                ) : signal.avatar ? (
-                  <UserAvatar
-                    className="workspace-community-signal-avatar public-funnel-face"
-                    readyClassName="has-image"
-                    name={signal.avatar.displayName ?? signal.avatar.userId}
-                    imageUrl={signal.avatar.avatarUrl}
-                    focusX={signal.avatar.avatarFocusX ?? 0.5}
-                    focusY={signal.avatar.avatarFocusY ?? 0.5}
-                    zoom={signal.avatar.avatarZoom ?? 1}
-                    alt=""
-                    aria-hidden={true}
-                    fallback={null}
-                  />
-                ) : (
-                  <span className="workspace-community-signal-icon" aria-hidden="true">
-                    {signal.iconLabel ?? signal.kind.slice(0, 2).toUpperCase()}
-                  </span>
-                )}
-                <div className="workspace-community-signal-copy">
-                  {signal.metaLabel ? (
-                    <div className="workspace-community-signal-meta">{signal.metaLabel}</div>
-                  ) : null}
-                  <div className="workspace-community-signal-title">{signal.title}</div>
-                  {signal.replyContext ? (
-                    <div className="workspace-community-signal-reply chat-reply-quote" aria-label={`Reply to ${signal.replyContext.sender}`}>
-                      <svg className="chat-reply-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <polyline points="9 14 4 9 9 4" />
-                        <path d="M20 20v-7a4 4 0 0 0-4-4H4" />
-                      </svg>
-                      <span className="chat-reply-sender">{signal.replyContext.sender}</span>
-                      <span className="chat-reply-text">{signal.replyContext.text}</span>
-                    </div>
-                  ) : null}
-                  {signal.subtitle ? (
-                    <div className="workspace-community-signal-subtitle">{signal.subtitle}</div>
-                  ) : null}
-                </div>
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M6 9l6 6 6-6" />
+                </svg>
               </button>
-            ))}
+            ) : null}
+          </div>
+          <div className="workspace-community-signal-actions">
             {canExpandRecentSignals ? (
               <button
                 type="button"

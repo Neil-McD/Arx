@@ -4058,41 +4058,6 @@ body {
   padding-bottom: 24px;
 }
 
-.discover-breadcrumb {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  color: var(--text-faint);
-}
-
-.discover-breadcrumb-button {
-  appearance: none;
-  border: 0;
-  background: transparent;
-  color: var(--text-muted);
-  padding: 0;
-  font: inherit;
-  cursor: pointer;
-}
-
-.discover-breadcrumb-button:hover {
-  color: var(--text-primary);
-}
-
-.discover-breadcrumb-separator {
-  color: var(--text-faint);
-}
-
-.discover-hero-breadcrumb {
-  min-width: 0;
-  padding-bottom: 7px;
-}
-
-.discover-hero-with-app-detail .discover-hero-breadcrumb {
-  padding-bottom: 0;
-}
-
 .discover-fixed-app-detail-header {
   min-width: 0;
 }
@@ -22555,6 +22520,35 @@ button.message-citation-chip:hover {
   gap: 8px;
 }
 
+.workspace-community-signal-viewport {
+  position: relative;
+  min-width: 0;
+}
+
+.workspace-community-signal-viewport.is-expanded {
+  max-height: 380px;
+  overflow-y: auto;
+  padding-right: 6px;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--text-faint) 38%, transparent) transparent;
+}
+
+.workspace-community-signal-viewport.is-expanded::-webkit-scrollbar {
+  width: 5px;
+}
+
+.workspace-community-signal-viewport.is-expanded::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-faint) 32%, transparent);
+}
+
+.workspace-community-signal-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  min-height: 22px;
+}
+
 .workspace-community-integration-row {
   min-width: 0;
   padding: 0;
@@ -22815,6 +22809,44 @@ button.message-citation-chip:hover {
 }
 
 .workspace-community-signal-view-more:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline-offset: 3px;
+}
+
+.workspace-community-signal-scroll-bottom {
+  position: sticky;
+  bottom: 8px;
+  float: right;
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  margin-top: -28px;
+  margin-right: 2px;
+  border: 1px solid color-mix(in srgb, var(--border-default) 82%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-card) 88%, transparent);
+  color: var(--text-secondary);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.24);
+  cursor: pointer;
+}
+
+.workspace-community-signal-scroll-bottom svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.1;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.workspace-community-signal-scroll-bottom:hover {
+  color: var(--text-primary);
+  border-color: color-mix(in srgb, var(--accent) 34%, var(--border-default));
+}
+
+.workspace-community-signal-scroll-bottom:focus-visible {
   outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
   outline-offset: 3px;
 }
