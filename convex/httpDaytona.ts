@@ -950,6 +950,7 @@ async function executeRetrievalAgentLoop(
 ): Promise<RuntimeAgentLoopSuccess | RuntimeAgentLoopFailure> {
   const projectContext = await resolveWorkspaceProjectContext({
     ctx: params.ctx,
+    userId: params.userId,
     projectId: params.projectId,
     authSubject: params.authSubject,
   });

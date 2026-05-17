@@ -1,4 +1,4 @@
-import { api } from "./_generated/api";
+import { internal } from "./_generated/api";
 import {
   extractInferenceSourceFromContentJson,
   extractTextFromContentJson,
@@ -46,7 +46,7 @@ export async function ensureRuntimeRunStarted(args: {
   const { ctx, runStartArgs, fail } = args;
   try {
     await ctx.runMutation(
-      (api as any).threads.ensureCloudRuntimeRunStarted as any,
+      (internal as any).threads.ensureCloudRuntimeRunStartedInternal as any,
       runStartArgs,
     );
     return { ok: true };
@@ -79,7 +79,7 @@ export async function lookupExistingRuntimeReplay(args: {
 }) {
   const { ctx, ownerId, threadId, assistantMessageKeyForRun, userMessageKeyForRun, inferenceSource } = args;
   const existingAssistant = (await ctx.runQuery(
-    api.threads.getCloudThreadMessageByOwnerMessageKey as any,
+    internal.threads.getCloudThreadMessageByOwnerMessageKeyInternal as any,
     {
       ownerId,
       threadId,
@@ -94,7 +94,7 @@ export async function lookupExistingRuntimeReplay(args: {
   if (!existingAssistant) return null;
   if (isPartialAssistantContentJson(existingAssistant.contentJson)) return null;
   const existingUser = (await ctx.runQuery(
-    api.threads.getCloudThreadMessageByOwnerMessageKey as any,
+    internal.threads.getCloudThreadMessageByOwnerMessageKeyInternal as any,
     {
       ownerId,
       threadId,
@@ -128,7 +128,7 @@ export async function persistRuntimeUserMessage(args: {
   latestUserText: string;
 }) {
   const persistedUser = (await args.ctx.runMutation(
-    api.threads.addCloudThreadMessage as any,
+    internal.threads.addCloudThreadMessageInternal as any,
     {
       ownerId: args.ownerId,
       threadId: args.threadId,
@@ -190,7 +190,7 @@ export async function persistRuntimeAssistantMessage(args: {
   const runtimeHarnessId = normalizeRuntimeHarnessId(args.runtimeHarnessId);
   const runtimeSurface = runtimeSurfaceFromHarnessId(runtimeHarnessId);
   const persisted = (await args.ctx.runMutation(
-    api.threads.upsertCloudThreadMessageByMessageKey as any,
+    internal.threads.upsertCloudThreadMessageByMessageKeyInternal as any,
     {
       ownerId: args.ownerId,
       threadId: args.threadId,

@@ -106,6 +106,21 @@ function main() {
 	  );
 	  assert.match(
 	    stagingMaintenance,
+	    /ensureStagingMountedMcpCanary/,
+	    "staging should seed a canonical user harness MCP canary for Codex projection proof",
+	  );
+	  assert.match(
+	    stagingMaintenance,
+	    /runCodexMountedMcpCanaryTurn/,
+	    "staging should expose a gated mounted MCP Codex canary turn",
+	  );
+	  assert.match(
+	    stagingMaintenance,
+	    /mcp_tool_execution_completed/,
+	    "staging Codex evidence should include runtime MCP execution events",
+	  );
+	  assert.match(
+	    stagingMaintenance,
 	    /duplicateActiveKeyCount/,
 	    "staging operability fingerprint should expose duplicate active binding and lock keys",
 	  );
@@ -113,6 +128,11 @@ function main() {
 	    packageJson,
 	    /check:staging-codex-harness-operability/,
 	    "package scripts should include the staging Codex operability canary",
+	  );
+	  assert.match(
+	    packageJson,
+	    /check:staging-codex-mounted-mcp-canary/,
+	    "package scripts should include the staging mounted MCP Codex canary",
 	  );
   assert.match(
     stagingMaintenanceCli,
@@ -159,11 +179,31 @@ function main() {
     /convexEnvGet\(options, "POLYNET_STAGING_MAINTENANCE_TOKEN"\)/,
 	    "staging maintenance scripts should reuse an existing maintenance token instead of overwriting it",
 	  );
-	  assert.match(
-	    stagingThreadBindingEvidence,
-	    /--require-sandbox-policy-evidence/,
-	    "staging thread-binding evidence should support an explicit fresh sandbox-policy evidence assertion",
-	  );
+		  assert.match(
+		    stagingThreadBindingEvidence,
+		    /--require-sandbox-policy-evidence/,
+		    "staging thread-binding evidence should support an explicit fresh sandbox-policy evidence assertion",
+		  );
+		  assert.match(
+		    stagingThreadBindingEvidence,
+		    /function findResumePair/,
+		    "staging thread-binding evidence should pair create/resume runs by the same thread/project/projection",
+		  );
+		  assert.match(
+		    stagingThreadBindingEvidence,
+		    /buildResumePairingKey/,
+		    "staging thread-binding evidence should avoid broad-window mismatches by grouping resume evidence",
+		  );
+		  assert.match(
+		    stagingMaintenanceCli,
+		    /redactSensitiveText/,
+		    "staging maintenance CLI should redact maintenance tokens from JSON parse failures",
+		  );
+		  assert.doesNotMatch(
+		    stagingMaintenanceCli,
+		    /args\.join\(" "\)/,
+		    "staging maintenance CLI should not dump raw command args that may include maintenance tokens",
+		  );
 
   assert.match(
     bridge,
@@ -217,11 +257,11 @@ function main() {
     /releaseCodexHarnessThreadBindingLockBestEffort/,
     "primary harness should release the binding lock in the finalizer",
   );
-	  assert.match(
-	    bridge,
-	    /codex_mcp_projection_execution: "descriptor_only"/,
-	    "thread binding slice should not enable native MCP execution yet",
-	  );
+		  assert.match(
+		    bridge,
+		    /read_only_dynamic_bridge_v0/,
+		    "thread binding slice should identify read-only MCP dynamic bridge execution",
+		  );
 	  assert.match(
 	    bridge,
 	    /duplicate_binding_count/,

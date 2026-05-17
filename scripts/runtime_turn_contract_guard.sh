@@ -120,8 +120,8 @@ forbid_match_in_file "$HANDLERS_FILE" 'listCloudThreadMessages as any' "no runti
 forbid_match_in_file "$HANDLERS_FILE" 'tailRole === "user"' "no tail-role text dedupe branch"
 
 echo "[7/10] Ensuring runtime turn short-circuits duplicate idempotency keys before inference..."
-require_match_in_file "$PERSISTENCE_FILE" 'getCloudThreadMessageByOwnerMessageKey as any' \
-  "runtime turn checks existing persisted messages by owner+messageKey"
+require_match_in_file "$PERSISTENCE_FILE" 'getCloudThreadMessageByOwnerMessageKeyInternal as any' \
+  "runtime turn checks existing persisted messages by owner+messageKey through trusted runtime persistence"
 require_match_in_file "$PERSISTENCE_FILE" 'existingAssistant = \(await ctx\.runQuery\(' \
   "runtime turn assistant short-circuit lookup exists"
 require_match_in_file "$HANDLERS_FILE" 'if \(existingReplay\) \{' \

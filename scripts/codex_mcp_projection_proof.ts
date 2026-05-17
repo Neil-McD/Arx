@@ -7,6 +7,11 @@ import {
   buildCodexMcpProjectionAuditPayload,
   type CodexMcpProjectionMountedTool,
 } from "../shared/codexMcpProjection.ts";
+import {
+  DISCOVER_APP_CATALOG,
+  INTERNAL_STAGING_MCP_CANARY_CATALOG_APP_ID,
+  resolveInternalStagingMcpCanaryEndpointUrl,
+} from "../shared/discoverCatalog.ts";
 
 const rootDir = process.cwd();
 
@@ -277,6 +282,34 @@ async function proveFingerprintStabilityAndRotation() {
   assert.notEqual(first.fingerprint, changed.fingerprint);
 }
 
+async function proveInternalStagingMcpCanaryIsHiddenButProjectable() {
+  assert.equal(
+    DISCOVER_APP_CATALOG.some(
+      (app) => app.id === INTERNAL_STAGING_MCP_CANARY_CATALOG_APP_ID,
+    ),
+    false,
+    "staging MCP canary must not appear in the public Discover catalog",
+  );
+
+  const projection = await buildCodexMcpProjection({
+    mountedTools: [
+      tool({
+        runtime_tool_name: "me__polynet_staging_canary__read_canary_record",
+        tool_name: "read_canary_record",
+        namespaced_tool_name: "polynet_staging_canary__read_canary_record",
+        catalog_app_id: INTERNAL_STAGING_MCP_CANARY_CATALOG_APP_ID,
+        app_name: "PolyNet staging MCP canary",
+        endpoint_url: resolveInternalStagingMcpCanaryEndpointUrl(),
+        auth_type: "none",
+      }),
+    ],
+  });
+
+  assert.equal(projection.eligible_tool_count, 1);
+  assert.equal(projection.blocked_tool_count, 0);
+  assert.equal(projection.tools[0]?.status, "eligible");
+}
+
 function proveRiskFloorGroundTruthIsUpstream() {
   const appValidation = readText("convex/appValidation.ts");
   const userPlatformAppMounts = readText("convex/userPlatformAppMounts.ts");
@@ -319,8 +352,8 @@ function proveHarnessWiring() {
   );
   assert.match(
     codexBridge,
-    /codex_mcp_projection_execution: "descriptor_only"/,
-    "first slice should be explicit that native MCP execution is not wired yet",
+    /codex_mcp_projection_execution:[\s\S]*read_only_dynamic_bridge_v0[\s\S]*descriptor_only/,
+    "Codex MCP projection should execute eligible read-only tools through the dynamic bridge and remain descriptor-only when none are eligible",
   );
   assert.match(
     codexBridge,
@@ -333,6 +366,7 @@ await proveEligibleAlreadyRiskFlooredReadOnlyRemoteMcpProjection();
 await proveFailClosedBlockedReasons();
 await proveDeveloperAppIdentitySeparatesProjectedServers();
 await proveFingerprintStabilityAndRotation();
+await proveInternalStagingMcpCanaryIsHiddenButProjectable();
 proveRiskFloorGroundTruthIsUpstream();
 proveHarnessWiring();
 

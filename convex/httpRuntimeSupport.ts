@@ -1,4 +1,4 @@
-import { api, internal } from "./_generated/api";
+import { internal } from "./_generated/api";
 import type { NativeToolAwareMessage } from "../shared/nativeToolProtocol";
 
 type InferenceRole = "user" | "assistant" | "system";
@@ -186,15 +186,17 @@ export async function resolveGateDecisionForAuthenticatedActor(params: {
   hasUserKeyConnection?: boolean;
   hasUserChatgptConnection?: boolean;
 }): Promise<ResolvedGateDecision> {
-  const raw = (await params.ctx.runQuery(api.gates.resolveGateDecision as any, {
-    authState: "authenticated",
+  const raw = (await params.ctx.runQuery(
+    internal.gates.resolveGateDecisionForTrustedActorInternal as any,
+    {
     authSubject: params.authSubject,
     surface: params.surface,
     executionMode: "cloud",
     requestedFundingSource: params.requestedFundingSource,
     hasUserKeyConnection: Boolean(params.hasUserKeyConnection),
     hasUserChatGptConnection: Boolean(params.hasUserChatgptConnection),
-  })) as Record<string, unknown> | null;
+    },
+  )) as Record<string, unknown> | null;
 
   const allowed = raw?.allowed === true;
   const code = normalizeGateCode(raw?.code, allowed ? "ok" : "tier_required");

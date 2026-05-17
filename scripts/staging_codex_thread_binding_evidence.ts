@@ -9,13 +9,15 @@ import {
 
 const options = parseCommonOptions();
 const sinceMs = Number(readFlag("--since-ms") ?? 0);
-const limit = Number(readFlag("--limit") ?? 20);
+const limit = Number(readFlag("--limit") ?? 6);
 const threadId = readFlag("--thread-id");
 const runId = readFlag("--run-id");
 const ownerId = readFlag("--owner-id");
 const assertResume = process.argv.includes("--assert-resume");
 const requireSandboxPolicyEvidence = process.argv.includes("--require-sandbox-policy-evidence");
 const rawOutput = process.argv.includes("--raw");
+
+type CodexThreadBindingSummary = ReturnType<typeof summarizeRun>;
 
 function eventTypes(run: any): string[] {
   return Array.isArray(run?.events)
@@ -27,6 +29,25 @@ function findEvent(run: any, eventType: string): any | null {
   return Array.isArray(run?.events)
     ? (run.events.find((event: any) => event?.eventType === eventType) ?? null)
     : null;
+}
+
+function eventsOfType(run: any, eventType: string): any[] {
+  return Array.isArray(run?.events)
+    ? run.events.filter((event: any) => event?.eventType === eventType)
+    : [];
+}
+
+function successfulDynamicToolNames(run: any): string[] {
+  const names = new Set<string>();
+  for (const event of [
+    ...eventsOfType(run, "codex_harness_dynamic_tool_bridge_call_finished"),
+    ...eventsOfType(run, "codex_harness_primary_dynamic_tool_event"),
+  ]) {
+    if (event?.payload?.success !== true) continue;
+    const toolName = String(event?.payload?.tool_name ?? "").trim();
+    if (toolName) names.add(toolName);
+  }
+  return [...names].sort();
 }
 
 function summarizeRun(run: any) {
@@ -91,37 +112,46 @@ function summarizeRun(run: any) {
     codexHomeRuntimeIsolated: completed?.payload?.codex_home_runtime_isolated ?? null,
     codexSessionArchivePresent: completed?.payload?.codex_session_archive_present ?? null,
     codexSessionArchiveRestored: completed?.payload?.codex_session_archive_restored ?? null,
-	    codexSessionArchivePersisted: completed?.payload?.codex_session_archive_persisted ?? null,
-	    codexSessionArchiveErrorMessage:
-	      completed?.payload?.codex_session_archive_error_message ?? null,
-	    sandboxPolicyType: completed?.payload?.sandbox_policy_type ?? null,
-	    sandboxPolicyNetworkAccess: completed?.payload?.sandbox_policy_network_access ?? null,
-	    sandboxPolicyWritableRootCount:
-	      completed?.payload?.sandbox_policy_writable_root_count ?? null,
-	    sandboxPolicyExcludeTmpdirEnvVar:
-	      completed?.payload?.sandbox_policy_exclude_tmpdir_env_var ?? null,
-	    sandboxPolicyExcludeSlashTmp:
-	      completed?.payload?.sandbox_policy_exclude_slash_tmp ?? null,
-	    bindingLockAcquired: Boolean(lockAcquired),
+    codexSessionArchivePersisted: completed?.payload?.codex_session_archive_persisted ?? null,
+    codexSessionArchiveErrorMessage:
+      completed?.payload?.codex_session_archive_error_message ?? null,
+    sandboxPolicyType: completed?.payload?.sandbox_policy_type ?? null,
+    sandboxPolicyNetworkAccess: completed?.payload?.sandbox_policy_network_access ?? null,
+    sandboxPolicyWritableRootCount:
+      completed?.payload?.sandbox_policy_writable_root_count ?? null,
+    sandboxPolicyExcludeTmpdirEnvVar:
+      completed?.payload?.sandbox_policy_exclude_tmpdir_env_var ?? null,
+    sandboxPolicyExcludeSlashTmp:
+      completed?.payload?.sandbox_policy_exclude_slash_tmp ?? null,
+    dynamicToolBridgeConfigured:
+      completed?.payload?.dynamic_tool_bridge_configured ?? null,
+    dynamicToolRequestCount:
+      completed?.payload?.dynamic_tool_request_count ?? null,
+    dynamicToolResponseCount:
+      completed?.payload?.dynamic_tool_response_count ?? null,
+    dynamicToolFailureCount:
+      completed?.payload?.dynamic_tool_failure_count ?? null,
+    successfulDynamicToolNames: successfulDynamicToolNames(run),
+    bindingLockAcquired: Boolean(lockAcquired),
     bindingLockReleased: Boolean(lockReleased),
     bindingLockConflict: Boolean(lockConflict),
-	    bindingLockReason: lockAcquired?.payload?.reason ?? lockConflict?.payload?.reason ?? null,
-	    duplicateBindingCount:
-	      resolved?.payload?.duplicate_binding_count ??
-	      created?.payload?.duplicate_binding_count ??
-	      resumed?.payload?.duplicate_binding_count ??
-	      rotated?.payload?.duplicate_binding_count ??
-	      null,
-	    repairedDuplicateBindingCount:
-	      created?.payload?.repaired_duplicate_binding_count ??
-	      resumed?.payload?.repaired_duplicate_binding_count ??
-	      rotated?.payload?.repaired_duplicate_binding_count ??
-	      null,
-	    duplicateLockCount:
-	      lockAcquired?.payload?.duplicate_lock_count ??
-	      lockReleased?.payload?.duplicate_lock_count ??
-	      lockConflict?.payload?.duplicate_lock_count ??
-	      null,
+    bindingLockReason: lockAcquired?.payload?.reason ?? lockConflict?.payload?.reason ?? null,
+    duplicateBindingCount:
+      resolved?.payload?.duplicate_binding_count ??
+      created?.payload?.duplicate_binding_count ??
+      resumed?.payload?.duplicate_binding_count ??
+      rotated?.payload?.duplicate_binding_count ??
+      null,
+    repairedDuplicateBindingCount:
+      created?.payload?.repaired_duplicate_binding_count ??
+      resumed?.payload?.repaired_duplicate_binding_count ??
+      rotated?.payload?.repaired_duplicate_binding_count ??
+      null,
+    duplicateLockCount:
+      lockAcquired?.payload?.duplicate_lock_count ??
+      lockReleased?.payload?.duplicate_lock_count ??
+      lockConflict?.payload?.duplicate_lock_count ??
+      null,
     projectionFingerprint:
       resolved?.payload?.projection_fingerprint ??
       completed?.payload?.projection_fingerprint ??
@@ -132,6 +162,99 @@ function summarizeRun(run: any) {
     previousCodexThreadId: run.binding?.previousCodexThreadId ?? null,
     eventTypes: types,
   };
+}
+
+function isSuccessfulCreatedSummary(run: CodexThreadBindingSummary): boolean {
+  return (
+    run.lifecycle === "created" &&
+    run.status === "ok" &&
+    run.primaryThreadLifecycle === "started" &&
+    Boolean(run.observedCodexThreadId) &&
+    run.bindingLockAcquired === true &&
+    run.bindingLockReleased === true &&
+    run.bindingLockConflict === false
+  );
+}
+
+function isSuccessfulResumedSummary(run: CodexThreadBindingSummary): boolean {
+  return (
+    run.lifecycle === "resumed" &&
+    run.status === "ok" &&
+    run.primaryThreadLifecycle === "resumed" &&
+    Boolean(run.observedCodexThreadId) &&
+    run.resumeAttempted === true &&
+    run.resumeFailed === false &&
+    run.resumeThreadIdMatched === true &&
+    run.bindingLockAcquired === true &&
+    run.bindingLockReleased === true &&
+    run.bindingLockConflict === false
+  );
+}
+
+function buildResumePairingKey(run: CodexThreadBindingSummary): string | null {
+  const thread = String(run.threadId ?? "").trim();
+  const project = String(run.projectId ?? "").trim();
+  const projection = String(run.projectionFingerprint ?? "").trim();
+  if (!thread || !project || !projection) return null;
+  return [thread, project, projection].join("::");
+}
+
+function sortByStartedAtDesc(
+  left: CodexThreadBindingSummary,
+  right: CodexThreadBindingSummary,
+): number {
+  return Number(right.startedAt ?? 0) - Number(left.startedAt ?? 0);
+}
+
+function findResumePair(summaries: CodexThreadBindingSummary[]): {
+  created: CodexThreadBindingSummary | null;
+  resumed: CodexThreadBindingSummary | null;
+} {
+  const groups = new Map<string, CodexThreadBindingSummary[]>();
+  for (const summary of summaries) {
+    const key = buildResumePairingKey(summary);
+    if (!key) continue;
+    groups.set(key, [...(groups.get(key) ?? []), summary]);
+  }
+
+  for (const runs of [...groups.values()].sort((left, right) => {
+    const leftStarted = Math.max(...left.map((run) => Number(run.startedAt ?? 0)));
+    const rightStarted = Math.max(...right.map((run) => Number(run.startedAt ?? 0)));
+    return rightStarted - leftStarted;
+  })) {
+    const createdCandidates = runs.filter(isSuccessfulCreatedSummary).sort(sortByStartedAtDesc);
+    const resumedCandidates = runs.filter(isSuccessfulResumedSummary).sort(sortByStartedAtDesc);
+    for (const resumed of resumedCandidates) {
+      const created = createdCandidates.find(
+        (candidate) =>
+          candidate.observedCodexThreadId === resumed.observedCodexThreadId &&
+          Number(candidate.startedAt ?? 0) <= Number(resumed.startedAt ?? 0),
+      );
+      if (created) return { created, resumed };
+    }
+  }
+
+  return { created: null, resumed: null };
+}
+
+function assertSuccessfulPlatformDynamicTools(run: CodexThreadBindingSummary | null): void {
+  assert(Boolean(run), "expected Codex run summary");
+  const toolNames = new Set(run?.successfulDynamicToolNames ?? []);
+  assert(
+    run?.dynamicToolBridgeConfigured === true,
+    "Codex primary canary should have the dynamic tool bridge configured",
+  );
+  assert(
+    Number(run?.dynamicToolRequestCount ?? 0) >= 2 &&
+      Number(run?.dynamicToolResponseCount ?? 0) >= 2 &&
+      Number(run?.dynamicToolFailureCount ?? 0) === 0,
+    "Codex primary canary should complete both PolyNet dynamic tool calls without failures",
+  );
+  assert(
+    toolNames.has("get_active_community_context") &&
+      toolNames.has("community_search"),
+    "Codex primary canary should successfully call both PolyNet read-only dynamic tools",
+  );
 }
 
 const evidence = withMaintenanceToken(options, (token) =>
@@ -153,29 +276,7 @@ const summaries = Array.isArray(evidence?.runs)
   : [];
 
 if (assertResume) {
-  const created = summaries.find(
-    (run: any) =>
-      run.lifecycle === "created" &&
-      run.status === "ok" &&
-      run.primaryThreadLifecycle === "started" &&
-      Boolean(run.observedCodexThreadId) &&
-      run.bindingLockAcquired === true &&
-      run.bindingLockReleased === true &&
-      run.bindingLockConflict === false,
-  );
-  const resumed = summaries.find(
-    (run: any) =>
-      run.lifecycle === "resumed" &&
-      run.status === "ok" &&
-      run.primaryThreadLifecycle === "resumed" &&
-      Boolean(run.observedCodexThreadId) &&
-      run.resumeAttempted === true &&
-      run.resumeFailed === false &&
-      run.resumeThreadIdMatched === true &&
-      run.bindingLockAcquired === true &&
-      run.bindingLockReleased === true &&
-      run.bindingLockConflict === false,
-  );
+  const { created, resumed } = findResumePair(summaries);
   assert(Boolean(created), "expected at least one successful Codex binding creation run");
   assert(Boolean(resumed), "expected at least one successful Codex binding resume run");
   assert(
@@ -208,33 +309,35 @@ if (assertResume) {
       resumed?.codexSessionArchivePersisted === true,
     "created/resumed runs should prove session archive persistence and restore",
   );
-	  assert(
-	    created?.bindingLockAcquired === true &&
+  assert(
+    created?.bindingLockAcquired === true &&
       resumed?.bindingLockAcquired === true &&
       created?.bindingLockReleased === true &&
       resumed?.bindingLockReleased === true &&
       created?.bindingLockConflict === false &&
       resumed?.bindingLockConflict === false,
-	    "created/resumed runs should acquire and release the binding lock without conflict",
-	  );
-	  const sandboxEvidencePresent =
-	    created?.sandboxPolicyType != null || resumed?.sandboxPolicyType != null;
-	  if (requireSandboxPolicyEvidence || sandboxEvidencePresent) {
-	    assert(
-	      created?.sandboxPolicyType === "workspaceWrite" &&
-	        resumed?.sandboxPolicyType === "workspaceWrite" &&
-	        created?.sandboxPolicyNetworkAccess === false &&
-	        resumed?.sandboxPolicyNetworkAccess === false &&
-	        created?.sandboxPolicyWritableRootCount === 1 &&
-	        resumed?.sandboxPolicyWritableRootCount === 1 &&
-	        created?.sandboxPolicyExcludeTmpdirEnvVar === true &&
-	        resumed?.sandboxPolicyExcludeTmpdirEnvVar === true &&
-	        created?.sandboxPolicyExcludeSlashTmp === true &&
-	        resumed?.sandboxPolicyExcludeSlashTmp === true,
-	      "created/resumed primary turns should expose workspace-only, network-free sandbox policy evidence",
-	    );
-	  }
-	}
+    "created/resumed runs should acquire and release the binding lock without conflict",
+  );
+  assertSuccessfulPlatformDynamicTools(created);
+  assertSuccessfulPlatformDynamicTools(resumed);
+  const sandboxEvidencePresent =
+    created?.sandboxPolicyType != null || resumed?.sandboxPolicyType != null;
+  if (requireSandboxPolicyEvidence || sandboxEvidencePresent) {
+    assert(
+      created?.sandboxPolicyType === "workspaceWrite" &&
+        resumed?.sandboxPolicyType === "workspaceWrite" &&
+        created?.sandboxPolicyNetworkAccess === false &&
+        resumed?.sandboxPolicyNetworkAccess === false &&
+        created?.sandboxPolicyWritableRootCount === 1 &&
+        resumed?.sandboxPolicyWritableRootCount === 1 &&
+        created?.sandboxPolicyExcludeTmpdirEnvVar === true &&
+        resumed?.sandboxPolicyExcludeTmpdirEnvVar === true &&
+        created?.sandboxPolicyExcludeSlashTmp === true &&
+        resumed?.sandboxPolicyExcludeSlashTmp === true,
+      "created/resumed primary turns should expose workspace-only, network-free sandbox policy evidence",
+    );
+  }
+}
 
 console.log(
   JSON.stringify(
@@ -245,11 +348,11 @@ console.log(
       filters: evidence?.filters ?? null,
       owner: evidence?.owner ?? null,
       project: evidence?.project ?? null,
-	      summaries,
-	      raw: rawOutput ? evidence?.runs ?? [] : undefined,
-	      assertedResume: assertResume,
-	      requiredSandboxPolicyEvidence: requireSandboxPolicyEvidence,
-	    },
+      summaries,
+      raw: rawOutput ? evidence?.runs ?? [] : undefined,
+      assertedResume: assertResume,
+      requiredSandboxPolicyEvidence: requireSandboxPolicyEvidence,
+    },
     null,
     2,
   ),

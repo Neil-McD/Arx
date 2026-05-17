@@ -48,13 +48,59 @@ export function run(command: string, args: string[], options?: { input?: string 
   });
 }
 
+const SENSITIVE_KEY_PATTERN =
+  /token|authorization|secret|api[_-]?key|credential|password|access[_-]?token|refresh[_-]?token/i;
+
+function redactSensitiveValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(redactSensitiveValue);
+  if (!value || typeof value !== "object") return value;
+  const out: Record<string, unknown> = {};
+  for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
+    out[key] = SENSITIVE_KEY_PATTERN.test(key)
+      ? "<redacted>"
+      : redactSensitiveValue(entry);
+  }
+  return out;
+}
+
+function redactSensitiveText(value: string, maxChars = 4_000): string {
+  const redacted = String(value ?? "")
+    .replace(/Bearer\s+[A-Za-z0-9._~+/=-]{12,}/gi, "Bearer <redacted>")
+    .replace(/pnt_[A-Za-z0-9_-]{12,}/g, "pnt_<redacted>")
+    .replace(
+      /(["']?(?:maintenanceToken|token|authorization|secret|api[_-]?key|credential|password|accessToken|refreshToken)["']?\s*[:=]\s*)("[^"]*"|'[^']*'|[^\s,}]+)/gi,
+      "$1<redacted>",
+    );
+  return redacted.length > maxChars
+    ? `${redacted.slice(redacted.length - maxChars)}\n...(truncated to tail)...`
+    : redacted;
+}
+
+function formatSafeCommandArgs(args: readonly string[]): string {
+  return args
+    .map((arg) => {
+      const trimmed = String(arg ?? "").trim();
+      if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) {
+        return redactSensitiveText(trimmed, 1_000);
+      }
+      try {
+        return JSON.stringify(redactSensitiveValue(JSON.parse(trimmed)));
+      } catch {
+        return redactSensitiveText(trimmed, 1_000);
+      }
+    })
+    .join(" ");
+}
+
 export function runJson(command: string, args: string[]): any {
   const raw = run(command, args).trim();
   if (!raw) return null;
   try {
     return JSON.parse(raw);
   } catch (error) {
-    throw new Error(`Command did not return JSON: ${command} ${args.join(" ")}\n${raw}`);
+    throw new Error(
+      `Command did not return JSON: ${command} ${formatSafeCommandArgs(args)}\n${redactSensitiveText(raw)}`,
+    );
   }
 }
 

@@ -6,9 +6,11 @@ import {
   CODEX_HARNESS_DYNAMIC_TOOL_BRIDGE_ROUTE,
   CODEX_HARNESS_READ_ONLY_DYNAMIC_TOOL_NAMES,
   buildCodexHarnessDynamicToolSpecs,
+  buildCodexHarnessMountedMcpDynamicToolSpecs,
   isCodexAppServerNativeToolName,
   normalizeCodexHarnessDynamicToolArguments,
 } from "../shared/codexHarnessDynamicTools.ts";
+import type { CodexMcpProjectionMountedTool } from "../shared/codexMcpProjection.ts";
 
 const rootDir = process.cwd();
 
@@ -30,11 +32,11 @@ function proveReadOnlyDynamicToolSurface() {
     "write",
     "bash",
   ]);
-  assert.deepEqual(
-    specs.map((tool) => tool.name),
-    ["get_active_community_context", "community_search"],
-    "Codex dynamic bridge should expose only read-only PolyNet platform tools",
-  );
+	  assert.deepEqual(
+	    specs.map((tool) => tool.name),
+	    ["get_active_community_context", "community_search"],
+	    "Codex platform dynamic bridge should expose only read-only PolyNet platform tools",
+	  );
   assert.equal(specs[0]?.inputSchema.type, "object");
   assert.equal(specs[1]?.inputSchema.type, "object");
   assert.deepEqual(
@@ -68,6 +70,58 @@ function proveReadOnlyDynamicToolSurface() {
     );
   }
   assert.equal(isCodexAppServerNativeToolName("community_search"), false);
+
+  const mountedMcpSpecs = buildCodexHarnessMountedMcpDynamicToolSpecs({
+    eligibleRuntimeToolNames: ["me__github__search_repositories"],
+    mountedTools: [
+      {
+        scope: "user",
+        mount_id: "mount:github",
+        runtime_tool_name: "me__github__search_repositories",
+        developer_app_id: "developer-app-github",
+        catalog_app_id: "github",
+        app_name: "GitHub",
+        endpoint_url: "https://api.githubcopilot.com/mcp/readonly",
+        auth_type: "bearer",
+        tool_name: "search_repositories",
+        namespaced_tool_name: "github__search_repositories",
+        description: "Search repositories.",
+        input_schema: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            query: { type: "string" },
+          },
+          required: ["query"],
+        },
+        risk_level: "read",
+      } satisfies CodexMcpProjectionMountedTool,
+      {
+        scope: "user",
+        mount_id: "mount:github",
+        runtime_tool_name: "me__github__create_issue",
+        developer_app_id: "developer-app-github",
+        catalog_app_id: "github",
+        app_name: "GitHub",
+        endpoint_url: "https://api.githubcopilot.com/mcp/readonly",
+        auth_type: "bearer",
+        tool_name: "create_issue",
+        namespaced_tool_name: "github__create_issue",
+        description: "Create an issue.",
+        input_schema: {
+          type: "object",
+          additionalProperties: true,
+          properties: {},
+        },
+        risk_level: "write",
+      } satisfies CodexMcpProjectionMountedTool,
+    ],
+  });
+  assert.deepEqual(
+    mountedMcpSpecs.map((tool) => tool.name),
+    ["me__github__search_repositories"],
+    "Codex dynamic bridge should expose only projection-eligible read-only mounted MCP tools",
+  );
 }
 
 function proveDaytonaSidecarBridgeHandling() {
@@ -120,7 +174,17 @@ function proveConvexBridgeAndRoute() {
   assert.match(
     bridge,
     /buildCodexHarnessDynamicToolSpecs\(\s*turn\.fixedAllowedToolNames/,
-    "primary Codex harness should derive dynamic tools from the existing runtime tool policy",
+    "primary Codex harness should derive platform dynamic tools from the existing runtime tool policy",
+  );
+  assert.match(
+    bridge,
+    /buildCodexHarnessMountedMcpDynamicToolSpecs\(\{/,
+    "primary Codex harness should project eligible read-only mounted MCP tools into Codex dynamic tools",
+  );
+  assert.match(
+    bridge,
+    /params\.executionSession\.getMountedTools\(\)/,
+    "primary Codex harness should source mounted MCP dynamic tools from PolyNet's resolved harness",
   );
   assert.match(
     bridge,
@@ -164,7 +228,7 @@ function proveConvexBridgeAndRoute() {
   );
   assert.match(
     bridge,
-    /codex_native_workspace_tools_v0_plus_polynet_readonly_dynamic_tools_v0/,
+    /codex_native_workspace_tools_v0_plus_polynet_readonly_dynamic_tools_v1/,
     "tool projection should make the Codex-native plus PolyNet-read-only split explicit",
   );
 
@@ -206,7 +270,7 @@ function proveConvexBridgeAndRoute() {
   assert.match(
     route,
     /executeCodexHarnessReadOnlyPlatformTool/,
-    "bridge route should execute only the platform read-only tool adapter",
+    "bridge route should execute through the PolyNet-owned read-only dynamic tool adapter",
   );
   assert.match(
     route,
@@ -258,6 +322,36 @@ function proveConvexBridgeAndRoute() {
     dynamicBridge,
     /cleanupExpiredCodexHarnessBridgeSessionsInternal/,
     "bridge sessions should have expired-session cleanup",
+  );
+  assert.doesNotMatch(
+    dynamicBridge,
+    /isCodexHarnessReadOnlyDynamicToolName\(toolName\)/,
+    "bridge session authorization should be driven by the per-run allowed tool list, including read-only MCP tools",
+  );
+  assert.match(
+    platformTools,
+    /executeCodexHarnessReadOnlyMountedMcpTool/,
+    "bridge platform adapter should route projection-eligible mounted MCP tools through PolyNet's MCP manager",
+  );
+  assert.match(
+    platformTools,
+    /buildCodexMcpProjection\(\{ mountedTools \}\)/,
+    "mounted MCP bridge calls should re-check current projection eligibility before execution",
+  );
+  assert.match(
+    platformTools,
+    /createRuntimeMcpManager\(/,
+    "mounted MCP bridge calls should reuse PolyNet's canonical MCP manager",
+  );
+  assert.match(
+    platformTools,
+    /appendRunEvent: params\.appendRunEvent/,
+    "mounted MCP bridge calls should preserve canonical MCP manager runtime telemetry",
+  );
+  assert.match(
+    route,
+    /appendBridgeRuntimeRunEventBestEffort/,
+    "Codex bridge route should attach MCP manager telemetry to the active runtime run",
   );
   assert.doesNotMatch(
     platformTools,

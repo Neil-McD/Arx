@@ -312,11 +312,13 @@ export const resolveRuntimeSkillSelectionInternal = internalQuery({
     ),
   },
   handler: async (ctx, args): Promise<RuntimeSkillResolutionResult> => {
-    const userId = await resolveUserIdForAuthenticatedRequest({
-      ctx,
-      userId: args.userId,
-      authSubject: args.authSubject ?? null,
-    });
+    const userId =
+      args.userId ??
+      (await resolveUserIdForAuthenticatedRequest({
+        ctx,
+        userId: args.userId,
+        authSubject: args.authSubject ?? null,
+      }));
     const requestedMentionTokens = extractExplicitSkillMentions(
       args.messages as RuntimeSkillInferenceMessage[],
     );

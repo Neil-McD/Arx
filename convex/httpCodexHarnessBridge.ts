@@ -103,6 +103,36 @@ async function appendBridgeAuditEventBestEffort(params: {
   }
 }
 
+async function appendBridgeRuntimeRunEventBestEffort(params: {
+  ctx: any;
+  session: Record<string, unknown> | null | undefined;
+  event: {
+    eventType: string;
+    eventKey?: string;
+    payload: Record<string, unknown>;
+  };
+}): Promise<void> {
+  const userId = readString(params.session ?? {}, "userId");
+  const threadId = readString(params.session ?? {}, "threadId");
+  const runId = readString(params.session ?? {}, "runId");
+  if (!userId || !threadId || !runId || !params.event.eventType) return;
+  try {
+    await params.ctx.runMutation((internal as any).threads.appendTrustedCloudRuntimeRunEventInternal, {
+      ownerId: userId,
+      threadId,
+      runId,
+      eventType: params.event.eventType,
+      eventKey: params.event.eventKey,
+      payload: {
+        bridge_source: "codex_harness_dynamic_tool_bridge",
+        ...params.event.payload,
+      },
+    });
+  } catch {
+    // Runtime MCP telemetry is best-effort; bridge auth and tool execution remain authoritative.
+  }
+}
+
 async function readJsonBody(req: Request): Promise<Record<string, unknown>> {
   try {
     const parsed = await req.json();
@@ -209,8 +239,15 @@ export function registerCodexHarnessBridgeRoutes(
           typeof session.authSubject === "string" ? session.authSubject : null,
         communityId:
           typeof session.communityId === "string" ? session.communityId : null,
+        runId,
         toolName,
         args: toolArgs,
+        appendRunEvent: async (event) =>
+          await appendBridgeRuntimeRunEventBestEffort({
+            ctx,
+            session,
+            event,
+          }),
       });
       const outputSummary = await summarizeContentItems(result.contentItems);
       await appendBridgeAuditEventBestEffort({

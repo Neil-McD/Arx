@@ -1,4 +1,4 @@
-import { query } from "./_generated/server";
+import { internalQuery, query } from "./_generated/server";
 import { v } from "convex/values";
 import { resolveAuthenticatedSubject } from "./authIdentity";
 import {
@@ -197,6 +197,54 @@ export const resolveGateDecision = query({
       userId,
       email: userEmail,
       canonicalTier,
+      effectiveTier: policy.decision.effectiveTier as EffectiveTier,
+      entitledCapabilityFamilies: policy.entitledCapabilityFamilies as CapabilityFamily[],
+    };
+  },
+});
+
+export const resolveGateDecisionForTrustedActorInternal = internalQuery({
+  args: {
+    authSubject: v.string(),
+    surface: v.literal("web"),
+    executionMode: v.literal("cloud"),
+    requestedFundingSource: v.union(
+      v.literal("demo_public"),
+      v.literal("user_key"),
+      v.literal("user_chatgpt"),
+      v.literal("platform"),
+    ),
+    hasUserKeyConnection: v.optional(v.boolean()),
+    hasUserChatGptConnection: v.optional(v.boolean()),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const nowMs = args.nowMs ?? Date.now();
+    const authSubject = String(args.authSubject ?? "").trim();
+    if (!authSubject) throw new Error("auth_subject_required");
+    const resolved = await getCanonicalTierBySubject({ ctx, authSubject, nowMs });
+    const policy = resolveCanonicalGatePolicy({
+      authState: "authenticated",
+      surface: args.surface,
+      executionMode: args.executionMode,
+      requestedFundingSource: args.requestedFundingSource,
+      tier: resolved.canonicalTier,
+      hasUserKeyConnection: Boolean(args.hasUserKeyConnection),
+      hasUserChatGptConnection: Boolean(args.hasUserChatGptConnection),
+    });
+    const decision = policy.decision;
+
+    return {
+      allowed: Boolean(decision.allowed),
+      code: decision.code as GateCode,
+      cta: decision.cta as GateCta,
+      lane: (decision.lane ?? null) as GateLane | null,
+      fundingSource: (decision.fundingSource ?? null) as RequestedFundingSource | null,
+      authState: "authenticated" as const,
+      authSubject,
+      userId: resolved.userId,
+      email: resolved.email,
+      canonicalTier: resolved.canonicalTier,
       effectiveTier: policy.decision.effectiveTier as EffectiveTier,
       entitledCapabilityFamilies: policy.entitledCapabilityFamilies as CapabilityFamily[],
     };

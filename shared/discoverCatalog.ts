@@ -241,6 +241,58 @@ export type DiscoverAppCatalogEntry = {
   personalConnect: DiscoverAppPersonalConnectTemplate;
 };
 
+export const INTERNAL_STAGING_MCP_CANARY_CATALOG_APP_ID =
+  "polynet-staging-mcp-canary";
+export const INTERNAL_STAGING_MCP_CANARY_ENDPOINT_PATH =
+  "/staging/mcp_canary";
+export const INTERNAL_STAGING_MCP_CANARY_DEFAULT_ENDPOINT_URL =
+  "https://quick-porcupine-949.convex.site/staging/mcp_canary";
+
+function readProcessEnv(name: string): string {
+  try {
+    const value = (globalThis as any)?.process?.env?.[name];
+    return typeof value === "string" ? value.trim() : "";
+  } catch {
+    return "";
+  }
+}
+
+function buildUrlWithPath(baseUrl: string, pathname: string): string {
+  try {
+    const url = new URL(baseUrl);
+    if (url.protocol !== "https:") return "";
+    url.pathname = pathname;
+    url.search = "";
+    url.hash = "";
+    return url.toString();
+  } catch {
+    return "";
+  }
+}
+
+export function resolveInternalStagingMcpCanaryEndpointUrl(): string {
+  const explicit = readProcessEnv("POLYNET_STAGING_MCP_CANARY_ENDPOINT_URL");
+  const explicitUrl = explicit
+    ? buildUrlWithPath(explicit, INTERNAL_STAGING_MCP_CANARY_ENDPOINT_PATH)
+    : "";
+  if (explicitUrl) return explicitUrl;
+
+  const bridgeUrl = readProcessEnv("POLYNET_CODEX_DYNAMIC_TOOL_BRIDGE_URL");
+  const bridgeEndpoint = bridgeUrl
+    ? buildUrlWithPath(bridgeUrl, INTERNAL_STAGING_MCP_CANARY_ENDPOINT_PATH)
+    : "";
+  if (bridgeEndpoint) return bridgeEndpoint;
+
+  const convexSiteUrl =
+    readProcessEnv("CONVEX_SITE_URL") ||
+    readProcessEnv("VITE_CONVEX_SITE_URL") ||
+    readProcessEnv("PUBLIC_CONVEX_SITE_URL");
+  const siteEndpoint = convexSiteUrl
+    ? buildUrlWithPath(convexSiteUrl, INTERNAL_STAGING_MCP_CANARY_ENDPOINT_PATH)
+    : "";
+  return siteEndpoint || INTERNAL_STAGING_MCP_CANARY_DEFAULT_ENDPOINT_URL;
+}
+
 function buildDiscoverAppResultPolicy(args: {
   maxToolCount: number;
   maxResultBytes: number;
@@ -319,6 +371,28 @@ function buildDiscoverAppMcpRequestHeaders(
 
 // Profiles describe integration intent. Runtime enforcement still lives in the harness policy layer.
 export const DISCOVER_APP_INTEGRATION_PROFILE_OVERRIDES = {
+  [INTERNAL_STAGING_MCP_CANARY_CATALOG_APP_ID]: {
+    adapterKind: "remote_mcp_no_auth",
+    readiness: "ready_no_auth",
+    identityScope: "catalog_singleton",
+    authMode: "none",
+    validationKind: "mcp_initialize_tools_list",
+    contextStrategy: "structured_snapshot",
+    resultPolicy: buildDiscoverAppResultPolicy({
+      maxToolCount: 4,
+      maxResultBytes: 4_000,
+    }),
+    runtimePolicy: buildDiscoverAppRuntimePolicy({
+      defaultToolRisk: "read",
+      declaredIntents: ["staging_mcp_canary_read"],
+    }),
+    toolPolicy: {
+      defaultEnabledNamePrefixes: ["read_"],
+      allowOnlyDefaultEnabled: true,
+      disabledReason:
+        "The staging MCP canary only exposes read-only evidence tools.",
+    },
+  },
   github: {
     adapterKind: "remote_mcp_token",
     readiness: "ready_token",
@@ -864,6 +938,42 @@ export function findDiscoverAppCatalogEntryById(
 ): DiscoverAppCatalogEntry | null {
   const normalizedCatalogAppId = normalizeCatalogId(catalogAppId);
   if (!normalizedCatalogAppId) return null;
+  if (normalizedCatalogAppId === INTERNAL_STAGING_MCP_CANARY_CATALOG_APP_ID) {
+    return {
+      id: INTERNAL_STAGING_MCP_CANARY_CATALOG_APP_ID,
+      name: "PolyNet staging MCP canary",
+      tagline: "Internal read-only MCP bridge canary",
+      description:
+        "Internal staging-only no-auth MCP endpoint used to verify PolyNet-owned user harness app tools can be projected into Codex.",
+      supportLabel: "Internal staging only",
+      supportNote:
+        "This app is intentionally omitted from the public Discover catalog and exists only for staging maintenance proof runs.",
+      heroNote:
+        "Used by staging maintenance to prove mounted MCP tool projection and execution.",
+      capabilities: [
+        "Return deterministic read-only canary evidence.",
+        "Exercise the standard user harness app mount tables.",
+        "Verify Codex dynamic bridge execution without changing user-facing MCP setup.",
+      ],
+      websiteUrl: "https://polynet-staging.vercel.app",
+      docsUrl: "https://polynet-staging.vercel.app",
+      logoUrl: null,
+      personalConnect: {
+        connectionKind: "known",
+        availability: "ready",
+        authMethod: "none",
+        connectionStrategy: {
+          defaultMode: "none",
+          supportedModes: ["none"],
+        },
+        endpointUrl: resolveInternalStagingMcpCanaryEndpointUrl(),
+        authType: "none",
+        authLabel: "No auth",
+        note:
+          "Internal staging maintenance canary. It is not shown as a user-facing Discover app.",
+      },
+    };
+  }
   return (
     DISCOVER_APP_CATALOG.find((app) => app.id === normalizedCatalogAppId) ??
     null

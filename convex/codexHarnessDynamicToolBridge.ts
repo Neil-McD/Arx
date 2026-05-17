@@ -1,8 +1,5 @@
 import { v } from "convex/values";
 import { internalMutation } from "./_generated/server";
-import {
-  isCodexHarnessReadOnlyDynamicToolName,
-} from "../shared/codexHarnessDynamicTools.ts";
 
 function normalizeOptionalString(value: unknown): string | undefined {
   const normalized = String(value ?? "").trim();
@@ -53,9 +50,7 @@ export const createCodexHarnessBridgeSessionInternal = internalMutation({
 
     const nowMs = Number.isFinite(args.nowMs) ? Math.floor(args.nowMs as number) : Date.now();
     const expiresAt = Math.max(nowMs + 1000, Math.floor(args.expiresAt));
-    const allowedToolNames = normalizeToolNames(args.allowedToolNames).filter(
-      isCodexHarnessReadOnlyDynamicToolName,
-    );
+    const allowedToolNames = normalizeToolNames(args.allowedToolNames);
     if (allowedToolNames.length === 0) {
       throw new Error("codex_bridge_allowed_tool_required");
     }
@@ -156,15 +151,6 @@ export const resolveCodexHarnessBridgeSessionForCallInternal = internalMutation(
         status: 401,
         code: "codex_bridge_session_expired",
         message: "Codex dynamic tool bridge session expired.",
-        ...buildAuditContext(session),
-      };
-    }
-    if (!isCodexHarnessReadOnlyDynamicToolName(toolName)) {
-      return {
-        ok: false,
-        status: 403,
-        code: "codex_bridge_tool_not_allowed",
-        message: "This tool is not allowed through the Codex dynamic bridge.",
         ...buildAuditContext(session),
       };
     }

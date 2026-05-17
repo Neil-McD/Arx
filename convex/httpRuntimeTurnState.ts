@@ -1,4 +1,4 @@
-import { api, internal } from "./_generated/api";
+import { internal } from "./_generated/api";
 import type { RuntimeTurnContextSnapshotV1 } from "../shared/runtimeTurnContextPacket";
 
 type RuntimeLane = "public" | "platform" | "daytona" | "chatgpt";
@@ -163,7 +163,7 @@ export function buildRuntimeRunPersistenceHelpers(params: {
     eventKey?: string;
     payload: Record<string, unknown>;
   }): Promise<unknown> => {
-    return await params.ctx.runMutation((api as any).threads.appendCloudRuntimeRunEvent as any, {
+    return await params.ctx.runMutation((internal as any).threads.appendTrustedCloudRuntimeRunEventInternal as any, {
       ownerId: params.userId,
       threadId: params.threadId,
       runId: params.runId,
@@ -199,7 +199,7 @@ export function buildRuntimeRunPersistenceHelpers(params: {
       }
     }
     try {
-      await params.ctx.runMutation((api as any).threads.finishCloudRuntimeRun as any, {
+      await params.ctx.runMutation((internal as any).threads.finishCloudRuntimeRunInternal as any, {
         ownerId: params.userId,
         threadId: params.threadId,
         runId: params.runId,

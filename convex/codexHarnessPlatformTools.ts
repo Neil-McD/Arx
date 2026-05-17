@@ -12,6 +12,16 @@ import {
   normalizeCodexHarnessDynamicToolArguments,
   type CodexHarnessReadOnlyDynamicToolName,
 } from "../shared/codexHarnessDynamicTools.ts";
+import {
+  buildCodexMcpProjection,
+} from "../shared/codexMcpProjection.ts";
+import {
+  normalizeRuntimeMountedUserPlatformAppTools,
+} from "./runtimeHarnessShaping.ts";
+import {
+  createRuntimeMcpManager,
+  type RuntimeMountedMcpTool,
+} from "./runtimeMcpManager.ts";
 
 export type CodexHarnessDynamicToolCallResponse = {
   success: boolean;
@@ -67,6 +77,23 @@ export const resolveCodexHarnessTrustedCommunityContextInternal = internalQuery(
   },
 });
 
+export const resolveCodexHarnessTrustedBridgeActorInternal = internalQuery({
+  args: {
+    userId: v.id("users"),
+    authSubject: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const userId = await requireTrustedBridgeActor({
+      ctx,
+      userId: args.userId,
+      authSubject: args.authSubject,
+    });
+    return {
+      user_id: String(userId),
+    };
+  },
+});
+
 function formatJsonToolOutput(value: unknown): string {
   try {
     return JSON.stringify(value, null, 2);
@@ -94,19 +121,149 @@ function okDynamicTool(payload: unknown): CodexHarnessDynamicToolCallResponse {
   };
 }
 
+function okTextDynamicTool(text: string): CodexHarnessDynamicToolCallResponse {
+  return {
+    success: true,
+    contentItems: [{ type: "inputText", text }],
+    errorCode: null,
+  };
+}
+
+function toRuntimeMountedMcpTools(value: unknown): RuntimeMountedMcpTool[] {
+  return normalizeRuntimeMountedUserPlatformAppTools(value).map((tool) => ({
+    scope: "user",
+    mount_id: tool.user_platform_app_mount_id,
+    runtime_tool_name: `me__${tool.namespaced_tool_name}`,
+    developer_app_id: tool.developer_app_id,
+    catalog_app_id: tool.catalog_app_id,
+    app_name: tool.app_name,
+    endpoint_url: tool.endpoint_url,
+    auth_type: tool.auth_type,
+    tool_name: tool.tool_name,
+    namespaced_tool_name: tool.namespaced_tool_name,
+    description: tool.description,
+    input_schema: tool.input_schema,
+    risk_level: tool.risk_level,
+  }));
+}
+
+async function executeCodexHarnessReadOnlyMountedMcpTool(params: {
+  ctx: any;
+  userId: string;
+  authSubject?: string | null;
+  runId?: string | null;
+  toolName: string;
+  args: Record<string, unknown>;
+  appendRunEvent?: (event: {
+    eventType: string;
+    eventKey?: string;
+    payload: Record<string, unknown>;
+  }) => Promise<void>;
+}): Promise<CodexHarnessDynamicToolCallResponse> {
+  const authSubject = String(params.authSubject ?? "").trim();
+  const toolName = String(params.toolName ?? "").trim();
+  if (!authSubject) {
+    return failDynamicTool(
+      "auth_subject_required",
+      `${toolName || "MCP tool"} requires authenticated bridge identity context.`,
+    );
+  }
+
+  try {
+    await params.ctx.runQuery(
+      (internal as any).codexHarnessPlatformTools
+        .resolveCodexHarnessTrustedBridgeActorInternal,
+      {
+        userId: params.userId as any,
+        authSubject,
+      },
+    );
+  } catch (error) {
+    return failDynamicTool(
+      "trusted_identity_mismatch",
+      error instanceof Error ? error.message : String(error),
+    );
+  }
+
+  const mountedTools = toRuntimeMountedMcpTools(
+    await params.ctx.runQuery(
+      internal.userPlatformAppMounts.listRuntimeUserPlatformMountedToolsInternal as any,
+      {
+        userId: params.userId as any,
+      },
+    ),
+  );
+  const mountedTool = mountedTools.find(
+    (tool) => tool.runtime_tool_name === toolName,
+  );
+  if (!mountedTool) {
+    return failDynamicTool(
+      "codex_mcp_tool_not_found",
+      "Mounted MCP tool was not found in the active user harness.",
+    );
+  }
+
+  const projection = await buildCodexMcpProjection({ mountedTools });
+  const projectedTool = projection.tools.find(
+    (tool) => tool.runtime_tool_name === toolName,
+  );
+  if (projectedTool?.status !== "eligible" || mountedTool.risk_level !== "read") {
+    return failDynamicTool(
+      "codex_mcp_tool_not_eligible",
+      "Mounted MCP tool is not eligible for the read-only Codex bridge.",
+    );
+  }
+
+  const manager = createRuntimeMcpManager({
+    runId: String(params.runId ?? "").trim() || `codex_bridge:${crypto.randomUUID()}`,
+    mountedTools: [mountedTool],
+    appendRunEvent: params.appendRunEvent,
+    loadConnectionBundle: async ({ developerAppId }) =>
+      (await params.ctx.runAction(
+        internal.appOAuth.getFreshDeveloperAppConnectionBundleInternal as any,
+        {
+          developerAppId: developerAppId as any,
+        },
+      )) as any,
+  });
+  const result = await manager.execute({
+    runtimeToolName: toolName,
+    argumentsObject: params.args,
+  });
+  if (result.status !== "ok") {
+    return failDynamicTool(
+      result.errorCode ?? "codex_mcp_tool_failed",
+      result.errorMessage ||
+        result.outputText ||
+        "Mounted MCP tool failed.",
+    );
+  }
+  return okTextDynamicTool(
+    result.outputText ||
+      formatJsonToolOutput({
+        status: "ok",
+        tool_name: toolName,
+        details: result.details ?? null,
+      }),
+  );
+}
+
 export async function executeCodexHarnessReadOnlyPlatformTool(params: {
   ctx: any;
   userId: string;
   authSubject?: string | null;
   communityId?: string | null;
+  runId?: string | null;
   toolName: string;
   args: Record<string, unknown>;
+  appendRunEvent?: (event: {
+    eventType: string;
+    eventKey?: string;
+    payload: Record<string, unknown>;
+  }) => Promise<void>;
 }): Promise<CodexHarnessDynamicToolCallResponse> {
   if (!isCodexHarnessReadOnlyDynamicToolName(params.toolName)) {
-    return failDynamicTool(
-      "codex_bridge_tool_not_allowed",
-      "This tool is not allowed through the Codex dynamic bridge.",
-    );
+    return await executeCodexHarnessReadOnlyMountedMcpTool(params);
   }
 
   let normalizedArgs: Record<string, unknown>;

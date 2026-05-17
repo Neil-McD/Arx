@@ -1,4 +1,4 @@
-import { api, internal } from "./_generated/api";
+import { internal } from "./_generated/api";
 import { decryptStoredSecret } from "./providerConnections";
 import { loadPlatformModelMap, loadPublicModelMap } from "./httpInferenceConfig";
 import type { RetrievalToolName } from "../shared/retrievalTools";
@@ -298,7 +298,7 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
     };
   }
   const ownedThread = (await ctx.runQuery(
-    api.threads.getCloudThreadByThreadKey as any,
+    internal.threads.getCloudThreadByOwnerThreadKeyInternal as any,
     {
       ownerId: actor.dbUserId,
       threadKey,

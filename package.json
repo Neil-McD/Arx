@@ -105,6 +105,7 @@
     "check:staging-environment-smoke": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/staging_environment_smoke.ts",
     "check:staging-codex-harness-operability": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/staging_codex_harness_operability.ts",
     "check:staging-codex-thread-binding-evidence": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/staging_codex_thread_binding_evidence.ts --assert-resume",
+    "check:staging-codex-mounted-mcp-canary": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/staging_codex_mounted_mcp_canary.ts",
     "check:community-app-lifecycle-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_app_lifecycle_contract_proof.ts",
     "check:community-skill-attachment-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_skill_attachment_contract_proof.ts",
     "check:community-skill-runtime-behavior-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_skill_runtime_behavior_proof.ts",

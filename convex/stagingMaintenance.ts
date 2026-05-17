@@ -1,10 +1,32 @@
-import { internal } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import { action, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
+import {
+  INTERNAL_STAGING_MCP_CANARY_CATALOG_APP_ID,
+  resolveInternalStagingMcpCanaryEndpointUrl,
+} from "../shared/discoverCatalog.ts";
+import {
+  encodeMcpToolForStorage,
+  normalizeStoredSnapshotTools,
+} from "./mcpSnapshotCodec";
+import {
+  handleRuntimeTurnRequest,
+  type JsonResponseFn,
+} from "./runtimeTurnHandlers";
+import type { SseResponseFn } from "./httpRuntimeTurnState";
+import type { RequireAuthenticatedActor } from "./runtimeTurnResolution";
 
 const DEFAULT_OWNER_EMAIL = "neilmcdevittd@gmail.com";
 const DEFAULT_PROJECT_NAME = "General";
 const STAGING_HOSTNAME = "polynet-staging.vercel.app";
+const STAGING_MCP_CANARY_APP_NAME = "PolyNet staging MCP canary";
+const STAGING_MCP_CANARY_APP_SLUG = "polynet-staging-mcp-canary";
+const STAGING_MCP_CANARY_TOOL_NAME = "read_canary_record";
+const STAGING_MCP_CANARY_NAMESPACED_TOOL_NAME =
+  "polynet_staging_canary__read_canary_record";
+const STAGING_MCP_CANARY_RUNTIME_TOOL_NAME =
+  `me__${STAGING_MCP_CANARY_NAMESPACED_TOOL_NAME}`;
+const DEFAULT_CODEX_MCP_CANARY_THREAD_KEY = "staging-codex-mounted-mcp-canary-v2";
 
 const expectedCommunityArg = v.object({
   slug: v.string(),
@@ -72,6 +94,7 @@ const CODEX_THREAD_BINDING_EVIDENCE_EVENT_TYPES = new Set([
   "codex_thread_binding_persist_failed",
   "codex_thread_binding_persist_skipped",
   "codex_mcp_projection_fingerprint_changed",
+  "codex_harness_primary_started",
   "codex_harness_primary_completed",
   "codex_harness_primary_dynamic_tool_event",
   "codex_harness_dynamic_tool_bridge_call_started",
@@ -79,6 +102,11 @@ const CODEX_THREAD_BINDING_EVIDENCE_EVENT_TYPES = new Set([
   "codex_harness_dynamic_tool_bridge_call_failed",
   "codex_harness_dynamic_tool_bridge_call_finished",
   "codex_harness_dynamic_tool_bridge_call_denied",
+  "mcp_connection_bundle_loaded",
+  "mcp_session_initialized",
+  "mcp_session_reused",
+  "mcp_session_reinitialized",
+  "mcp_tool_execution_completed",
 ]);
 
 function readEnv(name: string): string {
@@ -265,6 +293,27 @@ function summarizeCodexThreadBindingEvidencePayload(args: {
       "codex_session_archive_error_message",
     ]);
   }
+  if (args.eventType === "codex_harness_primary_started") {
+    return pickPayloadFields(args.payload, [
+      ...common,
+      "model",
+      "prompt_chars",
+      "instruction_chars",
+      "tool_projection",
+      "platform_tool_projection",
+      "combined_tool_projection",
+      "codex_mcp_projection",
+      "codex_mcp_projection_execution",
+      "dynamic_tool_bridge_configured",
+      "dynamic_tool_requested_names",
+      "dynamic_platform_tool_requested_names",
+      "dynamic_mcp_tool_requested_names",
+      "dynamic_tool_active_names",
+      "dynamic_mcp_tool_active_names",
+      "sandbox_policy",
+      "approval_policy",
+    ]);
+  }
   if (args.eventType === "codex_harness_primary_completed") {
     return pickPayloadFields(args.payload, [
       ...common,
@@ -322,6 +371,27 @@ function summarizeCodexThreadBindingEvidencePayload(args: {
       "error_code",
     ]);
   }
+  if (
+    args.eventType === "mcp_connection_bundle_loaded" ||
+    args.eventType === "mcp_session_initialized" ||
+    args.eventType === "mcp_session_reused" ||
+    args.eventType === "mcp_session_reinitialized" ||
+    args.eventType === "mcp_tool_execution_completed"
+  ) {
+    return pickPayloadFields(args.payload, [
+      ...common,
+      "scope",
+      "developer_app_id",
+      "app_name",
+      "protocol_version",
+      "has_session_id",
+      "runtime_tool_name",
+      "risk_level",
+      "status",
+      "error_code",
+      "refreshed_session",
+    ]);
+  }
   return pickPayloadFields(args.payload, common);
 }
 
@@ -343,6 +413,116 @@ function readCodexDynamicToolBridgeUrl(): string {
     readEnv("VITE_CONVEX_SITE_URL") ||
     readEnv("PUBLIC_CONVEX_SITE_URL");
   return siteUrl ? `${siteUrl.replace(/\/+$/, "")}/runtime/codex_harness_dynamic_tool` : "";
+}
+
+function readStagingMcpCanaryEndpointUrl(): string {
+  return resolveInternalStagingMcpCanaryEndpointUrl();
+}
+
+function stagingJsonResponse(_req: Request, status: number, payload: unknown): Response {
+  return new Response(JSON.stringify(payload), {
+    status,
+    headers: {
+      "Content-Type": "application/json; charset=utf-8",
+      "Cache-Control": "no-store",
+    },
+  });
+}
+
+const stagingSseResponse: SseResponseFn = (_req, source) => {
+  const encoder = new TextEncoder();
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      const write = (event: string, data: Record<string, unknown>) => {
+        controller.enqueue(
+          encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`),
+        );
+      };
+      if (Array.isArray(source)) {
+        for (const entry of source) write(entry.event, entry.data);
+        controller.close();
+        return;
+      }
+      const writer = {
+        send(entry: { event: string; data: Record<string, unknown> }) {
+          write(entry.event, entry.data);
+        },
+        close() {
+          controller.close();
+        },
+      };
+      Promise.resolve(source(writer)).catch((error) => {
+        write("error", {
+          error: error instanceof Error ? error.message : String(error ?? "Stream failed."),
+        });
+        controller.close();
+      });
+    },
+  });
+  return new Response(body, {
+    status: 200,
+    headers: {
+      "Content-Type": "text/event-stream; charset=utf-8",
+      "Cache-Control": "no-store",
+    },
+  });
+};
+
+function canarySnapshotTools() {
+  return [
+    encodeMcpToolForStorage({
+      tool_name: STAGING_MCP_CANARY_TOOL_NAME,
+      namespaced_tool_name: STAGING_MCP_CANARY_NAMESPACED_TOOL_NAME,
+      description:
+        "Read deterministic staging evidence for the PolyNet mounted MCP bridge canary.",
+      input_schema: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          marker: {
+            type: "string",
+          },
+        },
+      },
+      risk_level: "read",
+    }),
+  ];
+}
+
+function snapshotHasStagingCanaryTool(snapshot: any, endpointUrl: string): boolean {
+  if (!snapshot || snapshot.validationStatus !== "ok") return false;
+  if (normalizeText(snapshot.endpointUrl) !== endpointUrl) return false;
+  return normalizeStoredSnapshotTools(snapshot.toolsJson).some(
+    (tool) =>
+      tool.tool_name === STAGING_MCP_CANARY_TOOL_NAME &&
+      tool.namespaced_tool_name === STAGING_MCP_CANARY_NAMESPACED_TOOL_NAME &&
+      tool.risk_level === "read",
+  );
+}
+
+async function resolveStagingUniqueDeveloperAppSlug(args: {
+  ctx: any;
+  ownerUserId: any;
+  baseSlug: string;
+  existingDeveloperAppId?: any;
+}): Promise<string> {
+  const baseSlug = normalizeSlug(args.baseSlug) || STAGING_MCP_CANARY_APP_SLUG;
+  const rows = await args.ctx.db
+    .query("developerApps")
+    .withIndex("by_owner", (q: any) => q.eq("ownerUserId", args.ownerUserId))
+    .collect();
+  const conflicts = new Set(
+    rows
+      .filter((row: any) => String(row._id) !== String(args.existingDeveloperAppId ?? ""))
+      .map((row: any) => normalizeSlug(row.slug))
+      .filter(Boolean),
+  );
+  if (!conflicts.has(baseSlug)) return baseSlug;
+  for (let suffix = 2; suffix < 1000; suffix += 1) {
+    const candidate = `${baseSlug}-${suffix}`.slice(0, 80);
+    if (!conflicts.has(candidate)) return candidate;
+  }
+  throw new Error("staging_mcp_canary_slug_conflict");
 }
 
 async function buildCodexHarnessOperabilityFingerprint(args: {
@@ -862,6 +1042,358 @@ export const ensureStagingWorld = mutation({
       dryRun,
       actions,
       fingerprint,
+    };
+  },
+});
+
+export const ensureStagingMountedMcpCanary = mutation({
+  args: {
+    maintenanceToken: v.string(),
+    ownerId: v.optional(v.string()),
+    ownerEmail: v.optional(v.string()),
+    ownerAuthSubject: v.optional(v.string()),
+    projectName: v.optional(v.string()),
+    threadKey: v.optional(v.string()),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    assertStagingMaintenanceAllowed({ maintenanceToken: args.maintenanceToken });
+    const nowMs = Math.floor(args.nowMs ?? Date.now());
+    const owner = await findOwnerUser({
+      ctx,
+      ownerId: args.ownerId ?? null,
+      ownerEmail: args.ownerEmail ?? null,
+      ownerAuthSubject: args.ownerAuthSubject ?? null,
+    });
+    const ownerAuthSubject = normalizeText(owner.authSubject);
+    if (!ownerAuthSubject) throw new Error("staging_owner_auth_subject_missing");
+
+    const projectName = normalizeText(args.projectName) || DEFAULT_PROJECT_NAME;
+    const project = await ensureExpectedProject({
+      ctx,
+      ownerId: owner._id,
+      projectName,
+      dryRun: false,
+      nowMs,
+    });
+    if (!project.row?._id) throw new Error("staging_project_missing");
+    const canaryCommunityExpected = defaultExpectedCommunities()[0];
+    const community = await ensureExpectedCommunity({
+      ctx,
+      ownerId: owner._id,
+      expected: canaryCommunityExpected,
+      dryRun: false,
+      nowMs,
+    });
+    if (!community.row?._id) throw new Error("staging_mcp_canary_community_missing");
+
+    const endpointUrl = readStagingMcpCanaryEndpointUrl();
+    if (!endpointUrl) throw new Error("staging_mcp_canary_endpoint_missing");
+
+    const existingApps = await ctx.db
+      .query("developerApps")
+      .withIndex("by_owner_catalogAppId", (q: any) =>
+        q
+          .eq("ownerUserId", owner._id)
+          .eq("catalogAppId", INTERNAL_STAGING_MCP_CANARY_CATALOG_APP_ID),
+      )
+      .collect();
+    const existingApp = existingApps.sort(
+      (a: any, b: any) => (a.createdAt ?? 0) - (b.createdAt ?? 0),
+    )[0] ?? null;
+    const slug = await resolveStagingUniqueDeveloperAppSlug({
+      ctx,
+      ownerUserId: owner._id,
+      baseSlug: STAGING_MCP_CANARY_APP_SLUG,
+      existingDeveloperAppId: existingApp?._id,
+    });
+    const developerAppId = existingApp
+      ? existingApp._id
+      : await ctx.db.insert("developerApps", {
+          ownerUserId: owner._id,
+          catalogAppId: INTERNAL_STAGING_MCP_CANARY_CATALOG_APP_ID,
+          name: STAGING_MCP_CANARY_APP_NAME,
+          slug,
+          description:
+            "Internal staging-only canary used to prove mounted MCP projection through Codex.",
+          endpointUrl,
+          authType: "none",
+          status: "draft",
+          createdAt: nowMs,
+          updatedAt: nowMs,
+        });
+    const app = existingApp ?? (await ctx.db.get(developerAppId));
+    if (!app) throw new Error("staging_mcp_canary_app_missing");
+
+    const activeSnapshot = app.activeSnapshotId
+      ? await ctx.db.get(app.activeSnapshotId)
+      : null;
+    const snapshotId = snapshotHasStagingCanaryTool(activeSnapshot, endpointUrl)
+      ? app.activeSnapshotId
+      : await ctx.db.insert("appToolSnapshots", {
+          developerAppId,
+          snapshotVersion: "staging_mcp_canary_v1",
+          endpointUrl,
+          validationStatus: "ok",
+          toolsJson: canarySnapshotTools(),
+          fetchedAt: nowMs,
+          createdAt: nowMs,
+        });
+
+    await ctx.db.patch(developerAppId, {
+      catalogAppId: INTERNAL_STAGING_MCP_CANARY_CATALOG_APP_ID,
+      name: STAGING_MCP_CANARY_APP_NAME,
+      slug,
+      description:
+        "Internal staging-only canary used to prove mounted MCP projection through Codex.",
+      endpointUrl,
+      authType: "none",
+      status: "valid",
+      activeSnapshotId: snapshotId,
+      lastValidatedAt: nowMs,
+      lastValidationError: undefined,
+      updatedAt: nowMs,
+    });
+
+    const existingMount = await ctx.db
+      .query("userPlatformAppMounts")
+      .withIndex("by_user_app", (q: any) =>
+        q.eq("userId", owner._id).eq("developerAppId", developerAppId),
+      )
+      .first();
+    const mountPatch = {
+      userId: owner._id,
+      developerAppId,
+      toolSnapshotId: snapshotId,
+      enabled: true,
+      enabledTools: [STAGING_MCP_CANARY_TOOL_NAME],
+      updatedAt: nowMs,
+    };
+    const mountId = existingMount
+      ? (await ctx.db.patch(existingMount._id, mountPatch), existingMount._id)
+      : await ctx.db.insert("userPlatformAppMounts", {
+          ...mountPatch,
+          createdAt: nowMs,
+        });
+
+    const sourceKey = `personal:${String(mountId)}`;
+    const existingSource = await ctx.db
+      .query("userPlatformAppMountSources")
+      .withIndex("by_user_sourceKey", (q: any) =>
+        q.eq("userId", owner._id).eq("sourceKey", sourceKey),
+      )
+      .first();
+    if (existingSource) {
+      await ctx.db.patch(existingSource._id, {
+        userPlatformAppMountId: mountId,
+        sourceType: "personal",
+        sourceKey,
+        updatedAt: nowMs,
+      });
+    } else {
+      await ctx.db.insert("userPlatformAppMountSources", {
+        userId: owner._id,
+        userPlatformAppMountId: mountId,
+        sourceType: "personal",
+        sourceKey,
+        createdAt: nowMs,
+        updatedAt: nowMs,
+      });
+    }
+
+    const threadKey =
+      normalizeText(args.threadKey) || DEFAULT_CODEX_MCP_CANARY_THREAD_KEY;
+    const existingThread = await ctx.db
+      .query("threads")
+      .withIndex("by_owner_threadKey", (q: any) =>
+        q.eq("ownerId", owner._id).eq("threadKey", threadKey),
+      )
+      .first();
+    const currentContextVersion = Number.isFinite(Number(existingThread?.contextVersion ?? 0))
+      ? Math.max(0, Math.floor(Number(existingThread?.contextVersion ?? 0)))
+      : 0;
+    const communityChanged =
+      String(existingThread?.communityId ?? "") !== String(community.row._id);
+    const threadPatch = {
+      title: "Staging Codex mounted MCP canary",
+      titleSource: "manual" as const,
+      projectId: project.row._id,
+      communityId: community.row._id,
+      modelId: "gpt-5.5",
+      contextVersion: communityChanged
+        ? currentContextVersion + 1
+        : currentContextVersion,
+      updatedAt: nowMs,
+    };
+    const threadId = existingThread
+      ? (await ctx.db.patch(existingThread._id, threadPatch), existingThread._id)
+      : await ctx.db.insert("threads", {
+          ownerId: owner._id,
+          threadKey,
+          ...threadPatch,
+          lastSeq: 0,
+          createdAt: nowMs,
+        });
+
+    return {
+      ok: true,
+      owner: {
+        id: String(owner._id),
+        normalizedEmail: owner.normalizedEmail ?? null,
+        authSubjectPresent: Boolean(ownerAuthSubject),
+      },
+      ownerAuthSubject,
+      project: {
+        id: String(project.row._id),
+        name: project.row.name ?? null,
+      },
+      community: {
+        id: String(community.row._id),
+        slug: community.row.slug ?? null,
+        name: community.row.name ?? null,
+      },
+      app: {
+        id: String(developerAppId),
+        catalogAppId: INTERNAL_STAGING_MCP_CANARY_CATALOG_APP_ID,
+        endpointUrl,
+        duplicateCatalogAppCount: existingApps.length,
+      },
+      mount: {
+        id: String(mountId),
+        enabledToolNames: [STAGING_MCP_CANARY_TOOL_NAME],
+        runtimeToolName: STAGING_MCP_CANARY_RUNTIME_TOOL_NAME,
+      },
+      thread: {
+        id: String(threadId),
+        threadKey,
+      },
+    };
+  },
+});
+
+export const runCodexMountedMcpCanaryTurn = action({
+  args: {
+    maintenanceToken: v.string(),
+    ownerId: v.optional(v.string()),
+    ownerEmail: v.optional(v.string()),
+    ownerAuthSubject: v.optional(v.string()),
+    projectName: v.optional(v.string()),
+    threadKey: v.optional(v.string()),
+    runId: v.optional(v.string()),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args): Promise<Record<string, unknown>> => {
+    assertStagingMaintenanceAllowed({ maintenanceToken: args.maintenanceToken });
+    const nowMs = Math.floor(args.nowMs ?? Date.now());
+    const setup = (await ctx.runMutation(
+      (api as any).stagingMaintenance.ensureStagingMountedMcpCanary,
+      {
+        maintenanceToken: args.maintenanceToken,
+        ownerId: args.ownerId ?? undefined,
+        ownerEmail: args.ownerEmail ?? undefined,
+        ownerAuthSubject: args.ownerAuthSubject ?? undefined,
+        projectName: args.projectName ?? undefined,
+        threadKey: args.threadKey ?? undefined,
+        nowMs,
+      },
+    )) as Record<string, any>;
+    if (setup?.ok !== true) throw new Error("staging_mcp_canary_setup_failed");
+    const ownerId = String(setup.owner?.id ?? "").trim();
+    const ownerAuthSubject = normalizeText(setup.ownerAuthSubject);
+    const threadKey = normalizeText(setup.thread?.threadKey);
+    if (!ownerId || !ownerAuthSubject || !threadKey) {
+      throw new Error("staging_mcp_canary_setup_incomplete");
+    }
+
+    const runId =
+      normalizeText(args.runId) ||
+      `agent_web:staging-mounted-mcp-canary:${crypto.randomUUID()}`;
+    const prompt = [
+      "Run the staging mounted MCP canary.",
+      "Before answering, perform these three PolyNet dynamic tool calls in this exact order:",
+      "1. get_active_community_context with {}.",
+      '2. community_search with {"query":"codex primary dynamic bridge canary"}.',
+      `3. ${STAGING_MCP_CANARY_RUNTIME_TOOL_NAME} with {"marker":"codex-mounted-mcp-canary"}.`,
+      "Do not produce the final answer until all three tool results have been observed.",
+      "Then answer with a single sentence that says whether the platform tools and mounted MCP canary returned ok evidence.",
+    ].join(" ");
+    const req = new Request("https://polynet-staging.vercel.app/runtime/runtime_turn", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        thread_id: threadKey,
+        model_id: "gpt-5.5",
+        surface: "web",
+        requested_agentic_tools: true,
+        requested_funding_source: "user_chatgpt",
+        stream: false,
+        codex_primary_canary: true,
+        idempotency_key: runId,
+        user_message_key: `user:${threadKey}:${runId}`,
+        message: {
+          text: prompt,
+        },
+        max_tokens: 900,
+      }),
+    });
+    const requireAuthenticatedActor: RequireAuthenticatedActor = async () => ({
+      ok: true,
+      actor: {
+        userId: ownerId,
+        dbUserId: ownerId as any,
+        authSubject: ownerAuthSubject,
+        email: String(setup.owner?.normalizedEmail ?? "") || null,
+        displayName: null,
+        avatarUrl: null,
+      },
+    });
+    const startedAt = Date.now();
+    const response = await handleRuntimeTurnRequest({
+      ctx,
+      req,
+      jsonResponse: stagingJsonResponse as JsonResponseFn,
+      sseResponse: stagingSseResponse,
+      requireAuthenticatedActor,
+    });
+    const responseText = await response.text();
+    let responseJson: unknown = null;
+    try {
+      responseJson = responseText ? JSON.parse(responseText) : null;
+    } catch {
+      responseJson = null;
+    }
+    const responseRecord =
+      responseJson && typeof responseJson === "object" && !Array.isArray(responseJson)
+        ? (responseJson as Record<string, unknown>)
+        : {};
+    return {
+      ok: response.status >= 200 && response.status < 300 && responseRecord.ok !== false,
+      status: response.status,
+      latencyMs: Date.now() - startedAt,
+      runId,
+      threadKey,
+      threadId: setup.thread?.id ?? null,
+      project: setup.project ?? null,
+      owner: setup.owner ?? null,
+      app: {
+        id: setup.app?.id ?? null,
+        catalogAppId: setup.app?.catalogAppId ?? null,
+        duplicateCatalogAppCount: setup.app?.duplicateCatalogAppCount ?? null,
+      },
+      mount: setup.mount ?? null,
+      response: {
+        ok: responseRecord.ok ?? null,
+        engineId: responseRecord.engine_id ?? null,
+        runtimeHarnessId: responseRecord.runtime_harness_id ?? null,
+        contentChars:
+          typeof responseRecord.content === "string"
+            ? responseRecord.content.length
+            : null,
+        code: responseRecord.code ?? responseRecord.error ?? null,
+        message: responseRecord.message ?? null,
+      },
     };
   },
 });

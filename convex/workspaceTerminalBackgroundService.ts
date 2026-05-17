@@ -1,4 +1,4 @@
-import { api, internal } from "./_generated/api";
+import { internal } from "./_generated/api";
 import {
   createDaytonaSandbox,
   deleteDaytonaSandbox,
@@ -112,14 +112,10 @@ async function waitForProjectBackgroundSandboxRegistration(params: {
     });
     if (resolved.ok) return resolved;
 
-    const project = await params.ctx.runQuery(
-      api.projects.getCloudProjectById as any,
-      {
-        authSubject: params.authSubject,
-        ownerId: params.userId,
-        projectId: params.projectId,
-      },
-    );
+    const project = await params.ctx.runQuery(internal.projects.getCloudProjectByIdInternal as any, {
+      projectId: params.projectId,
+    });
+    if (project && project.ownerId !== params.userId) return null;
     const state = normalizeOptionalString(project?.providerSandboxState);
     const lastSeenAt = Number(project?.providerSandboxLastSeenAt ?? 0);
     const leaseAgeMs =
@@ -178,12 +174,10 @@ export async function ensureProjectBackgroundSandbox(params: {
   });
   if (existing.ok) return existing;
 
-  const project = await params.ctx.runQuery(api.projects.getCloudProjectById as any, {
-    authSubject: params.authSubject,
-    ownerId: params.userId,
+  const project = await params.ctx.runQuery(internal.projects.getCloudProjectByIdInternal as any, {
     projectId: params.projectId,
   });
-  if (!project) {
+  if (!project || project.ownerId !== params.userId) {
     return {
       ok: false,
       status: 404,
@@ -312,9 +306,8 @@ export async function ensureProjectBackgroundSandbox(params: {
   let runtimeProject: any;
   try {
     runtimeProject = await params.ctx.runAction(
-      api.projects.ensureCloudProjectVolume as any,
+      internal.projects.ensureCloudProjectVolumeInternal as any,
       {
-        authSubject: params.authSubject,
         projectId: params.projectId,
       },
     );
@@ -499,12 +492,10 @@ export async function resolveProjectBackgroundSandboxIfReady(params: {
       details?: Record<string, unknown>;
     }
 > {
-  const project = await params.ctx.runQuery(api.projects.getCloudProjectById as any, {
-    authSubject: params.authSubject,
-    ownerId: params.userId,
+  const project = await params.ctx.runQuery(internal.projects.getCloudProjectByIdInternal as any, {
     projectId: params.projectId,
   });
-  if (!project) {
+  if (!project || project.ownerId !== params.userId) {
     return {
       ok: false,
       status: 404,

@@ -10,6 +10,7 @@ import type { RetrievalToolName } from "../shared/retrievalTools";
 import {
   CODEX_HARNESS_DYNAMIC_TOOL_BRIDGE_ROUTE,
   buildCodexHarnessDynamicToolSpecs,
+  buildCodexHarnessMountedMcpDynamicToolSpecs,
   type CodexHarnessDynamicToolSpec,
 } from "../shared/codexHarnessDynamicTools.ts";
 import {
@@ -168,11 +169,11 @@ function buildCodexPrimaryRuntimeInstructions(params: {
           `blocked_tool_count: ${turn.codexMcpProjection.blockedToolCount}`,
           `server_count: ${turn.codexMcpProjection.serverCount}`,
           `eligible_runtime_tool_names: ${turn.codexMcpProjection.eligibleRuntimeToolNames.join(", ") || "none"}`,
-          "This slice is projection/audit only; use native Codex workspace tools for workspace work and listed PolyNet dynamic tools for PolyNet platform/community access.",
+          "Use native Codex workspace tools for workspace work. Use listed PolyNet dynamic tools for PolyNet platform/community access and eligible read-only MCP app tools.",
         ].join("\n")
       : null,
     dynamicToolNames.length > 0
-      ? `Available PolyNet read-only dynamic tools: ${dynamicToolNames.join(", ")}. Use them when active community profile or community memory/search evidence is relevant.`
+      ? `Available PolyNet read-only dynamic tools: ${dynamicToolNames.join(", ")}. Use community tools when active community profile or memory/search evidence is relevant. Use mounted MCP app tools when the user's connected app data is relevant.`
       : null,
     canaryRequiresDynamicTools
       ? [
@@ -520,12 +521,25 @@ export function buildCodexAppServerRuntimeAgentHarness(params: {
     execute: async () => {
       const startedAt = Date.now();
       const turn = params.preparedTurn;
-      const requestedDynamicToolSpecs = buildCodexHarnessDynamicToolSpecs(
+      const requestedPlatformDynamicToolSpecs = buildCodexHarnessDynamicToolSpecs(
         turn.fixedAllowedToolNames,
       );
+      const requestedMountedMcpDynamicToolSpecs =
+        buildCodexHarnessMountedMcpDynamicToolSpecs({
+          mountedTools: params.executionSession.getMountedTools(),
+          eligibleRuntimeToolNames:
+            turn.codexMcpProjection?.eligibleRuntimeToolNames ?? [],
+        });
+      const requestedDynamicToolSpecs = [
+        ...requestedPlatformDynamicToolSpecs,
+        ...requestedMountedMcpDynamicToolSpecs,
+      ];
       const dynamicToolBridgeUrl = resolveCodexHarnessDynamicToolBridgeUrl();
       const activeDynamicToolSpecs = dynamicToolBridgeUrl
         ? requestedDynamicToolSpecs
+        : [];
+      const activeMountedMcpDynamicToolSpecs = dynamicToolBridgeUrl
+        ? requestedMountedMcpDynamicToolSpecs
         : [];
       const instructions = buildCodexPrimaryRuntimeInstructions({
         turn,
@@ -548,17 +562,26 @@ export function buildCodexAppServerRuntimeAgentHarness(params: {
           tool_projection: "codex_native_workspace_tools_v0",
           platform_tool_projection:
             activeDynamicToolSpecs.length > 0
-              ? "polynet_readonly_dynamic_tools_v0"
+              ? "polynet_readonly_dynamic_tools_v1"
               : "none",
           combined_tool_projection:
             activeDynamicToolSpecs.length > 0
-              ? "codex_native_workspace_tools_v0_plus_polynet_readonly_dynamic_tools_v0"
+              ? "codex_native_workspace_tools_v0_plus_polynet_readonly_dynamic_tools_v1"
               : "codex_native_workspace_tools_v0",
           codex_mcp_projection: turn.codexMcpProjection,
-          codex_mcp_projection_execution: "descriptor_only",
+          codex_mcp_projection_execution:
+            activeMountedMcpDynamicToolSpecs.length > 0
+              ? "read_only_dynamic_bridge_v0"
+              : "descriptor_only",
           dynamic_tool_bridge_configured: Boolean(dynamicToolBridgeUrl),
           dynamic_tool_requested_names: requestedDynamicToolSpecs.map((tool) => tool.name),
+          dynamic_platform_tool_requested_names:
+            requestedPlatformDynamicToolSpecs.map((tool) => tool.name),
+          dynamic_mcp_tool_requested_names:
+            requestedMountedMcpDynamicToolSpecs.map((tool) => tool.name),
           dynamic_tool_active_names: activeDynamicToolSpecs.map((tool) => tool.name),
+          dynamic_mcp_tool_active_names:
+            activeMountedMcpDynamicToolSpecs.map((tool) => tool.name),
           sandbox_policy: "workspace_write_no_network",
           approval_policy: "never",
         },

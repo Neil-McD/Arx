@@ -154,11 +154,13 @@ export const resolveRuntimeCommunityPromptContextInternal = internalQuery({
     communityId: v.id("communities"),
   },
   handler: async (ctx, args) => {
-    const userId = await resolveUserIdForAuthenticatedRequest({
-      ctx,
-      userId: args.userId,
-      authSubject: args.authSubject ?? null,
-    });
+    const userId = args.userId
+      ? args.userId
+      : await resolveUserIdForAuthenticatedRequest({
+          ctx,
+          userId: args.userId,
+          authSubject: args.authSubject ?? null,
+        });
     const { community } = await requireCommunityChatAccess({
       ctx,
       communityId: args.communityId,

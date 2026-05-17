@@ -2,6 +2,7 @@ import {
   WORKSPACE_SANDBOX_TOOL_NAMES,
   type RetrievalToolName,
 } from "./retrievalTools.ts";
+import type { CodexMcpProjectionMountedTool } from "./codexMcpProjection.ts";
 import {
   getToolDefinition,
   normalizeToolArguments,
@@ -17,7 +18,7 @@ export type CodexHarnessReadOnlyDynamicToolName =
   (typeof CODEX_HARNESS_READ_ONLY_DYNAMIC_TOOL_NAMES)[number];
 
 export type CodexHarnessDynamicToolSpec = {
-  name: CodexHarnessReadOnlyDynamicToolName;
+  name: string;
   description: string;
   inputSchema: ToolRegistryEntry["inputSchema"];
 };
@@ -62,6 +63,47 @@ export function buildCodexHarnessDynamicToolSpecs(
         inputSchema: definition.inputSchema,
       };
     });
+}
+
+export function buildCodexHarnessMountedMcpDynamicToolSpecs(params: {
+  mountedTools: readonly CodexMcpProjectionMountedTool[];
+  eligibleRuntimeToolNames: readonly string[];
+}): CodexHarnessDynamicToolSpec[] {
+  const eligibleRuntimeToolNames = new Set(
+    params.eligibleRuntimeToolNames.map((toolName) => String(toolName).trim()),
+  );
+  const specs: CodexHarnessDynamicToolSpec[] = [];
+  const seen = new Set<string>();
+  for (const tool of params.mountedTools) {
+    const runtimeToolName = String(tool.runtime_tool_name ?? "").trim();
+    if (
+      !runtimeToolName ||
+      seen.has(runtimeToolName) ||
+      !eligibleRuntimeToolNames.has(runtimeToolName) ||
+      tool.scope !== "user" ||
+      tool.risk_level !== "read"
+    ) {
+      continue;
+    }
+    seen.add(runtimeToolName);
+    specs.push({
+      name: runtimeToolName,
+      description:
+        String(tool.description ?? "").trim() ||
+        `Call the read-only ${tool.app_name || "MCP app"} tool ${tool.tool_name}.`,
+      inputSchema:
+        tool.input_schema &&
+        typeof tool.input_schema === "object" &&
+        !Array.isArray(tool.input_schema)
+          ? (tool.input_schema as ToolRegistryEntry["inputSchema"])
+          : {
+              type: "object",
+              additionalProperties: true,
+              properties: {},
+            },
+    });
+  }
+  return specs.sort((left, right) => left.name.localeCompare(right.name));
 }
 
 export function normalizeCodexHarnessDynamicToolArguments(

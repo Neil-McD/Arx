@@ -1,4 +1,4 @@
-import { api, internal } from "./_generated/api";
+import { internal } from "./_generated/api";
 import {
   DAYTONA_WORKSPACE_ROOT,
   createDaytonaSandbox,
@@ -109,17 +109,17 @@ async function settleReservedCreditsBestEffort(params: {
 
 export async function resolveWorkspaceProjectContext(params: {
   ctx: any;
+  userId?: any;
   projectId?: string | null;
   authSubject?: string | null;
 }): Promise<{ label: string | null; description: string | null }> {
-  if (!params.projectId || !params.authSubject) {
+  if (!params.projectId || !params.authSubject || !params.userId) {
     return { label: null, description: null };
   }
-  const row = await params.ctx.runQuery(api.projects.getCloudProjectById as any, {
+  const row = await params.ctx.runQuery(internal.projects.getCloudProjectByIdInternal as any, {
     projectId: params.projectId,
-    authSubject: params.authSubject,
   });
-  if (!row) {
+  if (!row || row.ownerId !== params.userId) {
     return { label: null, description: null };
   }
   const label = normalizeComputerDisplayName(typeof row.name === "string" ? row.name : null);
@@ -216,6 +216,18 @@ export async function createWorkspaceSandboxSession(params: {
     }
 > {
   const nowMs = Date.now();
+  const project = await params.ctx.runQuery(internal.projects.getCloudProjectByIdInternal as any, {
+    projectId: params.projectId,
+  });
+  if (!project || project.ownerId !== params.userId) {
+    return {
+      ok: false,
+      status: 404,
+      code: "project_not_found",
+      message: "Computer not found.",
+    };
+  }
+
   const creditBalance = await params.ctx.runQuery(
     internal.workspaceCredits.getWorkspaceCreditBalanceInternal as any,
     {
@@ -310,8 +322,7 @@ export async function createWorkspaceSandboxSession(params: {
 
   let runtimeProject: any;
   try {
-    runtimeProject = await params.ctx.runAction(api.projects.ensureCloudProjectVolume as any, {
-      authSubject: params.authSubject,
+    runtimeProject = await params.ctx.runAction(internal.projects.ensureCloudProjectVolumeInternal as any, {
       projectId: params.projectId,
     });
   } catch (error) {

@@ -992,6 +992,20 @@ export const getCloudThreadByThreadKey = query({
   },
 });
 
+export const getCloudThreadByOwnerThreadKeyInternal = internalQuery({
+  args: {
+    ownerId: v.id("users"),
+    threadKey: v.string(),
+  },
+  handler: async (ctx, args) => {
+    return await getCloudThreadByThreadKeyInternal({
+      ctx,
+      ownerId: args.ownerId,
+      threadKey: normalizeThreadKey(args.threadKey),
+    });
+  },
+});
+
 export const getCloudThreadContext = query({
   args: {
     ownerId: v.optional(v.id("users")),
@@ -1325,6 +1339,27 @@ export const getCloudThreadMessageByOwnerMessageKey = query({
   },
 });
 
+export const getCloudThreadMessageByOwnerMessageKeyInternal = internalQuery({
+  args: {
+    ownerId: v.id("users"),
+    messageKey: v.string(),
+    threadId: v.optional(v.id("threads")),
+  },
+  handler: async (ctx, args) => {
+    const messageKey = String(args.messageKey ?? "").trim();
+    if (!messageKey) return null;
+    const row = (await ctx.db
+      .query("cloudMessages")
+      .withIndex("by_owner_messageKey", (q) =>
+        q.eq("ownerId", args.ownerId).eq("messageKey", messageKey),
+      )
+      .first()) as CloudMessageLike | null;
+    if (!row) return null;
+    if (args.threadId && row.threadId !== args.threadId) return null;
+    return row;
+  },
+});
+
 export const addCloudThreadMessage = mutation({
   args: {
     ownerId: v.optional(v.id("users")),
@@ -1412,6 +1447,101 @@ export const addCloudThreadMessage = mutation({
   },
 });
 
+export const addCloudThreadMessageInternal = internalMutation({
+  args: {
+    ownerId: v.id("users"),
+    threadId: v.id("threads"),
+    messageKey: v.optional(v.string()),
+    seq: v.optional(v.number()),
+    role: v.union(v.literal("user"), v.literal("assistant"), v.literal("system")),
+    contentJson: v.any(),
+    engineId: v.optional(v.string()),
+    modelId: v.optional(v.string()),
+    runId: v.optional(v.string()),
+    createdAt: v.optional(v.number()),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const ownerId = args.ownerId;
+    const nowMs = args.nowMs ?? Date.now();
+    const thread = await requireOwnedCloudThread({
+      ctx,
+      ownerId,
+      threadId: args.threadId,
+    });
+
+    const explicitSeq =
+      typeof args.seq === "number" && Number.isFinite(args.seq)
+        ? Math.max(0, Math.floor(args.seq))
+        : null;
+    const seq = explicitSeq ?? Math.max(0, Math.floor((thread.lastSeq ?? 0) + 1));
+    const explicitMessageKey = String(args.messageKey ?? "").trim();
+    const messageKey = explicitMessageKey || `${String(thread._id)}:${seq}`;
+
+    if (explicitMessageKey) {
+      const existingByMessageKey = (await ctx.db
+        .query("cloudMessages")
+        .withIndex("by_owner_messageKey", (q) =>
+          q.eq("ownerId", ownerId).eq("messageKey", explicitMessageKey),
+        )
+        .first()) as CloudMessageLike | null;
+      if (existingByMessageKey) {
+        if (existingByMessageKey.threadId !== thread._id) {
+          throw new Error("message_key_conflict");
+        }
+        return existingByMessageKey;
+      }
+    }
+
+    const existingBySeq = (await ctx.db
+      .query("cloudMessages")
+      .withIndex("by_thread_seq", (q) =>
+        q.eq("threadId", thread._id).eq("seq", seq),
+      )
+      .first()) as CloudMessageLike | null;
+    if (existingBySeq) return existingBySeq;
+
+    const createdAt =
+      typeof args.createdAt === "number" && Number.isFinite(args.createdAt)
+        ? Math.floor(args.createdAt)
+        : nowMs;
+    const id = await ctx.db.insert("cloudMessages", {
+      ownerId,
+      threadId: thread._id,
+      messageKey,
+      seq,
+      role: args.role,
+      contentJson: args.contentJson,
+      engineId: String(args.engineId ?? "").trim() || undefined,
+      modelId: String(args.modelId ?? "").trim() || undefined,
+      runId: String(args.runId ?? "").trim() || undefined,
+      createdAt,
+    });
+
+    const nextLastSeq = Math.max(
+      0,
+      Math.floor(Math.max(thread.lastSeq ?? 0, seq)),
+    );
+    const patch: Record<string, unknown> = {
+      updatedAt: nowMs,
+      lastSeq: nextLastSeq,
+    };
+    if (
+      (thread.titleSource ?? "auto") === "auto" &&
+      (!thread.title || !thread.title.trim()) &&
+      args.role === "user"
+    ) {
+      const derivedTitle = deriveTitleFromContent(args.contentJson);
+      if (derivedTitle) patch.title = derivedTitle;
+    }
+    await ctx.db.patch(thread._id, patch);
+
+    const created = (await ctx.db.get(id)) as CloudMessageLike | null;
+    if (!created) throw new Error("message_create_failed");
+    return created;
+  },
+});
+
 export const upsertCloudThreadMessageByMessageKey = mutation({
   args: {
     ownerId: v.optional(v.id("users")),
@@ -1462,6 +1592,87 @@ export const upsertCloudThreadMessageByMessageKey = mutation({
       await ctx.db.patch(thread._id, {
         updatedAt: nowMs,
         lastSeq: Math.max(0, Math.floor(Math.max(thread.lastSeq ?? 0, existing.seq ?? 0))),
+      });
+      const updated = (await ctx.db.get(existing._id)) as CloudMessageLike | null;
+      if (!updated) throw new Error("message_update_failed");
+      return updated;
+    }
+
+    const seq = Math.max(0, Math.floor((thread.lastSeq ?? 0) + 1));
+    const createdAt =
+      typeof args.createdAt === "number" && Number.isFinite(args.createdAt)
+        ? Math.floor(args.createdAt)
+        : nowMs;
+    const id = await ctx.db.insert("cloudMessages", {
+      ownerId,
+      threadId: thread._id,
+      messageKey,
+      seq,
+      role: args.role,
+      contentJson: args.contentJson,
+      engineId: String(args.engineId ?? "").trim() || undefined,
+      modelId: String(args.modelId ?? "").trim() || undefined,
+      runId: String(args.runId ?? "").trim() || undefined,
+      createdAt,
+    });
+    await ctx.db.patch(thread._id, {
+      updatedAt: nowMs,
+      lastSeq: Math.max(0, Math.floor(Math.max(thread.lastSeq ?? 0, seq))),
+    });
+    const created = (await ctx.db.get(id)) as CloudMessageLike | null;
+    if (!created) throw new Error("message_create_failed");
+    return created;
+  },
+});
+
+export const upsertCloudThreadMessageByMessageKeyInternal = internalMutation({
+  args: {
+    ownerId: v.id("users"),
+    threadId: v.id("threads"),
+    messageKey: v.string(),
+    role: v.union(v.literal("user"), v.literal("assistant"), v.literal("system")),
+    contentJson: v.any(),
+    engineId: v.optional(v.string()),
+    modelId: v.optional(v.string()),
+    runId: v.optional(v.string()),
+    createdAt: v.optional(v.number()),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const ownerId = args.ownerId;
+    const nowMs = args.nowMs ?? Date.now();
+    const thread = await requireOwnedCloudThread({
+      ctx,
+      ownerId,
+      threadId: args.threadId,
+    });
+    const messageKey = String(args.messageKey ?? "").trim();
+    if (!messageKey) throw new Error("message_key_required");
+
+    const existing = (await ctx.db
+      .query("cloudMessages")
+      .withIndex("by_owner_messageKey", (q) =>
+        q.eq("ownerId", ownerId).eq("messageKey", messageKey),
+      )
+      .first()) as CloudMessageLike | null;
+
+    if (existing) {
+      if (existing.threadId !== thread._id) {
+        throw new Error("message_key_conflict");
+      }
+      await ctx.db.patch(existing._id, {
+        role: args.role,
+        contentJson: args.contentJson,
+        engineId: String(args.engineId ?? "").trim() || undefined,
+        modelId: String(args.modelId ?? "").trim() || undefined,
+        runId: String(args.runId ?? "").trim() || undefined,
+      });
+      await ctx.db.patch(thread._id, {
+        updatedAt: nowMs,
+        lastSeq: Math.max(
+          0,
+          Math.floor(Math.max(thread.lastSeq ?? 0, existing.seq ?? 0)),
+        ),
       });
       const updated = (await ctx.db.get(existing._id)) as CloudMessageLike | null;
       if (!updated) throw new Error("message_update_failed");
@@ -1968,6 +2179,192 @@ export const ensureCloudRuntimeRunStarted = mutation({
   },
 });
 
+export const ensureCloudRuntimeRunStartedInternal = internalMutation({
+  args: {
+    ownerId: v.id("users"),
+    threadId: v.id("threads"),
+    runId: v.string(),
+    lane: v.optional(v.string()),
+    visibility: v.optional(v.union(v.literal("user_visible"), v.literal("internal_hidden"))),
+    internalFollowupKind: v.optional(v.string()),
+    projectId: v.optional(v.id("cloudProjects")),
+    communityId: v.optional(v.id("communities")),
+    communityContextVersion: v.optional(v.number()),
+    modelId: v.optional(v.string()),
+    engineId: v.optional(v.string()),
+    executionMode: v.optional(v.string()),
+    sandboxMode: v.optional(v.string()),
+    contractName: v.optional(v.string()),
+    contractVersion: v.optional(v.string()),
+    harnessProfile: v.optional(v.string()),
+    harnessProfileSource: v.optional(v.string()),
+    capabilityFamilies: v.optional(v.array(v.string())),
+    latestUserText: v.optional(v.string()),
+    startedAt: v.optional(v.number()),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const ownerId = args.ownerId;
+    const nowMs = args.nowMs ?? Date.now();
+    const thread = await requireOwnedCloudThread({
+      ctx,
+      ownerId,
+      threadId: args.threadId,
+    });
+    const runId = normalizeRunId(args.runId);
+    const existing = await getRuntimeRunByOwnerRunId({
+      ctx,
+      ownerId,
+      runId,
+    });
+    if (existing) {
+      if (existing.threadId !== thread._id) throw new Error("run_thread_conflict");
+      return existing;
+    }
+
+    let runningRun = await getRunningRuntimeRunByThread({
+      ctx,
+      threadId: thread._id,
+    });
+    if (
+      runningRun &&
+      runningRun.runId !== runId &&
+      isRuntimeRunStale({ run: runningRun, nowMs })
+    ) {
+      await finalizeRuntimeRunRecord({
+        ctx,
+        ownerId,
+        thread,
+        run: runningRun,
+        status: "error",
+        reason: "stale_run_reconciled",
+        errorCode: "stale_run_reconciled",
+        errorMessage:
+          "Previous run lost liveness and was reconciled before starting a new turn.",
+        nowMs,
+        finishedAt: nowMs,
+      });
+      runningRun = await getRunningRuntimeRunByThread({
+        ctx,
+        threadId: thread._id,
+      });
+    }
+    if (runningRun) {
+      if (runningRun.runId === runId) return runningRun;
+      throw new Error("thread_run_in_progress");
+    }
+
+    const startedAt =
+      typeof args.startedAt === "number" && Number.isFinite(args.startedAt)
+        ? Math.floor(args.startedAt)
+        : nowMs;
+    const lane = normalizeRunLane(args.lane);
+    const visibility =
+      args.visibility === "internal_hidden" ? "internal_hidden" : "user_visible";
+    const internalFollowupKind =
+      String(args.internalFollowupKind ?? "").trim() || undefined;
+    const executionMode = String(args.executionMode ?? "").trim() || "chat";
+    const contractName =
+      String(args.contractName ?? "").trim() || "canonical_cloud_run_v1";
+    const contractVersion = String(args.contractVersion ?? "").trim() || "v1";
+    const modelId = String(args.modelId ?? "").trim() || undefined;
+    const engineId = String(args.engineId ?? "").trim() || undefined;
+    const projectId = args.projectId;
+    const communityId = args.communityId;
+    const communityContextVersion =
+      typeof args.communityContextVersion === "number" &&
+      Number.isFinite(args.communityContextVersion)
+        ? Math.max(0, Math.floor(args.communityContextVersion))
+        : undefined;
+    const sandboxMode = String(args.sandboxMode ?? "").trim() || undefined;
+    const harnessProfile = String(args.harnessProfile ?? "").trim() || undefined;
+    const harnessProfileSource =
+      String(args.harnessProfileSource ?? "").trim() || undefined;
+    const capabilityFamilies = Array.isArray(args.capabilityFamilies)
+      ? args.capabilityFamilies
+          .map((value) => String(value ?? "").trim())
+          .filter(
+            (value, index, list) => value.length > 0 && list.indexOf(value) === index,
+          )
+      : undefined;
+    const startedWorkingState =
+      visibility === "internal_hidden"
+        ? null
+        : buildRunStartedWorkingState({
+            previous: thread.workingState,
+            latestUserText: args.latestUserText,
+            nowMs,
+          });
+
+    const id = await ctx.db.insert("runtimeRuns", {
+      ownerId,
+      threadId: thread._id,
+      runId,
+      lane,
+      visibility,
+      internalFollowupKind,
+      projectId,
+      communityId,
+      communityContextVersion,
+      modelId,
+      engineId,
+      executionMode,
+      sandboxMode,
+      contractName,
+      contractVersion,
+      harnessProfile,
+      harnessProfileSource,
+      capabilityFamilies,
+      workspaceSessionState: "none",
+      runtimeHarnessTelemetrySummary: createEmptyRuntimeHarnessTelemetrySummary(),
+      workspaceSessionUpdatedAt: startedAt,
+      status: "running",
+      lastEventSeq: 1,
+      startedAt,
+      createdAt: nowMs,
+      updatedAt: nowMs,
+    });
+
+    await ctx.db.insert("runtimeRunEvents", {
+      ownerId,
+      threadId: thread._id,
+      runId,
+      seq: 1,
+      eventType: "run_started",
+      eventKey: "run_started",
+      payload: {
+        run_id: runId,
+        lane,
+        visibility,
+        internal_followup_kind: internalFollowupKind ?? null,
+        project_id: projectId ?? null,
+        community_id: communityId ?? null,
+        community_context_version: communityContextVersion ?? null,
+        model_id: modelId ?? null,
+        engine_id: engineId ?? null,
+        execution_mode: executionMode,
+        sandbox_mode: sandboxMode ?? null,
+        contract_name: contractName,
+        contract_version: contractVersion,
+        harness_profile: harnessProfile ?? null,
+        harness_profile_source: harnessProfileSource ?? null,
+        capability_families: capabilityFamilies ?? [],
+      },
+      createdAt: startedAt,
+    });
+    if (startedWorkingState) {
+      await ctx.db.patch(thread._id, {
+        workingState: startedWorkingState,
+        updatedAt: nowMs,
+      });
+    }
+
+    const created = (await ctx.db.get(id)) as RuntimeRunLike | null;
+    if (!created) throw new Error("runtime_run_create_failed");
+    return created;
+  },
+});
+
 export const appendCloudRuntimeRunEvent = mutation({
   args: {
     ownerId: v.optional(v.id("users")),
@@ -2127,6 +2524,52 @@ export const finishCloudRuntimeRun = mutation({
       ownerId: args.ownerId,
       authSubject: args.authSubject ?? null,
     });
+    const nowMs = args.nowMs ?? Date.now();
+    const thread = await requireOwnedCloudThread({
+      ctx,
+      ownerId,
+      threadId: args.threadId,
+    });
+    const runId = normalizeRunId(args.runId);
+    const status = normalizeRunStatus(args.status);
+    const run = await getRuntimeRunByOwnerRunId({
+      ctx,
+      ownerId,
+      runId,
+    });
+    if (!run) throw new Error("runtime_run_not_found");
+    if (run.threadId !== thread._id) throw new Error("run_thread_conflict");
+    if (run.status !== "running") return run;
+
+    return await finalizeRuntimeRunRecord({
+      ctx,
+      ownerId,
+      thread,
+      run,
+      status,
+      reason: args.reason,
+      errorCode: args.errorCode,
+      errorMessage: args.errorMessage,
+      nowMs,
+      finishedAt: args.finishedAt,
+    });
+  },
+});
+
+export const finishCloudRuntimeRunInternal = internalMutation({
+  args: {
+    ownerId: v.id("users"),
+    threadId: v.id("threads"),
+    runId: v.string(),
+    status: v.string(),
+    reason: v.optional(v.string()),
+    errorCode: v.optional(v.string()),
+    errorMessage: v.optional(v.string()),
+    finishedAt: v.optional(v.number()),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const ownerId = args.ownerId;
     const nowMs = args.nowMs ?? Date.now();
     const thread = await requireOwnedCloudThread({
       ctx,

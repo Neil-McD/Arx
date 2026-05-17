@@ -742,6 +742,9 @@ export function createPolyNetExecutionSession(params: {
     getMountedTool(runtimeToolName: string): RuntimeMountedMcpTool | null {
       return mountedToolByName.get(runtimeToolName) ?? null;
     },
+    getMountedTools(): RuntimeMountedMcpTool[] {
+      return [...params.mountedTools];
+    },
     resolveMountedToolExposure(
       normalizedArgs: ReturnType<typeof normalizeResolveMountedToolsArguments>,
     ) {

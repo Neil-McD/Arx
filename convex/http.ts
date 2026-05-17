@@ -13,6 +13,7 @@ import { readAuthenticatedIdentityProfile } from "./authIdentity";
 import { parseBoolish, parseOptionalString } from "./httpInferenceConfig";
 import { registerRuntimeTurnRoutes } from "./httpRuntimeRoutes";
 import { registerRuntimeVoiceRoutes } from "./httpVoice";
+import { registerStagingMcpCanaryRoutes } from "./httpStagingMcpCanary";
 import type { RequireAuthenticatedActor } from "./runtimeTurnResolution";
 
 function readEnv(name: string): string {
@@ -336,6 +337,12 @@ registerCodexHarnessBridgeRoutes({
   http,
   httpAction,
   jsonResponse,
+  optionsResponse,
+});
+
+registerStagingMcpCanaryRoutes({
+  http,
+  httpAction,
   optionsResponse,
 });
 
