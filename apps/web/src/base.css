@@ -22560,19 +22560,25 @@ button.message-citation-chip:hover {
   min-width: 0;
 }
 
-.workspace-community-signal-viewport.is-expanded {
-  max-height: 380px;
+.workspace-community-signal-scroll-region {
+  min-width: 0;
+}
+
+.workspace-community-signal-viewport.is-expanded .workspace-community-signal-scroll-region {
+  height: min(560px, calc(100dvh - 240px));
   overflow-y: auto;
   padding-right: 6px;
+  overscroll-behavior: contain;
+  scroll-behavior: smooth;
   scrollbar-width: thin;
   scrollbar-color: color-mix(in srgb, var(--text-faint) 38%, transparent) transparent;
 }
 
-.workspace-community-signal-viewport.is-expanded::-webkit-scrollbar {
+.workspace-community-signal-viewport.is-expanded .workspace-community-signal-scroll-region::-webkit-scrollbar {
   width: 5px;
 }
 
-.workspace-community-signal-viewport.is-expanded::-webkit-scrollbar-thumb {
+.workspace-community-signal-viewport.is-expanded .workspace-community-signal-scroll-region::-webkit-scrollbar-thumb {
   border-radius: 999px;
   background: color-mix(in srgb, var(--text-faint) 32%, transparent);
 }
@@ -22848,42 +22854,22 @@ button.message-citation-chip:hover {
   outline-offset: 3px;
 }
 
-.workspace-community-signal-scroll-bottom {
-  position: sticky;
-  bottom: 8px;
-  float: right;
-  width: 24px;
-  height: 24px;
-  display: grid;
-  place-items: center;
-  margin-top: -28px;
-  margin-right: 2px;
-  border: 1px solid color-mix(in srgb, var(--border-default) 82%, transparent);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--bg-card) 88%, transparent);
-  color: var(--text-secondary);
-  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.24);
-  cursor: pointer;
+.scroll-to-bottom.workspace.workspace-community-signal-scroll-bottom {
+  bottom: 14px;
+  z-index: 3;
+  background: color-mix(in srgb, var(--bg-card) 92%, transparent);
+  color: var(--text-primary);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.28);
 }
 
-.workspace-community-signal-scroll-bottom svg {
-  width: 14px;
-  height: 14px;
+.scroll-to-bottom.workspace.workspace-community-signal-scroll-bottom svg {
+  width: 16px;
+  height: 16px;
   fill: none;
   stroke: currentColor;
   stroke-width: 2.1;
   stroke-linecap: round;
   stroke-linejoin: round;
-}
-
-.workspace-community-signal-scroll-bottom:hover {
-  color: var(--text-primary);
-  border-color: color-mix(in srgb, var(--accent) 34%, var(--border-default));
-}
-
-.workspace-community-signal-scroll-bottom:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
-  outline-offset: 3px;
 }
 
 .workspace-community-integration-identity {
