@@ -299,6 +299,8 @@ export const getAccountCommerceStatus = query({
       status: "not_connected" | "onboarding_required" | "pending_requirements" | "ready" | "restricted";
       account_id: string | null;
       country: string | null;
+      service_agreement: string | null;
+      transfers_enabled: boolean;
       details_submitted: boolean;
       charges_enabled: boolean;
       payouts_enabled: boolean;
@@ -325,6 +327,8 @@ export const getAccountCommerceStatus = query({
         )) as {
           stripeAccountId?: unknown;
           country?: unknown;
+          serviceAgreement?: unknown;
+          transfersEnabled?: unknown;
           status?: unknown;
           detailsSubmitted?: unknown;
           chargesEnabled?: unknown;
@@ -359,6 +363,11 @@ export const getAccountCommerceStatus = query({
           typeof stripeConnect?.country === "string" && stripeConnect.country.trim()
             ? stripeConnect.country.trim().toUpperCase()
             : null,
+        service_agreement:
+          typeof stripeConnect?.serviceAgreement === "string" && stripeConnect.serviceAgreement.trim()
+            ? stripeConnect.serviceAgreement.trim()
+            : null,
+        transfers_enabled: stripeConnect?.transfersEnabled === true,
         details_submitted: stripeConnect?.detailsSubmitted === true,
         charges_enabled: stripeConnect?.chargesEnabled === true,
         payouts_enabled: stripeConnect?.payoutsEnabled === true,
@@ -384,8 +393,8 @@ export const getAccountCommerceStatus = query({
             : null,
         can_accept_charges:
           stripeConnectStatus === "ready" &&
-          stripeConnect?.chargesEnabled === true &&
-          stripeConnect?.payoutsEnabled === true,
+          stripeConnect?.payoutsEnabled === true &&
+          (stripeConnect?.chargesEnabled === true || stripeConnect?.transfersEnabled === true),
       },
     };
   },

@@ -1,5 +1,8 @@
 import Stripe from "stripe";
-import { normalizeStripeConnectCountry } from "../shared/stripeConnectCountries";
+import {
+  normalizeStripeConnectCountry,
+  stripeConnectCountryUsesRecipientServiceAgreement,
+} from "../shared/stripeConnectCountries";
 
 export type StripeConnectStatus =
   | "not_connected"
@@ -31,9 +34,14 @@ export function deriveStoredStripeConnectStatus(args: {
   detailsSubmitted: boolean;
   chargesEnabled: boolean;
   payoutsEnabled: boolean;
+  transfersEnabled: boolean;
+  recipientServiceAgreement: boolean;
   requirementsDisabledReason: string | null;
 }): StoredStripeConnectStatus {
-  if (args.chargesEnabled && args.payoutsEnabled) return "ready";
+  const paymentRouteReady = args.recipientServiceAgreement
+    ? args.transfersEnabled && args.payoutsEnabled
+    : args.chargesEnabled && args.payoutsEnabled;
+  if (paymentRouteReady) return "ready";
   if (args.requirementsDisabledReason) return "restricted";
   if (!args.detailsSubmitted) return "onboarding_required";
   return "pending_requirements";
@@ -46,6 +54,8 @@ export function buildStripeConnectAccountSnapshot(
   stripeAccountId: string;
   accountType: "express";
   country: string | null;
+  serviceAgreement: string | null;
+  transfersEnabled: boolean;
   status: StoredStripeConnectStatus;
   detailsSubmitted: boolean;
   chargesEnabled: boolean;
@@ -58,6 +68,14 @@ export function buildStripeConnectAccountSnapshot(
   const detailsSubmitted = account.details_submitted === true;
   const chargesEnabled = account.charges_enabled === true;
   const payoutsEnabled = account.payouts_enabled === true;
+  const country = normalizeStripeConnectCountry(account.country);
+  const serviceAgreement = normalizeOptionalStripeConnectString(
+    account.tos_acceptance?.service_agreement,
+    40,
+  );
+  const recipientServiceAgreement =
+    serviceAgreement === "recipient" || stripeConnectCountryUsesRecipientServiceAgreement(country);
+  const transfersEnabled = account.capabilities?.transfers === "active";
   const requirementsDisabledReason = normalizeOptionalStripeConnectString(
     account.requirements?.disabled_reason,
   );
@@ -65,12 +83,16 @@ export function buildStripeConnectAccountSnapshot(
     detailsSubmitted,
     chargesEnabled,
     payoutsEnabled,
+    transfersEnabled,
+    recipientServiceAgreement,
     requirementsDisabledReason,
   });
   return {
     stripeAccountId: account.id,
     accountType: "express",
-    country: normalizeStripeConnectCountry(account.country),
+    country,
+    serviceAgreement,
+    transfersEnabled,
     status,
     detailsSubmitted,
     chargesEnabled,

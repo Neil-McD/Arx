@@ -14,6 +14,7 @@ import { readCanonicalPublicAppOrigin } from "./publicAppUrl";
 import {
   isSupportedStripeConnectCountry,
   normalizeStripeConnectCountry,
+  stripeConnectCountryUsesRecipientServiceAgreement,
 } from "../shared/stripeConnectCountries";
 
 const STRIPE_CONNECT_CONTEXT_VALIDATOR = v.union(
@@ -248,15 +249,19 @@ async function createStripeExpressAccountForUser(args: {
 }) {
   const country = normalizeStripeConnectCountry(args.country);
   if (!country) throw new Error("stripe_connect_country_required");
+  const usesRecipientServiceAgreement = stripeConnectCountryUsesRecipientServiceAgreement(country);
   return await args.stripe.accounts.create(
     {
       type: "express",
       country,
       email: normalizeOptionalStripeConnectString(args.email, 200) ?? undefined,
       capabilities: {
-        card_payments: { requested: true },
+        ...(usesRecipientServiceAgreement ? {} : { card_payments: { requested: true } }),
         transfers: { requested: true },
       },
+      tos_acceptance: usesRecipientServiceAgreement
+        ? { service_agreement: "recipient" }
+        : undefined,
       metadata: {
         user_id: String(args.userId),
       },
@@ -282,6 +287,8 @@ export const getUserStripeConnectAccountInternal = internalQuery({
       stripeAccountId: row.stripeAccountId,
       accountType: row.accountType,
       country: row.country ?? null,
+      serviceAgreement: row.serviceAgreement ?? null,
+      transfersEnabled: row.transfersEnabled === true,
       status: row.status,
       detailsSubmitted: row.detailsSubmitted,
       chargesEnabled: row.chargesEnabled,
@@ -312,6 +319,8 @@ export const getUserStripeConnectAccountByStripeAccountIdInternal = internalQuer
       userId: row.userId,
       stripeAccountId: row.stripeAccountId,
       country: row.country ?? null,
+      serviceAgreement: row.serviceAgreement ?? null,
+      transfersEnabled: row.transfersEnabled === true,
       status: row.status,
       chargesEnabled: row.chargesEnabled,
       payoutsEnabled: row.payoutsEnabled,
@@ -326,6 +335,8 @@ export const syncUserStripeConnectAccountInternal = internalMutation({
     stripeAccountId: v.string(),
     accountType: v.optional(v.literal("express")),
     country: v.optional(v.union(v.string(), v.null())),
+    serviceAgreement: v.optional(v.union(v.string(), v.null())),
+    transfersEnabled: v.optional(v.boolean()),
     status: v.union(
       v.literal("onboarding_required"),
       v.literal("pending_requirements"),
@@ -360,6 +371,9 @@ export const syncUserStripeConnectAccountInternal = internalMutation({
       stripeAccountId: String(args.stripeAccountId ?? "").trim(),
       accountType: args.accountType ?? "express",
       country: normalizeStripeConnectCountry(args.country) ?? existing?.country,
+      serviceAgreement:
+        normalizeOptionalStripeConnectString(args.serviceAgreement, 40) ?? existing?.serviceAgreement,
+      transfersEnabled: args.transfersEnabled === true,
       status: args.status,
       detailsSubmitted: args.detailsSubmitted === true,
       chargesEnabled: args.chargesEnabled === true,
@@ -387,6 +401,8 @@ export const syncUserStripeConnectAccountInternal = internalMutation({
         metadata: {
           connectStatus: patch.status,
           country: patch.country ?? "",
+          serviceAgreement: patch.serviceAgreement ?? "",
+          transfersEnabled: patch.transfersEnabled,
           chargesEnabled: patch.chargesEnabled,
           payoutsEnabled: patch.payoutsEnabled,
           detailsSubmitted: patch.detailsSubmitted,
@@ -414,6 +430,8 @@ export const syncUserStripeConnectAccountInternal = internalMutation({
       metadata: {
         connectStatus: patch.status,
         country: patch.country ?? "",
+        serviceAgreement: patch.serviceAgreement ?? "",
+        transfersEnabled: patch.transfersEnabled,
         chargesEnabled: patch.chargesEnabled,
         payoutsEnabled: patch.payoutsEnabled,
         detailsSubmitted: patch.detailsSubmitted,
@@ -559,6 +577,8 @@ export const startConnectOnboarding = action({
         stripeAccountId: snapshot.stripeAccountId,
         accountType: snapshot.accountType,
         country: snapshot.country,
+        serviceAgreement: snapshot.serviceAgreement,
+        transfersEnabled: snapshot.transfersEnabled,
         status: snapshot.status,
         detailsSubmitted: snapshot.detailsSubmitted,
         chargesEnabled: snapshot.chargesEnabled,

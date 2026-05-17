@@ -109,6 +109,9 @@ export type StripeConnectCountryCode = (typeof STRIPE_CONNECT_COUNTRIES)[number]
 const STRIPE_CONNECT_COUNTRY_BY_CODE = new Map(
   STRIPE_CONNECT_COUNTRIES.map((country) => [country.code, country]),
 );
+const STRIPE_CONNECT_RECIPIENT_SERVICE_AGREEMENT_COUNTRIES = new Set<StripeConnectCountryCode>([
+  "KW",
+]);
 
 export function normalizeStripeConnectCountry(raw: unknown): StripeConnectCountryCode | null {
   const value = String(raw ?? "").trim().toUpperCase();
@@ -126,4 +129,9 @@ export function formatStripeConnectCountry(raw: unknown): string {
   if (!code) return "";
   const country = STRIPE_CONNECT_COUNTRY_BY_CODE.get(code);
   return country ? country.name : code;
+}
+
+export function stripeConnectCountryUsesRecipientServiceAgreement(raw: unknown): boolean {
+  const code = normalizeStripeConnectCountry(raw);
+  return code ? STRIPE_CONNECT_RECIPIENT_SERVICE_AGREEMENT_COUNTRIES.has(code) : false;
 }

@@ -309,6 +309,7 @@ export const resolvePublicCommunityCheckoutConfigInternal = internalQuery({
       status?: unknown;
       chargesEnabled?: unknown;
       payoutsEnabled?: unknown;
+      transfersEnabled?: unknown;
     } | null;
     const destinationAccountId =
       typeof connectAccount?.stripeAccountId === "string" && connectAccount.stripeAccountId.trim()
@@ -318,8 +319,8 @@ export const resolvePublicCommunityCheckoutConfigInternal = internalQuery({
     const canAcceptCharges =
       destinationAccountId !== null &&
       connectStatus === "ready" &&
-      connectAccount?.chargesEnabled === true &&
-      connectAccount?.payoutsEnabled === true;
+      connectAccount?.payoutsEnabled === true &&
+      (connectAccount?.chargesEnabled === true || connectAccount?.transfersEnabled === true);
     if (!canAcceptCharges) {
       throw new Error("community_checkout_unavailable");
     }

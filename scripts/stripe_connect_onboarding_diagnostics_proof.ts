@@ -124,9 +124,24 @@ assert.match(
   "Stored Stripe Connect accounts must preserve the country chosen for account creation.",
 );
 assert.match(
+  schema,
+  /userStripeConnectAccounts:[\s\S]*serviceAgreement: v\.optional\(v\.string\(\)\)[\s\S]*transfersEnabled: v\.optional\(v\.boolean\(\)\)/,
+  "Stored Stripe Connect accounts must preserve service agreement and transfer-capability readiness.",
+);
+assert.match(
   stripeConnectAccountCore,
-  /country: normalizeStripeConnectCountry\(account\.country\)/,
+  /const country = normalizeStripeConnectCountry\(account\.country\)/,
   "Stripe Connect account snapshots must persist Stripe's account country.",
+);
+assert.match(
+  stripeConnectAccountCore,
+  /account\.tos_acceptance\?\.service_agreement/,
+  "Stripe Connect snapshots must preserve Stripe's service agreement type.",
+);
+assert.match(
+  stripeConnectAccountCore,
+  /account\.capabilities\?\.transfers === "active"/,
+  "Stripe Connect snapshots must preserve active transfer capability state.",
 );
 assert.match(
   accountStatusGateway,
@@ -137,6 +152,11 @@ assert.match(
   stripeConnectCountries,
   /\{ code: "KW", name: "Kuwait" \}/,
   "Stripe Connect supported countries must include Kuwait.",
+);
+assert.match(
+  stripeConnectCountries,
+  /STRIPE_CONNECT_RECIPIENT_SERVICE_AGREEMENT_COUNTRIES[\s\S]*"KW"/,
+  "Kuwait must use Stripe's recipient service agreement instead of requesting card payments.",
 );
 assert.match(
   creatorCommerce,
@@ -157,6 +177,21 @@ assert.match(
   creatorCommerce,
   /stripe\.accounts\.create\([\s\S]*country,/,
   "Stripe Connect account creation must pass country to Stripe.",
+);
+assert.match(
+  creatorCommerce,
+  /stripeConnectCountryUsesRecipientServiceAgreement\(country\)/,
+  "Stripe Connect account creation must branch on country-specific service agreement policy.",
+);
+assert.match(
+  creatorCommerce,
+  /usesRecipientServiceAgreement \? \{\} : \{ card_payments: \{ requested: true \} \}/,
+  "Recipient-service countries must not request card_payments.",
+);
+assert.match(
+  creatorCommerce,
+  /tos_acceptance:[\s\S]*service_agreement: "recipient"/,
+  "Recipient-service countries must create accounts with recipient service agreement.",
 );
 assert.match(
   creatorCommerce,

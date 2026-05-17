@@ -82,6 +82,8 @@ export default defineSchema({
     stripeAccountId: v.string(),
     accountType: v.literal("express"),
     country: v.optional(v.string()),
+    serviceAgreement: v.optional(v.string()),
+    transfersEnabled: v.optional(v.boolean()),
     status: v.union(
       v.literal("onboarding_required"),
       v.literal("pending_requirements"),
