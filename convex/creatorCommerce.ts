@@ -139,6 +139,17 @@ function stripeConnectAccountCanBeRecreated(error: unknown): boolean {
   );
 }
 
+function buildStripeConnectAccountCreateIdempotencyKey(args: {
+  userId: unknown;
+  staleStripeAccountId?: string | null;
+}): string {
+  const userId = normalizeDiagnosticString(args.userId, "unknown");
+  const staleStripeAccountId = normalizeDiagnosticString(args.staleStripeAccountId);
+  return staleStripeAccountId
+    ? `polynet-connect-account:recover:${userId}:${staleStripeAccountId}`
+    : `polynet-connect-account:create:${userId}`;
+}
+
 async function recordStripeConnectOnboardingFailureDiagnostic(args: {
   ctx: any;
   userId?: unknown;
@@ -215,18 +226,24 @@ async function createStripeExpressAccountForUser(args: {
   stripe: Stripe;
   userId: unknown;
   email?: string | null;
+  idempotencyKey: string;
 }) {
-  return await args.stripe.accounts.create({
-    type: "express",
-    email: normalizeOptionalStripeConnectString(args.email, 200) ?? undefined,
-    capabilities: {
-      card_payments: { requested: true },
-      transfers: { requested: true },
+  return await args.stripe.accounts.create(
+    {
+      type: "express",
+      email: normalizeOptionalStripeConnectString(args.email, 200) ?? undefined,
+      capabilities: {
+        card_payments: { requested: true },
+        transfers: { requested: true },
+      },
+      metadata: {
+        user_id: String(args.userId),
+      },
     },
-    metadata: {
-      user_id: String(args.userId),
+    {
+      idempotencyKey: args.idempotencyKey,
     },
-  });
+  );
 }
 
 export const getUserStripeConnectAccountInternal = internalQuery({
@@ -443,6 +460,10 @@ export const startConnectOnboarding = action({
             stripe,
             userId,
             email: actor?.email ?? null,
+            idempotencyKey: buildStripeConnectAccountCreateIdempotencyKey({
+              userId,
+              staleStripeAccountId: existingAccountId,
+            }),
           });
           diagnosticStripeAccountId = account.id;
         }
@@ -452,6 +473,7 @@ export const startConnectOnboarding = action({
           stripe,
           userId,
           email: actor?.email ?? null,
+          idempotencyKey: buildStripeConnectAccountCreateIdempotencyKey({ userId }),
         });
         diagnosticStripeAccountId = account.id;
       }

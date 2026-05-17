@@ -99,6 +99,21 @@ assert.match(
 );
 assert.match(
   creatorCommerce,
+  /function buildStripeConnectAccountCreateIdempotencyKey/,
+  "Stripe Connect account creation must have a deterministic idempotency key builder.",
+);
+assert.match(
+  creatorCommerce,
+  /polynet-connect-account:create:\$\{userId\}/,
+  "First-time Stripe Connect account creation must be idempotent per Polynet user.",
+);
+assert.match(
+  creatorCommerce,
+  /polynet-connect-account:recover:\$\{userId\}:\$\{staleStripeAccountId\}/,
+  "Stale Stripe Connect account recovery must be idempotent per user and stale account id.",
+);
+assert.match(
+  creatorCommerce,
   /stripeErrorCode === "account_invalid"/,
   "Stripe Connect onboarding should recover when a stored connected account is no longer accessible to this platform.",
 );
@@ -111,6 +126,21 @@ assert.match(
   creatorCommerce,
   /catch \(error\) \{[\s\S]*stripeConnectAccountCanBeRecreated\(error\)[\s\S]*createStripeExpressAccountForUser/,
   "Stripe Connect onboarding should create a fresh Express account after a recoverable stale-account retrieve failure.",
+);
+assert.match(
+  creatorCommerce,
+  /createStripeExpressAccountForUser\(args:[\s\S]*idempotencyKey: string/,
+  "Stripe Connect account creation helper must require an idempotency key.",
+);
+assert.match(
+  creatorCommerce,
+  /stripe\.accounts\.create\([\s\S]*idempotencyKey: args\.idempotencyKey/,
+  "Stripe Connect account creation must pass Stripe request options with an idempotency key.",
+);
+assert.match(
+  creatorCommerce,
+  /staleStripeAccountId: existingAccountId/,
+  "Stale-account recovery must scope idempotency to the inaccessible account being replaced.",
 );
 assert.doesNotMatch(
   creatorCommerce,
