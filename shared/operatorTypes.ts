@@ -446,6 +446,22 @@ export type OperatorPaidToolLane = {
   latestAt: number | null;
 };
 
+export type OperatorPaidToolEconomicsLane = {
+  toolName: string;
+  label: string;
+  settledRows: number;
+  revenueUsd: number;
+  vendorCostUsd: number;
+  grossMarginUsd: number;
+  grossMarginRate: number | null;
+  partnerCommissionUsd: number;
+  partnerShareOfGrossMargin: number | null;
+  netAfterPartnerUsd: number;
+  netAfterPartnerMarginRate: number | null;
+  missingCostRows: number;
+  latestAt: number | null;
+};
+
 export type OperatorRuntimeToolDiagnosticsSnapshot = {
   computedAt: number;
   range: OperatorRange;
@@ -469,14 +485,6 @@ export type OperatorRuntimeToolDiagnosticsSnapshot = {
     topFailureCodes: OperatorRuntimeToolFailureBucket[];
     topFailingTools: OperatorRuntimeToolFailureBucket[];
   };
-  usageIntegrity?: {
-    health: "healthy" | "degraded" | "incident" | "unknown";
-    score: number | null;
-    workspaceCreditFailures: number;
-    paidToolLedgerFailures: number;
-    unbilledComputeCharges: number;
-    topFailureCodes: OperatorRuntimeToolFailureBucket[];
-  };
   totals: {
     turnsStarted: number;
     turnsSucceeded: number;
@@ -488,10 +496,7 @@ export type OperatorRuntimeToolDiagnosticsSnapshot = {
     runtimeDiagnosticEvents: number;
     providerFailures: number;
     rateLimitFailures: number;
-    workspaceCreditFailures: number;
-    paidToolLedgerFailures: number;
     sandboxCreateFailures: number;
-    unbilledComputeCharges: number;
   };
   rates: {
     turnSuccessRate: number | null;
@@ -499,6 +504,26 @@ export type OperatorRuntimeToolDiagnosticsSnapshot = {
   };
   topFailureCodes: OperatorRuntimeToolFailureBucket[];
   topFailingTools: OperatorRuntimeToolFailureBucket[];
+  latestEvents: OperatorDiagnosticEventRecord[];
+  evidence: {
+    sourceTables: string[];
+    scannedRunLimit: number;
+    scannedEventLimit: number;
+    isTruncated: boolean;
+  };
+};
+
+export type OperatorToolEconomicsSnapshot = {
+  computedAt: number;
+  range: OperatorRange;
+  usageIntegrity: {
+    health: "healthy" | "degraded" | "incident" | "unknown";
+    score: number | null;
+    workspaceCreditFailures: number;
+    paidToolLedgerFailures: number;
+    unbilledComputeCharges: number;
+    topFailureCodes: OperatorRuntimeToolFailureBucket[];
+  };
   paidTools: {
     totals: {
       reservations: number;
@@ -513,12 +538,22 @@ export type OperatorRuntimeToolDiagnosticsSnapshot = {
     };
     lanes: OperatorPaidToolLane[];
   };
-  latestEvents: OperatorDiagnosticEventRecord[];
+  paidToolEconomics: {
+    targets: {
+      grossMarginBps: number;
+      partnerGrossMarginShareBps: number;
+    };
+    totals: OperatorPaidToolEconomicsLane & {
+      costEvidenceCoverage: number | null;
+      partnerCommissionRows: number;
+      voidedPartnerCommissionUsd: number;
+    };
+    lanes: OperatorPaidToolEconomicsLane[];
+  };
   evidence: {
     sourceTables: string[];
-    scannedRunLimit: number;
-    scannedEventLimit: number;
     scannedCreditLimit: number;
+    scannedCommissionLimit: number;
     scannedComputeLimit: number;
     isTruncated: boolean;
   };

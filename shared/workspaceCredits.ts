@@ -64,6 +64,33 @@ export const DAYTONA_VCPU_USD_PER_SECOND = 0.000014;
 export const DAYTONA_MEMORY_GIB_USD_PER_SECOND = 0.0000045;
 
 export type PaidToolKind = "workspace_tools" | "web_research" | "voice_input";
+export const PAID_TOOL_LEDGER_TOOL_NAMES = ["daytona_workspace", "web_research", "voice_transcribe"] as const;
+export type PaidToolLedgerToolName = (typeof PAID_TOOL_LEDGER_TOOL_NAMES)[number];
+
+export const PAID_TOOL_DEFINITIONS = {
+  workspace_tools: {
+    ledgerToolName: "daytona_workspace",
+    primaryMessage: "Workspace tools use paid computer time.",
+    operatorLabel: "Workspace runtime",
+  },
+  web_research: {
+    ledgerToolName: "web_research",
+    primaryMessage: "Web research uses paid provider calls.",
+    operatorLabel: "Web research",
+  },
+  voice_input: {
+    ledgerToolName: "voice_transcribe",
+    primaryMessage: "Voice input uses paid transcription.",
+    operatorLabel: "Voice input",
+  },
+} as const satisfies Record<
+  PaidToolKind,
+  {
+    ledgerToolName: PaidToolLedgerToolName;
+    primaryMessage: string;
+    operatorLabel: string;
+  }
+>;
 
 export function normalizePaidToolKind(value: unknown): PaidToolKind | null {
   const normalized = String(value ?? "").trim().toLowerCase();
@@ -71,6 +98,25 @@ export function normalizePaidToolKind(value: unknown): PaidToolKind | null {
   if (normalized === "web_research") return "web_research";
   if (normalized === "voice_input") return "voice_input";
   return null;
+}
+
+export function paidToolKindForLedgerToolName(value: unknown): PaidToolKind | null {
+  const normalized = String(value ?? "").trim();
+  for (const [kind, definition] of Object.entries(PAID_TOOL_DEFINITIONS) as Array<
+    [PaidToolKind, (typeof PAID_TOOL_DEFINITIONS)[PaidToolKind]]
+  >) {
+    if (definition.ledgerToolName === normalized) return kind;
+  }
+  return null;
+}
+
+export function getPaidToolBalancePrimaryMessage(kind: PaidToolKind | null | undefined): string {
+  return kind ? PAID_TOOL_DEFINITIONS[kind].primaryMessage : "Premium tools need tool balance.";
+}
+
+export function getPaidToolLedgerLabel(toolName: string): string | null {
+  const kind = paidToolKindForLedgerToolName(toolName);
+  return kind ? PAID_TOOL_DEFINITIONS[kind].operatorLabel : null;
 }
 
 export function normalizePositiveInteger(raw: unknown, fallback: number, min = 1): number {

@@ -5,7 +5,14 @@ import { sanitizeCriticalAuditMetadata } from "./criticalAudit";
 import {
   resolveDiscoverAppCatalogConnectPolicy,
 } from "../shared/discoverCatalog";
-import { WORKSPACE_CREDITS_PER_USD } from "../shared/workspaceCredits";
+import {
+  creditsToUsd,
+  getPaidToolLedgerLabel,
+  PAID_TOOL_LEDGER_TOOL_NAMES,
+  PAID_TOOL_TARGET_GROSS_MARGIN_BPS,
+  WORKSPACE_CREDITS_PER_USD,
+} from "../shared/workspaceCredits";
+import { BUILDER_PARTNER_TOOL_GROSS_MARGIN_SHARE_BPS } from "../shared/builderPartnerProgram";
 import {
   ACCOUNT_SETUP_MISSING_FIELDS,
   ACCOUNT_SETUP_STEPS,
@@ -70,7 +77,6 @@ const RUNTIME_TOOL_EVENT_TYPES = [
   "runtime_diagnostics_detected",
   "workspace_session_create_completed",
 ] as const;
-const PAID_TOOL_LEDGER_NAMES = ["daytona_workspace", "web_research", "voice_transcribe"] as const;
 const WEB_DEPLOY_FRONTEND_CRASH_EVENT_TYPES = new Set([
   "deploy.frontend_crash",
   "deploy.route_load_failed",
@@ -483,6 +489,19 @@ async function readCreditLedgerEntriesByTool(
   return await query.order("desc").take(limit);
 }
 
+async function readPartnerCommissionLedgerRowsByBasisType(
+  ctx: any,
+  basisType: "community_platform_fee" | "tool_gross_margin",
+  rangeStart: number | null,
+  limit: number,
+) {
+  const query = ctx.db.query("partnerCommissionLedger").withIndex("by_basis_createdAt", (q: any) => {
+    const scoped = q.eq("basisType", basisType);
+    return rangeStart == null ? scoped : scoped.gte("createdAt", rangeStart);
+  });
+  return await query.order("desc").take(limit);
+}
+
 async function readWorkspaceComputeChargesByDebitSource(
   ctx: any,
   debitSource: "included" | "purchased" | "mixed" | "unbilled",
@@ -631,6 +650,18 @@ function readLedgerCredits(value: unknown): number {
   return Math.round(parsed * 100) / 100;
 }
 
+function readLedgerUsd(value: unknown): number {
+  const parsed = Number(value ?? 0);
+  if (!Number.isFinite(parsed) || parsed < 0) return 0;
+  return Math.round(parsed * 10000) / 10000;
+}
+
+function readSignedLedgerUsd(value: unknown): number {
+  const parsed = Number(value ?? 0);
+  if (!Number.isFinite(parsed)) return 0;
+  return Math.round(parsed * 10000) / 10000;
+}
+
 function readLedgerSettledCredits(row: any): number {
   if (typeof row?.creditsSettled === "number") {
     return readLedgerCredits(row.creditsSettled);
@@ -646,16 +677,150 @@ function readLedgerRefundedCredits(row: any): number {
 }
 
 function formatPaidToolName(toolName: string): string {
-  switch (toolName) {
-    case "daytona_workspace":
-      return "Workspace runtime";
-    case "web_research":
-      return "Web research";
-    case "voice_transcribe":
-      return "Voice input";
-    default:
-      return formatOperatorBucketLabel(toolName);
+  return getPaidToolLedgerLabel(toolName) ?? formatOperatorBucketLabel(toolName);
+}
+
+function buildEmptyToolEconomicsLane(toolName: string) {
+  return {
+    toolName,
+    label: formatPaidToolName(toolName),
+    settledRows: 0,
+    revenueUsd: 0,
+    vendorCostUsd: 0,
+    grossMarginUsd: 0,
+    grossMarginRate: null as number | null,
+    partnerCommissionUsd: 0,
+    partnerShareOfGrossMargin: null as number | null,
+    netAfterPartnerUsd: 0,
+    netAfterPartnerMarginRate: null as number | null,
+    missingCostRows: 0,
+    latestAt: null as number | null,
+  };
+}
+
+function finalizeToolEconomicsLane<T extends ReturnType<typeof buildEmptyToolEconomicsLane>>(lane: T): T {
+  const grossMarginRate = lane.revenueUsd > 0 ? lane.grossMarginUsd / lane.revenueUsd : null;
+  const partnerShareOfGrossMargin = lane.grossMarginUsd > 0
+    ? lane.partnerCommissionUsd / lane.grossMarginUsd
+    : null;
+  const netAfterPartnerUsd = readSignedLedgerUsd(lane.grossMarginUsd - lane.partnerCommissionUsd);
+  return {
+    ...lane,
+    revenueUsd: readLedgerUsd(lane.revenueUsd),
+    vendorCostUsd: readLedgerUsd(lane.vendorCostUsd),
+    grossMarginUsd: readSignedLedgerUsd(lane.grossMarginUsd),
+    grossMarginRate,
+    partnerCommissionUsd: readLedgerUsd(lane.partnerCommissionUsd),
+    partnerShareOfGrossMargin,
+    netAfterPartnerUsd,
+    netAfterPartnerMarginRate: lane.revenueUsd > 0 ? netAfterPartnerUsd / lane.revenueUsd : null,
+  };
+}
+
+function buildToolGrossMarginPartnerCommissionByEntryId(partnerCommissionRows: any[]) {
+  const byEntryId = new Map<string, {
+    activeCommissionUsd: number;
+    voidedCommissionUsd: number;
+    rows: number;
+  }>();
+  for (const row of partnerCommissionRows) {
+    if (row.basisType !== "tool_gross_margin" || !row.sourceCreditLedgerEntryId) continue;
+    const entryId = String(row.sourceCreditLedgerEntryId);
+    const total = byEntryId.get(entryId) ?? {
+      activeCommissionUsd: 0,
+      voidedCommissionUsd: 0,
+      rows: 0,
+    };
+    const amount = readLedgerUsd(row.commissionAmountUsd);
+    if (row.status === "voided") {
+      total.voidedCommissionUsd = readLedgerUsd(total.voidedCommissionUsd + amount);
+    } else {
+      total.activeCommissionUsd = readLedgerUsd(total.activeCommissionUsd + amount);
+    }
+    total.rows += 1;
+    byEntryId.set(entryId, total);
   }
+  return byEntryId;
+}
+
+function buildPaidToolEconomics(paidToolLedgerRows: any[], partnerCommissionRows: any[]) {
+  const lanes = new Map<string, ReturnType<typeof buildEmptyToolEconomicsLane>>(
+    PAID_TOOL_LEDGER_TOOL_NAMES.map((toolName) => [
+      toolName,
+      buildEmptyToolEconomicsLane(toolName),
+    ]),
+  );
+  const settledRows = paidToolLedgerRows.filter((row: any) => row.status === "succeeded");
+  const partnerCommissionByEntryId = buildToolGrossMarginPartnerCommissionByEntryId(partnerCommissionRows);
+  let voidedPartnerCommissionUsd = 0;
+  let partnerCommissionRowCount = 0;
+
+  for (const row of settledRows) {
+    const toolName = String(row?.toolName ?? "unknown").trim() || "unknown";
+    const lane = lanes.get(toolName) ?? buildEmptyToolEconomicsLane(toolName);
+    const revenueUsd = typeof row?.polynetPriceUsd === "number"
+      ? readLedgerUsd(row.polynetPriceUsd)
+      : readLedgerUsd(creditsToUsd(readLedgerSettledCredits(row)));
+    const hasCostEvidence = typeof row?.rawVendorCostUsd === "number" && Number.isFinite(row.rawVendorCostUsd);
+    const vendorCostUsd = hasCostEvidence ? readLedgerUsd(row.rawVendorCostUsd) : 0;
+    const grossMarginUsd = readSignedLedgerUsd(revenueUsd - vendorCostUsd);
+    const commission = partnerCommissionByEntryId.get(String(row._id)) ?? {
+      activeCommissionUsd: 0,
+      voidedCommissionUsd: 0,
+      rows: 0,
+    };
+
+    lane.settledRows += 1;
+    lane.revenueUsd = readLedgerUsd(lane.revenueUsd + revenueUsd);
+    lane.vendorCostUsd = readLedgerUsd(lane.vendorCostUsd + vendorCostUsd);
+    lane.grossMarginUsd = readSignedLedgerUsd(lane.grossMarginUsd + grossMarginUsd);
+    lane.partnerCommissionUsd = readLedgerUsd(lane.partnerCommissionUsd + commission.activeCommissionUsd);
+    if (!hasCostEvidence) lane.missingCostRows += 1;
+    const latestAt = readRowCreatedAt(row);
+    lane.latestAt = Math.max(lane.latestAt ?? 0, latestAt) || lane.latestAt;
+    lanes.set(toolName, lane);
+    voidedPartnerCommissionUsd = readLedgerUsd(voidedPartnerCommissionUsd + commission.voidedCommissionUsd);
+    partnerCommissionRowCount += commission.rows;
+  }
+
+  const finalizedLanes = [...lanes.values()]
+    .map(finalizeToolEconomicsLane)
+    .sort((a, b) =>
+      b.revenueUsd - a.revenueUsd ||
+      b.settledRows - a.settledRows ||
+      Number(b.latestAt ?? 0) - Number(a.latestAt ?? 0) ||
+      a.label.localeCompare(b.label),
+    );
+  const totals = finalizeToolEconomicsLane(
+    finalizedLanes.reduce((total, lane) => ({
+      ...total,
+      settledRows: total.settledRows + lane.settledRows,
+      revenueUsd: readLedgerUsd(total.revenueUsd + lane.revenueUsd),
+      vendorCostUsd: readLedgerUsd(total.vendorCostUsd + lane.vendorCostUsd),
+      grossMarginUsd: readSignedLedgerUsd(total.grossMarginUsd + lane.grossMarginUsd),
+      partnerCommissionUsd: readLedgerUsd(total.partnerCommissionUsd + lane.partnerCommissionUsd),
+      missingCostRows: total.missingCostRows + lane.missingCostRows,
+      latestAt: Math.max(total.latestAt ?? 0, lane.latestAt ?? 0) || total.latestAt,
+    }), buildEmptyToolEconomicsLane("total")),
+  );
+
+  return {
+    targets: {
+      grossMarginBps: PAID_TOOL_TARGET_GROSS_MARGIN_BPS,
+      partnerGrossMarginShareBps: BUILDER_PARTNER_TOOL_GROSS_MARGIN_SHARE_BPS,
+    },
+    totals: {
+      ...totals,
+      toolName: "all",
+      label: "All paid tools",
+      costEvidenceCoverage: totals.settledRows > 0
+        ? (totals.settledRows - totals.missingCostRows) / totals.settledRows
+        : null,
+      partnerCommissionRows: partnerCommissionRowCount,
+      voidedPartnerCommissionUsd,
+    },
+    lanes: finalizedLanes,
+  };
 }
 
 function buildPaidToolDiagnostics(paidToolLedgerRows: any[], unbilledComputeCharges: any[]) {
@@ -675,7 +840,7 @@ function buildPaidToolDiagnostics(paidToolLedgerRows: any[], unbilledComputeChar
       latestAt: number | null;
     }
   >();
-  for (const toolName of PAID_TOOL_LEDGER_NAMES) {
+  for (const toolName of PAID_TOOL_LEDGER_TOOL_NAMES) {
     lanes.set(toolName, {
       toolName,
       label: formatPaidToolName(toolName),
@@ -739,6 +904,89 @@ function buildPaidToolDiagnostics(paidToolLedgerRows: any[], unbilledComputeChar
       unbilledComputeCharges: unbilledComputeCharges.length,
     },
     lanes: orderedLanes,
+  };
+}
+
+async function buildOperatorToolEconomicsSnapshot(ctx: any, range: "7d" | "30d" | "90d" | "all", nowMs: number) {
+  const rangeStart = normalizeRangeStart(range, nowMs);
+  const scannedCreditLimit = 300;
+  const scannedComputeLimit = 200;
+  const scannedCommissionLimit = PAID_TOOL_LEDGER_TOOL_NAMES.length * scannedCreditLimit;
+  const [
+    paidToolCreditGroups,
+    toolGrossMarginPartnerCommissionRows,
+    unbilledComputeCharges,
+  ] = await Promise.all([
+    Promise.all(
+      PAID_TOOL_LEDGER_TOOL_NAMES.map((toolName) =>
+        readCreditLedgerEntriesByTool(ctx, toolName, rangeStart, scannedCreditLimit),
+      ),
+    ),
+    readPartnerCommissionLedgerRowsByBasisType(ctx, "tool_gross_margin", rangeStart, scannedCommissionLimit),
+    readWorkspaceComputeChargesByDebitSource(ctx, "unbilled", rangeStart, scannedComputeLimit),
+  ]);
+
+  const paidToolLedgerRows: any[] = paidToolCreditGroups.flat();
+  const paidToolLedgerFailureRows = paidToolLedgerRows.filter(
+    (row: any) => row.status === "refunded" || row.failureReason,
+  );
+  const paidToolLedgerFailureCodeRows = paidToolLedgerFailureRows.map((row: any) => ({
+    ...row,
+    __operatorFailureCode: normalizeRuntimeFailureCode(row.failureReason ?? "paid_tool_ledger_failure"),
+  }));
+  const unbilledComputeCodeRows = unbilledComputeCharges.map((row: any) => ({
+    ...row,
+    __operatorFailureCode: "unbilled_compute",
+  }));
+  const workspaceCreditFailures = paidToolLedgerRows.filter((row: any) =>
+    String(row.failureReason ?? "").toLowerCase().includes("credits"),
+  ).length;
+  const paidToolLedgerFailures = paidToolLedgerFailureRows.length;
+  const usageIntegrityFailureCodeRows = [
+    ...paidToolLedgerFailureCodeRows,
+    ...unbilledComputeCodeRows,
+  ];
+  const usageErrorKeys = new Set(["workspace_credits_exhausted", "unbilled_compute", "paid_tool_ledger_failure"]);
+  const usageIntegrityScore = clampOperatorScore(
+    100 -
+      Math.min(30, workspaceCreditFailures * 10) -
+      Math.min(24, paidToolLedgerFailures * 8) -
+      Math.min(30, unbilledComputeCharges.length * 10),
+  );
+  const paidTools = buildPaidToolDiagnostics(paidToolLedgerRows, unbilledComputeCharges);
+  const paidToolEconomics = buildPaidToolEconomics(paidToolLedgerRows, toolGrossMarginPartnerCommissionRows);
+
+  return {
+    computedAt: nowMs,
+    range,
+    usageIntegrity: {
+      health: buildOperatorHealthFromScore(usageIntegrityScore),
+      score: usageIntegrityScore,
+      workspaceCreditFailures,
+      paidToolLedgerFailures,
+      unbilledComputeCharges: unbilledComputeCharges.length,
+      topFailureCodes: buildRuntimeBucket(
+        usageIntegrityFailureCodeRows,
+        (row: any) => row.__operatorFailureCode ?? "unknown_runtime_error",
+        { errorKeys: usageErrorKeys },
+      ),
+    },
+    paidTools,
+    paidToolEconomics,
+    evidence: {
+      sourceTables: [
+        "creditLedgerEntries",
+        "partnerCommissionLedger",
+        "workspaceComputeCharges",
+      ],
+      scannedCreditLimit,
+      scannedCommissionLimit,
+      scannedComputeLimit,
+      isTruncated:
+        paidToolCreditGroups.some((group: any[]) => group.length >= scannedCreditLimit) ||
+        toolGrossMarginPartnerCommissionRows.length >= scannedCommissionLimit ||
+        unbilledComputeCharges.length >= scannedComputeLimit,
+    },
   };
 }
 
@@ -1864,6 +2112,17 @@ export const getOperatorSecurityAuditDiagnosticsInternal = internalQuery({
   },
 });
 
+export const getOperatorToolEconomicsInternal = internalQuery({
+  args: {
+    range: v.optional(v.union(v.literal("7d"), v.literal("30d"), v.literal("90d"), v.literal("all"))),
+  },
+  handler: async (ctx, args): Promise<any> => {
+    const nowMs = Date.now();
+    const range = args.range ?? "30d";
+    return await buildOperatorToolEconomicsSnapshot(ctx, range, nowMs);
+  },
+});
+
 export const getOperatorRuntimeToolDiagnosticsInternal = internalQuery({
   args: {
     range: v.optional(v.union(v.literal("7d"), v.literal("30d"), v.literal("90d"), v.literal("all"))),
@@ -1874,14 +2133,10 @@ export const getOperatorRuntimeToolDiagnosticsInternal = internalQuery({
     const rangeStart = normalizeRangeStart(range, nowMs);
     const scannedRunLimit = 250;
     const scannedEventLimit = 400;
-    const scannedCreditLimit = 300;
-    const scannedComputeLimit = 200;
     const [
       runtimeRunGroups,
       runtimeEventGroups,
       diagnosticGroups,
-      paidToolCreditGroups,
-      unbilledComputeCharges,
     ] = await Promise.all([
       Promise.all(
         RUNTIME_RUN_STATUSES.map((status) =>
@@ -1898,18 +2153,11 @@ export const getOperatorRuntimeToolDiagnosticsInternal = internalQuery({
           readDiagnosticEventsBySubsystem(ctx, subsystem, rangeStart, scannedEventLimit),
         ),
       ),
-      Promise.all(
-        PAID_TOOL_LEDGER_NAMES.map((toolName) =>
-          readCreditLedgerEntriesByTool(ctx, toolName, rangeStart, scannedCreditLimit),
-        ),
-      ),
-      readWorkspaceComputeChargesByDebitSource(ctx, "unbilled", rangeStart, scannedComputeLimit),
     ]);
 
     const runs: any[] = runtimeRunGroups.flat();
     const runtimeEvents: any[] = runtimeEventGroups.flat();
     const diagnosticRows: any[] = diagnosticGroups.flat().sort((a: any, b: any) => b.createdAt - a.createdAt);
-    const paidToolLedgerRows: any[] = paidToolCreditGroups.flat();
     const toolStartedRows = runtimeEvents.filter((row: any) => row.eventType === "tool_call_started");
     const toolFinishedRows = runtimeEvents.filter((row: any) => row.eventType === "tool_call_finished");
     const runtimeDiagnosticRows = runtimeEvents.filter((row: any) => row.eventType === "runtime_diagnostics_detected");
@@ -1968,17 +2216,6 @@ export const getOperatorRuntimeToolDiagnosticsInternal = internalQuery({
         ),
       };
     });
-    const paidToolLedgerFailureRows = paidToolLedgerRows.filter(
-      (row: any) => row.status === "refunded" || row.failureReason,
-    );
-    const paidToolLedgerFailureCodeRows = paidToolLedgerFailureRows.map((row: any) => ({
-      ...row,
-      __operatorFailureCode: normalizeRuntimeFailureCode(row.failureReason ?? "paid_tool_ledger_failure"),
-    }));
-    const unbilledComputeCodeRows = unbilledComputeCharges.map((row: any) => ({
-      ...row,
-      __operatorFailureCode: "unbilled_compute",
-    }));
     const isWorkspaceCreditFailureCodeRow = (row: any) =>
       String(row.__operatorFailureCode ?? "").startsWith("workspace_credits_");
     const executionRunFailureCodeRows = runFailureCodeRows.filter(
@@ -1993,24 +2230,11 @@ export const getOperatorRuntimeToolDiagnosticsInternal = internalQuery({
     const executionRuntimeDiagnosticCodeRows = runtimeDiagnosticCodeRows.filter(
       (row: any) => !isWorkspaceCreditFailureCodeRow(row),
     );
-    const usageRuntimeDiagnosticCodeRows = runtimeDiagnosticCodeRows.filter(isWorkspaceCreditFailureCodeRow);
     const executionFailureCodeRows = [
       ...executionRunFailureCodeRows,
       ...executionToolFailureCodeRows,
       ...executionRuntimeDiagnosticCodeRows,
       ...executionWorkspaceSessionCreateFailureCodeRows,
-    ];
-    const usageIntegrityFailureCodeRows = [
-      ...runFailureCodeRows.filter(isWorkspaceCreditFailureCodeRow),
-      ...toolFailureCodeRows.filter(isWorkspaceCreditFailureCodeRow),
-      ...usageRuntimeDiagnosticCodeRows,
-      ...workspaceSessionCreateFailureCodeRows.filter(isWorkspaceCreditFailureCodeRow),
-      ...paidToolLedgerFailureCodeRows,
-      ...unbilledComputeCodeRows,
-    ];
-    const allFailureCodeRows = [
-      ...executionFailureCodeRows,
-      ...usageIntegrityFailureCodeRows,
     ];
     const providerFailures =
       normalizedRunFailureCodes.filter((code) => code === "provider_failed").length +
@@ -2018,16 +2242,6 @@ export const getOperatorRuntimeToolDiagnosticsInternal = internalQuery({
     const rateLimitFailures =
       normalizedRunFailureCodes.filter((code) => code === "provider_rate_limited").length +
       normalizedToolFailureCodes.filter((code) => code === "provider_rate_limited").length;
-    const workspaceCreditFailures =
-      normalizedRunFailureCodes.filter((code) => code.startsWith("workspace_credits_")).length +
-      normalizedToolFailureCodes.filter((code) => code.startsWith("workspace_credits_")).length +
-      usageRuntimeDiagnosticCodeRows.length +
-      normalizedWorkspaceSessionCreateFailureCodes.filter((code) => code.startsWith("workspace_credits_")).length +
-      paidToolLedgerRows.filter((row: any) =>
-        String(row.failureReason ?? "").toLowerCase().includes("credits"),
-      ).length;
-    const paidToolLedgerFailures = paidToolLedgerFailureRows.length;
-    const paidTools = buildPaidToolDiagnostics(paidToolLedgerRows, unbilledComputeCharges);
     const sandboxCreateFailures =
       normalizedWorkspaceSessionCreateFailureCodes.filter((code) => code === "sandbox_create_failed").length +
       normalizedToolFailureCodes.filter((code) => code === "sandbox_create_failed").length;
@@ -2074,16 +2288,8 @@ export const getOperatorRuntimeToolDiagnosticsInternal = internalQuery({
             Math.min(15, executionRuntimeDiagnosticCodeRows.length * 3),
         )
       : null;
-    const usageIntegrityScore = clampOperatorScore(
-      100 -
-        Math.min(30, workspaceCreditFailures * 10) -
-        Math.min(24, paidToolLedgerFailures * 8) -
-        Math.min(30, unbilledComputeCharges.length * 10),
-    );
     const health = buildOperatorHealthFromScore(executionAvailabilityScore);
-    const errorKeys = new Set(["provider_failed", "workspace_credits_exhausted", "sandbox_create_failed", "unbilled_compute"]);
     const executionErrorKeys = new Set(["provider_failed", "sandbox_create_failed"]);
-    const usageErrorKeys = new Set(["workspace_credits_exhausted", "unbilled_compute"]);
 
     return {
       computedAt: nowMs,
@@ -2114,18 +2320,6 @@ export const getOperatorRuntimeToolDiagnosticsInternal = internalQuery({
           errorKeys: new Set(executionToolFailureRows.map(readToolName)),
         }),
       },
-      usageIntegrity: {
-        health: buildOperatorHealthFromScore(usageIntegrityScore),
-        score: usageIntegrityScore,
-        workspaceCreditFailures,
-        paidToolLedgerFailures,
-        unbilledComputeCharges: unbilledComputeCharges.length,
-        topFailureCodes: buildRuntimeBucket(
-          usageIntegrityFailureCodeRows,
-          (row: any) => row.__operatorFailureCode ?? "unknown_runtime_error",
-          { errorKeys: usageErrorKeys },
-        ),
-      },
       totals: {
         turnsStarted: runs.length,
         turnsSucceeded,
@@ -2137,43 +2331,33 @@ export const getOperatorRuntimeToolDiagnosticsInternal = internalQuery({
         runtimeDiagnosticEvents: runtimeDiagnosticRows.length,
         providerFailures,
         rateLimitFailures,
-        workspaceCreditFailures,
-        paidToolLedgerFailures,
         sandboxCreateFailures,
-        unbilledComputeCharges: unbilledComputeCharges.length,
       },
       rates: {
         turnSuccessRate,
         toolFailureRate,
       },
       topFailureCodes: buildRuntimeBucket(
-        allFailureCodeRows,
+        executionFailureCodeRows,
         (row: any) => row.__operatorFailureCode ?? "unknown_runtime_error",
-        { errorKeys },
+        { errorKeys: executionErrorKeys },
       ),
-      topFailingTools: buildRuntimeBucket(toolFailureRows, readToolName, {
-        errorKeys: new Set(toolFailureRows.map(readToolName)),
+      topFailingTools: buildRuntimeBucket(executionToolFailureRows, readToolName, {
+        errorKeys: new Set(executionToolFailureRows.map(readToolName)),
       }),
-      paidTools,
       latestEvents: diagnosticRows.slice(0, 8).map(mapDiagnosticEvent),
       evidence: {
         sourceTables: [
           "runtimeRuns",
           "runtimeRunEvents",
           "platformDiagnosticEvents",
-          "creditLedgerEntries",
-          "workspaceComputeCharges",
         ],
         scannedRunLimit,
         scannedEventLimit,
-        scannedCreditLimit,
-        scannedComputeLimit,
         isTruncated:
           runtimeRunGroups.some((group: any[]) => group.length >= scannedRunLimit) ||
           runtimeEventGroups.some((group: any[]) => group.length >= scannedEventLimit) ||
-          diagnosticGroups.some((group: any[]) => group.length >= scannedEventLimit) ||
-          paidToolCreditGroups.some((group: any[]) => group.length >= scannedCreditLimit) ||
-          unbilledComputeCharges.length >= scannedComputeLimit,
+          diagnosticGroups.some((group: any[]) => group.length >= scannedEventLimit),
       },
     };
   },

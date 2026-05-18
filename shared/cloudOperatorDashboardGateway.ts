@@ -14,6 +14,7 @@ import type {
   OperatorRiskItem,
   OperatorRuntimeToolDiagnosticsSnapshot,
   OperatorSecurityAuditDiagnosticsSnapshot,
+  OperatorToolEconomicsSnapshot,
   OperatorWebDeployAssetCheck,
   OperatorWebDeployDiagnosticsSnapshot,
   OperatorWebDeployRouteCheck,
@@ -527,6 +528,17 @@ export async function loadOperatorRuntimeToolDiagnosticsCanonical(params: {
     authSubject,
     range: params.range ?? "30d",
   })) as OperatorRuntimeToolDiagnosticsSnapshot;
+}
+
+export async function loadOperatorToolEconomicsCanonical(params: {
+  session: AuthSessionLike;
+  range?: OperatorRange;
+}): Promise<OperatorToolEconomicsSnapshot> {
+  const { client, authSubject } = await withOperatorAuth(params.session);
+  return (await client.query("operatorDashboard:getOperatorToolEconomics" as any, {
+    authSubject,
+    range: params.range ?? "30d",
+  })) as OperatorToolEconomicsSnapshot;
 }
 
 export async function loadOperatorFrontendErrorDiagnosticsCanonical(params: {

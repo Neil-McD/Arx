@@ -53,9 +53,9 @@ import {
   WORKSPACE_RIGHT_PANEL_DEFAULT_WIDTH,
   WORKSPACE_RIGHT_PANEL_GUTTER,
   WORKSPACE_RIGHT_PANEL_KEYBOARD_STEP,
-  useOperatorDashboardData,
   WebWorkspaceRightPanel,
 } from "./WebWorkspaceRightPanel";
+import { useOperatorDashboardData } from "./useOperatorDashboardData";
 import {
   buildWorkspaceRightPanelTabs,
   isOperatorInsightTab,
