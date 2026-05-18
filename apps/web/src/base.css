@@ -6836,6 +6836,36 @@ button.chat-reply-quote:hover {
   letter-spacing: 0.02em;
 }
 
+.community-chat-timeline-item {
+  flex-shrink: 0;
+}
+
+.community-activity-marker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 20px;
+  margin: 4px 16px 8px 72px;
+  color: color-mix(in srgb, var(--text-muted) 88%, var(--text-primary) 12%);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.community-activity-marker-dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent-pink) 58%, var(--text-muted) 42%);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-pink) 10%, transparent);
+  flex: 0 0 auto;
+}
+
+.community-activity-marker-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* Reactions display */
 .chat-reactions {
   display: flex;
@@ -21746,6 +21776,11 @@ button.message-citation-chip:hover {
   max-width: 280px;
   font-size: 13px;
   line-height: 1.45;
+}
+
+.app-root.mobile-shell .community-activity-marker {
+  margin-left: 48px;
+  margin-right: 10px;
 }
 
 .app-root.mobile-shell .community-chat .chat-replying-bar,

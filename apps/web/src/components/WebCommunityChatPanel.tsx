@@ -11,12 +11,14 @@ import { useMemo } from "react";
 import { CommunityChatMessageRow } from "../../../../shared/CommunityChatMessageRow";
 import type { CommunityChatMediaImage } from "../../../../shared/CommunityChatMediaGrid";
 import type {
+  CommunityActivityEvent as SharedCommunityActivityEvent,
   CommunityChatMessage as SharedCommunityChatMessage,
   MessageReaction as SharedMessageReaction,
   CommunityTypingPresenceBundle as SharedCommunityTypingPresenceBundle,
   CommunityTypingPresenceUser as SharedCommunityTypingPresenceUser,
   UserProfile as SharedUserProfile,
 } from "../../../../shared/communityTypes";
+import { formatDateSeparator } from "../../../../shared/chatUi";
 import {
   type CommunityMessageAttachment,
   type ReplyPrefix,
@@ -26,6 +28,7 @@ import { VoiceInputButton } from "../../../../shared/VoiceInputButton";
 import { WebCommunityChatLightboxModal } from "./WebCommunityChatLightboxModal";
 
 type CommunityChatMessage = SharedCommunityChatMessage<CommunityMessageAttachment>;
+type CommunityActivityEvent = SharedCommunityActivityEvent;
 type MessageReaction = SharedMessageReaction;
 type CommunityTypingPresenceBundle = SharedCommunityTypingPresenceBundle;
 type CommunityTypingPresenceUser = SharedCommunityTypingPresenceUser;
@@ -33,7 +36,6 @@ type UserProfile = SharedUserProfile;
 
 type CommunityChatMessageViewModel = {
   message: CommunityChatMessage;
-  dateSeparator: string | null;
   showMeta: boolean;
   isOwn: boolean;
   isPending: boolean;
@@ -47,6 +49,36 @@ type CommunityChatMessageViewModel = {
   replyTarget: CommunityChatMessage | null;
   reactions: MessageReaction[];
 };
+
+type CommunityChatTimelineItem =
+  | {
+      kind: "activity";
+      key: string;
+      createdAt: string;
+      dateSeparator: string | null;
+      event: CommunityActivityEvent;
+    }
+  | {
+      kind: "message";
+      key: string;
+      createdAt: string;
+      dateSeparator: string | null;
+      viewModel: CommunityChatMessageViewModel;
+    };
+
+type CommunityChatTimelineDraftItem =
+  | {
+      kind: "activity";
+      key: string;
+      createdAt: string;
+      event: CommunityActivityEvent;
+    }
+  | {
+      kind: "message";
+      key: string;
+      createdAt: string;
+      viewModel: CommunityChatMessageViewModel;
+    };
 
 const EMPTY_MESSAGE_REACTIONS: MessageReaction[] = [];
 
@@ -65,6 +97,7 @@ export type WebCommunityChatPanelProps = {
   isLoadingMoreChat: boolean;
   communityChatHasMore: boolean;
   communityMessages: CommunityChatMessage[];
+  communityActivityEvents: CommunityActivityEvent[];
   communityMessageById: Map<string, CommunityChatMessage>;
   messageReactions: MessageReaction[];
   typingPresence: CommunityTypingPresenceBundle;
@@ -101,7 +134,6 @@ export type WebCommunityChatPanelProps = {
   onSendCommunityMessage: () => void | Promise<void>;
   displayName: (userId: string) => string;
   shouldShowCommunitySenderMeta: (messages: CommunityChatMessage[], index: number) => boolean;
-  shouldShowDateSeparator: (messages: CommunityChatMessage[], index: number) => string | null;
   getAvatarColor: (seed: string) => string;
   getInitials: (value: string) => string;
   formatChatTime: (value: string) => string;
@@ -123,6 +155,44 @@ export type WebCommunityChatPanelProps = {
   lightboxModalProps: ComponentProps<typeof WebCommunityChatLightboxModal>;
 };
 
+function parseTimelineTime(value: string): number {
+  const time = new Date(value).getTime();
+  return Number.isFinite(time) ? time : 0;
+}
+
+function resolveTimelineDateSeparator(createdAt: string, previousCreatedAt: string | null): string | null {
+  const current = new Date(createdAt);
+  if (!Number.isFinite(current.getTime())) return null;
+  if (!previousCreatedAt) return formatDateSeparator(current);
+  const previous = new Date(previousCreatedAt);
+  if (!Number.isFinite(previous.getTime())) return formatDateSeparator(current);
+  return previous.toDateString() === current.toDateString() ? null : formatDateSeparator(current);
+}
+
+function formatCommunityActivityLabel(
+  event: CommunityActivityEvent,
+  displayName: (userId: string) => string,
+): string {
+  const title = String(event.target_title ?? "").trim();
+  const titleSuffix = title ? `: ${title}` : "";
+  switch (event.type) {
+    case "member_joined": {
+      const actorName = event.actor_user_id ? displayName(event.actor_user_id) : "A member";
+      return `${actorName} joined the community`;
+    }
+    case "resource_added":
+      return `New resource added${titleSuffix}`;
+    case "ai_feed_post_added":
+      return `New AI Feed post added${titleSuffix}`;
+    case "event_soon":
+      return title ? `${title} starts soon` : "Event starts soon";
+    case "event_starting":
+      return title ? `${title} is starting now` : "Event is starting now";
+    default:
+      return "Community activity";
+  }
+}
+
 export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
   const {
     activeCommunity,
@@ -139,6 +209,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     isLoadingMoreChat,
     communityChatHasMore,
     communityMessages,
+    communityActivityEvents,
     communityMessageById,
     messageReactions,
     typingPresence,
@@ -175,7 +246,6 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     onSendCommunityMessage,
     displayName,
     shouldShowCommunitySenderMeta,
-    shouldShowDateSeparator,
     getAvatarColor,
     getInitials,
     formatChatTime,
@@ -231,7 +301,6 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
       const replyToId = message.reply_to_id ?? null;
       return {
         message,
-        dateSeparator: shouldShowDateSeparator(communityMessages, index),
         showMeta: shouldShowCommunitySenderMeta(communityMessages, index),
         isOwn: message.sender_id === sessionUserId,
         isPending: message.id.startsWith("pending-"),
@@ -259,15 +328,45 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     reactionsByMessageId,
     sessionUserId,
     shouldShowCommunitySenderMeta,
-    shouldShowDateSeparator,
   ]);
+
+  const timelineItems = useMemo<CommunityChatTimelineItem[]>(() => {
+    const items: CommunityChatTimelineDraftItem[] = [
+      ...messageViewModels.map((viewModel) => ({
+        kind: "message" as const,
+        key: `message:${viewModel.message.id}`,
+        createdAt: viewModel.message.created_at,
+        viewModel,
+      })),
+      ...communityActivityEvents.map((event) => ({
+        kind: "activity" as const,
+        key: `activity:${event.id}`,
+        createdAt: event.created_at,
+        event,
+      })),
+    ];
+    items.sort((a, b) => {
+      const byTime = parseTimelineTime(a.createdAt) - parseTimelineTime(b.createdAt);
+      if (byTime !== 0) return byTime;
+      if (a.kind === b.kind) return a.key.localeCompare(b.key);
+      return a.kind === "activity" ? -1 : 1;
+    });
+    let previousCreatedAt: string | null = null;
+    return items.map((item) => {
+      const dateSeparator = resolveTimelineDateSeparator(item.createdAt, previousCreatedAt);
+      previousCreatedAt = item.createdAt;
+      return { ...item, dateSeparator };
+    });
+  }, [communityActivityEvents, messageViewModels]);
+
+  const hasCommunityTimelineItems = communityMessages.length > 0 || communityActivityEvents.length > 0;
 
   const showCommunityChatBootstrap =
     hasAuthenticatedPresentation &&
     (isAuthRecoveringSignedIn ||
     (isResolvingSelectedCommunity ||
       (!!activeCommunity &&
-        communityMessages.length === 0 &&
+        !hasCommunityTimelineItems &&
         !communityChatError &&
         (isLoadingChat || !hasResolvedCommunityChat))));
 
@@ -343,14 +442,14 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
                   <div className="chat-empty">Select a community to start chatting.</div>
                 </div>
               )}
-              {activeCommunity && hasResolvedCommunityChat && !isLoadingChat && communityMessages.length === 0 && communityChatError && (
+              {activeCommunity && hasResolvedCommunityChat && !isLoadingChat && !hasCommunityTimelineItems && communityChatError && (
                 <div className="chat-messages-state-shell">
                   <div className="chat-empty">
                     <div>{communityChatError}</div>
                   </div>
                 </div>
               )}
-              {activeCommunity && hasResolvedCommunityChat && !isLoadingChat && communityMessages.length === 0 && !communityChatError && (
+              {activeCommunity && hasResolvedCommunityChat && !isLoadingChat && !hasCommunityTimelineItems && !communityChatError && (
                 <div className="chat-messages-state-shell">
                   <div className="chat-empty-state">
                     <div className="chat-empty-icon">
@@ -380,51 +479,75 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
               )}
               {activeCommunity &&
                 !isLoadingChat &&
-                messageViewModels.map((viewModel) => {
+                timelineItems.map((item) => {
+                  if (item.kind === "activity") {
+                    return (
+                      <div key={item.key} className="community-chat-timeline-item">
+                        {item.dateSeparator ? (
+                          <div className="chat-date-separator">
+                            <span>{item.dateSeparator}</span>
+                          </div>
+                        ) : null}
+                        <div className="community-activity-marker" role="note">
+                          <span className="community-activity-marker-dot" aria-hidden="true" />
+                          <span className="community-activity-marker-text">
+                            {formatCommunityActivityLabel(item.event, displayName)}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  }
+                  const viewModel = item.viewModel;
                   const { message, senderProfile } = viewModel;
                   return (
-                    <CommunityChatMessageRow
-                      key={message.id}
-                      message={message}
-                      copied={copiedCommunityMessageId === message.id}
-                      dateSeparator={viewModel.dateSeparator}
-                      isPending={viewModel.isPending}
-                      showMeta={viewModel.showMeta}
-                      isOwn={viewModel.isOwn}
-                      canModerateContent={canModerateMessages}
-                      senderLabel={viewModel.senderLabel}
-                      avatarUrl={viewModel.avatarUrl}
-                      avatarFocusX={senderProfile?.avatar_focus_x ?? 0.5}
-                      avatarFocusY={senderProfile?.avatar_focus_y ?? 0.5}
-                      avatarZoom={senderProfile?.avatar_zoom ?? 1}
-                      avatarColor={viewModel.avatarColor}
-                      shortTime={viewModel.shortTime}
-                      formattedTime={viewModel.formattedTime}
-                      isEditing={editingMessageId === message.id}
-                      editingMessageText={editingMessageText}
-                      isReactionPickerOpen={reactionPickerMessageId === message.id}
-                      messageReactions={viewModel.reactions}
-                      sessionUserId={sessionUserId}
-                      replyToId={viewModel.replyToId}
-                      replyTarget={viewModel.replyTarget}
-                      reactionEmojis={reactionEmojis}
-                      getInitials={getInitials}
-                      displayName={displayName}
-                      parseReplyPrefix={parseReplyPrefix}
-                      truncateReplyPreview={truncateReplyPreview}
-                      renderTextWithLinks={renderTextWithLinks}
-                      onScrollToReplyMessage={onScrollToReplyMessage}
-                      onOpenCommunityChatLightbox={onOpenCommunityChatLightbox}
-                      onToggleReaction={onToggleReaction}
-                      onSetReactionPickerMessageId={onSetReactionPickerMessageId}
-                      onStartReply={onStartReply}
-                      onCopyMessage={onCopyMessage}
-                      onStartEdit={onStartEdit}
-                      onDeleteMessage={onDeleteMessage}
-                      onEditingMessageTextChange={onEditingMessageTextChange}
-                      onSaveEdit={onSaveEdit}
-                      onCancelEdit={onCancelEdit}
-                    />
+                    <div key={item.key} className="community-chat-timeline-item">
+                      {item.dateSeparator ? (
+                        <div className="chat-date-separator">
+                          <span>{item.dateSeparator}</span>
+                        </div>
+                      ) : null}
+                      <CommunityChatMessageRow
+                        message={message}
+                        copied={copiedCommunityMessageId === message.id}
+                        dateSeparator={null}
+                        isPending={viewModel.isPending}
+                        showMeta={viewModel.showMeta}
+                        isOwn={viewModel.isOwn}
+                        canModerateContent={canModerateMessages}
+                        senderLabel={viewModel.senderLabel}
+                        avatarUrl={viewModel.avatarUrl}
+                        avatarFocusX={senderProfile?.avatar_focus_x ?? 0.5}
+                        avatarFocusY={senderProfile?.avatar_focus_y ?? 0.5}
+                        avatarZoom={senderProfile?.avatar_zoom ?? 1}
+                        avatarColor={viewModel.avatarColor}
+                        shortTime={viewModel.shortTime}
+                        formattedTime={viewModel.formattedTime}
+                        isEditing={editingMessageId === message.id}
+                        editingMessageText={editingMessageText}
+                        isReactionPickerOpen={reactionPickerMessageId === message.id}
+                        messageReactions={viewModel.reactions}
+                        sessionUserId={sessionUserId}
+                        replyToId={viewModel.replyToId}
+                        replyTarget={viewModel.replyTarget}
+                        reactionEmojis={reactionEmojis}
+                        getInitials={getInitials}
+                        displayName={displayName}
+                        parseReplyPrefix={parseReplyPrefix}
+                        truncateReplyPreview={truncateReplyPreview}
+                        renderTextWithLinks={renderTextWithLinks}
+                        onScrollToReplyMessage={onScrollToReplyMessage}
+                        onOpenCommunityChatLightbox={onOpenCommunityChatLightbox}
+                        onToggleReaction={onToggleReaction}
+                        onSetReactionPickerMessageId={onSetReactionPickerMessageId}
+                        onStartReply={onStartReply}
+                        onCopyMessage={onCopyMessage}
+                        onStartEdit={onStartEdit}
+                        onDeleteMessage={onDeleteMessage}
+                        onEditingMessageTextChange={onEditingMessageTextChange}
+                        onSaveEdit={onSaveEdit}
+                        onCancelEdit={onCancelEdit}
+                      />
+                    </div>
                   );
                 })}
               {activeCommunity && !isLoadingChat && typingLabel && (

@@ -84,7 +84,7 @@ export function shouldShowCommunitySenderMeta(
   return false;
 }
 
-function formatDateSeparator(date: Date): string {
+export function formatDateSeparator(date: Date): string {
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const yesterday = new Date(today.getTime() - 86400000);

@@ -14,6 +14,7 @@ import {
   deleteArchiveDocumentBySource,
   upsertArchiveDocumentForAiFeedPost,
 } from "./communityArchiveDocuments";
+import { recordCommunityActivityEventBestEffort } from "./communityActivity";
 import { upsertCommunitySourceTrace } from "./communityIntelligenceDirectory";
 
 const GOOD_WEIGHT = 1;
@@ -319,6 +320,17 @@ async function insertFeedPost(args: {
   const created = await getFeedPostOrThrow(args.ctx, normalizeIdValue(id));
   await upsertArchiveDocumentForAiFeedPost(args.ctx, created);
   await upsertSourceTraceForAiFeedPost(args.ctx, created, args.nowMs);
+  await recordCommunityActivityEventBestEffort({
+    ctx: args.ctx,
+    communityId: args.communityId,
+    type: "ai_feed_post_added",
+    actorUserId: args.authorUserId,
+    targetType: "ai_feed_post",
+    targetId: created._id,
+    targetTitle: created.title,
+    dedupeKey: `ai_feed_post_added:${normalizeIdValue(created._id)}`,
+    nowMs: args.nowMs,
+  });
   return await mapFeedPostRow({
     post: created,
     viewerReaction: null,

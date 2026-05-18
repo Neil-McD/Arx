@@ -93,6 +93,7 @@ type BuildWebCommunitySurfaceProjectionParams = {
   isLoadingMoreChat: WebCommunityChatPanelProps["isLoadingMoreChat"];
   communityChatHasMore: WebCommunityChatPanelProps["communityChatHasMore"];
   communityMessages: WebCommunityChatPanelProps["communityMessages"];
+  communityActivityEvents: WebCommunityChatPanelProps["communityActivityEvents"];
   communityMessageById: WebCommunityChatPanelProps["communityMessageById"];
   messageReactions: WebCommunityChatPanelProps["messageReactions"];
   typingPresence: WebCommunityChatPanelProps["typingPresence"];
@@ -128,7 +129,6 @@ type BuildWebCommunitySurfaceProjectionParams = {
   onSendCommunityMessage: WebCommunityChatPanelProps["onSendCommunityMessage"];
   displayName: WebCommunityChatPanelProps["displayName"];
   shouldShowCommunitySenderMeta: WebCommunityChatPanelProps["shouldShowCommunitySenderMeta"];
-  shouldShowDateSeparator: WebCommunityChatPanelProps["shouldShowDateSeparator"];
   getAvatarColor: WebCommunityChatPanelProps["getAvatarColor"];
   getInitials: WebCommunityChatPanelProps["getInitials"];
   formatChatTime: WebCommunityChatPanelProps["formatChatTime"];
@@ -308,6 +308,7 @@ export function buildWebCommunitySurfaceProjection(
     isLoadingMoreChat: params.isLoadingMoreChat,
     communityChatHasMore: params.communityChatHasMore,
     communityMessages: params.communityMessages,
+    communityActivityEvents: params.communityActivityEvents,
     communityMessageById: params.communityMessageById,
     messageReactions: params.messageReactions,
     typingPresence: params.typingPresence,
@@ -344,7 +345,6 @@ export function buildWebCommunitySurfaceProjection(
     onSendCommunityMessage: params.onSendCommunityMessage,
     displayName: params.displayName,
     shouldShowCommunitySenderMeta: params.shouldShowCommunitySenderMeta,
-    shouldShowDateSeparator: params.shouldShowDateSeparator,
     getAvatarColor: params.getAvatarColor,
     getInitials: params.getInitials,
     formatChatTime: params.formatChatTime,

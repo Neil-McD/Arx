@@ -30,6 +30,7 @@ import type * as chatgptResponsesTransport from "../chatgptResponsesTransport.js
 import type * as community from "../community.js";
 import type * as communityAccessAudit from "../communityAccessAudit.js";
 import type * as communityAccessQueries from "../communityAccessQueries.js";
+import type * as communityActivity from "../communityActivity.js";
 import type * as communityAdmin from "../communityAdmin.js";
 import type * as communityAgent from "../communityAgent.js";
 import type * as communityAgentFilesystem from "../communityAgentFilesystem.js";
@@ -183,6 +184,7 @@ declare const fullApi: ApiFromModules<{
   community: typeof community;
   communityAccessAudit: typeof communityAccessAudit;
   communityAccessQueries: typeof communityAccessQueries;
+  communityActivity: typeof communityActivity;
   communityAdmin: typeof communityAdmin;
   communityAgent: typeof communityAgent;
   communityAgentFilesystem: typeof communityAgentFilesystem;

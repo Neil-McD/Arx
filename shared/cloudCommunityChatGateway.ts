@@ -162,6 +162,31 @@ export function subscribeCloudCommunityTyping<TResult = unknown>(
   return watch.onUpdate(publish);
 }
 
+export function subscribeCloudCommunityActivityEvents<TRow = unknown>(
+  params: {
+    liveClient: CloudCommunityChatLiveClient;
+    communityId: string;
+    limit?: number;
+    onUpdate: (rows: TRow[]) => void;
+    onError?: (error: unknown) => void;
+  },
+): () => void {
+  const watch = params.liveClient.client.watchQuery(
+    "community:listCommunityActivityEvents" as any,
+    {
+      authSubject: params.liveClient.authSubject,
+      communityId: params.communityId as any,
+      beforeCreatedAt: null,
+      limit: params.limit ?? 50,
+    } as any,
+  );
+  const publish = () => {
+    emitLiveRows<TRow>(watch as any, params.onUpdate, params.onError);
+  };
+  publish();
+  return watch.onUpdate(publish);
+}
+
 export async function setCloudCommunityTyping<SessionT>(
   params: CloudCommunityChatGatewayParams<SessionT> & {
     communityId: string;
@@ -326,6 +351,23 @@ export async function listCloudThreadMessages<SessionT, TRow = unknown>(
     threadId: params.threadId,
     beforeSeq: params.beforeSeq ?? null,
     limit: params.limit ?? 100,
+  });
+  return coerceObjectRows<TRow>(payload);
+}
+
+export async function listCloudCommunityActivityEvents<SessionT, TRow = unknown>(
+  params: CloudCommunityChatGatewayParams<SessionT> & {
+    communityId: string;
+    beforeCreatedAt?: number | null;
+    limit?: number;
+  },
+): Promise<TRow[]> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  const payload = await client.query("community:listCommunityActivityEvents" as any, {
+    authSubject,
+    communityId: params.communityId,
+    beforeCreatedAt: params.beforeCreatedAt ?? null,
+    limit: params.limit ?? 50,
   });
   return coerceObjectRows<TRow>(payload);
 }

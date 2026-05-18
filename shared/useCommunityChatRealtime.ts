@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, type Dispatch, type MutableRefObject, t
 
 import {
   createCloudCommunityChatLiveClient,
+  subscribeCloudCommunityActivityEvents,
   subscribeCloudMessageReactions,
   subscribeCloudThreadMessages,
   type CloudCommunityChatLiveClient,
@@ -30,11 +31,17 @@ type ReactionLike = {
   user_id: string;
 };
 
+type ActivityEventLike = {
+  id: string;
+  actor_user_id: string | null;
+};
+
 type UseCommunityChatRealtimeArgs<
   SessionT extends SessionLike,
   MessageRowT extends MessageRowLike,
   ChatMessageT extends ChatMessageLike,
   ReactionT extends ReactionLike,
+  ActivityEventT extends ActivityEventLike,
 > = {
   isEnabled: boolean;
   session: SessionT | null;
@@ -47,6 +54,7 @@ type UseCommunityChatRealtimeArgs<
   setUnreadCount: Dispatch<SetStateAction<number>>;
   setCommunityMessages: Dispatch<SetStateAction<ChatMessageT[]>>;
   setMessageReactions: Dispatch<SetStateAction<ReactionT[]>>;
+  setCommunityActivityEvents: Dispatch<SetStateAction<ActivityEventT[]>>;
   onLoadProfiles?: (userIds: string[], session: SessionT) => void | Promise<void>;
   pollIntervalMs?: number;
 };
@@ -85,7 +93,8 @@ export function useCommunityChatRealtime<
   MessageRowT extends MessageRowLike,
   ChatMessageT extends ChatMessageLike,
   ReactionT extends ReactionLike,
->(args: UseCommunityChatRealtimeArgs<SessionT, MessageRowT, ChatMessageT, ReactionT>) {
+  ActivityEventT extends ActivityEventLike,
+>(args: UseCommunityChatRealtimeArgs<SessionT, MessageRowT, ChatMessageT, ReactionT, ActivityEventT>) {
   const argsRef = useRef(args);
   argsRef.current = args;
   const onLoadProfilesRef = useRef(args.onLoadProfiles);
@@ -111,6 +120,7 @@ export function useCommunityChatRealtime<
     let cancelled = false;
     let disposeMessages: (() => void) | null = null;
     let disposeReactions: (() => void) | null = null;
+    let disposeActivityEvents: (() => void) | null = null;
     let watchedReactionKey = "";
 
     const subscribe = async () => {
@@ -198,6 +208,24 @@ export function useCommunityChatRealtime<
             })();
           },
         });
+
+        disposeActivityEvents = subscribeCloudCommunityActivityEvents<ActivityEventT>({
+          liveClient,
+          communityId: args.activeCommunityId!,
+          limit: 50,
+          onUpdate: (rows) => {
+            if (cancelled) return;
+            const actorUserIds = Array.from(
+              new Set(rows.map((event) => String(event.actor_user_id ?? "").trim()).filter(Boolean)),
+            );
+            if (actorUserIds.length > 0) {
+              void Promise.resolve(onLoadProfilesRef.current?.(actorUserIds, usableSession)).catch(() => {
+                // Activity markers can still render without profile hydration.
+              });
+            }
+            latestArgs.setCommunityActivityEvents(rows);
+          },
+        });
       } catch {
         // Live subscription failures are soft; initial load remains the primary UX path.
       }
@@ -207,6 +235,7 @@ export function useCommunityChatRealtime<
 
     return () => {
       cancelled = true;
+      disposeActivityEvents?.();
       disposeReactions?.();
       disposeMessages?.();
       clearRuntimeState();

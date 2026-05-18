@@ -998,6 +998,32 @@ export default defineSchema({
     .index("by_thread_seq", ["threadId", "seq"])
     .index("by_sender", ["senderUserId"]),
 
+  communityActivityEvents: defineTable({
+    communityId: v.id("communities"),
+    type: v.union(
+      v.literal("member_joined"),
+      v.literal("resource_added"),
+      v.literal("event_soon"),
+      v.literal("event_starting"),
+      v.literal("ai_feed_post_added"),
+    ),
+    actorUserId: v.optional(v.id("users")),
+    targetType: v.optional(
+      v.union(
+        v.literal("membership"),
+        v.literal("resource"),
+        v.literal("event"),
+        v.literal("ai_feed_post"),
+      ),
+    ),
+    targetId: v.optional(v.string()),
+    targetTitle: v.optional(v.string()),
+    dedupeKey: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_community_createdAt", ["communityId", "createdAt"])
+    .index("by_community_dedupeKey", ["communityId", "dedupeKey"]),
+
   communityMessageReactions: defineTable({
     messageId: v.id("communityChatMessages"),
     userId: v.id("users"),

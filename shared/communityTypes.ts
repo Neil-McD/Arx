@@ -52,6 +52,30 @@ export type CommunityChatMessage<TAttachment = unknown> = {
   seq: number;
 };
 
+export type CommunityActivityEventType =
+  | "member_joined"
+  | "resource_added"
+  | "event_soon"
+  | "event_starting"
+  | "ai_feed_post_added";
+
+export type CommunityActivityTargetType =
+  | "membership"
+  | "resource"
+  | "event"
+  | "ai_feed_post";
+
+export type CommunityActivityEvent = {
+  id: string;
+  community_id: string;
+  type: CommunityActivityEventType;
+  actor_user_id: string | null;
+  target_type: CommunityActivityTargetType | null;
+  target_id: string | null;
+  target_title: string | null;
+  created_at: string;
+};
+
 export type ChatLightboxImage = {
   url: string;
   name: string;

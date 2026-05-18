@@ -62,6 +62,9 @@ import {
 } from "./communityChat";
 import { readCommunityRecentContext as readCommunityRecentContextImpl } from "./communityRecentContext";
 import {
+  listCommunityActivityEvents as listCommunityActivityEventsImpl,
+} from "./communityActivity";
+import {
   hideCommunityAiFeedPost as hideCommunityAiFeedPostImpl,
   listCommunityAiFeedBundle as listCommunityAiFeedBundleImpl,
   publishCommunityAiFeedAgentPost as publishCommunityAiFeedAgentPostImpl,
@@ -186,6 +189,7 @@ export const cancelMyJoinRequestBySlug = cancelMyJoinRequestBySlugImpl;
 export const ensureCommunityChatThread = ensureCommunityChatThreadImpl;
 export const generateCommunityChatAttachmentUploadUrl = generateCommunityChatAttachmentUploadUrlImpl;
 export const listThreadMessages = listThreadMessagesImpl;
+export const listCommunityActivityEvents = listCommunityActivityEventsImpl;
 export const listCommunityTyping = listCommunityTypingImpl;
 export const setCommunityTyping = setCommunityTypingImpl;
 export const createThreadUserMessage = createThreadUserMessageImpl;

@@ -131,7 +131,6 @@ import {
   getInitials,
   shortId,
   shouldShowCommunitySenderMeta,
-  shouldShowDateSeparator,
 } from "../../../shared/chatUi";
 import {
   type AppPage,
@@ -153,6 +152,7 @@ import type {
   CommunityAnalyticsSeries as SharedCommunityAnalyticsSeries,
   CommunityAgentConfig as SharedCommunityAgentConfig,
   CommunityAnalyticsSummary as SharedCommunityAnalyticsSummary,
+  CommunityActivityEvent as SharedCommunityActivityEvent,
   CommunityChatMessage as SharedCommunityChatMessage,
   CommunityFunnelConfig as SharedCommunityFunnelConfig,
   DiscoverCommunitySnapshot as SharedDiscoverCommunitySnapshot,
@@ -534,6 +534,7 @@ type MessageAttachment = CommunityMessageAttachment & {
 };
 
 type CommunityChatMessage = SharedCommunityChatMessage<MessageAttachment>;
+type CommunityActivityEvent = SharedCommunityActivityEvent;
 type ChatLightboxImage = SharedChatLightboxImage;
 type CommunityAgentConfig = SharedCommunityAgentConfig<CommunityAgentLanding>;
 type CommunityFunnelConfig = SharedCommunityFunnelConfig;
@@ -1090,6 +1091,7 @@ export default function App() {
         setActiveCommunityId,
         setCommunityTab,
         setCommunityMessages,
+        setCommunityActivityEvents,
         setCommunityMessageInput,
         setCommunityChatError,
         resetCommunityChatDataState,
@@ -1164,6 +1166,7 @@ export default function App() {
         setActiveCommunityId,
         setCommunityTab,
         setCommunityMessages,
+        setCommunityActivityEvents,
         setCommunityMessageInput,
         setCommunityChatError,
         resetCommunityChatDataState,
@@ -1757,6 +1760,7 @@ export default function App() {
   });
 
   const [communityMessages, setCommunityMessages] = useState<CommunityChatMessage[]>([]);
+  const [communityActivityEvents, setCommunityActivityEvents] = useState<CommunityActivityEvent[]>([]);
   const [communityMessageInput, setCommunityMessageInput] = useState("");
   const workspaceComposerApiRef = useRef<WorkspaceComposerApi | null>(null);
   const workspaceStarterPromptConsumedRef = useRef(false);
@@ -1963,6 +1967,7 @@ export default function App() {
     setUnreadCount,
     setCommunityMessages,
     setMessageReactions,
+    setCommunityActivityEvents,
     onLoadProfiles: (userIds, session) => {
       return loadUserProfiles(userIds, session);
     },
@@ -4313,12 +4318,17 @@ export default function App() {
       const senderId = String(message.sender_id ?? "").trim();
       if (senderId) ids.add(senderId);
     }
+    for (const event of communityActivityEvents) {
+      const actorId = String(event.actor_user_id ?? "").trim();
+      if (actorId) ids.add(actorId);
+    }
     if (canonicalSessionUserId) ids.add(canonicalSessionUserId);
     return Array.from(ids);
   }, [
     activePage,
     activeView,
     canonicalSessionUserId,
+    communityActivityEvents,
     communityMembers,
     communityMessages,
     isWorkspaceRightPanelOpen,
@@ -4421,6 +4431,7 @@ export default function App() {
   useEffect(() => {
     setCommunityChatError(null);
     setCommunityMessages([]);
+    setCommunityActivityEvents([]);
     setMessageReactions([]);
     setCommunityResources([]);
     setCommunityResourceModules([]);
@@ -7371,6 +7382,7 @@ export default function App() {
       isLoadingMoreChat,
       communityChatHasMore,
       communityMessages,
+      communityActivityEvents,
       communityMessageById,
       messageReactions,
       typingPresence: communityTypingUsers,
@@ -7418,7 +7430,6 @@ export default function App() {
       onSendCommunityMessage: handleSendCommunityMessage,
       displayName,
       shouldShowCommunitySenderMeta,
-      shouldShowDateSeparator,
       getAvatarColor,
       getInitials,
       formatChatTime,

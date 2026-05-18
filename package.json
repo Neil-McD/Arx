@@ -55,6 +55,7 @@
     "check:community-chat-cleanup-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_chat_cleanup_contract_proof.ts",
     "check:community-chat-image-lightbox-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_chat_image_lightbox_proof.ts",
     "check:community-chat-attachment-policy-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_chat_attachment_policy_proof.ts",
+    "check:community-activity-events-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_activity_events_contract_proof.ts",
     "check:community-events-recurrence-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_events_recurrence_proof.ts",
     "check:community-events-ui-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_events_ui_contract_proof.ts",
     "check:community-attention-events-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_attention_events_contract_proof.ts",

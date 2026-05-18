@@ -24,6 +24,7 @@ import {
   deleteArchiveDocumentBySource,
   upsertArchiveDocumentForResource,
 } from "./communityArchiveDocuments";
+import { recordCommunityActivityEventBestEffort } from "./communityActivity";
 
 function normalizeOptionalModuleId(raw: unknown): string | null {
   const value = String(raw ?? "").trim();
@@ -518,6 +519,17 @@ export const saveCommunityResource = mutation({
     const created = (await ctx.db.get(id as any)) as CommunityResourceLike | null;
     if (!created) throw new Error("community_resource_create_failed");
     await upsertArchiveDocumentForResource(ctx, created);
+    await recordCommunityActivityEventBestEffort({
+      ctx,
+      communityId: community._id,
+      type: "resource_added",
+      actorUserId: args.userId,
+      targetType: "resource",
+      targetId: created._id,
+      targetTitle: created.title,
+      dedupeKey: `resource_added:${normalizeIdValue(created._id)}`,
+      nowMs,
+    });
     return await mapCommunityResourceRow(ctx, created);
   },
 });

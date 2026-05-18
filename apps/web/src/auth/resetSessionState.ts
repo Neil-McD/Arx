@@ -8,6 +8,7 @@ type WebSessionResetDeps = {
   setActiveCommunityId: (value: null) => void;
   setCommunityTab: (value: "chat") => void;
   setCommunityMessages: (value: any[]) => void;
+  setCommunityActivityEvents?: (value: any[]) => void;
   setCommunityMessageInput: (value: string) => void;
   setCommunityChatError: (value: string | null) => void;
   resetCommunityChatDataState: () => void;
@@ -57,6 +58,7 @@ export async function resetWebSessionStateAfterSignOut(deps: WebSessionResetDeps
   deps.setActiveCommunityId(null);
   deps.setCommunityTab("chat");
   deps.setCommunityMessages([]);
+  deps.setCommunityActivityEvents?.([]);
   deps.setCommunityMessageInput("");
   deps.setCommunityChatError(null);
   deps.resetCommunityChatDataState();
