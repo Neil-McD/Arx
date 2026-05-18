@@ -1,4 +1,21 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  ChevronLeft,
+  File,
+  FileCode2,
+  FileImage,
+  FileText,
+  Folder,
+  LoaderCircle,
+} from "lucide-react";
+import hljs from "highlight.js/lib/core";
+import bash from "highlight.js/lib/languages/bash";
+import css from "highlight.js/lib/languages/css";
+import javascript from "highlight.js/lib/languages/javascript";
+import json from "highlight.js/lib/languages/json";
+import markdown from "highlight.js/lib/languages/markdown";
+import typescript from "highlight.js/lib/languages/typescript";
+import xml from "highlight.js/lib/languages/xml";
 import type { AuthSessionLike } from "../../../../shared/authSession";
 import { AnalyticsLineChart } from "../../../../shared/AnalyticsLineChart";
 import type {
@@ -156,6 +173,33 @@ type CommunityPanelContentProps = WorkspaceUserDataPanelDataProps & {
 const WORKSPACE_FILES_EXPANDED_STORAGE_KEY_PREFIX = "polynet-workspace-files-expanded";
 const WORKSPACE_PANEL_COLLAPSED_SIGNAL_LIMIT = 8;
 const WORKSPACE_PANEL_EXPANDED_SIGNAL_VIEWPORT_ITEMS = 10;
+const WORKSPACE_IMAGE_EXTENSIONS = new Set(["gif", "jpeg", "jpg", "png", "svg", "webp"]);
+const WORKSPACE_CODE_EXTENSION_LANGUAGE: Record<string, string> = {
+  bash: "bash",
+  css: "css",
+  html: "xml",
+  js: "javascript",
+  json: "json",
+  jsx: "javascript",
+  md: "markdown",
+  mdx: "markdown",
+  mjs: "javascript",
+  sh: "bash",
+  svg: "xml",
+  ts: "typescript",
+  tsx: "typescript",
+  txt: "text",
+  xml: "xml",
+};
+const WORKSPACE_DIFF_EXTENSIONS = new Set(["diff", "patch"]);
+
+hljs.registerLanguage("bash", bash);
+hljs.registerLanguage("css", css);
+hljs.registerLanguage("javascript", javascript);
+hljs.registerLanguage("json", json);
+hljs.registerLanguage("markdown", markdown);
+hljs.registerLanguage("typescript", typescript);
+hljs.registerLanguage("xml", xml);
 
 function ResourceSignalIcon() {
   return (
@@ -205,6 +249,144 @@ function pathDepth(path: string): number {
   return normalized.split("/").filter(Boolean).length;
 }
 
+function workspacePathSegments(path: string): string[] {
+  const normalized = String(path || ".").replace(/^\/+|\/+$/g, "");
+  if (!normalized || normalized === ".") return [];
+  return normalized.split("/").filter(Boolean);
+}
+
+function formatWorkspaceBreadcrumb(path: string): string {
+  const segments = workspacePathSegments(path);
+  return segments.length ? `workspace / ${segments.join(" / ")}` : "workspace";
+}
+
+function workspacePathExtension(path: string): string {
+  const name = String(path || "").split("/").pop() ?? "";
+  const index = name.lastIndexOf(".");
+  if (index <= 0 || index === name.length - 1) return "";
+  return name.slice(index + 1).toLowerCase();
+}
+
+function isWorkspaceDiffPath(path: string): boolean {
+  return WORKSPACE_DIFF_EXTENSIONS.has(workspacePathExtension(path));
+}
+
+function workspacePreviewLanguage(path: string): string | null {
+  const language = WORKSPACE_CODE_EXTENSION_LANGUAGE[workspacePathExtension(path)];
+  return language && language !== "text" ? language : null;
+}
+
+function workspaceFileVisualKind(entry: WorkspaceInspectorDirectoryEntry): "folder" | "image" | "code" | "diff" | "text" | "file" {
+  if (entry.type === "directory") return "folder";
+  const extension = entry.extension?.toLowerCase() || workspacePathExtension(entry.path);
+  if (WORKSPACE_DIFF_EXTENSIONS.has(extension)) return "diff";
+  if (WORKSPACE_IMAGE_EXTENSIONS.has(extension)) return "image";
+  if (WORKSPACE_CODE_EXTENSION_LANGUAGE[extension]) return extension === "txt" ? "text" : "code";
+  return "file";
+}
+
+function formatWorkspaceEntryKind(entry: WorkspaceInspectorDirectoryEntry): string {
+  if (entry.type === "directory") return entry.heavy ? "large folder" : "folder";
+  const extension = entry.extension?.toLowerCase() || workspacePathExtension(entry.path);
+  if (WORKSPACE_DIFF_EXTENSIONS.has(extension)) return "diff";
+  if (WORKSPACE_IMAGE_EXTENSIONS.has(extension)) return "image";
+  return extension || "file";
+}
+
+function WorkspaceFileIcon(props: { entry: WorkspaceInspectorDirectoryEntry }) {
+  const kind = workspaceFileVisualKind(props.entry);
+  const Icon =
+    kind === "folder"
+      ? Folder
+      : kind === "image"
+        ? FileImage
+        : kind === "code" || kind === "diff"
+          ? FileCode2
+          : kind === "text"
+            ? FileText
+            : File;
+
+  return (
+    <span className={`workspace-files-entry__icon workspace-files-entry__icon--${kind}`} aria-hidden="true">
+      <Icon size={15} strokeWidth={1.8} />
+    </span>
+  );
+}
+
+function classifyWorkspaceDiffLine(line: string): "add" | "delete" | "hunk" | "header" | "context" {
+  if (line.startsWith("+++") || line.startsWith("---") || line.startsWith("diff --git") || line.startsWith("index ")) {
+    return "header";
+  }
+  if (line.startsWith("@@")) return "hunk";
+  if (line.startsWith("+")) return "add";
+  if (line.startsWith("-")) return "delete";
+  return "context";
+}
+
+function highlightWorkspaceLine(line: string, language: string | null): string | null {
+  if (!language || !line) return null;
+  try {
+    return hljs.highlight(line, { language, ignoreIllegals: true }).value;
+  } catch {
+    return null;
+  }
+}
+
+function WorkspacePreviewHeader(props: {
+  name: string;
+  meta: string;
+}) {
+  return (
+    <div className="workspace-file-preview__header">
+      <div className="workspace-file-preview__title">{props.name}</div>
+      <div className="workspace-file-preview__meta">{props.meta}</div>
+    </div>
+  );
+}
+
+function WorkspaceTextPreview(props: {
+  preview: Extract<WorkspaceInspectorFilePreview, { ok: true; previewKind: "text" }>;
+}) {
+  const isDiff = isWorkspaceDiffPath(props.preview.path || props.preview.name);
+  const language = isDiff ? null : workspacePreviewLanguage(props.preview.path || props.preview.name);
+  const lines = props.preview.text ? props.preview.text.split("\n") : [""];
+  const meta = [
+    workspacePathExtension(props.preview.name || props.preview.path) || "text",
+    formatBytes(props.preview.sizeBytes),
+    props.preview.truncated ? "truncated" : "",
+  ].filter(Boolean).join(" · ");
+
+  return (
+    <div className="workspace-file-preview__text">
+      <WorkspacePreviewHeader name={props.preview.name} meta={meta} />
+      <div
+        className={`workspace-code-preview${isDiff ? " workspace-code-preview--diff" : ""}`}
+        aria-label={`${props.preview.name} preview`}
+      >
+        {lines.map((line, index) => {
+          const diffKind = isDiff ? classifyWorkspaceDiffLine(line) : "context";
+          const html = highlightWorkspaceLine(line, language);
+          return (
+            <div
+              key={`${index}:${line}`}
+              className={`workspace-code-preview__line workspace-code-preview__line--${diffKind}`}
+            >
+              <span className="workspace-code-preview__line-number">{index + 1}</span>
+              <code className="workspace-code-preview__line-text">
+                {html ? (
+                  <span dangerouslySetInnerHTML={{ __html: html }} />
+                ) : (
+                  line || "\u00A0"
+                )}
+              </code>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function formatCommunityRole(value: WorkspaceUserPanelCommunity["role"]): string {
   if (value === "owner") return "Owner";
   if (value === "admin") return "Admin";
@@ -219,7 +401,7 @@ function formatWorkspaceInspectorFailure(result: WorkspaceInspectorFailure): str
 }
 
 function isWorkspaceCreditStartFailure(result: DaytonaWorkspaceComputerStartResult): boolean {
-  return !result.ok && (
+  return result.ok === false && (
     result.code === "workspace_credits_exhausted" ||
     result.code === "workspace_credits_unavailable"
   );
@@ -512,7 +694,7 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps) {
     })
       .then((result) => {
         if (!isAlive) return;
-        if (!result.ok) {
+        if (result.ok === false) {
           setDirectoryEntries([]);
           setDirectoryError(formatWorkspaceInspectorFailure(result));
           setDirectoryErrorCode(result.code);
@@ -554,7 +736,7 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps) {
       })
         .then((result) => {
           if (filePreviewRequestId.current !== requestId) return;
-          if (!result.ok) {
+          if (result.ok === false) {
             setFilePreview(null);
             setFilePreviewError(formatWorkspaceInspectorFailure(result));
             return;
@@ -583,20 +765,48 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps) {
   );
   const hasFilePreviewContent = Boolean(isLoadingFilePreview || filePreviewError || filePreview?.ok);
   const canTurnOnComputer = Boolean(props.session && props.activeProjectId);
+  const isStartingComputerForFiles =
+    props.isStartingWorkspaceComputer || directoryErrorCode === "computer_starting";
   const shouldShowTurnOnComputerAction =
     canTurnOnComputer &&
     (
       directoryErrorCode === "background_sandbox_not_found" ||
       directoryErrorCode === "workspace_credits_exhausted" ||
-      directoryErrorCode === "workspace_credits_unavailable"
+      directoryErrorCode === "workspace_credits_unavailable" ||
+      directoryErrorCode === "computer_starting" ||
+      directoryErrorCode === "computer_start_failed"
     );
+  const shouldShowComputerState =
+    filesExpanded &&
+    canInspectFiles &&
+    !isComputerOnForFiles &&
+    Boolean(directoryError || isStartingComputerForFiles);
+  const computerStateMessage = isStartingComputerForFiles
+    ? "Computer turning on"
+    : directoryError ?? "Turn on computer to view files.";
 
   const handleTurnOnComputer = useCallback(async () => {
     if (!canTurnOnComputer) return;
-    setDirectoryError(null);
-    setDirectoryErrorCode(null);
-    const result = await props.onTurnOnComputer();
-    if (!result.ok) {
+    filePreviewRequestId.current += 1;
+    setDirectoryEntries([]);
+    setDirectoryError("Computer turning on");
+    setDirectoryErrorCode("computer_starting");
+    setIsComputerOnForFiles(false);
+    setSelectedFilePath(null);
+    setFilePreview(null);
+    setFilePreviewError(null);
+    setIsLoadingFilePreview(false);
+    let result: DaytonaWorkspaceComputerStartResult;
+    try {
+      result = await props.onTurnOnComputer();
+    } catch (error) {
+      setDirectoryEntries([]);
+      setDirectoryError(error instanceof Error ? error.message : "Computer could not turn on.");
+      setDirectoryErrorCode("computer_start_failed");
+      setIsComputerOnForFiles(false);
+      return;
+    }
+    if (result.ok === false) {
       setDirectoryEntries([]);
       setDirectoryError(
         isWorkspaceCreditStartFailure(result)
@@ -685,21 +895,31 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps) {
         </button>
         {!canInspectFiles ? (
           <p className="workspace-files-note">Turn on computer to view files.</p>
-        ) : filesExpanded && directoryError ? (
+        ) : shouldShowComputerState ? (
           <div className="workspace-files-empty-state">
             <div className="workspace-files-computer-row">
-              <p>{directoryError}</p>
+              <p>
+                {isStartingComputerForFiles ? (
+                  <LoaderCircle
+                    className="workspace-files-computer-spinner"
+                    size={14}
+                    strokeWidth={2}
+                    aria-hidden="true"
+                  />
+                ) : null}
+                <span>{computerStateMessage}</span>
+              </p>
               {shouldShowTurnOnComputerAction ? (
                 <label
                   className={`members-switch integration-mounted-switch workspace-files-computer-switch${
-                    props.isStartingWorkspaceComputer ? " is-disabled" : ""
+                    isStartingComputerForFiles ? " is-disabled" : ""
                   }`}
-                  title="Turn on computer"
+                  title={isStartingComputerForFiles ? "Computer turning on" : "Turn on computer"}
                 >
                   <input
                     type="checkbox"
-                    checked={false}
-                    disabled={props.isStartingWorkspaceComputer}
+                    checked={isStartingComputerForFiles}
+                    disabled={isStartingComputerForFiles}
                     aria-label="Turn on computer"
                     onChange={(event) => {
                       if (event.target.checked) void handleTurnOnComputer();
@@ -713,29 +933,33 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps) {
             </div>
             {shouldShowTurnOnComputerAction ? (
               <span className="workspace-files-computer-caption">
-                {props.isStartingWorkspaceComputer ? "Turning on" : "Off"}
+                {isStartingComputerForFiles ? "Starting" : "Off"}
               </span>
             ) : null}
           </div>
         ) : filesExpanded ? (
           <div className="workspace-files-browser">
             <div className="workspace-files-browser__toolbar">
-              <button
-                type="button"
-                className="workspace-user-data-action workspace-user-data-action--secondary"
-                onClick={() => {
-                  filePreviewRequestId.current += 1;
-                  setDirectoryPath(parentDirectory(directoryPath));
-                  setSelectedFilePath(null);
-                  setFilePreview(null);
-                  setFilePreviewError(null);
-                  setIsLoadingFilePreview(false);
-                }}
-                disabled={pathDepth(directoryPath) === 0 || isLoadingDirectory}
-              >
-                Up
-              </button>
-              <span>{directoryPath === "." ? "workspace" : directoryPath}</span>
+              {pathDepth(directoryPath) > 0 ? (
+                <button
+                  type="button"
+                  className="workspace-files-back"
+                  onClick={() => {
+                    filePreviewRequestId.current += 1;
+                    setDirectoryPath(parentDirectory(directoryPath));
+                    setSelectedFilePath(null);
+                    setFilePreview(null);
+                    setFilePreviewError(null);
+                    setIsLoadingFilePreview(false);
+                  }}
+                  disabled={isLoadingDirectory}
+                  aria-label="Go to parent folder"
+                  title="Parent folder"
+                >
+                  <ChevronLeft size={14} strokeWidth={2} aria-hidden="true" />
+                </button>
+              ) : null}
+              <span className="workspace-files-path">{formatWorkspaceBreadcrumb(directoryPath)}</span>
               {isComputerOnForFiles ? (
                 <label
                   className={`members-switch integration-mounted-switch workspace-files-computer-switch${
@@ -780,18 +1004,10 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps) {
                       }
                     }}
                   >
-                    <span className="workspace-files-entry__icon" aria-hidden="true">
-                      {entry.type === "directory" ? ">" : "*"}
-                    </span>
+                    <WorkspaceFileIcon entry={entry} />
                     <span>
                       <strong>{entry.name}</strong>
-                      <em>
-                        {entry.type === "directory"
-                          ? entry.heavy
-                            ? "large folder"
-                            : "folder"
-                          : entry.extension || "file"}
-                      </em>
+                      <em>{formatWorkspaceEntryKind(entry)}</em>
                     </span>
                   </button>
                 ))
@@ -811,19 +1027,14 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps) {
             <div className="workspace-files-empty">{filePreviewError}</div>
           ) : filePreview?.ok && filePreview.previewKind === "image" ? (
             <figure>
+              <WorkspacePreviewHeader
+                name={filePreview.name}
+                meta={[filePreview.mimeType, formatBytes(filePreview.sizeBytes)].filter(Boolean).join(" · ")}
+              />
               <img src={filePreview.dataUrl} alt={filePreview.name} />
-              <figcaption>
-                {filePreview.name} {formatBytes(filePreview.sizeBytes)}
-              </figcaption>
             </figure>
           ) : filePreview?.ok && filePreview.previewKind === "text" ? (
-            <div>
-              <div className="workspace-file-preview__meta">
-                {filePreview.name} {formatBytes(filePreview.sizeBytes)}
-                {filePreview.truncated ? " - truncated" : ""}
-              </div>
-              <pre>{filePreview.text || "(empty file)"}</pre>
-            </div>
+            <WorkspaceTextPreview preview={filePreview} />
           ) : filePreview?.ok && filePreview.previewKind === "unsupported" ? (
             <div className="workspace-files-empty">
               {filePreview.name}: {filePreview.reason}
