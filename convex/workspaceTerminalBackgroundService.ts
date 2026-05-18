@@ -35,6 +35,30 @@ function normalizeOptionalString(value: unknown): string | null {
   return normalized || null;
 }
 
+function isProjectBackgroundSandboxGoneFailure(value: unknown): boolean {
+  const record =
+    value && typeof value === "object" && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : {};
+  const details =
+    record.details && typeof record.details === "object" && !Array.isArray(record.details)
+      ? (record.details as Record<string, unknown>)
+      : {};
+  const code = normalizeString(record.code).toLowerCase();
+  const status = Number(details.response_status ?? record.status);
+  const text = [
+    record.message,
+    details.response_text,
+  ].map((part) => normalizeString(part).toLowerCase()).join("\n");
+  return (
+    code === "sandbox_not_found" ||
+    code === "background_sandbox_not_found" ||
+    status === 404 ||
+    text.includes("not found") ||
+    text.includes("failed (404)")
+  );
+}
+
 function buildBackgroundSandboxRunId(
   projectId: string,
   providerSandboxId?: string | null,
@@ -576,6 +600,20 @@ export async function resolveProjectBackgroundSandboxIfReady(params: {
     timeoutMs: 10_000,
   });
   if (!ready.ok) {
+    if (isProjectBackgroundSandboxGoneFailure(ready)) {
+      await releaseProjectBackgroundSandboxIfIdle({
+        ctx: params.ctx,
+        ownerId: params.userId,
+        projectId: params.projectId,
+        providerSandboxId: existingSandboxId,
+      });
+      return {
+        ok: false,
+        status: 404,
+        code: "background_sandbox_not_found",
+        message: "Turn on computer to view files.",
+      };
+    }
     await params.ctx.runMutation(
       internal.workspaceTerminals.clearProjectBackgroundSandboxInternal as any,
       {

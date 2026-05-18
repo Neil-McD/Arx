@@ -399,16 +399,11 @@ function formatCommunityRole(value: WorkspaceUserPanelCommunity["role"]): string
 }
 
 function formatWorkspaceInspectorFailure(result: WorkspaceInspectorFailure): string {
-  if (result.code === "background_sandbox_not_found") return "Turn on computer to view files.";
+  if (result.code === "background_sandbox_not_found" || result.code === "sandbox_not_found") {
+    return "Turn on computer to view files.";
+  }
   if (result.code === "workspace_credits_exhausted") return "Turn on computer to view files.";
   return result.message;
-}
-
-function isWorkspaceCreditStartFailure(result: DaytonaWorkspaceComputerStartResult): boolean {
-  return result.ok === false && (
-    result.code === "workspace_credits_exhausted" ||
-    result.code === "workspace_credits_unavailable"
-  );
 }
 
 function WorkspaceCommunityAnalyticsPreview(props: {
@@ -795,6 +790,7 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps & {
     canTurnOnComputer &&
     (
       directoryErrorCode === "background_sandbox_not_found" ||
+      directoryErrorCode === "sandbox_not_found" ||
       directoryErrorCode === "workspace_credits_exhausted" ||
       directoryErrorCode === "workspace_credits_unavailable" ||
       directoryErrorCode === "computer_starting" ||
@@ -832,11 +828,7 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps & {
     }
     if (result.ok === false) {
       setDirectoryEntries([]);
-      setDirectoryError(
-        isWorkspaceCreditStartFailure(result)
-          ? "Add tool credits to turn on computer."
-          : result.message,
-      );
+      setDirectoryError(formatWorkspaceInspectorFailure(result));
       setDirectoryErrorCode(result.code);
       return;
     }

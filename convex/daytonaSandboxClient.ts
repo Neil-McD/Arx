@@ -195,6 +195,7 @@ async function daytonaApiRequest<T>(params: {
       code: "runner_unavailable",
       message: `Daytona API ${params.method} ${params.path} failed (${response.status}).`,
       details: {
+        response_status: response.status,
         response_text: text.slice(0, 2000),
       },
     };
@@ -208,6 +209,24 @@ async function daytonaApiRequest<T>(params: {
     };
   }
   return { ok: true, payload: json as T };
+}
+
+function isDaytonaSandboxNotFoundResponse(value: unknown): boolean {
+  const record =
+    value && typeof value === "object" && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : {};
+  const details =
+    record.details && typeof record.details === "object" && !Array.isArray(record.details)
+      ? (record.details as Record<string, unknown>)
+      : {};
+  const status = Number(details.response_status ?? record.status);
+  if (status === 404) return true;
+  const text = [
+    record.message,
+    details.response_text,
+  ].map((part) => String(part ?? "").toLowerCase()).join("\n");
+  return text.includes("not found") || text.includes("failed (404)");
 }
 
 function normalizeDaytonaSandboxListPayload(
@@ -442,7 +461,10 @@ export async function stopDaytonaSandbox(params: {
     path: `/sandbox/${encodeURIComponent(params.sandboxId)}/stop`,
     method: "POST",
   });
-  if (!res.ok) return res;
+  if (!res.ok) {
+    if (isDaytonaSandboxNotFoundResponse(res)) return { ok: true };
+    return res;
+  }
   return { ok: true };
 }
 
@@ -465,8 +487,7 @@ export async function deleteDaytonaSandbox(params: {
     method: "DELETE",
   });
   if (!res.ok) {
-    const detailsText = String(res.details?.response_text ?? "").toLowerCase();
-    if (detailsText.includes("not found")) return { ok: true };
+    if (isDaytonaSandboxNotFoundResponse(res)) return { ok: true };
     return res;
   }
   return { ok: true };
@@ -496,7 +517,18 @@ export async function waitForDaytonaSandboxReady(params: {
       path: `/sandbox/${encodeURIComponent(params.sandboxId)}`,
       method: "GET",
     });
-    if (!lookup.ok) return lookup;
+    if (!lookup.ok) {
+      if (isDaytonaSandboxNotFoundResponse(lookup)) {
+        return {
+          ok: false,
+          status: 404,
+          code: "sandbox_not_found",
+          message: "Daytona sandbox not found.",
+          details: lookup.details,
+        };
+      }
+      return lookup;
+    }
     if (isDaytonaStartedState(lookup.payload.state))
       return { ok: true, sandbox: lookup.payload };
     if (isDaytonaTerminalErrorState(lookup.payload.state)) {
@@ -542,10 +574,7 @@ export async function waitForDaytonaSandboxStopped(params: {
       method: "GET",
     });
     if (!lookup.ok) {
-      const detailsText = String(
-        lookup.details?.response_text ?? "",
-      ).toLowerCase();
-      if (detailsText.includes("not found")) {
+      if (isDaytonaSandboxNotFoundResponse(lookup)) {
         return { ok: true, sandbox: null };
       }
       return lookup;

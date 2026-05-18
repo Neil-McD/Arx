@@ -33,6 +33,9 @@ async function proveLazyWorkspaceCreationRules() {
   const workspaceTerminalBackgroundServiceSource = await readRepoFile(
     "convex/workspaceTerminalBackgroundService.ts",
   );
+  const daytonaSandboxClientSource = await readRepoFile(
+    "convex/daytonaSandboxClient.ts",
+  );
   const workspaceTerminalReconciliationSource = await readRepoFile(
     "convex/workspaceTerminalReconciliation.ts",
   );
@@ -352,6 +355,40 @@ async function proveLazyWorkspaceCreationRules() {
     ),
     true,
     "expected reusable project background sandbox resolution to be explicit",
+  );
+  const resolveBackgroundSandboxBlock = extractFunctionBlock(
+    workspaceTerminalBackgroundServiceSource,
+    "export async function resolveProjectBackgroundSandboxIfReady",
+    "export async function resolveTerminalSandboxContext",
+  );
+  assert.equal(
+    workspaceTerminalBackgroundServiceSource.includes(
+      "function isProjectBackgroundSandboxGoneFailure",
+    ),
+    true,
+    "expected stale project background sandboxes to have a dedicated failure classifier",
+  );
+  assert.ok(
+    resolveBackgroundSandboxBlock.includes("isProjectBackgroundSandboxGoneFailure(ready)") &&
+      resolveBackgroundSandboxBlock.includes("releaseProjectBackgroundSandboxIfIdle") &&
+      resolveBackgroundSandboxBlock.includes('code: "background_sandbox_not_found"'),
+    "expected missing Daytona sandboxes to collapse to the canonical computer-off state",
+  );
+  assert.equal(
+    daytonaSandboxClientSource.includes("function isDaytonaSandboxNotFoundResponse"),
+    true,
+    "expected Daytona sandbox not-found responses to be normalized before UI projection",
+  );
+  const daytonaNotFoundBlock = extractFunctionBlock(
+    daytonaSandboxClientSource,
+    "function isDaytonaSandboxNotFoundResponse",
+    "function normalizeDaytonaSandboxListPayload",
+  );
+  assert.ok(
+    daytonaNotFoundBlock.includes("response_status") &&
+      daytonaNotFoundBlock.includes("failed (404)") &&
+      daytonaNotFoundBlock.includes("not found"),
+    "expected Daytona not-found detection to cover response status, raw 404 messages, and not-found response bodies",
   );
   assert.equal(
     executionSessionSource.includes("ensureProjectBackgroundSandbox"),
