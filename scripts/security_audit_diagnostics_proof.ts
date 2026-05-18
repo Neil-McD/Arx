@@ -125,8 +125,13 @@ assert.match(
 );
 assert.match(
   operatorIntelligence,
-  /SECURITY_AUDIT_EVENT_TYPES[\s\S]*stripe_webhook_failed[\s\S]*operator_role_upserted[\s\S]*account_delete_completed/,
+  /SECURITY_AUDIT_EVENT_TYPES[\s\S]*stripe_connect_onboarding_failed[\s\S]*stripe_webhook_failed[\s\S]*operator_role_upserted[\s\S]*account_delete_completed/,
   "security audit diagnostics must classify the security-critical audit event types",
+);
+assert.match(
+  operatorIntelligence,
+  /BILLING_TRUST_AUDIT_EVENT_TYPES[\s\S]*stripe_connect_onboarding_failed[\s\S]*stripe_connect_account_synced[\s\S]*stripe_webhook_failed/,
+  "Stripe Connect onboarding failures must be classified as billing trust events, not unknown security events",
 );
 assert.match(
   operatorIntelligence,

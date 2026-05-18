@@ -39,6 +39,7 @@ const SECURITY_AUDIT_EVENT_TYPES = [
   "operator_dashboard_accessed",
   "operator_role_deactivated",
   "operator_role_upserted",
+  "stripe_connect_onboarding_failed",
   "stripe_connect_account_synced",
   "stripe_webhook_failed",
   "stripe_webhook_processed",
@@ -58,6 +59,7 @@ function isAccountUserRow(row: any): boolean {
 const OPERATOR_ROLE_AUDIT_EVENT_TYPES = new Set(["operator_role_deactivated", "operator_role_upserted"]);
 const BILLING_TRUST_AUDIT_EVENT_TYPES = new Set([
   "community_subscription_synced",
+  "stripe_connect_onboarding_failed",
   "stripe_connect_account_synced",
   "stripe_webhook_failed",
 ]);
