@@ -77,6 +77,7 @@ const RUNTIME_TOOL_EVENT_TYPES = [
   "runtime_diagnostics_detected",
   "workspace_session_create_completed",
 ] as const;
+const PAID_TOOL_LEDGER_TOOL_NAME_SET = new Set<string>(PAID_TOOL_LEDGER_TOOL_NAMES as readonly string[]);
 const WEB_DEPLOY_FRONTEND_CRASH_EVENT_TYPES = new Set([
   "deploy.frontend_crash",
   "deploy.route_load_failed",
@@ -515,6 +516,57 @@ async function readWorkspaceComputeChargesByDebitSource(
   return await query.order("desc").take(limit);
 }
 
+async function readWorkspaceCreditBalanceRows(ctx: any, limit: number) {
+  return await ctx.db
+    .query("workspaceCreditBalances")
+    .withIndex("by_updatedAt")
+    .order("desc")
+    .take(limit);
+}
+
+async function readStaleReservedCreditLedgerRows(ctx: any, nowMs: number, limit: number) {
+  return await ctx.db
+    .query("creditLedgerEntries")
+    .withIndex("by_status_expiresAt", (q: any) =>
+      q.eq("status", "reserved").lt("expiresAt", nowMs),
+    )
+    .take(limit);
+}
+
+async function readDuePendingCreditSettlementRows(ctx: any, nowMs: number, limit: number) {
+  return await ctx.db
+    .query("creditLedgerEntries")
+    .withIndex("by_pendingSettlementStatus_nextAttemptAt", (q: any) =>
+      q.eq("pendingSettlementStatus", "succeeded").lt("pendingSettlementNextAttemptAt", nowMs),
+    )
+    .take(limit);
+}
+
+async function readCreditLedgerEntriesByUser(ctx: any, userId: any, limit: number) {
+  return await ctx.db
+    .query("creditLedgerEntries")
+    .withIndex("by_user_createdAt", (q: any) => q.eq("userId", userId))
+    .order("desc")
+    .take(limit);
+}
+
+async function readCompletedWorkspaceCreditTopupsByUser(ctx: any, userId: any, limit: number) {
+  const rows = await ctx.db
+    .query("checkoutSessions")
+    .withIndex("by_owner_status", (q: any) => q.eq("ownerUserId", userId).eq("status", "complete"))
+    .order("desc")
+    .take(limit);
+  return rows.filter((row: any) => row.mode === "workspace_credit_topup");
+}
+
+async function readWorkspaceComputeChargesByUser(ctx: any, userId: any, limit: number) {
+  return await ctx.db
+    .query("workspaceComputeCharges")
+    .withIndex("by_user", (q: any) => q.eq("userId", userId))
+    .order("desc")
+    .take(limit);
+}
+
 function readPayloadRecord(row: any): Record<string, unknown> {
   const payload = row?.payload;
   return payload && typeof payload === "object" && !Array.isArray(payload)
@@ -676,6 +728,106 @@ function readLedgerRefundedCredits(row: any): number {
   return readLedgerCredits(readLedgerCredits(row?.creditsReserved) - readLedgerSettledCredits(row));
 }
 
+function readLedgerMetadataNumber(row: any, key: string): number {
+  const metadata = row?.metadata;
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return 0;
+  return readLedgerCredits((metadata as Record<string, unknown>)[key]);
+}
+
+function buildToolBalanceIssue(args: {
+  kind: "negative_balance" | "duplicate_balance" | "stale_reservation" | "pending_settlement" | "unbilled_compute" | "missing_cost" | "price_drift" | "balance_mismatch" | "reconciliation_coverage_gap";
+  severity: "warning" | "error";
+  label: string;
+  userId?: unknown;
+  creditKey?: unknown;
+  amountCredits?: number | null;
+  amountUsd?: number | null;
+  latestAt?: number | null;
+}) {
+  return {
+    kind: args.kind,
+    severity: args.severity,
+    label: args.label,
+    userId: args.userId == null ? null : String(args.userId),
+    creditKey: args.creditKey == null ? null : String(args.creditKey),
+    amountCredits: typeof args.amountCredits === "number" ? readLedgerCredits(args.amountCredits) : null,
+    amountUsd: typeof args.amountUsd === "number" ? readSignedLedgerUsd(args.amountUsd) : null,
+    latestAt: typeof args.latestAt === "number" && Number.isFinite(args.latestAt) ? args.latestAt : null,
+  };
+}
+
+function buildSampledBalanceReconciliation(args: {
+  balance: any;
+  topups: any[];
+  ledgerRows: any[];
+  computeRows: any[];
+  userLedgerLimit: number;
+  userTopupLimit: number;
+  userComputeLimit: number;
+}) {
+  const completedTopups = args.topups.filter((row) => row.mode === "workspace_credit_topup");
+  const legacyTopupCoverageGaps = completedTopups.filter((row) =>
+    typeof row.workspaceCreditsGrantedAt === "number" &&
+    typeof row.workspaceCreditsUncollectedPaid !== "number"
+  ).length;
+  const userPaidToolLedgerRows = args.ledgerRows.filter((row) =>
+    PAID_TOOL_LEDGER_TOOL_NAME_SET.has(String(row?.toolName ?? "")),
+  );
+  const unbilledComputeRows = args.computeRows.filter((row) => row.debitSource === "unbilled");
+  const scanTruncated =
+    args.ledgerRows.length >= args.userLedgerLimit ||
+    args.topups.length >= args.userTopupLimit ||
+    args.computeRows.length >= args.userComputeLimit;
+  const coverageGap =
+    legacyTopupCoverageGaps > 0 ||
+    unbilledComputeRows.length > 0 ||
+    scanTruncated;
+
+  const topupPurchasedCredits = readLedgerCredits(
+    completedTopups.reduce((sum, row) => {
+      const credits = readLedgerCredits(row.workspaceCreditsAmount);
+      const paidUncollected = readLedgerCredits(row.workspaceCreditsUncollectedPaid);
+      return sum + Math.max(0, credits - paidUncollected);
+    }, 0),
+  );
+  const topupUncollectedPaidCredits = readLedgerCredits(
+    completedTopups.reduce((sum, row) => sum + readLedgerCredits(row.workspaceCreditsUncollectedPaid), 0),
+  );
+  const purchasedLedgerDebits = readLedgerCredits(
+    userPaidToolLedgerRows.reduce((sum, row) => sum + readLedgerCredits(row.purchasedCreditsDebited), 0),
+  );
+  const purchasedLedgerRefunds = readLedgerCredits(
+    userPaidToolLedgerRows.reduce((sum, row) => sum + readLedgerCredits(row.purchasedCreditsRefunded), 0),
+  );
+  const uncollectedCreatedCredits = readLedgerCredits(
+    userPaidToolLedgerRows.reduce((sum, row) => sum + readLedgerMetadataNumber(row, "uncollected_credits"), 0),
+  );
+
+  const expectedPurchasedCredits = readSignedLedgerUsd(
+    topupPurchasedCredits - purchasedLedgerDebits + purchasedLedgerRefunds,
+  );
+  const expectedUncollectedCredits = readSignedLedgerUsd(
+    uncollectedCreatedCredits - topupUncollectedPaidCredits,
+  );
+  const actualPurchasedCredits = readLedgerCredits(args.balance?.purchasedCreditsBalance);
+  const actualUncollectedCredits = readLedgerCredits(args.balance?.uncollectedCreditsBalance);
+  const purchasedDelta = readSignedLedgerUsd(actualPurchasedCredits - expectedPurchasedCredits);
+  const uncollectedDelta = readSignedLedgerUsd(actualUncollectedCredits - expectedUncollectedCredits);
+  const mismatch =
+    !coverageGap &&
+    (Math.abs(purchasedDelta) > 0.01 || Math.abs(uncollectedDelta) > 0.01);
+
+  return {
+    coverageGap,
+    mismatch,
+    purchasedDelta,
+    uncollectedDelta,
+    legacyTopupCoverageGaps,
+    unbilledComputeRows: unbilledComputeRows.length,
+    scanTruncated,
+  };
+}
+
 function formatPaidToolName(toolName: string): string {
   return getPaidToolLedgerLabel(toolName) ?? formatOperatorBucketLabel(toolName);
 }
@@ -823,6 +975,224 @@ function buildPaidToolEconomics(paidToolLedgerRows: any[], partnerCommissionRows
   };
 }
 
+async function buildToolBalanceAccountingIntegrity(params: {
+  ctx: any;
+  nowMs: number;
+  paidToolLedgerRows: any[];
+  unbilledComputeCharges: any[];
+  balanceRows: any[];
+  staleReservedRows: any[];
+  pendingSettlementRows: any[];
+  balanceSampleLimit: number;
+  userLedgerLimit: number;
+  userTopupLimit: number;
+  userComputeLimit: number;
+}) {
+  const issues: ReturnType<typeof buildToolBalanceIssue>[] = [];
+  const duplicateUsers = new Set<string>();
+  const sampledRowsByUser = new Map<string, any[]>();
+  for (const row of params.balanceRows) {
+    const key = String(row.userId);
+    sampledRowsByUser.set(key, [...(sampledRowsByUser.get(key) ?? []), row]);
+  }
+  for (const [userId, rows] of sampledRowsByUser.entries()) {
+    if (rows.length <= 1) continue;
+    duplicateUsers.add(userId);
+    if (issues.length < 10) {
+      issues.push(buildToolBalanceIssue({
+        kind: "duplicate_balance",
+        severity: "warning",
+        label: `${rows.length} sampled balance rows for one user`,
+        userId,
+        latestAt: Math.max(...rows.map((row) => readRowCreatedAt(row))),
+      }));
+    }
+  }
+
+  const negativeBalanceRows = params.balanceRows.filter((row) =>
+    Number(row.includedCreditsBalance ?? 0) < 0 ||
+    Number(row.purchasedCreditsBalance ?? 0) < 0 ||
+    Number(row.uncollectedCreditsBalance ?? 0) < 0
+  );
+  for (const row of negativeBalanceRows.slice(0, Math.max(0, 10 - issues.length))) {
+    issues.push(buildToolBalanceIssue({
+      kind: "negative_balance",
+      severity: "error",
+      label: "Negative tool balance row",
+      userId: row.userId,
+      amountCredits:
+        Math.min(
+          Number(row.includedCreditsBalance ?? 0),
+          Number(row.purchasedCreditsBalance ?? 0),
+          Number(row.uncollectedCreditsBalance ?? 0),
+        ),
+      latestAt: row.updatedAt,
+    }));
+  }
+
+  const uncollectedBalanceRows = params.balanceRows.filter((row) =>
+    readLedgerCredits(row.uncollectedCreditsBalance) > 0
+  );
+
+  const staleReservedRows = params.staleReservedRows.filter((row) =>
+    row.pendingSettlementStatus !== "succeeded"
+  );
+  for (const row of staleReservedRows.slice(0, Math.max(0, 10 - issues.length))) {
+    issues.push(buildToolBalanceIssue({
+      kind: "stale_reservation",
+      severity: "error",
+      label: "Expired paid-tool reservation still reserved",
+      userId: row.userId,
+      creditKey: row.creditKey,
+      amountCredits: row.creditsReserved,
+      latestAt: row.expiresAt ?? row.updatedAt,
+    }));
+  }
+
+  for (const row of params.pendingSettlementRows.slice(0, Math.max(0, 10 - issues.length))) {
+    issues.push(buildToolBalanceIssue({
+      kind: "pending_settlement",
+      severity: "warning",
+      label: "Provider-success settlement retry is due",
+      userId: row.userId,
+      creditKey: row.creditKey,
+      amountCredits: row.pendingCreditsSettled ?? row.creditsReserved,
+      latestAt: row.pendingSettlementNextAttemptAt ?? row.updatedAt,
+    }));
+  }
+
+  for (const row of params.unbilledComputeCharges.slice(0, Math.max(0, 10 - issues.length))) {
+    issues.push(buildToolBalanceIssue({
+      kind: "unbilled_compute",
+      severity: "error",
+      label: "Workspace compute charge was recorded as unbilled",
+      userId: row.userId,
+      amountUsd: row.computeCostUsd,
+      latestAt: row.createdAt,
+    }));
+  }
+
+  const settledRows = params.paidToolLedgerRows.filter((row) => row.status === "succeeded");
+  const settledRowsMissingVendorCost = settledRows.filter((row) =>
+    typeof row.rawVendorCostUsd !== "number" || !Number.isFinite(row.rawVendorCostUsd)
+  );
+  for (const row of settledRowsMissingVendorCost.slice(0, Math.max(0, 10 - issues.length))) {
+    issues.push(buildToolBalanceIssue({
+      kind: "missing_cost",
+      severity: "warning",
+      label: "Settled paid-tool row is missing vendor cost",
+      userId: row.userId,
+      creditKey: row.creditKey,
+      amountCredits: readLedgerSettledCredits(row),
+      latestAt: row.settledAt ?? row.updatedAt,
+    }));
+  }
+
+  const priceDriftRows = settledRows.filter((row) => {
+    const expected = creditsToUsd(readLedgerSettledCredits(row));
+    const actual = typeof row.polynetPriceUsd === "number" ? row.polynetPriceUsd : expected;
+    return Math.abs(readSignedLedgerUsd(actual - expected)) > 0.0001;
+  });
+  for (const row of priceDriftRows.slice(0, Math.max(0, 10 - issues.length))) {
+    issues.push(buildToolBalanceIssue({
+      kind: "price_drift",
+      severity: "error",
+      label: "Settled paid-tool price does not match settled credits",
+      userId: row.userId,
+      creditKey: row.creditKey,
+      amountCredits: readLedgerSettledCredits(row),
+      latestAt: row.settledAt ?? row.updatedAt,
+    }));
+  }
+
+  let balanceMismatchUsers = 0;
+  let reconciliationCoverageGaps = 0;
+  const reconciliationRows = params.balanceRows.slice(0, params.balanceSampleLimit);
+  for (const balance of reconciliationRows) {
+    const [topups, ledgerRows, computeRows] = await Promise.all([
+      readCompletedWorkspaceCreditTopupsByUser(params.ctx, balance.userId, params.userTopupLimit),
+      readCreditLedgerEntriesByUser(params.ctx, balance.userId, params.userLedgerLimit),
+      readWorkspaceComputeChargesByUser(params.ctx, balance.userId, params.userComputeLimit),
+    ]);
+    const reconciliation = buildSampledBalanceReconciliation({
+      balance,
+      topups,
+      ledgerRows,
+      computeRows,
+      userLedgerLimit: params.userLedgerLimit,
+      userTopupLimit: params.userTopupLimit,
+      userComputeLimit: params.userComputeLimit,
+    });
+    if (reconciliation.coverageGap) {
+      reconciliationCoverageGaps += 1;
+      if (issues.length < 10) {
+        issues.push(buildToolBalanceIssue({
+          kind: "reconciliation_coverage_gap",
+          severity: "warning",
+          label: reconciliation.scanTruncated
+            ? "Sampled user has more accounting rows than the diagnostic scan limit"
+            : reconciliation.legacyTopupCoverageGaps > 0
+              ? "Older top-up row lacks uncollected-usage allocation evidence"
+              : "Sampled user has unbilled compute outside credit-ledger replay",
+          userId: balance.userId,
+          latestAt: balance.updatedAt,
+        }));
+      }
+      continue;
+    }
+    if (reconciliation.mismatch) {
+      balanceMismatchUsers += 1;
+      if (issues.length < 10) {
+        issues.push(buildToolBalanceIssue({
+          kind: "balance_mismatch",
+          severity: "error",
+          label: "Materialized balance differs from replayed paid-tool ledger evidence",
+          userId: balance.userId,
+          amountCredits: Math.abs(reconciliation.purchasedDelta) + Math.abs(reconciliation.uncollectedDelta),
+          latestAt: balance.updatedAt,
+        }));
+      }
+    }
+  }
+
+  const errorCount =
+    negativeBalanceRows.length +
+    staleReservedRows.length +
+    params.unbilledComputeCharges.length +
+    priceDriftRows.length +
+    balanceMismatchUsers;
+  const warningCount =
+    duplicateUsers.size +
+    uncollectedBalanceRows.length +
+    params.pendingSettlementRows.length +
+    settledRowsMissingVendorCost.length +
+    reconciliationCoverageGaps;
+  const score = clampOperatorScore(
+    100 -
+      Math.min(70, errorCount * 14) -
+      Math.min(35, warningCount * 4),
+  );
+
+  return {
+    health: buildOperatorHealthFromScore(score),
+    score,
+    totals: {
+      sampledBalanceRows: params.balanceRows.length,
+      duplicateBalanceUsers: duplicateUsers.size,
+      negativeBalanceRows: negativeBalanceRows.length,
+      uncollectedBalanceRows: uncollectedBalanceRows.length,
+      staleReservations: staleReservedRows.length,
+      pendingSettlementsDue: params.pendingSettlementRows.length,
+      unbilledComputeCharges: params.unbilledComputeCharges.length,
+      settledRowsMissingVendorCost: settledRowsMissingVendorCost.length,
+      priceDriftRows: priceDriftRows.length,
+      balanceMismatchUsers,
+      reconciliationCoverageGaps,
+    },
+    issues,
+  };
+}
+
 function buildPaidToolDiagnostics(paidToolLedgerRows: any[], unbilledComputeCharges: any[]) {
   const lanes = new Map<
     string,
@@ -912,10 +1282,18 @@ async function buildOperatorToolEconomicsSnapshot(ctx: any, range: "7d" | "30d" 
   const scannedCreditLimit = 300;
   const scannedComputeLimit = 200;
   const scannedCommissionLimit = PAID_TOOL_LEDGER_TOOL_NAMES.length * scannedCreditLimit;
+  const scannedBalanceLimit = 200;
+  const scannedIntegritySampleLimit = 25;
+  const userLedgerLimit = 500;
+  const userTopupLimit = 250;
+  const userComputeLimit = 250;
   const [
     paidToolCreditGroups,
     toolGrossMarginPartnerCommissionRows,
     unbilledComputeCharges,
+    balanceRows,
+    staleReservedRows,
+    pendingSettlementRows,
   ] = await Promise.all([
     Promise.all(
       PAID_TOOL_LEDGER_TOOL_NAMES.map((toolName) =>
@@ -924,6 +1302,9 @@ async function buildOperatorToolEconomicsSnapshot(ctx: any, range: "7d" | "30d" 
     ),
     readPartnerCommissionLedgerRowsByBasisType(ctx, "tool_gross_margin", rangeStart, scannedCommissionLimit),
     readWorkspaceComputeChargesByDebitSource(ctx, "unbilled", rangeStart, scannedComputeLimit),
+    readWorkspaceCreditBalanceRows(ctx, scannedBalanceLimit),
+    readStaleReservedCreditLedgerRows(ctx, nowMs, scannedIntegritySampleLimit),
+    readDuePendingCreditSettlementRows(ctx, nowMs, scannedIntegritySampleLimit),
   ]);
 
   const paidToolLedgerRows: any[] = paidToolCreditGroups.flat();
@@ -955,6 +1336,19 @@ async function buildOperatorToolEconomicsSnapshot(ctx: any, range: "7d" | "30d" 
   );
   const paidTools = buildPaidToolDiagnostics(paidToolLedgerRows, unbilledComputeCharges);
   const paidToolEconomics = buildPaidToolEconomics(paidToolLedgerRows, toolGrossMarginPartnerCommissionRows);
+  const accountingIntegrity = await buildToolBalanceAccountingIntegrity({
+    ctx,
+    nowMs,
+    paidToolLedgerRows,
+    unbilledComputeCharges,
+    balanceRows,
+    staleReservedRows,
+    pendingSettlementRows,
+    balanceSampleLimit: scannedIntegritySampleLimit,
+    userLedgerLimit,
+    userTopupLimit,
+    userComputeLimit,
+  });
 
   return {
     computedAt: nowMs,
@@ -973,19 +1367,27 @@ async function buildOperatorToolEconomicsSnapshot(ctx: any, range: "7d" | "30d" 
     },
     paidTools,
     paidToolEconomics,
+    accountingIntegrity,
     evidence: {
       sourceTables: [
         "creditLedgerEntries",
         "partnerCommissionLedger",
         "workspaceComputeCharges",
+        "workspaceCreditBalances",
+        "checkoutSessions",
       ],
       scannedCreditLimit,
       scannedCommissionLimit,
       scannedComputeLimit,
+      scannedBalanceLimit,
+      scannedIntegritySampleLimit,
       isTruncated:
         paidToolCreditGroups.some((group: any[]) => group.length >= scannedCreditLimit) ||
         toolGrossMarginPartnerCommissionRows.length >= scannedCommissionLimit ||
-        unbilledComputeCharges.length >= scannedComputeLimit,
+        unbilledComputeCharges.length >= scannedComputeLimit ||
+        balanceRows.length >= scannedBalanceLimit ||
+        staleReservedRows.length >= scannedIntegritySampleLimit ||
+        pendingSettlementRows.length >= scannedIntegritySampleLimit,
     },
   };
 }

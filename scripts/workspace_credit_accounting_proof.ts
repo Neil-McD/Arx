@@ -95,6 +95,16 @@ async function proveWorkspaceCreditAccountingContract() {
   );
   assert.match(
     schemaSource,
+    /workspaceCreditBalances:[\s\S]*\.index\("by_updatedAt",\s*\["updatedAt"\]\)/,
+    "expected operator accounting diagnostics to scan recent materialized balance rows efficiently",
+  );
+  assert.match(
+    schemaSource,
+    /checkoutSessions:[\s\S]*workspaceCreditsUncollectedPaid:\s*v\.optional\(v\.number\(\)\)/,
+    "expected tool-balance top-ups to preserve how much payment cleared uncollected usage",
+  );
+  assert.match(
+    schemaSource,
     /pendingSettlementStatus:\s*v\.optional\(v\.literal\("succeeded"\)\)[\s\S]*pendingCreditsSettled:\s*v\.optional\(v\.number\(\)\)[\s\S]*pendingSettlementNextAttemptAt:\s*v\.optional\(v\.number\(\)\)/,
     "expected credit ledger entries to retain durable pending settlement recovery state",
   );
@@ -289,6 +299,11 @@ async function proveWorkspaceCreditAccountingContract() {
     topupCompletionBlock,
     /uncollectedCreditsPaid[\s\S]*purchasedCreditsGranted[\s\S]*uncollectedCreditsBalance/,
     "expected workspace credit top-ups to clear uncollected paid-tool usage before adding spendable balance",
+  );
+  assert.match(
+    topupCompletionBlock,
+    /let uncollectedCreditsPaid = 0[\s\S]*workspaceCreditsUncollectedPaid:\s*roundCredits\(uncollectedCreditsPaid\)/,
+    "expected workspace credit top-ups to store uncollected-usage allocation evidence for balance replay",
   );
   assert.match(
     settleCreditsBlock,

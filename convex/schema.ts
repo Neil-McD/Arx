@@ -311,7 +311,9 @@ export default defineSchema({
     includedCycleEndsAt: v.number(),
     createdAt: v.number(),
     updatedAt: v.number(),
-  }).index("by_user", ["userId"]),
+  })
+    .index("by_user", ["userId"])
+    .index("by_updatedAt", ["updatedAt"]),
 
   workspaceComputeCharges: defineTable({
     chargeKey: v.string(),
@@ -491,6 +493,7 @@ export default defineSchema({
     currencyDecimals: v.optional(v.number()),
     workspaceCreditsAmount: v.optional(v.number()),
     workspaceCreditsGrantedAt: v.optional(v.number()),
+    workspaceCreditsUncollectedPaid: v.optional(v.number()),
     ownerUserId: v.optional(v.id("users")),
     claimToken: v.optional(v.string()),
     status: v.union(v.literal("pending"), v.literal("complete"), v.literal("expired")),

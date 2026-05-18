@@ -513,6 +513,26 @@ export type OperatorRuntimeToolDiagnosticsSnapshot = {
   };
 };
 
+export type OperatorToolBalanceAccountingIssue = {
+  kind:
+    | "negative_balance"
+    | "duplicate_balance"
+    | "stale_reservation"
+    | "pending_settlement"
+    | "unbilled_compute"
+    | "missing_cost"
+    | "price_drift"
+    | "balance_mismatch"
+    | "reconciliation_coverage_gap";
+  severity: "warning" | "error";
+  label: string;
+  userId: string | null;
+  creditKey: string | null;
+  amountCredits: number | null;
+  amountUsd: number | null;
+  latestAt: number | null;
+};
+
 export type OperatorToolEconomicsSnapshot = {
   computedAt: number;
   range: OperatorRange;
@@ -550,11 +570,31 @@ export type OperatorToolEconomicsSnapshot = {
     };
     lanes: OperatorPaidToolEconomicsLane[];
   };
+  accountingIntegrity: {
+    health: "healthy" | "degraded" | "incident" | "unknown";
+    score: number | null;
+    totals: {
+      sampledBalanceRows: number;
+      duplicateBalanceUsers: number;
+      negativeBalanceRows: number;
+      uncollectedBalanceRows: number;
+      staleReservations: number;
+      pendingSettlementsDue: number;
+      unbilledComputeCharges: number;
+      settledRowsMissingVendorCost: number;
+      priceDriftRows: number;
+      balanceMismatchUsers: number;
+      reconciliationCoverageGaps: number;
+    };
+    issues: OperatorToolBalanceAccountingIssue[];
+  };
   evidence: {
     sourceTables: string[];
     scannedCreditLimit: number;
     scannedCommissionLimit: number;
     scannedComputeLimit: number;
+    scannedBalanceLimit: number;
+    scannedIntegritySampleLimit: number;
     isTruncated: boolean;
   };
 };

@@ -800,6 +800,7 @@ export const completeWorkspaceCreditTopupCheckoutSessionInternal = internalMutat
       .withIndex("by_user", (q) => q.eq("userId", ownerUserId))
       .first();
 
+    let uncollectedCreditsPaid = 0;
     if (!existingBalance) {
       await ctx.db.insert("workspaceCreditBalances", {
         userId: ownerUserId,
@@ -814,7 +815,7 @@ export const completeWorkspaceCreditTopupCheckoutSessionInternal = internalMutat
       });
     } else {
       const existingUncollectedCredits = readUncollectedCreditsBalance(existingBalance);
-      const uncollectedCreditsPaid = Math.min(existingUncollectedCredits, grantedCredits);
+      uncollectedCreditsPaid = Math.min(existingUncollectedCredits, grantedCredits);
       const purchasedCreditsGranted = roundCredits(grantedCredits - uncollectedCreditsPaid);
       await ctx.db.patch(existingBalance._id, {
         purchasedCreditsBalance: roundCredits(
@@ -836,6 +837,7 @@ export const completeWorkspaceCreditTopupCheckoutSessionInternal = internalMutat
       providerPriceId: normalizeStripePriceId(args.providerPriceId) ?? normalizeStripePriceId(row.providerPriceId),
       workspaceCreditsAmount: grantedCredits,
       workspaceCreditsGrantedAt: nowMs,
+      workspaceCreditsUncollectedPaid: roundCredits(uncollectedCreditsPaid),
       status: "complete",
       updatedAt: nowMs,
     });

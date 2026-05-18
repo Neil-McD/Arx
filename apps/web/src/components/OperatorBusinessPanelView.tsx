@@ -60,6 +60,7 @@ export function OperatorBusinessPanelView(props: {
       : null;
   const runtimeUsage = props.toolEconomics?.usageIntegrity ?? null;
   const toolEconomics = props.toolEconomics?.paidToolEconomics ?? null;
+  const accountingIntegrity = props.toolEconomics?.accountingIntegrity ?? null;
   const platformRevenueMetric =
     businessKpis?.revenue.platformNetRevenueAvailability === "available"
       ? businessKpis.revenue.platformNetRevenueInRange
@@ -262,6 +263,58 @@ export function OperatorBusinessPanelView(props: {
               ))
           ) : (
             <div className="operator-dashboard__empty">No paid-tool credit activity returned.</div>
+          )}
+        </div>
+      </section>
+
+      <section className="operator-dashboard__panel">
+        <h2>Tool balance accounting</h2>
+        <div className="operator-dashboard__table">
+          <div className="operator-dashboard__row">
+            <span>Health</span>
+            <strong>{accountingIntegrity?.health ?? "unknown"}</strong>
+          </div>
+          <div className="operator-dashboard__row">
+            <span>Score</span>
+            <strong>{accountingIntegrity?.score ?? "--"}</strong>
+          </div>
+          <div className="operator-dashboard__row">
+            <span>Balance mismatches</span>
+            <strong>{accountingIntegrity?.totals.balanceMismatchUsers ?? 0}</strong>
+          </div>
+          <div className="operator-dashboard__row">
+            <span>Stale reservations</span>
+            <strong>{accountingIntegrity?.totals.staleReservations ?? 0}</strong>
+          </div>
+          <div className="operator-dashboard__row">
+            <span>Settlement retries due</span>
+            <strong>{accountingIntegrity?.totals.pendingSettlementsDue ?? 0}</strong>
+          </div>
+          <div className="operator-dashboard__row">
+            <span>Coverage gaps</span>
+            <strong>{accountingIntegrity?.totals.reconciliationCoverageGaps ?? 0}</strong>
+          </div>
+          {accountingIntegrity?.issues.length ? (
+            accountingIntegrity.issues.slice(0, 4).map((issue, index) => (
+              <div className="operator-dashboard__row" key={`${issue.kind}:${issue.creditKey ?? issue.userId ?? index}`}>
+                <div>
+                  <strong>{issue.label}</strong>
+                  <span>
+                    {[
+                      issue.kind.replaceAll("_", " "),
+                      issue.userId ? `user ${issue.userId.slice(0, 8)}` : null,
+                      issue.creditKey ? issue.creditKey.slice(0, 18) : null,
+                      issue.latestAt ? formatEventTime(issue.latestAt) : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </span>
+                </div>
+                <span>{issue.severity}</span>
+              </div>
+            ))
+          ) : (
+            <div className="operator-dashboard__empty">No sampled tool-balance accounting issues returned.</div>
           )}
         </div>
       </section>

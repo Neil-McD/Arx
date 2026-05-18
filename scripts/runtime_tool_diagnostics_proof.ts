@@ -147,8 +147,13 @@ assert.match(
 );
 assert.match(
   operatorTypes,
-  /evidence:[\s\S]*scannedCreditLimit: number[\s\S]*scannedCommissionLimit: number[\s\S]*scannedComputeLimit: number/,
-  "operator tool economics evidence must expose commission scan limits",
+  /accountingIntegrity:[\s\S]*balanceMismatchUsers: number[\s\S]*reconciliationCoverageGaps: number[\s\S]*issues: OperatorToolBalanceAccountingIssue\[\]/,
+  "operator tool economics must expose tool-balance accounting integrity",
+);
+assert.match(
+  operatorTypes,
+  /evidence:[\s\S]*scannedCreditLimit: number[\s\S]*scannedCommissionLimit: number[\s\S]*scannedComputeLimit: number[\s\S]*scannedBalanceLimit: number[\s\S]*scannedIntegritySampleLimit: number/,
+  "operator tool economics evidence must expose commission and integrity scan limits",
 );
 
 assert.match(
@@ -217,6 +222,16 @@ assert.match(
   "operator tool economics must return paid-tool economics from actual ledger rows",
 );
 assert.match(
+  toolEconomicsBuilderBlock,
+  /readWorkspaceCreditBalanceRows\(ctx, scannedBalanceLimit\)[\s\S]*readStaleReservedCreditLedgerRows\(ctx, nowMs, scannedIntegritySampleLimit\)[\s\S]*readDuePendingCreditSettlementRows\(ctx, nowMs, scannedIntegritySampleLimit\)[\s\S]*buildToolBalanceAccountingIntegrity\(/,
+  "operator tool economics must build accounting integrity from balance, reservation, and settlement rows",
+);
+assert.match(
+  operatorIntelligence,
+  /buildSampledBalanceReconciliation[\s\S]*workspaceCreditsUncollectedPaid[\s\S]*purchasedCreditsDebited[\s\S]*purchasedCreditsRefunded[\s\S]*uncollected_credits/,
+  "tool-balance accounting integrity must replay top-ups, paid-tool ledger debits, refunds, and uncollected usage",
+);
+assert.match(
   runtimeDiagnosticsBlock,
   /const executionTurnTerminalCount = turnsSucceeded \+ executionRunFailureCodeRows\.length;/,
   "runtime execution scoring must not treat user-cancelled turns as availability failures",
@@ -273,8 +288,8 @@ assert.match(
 );
 assert.match(
   toolEconomicsBuilderBlock,
-  /sourceTables:[\s\S]*"creditLedgerEntries"[\s\S]*"partnerCommissionLedger"[\s\S]*"workspaceComputeCharges"[\s\S]*scannedCommissionLimit[\s\S]*toolGrossMarginPartnerCommissionRows\.length >= scannedCommissionLimit/,
-  "operator tool economics evidence must name finance source tables",
+  /sourceTables:[\s\S]*"creditLedgerEntries"[\s\S]*"partnerCommissionLedger"[\s\S]*"workspaceComputeCharges"[\s\S]*"workspaceCreditBalances"[\s\S]*"checkoutSessions"[\s\S]*scannedCommissionLimit[\s\S]*scannedBalanceLimit[\s\S]*toolGrossMarginPartnerCommissionRows\.length >= scannedCommissionLimit/,
+  "operator tool economics evidence must name finance and materialized-balance source tables",
 );
 assert.doesNotMatch(
   runtimeDiagnosticsBlock,
@@ -381,6 +396,11 @@ assert.match(
   toolBalancePanelBlock,
   /Tool economics[\s\S]*Tool revenue[\s\S]*Vendor cost[\s\S]*Gross margin[\s\S]*Partner commissions[\s\S]*Net after partner[\s\S]*Cost evidence[\s\S]*Tool economics are sampled for this window[\s\S]*Targets:/,
   "operator Business panel must render paid-tool economics",
+);
+assert.match(
+  toolBalancePanelBlock,
+  /Tool balance accounting[\s\S]*Health[\s\S]*Balance mismatches[\s\S]*Stale reservations[\s\S]*Settlement retries due[\s\S]*Coverage gaps[\s\S]*No sampled tool-balance accounting issues returned/,
+  "operator Business panel must render compact tool-balance accounting integrity",
 );
 assert.doesNotMatch(
   operatorPanel,
