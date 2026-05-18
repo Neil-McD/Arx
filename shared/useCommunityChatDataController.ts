@@ -1,6 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type Dispatch, type MutableRefObject, type SetStateAction, } from "react";
-import {
-  abortAllScopedRequests, beginScopedAbortRequest, finishScopedAbortRequest, isAbortError, } from "./communityFetchAbortScope";
+import { useCallback, useRef, useState, type Dispatch, type MutableRefObject, type SetStateAction, } from "react";
 
 import {
   ensureCloudCommunityChatThread,
@@ -119,7 +117,6 @@ export function useCommunityChatDataController<
   const isLoadingMoreChatRef = useRef(false);
   const communityChatHasMoreRef = useRef(true);
   const communityChatOldestSeqRef = useRef<number | null>(null);
-  const fetchAbortControllersRef = useRef<Map<string, AbortController>>(new Map());
   const ensureThreadInFlightByKeyRef = useRef<Map<string, Promise<string>>>(new Map());
   const ensureThreadCacheByKeyRef = useRef<Map<string, { threadId: string; expiresAt: number }>>(new Map());
   const activeCommunityIdRef = useRef<string | null>(null);
@@ -143,7 +140,6 @@ export function useCommunityChatDataController<
   }, []);
 
   const beginCommunityLoadGeneration = useCallback((communityId: string): number => {
-    abortAllScopedRequests(fetchAbortControllersRef.current);
     activeCommunityIdRef.current = communityId;
     loadGenerationRef.current += 1;
     return loadGenerationRef.current;
@@ -241,15 +237,10 @@ export function useCommunityChatDataController<
       const usableSession = await resolveUsableSession(session, argsRef.current.ensureSession);
       if (!usableSession) return;
       if (messageIds.length === 0) return;
-      const reactionsFetchController = beginScopedAbortRequest({
-        inFlightByKind: fetchAbortControllersRef.current,
-        kind: "community_chat_reactions",
-      });
       try {
         const rows = await listCloudMessageReactions<SessionT, ReactionT>({
           session: usableSession,
           messageIds,
-          init: { signal: reactionsFetchController.signal },
         });
         if (isStale(guard.communityId, guard.generation)) return;
         const reactionUserIds = Array.from(
@@ -274,15 +265,8 @@ export function useCommunityChatDataController<
           }
           return Array.from(byId.values());
         });
-      } catch (error) {
-        if (isAbortError(error)) return;
+      } catch {
         return;
-      } finally {
-        finishScopedAbortRequest({
-          inFlightByKind: fetchAbortControllersRef.current,
-          kind: "community_chat_reactions",
-          controller: reactionsFetchController,
-        });
       }
     },
     [isStale],
@@ -307,16 +291,11 @@ export function useCommunityChatDataController<
         const threadId = await ensureCommunityChatThread(communityId, usableSession);
         if (isStale(communityId, generation)) return;
 
-        const messagesFetchController = beginScopedAbortRequest({
-          inFlightByKind: fetchAbortControllersRef.current,
-          kind: "community_chat_initial",
-        });
         try {
           const rowsDesc = await listCloudThreadMessages<SessionT, CommunityChatRow>({
             session: usableSession,
             threadId,
             limit: argsRef.current.pageSize,
-            init: { signal: messagesFetchController.signal },
           });
           if (isStale(communityId, generation)) return;
 
@@ -345,15 +324,8 @@ export function useCommunityChatDataController<
             void loadMessageReactions(messageIds, usableSession, { communityId, generation });
           }
         } catch (error) {
-          if (isAbortError(error)) return;
           argsRef.current.onLoadChatError?.(formatCommunityChatLoadError(error));
           return;
-        } finally {
-          finishScopedAbortRequest({
-            inFlightByKind: fetchAbortControllersRef.current,
-            kind: "community_chat_initial",
-            controller: messagesFetchController,
-          });
         }
       } catch (error) {
         argsRef.current.onLoadChatError?.(formatCommunityChatLoadError(error));
@@ -399,17 +371,12 @@ export function useCommunityChatDataController<
         const threadId = await ensureCommunityChatThread(communityId, usableSession);
         if (isStale(communityId, generation)) return "noop";
 
-        const olderFetchController = beginScopedAbortRequest({
-          inFlightByKind: fetchAbortControllersRef.current,
-          kind: "community_chat_older",
-        });
         try {
           const rowsDesc = await listCloudThreadMessages<SessionT, CommunityChatRow>({
             session: usableSession,
             threadId,
             beforeSeq: cursor,
             limit: argsRef.current.pageSize,
-            init: { signal: olderFetchController.signal },
           });
           if (isStale(communityId, generation)) {
             argsRef.current.clearPendingPrependAnchor();
@@ -454,16 +421,9 @@ export function useCommunityChatDataController<
 
           void loadMessageReactions(rows.map((row) => row.id), usableSession, { communityId, generation });
           return "appended";
-        } catch (error) {
+        } catch {
           argsRef.current.clearPendingPrependAnchor();
-          if (isAbortError(error)) return "noop";
           return "error";
-        } finally {
-          finishScopedAbortRequest({
-            inFlightByKind: fetchAbortControllersRef.current,
-            kind: "community_chat_older",
-            controller: olderFetchController,
-          });
         }
       } catch {
         argsRef.current.clearPendingPrependAnchor();
@@ -484,7 +444,6 @@ export function useCommunityChatDataController<
   );
 
   const resetCommunityChatDataState = useCallback(() => {
-    abortAllScopedRequests(fetchAbortControllersRef.current);
     loadGenerationRef.current += 1;
     activeCommunityIdRef.current = null;
     communityChatOldestSeqRef.current = null;
@@ -493,12 +452,6 @@ export function useCommunityChatDataController<
     setCommunityChatHasMoreTracked(true);
     setHasResolvedCommunityChat(false);
   }, [setCommunityChatHasMoreTracked, setIsLoadingChatTracked, setIsLoadingMoreChatTracked]);
-
-  useEffect(() => {
-    return () => {
-      abortAllScopedRequests(fetchAbortControllersRef.current);
-    };
-  }, []);
 
   return {
     isLoadingChat,

@@ -57,7 +57,6 @@ import {
   listCommunityTyping as listCommunityTypingImpl,
   listMessageReactions as listMessageReactionsImpl,
   listThreadMessages as listThreadMessagesImpl,
-  listThreadUserMessageSenderIds as listThreadUserMessageSenderIdsImpl,
   patchOwnMessageContent as patchOwnMessageContentImpl,
   setCommunityTyping as setCommunityTypingImpl,
 } from "./communityChat";
@@ -195,7 +194,6 @@ export const deleteOwnMessage = deleteOwnMessageImpl;
 export const createMessageReaction = createMessageReactionImpl;
 export const deleteMessageReactionById = deleteMessageReactionByIdImpl;
 export const listMessageReactions = listMessageReactionsImpl;
-export const listThreadUserMessageSenderIds = listThreadUserMessageSenderIdsImpl;
 export const listCommunityAiFeedBundle = listCommunityAiFeedBundleImpl;
 export const hideCommunityAiFeedPost = hideCommunityAiFeedPostImpl;
 export const publishCommunityAiFeedAgentPost = publishCommunityAiFeedAgentPostImpl;

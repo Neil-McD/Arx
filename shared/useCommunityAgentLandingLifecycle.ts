@@ -3,8 +3,6 @@ import { useEffect, useRef, type Dispatch, type MutableRefObject, type SetStateA
 import { fetchActiveCloudCommunityAgentLanding } from "./cloudCommunityAgentGateway";
 import { resolveUsableSession, type EnsureSessionFn } from "./ensureUsableSession";
 
-const COMMUNITY_AGENT_LANDING_RPC_TIMEOUT_MS = 5000;
-
 export function useCommunityAgentLandingLifecycle<SessionT>(params: {
   session: SessionT | null;
   ensureSession?: EnsureSessionFn<SessionT>;
@@ -32,10 +30,6 @@ export function useCommunityAgentLandingLifecycle<SessionT>(params: {
     inFlightCommunityIdRef.current = communityId;
     params.communityAgentLandingFetchSeqRef.current += 1;
     const fetchSeq = params.communityAgentLandingFetchSeqRef.current;
-    const abortController = new AbortController();
-    const timeoutId = globalThis.setTimeout(() => {
-      abortController.abort();
-    }, COMMUNITY_AGENT_LANDING_RPC_TIMEOUT_MS);
 
     void (async () => {
       try {
@@ -44,9 +38,6 @@ export function useCommunityAgentLandingLifecycle<SessionT>(params: {
         const data = await fetchActiveCloudCommunityAgentLanding({
           session: usableSession,
           communityId,
-          init: {
-            signal: abortController.signal,
-          },
         });
         if (params.communityAgentLandingFetchSeqRef.current !== fetchSeq) return;
         if (params.activeCommunityIdRef.current !== communityId) return;
@@ -58,15 +49,12 @@ export function useCommunityAgentLandingLifecycle<SessionT>(params: {
         params.setActiveCommunityAgentLanding(null);
         params.activeCommunityAgentLandingCommunityIdRef.current = communityId;
       } finally {
-        globalThis.clearTimeout(timeoutId);
         if (inFlightCommunityIdRef.current === communityId) {
           inFlightCommunityIdRef.current = null;
         }
       }
     })();
     return () => {
-      globalThis.clearTimeout(timeoutId);
-      abortController.abort();
       if (inFlightCommunityIdRef.current === communityId) {
         inFlightCommunityIdRef.current = null;
       }

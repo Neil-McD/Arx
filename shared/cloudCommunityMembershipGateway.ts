@@ -17,11 +17,9 @@ export type CloudCommunityMembershipRow<TCommunity = unknown> = {
 export async function listCloudCommunityMembershipRows<SessionT, TCommunity = unknown>(
   params: CloudCommunityMembershipGatewayParams<SessionT> & {
     selectMode?: CloudCommunityMembershipCommunitySelect;
-    init?: RequestInit;
   },
 ): Promise<Array<CloudCommunityMembershipRow<TCommunity>>> {
   const selectMode = params.selectMode ?? "full";
-  void params.init;
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
   const payload = await client.query("community:listCommunityMemberships" as any, {
     authSubject,

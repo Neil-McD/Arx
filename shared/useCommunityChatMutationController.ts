@@ -244,7 +244,6 @@ export function useCommunityChatMutationController<
       await patchCloudOwnMessageContent({
         session,
         messageId: current.editingMessageId,
-        senderId: session.user.id,
         contentJson: {
           text: bodyToSave,
           ...(serializedAttachments.length > 0 ? { attachments: serializedAttachments } : {}),
@@ -268,7 +267,6 @@ export function useCommunityChatMutationController<
       await deleteCloudOwnMessage({
         session,
         messageId,
-        senderId: session.user.id,
       });
     } catch {
       if (current.activeCommunityId) {

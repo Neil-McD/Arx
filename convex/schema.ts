@@ -980,7 +980,9 @@ export default defineSchema({
     lastSeq: v.number(),
     createdAt: v.number(),
     updatedAt: v.number(),
-  }).index("by_community", ["communityId"]),
+  })
+    .index("by_community", ["communityId"])
+    .index("by_community_createdAt", ["communityId", "createdAt"]),
 
   communityChatMessages: defineTable({
     threadId: v.id("communityChatThreads"),
@@ -1015,7 +1017,8 @@ export default defineSchema({
   })
     .index("by_community", ["communityId"])
     .index("by_user", ["userId"])
-    .index("by_community_user", ["communityId", "userId"]),
+    .index("by_community_user", ["communityId", "userId"])
+    .index("by_community_displayUntil", ["communityId", "displayUntil"]),
 
   communityAgentConfigs: defineTable({
     communityId: v.id("communities"),

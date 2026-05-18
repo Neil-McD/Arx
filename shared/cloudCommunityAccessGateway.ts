@@ -17,10 +17,8 @@ function firstRpcRow<T>(payload: unknown): T | null {
 export async function fetchCloudMyCommunityAccessById<SessionT, TAccess = unknown>(
   params: CloudCommunityAccessGatewayParams<SessionT> & {
     communityId: string;
-    init?: RequestInit;
   },
 ): Promise<TAccess | null> {
-  void params.init;
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
   const payload = await client.query("community:getMyCommunityAccess" as any, {
     authSubject,

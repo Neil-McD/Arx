@@ -77,10 +77,8 @@ export async function fetchActiveCloudCommunityAgentSystemPrompt<SessionT>(
 export async function fetchActiveCloudCommunityAgentLanding<SessionT>(
   params: CloudCommunityAgentGatewayParams<SessionT> & {
     communityId: string;
-    init?: RequestInit;
   },
 ): Promise<unknown | null> {
-  void params.init;
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
   const payload = await client.query("community:getActiveCommunityAgentLanding" as any, {
     authSubject,

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, type Dispatch, type SetStateAction } from "react";
+import { useCallback, useRef, type Dispatch, type SetStateAction } from "react";
 import {
   cancelCloudCommunityEvent,
   listCloudCommunityEvents,
@@ -6,12 +6,6 @@ import {
   type CloudCommunityEvent,
   type CloudCommunityEventSavePayload,
 } from "./cloudCommunityEventsGateway";
-import {
-  abortAllScopedRequests,
-  beginScopedAbortRequest,
-  finishScopedAbortRequest,
-  isAbortError,
-} from "./communityFetchAbortScope";
 import { resolveUsableSession, type EnsureSessionFn } from "./ensureUsableSession";
 
 type SessionLike = unknown;
@@ -36,7 +30,6 @@ export function useCommunityEventsController<SessionT extends SessionLike>(
 ) {
   const argsRef = useRef(args);
   argsRef.current = args;
-  const fetchAbortControllersRef = useRef<Map<string, AbortController>>(new Map());
   const eventsLoadGenerationRef = useRef(0);
 
   const loadCommunityEvents = useCallback(async (
@@ -53,10 +46,6 @@ export function useCommunityEventsController<SessionT extends SessionLike>(
     const isCurrentEventsLoad = () =>
       eventsLoadGenerationRef.current === generation &&
       String(argsRef.current.activeCommunityId ?? "").trim() === requestedCommunityId;
-    const fetchController = beginScopedAbortRequest({
-      inFlightByKind: fetchAbortControllersRef.current,
-      kind: "community_events_list",
-    });
     current.setIsLoadingCommunityEvents(true);
     current.setCommunityEventsError(null);
     try {
@@ -70,24 +59,14 @@ export function useCommunityEventsController<SessionT extends SessionLike>(
       if (!isCurrentEventsLoad()) return;
       current.setCommunityEvents(rows);
     } catch (error) {
-      if (isAbortError(error)) return;
       if (!isCurrentEventsLoad()) return;
       const message = error instanceof Error ? error.message : "Could not load community events.";
       current.setCommunityEventsError(message);
     } finally {
-      finishScopedAbortRequest({
-        inFlightByKind: fetchAbortControllersRef.current,
-        kind: "community_events_list",
-        controller: fetchController,
-      });
       if (isCurrentEventsLoad()) {
         current.setIsLoadingCommunityEvents(false);
       }
     }
-  }, []);
-
-  useEffect(() => {
-    return () => abortAllScopedRequests(fetchAbortControllersRef.current);
   }, []);
 
   const handleSaveCommunityEvent = useCallback(async (

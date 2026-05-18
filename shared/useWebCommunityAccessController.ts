@@ -1,6 +1,4 @@
 import { useCallback, useEffect, useRef, type Dispatch, type SetStateAction } from "react";
-import {
-  abortAllScopedRequests, beginScopedAbortRequest, finishScopedAbortRequest, isAbortError, } from "./communityFetchAbortScope";
 
 import { listCloudCommunityMembershipRows } from "./cloudCommunityMembershipGateway";
 import { listCloudProfileRowsByUserIds } from "./cloudProfilesGateway";
@@ -37,7 +35,6 @@ export function useWebCommunityAccessController<
 >(args: UseWebCommunityAccessControllerArgs<SessionT, CommunityRecordT, UserProfileT>) {
   const argsRef = useRef(args);
   argsRef.current = args;
-  const fetchAbortControllersRef = useRef<Map<string, AbortController>>(new Map());
   const loadCommunitiesSeqRef = useRef(0);
   const hasCompletedInitialLoadRef = useRef(false);
   const hydratedProfileIdsRef = useRef<Set<string>>(new Set());
@@ -52,10 +49,6 @@ export function useWebCommunityAccessController<
     const usableSession = await resolveUsableSession(session, current.ensureSession);
     if (!usableSession) return;
     const seq = (loadCommunitiesSeqRef.current += 1);
-    const fetchController = beginScopedAbortRequest({
-      inFlightByKind: fetchAbortControllersRef.current,
-      kind: "community_access_list",
-    });
     const shouldShowLoading = !hasCompletedInitialLoadRef.current;
     try {
       if (shouldShowLoading) {
@@ -64,8 +57,8 @@ export function useWebCommunityAccessController<
       const rows = await listCloudCommunityMembershipRows<SessionT, CommunityRecordT>({
         session: usableSession,
         selectMode: "full",
-        init: { signal: fetchController.signal },
       });
+      if (loadCommunitiesSeqRef.current !== seq) return;
       const typedRows = rows as Array<{
         community_id: string;
         role: string;
@@ -75,7 +68,6 @@ export function useWebCommunityAccessController<
       for (const row of typedRows) {
         if (row.community_id) roleMap[row.community_id] = row.role;
       }
-      current.setCommunityRoleById(roleMap);
 
       const list = typedRows
         .map((row) => row.communities)
@@ -88,6 +80,8 @@ export function useWebCommunityAccessController<
         list.flatMap((community: any) => [community?.avatar_url ?? null, community?.banner_url ?? null]),
         { maxUrls: 12, timeoutMs: 1500 },
       );
+      if (loadCommunitiesSeqRef.current !== seq) return;
+      current.setCommunityRoleById(roleMap);
       current.setCommunities(list);
       if (!current.activeCommunitySlug) {
         const nextCommunitySlug = String(list[0]?.slug ?? "").trim() || null;
@@ -99,17 +93,11 @@ export function useWebCommunityAccessController<
         if (nextCommunitySlug) current.applyCommunityShellState({ communitySlug: nextCommunitySlug });
       }
     } catch (error) {
-      if (isAbortError(error)) return;
       console.warn(
         "Failed to load communities:",
         formatWorkspaceRestoreErrorMessage(error, "Couldn't load your communities right now."),
       );
     } finally {
-      finishScopedAbortRequest({
-        inFlightByKind: fetchAbortControllersRef.current,
-        kind: "community_access_list",
-        controller: fetchController,
-      });
       if (loadCommunitiesSeqRef.current === seq) {
         hasCompletedInitialLoadRef.current = true;
         current.setIsLoadingCommunities(false);
@@ -154,12 +142,6 @@ export function useWebCommunityAccessController<
     } catch {
       // ignore
     }
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      abortAllScopedRequests(fetchAbortControllersRef.current);
-    };
   }, []);
 
   return {

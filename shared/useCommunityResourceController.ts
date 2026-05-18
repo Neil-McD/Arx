@@ -1,6 +1,4 @@
-import { useCallback, useEffect, useRef, type Dispatch, type SetStateAction } from "react";
-import {
-  abortAllScopedRequests, beginScopedAbortRequest, finishScopedAbortRequest, isAbortError, } from "./communityFetchAbortScope";
+import { useCallback, useRef, type Dispatch, type SetStateAction } from "react";
 import { resolveUsableSession, type EnsureSessionFn } from "./ensureUsableSession";
 
 import {
@@ -118,7 +116,6 @@ export function useCommunityResourceController<
 >(args: UseCommunityResourceControllerArgs<SessionT, ResourceT, ResourceModuleT>) {
   const argsRef = useRef(args);
   argsRef.current = args;
-  const fetchAbortControllersRef = useRef<Map<string, AbortController>>(new Map());
   const resourceLoadGenerationRef = useRef(0);
   const moduleLoadGenerationRef = useRef(0);
 
@@ -156,10 +153,6 @@ export function useCommunityResourceController<
     const usableSession = await resolveUsableSession(session, current.ensureSession);
     if (!usableSession) return;
     const generation = (moduleLoadGenerationRef.current += 1);
-    const fetchController = beginScopedAbortRequest({
-      inFlightByKind: fetchAbortControllersRef.current,
-      kind: "community_resource_modules_list",
-    });
     current.setIsLoadingResourceModules(true);
     try {
       try {
@@ -167,19 +160,13 @@ export function useCommunityResourceController<
           session: usableSession,
           communityId,
           limit: 200,
-          init: { signal: fetchController.signal },
         });
+        if (moduleLoadGenerationRef.current !== generation) return;
         current.setCommunityResourceModules(rows);
-      } catch (error) {
-        if (isAbortError(error)) return;
+      } catch {
         return;
       }
     } finally {
-      finishScopedAbortRequest({
-        inFlightByKind: fetchAbortControllersRef.current,
-        kind: "community_resource_modules_list",
-        controller: fetchController,
-      });
       if (moduleLoadGenerationRef.current === generation) {
         current.setIsLoadingResourceModules(false);
       }
@@ -191,10 +178,6 @@ export function useCommunityResourceController<
     const usableSession = await resolveUsableSession(session, current.ensureSession);
     if (!usableSession) return;
     const generation = (resourceLoadGenerationRef.current += 1);
-    const fetchController = beginScopedAbortRequest({
-      inFlightByKind: fetchAbortControllersRef.current,
-      kind: "community_resources_list",
-    });
     current.setIsLoadingResources(true);
     try {
       try {
@@ -202,31 +185,19 @@ export function useCommunityResourceController<
           session: usableSession,
           communityId,
           limit: 200,
-          init: { signal: fetchController.signal },
         });
+        if (resourceLoadGenerationRef.current !== generation) return;
         current.setCommunityResources(rows);
         await loadCommunityResourceModules(communityId, usableSession);
-      } catch (error) {
-        if (isAbortError(error)) return;
+      } catch {
         return;
       }
     } finally {
-      finishScopedAbortRequest({
-        inFlightByKind: fetchAbortControllersRef.current,
-        kind: "community_resources_list",
-        controller: fetchController,
-      });
       if (resourceLoadGenerationRef.current === generation) {
         current.setIsLoadingResources(false);
       }
     }
   }, [loadCommunityResourceModules]);
-
-  useEffect(() => {
-    return () => {
-      abortAllScopedRequests(fetchAbortControllersRef.current);
-    };
-  }, []);
 
   const handleSaveCommunityResource = useCallback(async () => {
     const current = argsRef.current;

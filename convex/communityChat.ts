@@ -5,7 +5,6 @@ import {
   type CommunityChatThreadLike,
   type CommunityMessageReactionLike,
   type CommunityTypingPresenceLike,
-  parseIsoMs,
   normalizeIdValue,
   requireCommunityChatAccess,
   requireCommunityModerator,
@@ -33,26 +32,21 @@ type StoredCommunityChatAttachment = {
 };
 
 const COMMUNITY_TYPING_DISPLAY_WINDOW_MS = 5000;
-
-async function listCommunityChatThreadsForCommunity(
-  ctx: any,
-  communityId: any,
-): Promise<CommunityChatThreadLike[]> {
-  const rows = (await ctx.db
-    .query("communityChatThreads")
-    .withIndex("by_community", (q: any) => q.eq("communityId", communityId))
-    .collect()) as CommunityChatThreadLike[];
-  return rows
-    .slice()
-    .sort((a, b) => a.createdAt - b.createdAt || a.updatedAt - b.updatedAt);
-}
+const MAX_TYPING_PRESENCE_SCAN_ROWS = 25;
+const MAX_TYPING_PRESENCE_VISIBLE_ROWS = 12;
+const MAX_REACTION_MESSAGE_IDS_PER_REQUEST = 100;
+const MAX_REACTIONS_PER_MESSAGE = 100;
+const MAX_REACTION_DELETE_ROWS = 500;
 
 async function getCanonicalCommunityChatThread(
   ctx: any,
   communityId: any,
 ): Promise<CommunityChatThreadLike | null> {
-  const rows = await listCommunityChatThreadsForCommunity(ctx, communityId);
-  return rows[0] ?? null;
+  return (await ctx.db
+    .query("communityChatThreads")
+    .withIndex("by_community_createdAt", (q: any) => q.eq("communityId", communityId))
+    .order("asc")
+    .first()) as CommunityChatThreadLike | null;
 }
 
 function createAttachmentId(): string {
@@ -392,16 +386,17 @@ export const listCommunityTyping = query({
     const nowMs = Date.now();
     const rows = (await ctx.db
       .query("communityTypingPresence" as any)
-      .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
-      .collect()) as CommunityTypingPresenceLike[];
+      .withIndex("by_community_displayUntil", (q: any) =>
+        q.eq("communityId", args.communityId).gt("displayUntil", nowMs),
+      )
+      .order("desc")
+      .take(MAX_TYPING_PRESENCE_SCAN_ROWS)) as CommunityTypingPresenceLike[];
     const publicUserIdCache = new Map<string, string | null>();
     const activeRows = rows
-      .filter((row) => row.displayUntil > nowMs)
-      .filter((row) => normalizeIdValue(row.userId) !== normalizeIdValue(args.userId))
-      .sort((a, b) => b.displayUntil - a.displayUntil);
+      .filter((row) => normalizeIdValue(row.userId) !== normalizeIdValue(args.userId));
     const mapped = await Promise.all(
       activeRows
-        .slice(0, 12)
+        .slice(0, MAX_TYPING_PRESENCE_VISIBLE_ROWS)
         .map(async (row) => {
           const publicUserId = await resolvePublicUserId(ctx, row.userId, publicUserIdCache);
           const profile = await resolveTypingProfileFields(ctx, row.userId);
@@ -576,7 +571,10 @@ export const deleteOwnMessage = mutation({
     const reactions = (await ctx.db
       .query("communityMessageReactions" as any)
       .withIndex("by_message", (q: any) => q.eq("messageId", message._id))
-      .collect()) as CommunityMessageReactionLike[];
+      .take(MAX_REACTION_DELETE_ROWS + 1)) as CommunityMessageReactionLike[];
+    if (reactions.length > MAX_REACTION_DELETE_ROWS) {
+      throw new Error("message_reaction_delete_limit_exceeded");
+    }
     for (const reaction of reactions) {
       await ctx.db.delete(reaction._id as any);
     }
@@ -680,7 +678,7 @@ export const listMessageReactions = query({
           .map((value) => String(value ?? "").trim())
           .filter((value) => value.length > 0),
       ),
-    ).slice(0, 500);
+    ).slice(0, MAX_REACTION_MESSAGE_IDS_PER_REQUEST);
     if (uniqueIds.length === 0) return [];
 
     const out: CommunityMessageReactionLike[] = [];
@@ -702,53 +700,10 @@ export const listMessageReactions = query({
       const rows = (await ctx.db
         .query("communityMessageReactions" as any)
         .withIndex("by_message", (q: any) => q.eq("messageId", message._id))
-        .collect()) as CommunityMessageReactionLike[];
+        .take(MAX_REACTIONS_PER_MESSAGE)) as CommunityMessageReactionLike[];
       out.push(...rows);
     }
     const userIdCache = new Map<string, string | null>();
     return await Promise.all(out.map((row) => mapCommunityMessageReactionRow(ctx, row, userIdCache)));
-  },
-});
-
-export const listThreadUserMessageSenderIds = query({
-  args: {
-    userId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    threadId: v.id("communityChatThreads"),
-    sinceIso: v.optional(v.union(v.string(), v.null())),
-    limit: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    const userId = await resolveUserIdForAuthenticatedRequest({
-      ctx,
-      userId: args.userId,
-      authSubject: args.authSubject ?? null,
-    });
-    (args as { userId?: any }).userId = userId;
-    const thread = (await ctx.db.get(args.threadId)) as CommunityChatThreadLike | null;
-    if (!thread) return [];
-    await requireCommunityChatAccess({
-      ctx,
-      communityId: thread.communityId,
-      userId: args.userId,
-    });
-
-    const sinceMs = parseIsoMs(args.sinceIso);
-    const safeLimit = Math.max(1, Math.min(5000, Math.floor(args.limit ?? 5000)));
-    const rows = (await ctx.db
-      .query("communityChatMessages" as any)
-      .withIndex("by_thread", (q: any) => q.eq("threadId", args.threadId))
-      .collect()) as CommunityChatMessageLike[];
-    const userIdCache = new Map<string, string | null>();
-    const senderIds = await Promise.all(
-      rows
-        .filter((row) => row.role === "user")
-        .filter((row) => Boolean(row.senderUserId))
-        .filter((row) => (typeof sinceMs === "number" ? row.createdAt >= sinceMs : true))
-        .sort((a, b) => b.createdAt - a.createdAt)
-        .slice(0, safeLimit)
-        .map(async (row) => ({ sender_id: await resolvePublicUserId(ctx, row.senderUserId, userIdCache) })),
-    );
-    return senderIds.filter((row) => row.sender_id);
   },
 });

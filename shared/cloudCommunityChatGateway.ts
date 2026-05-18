@@ -202,11 +202,9 @@ export async function createCloudMessageReaction<SessionT, TReaction = unknown>(
 export async function patchCloudOwnMessageContent<SessionT>(
   params: CloudCommunityChatGatewayParams<SessionT> & {
     messageId: string;
-    senderId: string;
     contentJson: unknown;
   },
 ): Promise<void> {
-  void params.senderId;
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
   await client.mutation("community:patchOwnMessageContent" as any, {
     authSubject,
@@ -218,10 +216,8 @@ export async function patchCloudOwnMessageContent<SessionT>(
 export async function deleteCloudOwnMessage<SessionT>(
   params: CloudCommunityChatGatewayParams<SessionT> & {
     messageId: string;
-    senderId: string;
   },
 ): Promise<void> {
-  void params.senderId;
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
   await client.mutation("community:deleteOwnMessage" as any, {
     authSubject,
@@ -303,10 +299,8 @@ export async function uploadCloudCommunityChatAttachmentFile<SessionT>(
 export async function ensureCloudCommunityChatThread<SessionT>(
   params: CloudCommunityChatGatewayParams<SessionT> & {
     communityId: string;
-    init?: RequestInit;
   },
 ): Promise<string> {
-  void params.init;
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
   const payload = (await client.mutation("community:ensureCommunityChatThread" as any, {
     authSubject,
@@ -322,10 +316,8 @@ export async function listCloudThreadMessages<SessionT, TRow = unknown>(
     threadId: string;
     beforeSeq?: number | null;
     limit?: number;
-    init?: RequestInit;
   },
 ): Promise<TRow[]> {
-  void params.init;
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
   const payload = await client.query("community:listThreadMessages" as any, {
     authSubject,
@@ -339,37 +331,12 @@ export async function listCloudThreadMessages<SessionT, TRow = unknown>(
 export async function listCloudMessageReactions<SessionT, TRow = unknown>(
   params: CloudCommunityChatGatewayParams<SessionT> & {
     messageIds: string[];
-    init?: RequestInit;
   },
 ): Promise<TRow[]> {
-  void params.init;
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
   const payload = await client.query("community:listMessageReactions" as any, {
     authSubject,
     messageIds: params.messageIds,
   });
   return coerceObjectRows<TRow>(payload);
-}
-
-export async function listCloudThreadUserMessageSenderIds<SessionT>(
-  params: CloudCommunityChatGatewayParams<SessionT> & {
-    threadId: string;
-    sinceIso?: string | null;
-    limit?: number;
-  },
-): Promise<string[]> {
-  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.query("community:listThreadUserMessageSenderIds" as any, {
-    authSubject,
-    threadId: params.threadId,
-    sinceIso: params.sinceIso ?? null,
-    limit: params.limit ?? 5000,
-  });
-  const rows = coerceObjectRows<{ sender_id: string | null }>(payload);
-  const senders = new Set<string>();
-  for (const row of rows) {
-    const sender = String(row.sender_id ?? "").trim();
-    if (sender) senders.add(sender);
-  }
-  return [...senders];
 }

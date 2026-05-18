@@ -431,10 +431,8 @@ export async function listCloudCommunityResourceRows<SessionT, TResource = unkno
   params: CloudCommunityAdminGatewayParams<SessionT> & {
     communityId: string;
     limit?: number;
-    init?: RequestInit;
   },
 ): Promise<TResource[]> {
-  void params.init;
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
   const payload = await client.query("community:listCommunityResources" as any, {
     authSubject,
@@ -451,10 +449,8 @@ export async function listCloudCommunityResourceModuleRows<SessionT, TModule = u
   params: CloudCommunityAdminGatewayParams<SessionT> & {
     communityId: string;
     limit?: number;
-    init?: RequestInit;
   },
 ): Promise<TModule[]> {
-  void params.init;
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
   const payload = await client.query("community:listCommunityResourceModules" as any, {
     authSubject,
