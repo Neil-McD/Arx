@@ -48,11 +48,11 @@ import {
   type WorkspaceRightPanelTabItem,
 } from "./workspaceRightPanelModel";
 
-export const OPERATOR_RIGHT_PANEL_DEFAULT_WIDTH = 560;
-export const OPERATOR_RIGHT_PANEL_MIN_WIDTH = 380;
-export const OPERATOR_RIGHT_PANEL_MAX_WIDTH = 860;
-export const OPERATOR_RIGHT_PANEL_GUTTER = 28;
-export const OPERATOR_RIGHT_PANEL_KEYBOARD_STEP = 32;
+export const WORKSPACE_RIGHT_PANEL_DEFAULT_WIDTH = 560;
+export const WORKSPACE_RIGHT_PANEL_MIN_WIDTH = 380;
+export const WORKSPACE_RIGHT_PANEL_MAX_WIDTH = 860;
+export const WORKSPACE_RIGHT_PANEL_GUTTER = 28;
+export const WORKSPACE_RIGHT_PANEL_KEYBOARD_STEP = 32;
 
 const OPERATOR_ACCOUNT_SETUP_STEP_ORDER = ["identity", "inference", "agent", "complete"] as const;
 const OPERATOR_ACCOUNT_SETUP_MISSING_ORDER = [
@@ -106,9 +106,9 @@ type PartnerPayoutCycleActions = {
   reject: (cycleId: string) => Promise<void>;
 };
 
-export function clampOperatorRightPanelWidth(width: number): number {
-  if (!Number.isFinite(width)) return OPERATOR_RIGHT_PANEL_DEFAULT_WIDTH;
-  return Math.min(OPERATOR_RIGHT_PANEL_MAX_WIDTH, Math.max(OPERATOR_RIGHT_PANEL_MIN_WIDTH, Math.round(width)));
+export function clampWorkspaceRightPanelWidth(width: number): number {
+  if (!Number.isFinite(width)) return WORKSPACE_RIGHT_PANEL_DEFAULT_WIDTH;
+  return Math.min(WORKSPACE_RIGHT_PANEL_MAX_WIDTH, Math.max(WORKSPACE_RIGHT_PANEL_MIN_WIDTH, Math.round(width)));
 }
 
 function fulfilledValue<T>(result: PromiseSettledResult<T>): T | null {
@@ -306,7 +306,7 @@ export function useOperatorDashboardData(params: {
   return { state, topCommunities, partnerPayoutCycleActions, isLoading, error };
 }
 
-export function WebOperatorDataPanel(props: {
+export function WebWorkspaceRightPanel(props: {
   workspaceUserDataPanel: WorkspaceUserDataPanelDataProps;
   isCommunityRecentSignalsExpanded: boolean;
   insightTabs: WorkspaceRightPanelTabItem[];
@@ -331,10 +331,10 @@ export function WebOperatorDataPanel(props: {
   return (
     <>
       <div
-        className="operator-data-panel__resize-handle"
+        className="workspace-right-panel__resize-handle"
         role="separator"
         aria-orientation="vertical"
-        aria-label="Resize operator data panel"
+        aria-label="Resize workspace right panel"
         tabIndex={0}
         onPointerDown={props.onResizePointerDown}
         onPointerMove={props.onResizePointerMove}
@@ -342,7 +342,7 @@ export function WebOperatorDataPanel(props: {
         onKeyDown={props.onResizeKeyDown}
       />
       <div
-        className="platform-switcher platform-switcher-compact operator-data-panel__tabs operator-data-panel__tabs--instant"
+        className="platform-switcher platform-switcher-compact workspace-right-panel__tabs workspace-right-panel__tabs--instant"
         role="tablist"
         aria-label="Workspace data tabs"
         style={insightTabSwitcherStyle as CSSProperties}
@@ -361,10 +361,10 @@ export function WebOperatorDataPanel(props: {
         ))}
       </div>
 
-      <div className="operator-data-panel__content">
-        {isOperatorTabActive && props.error ? <div className="operator-surface-notice">{props.error}</div> : null}
+      <div className="workspace-right-panel__content">
+        {isOperatorTabActive && props.error ? <div className="workspace-right-panel__notice">{props.error}</div> : null}
         {isOperatorTabActive && props.isLoading ? (
-          <div className="operator-surface-notice">Loading operator data...</div>
+          <div className="workspace-right-panel__notice">Loading operator data...</div>
         ) : null}
         {activeInsightTab === "workspace" ? (
           <WorkspacePanelContent {...props.workspaceUserDataPanel} />
@@ -672,7 +672,7 @@ function OperatorPlatformInsights(props: {
   const runtimeExecution = props.runtimeTools?.executionAvailability ?? null;
   const runtimeTopFailureCodes = runtimeExecution?.topFailureCodes ?? props.runtimeTools?.topFailureCodes ?? [];
   return (
-    <div className="operator-data-panel__grid">
+    <div className="workspace-right-panel__grid">
       <section className="operator-dashboard__metrics" aria-label="Platform health overview">
         {healthCards.map((card) => (
           <div className={`operator-platform-health-card is-${card.status}`} key={card.id}>
@@ -1066,7 +1066,7 @@ function OperatorBusinessInsights(props: {
       : "Credit top-ups; take-rate pending.";
 
   return (
-    <div className="operator-data-panel__grid">
+    <div className="workspace-right-panel__grid">
       <section className="operator-dashboard__metrics" aria-label="Business overview">
         <div>
           <span>Visitors</span>
@@ -1644,7 +1644,7 @@ function OperatorCommunityInsights(props: {
 }) {
   const totals = props.overview?.totals;
   return (
-    <div className="operator-data-panel__grid">
+    <div className="workspace-right-panel__grid">
       <section className="operator-dashboard__metrics" aria-label="Community performance overview">
         <div>
           <span>Communities</span>

@@ -1394,7 +1394,7 @@ function main() {
   const builderPartnersSource = readText(new URL("../convex/builderPartners.ts", import.meta.url));
   const gatewaySource = readText(new URL("../shared/builderPartnerProgramGateway.ts", import.meta.url));
   const operatorGatewaySource = readText(new URL("../shared/cloudOperatorDashboardGateway.ts", import.meta.url));
-  const operatorPanelSource = readText(new URL("../apps/web/src/components/WebOperatorDataPanel.tsx", import.meta.url));
+  const operatorPanelSource = readText(new URL("../apps/web/src/components/WebWorkspaceRightPanel.tsx", import.meta.url));
   const appSource = readText(new URL("../apps/web/src/App.tsx", import.meta.url));
   const accountSource = readText(new URL("../convex/account.ts", import.meta.url));
   const docsSource = readText(new URL("../docs/product/primitives/polynet.md", import.meta.url));

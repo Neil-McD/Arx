@@ -11,7 +11,7 @@ const operatorDashboard = read("convex/operatorDashboard.ts");
 const operatorIntelligence = read("convex/operatorIntelligence.ts");
 const operatorGateway = read("shared/cloudOperatorDashboardGateway.ts");
 const operatorTypes = read("shared/operatorTypes.ts");
-const operatorPanel = read("apps/web/src/components/WebOperatorDataPanel.tsx");
+const operatorPanel = read("apps/web/src/components/WebWorkspaceRightPanel.tsx");
 const schema = read("convex/schema.ts");
 
 assert.match(

@@ -7,7 +7,8 @@ function read(relativePath: string): string {
 
 const app = read("apps/web/src/App.tsx");
 const threadDataController = read("shared/useWebThreadDataController.ts");
-const operatorPanel = read("apps/web/src/components/WebOperatorDataPanel.tsx");
+const workspaceRightPanel = read("apps/web/src/components/WebWorkspaceRightPanel.tsx");
+const workspaceRightPanelData = read("apps/web/src/components/workspaceRightPanelData.ts");
 const resourcesPanel = read("apps/web/src/components/CommunityResourcesPanel.tsx");
 const eventsPanel = read("apps/web/src/components/WebCommunityEventsSection.tsx");
 const aiFeedPanel = read("apps/web/src/components/CommunityAiFeedPanel.tsx");
@@ -34,19 +35,44 @@ assert.match(
 );
 
 assert.match(
-  operatorPanel,
+  workspaceRightPanel,
   /if \(!params\.enabled\) \{[\s\S]*setIsLoading\(false\);[\s\S]*return;[\s\S]*\}/,
   "closed operator panel must stop loading without clearing the last loaded snapshot",
 );
 assert.match(
-  operatorPanel,
+  workspaceRightPanel,
   /setState\(\(prev\) => \(\{[\s\S]*overview: nextState\.overview \?\? prev\.overview[\s\S]*authAccess: nextState\.authAccess \?\? prev\.authAccess[\s\S]*communityRows: nextState\.communityRows \?\? prev\.communityRows[\s\S]*events: nextState\.events \?\? prev\.events[\s\S]*\}\)\)/,
   "operator panel refresh must merge loaded sections over the previous snapshot",
 );
 assert.match(
-  operatorPanel,
+  workspaceRightPanel,
   /message\.includes\("operator_access_forbidden"\)[\s\S]*setState\(createEmptyOperatorDashboardState\(\)\)/,
   "operator panel must still clear stale operator data on confirmed access denial",
+);
+assert.match(
+  app,
+  /buildWorkspaceRightPanelRecentSignals\(\{[\s\S]*communityMessages[\s\S]*aiFeedPosts: activeCommunityFeedState\.live[\s\S]*resources: communityResources[\s\S]*events: communityEvents/,
+  "workspace right panel recent signal projection must be centralized in the panel data builder",
+);
+assert.match(
+  app,
+  /buildWorkspaceRightPanelCommunityData\(\{[\s\S]*recentSignals: workspacePanelCommunityRecentSignals[\s\S]*integrations: workspacePanelCommunityIntegrations/,
+  "workspace right panel community projection must be centralized before rendering",
+);
+assert.match(
+  app,
+  /buildWorkspaceRightPanelUserData\(\{[\s\S]*workspaceCreditBalance[\s\S]*activeCommunity: workspaceUserDataPanelCommunity[\s\S]*onTurnOnComputer: turnOnWorkspaceComputer/,
+  "workspace right panel user data props must be assembled through the panel data builder",
+);
+assert.match(
+  workspaceRightPanelData,
+  /kind: "chat"[\s\S]*kind: "ai_feed"[\s\S]*kind: "resource"[\s\S]*kind: "event"/,
+  "recent signal builder must include only real content/activity signal types",
+);
+assert.doesNotMatch(
+  workspaceRightPanelData,
+  /kind:\s*"(joined|member|membership)"/,
+  "recent signal builder must not reintroduce joined-member items as signal feed items",
 );
 
 assert.match(

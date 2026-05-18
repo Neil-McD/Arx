@@ -19,7 +19,7 @@ const operatorDashboard = read("convex/operatorDashboard.ts");
 const operatorGateway = read("shared/cloudOperatorDashboardGateway.ts");
 const operatorPlatformHealth = read("shared/operatorPlatformHealth.ts");
 const operatorTypes = read("shared/operatorTypes.ts");
-const operatorPanel = read("apps/web/src/components/WebOperatorDataPanel.tsx");
+const operatorPanel = read("apps/web/src/components/WebWorkspaceRightPanel.tsx");
 const packageJson = read("package.json");
 
 const securityDiagnosticsBlock = sliceBetween(

@@ -396,6 +396,16 @@ import {
 import type { WebSettingsPanelsProps } from "./components/WebSettingsPanels";
 import type { WorkspaceComposerApi, WorkspaceComposerDraft } from "./components/WebWorkspaceHost";
 import {
+  resolveWorkspaceRightPanelShellState,
+  useWorkspaceRightPanelController,
+} from "./components/useWorkspaceRightPanelController";
+import {
+  buildWorkspaceRightPanelCommunityData,
+  buildWorkspaceRightPanelRecentSignals,
+  buildWorkspaceRightPanelUserData,
+  type WorkspaceRightPanelRecentSignalTarget,
+} from "./components/workspaceRightPanelData";
+import {
   WebGlobalOverlayHost,
   type WebGlobalOverlayHostProps,
 } from "./components/WebGlobalOverlayHost";
@@ -472,119 +482,6 @@ type PublicCommunityRecord = {
   }> | null;
 };
 
-type WorkspacePanelCommunityRole = "member" | "moderator" | "admin" | "owner";
-
-type WorkspacePanelRecentSignalKind = "chat" | "ai_feed" | "resource" | "event";
-
-type WorkspacePanelRecentSignalTarget = {
-  tab: Extract<CommunityTab, "chat" | "ai_feed" | "resources" | "events">;
-  itemId?: string | null;
-};
-
-type WorkspacePanelSignalAvatar = {
-  userId: string;
-  displayName: string | null;
-  avatarUrl: string | null;
-  avatarFocusX?: number | null;
-  avatarFocusY?: number | null;
-  avatarZoom?: number | null;
-};
-
-type WorkspacePanelRecentSignal = {
-  id: string;
-  kind: WorkspacePanelRecentSignalKind;
-  title: string;
-  subtitle?: string | null;
-  metaLabel?: string | null;
-  iconLabel?: string | null;
-  eventMonth?: string | null;
-  eventDay?: string | null;
-  avatar?: WorkspacePanelSignalAvatar | null;
-  replyContext?: {
-    sender: string;
-    text: string;
-  } | null;
-  target: WorkspacePanelRecentSignalTarget;
-};
-
-type WorkspacePanelRecentSignalCandidate = WorkspacePanelRecentSignal & {
-  sortMs: number;
-};
-
-const WORKSPACE_PANEL_HIGHLIGHT_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
-
-function normalizeWorkspacePanelCommunityRole(
-  access: SharedCommunityAccess | null,
-  fallbackRole: string | null | undefined,
-): WorkspacePanelCommunityRole {
-  if (access?.is_owner) return "owner";
-  const candidate = String(access?.effective_role ?? fallbackRole ?? "").trim().toLowerCase();
-  if (candidate === "owner") return "owner";
-  if (candidate === "admin") return "admin";
-  if (candidate === "moderator" || candidate === "mod") return "moderator";
-  return "member";
-}
-
-function parsePanelSignalTimestampMs(value: string | null | undefined): number | null {
-  const parsed = Date.parse(String(value ?? ""));
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
-function normalizePanelSignalText(value: string | null | undefined): string {
-  return String(value ?? "").replace(/\s+/g, " ").trim();
-}
-
-function truncatePanelSignalText(value: string | null | undefined, maxLength = 150): string {
-  const normalized = normalizePanelSignalText(value);
-  if (normalized.length <= maxLength) return normalized;
-  return `${normalized.slice(0, Math.max(0, maxLength - 3)).trimEnd()}...`;
-}
-
-function formatPanelAiPostTypeLabel(value: CommunityAiFeedPost["post_type"]): string {
-  switch (value) {
-    case "action":
-      return "Action";
-    case "recommendation":
-      return "Recommendation";
-    case "observation":
-    default:
-      return "Observation";
-  }
-}
-
-function formatPanelResourceTypeLabel(value: CommunityResource["type"]): string {
-  switch (value) {
-    case "embed":
-      return "Embed";
-    case "file":
-      return "File";
-    case "link":
-      return "Link";
-    case "post":
-    default:
-      return "Resource";
-  }
-}
-
-function formatPanelEventDateTile(value: string): { month: string; day: string } | null {
-  const date = new Date(value);
-  if (!Number.isFinite(date.getTime())) return null;
-  return {
-    month: new Intl.DateTimeFormat(undefined, { month: "short" }).format(date),
-    day: new Intl.DateTimeFormat(undefined, { day: "numeric" }).format(date),
-  };
-}
-
-function formatPanelEventTimeLabel(value: string): string | null {
-  const date = new Date(value);
-  if (!Number.isFinite(date.getTime())) return null;
-  return new Intl.DateTimeFormat(undefined, {
-    weekday: "short",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(date);
-}
-
 type ThreadRecord = {
   id: string;
   title: string | null;
@@ -660,7 +557,6 @@ const LEGACY_APP_THEME_STORAGE_KEY = "arx-theme";
 const COMMUNITY_ANALYTICS_RANGE_STORAGE_KEY = "polynet-community-analytics-range";
 const LEGACY_COMMUNITY_ANALYTICS_RANGE_STORAGE_KEY = "arx-community-analytics-range";
 const COMMUNITY_RAIL_ORDER_STORAGE_KEY_PREFIX = "polynet-community-rail-order:web";
-const WORKSPACE_OPERATOR_DATA_PANEL_OPEN_STORAGE_KEY = "polynet-workspace-operator-data-panel-open";
 const WORKSPACE_CREDIT_TOPUP_RETURN_STORAGE_KEY = "polynet-workspace-credit-topup-return";
 const WORKSPACE_CREDIT_TOPUP_RETURN_MAX_AGE_MS = 2 * 60 * 60 * 1000;
 const CHATGPT_SECURITY_SETTINGS_URL = "https://chatgpt.com/#settings/Security";
@@ -705,22 +601,6 @@ function storeGuestModelId(modelId: string): void {
     localStorage.setItem(GUEST_MODEL_STORAGE_KEY, modelId);
   } catch {
     // ignore
-  }
-}
-
-function loadWorkspaceOperatorDataPanelOpen(): boolean {
-  try {
-    return localStorage.getItem(WORKSPACE_OPERATOR_DATA_PANEL_OPEN_STORAGE_KEY) === "1";
-  } catch {
-    return false;
-  }
-}
-
-function storeWorkspaceOperatorDataPanelOpen(isOpen: boolean): void {
-  try {
-    localStorage.setItem(WORKSPACE_OPERATOR_DATA_PANEL_OPEN_STORAGE_KEY, isOpen ? "1" : "0");
-  } catch {
-    // Operator panel visibility is a local preference only.
   }
 }
 
@@ -1001,12 +881,6 @@ const MAX_WEB_IMAGE_DATA_URL_CHARS = 600_000; // ~0.6MB base64 payload
 const WEB_RAIL_WIDTH = 72;
 const WEB_SESSIONS_DRAWER_WIDTH = 240;
 const MIN_DOCKED_WORKSPACE_CENTER_WIDTH = 400;
-
-type WorkspaceOperatorPanelLayout = {
-  open: boolean;
-  width: number;
-  gutter: number;
-};
 
 function buildCurrentTelemetryPathname(): string | null {
   if (typeof window === "undefined") return null;
@@ -1588,7 +1462,7 @@ export default function App() {
       isAlive = false;
     };
   }, [canonicalSessionUserId, session]);
-  const hasOperatorDataPanelAccess = Boolean(session && operatorAccess);
+  const hasOperatorRightPanelAccess = Boolean(session && operatorAccess);
   const profileStorageUserId = canonicalSessionUserId;
   const initialProfileDraft = useMemo(
     () => readProfileDraftForUser(profileStorageUserId),
@@ -1622,22 +1496,12 @@ export default function App() {
   const [workspaceViewportWidth, setWorkspaceViewportWidth] = useState(() =>
     typeof window === "undefined" ? 0 : window.innerWidth,
   );
-  const [workspaceOperatorPanelLayout, setWorkspaceOperatorPanelLayout] =
-    useState<WorkspaceOperatorPanelLayout>({ open: false, width: 0, gutter: 0 });
-  const [isWorkspaceOperatorDataPanelOpen, setIsWorkspaceOperatorDataPanelOpen] =
-    useState(loadWorkspaceOperatorDataPanelOpen);
-  const handleWorkspaceOperatorPanelLayoutChange = useCallback((layout: WorkspaceOperatorPanelLayout) => {
-    setWorkspaceOperatorPanelLayout((current) =>
-      current.open === layout.open &&
-      current.width === layout.width &&
-      current.gutter === layout.gutter
-        ? current
-        : layout,
-    );
-  }, []);
-  useEffect(() => {
-    storeWorkspaceOperatorDataPanelOpen(isWorkspaceOperatorDataPanelOpen);
-  }, [isWorkspaceOperatorDataPanelOpen]);
+  const {
+    workspaceRightPanelLayout,
+    isWorkspaceRightPanelOpen,
+    handleWorkspaceRightPanelLayoutChange,
+    handleToggleWorkspaceRightPanel,
+  } = useWorkspaceRightPanelController();
   useEffect(() => {
     if (typeof window === "undefined") return;
 
@@ -4438,7 +4302,7 @@ export default function App() {
   const visibleCommunityProfileIds = useMemo(() => {
     const shouldLoadCommunityProfiles =
       activePage === "community" ||
-      (activePage === "workspace" && activeView === "home" && isWorkspaceOperatorDataPanelOpen);
+      (activePage === "workspace" && activeView === "home" && isWorkspaceRightPanelOpen);
     if (!shouldLoadCommunityProfiles) return [] as string[];
     const ids = new Set<string>();
     for (const member of communityMembers) {
@@ -4457,7 +4321,7 @@ export default function App() {
     canonicalSessionUserId,
     communityMembers,
     communityMessages,
-    isWorkspaceOperatorDataPanelOpen,
+    isWorkspaceRightPanelOpen,
   ]);
 
   const savedProfilesByUserId = useMemo(() => {
@@ -4587,7 +4451,7 @@ export default function App() {
   const shouldHydrateWorkspaceCommunityPanel =
     activePage === "workspace" &&
     activeView === "home" &&
-    isWorkspaceOperatorDataPanelOpen;
+    isWorkspaceRightPanelOpen;
   useWebCommunityChatPreloadLifecycle<AuthSession>({
     session: session,
     activePage,
@@ -4804,7 +4668,7 @@ export default function App() {
 
   useEffect(() => {
     const shouldLoadCommunityApps =
-      (activePage === "workspace" && activeView === "home" && isWorkspaceOperatorDataPanelOpen) ||
+      (activePage === "workspace" && activeView === "home" && isWorkspaceRightPanelOpen) ||
       (activePage === "community" && communityTab === "ai_agent") ||
       (activePage === "community" && communityTab === "settings") ||
       activePage === "discover";
@@ -4832,7 +4696,7 @@ export default function App() {
     canManageCommunitySettings,
     canViewActiveCommunitySettings,
     canManageMembersActiveCommunity,
-    isWorkspaceOperatorDataPanelOpen,
+    isWorkspaceRightPanelOpen,
     clearCommunityAppMounts,
     loadCommunityAppMounts,
     communityAppMountsLoadedCommunityIdRef,
@@ -4868,7 +4732,7 @@ export default function App() {
       (activePage === "community" && communityTab === "ai_agent") ||
       (activePage === "workspace" &&
         activeView === "home" &&
-        isWorkspaceOperatorDataPanelOpen) ||
+        isWorkspaceRightPanelOpen) ||
       (activePage === "workspace" &&
         activeView === "settings" &&
         settingsPage === "integrations");
@@ -4885,7 +4749,7 @@ export default function App() {
     activePage,
     activeView,
     communityTab,
-    isWorkspaceOperatorDataPanelOpen,
+    isWorkspaceRightPanelOpen,
     session,
     settingsPage,
     clearEffectiveMcpApps,
@@ -6591,8 +6455,8 @@ export default function App() {
     workspaceViewportWidth -
     WEB_RAIL_WIDTH -
     WEB_SESSIONS_DRAWER_WIDTH -
-    (workspaceOperatorPanelLayout.open
-      ? workspaceOperatorPanelLayout.width
+    (workspaceRightPanelLayout.open
+      ? workspaceRightPanelLayout.width
       : 0);
   const shouldOverlaySessionsDrawer =
     isSessionsDrawerOpen &&
@@ -6970,7 +6834,7 @@ export default function App() {
 		    if (!communitySlug) return;
 		    openCommunityChat(communitySlug, { clearUnread: true });
 		  };
-		  const handleOpenWorkspacePanelCommunitySignal = (target: WorkspacePanelRecentSignalTarget) => {
+		  const handleOpenWorkspacePanelCommunitySignal = (target: WorkspaceRightPanelRecentSignalTarget) => {
 		    const communitySlug = String(selectedActiveCommunitySlug ?? activeCommunity?.slug ?? "").trim();
 		    if (!communitySlug) return;
 		    const itemId = String(target.itemId ?? "").trim();
@@ -8073,179 +7937,36 @@ export default function App() {
     formatModelSignature,
     renderMarkdown,
   });
-  const showWorkspaceRightPanelControl = Boolean(
-    session &&
-    !showMobileAppShell &&
-    activePage === "workspace" &&
-    activeView === "home",
-  );
-  const showWorkspaceOperatorTabs = Boolean(showWorkspaceRightPanelControl && hasOperatorDataPanelAccess);
-  const isWorkspaceRightPanelVisible = showWorkspaceRightPanelControl && isWorkspaceOperatorDataPanelOpen;
-  const handleToggleWorkspaceRightPanel = useCallback(() => {
-    setIsWorkspaceOperatorDataPanelOpen((value) => !value);
-  }, []);
+  const {
+    showControl: showWorkspaceRightPanelControl,
+    showOperatorTabs: showWorkspaceRightPanelOperatorTabs,
+    isVisible: isWorkspaceRightPanelVisible,
+  } = resolveWorkspaceRightPanelShellState({
+    hasSession: Boolean(session),
+    isWorkspaceHome: activePage === "workspace" && activeView === "home",
+    isMobileAppShell: showMobileAppShell,
+    hasOperatorRightPanelAccess,
+    isOpen: isWorkspaceRightPanelOpen,
+  });
 
   useEffect(() => {
     if (showWorkspaceRightPanelControl) return;
-    handleWorkspaceOperatorPanelLayoutChange({ open: false, width: 0, gutter: 0 });
+    handleWorkspaceRightPanelLayoutChange({ open: false, width: 0, gutter: 0 });
   }, [
-    handleWorkspaceOperatorPanelLayoutChange,
+    handleWorkspaceRightPanelLayoutChange,
     showWorkspaceRightPanelControl,
   ]);
 
   const workspacePanelCommunityRecentSignals = useMemo(() => {
-    const highlightedSignals: WorkspacePanelRecentSignalCandidate[] = [];
-    const nowMs = Date.now();
-    const recentStartMs = nowMs - WORKSPACE_PANEL_HIGHLIGHT_WINDOW_MS;
-    const upcomingEndMs = nowMs + WORKSPACE_PANEL_HIGHLIGHT_WINDOW_MS;
-    const buildAvatar = (
-      userId: string,
-      fallbackDisplayName: string | null,
-      fallbackProfile?: {
-        avatar_url?: string | null;
-        avatar_focus_x?: number | null;
-        avatar_focus_y?: number | null;
-        avatar_zoom?: number | null;
-      } | null,
-    ): WorkspacePanelSignalAvatar => {
-      const profile = savedProfilesByUserId[userId] ?? null;
-      return {
-        userId,
-        displayName: profile?.display_name ?? fallbackDisplayName,
-        avatarUrl: profile?.avatar_url ?? fallbackProfile?.avatar_url ?? null,
-        avatarFocusX: profile?.avatar_focus_x ?? fallbackProfile?.avatar_focus_x ?? null,
-        avatarFocusY: profile?.avatar_focus_y ?? fallbackProfile?.avatar_focus_y ?? null,
-        avatarZoom: profile?.avatar_zoom ?? fallbackProfile?.avatar_zoom ?? null,
-      };
-    };
-    const finalizeSignals = (signals: WorkspacePanelRecentSignalCandidate[]) =>
-      signals
-        .sort((a, b) => {
-          const distance = Math.abs(a.sortMs - nowMs) - Math.abs(b.sortMs - nowMs);
-          if (distance !== 0) return distance;
-          return b.sortMs - a.sortMs;
-        })
-        .map(({ sortMs: _sortMs, ...signal }) => signal);
-
-    const sortedMessages = [...communityMessages]
-      .filter((message) => !String(message.id ?? "").startsWith("pending-"))
-      .map((message) => ({
-        message,
-        createdAtMs: parsePanelSignalTimestampMs(message.created_at),
-      }))
-      .filter((entry): entry is { message: CommunityChatMessage; createdAtMs: number } => entry.createdAtMs !== null)
-      .sort((a, b) => b.createdAtMs - a.createdAtMs);
-
-    for (const { message, createdAtMs } of sortedMessages) {
-      const senderId = String(message.sender_id ?? "").trim();
-      const senderName = senderId ? displayName(senderId) : "Member";
-      const snippet = truncatePanelSignalText(message.body, 160);
-      if (!snippet) continue;
-      const replyToId = String(message.reply_to_id ?? "").trim();
-      const replyTarget = replyToId ? communityMessageById.get(replyToId) ?? null : null;
-      const replyBody = replyTarget
-        ? normalizePanelSignalText(parseReplyPrefix(replyTarget.body)?.rest ?? replyTarget.body)
-        : "";
-      const replyPreview = truncatePanelSignalText(replyBody || (replyTarget ? "Message" : ""), 90);
-      const signal: WorkspacePanelRecentSignalCandidate = {
-        id: `chat:${message.id}`,
-        kind: "chat",
-        title: senderName,
-        subtitle: snippet,
-        avatar: senderId ? buildAvatar(senderId, senderName) : null,
-        replyContext: replyToId
-          ? {
-              sender: replyTarget ? displayName(replyTarget.sender_id) : "Reply",
-              text: replyPreview || "Replied message not loaded",
-            }
-          : null,
-        target: { tab: "chat", itemId: message.id },
-        sortMs: createdAtMs,
-      };
-      if (createdAtMs >= recentStartMs && createdAtMs <= nowMs) {
-        highlightedSignals.push(signal);
-      }
-    }
-
-    const sortedAiPosts = [...activeCommunityFeedState.live]
-      .filter((post) => !post.pending)
-      .map((post) => ({
-        post,
-        createdAtMs: parsePanelSignalTimestampMs(post.created_at),
-      }))
-      .filter((entry): entry is { post: CommunityAiFeedPost; createdAtMs: number } => entry.createdAtMs !== null)
-      .sort((a, b) => b.createdAtMs - a.createdAtMs);
-    for (const latestAiPost of sortedAiPosts) {
-      const aiTitle = normalizePanelSignalText(latestAiPost.post.title);
-      if (!aiTitle) continue;
-      const signal: WorkspacePanelRecentSignalCandidate = {
-        id: `ai_feed:${latestAiPost.post.id}`,
-        kind: "ai_feed",
-        title: truncatePanelSignalText(aiTitle, 120),
-        metaLabel: formatPanelAiPostTypeLabel(latestAiPost.post.post_type),
-        iconLabel: "AI",
-        target: { tab: "ai_feed", itemId: latestAiPost.post.id },
-        sortMs: latestAiPost.createdAtMs,
-      };
-      if (latestAiPost.createdAtMs >= recentStartMs && latestAiPost.createdAtMs <= nowMs) {
-        highlightedSignals.push(signal);
-      }
-    }
-
-    const sortedResources = [...communityResources]
-      .map((resource) => ({
-        resource,
-        createdAtMs: parsePanelSignalTimestampMs(resource.created_at),
-      }))
-      .filter((entry): entry is { resource: CommunityResource; createdAtMs: number } => entry.createdAtMs !== null)
-      .sort((a, b) => b.createdAtMs - a.createdAtMs);
-    for (const latestResource of sortedResources) {
-      const resourceTitle = normalizePanelSignalText(latestResource.resource.title);
-      if (!resourceTitle) continue;
-      const signal: WorkspacePanelRecentSignalCandidate = {
-        id: `resource:${latestResource.resource.id}`,
-        kind: "resource",
-        title: truncatePanelSignalText(resourceTitle, 120),
-        metaLabel: formatPanelResourceTypeLabel(latestResource.resource.type),
-        target: { tab: "resources", itemId: latestResource.resource.id },
-        sortMs: latestResource.createdAtMs,
-      };
-      if (latestResource.createdAtMs >= recentStartMs && latestResource.createdAtMs <= nowMs) {
-        highlightedSignals.push(signal);
-      }
-    }
-
-    const sortedUpcomingEvents = [...communityEvents]
-      .filter((event) => String(event.status ?? "").trim().toLowerCase() !== "cancelled")
-      .map((event) => ({
-        event,
-        startsAtMs: parsePanelSignalTimestampMs(event.starts_at),
-      }))
-      .filter((entry): entry is { event: CommunityEvent; startsAtMs: number } => entry.startsAtMs !== null)
-      .filter((entry) => entry.startsAtMs >= nowMs)
-      .sort((a, b) => a.startsAtMs - b.startsAtMs);
-    for (const upcomingEvent of sortedUpcomingEvents) {
-      const eventTitle = normalizePanelSignalText(upcomingEvent.event.title);
-      if (!eventTitle) continue;
-      const eventDateTile = formatPanelEventDateTile(upcomingEvent.event.starts_at);
-      const signal: WorkspacePanelRecentSignalCandidate = {
-        id: `event:${upcomingEvent.event.id}`,
-        kind: "event",
-        title: truncatePanelSignalText(eventTitle, 120),
-        subtitle: formatPanelEventTimeLabel(upcomingEvent.event.starts_at),
-        metaLabel: "Event",
-        iconLabel: "EV",
-        eventMonth: eventDateTile?.month ?? null,
-        eventDay: eventDateTile?.day ?? null,
-        target: { tab: "events", itemId: upcomingEvent.event.id },
-        sortMs: upcomingEvent.startsAtMs,
-      };
-      if (upcomingEvent.startsAtMs <= upcomingEndMs) {
-        highlightedSignals.push(signal);
-      }
-    }
-
-    return finalizeSignals(highlightedSignals);
+    return buildWorkspaceRightPanelRecentSignals({
+      communityMessages,
+      communityMessageById,
+      aiFeedPosts: activeCommunityFeedState.live,
+      resources: communityResources,
+      events: communityEvents,
+      savedProfilesByUserId,
+      displayName,
+    });
   }, [
     activeCommunityFeedState.live,
     communityEvents,
@@ -8282,63 +8003,37 @@ export default function App() {
     ],
   );
 
-  const workspaceUserDataPanelCommunity = activeCommunity
-    ? {
-        id: activeCommunity.id,
-        slug: activeCommunity.slug ?? null,
-        name: activeCommunity.name,
-        oneLiner: activeCommunity.one_liner ?? null,
-        visibility: activeCommunity.visibility ?? null,
-        memberCount: activeCommunityMemberCount,
-        canManage: canManageMembersActiveCommunity || canViewActiveCommunitySettings,
-        role: normalizeWorkspacePanelCommunityRole(
-          activeCommunityAccess,
-          communityRoleById[activeCommunity.id],
-        ),
-        muted: communityMemberMuted,
-        onlineFaces: funnelPreviewOnlineFaces.map((face) => ({
-          userId: face.user_id,
-          displayName: face.display_name ?? null,
-          avatarUrl: face.avatar_url ?? null,
-          avatarFocusX: face.avatar_focus_x ?? null,
-          avatarFocusY: face.avatar_focus_y ?? null,
-          avatarZoom: face.avatar_zoom ?? null,
-        })),
-        analytics: {
-          canView: canViewActiveCommunityAnalytics,
-          range: communityAnalyticsRange,
-          isLoading: isLoadingCommunityAnalytics,
-          error: communityAnalyticsError,
-          summary: communityAnalyticsSummary,
-          series: communityAnalyticsSeries,
-        },
-        operations: {
-          canReviewJoinRequests: canReviewJoinRequestsActiveCommunity,
-          joinReviewMode: activeCommunityMembersJoinReviewMode,
-          pendingJoinRequests: communityJoinRequests.slice(0, 4).map((request) => {
-            const profile = savedProfilesByUserId[request.user_id] ?? null;
-            return {
-              id: request.id,
-              userId: request.user_id,
-              displayName: profile?.display_name ?? displayName(request.user_id),
-              avatarUrl: profile?.avatar_url ?? null,
-              avatarFocusX: profile?.avatar_focus_x ?? null,
-              avatarFocusY: profile?.avatar_focus_y ?? null,
-              avatarZoom: profile?.avatar_zoom ?? null,
-              message: (request.message ?? "").trim() || null,
-              createdAtLabel: formatRelativeTime(request.created_at),
-            };
-          }),
-          hiddenJoinRequestCount: Math.max(0, communityJoinRequests.length - 4),
-          isLoadingJoinRequests: isLoadingCommunityJoinRequests,
-          joinRequestsError: communityJoinRequestsError,
-          decidingJoinRequestId: decidingCommunityJoinRequestId,
-        },
-        recentSignals: workspacePanelCommunityRecentSignals,
-        integrations: workspacePanelCommunityIntegrations,
-      }
-    : null;
-  const workspaceUserDataPanel = {
+  const workspaceUserDataPanelCommunity = buildWorkspaceRightPanelCommunityData({
+    activeCommunity,
+    activeCommunityAccess,
+    fallbackRole: activeCommunity ? communityRoleById[activeCommunity.id] : null,
+    memberCount: activeCommunityMemberCount,
+    canManage: canManageMembersActiveCommunity || canViewActiveCommunitySettings,
+    muted: communityMemberMuted,
+    onlineFaces: funnelPreviewOnlineFaces,
+    analytics: {
+      canView: canViewActiveCommunityAnalytics,
+      range: communityAnalyticsRange,
+      isLoading: isLoadingCommunityAnalytics,
+      error: communityAnalyticsError,
+      summary: communityAnalyticsSummary,
+      series: communityAnalyticsSeries,
+    },
+    operations: {
+      canReviewJoinRequests: canReviewJoinRequestsActiveCommunity,
+      joinReviewMode: activeCommunityMembersJoinReviewMode,
+      joinRequests: communityJoinRequests,
+      isLoadingJoinRequests: isLoadingCommunityJoinRequests,
+      joinRequestsError: communityJoinRequestsError,
+      decidingJoinRequestId: decidingCommunityJoinRequestId,
+    },
+    savedProfilesByUserId,
+    displayName,
+    formatJoinRequestCreatedAt: formatRelativeTime,
+    recentSignals: workspacePanelCommunityRecentSignals,
+    integrations: workspacePanelCommunityIntegrations,
+  });
+  const workspaceUserDataPanel = buildWorkspaceRightPanelUserData({
     workspaceCreditBalance,
     isLoadingWorkspaceCreditBalance,
     workspaceCreditBalanceError,
@@ -8376,15 +8071,15 @@ export default function App() {
       if (!nextCommunitySlug) return;
       openCommunityTab(nextCommunitySlug, "settings", { pushSnapshot: false });
     },
-  };
+  });
 
   const workspaceRightPanelToggle = showWorkspaceRightPanelControl ? (
     <button
       type="button"
-      className={`icon-button workspace-operator-data-toggle${isWorkspaceRightPanelVisible ? " active" : ""}`}
+      className={`icon-button workspace-right-panel-toggle${isWorkspaceRightPanelVisible ? " active" : ""}`}
       onClick={handleToggleWorkspaceRightPanel}
       aria-expanded={isWorkspaceRightPanelVisible}
-      aria-controls="workspace-operator-data-panel"
+      aria-controls="workspace-right-panel"
       aria-label={
         isWorkspaceRightPanelVisible
           ? "Close workspace data panel"
@@ -8494,10 +8189,10 @@ export default function App() {
       workspaceHostProps: {
         ...workspaceHostProps,
         showWorkspaceRightPanel: showWorkspaceRightPanelControl,
-        operatorDataPanelSession: showWorkspaceOperatorTabs ? session : null,
+        operatorRightPanelSession: showWorkspaceRightPanelOperatorTabs ? session : null,
         workspaceRightPanelOpen: isWorkspaceRightPanelVisible,
         workspaceUserDataPanel,
-        onOperatorPanelLayoutChange: handleWorkspaceOperatorPanelLayoutChange,
+        onWorkspaceRightPanelLayoutChange: handleWorkspaceRightPanelLayoutChange,
       },
     },
     publicCommunityFunnelProps: {

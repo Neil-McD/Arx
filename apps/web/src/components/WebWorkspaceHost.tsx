@@ -49,15 +49,16 @@ import { WebWorkspaceThreadError } from "./WebWorkspaceThreadError";
 import { WebWorkspaceThreadMessageList } from "./WebWorkspaceThreadMessageList";
 import { WebWorkspaceStreamingMessage } from "./WebWorkspaceStreamingMessage";
 import {
-  clampOperatorRightPanelWidth,
-  OPERATOR_RIGHT_PANEL_DEFAULT_WIDTH,
-  OPERATOR_RIGHT_PANEL_GUTTER,
-  OPERATOR_RIGHT_PANEL_KEYBOARD_STEP,
+  clampWorkspaceRightPanelWidth,
+  WORKSPACE_RIGHT_PANEL_DEFAULT_WIDTH,
+  WORKSPACE_RIGHT_PANEL_GUTTER,
+  WORKSPACE_RIGHT_PANEL_KEYBOARD_STEP,
   useOperatorDashboardData,
-  WebOperatorDataPanel,
-} from "./WebOperatorDataPanel";
+  WebWorkspaceRightPanel,
+} from "./WebWorkspaceRightPanel";
 import {
   buildWorkspaceRightPanelTabs,
+  isOperatorInsightTab,
   parseWorkspaceRightPanelTab,
   resolveWorkspaceRightPanelTab,
   type WorkspaceRightPanelTab,
@@ -196,7 +197,7 @@ export type WebWorkspaceHostProps = {
   initialComposerDraft: WorkspaceComposerDraft;
   onComposerDraftChange: (draft: WorkspaceComposerDraft) => void;
   onRegisterComposerApi: (api: WorkspaceComposerApi | null) => void;
-  onOperatorPanelLayoutChange?: (layout: { open: boolean; width: number; gutter: number }) => void;
+  onWorkspaceRightPanelLayoutChange?: (layout: { open: boolean; width: number; gutter: number }) => void;
   landingActionButtons: LandingActionButton[];
   authedWorkspaceComposerPlaceholder: string;
   guestWorkspaceComposerPlaceholder: string;
@@ -237,7 +238,7 @@ export type WebWorkspaceHostProps = {
   renderMarkdown: WorkspaceMarkdownRenderer;
   copyTextToClipboard: (text: string) => Promise<void> | void;
   showWorkspaceRightPanel?: boolean;
-  operatorDataPanelSession?: AuthSessionLike | null;
+  operatorRightPanelSession?: AuthSessionLike | null;
   workspaceRightPanelOpen?: boolean;
   workspaceUserDataPanel?: WorkspaceUserDataPanelDataProps | null;
 };
@@ -1053,7 +1054,7 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
   const [workspaceRightPanelCommunityLabel, setWorkspaceRightPanelCommunityLabel] =
     useState<string>(initialRightPanelCommunityLabel);
   const [isCommunityRecentSignalsExpanded, setIsCommunityRecentSignalsExpanded] = useState(false);
-  const [operatorRightPanelWidth, setOperatorRightPanelWidth] = useState(OPERATOR_RIGHT_PANEL_DEFAULT_WIDTH);
+  const [workspaceRightPanelWidth, setWorkspaceRightPanelWidth] = useState(WORKSPACE_RIGHT_PANEL_DEFAULT_WIDTH);
   const loadedRightPanelTabUserIdRef = useRef<string | null>(initialRightPanelStorageUserId);
   const loadedRightPanelCommunityLabelUserIdRef = useRef<string | null>(initialRightPanelStorageUserId);
   const savedThreadScrollTopRef = useRef<number | null>(null);
@@ -1102,7 +1103,7 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
   });
   const showWorkspaceRightPanel = Boolean(props.showWorkspaceRightPanel && props.workspaceUserDataPanel);
   const isWorkspaceRightPanelVisible = Boolean(showWorkspaceRightPanel && props.workspaceRightPanelOpen);
-  const showOperatorTabs = Boolean(props.operatorDataPanelSession);
+  const showOperatorTabs = Boolean(props.operatorRightPanelSession);
   const rightPanelStorageUserId = useMemo(() => resolveAuthSubject(props.session), [props.session]);
   const activeRightPanelCommunityName = normalizeWorkspaceRightPanelCommunityLabel(
     props.workspaceUserDataPanel?.activeCommunity?.name,
@@ -1117,6 +1118,7 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
     [showOperatorTabs, workspaceRightPanelCommunityLabel],
   );
   const activeRightPanelTab = resolveWorkspaceRightPanelTab(requestedRightPanelTab, workspaceRightPanelTabs);
+  const isOperatorRightPanelTabActive = isOperatorInsightTab(activeRightPanelTab);
   const handleWorkspaceRightPanelTabChange = useCallback(
     (tab: WorkspaceRightPanelTab) => {
       setRequestedRightPanelTab(tab);
@@ -1124,23 +1126,23 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
     },
     [rightPanelStorageUserId],
   );
-  const operatorDataPanelStyle = {
-    "--operator-right-panel-width": `${operatorRightPanelWidth}px`,
-    "--operator-right-panel-gutter": `${OPERATOR_RIGHT_PANEL_GUTTER}px`,
+  const workspaceRightPanelStyle = {
+    "--workspace-right-panel-width": `${workspaceRightPanelWidth}px`,
+    "--workspace-right-panel-gutter": `${WORKSPACE_RIGHT_PANEL_GUTTER}px`,
   } as CSSProperties;
   const operatorData = useOperatorDashboardData({
-    session: props.operatorDataPanelSession ?? null,
-    enabled: isWorkspaceRightPanelVisible && showOperatorTabs,
+    session: props.operatorRightPanelSession ?? null,
+    enabled: isWorkspaceRightPanelVisible && showOperatorTabs && isOperatorRightPanelTabActive,
     surface: "workspace_operator_data_panel",
   });
 
   useEffect(() => {
-    props.onOperatorPanelLayoutChange?.({
+    props.onWorkspaceRightPanelLayoutChange?.({
       open: isWorkspaceRightPanelVisible,
-      width: isWorkspaceRightPanelVisible ? operatorRightPanelWidth : 0,
-      gutter: isWorkspaceRightPanelVisible ? OPERATOR_RIGHT_PANEL_GUTTER : 0,
+      width: isWorkspaceRightPanelVisible ? workspaceRightPanelWidth : 0,
+      gutter: isWorkspaceRightPanelVisible ? WORKSPACE_RIGHT_PANEL_GUTTER : 0,
     });
-  }, [isWorkspaceRightPanelVisible, operatorRightPanelWidth, props.onOperatorPanelLayoutChange]);
+  }, [isWorkspaceRightPanelVisible, workspaceRightPanelWidth, props.onWorkspaceRightPanelLayoutChange]);
 
   useEffect(() => {
     if (!rightPanelStorageUserId || loadedRightPanelTabUserIdRef.current === rightPanelStorageUserId) return;
@@ -1845,31 +1847,31 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
 
   const isDesktopExpandedPreview = isDesktopViewport && expandedPreviewTerminal !== null;
 
-  const resizeOperatorRightPanelFromPointer = (event: PointerEvent<HTMLDivElement>) => {
-    setOperatorRightPanelWidth(clampOperatorRightPanelWidth(window.innerWidth - event.clientX));
+  const resizeWorkspaceRightPanelFromPointer = (event: PointerEvent<HTMLDivElement>) => {
+    setWorkspaceRightPanelWidth(clampWorkspaceRightPanelWidth(window.innerWidth - event.clientX));
   };
 
-  const handleOperatorRightPanelResizePointerDown = (event: PointerEvent<HTMLDivElement>) => {
+  const handleWorkspaceRightPanelResizePointerDown = (event: PointerEvent<HTMLDivElement>) => {
     event.currentTarget.setPointerCapture(event.pointerId);
-    resizeOperatorRightPanelFromPointer(event);
+    resizeWorkspaceRightPanelFromPointer(event);
   };
 
-  const handleOperatorRightPanelResizeKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+  const handleWorkspaceRightPanelResizeKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key === "ArrowLeft") {
       event.preventDefault();
-      setOperatorRightPanelWidth((width) => clampOperatorRightPanelWidth(width + OPERATOR_RIGHT_PANEL_KEYBOARD_STEP));
+      setWorkspaceRightPanelWidth((width) => clampWorkspaceRightPanelWidth(width + WORKSPACE_RIGHT_PANEL_KEYBOARD_STEP));
     }
     if (event.key === "ArrowRight") {
       event.preventDefault();
-      setOperatorRightPanelWidth((width) => clampOperatorRightPanelWidth(width - OPERATOR_RIGHT_PANEL_KEYBOARD_STEP));
+      setWorkspaceRightPanelWidth((width) => clampWorkspaceRightPanelWidth(width - WORKSPACE_RIGHT_PANEL_KEYBOARD_STEP));
     }
   };
 
   return (
     <>
       <div
-        className={`workspace-body workspace-attachment-drop-surface${isDesktopExpandedPreview ? " preview-expanded" : ""}${isWorkspaceAttachmentDragOver ? " drag-over" : ""}${isWorkspaceRightPanelVisible ? " workspace-operator-data-open" : ""}`}
-        style={operatorDataPanelStyle}
+        className={`workspace-body workspace-attachment-drop-surface${isDesktopExpandedPreview ? " preview-expanded" : ""}${isWorkspaceAttachmentDragOver ? " drag-over" : ""}${isWorkspaceRightPanelVisible ? " workspace-right-panel-open" : ""}`}
+        style={workspaceRightPanelStyle}
         onDrop={handleWorkspaceAttachmentDrop}
         onDragEnter={handleWorkspaceAttachmentDragEnter}
         onDragOver={handleWorkspaceAttachmentDragOver}
@@ -1997,8 +1999,8 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
       </div>
       {!props.isEmptyWorkspaceThread ? (
         <div
-          className={`workspace-composer-shell workspace-attachment-drop-surface${isDesktopExpandedPreview ? " preview-expanded" : ""}${isWorkspaceAttachmentDragOver ? " drag-over" : ""}${isWorkspaceRightPanelVisible ? " workspace-operator-data-open" : ""}`}
-          style={operatorDataPanelStyle}
+          className={`workspace-composer-shell workspace-attachment-drop-surface${isDesktopExpandedPreview ? " preview-expanded" : ""}${isWorkspaceAttachmentDragOver ? " drag-over" : ""}${isWorkspaceRightPanelVisible ? " workspace-right-panel-open" : ""}`}
+          style={workspaceRightPanelStyle}
           onDrop={handleWorkspaceAttachmentDrop}
           onDragEnter={handleWorkspaceAttachmentDragEnter}
           onDragOver={handleWorkspaceAttachmentDragOver}
@@ -2055,13 +2057,13 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
       ) : null}
       {showWorkspaceRightPanel && props.workspaceUserDataPanel ? (
         <aside
-          id="workspace-operator-data-panel"
-          className={`operator-data-panel workspace-operator-data-panel${isWorkspaceRightPanelVisible ? " open" : ""}`}
-          style={operatorDataPanelStyle}
+          id="workspace-right-panel"
+          className={`workspace-right-panel${isWorkspaceRightPanelVisible ? " open" : ""}`}
+          style={workspaceRightPanelStyle}
           aria-label={showOperatorTabs ? "Workspace and operator data" : "Workspace data"}
           aria-hidden={!isWorkspaceRightPanelVisible}
         >
-          <WebOperatorDataPanel
+          <WebWorkspaceRightPanel
             workspaceUserDataPanel={props.workspaceUserDataPanel}
             isCommunityRecentSignalsExpanded={isCommunityRecentSignalsExpanded}
             state={operatorData.state}
@@ -2073,12 +2075,12 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
             activeInsightTab={activeRightPanelTab}
             onActiveInsightTabChange={handleWorkspaceRightPanelTabChange}
             onCommunityRecentSignalsExpandedChange={setIsCommunityRecentSignalsExpanded}
-            onResizePointerDown={handleOperatorRightPanelResizePointerDown}
+            onResizePointerDown={handleWorkspaceRightPanelResizePointerDown}
             onResizePointerMove={(event) => {
-              if (event.buttons === 1) resizeOperatorRightPanelFromPointer(event);
+              if (event.buttons === 1) resizeWorkspaceRightPanelFromPointer(event);
             }}
-            onResizeDoubleClick={() => setOperatorRightPanelWidth(OPERATOR_RIGHT_PANEL_DEFAULT_WIDTH)}
-            onResizeKeyDown={handleOperatorRightPanelResizeKeyDown}
+            onResizeDoubleClick={() => setWorkspaceRightPanelWidth(WORKSPACE_RIGHT_PANEL_DEFAULT_WIDTH)}
+            onResizeKeyDown={handleWorkspaceRightPanelResizeKeyDown}
           />
         </aside>
       ) : null}

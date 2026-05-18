@@ -5,6 +5,14 @@ function read(relativePath: string): string {
   return readFileSync(new URL(`../${relativePath}`, import.meta.url), "utf8");
 }
 
+function readExportBlock(source: string, exportName: string): string {
+  const marker = `export const ${exportName} = `;
+  const start = source.indexOf(marker);
+  assert.notEqual(start, -1, `${exportName} export must exist`);
+  const nextExport = source.indexOf("\nexport const ", start + marker.length);
+  return nextExport === -1 ? source.slice(start) : source.slice(start, nextExport);
+}
+
 const operatorDashboard = read("convex/operatorDashboard.ts");
 const operatorAccess = read("convex/operatorAccess.ts");
 const operatorGateway = read("shared/cloudOperatorDashboardGateway.ts");
@@ -14,6 +22,7 @@ const app = read("apps/web/src/App.tsx");
 const appMainSurfaceHost = read("apps/web/src/components/WebAppMainSurfaceHost.tsx");
 const webDesktopShellHeader = read("apps/web/src/components/WebDesktopShellHeader.tsx");
 const workspaceHost = read("apps/web/src/components/WebWorkspaceHost.tsx");
+const workspaceRightPanelController = read("apps/web/src/components/useWorkspaceRightPanelController.ts");
 const baseCss = read("apps/web/src/base.css");
 const packageJson = read("package.json");
 const seedScript = read("scripts/seed_operator_owner.ts");
@@ -89,21 +98,33 @@ for (const queryName of operatorQueryNames) {
 }
 
 assert.doesNotMatch(operatorDashboard, /export const \w+ = action/, "operator dashboard must not expose public actions");
+const operatorMaintenanceMutationNames = [
+  "backfillHarnessAppSourceProvenance",
+  "backfillCommunityMembershipActiveFlags",
+];
 assert.deepEqual(
   [...operatorDashboard.matchAll(/export const (\w+) = mutation/g)].map((match) => match[1]),
-  ["backfillHarnessAppSourceProvenance"],
+  operatorMaintenanceMutationNames,
   "operator dashboard mutations must stay limited to explicit operator maintenance jobs",
 );
-assert.match(
-  operatorDashboard,
-  /export const backfillHarnessAppSourceProvenance = mutation\([\s\S]*const operator = await requireOperatorWriteAccess\(ctx, args\.authSubject\)/,
-  "operator dashboard maintenance mutations must require operator write access",
-);
-assert.match(
-  operatorDashboard,
-  /export const backfillHarnessAppSourceProvenance = mutation\([\s\S]*recordCriticalAuditEventBestEffort/,
-  "operator dashboard maintenance mutations must write critical audit evidence",
-);
+for (const mutationName of operatorMaintenanceMutationNames) {
+  const mutationBlock = readExportBlock(operatorDashboard, mutationName);
+  assert.match(
+    mutationBlock,
+    /const operator = await requireOperatorWriteAccess\(ctx, args\.authSubject\)/,
+    `${mutationName} must require operator write access`,
+  );
+  assert.match(
+    mutationBlock,
+    /recordCriticalAuditEventBestEffort/,
+    `${mutationName} must write critical audit evidence`,
+  );
+  assert.match(
+    mutationBlock,
+    /status: "failed"/,
+    `${mutationName} must audit failed maintenance runs`,
+  );
+}
 
 assert.match(
   operatorGateway,
@@ -145,7 +166,7 @@ assert.match(
 );
 assert.match(
   app,
-  /hasOperatorDataPanelAccess = Boolean\(session && operatorAccess\)/,
+  /hasOperatorRightPanelAccess = Boolean\(session && operatorAccess\)/,
   "workspace operator panel must stay hidden without an operator access snapshot",
 );
 assert.doesNotMatch(
@@ -155,32 +176,42 @@ assert.doesNotMatch(
 );
 assert.match(
   workspaceHost,
-  /showOperatorTabs = Boolean\(props\.operatorDataPanelSession\)/,
+  /showOperatorTabs = Boolean\(props\.operatorRightPanelSession\)/,
   "workspace host must derive operator tabs only from an authenticated operator data-panel session",
 );
 assert.match(
   workspaceHost,
-  /useOperatorDashboardData\([\s\S]*enabled: isWorkspaceRightPanelVisible && showOperatorTabs/,
-  "operator data loading must be disabled unless the unified right panel is visible and operator tabs are authorized",
+  /isOperatorRightPanelTabActive = isOperatorInsightTab\(activeRightPanelTab\)/,
+  "workspace host must know whether the active right-panel tab is an operator insight tab",
 );
 assert.match(
-  app,
-  /showWorkspaceRightPanelControl = Boolean\([\s\S]*session[\s\S]*activePage === "workspace"[\s\S]*activeView === "home"[\s\S]*\)/,
-  "workspace right-panel toggle must remain signed-in workspace-home scoped",
+  workspaceHost,
+  /useOperatorDashboardData\([\s\S]*enabled: isWorkspaceRightPanelVisible && showOperatorTabs && isOperatorRightPanelTabActive/,
+  "operator data loading must be disabled unless the right panel is visible, operator tabs are authorized, and an operator tab is active",
 );
 assert.match(
-  app,
-  /showWorkspaceOperatorTabs = Boolean\(showWorkspaceRightPanelControl && hasOperatorDataPanelAccess\)/,
+  workspaceRightPanelController,
+  /showControl = Boolean\([\s\S]*params\.hasSession[\s\S]*params\.isWorkspaceHome[\s\S]*!params\.isMobileAppShell/,
+  "workspace right-panel control resolver must remain signed-in desktop workspace-home scoped",
+);
+assert.match(
+  workspaceRightPanelController,
+  /showOperatorTabs: Boolean\(showControl && params\.hasOperatorRightPanelAccess\)/,
   "operator-only tabs must remain gated by the operator access snapshot",
 );
 assert.match(
   app,
-  /operatorDataPanelSession: showWorkspaceOperatorTabs \? session : null/,
+  /resolveWorkspaceRightPanelShellState\(\{[\s\S]*hasSession: Boolean\(session\)[\s\S]*isWorkspaceHome: activePage === "workspace" && activeView === "home"[\s\S]*isMobileAppShell: showMobileAppShell[\s\S]*hasOperatorRightPanelAccess[\s\S]*isOpen: isWorkspaceRightPanelOpen/,
+  "App must resolve workspace right-panel shell state from session, route, mobile shell, operator access, and open preference",
+);
+assert.match(
+  app,
+  /operatorRightPanelSession: showWorkspaceRightPanelOperatorTabs \? session : null/,
   "workspace host must receive an operator data session only after operator access is confirmed",
 );
 assert.match(
   app,
-  /workspaceRightPanelToggle = showWorkspaceRightPanelControl \? \([\s\S]*workspace-operator-data-toggle/,
+  /workspaceRightPanelToggle = showWorkspaceRightPanelControl \? \([\s\S]*workspace-right-panel-toggle/,
   "workspace right-panel toggle should be built only from the signed-in workspace control flag",
 );
 assert.match(
@@ -200,12 +231,12 @@ assert.doesNotMatch(
 );
 assert.doesNotMatch(
   workspaceHost,
-  /workspace-operator-data-toggle/,
+  /workspace-right-panel-toggle/,
   "workspace host must not position its own top-right operator toggle outside the shared header",
 );
 assert.doesNotMatch(
   baseCss,
-  /\.workspace-operator-data-toggle\s*\{[^}]*position:\s*(fixed|absolute)/,
+  /\.workspace-right-panel-toggle\s*\{[^}]*position:\s*(fixed|absolute)/,
   "workspace operator toggle must be laid out by the shared header, not fixed-position CSS",
 );
 

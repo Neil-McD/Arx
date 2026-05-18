@@ -11436,8 +11436,8 @@ button.chat-reply-quote:hover {
   transition: padding-right 200ms cubic-bezier(0.2, 0, 0, 1);
 }
 
-.workspace-body.workspace-operator-data-open {
-  padding-right: var(--operator-right-panel-width);
+.workspace-body.workspace-right-panel-open {
+  padding-right: var(--workspace-right-panel-width);
 }
 
 .workspace-body.preview-expanded {
@@ -19452,9 +19452,9 @@ button.message-citation-chip:hover {
     max-width 200ms cubic-bezier(0.2, 0, 0, 1);
 }
 
-.workspace-composer-shell.workspace-operator-data-open {
-  max-width: min(var(--web-chat-max-width), calc(100% - var(--operator-right-panel-width)));
-  margin-right: var(--operator-right-panel-width);
+.workspace-composer-shell.workspace-right-panel-open {
+  max-width: min(var(--web-chat-max-width), calc(100% - var(--workspace-right-panel-width)));
+  margin-right: var(--workspace-right-panel-width);
 }
 
 .workspace-composer-shell.preview-expanded {
@@ -22237,87 +22237,41 @@ button.message-citation-chip:hover {
   overflow: hidden;
 }
 
-.operator-surface {
-  --operator-right-panel-width: 560px;
-  --operator-right-panel-gutter: 28px;
-  position: relative;
-  flex: 1;
-  min-width: 0;
-  min-height: 0;
-  overflow: hidden;
-  display: flex;
-  color: var(--text-primary);
-}
-
-.operator-workspace-body {
-  flex: 1;
-  min-width: 0;
-  transition: padding-right 0.18s ease;
-}
-
-.operator-surface--right-open .operator-workspace-body {
-  padding-right: calc(var(--operator-right-panel-width) + var(--operator-right-panel-gutter));
-}
-
-.operator-empty-thread {
-  width: min(100%, 760px);
-  margin: clamp(220px, 36vh, 380px) auto 0;
-  display: grid;
-  gap: 12px;
-}
-
-.operator-empty-thread-composer {
-  width: 100%;
-}
-
-.operator-ask-bar {
-  width: 100%;
-  margin: 0;
-}
-
-.operator-surface-notice {
+.workspace-right-panel__notice {
   color: var(--text-secondary);
   font-size: 13px;
   text-align: center;
 }
 
-.workspace-operator-data-toggle {
+.workspace-right-panel-toggle {
   width: 32px;
   height: 32px;
   border-radius: 8px;
 }
 
-.workspace-operator-data-toggle svg {
+.workspace-right-panel-toggle svg {
   width: 18px;
   height: 18px;
 }
 
-.operator-data-panel {
+.workspace-right-panel {
   position: absolute;
   top: 0;
   right: 0;
   bottom: 0;
   z-index: 30;
-  width: var(--operator-right-panel-width);
+  width: var(--workspace-right-panel-width);
   min-width: 0;
-  padding: 16px 18px 18px;
+  padding: 16px 0 0 18px;
   border-left: 1px solid var(--border-default);
   background: var(--bg-workspace, var(--bg-app));
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   gap: 14px;
   box-sizing: border-box;
-}
-
-.workspace-operator-data-panel {
-  top: 0;
-  right: 0;
-  bottom: 0;
-  padding-right: 0;
-  padding-bottom: 0;
   opacity: 0;
   pointer-events: none;
-  transform: translateX(calc(100% + var(--operator-right-panel-gutter)));
+  transform: translateX(calc(100% + var(--workspace-right-panel-gutter)));
   visibility: hidden;
   will-change: transform;
   transition:
@@ -22326,7 +22280,7 @@ button.message-citation-chip:hover {
     visibility 0s linear 200ms;
 }
 
-.workspace-operator-data-panel.open {
+.workspace-right-panel.open {
   opacity: 1;
   pointer-events: auto;
   transform: translateX(0);
@@ -22337,7 +22291,7 @@ button.message-citation-chip:hover {
     visibility 0s;
 }
 
-.operator-data-panel__resize-handle {
+.workspace-right-panel__resize-handle {
   position: absolute;
   top: 0;
   bottom: 0;
@@ -22349,7 +22303,7 @@ button.message-citation-chip:hover {
   touch-action: none;
 }
 
-.operator-data-panel__resize-handle::after {
+.workspace-right-panel__resize-handle::after {
   content: "";
   position: absolute;
   top: 0;
@@ -22360,31 +22314,31 @@ button.message-citation-chip:hover {
   transition: background 0.16s ease;
 }
 
-.operator-data-panel__resize-handle:hover::after,
-.operator-data-panel__resize-handle:focus-visible::after {
+.workspace-right-panel__resize-handle:hover::after,
+.workspace-right-panel__resize-handle:focus-visible::after {
   background: color-mix(in srgb, var(--accent) 45%, var(--border-default));
 }
 
-.operator-data-panel__tabs {
+.workspace-right-panel__tabs {
   width: fit-content;
   min-width: 208px;
 }
 
-.operator-data-panel__tabs--instant::before {
+.workspace-right-panel__tabs--instant::before {
   transition:
     border-color 140ms ease,
     background 140ms ease,
     box-shadow 140ms ease;
 }
 
-.operator-data-panel__tabs .platform-switcher-btn {
+.workspace-right-panel__tabs .platform-switcher-btn {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.operator-data-panel__content {
+.workspace-right-panel__content {
   min-height: 0;
   overflow: auto;
   padding: 0 18px 36px 0;
@@ -22392,117 +22346,18 @@ button.message-citation-chip:hover {
   scrollbar-width: thin;
 }
 
-.operator-data-panel__grid {
+.workspace-right-panel__grid {
   display: grid;
   gap: 12px;
 }
 
-.operator-data-panel .operator-dashboard__metrics {
+.workspace-right-panel .operator-dashboard__metrics {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .workspace-user-data-panel__grid {
   display: grid;
   gap: 12px;
-}
-
-.workspace-user-data-card {
-  display: grid;
-  gap: 10px;
-  padding: 14px;
-  border: 1px solid var(--border-default);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--bg-card) 82%, var(--bg-workspace) 18%);
-}
-
-.workspace-user-data-card__meta {
-  color: var(--text-faint);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.workspace-user-data-card__headline {
-  min-width: 0;
-  color: var(--text-primary);
-  font-size: 18px;
-  font-weight: 800;
-  line-height: 1.15;
-  overflow-wrap: anywhere;
-}
-
-.workspace-user-data-card p {
-  margin: 0;
-  color: var(--text-secondary);
-  font-size: 13px;
-  line-height: 1.35;
-}
-
-.workspace-user-data-list {
-  display: grid;
-  gap: 8px;
-  margin: 0;
-}
-
-.workspace-user-data-list div {
-  display: grid;
-  grid-template-columns: minmax(0, 0.45fr) minmax(0, 0.55fr);
-  gap: 12px;
-  align-items: baseline;
-  padding-top: 8px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.workspace-user-data-list dt,
-.workspace-user-data-list dd {
-  min-width: 0;
-  margin: 0;
-  font-size: 12px;
-}
-
-.workspace-user-data-list dt {
-  color: var(--text-faint);
-}
-
-.workspace-user-data-list dd {
-  color: var(--text-primary);
-  font-weight: 700;
-  overflow-wrap: anywhere;
-}
-
-.workspace-user-data-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.workspace-user-data-action {
-  width: fit-content;
-  min-height: 30px;
-  padding: 0 11px;
-  border: 1px solid color-mix(in srgb, var(--accent) 34%, rgba(255, 255, 255, 0.1));
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--accent) 16%, rgba(255, 255, 255, 0.06));
-  color: var(--text-primary);
-  font-size: 12px;
-  font-weight: 800;
-  cursor: pointer;
-}
-
-.workspace-user-data-action--secondary {
-  border-color: rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.06);
-}
-
-.workspace-user-data-action:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--accent) 24%, rgba(255, 255, 255, 0.08));
-}
-
-.workspace-user-data-action:disabled {
-  cursor: not-allowed;
-  opacity: 0.45;
 }
 
 .workspace-community-section {
@@ -23940,37 +23795,25 @@ button.message-citation-chip:hover {
 }
 
 @media (max-width: 860px) {
-  .operator-surface--right-open .operator-workspace-body {
-    padding-right: 0;
-  }
-
-  .workspace-body.workspace-operator-data-open,
-  .workspace-composer-shell.workspace-operator-data-open {
+  .workspace-body.workspace-right-panel-open,
+  .workspace-composer-shell.workspace-right-panel-open {
     padding-right: 0;
     margin-right: auto;
     max-width: var(--web-chat-max-width);
   }
 
-  .operator-empty-thread {
-    width: min(100%, calc(100vw - 28px));
-    margin-top: clamp(160px, 29vh, 260px);
-  }
-
-  .operator-data-panel {
+  .workspace-right-panel {
     left: 0;
     width: 100%;
     min-width: 0;
-  }
-
-  .workspace-operator-data-panel {
     transform: translateX(100%);
   }
 
-  .workspace-operator-data-panel.open {
+  .workspace-right-panel.open {
     transform: translateX(0);
   }
 
-  .operator-data-panel__resize-handle {
+  .workspace-right-panel__resize-handle {
     display: none;
   }
 
@@ -23995,7 +23838,7 @@ button.message-citation-chip:hover {
 @media (prefers-reduced-motion: reduce) {
   .workspace-body,
   .workspace-composer-shell,
-  .workspace-operator-data-panel {
+  .workspace-right-panel {
     transition: none;
   }
 

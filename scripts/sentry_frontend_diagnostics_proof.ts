@@ -8,7 +8,7 @@ function read(relativePath: string): string {
 const operatorSentryDiagnostics = read("convex/operatorSentryDiagnostics.ts");
 const operatorGateway = read("shared/cloudOperatorDashboardGateway.ts");
 const operatorTypes = read("shared/operatorTypes.ts");
-const operatorPanel = read("apps/web/src/components/WebOperatorDataPanel.tsx");
+const operatorPanel = read("apps/web/src/components/WebWorkspaceRightPanel.tsx");
 const viteConfig = read("apps/web/vite.config.ts");
 const packageJson = read("package.json");
 
