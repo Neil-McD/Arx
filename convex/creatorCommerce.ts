@@ -145,27 +145,82 @@ function stripeConnectAccountCanBeRecreated(error: unknown): boolean {
   );
 }
 
-function buildStripeConnectAccountCreateIdempotencyKey(args: {
+function toHex(bytes: ArrayBuffer): string {
+  return Array.from(new Uint8Array(bytes))
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+async function sha256HexText(value: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+  return toHex(digest);
+}
+
+function stableStripeConnectFingerprintValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => stableStripeConnectFingerprintValue(item));
+  }
+  if (value && typeof value === "object") {
+    const output: Record<string, unknown> = {};
+    for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
+      if (item === undefined) continue;
+      output[key] = stableStripeConnectFingerprintValue(item);
+    }
+    return Object.fromEntries(
+      Object.entries(output).sort(([left], [right]) => left.localeCompare(right)),
+    );
+  }
+  return value;
+}
+
+function stableStripeConnectFingerprintJson(value: unknown): string {
+  return JSON.stringify(stableStripeConnectFingerprintValue(value));
+}
+
+function buildStripeConnectAccountCreateParams(args: {
+  userId: unknown;
+  country: string;
+}): Stripe.AccountCreateParams {
+  const country = normalizeStripeConnectCountry(args.country);
+  if (!country) throw new Error("stripe_connect_country_required");
+  const policy = getStripeConnectCountryPolicy(country);
+  if (!policy) throw new Error("stripe_connect_country_required");
+  return {
+    type: policy.accountType,
+    country,
+    capabilities: {
+      ...(policy.requestCardPayments ? { card_payments: { requested: true } } : {}),
+      ...(policy.requestTransfers ? { transfers: { requested: true } } : {}),
+    },
+    tos_acceptance: policy.serviceAgreement === "recipient"
+      ? { service_agreement: "recipient" }
+      : undefined,
+    metadata: {
+      user_id: String(args.userId),
+    },
+  };
+}
+
+async function buildStripeConnectAccountCreateIdempotencyKey(args: {
   userId: unknown;
   country: string;
   existingStripeAccountId?: string | null;
-}): string {
-  const userId = normalizeDiagnosticString(args.userId, "unknown");
+  createParams: Stripe.AccountCreateParams;
+}): Promise<string> {
   const country = normalizeStripeConnectCountry(args.country) ?? "unknown";
-  const policy = getStripeConnectCountryPolicy(country);
-  const policyKey = policy
-    ? [
-        "v2",
-        policy.accountType,
-        policy.serviceAgreement,
-        policy.requestCardPayments ? "cards" : "no_cards",
-        policy.requestTransfers ? "transfers" : "no_transfers",
-      ].join(":")
-    : "v2:unknown";
-  const existingStripeAccountId = normalizeDiagnosticString(args.existingStripeAccountId);
-  return existingStripeAccountId
-    ? `polynet-connect-account:replace:${policyKey}:${userId}:${existingStripeAccountId}:${country}`
-    : `polynet-connect-account:create:${policyKey}:${userId}:${country}`;
+  const mode = normalizeDiagnosticString(args.existingStripeAccountId) ? "replace" : "create";
+  const scopeFingerprint = (await sha256HexText(
+    stableStripeConnectFingerprintJson({
+      mode,
+      userId: String(args.userId ?? ""),
+      existingStripeAccountId: normalizeDiagnosticString(args.existingStripeAccountId),
+      country,
+    }),
+  )).slice(0, 32);
+  const payloadFingerprint = (await sha256HexText(
+    stableStripeConnectFingerprintJson(args.createParams),
+  )).slice(0, 32);
+  return `polynet-connect-account:v3:${mode}:s_${scopeFingerprint}:p_${payloadFingerprint}`;
 }
 
 function stripeConnectCountryCanBeRecreated(account: Stripe.Account): boolean {
@@ -253,32 +308,23 @@ async function recordStripeConnectOnboardingFailureDiagnostic(args: {
 async function createStripeExpressAccountForUser(args: {
   stripe: Stripe;
   userId: unknown;
-  email?: string | null;
   country: string;
-  idempotencyKey: string;
+  existingStripeAccountId?: string | null;
 }) {
-  const country = normalizeStripeConnectCountry(args.country);
-  if (!country) throw new Error("stripe_connect_country_required");
-  const policy = getStripeConnectCountryPolicy(country);
-  if (!policy) throw new Error("stripe_connect_country_required");
+  const createParams = buildStripeConnectAccountCreateParams({
+    userId: args.userId,
+    country: args.country,
+  });
+  const idempotencyKey = await buildStripeConnectAccountCreateIdempotencyKey({
+    userId: args.userId,
+    country: args.country,
+    existingStripeAccountId: args.existingStripeAccountId,
+    createParams,
+  });
   return await args.stripe.accounts.create(
+    createParams,
     {
-      type: "express",
-      country,
-      email: normalizeOptionalStripeConnectString(args.email, 200) ?? undefined,
-      capabilities: {
-        ...(policy.requestCardPayments ? { card_payments: { requested: true } } : {}),
-        transfers: { requested: true },
-      },
-      tos_acceptance: policy.serviceAgreement === "recipient"
-        ? { service_agreement: "recipient" }
-        : undefined,
-      metadata: {
-        user_id: String(args.userId),
-      },
-    },
-    {
-      idempotencyKey: args.idempotencyKey,
+      idempotencyKey,
     },
   );
 }
@@ -533,13 +579,8 @@ export const startConnectOnboarding = action({
             account = await createStripeExpressAccountForUser({
               stripe,
               userId,
-              email: actor?.email ?? null,
               country: requestedCountry,
-              idempotencyKey: buildStripeConnectAccountCreateIdempotencyKey({
-                userId,
-                country: requestedCountry,
-                existingStripeAccountId: existingAccountId,
-              }),
+              existingStripeAccountId: existingAccountId,
             });
             diagnosticStripeAccountId = account.id;
             diagnosticCountry = requestedCountry;
@@ -556,13 +597,8 @@ export const startConnectOnboarding = action({
           account = await createStripeExpressAccountForUser({
             stripe,
             userId,
-            email: actor?.email ?? null,
             country,
-            idempotencyKey: buildStripeConnectAccountCreateIdempotencyKey({
-              userId,
-              country,
-              existingStripeAccountId: existingAccountId,
-            }),
+            existingStripeAccountId: existingAccountId,
           });
           diagnosticStripeAccountId = account.id;
         }
@@ -572,9 +608,7 @@ export const startConnectOnboarding = action({
         account = await createStripeExpressAccountForUser({
           stripe,
           userId,
-          email: actor?.email ?? null,
           country,
-          idempotencyKey: buildStripeConnectAccountCreateIdempotencyKey({ userId, country }),
         });
         diagnosticStripeAccountId = account.id;
       }

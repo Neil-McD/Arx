@@ -31,9 +31,17 @@ const onboardingFailureDiagnosticBody = creatorCommerce.slice(
   creatorCommerce.indexOf("async function recordStripeConnectOnboardingFailureDiagnostic"),
   creatorCommerce.indexOf("export const getUserStripeConnectAccountInternal"),
 );
+const accountCreateParamsBody = creatorCommerce.slice(
+  creatorCommerce.indexOf("function buildStripeConnectAccountCreateParams"),
+  creatorCommerce.indexOf("async function buildStripeConnectAccountCreateIdempotencyKey"),
+);
 assert.ok(
   onboardingFailureDiagnosticBody.length > 0,
   "Stripe Connect onboarding failure diagnostic helper must exist.",
+);
+assert.ok(
+  accountCreateParamsBody.length > 0,
+  "Stripe Connect account-create payload helper must exist.",
 );
 assert.doesNotMatch(
   onboardingFailureDiagnosticBody,
@@ -114,23 +122,38 @@ assert.match(
 );
 assert.match(
   creatorCommerce,
-  /policyKey = policy[\s\S]*policy\.accountType[\s\S]*policy\.serviceAgreement[\s\S]*policy\.requestCardPayments \? "cards" : "no_cards"[\s\S]*policy\.requestTransfers \? "transfers" : "no_transfers"/,
-  "Stripe Connect account creation idempotency keys must include the account creation policy shape.",
+  /function buildStripeConnectAccountCreateParams/,
+  "Stripe Connect account creation must centralize the exact payload sent to Stripe.",
 );
 assert.match(
   creatorCommerce,
-  /polynet-connect-account:create:\$\{policyKey\}:\$\{userId\}:\$\{country\}/,
-  "First-time Stripe Connect account creation must be idempotent per Polynet user, country, and policy shape.",
+  /stableStripeConnectFingerprintJson\(args\.createParams\)/,
+  "Stripe Connect account creation idempotency keys must fingerprint the exact normalized Stripe create payload.",
 );
 assert.match(
   creatorCommerce,
-  /polynet-connect-account:replace:\$\{policyKey\}:\$\{userId\}:\$\{existingStripeAccountId\}:\$\{country\}/,
-  "Stripe Connect account replacement must be idempotent per user, existing account id, country, and policy shape.",
+  /polynet-connect-account:v3:\$\{mode\}:s_\$\{scopeFingerprint\}:p_\$\{payloadFingerprint\}/,
+  "Stripe Connect account creation idempotency must use a v3 key with operation-scope and payload fingerprints.",
+);
+assert.doesNotMatch(
+  creatorCommerce,
+  /polynet-connect-account:(create|replace):\$\{policyKey\}/,
+  "Stripe Connect account creation must not use the old policy-only v2 key shape.",
 );
 assert.doesNotMatch(
   creatorCommerce,
   /polynet-connect-account:replace:\$\{userId\}:\$\{existingStripeAccountId\}:\$\{country\}/,
   "Stripe Connect replacement idempotency must not reuse the old key shape that collides after policy changes.",
+);
+assert.doesNotMatch(
+  creatorCommerce,
+  /polynet-connect-account:v3:[^`]*\$\{userId\}/,
+  "Stripe Connect idempotency keys must not embed raw user ids.",
+);
+assert.doesNotMatch(
+  creatorCommerce,
+  /polynet-connect-account:v3:[^`]*\$\{existingStripeAccountId\}/,
+  "Stripe Connect idempotency keys must not embed raw connected account ids.",
 );
 assert.match(
   schema,
@@ -214,7 +237,7 @@ assert.match(
 );
 assert.match(
   creatorCommerce,
-  /stripe\.accounts\.create\([\s\S]*country,/,
+  /function buildStripeConnectAccountCreateParams[\s\S]*country,/,
   "Stripe Connect account creation must pass country to Stripe.",
 );
 assert.match(
@@ -231,6 +254,11 @@ assert.match(
   creatorCommerce,
   /tos_acceptance:[\s\S]*policy\.serviceAgreement === "recipient"[\s\S]*service_agreement: "recipient"/,
   "Recipient-service countries must create accounts with recipient service agreement.",
+);
+assert.doesNotMatch(
+  accountCreateParamsBody,
+  /\bemail\b/,
+  "Stripe Connect account creation must not include volatile email in the idempotent create payload.",
 );
 assert.match(
   stripeConnectAccountCore,
@@ -289,13 +317,23 @@ assert.match(
 );
 assert.match(
   creatorCommerce,
-  /createStripeExpressAccountForUser\(args:[\s\S]*idempotencyKey: string/,
-  "Stripe Connect account creation helper must require an idempotency key.",
+  /const createParams = buildStripeConnectAccountCreateParams/,
+  "Stripe Connect account creation helper must build the payload before deriving the idempotency key.",
 );
 assert.match(
   creatorCommerce,
-  /stripe\.accounts\.create\([\s\S]*idempotencyKey: args\.idempotencyKey/,
-  "Stripe Connect account creation must pass Stripe request options with an idempotency key.",
+  /const idempotencyKey = await buildStripeConnectAccountCreateIdempotencyKey\([\s\S]*createParams/,
+  "Stripe Connect account creation helper must derive the idempotency key from the exact create payload.",
+);
+assert.match(
+  creatorCommerce,
+  /stripe\.accounts\.create\(\s*createParams,[\s\S]*idempotencyKey,/,
+  "Stripe Connect account creation must pass Stripe request options with the derived idempotency key.",
+);
+assert.doesNotMatch(
+  creatorCommerce,
+  /createStripeExpressAccountForUser\(args:[\s\S]*idempotencyKey: string/,
+  "Stripe Connect account creation helper must not accept caller-supplied idempotency keys.",
 );
 assert.match(
   creatorCommerce,
