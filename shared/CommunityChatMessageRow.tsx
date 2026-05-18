@@ -122,7 +122,10 @@ function CommunityChatMessageRowComponent({
   );
   const lightboxImages: CommunityChatMediaImage[] = useMemo(
     () => imageAttachments.map((item) => ({
-      url: item.url,
+      id: item.attachment.id,
+      url: item.previewUrl,
+      previewUrl: item.previewUrl,
+      fullUrl: item.fullUrl,
       name: item.name,
     })),
     [imageAttachments],

@@ -107,6 +107,12 @@ function mapCommunityChatMutationErrorMessage(error: unknown): string {
   if (message.includes("profile_setup_required")) {
     return "Finish your profile before posting in communities.";
   }
+  if (message.includes("message_attachment_limit_exceeded")) {
+    return "You can attach up to 8 files per message.";
+  }
+  if (message.includes("message_attachment_payload_too_large")) {
+    return "One attachment preview is too large. Try a smaller image.";
+  }
   return message;
 }
 

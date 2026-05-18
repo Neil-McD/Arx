@@ -8,6 +8,8 @@ export type AttachmentWithOptionalImageData = {
 export type CommunityImageAttachment<T extends AttachmentWithOptionalImageData> = {
   attachment: T;
   url: string;
+  previewUrl: string;
+  fullUrl: string;
   name: string;
 };
 
@@ -25,16 +27,20 @@ export function partitionCommunityAttachments<T extends AttachmentWithOptionalIm
   const fileAttachments: T[] = [];
 
   for (const attachment of attachments) {
-    const imageUrl =
-      typeof attachment.url === "string" && attachment.url.trim()
-        ? attachment.url.trim()
-        : typeof attachment.data_url === "string" && attachment.data_url.trim()
-          ? attachment.data_url.trim()
-          : null;
-    if (attachment.type === "image" && imageUrl) {
+    const storageUrl = typeof attachment.url === "string" && attachment.url.trim()
+      ? attachment.url.trim()
+      : null;
+    const dataUrl = typeof attachment.data_url === "string" && attachment.data_url.trim()
+      ? attachment.data_url.trim()
+      : null;
+    if (attachment.type === "image" && (storageUrl || dataUrl)) {
+      const previewUrl = dataUrl || storageUrl || "";
+      const fullUrl = storageUrl || dataUrl || "";
       imageAttachments.push({
         attachment,
-        url: imageUrl,
+        url: previewUrl,
+        previewUrl,
+        fullUrl,
         name: attachment.name,
       });
       continue;

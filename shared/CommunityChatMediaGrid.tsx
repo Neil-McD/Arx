@@ -1,5 +1,8 @@
 export type CommunityChatMediaImage = {
+  id?: string;
   url: string;
+  previewUrl?: string;
+  fullUrl?: string;
   name: string;
 };
 
@@ -27,14 +30,14 @@ export function CommunityChatMediaGrid({
     <div className={rootClassName}>
       {visibleImages.map((img, idx) => (
         <button
-          key={`${idx}-${img.url}`}
+          key={img.id || `${idx}-${img.fullUrl || img.url}`}
           type="button"
           className="chat-media-item"
           onClick={() => onOpenImage(images, idx)}
           title={img.name}
           aria-label={img.name}
         >
-          <img src={img.url} alt={img.name} loading="lazy" />
+          <img src={img.previewUrl || img.url} alt={img.name} loading="lazy" />
           {idx === clampedMaxVisible - 1 && images.length > clampedMaxVisible && (
             <div className="chat-media-more">+{images.length - clampedMaxVisible}</div>
           )}

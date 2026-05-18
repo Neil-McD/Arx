@@ -11,6 +11,8 @@ type CommunityChatUploadableFile = {
   type?: string;
 };
 
+const MAX_REACTION_MESSAGE_IDS_PER_REQUEST = 100;
+
 export type CloudCommunityChatLiveClient = {
   client: ConvexReactClient;
   authSubject: string;
@@ -119,7 +121,7 @@ export function subscribeCloudMessageReactions<TRow = unknown>(
 ): () => void {
   const messageIds = Array.from(
     new Set(params.messageIds.map((value) => String(value ?? "").trim()).filter(Boolean)),
-  ).slice(0, 500);
+  ).slice(0, MAX_REACTION_MESSAGE_IDS_PER_REQUEST);
   if (messageIds.length === 0) {
     params.onUpdate([]);
     return () => {};

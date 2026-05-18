@@ -37,6 +37,11 @@ const MAX_TYPING_PRESENCE_VISIBLE_ROWS = 12;
 const MAX_REACTION_MESSAGE_IDS_PER_REQUEST = 100;
 const MAX_REACTIONS_PER_MESSAGE = 100;
 const MAX_REACTION_DELETE_ROWS = 500;
+const MAX_STORED_CHAT_ATTACHMENTS = 8;
+const MAX_STORED_CHAT_IMAGE_DATA_URL_CHARS = 600_000;
+const MAX_STORED_CHAT_ATTACHMENT_TEXT_CHARS = 20_000;
+const MAX_STORED_CHAT_ATTACHMENT_NAME_CHARS = 256;
+const MAX_STORED_CHAT_ATTACHMENT_MIME_CHARS = 160;
 
 async function getCanonicalCommunityChatThread(
   ctx: any,
@@ -64,13 +69,16 @@ async function resolveTypingProfileFields(ctx: any, userId: any) {
   return await resolveUserProfileDisplayProjection(ctx, userId);
 }
 
-function normalizeStoredChatAttachment(raw: unknown): StoredCommunityChatAttachment | null {
+function normalizeStoredChatAttachment(
+  raw: unknown,
+  options: { enforceWritePolicy?: boolean } = {},
+): StoredCommunityChatAttachment | null {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
   const record = raw as Record<string, unknown>;
   const id = typeof record.id === "string" && record.id.trim() ? record.id.trim() : createAttachmentId();
-  const name = typeof record.name === "string" && record.name.trim() ? record.name.trim().slice(0, 256) : "attachment";
+  const name = typeof record.name === "string" && record.name.trim() ? record.name.trim().slice(0, MAX_STORED_CHAT_ATTACHMENT_NAME_CHARS) : "attachment";
   const type = record.type === "image" ? "image" : "file";
-  const mime = typeof record.mime === "string" && record.mime.trim() ? record.mime.trim().slice(0, 160) : null;
+  const mime = typeof record.mime === "string" && record.mime.trim() ? record.mime.trim().slice(0, MAX_STORED_CHAT_ATTACHMENT_MIME_CHARS) : null;
   const sizeRaw = Number(record.size);
   const size = Number.isFinite(sizeRaw) ? Math.max(0, Math.floor(sizeRaw)) : 0;
   const storageIdRaw =
@@ -80,11 +88,20 @@ function normalizeStoredChatAttachment(raw: unknown): StoredCommunityChatAttachm
         ? record.storage_id
         : "";
   const storageId = storageIdRaw.trim() ? storageIdRaw.trim() : null;
-  const dataUrl =
-    typeof record.data_url === "string" && record.data_url.trim().startsWith("data:")
-      ? record.data_url.trim()
-      : null;
-  const text = typeof record.text === "string" && record.text.trim() ? record.text.slice(0, 20_000) : null;
+  let dataUrl: string | null = null;
+  if (typeof record.data_url === "string") {
+    const normalizedDataUrl = record.data_url.trim();
+    if (normalizedDataUrl.startsWith("data:image/")) {
+      if (normalizedDataUrl.length > MAX_STORED_CHAT_IMAGE_DATA_URL_CHARS) {
+        if (options.enforceWritePolicy) {
+          throw new Error("message_attachment_payload_too_large");
+        }
+      } else {
+        dataUrl = normalizedDataUrl;
+      }
+    }
+  }
+  const text = typeof record.text === "string" && record.text.trim() ? record.text.slice(0, MAX_STORED_CHAT_ATTACHMENT_TEXT_CHARS) : null;
   const truncated = typeof record.truncated === "boolean" ? record.truncated : null;
   if (!storageId && !dataUrl) return null;
   return {
@@ -100,11 +117,18 @@ function normalizeStoredChatAttachment(raw: unknown): StoredCommunityChatAttachm
   };
 }
 
-function normalizeStoredChatAttachments(raw: unknown): StoredCommunityChatAttachment[] {
+function normalizeStoredChatAttachments(
+  raw: unknown,
+  options: { enforceWritePolicy?: boolean } = {},
+): StoredCommunityChatAttachment[] {
   if (!Array.isArray(raw)) return [];
+  if (options.enforceWritePolicy && raw.length > MAX_STORED_CHAT_ATTACHMENTS) {
+    throw new Error("message_attachment_limit_exceeded");
+  }
   const out: StoredCommunityChatAttachment[] = [];
   for (const item of raw) {
-    const normalized = normalizeStoredChatAttachment(item);
+    if (out.length >= MAX_STORED_CHAT_ATTACHMENTS) break;
+    const normalized = normalizeStoredChatAttachment(item, options);
     if (normalized) out.push(normalized);
   }
   return out;
@@ -116,7 +140,11 @@ async function mapMessageContentJsonForRead(ctx: any, contentJson: unknown): Pro
   }
   const record = contentJson as Record<string, unknown>;
   const attachments = normalizeStoredChatAttachments(record.attachments);
-  if (attachments.length === 0) return contentJson;
+  if (attachments.length === 0) {
+    return Array.isArray(record.attachments)
+      ? { ...record, attachments: [] }
+      : contentJson;
+  }
   const resolvedAttachments = await Promise.all(
     attachments.map(async (attachment) => ({
       id: attachment.id,
@@ -443,7 +471,7 @@ export const createThreadUserMessage = mutation({
 
     const seq = Math.max(0, Math.floor(thread.lastSeq ?? 0) + 1);
     const text = String(args.text ?? "").trim();
-    const attachments = normalizeStoredChatAttachments(args.attachments);
+    const attachments = normalizeStoredChatAttachments(args.attachments, { enforceWritePolicy: true });
     if (!text && attachments.length === 0) throw new Error("message_payload_required");
 
     let replyToMessageId: any | undefined = undefined;
@@ -516,7 +544,7 @@ export const patchOwnMessageContent = mutation({
     const nextText = extractMessageText(args.contentJson);
     const nextAttachments =
       args.contentJson && typeof args.contentJson === "object" && !Array.isArray(args.contentJson)
-        ? normalizeStoredChatAttachments((args.contentJson as Record<string, unknown>).attachments)
+        ? normalizeStoredChatAttachments((args.contentJson as Record<string, unknown>).attachments, { enforceWritePolicy: true })
         : [];
     if (!nextText && nextAttachments.length === 0) {
       throw new Error("message_payload_required");
