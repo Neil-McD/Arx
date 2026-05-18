@@ -1,4 +1,5 @@
 import { action, internalMutation, internalQuery, mutation, query } from "./_generated/server";
+import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import {
@@ -59,6 +60,8 @@ const ACTIVE_RECURRING_SUBSCRIPTION_STATUSES = new Set([
   "past_due",
   "cancel_at_period_end",
 ]);
+const COMMUNITY_ADMIN_MEMBERS_DEFAULT_PAGE_SIZE = 25;
+const COMMUNITY_ADMIN_MEMBERS_MAX_PAGE_SIZE = 100;
 
 function normalizeAnalyticsRange(rawRange: unknown): AnalyticsRangeValue {
   const range = String(rawRange ?? "30d").trim();
@@ -180,6 +183,116 @@ function buildAnalyticsRecurringRevenueSeries(params: {
 
 async function resolveCommunityMemberIdentity(ctx: any, userRowId: any) {
   return await resolveUserProfileDisplayProjection(ctx, userRowId);
+}
+
+async function resolveCommunityAdminMembersContext(args: {
+  ctx: any;
+  userId?: any;
+  authSubject?: string | null;
+  communityId: any;
+}): Promise<{
+  userId: any;
+  community: CommunityLike;
+  viewerCanManageMembers: boolean;
+}> {
+  const userId = await resolveUserIdForAuthenticatedRequest({
+    ctx: args.ctx,
+    userId: args.userId,
+    authSubject: args.authSubject ?? null,
+  });
+  const { community, membership: viewerMembership } = await getCommunityAndMembership({
+    ctx: args.ctx,
+    communityId: args.communityId,
+    userId,
+  });
+  const viewerEntitlement = await resolveCommunityMembershipEntitlementState({
+    ctx: args.ctx,
+    community,
+    membership: viewerMembership,
+    userId,
+  });
+  if (!viewerEntitlement.isEntitled) {
+    throw new Error("community_entitlement_required");
+  }
+  const viewerRole = normalizeCommunityRoleForOutput(viewerMembership?.role);
+  return {
+    userId,
+    community,
+    viewerCanManageMembers:
+      String(community.ownerId) === String(userId) || viewerRole === "admin",
+  };
+}
+
+async function mapCommunityOwnerAdminMemberRow(args: {
+  ctx: any;
+  community: CommunityLike;
+  userIdCache: Map<string, string | null>;
+}) {
+  return {
+    id: `owner:${String(args.community._id)}`,
+    community_id: String(args.community._id),
+    user_id:
+      (await resolvePublicUserId(args.ctx, args.community.ownerId, args.userIdCache)) ??
+      String(args.community.ownerId),
+    ...(await resolveCommunityMemberIdentity(args.ctx, args.community.ownerId)),
+    role: "owner",
+    price_point_id: null,
+    billing_period: null,
+    amount_base_units: null,
+    currency: null,
+    currency_decimals: null,
+    created_at: toIsoString(args.community.createdAt),
+  };
+}
+
+async function mapCommunityAdminMembershipRow(args: {
+  ctx: any;
+  row: CommunityMembershipLike;
+  userIdCache: Map<string, string | null>;
+  viewerCanManageMembers: boolean;
+}) {
+  let pricePoint: CommunityPricePointLike | null = null;
+  const identity = await resolveCommunityMemberIdentity(args.ctx, args.row.userId);
+  if (args.viewerCanManageMembers) {
+    const subscription =
+      (
+        (await args.ctx.db
+          .query("communitySubscriptions" as any)
+          .withIndex("by_membership", (q: any) =>
+            q.eq("membershipId", args.row._id),
+          )
+          .collect()) as CommunitySubscriptionLike[]
+      ).sort((a, b) => b.updatedAt - a.updatedAt)[0] ?? null;
+    const pricePointId = subscription?.pricePointId ?? args.row.pricePointId ?? null;
+    pricePoint = pricePointId
+      ? ((await args.ctx.db.get(pricePointId)) as CommunityPricePointLike | null)
+      : null;
+  }
+  return {
+    id: String(args.row._id),
+    community_id: String(args.row.communityId),
+    user_id:
+      (await resolvePublicUserId(args.ctx, args.row.userId, args.userIdCache)) ??
+      String(args.row.userId),
+    ...identity,
+    role: normalizeCommunityRoleForOutput(args.row.role) || "member",
+    price_point_id: pricePoint ? String(pricePoint._id) : null,
+    billing_period: pricePoint
+      ? String(pricePoint.billingPeriod ?? "")
+          .trim()
+          .toLowerCase() === "annual"
+        ? "annual"
+        : "monthly"
+      : null,
+    amount_base_units: pricePoint
+      ? Math.max(0, Math.floor(pricePoint.amountBaseUnits))
+      : null,
+    currency: pricePoint?.currency ?? null,
+    currency_decimals: pricePoint
+      ? Math.max(0, Math.floor(pricePoint.currencyDecimals))
+      : null,
+    created_at: toIsoString(args.row.createdAt),
+  };
 }
 
 async function endCommunitySubscriptionsForMembership(args: {
@@ -406,109 +519,119 @@ export const listCommunityMembershipsAdmin = query({
   },
   handler: async (ctx, args) => {
     const limit = Math.max(1, Math.min(5000, Math.floor(args.limit ?? 200)));
-    const userId = await resolveUserIdForAuthenticatedRequest({
-      ctx,
-      userId: args.userId,
-      authSubject: args.authSubject ?? null,
-    });
-    (args as { userId?: any }).userId = userId;
-    const { community, membership: viewerMembership } =
-      await getCommunityAndMembership({
+    const { community, viewerCanManageMembers } =
+      await resolveCommunityAdminMembersContext({
         ctx,
-        communityId: args.communityId,
         userId: args.userId,
+        authSubject: args.authSubject ?? null,
+        communityId: args.communityId,
       });
-    const viewerEntitlement = await resolveCommunityMembershipEntitlementState({
+    const userIdCache = new Map<string, string | null>();
+    const ownerRow = await mapCommunityOwnerAdminMemberRow({
       ctx,
       community,
-      membership: viewerMembership,
-      userId: args.userId,
+      userIdCache,
     });
-    if (!viewerEntitlement.isEntitled) {
-      throw new Error("community_entitlement_required");
-    }
-    const viewerRole = normalizeCommunityRoleForOutput(viewerMembership?.role);
-    const viewerCanManageMembers =
-      String(community.ownerId) === String(args.userId) ||
-      viewerRole === "admin";
-    const rows = (
-      (await ctx.db
-        .query("communityMemberships")
-        .withIndex("by_community", (q) => q.eq("communityId", args.communityId))
-        .collect()) as CommunityMembershipLike[]
-    )
+    const memberLimit = Math.max(0, limit - 1);
+    const scanLimit = Math.min(5000, Math.max(memberLimit, memberLimit * 3));
+    const rows =
+      scanLimit > 0
+        ? ((await ctx.db
+            .query("communityMemberships")
+            .withIndex("by_community_createdAt", (q) =>
+              q.eq("communityId", args.communityId),
+            )
+            .order("asc")
+            .take(scanLimit)) as CommunityMembershipLike[])
+        : [];
+    const activeRows = rows
       .filter(
         (row) =>
           communityMembershipRowIsActive(row) &&
           String(row.userId) !== String(community.ownerId),
       )
-      .sort((a, b) => a.createdAt - b.createdAt);
-    const userIdCache = new Map<string, string | null>();
-    const ownerRow = {
-      id: `owner:${String(community._id)}`,
-      community_id: String(community._id),
-      user_id:
-        (await resolvePublicUserId(ctx, community.ownerId, userIdCache)) ??
-        String(community.ownerId),
-      ...(await resolveCommunityMemberIdentity(ctx, community.ownerId)),
-      role: "owner",
-      price_point_id: null,
-      billing_period: null,
-      amount_base_units: null,
-      currency: null,
-      currency_decimals: null,
-      created_at: toIsoString(community.createdAt),
-    };
+      .slice(0, memberLimit);
     const memberRows = await Promise.all(
-      rows.slice(0, Math.max(0, limit - 1)).map(async (row) => {
-        let pricePoint: CommunityPricePointLike | null = null;
-        const identity = await resolveCommunityMemberIdentity(ctx, row.userId);
-        if (viewerCanManageMembers) {
-          const subscription =
-            (
-              (await ctx.db
-                .query("communitySubscriptions" as any)
-                .withIndex("by_membership", (q: any) =>
-                  q.eq("membershipId", row._id),
-                )
-                .collect()) as CommunitySubscriptionLike[]
-            ).sort((a, b) => b.updatedAt - a.updatedAt)[0] ?? null;
-          const pricePointId =
-            subscription?.pricePointId ?? row.pricePointId ?? null;
-          pricePoint = pricePointId
-            ? ((await ctx.db.get(
-                pricePointId,
-              )) as CommunityPricePointLike | null)
-            : null;
-        }
-        return {
-          id: String(row._id),
-          community_id: String(row.communityId),
-          user_id:
-            (await resolvePublicUserId(ctx, row.userId, userIdCache)) ??
-            String(row.userId),
-          ...identity,
-          role: normalizeCommunityRoleForOutput(row.role) || "member",
-          price_point_id: pricePoint ? String(pricePoint._id) : null,
-          billing_period: pricePoint
-            ? String(pricePoint.billingPeriod ?? "")
-                .trim()
-                .toLowerCase() === "annual"
-              ? "annual"
-              : "monthly"
-            : null,
-          amount_base_units: pricePoint
-            ? Math.max(0, Math.floor(pricePoint.amountBaseUnits))
-            : null,
-          currency: pricePoint?.currency ?? null,
-          currency_decimals: pricePoint
-            ? Math.max(0, Math.floor(pricePoint.currencyDecimals))
-            : null,
-          created_at: toIsoString(row.createdAt),
-        };
-      }),
+      activeRows.map((row) =>
+        mapCommunityAdminMembershipRow({
+          ctx,
+          row,
+          userIdCache,
+          viewerCanManageMembers,
+        }),
+      ),
     );
     return [ownerRow, ...memberRows].slice(0, limit);
+  },
+});
+
+export const listCommunityMembershipsAdminPage = query({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+    paginationOpts: paginationOptsValidator,
+  },
+  handler: async (ctx, args) => {
+    const { community, viewerCanManageMembers } =
+      await resolveCommunityAdminMembersContext({
+        ctx,
+        userId: args.userId,
+        authSubject: args.authSubject ?? null,
+        communityId: args.communityId,
+      });
+    const pageSize = Math.max(
+      2,
+      Math.min(
+        COMMUNITY_ADMIN_MEMBERS_MAX_PAGE_SIZE,
+        Math.floor(args.paginationOpts.numItems ?? COMMUNITY_ADMIN_MEMBERS_DEFAULT_PAGE_SIZE),
+      ),
+    );
+    const isFirstPage = args.paginationOpts.cursor === null;
+    const memberPageSize = isFirstPage ? pageSize - 1 : pageSize;
+    const rawPage = await ctx.db
+      .query("communityMemberships")
+      .withIndex("by_community_createdAt", (q) =>
+        q.eq("communityId", args.communityId),
+      )
+      .order("asc")
+      .paginate({
+        ...args.paginationOpts,
+        numItems: memberPageSize,
+        maximumRowsRead: Math.max(
+          args.paginationOpts.maximumRowsRead ?? memberPageSize * 3,
+          memberPageSize,
+        ),
+      });
+    const userIdCache = new Map<string, string | null>();
+    const ownerRows = isFirstPage
+      ? [
+          await mapCommunityOwnerAdminMemberRow({
+            ctx,
+            community,
+            userIdCache,
+          }),
+        ]
+      : [];
+    const pagedMemberRows = rawPage.page.filter(
+      (row: CommunityMembershipLike) =>
+        communityMembershipRowIsActive(row) &&
+        String(row.userId) !== String(community.ownerId),
+    );
+    const memberRows = await Promise.all(
+      pagedMemberRows.map((row: CommunityMembershipLike) =>
+        mapCommunityAdminMembershipRow({
+          ctx,
+          row,
+          userIdCache,
+          viewerCanManageMembers,
+        }),
+      ),
+    );
+    return {
+      ...rawPage,
+      page: [...ownerRows, ...memberRows],
+    };
   },
 });
 
@@ -521,21 +644,28 @@ export const countCommunityMemberships = query({
   },
   handler: async (ctx, args) => {
     const sinceMs = parseIsoMs(args.sinceIso);
-    const { community, rows } = await listCommunityMembershipRowsForManager({
+    const { community } = await resolveCommunityAdminMembersContext({
       ctx,
-      communityId: args.communityId,
       userId: args.userId,
       authSubject: args.authSubject ?? null,
+      communityId: args.communityId,
     });
+    const rows = (await ctx.db
+      .query("communityMemberships")
+      .withIndex("by_community_createdAt", (q) =>
+        q.eq("communityId", args.communityId),
+      )
+      .collect()) as CommunityMembershipLike[];
     const ownerIncluded =
       sinceMs === null || community.createdAt >= sinceMs ? 1 : 0;
     return (
       ownerIncluded +
-      rows.reduce(
-        (count, row) =>
-          count + (sinceMs === null || row.createdAt >= sinceMs ? 1 : 0),
-        0,
-      )
+      rows.reduce((count, row) => {
+        if (String(row.userId) === String(community.ownerId)) return count;
+        if (!communityMembershipRowIsActive(row)) return count;
+        if (sinceMs !== null && row.createdAt < sinceMs) return count;
+        return count + 1;
+      }, 0)
     );
   },
 });

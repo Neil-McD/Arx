@@ -9,8 +9,11 @@ echo "== Community admin contract guard =="
 COMMUNITY_FILE="convex/community.ts"
 COMMUNITY_ADMIN_FILE="convex/communityAdmin.ts"
 COMMUNITY_CORE_FILE="convex/communityCore.ts"
+SCHEMA_FILE="convex/schema.ts"
 ADMIN_GATEWAY_FILE="shared/cloudCommunityAdminGateway.ts"
 MEMBERSHIP_GATEWAY_FILE="shared/cloudCommunityMembershipGateway.ts"
+WEB_MEMBERS_FILE="apps/web/src/components/WebCommunityMembersSection.tsx"
+WEB_PEOPLE_CONTROLLER_FILE="apps/web/src/controllers/useWebCommunityPeopleController.ts"
 
 if [[ ! -f "$COMMUNITY_FILE" ]]; then
   echo "FAIL: missing $COMMUNITY_FILE"
@@ -22,6 +25,10 @@ if [[ ! -f "$COMMUNITY_ADMIN_FILE" ]]; then
 fi
 if [[ ! -f "$COMMUNITY_CORE_FILE" ]]; then
   echo "FAIL: missing $COMMUNITY_CORE_FILE"
+  exit 1
+fi
+if [[ ! -f "$SCHEMA_FILE" ]]; then
+  echo "FAIL: missing $SCHEMA_FILE"
   exit 1
 fi
 if [[ ! -f "$ADMIN_GATEWAY_FILE" ]]; then
@@ -44,10 +51,21 @@ require_multiline_match() {
   echo "OK: $description"
 }
 
+require_no_match() {
+  local file="$1"
+  local pattern="$2"
+  local description="$3"
+  if rg -n -U --pcre2 "$pattern" "$file" >/dev/null; then
+    echo "FAIL: forbidden contract marker present: $description"
+    exit 1
+  fi
+  echo "OK: $description"
+}
+
 echo "[1/9] Ensuring admin gateway forwards authSubject for member/admin queries..."
 require_multiline_match "$MEMBERSHIP_GATEWAY_FILE" \
-  'export async function listCloudCommunityMembershipAdminRows<[\s\S]*?client\.query\("community:listCommunityMembershipsAdmin" as any, \{\s*authSubject,\s*communityId:' \
-  "members admin gateway forwards authSubject"
+  'export async function listCloudCommunityMembershipAdminPage<[\s\S]*?client\.query\("community:listCommunityMembershipsAdminPage" as any, \{\s*authSubject,\s*communityId:' \
+  "paginated members admin gateway forwards authSubject"
 require_multiline_match "$MEMBERSHIP_GATEWAY_FILE" \
   'export async function countCloudCommunityMembershipRows<[\s\S]*?client\.query\("community:countCommunityMemberships" as any, \{\s*authSubject,\s*communityId:' \
   "member count gateway forwards authSubject"
@@ -59,6 +77,9 @@ echo "[2/9] Ensuring admin/member analytics queries accept authSubject..."
 require_multiline_match "$COMMUNITY_ADMIN_FILE" \
   'export const listCommunityMembershipsAdmin = query\(\{\s*args:\s*\{\s*userId: v\.optional\(v\.id\("users"\)\),\s*authSubject: v\.optional\(v\.string\(\)\),' \
   "listCommunityMembershipsAdmin accepts authSubject"
+require_multiline_match "$COMMUNITY_ADMIN_FILE" \
+  'export const listCommunityMembershipsAdminPage = query\(\{\s*args:\s*\{\s*userId: v\.optional\(v\.id\("users"\)\),\s*authSubject: v\.optional\(v\.string\(\)\),\s*communityId: v\.id\("communities"\),\s*paginationOpts: paginationOptsValidator,' \
+  "listCommunityMembershipsAdminPage accepts authSubject and pagination options"
 require_multiline_match "$COMMUNITY_ADMIN_FILE" \
   'export const countCommunityMemberships = query\(\{\s*args:\s*\{\s*userId: v\.optional\(v\.id\("users"\)\),\s*authSubject: v\.optional\(v\.string\(\)\),' \
   "countCommunityMemberships accepts authSubject"
@@ -77,16 +98,37 @@ require_multiline_match "$COMMUNITY_CORE_FILE" \
   'export async function listCommunityMembershipRowsForManager\(args: \{' \
   "shared manager-scoped membership helper exists"
 
-echo "[4/9] Ensuring member/admin queries delegate through the manager helper with authSubject..."
+echo "[4/9] Ensuring member/admin roster reads are paginated, release-safe, and count context is explicit..."
+require_multiline_match "$SCHEMA_FILE" \
+  'communityMemberships: defineTable\([\s\S]*?\.index\("by_community_createdAt", \["communityId", "createdAt"\]\)' \
+  "communityMemberships has community creation-order index"
 require_multiline_match "$COMMUNITY_ADMIN_FILE" \
-  'export const listCommunityMembershipsAdmin = query\([\s\S]*?listCommunityMembershipRowsForManager\(\{\s*ctx,\s*communityId: args\.communityId,\s*userId: args\.userId,\s*authSubject: args\.authSubject \?\? null,' \
-  "listCommunityMembershipsAdmin delegates through manager helper"
+  'export const listCommunityMembershipsAdminPage = query\([\s\S]*?withIndex\("by_community_createdAt", \(q\) =>[\s\S]*?q\.eq\("communityId", args\.communityId\)[\s\S]*?\.paginate\(\{' \
+  "listCommunityMembershipsAdminPage paginates membership rows by community creation order"
 require_multiline_match "$COMMUNITY_ADMIN_FILE" \
-  'export const countCommunityMemberships = query\([\s\S]*?listCommunityMembershipRowsForManager\(\{\s*ctx,\s*communityId: args\.communityId,\s*userId: args\.userId,\s*authSubject: args\.authSubject \?\? null,' \
-  "countCommunityMemberships delegates through manager helper"
+  'export const listCommunityMembershipsAdminPage = query\([\s\S]*?rawPage\.page\.filter\([\s\S]*?communityMembershipRowIsActive\(row\)' \
+  "listCommunityMembershipsAdminPage keeps legacy rows release-safe through the canonical active predicate"
+require_multiline_match "$COMMUNITY_ADMIN_FILE" \
+  'export const listCommunityMembershipsAdmin = query\([\s\S]*?withIndex\("by_community_createdAt"[\s\S]*?\.take\(scanLimit\)' \
+  "legacy listCommunityMembershipsAdmin is bounded by take"
+require_multiline_match "$COMMUNITY_ADMIN_FILE" \
+  'export const countCommunityMemberships = query\([\s\S]*?resolveCommunityAdminMembersContext\(\{\s*ctx,\s*userId: args\.userId,\s*authSubject: args\.authSubject \?\? null,\s*communityId: args\.communityId,' \
+  "countCommunityMemberships uses entitled community context"
+require_multiline_match "$COMMUNITY_ADMIN_FILE" \
+  'export const countCommunityMemberships = query\([\s\S]*?withIndex\("by_community_createdAt", \(q\) =>[\s\S]*?q\.eq\("communityId", args\.communityId\)' \
+  "countCommunityMemberships reads membership rows by community creation order"
+require_multiline_match "$COMMUNITY_ADMIN_FILE" \
+  'export const countCommunityMemberships = query\([\s\S]*?!communityMembershipRowIsActive\(row\)' \
+  "countCommunityMemberships keeps legacy rows release-safe through the canonical active predicate"
 require_multiline_match "$COMMUNITY_ADMIN_FILE" \
   'export const listCommunityMembershipCreatedAtRows = query\([\s\S]*?listCommunityMembershipRowsForManager\(\{\s*ctx,\s*communityId: args\.communityId,\s*userId: args\.userId,\s*authSubject: args\.authSubject \?\? null,' \
   "listCommunityMembershipCreatedAtRows delegates through manager helper"
+require_no_match "$WEB_PEOPLE_CONTROLLER_FILE" \
+  'filteredCommunityMembers|communityMembersRoleFilter|communityMembersPlanFilter' \
+  "members controller does not keep loaded-subset filter state"
+require_no_match "$WEB_MEMBERS_FILE" \
+  'filteredCommunityMembers|communityMembersRoleFilter|communityMembersPlanFilter|members-filter-row|members-filter-field' \
+  "members UI does not expose loaded-subset filters"
 
 echo "[5/9] Ensuring public user identity is returned for admin membership rows..."
 require_multiline_match "$COMMUNITY_ADMIN_FILE" \

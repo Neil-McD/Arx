@@ -9352,12 +9352,6 @@ button.chat-reply-quote:hover {
   place-items: center;
 }
 
-.members-filter-row {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
-}
-
 .members-readonly-note {
   margin: 0 0 2px;
   color: var(--text-secondary);
@@ -9377,13 +9371,6 @@ button.chat-reply-quote:hover {
   width: 100%;
 }
 
-.members-filter-field {
-  display: grid;
-  gap: 8px;
-  min-width: 0;
-}
-
-.members-filter-field>span,
 .members-panel .invite-field>span {
   font-size: 12px;
   font-weight: 600;
@@ -9413,16 +9400,6 @@ button.chat-reply-quote:hover {
     calc(100% - 12px) 50%,
     calc(100% - 28px) 50%;
   background-size: 14px 14px, 1px 52%;
-}
-
-.members-filter-row .members-surface-select.select-styled {
-  padding-left: 18px;
-  padding-right: 14px;
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239c9488' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
-  background-position: calc(100% - 6px) 50%;
-  background-size: 10px 10px;
-  background-repeat: no-repeat;
-  text-overflow: clip;
 }
 
 .members-panel .members-surface-input {
@@ -9680,6 +9657,7 @@ button.chat-reply-quote:hover {
 
 .members-pagination {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
@@ -9731,10 +9709,23 @@ button.chat-reply-quote:hover {
   transform: none;
 }
 
+.members-pagination-action:disabled {
+  color: var(--text-tertiary);
+  cursor: default;
+  text-decoration: none;
+}
+
 .members-pagination-next::after {
   content: "\2192";
   display: inline-block;
   text-decoration: none;
+}
+
+.members-pagination-error {
+  flex-basis: 100%;
+  color: var(--danger);
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 .members-loading-shell {
@@ -10132,10 +10123,6 @@ button.chat-reply-quote:hover {
   font-size: 14px;
 }
 
-.invite-create-shell .members-filter-field {
-  width: 100%;
-}
-
 .invite-create-shell .members-surface-select {
   min-width: 0;
   width: 100%;
@@ -10271,9 +10258,6 @@ button.chat-reply-quote:hover {
     gap: 12px;
   }
 
-  .members-filter-row {
-    grid-template-columns: minmax(0, 1fr);
-  }
 }
 
 @container (max-width: 620px) {
@@ -22105,11 +22089,6 @@ button.message-citation-chip:hover {
 
 .app-root.mobile-shell .members-header-row {
   align-items: flex-start;
-}
-
-.app-root.mobile-shell .members-filter-row {
-  grid-template-columns: minmax(0, 1fr);
-  gap: 12px;
 }
 
 .app-root.mobile-shell .members-policy-row,

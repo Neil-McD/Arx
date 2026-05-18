@@ -2249,14 +2249,20 @@ export default function App() {
   const {
     communityMembers,
     setCommunityMembers,
+    communityMemberCount,
+    setCommunityMemberCount,
     isLoadingCommunityMembers,
     setIsLoadingCommunityMembers,
+    isLoadingMoreCommunityMembers,
+    setIsLoadingMoreCommunityMembers,
     hasResolvedCommunityMembers,
     setHasResolvedCommunityMembers,
-    communityMembersRoleFilter,
-    setCommunityMembersRoleFilter,
-    communityMembersPlanFilter,
-    setCommunityMembersPlanFilter,
+    communityMembersNextCursor,
+    setCommunityMembersNextCursor,
+    communityMembersHasMore,
+    setCommunityMembersHasMore,
+    communityMembersLoadError,
+    setCommunityMembersLoadError,
     communityMembersPageIndex,
     setCommunityMembersPageIndex,
     communityJoinRequests,
@@ -2271,10 +2277,8 @@ export default function App() {
     setIsJoinRequestsModalOpen,
     isSavingFreeAccessMode,
     setIsSavingFreeAccessMode,
-    filteredCommunityMembers,
   } = useWebCommunityPeopleController<CommunityMember, CommunityJoinRequest>({
     activeCommunityId,
-    activeCommunityOwnerId: activeCommunity?.owner_id ?? null,
   });
   const {
     activeCommunityAccess,
@@ -3359,6 +3363,7 @@ export default function App() {
 
   const {
     loadCommunityMembers,
+    handleShowMoreCommunityMembers,
     loadSelfProfile,
     saveProfileToCloud,
     loadCommunityAnalytics,
@@ -3396,9 +3401,19 @@ export default function App() {
       requireSignIn();
     },
     applyLoadedProfileToLocal: profileUi.applyLoadedProfileToLocal,
+    communityMembers,
+    communityMemberCount,
+    communityMembersPageIndex,
+    communityMembersNextCursor,
     setCommunityMembers,
+    setCommunityMemberCount,
     setIsLoadingCommunityMembers,
+    setIsLoadingMoreCommunityMembers,
     setHasResolvedCommunityMembers,
+    setCommunityMembersPageIndex,
+    setCommunityMembersNextCursor,
+    setCommunityMembersHasMore,
+    setCommunityMembersLoadError,
     setProfilesByUserId,
     setCloudProfile,
     setProfileName: profileUi.setProfileName,
@@ -6596,6 +6611,13 @@ export default function App() {
   const funnelPreviewAction = deriveCommunityFunnelAction({
     entry_policy: activeCommunity?.entry_policy,
   });
+  const activeCommunityMemberCount = activeCommunity
+    ? typeof communityMemberCount === "number"
+      ? communityMemberCount
+      : hasResolvedCommunityMembers && !communityMembersHasMore
+        ? communityMembers.length
+        : null
+    : null;
   const handlePreviewCommunityFunnel = useCallback(() => {
     const slug = String(activeCommunity?.slug ?? "").trim();
     if (!slug) return;
@@ -6627,7 +6649,7 @@ export default function App() {
         online_faces: funnelPreviewOnlineFaces,
       },
       visibilityLabel: funnelPreviewVisibilityLabel,
-      memberCount: activeCommunity ? communityMembers.length : null,
+      memberCount: activeCommunityMemberCount,
       funnelAction: funnelPreviewAction,
       one_liner: activeCommunity?.one_liner ?? null,
       funnel: communityFunnelConfig,
@@ -6637,7 +6659,7 @@ export default function App() {
     navigateTo(previewPath, { state: previewState });
   }, [
     activeCommunity,
-    communityMembers.length,
+    activeCommunityMemberCount,
     communityFunnelConfig,
     funnelPreviewAdminCount,
     funnelPreviewAction,
@@ -7386,7 +7408,7 @@ export default function App() {
           online_faces: funnelPreviewOnlineFaces,
         },
         previewVisibilityLabel: funnelPreviewVisibilityLabel,
-        previewMemberCount: activeCommunity ? communityMembers.length : null,
+        previewMemberCount: activeCommunityMemberCount,
         previewFunnelAction: funnelPreviewAction,
       },
       canViewActiveCommunityAnalytics,
@@ -7441,11 +7463,12 @@ export default function App() {
       canModerateContentActiveCommunity,
       membersState: {
         communityMembers,
+        communityMemberCount,
         isLoadingCommunityMembers,
+        isLoadingMoreCommunityMembers,
         hasResolvedCommunityMembers,
-        filteredCommunityMembers,
-        communityMembersRoleFilter,
-        communityMembersPlanFilter,
+        communityMembersHasMore,
+        communityMembersLoadError,
         communityMembersPageIndex,
         activeCommunityMembersJoinReviewMode,
         communityJoinRequests,
@@ -7457,9 +7480,8 @@ export default function App() {
         profilesByUserId: savedProfilesByUserId,
       },
       membersActions: {
-        setCommunityMembersRoleFilter,
-        setCommunityMembersPlanFilter,
         setCommunityMembersPageIndex,
+        handleShowMoreCommunityMembers,
         setIsJoinRequestsModalOpen,
         displayName,
         handleSetCommunityFreeAccessMode,
@@ -8267,7 +8289,7 @@ export default function App() {
         name: activeCommunity.name,
         oneLiner: activeCommunity.one_liner ?? null,
         visibility: activeCommunity.visibility ?? null,
-        memberCount: communityMembers.length,
+        memberCount: activeCommunityMemberCount,
         canManage: canManageMembersActiveCommunity || canViewActiveCommunitySettings,
         role: normalizeWorkspacePanelCommunityRole(
           activeCommunityAccess,

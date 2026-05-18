@@ -13,6 +13,7 @@ import {
   listCommunityMembershipCreatedAtRows as listCommunityMembershipCreatedAtRowsImpl,
   listCommunityMemberships as listCommunityMembershipsImpl,
   listCommunityMembershipsAdmin as listCommunityMembershipsAdminImpl,
+  listCommunityMembershipsAdminPage as listCommunityMembershipsAdminPageImpl,
   listCommunityRevenueSeries as listCommunityRevenueSeriesImpl,
   banCommunityMember as banCommunityMemberImpl,
   removeCommunityMember as removeCommunityMemberImpl,
@@ -141,6 +142,7 @@ import {
 
 export const createCommunity = createCommunityImpl;
 export const generateCommunityBrandingUploadUrl = generateCommunityBrandingUploadUrlImpl;
+export const listCommunityMembershipsAdminPage = listCommunityMembershipsAdminPageImpl;
 export const listCommunityMemberships = listCommunityMembershipsImpl;
 export const listCommunityMembershipsAdmin = listCommunityMembershipsAdminImpl;
 export const countCommunityMemberships = countCommunityMembershipsImpl;

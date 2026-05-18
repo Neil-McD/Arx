@@ -41,11 +41,12 @@ type WebCommunityMembersSectionProps = {
   };
   state: {
     communityMembers: CommunityMember[];
-    filteredCommunityMembers: CommunityMember[];
+    communityMemberCount: number | null;
     isLoadingCommunityMembers: boolean;
+    isLoadingMoreCommunityMembers: boolean;
     hasResolvedCommunityMembers: boolean;
-    communityMembersRoleFilter: string;
-    communityMembersPlanFilter: string;
+    communityMembersHasMore: boolean;
+    communityMembersLoadError: string | null;
     communityMembersPageIndex: number;
     activeCommunityMembersJoinReviewMode: CommunityMembersJoinReviewMode | null;
     communityJoinRequests: CommunityJoinRequest[];
@@ -57,9 +58,8 @@ type WebCommunityMembersSectionProps = {
     profilesByUserId: Record<string, UserProfile>;
   };
   actions: {
-    setCommunityMembersRoleFilter: (value: string) => void;
-    setCommunityMembersPlanFilter: (value: string) => void;
     setCommunityMembersPageIndex: (value: number | ((previous: number) => number)) => void;
+    handleShowMoreCommunityMembers: () => Promise<void> | void;
     setIsJoinRequestsModalOpen: (isOpen: boolean) => void;
     displayName: (userId: string) => string;
     handleSetCommunityFreeAccessMode: (mode: "open" | "approval") => Promise<void> | void;
@@ -127,25 +127,39 @@ export function WebCommunityMembersSection(props: WebCommunityMembersSectionProp
     ? memberFallbackInitials(selectedMemberDisplayName, selectedMember.user_id, actions)
     : "";
   const setCommunityMembersPageIndex = actions.setCommunityMembersPageIndex;
-  const visibleMembers = canManageMembers ? state.filteredCommunityMembers : state.communityMembers;
-  const filterIsActive = canManageMembers && (
-    state.communityMembersRoleFilter !== "all" ||
-    state.communityMembersPlanFilter !== "all"
-  );
+  const visibleMembers = state.communityMembers;
   const totalVisibleMembers = visibleMembers.length;
+  const knownCommunityMemberCount =
+    typeof state.communityMemberCount === "number" ? state.communityMemberCount : null;
+  const loadedCommunityMemberCountLabel =
+    `${state.communityMembers.length}${state.communityMembersHasMore ? "+" : ""}`;
+  const communityMemberCountLabel =
+    knownCommunityMemberCount !== null ? String(knownCommunityMemberCount) : loadedCommunityMemberCountLabel;
   const maxMemberPageIndex = Math.max(0, Math.ceil(totalVisibleMembers / MEMBERS_PAGE_SIZE) - 1);
   const memberPageIndex = Math.min(Math.max(0, state.communityMembersPageIndex), maxMemberPageIndex);
   const memberPageStart = memberPageIndex * MEMBERS_PAGE_SIZE;
   const memberPageEnd = Math.min(memberPageStart + MEMBERS_PAGE_SIZE, totalVisibleMembers);
   const pagedMembers = visibleMembers.slice(memberPageStart, memberPageEnd);
+  const totalCommunityMemberSummaryCount =
+    knownCommunityMemberCount !== null
+      ? knownCommunityMemberCount
+      : state.communityMembersHasMore
+        ? null
+        : totalVisibleMembers;
   const memberPageSummary = totalVisibleMembers > 0
-    ? `Showing ${memberPageStart + 1}-${memberPageEnd} of ${totalVisibleMembers} ${
-        filterIsActive ? "matching " : ""
-      }members`
+    ? totalCommunityMemberSummaryCount !== null
+      ? `Showing ${memberPageStart + 1}-${memberPageEnd} of ${totalCommunityMemberSummaryCount} members`
+      : `Showing ${memberPageStart + 1}-${memberPageEnd} loaded members`
     : null;
   const canGoToPreviousMemberPage = memberPageIndex > 0;
-  const canGoToNextMemberPage = memberPageEnd < totalVisibleMembers;
-  const shouldShowMemberPagination = totalVisibleMembers > MEMBERS_PAGE_SIZE;
+  const canGoToNextLoadedMemberPage = memberPageEnd < totalVisibleMembers;
+  const canGoToNextMemberPage = canGoToNextLoadedMemberPage || state.communityMembersHasMore;
+  const shouldShowMemberPagination =
+    totalVisibleMembers > MEMBERS_PAGE_SIZE ||
+    state.communityMembersHasMore ||
+    state.isLoadingMoreCommunityMembers ||
+    Boolean(state.communityMembersLoadError) ||
+    canGoToPreviousMemberPage;
   useEffect(() => {
     if (state.communityMembersPageIndex > maxMemberPageIndex) {
       setCommunityMembersPageIndex(maxMemberPageIndex);
@@ -206,34 +220,6 @@ export function WebCommunityMembersSection(props: WebCommunityMembersSectionProp
       year: "numeric",
     }).format(parsed);
   };
-  const planOptions = (() => {
-    const seenPricePoints = new Set<string>();
-    const dynamicPlanOptions: Array<{ value: string; label: string; amount: number }> = [];
-    if (!canViewMemberPlanDetails) {
-      return [{ value: "all", label: "All plans" }];
-    }
-    for (const member of state.communityMembers) {
-      const pricePointId = String(member.price_point_id ?? "").trim();
-      if (!pricePointId || seenPricePoints.has(pricePointId)) continue;
-      seenPricePoints.add(pricePointId);
-      const amountRaw = Number(member.amount_base_units ?? 0);
-      const amount = Number.isFinite(amountRaw) ? amountRaw : 0;
-      const formattedAmount = formatAmount(member);
-      const period =
-        member.billing_period === "monthly" ? "/mo" : member.billing_period === "annual" ? "/yr" : "";
-      dynamicPlanOptions.push({
-        value: pricePointId,
-        label: formattedAmount ? `${formattedAmount}${period}` : "Paid plan",
-        amount,
-      });
-    }
-    dynamicPlanOptions.sort((a, b) => a.amount - b.amount || a.label.localeCompare(b.label));
-    const options: Array<{ value: string; label: string }> = [{ value: "all", label: "All plans" }];
-    for (const option of dynamicPlanOptions) {
-      options.push({ value: option.value, label: option.label });
-    }
-    return options;
-  })();
   const autoApproveNewMembers = state.activeCommunityMembersJoinReviewMode === "free_auto";
   const canReviewFreeMembers = Boolean(
     activeCommunity &&
@@ -253,45 +239,9 @@ export function WebCommunityMembersSection(props: WebCommunityMembersSectionProp
             <div className="members-header-row">
               <div className="members-header">Members</div>
               <div className="members-count">
-                {filterIsActive
-                  ? `${totalVisibleMembers} / ${state.communityMembers.length}`
-                  : state.communityMembers.length}
+                {communityMemberCountLabel}
               </div>
             </div>
-            {canManageMembers && (
-              <div className="members-filter-row">
-                <label className="members-filter-field">
-                  <span>Role</span>
-                  <select
-                    className="select-styled members-surface-select"
-                    value={state.communityMembersRoleFilter}
-                    onChange={(event) => actions.setCommunityMembersRoleFilter(event.target.value)}
-                  >
-                    <option value="all">All roles</option>
-                    <option value="owner">Owner</option>
-                    <option value="admin">Admin</option>
-                    <option value="moderator">Moderator</option>
-                    <option value="member">Member</option>
-                  </select>
-                </label>
-                {canViewMemberPlanDetails ? (
-                  <label className="members-filter-field">
-                    <span>Plan</span>
-                    <select
-                      className="select-styled members-surface-select"
-                      value={state.communityMembersPlanFilter}
-                      onChange={(event) => actions.setCommunityMembersPlanFilter(event.target.value)}
-                    >
-                      {planOptions.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                ) : null}
-              </div>
-            )}
             {canReviewFreeMembers && activeCommunity && (
               <div className="members-policy-row">
                 <div className="members-policy-copy">
@@ -424,10 +374,10 @@ export function WebCommunityMembersSection(props: WebCommunityMembersSectionProp
                     </div>
                   ))}
                 </div>
-              ) : state.communityMembers.length === 0 ? (
+              ) : state.communityMembers.length === 0 && !state.communityMembersHasMore ? (
                 <div className="members-empty">No members yet.</div>
               ) : visibleMembers.length === 0 ? (
-                <div className="members-empty">No matching members.</div>
+                <div className="members-empty">No members loaded yet.</div>
               ) : (
                 pagedMembers.map((member) => {
                   const profile = state.profilesByUserId[member.user_id] ?? null;
@@ -518,16 +468,18 @@ export function WebCommunityMembersSection(props: WebCommunityMembersSectionProp
                     <button
                       type="button"
                       className="members-pagination-action members-pagination-next"
-                      onClick={() =>
-                        setCommunityMembersPageIndex((previous) =>
-                          Math.min(maxMemberPageIndex, previous + 1),
-                        )
-                      }
+                      disabled={state.isLoadingMoreCommunityMembers}
+                      onClick={() => void actions.handleShowMoreCommunityMembers()}
                     >
-                      Show 25 more
+                      {state.isLoadingMoreCommunityMembers ? "Loading" : "Show 25 more"}
                     </button>
                   ) : null}
                 </div>
+                {state.communityMembersLoadError ? (
+                  <div className="members-pagination-error">
+                    Could not load more members.
+                  </div>
+                ) : null}
               </div>
             ) : null}
           </section>

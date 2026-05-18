@@ -15,11 +15,12 @@ import {
 } from "./communityAdminCore";
 
 import {
-  listCloudCommunityMembershipAdminRows,
+  listCloudCommunityMembershipAdminPage,
 } from "./cloudCommunityMembershipGateway";
 import {
   banCloudCommunityMember,
   fetchCloudCommunityAnalyticsSnapshot,
+  fetchCloudCommunityEntitledMemberCount,
   removeCloudCommunityMember,
   setCloudCommunityMemberRole,
 } from "./cloudCommunityAdminGateway";
@@ -30,6 +31,8 @@ import {
   upsertCloudProfileDetail,
 } from "./cloudProfilesGateway";
 import { preloadImageUrls } from "./preloadImageUrls";
+
+const COMMUNITY_MEMBERS_PAGE_SIZE = 25;
 
 type UseCommunityAdminControllerArgs<
   SessionT extends SessionLike,
@@ -62,9 +65,19 @@ type UseCommunityAdminControllerArgs<
   onProfileSaveUnauthenticated?: () => void;
   applyLoadedProfileToLocal?: (profile: UserProfileDetailT) => void;
 
+  communityMembers: CommunityMemberT[];
+  communityMemberCount: number | null;
+  communityMembersPageIndex: number;
+  communityMembersNextCursor: string | null;
   setCommunityMembers: Dispatch<SetStateAction<CommunityMemberT[]>>;
+  setCommunityMemberCount: Dispatch<SetStateAction<number | null>>;
   setIsLoadingCommunityMembers: Dispatch<SetStateAction<boolean>>;
+  setIsLoadingMoreCommunityMembers: Dispatch<SetStateAction<boolean>>;
   setHasResolvedCommunityMembers: Dispatch<SetStateAction<boolean>>;
+  setCommunityMembersPageIndex: Dispatch<SetStateAction<number>>;
+  setCommunityMembersNextCursor: Dispatch<SetStateAction<string | null>>;
+  setCommunityMembersHasMore: Dispatch<SetStateAction<boolean>>;
+  setCommunityMembersLoadError: Dispatch<SetStateAction<string | null>>;
   setProfilesByUserId: Dispatch<SetStateAction<Record<string, UserProfileT>>>;
   setCloudProfile: Dispatch<SetStateAction<UserProfileDetailT | null>>;
   setProfileName: Dispatch<SetStateAction<string>>;
@@ -120,6 +133,80 @@ export function useCommunityAdminController<
   const communityMembersLoadSeqRef = useRef(0);
   const communityAnalyticsLoadSeqRef = useRef(0);
 
+  const hydrateCommunityMemberRows = useCallback(async (
+    current: UseCommunityAdminControllerArgs<
+      SessionT,
+      CommunityMemberT,
+      UserProfileT,
+      UserProfileDetailT
+    >,
+    rows: CommunityMemberT[],
+    usableSession: SessionT,
+    seq: number,
+  ) => {
+    await preloadImageUrls(
+      rows.map((row: any) => row?.avatar_url ?? null),
+      { maxUrls: rows.length, timeoutMs: 1200 },
+    );
+
+    if (communityMembersLoadSeqRef.current !== seq) return false;
+
+    current.setProfilesByUserId((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      for (const row of rows) {
+        const profileLike = row as unknown as UserProfileT & {
+          display_name?: string | null;
+          avatar_url?: string | null;
+          avatar_storage_id?: string | null;
+          avatar_focus_x?: number | null;
+          avatar_focus_y?: number | null;
+          avatar_zoom?: number | null;
+        };
+        if (!profileLike.user_id) continue;
+        if (profileLike.display_name == null && profileLike.avatar_url == null) continue;
+        next[profileLike.user_id] = {
+          ...(next[profileLike.user_id] ?? ({} as UserProfileT)),
+          user_id: profileLike.user_id,
+          display_name: profileLike.display_name ?? null,
+          avatar_url: profileLike.avatar_url ?? null,
+          avatar_storage_id: profileLike.avatar_storage_id ?? null,
+          avatar_focus_x: profileLike.avatar_focus_x ?? 0.5,
+          avatar_focus_y: profileLike.avatar_focus_y ?? 0.5,
+          avatar_zoom: profileLike.avatar_zoom ?? 1,
+        } as UserProfileT;
+        changed = true;
+      }
+      return changed ? next : prev;
+    });
+
+    const userIds = Array.from(new Set(rows.map((row) => row.user_id)));
+    if (userIds.length > 0) {
+      if (current.loadUserProfiles) {
+        await current.loadUserProfiles(userIds, usableSession);
+      } else {
+        try {
+          const profiles = await listCloudProfileRowsByUserIds<SessionT, UserProfileT>({
+            session: usableSession,
+            userIds,
+          });
+          if (communityMembersLoadSeqRef.current !== seq) return false;
+          current.setProfilesByUserId((prev) => {
+            const next = { ...prev };
+            for (const profile of profiles) {
+              next[profile.user_id] = profile;
+            }
+            return next;
+          });
+        } catch {
+          // Profiles are enrichment; member rows can still render.
+        }
+      }
+    }
+
+    return communityMembersLoadSeqRef.current === seq;
+  }, []);
+
   const loadCommunityMembers = useCallback(async (
     communityId: string,
     session: SessionT,
@@ -129,83 +216,110 @@ export function useCommunityAdminController<
     if (!usableSession) return;
     const seq = (communityMembersLoadSeqRef.current += 1);
     current.setIsLoadingCommunityMembers(true);
+    current.setIsLoadingMoreCommunityMembers(false);
+    current.setCommunityMembersLoadError(null);
+    current.setCommunityMembersNextCursor(null);
+    current.setCommunityMembersHasMore(false);
+    current.setCommunityMemberCount(null);
+    current.setCommunityMembersPageIndex(0);
     try {
-      const rows = (await listCloudCommunityMembershipAdminRows({
-        session: usableSession,
-        communityId,
-        limit: 200,
-      })) as unknown as CommunityMemberT[];
-      await preloadImageUrls(
-        rows.map((row: any) => row?.avatar_url ?? null),
-        { maxUrls: rows.length, timeoutMs: 1200 },
-      );
-
-      if (communityMembersLoadSeqRef.current !== seq) return;
-
-      current.setProfilesByUserId((prev) => {
-        let changed = false;
-        const next = { ...prev };
-        for (const row of rows) {
-          const profileLike = row as unknown as UserProfileT & {
-            display_name?: string | null;
-            avatar_url?: string | null;
-            avatar_storage_id?: string | null;
-            avatar_focus_x?: number | null;
-            avatar_focus_y?: number | null;
-            avatar_zoom?: number | null;
-          };
-          if (!profileLike.user_id) continue;
-          if (profileLike.display_name == null && profileLike.avatar_url == null) continue;
-          next[profileLike.user_id] = {
-            ...(next[profileLike.user_id] ?? ({} as UserProfileT)),
-            user_id: profileLike.user_id,
-            display_name: profileLike.display_name ?? null,
-            avatar_url: profileLike.avatar_url ?? null,
-            avatar_storage_id: profileLike.avatar_storage_id ?? null,
-            avatar_focus_x: profileLike.avatar_focus_x ?? 0.5,
-            avatar_focus_y: profileLike.avatar_focus_y ?? 0.5,
-            avatar_zoom: profileLike.avatar_zoom ?? 1,
-          } as UserProfileT;
-          changed = true;
-        }
-        return changed ? next : prev;
-      });
-
-      const userIds = Array.from(new Set(rows.map((row) => row.user_id)));
-      if (userIds.length > 0) {
-        if (current.loadUserProfiles) {
-          await current.loadUserProfiles(userIds, usableSession);
-        } else {
-          try {
-            const profiles = await listCloudProfileRowsByUserIds<SessionT, UserProfileT>({
-              session: usableSession,
-              userIds,
-            });
-            if (communityMembersLoadSeqRef.current !== seq) return;
-            current.setProfilesByUserId((prev) => {
-              const next = { ...prev };
-              for (const profile of profiles) {
-                next[profile.user_id] = profile;
-              }
-              return next;
-            });
-          } catch {
-            // ignore
-          }
-        }
-      }
-
-      if (communityMembersLoadSeqRef.current !== seq) return;
+      const [page, memberCount] = await Promise.all([
+        listCloudCommunityMembershipAdminPage({
+          session: usableSession,
+          communityId,
+          cursor: null,
+          pageSize: COMMUNITY_MEMBERS_PAGE_SIZE,
+        }),
+        fetchCloudCommunityEntitledMemberCount({
+          session: usableSession,
+          communityId,
+        }),
+      ]);
+      const rows = page.rows as unknown as CommunityMemberT[];
+      if (!(await hydrateCommunityMemberRows(current, rows, usableSession, seq))) return;
       current.setCommunityMembers(rows);
-    } catch {
-      // ignore
+      current.setCommunityMemberCount(
+        typeof memberCount === "number" ? memberCount : page.isDone ? rows.length : null,
+      );
+      current.setCommunityMembersNextCursor(page.continueCursor);
+      current.setCommunityMembersHasMore(!page.isDone);
+    } catch (error) {
+      if (communityMembersLoadSeqRef.current === seq) {
+        current.setCommunityMembers([]);
+        current.setCommunityMemberCount(null);
+        current.setCommunityMembersNextCursor(null);
+        current.setCommunityMembersHasMore(false);
+        current.setCommunityMembersLoadError(
+          error instanceof Error ? error.message : "Failed to load members.",
+        );
+      }
     } finally {
       if (communityMembersLoadSeqRef.current === seq) {
         current.setHasResolvedCommunityMembers(true);
         current.setIsLoadingCommunityMembers(false);
       }
     }
-  }, []);
+  }, [hydrateCommunityMemberRows]);
+
+  const loadMoreCommunityMembers = useCallback(async (
+    communityId: string,
+    session: SessionT,
+  ) => {
+    const current = argsRef.current;
+    const cursor = current.communityMembersNextCursor;
+    if (!cursor) return;
+    const usableSession = await resolveUsableSession(session, current.ensureSession);
+    if (!usableSession) return;
+    const seq = communityMembersLoadSeqRef.current;
+    current.setIsLoadingMoreCommunityMembers(true);
+    current.setCommunityMembersLoadError(null);
+    try {
+      const page = await listCloudCommunityMembershipAdminPage({
+        session: usableSession,
+        communityId,
+        cursor,
+        pageSize: COMMUNITY_MEMBERS_PAGE_SIZE,
+      });
+      const rows = page.rows as unknown as CommunityMemberT[];
+      if (!(await hydrateCommunityMemberRows(current, rows, usableSession, seq))) return;
+      let mergedMemberCount: number | null = null;
+      current.setCommunityMembers((previous) => {
+        const seen = new Set(previous.map((row: any) => String(row.id ?? "")));
+        const nextRows = rows.filter((row: any) => {
+          const id = String(row.id ?? "");
+          return id && !seen.has(id);
+        });
+        const mergedRows = nextRows.length > 0 ? [...previous, ...nextRows] : previous;
+        mergedMemberCount = mergedRows.length;
+        return mergedRows;
+      });
+      if (page.isDone && typeof current.communityMemberCount !== "number") {
+        current.setCommunityMemberCount(mergedMemberCount);
+      }
+      current.setCommunityMembersNextCursor(page.continueCursor);
+      current.setCommunityMembersHasMore(!page.isDone);
+      current.setCommunityMembersPageIndex((previous) => previous + 1);
+    } catch (error) {
+      current.setCommunityMembersLoadError(
+        error instanceof Error ? error.message : "Failed to load more members.",
+      );
+    } finally {
+      current.setIsLoadingMoreCommunityMembers(false);
+    }
+  }, [hydrateCommunityMemberRows]);
+
+  const handleShowMoreCommunityMembers = useCallback(async () => {
+    const current = argsRef.current;
+    const communityId = current.activeCommunityId;
+    const session = await resolveUsableSession(current.session, current.ensureSession);
+    if (!communityId || !session) return;
+    const loadedPageCount = Math.max(1, Math.ceil(current.communityMembers.length / COMMUNITY_MEMBERS_PAGE_SIZE));
+    if (current.communityMembersPageIndex < loadedPageCount - 1) {
+      current.setCommunityMembersPageIndex((previous) => previous + 1);
+      return;
+    }
+    await loadMoreCommunityMembers(communityId, session);
+  }, [loadMoreCommunityMembers]);
 
   const loadSelfProfile = useCallback(async (session: SessionT) => {
     const current = argsRef.current;
@@ -446,6 +560,8 @@ export function useCommunityAdminController<
 
   return {
     loadCommunityMembers,
+    loadMoreCommunityMembers,
+    handleShowMoreCommunityMembers,
     loadSelfProfile,
     saveProfileToCloud,
     loadCommunityAnalytics,

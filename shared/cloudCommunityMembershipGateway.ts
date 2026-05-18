@@ -49,20 +49,41 @@ export type CloudCommunityMembershipAdminRow = {
   created_at: string;
 };
 
-export async function listCloudCommunityMembershipAdminRows<SessionT>(
+export type CloudCommunityMembershipAdminPage = {
+  rows: CloudCommunityMembershipAdminRow[];
+  continueCursor: string | null;
+  isDone: boolean;
+};
+
+export async function listCloudCommunityMembershipAdminPage<SessionT>(
   params: {
     session: SessionT;
     communityId: string;
-    limit?: number;
+    cursor?: string | null;
+    pageSize?: number;
   },
-): Promise<CloudCommunityMembershipAdminRow[]> {
+): Promise<CloudCommunityMembershipAdminPage> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.query("community:listCommunityMembershipsAdmin" as any, {
+  const payload = await client.query("community:listCommunityMembershipsAdminPage" as any, {
     authSubject,
     communityId: params.communityId,
-    limit: params.limit ?? 200,
-  });
-  return coerceGatewayRows<CloudCommunityMembershipAdminRow>(payload);
+    paginationOpts: {
+      cursor: params.cursor ?? null,
+      numItems: params.pageSize ?? 25,
+    },
+  }) as {
+    page?: unknown;
+    continueCursor?: unknown;
+    isDone?: unknown;
+  } | null;
+  return {
+    rows: coerceGatewayRows<CloudCommunityMembershipAdminRow>(payload?.page ?? []),
+    continueCursor:
+      typeof payload?.continueCursor === "string"
+        ? payload.continueCursor
+        : null,
+    isDone: payload?.isDone === true,
+  };
 }
 
 export async function countCloudCommunityMembershipRows<SessionT>(
