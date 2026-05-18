@@ -1,10 +1,10 @@
 import { action } from "./_generated/server";
 import { api, internal } from "./_generated/api";
 import { v } from "convex/values";
+import { DAYTONA_WORKSPACE_ROOT } from "./daytonaSandboxClient";
 import { resolveProjectBackgroundSandboxIfReady } from "./workspaceTerminalBackgroundService";
 import {
   normalizeWorkspacePath,
-  readDaytonaWorkspaceFile,
   runDaytonaWorkspaceBash,
 } from "./daytonaWorkspaceTools";
 
@@ -88,9 +88,39 @@ type WorkspaceInspectorSession = {
   toolboxProxyUrl: string;
 };
 
-function normalizeInspectorPath(raw: unknown): string {
+type WorkspaceInspectorPathKind = "file" | "directory" | "missing" | "other";
+type WorkspaceInspectorResolvedPath =
+  | {
+      kind: Exclude<WorkspaceInspectorPathKind, "missing">;
+      rootPath: string;
+      resolvedPath: string;
+    }
+  | {
+      kind: "missing";
+      rootPath: string;
+      resolvedPath: null;
+    };
+
+const WORKSPACE_INSPECTOR_UNSAFE_PATH_MARKER = "__POLYNET_UNSAFE_WORKSPACE_PATH__";
+
+function normalizeInspectorPath(raw: unknown):
+  | { ok: true; relPath: string }
+  | WorkspaceInspectorFailure {
   const candidate = String(raw ?? "").trim();
-  return normalizeWorkspacePath(candidate || ".");
+  try {
+    return {
+      ok: true,
+      relPath: normalizeWorkspacePath(candidate || "."),
+    };
+  } catch (error) {
+    const code = error instanceof Error ? error.message : "invalid_tool_args";
+    return {
+      ok: false,
+      status: 400,
+      code: code || "invalid_tool_args",
+      message: "Workspace path is outside the computer workspace.",
+    };
+  }
 }
 
 function shellQuote(value: string): string {
@@ -209,40 +239,121 @@ function parseDirectoryEntries(outputText: string, directoryPath: string) {
 
 async function readWorkspacePathSize(params: {
   session: WorkspaceInspectorSession;
-  relPath: string;
+  path: Extract<WorkspaceInspectorResolvedPath, { resolvedPath: string }>;
 }): Promise<number | null> {
   const result = await runDaytonaWorkspaceBash({
     config: params.session.config,
     toolboxProxyUrl: params.session.toolboxProxyUrl,
     sandboxId: params.session.providerSandboxId,
     relPath: ".",
-    command: `wc -c < ${shellQuote(params.relPath)} | tr -d '[:space:]'`,
+    command: [
+      ...buildGuardedResolvedPathPrelude(params.path),
+      `if [ ! -f "$safe_path" ]; then printf ${shellQuote(WORKSPACE_INSPECTOR_UNSAFE_PATH_MARKER)}; exit 0; fi;`,
+      `wc -c < "$safe_path" | tr -d '[:space:]'`,
+    ].join(" "),
   });
   if (!result.ok) return null;
+  if (String(result.outputText ?? "").trim() === WORKSPACE_INSPECTOR_UNSAFE_PATH_MARKER) return null;
   const parsed = Number(String(result.outputText ?? "").trim());
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-async function readWorkspacePathKind(params: {
+function buildGuardedResolvedPathPrelude(path: Extract<WorkspaceInspectorResolvedPath, { resolvedPath: string }>): string[] {
+  return [
+    "set -f;",
+    `root=${shellQuote(path.rootPath)};`,
+    `safe_path=${shellQuote(path.resolvedPath)};`,
+    'resolved_root="$(realpath -- "$root" 2>/dev/null || readlink -f -- "$root" 2>/dev/null || true)";',
+    `if [ "$resolved_root" != "$root" ]; then printf ${shellQuote(WORKSPACE_INSPECTOR_UNSAFE_PATH_MARKER)}; exit 0; fi;`,
+    'resolved_again="$(realpath -- "$safe_path" 2>/dev/null || readlink -f -- "$safe_path" 2>/dev/null || true)";',
+    `if [ "$resolved_again" != "$safe_path" ]; then printf ${shellQuote(WORKSPACE_INSPECTOR_UNSAFE_PATH_MARKER)}; exit 0; fi;`,
+    `case "$resolved_again" in "$root"|"$root"/*) ;; *) printf ${shellQuote(WORKSPACE_INSPECTOR_UNSAFE_PATH_MARKER)}; exit 0;; esac;`,
+  ];
+}
+
+function mapGuardedPathFailure(): WorkspaceInspectorFailure {
+  return {
+    ok: false,
+    status: 400,
+    code: "path_outside_workspace",
+    message: "Workspace path is outside the computer workspace.",
+  };
+}
+
+async function inspectWorkspacePathBoundary(params: {
   session: WorkspaceInspectorSession;
   relPath: string;
-}): Promise<"file" | "directory" | "missing" | "other"> {
+}): Promise<
+  | { ok: true; path: WorkspaceInspectorResolvedPath }
+  | WorkspaceInspectorFailure
+> {
   const result = await runDaytonaWorkspaceBash({
     config: params.session.config,
     toolboxProxyUrl: params.session.toolboxProxyUrl,
     sandboxId: params.session.providerSandboxId,
     relPath: ".",
     command: [
-      `if [ -d ${shellQuote(params.relPath)} ]; then printf directory;`,
-      `elif [ -f ${shellQuote(params.relPath)} ]; then printf file;`,
-      `elif [ -e ${shellQuote(params.relPath)} ]; then printf other;`,
+      "set -f;",
+      `root_input=${shellQuote(DAYTONA_WORKSPACE_ROOT)};`,
+      'root="$(realpath -- "$root_input" 2>/dev/null || readlink -f -- "$root_input" 2>/dev/null || true)";',
+      'if [ -z "$root" ]; then printf unresolved; exit 0; fi;',
+      `rel=${shellQuote(params.relPath)};`,
+      'abs="$root_input";',
+      'if [ "$rel" != "." ]; then',
+      '  old_ifs="$IFS"; IFS="/"; set -- $rel; IFS="$old_ifs";',
+      '  for part do',
+      '    [ -n "$part" ] || continue;',
+      '    abs="$abs/$part";',
+      '    if [ -L "$abs" ]; then printf symlink; exit 0; fi;',
+      "  done;",
+      "fi;",
+      'if [ ! -e "$abs" ]; then printf "missing\\t%s" "$root"; exit 0; fi;',
+      'resolved="$(realpath -- "$abs" 2>/dev/null || readlink -f -- "$abs" 2>/dev/null || true)";',
+      'if [ -z "$resolved" ]; then printf unresolved; exit 0; fi;',
+      'case "$resolved" in "$root"|"$root"/*) ;; *) printf outside; exit 0;; esac;',
+      'if [ -d "$abs" ]; then printf "directory\\t%s\\t%s" "$root" "$resolved";',
+      'elif [ -f "$abs" ]; then printf "file\\t%s\\t%s" "$root" "$resolved";',
+      'elif [ -e "$abs" ]; then printf "other\\t%s\\t%s" "$root" "$resolved";',
       "else printf missing; fi",
     ].join(" "),
   });
-  if (!result.ok) return "missing";
+  if (!result.ok) return mapFailure(result);
   const value = String(result.outputText ?? "").trim();
-  if (value === "file" || value === "directory" || value === "other") return value;
-  return "missing";
+  const [kind, rootPath, resolvedPath] = value.split("\t");
+  if (kind === "missing" && rootPath) {
+    return {
+      ok: true,
+      path: {
+        kind,
+        rootPath,
+        resolvedPath: null,
+      },
+    };
+  }
+  if ((kind === "file" || kind === "directory" || kind === "other") && rootPath && resolvedPath) {
+    return {
+      ok: true,
+      path: {
+        kind,
+        rootPath,
+        resolvedPath,
+      },
+    };
+  }
+  if (value === "symlink") {
+    return {
+      ok: false,
+      status: 400,
+      code: "workspace_symlink_not_supported",
+      message: "Workspace symlinks are not previewed in the workspace panel.",
+    };
+  }
+  return {
+    ok: false,
+    status: 400,
+    code: value === "outside" ? "path_outside_workspace" : "workspace_path_unresolved",
+    message: "Workspace path is outside the computer workspace.",
+  };
 }
 
 export const listWorkspaceDirectory = action({
@@ -252,7 +363,9 @@ export const listWorkspaceDirectory = action({
     path: v.optional(v.string()),
   },
   handler: async (ctx, args): Promise<unknown> => {
-    const relPath = normalizeInspectorPath(args.path ?? ".");
+    const normalized = normalizeInspectorPath(args.path ?? ".");
+    if (!normalized.ok) return normalized;
+    const relPath = normalized.relPath;
     const session = await resolveInspectorSession({
       ctx,
       authSubject: args.authSubject ?? null,
@@ -260,15 +373,55 @@ export const listWorkspaceDirectory = action({
     });
     if (!session.ok) return session;
 
-    const listed = await readDaytonaWorkspaceFile({
+    const boundaryResult = await inspectWorkspacePathBoundary({ session: session.session, relPath });
+    if (!boundaryResult.ok) return boundaryResult;
+    const boundary = boundaryResult.path;
+    if (boundary.kind === "missing") {
+      return {
+        ok: false,
+        status: 404,
+        code: "directory_not_found",
+        message: "Workspace folder not found.",
+      };
+    }
+    if (boundary.kind !== "directory") {
+      return {
+        ok: false,
+        status: 400,
+        code: "workspace_path_not_directory",
+        message: "Workspace path is not a folder.",
+      };
+    }
+
+    const listed = await runDaytonaWorkspaceBash({
       config: session.session.config,
       toolboxProxyUrl: session.session.toolboxProxyUrl,
       sandboxId: session.session.providerSandboxId,
-      relPath,
-      offset: 1,
-      limit: DIRECTORY_ENTRY_LIMIT,
+      relPath: ".",
+      command: [
+        ...buildGuardedResolvedPathPrelude(boundary),
+        `if [ ! -d "$safe_path" ]; then printf ${shellQuote(WORKSPACE_INSPECTOR_UNSAFE_PATH_MARKER)}; exit 0; fi;`,
+        'cd -- "$safe_path" || exit 1;',
+        "find . -mindepth 1 -maxdepth 1 -print",
+        "| sed 's#^\\./##'",
+        "| while IFS= read -r path; do",
+        '  [ -n "$path" ] || continue;',
+        '  if [ -L "$path" ]; then',
+        "    continue;",
+        '  elif [ -d "$path" ]; then',
+        '    printf \'dir\\t%s\\n\' "$path";',
+        '  elif [ -f "$path" ]; then',
+        '    printf \'file\\t%s\\n\' "$path";',
+        "  fi;",
+        "done",
+        "| LC_ALL=C sort",
+        `| sed -n '1,${DIRECTORY_ENTRY_LIMIT}p'`,
+      ].join(" "),
     });
     if (!listed.ok) return mapFailure(listed);
+    if (String(listed.outputText ?? "").trim() === WORKSPACE_INSPECTOR_UNSAFE_PATH_MARKER) {
+      return mapGuardedPathFailure();
+    }
 
     const entries = parseDirectoryEntries(listed.outputText, relPath);
     return {
@@ -288,7 +441,9 @@ export const readWorkspaceFilePreview = action({
     path: v.string(),
   },
   handler: async (ctx, args): Promise<unknown> => {
-    const relPath = normalizeInspectorPath(args.path);
+    const normalized = normalizeInspectorPath(args.path);
+    if (!normalized.ok) return normalized;
+    const relPath = normalized.relPath;
     const session = await resolveInspectorSession({
       ctx,
       authSubject: args.authSubject ?? null,
@@ -296,8 +451,10 @@ export const readWorkspaceFilePreview = action({
     });
     if (!session.ok) return session;
 
-    const kind = await readWorkspacePathKind({ session: session.session, relPath });
-    if (kind === "missing") {
+    const boundaryResult = await inspectWorkspacePathBoundary({ session: session.session, relPath });
+    if (!boundaryResult.ok) return boundaryResult;
+    const boundary = boundaryResult.path;
+    if (boundary.kind === "missing") {
       return {
         ok: false,
         status: 404,
@@ -305,7 +462,7 @@ export const readWorkspaceFilePreview = action({
         message: "Workspace file not found.",
       };
     }
-    if (kind === "directory") {
+    if (boundary.kind === "directory") {
       return {
         ok: true,
         path: relPath,
@@ -314,7 +471,7 @@ export const readWorkspaceFilePreview = action({
         previewKind: "directory",
       };
     }
-    if (kind !== "file") {
+    if (boundary.kind !== "file") {
       return {
         ok: true,
         path: relPath,
@@ -325,7 +482,7 @@ export const readWorkspaceFilePreview = action({
       };
     }
 
-    const sizeBytes = await readWorkspacePathSize({ session: session.session, relPath });
+    const sizeBytes = await readWorkspacePathSize({ session: session.session, path: boundary });
     const extension = extensionOfPath(relPath);
     const imageMimeType = IMAGE_MIME_BY_EXTENSION[extension] ?? null;
     if (imageMimeType) {
@@ -346,9 +503,16 @@ export const readWorkspaceFilePreview = action({
         toolboxProxyUrl: session.session.toolboxProxyUrl,
         sandboxId: session.session.providerSandboxId,
         relPath: ".",
-        command: `(base64 -w 0 ${shellQuote(relPath)} 2>/dev/null || base64 ${shellQuote(relPath)} | tr -d '\\n')`,
+        command: [
+          ...buildGuardedResolvedPathPrelude(boundary),
+          `if [ ! -f "$safe_path" ]; then printf ${shellQuote(WORKSPACE_INSPECTOR_UNSAFE_PATH_MARKER)}; exit 0; fi;`,
+          "(base64 -w 0 \"$safe_path\" 2>/dev/null || base64 \"$safe_path\" | tr -d '\\n')",
+        ].join(" "),
       });
       if (!encoded.ok) return mapFailure(encoded);
+      if (String(encoded.outputText ?? "").trim() === WORKSPACE_INSPECTOR_UNSAFE_PATH_MARKER) {
+        return mapGuardedPathFailure();
+      }
       return {
         ok: true,
         path: relPath,
@@ -379,14 +543,19 @@ export const readWorkspaceFilePreview = action({
       sandboxId: session.session.providerSandboxId,
       relPath: ".",
       command: [
-        `if ! LC_ALL=C grep -Iq . ${shellQuote(relPath)} && [ "$(wc -c < ${shellQuote(relPath)} | tr -d '[:space:]')" != "0" ]; then`,
+        ...buildGuardedResolvedPathPrelude(boundary),
+        `if [ ! -f "$safe_path" ]; then printf ${shellQuote(WORKSPACE_INSPECTOR_UNSAFE_PATH_MARKER)}; exit 0; fi;`,
+        'if ! LC_ALL=C grep -Iq . "$safe_path" && [ "$(wc -c < "$safe_path" | tr -d \'[:space:]\')" != "0" ]; then',
         "  printf '__POLYNET_BINARY_FILE__';",
         "else",
-        `  head -c ${TEXT_PREVIEW_MAX_BYTES} ${shellQuote(relPath)};`,
+        `  head -c ${TEXT_PREVIEW_MAX_BYTES} "$safe_path";`,
         "fi",
       ].join(" "),
     });
     if (!textPreview.ok) return mapFailure(textPreview);
+    if (String(textPreview.outputText ?? "").trim() === WORKSPACE_INSPECTOR_UNSAFE_PATH_MARKER) {
+      return mapGuardedPathFailure();
+    }
     if (String(textPreview.outputText ?? "").trim() === "__POLYNET_BINARY_FILE__") {
       return {
         ok: true,
