@@ -7601,58 +7601,8 @@ button.chat-reply-quote:hover {
   color: var(--text-muted);
 }
 
-.feed-post-card {
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-  background: var(--bg-card);
-  padding: 12px;
-  display: grid;
-  gap: 8px;
-}
-
-.feed-post-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
-  font-size: 12px;
-  color: var(--text-muted);
-}
-
-.feed-post-type {
-  border: 1px solid var(--border-default);
-  border-radius: 999px;
-  background: var(--bg-card-alt);
-  color: var(--text-primary);
-  padding: 2px 8px;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-}
-
-.feed-post-type.observation {
-  border-color: color-mix(in srgb, var(--accent-gold) 35%, var(--border-default));
-}
-
-.feed-post-type.recommendation {
-  border-color: color-mix(in srgb, #60a5fa 35%, var(--border-default));
-}
-
-.feed-post-type.action {
-  border-color: color-mix(in srgb, #f59e0b 45%, var(--border-default));
-}
-
 .feed-post-pending {
   color: var(--text-faint);
-}
-
-.feed-post-body {
-  color: var(--text-primary);
-  font-size: 14px;
-  line-height: 1.45;
-  white-space: pre-wrap;
-  word-break: break-word;
 }
 
 .ai-feed-item-card {
@@ -7662,59 +7612,6 @@ button.chat-reply-quote:hover {
   padding: 18px;
   display: grid;
   gap: 14px;
-}
-
-.ai-feed-item-card-skeleton {
-  pointer-events: none;
-}
-
-.ai-feed-skeleton-pill {
-  width: 92px;
-  height: 22px;
-  border-radius: 999px;
-}
-
-.ai-feed-skeleton-pill-short {
-  width: 74px;
-}
-
-.ai-feed-skeleton-meta {
-  width: 140px;
-  height: 14px;
-  border-radius: 999px;
-}
-
-.ai-feed-skeleton-title {
-  width: min(260px, 55%);
-  height: 18px;
-  border-radius: 999px;
-}
-
-.ai-feed-skeleton-copy {
-  display: grid;
-  gap: 8px;
-}
-
-.ai-feed-skeleton-row {
-  width: 100%;
-  height: 14px;
-  border-radius: 999px;
-}
-
-.ai-feed-skeleton-row-short {
-  width: 68%;
-}
-
-.ai-feed-skeleton-label {
-  width: 88px;
-  height: 12px;
-  border-radius: 999px;
-}
-
-.ai-feed-skeleton-button {
-  width: 68px;
-  height: 30px;
-  border-radius: 999px;
 }
 
 .ai-feed-item-meta {
@@ -7768,7 +7665,6 @@ button.chat-reply-quote:hover {
 }
 
 .ai-feed-item-type,
-.ai-feed-item-status,
 .ai-feed-item-confidence {
   display: inline-flex;
   align-items: center;
@@ -7779,8 +7675,7 @@ button.chat-reply-quote:hover {
   letter-spacing: 0.04em;
 }
 
-.ai-feed-item-type,
-.ai-feed-item-status {
+.ai-feed-item-type {
   text-transform: uppercase;
 }
 
@@ -7802,25 +7697,6 @@ button.chat-reply-quote:hover {
   border-color: color-mix(in srgb, #22c55e 35%, var(--border-default));
 }
 
-
-.ai-feed-item-status {
-  border: 1px solid var(--border-default);
-  background: color-mix(in srgb, var(--bg-workspace, var(--bg-app)) 90%, transparent);
-  color: var(--text-secondary);
-}
-
-.ai-feed-item-status.open {
-  color: var(--text-primary);
-}
-
-.ai-feed-item-status.dismissed {
-  color: var(--text-muted);
-}
-
-.ai-feed-item-status.resolved {
-  border-color: color-mix(in srgb, #22c55e 32%, var(--border-default));
-  color: color-mix(in srgb, #22c55e 62%, var(--text-primary));
-}
 
 .ai-feed-item-confidence {
   background: color-mix(in srgb, var(--bg-workspace, var(--bg-app)) 92%, transparent);
@@ -7925,75 +7801,10 @@ button.chat-reply-quote:hover {
   font-weight: 700;
 }
 
-.ai-feed-evidence-list {
-  display: grid;
-  gap: 10px;
-}
-
-.ai-feed-evidence-card {
-  border: 1px solid var(--border-muted);
-  border-radius: 14px;
-  background: color-mix(in srgb, var(--bg-workspace, var(--bg-app)) 92%, transparent);
-  padding: 12px 14px;
-  display: grid;
-  gap: 8px;
-}
-
-.ai-feed-evidence-meta {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  font-size: 12px;
-  color: var(--text-muted);
-}
-
-.ai-feed-evidence-type {
-  display: inline-flex;
-  align-items: center;
-  border-radius: 999px;
-  padding: 3px 8px;
-  background: color-mix(in srgb, var(--bg-card-alt) 84%, transparent);
-  border: 1px solid var(--border-default);
-  color: var(--text-secondary);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-}
-
-.ai-feed-evidence-snippet {
-  font-size: 13px;
-  line-height: 1.55;
-  color: var(--text-primary);
-  white-space: pre-wrap;
-}
-
-.ai-feed-evidence-empty {
-  font-size: 13px;
-  color: var(--text-muted);
-}
-
-.ai-feed-item-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
 @media (max-width: 900px) {
   .ai-feed-item-card {
     padding: 16px;
     gap: 12px;
-  }
-
-  .ai-feed-view-toggle {
-    width: 100%;
-    justify-content: stretch;
-  }
-
-  .ai-feed-view-button {
-    flex: 1 1 0;
-    justify-content: center;
   }
 
   .ai-feed-item-title {
@@ -16204,7 +16015,7 @@ button.message-citation-chip:hover {
 }
 
 /* Settings panel buttons - consistent styling */
-.settings-panel button:not(.platform-save-button):not(.integration-mounted-menu-trigger):not(.integration-mounted-menu-item):not(.platform-switcher-btn):not(.analytics-range-btn):not(.ai-feed-view-button):not(.ai-feed-moderate-button):not(.stripe-setup-button):not(.members-pagination-action) {
+.settings-panel button:not(.platform-save-button):not(.integration-mounted-menu-trigger):not(.integration-mounted-menu-item):not(.platform-switcher-btn):not(.analytics-range-btn):not(.ai-feed-moderate-button):not(.stripe-setup-button):not(.members-pagination-action) {
   padding: 10px 16px;
   font-size: 12px;
   font-weight: 500;
@@ -16216,12 +16027,12 @@ button.message-citation-chip:hover {
   color: var(--text-primary);
 }
 
-.settings-panel button:not(.platform-save-button):not(.integration-mounted-menu-trigger):not(.integration-mounted-menu-item):not(.platform-switcher-btn):not(.analytics-range-btn):not(.ai-feed-view-button):not(.ai-feed-moderate-button):not(.stripe-setup-button):not(.members-pagination-action):hover:not(:disabled) {
+.settings-panel button:not(.platform-save-button):not(.integration-mounted-menu-trigger):not(.integration-mounted-menu-item):not(.platform-switcher-btn):not(.analytics-range-btn):not(.ai-feed-moderate-button):not(.stripe-setup-button):not(.members-pagination-action):hover:not(:disabled) {
   border-color: var(--border-default);
   background: var(--bg-card-hover);
 }
 
-.settings-panel button:not(.platform-save-button):not(.integration-mounted-menu-trigger):not(.integration-mounted-menu-item):not(.platform-switcher-btn):not(.analytics-range-btn):not(.ai-feed-view-button):not(.ai-feed-moderate-button):not(.stripe-setup-button):not(.members-pagination-action):disabled {
+.settings-panel button:not(.platform-save-button):not(.integration-mounted-menu-trigger):not(.integration-mounted-menu-item):not(.platform-switcher-btn):not(.analytics-range-btn):not(.ai-feed-moderate-button):not(.stripe-setup-button):not(.members-pagination-action):disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
@@ -16603,8 +16414,7 @@ button.message-citation-chip:hover {
 }
 
 .platform-switcher,
-.analytics-range-toggle,
-.ai-feed-view-toggle {
+.analytics-range-toggle {
   position: relative;
   display: grid;
   grid-auto-flow: column;
@@ -16621,8 +16431,7 @@ button.message-citation-chip:hover {
 }
 
 .platform-switcher::before,
-.analytics-range-toggle::before,
-.ai-feed-view-toggle::before {
+.analytics-range-toggle::before {
   content: "";
   position: absolute;
   top: 4px;
@@ -16643,8 +16452,7 @@ button.message-citation-chip:hover {
 }
 
 .platform-switcher-btn,
-.analytics-range-toggle .analytics-range-btn,
-.ai-feed-view-button {
+.analytics-range-toggle .analytics-range-btn {
   position: relative;
   z-index: 1;
   display: inline-flex;
@@ -16666,13 +16474,10 @@ button.message-citation-chip:hover {
 
 .platform-switcher .platform-switcher-btn,
 .analytics-range-toggle .analytics-range-btn,
-.ai-feed-view-toggle .ai-feed-view-button,
 .settings-panel .platform-switcher .platform-switcher-btn,
 .settings-panel .analytics-range-toggle .analytics-range-btn,
-.settings-panel .ai-feed-view-toggle .ai-feed-view-button,
 .settings-panel .platform-switcher .platform-switcher-btn:hover:not(:disabled),
-.settings-panel .analytics-range-toggle .analytics-range-btn:hover:not(:disabled),
-.settings-panel .ai-feed-view-toggle .ai-feed-view-button:hover:not(:disabled) {
+.settings-panel .analytics-range-toggle .analytics-range-btn:hover:not(:disabled) {
   background: transparent;
   border: 0;
   border-radius: 999px;
@@ -16680,58 +16485,48 @@ button.message-citation-chip:hover {
 }
 
 .settings-panel .platform-switcher .platform-switcher-btn,
-.settings-panel .analytics-range-toggle .analytics-range-btn,
-.settings-panel .ai-feed-view-toggle .ai-feed-view-button {
+.settings-panel .analytics-range-toggle .analytics-range-btn {
   color: var(--text-muted);
 }
 
 .platform-switcher-btn:hover:not(.active):not(.is-active),
-.analytics-range-toggle .analytics-range-btn:hover:not(.active),
-.ai-feed-view-button:hover:not(.active):not(.is-active) {
+.analytics-range-toggle .analytics-range-btn:hover:not(.active) {
   color: var(--text-secondary);
 }
 
 .settings-panel .platform-switcher .platform-switcher-btn:hover:not(.active):not(.is-active),
-.settings-panel .analytics-range-toggle .analytics-range-btn:hover:not(.active),
-.settings-panel .ai-feed-view-toggle .ai-feed-view-button:hover:not(.active):not(.is-active) {
+.settings-panel .analytics-range-toggle .analytics-range-btn:hover:not(.active) {
   color: var(--text-secondary);
 }
 
 .platform-switcher-btn:focus-visible,
-.analytics-range-toggle .analytics-range-btn:focus-visible,
-.ai-feed-view-button:focus-visible {
+.analytics-range-toggle .analytics-range-btn:focus-visible {
   outline: none;
 }
 
 .platform-switcher-btn.active,
 .platform-switcher-btn.is-active,
-.analytics-range-toggle .analytics-range-btn.active,
-.ai-feed-view-button.active,
-.ai-feed-view-button.is-active {
+.analytics-range-toggle .analytics-range-btn.active {
   color: var(--text-primary);
 }
 
 .settings-panel .platform-switcher .platform-switcher-btn.active,
 .settings-panel .platform-switcher .platform-switcher-btn.is-active,
-.settings-panel .analytics-range-toggle .analytics-range-btn.active,
-.settings-panel .ai-feed-view-toggle .ai-feed-view-button.active,
-.settings-panel .ai-feed-view-toggle .ai-feed-view-button.is-active {
+.settings-panel .analytics-range-toggle .analytics-range-btn.active {
   color: var(--text-primary);
 }
 
 @supports (color: color-mix(in srgb, #000 50%, transparent)) {
 
   .platform-switcher-btn:focus-visible,
-  .analytics-range-toggle .analytics-range-btn:focus-visible,
-  .ai-feed-view-button:focus-visible {
+  .analytics-range-toggle .analytics-range-btn:focus-visible {
     box-shadow: 0 0 0 3px color-mix(in srgb, var(--border-active) 18%, transparent);
     border-radius: 999px;
   }
 }
 
 .platform-switcher-compact .platform-switcher-btn,
-.platform-switcher-compact .analytics-range-btn,
-.platform-switcher-compact .ai-feed-view-button {
+.platform-switcher-compact .analytics-range-btn {
   min-height: 32px;
   padding: 6px 12px;
   font-size: 11px;

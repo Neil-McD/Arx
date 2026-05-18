@@ -5,7 +5,13 @@ import {
   PAID_TOOL_PRICING_VERSION,
   PAID_TOOL_TARGET_GROSS_MARGIN_BPS,
   priceVoiceTranscriptionCredits,
+  VOICE_TRANSCRIPTION_FALLBACK_DURATION_SECONDS,
+  type VoiceTranscriptionProvider,
 } from "../shared/workspaceCredits";
+import {
+  settleReservedCreditsBestEffort,
+  settleReservedCreditsStrict,
+} from "./workspaceCreditSettlement";
 
 type VoiceTranscribeInput = {
   audio_base64?: unknown;
@@ -14,14 +20,24 @@ type VoiceTranscribeInput = {
   prompt?: unknown;
   surface?: unknown;
   prefer_primary?: unknown;
+  duration_ms?: unknown;
 };
+
+type VoiceTranscriptionResponseFormat = "verbose_json" | "json";
 
 type VoiceTranscribeResult = {
   ok: boolean;
   text: string;
   provider: "openai" | "groq";
   model: string;
+  responseFormat?: VoiceTranscriptionResponseFormat;
+  durationSeconds?: number;
+  durationSource?: "provider_usage" | "provider_duration";
   message?: string;
+};
+
+type VoiceTranscribeAttemptResult = VoiceTranscribeResult & {
+  retryWithJson?: boolean;
 };
 
 type HttpRouteMethod = "GET" | "POST" | "DELETE" | "OPTIONS" | "PUT" | "PATCH";
@@ -67,64 +83,121 @@ const DEFAULT_VOICE_FALLBACK_ENDPOINT = "https://api.groq.com/openai/v1/audio/tr
 const DEFAULT_VOICE_PROMPT =
   "Transcribe spoken words verbatim. If speech is unclear or absent, return an empty transcript.";
 
+type VoiceDurationEvidence = {
+  durationSeconds: number;
+  durationMs: number | null;
+  source: "client_reported" | "server_byte_floor" | "fallback";
+};
+
+type VoicePriceQuote = {
+  provider: VoiceTranscriptionProvider;
+  model: string;
+  durationSeconds: number;
+  rawVendorCostUsd: number;
+  credits: number;
+  polynetPriceUsd: number;
+};
+
 function newCreditKey(prefix: string): string {
   return `${prefix}_${crypto.randomUUID().replace(/-/g, "")}`;
 }
 
-async function settleReservedCreditsBestEffort(params: {
-  ctx: any;
-  creditKey: string;
-  status: "succeeded" | "refunded";
-  failureReason?: string | null;
-}): Promise<void> {
-  let lastError: unknown = null;
-  for (let attempt = 1; attempt <= 3; attempt += 1) {
-    try {
-      await params.ctx.runMutation(internal.workspaceCredits.settleCreditsInternal as any, {
-        creditKey: params.creditKey,
-        status: params.status,
-        failureReason: params.failureReason ?? undefined,
-        nowMs: Date.now(),
-      });
-      return;
-    } catch (error) {
-      lastError = error;
-      await new Promise((resolve) => setTimeout(resolve, attempt * 100));
-    }
-  }
-  console.warn("credits_settle_failed", {
-    credit_key: params.creditKey,
-    status: params.status,
-    error: lastError instanceof Error ? lastError.message : String(lastError ?? ""),
-  });
+function estimateVoiceDurationByteFloorSeconds(params: {
+  audioBytes: number;
+  mimeType: string;
+}): number {
+  const audioBytes = Math.max(0, Number(params.audioBytes) || 0);
+  if (audioBytes <= 0) return 0;
+  const mimeType = params.mimeType.toLowerCase();
+  const conservativeBytesPerSecond =
+    mimeType.includes("wav")
+      ? 192_000
+      : mimeType.includes("mpeg") || mimeType.includes("mp3") || mimeType.includes("mp4")
+        ? 64_000
+        : 64_000;
+  return audioBytes / conservativeBytesPerSecond;
 }
 
-async function settleReservedCreditsStrict(params: {
-  ctx: any;
-  creditKey: string;
-  status: "succeeded" | "refunded";
-  failureReason?: string | null;
-}): Promise<void> {
-  let lastError: unknown = null;
-  for (let attempt = 1; attempt <= 3; attempt += 1) {
-    try {
-      await params.ctx.runMutation(internal.workspaceCredits.settleCreditsInternal as any, {
-        creditKey: params.creditKey,
-        status: params.status,
-        failureReason: params.failureReason ?? undefined,
-        nowMs: Date.now(),
-      });
-      return;
-    } catch (error) {
-      lastError = error;
-      await new Promise((resolve) => setTimeout(resolve, attempt * 100));
-    }
-  }
-  throw new Error(
-    lastError instanceof Error
-      ? lastError.message || "credits_settlement_failed"
-      : "credits_settlement_failed",
+function resolveVoiceDurationEvidence(params: {
+  durationMs: unknown;
+  audioBytes: number;
+  mimeType: string;
+}): VoiceDurationEvidence {
+  const byteFloorSeconds = estimateVoiceDurationByteFloorSeconds({
+    audioBytes: params.audioBytes,
+    mimeType: params.mimeType,
+  });
+  const fallbackSeconds = Math.max(
+    VOICE_TRANSCRIPTION_FALLBACK_DURATION_SECONDS,
+    byteFloorSeconds,
   );
+  const parsed = Number(params.durationMs);
+  if (Number.isFinite(parsed) && parsed > 0) {
+    const roundedMs = Math.max(1, Math.round(parsed));
+    const clientSeconds = roundedMs / 1000;
+    if (byteFloorSeconds > clientSeconds) {
+      return {
+        durationMs: roundedMs,
+        durationSeconds: byteFloorSeconds,
+        source: "server_byte_floor",
+      };
+    }
+    return {
+      durationMs: roundedMs,
+      durationSeconds: clientSeconds,
+      source: "client_reported",
+    };
+  }
+  return {
+    durationMs: null,
+    durationSeconds: fallbackSeconds,
+    source:
+      byteFloorSeconds > VOICE_TRANSCRIPTION_FALLBACK_DURATION_SECONDS
+        ? "server_byte_floor"
+        : "fallback",
+  };
+}
+
+function quoteVoiceTranscription(params: {
+  provider: VoiceTranscriptionProvider;
+  model: string;
+  durationSeconds: number;
+}): VoicePriceQuote {
+  const rawVendorCostUsd = estimateVoiceTranscriptionVendorCostUsd(params);
+  const credits = priceVoiceTranscriptionCredits(params);
+  return {
+    provider: params.provider,
+    model: params.model,
+    durationSeconds: params.durationSeconds,
+    rawVendorCostUsd,
+    credits,
+    polynetPriceUsd: creditsToUsd(credits),
+  };
+}
+
+function voiceSettlementMetadata(params: {
+  quote: VoicePriceQuote;
+  durationEvidence: VoiceDurationEvidence;
+  finalDurationSource: VoiceTranscribeResult["durationSource"] | VoiceDurationEvidence["source"];
+  responseFormat?: VoiceTranscriptionResponseFormat | null;
+  fallbackUsed: boolean;
+  primaryError?: string | null;
+}): Record<string, unknown> {
+  return {
+    pricing_mode: "duration_seconds",
+    final_provider: params.quote.provider,
+    final_model: params.quote.model,
+    final_duration_seconds: params.quote.durationSeconds,
+    final_duration_source: params.finalDurationSource,
+    response_format: params.responseFormat ?? null,
+    reserve_duration_seconds: params.durationEvidence.durationSeconds,
+    reserve_duration_ms: params.durationEvidence.durationMs,
+    reserve_duration_source: params.durationEvidence.source,
+    final_vendor_cost_usd: params.quote.rawVendorCostUsd,
+    requested_polynet_price_usd: params.quote.polynetPriceUsd,
+    fallback_used: params.fallbackUsed,
+    primary_error: params.primaryError ?? null,
+  };
 }
 
 function readEnv(name: string): string {
@@ -220,6 +293,54 @@ function parseProviderErrorMessage(rawBody: string): string {
   }
 }
 
+function isResponseFormatUnsupported(status: number, message: string): boolean {
+  if (status !== 400 && status !== 422) return false;
+  const normalized = message.toLowerCase();
+  const mentionsResponseFormat =
+    normalized.includes("response_format") ||
+    normalized.includes("response format") ||
+    normalized.includes("verbose_json");
+  if (!mentionsResponseFormat) return false;
+  return (
+    normalized.includes("invalid enum") ||
+    normalized.includes("invalid value") ||
+    normalized.includes("invalid") ||
+    normalized.includes("not a valid") ||
+    normalized.includes("must be") ||
+    normalized.includes("allowed") ||
+    normalized.includes("not supported") ||
+    normalized.includes("unsupported")
+  );
+}
+
+function readProviderDuration(payload: unknown): {
+  durationSeconds: number | undefined;
+  durationSource: VoiceTranscribeResult["durationSource"] | undefined;
+} {
+  const record = payload && typeof payload === "object" ? payload as Record<string, unknown> : {};
+  const usage = record.usage && typeof record.usage === "object"
+    ? record.usage as Record<string, unknown>
+    : {};
+  const usageSeconds = Number(usage.seconds);
+  if (Number.isFinite(usageSeconds) && usageSeconds > 0) {
+    return {
+      durationSeconds: usageSeconds,
+      durationSource: "provider_usage",
+    };
+  }
+  const duration = Number(record.duration);
+  if (Number.isFinite(duration) && duration > 0) {
+    return {
+      durationSeconds: duration,
+      durationSource: "provider_duration",
+    };
+  }
+  return {
+    durationSeconds: undefined,
+    durationSource: undefined,
+  };
+}
+
 async function readJsonBounded<T>(req: Request, maxChars = 14_000_000): Promise<T> {
   const text = await req.text();
   if (!text) throw new Error("invalid_request");
@@ -273,44 +394,62 @@ async function transcribeWithOpenAi(params: {
     };
   }
 
-  const form = new FormData();
-  form.append("model", model);
-  form.append(
-    "file",
-    new Blob([toArrayBuffer(params.bytes)], { type: params.mimeType }),
-    `voice${extensionForMime(params.mimeType)}`,
-  );
-  if (params.language) form.append("language", params.language);
-  if (params.prompt) form.append("prompt", params.prompt);
-  form.append("temperature", "0");
-  form.append("response_format", "json");
+  async function attempt(
+    responseFormat: VoiceTranscriptionResponseFormat,
+  ): Promise<VoiceTranscribeAttemptResult> {
+    const form = new FormData();
+    form.append("model", model);
+    form.append(
+      "file",
+      new Blob([toArrayBuffer(params.bytes)], { type: params.mimeType }),
+      `voice${extensionForMime(params.mimeType)}`,
+    );
+    if (params.language) form.append("language", params.language);
+    if (params.prompt) form.append("prompt", params.prompt);
+    form.append("temperature", "0");
+    form.append("response_format", responseFormat);
 
-  const response = await fetch("https://api.openai.com/v1/audio/transcriptions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: form,
-  });
-  if (!response.ok) {
-    const message = parseProviderErrorMessage(await response.text());
+    const response = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: form,
+    });
+    if (!response.ok) {
+      const message = parseProviderErrorMessage(await response.text());
+      const retryWithJson =
+        responseFormat === "verbose_json" && isResponseFormatUnsupported(response.status, message);
+      return {
+        ok: false,
+        text: "",
+        provider: "openai",
+        model,
+        responseFormat,
+        retryWithJson,
+        message: message || `OpenAI transcription failed (${response.status})`,
+      };
+    }
+    const payload = (await response.json()) as { text?: unknown };
+    const text = typeof payload?.text === "string" ? payload.text.trim() : "";
+    const duration = readProviderDuration(payload);
     return {
-      ok: false,
-      text: "",
+      ok: Boolean(text),
+      text,
       provider: "openai",
       model,
-      message: message || `OpenAI transcription failed (${response.status})`,
+      responseFormat,
+      durationSeconds: duration.durationSeconds,
+      durationSource: duration.durationSource,
+      message: text ? undefined : "OpenAI returned empty transcript.",
     };
   }
-  const payload = (await response.json()) as { text?: unknown };
-  const text = typeof payload?.text === "string" ? payload.text.trim() : "";
-  return {
-    ok: Boolean(text),
-    text,
-    provider: "openai",
-    model,
-    message: text ? undefined : "OpenAI returned empty transcript.",
-  };
+
+  const verboseResult = await attempt("verbose_json");
+  if (!verboseResult.ok && verboseResult.retryWithJson) {
+    return await attempt("json");
+  }
+  return verboseResult;
 }
 
 async function transcribeWithGroqFallback(params: {
@@ -340,43 +479,62 @@ async function transcribeWithGroqFallback(params: {
     };
   }
 
-  const form = new FormData();
-  form.append("model", model);
-  form.append(
-    "file",
-    new Blob([toArrayBuffer(params.bytes)], { type: params.mimeType }),
-    `voice${extensionForMime(params.mimeType)}`,
-  );
-  if (params.language) form.append("language", params.language);
-  if (params.prompt) form.append("prompt", params.prompt);
-  form.append("temperature", "0");
+  async function attempt(
+    responseFormat: VoiceTranscriptionResponseFormat,
+  ): Promise<VoiceTranscribeAttemptResult> {
+    const form = new FormData();
+    form.append("model", model);
+    form.append(
+      "file",
+      new Blob([toArrayBuffer(params.bytes)], { type: params.mimeType }),
+      `voice${extensionForMime(params.mimeType)}`,
+    );
+    if (params.language) form.append("language", params.language);
+    if (params.prompt) form.append("prompt", params.prompt);
+    form.append("temperature", "0");
+    form.append("response_format", responseFormat);
 
-  const response = await fetch(endpoint, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: form,
-  });
-  if (!response.ok) {
-    const message = parseProviderErrorMessage(await response.text());
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: form,
+    });
+    if (!response.ok) {
+      const message = parseProviderErrorMessage(await response.text());
+      const retryWithJson =
+        responseFormat === "verbose_json" && isResponseFormatUnsupported(response.status, message);
+      return {
+        ok: false,
+        text: "",
+        provider: "groq",
+        model,
+        responseFormat,
+        retryWithJson,
+        message: message || `Fallback transcription failed (${response.status})`,
+      };
+    }
+    const payload = (await response.json()) as { text?: unknown };
+    const text = typeof payload?.text === "string" ? payload.text.trim() : "";
+    const duration = readProviderDuration(payload);
     return {
-      ok: false,
-      text: "",
+      ok: Boolean(text),
+      text,
       provider: "groq",
       model,
-      message: message || `Fallback transcription failed (${response.status})`,
+      responseFormat,
+      durationSeconds: duration.durationSeconds,
+      durationSource: duration.durationSource,
+      message: text ? undefined : "Fallback returned empty transcript.",
     };
   }
-  const payload = (await response.json()) as { text?: unknown };
-  const text = typeof payload?.text === "string" ? payload.text.trim() : "";
-  return {
-    ok: Boolean(text),
-    text,
-    provider: "groq",
-    model,
-    message: text ? undefined : "Fallback returned empty transcript.",
-  };
+
+  const verboseResult = await attempt("verbose_json");
+  if (!verboseResult.ok && verboseResult.retryWithJson) {
+    return await attempt("json");
+  }
+  return verboseResult;
 }
 
 export function registerRuntimeVoiceRoutes(args: RegisterRuntimeVoiceRoutesArgs): void {
@@ -457,15 +615,30 @@ export function registerRuntimeVoiceRoutes(args: RegisterRuntimeVoiceRoutesArgs)
             code: "audio_too_short",
           });
         }
+        const durationEvidence = resolveVoiceDurationEvidence({
+          durationMs: input.duration_ms,
+          audioBytes: bytes.byteLength,
+          mimeType,
+        });
 
         const creditKey = newCreditKey("voice");
         reservedCreditKey = creditKey;
-        const voiceVendorCostUsd = estimateVoiceTranscriptionVendorCostUsd({
-          audioBytes: bytes.byteLength,
+        const primaryConfig = resolveVoicePrimaryConfig();
+        const fallbackConfig = resolveVoiceFallbackConfig();
+        const primaryQuote = quoteVoiceTranscription({
+          provider: "openai",
+          model: primaryConfig.model,
+          durationSeconds: durationEvidence.durationSeconds,
         });
-        const voiceCredits = priceVoiceTranscriptionCredits({
-          audioBytes: bytes.byteLength,
+        const fallbackQuote = quoteVoiceTranscription({
+          provider: "groq",
+          model: fallbackConfig.model,
+          durationSeconds: durationEvidence.durationSeconds,
         });
+        const fallbackKeyPresent = Boolean(fallbackConfig.apiKey);
+        const reserveQuote =
+          fallbackKeyPresent && fallbackQuote.credits > primaryQuote.credits ? fallbackQuote : primaryQuote;
+        const voiceCredits = reserveQuote.credits;
         try {
           await (ctx as any).runMutation(internal.workspaceCredits.reserveCreditsInternal as any, {
             creditKey,
@@ -474,12 +647,19 @@ export function registerRuntimeVoiceRoutes(args: RegisterRuntimeVoiceRoutesArgs)
             action: "transcribe",
             vendor: "openai_groq",
             credits: voiceCredits,
-            rawVendorCostUsd: voiceVendorCostUsd,
+            rawVendorCostUsd: reserveQuote.rawVendorCostUsd,
             polynetPriceUsd: creditsToUsd(voiceCredits),
             metadata: {
               pricing_version: PAID_TOOL_PRICING_VERSION,
               target_gross_margin_bps: PAID_TOOL_TARGET_GROSS_MARGIN_BPS,
-              estimated_vendor_cost_usd: voiceVendorCostUsd,
+              pricing_mode: "duration_seconds",
+              reserve_provider: reserveQuote.provider,
+              reserve_model: reserveQuote.model,
+              reserve_vendor_cost_usd: reserveQuote.rawVendorCostUsd,
+              reserve_polynet_price_usd: reserveQuote.polynetPriceUsd,
+              duration_seconds: durationEvidence.durationSeconds,
+              duration_ms: durationEvidence.durationMs,
+              duration_source: durationEvidence.source,
               surface: surface || null,
               mime_type: mimeType,
               audio_bytes: bytes.byteLength,
@@ -503,11 +683,27 @@ export function registerRuntimeVoiceRoutes(args: RegisterRuntimeVoiceRoutesArgs)
 
         const primary = await transcribeWithOpenAi({ bytes, mimeType, language, prompt });
         if (primary.ok) {
+          const settledDurationSeconds = primary.durationSeconds ?? durationEvidence.durationSeconds;
+          const settledDurationSource = primary.durationSource ?? durationEvidence.source;
+          const settledQuote = quoteVoiceTranscription({
+            provider: "openai",
+            model: primary.model,
+            durationSeconds: settledDurationSeconds,
+          });
           try {
             await settleReservedCreditsStrict({
               ctx,
               creditKey,
               status: "succeeded",
+              creditsSettled: settledQuote.credits,
+              rawVendorCostUsd: settledQuote.rawVendorCostUsd,
+              metadata: voiceSettlementMetadata({
+                quote: settledQuote,
+                durationEvidence,
+                finalDurationSource: settledDurationSource,
+                responseFormat: primary.responseFormat ?? null,
+                fallbackUsed: false,
+              }),
             });
           } catch {
             reservedCreditKey = null;
@@ -545,7 +741,6 @@ export function registerRuntimeVoiceRoutes(args: RegisterRuntimeVoiceRoutesArgs)
           });
         }
 
-        const fallbackKeyPresent = Boolean(resolveVoiceFallbackConfig().apiKey);
         if (!fallbackKeyPresent) {
           await settleReservedCreditsBestEffort({
             ctx,
@@ -565,11 +760,28 @@ export function registerRuntimeVoiceRoutes(args: RegisterRuntimeVoiceRoutesArgs)
 
         const fallback = await transcribeWithGroqFallback({ bytes, mimeType, language, prompt });
         if (fallback.ok) {
+          const settledDurationSeconds = fallback.durationSeconds ?? durationEvidence.durationSeconds;
+          const settledDurationSource = fallback.durationSource ?? durationEvidence.source;
+          const settledQuote = quoteVoiceTranscription({
+            provider: "groq",
+            model: fallback.model,
+            durationSeconds: settledDurationSeconds,
+          });
           try {
             await settleReservedCreditsStrict({
               ctx,
               creditKey,
               status: "succeeded",
+              creditsSettled: settledQuote.credits,
+              rawVendorCostUsd: settledQuote.rawVendorCostUsd,
+              metadata: voiceSettlementMetadata({
+                quote: settledQuote,
+                durationEvidence,
+                finalDurationSource: settledDurationSource,
+                responseFormat: fallback.responseFormat ?? null,
+                fallbackUsed: true,
+                primaryError: primary.message ?? null,
+              }),
             });
           } catch {
             reservedCreditKey = null;

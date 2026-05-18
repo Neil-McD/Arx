@@ -5,8 +5,8 @@ export const DEFAULT_DAYTONA_SANDBOX_DISK_GIB = 8;
 export const DEFAULT_INCLUDED_TOOL_CREDITS = 0;
 export const WORKSPACE_CREDITS_PER_USD = 100;
 export const WORKSPACE_CREDIT_TOPUP_CREDITS = 500;
-export const WORKSPACE_CREDIT_TOPUP_PRICE_USD = 5;
 export const WORKSPACE_CREDIT_LOW_BALANCE_THRESHOLD = 100;
+export const WORKSPACE_TOOL_BALANCE_TOPUP_CHECKOUT_TTL_MS = 24 * 60 * 60 * 1000;
 export const WORKSPACE_TOOL_BALANCE_TOPUP_PACKS = [
   {
     id: "tool_balance_500",
@@ -42,7 +42,6 @@ export type WorkspaceToolBalanceTopupPackId = WorkspaceToolBalanceTopupPack["id"
 export type WorkspaceCreditTopupSurface = "settings_agent" | "tool_balance_modal";
 export const DEFAULT_WORKSPACE_TOOL_BALANCE_TOPUP_PACK_ID: WorkspaceToolBalanceTopupPackId = "tool_balance_500";
 export const WEB_RESEARCH_CREDITS_PER_CALL = 1;
-export const VOICE_TRANSCRIPTION_CREDITS_PER_REQUEST = 1;
 export const PAID_TOOL_TARGET_GROSS_MARGIN_BPS = 6000;
 export const PAID_TOOL_PRICING_VERSION = "paid_tools_v1";
 export const WEB_RESEARCH_VENDOR_COST_ESTIMATE_USD_BY_ACTION = {
@@ -50,15 +49,26 @@ export const WEB_RESEARCH_VENDOR_COST_ESTIMATE_USD_BY_ACTION = {
   open_page: 0.001,
   find_in_page: 0.001,
 } as const;
-export const VOICE_TRANSCRIPTION_VENDOR_COST_ESTIMATE_USD_PER_REQUEST = 0.003;
-export const VOICE_TRANSCRIPTION_VENDOR_COST_ESTIMATE_USD_PER_MEGABYTE = 0.001;
+export const VOICE_TRANSCRIPTION_FALLBACK_DURATION_SECONDS = 1;
+export const OPENAI_VOICE_TRANSCRIPTION_USD_PER_MINUTE_BY_MODEL = {
+  "gpt-4o-mini-transcribe": 0.003,
+  "gpt-4o-transcribe": 0.006,
+} as const;
+export const OPENAI_VOICE_TRANSCRIPTION_DEFAULT_USD_PER_MINUTE =
+  OPENAI_VOICE_TRANSCRIPTION_USD_PER_MINUTE_BY_MODEL["gpt-4o-mini-transcribe"];
+export const GROQ_VOICE_TRANSCRIPTION_USD_PER_HOUR_BY_MODEL = {
+  "whisper-large-v3-turbo": 0.04,
+  "whisper-large-v3": 0.111,
+} as const;
+export const GROQ_VOICE_TRANSCRIPTION_DEFAULT_USD_PER_HOUR =
+  GROQ_VOICE_TRANSCRIPTION_USD_PER_HOUR_BY_MODEL["whisper-large-v3-turbo"];
+export const GROQ_VOICE_TRANSCRIPTION_MIN_BILLED_SECONDS = 10;
 export const CREDIT_RESERVATION_EXPIRY_MS = 60 * 60 * 1000;
-export const DAYTONA_WORKSPACE_SESSION_BUDGET_SECONDS = 60 * 60;
-export const DAYTONA_WORKSPACE_SESSION_STOP_GRACE_SECONDS = 15 * 60;
-export const DAYTONA_WORKSPACE_SESSION_RESERVE_SECONDS =
-  DAYTONA_WORKSPACE_SESSION_BUDGET_SECONDS +
-  DAYTONA_WORKSPACE_SESSION_STOP_GRACE_SECONDS;
-export const DAYTONA_WORKSPACE_SESSION_RESERVATION_EXPIRY_MS = 2 * 60 * 60 * 1000;
+export const DAYTONA_WORKSPACE_SESSION_HOLD_SECONDS = 60;
+export const DAYTONA_WORKSPACE_SESSION_MAX_SECONDS = 30 * 60;
+export const DAYTONA_WORKSPACE_SESSION_IDLE_AUTOSTOP_MINUTES = 15;
+export const DAYTONA_WORKSPACE_SESSION_RESERVATION_EXPIRY_MS =
+  (DAYTONA_WORKSPACE_SESSION_MAX_SECONDS + 5 * 60) * 1000;
 
 export const DAYTONA_VCPU_USD_PER_SECOND = 0.000014;
 export const DAYTONA_MEMORY_GIB_USD_PER_SECOND = 0.0000045;
@@ -200,26 +210,44 @@ export function priceWebResearchCredits(action: WebResearchCreditAction): number
   });
 }
 
+export type VoiceTranscriptionProvider = "openai" | "groq";
+
+function normalizeDurationSeconds(raw: unknown): number {
+  const seconds = Number(raw);
+  if (!Number.isFinite(seconds)) return VOICE_TRANSCRIPTION_FALLBACK_DURATION_SECONDS;
+  return Math.max(0, seconds);
+}
+
 export function estimateVoiceTranscriptionVendorCostUsd(params?: {
-  audioBytes?: number;
+  durationSeconds?: number;
+  provider?: VoiceTranscriptionProvider;
+  model?: string | null;
 }): number {
-  const audioBytes =
-    typeof params?.audioBytes === "number" && Number.isFinite(params.audioBytes)
-      ? Math.max(0, params.audioBytes)
-      : 0;
-  const megabytes = audioBytes / 1_000_000;
-  return Math.max(
-    VOICE_TRANSCRIPTION_VENDOR_COST_ESTIMATE_USD_PER_REQUEST,
-    megabytes * VOICE_TRANSCRIPTION_VENDOR_COST_ESTIMATE_USD_PER_MEGABYTE,
-  );
+  const provider = params?.provider === "groq" ? "groq" : "openai";
+  const durationSeconds = normalizeDurationSeconds(params?.durationSeconds);
+  const model = String(params?.model ?? "").trim();
+  if (provider === "groq") {
+    const hourlyRate =
+      GROQ_VOICE_TRANSCRIPTION_USD_PER_HOUR_BY_MODEL[
+        model as keyof typeof GROQ_VOICE_TRANSCRIPTION_USD_PER_HOUR_BY_MODEL
+      ] ?? GROQ_VOICE_TRANSCRIPTION_DEFAULT_USD_PER_HOUR;
+    const billableSeconds = Math.max(durationSeconds, GROQ_VOICE_TRANSCRIPTION_MIN_BILLED_SECONDS);
+    return (billableSeconds / 3600) * hourlyRate;
+  }
+  const minuteRate =
+    OPENAI_VOICE_TRANSCRIPTION_USD_PER_MINUTE_BY_MODEL[
+      model as keyof typeof OPENAI_VOICE_TRANSCRIPTION_USD_PER_MINUTE_BY_MODEL
+    ] ?? OPENAI_VOICE_TRANSCRIPTION_DEFAULT_USD_PER_MINUTE;
+  return (durationSeconds / 60) * minuteRate;
 }
 
 export function priceVoiceTranscriptionCredits(params?: {
-  audioBytes?: number;
+  durationSeconds?: number;
+  provider?: VoiceTranscriptionProvider;
+  model?: string | null;
 }): number {
-  return priceFixedPaidToolCredits({
-    minimumCredits: VOICE_TRANSCRIPTION_CREDITS_PER_REQUEST,
-    estimatedVendorCostUsd: estimateVoiceTranscriptionVendorCostUsd(params),
+  return priceVendorCostUsdToWorkspaceCredits({
+    rawVendorCostUsd: estimateVoiceTranscriptionVendorCostUsd(params),
   });
 }
 
@@ -242,11 +270,11 @@ export function estimateDaytonaWorkspaceReservationCredits(params: {
     durationSeconds:
       typeof params.durationSeconds === "number" && Number.isFinite(params.durationSeconds)
         ? params.durationSeconds
-        : DAYTONA_WORKSPACE_SESSION_RESERVE_SECONDS,
+        : DAYTONA_WORKSPACE_SESSION_HOLD_SECONDS,
     sandboxCpu: params.sandboxCpu,
     sandboxMemoryGiB: params.sandboxMemoryGiB,
   });
-  return Math.max(1, ceilCredits(credits));
+  return ceilCredits(credits);
 }
 
 export function priceDaytonaWorkspaceUsageCredits(params: {
@@ -272,4 +300,19 @@ export function resolveWorkspaceToolBalanceTopupPack(
 export function formatWorkspaceToolBalanceUsdFromCredits(credits: number): string {
   const usd = creditsToUsd(credits);
   return usd % 1 === 0 ? `$${usd.toFixed(0)}` : `$${usd.toFixed(2)}`;
+}
+
+export type WorkspaceCreditBalanceLike = {
+  includedCreditsBalance?: number | null;
+  purchasedCreditsBalance?: number | null;
+  uncollectedCreditsBalance?: number | null;
+};
+
+export function getSpendableWorkspaceToolBalanceCredits(balance: WorkspaceCreditBalanceLike | null | undefined): number {
+  return Math.max(0, Number(balance?.includedCreditsBalance ?? 0) || 0) +
+    Math.max(0, Number(balance?.purchasedCreditsBalance ?? 0) || 0);
+}
+
+export function getUncollectedWorkspaceToolBalanceCredits(balance: WorkspaceCreditBalanceLike | null | undefined): number {
+  return Math.max(0, Number(balance?.uncollectedCreditsBalance ?? 0) || 0);
 }

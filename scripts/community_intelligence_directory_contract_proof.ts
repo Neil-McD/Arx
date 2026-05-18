@@ -87,6 +87,16 @@ assert.match(
   "source traces should include feedback and transcript evidence types",
 );
 assert.match(
+  schema,
+  /communitySourceTraces: defineTable\([\s\S]*compilerState: v\.optional\([\s\S]*v\.literal\("pending"\)[\s\S]*v\.literal\("compiled"\)[\s\S]*v\.literal\("excluded_by_visibility"\)[\s\S]*compilerPendingSince: v\.optional\(v\.number\(\)\)[\s\S]*compilerLastHandledAt: v\.optional\(v\.number\(\)\)[\s\S]*compilerLastDigestId: v\.optional\(v\.id\("communityCompilerDigests"\)\)/,
+  "source traces should carry explicit compiler lifecycle state",
+);
+assert.match(
+  schema,
+  /\.index\("by_community_compilerState_visibility_pendingSince", \[[\s\S]*"communityId",[\s\S]*"compilerState",[\s\S]*"visibilityScope",[\s\S]*"compilerPendingSince",[\s\S]*\]\)/,
+  "source traces should support bounded visibility-aware pending-backlog reads",
+);
+assert.match(
   directory,
   /createCommunityIntelligenceChangeRequest[\s\S]*insertChangeRequest/,
   "activity should be able to create policy-gated directory change requests",
@@ -158,6 +168,21 @@ assert.match(
   directory,
   /allowExistingUpdate\?: boolean[\s\S]*if \(existing\) \{[\s\S]*if \(!args\.allowExistingUpdate\) \{[\s\S]*community_source_trace_source_conflict/,
   "source trace upserts should reject source-id collisions unless trusted overwrite is explicit",
+);
+assert.match(
+  directory,
+  /sourceTraceMaterialChanged[\s\S]*shouldMarkSourceTracePending[\s\S]*nextSourceTracePendingSince/,
+  "source trace upserts should mark material evidence updates pending without reopening idempotent writes",
+);
+assert.match(
+  directory,
+  /sourceTraceCompilerLifecyclePatch[\s\S]*compilerState: nextState[\s\S]*compilerPendingSince: undefined[\s\S]*compilerLastHandledAt: undefined[\s\S]*compilerState: "pending" as const[\s\S]*compilerPendingSince: nextSourceTracePendingSince/,
+  "source trace lifecycle should exclude private traces and return eligible material updates to pending",
+);
+assert.match(
+  directory,
+  /const compilerLifecyclePatch = sourceTraceCompilerLifecyclePatch\([\s\S]*ctx\.db\.insert\("communitySourceTraces"[\s\S]*\.\.\.compilerLifecyclePatch/,
+  "new source traces should start from the visibility-aware compiler lifecycle patch",
 );
 assert.match(
   aiFeed,

@@ -11,9 +11,11 @@ import {
   type DaytonaConfig,
 } from "./daytonaSandboxClient";
 import { executeDaytonaCommand } from "./daytonaToolboxExecutor";
+import { settleReservedCreditsBestEffort } from "./workspaceCreditSettlement";
 import {
-  DAYTONA_WORKSPACE_SESSION_BUDGET_SECONDS,
-  DAYTONA_WORKSPACE_SESSION_RESERVE_SECONDS,
+  DAYTONA_WORKSPACE_SESSION_HOLD_SECONDS,
+  DAYTONA_WORKSPACE_SESSION_IDLE_AUTOSTOP_MINUTES,
+  DAYTONA_WORKSPACE_SESSION_MAX_SECONDS,
   DAYTONA_WORKSPACE_SESSION_RESERVATION_EXPIRY_MS,
   creditsToUsd,
   estimateDaytonaWorkspaceReservationCredits,
@@ -74,36 +76,12 @@ export type WorkspaceSandboxCleanupResult = {
 function buildRunPinnedDaytonaConfig(config: DaytonaConfig): DaytonaConfig {
   return {
     ...config,
-    // Workspace sandboxes are created per active run and explicitly stopped in cleanup.
-    // Disable Daytona idle auto-stop so mixed web+workspace turns cannot lose the sandbox
-    // during research gaps before the run finishes.
-    autoStopInterval: 0,
+    autoStopInterval: DAYTONA_WORKSPACE_SESSION_IDLE_AUTOSTOP_MINUTES,
   };
 }
 
 function newCreditKey(prefix: string): string {
   return `${prefix}_${crypto.randomUUID().replace(/-/g, "")}`;
-}
-
-async function settleReservedCreditsBestEffort(params: {
-  ctx: any;
-  creditKey: string;
-  status: "succeeded" | "refunded";
-  creditsSettled?: number;
-  failureReason?: string | null;
-  nowMs?: number;
-}): Promise<void> {
-  try {
-    await params.ctx.runMutation(internal.workspaceCredits.settleCreditsInternal as any, {
-      creditKey: params.creditKey,
-      status: params.status,
-      creditsSettled: params.creditsSettled,
-      failureReason: params.failureReason ?? undefined,
-      nowMs: params.nowMs ?? Date.now(),
-    });
-  } catch {
-    // Expired-reservation reconciliation is the durable fallback.
-  }
 }
 
 export async function resolveWorkspaceProjectContext(params: {
@@ -258,13 +236,13 @@ export async function createWorkspaceSandboxSession(params: {
   }
   const runPinnedConfig = buildRunPinnedDaytonaConfig(loadedDaytonaConfig.config);
   const creditReservationKey = newCreditKey("daytona");
-  const creditBudgetExpiresAt = nowMs + DAYTONA_WORKSPACE_SESSION_BUDGET_SECONDS * 1000;
+  const creditBudgetExpiresAt = nowMs + DAYTONA_WORKSPACE_SESSION_MAX_SECONDS * 1000;
   const creditBudgetCredits = estimateDaytonaWorkspaceReservationCredits({
     sandboxCpu: runPinnedConfig.sandboxCpu,
     sandboxMemoryGiB: runPinnedConfig.sandboxMemoryGiB,
   });
   const creditBudgetVendorCostUsd = estimateDaytonaWorkspaceComputeUsd({
-    durationSeconds: DAYTONA_WORKSPACE_SESSION_RESERVE_SECONDS,
+    durationSeconds: DAYTONA_WORKSPACE_SESSION_HOLD_SECONDS,
     sandboxCpu: runPinnedConfig.sandboxCpu,
     sandboxMemoryGiB: runPinnedConfig.sandboxMemoryGiB,
   });
@@ -284,6 +262,10 @@ export async function createWorkspaceSandboxSession(params: {
         sandbox_cpu: runPinnedConfig.sandboxCpu,
         sandbox_memory_gib: runPinnedConfig.sandboxMemoryGiB,
         sandbox_disk_gib: runPinnedConfig.sandboxDiskGiB,
+        hold_seconds: DAYTONA_WORKSPACE_SESSION_HOLD_SECONDS,
+        max_seconds: DAYTONA_WORKSPACE_SESSION_MAX_SECONDS,
+        idle_autostop_minutes: DAYTONA_WORKSPACE_SESSION_IDLE_AUTOSTOP_MINUTES,
+        billing_mode: "raw_elapsed_seconds",
         pricing_version: PAID_TOOL_PRICING_VERSION,
         target_gross_margin_bps: PAID_TOOL_TARGET_GROSS_MARGIN_BPS,
       },
@@ -440,21 +422,7 @@ export async function cleanupTemporaryWorkspaceSandboxSession(params: {
         sandboxMemoryGiB: params.session.sandboxMemoryGiB,
       });
       const creditReservationKey = String(params.session.creditReservationKey ?? "").trim();
-      const creditsDebited = creditReservationKey
-        ? Math.min(
-            Number(params.session.creditBudgetCredits ?? 0),
-            priceDaytonaWorkspaceUsageCredits({ computeCostUsd }),
-          )
-        : priceDaytonaWorkspaceUsageCredits({ computeCostUsd });
-      if (creditReservationKey) {
-        await settleReservedCreditsBestEffort({
-          ctx: params.ctx,
-          creditKey: creditReservationKey,
-          status: "succeeded",
-          creditsSettled: creditsDebited,
-          nowMs: endedAt,
-        });
-      }
+      const creditsDebited = priceDaytonaWorkspaceUsageCredits({ computeCostUsd });
       await params.ctx.runMutation(internal.workspaceCredits.recordWorkspaceComputeChargeInternal as any, {
         chargeKey: params.session.providerSandboxId,
         userId: params.userId,
@@ -476,6 +444,31 @@ export async function cleanupTemporaryWorkspaceSandboxSession(params: {
       const message = error instanceof Error ? error.message : String(error);
       chargeErrorMessage =
         message || "Failed to record workspace compute charge.";
+      const durationSeconds = Math.max(0, (Date.now() - params.session.startedAt) / 1000);
+      const computeCostUsd = estimateDaytonaWorkspaceComputeUsd({
+        durationSeconds,
+        sandboxCpu: params.session.sandboxCpu,
+        sandboxMemoryGiB: params.session.sandboxMemoryGiB,
+      });
+      const creditReservationKey = String(params.session.creditReservationKey ?? "").trim();
+      if (creditReservationKey) {
+        try {
+          await params.ctx.runMutation(internal.workspaceCredits.queueCreditSettlementRetryInternal as any, {
+            creditKey: creditReservationKey,
+            status: "succeeded",
+            creditsSettled: priceDaytonaWorkspaceUsageCredits({ computeCostUsd }),
+            rawVendorCostUsd: computeCostUsd,
+            metadata: {
+              settlement_source: "workspace_compute_charge_recording_failed",
+              provider_sandbox_id: params.session.providerSandboxId,
+              duration_seconds: durationSeconds,
+            },
+            error: chargeErrorMessage,
+          });
+        } catch {
+          // Preserve cleanup result; orphan reconciliation remains the fallback.
+        }
+      }
     }
   }
   return {

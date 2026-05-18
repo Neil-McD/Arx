@@ -33,6 +33,11 @@ type CommunityEventLike = {
   updatedAt: number;
 };
 
+const COMMUNITY_EVENT_LIST_STATUSES = ["live", "cancelled"] as const;
+const COMMUNITY_EVENT_RECURRING_FREQUENCIES = ["daily", "weekly", "monthly"] as const;
+const MAX_EVENT_WINDOW_CANDIDATES_PER_STATUS = 1000;
+const MAX_RECURRING_EVENT_CANDIDATES_PER_STATUS_FREQUENCY = 1000;
+
 function normalizeTimezone(raw: unknown): string {
   const value = String(raw ?? "").trim();
   return value || "UTC";
@@ -227,6 +232,60 @@ function expandCommunityEventRows(params: {
     .slice(0, params.limit);
 }
 
+function listStatusesForEventQuery(includeCancelled: boolean): CommunityEventLike["status"][] {
+  return includeCancelled ? [...COMMUNITY_EVENT_LIST_STATUSES] : ["live"];
+}
+
+function dedupeCommunityEventRows(rows: CommunityEventLike[]): CommunityEventLike[] {
+  const rowsById = new Map<string, CommunityEventLike>();
+  for (const row of rows) {
+    rowsById.set(normalizeIdValue(row._id), row);
+  }
+  return [...rowsById.values()];
+}
+
+async function listCommunityEventExpansionCandidates(params: {
+  ctx: any;
+  communityId: any;
+  startMs: number;
+  endMs: number;
+  includeCancelled: boolean;
+}): Promise<CommunityEventLike[]> {
+  if (params.startMs > params.endMs) return [];
+
+  const rows: CommunityEventLike[] = [];
+  for (const status of listStatusesForEventQuery(params.includeCancelled)) {
+    const windowRows = (await params.ctx.db
+      .query("communityEvents" as any)
+      .withIndex("by_community_status_startsAt", (q: any) =>
+        q
+          .eq("communityId", params.communityId)
+          .eq("status", status)
+          .gte("startsAt", params.startMs)
+          .lte("startsAt", params.endMs),
+      )
+      .take(MAX_EVENT_WINDOW_CANDIDATES_PER_STATUS)) as CommunityEventLike[];
+    rows.push(...windowRows);
+
+    for (const frequency of COMMUNITY_EVENT_RECURRING_FREQUENCIES) {
+      const recurringRows = (await params.ctx.db
+        .query("communityEvents" as any)
+        .withIndex("by_community_status_recurrenceFrequency_startsAt", (q: any) =>
+          q
+            .eq("communityId", params.communityId)
+            .eq("status", status)
+            .eq("recurrenceFrequency", frequency)
+            .lte("startsAt", params.endMs),
+        )
+        .order("desc")
+        .take(MAX_RECURRING_EVENT_CANDIDATES_PER_STATUS_FREQUENCY)) as CommunityEventLike[];
+      rows.push(...recurringRows);
+    }
+  }
+
+  return dedupeCommunityEventRows(rows);
+}
+
 export const listCommunityEvents = query({
   args: {
     userId: v.optional(v.id("users")),
@@ -254,10 +313,13 @@ export const listCommunityEvents = query({
     const limit = Math.max(1, Math.min(1000, Math.floor(args.limit ?? 200)));
     const includeCancelled = Boolean(args.includeCancelled);
 
-    const rows = (await ctx.db
-      .query("communityEvents" as any)
-      .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
-      .collect()) as CommunityEventLike[];
+    const rows = await listCommunityEventExpansionCandidates({
+      ctx,
+      communityId: args.communityId,
+      startMs,
+      endMs,
+      includeCancelled,
+    });
 
     return expandCommunityEventRows({ rows, startMs, endMs, includeCancelled, limit });
   },

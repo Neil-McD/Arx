@@ -52,6 +52,24 @@ crons.interval(
   },
 );
 
+crons.interval(
+  "retry pending credit settlements",
+  { minutes: 15 },
+  (internal as any).workspaceCredits.retryPendingCreditSettlementsInternal,
+  {
+    limit: 50,
+  },
+);
+
+crons.interval(
+  "expire stale tool balance checkouts",
+  { minutes: 15 },
+  (internal as any).workspaceCredits.expireStaleWorkspaceCreditTopupCheckoutSessionsInternal,
+  {
+    limit: 100,
+  },
+);
+
 crons.daily(
   "advance builder partner commissions to payable",
   {

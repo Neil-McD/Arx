@@ -19,7 +19,6 @@ export async function startCloudWorkspaceCreditTopupCheckout<SessionT>(
     successUrl: params.successUrl,
     cancelUrl: params.cancelUrl,
     packId: params.packId,
-    nowMs: Date.now(),
   })) as {
     checkout_url?: unknown;
   };

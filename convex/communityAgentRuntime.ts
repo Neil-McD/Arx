@@ -25,6 +25,7 @@ import { normalizeIdValue, toIsoString } from "./communityCore";
 const COMMUNITY_AGENT_RUNTIME_MAX_TOOL_STEPS = 8;
 const COMMUNITY_AGENT_RUNTIME_MAX_OUTPUT_CHARS = 12_000;
 const COMMUNITY_AGENT_RUNTIME_MAX_ERROR_CHARS = 500;
+const COMMUNITY_AGENT_RUNNING_RUN_STALE_MS = 30 * 60 * 1000;
 const internalRefs = internal as any;
 
 type CommunityAgentTriggerType = "manual_internal" | "heartbeat" | "event";
@@ -46,14 +47,28 @@ type CommunityAgentFilesystemContext = {
   heartbeatId?: string;
 };
 
+type CommunityAgentWakeEvidence = {
+  reason: string;
+  pendingTotal: number;
+  pendingStandard: number;
+  pendingStrong: number;
+  pendingCritical: number;
+  oldestPendingAt?: string;
+  hasMorePending: boolean;
+  countsAreLowerBound: boolean;
+};
+
 type CommunityAgentRunView = {
   id: string;
   community_id: string;
   agent_key: string;
   trigger_type: string;
+  heartbeat_id: string | null;
   sponsor_user_id: string;
   model_id: string | null;
   status: string;
+  wake_reason: string | null;
+  wake_evidence: CommunityAgentWakeEvidence | null;
   stop_reason: string | null;
   tool_step_count: number;
   candidate_proposal_ids: string[];
@@ -67,10 +82,17 @@ type CommunityAgentRunView = {
 
 type CommunityAgentRuntimeResult = {
   ok: boolean;
+  skipped: boolean;
   run: unknown;
   stop_reason: string;
   tool_step_count: number;
   candidate_proposal_ids: string[];
+};
+
+type CommunityAgentCreateRunResult = {
+  created: boolean;
+  skipped_reason: string | null;
+  run: CommunityAgentRunView;
 };
 
 function boundedText(raw: unknown, maxLength: number): string {
@@ -86,6 +108,17 @@ function normalizeTriggerType(raw: unknown): CommunityAgentTriggerType {
 function normalizeModelId(raw: unknown): string {
   return boundedText(raw, 128) || DEFAULT_ACTIVE_MODEL_ID;
 }
+
+const communityAgentWakeEvidenceValidator = v.object({
+  reason: v.string(),
+  pendingTotal: v.number(),
+  pendingStandard: v.number(),
+  pendingStrong: v.number(),
+  pendingCritical: v.number(),
+  oldestPendingAt: v.optional(v.string()),
+  hasMorePending: v.boolean(),
+  countsAreLowerBound: v.boolean(),
+});
 
 function clampToolSteps(raw: unknown): number {
   const parsed = Math.floor(Number(raw ?? COMMUNITY_AGENT_RUNTIME_MAX_TOOL_STEPS));
@@ -185,6 +218,8 @@ function buildCommunityAgentMessages(params: {
   agentKey: string;
   triggerType: CommunityAgentTriggerType;
   runId: string;
+  wakeReason?: string;
+  wakeEvidence?: CommunityAgentWakeEvidence;
 }): NativeToolAwareMessage[] {
   const communityLabel =
     params.resolved.communityName ||
@@ -227,6 +262,10 @@ function buildCommunityAgentMessages(params: {
         `Agent key: ${params.agentKey}`,
         `Run id: ${params.runId}`,
         `Trigger: ${params.triggerType}`,
+        params.wakeReason ? `Wake reason: ${params.wakeReason}` : "",
+        params.wakeEvidence
+          ? `Evidence state: pending ${params.wakeEvidence.pendingTotal}, critical ${params.wakeEvidence.pendingCritical}, strong ${params.wakeEvidence.pendingStrong}, lower-bound ${params.wakeEvidence.countsAreLowerBound ? "yes" : "no"}.`
+          : "",
         params.resolved.communityOneLiner ? `One-liner: ${params.resolved.communityOneLiner}` : "",
         params.resolved.communityAbout ? `About: ${params.resolved.communityAbout}` : "",
         "Begin the bounded community cognition pass now.",
@@ -285,9 +324,12 @@ function mapRun(row: Record<string, any>): CommunityAgentRunView {
     community_id: normalizeIdValue(row.communityId),
     agent_key: row.agentKey,
     trigger_type: row.triggerType,
+    heartbeat_id: row.heartbeatId ?? null,
     sponsor_user_id: normalizeIdValue(row.sponsorUserId),
     model_id: row.modelId ?? null,
     status: row.status,
+    wake_reason: row.wakeReason ?? null,
+    wake_evidence: row.wakeEvidence ?? null,
     stop_reason: row.stopReason ?? null,
     tool_step_count: row.toolStepCount,
     candidate_proposal_ids: Array.isArray(row.candidateProposalIds) ? row.candidateProposalIds.map(String) : [],
@@ -340,21 +382,58 @@ export const createCommunityAgentRunInternal = internalMutation({
     ),
     sponsorUserId: v.id("users"),
     modelId: v.string(),
+    heartbeatId: v.optional(v.string()),
+    wakeReason: v.optional(v.string()),
+    wakeEvidence: v.optional(communityAgentWakeEvidenceValidator),
     nowMs: v.optional(v.number()),
   },
-  handler: async (ctx, args): Promise<CommunityAgentRunView> => {
+  handler: async (ctx, args): Promise<CommunityAgentCreateRunResult> => {
     const community = (await ctx.db.get(args.communityId)) as Record<string, any> | null;
     if (!community) throw new Error("community_agent_runtime_community_not_found");
     if (normalizeIdValue(community.ownerId) !== normalizeIdValue(args.sponsorUserId)) {
       throw new Error("community_agent_runtime_sponsor_must_be_owner");
     }
     const nowMs = args.nowMs ?? Date.now();
+    const staleCutoffMs = nowMs - COMMUNITY_AGENT_RUNNING_RUN_STALE_MS;
+    const runningRows = (await ctx.db
+      .query("communityAgentRuns" as any)
+      .withIndex("by_community_status_createdAt", (q: any) =>
+        q.eq("communityId", args.communityId).eq("status", "running"),
+      )
+      .order("desc")
+      .take(20)) as Array<Record<string, any>>;
+    let freshRunningRow: Record<string, any> | null = null;
+    for (const row of runningRows) {
+      const startedAt = Number(row.startedAt ?? row.createdAt ?? 0);
+      if (startedAt >= staleCutoffMs) {
+        freshRunningRow = row;
+        continue;
+      }
+      await ctx.db.patch(row._id as any, {
+        status: "error",
+        stopReason: "stale_running_run_replaced",
+        errorCode: "community_agent_runtime_stale_running_run",
+        errorMessage: "Community agent run was still running after the stale-run window and was replaced by a new run.",
+        finishedAt: nowMs,
+        updatedAt: nowMs,
+      });
+    }
+    if (freshRunningRow) {
+      return {
+        created: false,
+        skipped_reason: "running_run_exists",
+        run: mapRun(freshRunningRow),
+      };
+    }
     const id = await ctx.db.insert("communityAgentRuns" as any, {
       communityId: args.communityId,
       agentKey: CANONICAL_COMMUNITY_AGENT_KEY,
       triggerType: args.triggerType,
+      heartbeatId: boundedText(args.heartbeatId, 200) || undefined,
       sponsorUserId: args.sponsorUserId,
       modelId: normalizeModelId(args.modelId),
+      wakeReason: boundedText(args.wakeReason, 120) || undefined,
+      wakeEvidence: args.wakeEvidence,
       status: "running",
       toolStepCount: 0,
       candidateProposalIds: [],
@@ -364,6 +443,57 @@ export const createCommunityAgentRunInternal = internalMutation({
     });
     const row = (await ctx.db.get(id as any)) as Record<string, any> | null;
     if (!row) throw new Error("community_agent_runtime_create_failed");
+    return {
+      created: true,
+      skipped_reason: null,
+      run: mapRun(row),
+    };
+  },
+});
+
+export const recordCommunityAgentSkippedRunInternal = internalMutation({
+  args: {
+    communityId: v.id("communities"),
+    triggerType: v.union(
+      v.literal("manual_internal"),
+      v.literal("heartbeat"),
+      v.literal("event"),
+    ),
+    heartbeatId: v.optional(v.string()),
+    modelId: v.optional(v.string()),
+    wakeReason: v.optional(v.string()),
+    wakeEvidence: v.optional(communityAgentWakeEvidenceValidator),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args): Promise<CommunityAgentRunView> => {
+    const community = (await ctx.db.get(args.communityId)) as Record<string, any> | null;
+    if (!community) throw new Error("community_agent_runtime_community_not_found");
+    const sponsorUserId = community.ownerId;
+    if (!sponsorUserId) throw new Error("community_agent_runtime_owner_required");
+    const owner = await ctx.db.get(sponsorUserId as any);
+    if (!owner) throw new Error("community_agent_runtime_owner_not_found");
+    const nowMs = args.nowMs ?? Date.now();
+    const wakeReason = boundedText(args.wakeReason, 120) || "no_trigger";
+    const id = await ctx.db.insert("communityAgentRuns" as any, {
+      communityId: args.communityId,
+      agentKey: CANONICAL_COMMUNITY_AGENT_KEY,
+      triggerType: normalizeTriggerType(args.triggerType),
+      heartbeatId: boundedText(args.heartbeatId, 200) || undefined,
+      sponsorUserId,
+      modelId: args.modelId ? normalizeModelId(args.modelId) : undefined,
+      status: "skipped",
+      wakeReason,
+      wakeEvidence: args.wakeEvidence,
+      stopReason: wakeReason,
+      toolStepCount: 0,
+      candidateProposalIds: [],
+      startedAt: nowMs,
+      finishedAt: nowMs,
+      createdAt: nowMs,
+      updatedAt: nowMs,
+    });
+    const row = (await ctx.db.get(id as any)) as Record<string, any> | null;
+    if (!row) throw new Error("community_agent_runtime_skip_create_failed");
     return mapRun(row);
   },
 });
@@ -382,6 +512,7 @@ export const finishCommunityAgentRunInternal = internalMutation({
   handler: async (ctx, args): Promise<CommunityAgentRunView> => {
     const row = (await ctx.db.get(args.runId)) as Record<string, any> | null;
     if (!row) throw new Error("community_agent_runtime_run_not_found");
+    if (row.status !== "running") return mapRun(row);
     const nowMs = args.nowMs ?? Date.now();
     const status = args.status === "ok" ? "ok" : "error";
     await ctx.db.patch(args.runId, {
@@ -416,6 +547,8 @@ export const runCommunityAgentLoopInternal = internalAction({
     heartbeatId: v.optional(v.string()),
     modelId: v.optional(v.string()),
     maxToolSteps: v.optional(v.number()),
+    wakeReason: v.optional(v.string()),
+    wakeEvidence: v.optional(communityAgentWakeEvidenceValidator),
   },
   handler: async (ctx, args): Promise<CommunityAgentRuntimeResult> => {
     const agentKey = CANONICAL_COMMUNITY_AGENT_KEY;
@@ -424,13 +557,26 @@ export const runCommunityAgentLoopInternal = internalAction({
     const resolved = (await ctx.runQuery(internalRefs.communityAgentRuntime.resolveCommunityAgentRunContextInternal as any, {
       communityId: args.communityId,
     })) as CommunityAgentResolvedContext;
-    const run = (await ctx.runMutation(internalRefs.communityAgentRuntime.createCommunityAgentRunInternal as any, {
+    const createdRun = (await ctx.runMutation(internalRefs.communityAgentRuntime.createCommunityAgentRunInternal as any, {
       communityId: args.communityId,
       triggerType,
       sponsorUserId: resolved.sponsorUserId,
       modelId,
-    })) as { id: string };
-    const runId = run.id;
+      heartbeatId: boundedText(args.heartbeatId, 200) || undefined,
+      wakeReason: boundedText(args.wakeReason, 120) || undefined,
+      wakeEvidence: args.wakeEvidence,
+    })) as CommunityAgentCreateRunResult;
+    if (!createdRun.created) {
+      return {
+        ok: true,
+        skipped: true,
+        run: createdRun.run,
+        stop_reason: createdRun.skipped_reason ?? "running_run_exists",
+        tool_step_count: createdRun.run.tool_step_count,
+        candidate_proposal_ids: createdRun.run.candidate_proposal_ids,
+      };
+    }
+    const runId = createdRun.run.id;
     const filesystemContext: CommunityAgentFilesystemContext = {
       communityId: args.communityId,
       agentKey,
@@ -445,6 +591,8 @@ export const runCommunityAgentLoopInternal = internalAction({
           agentKey,
           triggerType,
           runId,
+          wakeReason: boundedText(args.wakeReason, 120) || undefined,
+          wakeEvidence: args.wakeEvidence,
         }),
         budget: {
           ...DEFAULT_RUNTIME_KERNEL_BUDGET,
@@ -491,6 +639,7 @@ export const runCommunityAgentLoopInternal = internalAction({
       });
       return {
         ok: result.ok,
+        skipped: false,
         run: finished,
         stop_reason: result.stopReason,
         tool_step_count: result.stepCount,
@@ -509,6 +658,7 @@ export const runCommunityAgentLoopInternal = internalAction({
       });
       return {
         ok: false,
+        skipped: false,
         run: finished,
         stop_reason: "runtime_exception",
         tool_step_count: 0,

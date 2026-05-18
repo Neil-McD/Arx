@@ -103,10 +103,10 @@ require_multiline_match "$COMMUNITY_CORE_FILE" \
   'export async function mapCommunityResourceRow\([\s\S]*?created_by:\s*\(await resolvePublicUserId\(ctx, row\.createdByUserId, userIdCache\)\) \?\?\s*String\(row\.createdByUserId\)' \
   "resource rows resolve public creator IDs"
 
-echo "[9/10] Ensuring sender-ID list hydration stays in the same public namespace..."
+echo "[9/10] Ensuring chat message sender IDs stay in the same public namespace..."
 require_multiline_match "$COMMUNITY_CHAT_FILE" \
   'sender_id: await resolvePublicUserId\(ctx, row\.senderUserId, userIdCache\)' \
-  "sender ID list hydration uses public IDs"
+  "chat message rows use public sender IDs"
 
 echo "[10/10] Guard passed."
 echo "PASS: community browser-facing user references are normalized to public IDs."

@@ -1,7 +1,17 @@
 import { decodeHtmlEntities, searchWithFallbackHtml } from "./fallbackHtmlSearchTransport";
 import { searchWithOpenAiWebSearch } from "./openAiWebSearchTransport";
 import { searchWithXAi } from "./xAiSearchTransport";
-import type { NormalizedSearchResult, StructuredWebSource } from "./webSearchTypes";
+import type {
+  NormalizedSearchResult,
+  StructuredWebSource,
+  WebResearchBillingBackend,
+  WebResearchBillingCostSource,
+  WebResearchBillingEvidence,
+} from "./webSearchTypes";
+import {
+  estimateWebResearchVendorCostUsd,
+  type WebResearchCreditAction,
+} from "../shared/workspaceCredits";
 
 function collapseWhitespace(value: string): string {
   return value.replace(/\s+/g, " ").trim();
@@ -158,12 +168,72 @@ function mergeResultsWithDiversity(
   return merged;
 }
 
+function buildEstimatedBillingEvidence(params: {
+  backend: WebResearchBillingBackend;
+  action: WebResearchCreditAction;
+  rawVendorCostUsd?: number;
+}): WebResearchBillingEvidence {
+  return {
+    rawVendorCostUsd:
+      typeof params.rawVendorCostUsd === "number"
+        ? Math.max(0, params.rawVendorCostUsd)
+        : estimateWebResearchVendorCostUsd(params.action),
+    costSource: "estimated",
+    provider: params.backend,
+    backends: [params.backend],
+    usage: null,
+  };
+}
+
+function withEstimatedFallback(params: {
+  evidence: WebResearchBillingEvidence;
+  action: WebResearchCreditAction;
+  backend: WebResearchBillingBackend;
+}): WebResearchBillingEvidence {
+  if (params.evidence.costSource === "provider_exact") return params.evidence;
+  return {
+    ...params.evidence,
+    rawVendorCostUsd: estimateWebResearchVendorCostUsd(params.action),
+    costSource: "estimated",
+    provider: params.evidence.provider ?? params.backend,
+    backends: params.evidence.backends?.length ? params.evidence.backends : [params.backend],
+  };
+}
+
+function combineBillingEvidence(
+  evidenceParts: WebResearchBillingEvidence[],
+): WebResearchBillingEvidence | undefined {
+  if (evidenceParts.length === 0) return undefined;
+  const backends = [...new Set(evidenceParts.flatMap((evidence) => evidence.backends))];
+  const rawVendorCostUsd = evidenceParts.reduce(
+    (sum, evidence) => sum + Math.max(0, Number(evidence.rawVendorCostUsd) || 0),
+    0,
+  );
+  const costSources = new Set<WebResearchBillingCostSource>(
+    evidenceParts.map((evidence) => evidence.costSource),
+  );
+  const costSource =
+    costSources.size === 1
+      ? evidenceParts[0].costSource
+      : "mixed";
+  const exactUsage = evidenceParts.find((evidence) => evidence.usage)?.usage ?? null;
+  return {
+    rawVendorCostUsd,
+    costSource,
+    provider: backends.length === 1 ? backends[0] : "mixed",
+    backends,
+    model: evidenceParts.length === 1 ? evidenceParts[0].model ?? null : null,
+    usage: exactUsage,
+  };
+}
+
 type WebResearchResult =
   | {
       ok: true;
       outputText: string;
       exitCode: number;
       webSources?: StructuredWebSource[];
+      billingEvidence?: WebResearchBillingEvidence;
     }
   | {
       ok: false;
@@ -199,9 +269,13 @@ export async function searchWeb(params: {
   const openAiResults: NormalizedSearchResult[] = [];
   const xAiResults: NormalizedSearchResult[] = [];
   const fallbackResults: NormalizedSearchResult[] = [];
+  const billingEvidenceParts: WebResearchBillingEvidence[] = [];
   let needsCanonicalFallback = false;
 
   const openAiResult = await searchWithOpenAiWebSearch({ query });
+  if (openAiResult.ok) {
+    billingEvidenceParts.push(buildEstimatedBillingEvidence({ backend: "openai", action: "search" }));
+  }
   if (openAiResult.ok && openAiResult.quality === "strong") {
     backendLabels.push("openai");
     openAiResults.push(...openAiResult.results);
@@ -215,6 +289,13 @@ export async function searchWeb(params: {
     if (xAiResult.ok) {
       backendLabels.push("xai");
       xAiResults.push(...xAiResult.results);
+      billingEvidenceParts.push(
+        withEstimatedFallback({
+          evidence: xAiResult.billingEvidence,
+          action: "search",
+          backend: "xai",
+        }),
+      );
     } else if (!openAiResult.ok) {
       return {
         ok: false,
@@ -237,6 +318,9 @@ export async function searchWeb(params: {
     }
     fallbackResults.push(...fallbackResult.results);
     backendLabels.push("fallback");
+    billingEvidenceParts.push(
+      buildEstimatedBillingEvidence({ backend: "fallback", action: "search", rawVendorCostUsd: 0 }),
+    );
   }
 
   const results =
@@ -249,6 +333,7 @@ export async function searchWeb(params: {
     exitCode: 0,
     outputText: formatNormalizedResults(query, results, backendLabels),
     webSources: buildStructuredSearchSources(results),
+    billingEvidence: combineBillingEvidence(billingEvidenceParts),
   };
 }
 
@@ -296,6 +381,7 @@ export async function fetchWebPage(params: {
     exitCode: 0,
     outputText: normalizedText || `Fetched URL: ${url}\n(no readable content)`,
     webSources: [buildStructuredOpenedSource(url)],
+    billingEvidence: buildEstimatedBillingEvidence({ backend: "jina", action: "open_page" }),
   };
 }
 
@@ -346,6 +432,7 @@ export async function executeWebResearch(params: {
               "Preview: (none)",
             ].join("\n"),
       webSources: [buildStructuredOpenedSource(url)],
+      billingEvidence: buildEstimatedBillingEvidence({ backend: "jina", action: "find_in_page" }),
     };
   }
   return {

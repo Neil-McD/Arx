@@ -20,6 +20,7 @@ assert.match(protocol, /export const CANONICAL_COMMUNITY_AGENT_KEY = "community_
 assert.match(runtime, /export const runCommunityAgentLoopInternal = internalAction/);
 assert.match(runtime, /export const resolveCommunityAgentRunContextInternal = internalQuery/);
 assert.match(runtime, /export const createCommunityAgentRunInternal = internalMutation/);
+assert.match(runtime, /export const recordCommunityAgentSkippedRunInternal = internalMutation/);
 assert.match(runtime, /export const finishCommunityAgentRunInternal = internalMutation/);
 assert.doesNotMatch(runtime, /export const runCommunityAgentLoop = action\(|export const .* = action\(/);
 assert.doesNotMatch(runtime, /userPrompt|prompt: v\.string|authSubject|userId: v\.optional/);
@@ -27,7 +28,7 @@ assert.doesNotMatch(runtime, /agentKey: v\.(?:optional\()?string/, "runtime acti
 
 assert.match(
   schema,
-  /communityAgentRuns: defineTable\(\{[\s\S]*communityId: v\.id\("communities"\)[\s\S]*agentKey: v\.string\(\)[\s\S]*triggerType: v\.union\([\s\S]*v\.literal\("manual_internal"\)[\s\S]*v\.literal\("heartbeat"\)[\s\S]*v\.literal\("event"\)[\s\S]*sponsorUserId: v\.id\("users"\)[\s\S]*status: v\.union\([\s\S]*v\.literal\("running"\)[\s\S]*v\.literal\("ok"\)[\s\S]*v\.literal\("error"\)[\s\S]*candidateProposalIds: v\.array\(v\.string\(\)\)[\s\S]*\.index\("by_community_createdAt", \["communityId", "createdAt"\]\)/,
+  /communityAgentRuns: defineTable\(\{[\s\S]*communityId: v\.id\("communities"\)[\s\S]*agentKey: v\.string\(\)[\s\S]*triggerType: v\.union\([\s\S]*v\.literal\("manual_internal"\)[\s\S]*v\.literal\("heartbeat"\)[\s\S]*v\.literal\("event"\)[\s\S]*heartbeatId: v\.optional\(v\.string\(\)\)[\s\S]*sponsorUserId: v\.id\("users"\)[\s\S]*status: v\.union\([\s\S]*v\.literal\("skipped"\)[\s\S]*v\.literal\("running"\)[\s\S]*v\.literal\("ok"\)[\s\S]*v\.literal\("error"\)[\s\S]*wakeReason: v\.optional\(v\.string\(\)\)[\s\S]*wakeEvidence: v\.optional\(v\.object[\s\S]*candidateProposalIds: v\.array\(v\.string\(\)\)[\s\S]*\.index\("by_community_createdAt", \["communityId", "createdAt"\]\)/,
   "schema should include a single-community agent run ledger",
 );
 
@@ -45,6 +46,21 @@ assert.match(
   runtime,
   /ctx\.db\.insert\("communityAgentRuns"[\s\S]*agentKey: CANONICAL_COMMUNITY_AGENT_KEY/,
   "run creation should derive the canonical community-agent identity",
+);
+assert.match(
+  runtime,
+  /recordCommunityAgentSkippedRunInternal[\s\S]*status: "skipped"[\s\S]*wakeReason[\s\S]*wakeEvidence[\s\S]*toolStepCount: 0/,
+  "runtime should persist skipped heartbeat runs without creating a tool loop",
+);
+assert.match(
+  runtime,
+  /createCommunityAgentRunInternal[\s\S]*heartbeatId: v\.optional\(v\.string\(\)\)[\s\S]*wakeReason: v\.optional\(v\.string\(\)\)[\s\S]*wakeEvidence: v\.optional\(communityAgentWakeEvidenceValidator\)[\s\S]*ctx\.db\.insert\("communityAgentRuns"[\s\S]*heartbeatId:[\s\S]*wakeReason:[\s\S]*wakeEvidence:/,
+  "runtime should persist heartbeat id and wake evidence on actual runs",
+);
+assert.match(
+  runtime,
+  /buildCommunityAgentMessages[\s\S]*Wake reason:[\s\S]*Evidence state:/,
+  "runtime should pass wake diagnostics into the bounded community-agent loop",
 );
 assert.match(runtime, /runChatgptNativeToolCompletion\([\s\S]*userId: normalizeIdValue\(resolved\.sponsorUserId\)[\s\S]*modelId/);
 assert.doesNotMatch(runtime, /runOpenRouterNativeToolCompletion|runOpenAi|OPENAI_API_KEY|platform.*fallback|demo_public/);

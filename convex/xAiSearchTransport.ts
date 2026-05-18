@@ -1,9 +1,10 @@
-import type { NormalizedSearchResult } from "./webSearchTypes";
+import type { NormalizedSearchResult, WebResearchBillingEvidence } from "./webSearchTypes";
 
 type XAiSearchSuccess = {
   ok: true;
   results: NormalizedSearchResult[];
   backend: "xai";
+  billingEvidence: WebResearchBillingEvidence;
 };
 
 type XAiSearchFailure = {
@@ -12,6 +13,8 @@ type XAiSearchFailure = {
   message: string;
   outputPreview?: string;
 };
+
+const XAI_USD_TICKS_PER_DOLLAR = 10_000_000_000;
 
 function readEnv(name: string): string {
   try {
@@ -77,6 +80,65 @@ function buildSnippetFromText(text: string): string | null {
   return truncateLabel(normalized, 220);
 }
 
+function readFiniteNumber(value: unknown): number | null {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function normalizeServerSideToolUsage(value: unknown): Record<string, number> | null {
+  if (!value || typeof value !== "object") return null;
+  const normalized: Record<string, number> = {};
+  for (const [key, rawCount] of Object.entries(value as Record<string, unknown>)) {
+    const count = readFiniteNumber(rawCount);
+    if (!key || count === null) continue;
+    normalized[key] = count;
+  }
+  return Object.keys(normalized).length > 0 ? normalized : null;
+}
+
+function countServerSideXSearchCalls(output: unknown[]): number {
+  return output.filter((entry: any) => entry?.type === "x_search_call").length;
+}
+
+function buildXAiBillingEvidence(params: {
+  parsed: any;
+  model: string;
+  output: unknown[];
+}): WebResearchBillingEvidence {
+  const usage = params.parsed?.usage && typeof params.parsed.usage === "object"
+    ? params.parsed.usage
+    : {};
+  const costInUsdTicks = readFiniteNumber(usage.cost_in_usd_ticks);
+  const exactCostUsd =
+    costInUsdTicks !== null ? Math.max(0, costInUsdTicks / XAI_USD_TICKS_PER_DOLLAR) : null;
+  const serverSideToolUsage = normalizeServerSideToolUsage(usage.server_side_tool_usage);
+  const xSearchCallCount = countServerSideXSearchCalls(params.output);
+  const numServerSideToolsUsed =
+    readFiniteNumber(usage.num_server_side_tools_used) ??
+    (serverSideToolUsage
+      ? Object.values(serverSideToolUsage).reduce((sum, count) => sum + count, 0)
+      : xSearchCallCount || null);
+
+  return {
+    rawVendorCostUsd: exactCostUsd ?? 0,
+    costSource: exactCostUsd !== null ? "provider_exact" : "estimated",
+    provider: "xai",
+    backends: ["xai"],
+    model: params.model,
+    usage: {
+      costInUsdTicks,
+      inputTokens: readFiniteNumber(usage.input_tokens ?? usage.prompt_tokens),
+      outputTokens: readFiniteNumber(usage.output_tokens ?? usage.completion_tokens),
+      totalTokens: readFiniteNumber(usage.total_tokens),
+      reasoningTokens: readFiniteNumber(
+        usage.reasoning_tokens ?? usage.output_tokens_details?.reasoning_tokens,
+      ),
+      numServerSideToolsUsed,
+      serverSideToolUsage,
+    },
+  };
+}
+
 function buildXSearchPrompt(query: string): string {
   return [
     "Use x_search aggressively to find the highest-signal current X-native sources for the user's query.",
@@ -99,6 +161,7 @@ export async function searchWithXAi(params: {
     };
   }
 
+  const model = readEnv("ARX_XAI_SEARCH_MODEL") || "grok-4.20-reasoning";
   let response: Response;
   try {
     response = await fetch("https://api.x.ai/v1/responses", {
@@ -108,13 +171,16 @@ export async function searchWithXAi(params: {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: readEnv("ARX_XAI_SEARCH_MODEL") || "grok-4.20-reasoning",
+        model,
         input: [{ role: "user", content: buildXSearchPrompt(params.query) }],
         tools: [
           {
             type: "x_search",
+            enable_image_understanding: false,
+            enable_video_understanding: false,
           },
         ],
+        max_turns: 3,
         max_output_tokens: 1400,
       }),
     });
@@ -182,6 +248,7 @@ export async function searchWithXAi(params: {
   return {
     ok: true,
     backend: "xai",
+    billingEvidence: buildXAiBillingEvidence({ parsed, model, output }),
     results: [...results.values()].slice(0, 8),
   };
 }

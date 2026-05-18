@@ -10,9 +10,11 @@ import {
   type DaytonaConfig,
 } from "./daytonaSandboxClient";
 import { isWorkspaceTerminalActiveStatus } from "./workspaceTerminalProcessCore";
+import { settleReservedCreditsBestEffort } from "./workspaceCreditSettlement";
 import {
-  DAYTONA_WORKSPACE_SESSION_BUDGET_SECONDS,
-  DAYTONA_WORKSPACE_SESSION_RESERVE_SECONDS,
+  DAYTONA_WORKSPACE_SESSION_HOLD_SECONDS,
+  DAYTONA_WORKSPACE_SESSION_IDLE_AUTOSTOP_MINUTES,
+  DAYTONA_WORKSPACE_SESSION_MAX_SECONDS,
   DAYTONA_WORKSPACE_SESSION_RESERVATION_EXPIRY_MS,
   creditsToUsd,
   estimateDaytonaWorkspaceComputeUsd,
@@ -93,29 +95,6 @@ function readBackgroundCreditReservation(project: any): {
     creditBudgetExpiresAt: readPositiveNumber(project?.providerSandboxCreditBudgetExpiresAt, 0),
     startedAt: readPositiveNumber(project?.providerSandboxStartedAt, 0) || null,
   };
-}
-
-async function settleReservedCreditsBestEffort(params: {
-  ctx: any;
-  creditKey?: string | null;
-  status: "succeeded" | "refunded";
-  creditsSettled?: number;
-  failureReason?: string | null;
-  nowMs?: number;
-}): Promise<void> {
-  const creditKey = normalizeOptionalString(params.creditKey);
-  if (!creditKey) return;
-  try {
-    await params.ctx.runMutation(internal.workspaceCredits.settleCreditsInternal as any, {
-      creditKey,
-      status: params.status,
-      creditsSettled: params.creditsSettled,
-      failureReason: params.failureReason ?? undefined,
-      nowMs: params.nowMs ?? Date.now(),
-    });
-  } catch {
-    // Expired-reservation reconciliation is the durable fallback.
-  }
 }
 
 async function waitForProjectBackgroundSandboxRegistration(params: {
@@ -274,7 +253,7 @@ export async function ensureProjectBackgroundSandbox(params: {
   }
   const config: DaytonaConfig = {
     ...loadedConfig.config,
-    autoStopInterval: 0,
+    autoStopInterval: DAYTONA_WORKSPACE_SESSION_IDLE_AUTOSTOP_MINUTES,
   };
 
   const creditReservationKey = newCreditKey("daytona_bg");
@@ -283,12 +262,12 @@ export async function ensureProjectBackgroundSandbox(params: {
     sandboxMemoryGiB: config.sandboxMemoryGiB,
   });
   const creditBudgetVendorCostUsd = estimateDaytonaWorkspaceComputeUsd({
-    durationSeconds: DAYTONA_WORKSPACE_SESSION_RESERVE_SECONDS,
+    durationSeconds: DAYTONA_WORKSPACE_SESSION_HOLD_SECONDS,
     sandboxCpu: config.sandboxCpu,
     sandboxMemoryGiB: config.sandboxMemoryGiB,
   });
   const reservedAt = Date.now();
-  const creditBudgetExpiresAt = reservedAt + DAYTONA_WORKSPACE_SESSION_BUDGET_SECONDS * 1000;
+  const creditBudgetExpiresAt = reservedAt + DAYTONA_WORKSPACE_SESSION_MAX_SECONDS * 1000;
   try {
     await params.ctx.runMutation(
       internal.workspaceCredits.reserveCreditsInternal as any,
@@ -307,6 +286,10 @@ export async function ensureProjectBackgroundSandbox(params: {
           sandbox_cpu: config.sandboxCpu,
           sandbox_memory_gib: config.sandboxMemoryGiB,
           sandbox_disk_gib: config.sandboxDiskGiB,
+          hold_seconds: DAYTONA_WORKSPACE_SESSION_HOLD_SECONDS,
+          max_seconds: DAYTONA_WORKSPACE_SESSION_MAX_SECONDS,
+          idle_autostop_minutes: DAYTONA_WORKSPACE_SESSION_IDLE_AUTOSTOP_MINUTES,
+          billing_mode: "raw_elapsed_seconds",
           pricing_version: PAID_TOOL_PRICING_VERSION,
           target_gross_margin_bps: PAID_TOOL_TARGET_GROSS_MARGIN_BPS,
         },
@@ -591,7 +574,7 @@ export async function resolveProjectBackgroundSandboxIfReady(params: {
   }
   const config: DaytonaConfig = {
     ...loadedConfig.config,
-    autoStopInterval: 0,
+    autoStopInterval: DAYTONA_WORKSPACE_SESSION_IDLE_AUTOSTOP_MINUTES,
   };
 
   const ready = await waitForDaytonaSandboxReady({
@@ -724,7 +707,7 @@ export async function resolveTerminalSandboxContext(params: {
   }
   const config: DaytonaConfig = {
     ...loadedConfig.config,
-    autoStopInterval: 0,
+    autoStopInterval: DAYTONA_WORKSPACE_SESSION_IDLE_AUTOSTOP_MINUTES,
   };
   const ready = await waitForDaytonaSandboxReady({
     config,
@@ -794,7 +777,7 @@ export async function releaseProjectBackgroundSandboxIfIdle(params: {
   if (!loadedConfig.ok) return;
   const config: DaytonaConfig = {
     ...loadedConfig.config,
-    autoStopInterval: 0,
+    autoStopInterval: DAYTONA_WORKSPACE_SESSION_IDLE_AUTOSTOP_MINUTES,
   };
 
   const stopped = await stopDaytonaSandbox({
@@ -847,19 +830,7 @@ export async function releaseProjectBackgroundSandboxIfIdle(params: {
         sandboxCpu: config.sandboxCpu,
         sandboxMemoryGiB: config.sandboxMemoryGiB,
       });
-      const creditsDebited = credit.creditReservationKey
-        ? Math.min(
-            credit.creditBudgetCredits,
-            priceDaytonaWorkspaceUsageCredits({ computeCostUsd }),
-          )
-        : priceDaytonaWorkspaceUsageCredits({ computeCostUsd });
-      await settleReservedCreditsBestEffort({
-        ctx: params.ctx,
-        creditKey: credit.creditReservationKey,
-        status: "succeeded",
-        creditsSettled: creditsDebited,
-        nowMs: endedAt,
-      });
+      const creditsDebited = priceDaytonaWorkspaceUsageCredits({ computeCostUsd });
       await params.ctx.runMutation(
         internal.workspaceCredits.recordWorkspaceComputeChargeInternal as any,
         {
@@ -882,8 +853,33 @@ export async function releaseProjectBackgroundSandboxIfIdle(params: {
           creditReservationKey: credit.creditReservationKey,
         },
       );
-    } catch {
-      // Best-effort charge recording after sandbox teardown.
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error ?? "");
+      const durationSeconds = Math.max(0, (Date.now() - startedAt) / 1000);
+      const computeCostUsd = estimateDaytonaWorkspaceComputeUsd({
+        durationSeconds,
+        sandboxCpu: config.sandboxCpu,
+        sandboxMemoryGiB: config.sandboxMemoryGiB,
+      });
+      const creditReservationKey = String(credit.creditReservationKey ?? "").trim();
+      if (creditReservationKey) {
+        try {
+          await params.ctx.runMutation(internal.workspaceCredits.queueCreditSettlementRetryInternal as any, {
+            creditKey: creditReservationKey,
+            status: "succeeded",
+            creditsSettled: priceDaytonaWorkspaceUsageCredits({ computeCostUsd }),
+            rawVendorCostUsd: computeCostUsd,
+            metadata: {
+              settlement_source: "workspace_compute_charge_recording_failed",
+              provider_sandbox_id: params.providerSandboxId,
+              duration_seconds: durationSeconds,
+            },
+            error: message || "Failed to record workspace compute charge.",
+          });
+        } catch {
+          // Best-effort recovery queue after sandbox teardown.
+        }
+      }
     }
     await params.ctx.runMutation(
       internal.workspaceTerminals.clearProjectBackgroundSandboxInternal as any,

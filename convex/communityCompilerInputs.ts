@@ -6,6 +6,10 @@ import {
   resolveUserIdForAuthenticatedRequest,
   toIsoString,
 } from "./communityCore";
+import {
+  COMPILER_EVIDENCE_VISIBILITY_SCOPES,
+  isCommunityCompilerEligibleVisibility,
+} from "./communityCompilerEvidenceCore";
 
 type SourceTraceRow = {
   _id: any;
@@ -80,10 +84,6 @@ function boundedLimit(raw: unknown, fallback: number, max: number): number {
   const parsed = Math.floor(Number(raw));
   if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
   return Math.max(1, Math.min(max, parsed));
-}
-
-function isActiveCompilerTrace(row: SourceTraceRow): boolean {
-  return row.visibilityScope === "admin" || row.visibilityScope === "community" || row.visibilityScope === "public";
 }
 
 function mapTrace(row: SourceTraceRow) {
@@ -172,15 +172,21 @@ export const listCommunityCompilerInputs = query({
     );
     const aiFeedFetchLimit = Math.min(MAX_AI_FEED_INPUT_FETCH, aiFeedLimit * 3);
 
-    const [traceCandidateRows, aiFeedRows, outcomeRows, pendingChangeRequests] = await Promise.all([
-      ctx.db
-        .query("communitySourceTraces" as any)
-        .withIndex("by_community_createdAt", (q: any) => q.eq("communityId", args.communityId))
-        .order("desc")
-        .take(sourceTraceFetchLimit) as Promise<SourceTraceRow[]>,
+    const [traceRowsByVisibility, aiFeedRows, outcomeRows, pendingChangeRequests] = await Promise.all([
+      Promise.all(
+        COMPILER_EVIDENCE_VISIBILITY_SCOPES.map((visibilityScope) =>
+          ctx.db
+            .query("communitySourceTraces" as any)
+            .withIndex("by_community_visibility_createdAt", (q: any) =>
+              q.eq("communityId", args.communityId).eq("visibilityScope", visibilityScope),
+            )
+            .order("desc")
+            .take(sourceTraceFetchLimit) as Promise<SourceTraceRow[]>,
+        ),
+      ),
       ctx.db
         .query("communityAiFeedPosts" as any)
-        .withIndex("by_community_status_score", (q: any) =>
+        .withIndex("by_community_status_score_createdAt", (q: any) =>
           q.eq("communityId", args.communityId).eq("status", "live"),
         )
         .order("desc")
@@ -197,8 +203,12 @@ export const listCommunityCompilerInputs = query({
         )
         .take(1000) as Promise<ChangeRequestRow[]>,
     ]);
+    const traceCandidateRows = traceRowsByVisibility
+      .flatMap((rows) => rows)
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .slice(0, sourceTraceFetchLimit);
     const traceRows = traceCandidateRows
-      .filter(isActiveCompilerTrace)
+      .filter((row) => isCommunityCompilerEligibleVisibility(row.visibilityScope))
       .slice(0, sourceTraceLimit);
 
     const rankedAiFeedSignals = aiFeedRows

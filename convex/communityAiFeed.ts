@@ -1,5 +1,6 @@
 import { internal } from "./_generated/api";
 import { internalAction, internalMutation, internalQuery, mutation, query } from "./_generated/server";
+import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 import {
   normalizeIdValue,
@@ -26,6 +27,13 @@ const MIN_PRUNE_POOL_SIZE = 10;
 const MAX_LIVE_SCORE_FOR_PRUNE = -1;
 const HIDDEN_RETENTION_MS = 60 * DAY_MS;
 const DEFAULT_HIDDEN_DELETE_BATCH_SIZE = 256;
+const MAX_FEED_BUNDLE_LIMIT = 200;
+const MAX_VIEWER_REACTION_POST_LOOKUPS = MAX_FEED_BUNDLE_LIMIT * 2;
+const MAX_PRUNE_CANDIDATE_FETCH = 512;
+const MAX_NOVELTY_KEY_MATCHES = 10;
+const MAX_AI_FEED_PRUNE_COMMUNITIES_PER_PAGE = 250;
+const MAX_AI_FEED_PRUNE_COMMUNITY_PAGES_PER_RUN = 8;
+const MAX_EXPIRED_POST_REACTION_DELETE_BATCH = 512;
 
 type FeedPostRow = {
   _id: any;
@@ -191,26 +199,6 @@ async function hideFeedPost(args: {
   await upsertArchiveDocumentForAiFeedPost(args.ctx, nextPost);
 }
 
-async function restoreFeedPostToLive(args: {
-  ctx: any;
-  post: FeedPostRow;
-  nowMs: number;
-}): Promise<void> {
-  const nextPost: FeedPostRow = {
-    ...args.post,
-    status: "live",
-    hiddenAt: undefined,
-    updatedAt: args.nowMs,
-  };
-  await args.ctx.db.patch(args.post._id as any, {
-    status: "live",
-    hiddenAt: undefined,
-    updatedAt: args.nowMs,
-  });
-  await upsertSourceTraceForAiFeedPost(args.ctx, nextPost, args.nowMs);
-  await upsertArchiveDocumentForAiFeedPost(args.ctx, nextPost);
-}
-
 async function mapFeedPostRow(args: {
   post: FeedPostRow;
   viewerReaction: FeedReactionRow | null;
@@ -245,14 +233,21 @@ async function getViewerReactionsByPostId(args: {
 }): Promise<Map<string, FeedReactionRow>> {
   const result = new Map<string, FeedReactionRow>();
   if (!args.actorKey || args.postIds.length === 0) return result;
-  const rows = (await args.ctx.db
-    .query("communityAiFeedReactions" as any)
-    .withIndex("by_actorKey", (q: any) => q.eq("actorKey", args.actorKey))
-    .collect()) as FeedReactionRow[];
-  const wanted = new Set(args.postIds);
+  const postIds = Array.from(new Set(args.postIds.map((postId) => String(postId).trim()).filter(Boolean))).slice(
+    0,
+    MAX_VIEWER_REACTION_POST_LOOKUPS,
+  );
+  const rows = (await Promise.all(
+    postIds.map((postId) =>
+      args.ctx.db
+        .query("communityAiFeedReactions" as any)
+        .withIndex("by_post_actorKey", (q: any) => q.eq("postId", postId as any).eq("actorKey", args.actorKey))
+        .first(),
+    ),
+  )) as Array<FeedReactionRow | null>;
   for (const row of rows) {
-    const postId = normalizeIdValue(row.postId);
-    if (wanted.has(postId)) result.set(postId, row);
+    if (!row) continue;
+    result.set(normalizeIdValue(row.postId), row);
   }
   return result;
 }
@@ -283,7 +278,7 @@ async function insertFeedPost(args: {
       .withIndex("by_community_noveltyKey", (q: any) =>
         q.eq("communityId", args.communityId).eq("noveltyKey", noveltyKey),
       )
-      .collect()) as FeedPostRow[];
+      .take(MAX_NOVELTY_KEY_MATCHES)) as FeedPostRow[];
     const existing = existingRows.find((row) => row.status === "live");
     if (existing) {
       await upsertSourceTraceForAiFeedPost(args.ctx, existing, args.nowMs);
@@ -388,18 +383,24 @@ async function listCommunityAiFeedBundleInternal(args: {
     communityId: args.communityId,
     userId: args.userId,
   });
-  const limit = Math.max(1, Math.min(200, Math.floor(args.limit ?? 50)));
-  const rows = (await args.ctx.db
-    .query("communityAiFeedPosts" as any)
-    .withIndex("by_community_status_createdAt", (q: any) =>
-      q.eq("communityId", args.communityId).eq("status", "live"),
-    )
-    .collect()) as FeedPostRow[];
-  const liveSelected = rows
-    .slice()
-    .sort((a, b) => b.createdAt - a.createdAt)
-    .slice(0, limit);
-  const rankedSelected = rows
+  const limit = Math.max(1, Math.min(MAX_FEED_BUNDLE_LIMIT, Math.floor(args.limit ?? 50)));
+  const [liveSelected, rankedRows] = (await Promise.all([
+    args.ctx.db
+      .query("communityAiFeedPosts" as any)
+      .withIndex("by_community_status_createdAt", (q: any) =>
+        q.eq("communityId", args.communityId).eq("status", "live"),
+      )
+      .order("desc")
+      .take(limit),
+    args.ctx.db
+      .query("communityAiFeedPosts" as any)
+      .withIndex("by_community_status_score_createdAt", (q: any) =>
+        q.eq("communityId", args.communityId).eq("status", "live"),
+      )
+      .order("desc")
+      .take(limit),
+  ])) as [FeedPostRow[], FeedPostRow[]];
+  const rankedSelected = rankedRows
     .slice()
     .sort((a, b) => {
       const scoreDelta = Number(b.score ?? 0) - Number(a.score ?? 0);
@@ -463,10 +464,22 @@ export const listCommunityAiFeedBundle = query({
 });
 
 export const listCommunityIdsForAiFeedPruneInternal = internalQuery({
-  args: {},
-  handler: async (ctx) => {
-    const communities = (await ctx.db.query("communities" as any).collect()) as Array<{ _id: any }>;
-    return communities.map((community) => normalizeIdValue(community._id)).filter(Boolean);
+  args: {
+    paginationOpts: paginationOptsValidator,
+  },
+  handler: async (ctx, args) => {
+    const page = await ctx.db
+      .query("communities" as any)
+      .paginate({
+        ...args.paginationOpts,
+        numItems: MAX_AI_FEED_PRUNE_COMMUNITIES_PER_PAGE,
+        maximumRowsRead: MAX_AI_FEED_PRUNE_COMMUNITIES_PER_PAGE,
+      });
+    return {
+      community_ids: page.page.map((community: { _id: any }) => normalizeIdValue(community._id)).filter(Boolean),
+      continue_cursor: page.continueCursor,
+      is_done: page.isDone,
+    };
   },
 });
 
@@ -479,11 +492,14 @@ export const pruneCommunityAiFeedPostsInternal = internalMutation({
     const nowMs = args.nowMs ?? Date.now();
     const rows = (await ctx.db
       .query("communityAiFeedPosts" as any)
-      .withIndex("by_community_status_createdAt", (q: any) =>
+      .withIndex("by_community_status_score_createdAt", (q: any) =>
         q.eq("communityId", args.communityId).eq("status", "live"),
       )
-      .collect()) as FeedPostRow[];
-    const eligible = rows.filter((row) => isEligibleForMonthlyPrune(row, nowMs));
+      .order("asc")
+      .take(MAX_PRUNE_CANDIDATE_FETCH)) as FeedPostRow[];
+    const eligible = rows
+      .filter((row) => Number(row.score ?? 0) <= MAX_LIVE_SCORE_FOR_PRUNE)
+      .filter((row) => isEligibleForMonthlyPrune(row, nowMs));
     if (eligible.length < MIN_PRUNE_POOL_SIZE) {
       return {
         community_id: normalizeIdValue(args.communityId),
@@ -530,30 +546,51 @@ export const pruneAllCommunityAiFeedPostsInternal = internalAction({
   },
   handler: async (ctx, args) => {
     const nowMs = args.nowMs ?? Date.now();
-    const communityIds = (await ctx.runQuery(
-      internal.communityAiFeed.listCommunityIdsForAiFeedPruneInternal as any,
-      {},
-    )) as string[];
     let communitiesScanned = 0;
     let communitiesPruned = 0;
+    let communityPagesScanned = 0;
     let postsHidden = 0;
+    let cursor: string | null = null;
+    let isDone = false;
 
-    for (const communityId of communityIds) {
-      communitiesScanned += 1;
-      const result = (await ctx.runMutation(
-        internal.communityAiFeed.pruneCommunityAiFeedPostsInternal as any,
+    while (!isDone && communityPagesScanned < MAX_AI_FEED_PRUNE_COMMUNITY_PAGES_PER_RUN) {
+      const page = (await ctx.runQuery(
+        internal.communityAiFeed.listCommunityIdsForAiFeedPruneInternal as any,
         {
-          communityId,
-          nowMs,
+          paginationOpts: {
+            cursor,
+            numItems: MAX_AI_FEED_PRUNE_COMMUNITIES_PER_PAGE,
+          },
         },
-      )) as { posts_hidden?: unknown; pruned?: unknown };
-      const hiddenCount = Number(result?.posts_hidden ?? 0);
-      if (Boolean(result?.pruned)) communitiesPruned += 1;
-      if (Number.isFinite(hiddenCount) && hiddenCount > 0) postsHidden += hiddenCount;
+      )) as {
+        community_ids?: string[];
+        continue_cursor?: string | null;
+        is_done?: boolean;
+      };
+      communityPagesScanned += 1;
+      const communityIds = Array.isArray(page.community_ids) ? page.community_ids : [];
+      for (const communityId of communityIds) {
+        communitiesScanned += 1;
+        const result = (await ctx.runMutation(
+          internal.communityAiFeed.pruneCommunityAiFeedPostsInternal as any,
+          {
+            communityId,
+            nowMs,
+          },
+        )) as { posts_hidden?: unknown; pruned?: unknown };
+        const hiddenCount = Number(result?.posts_hidden ?? 0);
+        if (Boolean(result?.pruned)) communitiesPruned += 1;
+        if (Number.isFinite(hiddenCount) && hiddenCount > 0) postsHidden += hiddenCount;
+      }
+      isDone = Boolean(page.is_done);
+      cursor = typeof page.continue_cursor === "string" ? page.continue_cursor : null;
+      if (!cursor) isDone = true;
     }
 
     return {
       communities_scanned: communitiesScanned,
+      community_pages_scanned: communityPagesScanned,
+      has_more_communities: !isDone,
       communities_pruned: communitiesPruned,
       posts_hidden: postsHidden,
     };
@@ -580,11 +617,12 @@ export const deleteExpiredHiddenCommunityAiFeedPostsInternal = internalMutation(
       const reactions = (await ctx.db
         .query("communityAiFeedReactions" as any)
         .withIndex("by_post", (q: any) => q.eq("postId", post._id))
-        .collect()) as FeedReactionRow[];
+        .take(MAX_EXPIRED_POST_REACTION_DELETE_BATCH)) as FeedReactionRow[];
       for (const reaction of reactions) {
         await ctx.db.delete(reaction._id as any);
         deletedReactions += 1;
       }
+      if (reactions.length >= MAX_EXPIRED_POST_REACTION_DELETE_BATCH) continue;
       await deleteArchiveDocumentBySource(ctx, {
         communityId: post.communityId,
         sourceType: "ai_feed",
@@ -597,39 +635,6 @@ export const deleteExpiredHiddenCommunityAiFeedPostsInternal = internalMutation(
     return {
       deleted_posts: deletedPosts,
       deleted_reactions: deletedReactions,
-    };
-  },
-});
-
-export const restoreHiddenCommunityAiFeedPostsInternal = internalMutation({
-  args: {
-    nowMs: v.optional(v.number()),
-    communityId: v.optional(v.id("communities")),
-    limit: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    // Transitional rollout helper: run once after deploy to restore posts hidden by
-    // the old threshold-era moderation model, then delete this surface.
-    const nowMs = args.nowMs ?? Date.now();
-    const limit = Math.max(1, Math.min(2048, Math.floor(args.limit ?? 512)));
-    const hiddenRows = args.communityId
-      ? ((await ctx.db
-          .query("communityAiFeedPosts" as any)
-          .withIndex("by_community_status_createdAt", (q: any) =>
-            q.eq("communityId", args.communityId).eq("status", "hidden"),
-          )
-          .take(limit)) as FeedPostRow[])
-      : ((await ctx.db
-          .query("communityAiFeedPosts" as any)
-          .withIndex("by_status_hiddenAt", (q: any) => q.eq("status", "hidden"))
-          .take(limit)) as FeedPostRow[]);
-    let restoredPosts = 0;
-    for (const post of hiddenRows) {
-      await restoreFeedPostToLive({ ctx, post, nowMs });
-      restoredPosts += 1;
-    }
-    return {
-      restored_posts: restoredPosts,
     };
   },
 });

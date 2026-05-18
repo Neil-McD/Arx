@@ -3,7 +3,7 @@ id: product.reference.billing_entitlements
 title: Billing and Entitlements
 audience: builder, member, llm, operator
 status: alpha-current
-last_verified: 2026-05-12
+last_verified: 2026-05-18
 ---
 
 # Billing and Entitlements
@@ -35,7 +35,7 @@ Community creator revenue uses Stripe Connect subscriptions, not a Polynet-manag
 
 Community member access follows provider-backed subscription truth. Recurring invoice success refreshes the active subscription window. Payment failure follows Stripe subscription lifecycle state, usually a `past_due` grace state before terminal revocation. Full refunds revoke paid community access immediately. Partial refunds retain access unless subscription state later changes. Failed or canceled refunds restore from current Stripe subscription truth. Disputes and chargebacks suspend access when opened, remain revoked when lost, and restore only when Stripe shows a valid subscription after a win or funds reinstatement.
 
-Paid-tool usage is priced through tool balance. Workspace tool usage targets 60% gross margin by charging roughly 2.5x estimated vendor compute cost, then settling actual usage and refunding unused reservations. Web research and voice input use simple alpha tariffs with centralized vendor-cost estimates, and should still write tool, vendor, Polynet price, raw cost estimate, and settlement evidence into the internal credit ledger.
+Paid-tool usage is priced through tool balance. Workspace tool usage targets 60% gross margin with a small initial compute hold, then settles raw elapsed Daytona usage and refunds unused reservations. Web research reserves from centralized estimates, then settles from provider billing evidence when available; xAI Search can report exact provider cost ticks, while OpenAI, Jina, and fallback paths may remain estimated. Voice input is priced from captured audio duration and the provider/model that actually transcribes it. Paid tools should write tool, vendor, Polynet price, raw vendor cost, cost-source evidence, and settlement evidence into the internal credit ledger. If final settlement cannot collect the full usage amount from an initial reservation plus remaining balance, the uncollected credits block future paid-tool reservations until the next top-up clears them before adding spendable balance.
 
 Builder Partner commissions should not become payable from gross promises alone. Community-revenue commissions need provider invoice, payment, or charge evidence, and refunds or disputes must create explicit partner commission adjustments before payout execution. Commissions carry a 30-day risk hold before becoming payable, then must clear a 14-day payout review buffer before payout-cycle inclusion. There is no public minimum payout threshold; timing, risk checks, and approval policy control settlement eligibility. Partner payout settlement should run through system-generated monthly payout cycles: buffered payable commission rows are reserved into payout items, settlement amounts are normalized to cents, batches are revalidated before approval and execution, Stripe Connect transfers are idempotent, and items become settled only after transfer creation succeeds. Operators should only approve, hold, or reject generated payout cycles; they should not manually preview, create, or execute payout internals. Approval schedules transfer execution automatically. If a refund or dispute creates post-payout partner overpayment, the negative balance carries forward against later eligible partner commissions before any new transfer is allowed.
 
@@ -61,6 +61,7 @@ Payout readiness does not grant community access. It determines whether the buil
 12. Partner payout cycles should include only payable commissions that have cleared the payout review buffer.
 13. Community creator revenue stays Stripe-native unless Polynet intentionally changes to a held-funds payout architecture.
 14. Full refunds and opened disputes revoke or suspend paid community access through backend subscription lifecycle state.
+15. Paid-tool reporting should distinguish exact provider cost, estimated provider cost, and mixed provider evidence.
 
 ## Common Mistakes
 
@@ -72,6 +73,7 @@ Payout readiness does not grant community access. It determines whether the buil
 - letting a paid community launch with unclear payout readiness
 - treating pending partner commission as withdrawable before refund and dispute risk has cleared
 - applying Builder Partner payout holds to ordinary community creator revenue
+- treating estimated paid-tool provider cost as exact billing truth
 
 ## Related Concepts
 

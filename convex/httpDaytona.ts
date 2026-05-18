@@ -30,11 +30,17 @@ import {
   writeDaytonaWorkspaceFile,
 } from "./daytonaWorkspaceTools";
 import { executeWebResearch } from "./webResearchTools";
+import type { WebResearchBillingEvidence } from "./webSearchTypes";
+import {
+  settleReservedCreditsBestEffort,
+  settleReservedCreditsStrict,
+} from "./workspaceCreditSettlement";
 import {
   creditsToUsd,
   estimateWebResearchVendorCostUsd,
   PAID_TOOL_PRICING_VERSION,
   PAID_TOOL_TARGET_GROSS_MARGIN_BPS,
+  priceVendorCostUsdToWorkspaceCredits,
   priceWebResearchCredits,
   type WebResearchCreditAction,
 } from "../shared/workspaceCredits";
@@ -185,60 +191,33 @@ function buildWorkspaceCreditBudgetSignal(
   };
 }
 
-async function settleReservedCreditsBestEffort(params: {
-  ctx: any;
-  creditKey: string;
-  status: "succeeded" | "refunded";
-  failureReason?: string | null;
-}): Promise<void> {
-  let lastError: unknown = null;
-  for (let attempt = 1; attempt <= 3; attempt += 1) {
-    try {
-      await params.ctx.runMutation(internal.workspaceCredits.settleCreditsInternal as any, {
-        creditKey: params.creditKey,
-        status: params.status,
-        failureReason: params.failureReason ?? undefined,
-        nowMs: Date.now(),
-      });
-      return;
-    } catch (error) {
-      lastError = error;
-      await new Promise((resolve) => setTimeout(resolve, attempt * 100));
-    }
-  }
-  console.warn("credits_settle_failed", {
-    credit_key: params.creditKey,
-    status: params.status,
-    error: lastError instanceof Error ? lastError.message : String(lastError ?? ""),
-  });
-}
-
-async function settleReservedCreditsStrict(params: {
-  ctx: any;
-  creditKey: string;
-  status: "succeeded" | "refunded";
-  failureReason?: string | null;
-}): Promise<void> {
-  let lastError: unknown = null;
-  for (let attempt = 1; attempt <= 3; attempt += 1) {
-    try {
-      await params.ctx.runMutation(internal.workspaceCredits.settleCreditsInternal as any, {
-        creditKey: params.creditKey,
-        status: params.status,
-        failureReason: params.failureReason ?? undefined,
-        nowMs: Date.now(),
-      });
-      return;
-    } catch (error) {
-      lastError = error;
-      await new Promise((resolve) => setTimeout(resolve, attempt * 100));
-    }
-  }
-  throw new Error(
-    lastError instanceof Error
-      ? lastError.message || "credits_settlement_failed"
-      : "credits_settlement_failed",
-  );
+function buildWebResearchSettlementMetadata(params: {
+  reserveCredits: number;
+  reserveVendorCostUsd: number;
+  finalVendorCostUsd: number;
+  billingEvidence?: WebResearchBillingEvidence;
+}): Record<string, unknown> {
+  const evidence = params.billingEvidence as any;
+  const usage = evidence?.usage && typeof evidence.usage === "object" ? evidence.usage : null;
+  return {
+    pricing_version: PAID_TOOL_PRICING_VERSION,
+    target_gross_margin_bps: PAID_TOOL_TARGET_GROSS_MARGIN_BPS,
+    reserve_credits: params.reserveCredits,
+    reserve_vendor_cost_usd: params.reserveVendorCostUsd,
+    final_vendor_cost_usd: params.finalVendorCostUsd,
+    final_cost_source: typeof evidence?.costSource === "string" ? evidence.costSource : "estimated",
+    final_provider: typeof evidence?.provider === "string" ? evidence.provider : null,
+    final_backends: Array.isArray(evidence?.backends) ? evidence.backends : [],
+    final_model: typeof evidence?.model === "string" ? evidence.model : null,
+    xai_cost_in_usd_ticks:
+      typeof usage?.costInUsdTicks === "number" ? usage.costInUsdTicks : null,
+    server_side_tool_usage:
+      usage?.serverSideToolUsage && typeof usage.serverSideToolUsage === "object"
+        ? usage.serverSideToolUsage
+        : null,
+    num_server_side_tools_used:
+      typeof usage?.numServerSideToolsUsed === "number" ? usage.numServerSideToolsUsed : null,
+  };
 }
 
 function readRuntimeBooleanFlag(name: string, defaultValue: boolean): boolean {
@@ -600,11 +579,26 @@ async function executeRetrievalHarnessTool(params: {
         errorMessage: result.message,
       };
     }
+    const finalVendorCostUsd =
+      typeof result.billingEvidence?.rawVendorCostUsd === "number"
+        ? Math.max(0, result.billingEvidence.rawVendorCostUsd)
+        : webResearchVendorCostUsd;
+    const finalWebResearchCredits = priceVendorCostUsdToWorkspaceCredits({
+      rawVendorCostUsd: finalVendorCostUsd,
+    });
     try {
       await settleReservedCreditsStrict({
         ctx: params.ctx,
         creditKey,
         status: "succeeded",
+        creditsSettled: finalWebResearchCredits,
+        rawVendorCostUsd: finalVendorCostUsd,
+        metadata: buildWebResearchSettlementMetadata({
+          reserveCredits: webResearchCredits,
+          reserveVendorCostUsd: webResearchVendorCostUsd,
+          finalVendorCostUsd,
+          billingEvidence: result.billingEvidence,
+        }),
       });
     } catch {
       return {

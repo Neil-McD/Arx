@@ -752,9 +752,9 @@ function proveCommissionProducerContract(
     toolCommissionCalls >= 2,
     "expected both generic credit settlement and workspace compute reservation settlement to emit partner commissions",
   );
-  assertIncludes(
+  assert.match(
     workspaceCreditsSource,
-    "split.purchasedSettled / Number(entry.creditsReserved ?? 0)",
+    /purchasedSettled[\s\S]*creditsSettled[\s\S]*paidUsageRatio/,
     "paid tool usage settlement",
   );
 }
@@ -1394,7 +1394,12 @@ function main() {
   const builderPartnersSource = readText(new URL("../convex/builderPartners.ts", import.meta.url));
   const gatewaySource = readText(new URL("../shared/builderPartnerProgramGateway.ts", import.meta.url));
   const operatorGatewaySource = readText(new URL("../shared/cloudOperatorDashboardGateway.ts", import.meta.url));
-  const operatorPanelSource = readText(new URL("../apps/web/src/components/WebWorkspaceRightPanel.tsx", import.meta.url));
+  const operatorPanelSource = [
+    readText(new URL("../apps/web/src/components/WebWorkspaceRightPanel.tsx", import.meta.url)),
+    readText(new URL("../apps/web/src/components/useOperatorDashboardData.ts", import.meta.url)),
+    readText(new URL("../apps/web/src/components/OperatorBusinessPanelView.tsx", import.meta.url)),
+    readText(new URL("../apps/web/src/components/workspaceRightPanelOperatorShared.ts", import.meta.url)),
+  ].join("\n");
   const appSource = readText(new URL("../apps/web/src/App.tsx", import.meta.url));
   const accountSource = readText(new URL("../convex/account.ts", import.meta.url));
   const docsSource = readText(new URL("../docs/product/primitives/polynet.md", import.meta.url));

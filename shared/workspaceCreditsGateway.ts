@@ -5,11 +5,17 @@ export type WorkspaceCreditBalance = {
   userId: string;
   includedCreditsBalance: number;
   purchasedCreditsBalance: number;
+  uncollectedCreditsBalance: number;
   includedCycleCredits: number;
   includedCycleStartedAt: number;
   includedCycleEndsAt: number;
   createdAt: number;
   updatedAt: number;
+  spendableCreditsBalance: number;
+  displayBalanceUsd: string;
+  blocked: boolean;
+  blockedReason: string | null;
+  lowBalance: boolean;
 };
 
 function normalizeNumber(value: unknown, fallback = 0): number {
@@ -26,11 +32,20 @@ function normalizeWorkspaceCreditBalance(row: unknown): WorkspaceCreditBalance |
     userId,
     includedCreditsBalance: normalizeNumber(value.includedCreditsBalance),
     purchasedCreditsBalance: normalizeNumber(value.purchasedCreditsBalance),
+    uncollectedCreditsBalance: normalizeNumber(value.uncollectedCreditsBalance),
     includedCycleCredits: normalizeNumber(value.includedCycleCredits),
     includedCycleStartedAt: normalizeNumber(value.includedCycleStartedAt),
     includedCycleEndsAt: normalizeNumber(value.includedCycleEndsAt),
     createdAt: normalizeNumber(value.createdAt),
     updatedAt: normalizeNumber(value.updatedAt),
+    spendableCreditsBalance: normalizeNumber(
+      value.spendableCreditsBalance,
+      normalizeNumber(value.includedCreditsBalance) + normalizeNumber(value.purchasedCreditsBalance),
+    ),
+    displayBalanceUsd: String(value.displayBalanceUsd ?? "").trim(),
+    blocked: value.blocked === true,
+    blockedReason: typeof value.blockedReason === "string" ? value.blockedReason : null,
+    lowBalance: value.lowBalance === true,
   };
 }
 
@@ -39,8 +54,9 @@ export async function loadWorkspaceCreditBalanceCanonical(params: {
 }): Promise<WorkspaceCreditBalance | null> {
   requireConvexUrl();
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const row = await client.query("workspaceCredits:getWorkspaceCreditBalance" as any, {
+  const row = await client.query("workspaceCredits:getWorkspaceToolBalance" as any, {
     authSubject,
+    nowMs: Date.now(),
   });
   return normalizeWorkspaceCreditBalance(row);
 }

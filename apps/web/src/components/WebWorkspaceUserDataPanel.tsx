@@ -33,6 +33,8 @@ import { UserAvatar } from "../../../../shared/UserAvatar";
 import { DiscoverCatalogLogo } from "./DiscoverCatalogLogo";
 import {
   formatWorkspaceToolBalanceUsdFromCredits,
+  getSpendableWorkspaceToolBalanceCredits,
+  getUncollectedWorkspaceToolBalanceCredits,
 } from "../../../../shared/workspaceCredits";
 import type { WorkspaceCreditBalance } from "../../../../shared/workspaceCreditsGateway";
 import {
@@ -639,9 +641,8 @@ function WorkspaceCommunityOperations(props: {
 export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps & {
   filesResetNonce?: number;
 }) {
-  const totalCredits =
-    (props.workspaceCreditBalance?.includedCreditsBalance ?? 0) +
-    (props.workspaceCreditBalance?.purchasedCreditsBalance ?? 0);
+  const totalCredits = getSpendableWorkspaceToolBalanceCredits(props.workspaceCreditBalance);
+  const uncollectedCredits = getUncollectedWorkspaceToolBalanceCredits(props.workspaceCreditBalance);
   const displayedToolBalance =
     props.isLoadingWorkspaceCreditBalance && !props.workspaceCreditBalance
       ? "Checking..."
@@ -889,6 +890,11 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps & {
         </dl>
         {props.workspaceCreditBalanceError ? (
           <p className="workspace-summary-note">{props.workspaceCreditBalanceError}</p>
+        ) : null}
+        {uncollectedCredits > 0 ? (
+          <p className="workspace-summary-note">
+            {formatWorkspaceToolBalanceUsdFromCredits(uncollectedCredits)} prior usage clears from the next top-up before tools can run.
+          </p>
         ) : null}
         {props.workspaceCreditTopupError ? (
           <p className="workspace-summary-note">{props.workspaceCreditTopupError}</p>

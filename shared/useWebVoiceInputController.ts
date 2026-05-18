@@ -76,6 +76,7 @@ export function useWebVoiceInputController<SessionT>(args: UseWebVoiceInputContr
   const voiceChunksRef = useRef<BlobPart[]>([]);
   const voiceStopCaptureRef = useRef<(() => Promise<Blob>) | null>(null);
   const voiceCaptureCleanupRef = useRef<(() => void) | null>(null);
+  const voiceCaptureStartedAtRef = useRef<number | null>(null);
 
   function resolveVoiceInputIntent(surface: VoiceSurface): VoiceInputIntent {
     if (!args.session) {
@@ -154,6 +155,7 @@ export function useWebVoiceInputController<SessionT>(args: UseWebVoiceInputContr
     voiceStreamRef.current = null;
     voiceRecorderRef.current = null;
     voiceChunksRef.current = [];
+    voiceCaptureStartedAtRef.current = null;
   }
 
   useEffect(() => {
@@ -181,7 +183,11 @@ export function useWebVoiceInputController<SessionT>(args: UseWebVoiceInputContr
     }, 0);
   }
 
-  async function transcribeVoiceBlob(surface: VoiceSurface, blob: Blob): Promise<string> {
+  async function transcribeVoiceBlob(
+    surface: VoiceSurface,
+    blob: Blob,
+    durationMs: number | null,
+  ): Promise<string> {
     const session = await resolveUsableSession(args.sessionRef.current ?? args.session, args.ensureSession);
     if (!session) throw new Error("Sign in to use voice input.");
     return await transcribeVoice({
@@ -191,6 +197,7 @@ export function useWebVoiceInputController<SessionT>(args: UseWebVoiceInputContr
       language: getVoiceLanguageHint(),
       surface,
       preferPrimary: false,
+      durationMs,
     });
   }
 
@@ -250,6 +257,7 @@ export function useWebVoiceInputController<SessionT>(args: UseWebVoiceInputContr
         voiceStreamRef.current = stream;
         voiceRecorderRef.current = null;
         voiceChunksRef.current = [];
+        voiceCaptureStartedAtRef.current = Date.now();
         setActiveVoiceSurface(surface);
         args.showAppToastMessage("Listening... tap mic again to stop.");
         return;
@@ -302,6 +310,7 @@ export function useWebVoiceInputController<SessionT>(args: UseWebVoiceInputContr
         });
       voiceStreamRef.current = stream;
       voiceRecorderRef.current = recorder;
+      voiceCaptureStartedAtRef.current = Date.now();
       setActiveVoiceSurface(surface);
       recorder.start(250);
       args.showAppToastMessage("Listening... tap mic again to stop.");
@@ -326,13 +335,17 @@ export function useWebVoiceInputController<SessionT>(args: UseWebVoiceInputContr
     if (!stopCapture || activeVoiceSurface !== surface) return;
     setIsVoiceTranscribing(true);
     try {
+      const durationMs =
+        voiceCaptureStartedAtRef.current === null
+          ? null
+          : Math.max(0, Date.now() - voiceCaptureStartedAtRef.current);
       const audioBlob = await stopCapture();
       releaseVoiceCaptureResources();
       if (audioBlob.size === 0) {
         args.showAppToastMessage("No audio captured.");
         return;
       }
-      const transcript = await transcribeVoiceBlob(surface, audioBlob);
+      const transcript = await transcribeVoiceBlob(surface, audioBlob, durationMs);
       if (!transcript) {
         args.showAppToastMessage("No speech detected.");
         return;

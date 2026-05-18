@@ -6,19 +6,22 @@ import {
   resolveUserIdForAuthenticatedRequest,
   toIsoString,
 } from "./communityCore";
+import {
+  measureCommunityCompilerEvidenceForCommunity,
+  type SourceTraceRow,
+} from "./communityCompilerEvidenceCore";
 
 const COMMUNITY_COMPILER_DIGEST_WINDOW_DAYS = 30;
 const COMMUNITY_COMPILER_DIGEST_WINDOW_MS = COMMUNITY_COMPILER_DIGEST_WINDOW_DAYS * 24 * 60 * 60 * 1000;
 const COMMUNITY_COMPILER_DIGEST_AGENT_KEY = "community_compiler_digest_v1";
 
 const MAX_ARCHIVE_ACTIVITY_FETCH = 600;
-const MAX_SOURCE_TRACE_FETCH = 300;
 const MAX_AI_FEED_FETCH = 100;
 const MAX_OUTCOME_FETCH = 100;
 const MAX_CHANGE_REQUEST_FETCH = 100;
 const MAX_DIGEST_ITEMS = 12;
 const MAX_SOURCE_IDS_PER_ITEM = 12;
-const MAX_SOURCE_TRACE_IDS_PER_ITEM = 12;
+const MAX_SOURCE_TRACE_IDS_PER_ITEM = 500;
 
 type DigestCategory =
   | "chat_activity"
@@ -48,17 +51,6 @@ type ArchiveActivityRow = {
   title?: string;
   snippet: string;
   authorLabel?: string;
-  createdAt: number;
-};
-
-type SourceTraceRow = {
-  _id: any;
-  sourceType: string;
-  sourceId?: string;
-  title?: string;
-  summary: string;
-  visibilityScope: string;
-  sourceVisibility: string;
   createdAt: number;
 };
 
@@ -149,6 +141,71 @@ function sourceTraceIds(rows: SourceTraceRow[]): any[] {
   return out;
 }
 
+function uniqueDigestTraceIds(...groups: any[][]): any[] {
+  const out: any[] = [];
+  const seen = new Set<string>();
+  for (const group of groups) {
+    for (const traceId of group) {
+      const id = normalizeIdValue(traceId);
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      out.push(traceId);
+      if (out.length >= MAX_SOURCE_TRACE_IDS_PER_ITEM) return out;
+    }
+  }
+  return out;
+}
+
+function existingSourceTraceItem(row: CompilerDigestRow | null): DigestItem | null {
+  return row?.items.find((item) => item.category === "source_trace_signal") ?? null;
+}
+
+function mergeSourceTraceDigestItem(args: {
+  existing: DigestItem | null;
+  next: DigestItem | null;
+}): DigestItem | null {
+  if (!args.existing) return args.next;
+  if (!args.next) return args.existing;
+  const sourceTraceIds = uniqueDigestTraceIds(args.next.sourceTraceIds, args.existing.sourceTraceIds);
+  return makeItem({
+    category: "source_trace_signal",
+    title: `${sourceTraceIds.length} selected pending source traces compiled`,
+    summary: `${args.next.summary} This item preserves same-day source-trace evidence already represented by the digest.`,
+    priority: Math.max(args.existing.priority, args.next.priority),
+    confidence: Math.max(args.existing.confidence, args.next.confidence),
+    sourceTypes: Array.from(new Set([...args.existing.sourceTypes, ...args.next.sourceTypes])).slice(0, 12),
+    sourceIds: Array.from(new Set([...args.existing.sourceIds, ...args.next.sourceIds])).slice(0, MAX_SOURCE_IDS_PER_ITEM),
+    sourceTraceIds,
+  });
+}
+
+async function markSelectedSourceTracesCompiled(args: {
+  ctx: any;
+  communityId: any;
+  traceRows: SourceTraceRow[];
+  digestId: any;
+  nowMs: number;
+}): Promise<number> {
+  let handled = 0;
+  const seen = new Set<string>();
+  for (const row of args.traceRows) {
+    const id = normalizeIdValue(row._id);
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    const fresh = (await args.ctx.db.get(row._id as any)) as SourceTraceRow | null;
+    if (!fresh || normalizeIdValue(fresh.communityId) !== normalizeIdValue(args.communityId)) continue;
+    if (fresh.compilerState !== undefined && fresh.compilerState !== "pending") continue;
+    await args.ctx.db.patch(row._id as any, {
+      compilerState: "compiled" as const,
+      compilerPendingSince: typeof fresh.compilerPendingSince === "number" ? fresh.compilerPendingSince : fresh.createdAt,
+      compilerLastHandledAt: args.nowMs,
+      compilerLastDigestId: args.digestId,
+    });
+    handled += 1;
+  }
+  return handled;
+}
+
 function makeItem(args: {
   category: DigestCategory;
   title: string;
@@ -169,10 +226,6 @@ function makeItem(args: {
     sourceIds: (args.sourceIds ?? []).map((value) => truncateText(value, 96)).filter(Boolean).slice(0, MAX_SOURCE_IDS_PER_ITEM),
     sourceTraceIds: (args.sourceTraceIds ?? []).slice(0, MAX_SOURCE_TRACE_IDS_PER_ITEM),
   };
-}
-
-function activeCompilerTrace(row: SourceTraceRow): boolean {
-  return row.visibilityScope === "admin" || row.visibilityScope === "community" || row.visibilityScope === "public";
 }
 
 function mapDigestRow(row: CompilerDigestRow) {
@@ -211,14 +264,28 @@ export const runCommunityCompilerDigestPass = mutation({
     const nowMs = Date.now();
     const windowStartedAtMs = nowMs - COMMUNITY_COMPILER_DIGEST_WINDOW_MS;
     const dedupeKey = `community_compiler_digest:v1:${normalizeIdValue(args.communityId)}:${utcDayKey(nowMs)}`;
+    const existingDigestPromise = ctx.db
+      .query("communityCompilerDigests" as any)
+      .withIndex("by_community_dedupeKey", (q: any) =>
+        q.eq("communityId", args.communityId).eq("dedupeKey", dedupeKey),
+      )
+      .first() as Promise<CompilerDigestRow | null>;
+    const compilerEvidencePromise = measureCommunityCompilerEvidenceForCommunity({
+      ctx,
+      communityId: args.communityId,
+      nowMs,
+    });
 
     const [
+      existing,
+      compilerEvidence,
       archiveRows,
-      traceRowsRaw,
       aiFeedRowsRaw,
       outcomeRows,
       pendingChangeRequests,
     ] = await Promise.all([
+      existingDigestPromise,
+      compilerEvidencePromise,
       ctx.db
         .query("communityArchiveDocuments" as any)
         .withIndex("by_community_createdAt", (q: any) =>
@@ -226,13 +293,6 @@ export const runCommunityCompilerDigestPass = mutation({
         )
         .order("desc")
         .take(MAX_ARCHIVE_ACTIVITY_FETCH) as Promise<ArchiveActivityRow[]>,
-      ctx.db
-        .query("communitySourceTraces" as any)
-        .withIndex("by_community_createdAt", (q: any) =>
-          q.eq("communityId", args.communityId).gte("createdAt", windowStartedAtMs),
-        )
-        .order("desc")
-        .take(MAX_SOURCE_TRACE_FETCH) as Promise<SourceTraceRow[]>,
       ctx.db
         .query("communityAiFeedPosts" as any)
         .withIndex("by_community_status_createdAt", (q: any) =>
@@ -255,7 +315,7 @@ export const runCommunityCompilerDigestPass = mutation({
         .take(MAX_CHANGE_REQUEST_FETCH) as Promise<ChangeRequestRow[]>,
     ]);
 
-    const traceRows = traceRowsRaw.filter(activeCompilerTrace);
+    const selectedSourceTraceRows = compilerEvidence.selectedRows;
     const chatRows = archiveRows.filter((row) => row.sourceType === "chat");
     const resourceRows = archiveRows.filter((row) => row.sourceType === "resource");
     const archiveAiFeedRows = archiveRows.filter((row) => row.sourceType === "ai_feed");
@@ -317,17 +377,28 @@ export const runCommunityCompilerDigestPass = mutation({
         sourceIds: outcomeRows.slice(0, MAX_SOURCE_IDS_PER_ITEM).map((row) => normalizeIdValue(row._id)),
       }));
     }
-    if (traceRows.length > 0) {
-      items.push(makeItem({
+    const nextSourceTraceItem = selectedSourceTraceRows.length > 0
+      ? makeItem({
         category: "source_trace_signal",
-        title: `${traceRows.length} active source traces available`,
-        summary: "Source traces are normalized evidence for compiler consideration. They do not mutate directory truth without policy-gated change requests.",
-        priority: Math.min(1, 0.45 + traceRows.length / 80),
+        title: `${selectedSourceTraceRows.length} selected pending source traces compiled`,
+        summary: `${selectedSourceTraceRows.length} selected pending source traces were represented in this digest and can now be marked compiled. ${compilerEvidence.measurement.pending_total} eligible source traces were pending when measured.`,
+        priority: Math.min(1, 0.45 + selectedSourceTraceRows.length / 80),
         confidence: 0.8,
-        sourceTypes: Array.from(new Set(traceRows.map((row) => row.sourceType))).slice(0, 12),
-        sourceIds: traceRows.map((row) => String(row.sourceId ?? normalizeIdValue(row._id))).filter(Boolean).slice(0, MAX_SOURCE_IDS_PER_ITEM),
-        sourceTraceIds: sourceTraceIds(traceRows),
-      }));
+        sourceTypes: Array.from(new Set(selectedSourceTraceRows.map((row) => row.sourceType))).slice(0, 12),
+        sourceIds: selectedSourceTraceRows.map((row) => String(row.sourceId ?? normalizeIdValue(row._id))).filter(Boolean).slice(0, MAX_SOURCE_IDS_PER_ITEM),
+        sourceTraceIds: sourceTraceIds(selectedSourceTraceRows),
+      })
+      : null;
+    const sourceTraceItem = mergeSourceTraceDigestItem({
+      existing: existingSourceTraceItem(existing),
+      next: nextSourceTraceItem,
+    });
+    const representedSourceTraceIds = new Set((sourceTraceItem?.sourceTraceIds ?? []).map(normalizeIdValue));
+    const representedSelectedSourceTraceRows = selectedSourceTraceRows.filter((row) =>
+      representedSourceTraceIds.has(normalizeIdValue(row._id)),
+    );
+    if (sourceTraceItem) {
+      items.push(sourceTraceItem);
     }
     if (pendingChangeRequests.length > 0) {
       items.push(makeItem({
@@ -349,7 +420,7 @@ export const runCommunityCompilerDigestPass = mutation({
       aiFeed: Math.max(aiFeedRows.length, archiveAiFeedRows.length),
       resources: resourceRows.length,
       events: 0,
-      sourceTraces: traceRows.length,
+      sourceTraces: sourceTraceItem?.sourceTraceIds.length ?? 0,
       outcomes: outcomeRows.length,
       pendingChangeRequests: pendingChangeRequests.length,
       newMembers: 0,
@@ -362,18 +433,12 @@ export const runCommunityCompilerDigestPass = mutation({
         `Compiler window covered ${COMMUNITY_COMPILER_DIGEST_WINDOW_DAYS} days.`,
         `${chatRows.length} chat, ${signalCounts.aiFeed} AI feed, and ${resourceRows.length} resource learning signals were considered.`,
         "Events, member joins, presence, reactions, and generic activity are excluded from learning digests unless they produce transcripts, feedback, outcomes, decisions, artifacts, or source traces.",
-        `${traceRows.length} source traces, ${outcomeRows.length} outcomes, and ${pendingChangeRequests.length} pending directory decisions are in the working set.`,
+        `${selectedSourceTraceRows.length} selected pending source traces, ${outcomeRows.length} outcomes, and ${pendingChangeRequests.length} pending directory decisions are in the working set.`,
+        `${sourceTraceItem?.sourceTraceIds.length ?? 0} source traces are represented by the digest after same-day merging.`,
         "This digest is non-canonical compiler output.",
       ].join(" "),
       1_200,
     );
-
-    const existing = (await ctx.db
-      .query("communityCompilerDigests" as any)
-      .withIndex("by_community_dedupeKey", (q: any) =>
-        q.eq("communityId", args.communityId).eq("dedupeKey", dedupeKey),
-      )
-      .first()) as CompilerDigestRow | null;
     const payload = {
       communityId: args.communityId,
       dedupeKey,
@@ -401,6 +466,15 @@ export const runCommunityCompilerDigestPass = mutation({
     }
     const row = (await ctx.db.get(digestId)) as CompilerDigestRow | null;
     if (!row) throw new Error("community_compiler_digest_write_failed");
+    if (representedSelectedSourceTraceRows.length > 0) {
+      await markSelectedSourceTracesCompiled({
+        ctx,
+        communityId: args.communityId,
+        traceRows: representedSelectedSourceTraceRows,
+        digestId,
+        nowMs,
+      });
+    }
     return mapDigestRow(row);
   },
 });

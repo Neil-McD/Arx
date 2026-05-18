@@ -1206,6 +1206,134 @@ Rules:
 - Each run is persisted in `communityAgentRuns` with sponsor, model, status, stop reason, tool count, candidate proposal ids, and timestamps.
 - Provider failure, missing owner auth, or model failure must finish the run as an error instead of falling back to another community or platform inference source.
 
+## Tenth Implementation Slice
+
+The tenth backend slice adds the first single-community heartbeat bridge and runtime concurrency guard:
+
+```txt
+Internal scheduler/enqueuer
+  -> one explicit communityId
+  -> heartbeat action
+  -> canonical community-agent runtime
+  -> same-community running-run guard
+```
+
+Rules:
+
+- `enqueueCommunityAgentHeartbeatInternal` is internal-only and schedules exactly one heartbeat for exactly one explicit `communityId`.
+- The heartbeat bridge is platform infrastructure. It does not give members, admins, or prompts a way to wake or steer the community agent directly.
+- `runCommunityAgentHeartbeatInternal` calls the runtime with `triggerType`: `heartbeat`.
+- The heartbeat action must not accept `agentKey`, user prompt text, auth subject, or member/user identity.
+- The heartbeat bridge must not enumerate multiple communities, collect communities, or choose between communities. Any future fleet scheduler must enqueue separate single-community heartbeats rather than creating a cross-community agent run.
+- Run creation checks `communityAgentRuns` for an existing same-community `running` run before creating another run.
+- If a fresh running run exists, the new runtime call skips with `running_run_exists` and does not start another model/tool loop.
+- If stale running runs exist, the runtime marks them `error` with `stale_running_run_replaced` before creating a new run.
+- Finishing a run must not overwrite a terminal run that was already stale-replaced by a later heartbeat.
+
+## Eleventh Implementation Slice
+
+The eleventh backend slice adds the first compiler evidence measurement layer:
+
+```txt
+Source traces
+  -> eligible evidence units
+  -> standard / strong / critical priority
+  -> pending backlog measurement
+  -> should-run decision
+```
+
+The measurement model is intentionally simple:
+
+```txt
+Evidence Unit + Priority Tier + Pending Backlog
+```
+
+Rules:
+
+- Measurement is internal-only in this slice. It does not give members, admins, prompts, or agents a direct compiler trigger.
+- The measurement layer reads only one explicit `communityId`.
+- It uses `communitySourceTraces` as the eligible evidence substrate.
+- Active evidence is limited to `visibilityScope`: `admin`, `community`, or `public`.
+- Private source traces may exist, but they are not part of the community compiler backlog.
+- Private source traces use `compilerState: excluded_by_visibility` instead of `pending`.
+- If a private trace later becomes `admin`, `community`, or `public`, the material visibility change can reopen it as pending.
+- If a pending trace later becomes private, it leaves the pending backlog and clears handled/digest metadata.
+- The pending selector must use visibility-aware indexes. It must not scan all pending traces and filter private rows afterward.
+- Evidence priority has only three tiers:
+  - `standard`
+  - `strong`
+  - `critical`
+- Outcome and feedback traces are `critical`.
+- Traces containing failure, blocker, stale, wrong, contradiction, regression, broken, invalid, or unsafe language are `critical`.
+- Workflow runs, agent runs, and transcripts are `strong`.
+- Other eligible traces are `standard`.
+- `communitySourceTraces` own compiler lifecycle state. The digest table is not the backlog ledger.
+- New eligible source traces enter with `compilerState: pending` and `compilerPendingSince` set to creation time.
+- Material source trace updates reopen eligible traces as `compilerState: pending`, clear handled metadata, and set a fresh pending clock unless the trace was already pending.
+- Idempotent source trace upserts should not reopen already handled evidence.
+- Legacy source traces without compiler lifecycle fields are treated as pending only when their visibility is compiler-eligible.
+- The compiler should run when any of these are true:
+  - 20 pending eligible evidence units exist
+  - 5 strong evidence units exist
+  - 1 critical evidence unit exists
+  - oldest pending evidence is at least 72 hours old
+- A measurement run selects up to 100 pending evidence units, ordered by critical first, then strong, then standard, oldest first within each tier.
+- `compilerPendingSince` is the age clock for pending evidence, with `createdAt` only as a legacy fallback.
+- `communityCompilerDigests.windowEndedAt` is not a consumption cursor and must not decide whether source traces are pending.
+- If the pending scan cap is hit, returned counts are lower bounds and the result must say so explicitly.
+- The measurement layer does not use the 30-day compiler window as an eligibility cutoff.
+- The 30-day compiler window remains a raw context expansion bound for digest/compiler reading, not a reason to drop uncompiled eligible evidence.
+- This slice measures whether the next compiler pass is warranted. Future compiler-consumption slices may set traces to `compiled`, `carried_forward`, or `dismissed_low_signal`.
+
+## Twelfth Implementation Slice
+
+The twelfth backend slice closes the first source-trace compiler lifecycle loop:
+
+```txt
+Pending source traces
+  -> shared pending-evidence selector
+  -> compiler digest source_trace_signal item
+  -> digest row persisted
+  -> selected source traces marked compiled
+```
+
+Rules:
+
+- The digest pass must use the same pending-evidence selector exposed by `measureCommunityCompilerEvidenceInternal`.
+- The digest pass may still read the 30-day activity window for chat, AI feed, resources, outcomes, and pending directory decisions, but source-trace consumption comes only from selected pending source traces.
+- A `source_trace_signal` digest item represents the selected pending traces that the pass handled.
+- Selected source traces are marked `compiled` only after the digest row exists.
+- The compiled patch sets `compilerLastHandledAt` and `compilerLastDigestId`.
+- The compiled patch stays inside the same explicit `communityId`.
+- The compiled patch must not use `communityCompilerDigests.windowEndedAt` as a cursor.
+- Unselected source traces remain `pending`.
+- The pass does not auto-dismiss low-signal traces yet.
+- The pass does not set `carried_forward` yet.
+- Same-day digest reruns must preserve previously represented source-trace evidence instead of erasing it from the digest item.
+
+## Thirteenth Implementation Slice
+
+The thirteenth backend slice connects heartbeat awakening to compiler evidence measurement:
+
+```txt
+Single-community heartbeat
+  -> measure eligible pending evidence
+  -> record skipped run when there is no trigger
+  -> run the community agent only when evidence warrants it
+  -> persist wake reason and evidence counts
+```
+
+Rules:
+
+- `runCommunityAgentHeartbeatInternal` measures compiler evidence for exactly one explicit `communityId` before calling the runtime.
+- The heartbeat action must use `measureCommunityCompilerEvidenceInternal`; it must not inspect raw communities, prompts, users, or cross-community state.
+- If `should_run` is false, the heartbeat records a `communityAgentRuns` row with `status: skipped`.
+- Skipped heartbeat rows persist `wakeReason`, `wakeEvidence`, `stopReason`, `heartbeatId`, and zero tool steps.
+- If `should_run` is true, the heartbeat calls `runCommunityAgentLoopInternal` with `triggerType: heartbeat`, the same `communityId`, the `heartbeatId`, and the compiler `wakeReason`/`wakeEvidence`.
+- A compiler evidence trigger wakes the community agent; it does not give members, admins, or prompts a direct wake path.
+- `wakeReason` is diagnostic context for the run, not canonical directory truth.
+- Directory mutation still requires the filesystem write airlock and candidate/review path.
+
 ## What Not To Build Yet
 
 Do not start with:

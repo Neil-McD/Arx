@@ -305,6 +305,7 @@ export default defineSchema({
     userId: v.id("users"),
     includedCreditsBalance: v.number(),
     purchasedCreditsBalance: v.number(),
+    uncollectedCreditsBalance: v.optional(v.number()),
     includedCycleCredits: v.number(),
     includedCycleStartedAt: v.number(),
     includedCycleEndsAt: v.number(),
@@ -363,6 +364,14 @@ export default defineSchema({
     includedCycleEndsAt: v.optional(v.number()),
     includedCreditsRefunded: v.optional(v.number()),
     purchasedCreditsRefunded: v.optional(v.number()),
+    pendingSettlementStatus: v.optional(v.literal("succeeded")),
+    pendingCreditsSettled: v.optional(v.number()),
+    pendingRawVendorCostUsd: v.optional(v.number()),
+    pendingSettlementMetadata: v.optional(v.any()),
+    pendingSettlementAttempts: v.optional(v.number()),
+    pendingSettlementNextAttemptAt: v.optional(v.number()),
+    pendingSettlementError: v.optional(v.string()),
+    pendingSettlementUpdatedAt: v.optional(v.number()),
     rawVendorCostUsd: v.optional(v.number()),
     polynetPriceUsd: v.optional(v.number()),
     failureReason: v.optional(v.string()),
@@ -376,7 +385,8 @@ export default defineSchema({
     .index("by_user_createdAt", ["userId", "createdAt"])
     .index("by_run", ["runId"])
     .index("by_tool_createdAt", ["toolName", "createdAt"])
-    .index("by_status_expiresAt", ["status", "expiresAt"]),
+    .index("by_status_expiresAt", ["status", "expiresAt"])
+    .index("by_pendingSettlementStatus_nextAttemptAt", ["pendingSettlementStatus", "pendingSettlementNextAttemptAt"]),
 
   criticalAuditEvents: defineTable({
     eventKey: v.string(),
@@ -1063,13 +1073,26 @@ export default defineSchema({
       v.literal("heartbeat"),
       v.literal("event"),
     ),
+    heartbeatId: v.optional(v.string()),
     sponsorUserId: v.id("users"),
     modelId: v.optional(v.string()),
     status: v.union(
+      v.literal("skipped"),
       v.literal("running"),
       v.literal("ok"),
       v.literal("error"),
     ),
+    wakeReason: v.optional(v.string()),
+    wakeEvidence: v.optional(v.object({
+      reason: v.string(),
+      pendingTotal: v.number(),
+      pendingStandard: v.number(),
+      pendingStrong: v.number(),
+      pendingCritical: v.number(),
+      oldestPendingAt: v.optional(v.string()),
+      hasMorePending: v.boolean(),
+      countsAreLowerBound: v.boolean(),
+    })),
     stopReason: v.optional(v.string()),
     toolStepCount: v.number(),
     candidateProposalIds: v.array(v.string()),
@@ -1291,7 +1314,7 @@ export default defineSchema({
     .index("by_community", ["communityId"])
     .index("by_community_createdAt", ["communityId", "createdAt"])
     .index("by_community_status_createdAt", ["communityId", "status", "createdAt"])
-    .index("by_community_status_score", ["communityId", "status", "score"])
+    .index("by_community_status_score_createdAt", ["communityId", "status", "score", "createdAt"])
     .index("by_status_hiddenAt", ["status", "hiddenAt"])
     .index("by_community_noveltyKey", ["communityId", "noveltyKey"]),
 
@@ -1388,6 +1411,7 @@ export default defineSchema({
     .index("by_community", ["communityId"])
     .index("by_community_startsAt", ["communityId", "startsAt"])
     .index("by_community_status_startsAt", ["communityId", "status", "startsAt"])
+    .index("by_community_status_recurrenceFrequency_startsAt", ["communityId", "status", "recurrenceFrequency", "startsAt"])
     .index("by_community_status_updatedAt", ["communityId", "status", "updatedAt"])
     .index("by_status_startsAt", ["status", "startsAt"])
     .index("by_status_recurrenceFrequency_startsAt", ["status", "recurrenceFrequency", "startsAt"])
@@ -1472,11 +1496,31 @@ export default defineSchema({
     ),
     actorUserId: v.optional(v.id("users")),
     actorAgentKey: v.optional(v.string()),
+    compilerState: v.optional(
+      v.union(
+        v.literal("pending"),
+        v.literal("compiled"),
+        v.literal("dismissed_low_signal"),
+        v.literal("carried_forward"),
+        v.literal("excluded_by_visibility"),
+      ),
+    ),
+    compilerPendingSince: v.optional(v.number()),
+    compilerLastHandledAt: v.optional(v.number()),
+    compilerLastDigestId: v.optional(v.id("communityCompilerDigests")),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
     .index("by_community", ["communityId"])
     .index("by_community_createdAt", ["communityId", "createdAt"])
+    .index("by_community_visibility_createdAt", ["communityId", "visibilityScope", "createdAt"])
+    .index("by_community_updatedAt", ["communityId", "updatedAt"])
+    .index("by_community_compilerState_visibility_pendingSince", [
+      "communityId",
+      "compilerState",
+      "visibilityScope",
+      "compilerPendingSince",
+    ])
     .index("by_community_source", ["communityId", "sourceType", "sourceId"])
     .index("by_community_workflow", ["communityId", "workflowId"]),
 

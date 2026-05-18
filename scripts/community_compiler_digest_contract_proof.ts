@@ -5,6 +5,7 @@ import { join } from "node:path";
 const root = process.cwd();
 const schema = readFileSync(join(root, "convex/schema.ts"), "utf8");
 const digest = readFileSync(join(root, "convex/communityCompilerDigest.ts"), "utf8");
+const evidenceCore = readFileSync(join(root, "convex/communityCompilerEvidenceCore.ts"), "utf8");
 const communityExports = readFileSync(join(root, "convex/community.ts"), "utf8");
 const docs = readFileSync(join(root, "docs/community-agent-cognition-contract-v1.md"), "utf8");
 
@@ -45,9 +46,9 @@ assert.match(
   "compiler digests should have a manager-scoped read path",
 );
 assert.match(
-  digest,
-  /function activeCompilerTrace[\s\S]*visibilityScope === "admin"[\s\S]*visibilityScope === "community"[\s\S]*visibilityScope === "public"/,
-  "compiler digest should include trusted non-private source traces, including redacted/admin evidence",
+  evidenceCore,
+  /COMPILER_EVIDENCE_VISIBILITY_SCOPES = \["admin", "community", "public"\] as const[\s\S]*isCommunityCompilerEligibleVisibility/,
+  "shared compiler evidence selection should include trusted non-private source traces, including redacted/admin evidence",
 );
 assert.match(
   digest,
@@ -56,7 +57,6 @@ assert.match(
 );
 for (const tableName of [
   "communityArchiveDocuments",
-  "communitySourceTraces",
   "communityAiFeedPosts",
   "communityOutcomeObservations",
   "communityIntelligenceChangeRequests",
@@ -67,6 +67,21 @@ for (const tableName of [
     `compiler digest pass should read ${tableName} through a bounded query`,
   );
 }
+assert.match(
+  digest,
+  /measureCommunityCompilerEvidenceForCommunity[\s\S]*selectedSourceTraceRows = compilerEvidence\.selectedRows/,
+  "compiler digest pass should consume the shared pending-evidence selector",
+);
+assert.match(
+  evidenceCore,
+  /\.query\("communitySourceTraces"[\s\S]*\.withIndex\("by_community_compilerState_visibility_pendingSince"[\s\S]*\.eq\("visibilityScope", visibilityScope\)[\s\S]*\.take\(COMPILER_EVIDENCE_SCAN_LIMIT \+ 1\)/,
+  "source trace reads for digest consumption should come from the shared pending-evidence core",
+);
+assert.doesNotMatch(
+  digest,
+  /MAX_SOURCE_TRACE_FETCH|traceRowsRaw|query\("communitySourceTraces"[\s\S]*by_community_createdAt"[\s\S]*gte\("createdAt", windowStartedAtMs\)/,
+  "compiler digest should not consume broad 30-day source traces as handled evidence",
+);
 for (const tableName of [
   "communityEvents",
   "communityMemberships",
@@ -88,6 +103,41 @@ assert.match(
   digest,
   /ctx\.db\.patch\(existing\._id[\s\S]*ctx\.db\.insert\("communityCompilerDigests"/,
   "compiler digest pass should upsert one digest per dedupe key",
+);
+assert.match(
+  digest,
+  /MAX_SOURCE_TRACE_IDS_PER_ITEM = 500/,
+  "compiler digest should preserve the full selected evidence batch in the source-trace digest item",
+);
+assert.match(
+  digest,
+  /mergeSourceTraceDigestItem[\s\S]*existingSourceTraceItem\(existing\)[\s\S]*sourceTraceItem/,
+  "compiler digest reruns should preserve same-day source-trace evidence already represented by the digest",
+);
+assert.match(
+  digest,
+  /uniqueDigestTraceIds\(args\.next\.sourceTraceIds, args\.existing\.sourceTraceIds\)/,
+  "same-day source-trace merging should prioritize traces selected by the current compiler pass",
+);
+assert.match(
+  digest,
+  /selectedSourceTraceRows\.length > 0[\s\S]*category: "source_trace_signal"[\s\S]*sourceTraceIds: sourceTraceIds\(selectedSourceTraceRows\)/,
+  "compiler digest should represent selected pending traces in a source_trace_signal item",
+);
+assert.match(
+  digest,
+  /representedSourceTraceIds[\s\S]*representedSelectedSourceTraceRows = selectedSourceTraceRows\.filter[\s\S]*traceRows: representedSelectedSourceTraceRows/,
+  "compiler digest should only mark selected traces compiled when they are represented in the digest item",
+);
+assert.match(
+  digest,
+  /const row = \(await ctx\.db\.get\(digestId\)\)[\s\S]*community_compiler_digest_write_failed[\s\S]*markSelectedSourceTracesCompiled/,
+  "selected source traces should only be marked compiled after the digest write is confirmed",
+);
+assert.match(
+  digest,
+  /markSelectedSourceTracesCompiled[\s\S]*normalizeIdValue\(fresh\.communityId\) !== normalizeIdValue\(args\.communityId\)[\s\S]*fresh\.compilerState !== undefined && fresh\.compilerState !== "pending"[\s\S]*compilerState: "compiled" as const[\s\S]*compilerLastHandledAt: args\.nowMs[\s\S]*compilerLastDigestId: args\.digestId/,
+  "compiled marking should stay same-community and only close still-pending traces",
 );
 {
   const payloadStart = digest.indexOf("const payload = {");
@@ -145,6 +195,11 @@ assert.match(
   docs,
   /Fourth Implementation Slice[\s\S]*communityCompilerDigests[\s\S]*Compiler digests are not directory truth/,
   "architecture doc should capture the non-canonical compiler digest slice",
+);
+assert.match(
+  docs,
+  /Twelfth Implementation Slice[\s\S]*Pending source traces[\s\S]*marked `compiled`[\s\S]*only after the digest row exists[\s\S]*Unselected source traces remain `pending`/,
+  "architecture doc should capture source-trace evidence consumption",
 );
 
 console.log("community_compiler_digest_contract_proof: ok");

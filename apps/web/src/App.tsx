@@ -343,6 +343,10 @@ import {
   type DaytonaWorkspaceComputerStartResult,
 } from "../../../shared/daytonaWorkspaceTerminals";
 import { formatUsdCents, toEpochSeconds } from "../../../shared/displayFormatting";
+import {
+  getSpendableWorkspaceToolBalanceCredits,
+  getUncollectedWorkspaceToolBalanceCredits,
+} from "../../../shared/workspaceCredits";
 import type {
   PaidToolKind,
   WorkspaceCreditTopupSurface,
@@ -560,6 +564,7 @@ const LEGACY_COMMUNITY_ANALYTICS_RANGE_STORAGE_KEY = "arx-community-analytics-ra
 const COMMUNITY_RAIL_ORDER_STORAGE_KEY_PREFIX = "polynet-community-rail-order:web";
 const WORKSPACE_CREDIT_TOPUP_RETURN_STORAGE_KEY = "polynet-workspace-credit-topup-return";
 const WORKSPACE_CREDIT_TOPUP_RETURN_MAX_AGE_MS = 2 * 60 * 60 * 1000;
+const WORKSPACE_CREDIT_TOPUP_RETURN_POLL_MAX_ATTEMPTS = 12;
 const CHATGPT_SECURITY_SETTINGS_URL = "https://chatgpt.com/#settings/Security";
 
 type GuestStoredMessageV1 = {
@@ -647,11 +652,17 @@ function buildEmptyWorkspaceCreditBalance(session: AuthSession): WorkspaceCredit
     userId: String(getAuthUid(session) ?? session.user?.id ?? "").trim(),
     includedCreditsBalance: 0,
     purchasedCreditsBalance: 0,
+    uncollectedCreditsBalance: 0,
     includedCycleCredits: 0,
     includedCycleStartedAt: nowMs,
     includedCycleEndsAt: nowMs,
     createdAt: nowMs,
     updatedAt: nowMs,
+    spendableCreditsBalance: 0,
+    displayBalanceUsd: "$0",
+    blocked: false,
+    blockedReason: null,
+    lowBalance: true,
   };
 }
 
@@ -1681,6 +1692,10 @@ export default function App() {
   const [workspaceComputerStartError, setWorkspaceComputerStartError] = useState<string | null>(null);
   const builderPartnerProgramLoadRequestIdRef = useRef(0);
   const workspaceCreditLoadRequestIdRef = useRef(0);
+  const workspaceCreditTopupReturnPollRef = useRef<{ attempts: number; timeoutId: number | null }>({
+    attempts: 0,
+    timeoutId: null,
+  });
   const lastTrackedAuthSessionUserIdRef = useRef<string | null>(null);
   const [isFreeAccountInfoOpen, setIsFreeAccountInfoOpen] = useState(false);
   const [stripeConnectReturn, setStripeConnectReturn] = useState<StripeConnectReturn | null>(null);
@@ -4083,8 +4098,32 @@ export default function App() {
     const refreshPendingWorkspaceCreditTopup = () => {
       if (!hasPendingWorkspaceCreditTopupReturn()) return;
       const activeSession = sessionRef.current ?? session;
-      void loadWorkspaceCreditBalance(activeSession).finally(() => {
-        clearPendingWorkspaceCreditTopupReturn();
+      void loadWorkspaceCreditBalance(activeSession).then((balance) => {
+        const pending = readPendingAnalyticsReturn("workspace_credit_topup");
+        const baselineTotal = Math.max(0, Number(pending?.baseline_total_credits ?? 0) || 0);
+        const baselineUncollected = Math.max(0, Number(pending?.baseline_uncollected_credits ?? 0) || 0);
+        const currentTotal = getSpendableWorkspaceToolBalanceCredits(balance);
+        const currentUncollected = getUncollectedWorkspaceToolBalanceCredits(balance);
+        const hasConfirmedTopup = Boolean(
+          pending &&
+            (currentTotal > baselineTotal || currentUncollected < baselineUncollected)
+        );
+        if (hasConfirmedTopup || !pending) {
+          clearPendingWorkspaceCreditTopupReturn();
+          workspaceCreditTopupReturnPollRef.current.attempts = 0;
+          return;
+        }
+        workspaceCreditTopupReturnPollRef.current.attempts += 1;
+        if (workspaceCreditTopupReturnPollRef.current.attempts >= WORKSPACE_CREDIT_TOPUP_RETURN_POLL_MAX_ATTEMPTS) {
+          clearPendingWorkspaceCreditTopupReturn();
+          workspaceCreditTopupReturnPollRef.current.attempts = 0;
+          return;
+        }
+        const delayMs = Math.min(8000, 900 + workspaceCreditTopupReturnPollRef.current.attempts * 450);
+        if (workspaceCreditTopupReturnPollRef.current.timeoutId) {
+          window.clearTimeout(workspaceCreditTopupReturnPollRef.current.timeoutId);
+        }
+        workspaceCreditTopupReturnPollRef.current.timeoutId = window.setTimeout(refreshPendingWorkspaceCreditTopup, delayMs);
       });
     };
     const handlePageShow = () => {
@@ -4095,6 +4134,10 @@ export default function App() {
     window.addEventListener("pageshow", handlePageShow);
     return () => {
       window.removeEventListener("pageshow", handlePageShow);
+      if (workspaceCreditTopupReturnPollRef.current.timeoutId) {
+        window.clearTimeout(workspaceCreditTopupReturnPollRef.current.timeoutId);
+        workspaceCreditTopupReturnPollRef.current.timeoutId = null;
+      }
     };
   }, [loadWorkspaceCreditBalance, session, sessionRef]);
 
@@ -5246,6 +5289,7 @@ export default function App() {
     setWorkspaceCreditTopupError(null);
     setIsStartingWorkspaceCreditTopupCheckout(true);
     try {
+      const baselineBalance = workspaceCreditBalance ?? await loadWorkspaceCreditBalance(session);
       const returnUrl = buildWorkspaceCreditTopupReturnUrl(surface);
       const data = await startCloudWorkspaceCreditTopupCheckout({
         session,
@@ -5260,11 +5304,10 @@ export default function App() {
       if (!checkoutUrl) throw new Error("Missing checkout_url.");
       markPendingAnalyticsReturn("workspace_credit_topup", {
         surface,
-        baseline_included_credits: workspaceCreditBalance?.includedCreditsBalance ?? 0,
-        baseline_purchased_credits: workspaceCreditBalance?.purchasedCreditsBalance ?? 0,
-        baseline_total_credits:
-          (workspaceCreditBalance?.includedCreditsBalance ?? 0) +
-          (workspaceCreditBalance?.purchasedCreditsBalance ?? 0),
+        baseline_included_credits: baselineBalance?.includedCreditsBalance ?? 0,
+        baseline_purchased_credits: baselineBalance?.purchasedCreditsBalance ?? 0,
+        baseline_uncollected_credits: baselineBalance?.uncollectedCreditsBalance ?? 0,
+        baseline_total_credits: getSpendableWorkspaceToolBalanceCredits(baselineBalance),
       });
       markPendingWorkspaceCreditTopupReturn();
       captureProductAnalyticsEvent("workspace credit topup started", {
@@ -5283,7 +5326,7 @@ export default function App() {
     } finally {
       setIsStartingWorkspaceCreditTopupCheckout(false);
     }
-  }, [ensureUsableAuthSession, requireSignIn, workspaceCreditBalance]);
+  }, [ensureUsableAuthSession, loadWorkspaceCreditBalance, requireSignIn, workspaceCreditBalance]);
 
   const openWorkspaceCreditTopupModal = useCallback((params?: {
     toolKind?: PaidToolKind | null;
@@ -6674,18 +6717,22 @@ export default function App() {
 
     const currentIncluded = Math.max(0, workspaceCreditBalance.includedCreditsBalance);
     const currentPurchased = Math.max(0, workspaceCreditBalance.purchasedCreditsBalance);
+    const currentUncollected = Math.max(0, workspaceCreditBalance.uncollectedCreditsBalance);
     const currentTotal = currentIncluded + currentPurchased;
     const baselinePurchased = Math.max(0, Number(pending.baseline_purchased_credits ?? 0) || 0);
     const baselineTotal = Math.max(0, Number(pending.baseline_total_credits ?? 0) || 0);
+    const baselineUncollected = Math.max(0, Number(pending.baseline_uncollected_credits ?? 0) || 0);
     const surface = String(pending.surface ?? "").trim() || "unknown";
     const purchasedDelta = currentPurchased - baselinePurchased;
     const totalDelta = currentTotal - baselineTotal;
-    if (purchasedDelta <= 0 && totalDelta <= 0) return;
+    const uncollectedCleared = Math.max(0, baselineUncollected - currentUncollected);
+    if (purchasedDelta <= 0 && totalDelta <= 0 && uncollectedCleared <= 0) return;
 
     clearPendingAnalyticsReturn("workspace_credit_topup");
     captureProductAnalyticsEvent("workspace credit topup succeeded", {
       purchased_credit_delta: Math.max(0, purchasedDelta),
       total_credit_delta: Math.max(0, totalDelta),
+      uncollected_credit_delta: uncollectedCleared,
       surface,
     });
   }, [workspaceCreditBalance]);

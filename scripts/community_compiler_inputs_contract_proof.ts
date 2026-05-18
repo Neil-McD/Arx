@@ -81,8 +81,8 @@ assert.match(
 );
 assert.match(
   compilerInputs,
-  /isActiveCompilerTrace[\s\S]*visibilityScope === "admin"[\s\S]*visibilityScope === "community"[\s\S]*visibilityScope === "public"/,
-  "compiler input read model should include trusted non-private source traces, including redacted/admin evidence",
+  /COMPILER_EVIDENCE_VISIBILITY_SCOPES[\s\S]*by_community_visibility_createdAt[\s\S]*isCommunityCompilerEligibleVisibility/,
+  "compiler input read model should use visibility-aware source trace reads for trusted non-private evidence",
 );
 for (const tableName of [
   "communitySourceTraces",
@@ -98,7 +98,7 @@ for (const tableName of [
 }
 assert.match(
   compilerInputs,
-  /query\("communityAiFeedPosts"[\s\S]*withIndex\("by_community_status_score"[\s\S]*\.take\(aiFeedFetchLimit\)/,
+  /query\("communityAiFeedPosts"[\s\S]*withIndex\("by_community_status_score_createdAt"[\s\S]*\.take\(aiFeedFetchLimit\)/,
   "compiler input read model should use a bounded indexed AI feed read",
 );
 assert.doesNotMatch(

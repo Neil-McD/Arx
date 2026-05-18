@@ -87,44 +87,6 @@ function readSandboxCreditReservation(sandbox: DaytonaSandboxApiDto): {
   };
 }
 
-function priceCreditsWithinBudget(params: {
-  computeCostUsd: number;
-  creditReservationKey?: string | null;
-  creditBudgetCredits?: number | null;
-}): number {
-  const pricedCredits = priceDaytonaWorkspaceUsageCredits({
-    computeCostUsd: params.computeCostUsd,
-  });
-  const creditReservationKey = normalizeOptionalString(params.creditReservationKey);
-  const creditBudgetCredits = readPositiveNumber(params.creditBudgetCredits, 0);
-  return creditReservationKey && creditBudgetCredits > 0
-    ? Math.min(creditBudgetCredits, pricedCredits)
-    : pricedCredits;
-}
-
-async function settleReservedCreditsBestEffort(params: {
-  ctx: any;
-  creditKey?: string | null;
-  status: "succeeded" | "refunded";
-  creditsSettled?: number;
-  failureReason?: string | null;
-  nowMs: number;
-}): Promise<void> {
-  const creditKey = normalizeOptionalString(params.creditKey);
-  if (!creditKey) return;
-  try {
-    await params.ctx.runMutation(internal.workspaceCredits.settleCreditsInternal as any, {
-      creditKey,
-      status: params.status,
-      creditsSettled: params.creditsSettled,
-      failureReason: params.failureReason ?? undefined,
-      nowMs: params.nowMs,
-    });
-  } catch {
-    // Expired-reservation reconciliation is the durable fallback.
-  }
-}
-
 function isActiveTerminalStatus(status: unknown): boolean {
   const normalized = String(status ?? "").trim().toLowerCase();
   return normalized === "starting" || normalized === "running";
@@ -375,18 +337,7 @@ export const reconcileDaytonaOrphanedSandboxesInternal = internalAction({
             sandboxCpu,
             sandboxMemoryGiB,
           });
-          const creditsDebited = priceCreditsWithinBudget({
-            computeCostUsd,
-            creditReservationKey: backgroundCredit.creditReservationKey,
-            creditBudgetCredits: backgroundCredit.creditBudgetCredits,
-          });
-          await settleReservedCreditsBestEffort({
-            ctx,
-            creditKey: backgroundCredit.creditReservationKey,
-            status: "succeeded",
-            creditsSettled: creditsDebited,
-            nowMs,
-          });
+          const creditsDebited = priceDaytonaWorkspaceUsageCredits({ computeCostUsd });
           const charge = await ctx.runMutation(
             internal.workspaceCredits.recordWorkspaceComputeChargeInternal as any,
             {
@@ -408,8 +359,36 @@ export const reconcileDaytonaOrphanedSandboxesInternal = internalAction({
             },
           );
           if (charge) charged += 1;
-        } catch {
-          // Keep reconciliation focused on stopping leaked compute.
+        } catch (error) {
+          const creditReservationKey = String(backgroundCredit.creditReservationKey ?? "").trim();
+          if (creditReservationKey) {
+            try {
+              const durationSeconds = Math.max(0, (nowMs - startedAt) / 1000);
+              const computeCostUsd = estimateDaytonaWorkspaceComputeUsd({
+                durationSeconds,
+                sandboxCpu,
+                sandboxMemoryGiB,
+              });
+              await ctx.runMutation(
+                internal.workspaceCredits.queueCreditSettlementRetryInternal as any,
+                {
+                  creditKey: creditReservationKey,
+                  status: "succeeded",
+                  creditsSettled: priceDaytonaWorkspaceUsageCredits({ computeCostUsd }),
+                  rawVendorCostUsd: computeCostUsd,
+                  metadata: {
+                    settlement_source: "orphan_compute_charge_recording_failed",
+                    provider_sandbox_id: providerSandboxId,
+                    duration_seconds: durationSeconds,
+                  },
+                  error: error instanceof Error ? error.message : String(error ?? ""),
+                  nowMs,
+                },
+              );
+            } catch {
+              // Keep reconciliation focused on stopping leaked compute.
+            }
+          }
         }
       }
 

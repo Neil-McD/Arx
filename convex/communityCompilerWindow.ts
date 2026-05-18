@@ -8,6 +8,10 @@ import {
   resolveUserIdForAuthenticatedRequest,
   toIsoString,
 } from "./communityCore";
+import {
+  COMPILER_EVIDENCE_VISIBILITY_SCOPES,
+  isCommunityCompilerEligibleVisibility,
+} from "./communityCompilerEvidenceCore";
 
 const COMMUNITY_COMPILER_WINDOW_DAYS = 30;
 const COMMUNITY_COMPILER_WINDOW_MS = COMMUNITY_COMPILER_WINDOW_DAYS * 24 * 60 * 60 * 1000;
@@ -167,10 +171,6 @@ function boundedLimit(raw: unknown, fallback: number, max: number): number {
   return Math.max(1, Math.min(max, parsed));
 }
 
-function isActiveCompilerTrace(row: SourceTraceRow): boolean {
-  return row.visibilityScope === "admin" || row.visibilityScope === "community" || row.visibilityScope === "public";
-}
-
 function mapArchiveActivity(row: ArchiveActivityRow) {
   return {
     id: normalizeIdValue(row._id),
@@ -320,10 +320,11 @@ export const readCommunityCompilerWindow = query({
     const outcomeLimit = boundedLimit(args.outcomeLimit, 25, 75);
     const changeRequestLimit = boundedLimit(args.changeRequestLimit, 25, 100);
     const latestMemberLimit = boundedLimit(args.latestMemberLimit, 10, MAX_LATEST_NEW_MEMBERS);
+    const sourceTraceFetchLimit = Math.min(MAX_SOURCE_TRACE_FETCH, sourceTraceLimit * 3);
 
     const [
       archiveRows,
-      traceCandidateRows,
+      traceRowsByVisibility,
       aiFeedRows,
       eventRows,
       outcomeRows,
@@ -340,13 +341,20 @@ export const readCommunityCompilerWindow = query({
           )
           .order("desc")
           .take(Math.min(MAX_ARCHIVE_ACTIVITY_FETCH, archiveActivityLimit * 3)) as Promise<ArchiveActivityRow[]>,
-        ctx.db
-          .query("communitySourceTraces" as any)
-          .withIndex("by_community_createdAt", (q: any) =>
-            q.eq("communityId", args.communityId).gte("createdAt", windowStartedAtMs),
-          )
-          .order("desc")
-          .take(Math.min(MAX_SOURCE_TRACE_FETCH, sourceTraceLimit * 3)) as Promise<SourceTraceRow[]>,
+        Promise.all(
+          COMPILER_EVIDENCE_VISIBILITY_SCOPES.map((visibilityScope) =>
+            ctx.db
+              .query("communitySourceTraces" as any)
+              .withIndex("by_community_visibility_createdAt", (q: any) =>
+                q
+                  .eq("communityId", args.communityId)
+                  .eq("visibilityScope", visibilityScope)
+                  .gte("createdAt", windowStartedAtMs),
+              )
+              .order("desc")
+              .take(sourceTraceFetchLimit) as Promise<SourceTraceRow[]>,
+          ),
+        ),
         ctx.db
           .query("communityAiFeedPosts" as any)
           .withIndex("by_community_status_createdAt", (q: any) =>
@@ -398,7 +406,13 @@ export const readCommunityCompilerWindow = query({
       ]);
 
     const archiveActivity = archiveRows.slice(0, archiveActivityLimit);
-    const sourceTraces = traceCandidateRows.filter(isActiveCompilerTrace).slice(0, sourceTraceLimit);
+    const traceCandidateRows = traceRowsByVisibility
+      .flatMap((rows) => rows)
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .slice(0, sourceTraceFetchLimit);
+    const sourceTraces = traceCandidateRows
+      .filter((row) => isCommunityCompilerEligibleVisibility(row.visibilityScope))
+      .slice(0, sourceTraceLimit);
     const rankedAiFeedSignals = aiFeedRows
       .slice()
       .sort((a, b) => Number(b.score ?? 0) - Number(a.score ?? 0) || b.createdAt - a.createdAt)

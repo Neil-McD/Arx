@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import {
   formatWorkspaceToolBalanceUsdFromCredits,
+  getSpendableWorkspaceToolBalanceCredits,
+  getUncollectedWorkspaceToolBalanceCredits,
   WORKSPACE_CREDIT_LOW_BALANCE_THRESHOLD,
   WORKSPACE_TOOL_BALANCE_TOPUP_PACKS,
   type WorkspaceCreditTopupSurface,
@@ -210,11 +212,11 @@ export function WebAgentSettingsSection(props: WebAgentSettingsSectionProps) {
 
         {(() => {
           if (!session) return null;
-          const totalCredits = workspaceCreditBalance
-            ? workspaceCreditBalance.includedCreditsBalance + workspaceCreditBalance.purchasedCreditsBalance
-            : 0;
+          const totalCredits = getSpendableWorkspaceToolBalanceCredits(workspaceCreditBalance);
           const includedCredits = workspaceCreditBalance?.includedCreditsBalance ?? 0;
           const purchasedCredits = workspaceCreditBalance?.purchasedCreditsBalance ?? 0;
+          const uncollectedCredits = getUncollectedWorkspaceToolBalanceCredits(workspaceCreditBalance);
+          const hasUncollectedCredits = uncollectedCredits > 0;
 
           return (
             <>
@@ -230,7 +232,11 @@ export function WebAgentSettingsSection(props: WebAgentSettingsSectionProps) {
                   <div className="model-note">Checking tool balance…</div>
                 ) : (
                   <>
-                    {totalCredits <= WORKSPACE_CREDIT_LOW_BALANCE_THRESHOLD ? (
+                    {hasUncollectedCredits ? (
+                      <div className="auth-error" style={{ marginBottom: 12 }}>
+                        {formatWorkspaceToolBalanceUsdFromCredits(uncollectedCredits)} of prior tool usage must be cleared before premium tools can run.
+                      </div>
+                    ) : totalCredits <= WORKSPACE_CREDIT_LOW_BALANCE_THRESHOLD ? (
                       <div className="auth-error" style={{ marginBottom: 12 }}>
                         You&apos;re running low on tool balance. Add balance to keep premium tools available.
                       </div>
@@ -251,6 +257,9 @@ export function WebAgentSettingsSection(props: WebAgentSettingsSectionProps) {
                     <div className="settings-section-desc">
                       {purchasedCredits > 0
                         ? `${formatWorkspaceToolBalanceUsdFromCredits(purchasedCredits)} purchased balance is available. `
+                        : ""}
+                      {hasUncollectedCredits
+                        ? `Your next top-up clears ${formatWorkspaceToolBalanceUsdFromCredits(uncollectedCredits)} of prior usage first. `
                         : ""}
                       {includedCredits > 0 && (workspaceCreditBalance?.includedCycleEndsAt ?? 0) > 0
                         ? `Your included balance resets ${formatRelativeTime(new Date(workspaceCreditBalance?.includedCycleEndsAt ?? 0).toISOString())}.`

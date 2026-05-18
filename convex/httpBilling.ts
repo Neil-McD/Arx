@@ -75,14 +75,6 @@ function parseOptionalString(value: unknown, maxLen = 300): string | null {
   return trimmed.slice(0, maxLen);
 }
 
-function parseOptionalNumber(value: unknown): number | null {
-  if (typeof value === "number" && Number.isFinite(value))
-    return Math.floor(value);
-  if (typeof value !== "string") return null;
-  const parsed = Number(value.trim());
-  return Number.isFinite(parsed) ? Math.floor(parsed) : null;
-}
-
 function readStripeSignature(req: Request): string | null {
   const signature = String(req.headers.get("stripe-signature") ?? "").trim();
   return signature || null;
@@ -554,11 +546,7 @@ export function registerRuntimeBillingRoutes(
               const paymentStatus = String(session.payment_status ?? "")
                 .trim()
                 .toLowerCase();
-              if (
-                paymentStatus &&
-                paymentStatus !== "paid" &&
-                paymentStatus !== "no_payment_required"
-              ) {
+              if (paymentStatus !== "paid") {
                 return processedResponse({
                   ok: true,
                   ignored: true,
@@ -566,12 +554,6 @@ export function registerRuntimeBillingRoutes(
                   reason: "workspace_credit_topup_payment_pending",
                 }, "ignored");
               }
-              const metadataCreditsAmount = parseOptionalNumber(
-                readStripeMetadataString(
-                  session.metadata,
-                  "workspace_credits_amount",
-                ),
-              );
               const result = await (ctx as any).runMutation(
                 internal.workspaceCredits
                   .completeWorkspaceCreditTopupCheckoutSessionInternal as any,
@@ -583,7 +565,6 @@ export function registerRuntimeBillingRoutes(
                       ? session.customer
                       : null,
                   providerPriceId: topupCheckoutSession.providerPriceId ?? null,
-                  workspaceCreditsAmount: metadataCreditsAmount ?? undefined,
                   nowMs:
                     Number(event.created ?? 0) > 0
                       ? Number(event.created) * 1000

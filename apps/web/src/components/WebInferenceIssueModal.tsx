@@ -1,5 +1,6 @@
 import {
   formatWorkspaceToolBalanceUsdFromCredits,
+  getPaidToolBalancePrimaryMessage,
   type PaidToolKind,
   type WorkspaceCreditTopupSurface,
   WORKSPACE_TOOL_BALANCE_TOPUP_PACKS,
@@ -62,22 +63,12 @@ export function WebInferenceIssueModal(props: WebInferenceIssueModalProps) {
   const paidToolTitle =
     inferenceIssueModal.reason === "workspace_credits"
       ? "Add tool balance"
-      : paidToolKind === "voice_input"
-        ? "Add balance to use voice input"
-        : paidToolKind === "web_research"
-          ? "Add balance to research the web"
-        : paidToolKind === "workspace_tools"
-          ? "Add balance to use workspace tools"
-        : "Add balance to use premium tools";
+      : "Add balance to use premium tools";
 
   const paidToolPrimaryMessage =
-    paidToolKind === "voice_input"
-      ? "Voice input uses paid transcription."
-      : paidToolKind === "web_research"
-        ? "Web research uses paid provider calls."
-      : paidToolKind === "workspace_tools"
-        ? "Workspace tools use paid computer time."
-      : inferenceIssueModal.message || "Premium tools need tool balance.";
+    paidToolKind
+      ? getPaidToolBalancePrimaryMessage(paidToolKind)
+      : inferenceIssueModal.message || getPaidToolBalancePrimaryMessage(null);
 
   const paidToolFollowupMessage =
     requiredCredits !== null

@@ -51,12 +51,12 @@ assert.match(
 );
 assert.match(
   compilerWindow,
-  /query\("communitySourceTraces"[\s\S]*withIndex\("by_community_createdAt"[\s\S]*gte\("createdAt", windowStartedAtMs\)[\s\S]*\.take\(/,
-  "source traces should be bounded to the fixed compiler window",
+  /COMPILER_EVIDENCE_VISIBILITY_SCOPES\.map\(\(visibilityScope\)[\s\S]*query\("communitySourceTraces"[\s\S]*withIndex\("by_community_visibility_createdAt"[\s\S]*eq\("visibilityScope", visibilityScope\)[\s\S]*gte\("createdAt", windowStartedAtMs\)[\s\S]*\.take\(/,
+  "source traces should be visibility-aware and bounded to the fixed compiler window",
 );
 assert.match(
   compilerWindow,
-  /isActiveCompilerTrace[\s\S]*visibilityScope === "admin"[\s\S]*visibilityScope === "community"[\s\S]*visibilityScope === "public"/,
+  /isCommunityCompilerEligibleVisibility/,
   "compiler window should include trusted non-private source traces, including redacted/admin evidence",
 );
 assert.match(

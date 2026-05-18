@@ -523,6 +523,7 @@ export async function transcribeVoice(params: {
   language?: string | null;
   surface: string;
   preferPrimary?: boolean;
+  durationMs?: number | null;
 }): Promise<string> {
   const accessToken = readString(params.session?.access_token);
   if (!accessToken) throw new Error("Sign in to use voice input.");
@@ -541,6 +542,10 @@ export async function transcribeVoice(params: {
       language: params.language ?? undefined,
       surface: params.surface,
       prefer_primary: params.preferPrimary ?? false,
+      duration_ms:
+        typeof params.durationMs === "number" && Number.isFinite(params.durationMs)
+          ? Math.max(0, Math.round(params.durationMs))
+          : undefined,
     }),
   });
   if (!response.ok) {

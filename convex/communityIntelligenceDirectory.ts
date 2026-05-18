@@ -8,6 +8,10 @@ import {
   resolveUserIdForAuthenticatedRequest,
   toIsoString,
 } from "./communityCore";
+import {
+  compilerStateForSourceTraceVisibility,
+  type SourceTraceCompilerState,
+} from "./communityCompilerEvidenceCore";
 
 type ActorType = "member" | "admin" | "agent" | "compiler" | "system";
 type VisibilityScope = "private" | "admin" | "community" | "public";
@@ -72,6 +76,10 @@ type SourceTraceRow = {
   actorType: ActorType;
   actorUserId?: any;
   actorAgentKey?: string;
+  compilerState?: SourceTraceCompilerState;
+  compilerPendingSince?: number;
+  compilerLastHandledAt?: number;
+  compilerLastDigestId?: any;
   createdAt: number;
   updatedAt: number;
 };
@@ -286,6 +294,90 @@ function normalizeActorKey(raw: unknown): string | undefined {
   return value || undefined;
 }
 
+function stringArraysEqual(left: readonly string[] = [], right: readonly string[] = []): boolean {
+  if (left.length !== right.length) return false;
+  return left.every((value, index) => value === right[index]);
+}
+
+function idArraysEqual(left: readonly any[] = [], right: readonly any[] = []): boolean {
+  const leftIds = left.map(normalizeIdValue);
+  const rightIds = right.map(normalizeIdValue);
+  return stringArraysEqual(leftIds, rightIds);
+}
+
+function sourceTraceMaterialChanged(existing: SourceTraceRow, next: {
+  title?: string;
+  summary: string;
+  visibilityScope: VisibilityScope;
+  sourceVisibility: SourceVisibility;
+  workflowId?: string;
+  artifactIds: string[];
+  outcomeObservationIds?: any[];
+  actorType: ActorType;
+  actorUserId?: any;
+  actorAgentKey?: string;
+}): boolean {
+  return (
+    (existing.title ?? undefined) !== (next.title ?? undefined) ||
+    existing.summary !== next.summary ||
+    existing.visibilityScope !== next.visibilityScope ||
+    existing.sourceVisibility !== next.sourceVisibility ||
+    (existing.workflowId ?? undefined) !== (next.workflowId ?? undefined) ||
+    !stringArraysEqual(existing.artifactIds ?? [], next.artifactIds) ||
+    (next.outcomeObservationIds !== undefined && !idArraysEqual(existing.outcomeObservationIds ?? [], next.outcomeObservationIds)) ||
+    existing.actorType !== next.actorType ||
+    normalizeIdValue(existing.actorUserId) !== normalizeIdValue(next.actorUserId) ||
+    (existing.actorAgentKey ?? undefined) !== (next.actorAgentKey ?? undefined)
+  );
+}
+
+function sourceTraceCompilerState(row: SourceTraceRow): SourceTraceCompilerState {
+  return row.compilerState ?? compilerStateForSourceTraceVisibility(row.visibilityScope);
+}
+
+function shouldMarkSourceTracePending(existing: SourceTraceRow, materialChanged: boolean): boolean {
+  if (existing.compilerState === undefined) return true;
+  if (existing.compilerState === "pending" && typeof existing.compilerPendingSince !== "number") return true;
+  return materialChanged;
+}
+
+function nextSourceTracePendingSince(existing: SourceTraceRow, materialChanged: boolean, nowMs: number): number {
+  if (existing.compilerState === "pending" && typeof existing.compilerPendingSince === "number") {
+    return existing.compilerPendingSince;
+  }
+  return materialChanged ? nowMs : existing.createdAt;
+}
+
+function sourceTraceCompilerLifecyclePatch(args: {
+  existing?: SourceTraceRow;
+  visibilityScope: VisibilityScope;
+  materialChanged: boolean;
+  nowMs: number;
+}) {
+  const nextState = compilerStateForSourceTraceVisibility(args.visibilityScope);
+  if (nextState === "excluded_by_visibility") {
+    return {
+      compilerState: nextState,
+      compilerPendingSince: undefined,
+      compilerLastHandledAt: undefined,
+      compilerLastDigestId: undefined,
+    };
+  }
+  if (!args.existing) {
+    return {
+      compilerState: "pending" as const,
+      compilerPendingSince: args.nowMs,
+    };
+  }
+  if (!shouldMarkSourceTracePending(args.existing, args.materialChanged)) return {};
+  return {
+    compilerState: "pending" as const,
+    compilerPendingSince: nextSourceTracePendingSince(args.existing, args.materialChanged, args.nowMs),
+    compilerLastHandledAt: undefined,
+    compilerLastDigestId: undefined,
+  };
+}
+
 function payloadObject(raw: unknown): Record<string, unknown> {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
   return raw as Record<string, unknown>;
@@ -443,6 +535,7 @@ function resolveTraceVisibility(args: {
 }
 
 function mapTraceRow(row: SourceTraceRow) {
+  const compilerState = sourceTraceCompilerState(row);
   return {
     id: normalizeIdValue(row._id),
     community_id: normalizeIdValue(row.communityId),
@@ -458,6 +551,14 @@ function mapTraceRow(row: SourceTraceRow) {
     actor_type: row.actorType,
     actor_user_id: row.actorUserId ? normalizeIdValue(row.actorUserId) : null,
     actor_agent_key: row.actorAgentKey ?? null,
+    compiler_state: compilerState,
+    compiler_pending_since: typeof row.compilerPendingSince === "number"
+      ? toIsoString(row.compilerPendingSince)
+      : compilerState === "pending"
+        ? toIsoString(row.createdAt)
+        : null,
+    compiler_last_handled_at: typeof row.compilerLastHandledAt === "number" ? toIsoString(row.compilerLastHandledAt) : null,
+    compiler_last_digest_id: row.compilerLastDigestId ? normalizeIdValue(row.compilerLastDigestId) : null,
     created_at: toIsoString(row.createdAt),
     updated_at: toIsoString(row.updatedAt),
   };
@@ -1118,6 +1219,24 @@ export async function upsertCommunitySourceTrace(args: {
     if (!args.allowExistingUpdate) {
       throw new Error("community_source_trace_source_conflict");
     }
+    const materialChanged = sourceTraceMaterialChanged(existing, {
+      title,
+      summary,
+      visibilityScope,
+      sourceVisibility,
+      workflowId,
+      artifactIds,
+      outcomeObservationIds,
+      actorType: args.actorType,
+      actorUserId: args.actorUserId,
+      actorAgentKey,
+    });
+    const compilerLifecyclePatch = sourceTraceCompilerLifecyclePatch({
+      existing,
+      visibilityScope,
+      materialChanged,
+      nowMs: args.nowMs,
+    });
     await args.ctx.db.patch(existing._id as any, {
       title,
       summary,
@@ -1129,6 +1248,7 @@ export async function upsertCommunitySourceTrace(args: {
       actorType: args.actorType,
       ...(args.actorUserId ? { actorUserId: args.actorUserId } : { actorUserId: undefined }),
       ...(actorAgentKey ? { actorAgentKey } : { actorAgentKey: undefined }),
+      ...compilerLifecyclePatch,
       updatedAt: args.nowMs,
     });
     const updated = (await args.ctx.db.get(existing._id as any)) as SourceTraceRow | null;
@@ -1136,6 +1256,11 @@ export async function upsertCommunitySourceTrace(args: {
     return mapTraceRow(updated);
   }
 
+  const compilerLifecyclePatch = sourceTraceCompilerLifecyclePatch({
+    visibilityScope,
+    materialChanged: true,
+    nowMs: args.nowMs,
+  });
   const id = await args.ctx.db.insert("communitySourceTraces" as any, {
     communityId: args.communityId,
     sourceType: args.sourceType,
@@ -1150,6 +1275,7 @@ export async function upsertCommunitySourceTrace(args: {
     actorType: args.actorType,
     ...(args.actorUserId ? { actorUserId: args.actorUserId } : {}),
     ...(actorAgentKey ? { actorAgentKey } : {}),
+    ...compilerLifecyclePatch,
     createdAt: args.nowMs,
     updatedAt: args.nowMs,
   });
