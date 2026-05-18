@@ -54,14 +54,14 @@ assert.match(
 
 assert.match(
   css,
-  /\.lightbox-modal \{[\s\S]*width: 100vw;[\s\S]*height: 100svh;[\s\S]*max-height: none;/,
-  "lightbox should use the full viewport instead of a small modal frame",
+  /\.modal\.lightbox-modal \{[\s\S]*width: 100vw;[\s\S]*height: 100svh;[\s\S]*max-height: none;/,
+  "lightbox should override the generic modal frame and use the full viewport",
 );
 
 assert.match(
   css,
-  /\.lightbox-body img \{[\s\S]*object-fit: contain;/,
-  "lightbox images should fit without cropping",
+  /\.modal\.lightbox-modal \.lightbox-body img \{[\s\S]*width: 100%;[\s\S]*height: 100%;[\s\S]*object-fit: contain;/,
+  "lightbox images should fill the viewport box without cropping",
 );
 
 console.log("community_chat_image_lightbox_proof: ok");
