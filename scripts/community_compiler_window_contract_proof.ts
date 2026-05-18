@@ -56,8 +56,8 @@ assert.match(
 );
 assert.match(
   compilerWindow,
-  /isActiveCompilerTrace[\s\S]*sourceVisibility !== "redacted"/,
-  "compiler window should exclude redacted source traces from the active working set",
+  /isActiveCompilerTrace[\s\S]*visibilityScope === "admin"[\s\S]*visibilityScope === "community"[\s\S]*visibilityScope === "public"/,
+  "compiler window should include trusted non-private source traces, including redacted/admin evidence",
 );
 assert.match(
   compilerWindow,

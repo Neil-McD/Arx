@@ -1,4 +1,4 @@
-import { mutation, query } from "./_generated/server";
+import { internalMutation, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import {
   normalizeIdValue,
@@ -51,8 +51,10 @@ type SourceTraceType =
   | "agent_run"
   | "artifact"
   | "tool_call"
-  | "manual"
   | "outcome"
+  | "feedback"
+  | "transcript"
+  | "manual"
   | "external";
 
 type SourceTraceRow = {
@@ -1156,6 +1158,66 @@ export async function upsertCommunitySourceTrace(args: {
   return mapTraceRow(created);
 }
 
+export async function recordTrustedCommunitySourceTraceCore(args: {
+  ctx: any;
+  communityId: any;
+  sourceType: SourceTraceType;
+  sourceId: string;
+  title?: string | null;
+  summary: string;
+  visibilityScope?: VisibilityScope;
+  sourceVisibility?: SourceVisibility;
+  workflowId?: string | null;
+  artifactIds?: string[] | null;
+  outcomeObservationIds?: any[] | null;
+  actorType?: ActorType;
+  actorUserId?: any;
+  actorAgentKey?: string;
+  nowMs?: number;
+}): Promise<ReturnType<typeof mapTraceRow>> {
+  const community = await args.ctx.db.get(args.communityId);
+  if (!community) throw new Error("community_not_found");
+  if (args.sourceType === "manual" || args.sourceType === "external") {
+    throw new Error("community_source_trace_trusted_source_type_required");
+  }
+  const sourceId = normalizeBoundedText(
+    args.sourceId,
+    512,
+    "community_source_trace_source_id_required",
+  );
+  const visibilityScope = args.visibilityScope ?? "admin";
+  const sourceVisibility = args.sourceVisibility ?? visibilityScope;
+  const actorType = args.actorType ?? "system";
+  if ((actorType === "member" || actorType === "admin") && !args.actorUserId) {
+    throw new Error("community_source_trace_actor_user_required");
+  }
+  const outcomeObservationIds = args.outcomeObservationIds ?? [];
+  if (outcomeObservationIds.length > 0) {
+    await requireOutcomeIdsBelongToCommunity(args.ctx, args.communityId, outcomeObservationIds);
+  }
+  return await upsertCommunitySourceTrace({
+    ctx: args.ctx,
+    communityId: args.communityId,
+    sourceType: args.sourceType,
+    sourceId,
+    title: args.title,
+    summary: args.summary,
+    visibilityScope,
+    sourceVisibility,
+    workflowId: args.workflowId,
+    artifactIds: args.artifactIds,
+    outcomeObservationIds,
+    actorType,
+    actorUserId: args.actorUserId,
+    actorAgentKey:
+      actorType === "agent" || actorType === "compiler" || actorType === "system"
+        ? args.actorAgentKey ?? "trusted_evidence_bridge"
+        : args.actorAgentKey,
+    allowExistingUpdate: true,
+    nowMs: args.nowMs ?? Date.now(),
+  });
+}
+
 async function insertChangeRequest(args: {
   ctx: any;
   communityId: any;
@@ -1265,27 +1327,16 @@ async function resolveWriteActor(args: {
   ctx: any;
   communityId: any;
   userId: any;
-  requestedActorType?: ActorType;
-  requestedAgentKey?: string;
-}): Promise<{ actorType: ActorType; actorUserId?: any; actorAgentKey?: string; isManager: boolean }> {
+  requestedActorType?: "member" | "admin";
+}): Promise<{ actorType: "member" | "admin"; actorUserId: any; isManager: boolean }> {
   const isManager = await viewerCanManageCommunity(args.ctx, args.communityId, args.userId);
   const actorType = args.requestedActorType ?? (isManager ? "admin" : "member");
-  if (
-    (actorType === "admin" ||
-      actorType === "agent" ||
-      actorType === "compiler" ||
-      actorType === "system") &&
-    !isManager
-  ) {
+  if (actorType === "admin" && !isManager) {
     throw new Error("community_intelligence_actor_forbidden");
   }
   return {
     actorType,
-    actorUserId: actorType === "member" || actorType === "admin" ? args.userId : undefined,
-    actorAgentKey:
-      actorType === "agent" || actorType === "compiler" || actorType === "system"
-        ? normalizeActorKey(args.requestedAgentKey) ?? actorType
-        : undefined,
+    actorUserId: args.userId,
     isManager,
   };
 }
@@ -1294,12 +1345,8 @@ async function resolveAdminTruthActor(args: {
   ctx: any;
   communityId: any;
   userId: any;
-  requestedActorType?: "admin";
 }): Promise<{ actorType: "admin"; actorUserId: any; isManager: true }> {
   await requireCommunityManager({ ctx: args.ctx, communityId: args.communityId, userId: args.userId });
-  if (args.requestedActorType && args.requestedActorType !== "admin") {
-    throw new Error("community_intelligence_direct_truth_actor_forbidden");
-  }
   return {
     actorType: "admin",
     actorUserId: args.userId,
@@ -1311,23 +1358,15 @@ async function resolvePolicyDecisionActor(args: {
   ctx: any;
   communityId: any;
   userId: any;
-  requestedActorType?: "admin" | "agent" | "compiler" | "system";
-  requestedAgentKey?: string;
 }): Promise<{
-  actorType: "admin" | "agent" | "compiler" | "system";
-  actorUserId?: any;
-  actorAgentKey?: string;
+  actorType: "admin";
+  actorUserId: any;
   isManager: true;
 }> {
   await requireCommunityManager({ ctx: args.ctx, communityId: args.communityId, userId: args.userId });
-  const actorType = args.requestedActorType ?? "agent";
   return {
-    actorType,
-    actorUserId: actorType === "admin" ? args.userId : undefined,
-    actorAgentKey:
-      actorType === "admin"
-        ? undefined
-        : normalizeActorKey(args.requestedAgentKey) ?? "community_cognition_agent",
+    actorType: "admin",
+    actorUserId: args.userId,
     isManager: true,
   };
 }
@@ -1455,7 +1494,6 @@ export const recordCommunitySourceTrace = mutation({
         v.literal("admin"),
       ),
     ),
-    actorAgentKey: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const userId = await resolveUserIdForAuthenticatedRequest({
@@ -1469,7 +1507,6 @@ export const recordCommunitySourceTrace = mutation({
       communityId: args.communityId,
       userId,
       requestedActorType: args.actorType,
-      requestedAgentKey: args.actorAgentKey,
     });
     const traceVisibility = resolveTraceVisibility({
       requestedVisibility: args.visibilityScope,
@@ -1489,14 +1526,13 @@ export const recordCommunitySourceTrace = mutation({
       artifactIds: args.artifactIds,
       actorType: actor.actorType,
       actorUserId: actor.actorUserId,
-      actorAgentKey: actor.actorAgentKey,
       allowExistingUpdate: actor.isManager,
       nowMs: Date.now(),
     });
   },
 });
 
-export const createCommunityIntelligenceNode = mutation({
+export const createCommunityIntelligenceNode = internalMutation({
   args: {
     userId: v.optional(v.id("users")),
     authSubject: v.optional(v.string()),
@@ -1551,9 +1587,6 @@ export const createCommunityIntelligenceNode = mutation({
     workflowIds: v.optional(v.array(v.string())),
     tags: v.optional(v.array(v.string())),
     sourceTraceIds: v.optional(v.array(v.id("communitySourceTraces"))),
-    actorType: v.optional(
-      v.literal("admin"),
-    ),
     reason: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
@@ -1566,7 +1599,6 @@ export const createCommunityIntelligenceNode = mutation({
       ctx,
       communityId: args.communityId,
       userId,
-      requestedActorType: args.actorType,
     });
     const sourceTraceIds = args.sourceTraceIds ?? [];
     await requireTraceIdsBelongToCommunity(ctx, args.communityId, sourceTraceIds);
@@ -1621,7 +1653,7 @@ export const createCommunityIntelligenceNode = mutation({
   },
 });
 
-export const updateCommunityIntelligenceNode = mutation({
+export const updateCommunityIntelligenceNode = internalMutation({
   args: {
     userId: v.optional(v.id("users")),
     authSubject: v.optional(v.string()),
@@ -1686,9 +1718,6 @@ export const updateCommunityIntelligenceNode = mutation({
       outcomeImpactScore: v.optional(v.number()),
       deprecatedByNodeId: v.optional(v.id("communityIntelligenceNodes")),
     }),
-    actorType: v.optional(
-      v.literal("admin"),
-    ),
     reason: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
@@ -1702,7 +1731,6 @@ export const updateCommunityIntelligenceNode = mutation({
       ctx,
       communityId: existing.communityId,
       userId,
-      requestedActorType: args.actorType,
     });
     const updates = args.updates ?? {};
     const sourceTraceIds = updates.sourceTraceIds ?? existing.sourceTraceIds ?? [];
@@ -1776,7 +1804,7 @@ export const updateCommunityIntelligenceNode = mutation({
   },
 });
 
-export const createCommunityIntelligenceEdge = mutation({
+export const createCommunityIntelligenceEdge = internalMutation({
   args: {
     userId: v.optional(v.id("users")),
     authSubject: v.optional(v.string()),
@@ -1810,9 +1838,6 @@ export const createCommunityIntelligenceEdge = mutation({
     visibilityScope: v.optional(
       v.union(v.literal("private"), v.literal("admin"), v.literal("community"), v.literal("public")),
     ),
-    actorType: v.optional(
-      v.literal("admin"),
-    ),
     compilerRunId: v.optional(v.string()),
     reason: v.optional(v.string()),
   },
@@ -1826,7 +1851,6 @@ export const createCommunityIntelligenceEdge = mutation({
       ctx,
       communityId: args.communityId,
       userId,
-      requestedActorType: args.actorType,
     });
     const fromNode = await getIntelligenceNodeOrThrow(ctx, args.fromNodeId);
     if (normalizeIdValue(fromNode.communityId) !== normalizeIdValue(args.communityId)) {
@@ -1915,12 +1939,8 @@ export const createCommunityIntelligenceChangeRequest = mutation({
       v.union(
         v.literal("member"),
         v.literal("admin"),
-        v.literal("agent"),
-        v.literal("compiler"),
-        v.literal("system"),
       ),
     ),
-    actorAgentKey: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const userId = await resolveUserIdForAuthenticatedRequest({
@@ -1934,7 +1954,6 @@ export const createCommunityIntelligenceChangeRequest = mutation({
       communityId: args.communityId,
       userId,
       requestedActorType: args.actorType,
-      requestedAgentKey: args.actorAgentKey,
     });
     const sourceTraceIds = args.sourceTraceIds ?? [];
     const outcomeObservationIds = args.outcomeObservationIds ?? [];
@@ -2003,7 +2022,6 @@ export const createCommunityIntelligenceChangeRequest = mutation({
       privacyRisk: args.privacyRisk,
       actorType: actor.actorType,
       actorUserId: actor.actorUserId,
-      actorAgentKey: actor.actorAgentKey,
       nowMs,
     });
     const changeRequest = await getChangeRequestOrThrow(ctx, changeRequestId);
@@ -2075,15 +2093,6 @@ export const decideCommunityIntelligenceChangeRequest = mutation({
     authSubject: v.optional(v.string()),
     changeRequestId: v.id("communityIntelligenceChangeRequests"),
     status: v.union(v.literal("accepted"), v.literal("rejected")),
-    actorType: v.optional(
-      v.union(
-        v.literal("admin"),
-        v.literal("agent"),
-        v.literal("compiler"),
-        v.literal("system"),
-      ),
-    ),
-    actorAgentKey: v.optional(v.string()),
     decisionReason: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
@@ -2097,8 +2106,6 @@ export const decideCommunityIntelligenceChangeRequest = mutation({
       ctx,
       communityId: changeRequest.communityId,
       userId,
-      requestedActorType: args.actorType,
-      requestedAgentKey: args.actorAgentKey,
     });
     if (changeRequest.status === "applied") {
       throw new Error("community_intelligence_change_request_already_applied");
@@ -2108,7 +2115,7 @@ export const decideCommunityIntelligenceChangeRequest = mutation({
       status: args.status,
       decidedByActorType: actor.actorType,
       ...(actor.actorUserId ? { decidedByUserId: actor.actorUserId } : { decidedByUserId: undefined }),
-      ...(actor.actorAgentKey ? { decidedByAgentKey: actor.actorAgentKey } : { decidedByAgentKey: undefined }),
+      decidedByAgentKey: undefined,
       decisionReason: normalizeOptionalLongText(args.decisionReason, 2000),
       decidedAt: nowMs,
       updatedAt: nowMs,
@@ -2122,15 +2129,6 @@ export const applyCommunityIntelligenceChangeRequest = mutation({
     userId: v.optional(v.id("users")),
     authSubject: v.optional(v.string()),
     changeRequestId: v.id("communityIntelligenceChangeRequests"),
-    actorType: v.optional(
-      v.union(
-        v.literal("admin"),
-        v.literal("agent"),
-        v.literal("compiler"),
-        v.literal("system"),
-      ),
-    ),
-    actorAgentKey: v.optional(v.string()),
     reason: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
@@ -2147,8 +2145,6 @@ export const applyCommunityIntelligenceChangeRequest = mutation({
       ctx,
       communityId: changeRequest.communityId,
       userId,
-      requestedActorType: args.actorType,
-      requestedAgentKey: args.actorAgentKey,
     });
     await requireChangeRequestReferencesAllowedForApply(ctx, changeRequest);
     await requireChangeRequestTargetsCurrent(ctx, changeRequest);
@@ -2187,10 +2183,8 @@ export const applyCommunityIntelligenceChangeRequest = mutation({
         outcomeImpactScore: clampScore(payload.outcomeImpactScore, 0),
         createdByActorType: actor.actorType,
         ...(actor.actorUserId ? { createdByUserId: actor.actorUserId } : {}),
-        ...(actor.actorAgentKey ? { createdByAgentKey: actor.actorAgentKey } : {}),
         lastUpdatedByActorType: actor.actorType,
         ...(actor.actorUserId ? { lastUpdatedByUserId: actor.actorUserId } : {}),
-        ...(actor.actorAgentKey ? { lastUpdatedByAgentKey: actor.actorAgentKey } : {}),
         ...(changeRequest.outcomeObservationIds?.length ? { lastValidatedAt: nowMs } : {}),
         version: 1,
         createdAt: nowMs,
@@ -2204,7 +2198,6 @@ export const applyCommunityIntelligenceChangeRequest = mutation({
         operation: "create_node",
         actorType: actor.actorType,
         actorUserId: actor.actorUserId,
-        actorAgentKey: actor.actorAgentKey,
         targetNodeIds: appliedNodeIds,
         afterSnapshot: mapNodeRow(node),
         sourceTraceIds: changeRequest.sourceTraceIds ?? [],
@@ -2259,7 +2252,6 @@ export const applyCommunityIntelligenceChangeRequest = mutation({
         visibilityScope: payloadVisibility(payload.visibilityScope) ?? "community",
         createdByActorType: actor.actorType,
         ...(actor.actorUserId ? { createdByUserId: actor.actorUserId } : {}),
-        ...(actor.actorAgentKey ? { createdByAgentKey: actor.actorAgentKey } : {}),
         ...(typeof payload.compilerRunId === "string"
           ? { compilerRunId: normalizeBoundedText(payload.compilerRunId, 512, "compiler_run_id_required") }
           : {}),
@@ -2276,7 +2268,6 @@ export const applyCommunityIntelligenceChangeRequest = mutation({
         operation: "create_edge",
         actorType: actor.actorType,
         actorUserId: actor.actorUserId,
-        actorAgentKey: actor.actorAgentKey,
         targetNodeIds: appliedNodeIds,
         targetEdgeIds: appliedEdgeIds,
         afterSnapshot: mapEdgeRow(edge),
@@ -2319,7 +2310,6 @@ export const applyCommunityIntelligenceChangeRequest = mutation({
         version: Number(existing.version ?? 1) + 1,
         lastUpdatedByActorType: actor.actorType,
         lastUpdatedByUserId: actor.actorUserId,
-        lastUpdatedByAgentKey: actor.actorAgentKey,
         sourceTraceIds: nextSourceTraceIds,
         outcomeObservationIds: nextOutcomeIds,
       };
@@ -2374,7 +2364,6 @@ export const applyCommunityIntelligenceChangeRequest = mutation({
         operation: changeRequest.operation,
         actorType: actor.actorType,
         actorUserId: actor.actorUserId,
-        actorAgentKey: actor.actorAgentKey,
         targetNodeIds: appliedNodeIds,
         beforeSnapshot: mapNodeRow(existing),
         afterSnapshot: mapNodeRow(updated),
@@ -2637,12 +2626,8 @@ export const recordCommunityOutcomeObservation = mutation({
       v.union(
         v.literal("member"),
         v.literal("admin"),
-        v.literal("agent"),
-        v.literal("compiler"),
-        v.literal("system"),
       ),
     ),
-    actorAgentKey: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const userId = await resolveUserIdForAuthenticatedRequest({
@@ -2656,7 +2641,6 @@ export const recordCommunityOutcomeObservation = mutation({
       communityId: args.communityId,
       userId,
       requestedActorType: args.actorType,
-      requestedAgentKey: args.actorAgentKey,
     });
     let node: IntelligenceNodeRow | null = null;
     if (args.nodeId) {
@@ -2703,7 +2687,6 @@ export const recordCommunityOutcomeObservation = mutation({
       notes: normalizeOptionalLongText(args.notes, 4000),
       observedByActorType: actor.actorType,
       ...(actor.actorUserId ? { observedByUserId: actor.actorUserId } : {}),
-      ...(actor.actorAgentKey ? { observedByAgentKey: actor.actorAgentKey } : {}),
       observedAt,
       createdAt: nowMs,
       updatedAt: nowMs,
@@ -2727,7 +2710,6 @@ export const recordCommunityOutcomeObservation = mutation({
         privacyRisk: 0.2,
         actorType: actor.actorType,
         actorUserId: actor.actorUserId,
-        actorAgentKey: actor.actorAgentKey,
         nowMs,
       });
     }

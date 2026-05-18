@@ -19,16 +19,20 @@ function exportedFunctionBlock(source: string, exportName: string): string {
   return source.slice(start, next === -1 ? source.length : next);
 }
 
-function assertNoAutonomousCanonicalActor(functionName: string) {
+function assertInternalCanonicalRepairFunction(functionName: string) {
   const block = exportedFunctionBlock(directory, functionName);
+  assert.match(block, new RegExp(`export const ${functionName} = internalMutation`), `${functionName} should be internal-only repair infrastructure`);
   assert.match(block, /resolveAdminTruthActor/, `${functionName} should use admin-only truth actor resolution`);
-  assert.match(block, /actorType: v\.optional\(\s*v\.literal\("admin"\),?\s*\)/, `${functionName} should only accept admin as direct truth actor`);
+  assert.doesNotMatch(block, /actorType: v\./, `${functionName} should not expose caller-selected actor identity`);
+  assert.doesNotMatch(block, /actorAgentKey/, `${functionName} should not expose agent attribution through direct repair writes`);
   assert.doesNotMatch(block, /v\.literal\("agent"\)|v\.literal\("compiler"\)|v\.literal\("system"\)/, `${functionName} should not allow autonomous actors to write canonical truth directly`);
 }
 
 function assertPolicyGatedApply(functionName: string) {
   const block = exportedFunctionBlock(directory, functionName);
   assert.match(block, /resolvePolicyDecisionActor/, `${functionName} should use policy decision actor resolution`);
+  assert.doesNotMatch(block, /actorAgentKey/, `${functionName} should not accept or write caller-supplied agent attribution`);
+  assert.doesNotMatch(block, /v\.literal\("agent"\)|v\.literal\("compiler"\)|v\.literal\("system"\)/, `${functionName} should not allow public autonomous policy actors`);
   assert.match(block, /changeRequest\.status !== "accepted"/, `${functionName} should require an accepted change request`);
   assert.match(block, /requireChangeRequestTargetsCurrent/, `${functionName} should reject stale targets`);
   assert.match(block, /insertMutationLog/, `${functionName} should still write audited mutations`);
@@ -78,9 +82,44 @@ assert.match(
   "directory change requests should snapshot target state before decision/apply",
 );
 assert.match(
+  schema,
+  /communitySourceTraces: defineTable\([\s\S]*v\.literal\("feedback"\)[\s\S]*v\.literal\("transcript"\)/,
+  "source traces should include feedback and transcript evidence types",
+);
+assert.match(
   directory,
   /createCommunityIntelligenceChangeRequest[\s\S]*insertChangeRequest/,
   "activity should be able to create policy-gated directory change requests",
+);
+assert.doesNotMatch(
+  directory,
+  /recordTrustedCommunitySourceTraceInternal/,
+  "trusted product evidence should not expose a generic internal mutation; source-specific product bridges should call the core helper",
+);
+assert.match(
+  directory,
+  /export async function recordTrustedCommunitySourceTraceCore[\s\S]*community_source_trace_trusted_source_type_required/,
+  "trusted product evidence core should reject manual/external source types",
+);
+assert.match(
+  directory,
+  /recordTrustedCommunitySourceTraceCore[\s\S]*const visibilityScope = args\.visibilityScope \?\? "admin"/,
+  "trusted product evidence core should default to restricted visibility",
+);
+assert.match(
+  directory,
+  /recordTrustedCommunitySourceTraceCore[\s\S]*allowExistingUpdate: true/,
+  "trusted product evidence core should explicitly opt into idempotent source updates",
+);
+assert.match(
+  directory,
+  /recordTrustedCommunitySourceTraceCore[\s\S]*actorType === "member" \|\| actorType === "admin"[\s\S]*community_source_trace_actor_user_required/,
+  "trusted human-attributed evidence should require a user id",
+);
+assert.match(
+  directory,
+  /recordTrustedCommunitySourceTraceCore[\s\S]*outcomeObservationIds = args\.outcomeObservationIds \?\? \[\][\s\S]*requireOutcomeIdsBelongToCommunity\(args\.ctx, args\.communityId, outcomeObservationIds\)/,
+  "trusted source traces should validate attached outcomes belong to the same community",
 );
 {
   const block = exportedFunctionBlock(directory, "recordCommunitySourceTrace");
@@ -91,7 +130,7 @@ assert.match(
   );
   assert.doesNotMatch(
     block,
-    /v\.literal\("chat"\)|v\.literal\("ai_feed"\)|v\.literal\("resource"\)|v\.literal\("workflow_run"\)|v\.literal\("agent_run"\)|v\.literal\("artifact"\)|v\.literal\("tool_call"\)|v\.literal\("outcome"\)/,
+    /v\.literal\("chat"\)|v\.literal\("ai_feed"\)|v\.literal\("resource"\)|v\.literal\("workflow_run"\)|v\.literal\("agent_run"\)|v\.literal\("artifact"\)|v\.literal\("tool_call"\)|v\.literal\("outcome"\)|v\.literal\("feedback"\)|v\.literal\("transcript"\)/,
     "public source trace writes should not impersonate product-owned source types",
   );
   assert.match(
@@ -103,6 +142,11 @@ assert.match(
     block,
     /v\.literal\("agent"\)|v\.literal\("compiler"\)|v\.literal\("system"\)/,
     "public source trace writes should not claim autonomous actor identity",
+  );
+  assert.doesNotMatch(
+    block,
+    /actorAgentKey/,
+    "public source trace writes should not accept agent attribution",
   );
   assert.match(
     block,
@@ -122,6 +166,16 @@ assert.match(
 );
 {
   const block = exportedFunctionBlock(directory, "createCommunityIntelligenceChangeRequest");
+  assert.match(
+    block,
+    /actorType: v\.optional\(\s*v\.union\(\s*v\.literal\("member"\),\s*v\.literal\("admin"\),?\s*\)/,
+    "public change requests should only allow member/admin actor identity",
+  );
+  assert.doesNotMatch(
+    block,
+    /v\.literal\("agent"\)|v\.literal\("compiler"\)|v\.literal\("system"\)|actorAgentKey/,
+    "public change requests should not impersonate community-agent or compiler actors",
+  );
   assert.match(
     block,
     /if \(actor\.isManager\) \{[\s\S]*requireTraceIdsBelongToCommunity[\s\S]*\} else \{[\s\S]*requireTraceIdsReadableByViewer/,
@@ -163,15 +217,41 @@ assert.match(
   /requireChangeRequestReferencesAllowedForApply[\s\S]*createdByActorType === "member"[\s\S]*createdByUserId[\s\S]*requireTraceIdsReadableByViewer[\s\S]*requireOutcomeIdsReadableByViewer[\s\S]*requireNodeIdsReadableByViewer[\s\S]*requireEdgeIdsReadableByViewer[\s\S]*requireChangeRequestPayloadReferencesAllowed/,
   "apply should revalidate member-authored change request references against the original requester readability",
 );
-assertNoAutonomousCanonicalActor("createCommunityIntelligenceNode");
-assertNoAutonomousCanonicalActor("updateCommunityIntelligenceNode");
-assertNoAutonomousCanonicalActor("createCommunityIntelligenceEdge");
+assertInternalCanonicalRepairFunction("createCommunityIntelligenceNode");
+assertInternalCanonicalRepairFunction("updateCommunityIntelligenceNode");
+assertInternalCanonicalRepairFunction("createCommunityIntelligenceEdge");
 assertPolicyGatedApply("applyCommunityIntelligenceChangeRequest");
 assert.match(
   directory,
-  /decideCommunityIntelligenceChangeRequest[\s\S]*resolvePolicyDecisionActor[\s\S]*status: args\.status[\s\S]*decidedByActorType/,
-  "community cognition decisions should be attributed to a policy actor",
+  /async function resolvePolicyDecisionActor[\s\S]*requireCommunityManager[\s\S]*actorType: "admin"/,
+  "public policy decisions should resolve to explicit admin override attribution only",
 );
+{
+  const block = exportedFunctionBlock(directory, "decideCommunityIntelligenceChangeRequest");
+  assert.match(
+    block,
+    /resolvePolicyDecisionActor[\s\S]*status: args\.status[\s\S]*decidedByActorType/,
+    "change request decisions should be attributed to a policy actor",
+  );
+  assert.doesNotMatch(
+    block,
+    /actorAgentKey|v\.literal\("agent"\)|v\.literal\("compiler"\)|v\.literal\("system"\)/,
+    "public change request decisions should not impersonate autonomous actors",
+  );
+}
+{
+  const block = exportedFunctionBlock(directory, "recordCommunityOutcomeObservation");
+  assert.match(
+    block,
+    /actorType: v\.optional\(\s*v\.union\(\s*v\.literal\("member"\),\s*v\.literal\("admin"\),?\s*\)/,
+    "public outcome observations should only allow member/admin actor identity",
+  );
+  assert.doesNotMatch(
+    block,
+    /v\.literal\("agent"\)|v\.literal\("compiler"\)|v\.literal\("system"\)|actorAgentKey/,
+    "public outcome observations should not impersonate community-agent or compiler actors",
+  );
+}
 assert.match(
   directory,
   /createCommunityIntelligenceNode[\s\S]*insertMutationLog\([\s\S]*operation: "create_node"/,
@@ -219,18 +299,13 @@ assert.match(
 );
 assert.match(
   directory,
-  /export const createCommunityIntelligenceNode[\s\S]*requireCommunityManager\(\{ ctx, communityId: args\.communityId, userId \}\);/,
-  "canonical node creation should require community manager authority",
+  /export const createCommunityIntelligenceNode = internalMutation[\s\S]*resolveAdminTruthActor/,
+  "canonical node creation should be internal repair infrastructure with admin truth resolution",
 );
 assert.match(
   directory,
   /export const retrieveCommunityIntelligenceForWorkflow[\s\S]*requireCommunityChatAccess\(\{ ctx, communityId: args\.communityId, userId \}\);/,
   "retrieval should require community access",
-);
-assert.match(
-  communityExports,
-  /createCommunityIntelligenceNodeImpl/,
-  "community module should re-export directory node creation",
 );
 assert.match(
   communityExports,
@@ -240,7 +315,12 @@ assert.match(
 assert.match(
   communityExports,
   /createCommunityIntelligenceChangeRequestImpl[\s\S]*applyCommunityIntelligenceChangeRequestImpl/,
-  "community module should re-export change request decision and application functions",
+  "community module should still re-export the policy-gated change request airlock",
+);
+assert.doesNotMatch(
+  communityExports,
+  /createCommunityIntelligenceNodeImpl|updateCommunityIntelligenceNodeImpl|createCommunityIntelligenceEdgeImpl/,
+  "community module should not re-export direct canonical directory repair functions",
 );
 
 console.log("community_intelligence_directory_contract_proof: ok");

@@ -1025,6 +1025,35 @@ export default defineSchema({
     updatedAt: v.number(),
   }).index("by_community", ["communityId"]),
 
+  communityAgentRuns: defineTable({
+    communityId: v.id("communities"),
+    agentKey: v.string(),
+    triggerType: v.union(
+      v.literal("manual_internal"),
+      v.literal("heartbeat"),
+      v.literal("event"),
+    ),
+    sponsorUserId: v.id("users"),
+    modelId: v.optional(v.string()),
+    status: v.union(
+      v.literal("running"),
+      v.literal("ok"),
+      v.literal("error"),
+    ),
+    stopReason: v.optional(v.string()),
+    toolStepCount: v.number(),
+    candidateProposalIds: v.array(v.string()),
+    errorCode: v.optional(v.string()),
+    errorMessage: v.optional(v.string()),
+    startedAt: v.number(),
+    finishedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_community_createdAt", ["communityId", "createdAt"])
+    .index("by_community_status_createdAt", ["communityId", "status", "createdAt"])
+    .index("by_sponsor_createdAt", ["sponsorUserId", "createdAt"]),
+
   developerApps: defineTable({
     ownerUserId: v.id("users"),
     catalogAppId: v.optional(v.string()),
@@ -1379,8 +1408,10 @@ export default defineSchema({
       v.literal("agent_run"),
       v.literal("artifact"),
       v.literal("tool_call"),
-      v.literal("manual"),
       v.literal("outcome"),
+      v.literal("feedback"),
+      v.literal("transcript"),
+      v.literal("manual"),
       v.literal("external"),
     ),
     sourceId: v.optional(v.string()),

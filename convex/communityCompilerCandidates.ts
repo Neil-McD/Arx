@@ -1,4 +1,4 @@
-import { mutation, query } from "./_generated/server";
+import { query } from "./_generated/server";
 import { v } from "convex/values";
 import {
   normalizeIdValue,
@@ -115,8 +115,10 @@ const RESOLVABLE_SOURCE_TRACE_TYPES = new Set([
   "agent_run",
   "artifact",
   "tool_call",
-  "manual",
   "outcome",
+  "feedback",
+  "transcript",
+  "manual",
   "external",
 ]);
 
@@ -149,8 +151,6 @@ function defaultNodeTypeForDigestCategory(category: DigestCategory): NodeType {
   if (category === "chat_activity") return "open_question";
   if (category === "ai_feed_signal") return "insight";
   if (category === "resource_activity") return "insight";
-  if (category === "event_activity") return "open_question";
-  if (category === "member_state") return "open_question";
   if (category === "outcome_signal") return "insight";
   if (category === "source_trace_signal") return "insight";
   throw new Error("community_compiler_digest_item_not_candidate");
@@ -163,12 +163,10 @@ function normalizeNodeTypeOverride(args: {
   if (args.category === "pending_directory_decision") {
     throw new Error("community_compiler_digest_item_already_in_airlock");
   }
-  if (args.category === "member_state" && args.override && args.override !== "open_question") {
-    throw new Error("community_compiler_member_state_candidate_must_be_open_question");
+  if (args.category === "event_activity" || args.category === "member_state") {
+    throw new Error("community_compiler_digest_item_not_learning_signal");
   }
-  return args.category === "member_state"
-    ? "open_question"
-    : args.override ?? defaultNodeTypeForDigestCategory(args.category);
+  return args.override ?? defaultNodeTypeForDigestCategory(args.category);
 }
 
 function sourceTraceIdsFromItem(item: DigestItem): any[] {
@@ -330,18 +328,100 @@ async function resolveSourceTraceIdsForDigestItem(args: {
   return out;
 }
 
-function buildCandidateTitle(item: DigestItem, override?: string | null): string {
-  return truncateText(override, 180) || truncateText(item.title, 180) || "Compiler candidate";
+function buildCandidateTitle(item: DigestItem): string {
+  return truncateText(item.title, 180) || "Compiler candidate";
+}
+
+type LearningEnvelope = {
+  version: "compiler_learning_envelope_v1";
+  learningQuestion: string;
+  candidateClaim: string;
+  rejectedAlternative: string;
+  preferenceReason: string;
+  evidenceSummary: string;
+  uncertainty: string;
+  falsificationCriteria: string;
+};
+
+function learningQuestionForItem(item: DigestItem): string {
+  if (item.category === "chat_activity") {
+    return "What repeated question, decision, warning, example, or workflow opportunity should be extracted from this conversation evidence?";
+  }
+  if (item.category === "ai_feed_signal") {
+    return "What operational pattern, warning, or workflow hypothesis should be tested from this AI Feed signal?";
+  }
+  if (item.category === "resource_activity") {
+    return "Does this resource evidence support, contradict, stale, or improve any community directory intelligence?";
+  }
+  if (item.category === "outcome_signal") {
+    return "Which existing or candidate pattern did this outcome evidence support, weaken, or falsify?";
+  }
+  if (item.category === "source_trace_signal") {
+    return "What reusable operational pattern might be inferred from these normalized source traces?";
+  }
+  return "Is there a supported, reusable community learning from this compiler signal?";
+}
+
+function rejectedAlternativeForItem(item: DigestItem): string {
+  if (item.category === "chat_activity") {
+    return "Treat the conversation as isolated chatter and extract no reusable question, warning, example, or workflow implication.";
+  }
+  if (item.category === "ai_feed_signal") {
+    return "Treat the AI Feed signal as interesting commentary without testing whether it should affect future workflows.";
+  }
+  if (item.category === "resource_activity") {
+    return "Treat the resource activity as canonical advice without checking reuse, staleness, contradiction, or outcome evidence.";
+  }
+  if (item.category === "outcome_signal") {
+    return "Leave prior recommendations unchanged despite new outcome evidence.";
+  }
+  if (item.category === "source_trace_signal") {
+    return "Leave normalized evidence uncompiled and unavailable to future workflow retrieval.";
+  }
+  return "Ignore this signal unless stronger evidence emerges.";
+}
+
+function falsificationCriteriaForItem(item: DigestItem): string {
+  if (item.category === "outcome_signal") {
+    return "Demote or contest the claim if later outcome observations fail to reproduce the same direction under similar conditions.";
+  }
+  if (item.category === "resource_activity") {
+    return "Demote or contest the claim if the source resource becomes stale, contradicted, or unused in relevant workflows.";
+  }
+  return "Demote, reject, or convert to an open question if later traces fail to show repeated use, outcome movement, or workflow relevance.";
+}
+
+function buildLearningEnvelope(args: {
+  item: DigestItem;
+  sourceTraceResolution: SourceTraceResolution;
+}): LearningEnvelope {
+  const sourceTypes = uniqueBoundedStrings(args.item.sourceTypes, 8, 64).join(", ") || "none";
+  const resolvedCount = args.sourceTraceResolution.sourceTraceIds.length;
+  const unresolvedCount = args.sourceTraceResolution.unresolvedSourceReferences.length;
+  const candidateClaim = truncateText(args.item.title || args.item.summary, 260) || "The compiler found a possible reusable community learning.";
+  return {
+    version: "compiler_learning_envelope_v1",
+    learningQuestion: learningQuestionForItem(args.item),
+    candidateClaim,
+    rejectedAlternative: rejectedAlternativeForItem(args.item),
+    preferenceReason: "Prefer the candidate only if the evidence shows it is more useful for future workflows than the rejected alternative.",
+    evidenceSummary: truncateText(
+      `${args.item.summary} Source types: ${sourceTypes}. Formal source traces resolved: ${resolvedCount}. Unresolved source references: ${unresolvedCount}.`,
+      900,
+    ),
+    uncertainty: resolvedCount > 0
+      ? "This is still candidate intelligence. It needs community-agent judgment and future outcome feedback before becoming validated memory."
+      : "Formal source trace evidence is missing or unresolved, so this should stay low-confidence until evidence is attached.",
+    falsificationCriteria: falsificationCriteriaForItem(args.item),
+  };
 }
 
 function buildCandidateBody(args: {
   digest: CompilerDigestRow;
   item: DigestItem;
   itemIndex: number;
-  bodyMdOverride?: string | null;
+  learningEnvelope: LearningEnvelope;
 }): string {
-  const override = String(args.bodyMdOverride ?? "").trim();
-  if (override) return override.slice(0, 40_000);
   const sourceTypes = (args.item.sourceTypes ?? []).filter(Boolean).join(", ") || "none";
   const sourceIds = (args.item.sourceIds ?? []).filter(Boolean).slice(0, 12).join(", ") || "none";
   return [
@@ -351,6 +431,27 @@ function buildCandidateBody(args: {
     `Digest item index: ${args.itemIndex}`,
     `Digest category: ${args.item.category}`,
     `Digest window: ${toIsoString(args.digest.windowStartedAt)} to ${toIsoString(args.digest.windowEndedAt)}`,
+    "",
+    "Learning question:",
+    args.learningEnvelope.learningQuestion,
+    "",
+    "Candidate claim:",
+    args.learningEnvelope.candidateClaim,
+    "",
+    "Rejected alternative:",
+    args.learningEnvelope.rejectedAlternative,
+    "",
+    "Preference reason:",
+    args.learningEnvelope.preferenceReason,
+    "",
+    "Evidence summary:",
+    args.learningEnvelope.evidenceSummary,
+    "",
+    "Uncertainty:",
+    args.learningEnvelope.uncertainty,
+    "",
+    "Falsification criteria:",
+    args.learningEnvelope.falsificationCriteria,
     "",
     "Candidate summary:",
     args.item.summary,
@@ -368,17 +469,25 @@ function buildCandidatePayload(args: {
   itemIndex: number;
   nodeType: NodeType;
   sourceTraceResolution: SourceTraceResolution;
-  overrideByUserId: any;
-  titleOverride?: string | null;
-  bodyMdOverride?: string | null;
 }) {
   const sourceTraceIds = args.sourceTraceResolution.sourceTraceIds;
-  const hasHumanOverride = Boolean(String(args.titleOverride ?? "").trim() || String(args.bodyMdOverride ?? "").trim());
   const needsTraceResolution =
     sourceTraceIds.length === 0 &&
     ((args.item.sourceIds ?? []).length > 0 || args.sourceTraceResolution.unresolvedSourceReferences.length > 0);
+  const learningEnvelope = buildLearningEnvelope({
+    item: args.item,
+    sourceTraceResolution: args.sourceTraceResolution,
+  });
   return {
     source: COMMUNITY_COMPILER_CANDIDATE_PAYLOAD_SOURCE,
+    learningEnvelopeVersion: learningEnvelope.version,
+    learningQuestion: learningEnvelope.learningQuestion,
+    candidateClaim: learningEnvelope.candidateClaim,
+    rejectedAlternative: learningEnvelope.rejectedAlternative,
+    preferenceReason: learningEnvelope.preferenceReason,
+    evidenceSummary: learningEnvelope.evidenceSummary,
+    uncertainty: learningEnvelope.uncertainty,
+    falsificationCriteria: learningEnvelope.falsificationCriteria,
     compilerDigestId: normalizeIdValue(args.digest._id),
     compilerDigestDedupeKey: args.digest.dedupeKey,
     digestItemIndex: args.itemIndex,
@@ -397,25 +506,13 @@ function buildCandidatePayload(args: {
       resolvedSourceReferences: args.sourceTraceResolution.resolvedSourceReferences,
       unresolvedSourceReferences: args.sourceTraceResolution.unresolvedSourceReferences,
     },
-    ...(hasHumanOverride
-      ? {
-          humanOverride: true,
-          overrideByUserId: normalizeIdValue(args.overrideByUserId),
-          overriddenFields: [
-            ...(String(args.titleOverride ?? "").trim() ? ["title"] : []),
-            ...(String(args.bodyMdOverride ?? "").trim() ? ["bodyMd"] : []),
-          ],
-          originalCompilerTitle: truncateText(args.item.title, 180),
-          originalCompilerSummary: truncateText(args.item.summary, 700),
-        }
-      : {}),
     type: args.nodeType,
-    title: buildCandidateTitle(args.item, args.titleOverride),
+    title: buildCandidateTitle(args.item),
     bodyMd: buildCandidateBody({
       digest: args.digest,
       item: args.item,
       itemIndex: args.itemIndex,
-      bodyMdOverride: args.bodyMdOverride,
+      learningEnvelope,
     }),
     status: "candidate",
     visibilityScope: "admin",
@@ -459,9 +556,12 @@ function mapCandidateProposal(row: ChangeRequestRow) {
     digest_item_category: typeof payload.digestItemCategory === "string" ? payload.digestItemCategory : null,
     candidate_type: typeof payload.type === "string" ? payload.type : null,
     title: typeof payload.title === "string" ? payload.title : null,
+    learning_question: typeof payload.learningQuestion === "string" ? payload.learningQuestion : null,
+    candidate_claim: typeof payload.candidateClaim === "string" ? payload.candidateClaim : null,
+    rejected_alternative: typeof payload.rejectedAlternative === "string" ? payload.rejectedAlternative : null,
+    preference_reason: typeof payload.preferenceReason === "string" ? payload.preferenceReason : null,
     source_trace_resolution_status:
       typeof sourceTraceResolution.status === "string" ? sourceTraceResolution.status : null,
-    human_override: payload.humanOverride === true,
     confidence: row.confidence,
     privacy_risk: row.privacyRisk,
     source_trace_ids: (row.sourceTraceIds ?? []).map(normalizeIdValue),
@@ -500,96 +600,74 @@ async function findExistingDigestItemCandidate(args: {
   );
 }
 
-export const proposeCommunityIntelligenceFromDigestItem = mutation({
-  args: {
-    userId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    communityId: v.id("communities"),
-    digestId: v.id("communityCompilerDigests"),
-    itemIndex: v.number(),
-    nodeType: v.optional(
-      v.union(
-        v.literal("playbook"),
-        v.literal("insight"),
-        v.literal("example"),
-        v.literal("warning_failure"),
-        v.literal("decision_judgment"),
-        v.literal("open_question"),
-      ),
-    ),
-    title: v.optional(v.string()),
-    bodyMd: v.optional(v.string()),
-  },
-  handler: async (ctx, args) => {
-    const userId = await resolveUserIdForAuthenticatedRequest({
-      ctx,
-      userId: args.userId,
-      authSubject: args.authSubject ?? null,
-    });
-    await requireCommunityManager({ ctx, communityId: args.communityId, userId });
-    const digest = await getDigestOrThrow(ctx, args.digestId);
-    if (normalizeIdValue(digest.communityId) !== normalizeIdValue(args.communityId)) {
-      throw new Error("community_compiler_digest_not_found");
-    }
-    const itemIndex = normalizeItemIndex(args.itemIndex);
-    const item = digest.items[itemIndex];
-    if (!item) throw new Error("community_compiler_digest_item_not_found");
-    const nodeType = normalizeNodeTypeOverride({
-      category: item.category,
-      override: args.nodeType,
-    });
-    const digestId = normalizeIdValue(digest._id);
-    const existing = await findExistingDigestItemCandidate({
-      ctx,
-      communityId: args.communityId,
-      digestId,
-      itemIndex,
-    });
-    if (existing) {
-      return {
-        ok: true,
-        reused_existing: true,
-        proposal: mapCandidateProposal(existing),
-      };
-    }
-    const sourceTraceResolution = await resolveSourceTraceIdsForDigestItem({
-      ctx,
-      communityId: args.communityId,
-      item,
-    });
-    const requestedPayload = buildCandidatePayload({
-      digest,
-      item,
-      itemIndex,
-      nodeType,
-      sourceTraceResolution,
-      overrideByUserId: userId,
-      titleOverride: args.title,
-      bodyMdOverride: args.bodyMd,
-    });
-    const proposal = await createTrustedCommunityIntelligenceChangeRequest({
-      ctx,
-      communityId: args.communityId,
-      operation: "create_node",
-      sourceTraceIds: sourceTraceResolution.sourceTraceIds,
-      requestedPayload,
-      confidence: clampScore(item.confidence, 0.5),
-      privacyRisk: clampScore(
-        (item.category === "member_state" ? 0.45 : 0.25) +
-          (sourceTraceResolution.sourceTraceIds.length === 0 && (item.sourceIds ?? []).length > 0 ? 0.1 : 0),
-        0.25,
-      ),
-      actorType: "compiler",
-      actorAgentKey: COMMUNITY_COMPILER_CANDIDATE_AGENT_KEY,
-      nowMs: Date.now(),
-    });
+export async function proposeCommunityIntelligenceFromDigestItemCore(args: {
+  ctx: any;
+  communityId: any;
+  digestId: any;
+  itemIndex: number;
+  nodeType?: NodeType;
+  actorType?: "compiler" | "agent";
+  actorAgentKey?: string;
+  nowMs?: number;
+}) {
+  const digest = await getDigestOrThrow(args.ctx, args.digestId);
+  if (normalizeIdValue(digest.communityId) !== normalizeIdValue(args.communityId)) {
+    throw new Error("community_compiler_digest_not_found");
+  }
+  const itemIndex = normalizeItemIndex(args.itemIndex);
+  const item = digest.items[itemIndex];
+  if (!item) throw new Error("community_compiler_digest_item_not_found");
+  const nodeType = normalizeNodeTypeOverride({
+    category: item.category,
+    override: args.nodeType,
+  });
+  const digestId = normalizeIdValue(digest._id);
+  const existing = await findExistingDigestItemCandidate({
+    ctx: args.ctx,
+    communityId: args.communityId,
+    digestId,
+    itemIndex,
+  });
+  if (existing) {
     return {
       ok: true,
-      reused_existing: false,
-      proposal,
+      reused_existing: true,
+      proposal: mapCandidateProposal(existing),
     };
-  },
-});
+  }
+  const sourceTraceResolution = await resolveSourceTraceIdsForDigestItem({
+    ctx: args.ctx,
+    communityId: args.communityId,
+    item,
+  });
+  const requestedPayload = buildCandidatePayload({
+    digest,
+    item,
+    itemIndex,
+    nodeType,
+    sourceTraceResolution,
+  });
+  const proposal = await createTrustedCommunityIntelligenceChangeRequest({
+    ctx: args.ctx,
+    communityId: args.communityId,
+    operation: "create_node",
+    sourceTraceIds: sourceTraceResolution.sourceTraceIds,
+    requestedPayload,
+    confidence: clampScore(item.confidence, 0.5),
+    privacyRisk: clampScore(
+      0.25 + (sourceTraceResolution.sourceTraceIds.length === 0 && (item.sourceIds ?? []).length > 0 ? 0.1 : 0),
+      0.25,
+    ),
+    actorType: args.actorType ?? "compiler",
+    actorAgentKey: args.actorAgentKey ?? COMMUNITY_COMPILER_CANDIDATE_AGENT_KEY,
+    nowMs: args.nowMs ?? Date.now(),
+  });
+  return {
+    ok: true,
+    reused_existing: false,
+    proposal,
+  };
+}
 
 export const listCommunityCompilerCandidateProposals = query({
   args: {

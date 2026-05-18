@@ -46,6 +46,11 @@ assert.match(
 );
 assert.match(
   digest,
+  /function activeCompilerTrace[\s\S]*visibilityScope === "admin"[\s\S]*visibilityScope === "community"[\s\S]*visibilityScope === "public"/,
+  "compiler digest should include trusted non-private source traces, including redacted/admin evidence",
+);
+assert.match(
+  digest,
   /requireCommunityManager\(\{ ctx, communityId: args\.communityId, userId \}\)/,
   "compiler digest pass should require community manager authority in this slice",
 );
@@ -53,17 +58,25 @@ for (const tableName of [
   "communityArchiveDocuments",
   "communitySourceTraces",
   "communityAiFeedPosts",
-  "communityEvents",
   "communityOutcomeObservations",
   "communityIntelligenceChangeRequests",
-  "communityMemberships",
-  "communityPresence",
-  "communityAiFeedReactions",
 ]) {
   assert.match(
     digest,
     new RegExp(`query\\("${tableName}"[\\s\\S]*\\.take\\(`),
     `compiler digest pass should read ${tableName} through a bounded query`,
+  );
+}
+for (const tableName of [
+  "communityEvents",
+  "communityMemberships",
+  "communityPresence",
+  "communityAiFeedReactions",
+]) {
+  assert.doesNotMatch(
+    digest,
+    new RegExp(`query\\("${tableName}"`),
+    `compiler digest pass should exclude ${tableName} from learning-signal digests`,
   );
 }
 assert.match(
@@ -100,8 +113,13 @@ assert.match(
 );
 assert.match(
   digest,
-  /category: "member_state"[\s\S]*aggregate state only, not people scoring/,
-  "member-state digest item should stay aggregate-only",
+  /Events, member joins, presence, reactions, and generic activity are excluded from learning digests/,
+  "compiler digest summary should make the learning-signal boundary explicit",
+);
+assert.doesNotMatch(
+  digest,
+  /category: "event_activity"|category: "member_state"/,
+  "compiler digest pass should not emit event/member-state learning items",
 );
 assert.doesNotMatch(
   digest,

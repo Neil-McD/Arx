@@ -111,8 +111,11 @@ Surface handling:
 | Chat | yes | selected or high-signal messages | yes, mostly | yes | only extracted decisions, insights, questions, warnings, examples |
 | AI Feed | yes | yes | yes | yes, weighted by signal ranking | only promoted posts or patterns |
 | Resources | yes | yes | yes, strongly | yes, especially for stale or contradiction checks | usually reference material; sometimes source-backed playbook or resource node |
-| Events | yes | yes | only descriptions, summaries, or recaps | yes | only learnings, decisions, repeated coordination patterns, or event-derived outcomes |
-| Members | yes | carefully and permissioned | mostly no | yes, aggregated or explicit contribution signals | expertise nodes later, opt-in and evidence-based |
+| Workflow runs / artifacts | yes | yes | yes, where text-bearing | yes | successful examples, failures, workflow improvements, validated patterns |
+| Outcomes / feedback | yes | yes | yes, when textual | yes, high priority | support, contest, validate, or falsify patterns |
+| Calls / transcripts | yes | yes | yes | yes | decisions, insights, repeated questions, warnings, examples |
+| Events | yes | only when there is recap/transcript/decision/outcome evidence | only descriptions, summaries, recaps, or transcripts | context-only unless evidence-bearing | only learnings, decisions, repeated coordination patterns, or event-derived outcomes |
+| Members | yes | only explicit contribution or aggregate state signals | mostly no | context-only and aggregate-first | expertise nodes later, opt-in and evidence-based |
 
 Rules:
 
@@ -123,6 +126,8 @@ Rules:
 - Raw archive and embeddings can support evidence search, but they are not validated community intelligence.
 - Workflow retrieval should prefer accepted directory intelligence, then fall back to archive evidence when needed.
 - Events and members are mostly structural context and graph references, not blob-search content.
+- Event scheduling, member joins, presence, reactions, and generic activity are not learning signals by themselves.
+- Events and members enter the learning compiler only through evidence-bearing artifacts such as transcripts, recaps, feedback, outcomes, decisions, workflow runs, artifacts, or explicit contribution records.
 
 ## Direct Surface Read Tools
 
@@ -181,6 +186,28 @@ Chat / AI Feed / Resources / Events / Members
   -> workflow retrieval
   -> outcome observations
   -> pattern updates
+```
+
+The learning-compiler flow should be narrower:
+
+```txt
+Chat / AI Feed / Workflow Runs / Artifacts / Resources / Outcomes / Feedback / Transcripts
+  -> source traces
+  -> compiler observation
+  -> learning envelope
+  -> preference judgment
+  -> directory change request
+```
+
+Excluded from learning unless attached to evidence:
+
+```txt
+event scheduled
+event updated
+member joined
+member present
+member reacted
+generic activity
 ```
 
 ## Product Thesis
@@ -342,6 +369,21 @@ Members + personal agents
 ```
 
 The community agent is the executive function over the memory system. The compiler is the consolidation machinery. The directory is the persistent cognition substrate. Validated operational patterns are promoted operational memory. Retrieval is action-time memory routing.
+
+The compiler should behave as one staged pipeline rather than a pile of disconnected compilers:
+
+```txt
+Pass 1: Observe
+  What happened?
+
+Pass 2: Learn
+  What could the community learn from this?
+
+Pass 3: Judge
+  What worked better than what, how strong is the evidence, and should this become a directory proposal?
+```
+
+Implementation can use separate prompts or agent personas for each pass later, but the product should keep one compiler pipeline with typed stages until the data proves it needs more durable services.
 
 ## Research Inspirations
 
@@ -680,7 +722,7 @@ Rules:
 - private member context is private by default
 - memory visibility and source visibility are distinct
 - community memory requires explicit policy or community cognition decision
-- cross-community learning must be anonymized and explicitly allowed
+- community memory is single-community only; cross-community memory/intelligence is out of scope and must not be reachable from this system
 
 ### Compiler Filter
 
@@ -1015,6 +1057,8 @@ Rules:
 - The pass is fixed to the same 30-day compiler window.
 - The pass is idempotent per community/day so heartbeat retries do not spam duplicate digests.
 - Digest items are bounded and typed: chat activity, AI Feed signal, resource activity, event activity, member state, outcome signal, source trace signal, and pending directory decision.
+- Learning digest items should be generated from signal-bearing sources: chat, AI Feed, resources, outcomes, source traces, transcripts, feedback, workflow runs, artifacts, and pending directory decisions.
+- Event scheduling, member joins, presence, reactions, and generic activity are excluded from learning digests unless they produce evidence-bearing traces such as transcripts, feedback, outcomes, decisions, artifacts, or workflow records.
 - Digest items may point at source ids or source trace ids, but they do not mutate `communityIntelligenceNodes`, `communityIntelligenceEdges`, or `communityIntelligenceChangeRequests`.
 - The digest is manager-scoped in this backend slice because it exposes compiler state and pending decision counts.
 
@@ -1035,11 +1079,15 @@ Member/manual evidence
 Rules:
 
 - Public `recordCommunitySourceTrace` calls may only write `manual` or `external` traces.
-- Public source trace writes cannot impersonate product-owned sources such as chat, AI Feed, resources, workflow runs, tool calls, artifacts, or outcomes.
-- Product-source traces are bridge-owned. `chat`, `ai_feed`, `resource`, event-derived, workflow-derived, and outcome-derived traces must come from their product/runtime bridge code.
+- Public source trace writes cannot impersonate product-owned sources such as chat, AI Feed, resources, workflow runs, tool calls, artifacts, outcomes, feedback, or transcripts.
+- Product-source traces are bridge-owned. `chat`, `ai_feed`, `resource`, workflow-derived, artifact-derived, outcome-derived, feedback-derived, and transcript-derived traces must come from trusted product/runtime bridge code.
+- There is no generic internal product-source trace mutation. Source-specific bridges must validate their own authority and call the trusted source-trace core helper directly.
+- The trusted source-trace bridge requires a stable product `sourceId` and defaults new product-owned evidence to admin visibility unless the product path explicitly widens it.
 - Public source trace writes cannot claim `agent`, `compiler`, or `system` actor identity.
 - AI Feed agent publication is governance-scoped in this slice so normal members cannot create fake `Community agent` evidence.
 - Daily compiler digest reruns update digest contents without rewriting original creation attribution.
+- Direct canonical directory node/edge writes are internal repair infrastructure only. They are not public community product APIs.
+- Public member/admin APIs may create evidence, outcomes, retrieval logs, and policy-gated change requests; they must not impersonate the community agent, compiler, or system.
 
 ## Sixth Implementation Slice
 
@@ -1055,17 +1103,108 @@ Compiler digest
 
 Rules:
 
-- The digest-to-candidate pass creates only `communityIntelligenceChangeRequests`.
+- The digest-to-candidate pass is an internal compiler/community-agent operation that creates only `communityIntelligenceChangeRequests`.
 - Directory truth is still untouched: no direct `communityIntelligenceNodes` or `communityIntelligenceEdges` writes.
 - Candidate change requests use `operation: create_node`, `status: pending_decision`, and `createdByActorType: compiler`.
 - Candidate payloads default to `status: candidate` and `visibilityScope: admin`.
+- Public admin decisions are explicit repair/override paths. The normal reviewer is the community cognition loop.
 - Digest `sourceIds` are clues; resolved `sourceTraceIds` are formal evidence.
 - The candidate pass resolves digest source ids into `communitySourceTraces` before creating the change request.
 - If formal trace evidence cannot be resolved, the candidate stays honest: `sourceVisibility: redacted`, lower evidence strength, and a `needs_trace_resolution` tag.
-- If a manager edits the candidate title/body during proposal creation, the payload records override metadata separately from the compiler output.
 - `pending_directory_decision` digest items are rejected because they are already inside the airlock.
-- `member_state` digest items may only create `open_question` candidates. They must not create people scoring, private behavioral judgments, or expertise nodes.
+- `event_activity` and `member_state` digest items are not learning candidates. They should not create directory proposals unless converted into evidence-bearing source traces by another product bridge.
 - Duplicate proposals for the same digest item should reuse the existing non-rejected change request instead of spamming the airlock.
+- Digest-derived candidate payloads should carry a PRefLexOR-style learning envelope:
+  - `learningQuestion`
+  - `candidateClaim`
+  - `rejectedAlternative`
+  - `preferenceReason`
+  - `evidenceSummary`
+  - `uncertainty`
+  - `falsificationCriteria`
+
+## Seventh Implementation Slice
+
+The seventh backend slice adds the first internal single-community filesystem for the community agent:
+
+```txt
+Community agent heartbeat/tool loop
+  -> list/read/search/write
+  -> compiler and directory only
+  -> existing directory airlock
+```
+
+Rules:
+
+- The filesystem is internal-only. It is not exported as a public member/admin prompt surface.
+- Every operation is scoped to exactly one community-agent filesystem context.
+- The filesystem context must include the canonical `communityId` and canonical `agentKey`, must resolve to an existing community, and preserves optional run/heartbeat ids in tool metadata for provenance.
+- The only accepted v0 community-agent identity is `community_agent`; the filesystem must reject non-canonical agent keys.
+- Filesystem tools inherit community scope from this context. They must not accept `communityId` as a loose per-operation argument.
+- The root exposes only `/compiler` and `/directory`.
+- `/compiler` exposes bounded compiler state: latest window summary, digests, and digest-derived candidate proposals.
+- `/directory` exposes long-term intelligence state: nodes, edges, and change requests.
+- The filesystem does not expose raw `/activity`; activity must flow into compiler evidence first.
+- The first write operation is deliberately narrow: propose a directory candidate from a compiler digest item.
+- Filesystem writes create or reuse `communityIntelligenceChangeRequests`; they do not directly create or patch `communityIntelligenceNodes` or `communityIntelligenceEdges`.
+- Candidate proposals created through this surface are attributed to the community agent, not a member prompt.
+
+## Eighth Implementation Slice
+
+The eighth backend slice connects actual community-lensed runtime execution to compiler evidence:
+
+```txt
+Runtime run finalization
+  -> trusted `agent_run` source trace
+  -> 30-day compiler window
+  -> future community-agent inspection
+```
+
+Rules:
+
+- Runtime completion is operational truth; the source trace is execution evidence, not directory truth.
+- Runtime run community scope is derived only from the server-validated thread community lens.
+- Caller-provided runtime `communityId` values are start-time consistency assertions only. They must match the thread lens for new runs or the stored run lens for existing runs.
+- Thread community lens changes are allowed after a run starts, but they only affect future runs.
+- Runtime source-trace capture writes to the immutable run community lens captured at run start, not the mutable current thread lens.
+- Only runtime runs with a canonical thread community lens create community evidence.
+- Runtime run evidence is single-community evidence. It must never read from, write to, or merge with another community.
+- Runtime source traces use stable source ids so retries and stale-run reconciliation update the same evidence row.
+- Runtime source traces default to `visibilityScope: admin` and `sourceVisibility: redacted`.
+- Compiler reads may inspect trusted non-private source traces even when `sourceVisibility` is `redacted`; redaction controls source exposure, not compiler perception.
+- Runtime source traces include bounded execution metadata: status, reason, error code, model, engine, contract, start/finish time, and duration.
+- Runtime source traces must not include raw prompts, message content, tool arguments, raw error messages, or raw runtime transcripts.
+- Runtime source trace capture is best-effort and must not break terminal runtime finalization.
+- Runtime finalization does not create directory nodes, edges, or change requests directly.
+- This gives the community compiler sensory input from actual work while preserving the evidence -> compiler -> directory airlock.
+
+## Ninth Implementation Slice
+
+The ninth backend slice adds the first internal community-agent runtime loop:
+
+```txt
+Internal trigger
+  -> single community-agent run ledger
+  -> owner-sponsored ChatGPT inference
+  -> native tool loop
+  -> community-agent filesystem tools
+  -> directory airlock proposals only
+```
+
+Rules:
+
+- The runtime is internal-only. There is no public member/admin prompt action for the community agent.
+- Every run belongs to exactly one `communityId` and the canonical `agentKey`: `community_agent`.
+- The runtime derives the community-agent identity from platform code. It must not accept `agentKey` as caller input.
+- The sponsor is the community owner. The runtime must not use platform/global fallback inference.
+- The runtime may use only four tools: `list`, `read`, `search`, and `write`.
+- Tool execution is bound to the single-community filesystem context: `communityId`, canonical `agentKey`, `runId`, and optional `heartbeatId`.
+- The runtime sees only `/compiler` and `/directory`; it does not read raw `/activity`.
+- The first runtime write is still only `propose_directory_candidate_from_digest_item`.
+- Runtime writes create or reuse directory change requests through the filesystem airlock.
+- The runtime must not directly insert or patch `communityIntelligenceNodes` or `communityIntelligenceEdges`.
+- Each run is persisted in `communityAgentRuns` with sponsor, model, status, stop reason, tool count, candidate proposal ids, and timestamps.
+- Provider failure, missing owner auth, or model failure must finish the run as an error instead of falling back to another community or platform inference source.
 
 ## What Not To Build Yet
 
@@ -1073,7 +1212,7 @@ Do not start with:
 
 - giant graph database
 - full autonomous community god-agent
-- automatic cross-community learning
+- cross-community memory, retrieval, learning, or intelligence of any kind
 - fine-tuning
 - complex neuroscience ontology
 - fully custom directory architecture per community

@@ -81,8 +81,8 @@ assert.match(
 );
 assert.match(
   compilerInputs,
-  /isActiveCompilerTrace[\s\S]*sourceVisibility !== "redacted"/,
-  "compiler input read model should exclude redacted traces by default",
+  /isActiveCompilerTrace[\s\S]*visibilityScope === "admin"[\s\S]*visibilityScope === "community"[\s\S]*visibilityScope === "public"/,
+  "compiler input read model should include trusted non-private source traces, including redacted/admin evidence",
 );
 for (const tableName of [
   "communitySourceTraces",

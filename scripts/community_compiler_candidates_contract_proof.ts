@@ -20,8 +20,13 @@ assert.match(
 );
 assert.match(
   candidates,
+  /export async function proposeCommunityIntelligenceFromDigestItemCore/,
+  "compiler candidate core should exist for the internal community-agent filesystem",
+);
+assert.doesNotMatch(
+  candidates,
   /export const proposeCommunityIntelligenceFromDigestItem = mutation/,
-  "compiler candidate mutation should exist",
+  "compiler candidate proposal should not be a public manager mutation",
 );
 assert.match(
   candidates,
@@ -30,8 +35,8 @@ assert.match(
 );
 assert.match(
   candidates,
-  /requireCommunityManager\(\{ ctx, communityId: args\.communityId, userId \}\)/,
-  "digest-to-candidate functions should be manager-scoped in this slice",
+  /actorType\?: "compiler" \| "agent"[\s\S]*actorAgentKey\?: string/,
+  "digest-to-candidate writes should be attributed by trusted compiler or community-agent callers",
 );
 assert.match(
   candidates,
@@ -40,13 +45,18 @@ assert.match(
 );
 assert.match(
   candidates,
-  /createTrustedCommunityIntelligenceChangeRequest\([\s\S]*operation: "create_node"[\s\S]*actorType: "compiler"/,
-  "candidate mutation should create a compiler-attributed create_node change request",
+  /createTrustedCommunityIntelligenceChangeRequest\([\s\S]*operation: "create_node"[\s\S]*actorType: args\.actorType \?\? "compiler"/,
+  "candidate core should create compiler-attributed change requests unless a trusted community-agent caller is supplied",
 );
 assert.match(
   candidates,
   /communitySourceTraces[\s\S]*by_community_source[\s\S]*resolveSourceTraceIdsForDigestItem|resolveSourceTraceIdsForDigestItem[\s\S]*communitySourceTraces[\s\S]*by_community_source/,
   "candidate mutation should resolve digest source ids into formal community source traces",
+);
+assert.match(
+  candidates,
+  /RESOLVABLE_SOURCE_TRACE_TYPES[\s\S]*"workflow_run"[\s\S]*"artifact"[\s\S]*"outcome"[\s\S]*"feedback"[\s\S]*"transcript"/,
+  "candidate mutation should resolve workflow, artifact, outcome, feedback, and transcript source traces",
 );
 assert.match(
   candidates,
@@ -68,10 +78,35 @@ assert.match(
   /needs_trace_resolution/,
   "candidate payload should tag proposals that still need trace resolution",
 );
+assert.doesNotMatch(
+  candidates,
+  /humanOverride|overrideByUserId|originalCompilerTitle|originalCompilerSummary|titleOverride|bodyMdOverride/,
+  "candidate payloads should not carry public manager override metadata",
+);
+for (const fieldName of [
+  "learningQuestion",
+  "candidateClaim",
+  "rejectedAlternative",
+  "preferenceReason",
+  "evidenceSummary",
+  "uncertainty",
+  "falsificationCriteria",
+]) {
+  assert.match(
+    candidates,
+    new RegExp(`${fieldName}: learningEnvelope\\.${fieldName}`),
+    `candidate payload should include ${fieldName} from the learning envelope`,
+  );
+}
 assert.match(
   candidates,
-  /humanOverride[\s\S]*overrideByUserId[\s\S]*originalCompilerTitle[\s\S]*originalCompilerSummary/,
-  "candidate payload should audit manager edits separately from compiler output",
+  /type LearningEnvelope[\s\S]*version: "compiler_learning_envelope_v1"/,
+  "candidate generation should define a versioned learning envelope scaffold",
+);
+assert.match(
+  candidates,
+  /buildLearningEnvelope[\s\S]*sourceTraceResolution[\s\S]*resolvedCount[\s\S]*unresolvedCount/,
+  "learning envelope should preserve evidence resolution context",
 );
 assert.match(
   candidates,
@@ -95,8 +130,8 @@ assert.match(
 );
 assert.match(
   candidates,
-  /member_state[\s\S]*open_question[\s\S]*community_compiler_member_state_candidate_must_be_open_question/,
-  "member-state digest items should only create open-question candidates",
+  /event_activity[\s\S]*member_state[\s\S]*community_compiler_digest_item_not_learning_signal/,
+  "event/member-state digest items should not create learning candidates",
 );
 assert.doesNotMatch(
   candidates,
@@ -105,18 +140,23 @@ assert.doesNotMatch(
 );
 assert.match(
   communityExports,
-  /proposeCommunityIntelligenceFromDigestItemImpl[\s\S]*export const proposeCommunityIntelligenceFromDigestItem = proposeCommunityIntelligenceFromDigestItemImpl/,
-  "community module should re-export digest-to-candidate mutation",
-);
-assert.match(
-  communityExports,
   /listCommunityCompilerCandidateProposalsImpl[\s\S]*export const listCommunityCompilerCandidateProposals = listCommunityCompilerCandidateProposalsImpl/,
   "community module should re-export compiler candidate list query",
 );
+assert.doesNotMatch(
+  communityExports,
+  /proposeCommunityIntelligenceFromDigestItemImpl|export const proposeCommunityIntelligenceFromDigestItem/,
+  "community module should not expose public digest-to-candidate mutation",
+);
 assert.match(
   docs,
-  /Sixth Implementation Slice[\s\S]*Compiler digest[\s\S]*candidate change request[\s\S]*Directory truth is still untouched/,
-  "architecture doc should capture digest-to-candidate slice",
+  /Sixth Implementation Slice[\s\S]*Compiler digest[\s\S]*candidate change request[\s\S]*Directory truth is still untouched[\s\S]*learningQuestion[\s\S]*falsificationCriteria/,
+  "architecture doc should capture digest-to-candidate learning-envelope slice",
+);
+assert.match(
+  docs,
+  /Fifth Implementation Slice[\s\S]*feedback[\s\S]*transcripts[\s\S]*trusted product\/runtime bridge code/,
+  "docs should describe feedback and transcript evidence bridge ownership",
 );
 
 console.log("community_compiler_candidates_contract_proof: ok");

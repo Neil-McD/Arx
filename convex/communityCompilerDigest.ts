@@ -1,7 +1,6 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import {
-  communityMembershipRowIsActive,
   normalizeIdValue,
   requireCommunityManager,
   resolveUserIdForAuthenticatedRequest,
@@ -15,12 +14,8 @@ const COMMUNITY_COMPILER_DIGEST_AGENT_KEY = "community_compiler_digest_v1";
 const MAX_ARCHIVE_ACTIVITY_FETCH = 600;
 const MAX_SOURCE_TRACE_FETCH = 300;
 const MAX_AI_FEED_FETCH = 100;
-const MAX_EVENT_FETCH = 100;
 const MAX_OUTCOME_FETCH = 100;
 const MAX_CHANGE_REQUEST_FETCH = 100;
-const MAX_NEW_MEMBER_FETCH = 1_000;
-const MAX_ACTIVE_MEMBER_FETCH = 2_000;
-const MAX_AI_FEED_REACTION_FETCH = 1_000;
 const MAX_DIGEST_ITEMS = 12;
 const MAX_SOURCE_IDS_PER_ITEM = 12;
 const MAX_SOURCE_TRACE_IDS_PER_ITEM = 12;
@@ -79,13 +74,6 @@ type AiFeedPostRow = {
   createdAt: number;
 };
 
-type EventRow = {
-  _id: any;
-  title: string;
-  startsAt: number;
-  updatedAt: number;
-};
-
 type OutcomeObservationRow = {
   _id: any;
   resultStatus: "worked" | "failed" | "mixed" | "unknown";
@@ -99,29 +87,6 @@ type ChangeRequestRow = {
   operation: string;
   confidence: number;
   privacyRisk: number;
-  createdAt: number;
-};
-
-type MembershipRow = {
-  _id: any;
-  communityId: any;
-  userId: any;
-  role: string;
-  active?: boolean;
-  revokedAt?: number;
-  revokedReason?: string;
-  createdAt: number;
-  updatedAt: number;
-};
-
-type PresenceRow = {
-  userId: any;
-  lastSeenAt: number;
-};
-
-type AiFeedReactionRow = {
-  actorUserId?: any;
-  actorKey: string;
   createdAt: number;
 };
 
@@ -207,10 +172,7 @@ function makeItem(args: {
 }
 
 function activeCompilerTrace(row: SourceTraceRow): boolean {
-  return (
-    (row.visibilityScope === "community" || row.visibilityScope === "public") &&
-    row.sourceVisibility !== "redacted"
-  );
+  return row.visibilityScope === "admin" || row.visibilityScope === "community" || row.visibilityScope === "public";
 }
 
 function mapDigestRow(row: CompilerDigestRow) {
@@ -254,12 +216,8 @@ export const runCommunityCompilerDigestPass = mutation({
       archiveRows,
       traceRowsRaw,
       aiFeedRowsRaw,
-      eventRows,
       outcomeRows,
       pendingChangeRequests,
-      newMemberRows,
-      activePresenceRows,
-      aiFeedReactionRows,
     ] = await Promise.all([
       ctx.db
         .query("communityArchiveDocuments" as any)
@@ -283,13 +241,6 @@ export const runCommunityCompilerDigestPass = mutation({
         .order("desc")
         .take(MAX_AI_FEED_FETCH) as Promise<AiFeedPostRow[]>,
       ctx.db
-        .query("communityEvents" as any)
-        .withIndex("by_community_status_updatedAt", (q: any) =>
-          q.eq("communityId", args.communityId).eq("status", "live").gte("updatedAt", windowStartedAtMs),
-        )
-        .order("desc")
-        .take(MAX_EVENT_FETCH) as Promise<EventRow[]>,
-      ctx.db
         .query("communityOutcomeObservations" as any)
         .withIndex("by_community_observedAt", (q: any) =>
           q.eq("communityId", args.communityId).gte("observedAt", windowStartedAtMs),
@@ -302,27 +253,6 @@ export const runCommunityCompilerDigestPass = mutation({
           q.eq("communityId", args.communityId).eq("status", "pending_decision"),
         )
         .take(MAX_CHANGE_REQUEST_FETCH) as Promise<ChangeRequestRow[]>,
-      ctx.db
-        .query("communityMemberships" as any)
-        .withIndex("by_community_createdAt", (q: any) =>
-          q.eq("communityId", args.communityId).gte("createdAt", windowStartedAtMs),
-        )
-        .order("desc")
-        .take(MAX_NEW_MEMBER_FETCH) as Promise<MembershipRow[]>,
-      ctx.db
-        .query("communityPresence" as any)
-        .withIndex("by_community_lastSeenAt", (q: any) =>
-          q.eq("communityId", args.communityId).gte("lastSeenAt", windowStartedAtMs),
-        )
-        .order("desc")
-        .take(MAX_ACTIVE_MEMBER_FETCH) as Promise<PresenceRow[]>,
-      ctx.db
-        .query("communityAiFeedReactions" as any)
-        .withIndex("by_community_createdAt", (q: any) =>
-          q.eq("communityId", args.communityId).gte("createdAt", windowStartedAtMs),
-        )
-        .order("desc")
-        .take(MAX_AI_FEED_REACTION_FETCH) as Promise<AiFeedReactionRow[]>,
     ]);
 
     const traceRows = traceRowsRaw.filter(activeCompilerTrace);
@@ -332,17 +262,10 @@ export const runCommunityCompilerDigestPass = mutation({
     const aiFeedRows = aiFeedRowsRaw
       .slice()
       .sort((a, b) => Number(b.score ?? 0) - Number(a.score ?? 0) || b.createdAt - a.createdAt);
-    const activeNewMemberRows = newMemberRows.filter(communityMembershipRowIsActive);
-    const activeMemberIds = new Set(activePresenceRows.map((row) => normalizeIdValue(row.userId)).filter(Boolean));
     const postingMemberKeys = new Set(
       chatRows
         .map((row) => String(row.authorLabel ?? "").trim())
         .filter((label) => label.startsWith("member:")),
-    );
-    const reactingMemberKeys = new Set(
-      aiFeedReactionRows
-        .map((row) => (row.actorUserId ? normalizeIdValue(row.actorUserId) : String(row.actorKey ?? "").trim()))
-        .filter(Boolean),
     );
     const outcomesByStatus = outcomeRows.reduce<Record<string, number>>((counts, row) => {
       counts[row.resultStatus] = (counts[row.resultStatus] ?? 0) + 1;
@@ -381,28 +304,6 @@ export const runCommunityCompilerDigestPass = mutation({
         confidence: 0.7,
         sourceTypes: ["resource"],
         sourceIds: sourceIds(resourceRows),
-      }));
-    }
-    if (eventRows.length > 0) {
-      items.push(makeItem({
-        category: "event_activity",
-        title: `${eventRows.length} live event records changed`,
-        summary: "Events are coordination state. Only recaps, outcomes, decisions, or repeated coordination patterns should become directory proposals.",
-        priority: Math.min(1, 0.3 + eventRows.length / 25),
-        confidence: 0.7,
-        sourceTypes: ["event"],
-        sourceIds: eventRows.slice(0, MAX_SOURCE_IDS_PER_ITEM).map((row) => normalizeIdValue(row._id)),
-      }));
-    }
-    if (activeNewMemberRows.length > 0 || activeMemberIds.size > 0 || postingMemberKeys.size > 0) {
-      items.push(makeItem({
-        category: "member_state",
-        title: "Community member-state changed",
-        summary: `${activeNewMemberRows.length} new active members joined, ${activeMemberIds.size} members were present, ${postingMemberKeys.size} members posted, and ${reactingMemberKeys.size} members reacted to AI Feed items in the compiler window. This is aggregate state only, not people scoring.`,
-        priority: Math.min(1, 0.35 + (activeNewMemberRows.length + postingMemberKeys.size) / 60),
-        confidence: 0.75,
-        sourceTypes: ["member_state"],
-        sourceIds: activeNewMemberRows.slice(0, MAX_SOURCE_IDS_PER_ITEM).map((row) => normalizeIdValue(row.userId)),
       }));
     }
     if (outcomeRows.length > 0) {
@@ -447,20 +348,20 @@ export const runCommunityCompilerDigestPass = mutation({
       chat: chatRows.length,
       aiFeed: Math.max(aiFeedRows.length, archiveAiFeedRows.length),
       resources: resourceRows.length,
-      events: eventRows.length,
+      events: 0,
       sourceTraces: traceRows.length,
       outcomes: outcomeRows.length,
       pendingChangeRequests: pendingChangeRequests.length,
-      newMembers: activeNewMemberRows.length,
-      activeMembers: activeMemberIds.size,
+      newMembers: 0,
+      activeMembers: 0,
       postingMembers: postingMemberKeys.size,
-      aiFeedReactingMembers: reactingMemberKeys.size,
+      aiFeedReactingMembers: 0,
     };
     const summary = truncateText(
       [
         `Compiler window covered ${COMMUNITY_COMPILER_DIGEST_WINDOW_DAYS} days.`,
-        `${chatRows.length} chat, ${signalCounts.aiFeed} AI feed, ${resourceRows.length} resource, and ${eventRows.length} event signals were considered.`,
-        `${activeNewMemberRows.length} new members joined and ${activeMemberIds.size} members were active.`,
+        `${chatRows.length} chat, ${signalCounts.aiFeed} AI feed, and ${resourceRows.length} resource learning signals were considered.`,
+        "Events, member joins, presence, reactions, and generic activity are excluded from learning digests unless they produce transcripts, feedback, outcomes, decisions, artifacts, or source traces.",
         `${traceRows.length} source traces, ${outcomeRows.length} outcomes, and ${pendingChangeRequests.length} pending directory decisions are in the working set.`,
         "This digest is non-canonical compiler output.",
       ].join(" "),

@@ -83,10 +83,7 @@ function boundedLimit(raw: unknown, fallback: number, max: number): number {
 }
 
 function isActiveCompilerTrace(row: SourceTraceRow): boolean {
-  return (
-    (row.visibilityScope === "community" || row.visibilityScope === "public") &&
-    row.sourceVisibility !== "redacted"
-  );
+  return row.visibilityScope === "admin" || row.visibilityScope === "community" || row.visibilityScope === "public";
 }
 
 function mapTrace(row: SourceTraceRow) {

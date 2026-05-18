@@ -120,13 +120,10 @@ import {
 } from "./communityCompilerDigest";
 import {
   listCommunityCompilerCandidateProposals as listCommunityCompilerCandidateProposalsImpl,
-  proposeCommunityIntelligenceFromDigestItem as proposeCommunityIntelligenceFromDigestItemImpl,
 } from "./communityCompilerCandidates";
 import { readCommunityCompilerWindow as readCommunityCompilerWindowImpl } from "./communityCompilerWindow";
 import {
   applyCommunityIntelligenceChangeRequest as applyCommunityIntelligenceChangeRequestImpl,
-  createCommunityIntelligenceEdge as createCommunityIntelligenceEdgeImpl,
-  createCommunityIntelligenceNode as createCommunityIntelligenceNodeImpl,
   createCommunityIntelligenceChangeRequest as createCommunityIntelligenceChangeRequestImpl,
   listCommunityIntelligenceDirectoryView as listCommunityIntelligenceDirectoryViewImpl,
   listCommunityIntelligenceEdges as listCommunityIntelligenceEdgesImpl,
@@ -137,14 +134,13 @@ import {
   recordCommunitySourceTrace as recordCommunitySourceTraceImpl,
   decideCommunityIntelligenceChangeRequest as decideCommunityIntelligenceChangeRequestImpl,
   retrieveCommunityIntelligenceForWorkflow as retrieveCommunityIntelligenceForWorkflowImpl,
-  updateCommunityIntelligenceNode as updateCommunityIntelligenceNodeImpl,
 } from "./communityIntelligenceDirectory";
 
 export const createCommunity = createCommunityImpl;
 export const generateCommunityBrandingUploadUrl = generateCommunityBrandingUploadUrlImpl;
-export const listCommunityMembershipsAdminPage = listCommunityMembershipsAdminPageImpl;
 export const listCommunityMemberships = listCommunityMembershipsImpl;
 export const listCommunityMembershipsAdmin = listCommunityMembershipsAdminImpl;
+export const listCommunityMembershipsAdminPage = listCommunityMembershipsAdminPageImpl;
 export const countCommunityMemberships = countCommunityMembershipsImpl;
 export const listCommunityMembershipCreatedAtRows = listCommunityMembershipCreatedAtRowsImpl;
 export const communityOwnerHasArchitectAccess = communityOwnerHasArchitectAccessImpl;
@@ -236,9 +232,6 @@ export const createCommunityIntelligenceChangeRequest = createCommunityIntellige
 export const listCommunityIntelligenceChangeRequests = listCommunityIntelligenceChangeRequestsImpl;
 export const decideCommunityIntelligenceChangeRequest = decideCommunityIntelligenceChangeRequestImpl;
 export const applyCommunityIntelligenceChangeRequest = applyCommunityIntelligenceChangeRequestImpl;
-export const createCommunityIntelligenceNode = createCommunityIntelligenceNodeImpl;
-export const updateCommunityIntelligenceNode = updateCommunityIntelligenceNodeImpl;
-export const createCommunityIntelligenceEdge = createCommunityIntelligenceEdgeImpl;
 export const listCommunityIntelligenceDirectoryView = listCommunityIntelligenceDirectoryViewImpl;
 export const listCommunityIntelligenceEdges = listCommunityIntelligenceEdgesImpl;
 export const retrieveCommunityIntelligenceForWorkflow = retrieveCommunityIntelligenceForWorkflowImpl;
@@ -249,5 +242,4 @@ export const listCommunityCompilerInputs = listCommunityCompilerInputsImpl;
 export const readCommunityCompilerWindow = readCommunityCompilerWindowImpl;
 export const runCommunityCompilerDigestPass = runCommunityCompilerDigestPassImpl;
 export const listCommunityCompilerDigests = listCommunityCompilerDigestsImpl;
-export const proposeCommunityIntelligenceFromDigestItem = proposeCommunityIntelligenceFromDigestItemImpl;
 export const listCommunityCompilerCandidateProposals = listCommunityCompilerCandidateProposalsImpl;

@@ -1,0 +1,674 @@
+import { internalMutation, internalQuery } from "./_generated/server";
+import { v } from "convex/values";
+import { normalizeIdValue, toIsoString } from "./communityCore";
+import { proposeCommunityIntelligenceFromDigestItemCore } from "./communityCompilerCandidates";
+import { CANONICAL_COMMUNITY_AGENT_KEY } from "../shared/communityAgentToolProtocol";
+
+const COMPILER_CANDIDATE_PAYLOAD_SOURCE = "compiler_digest_item_v1";
+const DEFAULT_LIMIT = 50;
+
+type CommunityAgentFilesystemContext = {
+  communityId: any;
+  agentKey: string;
+  runId?: string;
+  heartbeatId?: string;
+};
+
+type ResolvedCommunityAgentFilesystemContext = {
+  communityId: any;
+  agentKey: string;
+  runId?: string;
+  heartbeatId?: string;
+};
+
+type NodeType =
+  | "playbook"
+  | "insight"
+  | "example"
+  | "warning_failure"
+  | "decision_judgment"
+  | "open_question";
+
+type DigestRow = {
+  _id: any;
+  communityId: any;
+  dedupeKey: string;
+  windowStartedAt: number;
+  windowEndedAt: number;
+  summary: string;
+  itemCount: number;
+  items: unknown[];
+  signalCounts: Record<string, number>;
+  createdAt: number;
+  updatedAt: number;
+};
+
+type NodeRow = {
+  _id: any;
+  communityId: any;
+  type: string;
+  title: string;
+  bodyMd: string;
+  status: string;
+  visibilityScope: string;
+  sourceVisibility: string;
+  confidence: number;
+  evidenceStrength: string;
+  workflowIds: string[];
+  tags: string[];
+  updatedAt: number;
+  createdAt: number;
+};
+
+type EdgeRow = {
+  _id: any;
+  communityId: any;
+  fromNodeId: any;
+  toNodeId?: any;
+  toReferenceType?: string;
+  toReferenceId?: string;
+  type: string;
+  confidence: number;
+  visibilityScope: string;
+  updatedAt: number;
+  createdAt: number;
+};
+
+type ChangeRequestRow = {
+  _id: any;
+  communityId: any;
+  operation: string;
+  status: string;
+  requestedPayload: unknown;
+  sourceTraceIds: any[];
+  targetNodeIds: any[];
+  targetEdgeIds: any[];
+  confidence: number;
+  privacyRisk: number;
+  createdByActorType: string;
+  createdByAgentKey?: string;
+  createdAt: number;
+  updatedAt: number;
+  decidedAt?: number;
+  appliedAt?: number;
+};
+
+function boundedLimit(raw: unknown): number {
+  const parsed = Math.floor(Number(raw ?? DEFAULT_LIMIT));
+  if (!Number.isFinite(parsed)) return DEFAULT_LIMIT;
+  return Math.max(1, Math.min(100, parsed));
+}
+
+function normalizePath(raw: unknown): string {
+  const value = String(raw ?? "/").trim();
+  const withRoot = value.startsWith("/") ? value : `/${value}`;
+  const collapsed = withRoot.replace(/\/+/g, "/");
+  return collapsed.length > 1 ? collapsed.replace(/\/$/, "") : "/";
+}
+
+function pathParts(path: string): string[] {
+  return normalizePath(path).split("/").filter(Boolean);
+}
+
+function payloadObject(raw: unknown): Record<string, unknown> {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  return raw as Record<string, unknown>;
+}
+
+const communityAgentFilesystemContextValidator = v.object({
+  communityId: v.id("communities"),
+  agentKey: v.string(),
+  runId: v.optional(v.string()),
+  heartbeatId: v.optional(v.string()),
+});
+
+function isRecord(raw: unknown): raw is Record<string, any> {
+  return !!raw && typeof raw === "object" && !Array.isArray(raw);
+}
+
+function hasString(row: Record<string, any>, key: string): boolean {
+  return typeof row[key] === "string";
+}
+
+function hasNumber(row: Record<string, any>, key: string): boolean {
+  return typeof row[key] === "number" && Number.isFinite(row[key]);
+}
+
+function hasArray(row: Record<string, any>, key: string): boolean {
+  return Array.isArray(row[key]);
+}
+
+function hasCommunityId(row: Record<string, any>): boolean {
+  return row.communityId !== undefined && row.communityId !== null;
+}
+
+function isDigestRow(row: unknown): row is DigestRow {
+  return (
+    isRecord(row) &&
+    hasCommunityId(row) &&
+    hasString(row, "dedupeKey") &&
+    hasNumber(row, "windowStartedAt") &&
+    hasNumber(row, "windowEndedAt") &&
+    hasString(row, "summary") &&
+    hasNumber(row, "itemCount") &&
+    hasArray(row, "items") &&
+    isRecord(row.signalCounts) &&
+    hasNumber(row, "createdAt") &&
+    hasNumber(row, "updatedAt")
+  );
+}
+
+function isNodeRow(row: unknown): row is NodeRow {
+  return (
+    isRecord(row) &&
+    hasCommunityId(row) &&
+    hasString(row, "type") &&
+    hasString(row, "title") &&
+    hasString(row, "bodyMd") &&
+    hasString(row, "status") &&
+    hasString(row, "visibilityScope") &&
+    hasString(row, "sourceVisibility") &&
+    hasNumber(row, "confidence") &&
+    hasString(row, "evidenceStrength") &&
+    hasArray(row, "workflowIds") &&
+    hasArray(row, "tags") &&
+    hasNumber(row, "createdAt") &&
+    hasNumber(row, "updatedAt")
+  );
+}
+
+function isEdgeRow(row: unknown): row is EdgeRow {
+  return (
+    isRecord(row) &&
+    hasCommunityId(row) &&
+    row.fromNodeId !== undefined &&
+    row.fromNodeId !== null &&
+    hasString(row, "type") &&
+    hasNumber(row, "confidence") &&
+    hasString(row, "visibilityScope") &&
+    hasNumber(row, "createdAt") &&
+    hasNumber(row, "updatedAt")
+  );
+}
+
+function isChangeRequestRow(row: unknown): row is ChangeRequestRow {
+  return (
+    isRecord(row) &&
+    hasCommunityId(row) &&
+    hasString(row, "operation") &&
+    hasString(row, "status") &&
+    row.requestedPayload !== undefined &&
+    hasArray(row, "sourceTraceIds") &&
+    hasArray(row, "targetNodeIds") &&
+    hasArray(row, "targetEdgeIds") &&
+    hasNumber(row, "confidence") &&
+    hasNumber(row, "privacyRisk") &&
+    hasString(row, "createdByActorType") &&
+    hasNumber(row, "createdAt") &&
+    hasNumber(row, "updatedAt")
+  );
+}
+
+function ensureCommunityRow<T extends { communityId?: any }>(
+  row: T | null,
+  communityId: any,
+  errorCode: string,
+): T {
+  if (!row || normalizeIdValue(row.communityId) !== normalizeIdValue(communityId)) {
+    throw new Error(errorCode);
+  }
+  return row;
+}
+
+function normalizeContextToken(raw: unknown, maxLength: number): string | undefined {
+  const value = String(raw ?? "").trim();
+  return value ? value.slice(0, maxLength) : undefined;
+}
+
+async function resolveFilesystemContext(
+  ctx: any,
+  context: CommunityAgentFilesystemContext,
+): Promise<ResolvedCommunityAgentFilesystemContext> {
+  const communityId = context.communityId;
+  if (!communityId) throw new Error("community_agent_filesystem_context_community_required");
+  const community = await ctx.db.get(communityId);
+  if (!community) throw new Error("community_not_found");
+  const agentKey = normalizeContextToken(context.agentKey, 120);
+  if (!agentKey) throw new Error("community_agent_filesystem_context_agent_required");
+  if (agentKey !== CANONICAL_COMMUNITY_AGENT_KEY) {
+    throw new Error("community_agent_filesystem_context_agent_not_canonical");
+  }
+  return {
+    communityId,
+    agentKey,
+    runId: normalizeContextToken(context.runId, 200),
+    heartbeatId: normalizeContextToken(context.heartbeatId, 200),
+  };
+}
+
+function contextMetadata(context: ResolvedCommunityAgentFilesystemContext) {
+  return {
+    community_id: normalizeIdValue(context.communityId),
+    agent_key: context.agentKey,
+    run_id: context.runId ?? null,
+    heartbeat_id: context.heartbeatId ?? null,
+  };
+}
+
+function directoryEntry(args: {
+  type: "directory" | "file";
+  name: string;
+  path: string;
+  summary?: string;
+  updatedAt?: number;
+}) {
+  return {
+    type: args.type,
+    name: args.name,
+    path: args.path,
+    summary: args.summary ?? null,
+    updated_at: typeof args.updatedAt === "number" ? toIsoString(args.updatedAt) : null,
+  };
+}
+
+function mapDigest(row: DigestRow) {
+  return {
+    id: normalizeIdValue(row._id),
+    path: `/compiler/digests/${normalizeIdValue(row._id)}`,
+    dedupe_key: row.dedupeKey,
+    window_started_at: toIsoString(row.windowStartedAt),
+    window_ended_at: toIsoString(row.windowEndedAt),
+    summary: row.summary,
+    item_count: row.itemCount,
+    items: row.items ?? [],
+    signal_counts: row.signalCounts ?? {},
+    created_at: toIsoString(row.createdAt),
+    updated_at: toIsoString(row.updatedAt),
+  };
+}
+
+function mapNode(row: NodeRow) {
+  return {
+    id: normalizeIdValue(row._id),
+    path: `/directory/nodes/${normalizeIdValue(row._id)}`,
+    type: row.type,
+    title: row.title,
+    body_md: row.bodyMd,
+    status: row.status,
+    visibility_scope: row.visibilityScope,
+    source_visibility: row.sourceVisibility,
+    confidence: row.confidence,
+    evidence_strength: row.evidenceStrength,
+    workflow_ids: row.workflowIds ?? [],
+    tags: row.tags ?? [],
+    created_at: toIsoString(row.createdAt),
+    updated_at: toIsoString(row.updatedAt),
+  };
+}
+
+function mapEdge(row: EdgeRow) {
+  return {
+    id: normalizeIdValue(row._id),
+    path: `/directory/edges/${normalizeIdValue(row._id)}`,
+    from_node_id: normalizeIdValue(row.fromNodeId),
+    to_node_id: row.toNodeId ? normalizeIdValue(row.toNodeId) : null,
+    to_reference_type: row.toReferenceType ?? null,
+    to_reference_id: row.toReferenceId ?? null,
+    type: row.type,
+    confidence: row.confidence,
+    visibility_scope: row.visibilityScope,
+    created_at: toIsoString(row.createdAt),
+    updated_at: toIsoString(row.updatedAt),
+  };
+}
+
+function mapChangeRequest(row: ChangeRequestRow) {
+  const payload = payloadObject(row.requestedPayload);
+  return {
+    id: normalizeIdValue(row._id),
+    path: `/directory/change-requests/${normalizeIdValue(row._id)}`,
+    operation: row.operation,
+    status: row.status,
+    requested_payload: payload,
+    source_trace_ids: (row.sourceTraceIds ?? []).map(normalizeIdValue),
+    target_node_ids: (row.targetNodeIds ?? []).map(normalizeIdValue),
+    target_edge_ids: (row.targetEdgeIds ?? []).map(normalizeIdValue),
+    confidence: row.confidence,
+    privacy_risk: row.privacyRisk,
+    created_by_actor_type: row.createdByActorType,
+    created_by_agent_key: row.createdByAgentKey ?? null,
+    candidate_source: payload.source ?? null,
+    compiler_digest_id: payload.compilerDigestId ?? null,
+    digest_item_index: payload.digestItemIndex ?? null,
+    title: typeof payload.title === "string" ? payload.title : null,
+    created_at: toIsoString(row.createdAt),
+    updated_at: toIsoString(row.updatedAt),
+    decided_at: typeof row.decidedAt === "number" ? toIsoString(row.decidedAt) : null,
+    applied_at: typeof row.appliedAt === "number" ? toIsoString(row.appliedAt) : null,
+  };
+}
+
+function changeRequestIsCompilerCandidate(row: ChangeRequestRow): boolean {
+  const payload = payloadObject(row.requestedPayload);
+  return row.operation === "create_node" && payload.source === COMPILER_CANDIDATE_PAYLOAD_SOURCE;
+}
+
+async function latestDigests(ctx: any, communityId: any, limit: number): Promise<DigestRow[]> {
+  return (await ctx.db
+    .query("communityCompilerDigests" as any)
+    .withIndex("by_community_createdAt", (q: any) => q.eq("communityId", communityId))
+    .order("desc")
+    .take(limit)) as DigestRow[];
+}
+
+async function latestChangeRequests(ctx: any, communityId: any, limit: number): Promise<ChangeRequestRow[]> {
+  return (await ctx.db
+    .query("communityIntelligenceChangeRequests" as any)
+    .withIndex("by_community_createdAt", (q: any) => q.eq("communityId", communityId))
+    .order("desc")
+    .take(limit)) as ChangeRequestRow[];
+}
+
+async function latestNodes(ctx: any, communityId: any, limit: number): Promise<NodeRow[]> {
+  const statuses = ["canonical", "validated", "promising", "contested", "stale", "candidate"];
+  const rows: NodeRow[] = [];
+  for (const status of statuses) {
+    const batch = (await ctx.db
+      .query("communityIntelligenceNodes" as any)
+      .withIndex("by_community_status_updatedAt", (q: any) =>
+        q.eq("communityId", communityId).eq("status", status),
+      )
+      .order("desc")
+      .take(Math.max(5, Math.ceil(limit / 2)))) as NodeRow[];
+    rows.push(...batch);
+  }
+  return rows.sort((a, b) => b.updatedAt - a.updatedAt).slice(0, limit);
+}
+
+async function latestEdges(ctx: any, communityId: any, limit: number): Promise<EdgeRow[]> {
+  const rows = (await ctx.db
+    .query("communityIntelligenceEdges" as any)
+    .withIndex("by_community", (q: any) => q.eq("communityId", communityId))
+    .take(Math.max(100, limit * 4))) as EdgeRow[];
+  return rows.sort((a, b) => b.updatedAt - a.updatedAt).slice(0, limit);
+}
+
+async function readExpectedRow<T extends { communityId?: any }>(
+  ctx: any,
+  communityId: any,
+  id: string,
+  errorCode: string,
+  isExpectedRow: (row: unknown) => row is T,
+): Promise<T> {
+  let row: unknown;
+  try {
+    row = await ctx.db.get(id as any);
+  } catch {
+    throw new Error(errorCode);
+  }
+  if (!isExpectedRow(row)) throw new Error(errorCode);
+  return ensureCommunityRow(row, communityId, errorCode);
+}
+
+export const listCommunityAgentFilesystemInternal = internalQuery({
+  args: {
+    context: communityAgentFilesystemContextValidator,
+    path: v.optional(v.string()),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const context = await resolveFilesystemContext(ctx, args.context);
+    const path = normalizePath(args.path);
+    const limit = boundedLimit(args.limit);
+
+    if (path === "/") {
+      return {
+        ...contextMetadata(context),
+        path,
+        entries: [
+          directoryEntry({ type: "directory", name: "compiler", path: "/compiler" }),
+          directoryEntry({ type: "directory", name: "directory", path: "/directory" }),
+        ],
+      };
+    }
+
+    if (path === "/compiler") {
+      return {
+        ...contextMetadata(context),
+        path,
+        entries: [
+          directoryEntry({ type: "file", name: "window", path: "/compiler/window" }),
+          directoryEntry({ type: "directory", name: "digests", path: "/compiler/digests" }),
+          directoryEntry({ type: "directory", name: "candidates", path: "/compiler/candidates" }),
+        ],
+      };
+    }
+
+    if (path === "/directory") {
+      return {
+        ...contextMetadata(context),
+        path,
+        entries: [
+          directoryEntry({ type: "directory", name: "nodes", path: "/directory/nodes" }),
+          directoryEntry({ type: "directory", name: "edges", path: "/directory/edges" }),
+          directoryEntry({ type: "directory", name: "change-requests", path: "/directory/change-requests" }),
+        ],
+      };
+    }
+
+    if (path === "/compiler/digests") {
+      const rows = await latestDigests(ctx, context.communityId, limit);
+      return {
+        ...contextMetadata(context),
+        path,
+        entries: rows.map((row) =>
+          directoryEntry({
+            type: "file",
+            name: normalizeIdValue(row._id),
+            path: `/compiler/digests/${normalizeIdValue(row._id)}`,
+            summary: row.summary,
+            updatedAt: row.updatedAt,
+          }),
+        ),
+      };
+    }
+
+    if (path === "/compiler/candidates") {
+      const rows = (await latestChangeRequests(ctx, context.communityId, limit * 4))
+        .filter(changeRequestIsCompilerCandidate)
+        .slice(0, limit);
+      return {
+        ...contextMetadata(context),
+        path,
+        entries: rows.map((row) =>
+          directoryEntry({
+            type: "file",
+            name: normalizeIdValue(row._id),
+            path: `/compiler/candidates/${normalizeIdValue(row._id)}`,
+            summary: String(payloadObject(row.requestedPayload).title ?? row.operation),
+            updatedAt: row.updatedAt,
+          }),
+        ),
+      };
+    }
+
+    if (path === "/directory/nodes") {
+      const rows = await latestNodes(ctx, context.communityId, limit);
+      return {
+        ...contextMetadata(context),
+        path,
+        entries: rows.map((row) =>
+          directoryEntry({
+            type: "file",
+            name: normalizeIdValue(row._id),
+            path: `/directory/nodes/${normalizeIdValue(row._id)}`,
+            summary: `${row.type}: ${row.title}`,
+            updatedAt: row.updatedAt,
+          }),
+        ),
+      };
+    }
+
+    if (path === "/directory/edges") {
+      const rows = await latestEdges(ctx, context.communityId, limit);
+      return {
+        ...contextMetadata(context),
+        path,
+        entries: rows.map((row) =>
+          directoryEntry({
+            type: "file",
+            name: normalizeIdValue(row._id),
+            path: `/directory/edges/${normalizeIdValue(row._id)}`,
+            summary: `${row.type}: ${normalizeIdValue(row.fromNodeId)}`,
+            updatedAt: row.updatedAt,
+          }),
+        ),
+      };
+    }
+
+    if (path === "/directory/change-requests") {
+      const rows = await latestChangeRequests(ctx, context.communityId, limit);
+      return {
+        ...contextMetadata(context),
+        path,
+        entries: rows.map((row) =>
+          directoryEntry({
+            type: "file",
+            name: normalizeIdValue(row._id),
+            path: `/directory/change-requests/${normalizeIdValue(row._id)}`,
+            summary: `${row.status}: ${row.operation}`,
+            updatedAt: row.updatedAt,
+          }),
+        ),
+      };
+    }
+
+    throw new Error("community_agent_filesystem_path_not_listable");
+  },
+});
+
+export const readCommunityAgentFilesystemInternal = internalQuery({
+  args: {
+    context: communityAgentFilesystemContextValidator,
+    path: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const context = await resolveFilesystemContext(ctx, args.context);
+    const path = normalizePath(args.path);
+    const parts = pathParts(path);
+
+    if (path === "/compiler/window") {
+      const [digest] = await latestDigests(ctx, context.communityId, 1);
+      const pending = (await ctx.db
+        .query("communityIntelligenceChangeRequests" as any)
+        .withIndex("by_community_status", (q: any) =>
+          q.eq("communityId", context.communityId).eq("status", "pending_decision"),
+        )
+        .take(100)) as ChangeRequestRow[];
+      return {
+        ...contextMetadata(context),
+        path,
+        kind: "compiler_window_summary",
+        latest_digest: digest ? mapDigest(digest) : null,
+        pending_change_request_count: pending.length,
+      };
+    }
+
+    if (parts[0] === "compiler" && parts[1] === "digests" && parts[2]) {
+      const row = await readExpectedRow(ctx, context.communityId, parts[2], "community_compiler_digest_not_found", isDigestRow);
+      return { ...contextMetadata(context), path, kind: "compiler_digest", digest: mapDigest(row) };
+    }
+
+    if (parts[0] === "compiler" && parts[1] === "candidates" && parts[2]) {
+      const row = await readExpectedRow(ctx, context.communityId, parts[2], "community_compiler_candidate_not_found", isChangeRequestRow);
+      if (!changeRequestIsCompilerCandidate(row)) throw new Error("community_compiler_candidate_not_found");
+      return { ...contextMetadata(context), path, kind: "compiler_candidate", candidate: mapChangeRequest(row) };
+    }
+
+    if (parts[0] === "directory" && parts[1] === "nodes" && parts[2]) {
+      const row = await readExpectedRow(ctx, context.communityId, parts[2], "community_intelligence_node_not_found", isNodeRow);
+      return { ...contextMetadata(context), path, kind: "directory_node", node: mapNode(row) };
+    }
+
+    if (parts[0] === "directory" && parts[1] === "edges" && parts[2]) {
+      const row = await readExpectedRow(ctx, context.communityId, parts[2], "community_intelligence_edge_not_found", isEdgeRow);
+      return { ...contextMetadata(context), path, kind: "directory_edge", edge: mapEdge(row) };
+    }
+
+    if (parts[0] === "directory" && parts[1] === "change-requests" && parts[2]) {
+      const row = await readExpectedRow(ctx, context.communityId, parts[2], "community_intelligence_change_request_not_found", isChangeRequestRow);
+      return { ...contextMetadata(context), path, kind: "directory_change_request", change_request: mapChangeRequest(row) };
+    }
+
+    throw new Error("community_agent_filesystem_path_not_readable");
+  },
+});
+
+export const searchCommunityAgentFilesystemInternal = internalQuery({
+  args: {
+    context: communityAgentFilesystemContextValidator,
+    query: v.string(),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const context = await resolveFilesystemContext(ctx, args.context);
+    const queryText = String(args.query ?? "").trim().toLowerCase();
+    if (!queryText) throw new Error("community_agent_filesystem_search_query_required");
+    const limit = boundedLimit(args.limit);
+    const [digests, nodes, changeRequests] = await Promise.all([
+      latestDigests(ctx, context.communityId, limit),
+      latestNodes(ctx, context.communityId, limit),
+      latestChangeRequests(ctx, context.communityId, limit),
+    ]);
+    const matches = [
+      ...digests
+        .filter((row) => `${row.summary} ${row.dedupeKey}`.toLowerCase().includes(queryText))
+        .map((row) => ({ kind: "compiler_digest", path: `/compiler/digests/${normalizeIdValue(row._id)}`, score: 0.7, item: mapDigest(row) })),
+      ...nodes
+        .filter((row) => `${row.title} ${row.bodyMd} ${row.type} ${row.status}`.toLowerCase().includes(queryText))
+        .map((row) => ({ kind: "directory_node", path: `/directory/nodes/${normalizeIdValue(row._id)}`, score: 0.9, item: mapNode(row) })),
+      ...changeRequests
+        .filter((row) => JSON.stringify(row.requestedPayload ?? {}).toLowerCase().includes(queryText))
+        .map((row) => ({ kind: "directory_change_request", path: `/directory/change-requests/${normalizeIdValue(row._id)}`, score: 0.8, item: mapChangeRequest(row) })),
+    ];
+    return { ...contextMetadata(context), query: args.query, matches: matches.slice(0, limit) };
+  },
+});
+
+export const writeCommunityAgentFilesystemInternal = internalMutation({
+  args: {
+    context: communityAgentFilesystemContextValidator,
+    operation: v.union(v.literal("propose_directory_candidate_from_digest_item")),
+    payload: v.object({
+      digestId: v.optional(v.id("communityCompilerDigests")),
+      itemIndex: v.optional(v.number()),
+      nodeType: v.optional(
+        v.union(
+          v.literal("playbook"),
+          v.literal("insight"),
+          v.literal("example"),
+          v.literal("warning_failure"),
+          v.literal("decision_judgment"),
+          v.literal("open_question"),
+        ),
+      ),
+    }),
+  },
+  handler: async (ctx, args) => {
+    const context = await resolveFilesystemContext(ctx, args.context);
+    const payload = args.payload ?? {};
+    if (!payload.digestId || typeof payload.itemIndex !== "number") {
+      throw new Error("community_agent_filesystem_digest_item_required");
+    }
+    const result = await proposeCommunityIntelligenceFromDigestItemCore({
+      ctx,
+      communityId: context.communityId,
+      digestId: payload.digestId,
+      itemIndex: payload.itemIndex,
+      nodeType: payload.nodeType as NodeType | undefined,
+      actorType: "agent",
+      actorAgentKey: context.agentKey,
+    });
+    return { ok: true, operation: args.operation, ...contextMetadata(context), result };
+  },
+});
