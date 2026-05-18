@@ -532,6 +532,19 @@ export async function resolveProjectBackgroundSandboxIfReady(params: {
       projectId: params.projectId,
       providerSandboxId: existingSandboxId,
     });
+    const refreshedProject = await params.ctx.runQuery(api.projects.getCloudProjectById as any, {
+      authSubject: params.authSubject,
+      ownerId: params.userId,
+      projectId: params.projectId,
+    });
+    if (normalizeOptionalString(refreshedProject?.providerSandboxId) !== existingSandboxId) {
+      return {
+        ok: false,
+        status: 404,
+        code: "background_sandbox_not_found",
+        message: "Turn on computer to view files.",
+      };
+    }
     return {
       ok: false,
       status: 402,

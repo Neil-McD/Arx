@@ -64,6 +64,7 @@ import {
   type WorkspaceRightPanelTab,
 } from "./workspaceRightPanelModel";
 import {
+  resetWorkspaceFilesExpandedPreference,
   type WorkspaceUserDataPanelDataProps,
 } from "./WebWorkspaceUserDataPanel";
 import type {
@@ -1054,9 +1055,11 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
   const [workspaceRightPanelCommunityLabel, setWorkspaceRightPanelCommunityLabel] =
     useState<string>(initialRightPanelCommunityLabel);
   const [isCommunityRecentSignalsExpanded, setIsCommunityRecentSignalsExpanded] = useState(false);
+  const [workspaceFilesResetNonce, setWorkspaceFilesResetNonce] = useState(0);
   const [workspaceRightPanelWidth, setWorkspaceRightPanelWidth] = useState(WORKSPACE_RIGHT_PANEL_DEFAULT_WIDTH);
   const loadedRightPanelTabUserIdRef = useRef<string | null>(initialRightPanelStorageUserId);
   const loadedRightPanelCommunityLabelUserIdRef = useRef<string | null>(initialRightPanelStorageUserId);
+  const wasWorkspaceRightPanelVisibleRef = useRef(false);
   const savedThreadScrollTopRef = useRef<number | null>(null);
   const pendingRestoreThreadScrollTopRef = useRef<number | null>(null);
   const lastTerminalSnapshotSignatureRef = useRef<string | null>(null);
@@ -1178,6 +1181,14 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
     if (isWorkspaceRightPanelVisible) return;
     setIsCommunityRecentSignalsExpanded(false);
   }, [isWorkspaceRightPanelVisible]);
+
+  useEffect(() => {
+    const wasVisible = wasWorkspaceRightPanelVisibleRef.current;
+    wasWorkspaceRightPanelVisibleRef.current = isWorkspaceRightPanelVisible;
+    if (!wasVisible || isWorkspaceRightPanelVisible) return;
+    resetWorkspaceFilesExpandedPreference(props.activeProjectId);
+    setWorkspaceFilesResetNonce((value) => value + 1);
+  }, [isWorkspaceRightPanelVisible, props.activeProjectId]);
 
   useEffect(() => {
     workspaceAttachmentsRef.current = workspaceAttachments;
@@ -2065,6 +2076,7 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
         >
           <WebWorkspaceRightPanel
             workspaceUserDataPanel={props.workspaceUserDataPanel}
+            workspaceFilesResetNonce={workspaceFilesResetNonce}
             isCommunityRecentSignalsExpanded={isCommunityRecentSignalsExpanded}
             state={operatorData.state}
             topCommunities={operatorData.topCommunities}

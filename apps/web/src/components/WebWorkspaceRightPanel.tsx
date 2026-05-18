@@ -308,6 +308,7 @@ export function useOperatorDashboardData(params: {
 
 export function WebWorkspaceRightPanel(props: {
   workspaceUserDataPanel: WorkspaceUserDataPanelDataProps;
+  workspaceFilesResetNonce: number;
   isCommunityRecentSignalsExpanded: boolean;
   insightTabs: WorkspaceRightPanelTabItem[];
   state: OperatorDashboardState;
@@ -367,7 +368,10 @@ export function WebWorkspaceRightPanel(props: {
           <div className="workspace-right-panel__notice">Loading operator data...</div>
         ) : null}
         {activeInsightTab === "workspace" ? (
-          <WorkspacePanelContent {...props.workspaceUserDataPanel} />
+          <WorkspacePanelContent
+            {...props.workspaceUserDataPanel}
+            filesResetNonce={props.workspaceFilesResetNonce}
+          />
         ) : activeInsightTab === "community" ? (
           <CommunityPanelContent
             {...props.workspaceUserDataPanel}

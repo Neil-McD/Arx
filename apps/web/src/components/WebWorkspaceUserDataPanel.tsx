@@ -237,6 +237,10 @@ function storeFilesExpanded(projectId: string | null, isExpanded: boolean): void
   }
 }
 
+export function resetWorkspaceFilesExpandedPreference(projectId: string | null): void {
+  storeFilesExpanded(projectId, false);
+}
+
 function parentDirectory(path: string): string {
   const normalized = String(path || ".").replace(/^\/+|\/+$/g, "");
   if (!normalized || normalized === "." || !normalized.includes("/")) return ".";
@@ -396,7 +400,7 @@ function formatCommunityRole(value: WorkspaceUserPanelCommunity["role"]): string
 
 function formatWorkspaceInspectorFailure(result: WorkspaceInspectorFailure): string {
   if (result.code === "background_sandbox_not_found") return "Turn on computer to view files.";
-  if (result.code === "workspace_credits_exhausted") return "Add tool credits to turn on computer.";
+  if (result.code === "workspace_credits_exhausted") return "Turn on computer to view files.";
   return result.message;
 }
 
@@ -637,7 +641,9 @@ function WorkspaceCommunityOperations(props: {
   );
 }
 
-export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps) {
+export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps & {
+  filesResetNonce?: number;
+}) {
   const totalCredits =
     (props.workspaceCreditBalance?.includedCreditsBalance ?? 0) +
     (props.workspaceCreditBalance?.purchasedCreditsBalance ?? 0);
@@ -658,6 +664,7 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps) {
   const [isLoadingFilePreview, setIsLoadingFilePreview] = useState(false);
   const [filePreviewError, setFilePreviewError] = useState<string | null>(null);
   const filePreviewRequestId = useRef(0);
+  const lastFilesResetNonceRef = useRef(props.filesResetNonce ?? 0);
   const canInspectFiles = Boolean(props.session && props.activeProjectId);
 
   useEffect(() => {
@@ -680,6 +687,23 @@ export function WorkspacePanelContent(props: WorkspaceUserDataPanelDataProps) {
     },
     [props.activeProjectId],
   );
+
+  useEffect(() => {
+    const nonce = props.filesResetNonce ?? 0;
+    if (lastFilesResetNonceRef.current === nonce) return;
+    lastFilesResetNonceRef.current = nonce;
+    filePreviewRequestId.current += 1;
+    setFilesExpanded(false);
+    storeFilesExpanded(props.activeProjectId, false);
+    setDirectoryPath(".");
+    setDirectoryEntries([]);
+    setDirectoryError(null);
+    setDirectoryErrorCode(null);
+    setSelectedFilePath(null);
+    setFilePreview(null);
+    setFilePreviewError(null);
+    setIsLoadingFilePreview(false);
+  }, [props.activeProjectId, props.filesResetNonce]);
 
   useEffect(() => {
     let isAlive = true;
