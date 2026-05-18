@@ -137,6 +137,7 @@ import type * as settings from "../settings.js";
 import type * as skillCore from "../skillCore.js";
 import type * as skillPackages from "../skillPackages.js";
 import type * as stagingMaintenance from "../stagingMaintenance.js";
+import type * as stagingProjectHygiene from "../stagingProjectHygiene.js";
 import type * as stripeConnectAccountCore from "../stripeConnectAccountCore.js";
 import type * as stripeCore from "../stripeCore.js";
 import type * as threads from "../threads.js";
@@ -288,6 +289,7 @@ declare const fullApi: ApiFromModules<{
   skillCore: typeof skillCore;
   skillPackages: typeof skillPackages;
   stagingMaintenance: typeof stagingMaintenance;
+  stagingProjectHygiene: typeof stagingProjectHygiene;
   stripeConnectAccountCore: typeof stripeConnectAccountCore;
   stripeCore: typeof stripeCore;
   threads: typeof threads;

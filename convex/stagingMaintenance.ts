@@ -148,11 +148,11 @@ function normalizeSlug(raw: unknown): string {
     .slice(0, 96);
 }
 
-function normalizeText(raw: unknown): string {
+export function normalizeText(raw: unknown): string {
   return String(raw ?? "").trim().replace(/\s+/g, " ");
 }
 
-function normalizeLimit(raw: unknown, fallback: number, max: number): number {
+export function normalizeLimit(raw: unknown, fallback: number, max: number): number {
   const value = Math.floor(Number(raw));
   if (!Number.isFinite(value)) return fallback;
   return Math.max(1, Math.min(max, value));
@@ -644,7 +644,7 @@ function summarizeDuplicateRowsByKey(rows: readonly any[], keyField: string): {
   };
 }
 
-function assertStagingMaintenanceAllowed(args: { maintenanceToken: string }): void {
+export function assertStagingMaintenanceAllowed(args: { maintenanceToken: string }): void {
   const enabled = readEnv("POLYNET_STAGING_MAINTENANCE_ENABLED").toLowerCase() === "true";
   if (!enabled) throw new Error("staging_maintenance_disabled");
 
@@ -699,7 +699,7 @@ function normalizeExpectedCommunities(raw: readonly ExpectedCommunity[] | undefi
   return out;
 }
 
-async function findOwnerUser(args: {
+export async function findOwnerUser(args: {
   ctx: any;
   ownerId?: string | null;
   ownerEmail?: string | null;

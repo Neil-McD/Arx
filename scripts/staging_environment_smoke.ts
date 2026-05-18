@@ -89,6 +89,10 @@ for (const slug of ["polynet", "distribution-engineering"]) {
   assert(community?.visibility === "published", `staging community visibility mismatch: ${slug}`);
 }
 assert(fingerprint?.project?.exists === true, "staging default project missing");
+assert(
+  Number(fingerprint?.project?.duplicateNameCount ?? 0) <= 1,
+  "staging default General project must not have duplicate exact-name rows",
+);
 assert(fingerprint?.codex?.harnessEnabled === true, "Codex harness flag must be enabled in staging");
 assert(fingerprint?.codex?.executorEnabled === true, "Codex executor flag must be enabled in staging");
 assert(fingerprint?.codex?.primaryEnabled === true, "Codex primary flag must be enabled in staging");
