@@ -251,6 +251,15 @@ function isDaytonaStoppedState(
   );
 }
 
+function isDaytonaDestroyedState(
+  daytonaState: string | null | undefined,
+): boolean {
+  const state = String(daytonaState ?? "")
+    .trim()
+    .toLowerCase();
+  return state === "destroyed" || state === "destroying";
+}
+
 function isDaytonaTerminalErrorState(
   daytonaState: string | null | undefined,
 ): boolean {
@@ -424,6 +433,50 @@ export async function listDaytonaSandboxes(params: {
   };
 }
 
+export async function refreshDaytonaSandboxActivity(params: {
+  config: DaytonaConfig;
+  sandboxId: string;
+}): Promise<
+  | { ok: true }
+  | {
+      ok: false;
+      status: number;
+      code: string;
+      message: string;
+      details?: Record<string, unknown>;
+    }
+> {
+  let response: Response;
+  const path = `/sandbox/${encodeURIComponent(params.sandboxId)}/last-activity`;
+  try {
+    response = await fetch(`${params.config.apiBaseUrl}${path}`, {
+      method: "POST",
+      headers: daytonaHeaders(params.config, false),
+    });
+  } catch (error) {
+    return {
+      ok: false,
+      status: 503,
+      code: "runner_unavailable",
+      message:
+        error instanceof Error
+          ? error.message
+          : "Daytona activity refresh failed.",
+    };
+  }
+  if (response.ok) return { ok: true };
+  const { text } = await parseDaytonaResponseBody(response);
+  return {
+    ok: false,
+    status: 503,
+    code: "runner_unavailable",
+    message: `Daytona API POST ${path} failed (${response.status}).`,
+    details: {
+      response_text: text.slice(0, 2000),
+    },
+  };
+}
+
 export async function stopDaytonaSandbox(params: {
   config: DaytonaConfig;
   sandboxId: string;
@@ -466,7 +519,20 @@ export async function deleteDaytonaSandbox(params: {
   });
   if (!res.ok) {
     const detailsText = String(res.details?.response_text ?? "").toLowerCase();
-    if (detailsText.includes("not found")) return { ok: true };
+    const messageText = String(res.message ?? "").toLowerCase();
+    const idempotentStatus =
+      res.status === 404 || res.status === 409 || res.status === 410;
+    if (
+      idempotentStatus &&
+      (detailsText.includes("not found") ||
+        messageText.includes("not found") ||
+        detailsText.includes("destroyed") ||
+        detailsText.includes("destroying") ||
+        messageText.includes("destroyed") ||
+        messageText.includes("destroying"))
+    ) {
+      return { ok: true };
+    }
     return res;
   }
   return { ok: true };
@@ -552,6 +618,9 @@ export async function waitForDaytonaSandboxStopped(params: {
     }
     if (isDaytonaStoppedState(lookup.payload.state)) {
       return { ok: true, sandbox: lookup.payload };
+    }
+    if (isDaytonaDestroyedState(lookup.payload.state)) {
+      return { ok: true, sandbox: null };
     }
     if (isDaytonaTerminalErrorState(lookup.payload.state)) {
       return {

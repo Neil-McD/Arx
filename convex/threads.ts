@@ -2885,6 +2885,35 @@ export const setCloudRuntimeRunWorkspaceSessionInternal = internalMutation({
   },
 });
 
+export const hasActiveWorkspaceRuntimeRunForSandboxInternal = internalQuery({
+  args: {
+    providerSandboxId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const providerSandboxId = String(args.providerSandboxId ?? "").trim();
+    if (!providerSandboxId) {
+      return {
+        hasActive: false,
+        activeRunCount: 0,
+      };
+    }
+    const rows = await ctx.db
+      .query("runtimeRuns")
+      .withIndex("by_workspaceSessionState_providerSandboxId_status", (q: any) =>
+        q
+          .eq("workspaceSessionState", "active")
+          .eq("workspaceProviderSandboxId", providerSandboxId)
+          .eq("status", "running"),
+      )
+      .take(1);
+    const activeRunCount = rows.length;
+    return {
+      hasActive: activeRunCount > 0,
+      activeRunCount,
+    };
+  },
+});
+
 export const getCloudRunningRuntimeRunByThreadKey = query({
   args: {
     ownerId: v.optional(v.id("users")),

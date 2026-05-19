@@ -1,4 +1,5 @@
 import { internal } from "./_generated/api";
+import { refreshDaytonaSandboxActivity } from "./daytonaSandboxClient";
 import type { WorkspaceSandboxSession } from "./daytonaWorkspaceSession";
 import { runDaytonaComputerUseTool } from "./daytonaComputerUse";
 import {
@@ -325,13 +326,45 @@ export function createPolyNetExecutionSession(params: {
   let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   let heartbeatInFlight = false;
 
+  const touchWorkspaceActivity = async (
+    session: WorkspaceSandboxSession | null | undefined,
+  ): Promise<void> => {
+    if (!session?.projectId || !session.providerSandboxId) return;
+    try {
+      await params.ctx.runMutation(
+        internal.workspaceTerminals.touchProjectBackgroundSandboxActivityInternal as any,
+        {
+          projectId: session.projectId as any,
+          providerSandboxId: session.providerSandboxId,
+          nowMs: Date.now(),
+        },
+      );
+    } catch {
+      // PolyNet activity is best-effort; orphan and idle reconcilers remain durable fallbacks.
+    }
+    try {
+      await refreshDaytonaSandboxActivity({
+        config: session.config,
+        sandboxId: session.providerSandboxId,
+      });
+    } catch {
+      // Daytona activity refresh is a provider backstop, not a turn-critical operation.
+    }
+  };
+
   const ensureWorkspaceHeartbeat = () => {
-    if (!params.touchRunHeartbeat || !workspaceSession || heartbeatTimer) return;
+    if (!workspaceSession || heartbeatTimer) return;
     const touchRunHeartbeat = params.touchRunHeartbeat;
     heartbeatTimer = setInterval(() => {
       if (!workspaceSession || heartbeatInFlight) return;
       heartbeatInFlight = true;
-      void Promise.resolve(touchRunHeartbeat())
+      const activeSession = workspaceSession;
+      void Promise.resolve(
+        (async () => {
+          if (touchRunHeartbeat) await touchRunHeartbeat();
+          await touchWorkspaceActivity(activeSession);
+        })(),
+      )
         .catch(() => {})
         .finally(() => {
           heartbeatInFlight = false;

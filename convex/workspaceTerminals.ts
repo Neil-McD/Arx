@@ -36,11 +36,14 @@ import {
   type WorkspaceTerminalPreviewTransportStatus,
 } from "./workspaceTerminalProcessCore";
 import { classifyRuntimePreviewProbe } from "../shared/runtimePreviewProbe";
+import { DAYTONA_WORKSPACE_IDLE_STOP_SECONDS } from "../shared/workspaceCredits";
 
 const PROJECT_TERMINAL_RECONCILE_FRESH_MS = 8_000;
 const RECENT_TERMINAL_FAILURE_VISIBLE_MS = 5 * 60_000;
 const RECENT_TERMINAL_FAILURE_LIMIT = 4;
 const PROJECT_BACKGROUND_SANDBOX_CREATE_LEASE_MS = 60_000;
+const DAYTONA_WORKSPACE_IDLE_STOP_MS = DAYTONA_WORKSPACE_IDLE_STOP_SECONDS * 1000;
+const PROJECT_BACKGROUND_SANDBOX_STOP_LEASE_MS = 5 * 60_000;
 
 type WorkspaceTerminalStatus = "starting" | "running" | "exited" | "failed" | "stopped";
 type WorkspaceTerminalCompletionReason =
@@ -139,6 +142,46 @@ const workspaceTerminalCompletionReasonValidator = v.union(
 function normalizeOptionalString(value: unknown): string | null {
   const normalized = String(value ?? "").trim();
   return normalized || null;
+}
+
+function normalizeQueryLimit(value: unknown, fallback: number, max: number): number {
+  const numeric = Math.floor(Number(value));
+  if (!Number.isFinite(numeric) || numeric <= 0) return fallback;
+  return Math.min(max, numeric);
+}
+
+function buildProjectSandboxIdleExpiresAt(lastActivityAt: number): number {
+  return lastActivityAt + DAYTONA_WORKSPACE_IDLE_STOP_MS;
+}
+
+function readProjectSandboxIdleExpiresAt(project: {
+  providerSandboxIdleExpiresAt?: unknown;
+  providerSandboxLastActivityAt?: unknown;
+  providerSandboxLastSeenAt?: unknown;
+  providerSandboxStartedAt?: unknown;
+}): number {
+  const explicitExpiresAt = Number(project.providerSandboxIdleExpiresAt ?? 0);
+  if (Number.isFinite(explicitExpiresAt) && explicitExpiresAt > 0) {
+    return explicitExpiresAt;
+  }
+  const lastActivityAt = Number(
+    project.providerSandboxLastActivityAt ??
+      project.providerSandboxLastSeenAt ??
+      project.providerSandboxStartedAt ??
+      0,
+  );
+  return Number.isFinite(lastActivityAt) && lastActivityAt > 0
+    ? buildProjectSandboxIdleExpiresAt(lastActivityAt)
+    : 0;
+}
+
+function isActiveStopLease(project: {
+  providerSandboxState?: unknown;
+  providerSandboxStopLeaseExpiresAt?: unknown;
+}, nowMs: number): boolean {
+  if (normalizeOptionalString(project.providerSandboxState) !== "stopping") return false;
+  const expiresAt = Number(project.providerSandboxStopLeaseExpiresAt ?? 0);
+  return Number.isFinite(expiresAt) && expiresAt > nowMs;
 }
 
 function normalizeObservationSummary(value: unknown, maxLen = 240): string | null {
@@ -443,6 +486,9 @@ export const acquireProjectBackgroundSandboxLeaseInternal = internalMutation({
     await ctx.db.patch(project._id, {
       providerSandboxState: "creating",
       providerSandboxLastSeenAt: args.nowMs,
+      providerSandboxLastActivityAt: undefined,
+      providerSandboxIdleExpiresAt: undefined,
+      providerSandboxStopLeaseExpiresAt: undefined,
       updatedAt: args.nowMs,
     });
     return {
@@ -471,6 +517,9 @@ export const clearProjectBackgroundSandboxLeaseInternal = internalMutation({
     await ctx.db.patch(project._id, {
       providerSandboxState: undefined,
       providerSandboxLastSeenAt: undefined,
+      providerSandboxLastActivityAt: undefined,
+      providerSandboxIdleExpiresAt: undefined,
+      providerSandboxStopLeaseExpiresAt: undefined,
       updatedAt: args.nowMs,
     });
     return await ctx.db.get(project._id);
@@ -546,17 +595,49 @@ export const setProjectBackgroundSandboxInternal = internalMutation({
     providerSandboxId: v.string(),
     providerSandboxState: v.optional(v.string()),
     providerSandboxLastSeenAt: v.optional(v.number()),
+    providerSandboxLastActivityAt: v.optional(v.number()),
+    providerSandboxIdleExpiresAt: v.optional(v.number()),
+    providerSandboxStopLeaseExpiresAt: v.optional(v.number()),
     providerSandboxStartedAt: v.optional(v.number()),
     providerSandboxCreditReservationKey: v.optional(v.string()),
     providerSandboxCreditBudgetCredits: v.optional(v.number()),
     providerSandboxCreditBudgetExpiresAt: v.optional(v.number()),
+    touchActivity: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const project = await ctx.db.get(args.projectId);
+    const nowMs = Date.now();
+    const requestedState =
+      args.providerSandboxState ?? project?.providerSandboxState ?? "started";
+    if (
+      project &&
+      isActiveStopLease(project, nowMs) &&
+      requestedState !== "stopping" &&
+      requestedState !== "error"
+    ) {
+      return await ctx.db.get(args.projectId);
+    }
+    const lastSeenAt = args.providerSandboxLastSeenAt ?? nowMs;
+    const shouldTouchActivity = args.touchActivity !== false;
+    const lastActivityAt =
+      shouldTouchActivity
+        ? args.providerSandboxLastActivityAt ?? lastSeenAt
+        : args.providerSandboxLastActivityAt ?? project?.providerSandboxLastActivityAt;
+    const idleExpiresAt =
+      shouldTouchActivity && typeof lastActivityAt === "number"
+        ? args.providerSandboxIdleExpiresAt ?? buildProjectSandboxIdleExpiresAt(lastActivityAt)
+        : args.providerSandboxIdleExpiresAt ?? project?.providerSandboxIdleExpiresAt;
     await ctx.db.patch(args.projectId, {
       providerSandboxId: args.providerSandboxId,
-      providerSandboxState: args.providerSandboxState,
-      providerSandboxLastSeenAt: args.providerSandboxLastSeenAt,
+      providerSandboxState: requestedState,
+      providerSandboxLastSeenAt: lastSeenAt,
+      providerSandboxLastActivityAt: lastActivityAt,
+      providerSandboxIdleExpiresAt: idleExpiresAt,
+      providerSandboxStopLeaseExpiresAt:
+        requestedState === "stopping"
+          ? args.providerSandboxStopLeaseExpiresAt ??
+            project?.providerSandboxStopLeaseExpiresAt
+          : undefined,
       providerSandboxStartedAt:
         args.providerSandboxStartedAt ?? project?.providerSandboxStartedAt,
       providerSandboxCreditReservationKey:
@@ -568,7 +649,38 @@ export const setProjectBackgroundSandboxInternal = internalMutation({
       providerSandboxCreditBudgetExpiresAt:
         args.providerSandboxCreditBudgetExpiresAt ??
         project?.providerSandboxCreditBudgetExpiresAt,
-      updatedAt: Date.now(),
+      updatedAt: nowMs,
+    });
+    return await ctx.db.get(args.projectId);
+  },
+});
+
+export const touchProjectBackgroundSandboxActivityInternal = internalMutation({
+  args: {
+    projectId: v.id("cloudProjects"),
+    providerSandboxId: v.string(),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const project = await ctx.db.get(args.projectId);
+    if (
+      !project ||
+      normalizeOptionalString(project.providerSandboxId) !== args.providerSandboxId
+    ) {
+      return null;
+    }
+    const nowMs = args.nowMs ?? Date.now();
+    if (isActiveStopLease(project, nowMs)) {
+      return null;
+    }
+    await ctx.db.patch(args.projectId, {
+      providerSandboxState:
+        normalizeOptionalString(project.providerSandboxState) ?? "started",
+      providerSandboxLastSeenAt: nowMs,
+      providerSandboxLastActivityAt: nowMs,
+      providerSandboxIdleExpiresAt: buildProjectSandboxIdleExpiresAt(nowMs),
+      providerSandboxStopLeaseExpiresAt: undefined,
+      updatedAt: nowMs,
     });
     return await ctx.db.get(args.projectId);
   },
@@ -583,6 +695,9 @@ export const clearProjectBackgroundSandboxInternal = internalMutation({
       providerSandboxId: undefined,
       providerSandboxState: undefined,
       providerSandboxLastSeenAt: undefined,
+      providerSandboxLastActivityAt: undefined,
+      providerSandboxIdleExpiresAt: undefined,
+      providerSandboxStopLeaseExpiresAt: undefined,
       providerSandboxStartedAt: undefined,
       providerSandboxCreditReservationKey: undefined,
       providerSandboxCreditBudgetCredits: undefined,
@@ -590,6 +705,170 @@ export const clearProjectBackgroundSandboxInternal = internalMutation({
       updatedAt: Date.now(),
     });
     return await ctx.db.get(args.projectId);
+  },
+});
+
+export const listIdleProjectBackgroundSandboxesInternal = internalQuery({
+  args: {
+    nowMs: v.number(),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const limit = normalizeQueryLimit(args.limit, 25, 100);
+    const expiredRows = await ctx.db
+      .query("cloudProjects")
+      .withIndex("by_providerSandboxState_idleExpiresAt", (q: any) =>
+        q
+          .eq("providerSandboxState", "started")
+          .gt("providerSandboxIdleExpiresAt", 0)
+          .lte("providerSandboxIdleExpiresAt", args.nowMs),
+      )
+      .take(limit);
+    const rowsById = new Map(expiredRows.map((row) => [String(row._id), row]));
+    if (expiredRows.length < limit) {
+      const compatibilityRows = await ctx.db
+        .query("cloudProjects")
+        .withIndex("by_providerSandboxState_idleExpiresAt", (q: any) =>
+          q.eq("providerSandboxState", "started"),
+        )
+        .take(Math.min(100, limit * 2));
+      for (const row of compatibilityRows) {
+        if (rowsById.size >= limit) break;
+        if (rowsById.has(String(row._id))) continue;
+        if (row.providerSandboxIdleExpiresAt != null) continue;
+        const derivedIdleExpiresAt = readProjectSandboxIdleExpiresAt(row);
+        if (
+          row.providerSandboxIdleExpiresAt == null &&
+          derivedIdleExpiresAt > 0 &&
+          derivedIdleExpiresAt <= args.nowMs
+        ) {
+          rowsById.set(String(row._id), row);
+        }
+      }
+    }
+    if (rowsById.size < limit) {
+      const stoppingRows = await ctx.db
+        .query("cloudProjects")
+        .withIndex("by_providerSandboxState_idleExpiresAt", (q: any) =>
+          q.eq("providerSandboxState", "stopping"),
+        )
+        .take(Math.min(100, limit * 2));
+      for (const row of stoppingRows) {
+        if (rowsById.size >= limit) break;
+        if (rowsById.has(String(row._id))) continue;
+        const stopLeaseExpiresAt = Number(row.providerSandboxStopLeaseExpiresAt ?? 0);
+        const idleExpiresAt = readProjectSandboxIdleExpiresAt(row);
+        if (
+          idleExpiresAt > 0 &&
+          idleExpiresAt <= args.nowMs &&
+          (!Number.isFinite(stopLeaseExpiresAt) ||
+            stopLeaseExpiresAt <= 0 ||
+            stopLeaseExpiresAt <= args.nowMs)
+        ) {
+          rowsById.set(String(row._id), row);
+        }
+      }
+    }
+    if (rowsById.size < limit) {
+      const errorRows = await ctx.db
+        .query("cloudProjects")
+        .withIndex("by_providerSandboxState_idleExpiresAt", (q: any) =>
+          q.eq("providerSandboxState", "error"),
+        )
+        .take(Math.min(100, limit * 2));
+      for (const row of errorRows) {
+        if (rowsById.size >= limit) break;
+        if (rowsById.has(String(row._id))) continue;
+        const idleExpiresAt = readProjectSandboxIdleExpiresAt(row);
+        if (idleExpiresAt > 0 && idleExpiresAt <= args.nowMs) {
+          rowsById.set(String(row._id), row);
+        }
+      }
+    }
+    const rows = [...rowsById.values()].slice(0, limit);
+    return rows
+      .filter((row) => normalizeOptionalString(row.providerSandboxId))
+      .map((row) => ({
+        projectId: row._id,
+        ownerId: row.ownerId,
+        providerSandboxId: normalizeOptionalString(row.providerSandboxId),
+        providerSandboxState: normalizeOptionalString(row.providerSandboxState),
+        providerSandboxLastActivityAt: row.providerSandboxLastActivityAt ?? null,
+        providerSandboxIdleExpiresAt: readProjectSandboxIdleExpiresAt(row) || null,
+        providerSandboxStopLeaseExpiresAt: row.providerSandboxStopLeaseExpiresAt ?? null,
+      }));
+  },
+});
+
+export const acquireProjectBackgroundSandboxStopLeaseInternal = internalMutation({
+  args: {
+    projectId: v.id("cloudProjects"),
+    ownerId: v.id("users"),
+    providerSandboxId: v.string(),
+    nowMs: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const project = await ctx.db.get(args.projectId);
+    if (!project || project.ownerId !== args.ownerId) {
+      return { acquired: false, reason: "project_not_found" };
+    }
+    if (normalizeOptionalString(project.providerSandboxId) !== args.providerSandboxId) {
+      return { acquired: false, reason: "sandbox_changed" };
+    }
+    const state = normalizeOptionalString(project.providerSandboxState) ?? "started";
+    if (state === "stopping" && isActiveStopLease(project, args.nowMs)) {
+      return {
+        acquired: false,
+        reason: "stop_in_progress",
+        leaseExpiresAt: project.providerSandboxStopLeaseExpiresAt ?? null,
+      };
+    }
+    if (state !== "started" && state !== "stopping" && state !== "error") {
+      return { acquired: false, reason: "not_started" };
+    }
+    const idleExpiresAt = readProjectSandboxIdleExpiresAt(project);
+    if (idleExpiresAt <= 0 || idleExpiresAt > args.nowMs) {
+      return {
+        acquired: false,
+        reason: "not_idle",
+        idleExpiresAt,
+      };
+    }
+    const activeTerminalRows = await ctx.db
+      .query("workspaceTerminalSessions")
+      .withIndex("by_providerSandboxId", (q: any) =>
+        q.eq("providerSandboxId", args.providerSandboxId),
+      )
+      .collect();
+    if (activeTerminalRows.some((row) => isTerminalActiveStatus(row.status))) {
+      return { acquired: false, reason: "active_terminal" };
+    }
+    const activeRuntimeRows = await ctx.db
+      .query("runtimeRuns")
+      .withIndex("by_workspaceSessionState_providerSandboxId_status", (q: any) =>
+        q
+          .eq("workspaceSessionState", "active")
+          .eq("workspaceProviderSandboxId", args.providerSandboxId)
+          .eq("status", "running"),
+      )
+      .take(1);
+    if (activeRuntimeRows.length > 0) {
+      return { acquired: false, reason: "active_runtime_run" };
+    }
+
+    const leaseExpiresAt = args.nowMs + PROJECT_BACKGROUND_SANDBOX_STOP_LEASE_MS;
+    await ctx.db.patch(project._id, {
+      providerSandboxState: "stopping",
+      providerSandboxLastSeenAt: args.nowMs,
+      providerSandboxStopLeaseExpiresAt: leaseExpiresAt,
+      updatedAt: args.nowMs,
+    });
+    return {
+      acquired: true,
+      reason: "acquired",
+      idleExpiresAt,
+      leaseExpiresAt,
+    };
   },
 });
 

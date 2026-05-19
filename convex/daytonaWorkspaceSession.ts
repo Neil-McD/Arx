@@ -12,8 +12,9 @@ import {
 } from "./daytonaSandboxClient";
 import { executeDaytonaCommand } from "./daytonaToolboxExecutor";
 import {
-  DAYTONA_WORKSPACE_SESSION_BUDGET_SECONDS,
-  DAYTONA_WORKSPACE_SESSION_RESERVE_SECONDS,
+  DAYTONA_WORKSPACE_SESSION_HOLD_SECONDS,
+  DAYTONA_WORKSPACE_SESSION_IDLE_AUTOSTOP_MINUTES,
+  DAYTONA_WORKSPACE_SESSION_MAX_SECONDS,
   DAYTONA_WORKSPACE_SESSION_RESERVATION_EXPIRY_MS,
   creditsToUsd,
   estimateDaytonaWorkspaceReservationCredits,
@@ -75,10 +76,7 @@ export type WorkspaceSandboxCleanupResult = {
 function buildRunPinnedDaytonaConfig(config: DaytonaConfig): DaytonaConfig {
   return {
     ...config,
-    // Workspace sandboxes are created per active run and explicitly stopped in cleanup.
-    // Disable Daytona idle auto-stop so mixed web+workspace turns cannot lose the sandbox
-    // during research gaps before the run finishes.
-    autoStopInterval: 0,
+    autoStopInterval: DAYTONA_WORKSPACE_SESSION_IDLE_AUTOSTOP_MINUTES,
   };
 }
 
@@ -271,13 +269,13 @@ export async function createWorkspaceSandboxSession(params: {
   }
   const runPinnedConfig = buildRunPinnedDaytonaConfig(loadedDaytonaConfig.config);
   const creditReservationKey = newCreditKey("daytona");
-  const creditBudgetExpiresAt = nowMs + DAYTONA_WORKSPACE_SESSION_BUDGET_SECONDS * 1000;
+  const creditBudgetExpiresAt = nowMs + DAYTONA_WORKSPACE_SESSION_MAX_SECONDS * 1000;
   const creditBudgetCredits = estimateDaytonaWorkspaceReservationCredits({
     sandboxCpu: runPinnedConfig.sandboxCpu,
     sandboxMemoryGiB: runPinnedConfig.sandboxMemoryGiB,
   });
   const creditBudgetVendorCostUsd = estimateDaytonaWorkspaceComputeUsd({
-    durationSeconds: DAYTONA_WORKSPACE_SESSION_RESERVE_SECONDS,
+    durationSeconds: DAYTONA_WORKSPACE_SESSION_HOLD_SECONDS,
     sandboxCpu: runPinnedConfig.sandboxCpu,
     sandboxMemoryGiB: runPinnedConfig.sandboxMemoryGiB,
   });
@@ -299,6 +297,9 @@ export async function createWorkspaceSandboxSession(params: {
         sandbox_disk_gib: runPinnedConfig.sandboxDiskGiB,
         pricing_version: PAID_TOOL_PRICING_VERSION,
         target_gross_margin_bps: PAID_TOOL_TARGET_GROSS_MARGIN_BPS,
+        hold_seconds: DAYTONA_WORKSPACE_SESSION_HOLD_SECONDS,
+        max_seconds: DAYTONA_WORKSPACE_SESSION_MAX_SECONDS,
+        idle_autostop_minutes: DAYTONA_WORKSPACE_SESSION_IDLE_AUTOSTOP_MINUTES,
       },
       expiresAt: nowMs + DAYTONA_WORKSPACE_SESSION_RESERVATION_EXPIRY_MS,
       nowMs,

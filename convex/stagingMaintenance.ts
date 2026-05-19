@@ -46,7 +46,7 @@ type ExpectedCommunity = {
   oneLiner?: string;
 };
 
-type StagingAction = {
+export type StagingAction = {
   entity: string;
   key: string;
   action: string;
@@ -835,7 +835,7 @@ async function ensureExpectedCommunity(args: {
   };
 }
 
-async function ensureExpectedProject(args: {
+export async function ensureExpectedProject(args: {
   ctx: any;
   ownerId: any;
   projectName: string;

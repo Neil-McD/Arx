@@ -664,6 +664,9 @@ export default defineSchema({
     providerSandboxId: v.optional(v.string()),
     providerSandboxState: v.optional(v.string()),
     providerSandboxLastSeenAt: v.optional(v.number()),
+    providerSandboxLastActivityAt: v.optional(v.number()),
+    providerSandboxIdleExpiresAt: v.optional(v.number()),
+    providerSandboxStopLeaseExpiresAt: v.optional(v.number()),
     providerSandboxStartedAt: v.optional(v.number()),
     providerSandboxCreditReservationKey: v.optional(v.string()),
     providerSandboxCreditBudgetCredits: v.optional(v.number()),
@@ -676,7 +679,11 @@ export default defineSchema({
     createdAt: v.number(),
     updatedAt: v.number(),
   })
-    .index("by_owner", ["ownerId"]),
+    .index("by_owner", ["ownerId"])
+    .index("by_providerSandboxState_idleExpiresAt", [
+      "providerSandboxState",
+      "providerSandboxIdleExpiresAt",
+    ]),
 
   workspaceTerminalSessions: defineTable({
     ownerId: v.id("users"),
@@ -1482,7 +1489,16 @@ export default defineSchema({
     .index("by_thread_status_startedAt", ["threadId", "status", "startedAt"])
     .index("by_thread_startedAt", ["threadId", "startedAt"])
     .index("by_owner_startedAt", ["ownerId", "startedAt"])
-    .index("by_status_startedAt", ["status", "startedAt"]),
+    .index("by_status_startedAt", ["status", "startedAt"])
+    .index("by_workspaceSessionState_providerSandboxId", [
+      "workspaceSessionState",
+      "workspaceProviderSandboxId",
+    ])
+    .index("by_workspaceSessionState_providerSandboxId_status", [
+      "workspaceSessionState",
+      "workspaceProviderSandboxId",
+      "status",
+    ]),
 
   runtimeRunEvents: defineTable({
     ownerId: v.id("users"),

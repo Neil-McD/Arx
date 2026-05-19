@@ -73,8 +73,18 @@ async function proveWorkspaceCreditAccountingContract() {
 
   assert.match(
     sharedCreditsSource,
-    /DAYTONA_WORKSPACE_SESSION_BUDGET_SECONDS\s*=\s*60\s*\*\s*60/,
-    "expected Daytona runtime budget to be explicitly duration based",
+    /DAYTONA_WORKSPACE_SESSION_HOLD_SECONDS\s*=\s*60/,
+    "expected Daytona computer reservations to use only a small one-minute hold",
+  );
+  assert.match(
+    sharedCreditsSource,
+    /DAYTONA_WORKSPACE_SESSION_MAX_SECONDS\s*=\s*30\s*\*\s*60/,
+    "expected Daytona computer runtime to have a bounded 30-minute hard-stop window",
+  );
+  assert.match(
+    sharedCreditsSource,
+    /DAYTONA_WORKSPACE_SESSION_IDLE_AUTOSTOP_MINUTES\s*=\s*15/,
+    "expected Daytona provider auto-stop to remain enabled as a backstop",
   );
   assert.match(
     sharedCreditsSource,
@@ -103,8 +113,13 @@ async function proveWorkspaceCreditAccountingContract() {
   );
   assert.match(
     sharedCreditsSource,
-    /DAYTONA_WORKSPACE_SESSION_RESERVE_SECONDS\s*=[\s\S]*DAYTONA_WORKSPACE_SESSION_BUDGET_SECONDS\s*\+[\s\S]*DAYTONA_WORKSPACE_SESSION_STOP_GRACE_SECONDS/,
-    "expected Daytona reservations to cover the runtime budget plus cleanup grace",
+    /DAYTONA_WORKSPACE_SESSION_RESERVATION_EXPIRY_MS\s*=[\s\S]*DAYTONA_WORKSPACE_SESSION_MAX_SECONDS\s*\+\s*5\s*\*\s*60/,
+    "expected Daytona reservations to expire shortly after the hard runtime window",
+  );
+  assert.doesNotMatch(
+    sharedCreditsSource,
+    /DAYTONA_WORKSPACE_SESSION_BUDGET_SECONDS|DAYTONA_WORKSPACE_SESSION_STOP_GRACE_SECONDS|DAYTONA_WORKSPACE_SESSION_RESERVE_SECONDS/,
+    "Daytona computer billing must not keep the old 60-minute-plus-grace reservation model",
   );
   assert.match(
     sharedCreditsSource,
@@ -293,6 +308,16 @@ async function proveWorkspaceCreditAccountingContract() {
     /priceDaytonaWorkspaceUsageCredits\(\{\s*computeCostUsd\s*\}\)/,
     "expected temporary Daytona sessions to settle usage at margin-aware credit pricing",
   );
+  assert.match(
+    daytonaSessionSource,
+    /autoStopInterval:\s*DAYTONA_WORKSPACE_SESSION_IDLE_AUTOSTOP_MINUTES/,
+    "expected temporary Daytona sessions to use provider auto-stop",
+  );
+  assert.match(
+    daytonaSessionSource,
+    /durationSeconds:\s*DAYTONA_WORKSPACE_SESSION_HOLD_SECONDS/,
+    "expected temporary Daytona sessions to reserve only the small hold amount",
+  );
 
   assert.match(
     backgroundServiceSource,
@@ -348,6 +373,16 @@ async function proveWorkspaceCreditAccountingContract() {
     backgroundServiceSource,
     /priceDaytonaWorkspaceUsageCredits\(\{\s*computeCostUsd\s*\}\)/,
     "expected background Daytona sandboxes to settle usage at margin-aware credit pricing",
+  );
+  assert.match(
+    backgroundServiceSource,
+    /autoStopInterval:\s*DAYTONA_WORKSPACE_SESSION_IDLE_AUTOSTOP_MINUTES/,
+    "expected background Daytona sandboxes to use provider auto-stop",
+  );
+  assert.match(
+    backgroundServiceSource,
+    /durationSeconds:\s*DAYTONA_WORKSPACE_SESSION_HOLD_SECONDS/,
+    "expected background Daytona sandboxes to reserve only the small hold amount",
   );
   assert.match(
     orphanReconcilerSource,

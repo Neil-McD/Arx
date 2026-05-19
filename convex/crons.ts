@@ -44,6 +44,15 @@ crons.interval(
 );
 
 crons.interval(
+  "reconcile idle daytona workspace sandboxes",
+  { minutes: 2 },
+  (internal as any).daytonaWorkspaceLifecycle.reconcileIdleProjectSandboxesInternal,
+  {
+    limit: 25,
+  },
+);
+
+crons.interval(
   "reconcile expired credit reservations",
   { minutes: 15 },
   (internal as any).workspaceCredits.reconcileExpiredCreditReservationsInternal,

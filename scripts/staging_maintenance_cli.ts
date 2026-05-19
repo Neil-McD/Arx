@@ -41,11 +41,31 @@ export function fail(message: string): never {
 }
 
 export function run(command: string, args: string[], options?: { input?: string }): string {
-  return execFileSync(command, args, {
-    encoding: "utf8",
-    input: options?.input,
-    stdio: ["pipe", "pipe", "pipe"],
-  });
+  try {
+    return execFileSync(command, args, {
+      encoding: "utf8",
+      input: options?.input,
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+  } catch (error) {
+    const failure = error as {
+      status?: number;
+      signal?: string;
+      stdout?: string | Buffer;
+      stderr?: string | Buffer;
+    };
+    throw new Error(
+      [
+        `Command failed: ${command} ${formatSafeCommandArgs(args)}`,
+        failure.status === undefined ? null : `status=${failure.status}`,
+        failure.signal ? `signal=${failure.signal}` : null,
+        failure.stdout ? `stdout=${redactSensitiveText(String(failure.stdout))}` : null,
+        failure.stderr ? `stderr=${redactSensitiveText(String(failure.stderr))}` : null,
+      ]
+        .filter(Boolean)
+        .join("\n"),
+    );
+  }
 }
 
 const SENSITIVE_KEY_PATTERN =

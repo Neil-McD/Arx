@@ -11,8 +11,9 @@ import {
 } from "./daytonaSandboxClient";
 import { isWorkspaceTerminalActiveStatus } from "./workspaceTerminalProcessCore";
 import {
-  DAYTONA_WORKSPACE_SESSION_BUDGET_SECONDS,
-  DAYTONA_WORKSPACE_SESSION_RESERVE_SECONDS,
+  DAYTONA_WORKSPACE_SESSION_HOLD_SECONDS,
+  DAYTONA_WORKSPACE_SESSION_IDLE_AUTOSTOP_MINUTES,
+  DAYTONA_WORKSPACE_SESSION_MAX_SECONDS,
   DAYTONA_WORKSPACE_SESSION_RESERVATION_EXPIRY_MS,
   creditsToUsd,
   estimateDaytonaWorkspaceComputeUsd,
@@ -27,6 +28,7 @@ const PROJECT_BACKGROUND_SANDBOX_CREATE_LEASE_MS = 60_000;
 const PROJECT_BACKGROUND_SANDBOX_WAIT_MS = 65_000;
 const PROJECT_BACKGROUND_SANDBOX_WAIT_POLL_MS = 1_000;
 const BACKGROUND_SANDBOX_BUDGET_EXPIRED_CODE = "background_sandbox_budget_expired";
+const BACKGROUND_SANDBOX_STOPPING_CODE = "background_sandbox_stopping";
 
 function normalizeString(value: unknown): string {
   return String(value ?? "").trim();
@@ -70,6 +72,40 @@ function readBackgroundCreditReservation(project: any): {
     creditBudgetCredits: readPositiveNumber(project?.providerSandboxCreditBudgetCredits, 0),
     creditBudgetExpiresAt: readPositiveNumber(project?.providerSandboxCreditBudgetExpiresAt, 0),
     startedAt: readPositiveNumber(project?.providerSandboxStartedAt, 0) || null,
+  };
+}
+
+function isBackgroundSandboxStopping(project: any, nowMs = Date.now()): boolean {
+  if (normalizeOptionalString(project?.providerSandboxState) !== "stopping") {
+    return false;
+  }
+  const stopLeaseExpiresAt = Number(project?.providerSandboxStopLeaseExpiresAt ?? 0);
+  return Number.isFinite(stopLeaseExpiresAt) && stopLeaseExpiresAt > nowMs;
+}
+
+function backgroundSandboxStoppingResult(project: any): {
+  ok: false;
+  status: number;
+  code: string;
+  message: string;
+  details?: Record<string, unknown>;
+} {
+  const stopLeaseExpiresAt = Number(project?.providerSandboxStopLeaseExpiresAt ?? 0);
+  const retryAfterMs =
+    Number.isFinite(stopLeaseExpiresAt) && stopLeaseExpiresAt > Date.now()
+      ? Math.max(250, stopLeaseExpiresAt - Date.now())
+      : undefined;
+  return {
+    ok: false,
+    status: 409,
+    code: BACKGROUND_SANDBOX_STOPPING_CODE,
+    message: "The background workspace is stopping. Retry after it finishes.",
+    details:
+      retryAfterMs === undefined
+        ? undefined
+        : {
+            retry_after_ms: retryAfterMs,
+          },
   };
 }
 
@@ -173,6 +209,7 @@ export async function ensureProjectBackgroundSandbox(params: {
     projectId: params.projectId,
   });
   if (existing.ok) return existing;
+  if (existing.code === BACKGROUND_SANDBOX_STOPPING_CODE) return existing;
 
   const project = await params.ctx.runQuery(internal.projects.getCloudProjectByIdInternal as any, {
     projectId: params.projectId,
@@ -245,7 +282,7 @@ export async function ensureProjectBackgroundSandbox(params: {
   }
   const config: DaytonaConfig = {
     ...loadedConfig.config,
-    autoStopInterval: 0,
+    autoStopInterval: DAYTONA_WORKSPACE_SESSION_IDLE_AUTOSTOP_MINUTES,
   };
 
   const creditReservationKey = newCreditKey("daytona_bg");
@@ -254,12 +291,12 @@ export async function ensureProjectBackgroundSandbox(params: {
     sandboxMemoryGiB: config.sandboxMemoryGiB,
   });
   const creditBudgetVendorCostUsd = estimateDaytonaWorkspaceComputeUsd({
-    durationSeconds: DAYTONA_WORKSPACE_SESSION_RESERVE_SECONDS,
+    durationSeconds: DAYTONA_WORKSPACE_SESSION_HOLD_SECONDS,
     sandboxCpu: config.sandboxCpu,
     sandboxMemoryGiB: config.sandboxMemoryGiB,
   });
   const reservedAt = Date.now();
-  const creditBudgetExpiresAt = reservedAt + DAYTONA_WORKSPACE_SESSION_BUDGET_SECONDS * 1000;
+  const creditBudgetExpiresAt = reservedAt + DAYTONA_WORKSPACE_SESSION_MAX_SECONDS * 1000;
   try {
     await params.ctx.runMutation(
       internal.workspaceCredits.reserveCreditsInternal as any,
@@ -280,6 +317,9 @@ export async function ensureProjectBackgroundSandbox(params: {
           sandbox_disk_gib: config.sandboxDiskGiB,
           pricing_version: PAID_TOOL_PRICING_VERSION,
           target_gross_margin_bps: PAID_TOOL_TARGET_GROSS_MARGIN_BPS,
+          hold_seconds: DAYTONA_WORKSPACE_SESSION_HOLD_SECONDS,
+          max_seconds: DAYTONA_WORKSPACE_SESSION_MAX_SECONDS,
+          idle_autostop_minutes: DAYTONA_WORKSPACE_SESSION_IDLE_AUTOSTOP_MINUTES,
         },
         expiresAt: reservedAt + DAYTONA_WORKSPACE_SESSION_RESERVATION_EXPIRY_MS,
         nowMs: reservedAt,
@@ -513,6 +553,9 @@ export async function resolveProjectBackgroundSandboxIfReady(params: {
       message: "No active computer background sandbox is registered.",
     };
   }
+  if (isBackgroundSandboxStopping(project)) {
+    return backgroundSandboxStoppingResult(project);
+  }
   const credit = readBackgroundCreditReservation(project);
   if (
     credit.creditBudgetExpiresAt > 0 &&
@@ -547,7 +590,7 @@ export async function resolveProjectBackgroundSandboxIfReady(params: {
   }
   const config: DaytonaConfig = {
     ...loadedConfig.config,
-    autoStopInterval: 0,
+    autoStopInterval: DAYTONA_WORKSPACE_SESSION_IDLE_AUTOSTOP_MINUTES,
   };
 
   const ready = await waitForDaytonaSandboxReady({
@@ -589,7 +632,7 @@ export async function resolveProjectBackgroundSandboxIfReady(params: {
     };
   }
 
-  await params.ctx.runMutation(
+  const updatedProject = await params.ctx.runMutation(
     internal.workspaceTerminals.setProjectBackgroundSandboxInternal as any,
     {
       projectId: params.projectId,
@@ -598,6 +641,9 @@ export async function resolveProjectBackgroundSandboxIfReady(params: {
       providerSandboxLastSeenAt: Date.now(),
     },
   );
+  if (isBackgroundSandboxStopping(updatedProject)) {
+    return backgroundSandboxStoppingResult(updatedProject);
+  }
 
   return {
     ok: true,
@@ -639,6 +685,9 @@ export async function resolveTerminalSandboxContext(params: {
   if (
     String(project?.providerSandboxId ?? "").trim() === params.providerSandboxId
   ) {
+    if (isBackgroundSandboxStopping(project)) {
+      return backgroundSandboxStoppingResult(project);
+    }
     const credit = readBackgroundCreditReservation(project);
     if (
       credit.creditBudgetExpiresAt > 0 &&
@@ -667,7 +716,7 @@ export async function resolveTerminalSandboxContext(params: {
   }
   const config: DaytonaConfig = {
     ...loadedConfig.config,
-    autoStopInterval: 0,
+    autoStopInterval: DAYTONA_WORKSPACE_SESSION_IDLE_AUTOSTOP_MINUTES,
   };
   const ready = await waitForDaytonaSandboxReady({
     config,
@@ -683,7 +732,7 @@ export async function resolveTerminalSandboxContext(params: {
   });
   if (!toolbox.ok) return toolbox;
   if (params.touchProjectBackground !== false) {
-    await params.ctx.runMutation(
+    const updatedProject = await params.ctx.runMutation(
       internal.workspaceTerminals.setProjectBackgroundSandboxInternal as any,
       {
         projectId: params.projectId,
@@ -692,6 +741,9 @@ export async function resolveTerminalSandboxContext(params: {
         providerSandboxLastSeenAt: Date.now(),
       },
     );
+    if (isBackgroundSandboxStopping(updatedProject)) {
+      return backgroundSandboxStoppingResult(updatedProject);
+    }
   }
   return {
     ok: true,
@@ -732,12 +784,21 @@ export async function releaseProjectBackgroundSandboxIfIdle(params: {
   if (String(project?.providerSandboxId ?? "").trim() !== params.providerSandboxId) {
     return;
   }
+  const activeRuntimeRun = (await params.ctx.runQuery(
+    internal.threads.hasActiveWorkspaceRuntimeRunForSandboxInternal as any,
+    {
+      providerSandboxId: params.providerSandboxId,
+    },
+  )) as { hasActive?: unknown } | null;
+  if (activeRuntimeRun?.hasActive === true) {
+    return;
+  }
 
   const loadedConfig = loadDaytonaConfig();
   if (!loadedConfig.ok) return;
   const config: DaytonaConfig = {
     ...loadedConfig.config,
-    autoStopInterval: 0,
+    autoStopInterval: DAYTONA_WORKSPACE_SESSION_IDLE_AUTOSTOP_MINUTES,
   };
 
   const stopped = await stopDaytonaSandbox({
@@ -844,6 +905,7 @@ export async function releaseProjectBackgroundSandboxIfIdle(params: {
       providerSandboxId: params.providerSandboxId,
       providerSandboxState: "error",
       providerSandboxLastSeenAt: Date.now(),
+      touchActivity: false,
     },
   );
 }

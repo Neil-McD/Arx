@@ -92,6 +92,25 @@ const DIAGNOSTIC_METADATA_ALLOWLIST: Record<string, readonly string[]> = {
   "auth.session_refresh_failed": ["recoveredWithStoredToken"],
   "access.operator_access_granted": ["role", "source"],
   "access.operator_access_denied": [],
+  "runtime.daytona_workspace_lifecycle.started": ["limit", "candidateCount"],
+  "runtime.daytona_workspace_lifecycle.candidate": [
+    "candidateIndex",
+    "reason",
+    "sandboxState",
+    "idleExpired",
+    "stopLeaseActive",
+    "leaseAcquired",
+    "providerSandboxPresent",
+  ],
+  "runtime.daytona_workspace_lifecycle.completed": [
+    "limit",
+    "candidateCount",
+    "scanned",
+    "released",
+    "skipped",
+    "activeRuns",
+    "failed",
+  ],
 };
 
 function cleanString(value: unknown): string | undefined {
