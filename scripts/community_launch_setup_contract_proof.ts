@@ -253,13 +253,18 @@ assert.doesNotMatch(
 );
 assert.match(
   setupModal,
-  /community-launch-media-grid[\s\S]*type="file"[\s\S]*accept="image\/\*"/,
-  "launch profile setup must use raw image file inputs instead of URL fields",
+  /create-community-banner[\s\S]*create-community-banner-media[\s\S]*create-community-avatar-row[\s\S]*create-community-avatar/,
+  "launch profile setup must reuse the canonical community branding preview structure",
+);
+assert.match(
+  setupModal,
+  /type="file"[\s\S]*accept="image\/\*"/,
+  "launch profile setup must use raw image file inputs",
 );
 assert.doesNotMatch(
   setupModal,
-  /Avatar URL|Banner URL/,
-  "launch profile setup must not expose resolved storage URLs as editable fields",
+  /Avatar URL|Banner URL|community-launch-media-grid|community-launch-avatar-preview|community-launch-banner-preview/,
+  "launch profile setup must not expose resolved storage URLs or custom branding preview classes",
 );
 assert.match(
   appShell,

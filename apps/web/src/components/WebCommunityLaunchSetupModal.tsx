@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type DragEvent, type FormEvent, type ReactNode } from "react";
 import {
   BookOpen,
   Bot,
@@ -222,6 +222,8 @@ export function WebCommunityLaunchSetupModal(
   const [profileAvatarFileName, setProfileAvatarFileName] = useState("");
   const [profileBannerFileName, setProfileBannerFileName] = useState("");
   const [processingProfileMedia, setProcessingProfileMedia] = useState<"avatar" | "banner" | null>(null);
+  const [profileAvatarDragOver, setProfileAvatarDragOver] = useState(false);
+  const [profileBannerDragOver, setProfileBannerDragOver] = useState(false);
   const [profileDraft, setProfileDraft] = useState<CommunityLaunchProfileSaveDraft>({
     name: "",
     slug: "",
@@ -267,6 +269,8 @@ export function WebCommunityLaunchSetupModal(
     setProfileAvatarFileName("");
     setProfileBannerFileName("");
     setProcessingProfileMedia(null);
+    setProfileAvatarDragOver(false);
+    setProfileBannerDragOver(false);
   }, [
     isOpen,
     community?.id,
@@ -323,6 +327,20 @@ export function WebCommunityLaunchSetupModal(
     } finally {
       setSavingStep(null);
     }
+  };
+
+  const handleProfileImageDrop = (
+    kind: "avatar" | "banner",
+    event: DragEvent<HTMLDivElement>,
+  ) => {
+    event.preventDefault();
+    if (kind === "avatar") {
+      setProfileAvatarDragOver(false);
+    } else {
+      setProfileBannerDragOver(false);
+    }
+    const file = event.dataTransfer.files?.[0] ?? null;
+    void readProfileImage(kind, file);
   };
 
   const handleSaveProfile = (event: FormEvent) => {
@@ -454,52 +472,17 @@ export function WebCommunityLaunchSetupModal(
               placeholder="A short line about who this community is for."
             />
           </label>
-          <div className="community-launch-media-grid">
-            <div className="community-launch-media-card">
-              <CommunityAvatar
-                className="community-launch-avatar-preview"
-                imageUrl={profileDraft.avatarUrl || null}
-                focusX={community.avatar_focus_x}
-                focusY={community.avatar_focus_y}
-                zoom={community.avatar_zoom}
-                name={profileDraft.name || community.name}
-                alt="Community avatar preview"
-              />
-              <div className="community-launch-media-copy">
-                <strong>Avatar</strong>
-                <span>{profileAvatarFileName || "Square image for rails and Discover."}</span>
-                <div className="community-launch-media-actions">
-                  <label className="community-launch-upload-button">
-                    {processingProfileMedia === "avatar" ? "Reading..." : "Upload"}
-                    <input
-                      type="file"
-                      accept="image/*"
-                      disabled={Boolean(processingProfileMedia)}
-                      onChange={(event) => {
-                        const file = event.target.files?.[0] ?? null;
-                        event.target.value = "";
-                        void readProfileImage("avatar", file);
-                      }}
-                    />
-                  </label>
-                  {profileDraft.avatarUrl ? (
-                    <button
-                      type="button"
-                      className="community-launch-media-remove"
-                      disabled={Boolean(processingProfileMedia)}
-                      onClick={() => {
-                        setProfileDraft((draft) => ({ ...draft, avatarUrl: "" }));
-                        setProfileAvatarFileName("");
-                      }}
-                    >
-                      Remove
-                    </button>
-                  ) : null}
-                </div>
-              </div>
-            </div>
-            <div className="community-launch-media-card banner">
-              <div className="community-launch-banner-preview">
+          <div className="create-community-branding community-launch-profile-branding">
+            <div
+              className={`create-community-banner${profileBannerDragOver ? " drag-over" : ""}`}
+              onDragOver={(event) => {
+                event.preventDefault();
+                setProfileBannerDragOver(true);
+              }}
+              onDragLeave={() => setProfileBannerDragOver(false)}
+              onDrop={(event) => handleProfileImageDrop("banner", event)}
+            >
+              <div className="create-community-banner-media">
                 {profileDraft.bannerUrl ? (
                   <img
                     src={profileDraft.bannerUrl}
@@ -512,40 +495,83 @@ export function WebCommunityLaunchSetupModal(
                     })}
                   />
                 ) : (
-                  <span>Banner</span>
+                  <div className="create-community-banner-placeholder">Banner preview</div>
                 )}
               </div>
-              <div className="community-launch-media-copy">
-                <strong>Banner</strong>
-                <span>{profileBannerFileName || "Wide image for the public surface."}</span>
-                <div className="community-launch-media-actions">
-                  <label className="community-launch-upload-button">
-                    {processingProfileMedia === "banner" ? "Reading..." : "Upload"}
-                    <input
-                      type="file"
-                      accept="image/*"
-                      disabled={Boolean(processingProfileMedia)}
-                      onChange={(event) => {
-                        const file = event.target.files?.[0] ?? null;
-                        event.target.value = "";
-                        void readProfileImage("banner", file);
-                      }}
-                    />
-                  </label>
-                  {profileDraft.bannerUrl ? (
-                    <button
-                      type="button"
-                      className="community-launch-media-remove"
-                      disabled={Boolean(processingProfileMedia)}
-                      onClick={() => {
-                        setProfileDraft((draft) => ({ ...draft, bannerUrl: "" }));
-                        setProfileBannerFileName("");
-                      }}
-                    >
-                      Remove
-                    </button>
-                  ) : null}
-                </div>
+              <div className="create-community-branding-actions">
+                <label className={`create-banner-btn${processingProfileMedia ? " disabled" : ""}`}>
+                  {processingProfileMedia === "banner" ? "Reading..." : "Upload banner"}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    disabled={Boolean(processingProfileMedia)}
+                    onChange={(event) => {
+                      const file = event.target.files?.[0] ?? null;
+                      event.target.value = "";
+                      void readProfileImage("banner", file);
+                    }}
+                  />
+                </label>
+                {profileDraft.bannerUrl ? (
+                  <button
+                    type="button"
+                    className="create-banner-remove"
+                    disabled={Boolean(processingProfileMedia)}
+                    onClick={() => {
+                      setProfileDraft((draft) => ({ ...draft, bannerUrl: "" }));
+                      setProfileBannerFileName("");
+                    }}
+                  >
+                    Remove
+                  </button>
+                ) : null}
+                {profileBannerFileName ? <span className="create-upload-status">{profileBannerFileName}</span> : null}
+              </div>
+            </div>
+            <div className="create-community-avatar-row">
+              <CommunityAvatar
+                className={`create-community-avatar${profileAvatarDragOver ? " drag-over" : ""}`}
+                imageUrl={profileDraft.avatarUrl || null}
+                focusX={community.avatar_focus_x}
+                focusY={community.avatar_focus_y}
+                zoom={community.avatar_zoom}
+                name={profileDraft.name || community.name}
+                alt="Community avatar preview"
+                onDragOver={(event) => {
+                  event.preventDefault();
+                  setProfileAvatarDragOver(true);
+                }}
+                onDragLeave={() => setProfileAvatarDragOver(false)}
+                onDrop={(event) => handleProfileImageDrop("avatar", event)}
+              />
+              <div className="create-community-avatar-actions">
+                <label className={`create-avatar-btn${processingProfileMedia ? " disabled" : ""}`}>
+                  {processingProfileMedia === "avatar" ? "Reading..." : "Upload avatar"}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    disabled={Boolean(processingProfileMedia)}
+                    onChange={(event) => {
+                      const file = event.target.files?.[0] ?? null;
+                      event.target.value = "";
+                      void readProfileImage("avatar", file);
+                    }}
+                  />
+                </label>
+                {profileDraft.avatarUrl ? (
+                  <button
+                    type="button"
+                    className="create-avatar-remove"
+                    disabled={Boolean(processingProfileMedia)}
+                    onClick={() => {
+                      setProfileDraft((draft) => ({ ...draft, avatarUrl: "" }));
+                      setProfileAvatarFileName("");
+                    }}
+                  >
+                    Remove
+                  </button>
+                ) : null}
+                {profileAvatarFileName ? <span className="create-upload-status">{profileAvatarFileName}</span> : null}
               </div>
             </div>
           </div>
