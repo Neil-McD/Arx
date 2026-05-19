@@ -3373,9 +3373,15 @@ body {
   background: color-mix(in srgb, var(--bg-page) 38%, transparent);
 }
 
-.community-launch-starter-panel > div:first-child {
+.community-launch-starter-panel summary {
   display: grid;
   gap: 3px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.community-launch-starter-panel summary::-webkit-details-marker {
+  display: none;
 }
 
 .community-launch-starter-panel strong {
@@ -3384,7 +3390,7 @@ body {
   line-height: 1.2;
 }
 
-.community-launch-starter-panel > div:first-child span {
+.community-launch-starter-panel summary span {
   color: var(--text-secondary);
   font-size: 12px;
   line-height: 1.35;
@@ -3393,6 +3399,7 @@ body {
 .community-launch-starter-list {
   display: grid;
   gap: 9px;
+  padding-top: 10px;
 }
 
 .community-launch-starter-list .community-launch-field textarea {

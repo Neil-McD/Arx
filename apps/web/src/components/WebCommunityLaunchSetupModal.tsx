@@ -642,11 +642,11 @@ export function WebCommunityLaunchSetupModal(
               placeholder="How should the agent help this community?"
             />
           </label>
-          <div className="community-launch-starter-panel">
-            <div>
+          <details className="community-launch-starter-panel">
+            <summary>
               <strong>Starter prompts</strong>
               <span>Optional quick questions members can tap.</span>
-            </div>
+            </summary>
             <div className="community-launch-starter-list">
               {agentDraft.starterPrompts.map((prompt, index) => (
                 <label className="community-launch-field" key={index}>
@@ -664,7 +664,7 @@ export function WebCommunityLaunchSetupModal(
                 </label>
               ))}
             </div>
-          </div>
+          </details>
           <div className="community-launch-step-actions">
             <button type="button" className="polynet-onboarding-back" onClick={() => onOpenStep("agent")}>
               Open agent
