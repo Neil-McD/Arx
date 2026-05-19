@@ -16,9 +16,16 @@ import {
   resolveCodexHarnessRoute,
 } from "../shared/codexHarnessRoute.ts";
 import {
+  CODEX_HARNESS_PROBE_EVENT_MARKER,
   CODEX_HARNESS_PROBE_RESULT_MARKER,
   buildCodexHarnessProbeScript,
 } from "../shared/codexHarnessProbeScript.ts";
+import {
+  createCodexHarnessProbeStreamEventIncrementalParser,
+  findCodexHarnessLogOverlapSuffixLength,
+  readCodexHarnessNextLogChunk,
+  readCodexHarnessProbeStreamEvents,
+} from "../shared/codexHarnessStreamEvents.ts";
 
 const rootDir = process.cwd();
 
@@ -443,6 +450,139 @@ function proveRuntimeTraceOnlyIntegration() {
   );
 }
 
+function proveCodexStreamEventParser() {
+  const assistantEvent =
+    CODEX_HARNESS_PROBE_EVENT_MARKER +
+    JSON.stringify({
+      sequence: 1,
+      elapsed_ms: 123,
+      type: "assistant_delta",
+      delta: "hello",
+      delta_chars: 5,
+    }) +
+    "\n";
+  const finalResult =
+    CODEX_HARNESS_PROBE_RESULT_MARKER +
+    JSON.stringify({ ok: true, executionFinalText: "hello" });
+  const batchEvents = readCodexHarnessProbeStreamEvents(
+    ["noise", assistantEvent.trimEnd(), finalResult].join("\n"),
+  );
+  assert.equal(batchEvents.length, 1, "batch parser should ignore non-event and final-result marker lines");
+  assert.equal(batchEvents[0]?.type, "assistant_delta");
+  assert.equal(batchEvents[0]?.delta, "hello");
+
+  const incremental = createCodexHarnessProbeStreamEventIncrementalParser();
+  assert.equal(
+    incremental.push(assistantEvent.slice(0, 28)).length,
+    0,
+    "incremental parser should hold split marker lines until JSON is complete",
+  );
+  const splitEvents = incremental.push(assistantEvent.slice(28));
+  assert.equal(splitEvents.length, 1, "incremental parser should emit once the split marker line completes");
+  assert.equal(splitEvents[0]?.delta, "hello");
+
+  const noNewlineEvents = incremental.push(
+    CODEX_HARNESS_PROBE_EVENT_MARKER +
+      JSON.stringify({
+        sequence: 2,
+        elapsed_ms: 250,
+        type: "assistant_delta",
+        delta: "done",
+        delta_chars: 4,
+      }),
+  );
+  assert.equal(
+    noNewlineEvents.length,
+    1,
+    "incremental parser should emit complete marker JSON even when Daytona trims trailing newlines",
+  );
+
+  incremental.push(CODEX_HARNESS_PROBE_EVENT_MARKER + '{"type":', { flush: true });
+  assert.equal(
+    incremental.getMalformedLineCount(),
+    1,
+    "incremental parser should count malformed marker lines without throwing",
+  );
+
+  const secondEvent =
+    CODEX_HARNESS_PROBE_EVENT_MARKER +
+    JSON.stringify({
+      sequence: 3,
+      elapsed_ms: 375,
+      type: "assistant_delta",
+      delta: "again",
+      delta_chars: 5,
+    }) +
+    "\n";
+  const cumulative = readCodexHarnessNextLogChunk({
+    previousLogText: assistantEvent,
+    nextLogText: assistantEvent + secondEvent,
+  });
+  assert.equal(cumulative.strategy, "cumulative");
+  assert.equal(
+    cumulative.chunk,
+    secondEvent,
+    "log chunk reader should only parse the suffix for cumulative Daytona logs",
+  );
+
+  const duplicate = readCodexHarnessNextLogChunk({
+    previousLogText: assistantEvent,
+    nextLogText: assistantEvent,
+  });
+  assert.equal(duplicate.strategy, "duplicate");
+  assert.equal(
+    duplicate.chunk,
+    "",
+    "log chunk reader should not reparse identical Daytona log polls",
+  );
+
+  const overlapPrefix = "x".repeat(96);
+  const previousSlidingLog = overlapPrefix + assistantEvent;
+  const nextSlidingLog = previousSlidingLog.slice(-96) + secondEvent;
+  assert.equal(
+    findCodexHarnessLogOverlapSuffixLength(previousSlidingLog, nextSlidingLog),
+    96,
+    "log overlap helper should find the shared suffix/prefix window",
+  );
+  const sliding = readCodexHarnessNextLogChunk({
+    previousLogText: previousSlidingLog,
+    nextLogText: nextSlidingLog,
+  });
+  assert.equal(sliding.strategy, "overlap");
+  assert.equal(
+    sliding.chunk,
+    secondEvent,
+    "log chunk reader should preserve new events from sliding Daytona log windows",
+  );
+
+  const sameLengthChanged = readCodexHarnessNextLogChunk({
+    previousLogText: "a".repeat(secondEvent.length),
+    nextLogText: secondEvent,
+  });
+  assert.equal(sameLengthChanged.strategy, "reset");
+  assert.equal(
+    sameLengthChanged.chunk,
+    secondEvent,
+    "same-length changed log windows should be reparsed instead of skipped by offset",
+  );
+
+  const resetParser = createCodexHarnessProbeStreamEventIncrementalParser();
+  const partialMarker = CODEX_HARNESS_PROBE_EVENT_MARKER + '{"stale":';
+  assert.equal(resetParser.push(partialMarker).length, 0);
+  const resetChunk = readCodexHarnessNextLogChunk({
+    previousLogText: partialMarker,
+    nextLogText: secondEvent,
+  });
+  assert.equal(resetChunk.strategy, "reset");
+  resetParser.push("", { flush: true });
+  const resetEvents = resetParser.push(resetChunk.chunk);
+  assert.equal(
+    resetEvents[0]?.sequence,
+    3,
+    "reset log windows should flush stale buffered marker fragments before parsing the new window",
+  );
+}
+
 function proveDaytonaProbeBridge() {
   const httpDaytona = readText("convex/httpDaytona.ts");
   const codexBridge = readText("convex/codexHarnessBridge.ts");
@@ -453,6 +593,11 @@ function proveDaytonaProbeBridge() {
     CODEX_HARNESS_PROBE_RESULT_MARKER,
     "POLYNET_CODEX_HARNESS_PROBE_RESULT ",
     "probe marker should stay stable for parsing Daytona command output",
+  );
+  assert.equal(
+    CODEX_HARNESS_PROBE_EVENT_MARKER,
+    "POLYNET_CODEX_HARNESS_EVENT ",
+    "probe event marker should stay stable for parsing Codex app-server stream events",
   );
   assert.match(
     httpDaytona,
@@ -489,6 +634,34 @@ function proveDaytonaProbeBridge() {
     generatedProbeScript,
     /"app-server",\s*"--listen",\s*"stdio:\/\/"/,
     "probe should start Codex app-server over stdio",
+  );
+  assert.match(
+    generatedProbeScript,
+    /process\.stdout\.write\(EVENT_MARKER \+ JSON\.stringify\(payload\) \+ "\\n"\)/,
+    "probe should flush machine-readable Codex harness events while the app-server turn runs",
+  );
+  assert.match(
+    generatedProbeScript,
+    /type:\s*"assistant_delta"[\s\S]*?delta,\s*[\r\n]/,
+    "probe should include raw assistant deltas in live stream events for future browser SSE relay",
+  );
+  assert.doesNotMatch(
+    sliceBetween(
+      generatedProbeScript,
+      'if (method === "item/commandExecution/outputDelta")',
+      'if (method === "item/fileChange/outputDelta")',
+    ),
+    /[\r\n]\s*delta,\s*[\r\n]/,
+    "bash output stream events must not include raw native tool output deltas",
+  );
+  assert.doesNotMatch(
+    sliceBetween(
+      generatedProbeScript,
+      'if (method === "item/agentReasoning/delta")',
+      'if (method === "turn/completed")',
+    ),
+    /[\r\n]\s*delta,\s*[\r\n]/,
+    "reasoning stream events must not include raw reasoning text",
   );
   assert.match(
     generatedProbeScript,
@@ -887,6 +1060,8 @@ function proveDaytonaProbeBridge() {
     "codex_harness_thread_started",
     "codex_harness_event_adapter_summary",
     "codex_harness_event_adapter_event",
+    "codex_harness_stream_event_summary",
+    "codex_harness_stream_event",
     "codex_harness_tool_call_started",
     "codex_harness_tool_call_completed",
     "codex_harness_tool_call_readiness",
@@ -918,7 +1093,116 @@ function proveDaytonaProbeBridge() {
   assert.match(
     codexBridge,
     /executeDaytonaCommand/,
-    "Daytona bridge should run the probe inside the existing workspace session",
+    "Daytona bridge should keep the blocking Daytona command primitive available for cleanup and probe canaries",
+  );
+  assert.match(
+    codexBridge,
+    /executeCodexHarnessStreamingCommand/,
+    "Codex primary turns should use the streaming Daytona process-session command runner",
+  );
+  for (const helper of [
+    "createDaytonaProcessSession",
+    "executeDaytonaProcessSessionCommand",
+    "getDaytonaProcessSessionCommandLogs",
+    "getDaytonaProcessSession",
+    "findDaytonaProcessSessionCommand",
+    "readDaytonaProcessSessionCommandExitCode",
+    "deleteDaytonaProcessSession",
+  ]) {
+    assert.match(
+      codexBridge,
+      new RegExp(helper),
+      `Codex streaming runner should use ${helper}`,
+    );
+  }
+  assert.match(
+    codexBridge,
+    /runAsync:\s*true/,
+    "Codex streaming runner should start the Daytona command asynchronously",
+  );
+  assert.match(
+    codexBridge,
+    /createCodexHarnessProbeStreamEventIncrementalParser/,
+    "Codex streaming runner should parse marker lines incrementally",
+  );
+  assert.match(
+    codexBridge,
+    /readCodexHarnessNextLogChunk/,
+    "Codex streaming runner should use the shared overlap-aware log chunk reader",
+  );
+  assert.doesNotMatch(
+    codexBridge,
+    /stdoutOffset/,
+    "Codex streaming runner should not rely on a single monotonically increasing log offset",
+  );
+  assert.match(
+    codexBridge,
+    /strategy === "reset"[\s\S]*flushBufferedStreamEvents/,
+    "Codex streaming runner should flush stale buffered fragments when Daytona resets the log window",
+  );
+  assert.match(
+    codexBridge,
+    /seenStreamEventKeys\.has\(eventKey\)[\s\S]*continue[\s\S]*params\.onStreamEvent\?\.\(event\)/,
+    "Codex streaming runner should dedupe stream events before relaying live deltas",
+  );
+  assert.match(
+    codexBridge,
+    /onStreamEvent/,
+    "Codex streaming runner should expose parsed events through a callback before final result parsing",
+  );
+  assert.match(
+    codexBridge,
+    /emitLiveAssistantDelta\?: \(delta: string\) => Promise<boolean> \| boolean/,
+    "Codex harness should accept the runtime live assistant-delta emitter as an optional bridge",
+  );
+  assert.match(
+    codexBridge,
+    /turn\.stream === true[\s\S]*readStringField\(event,\s*"type"\) === "assistant_delta"[\s\S]*params\.emitLiveAssistantDelta\(delta\)/,
+    "Codex harness should relay only assistant deltas to the live browser stream",
+  );
+  assert.match(
+    codexBridge,
+    /live_stream_delta_events[\s\S]*live_stream_delta_chars[\s\S]*live_stream_delta_emit_failures/,
+    "Codex primary evidence should count live stream relay successes and failures without raw delta text",
+  );
+  assert.match(
+    codexBridge,
+    /flushBufferedStreamEvents/,
+    "Codex streaming runner should flush parser state without replaying saved stdout tail",
+  );
+  assert.doesNotMatch(
+    codexBridge,
+    /processStdout\(stdoutText,\s*true\)/,
+    "Codex streaming runner should not replay saved stdout tail while flushing buffered parser state",
+  );
+  assert.match(
+    codexBridge,
+    /streaming_transport:\s*"daytona_process_session_log_polling_v0"/,
+    "Codex primary completion evidence should identify the process-session log polling transport",
+  );
+  assert.match(
+    codexBridge,
+    /readCodexHarnessProbeStreamEvents/,
+    "Daytona bridge should parse the probe event marker stream separately from the final result marker",
+  );
+  assert.match(
+    codexBridge,
+    /raw_delta_storage_policy:\s*"assistant_delta_live_only_audit_metadata_only"/,
+    "Codex stream audit should document that raw assistant deltas are for live relay, not durable event storage",
+  );
+  assert.match(
+    codexBridge,
+    /raw_delta_present/,
+    "Codex stream audit should record raw-delta presence without storing the raw delta itself",
+  );
+  assert.doesNotMatch(
+    sliceBetween(
+      codexBridge,
+      "function sanitizeCodexHarnessStreamEventForAudit",
+      "async function emitCodexHarnessStreamEventAudit",
+    ),
+    /delta:\s*rawDelta|delta:\s*event\.delta|\.\.\.event/,
+    "sanitized Codex stream events must not spread or persist raw assistant delta text",
   );
   assert.match(
     codexBridge,
@@ -1016,5 +1300,6 @@ proveRouteSelection();
 proveReadinessClassification();
 proveAuthBridgeShape();
 proveRuntimeTraceOnlyIntegration();
+proveCodexStreamEventParser();
 proveDaytonaProbeBridge();
 console.log("PASS: Codex harness bridge keeps current runtime active, probes Daytona safely, and scopes ChatGPT auth");

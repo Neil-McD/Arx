@@ -175,6 +175,8 @@ For the Codex primary visible-turn canary, staging exposes the one-turn Codex pr
 
 The staging web bundle must send the explicit `codex_primary_canary` request flag for Codex primary visible-turn canaries. Runtime no longer infers a canary turn from non-streaming staging requests.
 
+For Codex primary token streaming, use `npm run check:staging-codex-primary-streaming-canary` after staging has `POLYNET_CODEX_HARNESS_PRIMARY_STREAMING_ENABLED=true`. The canary runs a real streaming runtime turn through the staging maintenance gate, parses SSE `delta`/`done` evidence, and verifies Codex stream summary events without returning raw assistant text.
+
 ## Anti-Patterns
 
 Avoid these patterns:

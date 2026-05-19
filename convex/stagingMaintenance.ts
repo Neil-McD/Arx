@@ -27,6 +27,8 @@ const STAGING_MCP_CANARY_NAMESPACED_TOOL_NAME =
 const STAGING_MCP_CANARY_RUNTIME_TOOL_NAME =
   `me__${STAGING_MCP_CANARY_NAMESPACED_TOOL_NAME}`;
 const DEFAULT_CODEX_MCP_CANARY_THREAD_KEY = "staging-codex-mounted-mcp-canary-v2";
+const DEFAULT_CODEX_STREAMING_CANARY_THREAD_KEY =
+  "staging-codex-primary-streaming-canary-v1";
 
 const expectedCommunityArg = v.object({
   slug: v.string(),
@@ -83,6 +85,8 @@ type CodexHarnessOperabilityFingerprint = {
 const CODEX_THREAD_BINDING_EVIDENCE_EVENT_TYPES = new Set([
   "runtime_agent_harness_selected",
   "runtime_agent_harness_prepared",
+  "runtime_agent_harness_fallback_started",
+  "runtime_agent_harness_fallback_skipped",
   "codex_mcp_projection_resolved",
   "codex_thread_binding_resolved",
   "codex_thread_binding_lock_acquired",
@@ -96,6 +100,8 @@ const CODEX_THREAD_BINDING_EVIDENCE_EVENT_TYPES = new Set([
   "codex_mcp_projection_fingerprint_changed",
   "codex_harness_primary_started",
   "codex_harness_primary_completed",
+  "codex_harness_stream_event_summary",
+  "codex_harness_live_stream_delta_failed",
   "codex_harness_primary_dynamic_tool_event",
   "codex_harness_dynamic_tool_bridge_call_started",
   "codex_harness_dynamic_tool_bridge_call_completed",
@@ -120,6 +126,9 @@ const CODEX_THREAD_BINDING_COMPACT_EVIDENCE_EVENT_TYPES = new Set([
   "codex_thread_binding_persist_failed",
   "codex_thread_binding_persist_skipped",
   "codex_harness_primary_completed",
+  "codex_harness_stream_event_summary",
+  "runtime_agent_harness_fallback_started",
+  "runtime_agent_harness_fallback_skipped",
   "codex_harness_primary_dynamic_tool_event",
 ]);
 
@@ -213,12 +222,26 @@ function summarizeCodexThreadBindingEvidencePayload(args: {
       "run_id",
       "selected_harness_id",
       "candidate_harness_id",
-      "fallback_harness_id",
-      "execution_placement",
-      "selection_reason",
+	      "fallback_harness_id",
+	      "execution_placement",
+	      "selection_reason",
       "codex_primary_enabled",
+      "codex_primary_streaming_enabled",
       "codex_route_selected",
       "stream",
+    ]);
+  }
+  if (
+    args.eventType === "runtime_agent_harness_fallback_started" ||
+    args.eventType === "runtime_agent_harness_fallback_skipped"
+  ) {
+    return pickPayloadFields(args.payload, [
+      ...common,
+      "failed_harness_id",
+      "fallback_harness_id",
+      "skipped_reason",
+      "failed_code",
+      "failed_message",
     ]);
   }
   if (args.eventType === "codex_mcp_projection_resolved") {
@@ -358,14 +381,49 @@ function summarizeCodexThreadBindingEvidencePayload(args: {
       "sandbox_policy_writable_root_count",
       "sandbox_policy_exclude_tmpdir_env_var",
       "sandbox_policy_exclude_slash_tmp",
-      "dynamic_tool_bridge_configured",
-      "dynamic_tool_request_count",
-      "dynamic_tool_response_count",
+	      "dynamic_tool_bridge_configured",
+	      "dynamic_tool_request_count",
+	      "dynamic_tool_response_count",
       "dynamic_tool_failure_count",
+      "streaming_transport",
+      "stream_event_count",
+      "live_stream_delta_events",
+      "live_stream_delta_chars",
+      "live_stream_delta_emit_failures",
+      "first_stream_event_latency_ms",
+      "last_stream_event_latency_ms",
+      "log_poll_count",
+      "malformed_stream_event_line_count",
       "output_sha256",
       "stdout_chars",
       "stage",
       "exit_code",
+    ]);
+  }
+  if (args.eventType === "codex_harness_stream_event_summary") {
+    return pickPayloadFields(args.payload, [
+      ...common,
+      "source",
+      "captured_stream_events",
+      "counts_by_type",
+      "assistant_delta_events",
+      "assistant_delta_chars",
+      "first_stream_event_latency_ms",
+      "last_stream_event_latency_ms",
+      "first_assistant_delta_latency_ms",
+      "reasoning_delta_events",
+      "tool_output_delta_events",
+      "tool_output_delta_chars",
+      "raw_delta_storage_policy",
+    ]);
+  }
+  if (args.eventType === "codex_harness_live_stream_delta_failed") {
+    return pickPayloadFields(args.payload, [
+      ...common,
+      "delta_chars",
+      "attempted_delta_events",
+      "emitted_delta_events",
+      "emitted_delta_chars",
     ]);
   }
   if (
@@ -450,14 +508,21 @@ const stagingSseResponse: SseResponseFn = (_req, source) => {
   const encoder = new TextEncoder();
   const body = new ReadableStream<Uint8Array>({
     start(controller) {
+      let closed = false;
       const write = (event: string, data: Record<string, unknown>) => {
+        if (closed) return;
         controller.enqueue(
           encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`),
         );
       };
+      const close = () => {
+        if (closed) return;
+        closed = true;
+        controller.close();
+      };
       if (Array.isArray(source)) {
         for (const entry of source) write(entry.event, entry.data);
-        controller.close();
+        close();
         return;
       }
       const writer = {
@@ -465,15 +530,19 @@ const stagingSseResponse: SseResponseFn = (_req, source) => {
           write(entry.event, entry.data);
         },
         close() {
-          controller.close();
+          close();
         },
       };
-      Promise.resolve(source(writer)).catch((error) => {
-        write("error", {
-          error: error instanceof Error ? error.message : String(error ?? "Stream failed."),
+      Promise.resolve(source(writer))
+        .then(() => {
+          close();
+        })
+        .catch((error) => {
+          write("error", {
+            error: error instanceof Error ? error.message : String(error ?? "Stream failed."),
+          });
+          close();
         });
-        controller.close();
-      });
     },
   });
   return new Response(body, {
@@ -484,6 +553,82 @@ const stagingSseResponse: SseResponseFn = (_req, source) => {
     },
   });
 };
+
+function parseStagingRuntimeSseEvents(responseText: string): Array<{
+  event: string;
+  data: Record<string, unknown>;
+}> {
+  const events: Array<{ event: string; data: Record<string, unknown> }> = [];
+  for (const block of String(responseText ?? "").split(/\n\n+/)) {
+    const lines = block.split(/\r?\n/).filter(Boolean);
+    if (lines.length === 0) continue;
+    let eventName = "message";
+    const dataLines: string[] = [];
+    for (const line of lines) {
+      if (line.startsWith("event:")) {
+        eventName = line.slice("event:".length).trim() || eventName;
+      } else if (line.startsWith("data:")) {
+        dataLines.push(line.slice("data:".length).trim());
+      }
+    }
+    if (dataLines.length === 0) continue;
+    const rawData = dataLines.join("\n");
+    let parsed: unknown = null;
+    try {
+      parsed = JSON.parse(rawData);
+    } catch {
+      parsed = null;
+    }
+    events.push({
+      event: eventName,
+      data:
+        parsed && typeof parsed === "object" && !Array.isArray(parsed)
+          ? (parsed as Record<string, unknown>)
+          : {},
+    });
+  }
+  return events;
+}
+
+function summarizeStagingRuntimeSseResponse(responseText: string): Record<string, unknown> {
+  const events = parseStagingRuntimeSseEvents(responseText);
+  const eventCounts: Record<string, number> = {};
+  let deltaEventCount = 0;
+  let deltaChars = 0;
+  let runtimeEventCount = 0;
+  let doneEventCount = 0;
+  let errorEventCount = 0;
+  let doneFullContentChars: number | null = null;
+  const runtimeEventTypes = new Set<string>();
+  for (const entry of events) {
+    eventCounts[entry.event] = (eventCounts[entry.event] ?? 0) + 1;
+    if (entry.event === "delta") {
+      deltaEventCount += 1;
+      deltaChars += String(entry.data.delta ?? "").length;
+    } else if (entry.event === "runtime_event") {
+      runtimeEventCount += 1;
+      const eventType = String(entry.data.eventType ?? entry.data.event_type ?? "").trim();
+      if (eventType) runtimeEventTypes.add(eventType);
+    } else if (entry.event === "done") {
+      doneEventCount += 1;
+      doneFullContentChars = String(entry.data.full_content ?? "").length;
+    } else if (entry.event === "error") {
+      errorEventCount += 1;
+    }
+  }
+  return {
+    eventCount: events.length,
+    eventCounts,
+    eventTypes: events.map((entry) => entry.event),
+    deltaEventCount,
+    deltaChars,
+    runtimeEventCount,
+    runtimeEventTypes: [...runtimeEventTypes].sort(),
+    doneEventCount,
+    doneFullContentChars,
+    errorEventCount,
+  };
+}
 
 function canarySnapshotTools() {
   return [
@@ -965,6 +1110,7 @@ async function buildFingerprint(args: {
       harnessEnabled: readEnv("POLYNET_CODEX_HARNESS_ENABLED").toLowerCase() === "true",
       executorEnabled: readEnv("POLYNET_CODEX_HARNESS_EXECUTOR_ENABLED").toLowerCase() === "true",
       primaryEnabled: readEnv("POLYNET_CODEX_HARNESS_PRIMARY_ENABLED").toLowerCase() === "true",
+      primaryStreamingEnabled: readEnv("POLYNET_CODEX_HARNESS_PRIMARY_STREAMING_ENABLED").toLowerCase() === "true",
       probeMode: readEnv("POLYNET_CODEX_HARNESS_PROBE_MODE") || null,
       dynamicToolBridgeUrlConfigured: Boolean(readCodexDynamicToolBridgeUrl()),
       daytonaApiKeyPresent: Boolean(readEnv("DAYTONA_API_KEY")),
@@ -1408,6 +1554,117 @@ export const runCodexMountedMcpCanaryTurn = action({
             : null,
         code: responseRecord.code ?? responseRecord.error ?? null,
         message: responseRecord.message ?? null,
+      },
+    };
+  },
+});
+
+export const runCodexPrimaryStreamingCanaryTurn = action({
+  args: {
+    maintenanceToken: v.string(),
+    ownerId: v.optional(v.string()),
+    ownerEmail: v.optional(v.string()),
+    ownerAuthSubject: v.optional(v.string()),
+    projectName: v.optional(v.string()),
+    threadKey: v.optional(v.string()),
+    runId: v.optional(v.string()),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args): Promise<Record<string, unknown>> => {
+    assertStagingMaintenanceAllowed({ maintenanceToken: args.maintenanceToken });
+    const nowMs = Math.floor(args.nowMs ?? Date.now());
+    const setup = (await ctx.runMutation(
+      (api as any).stagingMaintenance.ensureStagingMountedMcpCanary,
+      {
+        maintenanceToken: args.maintenanceToken,
+        ownerId: args.ownerId ?? undefined,
+        ownerEmail: args.ownerEmail ?? undefined,
+        ownerAuthSubject: args.ownerAuthSubject ?? undefined,
+        projectName: args.projectName ?? undefined,
+        threadKey:
+          normalizeText(args.threadKey) ||
+          DEFAULT_CODEX_STREAMING_CANARY_THREAD_KEY,
+        nowMs,
+      },
+    )) as Record<string, any>;
+    if (setup?.ok !== true) throw new Error("staging_streaming_canary_setup_failed");
+    const ownerId = String(setup.owner?.id ?? "").trim();
+    const ownerAuthSubject = normalizeText(setup.ownerAuthSubject);
+    const threadKey = normalizeText(setup.thread?.threadKey);
+    if (!ownerId || !ownerAuthSubject || !threadKey) {
+      throw new Error("staging_streaming_canary_setup_incomplete");
+    }
+
+    const runId =
+      normalizeText(args.runId) ||
+      `agent_web:staging-codex-streaming-canary:${crypto.randomUUID()}`;
+    const prompt = [
+      "Run the staging Codex primary streaming canary.",
+      "Use the PolyNet read-only dynamic tools requested by the Codex primary canary before answering.",
+      "Then answer with one short sentence containing POLYNET_CODEX_STREAMING_OK.",
+    ].join(" ");
+    const req = new Request("https://polynet-staging.vercel.app/runtime/runtime_turn", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        thread_id: threadKey,
+        model_id: "gpt-5.5",
+        surface: "web",
+        requested_agentic_tools: true,
+        requested_funding_source: "user_chatgpt",
+        stream: true,
+        codex_primary_canary: true,
+        idempotency_key: runId,
+        user_message_key: `user:${threadKey}:${runId}`,
+        message: {
+          text: prompt,
+        },
+        max_tokens: 900,
+      }),
+    });
+    const requireAuthenticatedActor: RequireAuthenticatedActor = async () => ({
+      ok: true,
+      actor: {
+        userId: ownerId,
+        dbUserId: ownerId as any,
+        authSubject: ownerAuthSubject,
+        email: String(setup.owner?.normalizedEmail ?? "") || null,
+        displayName: null,
+        avatarUrl: null,
+      },
+    });
+    const startedAt = Date.now();
+    const response = await handleRuntimeTurnRequest({
+      ctx,
+      req,
+      jsonResponse: stagingJsonResponse as JsonResponseFn,
+      sseResponse: stagingSseResponse,
+      requireAuthenticatedActor,
+    });
+    const responseText = await response.text();
+    const sseSummary = summarizeStagingRuntimeSseResponse(responseText);
+    const deltaEventCount = Number(sseSummary.deltaEventCount ?? 0);
+    const doneEventCount = Number(sseSummary.doneEventCount ?? 0);
+    const errorEventCount = Number(sseSummary.errorEventCount ?? 0);
+    return {
+      ok:
+        response.status >= 200 &&
+        response.status < 300 &&
+        deltaEventCount > 0 &&
+        doneEventCount > 0 &&
+        errorEventCount === 0,
+      status: response.status,
+      latencyMs: Date.now() - startedAt,
+      runId,
+      threadKey,
+      threadId: setup.thread?.id ?? null,
+      project: setup.project ?? null,
+      owner: setup.owner ?? null,
+      response: {
+        sse: sseSummary,
+        responseTextChars: responseText.length,
       },
     };
   },

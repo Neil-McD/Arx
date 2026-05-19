@@ -1060,6 +1060,11 @@ export async function handleRuntimeTurnRequest(args: {
           let assistantMessageId: string | null = null;
           let assistantMessageKey: string | null = null;
           let assistantMessageSeq: number | null = null;
+          let codexLiveStreamDeltaAttemptedEvents = 0;
+          let codexLiveStreamDeltaAttemptedChars = 0;
+          let codexLiveStreamDeltaEvents = 0;
+          let codexLiveStreamDeltaChars = 0;
+          let codexLiveStreamDeltaEmitFailureRecorded = false;
 
           const emitDelta = (delta: string) => {
             if (!delta) return;
@@ -1085,6 +1090,44 @@ export async function handleRuntimeTurnRequest(args: {
               event: "runtime_event",
               data: mapped,
             });
+          };
+          const emitCodexLiveAssistantDelta = async (
+            delta: string,
+          ): Promise<boolean> => {
+            const text = String(delta ?? "");
+            if (!text) return false;
+            codexLiveStreamDeltaAttemptedEvents += 1;
+            codexLiveStreamDeltaAttemptedChars += text.length;
+            try {
+              emitDelta(text);
+              codexLiveStreamDeltaEvents += 1;
+              codexLiveStreamDeltaChars += text.length;
+              return true;
+            } catch (error) {
+              if (!codexLiveStreamDeltaEmitFailureRecorded) {
+                codexLiveStreamDeltaEmitFailureRecorded = true;
+                const message =
+                  error instanceof Error ? error.message : String(error ?? "");
+                try {
+                  await appendRunEvent({
+                    eventType: "codex_harness_live_stream_delta_failed",
+                    eventKey: `${runId}:codex_harness_live_stream_delta_failed:1`,
+                    payload: {
+                      run_id: runId,
+                      code: "live_delta_emit_failed",
+                      message: message || "Failed to emit Codex live delta.",
+                      delta_chars: text.length,
+                      attempted_delta_events: codexLiveStreamDeltaAttemptedEvents,
+                      emitted_delta_events: codexLiveStreamDeltaEvents,
+                      emitted_delta_chars: codexLiveStreamDeltaChars,
+                    },
+                  });
+                } catch {
+                  // Best-effort diagnostic only; final assistant persistence remains authoritative.
+                }
+              }
+              return false;
+            }
           };
           writer.send({
             event: "start",
@@ -1128,6 +1171,7 @@ export async function handleRuntimeTurnRequest(args: {
               apiKeyOverride: providerApiKeyOverride,
               appendRunEvent: streamAppendRunEvent,
               touchRunHeartbeat: touchRunHeartbeatBestEffort,
+              emitLiveAssistantDelta: emitCodexLiveAssistantDelta,
             });
           } catch (error) {
             if (isRuntimeRunCancelledError(error)) {
@@ -1283,10 +1327,18 @@ export async function handleRuntimeTurnRequest(args: {
           runtimeTurnStage = "assistant_emit";
           streamedPromptTokens = loopResult.promptTokens;
           streamedCompletionTokens = loopResult.completionTokens;
-          emitBufferedAssistantText({
-            content: loopResult.assistantText,
-            emitDelta,
-          });
+          if (
+            loopResult.runtimeHarnessId === "codex_app_server" &&
+            codexLiveStreamDeltaAttemptedEvents > 0 &&
+            codexLiveStreamDeltaAttemptedChars > 0
+          ) {
+            streamedContent = loopResult.assistantText;
+          } else {
+            emitBufferedAssistantText({
+              content: loopResult.assistantText,
+              emitDelta,
+            });
+          }
 
           runtimeTurnStage = "assistant_persist";
           if (persistVisibleAssistantMessage) {

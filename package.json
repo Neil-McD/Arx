@@ -108,6 +108,7 @@
     "check:staging-codex-harness-operability": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/staging_codex_harness_operability.ts",
     "check:staging-codex-thread-binding-evidence": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/staging_codex_thread_binding_evidence.ts --assert-resume",
     "check:staging-codex-mounted-mcp-canary": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/staging_codex_mounted_mcp_canary.ts",
+    "check:staging-codex-primary-streaming-canary": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/staging_codex_primary_streaming_canary.ts",
     "check:staging-daytona-workspace-lifecycle-canary": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/staging_daytona_workspace_lifecycle_canary.ts",
     "check:staging-daytona-workspace-lifecycle-release-canary": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/staging_daytona_workspace_lifecycle_release_canary.ts",
     "check:staging-maintenance-environment-guard": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/staging_maintenance_environment_guard_proof.ts",

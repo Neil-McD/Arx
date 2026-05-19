@@ -77,6 +77,7 @@ export type RuntimeAgentHarnessSelection = {
   candidateHarness: RuntimeAgentHarnessDescriptor | null;
   fallbackHarness: RuntimeAgentHarnessDescriptor | null;
   codexPrimaryEnabled: boolean;
+  codexPrimaryStreamingEnabled: boolean;
   codexRouteSelected: boolean;
   codexPrimaryAdapterAvailable: boolean;
   stream: boolean;
@@ -167,6 +168,7 @@ export function buildPreparedRuntimeAgentTurnEventPayload(
 
 export function resolveRuntimeAgentHarnessSelection(params: {
   codexPrimaryEnabled: boolean;
+  codexPrimaryStreamingEnabled?: boolean;
   codexRouteSelected: boolean;
   codexPrimaryAdapterAvailable: boolean;
   stream?: boolean;
@@ -174,12 +176,15 @@ export function resolveRuntimeAgentHarnessSelection(params: {
   const codexCandidate = CODEX_APP_SERVER_RUNTIME_AGENT_HARNESS;
   const nativeFallback = POLYNET_NATIVE_RUNTIME_AGENT_HARNESS;
   const stream = params.stream ?? false;
+  const codexPrimaryStreamingEnabled =
+    params.codexPrimaryStreamingEnabled ?? false;
   if (!params.codexPrimaryEnabled) {
     return {
       selectedHarness: nativeFallback,
       candidateHarness: null,
       fallbackHarness: null,
       codexPrimaryEnabled: false,
+      codexPrimaryStreamingEnabled,
       codexRouteSelected: params.codexRouteSelected,
       codexPrimaryAdapterAvailable: params.codexPrimaryAdapterAvailable,
       stream,
@@ -187,12 +192,13 @@ export function resolveRuntimeAgentHarnessSelection(params: {
       selectionPolicy: "codex_primary_flag_then_native_fallback",
     };
   }
-  if (stream) {
+  if (stream && !codexPrimaryStreamingEnabled) {
     return {
       selectedHarness: nativeFallback,
       candidateHarness: codexCandidate,
       fallbackHarness: nativeFallback,
       codexPrimaryEnabled: true,
+      codexPrimaryStreamingEnabled,
       codexRouteSelected: params.codexRouteSelected,
       codexPrimaryAdapterAvailable: params.codexPrimaryAdapterAvailable,
       stream,
@@ -206,6 +212,7 @@ export function resolveRuntimeAgentHarnessSelection(params: {
       candidateHarness: codexCandidate,
       fallbackHarness: nativeFallback,
       codexPrimaryEnabled: true,
+      codexPrimaryStreamingEnabled,
       codexRouteSelected: false,
       codexPrimaryAdapterAvailable: params.codexPrimaryAdapterAvailable,
       stream,
@@ -219,6 +226,7 @@ export function resolveRuntimeAgentHarnessSelection(params: {
       candidateHarness: codexCandidate,
       fallbackHarness: nativeFallback,
       codexPrimaryEnabled: true,
+      codexPrimaryStreamingEnabled,
       codexRouteSelected: true,
       codexPrimaryAdapterAvailable: false,
       stream,
@@ -231,6 +239,7 @@ export function resolveRuntimeAgentHarnessSelection(params: {
     candidateHarness: codexCandidate,
     fallbackHarness: nativeFallback,
     codexPrimaryEnabled: true,
+    codexPrimaryStreamingEnabled,
     codexRouteSelected: true,
     codexPrimaryAdapterAvailable: true,
     stream,
@@ -255,6 +264,8 @@ export function buildRuntimeAgentHarnessSelectedEventPayload(params: {
     candidate_execution_placement:
       params.selection.candidateHarness?.executionPlacement ?? null,
     codex_primary_enabled: params.selection.codexPrimaryEnabled,
+    codex_primary_streaming_enabled:
+      params.selection.codexPrimaryStreamingEnabled,
     codex_route_selected: params.selection.codexRouteSelected,
     codex_primary_adapter_available:
       params.selection.codexPrimaryAdapterAvailable,

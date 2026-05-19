@@ -2,6 +2,8 @@ export const CODEX_HARNESS_EXPERIMENT_ENV = "POLYNET_CODEX_HARNESS_ENABLED";
 export const CODEX_HARNESS_PROBE_MODE_ENV = "POLYNET_CODEX_HARNESS_PROBE_MODE";
 export const CODEX_HARNESS_EXECUTOR_ENV = "POLYNET_CODEX_HARNESS_EXECUTOR_ENABLED";
 export const CODEX_HARNESS_PRIMARY_ENV = "POLYNET_CODEX_HARNESS_PRIMARY_ENABLED";
+export const CODEX_HARNESS_PRIMARY_STREAMING_ENV =
+  "POLYNET_CODEX_HARNESS_PRIMARY_STREAMING_ENABLED";
 
 type RuntimeExecutionMode = "agentic" | "chat";
 type RuntimeInferenceSource = "free" | "platform" | "chatgpt" | "user_key";
@@ -104,6 +106,15 @@ export function isCodexHarnessPrimaryEnabled(
 ): boolean {
   return isEnabledFlagValue(
     env[CODEX_HARNESS_PRIMARY_ENV] ?? readEnv(CODEX_HARNESS_PRIMARY_ENV),
+  );
+}
+
+export function isCodexHarnessPrimaryStreamingEnabled(
+  env: Record<string, unknown> = (globalThis as any)?.process?.env ?? {},
+): boolean {
+  return isEnabledFlagValue(
+    env[CODEX_HARNESS_PRIMARY_STREAMING_ENV] ??
+      readEnv(CODEX_HARNESS_PRIMARY_STREAMING_ENV),
   );
 }
 

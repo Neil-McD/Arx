@@ -136,6 +136,7 @@ import {
 import {
   isCodexHarnessExperimentEnabled,
   isCodexHarnessPrimaryEnabled,
+  isCodexHarnessPrimaryStreamingEnabled,
   resolveCodexHarnessProbeMode,
   resolveCodexHarnessRoute,
 } from "../shared/codexHarnessRoute.ts";
@@ -939,6 +940,7 @@ async function executeRetrievalAgentLoop(
     authSubject?: string | null;
     workspaceSession?: WorkspaceSandboxSession | null;
     codexPrimaryCanary?: boolean;
+    emitLiveAssistantDelta?: (delta: string) => Promise<boolean> | boolean;
     apiKeyOverride?: string | null;
     appendRunEvent: (params: {
       eventType: string;
@@ -1132,6 +1134,7 @@ async function executeRetrievalAgentLoop(
   }
   const runtimeHarnessSelection = resolveRuntimeAgentHarnessSelection({
     codexPrimaryEnabled: isCodexHarnessPrimaryEnabled(),
+    codexPrimaryStreamingEnabled: isCodexHarnessPrimaryStreamingEnabled(),
     codexRouteSelected: codexPrimaryRoute.selected,
     codexPrimaryAdapterAvailable: true,
     stream: params.stream ?? false,
@@ -2092,6 +2095,21 @@ async function executeRetrievalAgentLoop(
       },
       }),
     });
+    let codexLiveAssistantDeltaEmitted = false;
+    const emitCodexLiveAssistantDelta = async (delta: string): Promise<boolean> => {
+      const text = String(delta ?? "");
+      if (!text || !params.stream || !params.emitLiveAssistantDelta) return false;
+      try {
+        const emitted = await params.emitLiveAssistantDelta(text);
+        if (emitted === true) {
+          codexLiveAssistantDeltaEmitted = true;
+          return true;
+        }
+      } catch {
+        // Live stream transport is not product truth; final answer persistence remains authoritative.
+      }
+      return false;
+    };
     const codexRuntimeHarness = buildCodexAppServerRuntimeAgentHarness({
       ctx: params.ctx,
       userId: params.userId,
@@ -2101,6 +2119,7 @@ async function executeRetrievalAgentLoop(
       preparedTurn: preparedRuntimeTurn,
       executionSession,
       appendRunEvent: params.appendRunEvent,
+      emitLiveAssistantDelta: emitCodexLiveAssistantDelta,
     });
     const selectedRuntimeHarness =
       runtimeHarnessSelection.selectedHarness.id === "codex_app_server"
@@ -2115,25 +2134,45 @@ async function executeRetrievalAgentLoop(
       selectedRuntimeHarness.id === "codex_app_server" &&
       runtimeHarnessSelection.fallbackHarness?.id === "polynet_native"
     ) {
-      try {
-        await params.appendRunEvent({
-          eventType: "runtime_agent_harness_fallback_started",
-          eventKey: `${params.runId}:runtime_agent_harness_fallback_started:1`,
-          payload: {
-            run_id: params.runId,
-            failed_harness_id: selectedRuntimeHarness.id,
-            fallback_harness_id: nativeRuntimeHarness.id,
-            failed_code: loopResult.code,
-            failed_message: loopResult.message,
-          },
-        });
-      } catch {
-        // Best-effort runtime evidence only.
+      const failedCodexLoopResult = loopResult as RuntimeAgentLoopFailure;
+      if (codexLiveAssistantDeltaEmitted) {
+        try {
+          await params.appendRunEvent({
+            eventType: "runtime_agent_harness_fallback_skipped",
+            eventKey: `${params.runId}:runtime_agent_harness_fallback_skipped:1`,
+            payload: {
+              run_id: params.runId,
+              failed_harness_id: selectedRuntimeHarness.id,
+              fallback_harness_id: nativeRuntimeHarness.id,
+              skipped_reason: "visible_output_started",
+              failed_code: failedCodexLoopResult.code,
+              failed_message: failedCodexLoopResult.message,
+            },
+          });
+        } catch {
+          // Best-effort runtime evidence only.
+        }
+      } else {
+        try {
+          await params.appendRunEvent({
+            eventType: "runtime_agent_harness_fallback_started",
+            eventKey: `${params.runId}:runtime_agent_harness_fallback_started:1`,
+            payload: {
+              run_id: params.runId,
+              failed_harness_id: selectedRuntimeHarness.id,
+              fallback_harness_id: nativeRuntimeHarness.id,
+              failed_code: failedCodexLoopResult.code,
+              failed_message: failedCodexLoopResult.message,
+            },
+          });
+        } catch {
+          // Best-effort runtime evidence only.
+        }
+        loopResult = withRuntimeAgentLoopAttribution(
+          await nativeRuntimeHarness.execute(),
+          nativeRuntimeHarness,
+        );
       }
-      loopResult = withRuntimeAgentLoopAttribution(
-        await nativeRuntimeHarness.execute(),
-        nativeRuntimeHarness,
-      );
     }
     const loopFailure = loopResult.ok
       ? null
@@ -2280,6 +2319,7 @@ async function executeChatToolsAgentLoop(
     threadWorkingState?: ThreadWorkingStatePrompt | null;
     apiKeyOverride?: string | null;
     codexPrimaryCanary?: boolean;
+    emitLiveAssistantDelta?: (delta: string) => Promise<boolean> | boolean;
     appendRunEvent: (params: {
       eventType: string;
       eventKey?: string;

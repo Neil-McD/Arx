@@ -60,6 +60,7 @@ for (const field of [
   "latestShadowReadiness",
   "latestShadowComparison",
   "latestAdapterSummary",
+  "latestStreamSummary",
 ]) {
   assert.match(operatorTypes, new RegExp(`${field}:`), `Codex harness diagnostics missing ${field}`);
 }
@@ -87,6 +88,9 @@ for (const eventType of [
   "codex_harness_shadow_comparison",
   "codex_harness_event_adapter_summary",
   "codex_harness_event_adapter_event",
+  "codex_harness_stream_event_summary",
+  "codex_harness_stream_event",
+  "codex_harness_live_stream_delta_failed",
   "codex_harness_tool_call_started",
   "codex_harness_tool_call_completed",
   "codex_harness_tool_call_readiness",
@@ -104,19 +108,24 @@ assert.match(
   /function buildCodexHarnessDiagnostics\(runtimeEvents: any\[\]\)/,
   "operator intelligence should project Codex canary events through a bounded helper",
 );
-	assert.match(
-	  runtimeDiagnosticsBlock,
-	  /const codexHarness = buildCodexHarnessDiagnostics\(runtimeEvents\)[\s\S]*codexHarness,/,
-	  "runtime/tool diagnostics should return the Codex canary projection",
-	);
-	assert.match(
-	  sliceBetween(operatorIntelligence, "latestProbe:", "latestReadiness:"),
-	  /readPayloadString\(latestProbePayload,\s*"status"\)\s*===\s*"ok"/,
-	  "latest probe projection should treat status=ok as success",
-	);
-	assert.doesNotMatch(
-	  sliceBetween(operatorIntelligence, "function buildCodexHarnessDiagnostics", "async function readCriticalAuditEventsByType"),
-	  /accessToken|refreshToken|Authorization|OPENAI_API_KEY|CODEX_API_KEY|authFile|accountEmail|rawOutput|stdout|stderr/,
+assert.match(
+  operatorIntelligence,
+  /streamSummaryRows[\s\S]*latestStreamSummary/,
+  "operator intelligence should project Codex stream-event summaries without raw delta text",
+);
+assert.match(
+  runtimeDiagnosticsBlock,
+  /const codexHarness = buildCodexHarnessDiagnostics\(runtimeEvents\)[\s\S]*codexHarness,/,
+  "runtime/tool diagnostics should return the Codex canary projection",
+);
+assert.match(
+  sliceBetween(operatorIntelligence, "latestProbe:", "latestReadiness:"),
+  /readPayloadString\(latestProbePayload,\s*"status"\)\s*===\s*"ok"/,
+  "latest probe projection should treat status=ok as success",
+);
+assert.doesNotMatch(
+  sliceBetween(operatorIntelligence, "function buildCodexHarnessDiagnostics", "async function readCriticalAuditEventsByType"),
+  /accessToken|refreshToken|Authorization|OPENAI_API_KEY|CODEX_API_KEY|authFile|accountEmail|rawOutput|stdout|stderr/,
   "Codex canary operator projection must not expose tokens, auth files, or raw command output",
 );
 

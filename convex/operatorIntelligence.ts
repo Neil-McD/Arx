@@ -75,6 +75,9 @@ const CODEX_HARNESS_EVENT_TYPES = [
   "codex_harness_thread_started",
   "codex_harness_event_adapter_summary",
   "codex_harness_event_adapter_event",
+  "codex_harness_stream_event_summary",
+  "codex_harness_stream_event",
+  "codex_harness_live_stream_delta_failed",
   "codex_harness_tool_call_started",
   "codex_harness_tool_call_completed",
   "codex_harness_tool_call_readiness",
@@ -825,6 +828,8 @@ function buildCodexHarnessDiagnostics(runtimeEvents: any[]) {
   const shadowComparisonRows = runtimeEvents.filter((row: any) => row.eventType === "codex_harness_shadow_comparison");
   const adapterSummaryRows = runtimeEvents.filter((row: any) => row.eventType === "codex_harness_event_adapter_summary");
   const adapterEventRows = runtimeEvents.filter((row: any) => row.eventType === "codex_harness_event_adapter_event");
+  const streamSummaryRows = runtimeEvents.filter((row: any) => row.eventType === "codex_harness_stream_event_summary");
+  const streamEventRows = runtimeEvents.filter((row: any) => row.eventType === "codex_harness_stream_event");
   const selectedRouteRows = routeRows.filter((row: any) => readPayloadBoolean(readPayloadRecord(row), "selected"));
   const selectedExecutorRows = executorRows.filter((row: any) => readPayloadBoolean(readPayloadRecord(row), "selected"));
   const readyRows = readinessRows.filter((row: any) => {
@@ -853,6 +858,7 @@ function buildCodexHarnessDiagnostics(runtimeEvents: any[]) {
   const latestShadowReadinessRow = latestRuntimeEventByCreatedAt(shadowReadinessRows);
   const latestShadowComparisonRow = latestRuntimeEventByCreatedAt(shadowComparisonRows);
   const latestAdapterSummaryRow = latestRuntimeEventByCreatedAt(adapterSummaryRows);
+  const latestStreamSummaryRow = latestRuntimeEventByCreatedAt(streamSummaryRows);
   const latestRoutePayload = latestRouteRow ? readPayloadRecord(latestRouteRow) : null;
   const latestExecutorPayload = latestExecutorRow ? readPayloadRecord(latestExecutorRow) : null;
   const latestProbePayload = latestProbeRow ? readPayloadRecord(latestProbeRow) : null;
@@ -863,6 +869,7 @@ function buildCodexHarnessDiagnostics(runtimeEvents: any[]) {
   const latestShadowReadinessPayload = latestShadowReadinessRow ? readPayloadRecord(latestShadowReadinessRow) : null;
   const latestShadowComparisonPayload = latestShadowComparisonRow ? readPayloadRecord(latestShadowComparisonRow) : null;
   const latestAdapterSummaryPayload = latestAdapterSummaryRow ? readPayloadRecord(latestAdapterSummaryRow) : null;
+  const latestStreamSummaryPayload = latestStreamSummaryRow ? readPayloadRecord(latestStreamSummaryRow) : null;
 
   return {
     routeDecisions: routeRows.length,
@@ -885,6 +892,8 @@ function buildCodexHarnessDiagnostics(runtimeEvents: any[]) {
     shadowComparisonMatches: shadowComparisonMatchRows.length,
     adapterSummaries: adapterSummaryRows.length,
     adapterEvents: adapterEventRows.length,
+    streamSummaries: streamSummaryRows.length,
+    streamEvents: streamEventRows.length,
     latestRoute: latestRouteRow && latestRoutePayload
       ? {
           selected: readPayloadBoolean(latestRoutePayload, "selected"),
@@ -1010,6 +1019,23 @@ function buildCodexHarnessDiagnostics(runtimeEvents: any[]) {
           errorEvents: readPayloadNumber(latestAdapterSummaryPayload, "error_events"),
           runId: String(latestAdapterSummaryRow.runId ?? readPayloadString(latestAdapterSummaryPayload, "run_id") ?? "") || null,
           createdAt: readRowCreatedAt(latestAdapterSummaryRow) || null,
+        }
+      : null,
+    latestStreamSummary: latestStreamSummaryRow && latestStreamSummaryPayload
+      ? {
+          source: readPayloadString(latestStreamSummaryPayload, "source"),
+          capturedStreamEvents: readPayloadNumber(latestStreamSummaryPayload, "captured_stream_events"),
+          assistantDeltaEvents: readPayloadNumber(latestStreamSummaryPayload, "assistant_delta_events"),
+          assistantDeltaChars: readPayloadNumber(latestStreamSummaryPayload, "assistant_delta_chars"),
+          firstStreamEventLatencyMs: readPayloadNumber(latestStreamSummaryPayload, "first_stream_event_latency_ms"),
+          lastStreamEventLatencyMs: readPayloadNumber(latestStreamSummaryPayload, "last_stream_event_latency_ms"),
+          firstAssistantDeltaLatencyMs: readPayloadNumber(latestStreamSummaryPayload, "first_assistant_delta_latency_ms"),
+          reasoningDeltaEvents: readPayloadNumber(latestStreamSummaryPayload, "reasoning_delta_events"),
+          toolOutputDeltaEvents: readPayloadNumber(latestStreamSummaryPayload, "tool_output_delta_events"),
+          toolOutputDeltaChars: readPayloadNumber(latestStreamSummaryPayload, "tool_output_delta_chars"),
+          rawDeltaStoragePolicy: readPayloadString(latestStreamSummaryPayload, "raw_delta_storage_policy"),
+          runId: String(latestStreamSummaryRow.runId ?? readPayloadString(latestStreamSummaryPayload, "run_id") ?? "") || null,
+          createdAt: readRowCreatedAt(latestStreamSummaryRow) || null,
         }
       : null,
   };

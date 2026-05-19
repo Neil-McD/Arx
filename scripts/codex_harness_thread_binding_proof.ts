@@ -14,9 +14,10 @@ function main() {
   const bridge = readText("convex/codexHarnessBridge.ts");
 	  const probeScript = readText("shared/codexHarnessProbeScript.ts");
 	  const stagingMaintenance = readText("convex/stagingMaintenance.ts");
-	  const stagingMaintenanceCli = readText("scripts/staging_maintenance_cli.ts");
-	  const stagingThreadBindingEvidence = readText("scripts/staging_codex_thread_binding_evidence.ts");
-	  const packageJson = readText("package.json");
+		  const stagingMaintenanceCli = readText("scripts/staging_maintenance_cli.ts");
+		  const stagingThreadBindingEvidence = readText("scripts/staging_codex_thread_binding_evidence.ts");
+		  const stagingStreamingCanary = readText("scripts/staging_codex_primary_streaming_canary.ts");
+		  const packageJson = readText("package.json");
 
   assert.match(
     schema,
@@ -124,16 +125,46 @@ function main() {
 	    /ensureStagingMountedMcpCanary/,
 	    "staging should seed a canonical user harness MCP canary for Codex projection proof",
 	  );
-	  assert.match(
-	    stagingMaintenance,
-	    /runCodexMountedMcpCanaryTurn/,
-	    "staging should expose a gated mounted MCP Codex canary turn",
-	  );
-	  assert.match(
-	    stagingMaintenance,
-	    /mcp_tool_execution_completed/,
-	    "staging Codex evidence should include runtime MCP execution events",
-	  );
+		  assert.match(
+		    stagingMaintenance,
+		    /runCodexMountedMcpCanaryTurn/,
+		    "staging should expose a gated mounted MCP Codex canary turn",
+		  );
+		  assert.match(
+		    stagingMaintenance,
+		    /runCodexPrimaryStreamingCanaryTurn/,
+		    "staging should expose a gated Codex primary streaming canary turn",
+		  );
+		  assert.match(
+		    stagingMaintenance,
+		    /stream:\s*true[\s\S]*codex_primary_canary:\s*true/,
+		    "staging streaming canary should exercise the real streaming Codex primary route",
+		  );
+		  assert.match(
+		    stagingMaintenance,
+		    /summarizeStagingRuntimeSseResponse/,
+		    "staging streaming canary should parse the SSE response into safe counts",
+		  );
+		  assert.match(
+		    stagingMaintenance,
+		    /\.then\(\(\) => \{[\s\S]*close\(\);[\s\S]*\}\)/,
+		    "staging SSE test response should close after async streaming handlers resolve",
+		  );
+		  assert.match(
+		    stagingMaintenance,
+		    /mcp_tool_execution_completed/,
+		    "staging Codex evidence should include runtime MCP execution events",
+		  );
+		  assert.match(
+		    stagingMaintenance,
+		    /codex_harness_stream_event_summary/,
+		    "staging Codex evidence should include stream-event summary events",
+		  );
+		  assert.match(
+		    stagingMaintenance,
+		    /runtime_agent_harness_fallback_skipped/,
+		    "staging Codex evidence should expose skipped fallback events for streaming safety",
+		  );
 	  assert.match(
 	    stagingMaintenance,
 	    /duplicateActiveKeyCount/,
@@ -144,11 +175,41 @@ function main() {
 	    /check:staging-codex-harness-operability/,
 	    "package scripts should include the staging Codex operability canary",
 	  );
-	  assert.match(
-	    packageJson,
-	    /check:staging-codex-mounted-mcp-canary/,
-	    "package scripts should include the staging mounted MCP Codex canary",
-	  );
+		  assert.match(
+		    packageJson,
+		    /check:staging-codex-mounted-mcp-canary/,
+		    "package scripts should include the staging mounted MCP Codex canary",
+		  );
+		  assert.match(
+		    packageJson,
+		    /check:staging-codex-primary-streaming-canary/,
+		    "package scripts should include the staging Codex primary streaming canary",
+		  );
+		  assert.match(
+		    stagingStreamingCanary,
+		    /stagingMaintenance:runCodexPrimaryStreamingCanaryTurn/,
+		    "streaming canary script should call the gated staging maintenance action",
+		  );
+		  assert.match(
+		    stagingStreamingCanary,
+		    /deltaEventCount[\s\S]*doneFullContentChars[\s\S]*codex_app_server/,
+		    "streaming canary script should assert live deltas, final content, and Codex harness selection",
+		  );
+		  assert.match(
+		    stagingStreamingCanary,
+		    /codex_primary_streaming_enabled/,
+		    "streaming canary script should assert the primary streaming flag evidence",
+		  );
+		  assert.match(
+		    stagingStreamingCanary,
+		    /live_stream_delta_events/,
+		    "streaming canary script should assert Codex live-delta relay evidence",
+		  );
+		  assert.match(
+		    stagingStreamingCanary,
+		    /codex_harness_stream_event_summary/,
+		    "streaming canary script should assert Codex stream summary evidence",
+		  );
   assert.match(
     stagingMaintenanceCli,
     /acquireMaintenanceSetupLock/,

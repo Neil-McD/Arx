@@ -9,7 +9,9 @@ import {
 } from "../shared/runtimeAgentHarness.ts";
 import {
   CODEX_HARNESS_PRIMARY_ENV,
+  CODEX_HARNESS_PRIMARY_STREAMING_ENV,
   isCodexHarnessPrimaryEnabled,
+  isCodexHarnessPrimaryStreamingEnabled,
 } from "../shared/codexHarnessRoute.ts";
 
 function readText(path: string): string {
@@ -19,6 +21,7 @@ function readText(path: string): string {
 const runtimeAgentHarness = readText("shared/runtimeAgentHarness.ts");
 const codexHarnessRoute = readText("shared/codexHarnessRoute.ts");
 const httpDaytona = readText("convex/httpDaytona.ts");
+const runtimeTurnHandlers = readText("convex/runtimeTurnHandlers.ts");
 const packageJson = readText("package.json");
 
 assert.equal(
@@ -30,6 +33,20 @@ assert.equal(
   isCodexHarnessPrimaryEnabled({ [CODEX_HARNESS_PRIMARY_ENV]: "0" }),
   false,
   "Codex primary harness should default off for safe rollout",
+);
+assert.equal(
+  isCodexHarnessPrimaryStreamingEnabled({
+    [CODEX_HARNESS_PRIMARY_STREAMING_ENV]: "true",
+  }),
+  true,
+  "Codex primary streaming must require its own explicit hard flag",
+);
+assert.equal(
+  isCodexHarnessPrimaryStreamingEnabled({
+    [CODEX_HARNESS_PRIMARY_STREAMING_ENV]: "0",
+  }),
+  false,
+  "Codex primary streaming should default off for safe rollout",
 );
 
 assert.match(
@@ -114,6 +131,7 @@ assert.deepEqual(
     candidate_harness_id: "codex_app_server",
     candidate_execution_placement: "daytona_sidecar",
     codex_primary_enabled: true,
+    codex_primary_streaming_enabled: false,
     codex_route_selected: true,
     codex_primary_adapter_available: false,
     stream: false,
@@ -143,6 +161,7 @@ assert.deepEqual(
     candidate_harness_id: "codex_app_server",
     candidate_execution_placement: "daytona_sidecar",
     codex_primary_enabled: true,
+    codex_primary_streaming_enabled: false,
     codex_route_selected: true,
     codex_primary_adapter_available: true,
     stream: false,
@@ -159,10 +178,25 @@ const streamingPrimary = resolveRuntimeAgentHarnessSelection({
 assert.equal(streamingPrimary.selectedHarness.id, POLYNET_NATIVE_RUNTIME_AGENT_HARNESS.id);
 assert.equal(streamingPrimary.reason, "codex_primary_streaming_not_supported");
 
+const streamingPrimaryEnabled = resolveRuntimeAgentHarnessSelection({
+  codexPrimaryEnabled: true,
+  codexPrimaryStreamingEnabled: true,
+  codexRouteSelected: true,
+  codexPrimaryAdapterAvailable: true,
+  stream: true,
+});
+assert.equal(streamingPrimaryEnabled.selectedHarness.id, CODEX_APP_SERVER_RUNTIME_AGENT_HARNESS.id);
+assert.equal(streamingPrimaryEnabled.reason, "codex_primary_selected");
+
 assert.match(
   codexHarnessRoute,
   /CODEX_HARNESS_PRIMARY_ENV = "POLYNET_CODEX_HARNESS_PRIMARY_ENABLED"/,
   "Codex primary harness rollout should have a separate explicit env flag",
+);
+assert.match(
+  codexHarnessRoute,
+  /CODEX_HARNESS_PRIMARY_STREAMING_ENV =\s*"POLYNET_CODEX_HARNESS_PRIMARY_STREAMING_ENABLED"/,
+  "Codex primary streaming rollout should have a separate explicit env flag",
 );
 
 assert.match(
@@ -194,17 +228,55 @@ assert.match(
   /codexPrimaryEnabled: isCodexHarnessPrimaryEnabled\(\)/,
   "primary Codex selection must remain behind the hard primary flag",
 );
+assert.match(
+  httpDaytona,
+  /codexPrimaryStreamingEnabled: isCodexHarnessPrimaryStreamingEnabled\(\)/,
+  "primary Codex streaming selection must remain behind its own hard flag",
+);
 
 assert.match(
   httpDaytona,
   /codexPrimaryAdapterAvailable: true/,
   "once the real adapter exists, selection should be able to choose Codex behind the primary flag",
 );
+assert.match(
+  httpDaytona,
+  /emitLiveAssistantDelta: emitCodexLiveAssistantDelta/,
+  "Codex app-server harness should receive the existing runtime live-delta emitter",
+);
+assert.match(
+  httpDaytona,
+  /codexLiveAssistantDeltaEmitted[\s\S]*runtime_agent_harness_fallback_skipped[\s\S]*visible_output_started/,
+  "Codex primary fallback should be skipped after user-visible live output starts",
+);
 
 assert.match(
   httpDaytona,
   /stream: params\.stream \?\? false/,
-  "first Codex primary adapter should leave streaming turns on the native harness",
+  "Codex primary selection should receive the explicit stream fact",
+);
+assert.match(
+  runtimeTurnHandlers,
+  /const emitCodexLiveAssistantDelta = async[\s\S]*emitDelta\(text\)[\s\S]*return true/,
+  "runtime streaming path should bridge Codex assistant deltas into the existing SSE delta emitter",
+);
+assert.match(
+  runtimeTurnHandlers,
+  /codex_harness_live_stream_delta_failed[\s\S]*delta_chars: text\.length/,
+  "runtime streaming path should record live-delta emit failures without raw delta text",
+);
+assert.doesNotMatch(
+  runtimeTurnHandlers.slice(
+    runtimeTurnHandlers.indexOf('eventType: "codex_harness_live_stream_delta_failed"'),
+    runtimeTurnHandlers.indexOf("          writer.send({", runtimeTurnHandlers.indexOf('eventType: "codex_harness_live_stream_delta_failed"')),
+  ),
+  /delta:\s*text|raw_delta|full_content/,
+  "runtime live-delta failure audit must not persist raw assistant text",
+);
+assert.match(
+  runtimeTurnHandlers,
+  /loopResult\.runtimeHarnessId === "codex_app_server"[\s\S]*codexLiveStreamDeltaAttemptedEvents > 0[\s\S]*streamedContent = loopResult\.assistantText/,
+  "runtime streaming path should avoid replaying final Codex text after live deltas already streamed",
 );
 
 assert.match(

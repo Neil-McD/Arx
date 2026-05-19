@@ -1,6 +1,15 @@
 import { internal } from "./_generated/api";
 import { DAYTONA_WORKSPACE_ROOT } from "./daytonaSandboxClient";
 import type { WorkspaceSandboxSession } from "./daytonaWorkspaceSession";
+import {
+  createDaytonaProcessSession,
+  deleteDaytonaProcessSession,
+  executeDaytonaProcessSessionCommand,
+  findDaytonaProcessSessionCommand,
+  getDaytonaProcessSession,
+  getDaytonaProcessSessionCommandLogs,
+  readDaytonaProcessSessionCommandExitCode,
+} from "./daytonaProcessSessions";
 import { executeDaytonaCommand } from "./daytonaToolboxExecutor";
 import { uploadDaytonaToolboxFile } from "./daytonaToolboxFileSystem";
 import { resolveCodexChatgptAuthTokens } from "./chatgptAuth";
@@ -29,6 +38,12 @@ import {
   CODEX_HARNESS_PROBE_RESULT_MARKER,
   buildCodexHarnessProbeScript,
 } from "../shared/codexHarnessProbeScript.ts";
+import {
+  createCodexHarnessProbeStreamEventIncrementalParser,
+  readCodexHarnessNextLogChunk,
+  readCodexHarnessProbeStreamEvents,
+  type CodexHarnessProbeStreamEvent,
+} from "../shared/codexHarnessStreamEvents.ts";
 import {
   CODEX_APP_SERVER_RUNTIME_AGENT_HARNESS,
   type PreparedRuntimeAgentTurn,
@@ -389,6 +404,371 @@ function readCodexHarnessProbeResult(outputText: string): Record<string, unknown
   return null;
 }
 
+function summarizeCodexHarnessStreamEvents(
+  events: readonly CodexHarnessProbeStreamEvent[],
+): Record<string, unknown> {
+  const countsByType: Record<string, number> = {};
+  let assistantDeltaEvents = 0;
+  let assistantDeltaChars = 0;
+  let reasoningDeltaEvents = 0;
+  let toolOutputDeltaEvents = 0;
+  let toolOutputDeltaChars = 0;
+  let firstStreamEventLatencyMs: number | null = null;
+  let lastStreamEventLatencyMs: number | null = null;
+  let firstAssistantDeltaLatencyMs: number | null = null;
+  for (const event of events) {
+    const type = readStringField(event, "type") ?? "unknown";
+    countsByType[type] = (countsByType[type] ?? 0) + 1;
+    const elapsedMs = readNumberField(event, "elapsed_ms");
+    if (elapsedMs !== null) {
+      if (firstStreamEventLatencyMs === null) {
+        firstStreamEventLatencyMs = elapsedMs;
+      }
+      lastStreamEventLatencyMs = elapsedMs;
+    }
+    const deltaChars =
+      readNumberField(event, "delta_chars") ??
+      (typeof event.delta === "string" ? event.delta.length : 0);
+    if (type === "assistant_delta") {
+      assistantDeltaEvents += 1;
+      assistantDeltaChars += deltaChars;
+      if (firstAssistantDeltaLatencyMs === null && elapsedMs !== null) {
+        firstAssistantDeltaLatencyMs = elapsedMs;
+      }
+    } else if (type === "reasoning_delta") {
+      reasoningDeltaEvents += 1;
+    } else if (type === "tool_output_delta") {
+      toolOutputDeltaEvents += 1;
+      toolOutputDeltaChars += deltaChars;
+    }
+  }
+  return {
+    captured_stream_events: events.length,
+    counts_by_type: countsByType,
+    assistant_delta_events: assistantDeltaEvents,
+    assistant_delta_chars: assistantDeltaChars,
+    first_stream_event_latency_ms: firstStreamEventLatencyMs,
+    last_stream_event_latency_ms: lastStreamEventLatencyMs,
+    first_assistant_delta_latency_ms: firstAssistantDeltaLatencyMs,
+    reasoning_delta_events: reasoningDeltaEvents,
+    tool_output_delta_events: toolOutputDeltaEvents,
+    tool_output_delta_chars: toolOutputDeltaChars,
+    raw_delta_storage_policy: "assistant_delta_live_only_audit_metadata_only",
+  };
+}
+
+function sanitizeCodexHarnessStreamEventForAudit(
+  event: CodexHarnessProbeStreamEvent,
+  fallbackSequence: number,
+): Record<string, unknown> {
+  const rawDelta = typeof event.delta === "string" ? event.delta : "";
+  return sanitizeCodexHarnessProbeValue({
+    sequence: readNumberField(event, "sequence") ?? fallbackSequence,
+    elapsed_ms: readNumberField(event, "elapsed_ms"),
+    type: readStringField(event, "type") ?? "unknown",
+    method: readStringField(event, "method"),
+    tool_name: readStringField(event, "tool_name"),
+    status: readStringField(event, "status"),
+    thread_id_present: readBooleanField(event, "thread_id_present"),
+    turn_id_present: readBooleanField(event, "turn_id_present"),
+    item_id_present: readBooleanField(event, "item_id_present"),
+    item_count: readNumberField(event, "item_count"),
+    delta_chars: readNumberField(event, "delta_chars") ?? (rawDelta ? rawDelta.length : null),
+    raw_delta_present: rawDelta.length > 0,
+  }) as Record<string, unknown>;
+}
+
+async function emitCodexHarnessStreamEventAudit(params: {
+  appendRunEvent: RuntimeRunEventAppender;
+  runId: string;
+  source: string;
+  events: readonly CodexHarnessProbeStreamEvent[];
+}): Promise<void> {
+  if (params.events.length === 0) return;
+  await emitCodexHarnessProbeEvent({
+    appendRunEvent: params.appendRunEvent,
+    runId: params.runId,
+    eventType: "codex_harness_stream_event_summary",
+    eventKeySuffix: `${params.source}_1`,
+    payload: {
+      source: params.source,
+      ...summarizeCodexHarnessStreamEvents(params.events),
+    },
+  });
+  for (const [index, event] of params.events.slice(0, 40).entries()) {
+    await emitCodexHarnessProbeEvent({
+      appendRunEvent: params.appendRunEvent,
+      runId: params.runId,
+      eventType: "codex_harness_stream_event",
+      eventKeySuffix: `${params.source}_${index + 1}`,
+      payload: {
+        source: params.source,
+        ...sanitizeCodexHarnessStreamEventForAudit(event, index + 1),
+      },
+    });
+  }
+}
+
+const CODEX_HARNESS_STREAMING_COMMAND_STDOUT_MAX_CHARS = 2_000_000;
+
+function sleepMs(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, Math.max(0, Math.floor(ms))));
+}
+
+function tailText(value: string, maxChars: number): string {
+  const normalized = String(value ?? "");
+  const max = Math.max(1, Math.floor(maxChars));
+  if (normalized.length <= max) return normalized;
+  return normalized.slice(normalized.length - max);
+}
+
+function wrapCodexHarnessProcessSessionCommand(command: string): string {
+  return `sh -lc ${shellQuote(command)}`;
+}
+
+function buildCodexHarnessStreamEventDedupeKey(
+  event: CodexHarnessProbeStreamEvent,
+  fallbackSequence: number,
+): string {
+  const sequence = readNumberField(event, "sequence");
+  if (sequence !== null) return `sequence:${sequence}`;
+  return [
+    "fallback",
+    fallbackSequence,
+    readStringField(event, "type") ?? "unknown",
+    readStringField(event, "method") ?? "unknown",
+    readNumberField(event, "elapsed_ms") ?? "elapsed_unknown",
+    readNumberField(event, "delta_chars") ?? "delta_unknown",
+  ].join(":");
+}
+
+async function executeCodexHarnessStreamingCommand(params: {
+  session: WorkspaceSandboxSession;
+  runId: string;
+  command: string;
+  cwd: string;
+  timeoutSeconds: number;
+  onStreamEvent?: (event: CodexHarnessProbeStreamEvent) => Promise<void> | void;
+}): Promise<
+  | {
+      ok: true;
+      stdout: string;
+      exitCode: number;
+      commandId: string;
+      processSessionId: string;
+      streamEventCount: number;
+      firstStreamEventLatencyMs: number | null;
+      lastStreamEventLatencyMs: number | null;
+      logPollCount: number;
+      malformedStreamEventLineCount: number;
+    }
+  | {
+      ok: false;
+      status: number;
+      code: string;
+      message: string;
+      details?: Record<string, unknown>;
+    }
+> {
+  const processSessionId = `codex-stream-${safeCodexHarnessProbeId(params.runId)}-${crypto.randomUUID().replace(/-/g, "")}`;
+  const created = await createDaytonaProcessSession({
+    config: params.session.config,
+    toolboxProxyUrl: params.session.toolboxProxyUrl,
+    sandboxId: params.session.providerSandboxId,
+    sessionId: processSessionId,
+  });
+  if (created.ok !== true) return created;
+
+  const parser = createCodexHarnessProbeStreamEventIncrementalParser({
+    eventLimit: 5000,
+  });
+  const seenStreamEventKeys = new Set<string>();
+  const startedAt = Date.now();
+  const timeoutMs = Math.max(1, Math.floor(params.timeoutSeconds)) * 1000;
+  const deadlineMs = startedAt + timeoutMs;
+  let stdoutText = "";
+  let previousLogText = "";
+  let commandId = "";
+  let streamEventCount = 0;
+  let firstStreamEventLatencyMs: number | null = null;
+  let lastStreamEventLatencyMs: number | null = null;
+  let logPollCount = 0;
+
+  const emitParsedStreamEvents = async (
+    parsedEvents: readonly CodexHarnessProbeStreamEvent[],
+  ): Promise<void> => {
+    for (const event of parsedEvents) {
+      const eventKey = buildCodexHarnessStreamEventDedupeKey(event, streamEventCount + 1);
+      if (seenStreamEventKeys.has(eventKey)) continue;
+      seenStreamEventKeys.add(eventKey);
+      streamEventCount += 1;
+      const elapsed =
+        readNumberField(event, "elapsed_ms") ?? Math.max(0, Date.now() - startedAt);
+      if (firstStreamEventLatencyMs === null) {
+        firstStreamEventLatencyMs = elapsed;
+      }
+      lastStreamEventLatencyMs = elapsed;
+      await params.onStreamEvent?.(event);
+    }
+  };
+
+  const processStdout = async (nextStdout: string, flush: boolean): Promise<void> => {
+    const normalized = String(nextStdout ?? "");
+    const { chunk, strategy } = readCodexHarnessNextLogChunk({
+      previousLogText,
+      nextLogText: normalized,
+    });
+    if (strategy === "reset" && previousLogText) {
+      await flushBufferedStreamEvents();
+    }
+    previousLogText = normalized;
+    stdoutText = tailText(normalized, CODEX_HARNESS_STREAMING_COMMAND_STDOUT_MAX_CHARS);
+    const parsedEvents = parser.push(chunk, { flush });
+    await emitParsedStreamEvents(parsedEvents);
+  };
+
+  const flushBufferedStreamEvents = async (): Promise<void> => {
+    await emitParsedStreamEvents(parser.push("", { flush: true }));
+  };
+
+  try {
+    const executed = await executeDaytonaProcessSessionCommand({
+      config: params.session.config,
+      toolboxProxyUrl: params.session.toolboxProxyUrl,
+      sandboxId: params.session.providerSandboxId,
+      sessionId: created.sessionId,
+      command: wrapCodexHarnessProcessSessionCommand(params.command),
+      cwd: params.cwd,
+      runAsync: true,
+    });
+    if (executed.ok !== true) return executed;
+    commandId = executed.commandId;
+    await processStdout(executed.outputText, false);
+
+    while (Date.now() < deadlineMs) {
+      const logs = await getDaytonaProcessSessionCommandLogs({
+        config: params.session.config,
+        toolboxProxyUrl: params.session.toolboxProxyUrl,
+        sandboxId: params.session.providerSandboxId,
+        sessionId: created.sessionId,
+        commandId,
+      });
+      if (logs.ok !== true) {
+        return {
+          ok: false,
+          status: logs.status,
+          code: logs.code,
+          message: logs.message,
+          details: {
+            ...(logs.details ?? {}),
+            process_session_id_present: Boolean(created.sessionId),
+            command_id_present: Boolean(commandId),
+            stream_event_count: streamEventCount,
+            stdout_chars: stdoutText.length,
+          },
+        };
+      }
+      logPollCount += 1;
+      await processStdout(logs.stdout || logs.output, false);
+
+      const processSession = await getDaytonaProcessSession({
+        config: params.session.config,
+        toolboxProxyUrl: params.session.toolboxProxyUrl,
+        sandboxId: params.session.providerSandboxId,
+        sessionId: created.sessionId,
+      });
+      if (processSession.ok !== true) {
+        return {
+          ok: false,
+          status: processSession.status,
+          code: processSession.code,
+          message: processSession.message,
+          details: {
+            ...(processSession.details ?? {}),
+            process_session_id_present: Boolean(created.sessionId),
+            command_id_present: Boolean(commandId),
+            stream_event_count: streamEventCount,
+            stdout_chars: stdoutText.length,
+          },
+        };
+      }
+      const command = findDaytonaProcessSessionCommand(processSession.session, commandId);
+      if (!command) {
+        return {
+          ok: false,
+          status: 503,
+          code: "codex_streaming_command_missing",
+          message: "Daytona process session no longer lists the Codex streaming command.",
+          details: {
+            process_session_id_present: Boolean(created.sessionId),
+            command_id_present: Boolean(commandId),
+            stream_event_count: streamEventCount,
+            stdout_chars: stdoutText.length,
+          },
+        };
+      }
+      const exitCode = readDaytonaProcessSessionCommandExitCode(command);
+      if (exitCode !== null) {
+        const finalLogs = await getDaytonaProcessSessionCommandLogs({
+          config: params.session.config,
+          toolboxProxyUrl: params.session.toolboxProxyUrl,
+          sandboxId: params.session.providerSandboxId,
+          sessionId: created.sessionId,
+          commandId,
+        });
+        if (finalLogs.ok === true) {
+          logPollCount += 1;
+          await processStdout(finalLogs.stdout || finalLogs.output, true);
+        } else {
+          await flushBufferedStreamEvents();
+        }
+        return {
+          ok: true,
+          stdout: stdoutText,
+          exitCode,
+          commandId,
+          processSessionId: created.sessionId,
+          streamEventCount,
+          firstStreamEventLatencyMs,
+          lastStreamEventLatencyMs,
+          logPollCount,
+          malformedStreamEventLineCount: parser.getMalformedLineCount(),
+        };
+      }
+      await sleepMs(500);
+    }
+
+    await flushBufferedStreamEvents();
+    return {
+      ok: false,
+      status: 504,
+      code: "codex_streaming_command_timeout",
+      message: `Codex streaming command timed out after ${Math.floor(timeoutMs / 1000)}s.`,
+      details: {
+        process_session_id_present: Boolean(created.sessionId),
+        command_id_present: Boolean(commandId),
+        stream_event_count: streamEventCount,
+        first_stream_event_latency_ms: firstStreamEventLatencyMs,
+        last_stream_event_latency_ms: lastStreamEventLatencyMs,
+        log_poll_count: logPollCount,
+        malformed_stream_event_line_count: parser.getMalformedLineCount(),
+        stdout_chars: stdoutText.length,
+      },
+    };
+  } finally {
+    try {
+      await deleteDaytonaProcessSession({
+        config: params.session.config,
+        toolboxProxyUrl: params.session.toolboxProxyUrl,
+        sandboxId: params.session.providerSandboxId,
+        sessionId: created.sessionId,
+      });
+    } catch {
+      // Best-effort cleanup; Daytona process sessions are not product truth.
+    }
+  }
+}
+
 async function emitCodexHarnessProbeEvent(params: {
   appendRunEvent: RuntimeRunEventAppender;
   runId: string;
@@ -516,6 +896,7 @@ export function buildCodexAppServerRuntimeAgentHarness(params: {
   preparedTurn: PreparedRuntimeAgentTurn;
   executionSession: CodexHarnessProbeExecutionSession;
   appendRunEvent: RuntimeRunEventAppender;
+  emitLiveAssistantDelta?: (delta: string) => Promise<boolean> | boolean;
 }): RuntimeAgentHarness {
   return {
     ...CODEX_APP_SERVER_RUNTIME_AGENT_HARNESS,
@@ -991,7 +1372,7 @@ export function buildCodexAppServerRuntimeAgentHarness(params: {
         mimeType: "application/json",
         fileName: "codex-auth.json",
       });
-      if (!authUpload.ok) {
+      if (authUpload.ok !== true) {
         await cleanupCodexHarnessProbeFilesBestEffort({
           session,
           authPath,
@@ -1030,7 +1411,7 @@ export function buildCodexAppServerRuntimeAgentHarness(params: {
           mimeType: "application/json",
           fileName: "codex-bridge.json",
         });
-        if (!bridgeConfigUpload.ok) {
+        if (bridgeConfigUpload.ok !== true) {
           await cleanupCodexHarnessProbeFilesBestEffort({
             session,
             authPath,
@@ -1080,17 +1461,40 @@ export function buildCodexAppServerRuntimeAgentHarness(params: {
         `rm -f ${shellQuote(authPath)} ${shellQuote(scriptPath)} ${shellQuote(promptPath)} ${shellQuote(instructionsPath)}${bridgeConfigPath ? ` ${shellQuote(bridgeConfigPath)}` : ""}`,
         'exit "$primary_status"',
       ].join("; ");
-      const executed = await executeDaytonaCommand({
-        config: session.config,
-        toolboxProxyUrl: session.toolboxProxyUrl,
-        sandboxId: session.providerSandboxId,
+      const streamEvents: CodexHarnessProbeStreamEvent[] = [];
+      let liveStreamDeltaEvents = 0;
+      let liveStreamDeltaChars = 0;
+      let liveStreamDeltaEmitFailures = 0;
+      const executed = await executeCodexHarnessStreamingCommand({
+        session,
+        runId: params.runId,
         command,
         cwd: DAYTONA_WORKSPACE_ROOT,
         timeoutSeconds: 80,
-        allowNonZero: true,
+        onStreamEvent: async (event) => {
+          streamEvents.push(event);
+          if (
+            turn.stream === true &&
+            readStringField(event, "type") === "assistant_delta"
+          ) {
+            const delta = readStringField(event, "delta") ?? "";
+            if (!delta || !params.emitLiveAssistantDelta) return;
+            try {
+              const emitted = await params.emitLiveAssistantDelta(delta);
+              if (emitted === true) {
+                liveStreamDeltaEvents += 1;
+                liveStreamDeltaChars += delta.length;
+              } else {
+                liveStreamDeltaEmitFailures += 1;
+              }
+            } catch {
+              liveStreamDeltaEmitFailures += 1;
+            }
+          }
+        },
       });
 
-      if (!executed.ok) {
+      if (executed.ok !== true) {
         await cleanupCodexHarnessProbeFilesBestEffort({
           session,
           authPath,
@@ -1108,6 +1512,10 @@ export function buildCodexAppServerRuntimeAgentHarness(params: {
             code: executed.code,
             message: executed.message,
             details: executed.details ?? null,
+            streaming_transport: "daytona_process_session_log_polling_v0",
+            live_stream_delta_events: liveStreamDeltaEvents,
+            live_stream_delta_chars: liveStreamDeltaChars,
+            live_stream_delta_emit_failures: liveStreamDeltaEmitFailures,
             latency_ms: Date.now() - startedAt,
           },
         });
@@ -1119,6 +1527,12 @@ export function buildCodexAppServerRuntimeAgentHarness(params: {
         });
       }
 
+      await emitCodexHarnessStreamEventAudit({
+        appendRunEvent: params.appendRunEvent,
+        runId: params.runId,
+        source: "primary_turn",
+        events: streamEvents,
+      });
       const probeResult = readCodexHarnessProbeResult(executed.stdout);
       const finalText = readStringField(probeResult, "executionFinalText");
       const nativeToolSteps = readCodexPrimaryNativeToolSteps(probeResult);
@@ -1139,6 +1553,16 @@ export function buildCodexAppServerRuntimeAgentHarness(params: {
             stage: readStringField(probeResult, "stage"),
             exit_code: executed.exitCode,
             stdout_chars: String(executed.stdout ?? "").length,
+            streaming_transport: "daytona_process_session_log_polling_v0",
+            stream_event_count: executed.streamEventCount,
+            live_stream_delta_events: liveStreamDeltaEvents,
+            live_stream_delta_chars: liveStreamDeltaChars,
+            live_stream_delta_emit_failures: liveStreamDeltaEmitFailures,
+            first_stream_event_latency_ms: executed.firstStreamEventLatencyMs,
+            last_stream_event_latency_ms: executed.lastStreamEventLatencyMs,
+            log_poll_count: executed.logPollCount,
+            malformed_stream_event_line_count:
+              executed.malformedStreamEventLineCount,
             latency_ms: Date.now() - startedAt,
           },
         });
@@ -1426,6 +1850,16 @@ export function buildCodexAppServerRuntimeAgentHarness(params: {
           output_chars: finalText.length,
           output_sha256: readStringField(probeResult, "executionFinalTextSha256"),
           prompt_chars: readNumberField(probeResult, "runtimePromptChars"),
+          streaming_transport: "daytona_process_session_log_polling_v0",
+          stream_event_count: executed.streamEventCount,
+          live_stream_delta_events: liveStreamDeltaEvents,
+          live_stream_delta_chars: liveStreamDeltaChars,
+          live_stream_delta_emit_failures: liveStreamDeltaEmitFailures,
+          first_stream_event_latency_ms: executed.firstStreamEventLatencyMs,
+          last_stream_event_latency_ms: executed.lastStreamEventLatencyMs,
+          log_poll_count: executed.logPollCount,
+          malformed_stream_event_line_count:
+            executed.malformedStreamEventLineCount,
           latency_ms: Date.now() - startedAt,
         },
       });
@@ -1932,6 +2366,15 @@ export async function executeCodexHarnessProbeIfSelected(params: {
     return;
   }
 
+  const streamEvents = readCodexHarnessProbeStreamEvents(executed.stdout);
+  if (codexTurnRequested) {
+    await emitCodexHarnessStreamEventAudit({
+      appendRunEvent: params.appendRunEvent,
+      runId: params.runId,
+      source: probeMode,
+      events: streamEvents,
+    });
+  }
   const probeResult = readCodexHarnessProbeResult(executed.stdout);
   if (!probeResult) {
     const latencyMs = Date.now() - probeStartedAt;

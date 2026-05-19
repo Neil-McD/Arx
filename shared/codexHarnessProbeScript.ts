@@ -1,4 +1,5 @@
 export const CODEX_HARNESS_PROBE_RESULT_MARKER = "POLYNET_CODEX_HARNESS_PROBE_RESULT ";
+export const CODEX_HARNESS_PROBE_EVENT_MARKER = "POLYNET_CODEX_HARNESS_EVENT ";
 
 export function buildCodexHarnessProbeScript(): string {
   return String.raw`import { spawn } from "node:child_process";
@@ -9,6 +10,8 @@ import path from "node:path";
 import readline from "node:readline";
 
 const RESULT_MARKER = "POLYNET_CODEX_HARNESS_PROBE_RESULT ";
+const EVENT_MARKER = "POLYNET_CODEX_HARNESS_EVENT ";
+let harnessEventSequence = 0;
 const timeoutMs = Number.parseInt(process.env.POLYNET_CODEX_PROBE_TIMEOUT_MS || "20000", 10);
 const executionMode = String(process.env.POLYNET_CODEX_EXECUTION_MODE || "").trim().toLowerCase();
 const executionSmokeRequested = /^(1|true|yes|on)$/i.test(
@@ -182,6 +185,21 @@ function finish(ok, code, message) {
   if (code) result.errorCode = code;
   if (message) result.errorMessage = message;
   console.log(RESULT_MARKER + JSON.stringify(sanitize(result)));
+}
+
+function emitHarnessEvent(event) {
+  if (!event || typeof event !== "object" || Array.isArray(event)) return;
+  harnessEventSequence += 1;
+  const payload = sanitize({
+    sequence: harnessEventSequence,
+    elapsed_ms: Date.now() - startedAt,
+    ...event,
+  });
+  try {
+    process.stdout.write(EVENT_MARKER + JSON.stringify(payload) + "\n");
+  } catch {
+    // Best-effort streaming evidence only; final result parsing is the fallback.
+  }
 }
 
 function runShell(command, timeout = 5000) {
@@ -588,6 +606,11 @@ function recordAdapterNotification(message) {
   incrementAdapterCount(method);
 
   if (method === "thread/started") {
+    emitHarnessEvent({
+      type: "thread_started",
+      method,
+      thread_id_present: Boolean(readString(params, "threadId") || readString(params?.thread, "id")),
+    });
     pushAdapterEvent({
       type: "thread_started",
       method,
@@ -596,6 +619,12 @@ function recordAdapterNotification(message) {
     return;
   }
   if (method === "turn/started") {
+    emitHarnessEvent({
+      type: "turn_started",
+      method,
+      thread_id_present: Boolean(readString(params, "threadId")),
+      turn_id_present: Boolean(readNotificationTurnId(params)),
+    });
     pushAdapterEvent({
       type: "turn_started",
       method,
@@ -655,6 +684,15 @@ function recordAdapterNotification(message) {
   if (method === "item/commandExecution/outputDelta") {
     const delta = readString(params, "delta") || "";
     recordNativeToolOutputDelta(params, "bash", method);
+    emitHarnessEvent({
+      type: "tool_output_delta",
+      method,
+      tool_name: "bash",
+      thread_id_present: Boolean(readString(params, "threadId")),
+      turn_id_present: Boolean(readNotificationTurnId(params)),
+      item_id_present: Boolean(readString(params, "itemId") || readString(params, "id")),
+      delta_chars: delta.length,
+    });
     pushAdapterEvent({
       type: "tool_output_delta",
       method,
@@ -669,6 +707,15 @@ function recordAdapterNotification(message) {
   if (method === "item/fileChange/outputDelta") {
     const delta = readString(params, "delta") || "";
     recordNativeToolOutputDelta(params, "apply_patch", method);
+    emitHarnessEvent({
+      type: "tool_output_delta",
+      method,
+      tool_name: "apply_patch",
+      thread_id_present: Boolean(readString(params, "threadId")),
+      turn_id_present: Boolean(readNotificationTurnId(params)),
+      item_id_present: Boolean(readString(params, "itemId") || readString(params, "id")),
+      delta_chars: delta.length,
+    });
     pushAdapterEvent({
       type: "tool_output_delta",
       method,
@@ -683,6 +730,15 @@ function recordAdapterNotification(message) {
   if (method === "item/agentMessage/delta") {
     const delta = readString(params, "delta") || "";
     result.adapterSummary.assistantDeltaEvents += 1;
+    emitHarnessEvent({
+      type: "assistant_delta",
+      method,
+      thread_id_present: Boolean(readString(params, "threadId")),
+      turn_id_present: Boolean(readNotificationTurnId(params)),
+      item_id_present: Boolean(readString(params, "itemId") || readString(params, "id")),
+      delta,
+      delta_chars: delta.length,
+    });
     pushAdapterEvent({
       type: "assistant_delta",
       method,
@@ -696,6 +752,14 @@ function recordAdapterNotification(message) {
   if (method === "item/agentReasoning/delta") {
     const delta = readString(params, "delta") || "";
     result.adapterSummary.reasoningDeltaEvents += 1;
+    emitHarnessEvent({
+      type: "reasoning_delta",
+      method,
+      thread_id_present: Boolean(readString(params, "threadId")),
+      turn_id_present: Boolean(readNotificationTurnId(params)),
+      item_id_present: Boolean(readString(params, "itemId") || readString(params, "id")),
+      delta_chars: delta.length,
+    });
     pushAdapterEvent({
       type: "reasoning_delta",
       method,
@@ -710,6 +774,14 @@ function recordAdapterNotification(message) {
     const turn = isRecord(params?.turn) ? params.turn : null;
     recordNativeToolItemsFromTurn(turn);
     result.adapterSummary.turnCompletedEvents += 1;
+    emitHarnessEvent({
+      type: "turn_completed",
+      method,
+      thread_id_present: Boolean(readString(params, "threadId")),
+      turn_id_present: Boolean(readNotificationTurnId(params)),
+      status: readString(turn, "status") || null,
+      item_count: Array.isArray(turn?.items) ? turn.items.length : null,
+    });
     pushAdapterEvent({
       type: "turn_completed",
       method,

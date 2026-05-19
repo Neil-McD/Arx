@@ -468,6 +468,8 @@ export type OperatorCodexHarnessDiagnostics = {
   shadowComparisonMatches: number;
   adapterSummaries: number;
   adapterEvents: number;
+  streamSummaries: number;
+  streamEvents: number;
   latestRoute: {
     selected: boolean;
     reason: string;
@@ -558,6 +560,21 @@ export type OperatorCodexHarnessDiagnostics = {
     toolStartedEvents: number | null;
     turnCompletedEvents: number | null;
     errorEvents: number | null;
+    runId: string | null;
+    createdAt: number | null;
+  } | null;
+  latestStreamSummary: {
+    source: string | null;
+    capturedStreamEvents: number | null;
+    assistantDeltaEvents: number | null;
+    assistantDeltaChars: number | null;
+    firstStreamEventLatencyMs: number | null;
+    lastStreamEventLatencyMs: number | null;
+    firstAssistantDeltaLatencyMs: number | null;
+    reasoningDeltaEvents: number | null;
+    toolOutputDeltaEvents: number | null;
+    toolOutputDeltaChars: number | null;
+    rawDeltaStoragePolicy: string | null;
     runId: string | null;
     createdAt: number | null;
   } | null;
