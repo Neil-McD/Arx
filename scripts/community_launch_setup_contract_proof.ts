@@ -391,13 +391,33 @@ assert.match(
 );
 assert.doesNotMatch(
   setupModal,
-  /community-launch-checklist|Add source material|Publish one usable resource|Resource title|Resource body|Add resource|knowledgeDraft|handleAddKnowledge/,
+  /community-launch-checklist|Add source material|Publish one usable resource|Resource title|Resource body|Add resource|knowledgeDraft|handleAddKnowledge\(/,
   "launch modal must not render per-item checklist rows inside the step card",
 );
 assert.match(
   setupModal,
-  /Generate the Get Started path[\s\S]*Drag and drop source material[\s\S]*Google Drive[\s\S]*Links[\s\S]*GitHub[\s\S]*Review publish/,
-  "launch knowledge step must act as a source and automation gateway instead of a manual resource form",
+  /Sources[\s\S]*Drop source material[\s\S]*Links[\s\S]*Add source links[\s\S]*Integrations[\s\S]*Google Drive[\s\S]*GitHub[\s\S]*Review publish/,
+  "launch knowledge step must separate file sources, link sources, and connected source integrations",
+);
+assert.match(
+  setupModal,
+  /onAddKnowledgeLink[\s\S]*handleAddKnowledgeLink[\s\S]*community-launch-knowledge-link-composer/,
+  "launch knowledge link entry must write through the onboarding save path",
+);
+assert.match(
+  appShell,
+  /handleAddCommunityLaunchKnowledgeLink[\s\S]*saveCloudCommunityResource[\s\S]*type: "link"[\s\S]*resource_status: "published"/,
+  "launch knowledge links must create canonical published link resources",
+);
+assert.doesNotMatch(
+  setupModal,
+  /Starter guide|Generate the Get Started path/,
+  "launch knowledge step should not lead with the old starter-guide placeholder",
+);
+assert.match(
+  setupModal,
+  /\/app-logos\/google-drive\.svg[\s\S]*\/app-logos\/github\.svg/,
+  "launch knowledge integrations must show Google Drive and GitHub logos",
 );
 assert.match(
   setupModal,

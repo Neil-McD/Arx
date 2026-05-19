@@ -7,6 +7,7 @@ import {
   FileText,
   Globe2,
   Image,
+  Link2,
   LockKeyhole,
   PlugZap,
   X,
@@ -64,6 +65,10 @@ export type CommunityLaunchAboutSaveDraft = {
   about: string;
 };
 
+export type CommunityLaunchKnowledgeLinkSaveDraft = {
+  url: string;
+};
+
 export type CommunityLaunchAgentSaveDraft = {
   systemPrompt: string;
   starterPrompts: string[];
@@ -87,6 +92,7 @@ type WebCommunityLaunchSetupModalProps = {
   onCreateCommunity?: (draft: CommunityLaunchProfileSaveDraft) => Promise<void>;
   onSaveProfile: (draft: CommunityLaunchProfileSaveDraft) => Promise<void>;
   onSaveAbout: (draft: CommunityLaunchAboutSaveDraft) => Promise<void>;
+  onAddKnowledgeLink: (draft: CommunityLaunchKnowledgeLinkSaveDraft) => Promise<void>;
   onSaveAgent: (draft: CommunityLaunchAgentSaveDraft) => Promise<void>;
   onSaveAccess: (draft: CommunityLaunchAccessSaveDraft) => Promise<void>;
   onSavePublish: (draft: CommunityLaunchPublishSaveDraft) => Promise<void>;
@@ -205,6 +211,7 @@ export function WebCommunityLaunchSetupModal(
     onCreateCommunity,
     onSaveProfile,
     onSaveAbout,
+    onAddKnowledgeLink,
     onSaveAgent,
     onSaveAccess,
     onSavePublish,
@@ -232,6 +239,7 @@ export function WebCommunityLaunchSetupModal(
     bannerUrl: "",
   });
   const [aboutDraft, setAboutDraft] = useState("");
+  const [knowledgeLinkDraft, setKnowledgeLinkDraft] = useState("");
   const [agentDraft, setAgentDraft] = useState<CommunityLaunchAgentSaveDraft>({
     systemPrompt: "",
     starterPrompts: ["", "", ""],
@@ -260,6 +268,7 @@ export function WebCommunityLaunchSetupModal(
         bannerUrl: "",
       });
       setAboutDraft("");
+      setKnowledgeLinkDraft("");
       setAgentDraft({
         systemPrompt: "",
         starterPrompts: ["", "", ""],
@@ -285,6 +294,7 @@ export function WebCommunityLaunchSetupModal(
       bannerUrl: community.banner_url ?? "",
     });
     setAboutDraft(community.about ?? "");
+    setKnowledgeLinkDraft("");
     setAgentDraft({
       systemPrompt: community.agent_system_prompt ?? "",
       starterPrompts: getStarterPrompts(community),
@@ -455,6 +465,18 @@ export function WebCommunityLaunchSetupModal(
       "about",
       () => onSaveAbout({ about: aboutDraft }),
       "About saved.",
+    );
+  };
+
+  const handleAddKnowledgeLink = (event: FormEvent) => {
+    event.preventDefault();
+    void runStepSave(
+      "knowledge",
+      async () => {
+        await onAddKnowledgeLink({ url: knowledgeLinkDraft });
+        setKnowledgeLinkDraft("");
+      },
+      "Link added.",
     );
   };
 
@@ -713,31 +735,43 @@ export function WebCommunityLaunchSetupModal(
     }
 
     if (activeStep === "knowledge") {
+      const canAddKnowledgeLink = Boolean(knowledgeLinkDraft.trim());
       return (
         <div className="community-launch-inline-form community-launch-knowledge-gateway">
           <div className="community-launch-knowledge-stack">
-            <section className="community-launch-knowledge-row">
-              <span className="community-launch-knowledge-icon" aria-hidden="true">
-                <BookOpen size={15} strokeWidth={2} />
-              </span>
-              <div>
-                <span className="community-launch-knowledge-kicker">Starter guide</span>
-                <strong>Generate the Get Started path</strong>
-                <p>Use the profile, about page, agent behavior, workflows, and access settings as source context.</p>
-              </div>
-              <span className="community-launch-knowledge-pill">Planned</span>
-            </section>
             <section className="community-launch-knowledge-row">
               <span className="community-launch-knowledge-icon" aria-hidden="true">
                 <FileText size={15} strokeWidth={2} />
               </span>
               <div>
                 <span className="community-launch-knowledge-kicker">Sources</span>
-                <strong>Drag and drop source material</strong>
+                <strong>Drop source material</strong>
                 <p>Files, PDFs, presentations, videos, and notes should enter the canonical resources system here.</p>
                 <div className="community-launch-knowledge-dropzone" aria-label="Knowledge upload placeholder">
                   Drop files here once ingestion is enabled
                 </div>
+              </div>
+              <span className="community-launch-knowledge-pill">Next</span>
+            </section>
+            <section className="community-launch-knowledge-row">
+              <span className="community-launch-knowledge-icon" aria-hidden="true">
+                <Link2 size={15} strokeWidth={2} />
+              </span>
+              <div>
+                <span className="community-launch-knowledge-kicker">Links</span>
+                <strong>Add source links</strong>
+                <p>Paste docs, videos, articles, or public resource URLs into the community resource directory.</p>
+                <form className="community-launch-knowledge-link-composer" onSubmit={handleAddKnowledgeLink}>
+                  <input
+                    aria-label="Source link URL"
+                    value={knowledgeLinkDraft}
+                    onChange={(event) => setKnowledgeLinkDraft(event.target.value)}
+                    placeholder="https://..."
+                  />
+                  <button type="submit" disabled={!canAddKnowledgeLink || isSavingActiveStep}>
+                    {isSavingActiveStep ? "Adding..." : "Add link"}
+                  </button>
+                </form>
               </div>
               <span className="community-launch-knowledge-pill">Next</span>
             </section>
@@ -748,10 +782,16 @@ export function WebCommunityLaunchSetupModal(
               <div>
                 <span className="community-launch-knowledge-kicker">Integrations</span>
                 <strong>Connect source systems</strong>
-                <div className="community-launch-knowledge-integrations">
-                  <span>Google Drive</span>
-                  <span>Links</span>
-                  <span>GitHub</span>
+                <p>Connect cloud sources that can become community context once scoped and approved.</p>
+                <div className="community-launch-knowledge-integrations" aria-label="Knowledge integrations">
+                  <button type="button" onClick={() => onOpenStep("workflows")}>
+                    <img src="/app-logos/google-drive.svg" alt="" aria-hidden="true" />
+                    <span>Google Drive</span>
+                  </button>
+                  <button type="button" onClick={() => onOpenStep("workflows")}>
+                    <img src="/app-logos/github.svg" alt="" aria-hidden="true" />
+                    <span>GitHub</span>
+                  </button>
                 </div>
               </div>
               <span className="community-launch-knowledge-pill">Planned</span>
