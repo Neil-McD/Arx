@@ -26,8 +26,8 @@ const workspaceLandingProjection = read(
 assert.deepEqual(COMMUNITY_LAUNCH_SETUP_STEPS, [
   "profile",
   "about",
-  "knowledge",
   "agent",
+  "knowledge",
   "workflows",
   "access",
   "publish",
@@ -67,6 +67,21 @@ assert.deepEqual(draftStatus.steps.find((step) => step.step === "knowledge")?.mi
   "community_knowledge_material",
   "community_knowledge_published",
 ]);
+
+const agentBeforeKnowledgeStatus = buildCommunityLaunchSetupStatus({
+  name: "Operators",
+  oneLiner: "Operators building with AI.",
+  avatarUrl: "https://example.com/avatar.png",
+  bannerUrl: "https://example.com/banner.png",
+  about: "A community for operators.",
+  hasKnowledgeMaterial: false,
+  hasPublishedKnowledge: false,
+  hasAgentConfig: false,
+  hasWorkflow: false,
+  entryPolicy: "approval",
+  visibility: "unlisted",
+});
+assert.equal(agentBeforeKnowledgeStatus.current_step, "agent");
 
 const stagedKnowledgeStatus = buildCommunityLaunchSetupStatus({
   name: "Operators",
@@ -241,7 +256,7 @@ assert.match(
 );
 assert.match(
   setupModal,
-  /Profile[\s\S]*About[\s\S]*Knowledge[\s\S]*Agent[\s\S]*Workflows[\s\S]*Access[\s\S]*Publish/,
+  /Profile[\s\S]*About[\s\S]*Agent[\s\S]*Knowledge[\s\S]*Workflows[\s\S]*Access[\s\S]*Publish/,
   "launch modal must expose the agreed setup sequence",
 );
 assert.match(

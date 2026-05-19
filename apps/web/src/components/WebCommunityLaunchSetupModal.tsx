@@ -102,8 +102,8 @@ type WebCommunityLaunchSetupModalProps = {
 const STEP_ORDER: CommunityLaunchSetupStep[] = [
   "profile",
   "about",
-  "knowledge",
   "agent",
+  "knowledge",
   "workflows",
   "access",
   "publish",
@@ -130,17 +130,17 @@ const STEP_META: Record<
     action: "Open about",
     icon: <FileText size={15} strokeWidth={2} aria-hidden="true" />,
   },
-  knowledge: {
-    label: "Knowledge",
-    title: "Add community knowledge",
-    action: "Open resources",
-    icon: <BookOpen size={15} strokeWidth={2} aria-hidden="true" />,
-  },
   agent: {
     label: "Agent",
     title: "Set the agent behavior",
     action: "Open agent",
     icon: <Bot size={15} strokeWidth={2} aria-hidden="true" />,
+  },
+  knowledge: {
+    label: "Knowledge",
+    title: "Add community knowledge",
+    action: "Open resources",
+    icon: <BookOpen size={15} strokeWidth={2} aria-hidden="true" />,
   },
   workflows: {
     label: "Workflows",

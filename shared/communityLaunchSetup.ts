@@ -6,8 +6,8 @@ import {
 export type CommunityLaunchSetupStep =
   | "profile"
   | "about"
-  | "knowledge"
   | "agent"
+  | "knowledge"
   | "workflows"
   | "access"
   | "publish";
@@ -62,8 +62,8 @@ export type CommunityLaunchSetupStatusInput = {
 export const COMMUNITY_LAUNCH_SETUP_STEPS: CommunityLaunchSetupStep[] = [
   "profile",
   "about",
-  "knowledge",
   "agent",
+  "knowledge",
   "workflows",
   "access",
   "publish",
@@ -142,8 +142,8 @@ export function buildCommunityLaunchSetupStatus(
   const steps = [
     buildStepStatus("profile", profileMissing, COMMUNITY_PROFILE_TOTAL_ITEMS),
     buildStepStatus("about", aboutMissing, 1),
-    buildStepStatus("knowledge", knowledgeMissing, 2),
     buildStepStatus("agent", agentMissing, 1),
+    buildStepStatus("knowledge", knowledgeMissing, 2),
     buildStepStatus("workflows", workflowMissing, 1),
     buildStepStatus("access", accessMissing, 1),
     buildStepStatus("publish", publishMissing, 1),
