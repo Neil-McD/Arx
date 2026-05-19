@@ -52,6 +52,22 @@ export const MOBILE_SHELL_PATH_PREFIX = "/m";
 export const STANDALONE_APP_LAUNCH_SEARCH_PARAM = "launch";
 export const STANDALONE_APP_LAUNCH_SEARCH_VALUE = "app";
 
+const RESERVED_WORKSPACE_ROUTE_SEGMENTS = new Set([
+  "apps",
+  "community",
+  "files",
+  "project",
+  "projects",
+  "settings",
+  "skills",
+  "thread",
+]);
+
+function isReservedWorkspaceRouteSegment(value: string | null | undefined): boolean {
+  const segment = String(value ?? "").trim().toLowerCase();
+  return Boolean(segment && RESERVED_WORKSPACE_ROUTE_SEGMENTS.has(segment));
+}
+
 function joinPathWithQueryAndHash(pathname: string, search: string, hash: string): string {
   return `${pathname || "/"}${search || ""}${hash || ""}` || "/";
 }
@@ -139,7 +155,10 @@ export function buildWorkspaceDraftPath(): string {
 export function buildWorkspaceCommunityDraftPath(communitySlug: string | null | undefined): string | null {
   const slug = String(communitySlug ?? "").trim();
   if (!slug) return null;
-  return `/workspace/${encodeURIComponent(slug)}`;
+  const encodedSlug = encodeURIComponent(slug);
+  return isReservedWorkspaceRouteSegment(slug)
+    ? `/workspace/community/${encodedSlug}`
+    : `/workspace/${encodedSlug}`;
 }
 
 export function buildWorkspaceThreadPath(threadId: string | null | undefined): string {
@@ -344,17 +363,6 @@ function parseCommunityTabSegment(value: string | null | undefined): CommunityTa
   }
 }
 
-const RESERVED_WORKSPACE_ROUTE_SEGMENTS = new Set([
-  "apps",
-  "community",
-  "files",
-  "project",
-  "projects",
-  "settings",
-  "skills",
-  "thread",
-]);
-
 function parseAppRouteFromPathname(pathname: string): AppRoutePathState | null {
   const segments = splitPathSegments(pathname);
   if (segments.length === 0) {
@@ -440,7 +448,7 @@ function parseAppRouteFromPathname(pathname: string): AppRoutePathState | null {
         threadId: null,
       };
     }
-    if (segments.length === 2 && !RESERVED_WORKSPACE_ROUTE_SEGMENTS.has(segments[1])) {
+    if (segments.length === 2 && !isReservedWorkspaceRouteSegment(segments[1])) {
       const slug = String(segments[1] ?? "").trim();
       if (!slug) return null;
       return {

@@ -131,8 +131,8 @@ For workspace operating routes, the same principle applies:
 
 This is now the active route direction in the web app.
 
-`/workspace/community/:slug` is accepted as a legacy compatibility route, but it should canonicalize to
-`/workspace/:communitySlug`.
+`/workspace/community/:slug` is accepted as a legacy compatibility route. Normal community workspace routes should
+canonicalize to `/workspace/:communitySlug`; reserved workspace segments use the legacy route as an escape hatch.
 
 ## Transactional Routes
 
