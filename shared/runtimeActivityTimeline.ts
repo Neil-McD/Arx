@@ -2,6 +2,7 @@ import { isVerificationShellCommand } from "./runtimeWorkingStateLedger.ts";
 
 export type AgentActivityKind =
   | "planning"
+  | "connecting"
   | "exploring"
   | "reading"
   | "editing"
@@ -338,6 +339,76 @@ function extractToolItems(events: RuntimeActivityEvent[]): Map<string, ToolActiv
   return calls;
 }
 
+function workspaceSessionItemId(event: RuntimeActivityEvent): string {
+  return `${event.run_id}:workspace_session_create`;
+}
+
+function buildWorkspaceSessionTitle(status: AgentActivityStatus): string {
+  if (status === "error") return "Workspace computer failed to start";
+  if (status === "ok") return "Workspace computer ready";
+  return "Starting workspace computer";
+}
+
+function extractWorkspaceSessionItems(events: RuntimeActivityEvent[]): Map<string, ToolActivityItem> {
+  const sessions = new Map<string, ToolActivityItem>();
+  for (const event of events) {
+    if (
+      event.event_type !== "workspace_session_create_started" &&
+      event.event_type !== "workspace_session_adopted" &&
+      event.event_type !== "workspace_session_create_completed"
+    ) {
+      continue;
+    }
+    const payload = asRecord(event.payload);
+    const sessionId = workspaceSessionItemId(event);
+    const finished =
+      event.event_type === "workspace_session_create_completed";
+    const status: AgentActivityStatus = finished
+      ? toStringValue(payload?.status) === "error"
+        ? "error"
+        : "ok"
+      : "running";
+    const existing = sessions.get(sessionId);
+    const errorDetail =
+      toStringValue(payload?.message) ||
+      toStringValue(payload?.error_message) ||
+      toStringValue(payload?.code);
+    const latencyMs = toFiniteNumber(payload?.latency_ms);
+    const item: ToolActivityItem = existing ?? {
+      id: sessionId,
+      kind: "connecting",
+      title: buildWorkspaceSessionTitle(status),
+      detail: null,
+      toolName: null,
+      status,
+      seqStart: event.seq,
+      seqEnd: event.seq,
+      startedAt: event.created_at,
+      finishedAt: finished ? event.created_at : null,
+      durationMs: null,
+      stats: {},
+    };
+
+    item.seqStart = Math.min(item.seqStart, event.seq);
+    item.seqEnd = Math.max(item.seqEnd, event.seq);
+    item.startedAt = item.startedAt ?? event.created_at;
+    item.status = status === "running" && item.status === "error" ? "error" : status;
+    item.title = buildWorkspaceSessionTitle(item.status);
+    if (errorDetail) item.detail = errorDetail;
+    if (finished) {
+      item.finishedAt = event.created_at;
+      item.durationMs =
+        latencyMs === null
+          ? durationBetweenMs(item.startedAt, item.finishedAt)
+          : Math.max(0, Math.floor(latencyMs));
+    } else {
+      item.durationMs = durationBetweenMs(item.startedAt, item.finishedAt);
+    }
+    sessions.set(sessionId, item);
+  }
+  return sessions;
+}
+
 function addStats(left: AgentActivityStats, right: AgentActivityStats): AgentActivityStats {
   const next: AgentActivityStats = { ...left };
   const writable = next as Record<keyof AgentActivityStats, number | undefined>;
@@ -360,6 +431,7 @@ function formatDuration(durationMs: number | null): string | null {
 
 function titleForKind(kind: AgentActivityKind): string {
   if (kind === "planning") return "Planning";
+  if (kind === "connecting") return "Starting workspace computer";
   if (kind === "exploring") return "Exploring";
   if (kind === "reading") return "Reading";
   if (kind === "editing") return "Editing";
@@ -371,6 +443,14 @@ function titleForKind(kind: AgentActivityKind): string {
 function summarizeStep(kind: AgentActivityKind, stats: AgentActivityStats, items: AgentActivityItem[]): string {
   const parts: string[] = [];
   if (kind === "planning") return "Prepared the workspace run.";
+  if (kind === "connecting") {
+    if (items.some((item) => item.status === "error")) {
+      return items.find((item) => item.status === "error")?.detail || "Workspace computer could not start.";
+    }
+    if (items.some((item) => item.status === "running")) return "Workspace computer is coming online.";
+    const duration = formatDuration(mergeDurationMs(items));
+    return duration ? `Workspace ready in ${duration}.` : "Workspace computer is ready.";
+  }
   if (kind === "exploring") {
     if (stats.directoriesScanned) parts.push(formatCount(stats.directoriesScanned, "directory", "directories"));
     if (stats.searches) parts.push(formatCount(stats.searches, "search"));
@@ -426,7 +506,7 @@ function createStep(kind: AgentActivityKind, index: number, items: ToolActivityI
   return {
     id: `${kind}:${seqStart}:${index}`,
     kind,
-    title: titleForKind(kind),
+    title: kind === "connecting" ? items[items.length - 1]?.title || titleForKind(kind) : titleForKind(kind),
     summary: summarizeStep(kind, stats, items),
     status,
     seqStart,
@@ -484,7 +564,9 @@ export function buildAgentActivityTimeline(events: RuntimeActivityEvent[]): Agen
   if (sorted.length === 0) return [];
 
   const toolItems = extractToolItems(sorted);
+  const workspaceSessionItems = extractWorkspaceSessionItems(sorted);
   const placedToolCallIds = new Set<string>();
+  const placedWorkspaceSessionIds = new Set<string>();
   const stepInputs: Array<{ kind: AgentActivityKind; items: ToolActivityItem[] }> = [];
   let current: { kind: AgentActivityKind; items: ToolActivityItem[] } | null = null;
   const firstEventCreatedAt = sorted[0]?.created_at ?? null;
@@ -501,6 +583,19 @@ export function buildAgentActivityTimeline(events: RuntimeActivityEvent[]): Agen
   for (const event of sorted) {
     if (event.event_type === "run_started") {
       pushItem(runStartedItem(event));
+      continue;
+    }
+    if (
+      event.event_type === "workspace_session_create_started" ||
+      event.event_type === "workspace_session_adopted" ||
+      event.event_type === "workspace_session_create_completed"
+    ) {
+      const sessionId = workspaceSessionItemId(event);
+      if (placedWorkspaceSessionIds.has(sessionId)) continue;
+      const item = workspaceSessionItems.get(sessionId);
+      if (!item) continue;
+      pushItem(item);
+      placedWorkspaceSessionIds.add(sessionId);
       continue;
     }
     if (event.event_type === "tool_call_started" || event.event_type === "tool_call_finished") {

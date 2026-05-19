@@ -1,4 +1,7 @@
-import { type RetrievalToolName } from "./retrievalTools.ts";
+import {
+  WORKSPACE_SANDBOX_TOOL_NAMES,
+  type RetrievalToolName,
+} from "./retrievalTools.ts";
 import type { RuntimeKernelBudget } from "./runtimeKernelTypes";
 import {
   renderRuntimeTurnContextForPrompt,
@@ -313,6 +316,9 @@ function buildPlatformHarnessOperatingPolicyPrompt(params: {
   allowedToolNames: readonly RetrievalToolName[];
 }): string {
   const toolGuidance: string[] = [];
+  const workspaceToolsEnabled = params.allowedToolNames.some((toolName) =>
+    WORKSPACE_SANDBOX_TOOL_NAMES.includes(toolName),
+  );
   if (
     params.allowedToolNames.includes("search_product_docs") ||
     params.allowedToolNames.includes("get_product_doc")
@@ -355,6 +361,12 @@ function buildPlatformHarnessOperatingPolicyPrompt(params: {
       ? "- If connected-app provider behavior is unclear and the answer depends on it, use web_research against official provider docs/status before making a provider-specific claim."
       : "- If connected-app provider behavior is unclear and research tools are unavailable, name the uncertainty and the setup/permission detail needed to resolve it.",
   );
+  if (workspaceToolsEnabled) {
+    toolGuidance.push(
+      "- Workspace tools can start paid workspace computer compute. Use them only when the task needs filesystem, shell, repo, preview, browser/computer, or artifact execution.",
+      "- For greetings, casual replies, and general questions that current prompt/context can answer, reply directly without workspace tools.",
+    );
+  }
   if (params.allowedToolNames.includes("list_dir")) {
     toolGuidance.push(
       "- Use list_dir to discover files and folders before claiming workspace knowledge you have not inspected.",

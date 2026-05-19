@@ -7,6 +7,10 @@ import {
   buildRuntimeTurnContextPacket,
 } from "../shared/runtimeTurnContextPacket.ts";
 
+function readRepoText(relativePath: string): string {
+  return readFileSync(new URL(`../${relativePath}`, import.meta.url), "utf8");
+}
+
 function indexOfBlock(prompt: string, blockName: string): number {
   const index = prompt.indexOf(blockName);
   assert.notEqual(index, -1, `expected ${blockName} block`);
@@ -247,6 +251,8 @@ assert.match(prompt, /recovery=Check the connected account, workspace\/resource 
 assert.match(prompt, /Do not say exact failed tool calls are unavailable when they are listed here/);
 assert.match(prompt, /When a connected app\/MCP tool fails/);
 assert.match(prompt, /Do not repeatedly call the same failing connected-app tool/);
+assert.match(prompt, /Workspace tools can start paid workspace computer compute/);
+assert.match(prompt, /For greetings, casual replies, and general questions/);
 assert.doesNotMatch(prompt, /WORKSPACE_RUNTIME_STATE/);
 assert.doesNotMatch(prompt, /BACKGROUND_TERMINAL_STATE/);
 assert.match(prompt, /Polynet helps builders create, deploy, and monetize AI agents, communities, and apps/);
@@ -278,22 +284,10 @@ assert.doesNotMatch(
   "runtime prompt should avoid duplicating product docs content",
 );
 
-const runtimePromptSource = readFileSync(
-  "/Users/neilmcdevitt/code/arx/shared/runtimePrompt.ts",
-  "utf8",
-);
-const runtimeTurnContextPacketSource = readFileSync(
-  "/Users/neilmcdevitt/code/arx/shared/runtimeTurnContextPacket.ts",
-  "utf8",
-);
-const httpDaytonaSource = readFileSync(
-  "/Users/neilmcdevitt/code/arx/convex/httpDaytona.ts",
-  "utf8",
-);
-const runtimeTurnContextLoaderSource = readFileSync(
-  "/Users/neilmcdevitt/code/arx/convex/runtimeTurnContext.ts",
-  "utf8",
-);
+const runtimePromptSource = readRepoText("shared/runtimePrompt.ts");
+const runtimeTurnContextPacketSource = readRepoText("shared/runtimeTurnContextPacket.ts");
+const httpDaytonaSource = readRepoText("convex/httpDaytona.ts");
+const runtimeTurnContextLoaderSource = readRepoText("convex/runtimeTurnContext.ts");
 assert.match(
   runtimePromptSource,
   /const stablePromptBlocks = \[/,

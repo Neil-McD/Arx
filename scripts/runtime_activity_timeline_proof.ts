@@ -5,7 +5,7 @@ import {
   type AgentActivityKind,
 } from "../shared/runtimeActivityTimeline.ts";
 
-function readText(path: string): string {
+function readText(path: string | URL): string {
   return readFileSync(path, "utf8");
 }
 
@@ -69,12 +69,13 @@ function kinds(events: ReturnType<typeof event>[]): AgentActivityKind[] {
   return buildAgentActivityTimeline(events).map((step) => step.kind);
 }
 
-const projection = readText("/Users/neilmcdevitt/code/arx/shared/runtimeActivityTimeline.ts");
-const runtimeTimelineUi = readText("/Users/neilmcdevitt/code/arx/shared/runtimeTimelineUi.ts");
+const projection = readText(new URL("../shared/runtimeActivityTimeline.ts", import.meta.url));
+const runtimeTimelineUi = readText(new URL("../shared/runtimeTimelineUi.ts", import.meta.url));
 
 for (const token of [
   "export type AgentActivityKind",
   '"planning"',
+  '"connecting"',
   '"exploring"',
   '"reading"',
   '"editing"',
@@ -82,6 +83,8 @@ for (const token of [
   '"blocked"',
   '"completed"',
   "buildAgentActivityTimeline",
+  "workspace_session_create_started",
+  "workspace_session_create_completed",
   "isVerificationShellCommand",
   "totalDurationMs",
 ]) {
@@ -93,6 +96,80 @@ assertContains(
   "buildRuntimeLiveTimeline",
   "runtime timeline UI projection remains intact",
 );
+
+const startingWorkspace = [
+  event({ seq: 1, event_type: "run_started", created_at: "2026-04-25T12:00:00.000Z" }),
+  event({
+    seq: 2,
+    event_type: "workspace_session_create_started",
+    payload: { run_id: "run_1", project_id: "project_1", tool_name: "bash" },
+    created_at: "2026-04-25T12:00:01.000Z",
+  }),
+];
+const startingWorkspaceSteps = buildAgentActivityTimeline(startingWorkspace);
+assert.deepEqual(
+  startingWorkspaceSteps.map((step) => step.kind),
+  ["planning", "connecting"],
+);
+assert.equal(startingWorkspaceSteps[1]?.title, "Starting workspace computer");
+assert.equal(startingWorkspaceSteps[1]?.status, "running");
+assert.equal(startingWorkspaceSteps[1]?.isActive, true);
+assert.match(startingWorkspaceSteps[1]?.summary ?? "", /coming online/);
+
+const readyWorkspace = [
+  ...startingWorkspace,
+  event({
+    seq: 3,
+    event_type: "workspace_session_adopted",
+    payload: {
+      run_id: "run_1",
+      project_id: "project_1",
+      sandbox_id: "sandbox_1",
+      source: "project_background",
+    },
+    created_at: "2026-04-25T12:00:08.000Z",
+  }),
+  event({
+    seq: 4,
+    event_type: "workspace_session_create_completed",
+    payload: {
+      run_id: "run_1",
+      project_id: "project_1",
+      tool_name: "bash",
+      latency_ms: 9000,
+      status: "ok",
+      sandbox_id: "sandbox_1",
+    },
+    created_at: "2026-04-25T12:00:10.000Z",
+  }),
+];
+const readyWorkspaceStep = buildAgentActivityTimeline(readyWorkspace).find(
+  (step) => step.kind === "connecting",
+);
+assert.equal(readyWorkspaceStep?.status, "ok");
+assert.match(readyWorkspaceStep?.summary ?? "", /Workspace ready/);
+
+const failedWorkspace = [
+  ...startingWorkspace,
+  event({
+    seq: 3,
+    event_type: "workspace_session_create_completed",
+    payload: {
+      run_id: "run_1",
+      project_id: "project_1",
+      tool_name: "bash",
+      latency_ms: 5000,
+      status: "error",
+      code: "workspace_session_create_failed",
+    },
+    created_at: "2026-04-25T12:00:06.000Z",
+  }),
+];
+const failedWorkspaceStep = buildAgentActivityTimeline(failedWorkspace).find(
+  (step) => step.kind === "connecting",
+);
+assert.equal(failedWorkspaceStep?.status, "error");
+assert.match(failedWorkspaceStep?.summary ?? "", /workspace_session_create_failed/);
 
 const happyPath = [
   event({ seq: 1, event_type: "run_started", created_at: "2026-04-25T12:00:00.000Z" }),
