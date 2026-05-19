@@ -38,6 +38,7 @@ const result = withMaintenanceToken(options, (token) => {
       ownerId: ownerId ?? undefined,
       runId: run?.runId,
       limit: 1,
+      compact: true,
     }),
   );
   return { run, evidence };

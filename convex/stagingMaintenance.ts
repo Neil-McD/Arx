@@ -116,6 +116,7 @@ const CODEX_THREAD_BINDING_EVIDENCE_EVENT_TYPES = new Set([
 ]);
 
 const CODEX_THREAD_BINDING_COMPACT_EVIDENCE_EVENT_TYPES = new Set([
+  "runtime_agent_harness_selected",
   "codex_thread_binding_resolved",
   "codex_thread_binding_lock_acquired",
   "codex_thread_binding_lock_conflict",
