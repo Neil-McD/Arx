@@ -3,6 +3,7 @@ import {
   buildDaytonaToolboxBaseCandidates,
   shouldRetryWithAlternateToolboxBase,
 } from "./daytonaToolboxExecutor";
+import { normalizeDaytonaProcessSessionCommandLogsPayload } from "../shared/daytonaProcessSessionLogs.ts";
 
 type DaytonaProcessSessionCommandDto = {
   id?: unknown;
@@ -23,6 +24,10 @@ type DaytonaProcessSessionLogsDto = {
   stdout?: unknown;
   stderr?: unknown;
   output?: unknown;
+  logs?: unknown;
+  data?: unknown;
+  result?: unknown;
+  text?: unknown;
 };
 
 function isAbortError(error: unknown): boolean {
@@ -416,12 +421,11 @@ export async function getDaytonaProcessSessionCommandLogs(params: {
     path: `/process/session/${encodeURIComponent(params.sessionId)}/command/${encodeURIComponent(params.commandId)}/logs`,
   });
   if (!response.ok) return response;
-  const payload = response.payload ?? {};
-  const stdout = toStringValue(payload.stdout) ?? "";
-  const stderr = toStringValue(payload.stderr) ?? "";
-  const output =
-    toStringValue(payload.output) ??
-    [stdout, stderr].filter(Boolean).join(stdout && stderr ? "\n" : "");
+  const { stdout, stderr, output } =
+    normalizeDaytonaProcessSessionCommandLogsPayload(
+      response.payload,
+      response.text,
+    );
   return {
     ok: true,
     stdout,
