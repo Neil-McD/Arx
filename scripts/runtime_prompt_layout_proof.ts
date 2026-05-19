@@ -59,6 +59,9 @@ const prompt = buildPlatformHarnessRuntimeSystemPrompt({
   },
   allowedToolNames: [
     "get_active_community_context",
+    "community_resources_list",
+    "community_resource_read",
+    "community_resources_search",
     "community_search",
     "read",
     "write",
@@ -257,7 +260,9 @@ assert.match(prompt, /You are the member's Polynet agent: a sharp little intelli
 assert.match(prompt, /Keep proofs tight/);
 assert.match(prompt, /Use this lens as background context/);
 assert.match(prompt, /Use get_active_community_context when the answer depends on the active community's identity/);
-assert.match(prompt, /Use community_search when community activity, archive memory, resources, or learned context matter/);
+assert.match(prompt, /When available, use community resource tools when canonical resource navigation/);
+assert.match(prompt, /Use community_resources_list to inspect/);
+assert.match(prompt, /Use community_search when active community activity, archive memory, or learned context matter beyond the resource directory/);
 assert.match(prompt, /About excerpt: Used to prove prompt layout/);
 assert.match(prompt, /The about excerpt is not a complete knowledge base/);
 assert.doesNotMatch(prompt, /About: Used to prove prompt layout/);

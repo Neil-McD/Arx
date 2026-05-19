@@ -8,6 +8,8 @@ type WebCommunityResourceModalProps = {
   resourceUrlInput: string;
   resourceBodyInput: string;
   resourcePinnedInput: boolean;
+  resourceRoleInput: "page" | "source";
+  resourceStatusInput: "draft" | "review" | "published" | "processing" | "failed";
   resourceError: string | null;
   isSavingResource: boolean;
   onClose: () => void;
@@ -17,6 +19,8 @@ type WebCommunityResourceModalProps = {
   onChangeUrl: (value: string) => void;
   onChangeBody: (value: string) => void;
   onChangePinned: (value: boolean) => void;
+  onChangeRole: (value: "page" | "source") => void;
+  onChangeStatus: (value: "draft" | "review" | "published" | "processing" | "failed") => void;
 };
 
 function LinkIcon() {
@@ -61,6 +65,8 @@ export function WebCommunityResourceModal(props: WebCommunityResourceModalProps)
     resourceUrlInput,
     resourceBodyInput,
     resourcePinnedInput,
+    resourceRoleInput,
+    resourceStatusInput,
     resourceError,
     isSavingResource,
     onClose,
@@ -70,6 +76,8 @@ export function WebCommunityResourceModal(props: WebCommunityResourceModalProps)
     onChangeUrl,
     onChangeBody,
     onChangePinned,
+    onChangeRole,
+    onChangeStatus,
   } = props;
 
   if (!isOpen) return null;
@@ -91,7 +99,7 @@ export function WebCommunityResourceModal(props: WebCommunityResourceModalProps)
           <div>
             <div className="modal-title">{editingResourceId ? "Edit resource" : "Add resource"}</div>
             <div className="resource-modal-subtitle">
-              Save a durable link, video, or note that members can come back to.
+              Save a durable page or source for the community knowledge base.
             </div>
           </div>
           <button className="modal-close" onClick={onClose} title="Close">
@@ -100,6 +108,28 @@ export function WebCommunityResourceModal(props: WebCommunityResourceModalProps)
         </div>
         <div className="modal-body">
           <div className="resource-form">
+            <div className="resource-form-section">
+              <div className="resource-field-label">Kind</div>
+              <div className="resource-kind-segment" role="group" aria-label="Knowledge item kind">
+                <button
+                  type="button"
+                  className={resourceRoleInput === "page" ? "is-active" : ""}
+                  onClick={() => onChangeRole("page")}
+                  disabled={!hasActiveCommunity}
+                >
+                  Page
+                </button>
+                <button
+                  type="button"
+                  className={resourceRoleInput === "source" ? "is-active" : ""}
+                  onClick={() => onChangeRole("source")}
+                  disabled={!hasActiveCommunity}
+                >
+                  Source
+                </button>
+              </div>
+            </div>
+
             <div className="resource-form-section">
               <div className="resource-title-row">
                 <div className="resource-field-label">Title</div>
@@ -153,7 +183,7 @@ export function WebCommunityResourceModal(props: WebCommunityResourceModalProps)
                   />
                 </div>
                 <div className="resource-source-hint">
-                  Supports YouTube, Wistia, and normal links. Leave blank if this is just a note.
+                  Supports YouTube, Wistia, normal links, and PDF links. Leave blank for a written page.
                 </div>
                 {embed ? (
                   <div className="resource-source-status">
@@ -190,14 +220,35 @@ export function WebCommunityResourceModal(props: WebCommunityResourceModalProps)
             </div>
 
             <div className="resource-form-section">
-              <div className="resource-field-label">Description</div>
+              <div className="resource-field-label">Content</div>
               <textarea
                 className="resource-description-input"
-                placeholder="Add the context, takeaway, or reason this matters."
+                placeholder={resourceRoleInput === "source" ? "Add extraction notes, context, or review instructions." : "Write the page content, context, or takeaway."}
                 value={resourceBodyInput}
                 onChange={(event) => onChangeBody(event.target.value)}
                 disabled={!hasActiveCommunity}
               />
+            </div>
+
+            <div className="resource-form-section">
+              <div className="resource-field-label">Status</div>
+              <select
+                className="resource-status-select"
+                value={resourceStatusInput}
+                onChange={(event) =>
+                  onChangeStatus(event.target.value as "draft" | "review" | "published" | "processing" | "failed")
+                }
+                disabled={!hasActiveCommunity}
+              >
+                <option value="published">Published</option>
+                <option value="draft">Draft</option>
+                <option value="review">Needs review</option>
+                <option value="processing">Processing</option>
+                <option value="failed">Failed</option>
+              </select>
+              <div className="resource-source-hint">
+                Only published items are visible to members and available to community search.
+              </div>
             </div>
 
             {resourceError && <div className="auth-error">{resourceError}</div>}
@@ -212,10 +263,10 @@ export function WebCommunityResourceModal(props: WebCommunityResourceModalProps)
                 !hasActiveCommunity ||
                 isSavingResource ||
                 resourceTitleInput.trim().length === 0 ||
-                resourceBodyInput.trim().length === 0
+                (resourceBodyInput.trim().length === 0 && resourceUrlInput.trim().length === 0)
               }
             >
-              {isSavingResource ? "Saving..." : editingResourceId ? "Save changes" : "Save resource"}
+              {isSavingResource ? "Saving..." : editingResourceId ? "Save changes" : "Save knowledge"}
             </button>
             <button className="secondary" onClick={onCancel}>
               Cancel

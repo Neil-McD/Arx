@@ -1,4 +1,8 @@
 import { resolveUserIdForAuthenticatedRequest } from "./authActor";
+import {
+  buildCommunityResourceDirectoryFields,
+  buildCommunityResourceModuleDirectoryFields,
+} from "../shared/communityResourceDirectory";
 export { resolveUserIdForAuthenticatedRequest } from "./authActor";
 
 export type CommunityLike = {
@@ -189,6 +193,9 @@ export type CommunityResourceLike = {
   moduleId?: any;
   createdByUserId: any;
   type: string;
+  role?: string;
+  status?: string;
+  sourceResourceId?: any;
   title: string;
   bodyMd?: string;
   url?: string;
@@ -214,6 +221,22 @@ export type CommunityResourceModuleLike = {
   createdAt: number;
   updatedAt: number;
 };
+
+async function resolveCommunityResourceModuleName(
+  ctx: any,
+  row: CommunityResourceLike,
+  moduleNameCache?: Map<string, string | null>,
+): Promise<string | null> {
+  if (!row.moduleId) return null;
+  const moduleId = String(row.moduleId);
+  if (moduleNameCache?.has(moduleId)) return moduleNameCache.get(moduleId) ?? null;
+  const module = (await ctx.db.get(row.moduleId as any)) as CommunityResourceModuleLike | null;
+  const name = module && String(module.communityId) === String(row.communityId)
+    ? module.name
+    : null;
+  moduleNameCache?.set(moduleId, name);
+  return name;
+}
 
 export type PublicPlanSummaryLike = {
   name: string;
@@ -416,6 +439,55 @@ export function normalizeResourceType(raw: unknown): "post" | "embed" | "link" |
     .toLowerCase();
   if (type === "embed" || type === "link" || type === "file") return type;
   return "post";
+}
+
+export function normalizeResourceRole(raw: unknown): "page" | "source" {
+  const role = String(raw ?? "")
+    .trim()
+    .toLowerCase();
+  if (role === "source") return "source";
+  return "page";
+}
+
+export type CommunityResourceStatus = "draft" | "review" | "published" | "processing" | "failed";
+
+export function parseResourceStatusForWrite(raw: unknown): CommunityResourceStatus | null {
+  const status = String(raw ?? "")
+    .trim()
+    .toLowerCase();
+  if (status === "draft") return "draft";
+  if (status === "review" || status === "in_review" || status === "needs_review") return "review";
+  if (status === "processing") return "processing";
+  if (status === "failed") return "failed";
+  if (status === "published") return "published";
+  return null;
+}
+
+export function requireResourceStatusForWrite(raw: unknown): CommunityResourceStatus {
+  const status = parseResourceStatusForWrite(raw);
+  if (!status) throw new Error("community_resource_status_invalid");
+  return status;
+}
+
+export function normalizeResourceStatus(raw: unknown): CommunityResourceStatus {
+  const status = String(raw ?? "").trim();
+  if (!status) return "published";
+  return parseResourceStatusForWrite(status) ?? "draft";
+}
+
+export function communityResourceHasUsableKnowledgeContent(row: CommunityResourceLike): boolean {
+  return Boolean(
+    String(row.title ?? "").trim() &&
+      (
+        String(row.bodyMd ?? "").trim() ||
+        String(row.url ?? "").trim() ||
+        String(row.fileKey ?? "").trim()
+      ),
+  );
+}
+
+export function communityResourceIsPublishedKnowledge(row: CommunityResourceLike): boolean {
+  return normalizeResourceStatus(row.status) === "published" && communityResourceHasUsableKnowledgeContent(row);
 }
 
 export function normalizeOptionalUrl(raw: unknown): string | undefined {
@@ -661,12 +733,26 @@ export async function mapCommunityResourceRow(
   ctx: any,
   row: CommunityResourceLike,
   userIdCache?: Map<string, string | null>,
+  moduleNameCache?: Map<string, string | null>,
 ) {
+  const resourceDirectory = buildCommunityResourceDirectoryFields({
+    communityId: String(row.communityId),
+    moduleId: row.moduleId ? String(row.moduleId) : null,
+    moduleName: await resolveCommunityResourceModuleName(ctx, row, moduleNameCache),
+    resourceId: String(row._id),
+    resourceTitle: row.title,
+    resourceRole: normalizeResourceRole(row.role),
+  });
   return {
     id: String(row._id),
     community_id: String(row.communityId),
     module_id: row.moduleId ? String(row.moduleId) : null,
+    directory_uri: resourceDirectory.directory_uri,
+    directory_path: resourceDirectory.directory_path,
     type: String(row.type ?? "").trim().toLowerCase() || "post",
+    resource_role: normalizeResourceRole(row.role),
+    resource_status: normalizeResourceStatus(row.status),
+    source_resource_id: row.sourceResourceId ? String(row.sourceResourceId) : null,
     title: row.title,
     body_md: row.bodyMd ?? null,
     url: row.url ?? null,
@@ -688,9 +774,16 @@ export async function mapCommunityResourceModuleRow(
   const resolvedBannerUrl = row.bannerStorageId
     ? await maybeResolveStorageUrl(ctx, row.bannerStorageId)
     : null;
+  const moduleDirectory = buildCommunityResourceModuleDirectoryFields({
+    communityId: String(row.communityId),
+    moduleId: String(row._id),
+    moduleName: row.name,
+  });
   return {
     id: String(row._id),
     community_id: String(row.communityId),
+    directory_uri: moduleDirectory.directory_uri,
+    directory_path: moduleDirectory.directory_path,
     name: row.name,
     description_md: row.descriptionMd ?? null,
     banner_url: resolvedBannerUrl ?? row.bannerUrl ?? null,

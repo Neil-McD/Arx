@@ -15,6 +15,8 @@ type ResourceLike = {
   id: string;
   module_id?: string | null;
   type: string;
+  resource_role?: "page" | "source";
+  resource_status?: "draft" | "review" | "published" | "processing" | "failed";
   title: string;
   body_md: string | null;
   url: string | null;
@@ -72,8 +74,11 @@ export type UseWebCommunityResourceUiControllerResult<
   handleReorderModules: (moduleIds: string[]) => Promise<boolean>;
   handleReorderResources: (moduleId: string | null, resourceIds: string[]) => Promise<boolean>;
   openNewResourceModal: (moduleId?: string | null) => void;
+  openNewSourceModal: (moduleId?: string | null) => void;
   handleEditResource: (resource: ResourceT) => void;
   handleDeleteResource: (resourceId: string) => Promise<boolean>;
+  handlePublishResource: (resource: ResourceT) => Promise<boolean>;
+  handleCreatePageDraftFromSource: (resource: ResourceT) => Promise<ResourceT | null>;
   resourceModuleModalProps: ComponentProps<typeof WebCommunityResourceModuleModal>;
   resourceModuleDeleteModalProps: ComponentProps<typeof WebDeleteResourceModuleModal>;
   resourceModalProps: ComponentProps<typeof WebCommunityResourceModal>;
@@ -98,6 +103,9 @@ export function useWebCommunityResourceUiController<
   const [resourceUrlInput, setResourceUrlInput] = useState("");
   const [resourceBodyInput, setResourceBodyInput] = useState("");
   const [resourcePinnedInput, setResourcePinnedInput] = useState(false);
+  const [resourceRoleInput, setResourceRoleInput] = useState<"page" | "source">("page");
+  const [resourceStatusInput, setResourceStatusInput] =
+    useState<"draft" | "review" | "published" | "processing" | "failed">("published");
   const [resourceModuleIdInput, setResourceModuleIdInput] = useState<string | null>(null);
   const [moduleNameInput, setModuleNameInput] = useState("");
   const [moduleDescriptionInput, setModuleDescriptionInput] = useState("");
@@ -128,6 +136,8 @@ export function useWebCommunityResourceUiController<
     handleReorderCommunityResources,
     handleSaveCommunityResource,
     handleDeleteResource,
+    handlePublishResource,
+    handleCreatePageDraftFromSource,
   } = useCommunityResourceController<SessionT, ResourceT, ResourceModuleT>({
     activeCommunityId: params.activeCommunityId,
     session: params.session,
@@ -142,6 +152,8 @@ export function useWebCommunityResourceUiController<
     resourceUrlInput,
     resourceBodyInput,
     resourcePinnedInput,
+    resourceRoleInput,
+    resourceStatusInput,
     resourceModuleIdInput,
     moduleNameInput,
     moduleDescriptionInput,
@@ -171,6 +183,8 @@ export function useWebCommunityResourceUiController<
     setResourceUrlInput,
     setResourceBodyInput,
     setResourcePinnedInput,
+    setResourceRoleInput,
+    setResourceStatusInput,
     setResourceModuleIdInput,
     setModuleNameInput,
     setModuleDescriptionInput,
@@ -191,6 +205,8 @@ export function useWebCommunityResourceUiController<
     setResourceUrlInput,
     setResourceBodyInput,
     setResourcePinnedInput,
+    setResourceRoleInput,
+    setResourceStatusInput,
     setResourceError,
     setShowResourceModal,
     onReset: () => setResourceModuleIdInput(null),
@@ -200,6 +216,20 @@ export function useWebCommunityResourceUiController<
   const openNewResourceModal = (moduleId?: string | null) => {
     rawOpenNewResourceModal();
     setResourceModuleIdInput(moduleId ?? null);
+  };
+
+  const openNewSourceModal = (moduleId?: string | null) => {
+    rawOpenNewResourceModal();
+    setResourceRoleInput("source");
+    setResourceStatusInput("review");
+    setResourceModuleIdInput(moduleId ?? null);
+  };
+
+  const handleChangeResourceRole = (role: "page" | "source") => {
+    setResourceRoleInput(role);
+    if (!editingResourceId) {
+      setResourceStatusInput(role === "source" ? "review" : "published");
+    }
   };
 
   const openNewModuleModal = () => {
@@ -328,8 +358,11 @@ export function useWebCommunityResourceUiController<
     handleReorderModules: handleReorderCommunityResourceModules,
     handleReorderResources: handleReorderCommunityResources,
     openNewResourceModal,
+    openNewSourceModal,
     handleEditResource,
     handleDeleteResource,
+    handlePublishResource,
+    handleCreatePageDraftFromSource,
     resourceModuleModalProps: {
       isOpen: showResourceModuleModal,
       isEditingModule: Boolean(editingResourceModuleId),
@@ -410,6 +443,8 @@ export function useWebCommunityResourceUiController<
       resourceUrlInput,
       resourceBodyInput,
       resourcePinnedInput,
+      resourceRoleInput,
+      resourceStatusInput,
       resourceError,
       isSavingResource,
       onClose: closeResourceModal,
@@ -422,6 +457,8 @@ export function useWebCommunityResourceUiController<
       onChangeUrl: setResourceUrlInput,
       onChangeBody: setResourceBodyInput,
       onChangePinned: setResourcePinnedInput,
+      onChangeRole: handleChangeResourceRole,
+      onChangeStatus: setResourceStatusInput,
     },
     loadCommunityResourceModules,
     loadCommunityResources,

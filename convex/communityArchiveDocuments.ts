@@ -2,6 +2,9 @@ import {
   type CommunityChatMessageLike,
   type CommunityChatThreadLike,
   type CommunityResourceLike,
+  communityResourceIsPublishedKnowledge,
+  normalizeResourceRole,
+  normalizeResourceStatus,
   normalizeIdValue,
 } from "./communityCore";
 
@@ -36,6 +39,8 @@ export type ArchiveDocLike = {
   authorLabel?: string;
   postType?: ArchivePostType;
   resourceType?: string;
+  resourceRole?: "page" | "source";
+  resourceStatus?: "draft" | "review" | "published" | "processing" | "failed";
   isPdf: boolean;
   embeddingStatus: ArchiveEmbeddingStatus;
   embedding?: number[];
@@ -168,6 +173,8 @@ function buildChatArchiveDoc(params: {
     authorLabel: params.message.senderUserId ? `member:${normalizeIdValue(params.message.senderUserId)}` : "member",
     postType: undefined,
     resourceType: undefined,
+    resourceRole: undefined,
+    resourceStatus: undefined,
     isPdf: false,
     createdAt: params.message.createdAt,
     updatedAt: params.message.updatedAt,
@@ -199,6 +206,8 @@ function buildAiFeedArchiveDoc(post: FeedPostRow): Omit<
     authorLabel: normalizeOptionalText(post.authorLabel, 160) ?? "Agent",
     postType: post.type,
     resourceType: undefined,
+    resourceRole: undefined,
+    resourceStatus: undefined,
     isPdf: false,
     createdAt: post.createdAt,
     updatedAt: post.updatedAt,
@@ -214,6 +223,9 @@ function buildResourceArchiveDoc(params: {
 > | null {
   const url = normalizeUrl(params.resource.url);
   const isPdf = isPdfUrl(url);
+  const resourceRole = normalizeResourceRole(params.resource.role);
+  const resourceStatus = normalizeResourceStatus(params.resource.status);
+  if (!communityResourceIsPublishedKnowledge(params.resource)) return null;
   const sourceText = buildArchiveText([
     params.resource.title,
     params.resource.bodyMd ?? "",
@@ -239,6 +251,8 @@ function buildResourceArchiveDoc(params: {
     authorLabel: undefined,
     postType: undefined,
     resourceType: normalizeOptionalText(params.resource.type, 64) ?? undefined,
+    resourceRole,
+    resourceStatus,
     isPdf,
     createdAt: params.resource.createdAt,
     updatedAt: params.resource.updatedAt,
@@ -291,6 +305,8 @@ async function upsertArchiveDoc(ctx: { db: any }, nextDoc: Omit<
     authorLabel: nextDoc.authorLabel,
     postType: nextDoc.postType,
     resourceType: nextDoc.resourceType,
+    resourceRole: nextDoc.resourceRole,
+    resourceStatus: nextDoc.resourceStatus,
     isPdf: nextDoc.isPdf,
     createdAt: nextDoc.createdAt,
     updatedAt: nextDoc.updatedAt,
@@ -364,13 +380,19 @@ export async function upsertArchiveDocumentForResource(ctx: { db: any }, resourc
     sourceType: "resource",
     sourceId: normalizeIdValue(resource._id),
   });
-  await upsertArchiveDoc(
-    ctx,
-    buildResourceArchiveDoc({
-      resource,
-      existing,
-    }),
-  );
+  const nextDoc = buildResourceArchiveDoc({
+    resource,
+    existing,
+  });
+  if (!nextDoc) {
+    await deleteArchiveDocumentBySource(ctx, {
+      communityId: resource.communityId,
+      sourceType: "resource",
+      sourceId: normalizeIdValue(resource._id),
+    });
+    return;
+  }
+  await upsertArchiveDoc(ctx, nextDoc);
 }
 
 export async function backfillCommunityArchive(ctx: { db: any }, communityId: any): Promise<{

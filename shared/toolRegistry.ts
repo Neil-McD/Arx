@@ -91,6 +91,65 @@ const COMMUNITY_SEARCH_TOOL_SCHEMA: JsonSchema = {
   },
 };
 
+const COMMUNITY_RESOURCES_LIST_TOOL_SCHEMA: JsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    path: {
+      type: "string",
+      minLength: 1,
+      maxLength: 1024,
+    },
+    limit: {
+      type: "integer",
+      minimum: 1,
+      maximum: 100,
+    },
+  },
+};
+
+const COMMUNITY_RESOURCE_READ_TOOL_SCHEMA: JsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["ref"],
+  properties: {
+    ref: {
+      type: "string",
+      minLength: 1,
+      maxLength: 1024,
+      description: "Resource id, resources:// directory URI, or readable resource path.",
+    },
+    offset: {
+      type: "integer",
+      minimum: 0,
+      maximum: 1000000,
+    },
+    limit: {
+      type: "integer",
+      minimum: 1,
+      maximum: 20000,
+    },
+  },
+};
+
+const COMMUNITY_RESOURCES_SEARCH_TOOL_SCHEMA: JsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["query"],
+  properties: {
+    query: {
+      type: "string",
+      minLength: 1,
+      maxLength: 240,
+    },
+    limit: {
+      type: "integer",
+      minimum: 1,
+      maximum: 100,
+    },
+  },
+};
+
 const EMPTY_TOOL_SCHEMA: JsonSchema = {
   type: "object",
   additionalProperties: false,
@@ -477,6 +536,21 @@ const TOOL_REGISTRY: Record<RetrievalToolName, ToolRegistryEntry> = {
     name: "get_active_community_context",
     description: "Read bounded profile context for the active community lens. The active community is server-selected from the thread context.",
     inputSchema: EMPTY_TOOL_SCHEMA,
+  },
+  community_resources_list: {
+    name: "community_resources_list",
+    description: "List the active community's published resource directory. Use paths or resources:// directory URIs returned by this tool to navigate modules and source inboxes.",
+    inputSchema: COMMUNITY_RESOURCES_LIST_TOOL_SCHEMA,
+  },
+  community_resource_read: {
+    name: "community_resource_read",
+    description: "Read one published resource from the active community by resource id, resources:// directory URI, or readable resource path.",
+    inputSchema: COMMUNITY_RESOURCE_READ_TOOL_SCHEMA,
+  },
+  community_resources_search: {
+    name: "community_resources_search",
+    description: "Search the active community's published resources and return resource paths, directory URIs, snippets, and metadata.",
+    inputSchema: COMMUNITY_RESOURCES_SEARCH_TOOL_SCHEMA,
   },
   community_search: {
     name: "community_search",
@@ -990,6 +1064,34 @@ export function normalizeToolArguments(
     const query = normalizeString(args.query);
     if (!query) throw new Error("community_search requires query.");
     return { query: query.slice(0, 240) };
+  }
+  if (toolName === "community_resources_list") {
+    const path = normalizeString(args.path);
+    const limit = normalizeBoundedInteger(args.limit, "community_resources_list limit", 1, 100);
+    return {
+      ...(path ? { path: path.slice(0, 1024) } : null),
+      ...(limit ? { limit } : null),
+    };
+  }
+  if (toolName === "community_resource_read") {
+    const ref = normalizeString(args.ref);
+    if (!ref) throw new Error("community_resource_read requires ref.");
+    const offset = normalizeBoundedInteger(args.offset, "community_resource_read offset", 0, 1000000);
+    const limit = normalizeBoundedInteger(args.limit, "community_resource_read limit", 1, 20000);
+    return {
+      ref: ref.slice(0, 1024),
+      ...(offset !== null ? { offset } : null),
+      ...(limit ? { limit } : null),
+    };
+  }
+  if (toolName === "community_resources_search") {
+    const query = normalizeString(args.query);
+    if (!query) throw new Error("community_resources_search requires query.");
+    const limit = normalizeBoundedInteger(args.limit, "community_resources_search limit", 1, 100);
+    return {
+      query: query.slice(0, 240),
+      ...(limit ? { limit } : null),
+    };
   }
   if (toolName === "get_active_community_context") {
     return {};

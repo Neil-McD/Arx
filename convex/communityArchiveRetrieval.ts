@@ -17,6 +17,8 @@ function mapArchiveDocToItem(doc: ArchiveDocLike, score: number | null) {
     ...(doc.url ? { url: doc.url } : null),
     ...(doc.postType ? { post_type: doc.postType } : null),
     ...(doc.resourceType ? { resource_type: doc.resourceType } : null),
+    ...(doc.resourceRole ? { resource_role: doc.resourceRole } : null),
+    ...(doc.resourceStatus ? { resource_status: doc.resourceStatus } : null),
   };
 }
 

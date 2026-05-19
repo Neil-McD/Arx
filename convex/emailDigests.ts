@@ -3,6 +3,7 @@ import { internalAction, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
 import { buildCommunityTabPath } from "../shared/webAppRouteState";
 import { listActiveCommunityRecipientUserIds } from "./communityRecipientCore";
+import { communityResourceIsPublishedKnowledge } from "./communityCore";
 import {
   buildWeeklyDigestDedupeKey,
   buildWeeklyDigestPeriod,
@@ -60,7 +61,9 @@ type CommunityResourceRow = {
   title: string;
   bodyMd?: string;
   url?: string;
+  fileKey?: string;
   type: string;
+  status?: string;
   pinned: boolean;
   createdAt: number;
 };
@@ -252,14 +255,33 @@ async function listRecentResources(ctx: any, params: {
   periodStartMs: number;
   periodEndMs: number;
 }): Promise<CommunityResourceRow[]> {
-  const rows = (await ctx.db
-    .query("communityResources" as any)
-    .withIndex("by_community_createdAt", (q: any) =>
-      q.eq("communityId", params.communityId).gte("createdAt", params.periodStartMs),
+  const [publishedRows, recentRows] = await Promise.all([
+    ctx.db
+      .query("communityResources" as any)
+      .withIndex("by_community_status_createdAt", (q: any) =>
+        q
+          .eq("communityId", params.communityId)
+          .eq("status", "published")
+          .gte("createdAt", params.periodStartMs),
+      )
+      .collect(),
+    ctx.db
+      .query("communityResources" as any)
+      .withIndex("by_community_createdAt", (q: any) =>
+        q.eq("communityId", params.communityId).gte("createdAt", params.periodStartMs),
+      )
+      .collect(),
+  ]);
+  const uniqueRows = new Map<string, CommunityResourceRow>();
+  for (const row of [...publishedRows, ...recentRows] as CommunityResourceRow[]) {
+    uniqueRows.set(String(row._id), row);
+  }
+  return Array.from(uniqueRows.values())
+    .filter(
+      (row) =>
+        row.createdAt <= params.periodEndMs &&
+        communityResourceIsPublishedKnowledge(row as any),
     )
-    .collect()) as CommunityResourceRow[];
-  return rows
-    .filter((row) => row.createdAt <= params.periodEndMs)
     .sort((a, b) => {
       if (Boolean(a.pinned) !== Boolean(b.pinned)) return Boolean(a.pinned) ? -1 : 1;
       return b.createdAt - a.createdAt;

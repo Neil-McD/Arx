@@ -441,6 +441,142 @@ async function executeRetrievalHarnessTool(params: {
     }
   }
 
+  if (params.toolName === "community_resources_list") {
+    if (!params.communityId) {
+      return {
+        status: "error",
+        exitCode: null,
+        outputText: "",
+        errorCode: "community_required",
+        errorMessage: "community_resources_list requires an active community context.",
+      };
+    }
+    try {
+      const payload = await params.ctx.runQuery(
+        internal.communityResources.listCommunityResourceDirectoryInternal as any,
+        {
+          userId: params.userId,
+          authSubject: params.authSubject ?? undefined,
+          communityId: params.communityId,
+          path:
+            typeof normalizedArgs.path === "string"
+              ? normalizedArgs.path
+              : undefined,
+          limit:
+            typeof normalizedArgs.limit === "number"
+              ? normalizedArgs.limit
+              : undefined,
+        },
+      );
+      return {
+        status: "ok",
+        exitCode: 0,
+        outputText: formatJsonToolOutput(payload),
+        errorCode: null,
+        errorMessage: null,
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return {
+        status: "error",
+        exitCode: null,
+        outputText: "",
+        errorCode: "community_resources_list_failed",
+        errorMessage: message || "Community resource listing failed.",
+      };
+    }
+  }
+
+  if (params.toolName === "community_resource_read") {
+    if (!params.communityId) {
+      return {
+        status: "error",
+        exitCode: null,
+        outputText: "",
+        errorCode: "community_required",
+        errorMessage: "community_resource_read requires an active community context.",
+      };
+    }
+    try {
+      const payload = await params.ctx.runQuery(
+        internal.communityResources.readCommunityResourceDirectoryInternal as any,
+        {
+          userId: params.userId,
+          authSubject: params.authSubject ?? undefined,
+          communityId: params.communityId,
+          ref: String(normalizedArgs.ref ?? ""),
+          offset:
+            typeof normalizedArgs.offset === "number"
+              ? normalizedArgs.offset
+              : undefined,
+          limit:
+            typeof normalizedArgs.limit === "number"
+              ? normalizedArgs.limit
+              : undefined,
+        },
+      );
+      return {
+        status: "ok",
+        exitCode: 0,
+        outputText: formatJsonToolOutput(payload),
+        errorCode: null,
+        errorMessage: null,
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return {
+        status: "error",
+        exitCode: null,
+        outputText: "",
+        errorCode: "community_resource_read_failed",
+        errorMessage: message || "Community resource read failed.",
+      };
+    }
+  }
+
+  if (params.toolName === "community_resources_search") {
+    if (!params.communityId) {
+      return {
+        status: "error",
+        exitCode: null,
+        outputText: "",
+        errorCode: "community_required",
+        errorMessage: "community_resources_search requires an active community context.",
+      };
+    }
+    try {
+      const payload = await params.ctx.runQuery(
+        internal.communityResources.searchCommunityResourceDirectoryInternal as any,
+        {
+          userId: params.userId,
+          authSubject: params.authSubject ?? undefined,
+          communityId: params.communityId,
+          query: String(normalizedArgs.query ?? ""),
+          limit:
+            typeof normalizedArgs.limit === "number"
+              ? normalizedArgs.limit
+              : undefined,
+        },
+      );
+      return {
+        status: "ok",
+        exitCode: 0,
+        outputText: formatJsonToolOutput(payload),
+        errorCode: null,
+        errorMessage: null,
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return {
+        status: "error",
+        exitCode: null,
+        outputText: "",
+        errorCode: "community_resources_search_failed",
+        errorMessage: message || "Community resource search failed.",
+      };
+    }
+  }
+
   if (params.toolName === "community_write") {
     if (!params.communityId) {
       return {

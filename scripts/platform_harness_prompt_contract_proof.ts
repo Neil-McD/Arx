@@ -138,6 +138,9 @@ function provePromptEntrypoints() {
       "search_product_docs",
       "get_product_doc",
       "get_active_community_context",
+      "community_resources_list",
+      "community_resource_read",
+      "community_resources_search",
       "community_search",
       "community_write",
       "web_research",
@@ -169,9 +172,10 @@ function provePromptEntrypoints() {
   assert.match(platformHarnessPrompt, /AGENT_OPERATING_POLICY/);
   assert.match(platformHarnessPrompt, /THREAD_WORKING_STATE/);
   assert.match(platformHarnessPrompt, /TEMPORAL_CONTEXT/);
-  assert.match(platformHarnessPrompt, /Allowed tools: search_product_docs,get_product_doc,get_active_community_context,community_search,community_write,web_research,read,write,bash/);
+  assert.match(platformHarnessPrompt, /Allowed tools: search_product_docs,get_product_doc,get_active_community_context,community_resources_list,community_resource_read,community_resources_search,community_search,community_write,web_research,read,write,bash/);
   assert.match(platformHarnessPrompt, /Use web_research for current external facts/);
   assert.match(platformHarnessPrompt, /Use get_active_community_context when the answer depends on the active community's identity/);
+  assert.match(platformHarnessPrompt, /Use community_resources_list to inspect/);
   assert.match(platformHarnessPrompt, /Use community_search when active community activity/);
   assert.match(platformHarnessPrompt, /Use read to inspect specific files/);
   assert.doesNotMatch(
@@ -307,7 +311,7 @@ async function proveSourceContract() {
   );
   assert.match(
     runtimeTurnResolutionSource,
-    /if \(params\.activeCapabilityFamilies\.includes\("community_tools"\)\)[\s\S]*"get_active_community_context"[\s\S]*"community_search"[\s\S]*"community_write"/,
+    /if \(params\.activeCapabilityFamilies\.includes\("community_tools"\)\)[\s\S]*"get_active_community_context"[\s\S]*"community_resources_list"[\s\S]*"community_resource_read"[\s\S]*"community_resources_search"[\s\S]*"community_search"[\s\S]*"community_write"/,
     "community tools should be exposed by capability family, not product tier",
   );
   assert.match(

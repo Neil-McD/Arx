@@ -1,7 +1,9 @@
 import type { ReactNode } from "react";
 import { CommunityAvatar } from "../../../../shared/CommunityAvatar";
 import type { AccountSetupStatus } from "../../../../shared/accountSetup";
+import type { CommunityLaunchSetupStatus } from "../../../../shared/communityLaunchSetup";
 import { WebAccountSetupCard } from "../components/WebAccountSetupCard";
+import { WebCommunityLaunchSetupCard } from "../components/WebCommunityLaunchSetupCard";
 import { WebGuestSignupRail } from "../components/WebGuestSignupRail";
 
 type WorkspaceLandingCommunity = {
@@ -23,6 +25,9 @@ type BuildWebWorkspaceLandingProjectionParams = {
   shouldShowAccountSetupCard: boolean;
   accountSetupStatus: AccountSetupStatus | null;
   onContinueAccountSetup: () => void;
+  shouldShowCommunityLaunchSetupCard: boolean;
+  communityLaunchSetupStatus: CommunityLaunchSetupStatus | null;
+  onContinueCommunityLaunchSetup: () => void;
 };
 
 export function buildWebWorkspaceLandingProjection(
@@ -76,12 +81,21 @@ export function buildWebWorkspaceLandingProjection(
       </div>
     ) : null;
 
-  const emptyThreadSetupCard = params.shouldShowAccountSetupCard && params.accountSetupStatus ? (
-    <WebAccountSetupCard
-      status={params.accountSetupStatus}
-      onContinueSetup={params.onContinueAccountSetup}
-    />
-  ) : null;
+  const emptyThreadSetupCard =
+    params.shouldShowAccountSetupCard && params.accountSetupStatus ? (
+      <WebAccountSetupCard
+        status={params.accountSetupStatus}
+        onContinueSetup={params.onContinueAccountSetup}
+      />
+    ) : params.shouldShowCommunityLaunchSetupCard &&
+      params.activeCommunity &&
+      params.communityLaunchSetupStatus ? (
+      <WebCommunityLaunchSetupCard
+        status={params.communityLaunchSetupStatus}
+        communityName={params.activeCommunity.name}
+        onContinueSetup={params.onContinueCommunityLaunchSetup}
+      />
+    ) : null;
 
   return {
     emptyThreadClassName: `web-empty-thread${params.activeCommunity ? "" : " web-empty-thread-no-community"}`,

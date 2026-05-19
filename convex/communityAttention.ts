@@ -4,6 +4,8 @@ import {
   type CommunityChatMessageLike,
   type CommunityChatThreadLike,
   type CommunityMemberSettingsLike,
+  type CommunityResourceLike,
+  communityResourceIsPublishedKnowledge,
   requireCommunityChatAccess,
   resolveUserIdForAuthenticatedRequest,
 } from "./communityCore";
@@ -111,12 +113,21 @@ async function getLatestCommunityResourcesCreatedAt(
   ctx: any,
   communityId: any,
 ): Promise<number | null> {
-  const latest = await ctx.db
+  const publishedRows = (await ctx.db
+    .query("communityResources" as any)
+    .withIndex("by_community_status_createdAt", (q: any) =>
+      q.eq("communityId", communityId).eq("status", "published"),
+    )
+    .order("desc")
+    .take(5)) as CommunityResourceLike[];
+  const recentRows = (await ctx.db
     .query("communityResources" as any)
     .withIndex("by_community_createdAt", (q: any) => q.eq("communityId", communityId))
     .order("desc")
-    .take(1);
-  const createdAt = latest[0]?.createdAt;
+    .take(50)) as CommunityResourceLike[];
+  const createdAt = [...publishedRows, ...recentRows].find((row) =>
+    communityResourceIsPublishedKnowledge(row),
+  )?.createdAt;
   return typeof createdAt === "number" && Number.isFinite(createdAt) && createdAt > 0
     ? Math.floor(createdAt)
     : null;

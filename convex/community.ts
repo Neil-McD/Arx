@@ -76,6 +76,7 @@ import {
   countCommunityResources as countCommunityResourcesImpl,
   heartbeatCommunityPresence as heartbeatCommunityPresenceImpl,
   recordPublicFunnelVisitBySlug as recordPublicFunnelVisitBySlugImpl,
+  createCommunityResourcePageDraftFromSource as createCommunityResourcePageDraftFromSourceImpl,
   deleteCommunityResource as deleteCommunityResourceImpl,
   deleteCommunityResourceModule as deleteCommunityResourceModuleImpl,
   getMyCommunityAccess as getMyCommunityAccessImpl,
@@ -105,6 +106,9 @@ import {
   saveCommunityOneLiner as saveCommunityOneLinerImpl,
   saveCommunitySettings as saveCommunitySettingsImpl,
 } from "./communityLifecycle";
+import {
+  getCommunityLaunchSetupStatus as getCommunityLaunchSetupStatusImpl,
+} from "./communityLaunchSetup";
 import {
   getCommunityArchiveHealth as getCommunityArchiveHealthImpl,
   processCommunityArchivePending as processCommunityArchivePendingImpl,
@@ -168,6 +172,7 @@ export const listCommunityResourceModules = listCommunityResourceModulesImpl;
 export const countCommunityResources = countCommunityResourcesImpl;
 export const recordPublicFunnelVisitBySlug = recordPublicFunnelVisitBySlugImpl;
 export const saveCommunityResource = saveCommunityResourceImpl;
+export const createCommunityResourcePageDraftFromSource = createCommunityResourcePageDraftFromSourceImpl;
 export const saveCommunityResourceModule = saveCommunityResourceModuleImpl;
 export const reorderCommunityResourceModules = reorderCommunityResourceModulesImpl;
 export const reorderCommunityResources = reorderCommunityResourcesImpl;
@@ -204,6 +209,7 @@ export const publishCommunityAiFeedAgentPost = publishCommunityAiFeedAgentPostIm
 export const reactToCommunityAiFeedPost = reactToCommunityAiFeedPostImpl;
 export const saveCommunitySettings = saveCommunitySettingsImpl;
 export const saveCommunityOneLiner = saveCommunityOneLinerImpl;
+export const getCommunityLaunchSetupStatus = getCommunityLaunchSetupStatusImpl;
 export const deleteCommunity = deleteCommunityImpl;
 export const getCommunityArchiveHealth = getCommunityArchiveHealthImpl;
 export const requestCommunityArchiveBackfill = requestCommunityArchiveBackfillImpl;

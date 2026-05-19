@@ -1360,6 +1360,17 @@ export default defineSchema({
     moduleId: v.optional(v.id("communityResourceModules")),
     createdByUserId: v.id("users"),
     type: v.string(),
+    role: v.optional(v.union(v.literal("page"), v.literal("source"))),
+    status: v.optional(
+      v.union(
+        v.literal("draft"),
+        v.literal("review"),
+        v.literal("published"),
+        v.literal("processing"),
+        v.literal("failed"),
+      ),
+    ),
+    sourceResourceId: v.optional(v.id("communityResources")),
     title: v.string(),
     bodyMd: v.optional(v.string()),
     url: v.optional(v.string()),
@@ -1371,6 +1382,8 @@ export default defineSchema({
   })
     .index("by_community", ["communityId"])
     .index("by_community_module", ["communityId", "moduleId"])
+    .index("by_community_role_status", ["communityId", "role", "status"])
+    .index("by_community_status_createdAt", ["communityId", "status", "createdAt"])
     .index("by_community_createdAt", ["communityId", "createdAt"])
     .index("by_createdBy", ["createdByUserId"]),
 
@@ -1435,6 +1448,16 @@ export default defineSchema({
       v.union(v.literal("observation"), v.literal("recommendation"), v.literal("action")),
     ),
     resourceType: v.optional(v.string()),
+    resourceRole: v.optional(v.union(v.literal("page"), v.literal("source"))),
+    resourceStatus: v.optional(
+      v.union(
+        v.literal("draft"),
+        v.literal("review"),
+        v.literal("published"),
+        v.literal("processing"),
+        v.literal("failed"),
+      ),
+    ),
     isPdf: v.boolean(),
     embeddingStatus: v.union(v.literal("pending"), v.literal("embedded"), v.literal("failed")),
     embedding: v.optional(v.array(v.float64())),

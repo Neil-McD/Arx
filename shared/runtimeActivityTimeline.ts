@@ -218,6 +218,7 @@ function buildToolTitle(toolName: string, args: Record<string, unknown> | null):
   const command = toStringValue(args?.command);
   const pattern = toStringValue(args?.pattern);
   const query = toStringValue(args?.query);
+  const ref = toStringValue(args?.ref);
   const slug = toStringValue(args?.slug);
   const url = toStringValue(args?.url);
   const action = toStringValue(args?.action);
@@ -242,6 +243,9 @@ function buildToolTitle(toolName: string, args: Record<string, unknown> | null):
   if (toolName === "search_product_docs") return `Searched docs${query ? ` for ${truncateLabel(query, 48)}` : ""}`;
   if (toolName === "get_product_doc") return `Read docs${slug ? ` ${truncateLabel(slug, 48)}` : ""}`;
   if (toolName === "get_active_community_context") return "Read community context";
+  if (toolName === "community_resources_list") return `Listed community resources${path ? ` at ${truncateLabel(path, 48)}` : ""}`;
+  if (toolName === "community_resource_read") return `Read community resource${ref ? ` ${truncateLabel(ref, 48)}` : ""}`;
+  if (toolName === "community_resources_search") return `Searched resources${query ? ` for ${truncateLabel(query, 48)}` : ""}`;
   if (toolName === "community_search") return `Searched community${query ? ` for ${truncateLabel(query, 48)}` : ""}`;
   if (toolName === "community_write") return "Updated community";
   return toolName;
@@ -255,6 +259,8 @@ function buildToolDetail(toolName: string, args: Record<string, unknown> | null)
   const url = toStringValue(args?.url);
   if (toolName === "bash" || toolName.startsWith("terminal_")) return command ? truncateLabel(command, 160) : null;
   if (path) return path;
+  const ref = toStringValue(args?.ref);
+  if (ref) return ref;
   if (pattern) return pattern;
   if (query) return query;
   if (url) return url;
@@ -272,6 +278,7 @@ function statsForTool(toolName: string, kind: AgentActivityKind, payload: Record
     toolName === "grep" ||
     toolName === "web_research" ||
     toolName === "search_product_docs" ||
+    toolName === "community_resources_search" ||
     toolName === "community_search"
   ) {
     stats.searches = 1;

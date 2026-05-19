@@ -2,6 +2,7 @@ import { useCallback, useRef, type Dispatch, type SetStateAction } from "react";
 import { resolveUsableSession, type EnsureSessionFn } from "./ensureUsableSession";
 
 import {
+  createCloudCommunityResourcePageDraftFromSource,
   deleteCloudCommunityResource,
   deleteCloudCommunityResourceModule,
   listCloudCommunityResourceModuleRows,
@@ -19,6 +20,8 @@ type ResourceLike = {
   id: string;
   module_id?: string | null;
   type: string;
+  resource_role?: "page" | "source";
+  resource_status?: "draft" | "review" | "published" | "processing" | "failed";
   title: string;
   body_md: string | null;
   url: string | null;
@@ -70,6 +73,8 @@ type UseCommunityResourceControllerArgs<
   resourceUrlInput: string;
   resourceBodyInput: string;
   resourcePinnedInput: boolean;
+  resourceRoleInput: "page" | "source";
+  resourceStatusInput: "draft" | "review" | "published" | "processing" | "failed";
   resourceModuleIdInput: string | null;
   moduleNameInput: string;
   moduleDescriptionInput: string;
@@ -100,6 +105,8 @@ type UseCommunityResourceControllerArgs<
   setResourceUrlInput: Dispatch<SetStateAction<string>>;
   setResourceBodyInput: Dispatch<SetStateAction<string>>;
   setResourcePinnedInput: Dispatch<SetStateAction<boolean>>;
+  setResourceRoleInput: Dispatch<SetStateAction<"page" | "source">>;
+  setResourceStatusInput: Dispatch<SetStateAction<"draft" | "review" | "published" | "processing" | "failed">>;
   setResourceModuleIdInput: Dispatch<SetStateAction<string | null>>;
   setModuleNameInput: Dispatch<SetStateAction<string>>;
   setModuleDescriptionInput: Dispatch<SetStateAction<string>>;
@@ -126,6 +133,8 @@ export function useCommunityResourceController<
     current.setResourceUrlInput("");
     current.setResourceBodyInput("");
     current.setResourcePinnedInput(false);
+    current.setResourceRoleInput("page");
+    current.setResourceStatusInput("published");
     current.setResourceModuleIdInput(null);
     if (clearError) {
       current.setResourceError(null);
@@ -210,13 +219,12 @@ export function useCommunityResourceController<
       return;
     }
 
+    const rawUrl = current.resourceUrlInput.trim();
     const description = current.resourceBodyInput.trim();
-    if (!description) {
-      current.setResourceError("Description is required.");
+    if (!description && !rawUrl) {
+      current.setResourceError("Add content or a source URL.");
       return;
     }
-
-    const rawUrl = current.resourceUrlInput.trim();
 
     if (current.beforeSaveValidate) {
       const validationError = await current.beforeSaveValidate({ title, description, rawUrl });
@@ -233,6 +241,8 @@ export function useCommunityResourceController<
     current.setIsSavingResource(true);
     const basePayload: Record<string, unknown> = {
       type: resourceType,
+      resource_role: current.resourceRoleInput,
+      resource_status: current.resourceStatusInput,
       title,
       body_md: description,
       url: rawUrl ? rawUrl : null,
@@ -469,6 +479,56 @@ export function useCommunityResourceController<
     return true;
   }, [loadCommunityResources, resetResourceEditor]);
 
+  const handlePublishResource = useCallback(async (resource: ResourceT) => {
+    const current = argsRef.current;
+    const session = await resolveUsableSession(current.session, current.ensureSession);
+    if (!session || !current.activeCommunityId) return false;
+
+    try {
+      await saveCloudCommunityResource({
+        session,
+        resourceId: resource.id,
+        isPatch: true,
+        payload: {
+          resource_status: "published",
+        },
+      });
+      await loadCommunityResources(current.activeCommunityId, session);
+      return true;
+    } catch (error) {
+      const message = typeof error === "string"
+        ? error
+        : error instanceof Error
+          ? error.message
+          : current.saveFailureMessage;
+      current.setResourceError(message);
+      return false;
+    }
+  }, [loadCommunityResources]);
+
+  const handleCreatePageDraftFromSource = useCallback(async (resource: ResourceT): Promise<ResourceT | null> => {
+    const current = argsRef.current;
+    const session = await resolveUsableSession(current.session, current.ensureSession);
+    if (!session || !current.activeCommunityId) return null;
+
+    try {
+      const created = await createCloudCommunityResourcePageDraftFromSource<SessionT, ResourceT>({
+        session,
+        sourceResourceId: resource.id,
+      });
+      await loadCommunityResources(current.activeCommunityId, session);
+      return created;
+    } catch (error) {
+      const message = typeof error === "string"
+        ? error
+        : error instanceof Error
+          ? error.message
+          : current.saveFailureMessage;
+      current.setResourceError(message);
+      return null;
+    }
+  }, [loadCommunityResources]);
+
   return {
     loadCommunityResourceModules,
     loadCommunityResources,
@@ -478,5 +538,7 @@ export function useCommunityResourceController<
     handleReorderCommunityResources,
     handleSaveCommunityResource,
     handleDeleteResource,
+    handlePublishResource,
+    handleCreatePageDraftFromSource,
   };
 }

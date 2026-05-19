@@ -20,6 +20,7 @@ export {
   listCommunityResources,
   countCommunityResources,
   deleteCommunityResourceModule,
+  createCommunityResourcePageDraftFromSource,
   reorderCommunityResourceModules,
   reorderCommunityResources,
   saveCommunityResourceModule,

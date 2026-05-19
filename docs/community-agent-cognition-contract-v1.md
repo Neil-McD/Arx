@@ -143,7 +143,7 @@ Dedicated surface tools answer:
 What canonical surface state or evidence should the agent inspect now?
 ```
 
-This layer is deferred until the compiler/window boundaries are stable, but the intended split is:
+This layer should arrive surface by surface as each boundary becomes stable. The first platform-harness slice is the resource directory: read-only active-community tools can list, read, and search published usable resources without exposing drafts, processing items, failed items, or raw storage keys. Other direct surface tools remain deferred until their source and privacy contracts are equally clear.
 
 | Surface | Future direct read role | Compiler-window role |
 | --- | --- | --- |

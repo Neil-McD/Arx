@@ -5,6 +5,8 @@ import {
   type CommunityChatThreadLike,
   type CommunityLike,
   type CommunityResourceLike,
+  communityResourceIsPublishedKnowledge,
+  normalizeResourceRole,
   requireCommunityChatAccess,
   resolvePublicUserId,
   resolveUserIdForAuthenticatedRequest,
@@ -37,11 +39,14 @@ type RecentContextItem = {
   url?: string | null;
   post_type?: "observation" | "recommendation" | "action" | null;
   resource_type?: string | null;
+  resource_role?: "page" | "source" | null;
+  resource_status?: "draft" | "review" | "published" | "processing" | "failed" | null;
 };
 
 const CHAT_WINDOW_LIMIT = 24;
 const AI_FEED_WINDOW_LIMIT = 12;
 const RESOURCE_WINDOW_LIMIT = 12;
+const RESOURCE_SCAN_LIMIT = 48;
 const RECENT_CONTEXT_LIMIT = 12;
 
 function normalizeQueryText(raw: unknown): string {
@@ -172,13 +177,24 @@ async function listRecentResourceItems(args: {
   communityId: any;
   tokens: string[];
 }): Promise<{ items: RecentContextItem[]; considered: number }> {
-  const rows = (await args.ctx.db
+  const publishedRows = (await args.ctx.db
+    .query("communityResources" as any)
+    .withIndex("by_community_status_createdAt", (q: any) =>
+      q.eq("communityId", args.communityId).eq("status", "published"),
+    )
+    .order("desc")
+    .take(RESOURCE_SCAN_LIMIT)) as CommunityResourceLike[];
+  const recentRows = (await args.ctx.db
     .query("communityResources" as any)
     .withIndex("by_community_createdAt", (q: any) => q.eq("communityId", args.communityId))
     .order("desc")
-    .take(RESOURCE_WINDOW_LIMIT)) as CommunityResourceLike[];
-  const sorted = rows
-    .slice()
+    .take(RESOURCE_SCAN_LIMIT)) as CommunityResourceLike[];
+  const uniqueRows = new Map<string, CommunityResourceLike>();
+  for (const row of [...publishedRows, ...recentRows]) {
+    uniqueRows.set(String(row._id), row);
+  }
+  const sorted = Array.from(uniqueRows.values())
+    .filter((row) => communityResourceIsPublishedKnowledge(row))
     .sort((a, b) => {
       if (Boolean(a.pinned) !== Boolean(b.pinned)) return Boolean(a.pinned) ? -1 : 1;
       return b.createdAt - a.createdAt;
@@ -195,8 +211,10 @@ async function listRecentResourceItems(args: {
       score: scoreText(snippet, args.tokens),
       url: row.url ?? null,
       resource_type: String(row.type ?? "").trim().toLowerCase() || null,
+      resource_role: normalizeResourceRole(row.role),
+      resource_status: "published" as const,
     };
-  });
+  }).slice(0, RESOURCE_WINDOW_LIMIT);
   return { items, considered: sorted.length };
 }
 

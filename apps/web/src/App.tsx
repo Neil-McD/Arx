@@ -116,6 +116,13 @@ import {
   isAccountSetupStatusIdentityComplete,
   type AccountSetupStatus,
 } from "../../../shared/accountSetup";
+import {
+  loadCloudCommunityLaunchSetupStatus,
+} from "../../../shared/cloudCommunityLaunchSetupGateway";
+import type {
+  CommunityLaunchSetupStatus,
+  CommunityLaunchSetupStep,
+} from "../../../shared/communityLaunchSetup";
 import { deleteCloudOwnAccount } from "../../../shared/cloudAccountGateway";
 import { listEnabledCloudModelRegistryRows } from "../../../shared/cloudModelRegistryGateway";
 import {
@@ -413,6 +420,7 @@ import {
   WebGlobalOverlayHost,
   type WebGlobalOverlayHostProps,
 } from "./components/WebGlobalOverlayHost";
+import { WebCommunityLaunchSetupModal } from "./components/WebCommunityLaunchSetupModal";
 import { WebShellChromeHost } from "./components/WebShellChromeHost";
 import { WebWorkspaceShellPanelsHost } from "./components/WebWorkspaceShellPanelsHost";
 import { buildWebStandalonePublicRouteViewProps } from "./controllers/buildWebStandalonePublicRouteViewProps";
@@ -782,7 +790,12 @@ type CommunityResource = {
   id: string;
   community_id?: string | null;
   module_id: string | null;
+  directory_uri: string;
+  directory_path: string;
   type: "post" | "link" | "embed" | "file";
+  resource_role: "page" | "source";
+  resource_status: "draft" | "review" | "published" | "processing" | "failed";
+  source_resource_id?: string | null;
   title: string;
   body_md: string | null;
   url: string | null;
@@ -795,6 +808,8 @@ type CommunityResource = {
 type CommunityResourceModule = {
   id: string;
   community_id?: string | null;
+  directory_uri: string;
+  directory_path: string;
   name: string;
   description_md: string | null;
   banner_url: string | null;
@@ -1552,6 +1567,14 @@ export default function App() {
   const [cloudProfile, setCloudProfile] = useState<UserProfileDetail | null>(null);
   const [accountSetupStatus, setAccountSetupStatus] = useState<AccountSetupStatus | null>(null);
   const [isLoadingAccountSetupStatus, setIsLoadingAccountSetupStatus] = useState(false);
+  const [communityLaunchSetupStatus, setCommunityLaunchSetupStatus] =
+    useState<CommunityLaunchSetupStatus | null>(null);
+  const [isLoadingCommunityLaunchSetupStatus, setIsLoadingCommunityLaunchSetupStatus] =
+    useState(false);
+  const [communityLaunchSetupError, setCommunityLaunchSetupError] =
+    useState<string | null>(null);
+  const [isCommunityLaunchSetupModalOpen, setIsCommunityLaunchSetupModalOpen] =
+    useState(false);
   const [hasLoadedOnboardingProfile, setHasLoadedOnboardingProfile] = useState(false);
   const [isOnboardingModalOpen, setIsOnboardingModalOpen] = useState(false);
   const profileUi = useWebProfileSettingsUiController({
@@ -2223,8 +2246,11 @@ export default function App() {
     handleReorderModules,
     handleReorderResources,
     openNewResourceModal,
+    openNewSourceModal,
     handleEditResource,
     handleDeleteResource,
+    handlePublishResource,
+    handleCreatePageDraftFromSource,
     setShowResourceModal,
     setEditingResourceId,
     setResourceTitleInput,
@@ -5349,6 +5375,59 @@ export default function App() {
   const isAccountSetupCompleteForBuilderActions =
     !session || Boolean(effectiveAccountSetupStatus?.completed);
 
+  useEffect(() => {
+    const shouldLoadLaunchStatus =
+      Boolean(session) &&
+      Boolean(activeCommunityId) &&
+      Boolean(canManageCommunitySettings) &&
+      Boolean(effectiveAccountSetupStatus?.completed) &&
+      activePage === "workspace" &&
+      activeView === "home";
+    if (!shouldLoadLaunchStatus || !session || !activeCommunityId) {
+      setCommunityLaunchSetupStatus(null);
+      setCommunityLaunchSetupError(null);
+      setIsLoadingCommunityLaunchSetupStatus(false);
+      setIsCommunityLaunchSetupModalOpen(false);
+      return;
+    }
+    let cancelled = false;
+    setIsLoadingCommunityLaunchSetupStatus(true);
+    setCommunityLaunchSetupError(null);
+    void loadCloudCommunityLaunchSetupStatus({
+      session,
+      communityId: activeCommunityId,
+    })
+      .then((status) => {
+        if (cancelled) return;
+        setCommunityLaunchSetupStatus(status);
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        const message =
+          typeof error === "string"
+            ? error
+            : error instanceof Error
+              ? error.message
+              : "Failed to load community launch setup.";
+        setCommunityLaunchSetupStatus(null);
+        setCommunityLaunchSetupError(message);
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoadingCommunityLaunchSetupStatus(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    session,
+    activeCommunityId,
+    activePage,
+    activeView,
+    canManageCommunitySettings,
+    effectiveAccountSetupStatus?.completed,
+    activeCommunity?.updated_at,
+  ]);
+
   const communityUi = useWebCommunityUiController<
     AuthSession,
     CommunityRecord,
@@ -5937,6 +6016,15 @@ export default function App() {
     Boolean(effectiveAccountSetupStatus) &&
     !effectiveAccountSetupStatus?.completed &&
     !isLoadingAccountSetupStatus;
+  const shouldShowCommunityLaunchSetupCard =
+    Boolean(session) &&
+    Boolean(activeCommunity) &&
+    Boolean(canManageCommunitySettings) &&
+    Boolean(effectiveAccountSetupStatus?.completed) &&
+    Boolean(communityLaunchSetupStatus) &&
+    !communityLaunchSetupStatus?.completed &&
+    !isLoadingCommunityLaunchSetupStatus &&
+    !communityLaunchSetupError;
 
   const { sendUserMessage, retryLastTurn } = useWebSendFlowController<
     AuthSession,
@@ -7022,6 +7110,29 @@ export default function App() {
       setCommunityAiAgentPreferredTab(tab);
       openCommunityTab(nextCommunitySlug, "ai_agent", { pushSnapshot: false });
     };
+    const handleOpenCommunityLaunchSetupStep = (step: CommunityLaunchSetupStep) => {
+      const nextCommunitySlug = String(
+        selectedActiveCommunitySlug ?? activeCommunity?.slug ?? "",
+      ).trim();
+      if (!nextCommunitySlug) return;
+      setIsCommunityLaunchSetupModalOpen(false);
+      pushNavSnapshot();
+      if (step === "knowledge") {
+        openCommunityTab(nextCommunitySlug, "resources", { pushSnapshot: false });
+        return;
+      }
+      if (step === "agent") {
+        setCommunityAiAgentPreferredTab("workspace");
+        openCommunityTab(nextCommunitySlug, "ai_agent", { pushSnapshot: false });
+        return;
+      }
+      if (step === "workflows") {
+        setCommunityAiAgentPreferredTab("apps");
+        openCommunityTab(nextCommunitySlug, "ai_agent", { pushSnapshot: false });
+        return;
+      }
+      openCommunityTab(nextCommunitySlug, "settings", { pushSnapshot: false });
+    };
     const {
       handleSelectMobileMode,
       openMobileAgentSettings,
@@ -7361,8 +7472,11 @@ export default function App() {
         handleReorderModules,
         handleReorderResources,
         openNewResourceModal,
+        openNewSourceModal,
         handleEditResource,
         handleDeleteResource,
+        handlePublishResource,
+        handleCreatePageDraftFromSource,
       },
       eventsState: {
         events: communityEvents,
@@ -7908,6 +8022,11 @@ export default function App() {
     onContinueAccountSetup: () => {
       setIsOnboardingModalOpen(true);
     },
+    shouldShowCommunityLaunchSetupCard,
+    communityLaunchSetupStatus,
+    onContinueCommunityLaunchSetup: () => {
+      setIsCommunityLaunchSetupModalOpen(true);
+    },
   });
   const { workspaceHostProps } = buildWebWorkspaceSurfaceProjection({
     session: session,
@@ -8390,7 +8509,28 @@ export default function App() {
       renderMarkdown,
     },
   });
-  const globalOverlays = <WebGlobalOverlayHost {...globalOverlayHostProps} />;
+  const globalOverlays = (
+    <>
+      <WebGlobalOverlayHost {...globalOverlayHostProps} />
+      <WebCommunityLaunchSetupModal
+        isOpen={isCommunityLaunchSetupModalOpen}
+        community={
+          activeCommunity
+            ? {
+                name: activeCommunity.name,
+                avatar_url: activeCommunity.avatar_url,
+                avatar_focus_x: activeCommunity.avatar_focus_x,
+                avatar_focus_y: activeCommunity.avatar_focus_y,
+                avatar_zoom: activeCommunity.avatar_zoom,
+              }
+            : null
+        }
+        status={communityLaunchSetupStatus}
+        onClose={() => setIsCommunityLaunchSetupModalOpen(false)}
+        onOpenStep={handleOpenCommunityLaunchSetupStep}
+      />
+    </>
+  );
   const mainSurfaceFallback = (
     <main
       className={`workspace${

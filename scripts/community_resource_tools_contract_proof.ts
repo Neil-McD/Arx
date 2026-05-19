@@ -1,0 +1,227 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
+import {
+  parseCommunityResourceDirectoryUri,
+} from "../shared/communityResourceDirectory.ts";
+import {
+  buildResponsesApiFunctionTools,
+  normalizeToolArguments,
+} from "../shared/toolRegistry.ts";
+import {
+  getFixedRuntimeToolPolicy,
+} from "../shared/runtimeToolPolicy.ts";
+
+const root = process.cwd();
+
+function read(path: string): string {
+  return readFileSync(join(root, path), "utf8");
+}
+
+const retrievalTools = read("shared/retrievalTools.ts");
+const toolRegistry = read("shared/toolRegistry.ts");
+const runtimeToolPolicy = read("shared/runtimeToolPolicy.ts");
+const runtimePrompt = read("shared/runtimePrompt.ts");
+const runtimeTurnResolution = read("convex/runtimeTurnResolution.ts");
+const httpDaytona = read("convex/httpDaytona.ts");
+const resources = read("convex/communityResources.ts");
+const polynetMcp = read("shared/polynetMcp.ts");
+const timeline = read("shared/runtimeActivityTimeline.ts");
+const timelineUi = read("shared/runtimeTimelineUi.ts");
+const cognitionDocs = read("docs/community-agent-cognition-contract-v1.md");
+
+assert.deepEqual(
+  parseCommunityResourceDirectoryUri(
+    "resources://community/community%201/modules/module%201/resources/resource%201",
+  ),
+  {
+    communityId: "community 1",
+    moduleId: "module 1",
+    sourceInbox: false,
+    resourceId: "resource 1",
+  },
+  "resource directory URIs should be stable and parseable",
+);
+assert.deepEqual(
+  parseCommunityResourceDirectoryUri(
+    "resources://community/community%201/modules/module%201/source-inbox",
+  ),
+  {
+    communityId: "community 1",
+    moduleId: "module 1",
+    sourceInbox: true,
+    resourceId: null,
+  },
+  "source inbox directory URIs should be stable and parseable",
+);
+
+assert.deepEqual(
+  normalizeToolArguments("community_resources_list", {
+    path: "/module/source-inbox",
+    limit: 500,
+  }),
+  {
+    path: "/module/source-inbox",
+    limit: 100,
+  },
+  "resource listing arguments should be bounded",
+);
+assert.deepEqual(
+  normalizeToolArguments("community_resource_read", {
+    ref: "resources://community/c/modules/m/resources/r",
+    offset: 0,
+    limit: 999999,
+  }),
+  {
+    ref: "resources://community/c/modules/m/resources/r",
+    offset: 0,
+    limit: 20000,
+  },
+  "resource reads should support bounded content windows",
+);
+assert.deepEqual(
+  normalizeToolArguments("community_resources_search", {
+    query: "process swim lanes",
+    limit: 500,
+  }),
+  {
+    query: "process swim lanes",
+    limit: 100,
+  },
+  "resource search arguments should be bounded",
+);
+
+const responseTools = buildResponsesApiFunctionTools([
+  "community_resources_list",
+  "community_resource_read",
+  "community_resources_search",
+]);
+assert.equal(responseTools.length, 3);
+for (const tool of responseTools) {
+  assert.equal(tool.strict, true, `${tool.name} should be strict`);
+  assert.equal(tool.parameters.type, "object", `${tool.name} should use an object schema`);
+  assert.equal(
+    tool.parameters.additionalProperties,
+    false,
+    `${tool.name} should reject extra input`,
+  );
+}
+
+for (const toolName of [
+  "community_resources_list",
+  "community_resource_read",
+  "community_resources_search",
+] as const) {
+  const policy = getFixedRuntimeToolPolicy(toolName);
+  assert.equal(policy.category, "community");
+  assert.equal(policy.readOnly, true);
+  assert.equal(policy.parallelSafe, true);
+  assert.equal(policy.requiresCommunity, true);
+  assert.equal(policy.requiresWorkspace, false);
+}
+
+assert.match(
+  retrievalTools,
+  /"get_active_community_context"[\s\S]*"community_resources_list"[\s\S]*"community_resource_read"[\s\S]*"community_resources_search"[\s\S]*"community_search"[\s\S]*"community_write"/,
+  "resource tools should live in the fixed community tool family before broad community search/write",
+);
+assert.match(toolRegistry, /COMMUNITY_RESOURCES_LIST_TOOL_SCHEMA/);
+assert.match(toolRegistry, /COMMUNITY_RESOURCE_READ_TOOL_SCHEMA/);
+assert.match(toolRegistry, /COMMUNITY_RESOURCES_SEARCH_TOOL_SCHEMA/);
+assert.match(runtimeToolPolicy, /community_resources_list:[\s\S]*requiresCommunity: true/);
+assert.match(
+  runtimeTurnResolution,
+  /if \(params\.activeCapabilityFamilies\.includes\("community_tools"\)\)[\s\S]*"get_active_community_context"[\s\S]*"community_resources_list"[\s\S]*"community_resource_read"[\s\S]*"community_resources_search"[\s\S]*"community_search"[\s\S]*"community_write"/,
+  "community resource tools should activate only through the backend-validated community_tools family",
+);
+
+assert.match(resources, /export const listCommunityResourceDirectoryInternal = internalQuery/);
+assert.match(resources, /export const readCommunityResourceDirectoryInternal = internalQuery/);
+assert.match(resources, /export const searchCommunityResourceDirectoryInternal = internalQuery/);
+assert.equal(
+  (resources.match(/await requireCommunityResourceDirectoryToolAccess/g) ?? []).length,
+  3,
+  "each resource tool query should revalidate community chat access",
+);
+assert.match(resources, /resolveUserIdForAuthenticatedRequest/);
+assert.match(resources, /requireCommunityChatAccess/);
+assert.match(
+  resources,
+  /listResourceDirectoryPublishedResources[\s\S]*communityResourceIsPublishedKnowledge/,
+  "resource tools should use the published usable knowledge boundary",
+);
+assert.match(
+  resources,
+  /parseCommunityResourceDirectoryUri[\s\S]*community_resource_directory_community_mismatch/,
+  "directory URI reads should fail closed across community ids",
+);
+assert.match(
+  resources,
+  /directory_uri: `\$\{moduleDirectory\.directory_uri\}\/\$\{COMMUNITY_RESOURCE_SOURCE_INBOX_SEGMENT\}`/,
+  "source inbox directory entries should return their own navigable URI",
+);
+assert.match(
+  resources,
+  /directoryUri: sourceInbox[\s\S]*\? `\$\{candidate\.directory_uri\}\/\$\{COMMUNITY_RESOURCE_SOURCE_INBOX_SEGMENT\}`[\s\S]*: candidate\.directory_uri/,
+  "source inbox path resolution should return the source inbox URI, not the parent module URI",
+);
+assert.match(
+  resources,
+  /ambiguous_resource_ref[\s\S]*Use directory_uri or resource_id/,
+  "readable path collisions should return an actionable ambiguity result",
+);
+assert.match(
+  resources,
+  /has_file: Boolean\(row\.fileKey\)/,
+  "tool payloads should expose file presence without leaking storage keys",
+);
+assert.doesNotMatch(
+  resources,
+  /file_key:/,
+  "resource tool payloads should not expose raw storage file keys",
+);
+
+assert.match(httpDaytona, /toolName === "community_resources_list"/);
+assert.match(httpDaytona, /toolName === "community_resource_read"/);
+assert.match(httpDaytona, /toolName === "community_resources_search"/);
+assert.match(
+  httpDaytona,
+  /community_resources_list requires an active community context/,
+);
+assert.match(
+  httpDaytona,
+  /internal\.communityResources\.listCommunityResourceDirectoryInternal/,
+);
+assert.match(
+  httpDaytona,
+  /internal\.communityResources\.readCommunityResourceDirectoryInternal/,
+);
+assert.match(
+  httpDaytona,
+  /internal\.communityResources\.searchCommunityResourceDirectoryInternal/,
+);
+
+assert.match(runtimePrompt, /When available, use community resource tools when canonical resource navigation/);
+assert.match(runtimePrompt, /Use community_resources_list to inspect/);
+assert.match(runtimePrompt, /Use community_resource_read to inspect one published resource/);
+assert.match(runtimePrompt, /Use community_resources_search for targeted lookup/);
+assert.match(timeline, /community_resources_list/);
+assert.match(timeline, /community_resource_read/);
+assert.match(timeline, /community_resources_search/);
+assert.match(timelineUi, /community_resources_list/);
+assert.match(timelineUi, /community_resource_read/);
+assert.match(timelineUi, /community_resources_search/);
+
+assert.doesNotMatch(
+  polynetMcp,
+  /community_resource_read|community_resources_list|community_resources_search/,
+  "resource directory tools should not be exposed through public PolyNet MCP in this slice",
+);
+assert.match(
+  cognitionDocs,
+  /first platform-harness slice is the resource directory[\s\S]*list, read, and search published usable resources/,
+  "community cognition contract should describe the resource direct-read slice",
+);
+
+console.log("community_resource_tools_contract_proof: ok");

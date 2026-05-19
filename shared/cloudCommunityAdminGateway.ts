@@ -479,6 +479,19 @@ export async function saveCloudCommunityResource<SessionT>(
   });
 }
 
+export async function createCloudCommunityResourcePageDraftFromSource<SessionT, TResource = unknown>(
+  params: CloudCommunityAdminGatewayParams<SessionT> & {
+    sourceResourceId: string;
+  },
+): Promise<TResource> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  const payload = await client.mutation("community:createCommunityResourcePageDraftFromSource" as any, {
+    authSubject,
+    sourceResourceId: params.sourceResourceId,
+  });
+  return payload as TResource;
+}
+
 export async function saveCloudCommunityResourceModule<SessionT>(
   params: CloudCommunityAdminGatewayParams<SessionT> & {
     moduleId: string | null;

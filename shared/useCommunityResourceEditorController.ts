@@ -3,6 +3,8 @@ import { useCallback, useRef, type Dispatch, type SetStateAction } from "react";
 type ResourceLike = {
   id: string;
   module_id?: string | null;
+  resource_role?: "page" | "source";
+  resource_status?: "draft" | "review" | "published" | "processing" | "failed";
   title: string;
   url: string | null;
   body_md: string | null;
@@ -15,6 +17,8 @@ type UseCommunityResourceEditorControllerArgs = {
   setResourceUrlInput: Dispatch<SetStateAction<string>>;
   setResourceBodyInput: Dispatch<SetStateAction<string>>;
   setResourcePinnedInput: Dispatch<SetStateAction<boolean>>;
+  setResourceRoleInput?: Dispatch<SetStateAction<"page" | "source">>;
+  setResourceStatusInput?: Dispatch<SetStateAction<"draft" | "review" | "published" | "processing" | "failed">>;
   setResourceError: Dispatch<SetStateAction<string | null>>;
   setShowResourceModal: Dispatch<SetStateAction<boolean>>;
   onReset?: () => void;
@@ -34,6 +38,8 @@ export function useCommunityResourceEditorController<ResourceT extends ResourceL
     current.setResourceUrlInput("");
     current.setResourceBodyInput("");
     current.setResourcePinnedInput(false);
+    current.setResourceRoleInput?.("page");
+    current.setResourceStatusInput?.("published");
     current.setResourceError(null);
     current.onReset?.();
   }, []);
@@ -57,6 +63,8 @@ export function useCommunityResourceEditorController<ResourceT extends ResourceL
     current.setResourceUrlInput(resource.url ?? "");
     current.setResourceBodyInput(resource.body_md ?? "");
     current.setResourcePinnedInput(resource.pinned);
+    current.setResourceRoleInput?.(resource.resource_role ?? "page");
+    current.setResourceStatusInput?.(resource.resource_status ?? "published");
     current.onEdit?.(resource);
     current.setResourceError(null);
     current.setShowResourceModal(true);

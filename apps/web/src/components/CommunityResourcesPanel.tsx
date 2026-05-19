@@ -1,6 +1,5 @@
 import {
   useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -8,7 +7,7 @@ import {
   type KeyboardEvent,
   type MouseEvent,
 } from "react";
-import { parseEmbedUrl } from "../../../../shared/linkEmbedUi";
+import { normalizeExternalUrl, parseEmbedUrl } from "../../../../shared/linkEmbedUi";
 import { getCommunityBannerImageStyle } from "../../../../shared/communityBannerUi";
 import type {
   CommunityResource,
@@ -17,7 +16,10 @@ import type {
   CommunityResourcesCapabilities,
   CommunityResourcesState,
 } from "./communityResourcesContracts";
-import { WebCommunityResourceViewerModal } from "./WebCommunityResourceViewerModal";
+import {
+  WebCommunityResourceViewerContent,
+  type WebCommunityResourceSourceLineage,
+} from "./WebCommunityResourceViewerModal";
 import { WebDeleteResourceModal } from "./WebDeleteResourceModal";
 
 type CommunityResourcesPanelProps = {
@@ -26,29 +28,11 @@ type CommunityResourcesPanelProps = {
   actions: CommunityResourcesActions;
 };
 
-type ResourceTitleProps = {
-  title: string;
-};
-
 const LEGACY_RESOURCE_MODULE_ID = "__legacy_resources__";
 
 type ResourceModuleView = CommunityResourceModule & {
   is_virtual?: boolean;
 };
-
-function normalizeExternalUrl(rawUrl: string | null): URL | null {
-  const trimmed = typeof rawUrl === "string" ? rawUrl.trim() : "";
-  if (!trimmed) return null;
-  try {
-    return new URL(trimmed);
-  } catch {
-    try {
-      return new URL(`https://${trimmed}`);
-    } catch {
-      return null;
-    }
-  }
-}
 
 function getHostLabel(rawUrl: string | null): string {
   const url = normalizeExternalUrl(rawUrl);
@@ -64,6 +48,36 @@ function getResourceMeta(resource: CommunityResource): { primary: string; second
   return { primary: "Note", secondary: null };
 }
 
+function getResourceRole(resource: CommunityResource): "page" | "source" {
+  return resource.resource_role === "source" ? "source" : "page";
+}
+
+function getResourceRoleLabel(resource: CommunityResource): string {
+  return getResourceRole(resource) === "source" ? "Source" : "Page";
+}
+
+function getResourceStatusLabel(resource: CommunityResource): string {
+  if (resource.resource_status === "draft") return "Draft";
+  if (resource.resource_status === "review") return "Needs review";
+  if (resource.resource_status === "processing") return "Processing";
+  if (resource.resource_status === "failed") return "Failed";
+  return "Published";
+}
+
+function getResourceLineageDetail(resource: CommunityResource): string {
+  const meta = getResourceMeta(resource);
+  return [
+    getResourceRoleLabel(resource),
+    meta.primary,
+    meta.secondary,
+    getResourceStatusLabel(resource),
+  ].filter(Boolean).join(" · ");
+}
+
+function getResourceModuleSelectionId(resource: CommunityResource): string {
+  return resource.module_id ?? LEGACY_RESOURCE_MODULE_ID;
+}
+
 function compareResources(a: CommunityResource, b: CommunityResource): number {
   const aSortOrder = typeof a.sort_order === "number" && Number.isFinite(a.sort_order) ? a.sort_order : null;
   const bSortOrder = typeof b.sort_order === "number" && Number.isFinite(b.sort_order) ? b.sort_order : null;
@@ -75,35 +89,6 @@ function compareResources(a: CommunityResource, b: CommunityResource): number {
     return Boolean(a.pinned) ? -1 : 1;
   }
   return String(b.created_at ?? "").localeCompare(String(a.created_at ?? ""));
-}
-
-function ResourceTitle(props: ResourceTitleProps) {
-  const { title } = props;
-  const shellRef = useRef<HTMLDivElement | null>(null);
-  const [isTruncated, setIsTruncated] = useState(false);
-
-  useLayoutEffect(() => {
-    const node = shellRef.current;
-    if (!node) return;
-
-    const measure = () => {
-      setIsTruncated(node.scrollWidth - node.clientWidth > 6);
-    };
-
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, [title]);
-
-  return (
-    <div
-      ref={shellRef}
-      className={isTruncated ? "resource-card-title-shell is-truncated" : "resource-card-title-shell"}
-    >
-      <h3 className="resource-card-title">{title}</h3>
-    </div>
-  );
 }
 
 function PlayIcon() {
@@ -295,16 +280,36 @@ function ResourceModuleCard(props: {
           <div className="discover-card-name">{module.name}</div>
         </div>
         <div className="discover-card-desc">
-          {module.description_md?.trim() || "Resources shared by the community team."}
+          {module.description_md?.trim() || "Knowledge shared by the community team."}
         </div>
       </div>
     </div>
   );
 }
 
-function ResourceCard(props: {
+function NoteIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M6 4h9l3 3v13H6z" />
+      <path d="M15 4v4h4" />
+      <path d="M9 12h6" />
+      <path d="M9 16h5" />
+    </svg>
+  );
+}
+
+function ResourceKindIcon(props: { resource: CommunityResource }) {
+  const { resource } = props;
+  const embed = resource.url ? parseEmbedUrl(resource.url) : null;
+  if (embed) return <PlayIcon />;
+  if (resource.url) return <LinkIcon />;
+  return <NoteIcon />;
+}
+
+function ResourceRailItem(props: {
   resource: CommunityResource;
-  onOpenViewer: () => void;
+  isActive: boolean;
+  onSelect: () => void;
   onEdit: () => void;
   onDelete: () => void;
   onDragStart: (event: DragEvent<HTMLElement>) => void;
@@ -319,7 +324,8 @@ function ResourceCard(props: {
 }) {
   const {
     resource,
-    onOpenViewer,
+    isActive,
+    onSelect,
     onEdit,
     onDelete,
     onDragStart,
@@ -332,24 +338,22 @@ function ResourceCard(props: {
     isDragging,
     isDropTarget,
   } = props;
-  const embed = resource.url ? parseEmbedUrl(resource.url) : null;
   const meta = getResourceMeta(resource);
   const summary = (resource.body_md ?? "").trim();
-  const canToggleSummary = summary.length > 140;
-  const hostLabel = getHostLabel(resource.url);
 
-  const handleCardKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+  const handleItemKeyDown = (event: KeyboardEvent<HTMLElement>) => {
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
-      onOpenViewer();
+      onSelect();
     }
   };
 
   return (
-    <article
+    <div
       id={`community-resource-${resource.id}`}
       className={[
-        "resource-card is-clickable",
+        "knowledge-resource-item",
+        isActive ? "is-active" : "",
         resource.pinned ? "is-pinned" : "",
         canReorder ? "can-reorder" : "",
         isDragging ? "is-dragging" : "",
@@ -357,134 +361,87 @@ function ResourceCard(props: {
       ].filter(Boolean).join(" ")}
       role="button"
       tabIndex={0}
+      aria-current={isActive ? "page" : undefined}
       draggable={canReorder}
-      onClick={onOpenViewer}
+      onClick={onSelect}
       onDragStart={onDragStart}
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
       onDrop={onDrop}
       onDragEnd={onDragEnd}
-      onKeyDown={handleCardKeyDown}
+      onKeyDown={handleItemKeyDown}
     >
-      <div className="resource-card-topline">
-        <div className="resource-card-title-row">
-          {resource.pinned ? (
-            <div className="resource-card-pin-icon" aria-hidden="true">
-              <PinIcon />
-            </div>
-          ) : null}
-          <ResourceTitle title={resource.title} />
+      <div className="knowledge-resource-item-icon" aria-hidden="true">
+        <ResourceKindIcon resource={resource} />
+      </div>
+      <div className="knowledge-resource-item-copy">
+        <div className="knowledge-resource-item-topline">
+          <div className="knowledge-resource-item-title">{resource.title}</div>
+          {resource.pinned ? <PinIcon /> : null}
         </div>
-        {canManage ? (
-          <div className="resource-card-header-side">
-            <div className="resource-card-actions">
-              <button
-                className="resource-card-action"
-                type="button"
-                title="Edit resource"
-                onPointerDown={(event) => event.stopPropagation()}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onEdit();
-                }}
-              >
-                <EditIcon />
-              </button>
-              <button
-                className="resource-card-action danger"
-                type="button"
-                title="Delete resource"
-                onPointerDown={(event) => event.stopPropagation()}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onDelete();
-                }}
-              >
-                <DeleteIcon />
-              </button>
-            </div>
-          </div>
-        ) : null}
+        <div className="knowledge-resource-item-meta">
+          <span>{getResourceRoleLabel(resource)}</span>
+          <span>{meta.primary}</span>
+          {meta.secondary ? <span>{meta.secondary}</span> : null}
+          {resource.resource_status !== "published" ? <span>{getResourceStatusLabel(resource)}</span> : null}
+        </div>
+        {summary ? <div className="knowledge-resource-item-summary">{summary}</div> : null}
       </div>
-
-      <div className="resource-card-meta">
-        <span>{meta.primary}</span>
-        {meta.secondary ? <span>{meta.secondary}</span> : null}
-      </div>
-
-      {summary ? (
-        <div className={`resource-card-summary-block${canToggleSummary ? " can-toggle" : ""}`}>
-          <p className={canToggleSummary ? "resource-card-summary clamped" : "resource-card-summary"}>{summary}</p>
-          {canToggleSummary ? (
-            <button
-              className="resource-card-summary-toggle"
-              type="button"
-              onPointerDown={(event) => event.stopPropagation()}
-              onClick={(event) => {
-                event.stopPropagation();
-                onOpenViewer();
-              }}
-            >
-              More
-            </button>
-          ) : null}
+      {canManage ? (
+        <div className="knowledge-resource-item-actions">
+          <button
+            className="resource-card-action"
+            type="button"
+            title="Edit knowledge item"
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={(event) => {
+              event.stopPropagation();
+              onEdit();
+            }}
+          >
+            <EditIcon />
+          </button>
+          <button
+            className="resource-card-action danger"
+            type="button"
+            title="Delete knowledge item"
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={(event) => {
+              event.stopPropagation();
+              onDelete();
+            }}
+          >
+            <DeleteIcon />
+          </button>
         </div>
       ) : null}
-
-      {embed ? (
-        <div className="resource-card-preview" aria-hidden="true">
-          {embed.provider === "youtube" ? (
-            <img src={embed.thumbnailUrl} alt="" loading="lazy" draggable={false} />
-          ) : (
-            <div className="resource-card-preview-placeholder">
-              <div className="resource-card-preview-provider">{meta.secondary ?? "Embed"}</div>
-            </div>
-          )}
-          <div className="resource-card-preview-overlay" />
-          <div className="resource-card-preview-play">
-            <PlayIcon />
-          </div>
-        </div>
-      ) : resource.url ? (
-        <div className="resource-card-link-surface" aria-hidden="true">
-          <div className="resource-card-link-icon" aria-hidden="true">
-            <LinkIcon />
-          </div>
-          <div className="resource-card-link-copy">
-            <div className="resource-card-link-label">Source</div>
-            <div className="resource-card-link-host">{hostLabel}</div>
-          </div>
-          <div className="resource-card-link-arrow" aria-hidden="true">
-            <svg viewBox="0 0 24 24">
-              <path d="M7 17L17 7" />
-              <path d="M9 7h8v8" />
-            </svg>
-          </div>
-        </div>
-      ) : null}
-    </article>
+    </div>
   );
 }
 
 export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
   const { capabilities, state, actions } = props;
   const selectedModuleId = state.selectedModuleId;
-  const [viewerResourceId, setViewerResourceId] = useState<string | null>(null);
+  const selectedResourceId = state.openResourceEmbedId;
   const [pendingDeleteResourceId, setPendingDeleteResourceId] = useState<string | null>(null);
   const [isDeletingResource, setIsDeletingResource] = useState(false);
   const [draggingModuleId, setDraggingModuleId] = useState<string | null>(null);
   const [dropTargetModuleId, setDropTargetModuleId] = useState<string | null>(null);
   const [draggingResourceId, setDraggingResourceId] = useState<string | null>(null);
   const [dropTargetResourceId, setDropTargetResourceId] = useState<string | null>(null);
+  const [pendingOpenResourceId, setPendingOpenResourceId] = useState<string | null>(null);
 
-  const viewerResource = useMemo(
-    () => state.resources.find((resource) => resource.id === viewerResourceId) ?? null,
-    [state.resources, viewerResourceId],
-  );
   const pendingDeleteResource = useMemo(
     () => state.resources.find((resource) => resource.id === pendingDeleteResourceId) ?? null,
     [state.resources, pendingDeleteResourceId],
   );
+  const resourcesById = useMemo(() => {
+    const map = new Map<string, CommunityResource>();
+    state.resources.forEach((resource) => {
+      map.set(resource.id, resource);
+    });
+    return map;
+  }, [state.resources]);
   const hasLegacyResources = useMemo(
     () => state.resources.some((resource) => !resource.module_id),
     [state.resources],
@@ -496,11 +453,17 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
       return a.name.localeCompare(b.name);
     });
     if (!hasLegacyResources) return modules;
+    const firstLegacyResource = state.resources.find((resource) => !resource.module_id) ?? null;
+    const legacyDirectoryUri = firstLegacyResource?.directory_uri
+      ? firstLegacyResource.directory_uri.replace(/\/resources\/[^/]+$/, "")
+      : "resources://community/unknown/modules/unsorted";
     return [
       {
         id: LEGACY_RESOURCE_MODULE_ID,
-        name: "Resources",
-        description_md: "Shared links, videos, and notes for this community.",
+        directory_uri: legacyDirectoryUri,
+        directory_path: "/unsorted",
+        name: "Unsorted",
+        description_md: "Existing knowledge items that are not assigned to a module.",
         banner_url: null,
         banner_focus_x: null,
         banner_focus_y: null,
@@ -510,11 +473,13 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
       },
       ...modules,
     ];
-  }, [hasLegacyResources, state.modules]);
+  }, [hasLegacyResources, state.modules, state.resources]);
   const selectedModule = useMemo(
     () => moduleViews.find((module) => module.id === selectedModuleId) ?? null,
     [moduleViews, selectedModuleId],
   );
+  const selectedModuleResourceTargetId =
+    selectedModule && selectedModule.id !== LEGACY_RESOURCE_MODULE_ID ? selectedModule.id : null;
   const reorderableModuleIds = useMemo(
     () => moduleViews.filter((module) => !module.is_virtual).map((module) => module.id),
     [moduleViews],
@@ -529,6 +494,47 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
   }, [selectedModule, state.resources]);
   const reorderableResourceIds = useMemo(() => visibleResources.map((resource) => resource.id), [visibleResources]);
   const canReorderResources = capabilities.canOperateResources && reorderableResourceIds.length > 1;
+  const pageResources = useMemo(
+    () => visibleResources.filter((resource) => getResourceRole(resource) === "page"),
+    [visibleResources],
+  );
+  const sourceResources = useMemo(
+    () => visibleResources.filter((resource) => getResourceRole(resource) === "source"),
+    [visibleResources],
+  );
+  const shouldShowSourceInbox = capabilities.canOperateResources || sourceResources.length > 0;
+  const selectedResource = useMemo(() => {
+    if (!selectedModule || visibleResources.length === 0) return null;
+    return visibleResources.find((resource) => resource.id === selectedResourceId) ?? visibleResources[0] ?? null;
+  }, [selectedModule, selectedResourceId, visibleResources]);
+  const selectedSourceResource = useMemo(() => {
+    const sourceId = selectedResource?.source_resource_id?.trim();
+    if (!sourceId) return null;
+    return resourcesById.get(sourceId) ?? null;
+  }, [resourcesById, selectedResource?.source_resource_id]);
+  const selectedSourceResourceModuleId = selectedSourceResource
+    ? getResourceModuleSelectionId(selectedSourceResource)
+    : null;
+  const canOpenSelectedSourceResource = Boolean(
+    capabilities.canOperateResources &&
+      selectedSourceResource &&
+      selectedSourceResourceModuleId &&
+      moduleViews.some((module) => module.id === selectedSourceResourceModuleId),
+  );
+  const handleOpenSelectedSourceResource = () => {
+    if (!selectedSourceResource || !selectedSourceResourceModuleId || !canOpenSelectedSourceResource) return;
+    setPendingOpenResourceId(selectedSourceResource.id);
+    actions.handleSelectModule(selectedSourceResourceModuleId);
+    actions.setOpenResourceEmbedId(selectedSourceResource.id);
+  };
+  const selectedSourceLineage: WebCommunityResourceSourceLineage | null =
+    selectedResource?.source_resource_id && selectedSourceResource
+      ? {
+          title: selectedSourceResource.title,
+          detail: getResourceLineageDetail(selectedSourceResource),
+          ...(canOpenSelectedSourceResource ? { onOpen: handleOpenSelectedSourceResource } : {}),
+        }
+      : null;
   const isRefreshingResources = state.isLoadingResources || state.isLoadingResourceModules;
   const hasResourceContent = state.modules.length > 0 || state.resources.length > 0;
   const wasRefreshingResourcesRef = useRef(false);
@@ -550,10 +556,21 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
   }, [actions, hasResourceContent, isRefreshingResources, selectedModule, selectedModuleId]);
 
   useEffect(() => {
-    if (viewerResourceId && !viewerResource) {
-      setViewerResourceId(null);
+    if (!selectedModule) {
+      if (selectedResourceId) actions.setOpenResourceEmbedId(null);
+      return;
     }
-  }, [viewerResource, viewerResourceId]);
+    if (visibleResources.length === 0) {
+      if (selectedResourceId) actions.setOpenResourceEmbedId(null);
+      return;
+    }
+    const hasSelectedResource = Boolean(
+      selectedResourceId && visibleResources.some((resource) => resource.id === selectedResourceId),
+    );
+    if (!hasSelectedResource) {
+      actions.setOpenResourceEmbedId(visibleResources[0]?.id ?? null);
+    }
+  }, [actions, selectedModule, selectedResourceId, visibleResources]);
 
   useEffect(() => {
     if (pendingDeleteResourceId && !pendingDeleteResource) {
@@ -561,6 +578,13 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
       setIsDeletingResource(false);
     }
   }, [pendingDeleteResource, pendingDeleteResourceId]);
+
+  useEffect(() => {
+    if (!pendingOpenResourceId) return;
+    if (!visibleResources.some((resource) => resource.id === pendingOpenResourceId)) return;
+    actions.setOpenResourceEmbedId(pendingOpenResourceId);
+    setPendingOpenResourceId(null);
+  }, [actions, pendingOpenResourceId, visibleResources]);
 
   const handleModuleDragStart = (event: DragEvent<HTMLDivElement>, module: ResourceModuleView) => {
     if (!canReorderModules || module.is_virtual) {
@@ -639,6 +663,28 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
     setDropTargetResourceId(null);
   };
 
+  const renderResourceRailItem = (resource: CommunityResource) => (
+    <ResourceRailItem
+      key={resource.id}
+      resource={resource}
+      isActive={selectedResource?.id === resource.id}
+      onSelect={() => actions.setOpenResourceEmbedId(resource.id)}
+      onEdit={() => actions.handleEditResource(resource)}
+      onDelete={() => setPendingDeleteResourceId(resource.id)}
+      onDragStart={(event) => handleResourceDragStart(event, resource)}
+      onDragOver={(event) => handleResourceDragOver(event, resource)}
+      onDragLeave={() => {
+        if (dropTargetResourceId === resource.id) setDropTargetResourceId(null);
+      }}
+      onDrop={(event) => handleResourceDrop(event, resource)}
+      onDragEnd={handleResourceDragEnd}
+      canManage={capabilities.canOperateResources}
+      canReorder={canReorderResources}
+      isDragging={draggingResourceId === resource.id}
+      isDropTarget={dropTargetResourceId === resource.id}
+    />
+  );
+
   return (
     <>
       <div className="community-panel resources-panel">
@@ -647,52 +693,71 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
             {selectedModule ? (
               <button className="resources-back-btn" type="button" onClick={() => actions.handleSelectModule(null)}>
                 <BackIcon />
-                <span>Resources</span>
+                <span>Knowledge</span>
               </button>
             ) : null}
-            <div className="resources-header">{selectedModule?.name ?? "Resources"}</div>
+            <div className="resources-header">{selectedModule?.name ?? "Knowledge"}</div>
             <div className="feed-header-subtitle">
               {selectedModule
                 ? selectedModule.description_md?.trim() ||
-                  `Durable links, videos, and notes for ${capabilities.activeCommunityName ?? "this community"}.`
-                : `Modules for ${capabilities.activeCommunityName ?? "this community"} resources.`}
+                  `Durable knowledge and source material for ${capabilities.activeCommunityName ?? "this community"}.`
+                : `Organized knowledge for ${capabilities.activeCommunityName ?? "this community"}.`}
             </div>
           </div>
           <div className="feed-header-actions">
             <div
               className="feed-header-badge"
-              aria-label={selectedModule ? `${visibleResources.length} resources` : `${moduleViews.length} modules`}
+              aria-label={selectedModule ? `${visibleResources.length} knowledge items` : `${moduleViews.length} modules`}
             >
               {selectedModule ? visibleResources.length : moduleViews.length}
             </div>
             {capabilities.hasActiveCommunity && capabilities.canOperateResources ? (
-              <button
-                className="resources-add-btn"
-                onClick={() =>
-                  selectedModule
-                    ? actions.openNewResourceModal(
-                        selectedModule.id === LEGACY_RESOURCE_MODULE_ID ? null : selectedModule.id,
-                      )
-                    : actions.openNewModuleModal()
-                }
-                title={selectedModule ? "Add resource" : "Add module"}
-              >
-                +
-              </button>
+              selectedModule ? (
+                <div className="resources-add-split" role="group" aria-label="Add knowledge">
+                  <button
+                    className="resources-add-choice"
+                    type="button"
+                    onClick={() => actions.openNewResourceModal(selectedModuleResourceTargetId)}
+                    title="Add page"
+                  >
+                    <span aria-hidden="true">+</span>
+                    <span>Page</span>
+                  </button>
+                  <button
+                    className="resources-add-choice"
+                    type="button"
+                    onClick={() => actions.openNewSourceModal(selectedModuleResourceTargetId)}
+                    title="Add source"
+                  >
+                    <span aria-hidden="true">+</span>
+                    <span>Source</span>
+                  </button>
+                </div>
+              ) : (
+                <button
+                  className="resources-add-btn"
+                  type="button"
+                  onClick={() => actions.openNewModuleModal()}
+                  title="Add knowledge module"
+                  aria-label="Add knowledge module"
+                >
+                  +
+                </button>
+              )
             ) : null}
           </div>
         </div>
 
         {isRefreshingResources && !showInitialResourceLoading ? (
-          <div className="analytics-refreshing-note">Refreshing resources...</div>
+          <div className="analytics-refreshing-note">Refreshing knowledge...</div>
         ) : null}
 
         {showInitialResourceLoading ? (
           <div className="community-panel-state-shell">
             <div className="community-chat-page-loading-card" aria-busy="true" aria-live="polite">
-              <div className="community-chat-page-loading-title">Loading resources…</div>
+              <div className="community-chat-page-loading-title">Loading knowledge…</div>
               <div className="community-chat-page-loading-copy">
-                {`Preparing links, videos, and notes for ${capabilities.activeCommunityName ?? "this community"}.`}
+                {`Preparing references and source material for ${capabilities.activeCommunityName ?? "this community"}.`}
               </div>
               <div className="community-chat-page-loading-progress web-skeleton-pill" aria-hidden="true" />
             </div>
@@ -707,12 +772,12 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
                 </svg>
               </div>
               <div className="chat-empty-title">
-                Welcome to {capabilities.activeCommunityName ?? "your"} modules
+                Welcome to {capabilities.activeCommunityName ?? "your"} knowledge
               </div>
               <div className="chat-empty-text">
                 {capabilities.canOperateResources
-                  ? "Create modules to organize links, videos, and notes members can come back to."
-                  : "Modules shared by the community team will show up here."}
+                  ? "Create modules to organize durable pages, sources, and references."
+                  : "Knowledge shared by the community team will show up here."}
               </div>
             </div>
           </div>
@@ -750,46 +815,109 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
                   <path d="M14 11a5 5 0 0 0-7.07 0L3.4 14.54a5 5 0 0 0 7.07 7.07L14 19" />
                 </svg>
               </div>
-              <div className="chat-empty-title">No resources yet</div>
+              <div className="chat-empty-title">No knowledge items yet</div>
               <div className="chat-empty-text">
                 {capabilities.canOperateResources
-                  ? "Add the first resource for this module."
-                  : "Resources shared by the community team will show up here."}
+                  ? "Add the first page, source, or reference for this module."
+                  : "Knowledge shared by the community team will show up here."}
               </div>
             </div>
           </div>
         ) : (
-          <div className="resource-library">
-            <div className="resource-grid">
-              {visibleResources.map((resource) => (
-                <ResourceCard
-                  key={resource.id}
-                  resource={resource}
-                  onOpenViewer={() => setViewerResourceId(resource.id)}
-                  onEdit={() => actions.handleEditResource(resource)}
-                  onDelete={() => setPendingDeleteResourceId(resource.id)}
-                  onDragStart={(event) => handleResourceDragStart(event, resource)}
-                  onDragOver={(event) => handleResourceDragOver(event, resource)}
-                  onDragLeave={() => {
-                    if (dropTargetResourceId === resource.id) setDropTargetResourceId(null);
-                  }}
-                  onDrop={(event) => handleResourceDrop(event, resource)}
-                  onDragEnd={handleResourceDragEnd}
-                  canManage={capabilities.canOperateResources}
-                  canReorder={canReorderResources}
-                  isDragging={draggingResourceId === resource.id}
-                  isDropTarget={dropTargetResourceId === resource.id}
+          <div className="knowledge-workspace">
+            <aside className="knowledge-resource-rail" aria-label={`${selectedModule.name} knowledge items`}>
+              <div className="knowledge-resource-rail-header">
+                <div className="knowledge-resource-rail-kicker">Knowledge</div>
+                <div className="knowledge-resource-rail-count">{visibleResources.length}</div>
+              </div>
+              <div className="knowledge-resource-list">
+                <div className="knowledge-resource-section">
+                  <div className="knowledge-resource-section-header">
+                    <span>Pages</span>
+                    <span>{pageResources.length}</span>
+                  </div>
+                  {pageResources.length > 0 ? (
+                    pageResources.map(renderResourceRailItem)
+                  ) : (
+                    <div className="knowledge-resource-empty-line">No pages yet</div>
+                  )}
+                </div>
+                {shouldShowSourceInbox ? (
+                  <div className="knowledge-resource-section">
+                    <div className="knowledge-resource-section-header">
+                      <span>Source Inbox</span>
+                      <span>{sourceResources.length}</span>
+                    </div>
+                    {sourceResources.length > 0 ? (
+                      sourceResources.map(renderResourceRailItem)
+                    ) : (
+                      <div className="knowledge-resource-empty-line">Sources added for review will appear here.</div>
+                    )}
+                  </div>
+                ) : null}
+              </div>
+            </aside>
+            <div className="knowledge-resource-reader">
+              {selectedResource ? (
+                <WebCommunityResourceViewerContent
+                  resource={selectedResource}
+                  eyebrow={getResourceRoleLabel(selectedResource)}
+                  sourceLineage={selectedSourceLineage}
+                  actions={
+                    capabilities.canOperateResources ? (
+                      <>
+                        {getResourceRole(selectedResource) === "source" ? (
+                          <>
+                            <button
+                              className="resource-card-action resource-publish-action resource-draft-action"
+                              type="button"
+                              title="Create page draft"
+                              onClick={() => {
+                                if (!selectedResource) return;
+                                void actions.handleCreatePageDraftFromSource(selectedResource).then((created) => {
+                                  if (created) setPendingOpenResourceId(created.id);
+                                });
+                              }}
+                            >
+                              Draft page
+                            </button>
+                            {selectedResource.resource_status !== "published" ? (
+                              <button
+                                className="resource-card-action resource-publish-action"
+                                type="button"
+                                title="Publish source"
+                                onClick={() => void actions.handlePublishResource(selectedResource)}
+                              >
+                                Publish
+                              </button>
+                            ) : null}
+                          </>
+                        ) : null}
+                        <button
+                          className="resource-card-action"
+                          type="button"
+                          title="Edit knowledge item"
+                          onClick={() => actions.handleEditResource(selectedResource)}
+                        >
+                          <EditIcon />
+                        </button>
+                        <button
+                          className="resource-card-action danger"
+                          type="button"
+                          title="Delete knowledge item"
+                          onClick={() => setPendingDeleteResourceId(selectedResource.id)}
+                        >
+                          <DeleteIcon />
+                        </button>
+                      </>
+                    ) : null
+                  }
                 />
-              ))}
+              ) : null}
             </div>
           </div>
         )}
       </div>
-
-      <WebCommunityResourceViewerModal
-        resource={viewerResource}
-        onClose={() => setViewerResourceId(null)}
-      />
 
       <WebDeleteResourceModal
         isOpen={Boolean(pendingDeleteResource)}
@@ -806,8 +934,8 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
           setIsDeletingResource(false);
           if (didDelete !== false) {
             setPendingDeleteResourceId(null);
-            if (viewerResourceId === pendingDeleteResource.id) {
-              setViewerResourceId(null);
+            if (selectedResourceId === pendingDeleteResource.id) {
+              actions.setOpenResourceEmbedId(null);
             }
           }
         }}
