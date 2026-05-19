@@ -121,8 +121,6 @@ const CODEX_THREAD_BINDING_COMPACT_EVIDENCE_EVENT_TYPES = new Set([
   "codex_thread_binding_persist_skipped",
   "codex_harness_primary_completed",
   "codex_harness_primary_dynamic_tool_event",
-  "codex_harness_dynamic_tool_bridge_call_finished",
-  "mcp_tool_execution_completed",
 ]);
 
 function readEnv(name: string): string {
