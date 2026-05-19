@@ -221,6 +221,16 @@ assert.match(
   "web gateway must call the canonical launch status query",
 );
 assert.match(
+  launchGateway,
+  /community:saveCommunityLaunchProfile/,
+  "launch onboarding inline profile/about/publish saves must write through the canonical community mutation",
+);
+assert.match(
+  communityBarrel,
+  /saveCommunityLaunchProfile/,
+  "community barrel must expose the launch profile mutation",
+);
+assert.match(
   setupCard,
   /Community launch/,
   "workspace card must present launch setup separately from account setup",
@@ -234,6 +244,11 @@ assert.match(
   setupModal,
   /Add source material[\s\S]*Publish one usable resource/,
   "launch modal knowledge step must show source material and publish activation points",
+);
+assert.match(
+  setupModal,
+  /onSaveProfile[\s\S]*onSaveAbout[\s\S]*onAddKnowledge[\s\S]*onSaveAgent/,
+  "launch modal must support inline canonical saves for the core setup surfaces",
 );
 assert.match(
   workspaceLandingProjection,

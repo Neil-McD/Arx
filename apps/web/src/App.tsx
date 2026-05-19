@@ -117,7 +117,17 @@ import {
   type AccountSetupStatus,
 } from "../../../shared/accountSetup";
 import {
+  saveCloudCommunityAgentConfig as saveCloudCommunityAgentConfigDirect,
+} from "../../../shared/cloudCommunityAgentGateway";
+import {
+  saveCloudCommunityResource,
+  setCloudCommunityFreeAccessMode,
+} from "../../../shared/cloudCommunityAdminGateway";
+import {
   loadCloudCommunityLaunchSetupStatus,
+  saveCloudCommunityLaunchProfile,
+  type CloudCommunityLaunchProfileSaveInput,
+  type CloudCommunityLaunchProfileSaveResult,
 } from "../../../shared/cloudCommunityLaunchSetupGateway";
 import type {
   CommunityLaunchSetupStatus,
@@ -4216,6 +4226,20 @@ export default function App() {
     resetCommunityFunnelState,
   ]);
 
+  useEffect(() => {
+    if (!isCommunityLaunchSetupModalOpen) return;
+    if (!session || !activeCommunityId || !canManageMembersActiveCommunity) return;
+    if (communityAgentConfigLoadedCommunityIdRef.current === activeCommunityId) return;
+    void loadCommunityAgentConfig(activeCommunityId, session);
+  }, [
+    isCommunityLaunchSetupModalOpen,
+    session,
+    activeCommunityId,
+    canManageMembersActiveCommunity,
+    communityAgentConfigLoadedCommunityIdRef,
+    loadCommunityAgentConfig,
+  ]);
+
   const communityPolynetController = useWebCommunityPolynetController<AuthSession>({
     activePage,
     communityTab,
@@ -5427,6 +5451,30 @@ export default function App() {
     effectiveAccountSetupStatus?.completed,
     activeCommunity?.updated_at,
   ]);
+
+  const refreshActiveCommunityLaunchSetupStatus = useCallback(async () => {
+    if (!session || !activeCommunityId) return;
+    setIsLoadingCommunityLaunchSetupStatus(true);
+    setCommunityLaunchSetupError(null);
+    try {
+      const status = await loadCloudCommunityLaunchSetupStatus({
+        session,
+        communityId: activeCommunityId,
+      });
+      setCommunityLaunchSetupStatus(status);
+    } catch (error) {
+      const message =
+        typeof error === "string"
+          ? error
+          : error instanceof Error
+            ? error.message
+            : "Failed to load community launch setup.";
+      setCommunityLaunchSetupStatus(null);
+      setCommunityLaunchSetupError(message);
+    } finally {
+      setIsLoadingCommunityLaunchSetupStatus(false);
+    }
+  }, [activeCommunityId, session]);
 
   const communityUi = useWebCommunityUiController<
     AuthSession,
@@ -7133,6 +7181,219 @@ export default function App() {
       }
       openCommunityTab(nextCommunitySlug, "settings", { pushSnapshot: false });
     };
+    const communityLaunchAgentStarterPrompts = useMemo(() => {
+      const landing = normalizeCommunityAgentLanding(communityAgentConfigLanding) ?? DEFAULT_EMPTY_THREAD_LANDING;
+      return [0, 1, 2].map((index) =>
+        String(landing.tabs[index]?.prompts?.[0] ?? "").trim(),
+      );
+    }, [communityAgentConfigLanding]);
+    const buildCommunityLaunchAgentLanding = (starterPrompts: string[]): CommunityAgentLanding => {
+      const currentLanding = normalizeCommunityAgentLanding(communityAgentConfigLanding) ?? DEFAULT_EMPTY_THREAD_LANDING;
+      const fallbackLanding = DEFAULT_EMPTY_THREAD_LANDING;
+      return {
+        title: fallbackLanding.title,
+        subtitle: fallbackLanding.subtitle,
+        tabs: [0, 1, 2].map((index) => {
+          const currentTab = currentLanding.tabs[index] ?? fallbackLanding.tabs[index]!;
+          const fallbackPrompt = fallbackLanding.tabs[index]?.prompts?.[0] ?? "";
+          const prompt = String(starterPrompts[index] ?? "").trim() ||
+            String(currentTab.prompts?.[0] ?? "").trim() ||
+            fallbackPrompt;
+          return {
+            id: currentTab.id || fallbackLanding.tabs[index]!.id,
+            label: currentTab.label || fallbackLanding.tabs[index]!.label,
+            prompts: [prompt],
+          };
+        }),
+      };
+    };
+    const applyCommunityLaunchProfileResult = (result: CloudCommunityLaunchProfileSaveResult) => {
+      setCommunities((prev) =>
+        prev.map((community) =>
+          community.id === result.id
+            ? {
+                ...community,
+                slug: result.slug,
+                name: result.name,
+                one_liner: result.one_liner,
+                about: result.about,
+                avatar_url: result.avatar_url,
+                avatar_storage_id: result.avatar_storage_id ?? null,
+                avatar_focus_x: result.avatar_focus_x ?? 0.5,
+                avatar_focus_y: result.avatar_focus_y ?? 0.5,
+                avatar_zoom: result.avatar_zoom ?? 1,
+                banner_url: result.banner_url,
+                banner_storage_id: result.banner_storage_id ?? null,
+                banner_focus_x: result.banner_focus_x ?? 0.5,
+                banner_focus_y: result.banner_focus_y ?? 0.5,
+                banner_zoom: result.banner_zoom ?? 1,
+                visibility: toCanonicalCommunityVisibility(result.visibility, "unlisted"),
+                entry_policy: result.entry_policy ?? community.entry_policy ?? null,
+                updated_at: result.updated_at,
+              }
+            : community,
+        ),
+      );
+      if (activeCommunityId === result.id) {
+        applyCommunityShellState({
+          communityId: result.id,
+          communitySlug: result.slug,
+        });
+      }
+    };
+    const requireCommunityLaunchSaveContext = () => {
+      if (!session) throw new Error("Sign in before updating community launch setup.");
+      if (!activeCommunity) throw new Error("Select a community before updating launch setup.");
+      return {
+        session,
+        community: activeCommunity,
+      };
+    };
+    const handleSaveCommunityLaunchProfile = async (draft: {
+      name: string;
+      slug: string;
+      oneLiner: string;
+      avatarUrl: string;
+      bannerUrl: string;
+    }) => {
+      const { session, community } = requireCommunityLaunchSaveContext();
+      const nextAvatarUrl = String(draft.avatarUrl ?? "").trim();
+      const nextBannerUrl = String(draft.bannerUrl ?? "").trim();
+      const currentAvatarUrl = String(community.avatar_url ?? "").trim();
+      const currentBannerUrl = String(community.banner_url ?? "").trim();
+      const input: CloudCommunityLaunchProfileSaveInput = {
+        name: draft.name,
+        slug: slugifyCommunityName(draft.slug) || draft.slug,
+        oneLiner: draft.oneLiner.trim() || null,
+      };
+      if (nextAvatarUrl !== currentAvatarUrl) {
+        input.avatarUrl = nextAvatarUrl || null;
+        input.avatarStorageId = null;
+        input.avatarFocusX = community.avatar_focus_x ?? 0.5;
+        input.avatarFocusY = community.avatar_focus_y ?? 0.5;
+        input.avatarZoom = community.avatar_zoom ?? 1;
+      }
+      if (nextBannerUrl !== currentBannerUrl) {
+        input.bannerUrl = nextBannerUrl || null;
+        input.bannerStorageId = null;
+        input.bannerFocusX = community.banner_focus_x ?? 0.5;
+        input.bannerFocusY = community.banner_focus_y ?? 0.5;
+        input.bannerZoom = community.banner_zoom ?? 1;
+      }
+      const result = await saveCloudCommunityLaunchProfile({
+        session,
+        communityId: community.id,
+        input,
+      });
+      if (!result) throw new Error("Failed to save community profile.");
+      applyCommunityLaunchProfileResult(result);
+      await refreshActiveCommunityLaunchSetupStatus();
+    };
+    const handleSaveCommunityLaunchAbout = async (draft: { about: string }) => {
+      const { session, community } = requireCommunityLaunchSaveContext();
+      const result = await saveCloudCommunityLaunchProfile({
+        session,
+        communityId: community.id,
+        input: {
+          about: draft.about.trim() || null,
+        },
+      });
+      if (!result) throw new Error("Failed to save community about.");
+      applyCommunityLaunchProfileResult(result);
+      await refreshActiveCommunityLaunchSetupStatus();
+    };
+    const handleAddCommunityLaunchKnowledge = async (draft: {
+      title: string;
+      bodyMd: string;
+      url: string;
+    }) => {
+      const { session, community } = requireCommunityLaunchSaveContext();
+      const title = draft.title.trim();
+      const bodyMd = draft.bodyMd.trim();
+      const url = draft.url.trim();
+      if (!title) throw new Error("Add a resource title.");
+      if (!bodyMd && !url) throw new Error("Add resource body or a source link.");
+      await saveCloudCommunityResource({
+        session,
+        resourceId: null,
+        isPatch: false,
+        payload: {
+          community_id: community.id,
+          title,
+          body_md: bodyMd || null,
+          url: url || null,
+          type: url ? "link" : "post",
+          resource_role: "page",
+          resource_status: "published",
+          pinned: false,
+        },
+      });
+      await loadCommunityResources(community.id, session);
+      await refreshActiveCommunityLaunchSetupStatus();
+    };
+    const handleSaveCommunityLaunchAgent = async (draft: {
+      systemPrompt: string;
+      starterPrompts: string[];
+    }) => {
+      const { session, community } = requireCommunityLaunchSaveContext();
+      const landing = buildCommunityLaunchAgentLanding(draft.starterPrompts);
+      const normalizedLanding = normalizeCommunityAgentDraftForSave(landing);
+      if (!normalizedLanding) throw new Error("Add at least one onboarding prompt.");
+      const row = await saveCloudCommunityAgentConfigDirect({
+        session,
+        communityId: community.id,
+        landingJson: normalizedLanding,
+        communitySystemPrompt: draft.systemPrompt,
+      });
+      if (!row) throw new Error("Failed to save community agent.");
+      hydrateCommunityAgentEditor({
+        landing_json: normalizedLanding,
+        community_system_prompt: draft.systemPrompt,
+        system_prompt: draft.systemPrompt,
+      });
+      communityAgentConfigLoadedCommunityIdRef.current = community.id;
+      communityAgentConfigDirtyRef.current = false;
+      activeCommunityAgentLandingCommunityIdRef.current = community.id;
+      setActiveCommunityAgentLanding(normalizedLanding);
+      await refreshActiveCommunityLaunchSetupStatus();
+    };
+    const handleSaveCommunityLaunchAccess = async (draft: {
+      entryPolicy: "open" | "approval";
+    }) => {
+      const { session, community } = requireCommunityLaunchSaveContext();
+      const result = await setCloudCommunityFreeAccessMode({
+        session,
+        communityId: community.id,
+        mode: draft.entryPolicy,
+      });
+      setCommunities((prev) =>
+        prev.map((candidate) =>
+          candidate.id === community.id
+            ? {
+                ...candidate,
+                entry_policy: result?.entry_policy ?? draft.entryPolicy,
+                updated_at: result?.updated_at ?? candidate.updated_at,
+              }
+            : candidate,
+        ),
+      );
+      await refreshActiveCommunityLaunchSetupStatus();
+    };
+    const handleSaveCommunityLaunchPublish = async (draft: {
+      visibility: "published" | "unlisted";
+    }) => {
+      const { session, community } = requireCommunityLaunchSaveContext();
+      const result = await saveCloudCommunityLaunchProfile({
+        session,
+        communityId: community.id,
+        input: {
+          visibility: draft.visibility,
+        },
+      });
+      if (!result) throw new Error("Failed to update publishing.");
+      applyCommunityLaunchProfileResult(result);
+      await refreshActiveCommunityLaunchSetupStatus();
+    };
     const {
       handleSelectMobileMode,
       openMobileAgentSettings,
@@ -8517,17 +8778,37 @@ export default function App() {
         community={
           activeCommunity
             ? {
+                id: activeCommunity.id,
+                slug: activeCommunity.slug,
                 name: activeCommunity.name,
+                one_liner: activeCommunity.one_liner,
+                about: activeCommunity.about,
                 avatar_url: activeCommunity.avatar_url,
+                avatar_storage_id: activeCommunity.avatar_storage_id ?? null,
                 avatar_focus_x: activeCommunity.avatar_focus_x,
                 avatar_focus_y: activeCommunity.avatar_focus_y,
                 avatar_zoom: activeCommunity.avatar_zoom,
+                banner_url: activeCommunity.banner_url,
+                banner_storage_id: activeCommunity.banner_storage_id ?? null,
+                banner_focus_x: activeCommunity.banner_focus_x,
+                banner_focus_y: activeCommunity.banner_focus_y,
+                banner_zoom: activeCommunity.banner_zoom,
+                visibility: activeCommunity.visibility,
+                entry_policy: activeCommunity.entry_policy ?? null,
+                agent_system_prompt: communityAgentConfigCommunitySystemPrompt,
+                agent_starter_prompts: communityLaunchAgentStarterPrompts,
               }
             : null
         }
         status={communityLaunchSetupStatus}
         onClose={() => setIsCommunityLaunchSetupModalOpen(false)}
         onOpenStep={handleOpenCommunityLaunchSetupStep}
+        onSaveProfile={handleSaveCommunityLaunchProfile}
+        onSaveAbout={handleSaveCommunityLaunchAbout}
+        onAddKnowledge={handleAddCommunityLaunchKnowledge}
+        onSaveAgent={handleSaveCommunityLaunchAgent}
+        onSaveAccess={handleSaveCommunityLaunchAccess}
+        onSavePublish={handleSaveCommunityLaunchPublish}
       />
     </>
   );
