@@ -29,6 +29,8 @@ const STAGING_MCP_CANARY_RUNTIME_TOOL_NAME =
 const DEFAULT_CODEX_MCP_CANARY_THREAD_KEY = "staging-codex-mounted-mcp-canary-v2";
 const DEFAULT_CODEX_STREAMING_CANARY_THREAD_KEY =
   "staging-codex-primary-streaming-canary-v1";
+const DEFAULT_NATIVE_HARNESS_CANARY_THREAD_KEY =
+  "staging-native-default-harness-canary-v1";
 
 const expectedCommunityArg = v.object({
   slug: v.string(),
@@ -100,6 +102,9 @@ const CODEX_THREAD_BINDING_EVIDENCE_EVENT_TYPES = new Set([
   "codex_mcp_projection_fingerprint_changed",
   "codex_harness_primary_started",
   "codex_harness_primary_completed",
+  "codex_harness_probe_started",
+  "codex_harness_probe_completed",
+  "codex_harness_readiness",
   "codex_harness_stream_event_summary",
   "codex_harness_live_stream_delta_failed",
   "codex_harness_primary_dynamic_tool_event",
@@ -113,6 +118,9 @@ const CODEX_THREAD_BINDING_EVIDENCE_EVENT_TYPES = new Set([
   "mcp_session_reused",
   "mcp_session_reinitialized",
   "mcp_tool_execution_completed",
+  "workspace_session_create_started",
+  "workspace_session_adopted",
+  "workspace_session_create_completed",
 ]);
 
 const CODEX_THREAD_BINDING_COMPACT_EVIDENCE_EVENT_TYPES = new Set([
@@ -127,10 +135,16 @@ const CODEX_THREAD_BINDING_COMPACT_EVIDENCE_EVENT_TYPES = new Set([
   "codex_thread_binding_persist_failed",
   "codex_thread_binding_persist_skipped",
   "codex_harness_primary_completed",
+  "codex_harness_probe_started",
+  "codex_harness_probe_completed",
+  "codex_harness_readiness",
   "codex_harness_stream_event_summary",
   "runtime_agent_harness_fallback_started",
   "runtime_agent_harness_fallback_skipped",
   "codex_harness_primary_dynamic_tool_event",
+  "workspace_session_create_started",
+  "workspace_session_adopted",
+  "workspace_session_create_completed",
 ]);
 
 function readEnv(name: string): string {
@@ -257,6 +271,29 @@ function summarizeCodexThreadBindingEvidencePayload(args: {
       "blocked_tool_count",
       "server_count",
       "eligible_runtime_tool_names",
+    ]);
+  }
+  if (
+    args.eventType === "codex_harness_probe_started" ||
+    args.eventType === "codex_harness_probe_completed" ||
+    args.eventType === "codex_harness_readiness" ||
+    args.eventType === "workspace_session_create_started" ||
+    args.eventType === "workspace_session_adopted" ||
+    args.eventType === "workspace_session_create_completed"
+  ) {
+    return pickPayloadFields(args.payload, [
+      ...common,
+      "probe_mode",
+      "ready",
+      "stage",
+      "project_id",
+      "tool_name",
+      "sandbox_id",
+      "source",
+      "codex_turn_requested",
+      "execution_placement",
+      "auth_bridge",
+      "codex_home_placement",
     ]);
   }
   if (args.eventType === "codex_thread_binding_resolved") {
@@ -1553,6 +1590,132 @@ export const runCodexMountedMcpCanaryTurn = action({
           typeof responseRecord.content === "string"
             ? responseRecord.content.length
             : null,
+        code: responseRecord.code ?? responseRecord.error ?? null,
+        message: responseRecord.message ?? null,
+      },
+    };
+  },
+});
+
+export const runNativeDefaultHarnessCanaryTurn = action({
+  args: {
+    maintenanceToken: v.string(),
+    ownerId: v.optional(v.string()),
+    ownerEmail: v.optional(v.string()),
+    ownerAuthSubject: v.optional(v.string()),
+    projectName: v.optional(v.string()),
+    threadKey: v.optional(v.string()),
+    runId: v.optional(v.string()),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args): Promise<Record<string, unknown>> => {
+    assertStagingMaintenanceAllowed({ maintenanceToken: args.maintenanceToken });
+    const nowMs = Math.floor(args.nowMs ?? Date.now());
+    const setup = (await ctx.runMutation(
+      (api as any).stagingMaintenance.ensureStagingMountedMcpCanary,
+      {
+        maintenanceToken: args.maintenanceToken,
+        ownerId: args.ownerId ?? undefined,
+        ownerEmail: args.ownerEmail ?? undefined,
+        ownerAuthSubject: args.ownerAuthSubject ?? undefined,
+        projectName: args.projectName ?? undefined,
+        threadKey:
+          normalizeText(args.threadKey) ||
+          DEFAULT_NATIVE_HARNESS_CANARY_THREAD_KEY,
+        nowMs,
+      },
+    )) as Record<string, any>;
+    if (setup?.ok !== true) throw new Error("staging_native_harness_canary_setup_failed");
+    const ownerId = String(setup.owner?.id ?? "").trim();
+    const ownerAuthSubject = normalizeText(setup.ownerAuthSubject);
+    const threadKey = normalizeText(setup.thread?.threadKey);
+    if (!ownerId || !ownerAuthSubject || !threadKey) {
+      throw new Error("staging_native_harness_canary_setup_incomplete");
+    }
+
+    const marker = `POLYNET_NATIVE_DEFAULT_OK_${crypto.randomUUID().replace(/-/g, "")}`;
+    const runId =
+      normalizeText(args.runId) ||
+      `agent_web:staging-native-default-canary:${crypto.randomUUID()}`;
+    const prompt = [
+      "Default harness smoke.",
+      "Do not use workspace tools, Codex canary, or Daytona unless explicitly required.",
+      `Reply with exactly: ${marker}`,
+    ].join(" ");
+    const req = new Request("https://polynet-staging.vercel.app/runtime/runtime_turn", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        thread_id: threadKey,
+        model_id: "gpt-5.5",
+        surface: "web",
+        requested_agentic_tools: true,
+        requested_funding_source: "user_chatgpt",
+        stream: false,
+        codex_primary_canary: false,
+        idempotency_key: runId,
+        user_message_key: `user:${threadKey}:${runId}`,
+        message: {
+          text: prompt,
+        },
+        max_tokens: 300,
+      }),
+    });
+    const requireAuthenticatedActor: RequireAuthenticatedActor = async () => ({
+      ok: true,
+      actor: {
+        userId: ownerId,
+        dbUserId: ownerId as any,
+        authSubject: ownerAuthSubject,
+        email: String(setup.owner?.normalizedEmail ?? "") || null,
+        displayName: null,
+        avatarUrl: null,
+      },
+    });
+    const startedAt = Date.now();
+    const response = await handleRuntimeTurnRequest({
+      ctx,
+      req,
+      jsonResponse: stagingJsonResponse as JsonResponseFn,
+      sseResponse: stagingSseResponse,
+      requireAuthenticatedActor,
+    });
+    const responseText = await response.text();
+    let responseJson: unknown = null;
+    try {
+      responseJson = responseText ? JSON.parse(responseText) : null;
+    } catch {
+      responseJson = null;
+    }
+    const responseRecord =
+      responseJson && typeof responseJson === "object" && !Array.isArray(responseJson)
+        ? (responseJson as Record<string, unknown>)
+        : {};
+    const content = typeof responseRecord.content === "string"
+      ? responseRecord.content
+      : "";
+    return {
+      ok:
+        response.status >= 200 &&
+        response.status < 300 &&
+        responseRecord.ok !== false &&
+        content.includes(marker),
+      status: response.status,
+      latencyMs: Date.now() - startedAt,
+      runId,
+      marker,
+      threadKey,
+      threadId: setup.thread?.id ?? null,
+      project: setup.project ?? null,
+      owner: setup.owner ?? null,
+      response: {
+        ok: responseRecord.ok ?? null,
+        engineId: responseRecord.engine_id ?? null,
+        runtimeHarnessId: responseRecord.runtime_harness_id ?? null,
+        contentChars: content.length,
+        markerPresent: content.includes(marker),
         code: responseRecord.code ?? responseRecord.error ?? null,
         message: responseRecord.message ?? null,
       },
