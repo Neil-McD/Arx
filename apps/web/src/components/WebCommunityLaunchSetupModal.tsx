@@ -385,7 +385,7 @@ export function WebCommunityLaunchSetupModal(
   const handleSaveAccess = (event: FormEvent) => {
     event.preventDefault();
     if (accessDraft === "paid_subscription") {
-      setStepError("Paid access needs the full access setup for pricing and Stripe.");
+      setStepError("Stripe Connect needs the full access setup for pricing.");
       return;
     }
     void runStepSave(
@@ -710,7 +710,7 @@ export function WebCommunityLaunchSetupModal(
             {[
               ["open", "Open", "Members can join directly."],
               ["approval", "Approval", "Members request access first."],
-              ["paid_subscription", "Paid", "Requires pricing setup."],
+              ["paid_subscription", "Stripe Connect", "Connect Stripe before paid access."],
             ].map(([value, label, description]) => (
               <button
                 key={value}

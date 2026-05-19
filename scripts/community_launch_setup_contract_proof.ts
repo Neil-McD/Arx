@@ -243,6 +243,11 @@ assert.match(
 );
 assert.match(
   setupModal,
+  /Stripe Connect/,
+  "launch access setup must label paid setup as Stripe Connect",
+);
+assert.match(
+  setupModal,
   /community-launch-step-summary[\s\S]*completed_items[\s\S]*total_items/,
   "launch modal must show the compact aggregate progress indicator for each step",
 );

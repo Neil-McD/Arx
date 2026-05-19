@@ -3106,6 +3106,41 @@ body {
 
 .community-launch-modal {
   width: min(100%, 860px);
+  overflow: hidden;
+}
+
+.community-launch-modal .polynet-onboarding-shell {
+  min-height: 0;
+}
+
+.community-launch-modal .polynet-onboarding-step-body {
+  max-height: min(590px, calc(100vh - 300px));
+  overflow-y: auto;
+  padding-right: 10px;
+  margin-right: -10px;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--text-secondary) 24%, transparent) transparent;
+}
+
+.community-launch-modal .polynet-onboarding-step-body::-webkit-scrollbar {
+  width: 8px;
+}
+
+.community-launch-modal .polynet-onboarding-step-body::-webkit-scrollbar-track {
+  margin-block: 12px;
+  background: transparent;
+}
+
+.community-launch-modal .polynet-onboarding-step-body::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: content-box;
+  background-color: color-mix(in srgb, var(--text-secondary) 24%, transparent);
+}
+
+.community-launch-modal .polynet-onboarding-step-body::-webkit-scrollbar-thumb:hover {
+  background-color: color-mix(in srgb, var(--text-secondary) 38%, transparent);
 }
 
 .community-launch-brand-avatar {
@@ -3223,9 +3258,9 @@ body {
 .community-launch-field textarea {
   width: 100%;
   min-width: 0;
-  border: 1px solid color-mix(in srgb, var(--border-muted) 72%, var(--text-secondary));
+  border: 1px solid color-mix(in srgb, var(--border-muted) 78%, transparent);
   border-radius: 10px;
-  background: color-mix(in srgb, var(--bg-card) 68%, var(--bg-page));
+  background: color-mix(in srgb, var(--bg-page) 82%, #000000 18%);
   color: var(--text-primary);
   font: inherit;
   font-size: 14px;
@@ -3246,8 +3281,9 @@ body {
 
 .community-launch-field input:focus,
 .community-launch-field textarea:focus {
-  border-color: color-mix(in srgb, var(--accent-gold) 44%, var(--border-muted));
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-gold) 12%, transparent);
+  border-color: color-mix(in srgb, var(--accent-gold) 28%, var(--border-muted));
+  background: color-mix(in srgb, var(--bg-page) 88%, #000000 12%);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-gold) 10%, transparent);
 }
 
 .community-launch-starter-panel {
