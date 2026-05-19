@@ -540,22 +540,6 @@ export async function handleRuntimeTurnRequest(args: {
     });
   }
 
-  const isStagingCodexPrimaryCanaryFallback = (): boolean => {
-    try {
-      const raw =
-        ((globalThis as any)?.process?.env?.ARX_PUBLIC_APP_URL as string | undefined) ||
-        ((globalThis as any)?.process?.env?.VITE_PUBLIC_APP_URL as string | undefined) ||
-        "";
-      const fallbackEnabled = String(
-        ((globalThis as any)?.process?.env
-          ?.POLYNET_CODEX_PRIMARY_CANARY_NON_STREAMING_FALLBACK as string | undefined) ?? "",
-      ).toLowerCase() === "true";
-      return fallbackEnabled && new URL(String(raw)).hostname.toLowerCase() === "polynet-staging.vercel.app";
-    } catch {
-      return false;
-    }
-  };
-
   runtimeTurnStage = "auth";
   try {
     const resolved = await resolveAuthenticatedRuntimeTurn({
@@ -599,9 +583,7 @@ export async function handleRuntimeTurnRequest(args: {
     const runId =
       String(input.idempotency_key ?? "").trim() ||
       `convex_runtime:${crypto.randomUUID()}`;
-    const codexPrimaryCanaryRequested =
-      input.codex_primary_canary === true ||
-      (input.stream === false && isStagingCodexPrimaryCanaryFallback());
+    const codexPrimaryCanaryRequested = input.codex_primary_canary === true;
     startedRunId = runId;
     runtimeTurnStage = "run_start";
     const explicitUserMessageKey = String(input.user_message_key ?? "").trim();

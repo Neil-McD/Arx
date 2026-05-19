@@ -969,8 +969,6 @@ async function buildFingerprint(args: {
       primaryEnabled: readEnv("POLYNET_CODEX_HARNESS_PRIMARY_ENABLED").toLowerCase() === "true",
       probeMode: readEnv("POLYNET_CODEX_HARNESS_PROBE_MODE") || null,
       dynamicToolBridgeUrlConfigured: Boolean(readCodexDynamicToolBridgeUrl()),
-      nonStreamingCanaryFallbackEnabled:
-        readEnv("POLYNET_CODEX_PRIMARY_CANARY_NON_STREAMING_FALLBACK").toLowerCase() === "true",
       daytonaApiKeyPresent: Boolean(readEnv("DAYTONA_API_KEY")),
       daytonaOrgIdPresent: Boolean(readEnv("DAYTONA_ORG_ID") || readEnv("DAYTONA_ORGANIZATION_ID")),
       daytonaSnapshotPresent: Boolean(readEnv("DAYTONA_SNAPSHOT")),

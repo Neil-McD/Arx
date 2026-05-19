@@ -50,7 +50,6 @@ The staging Convex deployment currently needs:
 - `POLYNET_CODEX_HARNESS_PROBE_MODE=canary`
 - `POLYNET_CODEX_HARNESS_EXECUTOR_ENABLED`
 - `POLYNET_CODEX_HARNESS_PRIMARY_ENABLED`
-- `POLYNET_CODEX_PRIMARY_CANARY_NON_STREAMING_FALLBACK=true` only while an older staging web bundle has the Codex canary toggle but does not yet send `codex_primary_canary`
 - `POLYNET_STAGING_MAINTENANCE_ENABLED=true`
 
 The staging maintenance token is intentionally temporary. The staging seed and smoke scripts create `POLYNET_STAGING_MAINTENANCE_TOKEN`, run the gated maintenance function, and remove the token unless `--keep-token` is passed.
@@ -174,7 +173,7 @@ Use `POLYNET_CODEX_HARNESS_PROBE_MODE=tool_call_canary` only as a temporary diag
 
 For the Codex primary visible-turn canary, staging exposes the one-turn Codex primary toggle for signed-in users on `polynet-staging.vercel.app` without requiring a staging `operatorRoles` seed. The operator data panel remains operator-only, and production must not depend on this staging-only debug path.
 
-After the staging web bundle includes the explicit `codex_primary_canary` request flag, remove `POLYNET_CODEX_PRIMARY_CANARY_NON_STREAMING_FALLBACK`; the fallback only exists to keep older staging bundles from silently losing the canary route during rollout.
+The staging web bundle must send the explicit `codex_primary_canary` request flag for Codex primary visible-turn canaries. Runtime no longer infers a canary turn from non-streaming staging requests.
 
 ## Anti-Patterns
 

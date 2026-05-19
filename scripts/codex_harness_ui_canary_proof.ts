@@ -87,14 +87,14 @@ assert.match(
 
 assert.match(
   runtimeTurnHandlers,
-  /POLYNET_CODEX_PRIMARY_CANARY_NON_STREAMING_FALLBACK[\s\S]*hostname\.toLowerCase\(\) === "polynet-staging\.vercel\.app"/,
-  "temporary non-streaming fallback should be explicit and staging-only while older staging bundles roll forward",
+  /const codexPrimaryCanaryRequested = input\.codex_primary_canary === true;/,
+  "runtime should only use the explicit Codex primary canary flag",
 );
 
-assert.match(
+assert.doesNotMatch(
   runtimeTurnHandlers,
-  /input\.codex_primary_canary === true[\s\S]*input\.stream === false[\s\S]*isStagingCodexPrimaryCanaryFallback\(\)/,
-  "runtime should prefer the explicit canary flag and only use the named staging fallback for older web bundles",
+  /POLYNET_CODEX_PRIMARY_CANARY_NON_STREAMING_FALLBACK|isStagingCodexPrimaryCanaryFallback/,
+  "temporary staging fallback should be removed after the explicit canary flag is live",
 );
 
 assert.match(

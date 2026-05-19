@@ -98,7 +98,6 @@ assert(fingerprint?.codex?.executorEnabled === true, "Codex executor flag must b
 assert(fingerprint?.codex?.primaryEnabled === true, "Codex primary flag must be enabled in staging");
 assert(fingerprint?.codex?.probeMode === "canary", "Codex probe mode must be canary in staging");
 assert(fingerprint?.codex?.dynamicToolBridgeUrlConfigured === true, "Codex dynamic tool bridge URL must resolve in staging");
-assert(fingerprint?.codex?.nonStreamingCanaryFallbackEnabled === false, "Codex primary canary fallback must be disabled once the staging web bundle sends the explicit flag");
 assert(fingerprint?.codex?.daytonaApiKeyPresent === true, "Daytona API key must be present in staging");
 assert(fingerprint?.codex?.daytonaOrgIdPresent === true, "Daytona org id must be present in staging");
 assert(fingerprint?.codex?.daytonaSnapshotPresent === true, "Daytona snapshot must be present in staging");
