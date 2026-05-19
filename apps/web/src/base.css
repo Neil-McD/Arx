@@ -2553,6 +2553,17 @@ body {
   color: color-mix(in srgb, var(--accent-gold) 72%, var(--text-primary));
 }
 
+.polynet-onboarding-steps button:disabled {
+  cursor: not-allowed;
+  opacity: 0.46;
+}
+
+.polynet-onboarding-steps button:disabled:hover {
+  border-color: transparent;
+  background: transparent;
+  color: var(--text-secondary);
+}
+
 .polynet-onboarding-step-icon {
   width: 24px;
   height: 24px;

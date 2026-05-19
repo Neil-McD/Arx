@@ -30,7 +30,7 @@ export function useWebMobileShellController(params: {
   handleOpenDiscover: () => void;
   handleTopbarBackToWorkspace: () => void;
   hasCommunityCreateAccess: boolean;
-  openCreateCommunityModal: () => void;
+  openCommunityCreateFlow: () => void;
   setIsFreeAccountInfoOpen: Dispatch<SetStateAction<boolean>>;
 }) {
   const mobileShellSwipeStartRef = useRef<{ x: number; y: number } | null>(null);
@@ -98,13 +98,13 @@ export function useWebMobileShellController(params: {
   const openMobileCreateCommunity = useCallback(() => {
     params.setMobileOverlay(null);
     if (params.hasCommunityCreateAccess) {
-      params.openCreateCommunityModal();
+      params.openCommunityCreateFlow();
       return;
     }
     params.setIsFreeAccountInfoOpen(true);
   }, [
     params.hasCommunityCreateAccess,
-    params.openCreateCommunityModal,
+    params.openCommunityCreateFlow,
     params.setIsFreeAccountInfoOpen,
     params.setMobileOverlay,
   ]);

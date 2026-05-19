@@ -120,6 +120,7 @@ import {
   saveCloudCommunityAgentConfig as saveCloudCommunityAgentConfigDirect,
 } from "../../../shared/cloudCommunityAgentGateway";
 import {
+  createCloudCommunity,
   prepareCloudCommunityBrandingField,
   saveCloudCommunityResource,
   setCloudCommunityFreeAccessMode,
@@ -431,7 +432,10 @@ import {
   WebGlobalOverlayHost,
   type WebGlobalOverlayHostProps,
 } from "./components/WebGlobalOverlayHost";
-import { WebCommunityLaunchSetupModal } from "./components/WebCommunityLaunchSetupModal";
+import {
+  WebCommunityLaunchSetupModal,
+  type CommunityLaunchProfileSaveDraft,
+} from "./components/WebCommunityLaunchSetupModal";
 import { WebShellChromeHost } from "./components/WebShellChromeHost";
 import { WebWorkspaceShellPanelsHost } from "./components/WebWorkspaceShellPanelsHost";
 import { buildWebStandalonePublicRouteViewProps } from "./controllers/buildWebStandalonePublicRouteViewProps";
@@ -473,6 +477,31 @@ type CommunityRecord = {
   created_at: string;
   updated_at: string;
 };
+
+function mapLaunchCommunityCreateError(error: unknown): string {
+  const message =
+    typeof error === "string"
+      ? error
+      : error instanceof Error
+        ? error.message
+        : "Failed to create community.";
+  if (message === "community_builder_required") {
+    return "Your account cannot create a community yet.";
+  }
+  if (message.includes("account_setup_required") || message.includes("profile_setup_required")) {
+    return "Finish account setup before creating a community.";
+  }
+  if (message.includes("community_publish_ready_required")) {
+    return "Published communities need a name, one-liner, avatar, and banner.";
+  }
+  if (message === "community_owner_limit_reached") {
+    return "You've reached your community limit.";
+  }
+  if (message === "community_slug_taken") {
+    return "That community slug is already taken.";
+  }
+  return message;
+}
 
 type PublicCommunityRecord = {
   slug: string;
@@ -1585,6 +1614,8 @@ export default function App() {
   const [communityLaunchSetupError, setCommunityLaunchSetupError] =
     useState<string | null>(null);
   const [isCommunityLaunchSetupModalOpen, setIsCommunityLaunchSetupModalOpen] =
+    useState(false);
+  const [isCommunityLaunchCreateMode, setIsCommunityLaunchCreateMode] =
     useState(false);
   const [hasLoadedOnboardingProfile, setHasLoadedOnboardingProfile] = useState(false);
   const [isOnboardingModalOpen, setIsOnboardingModalOpen] = useState(false);
@@ -5026,10 +5057,14 @@ export default function App() {
           return;
         }
         showAppToastMessage("Provider connection is not available.");
-      },
-      create_community: (payload) => {
-        openCreateCommunityModal(payload.draft ?? null);
-      },
+	      },
+	      create_community: (payload) => {
+	        if (payload.draft) {
+	          openCreateCommunityModal(payload.draft);
+	          return;
+	        }
+	        openCommunityLaunchCreateFlow();
+	      },
       redeem_purchase_claim: (payload) => {
         void redeemPurchaseClaim(payload.token);
       },
@@ -5401,6 +5436,12 @@ export default function App() {
     !session || Boolean(effectiveAccountSetupStatus?.completed);
 
   useEffect(() => {
+    if (isCommunityLaunchCreateMode) {
+      setCommunityLaunchSetupStatus(null);
+      setCommunityLaunchSetupError(null);
+      setIsLoadingCommunityLaunchSetupStatus(false);
+      return;
+    }
     const shouldLoadLaunchStatus =
       Boolean(session) &&
       Boolean(activeCommunityId) &&
@@ -5445,6 +5486,7 @@ export default function App() {
     };
   }, [
     session,
+    isCommunityLaunchCreateMode,
     activeCommunityId,
     activePage,
     activeView,
@@ -7411,6 +7453,147 @@ export default function App() {
       applyCommunityLaunchProfileResult(result);
       await refreshActiveCommunityLaunchSetupStatus();
     };
+    const getOwnedCommunityCount = () =>
+      communities.reduce(
+        (count, community) =>
+          count + (communityRoleById[community.id] === "owner" ? 1 : 0),
+        0,
+      );
+    const openCommunityLaunchCreateFlow = () => {
+      void (async () => {
+        const activeSession = await ensureUsableAuthSession();
+        if (!activeSession) {
+          requireSignIn({ reason: "create_community", payload: { draft: null } });
+          return;
+        }
+        if (!isAccountSetupCompleteForBuilderActions) {
+          openProfileSetup();
+          return;
+        }
+        let status = accountCommerceStatus;
+        if (!status) {
+          try {
+            status = await loadAccountCommerceStatus(activeSession);
+          } catch (error) {
+            const message =
+              typeof error === "string"
+                ? error
+                : error instanceof Error
+                  ? error.message
+                  : "Couldn't check your account status. Try again.";
+            setAccountCommerceError(message);
+            showAppToastMessage(message);
+            return;
+          }
+        }
+        const maxCommunities = Math.max(
+          0,
+          Math.floor(Number(status?.max_communities ?? 0)),
+        );
+        if (maxCommunities <= 0) {
+          setIsFreeAccountInfoOpen(true);
+          return;
+        }
+        if (getOwnedCommunityCount() >= maxCommunities) {
+          showAppToastMessage("You've built the maximum number of communities");
+          return;
+        }
+        setCommunityLaunchSetupStatus(null);
+        setCommunityLaunchSetupError(null);
+        setIsLoadingCommunityLaunchSetupStatus(false);
+        setIsCommunityLaunchCreateMode(true);
+        setIsCommunityLaunchSetupModalOpen(true);
+        navigateTo("/workspace");
+      })();
+    };
+    const handleCreateCommunityFromLaunch = async (
+      draft: CommunityLaunchProfileSaveDraft,
+    ) => {
+      const activeSession = await ensureUsableAuthSession();
+      if (!activeSession) {
+        requireSignIn({ reason: "create_community", payload: { draft: null } });
+        throw new Error("Sign in to create a community.");
+      }
+      if (!isAccountSetupCompleteForBuilderActions) {
+        openProfileSetup();
+        throw new Error("Finish account setup before creating a community.");
+      }
+      const name = draft.name.trim();
+      const slug = (draft.slug.trim() || slugifyCommunityName(name)).toLowerCase();
+      if (!name || !slug) {
+        throw new Error("Name and slug are required.");
+      }
+      if (!isValidCommunitySlug(slug)) {
+        throw new Error("Slug must be 3-32 chars, lowercase, and may include dashes.");
+      }
+      const status = accountCommerceStatus ?? await loadAccountCommerceStatus(activeSession);
+      const maxCommunities = Math.max(
+        0,
+        Math.floor(Number(status?.max_communities ?? 0)),
+      );
+      if (maxCommunities <= 0) {
+        setIsFreeAccountInfoOpen(true);
+        throw new Error("Your account cannot create a community yet.");
+      }
+      if (getOwnedCommunityCount() >= maxCommunities) {
+        throw new Error("You've reached your community limit.");
+      }
+
+      try {
+        const [avatarField, bannerField] = await Promise.all([
+          prepareCloudCommunityBrandingField({
+            session: activeSession,
+            kind: "avatar",
+            nextValue: draft.avatarUrl || null,
+          }),
+          prepareCloudCommunityBrandingField({
+            session: activeSession,
+            kind: "banner",
+            nextValue: draft.bannerUrl || null,
+          }),
+        ]);
+        const community = await createCloudCommunity<AuthSession, CommunityRecord>({
+          session: activeSession,
+          name,
+          slug,
+          visibility: "unlisted",
+          avatarStorageId: avatarField.storageId ?? null,
+          avatarUrl: avatarField.url ?? null,
+          oneLiner: draft.oneLiner.trim() || null,
+          bannerStorageId: bannerField.storageId ?? null,
+          bannerUrl: bannerField.url ?? null,
+        });
+        if (!community?.id) {
+          throw new Error("Failed to create community.");
+        }
+        setCommunities((prev) => [
+          community,
+          ...prev.filter((candidate) => candidate.id !== community.id),
+        ]);
+        setCommunityRoleById((prev) => ({ ...prev, [community.id]: "owner" }));
+        applyCommunityShellState({
+          communityId: community.id,
+          communitySlug: community.slug,
+          communityTab: "chat",
+        });
+        setPublicRoute({ kind: "app" });
+        setActivePage("workspace");
+        setActiveView("home");
+        setIsCommunityLaunchCreateMode(false);
+        setIsLoadingCommunityLaunchSetupStatus(true);
+        const launchStatus = await loadCloudCommunityLaunchSetupStatus({
+          session: activeSession,
+          communityId: community.id,
+        });
+        setCommunityLaunchSetupStatus(launchStatus);
+        setCommunityLaunchSetupError(null);
+        setIsCommunityLaunchSetupModalOpen(true);
+      } catch (error) {
+        throw new Error(mapLaunchCommunityCreateError(error));
+      } finally {
+        setIsLoadingCommunityLaunchSetupStatus(false);
+      }
+    };
     const {
       handleSelectMobileMode,
       openMobileAgentSettings,
@@ -7438,7 +7621,7 @@ export default function App() {
       handleOpenDiscover,
       handleTopbarBackToWorkspace,
       hasCommunityCreateAccess: Number(accountCommerceStatus?.max_communities ?? 0) > 0,
-      openCreateCommunityModal: () => openCreateCommunityModal(),
+      openCommunityCreateFlow: openCommunityLaunchCreateFlow,
       setIsFreeAccountInfoOpen,
     });
     useEffect(() => {
@@ -8303,6 +8486,7 @@ export default function App() {
     shouldShowCommunityLaunchSetupCard,
     communityLaunchSetupStatus,
     onContinueCommunityLaunchSetup: () => {
+      setIsCommunityLaunchCreateMode(false);
       setIsCommunityLaunchSetupModalOpen(true);
     },
   });
@@ -8792,8 +8976,9 @@ export default function App() {
       <WebGlobalOverlayHost {...globalOverlayHostProps} />
       <WebCommunityLaunchSetupModal
         isOpen={isCommunityLaunchSetupModalOpen}
+        mode={isCommunityLaunchCreateMode ? "create" : "setup"}
         community={
-          activeCommunity
+          !isCommunityLaunchCreateMode && activeCommunity
             ? {
                 id: activeCommunity.id,
                 slug: activeCommunity.slug,
@@ -8818,8 +9003,12 @@ export default function App() {
             : null
         }
         status={communityLaunchSetupStatus}
-        onClose={() => setIsCommunityLaunchSetupModalOpen(false)}
+        onClose={() => {
+          setIsCommunityLaunchSetupModalOpen(false);
+          setIsCommunityLaunchCreateMode(false);
+        }}
         onOpenStep={handleOpenCommunityLaunchSetupStep}
+        onCreateCommunity={handleCreateCommunityFromLaunch}
         onSaveProfile={handleSaveCommunityLaunchProfile}
         onSaveAbout={handleSaveCommunityLaunchAbout}
         onAddKnowledge={handleAddCommunityLaunchKnowledge}
@@ -8917,7 +9106,7 @@ export default function App() {
     handleOpenDiscover,
     openMobileCreateCommunity,
     hasCommunityCreateAccess: Number(accountCommerceStatus?.max_communities ?? 0) > 0,
-    openCreateCommunityModal: () => openCreateCommunityModal(),
+    openCommunityCreateFlow: openCommunityLaunchCreateFlow,
     communities,
     railCommunities,
     communityRailAttentionById,

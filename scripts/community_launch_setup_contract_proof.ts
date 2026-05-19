@@ -16,6 +16,8 @@ const communityBarrel = read("convex/community.ts");
 const setupCard = read("apps/web/src/components/WebCommunityLaunchSetupCard.tsx");
 const setupModal = read("apps/web/src/components/WebCommunityLaunchSetupModal.tsx");
 const appShell = read("apps/web/src/App.tsx");
+const shellChromeHostProps = read("apps/web/src/controllers/buildWebShellChromeHostProps.ts");
+const mobileShellController = read("apps/web/src/controllers/useWebMobileShellController.ts");
 const workspaceLandingProjection = read(
   "apps/web/src/controllers/buildWebWorkspaceLandingProjection.tsx",
 );
@@ -250,6 +252,41 @@ assert.match(
   setupModal,
   /StripeWordmark[\s\S]*community-launch-stripe-wordmark/,
   "launch access setup must reuse the Stripe wordmark for the paid setup path",
+);
+assert.match(
+  setupModal,
+  /mode\?: "setup" \| "create"[\s\S]*onCreateCommunity/,
+  "launch modal must support create mode before a community exists",
+);
+assert.match(
+  appShell,
+  /openCommunityLaunchCreateFlow[\s\S]*setIsCommunityLaunchCreateMode\(true\)[\s\S]*setIsCommunityLaunchSetupModalOpen\(true\)/,
+  "app shell must open the launch onboarding modal for new community creation",
+);
+assert.match(
+  appShell,
+  /create_community: \(payload\)[\s\S]*if \(payload\.draft\)[\s\S]*openCreateCommunityModal\(payload\.draft\)[\s\S]*openCommunityLaunchCreateFlow\(\)/,
+  "auth resume should keep legacy drafts but route empty community create intents to launch onboarding",
+);
+assert.match(
+  appShell,
+  /handleCreateCommunityFromLaunch[\s\S]*createCloudCommunity[\s\S]*loadCloudCommunityLaunchSetupStatus/,
+  "launch create flow must create the community then continue into setup status",
+);
+assert.match(
+  shellChromeHostProps,
+  /onOpenCommunityCreateCta[\s\S]*openCommunityCreateFlow/,
+  "desktop community rail create CTA must route to the launch create flow",
+);
+assert.doesNotMatch(
+  shellChromeHostProps,
+  /onOpenCommunityCreateCta[\s\S]{0,240}openCreateCommunityModal/,
+  "desktop community rail create CTA must not open the legacy create modal directly",
+);
+assert.match(
+  mobileShellController,
+  /openMobileCreateCommunity[\s\S]*openCommunityCreateFlow/,
+  "mobile community create CTA must route to the launch create flow",
 );
 assert.match(
   setupModal,

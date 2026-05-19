@@ -18,6 +18,8 @@ import type {
   CommunityLaunchSetupStatus,
   CommunityLaunchSetupStep,
 } from "../../../../shared/communityLaunchSetup";
+import { buildCommunityLaunchSetupStatus } from "../../../../shared/communityLaunchSetup";
+import { slugifyCommunityName } from "../../../../shared/communitySlug";
 import {
   readBannerFileAsWideDataUrlWithinLimit,
   readCommunityAvatarFileAsDataUrlWithinLimit,
@@ -83,10 +85,12 @@ export type CommunityLaunchPublishSaveDraft = {
 
 type WebCommunityLaunchSetupModalProps = {
   isOpen: boolean;
+  mode?: "setup" | "create";
   community: CommunityLaunchSetupCommunity | null;
   status: CommunityLaunchSetupStatus | null;
   onClose: () => void;
   onOpenStep: (step: CommunityLaunchSetupStep) => void;
+  onCreateCommunity?: (draft: CommunityLaunchProfileSaveDraft) => Promise<void>;
   onSaveProfile: (draft: CommunityLaunchProfileSaveDraft) => Promise<void>;
   onSaveAbout: (draft: CommunityLaunchAboutSaveDraft) => Promise<void>;
   onAddKnowledge: (draft: CommunityLaunchKnowledgeSaveDraft) => Promise<void>;
@@ -202,10 +206,12 @@ export function WebCommunityLaunchSetupModal(
 ) {
   const {
     isOpen,
+    mode = "setup",
     community,
     status,
     onClose,
     onOpenStep,
+    onCreateCommunity,
     onSaveProfile,
     onSaveAbout,
     onAddKnowledge,
@@ -213,6 +219,7 @@ export function WebCommunityLaunchSetupModal(
     onSaveAccess,
     onSavePublish,
   } = props;
+  const isCreateMode = mode === "create";
   const [activeStep, setActiveStep] = useState<CommunityLaunchSetupStep>(() =>
     normalizeActiveStep(status),
   );
@@ -225,6 +232,7 @@ export function WebCommunityLaunchSetupModal(
   const [processingProfileMedia, setProcessingProfileMedia] = useState<"avatar" | "banner" | null>(null);
   const [profileAvatarDragOver, setProfileAvatarDragOver] = useState(false);
   const [profileBannerDragOver, setProfileBannerDragOver] = useState(false);
+  const [profileSlugEdited, setProfileSlugEdited] = useState(false);
   const [profileDraft, setProfileDraft] = useState<CommunityLaunchProfileSaveDraft>({
     name: "",
     slug: "",
@@ -246,11 +254,37 @@ export function WebCommunityLaunchSetupModal(
 
   useEffect(() => {
     if (!isOpen) return;
-    setActiveStep(normalizeActiveStep(status));
-  }, [isOpen, status?.current_step]);
+    setActiveStep(isCreateMode ? "profile" : normalizeActiveStep(status));
+  }, [isCreateMode, isOpen, status?.current_step]);
 
   useEffect(() => {
-    if (!isOpen || !community) return;
+    if (!isOpen) return;
+    if (isCreateMode) {
+      setProfileDraft({
+        name: "",
+        slug: "",
+        oneLiner: "",
+        avatarUrl: "",
+        bannerUrl: "",
+      });
+      setAboutDraft("");
+      setAgentDraft({
+        systemPrompt: "",
+        starterPrompts: ["", "", ""],
+      });
+      setAccessDraft("approval");
+      setStepError(null);
+      setStepSuccess(null);
+      setProfileMediaError(null);
+      setProfileAvatarFileName("");
+      setProfileBannerFileName("");
+      setProcessingProfileMedia(null);
+      setProfileAvatarDragOver(false);
+      setProfileBannerDragOver(false);
+      setProfileSlugEdited(false);
+      return;
+    }
+    if (!community) return;
     setProfileDraft({
       name: community.name ?? "",
       slug: community.slug ?? "",
@@ -272,8 +306,10 @@ export function WebCommunityLaunchSetupModal(
     setProcessingProfileMedia(null);
     setProfileAvatarDragOver(false);
     setProfileBannerDragOver(false);
+    setProfileSlugEdited(false);
   }, [
     isOpen,
+    isCreateMode,
     community?.id,
     community?.name,
     community?.slug,
@@ -286,15 +322,58 @@ export function WebCommunityLaunchSetupModal(
     community?.agent_starter_prompts,
   ]);
 
-  const progress = Math.max(0, Math.min(100, status?.percent ?? 0));
+  const createModeStatus = useMemo(
+    () =>
+      buildCommunityLaunchSetupStatus({
+        name: profileDraft.name,
+        oneLiner: profileDraft.oneLiner,
+        avatarUrl: profileDraft.avatarUrl,
+        bannerUrl: profileDraft.bannerUrl,
+        about: null,
+        hasKnowledgeMaterial: false,
+        hasPublishedKnowledge: false,
+        hasAgentConfig: false,
+        hasWorkflow: false,
+        entryPolicy: "approval",
+        visibility: "unlisted",
+      }),
+    [
+      profileDraft.avatarUrl,
+      profileDraft.bannerUrl,
+      profileDraft.name,
+      profileDraft.oneLiner,
+    ],
+  );
+  const effectiveStatus = isCreateMode ? createModeStatus : status;
+  const effectiveCommunity: CommunityLaunchSetupCommunity | null = isCreateMode
+    ? {
+        id: "__new_community__",
+        slug: profileDraft.slug,
+        name: profileDraft.name.trim() || "New community",
+        one_liner: profileDraft.oneLiner.trim() || null,
+        about: null,
+        avatar_url: profileDraft.avatarUrl || null,
+        avatar_focus_x: 0.5,
+        avatar_focus_y: 0.5,
+        avatar_zoom: 1,
+        banner_url: profileDraft.bannerUrl || null,
+        banner_focus_x: 0.5,
+        banner_focus_y: 0.5,
+        banner_zoom: 1,
+        visibility: "unlisted",
+        entry_policy: "approval",
+      }
+    : community;
+
+  const progress = Math.max(0, Math.min(100, effectiveStatus?.percent ?? 0));
   const progressCircumference = 2 * Math.PI * 17;
   const progressDashOffset =
     progressCircumference - (progress / 100) * progressCircumference;
   const activeMeta = STEP_META[activeStep];
-  const activeStatus = status?.steps.find((step) => step.step === activeStep) ?? null;
+  const activeStatus = effectiveStatus?.steps.find((step) => step.step === activeStep) ?? null;
   const activeComplete = Boolean(activeStatus?.completed);
   const missingCount = activeStatus?.missing.length ?? 0;
-  const publishMissing = status?.missing.filter(isPublishProfileMissing) ?? [];
+  const publishMissing = effectiveStatus?.missing.filter(isPublishProfileMissing) ?? [];
   const isSavingActiveStep = savingStep === activeStep;
   const stepSummary = useMemo(() => {
     if (!activeStatus) return "Not loaded yet.";
@@ -303,7 +382,7 @@ export function WebCommunityLaunchSetupModal(
     return `${missingCount} items left`;
   }, [activeStatus, missingCount]);
 
-  if (!isOpen || !community || !status) return null;
+  if (!isOpen || !effectiveCommunity || !effectiveStatus) return null;
 
   const runStepSave = async (
     step: CommunityLaunchSetupStep,
@@ -346,6 +425,18 @@ export function WebCommunityLaunchSetupModal(
 
   const handleSaveProfile = (event: FormEvent) => {
     event.preventDefault();
+    if (isCreateMode) {
+      if (!onCreateCommunity) {
+        setStepError("Community creation is unavailable.");
+        return;
+      }
+      void runStepSave(
+        "profile",
+        () => onCreateCommunity(profileDraft),
+        "Community created.",
+      );
+      return;
+    }
     void runStepSave(
       "profile",
       () => onSaveProfile(profileDraft),
@@ -451,7 +542,17 @@ export function WebCommunityLaunchSetupModal(
               <span>Name</span>
               <input
                 value={profileDraft.name}
-                onChange={(event) => setProfileDraft((draft) => ({ ...draft, name: event.target.value }))}
+                onChange={(event) => {
+                  const nextName = event.target.value;
+                  setProfileDraft((draft) => ({
+                    ...draft,
+                    name: nextName,
+                    slug:
+                      isCreateMode && !profileSlugEdited
+                        ? slugifyCommunityName(nextName)
+                        : draft.slug,
+                  }));
+                }}
                 placeholder="Community name"
               />
             </label>
@@ -459,7 +560,10 @@ export function WebCommunityLaunchSetupModal(
               <span>Slug</span>
               <input
                 value={profileDraft.slug}
-                onChange={(event) => setProfileDraft((draft) => ({ ...draft, slug: event.target.value }))}
+                onChange={(event) => {
+                  setProfileSlugEdited(true);
+                  setProfileDraft((draft) => ({ ...draft, slug: event.target.value }));
+                }}
                 placeholder="community-slug"
               />
             </label>
@@ -490,9 +594,9 @@ export function WebCommunityLaunchSetupModal(
                     alt="Community banner preview"
                     draggable={false}
                     style={getCommunityBannerImageStyle({
-                      focusX: community.banner_focus_x,
-                      focusY: community.banner_focus_y,
-                      zoom: community.banner_zoom,
+                      focusX: effectiveCommunity.banner_focus_x,
+                      focusY: effectiveCommunity.banner_focus_y,
+                      zoom: effectiveCommunity.banner_zoom,
                     })}
                   />
                 ) : (
@@ -533,10 +637,10 @@ export function WebCommunityLaunchSetupModal(
               <CommunityAvatar
                 className={`create-community-avatar${profileAvatarDragOver ? " drag-over" : ""}`}
                 imageUrl={profileDraft.avatarUrl || null}
-                focusX={community.avatar_focus_x}
-                focusY={community.avatar_focus_y}
-                zoom={community.avatar_zoom}
-                name={profileDraft.name || community.name}
+                focusX={effectiveCommunity.avatar_focus_x}
+                focusY={effectiveCommunity.avatar_focus_y}
+                zoom={effectiveCommunity.avatar_zoom}
+                name={profileDraft.name || effectiveCommunity.name}
                 alt="Community avatar preview"
                 onDragOver={(event) => {
                   event.preventDefault();
@@ -578,11 +682,19 @@ export function WebCommunityLaunchSetupModal(
           </div>
           {profileMediaError ? <p className="community-launch-step-message error">{profileMediaError}</p> : null}
           <div className="community-launch-step-actions">
-            <button type="button" className="polynet-onboarding-back" onClick={() => onOpenStep("profile")}>
-              Open full editor
-            </button>
+            {isCreateMode ? null : (
+              <button type="button" className="polynet-onboarding-back" onClick={() => onOpenStep("profile")}>
+                Open full editor
+              </button>
+            )}
             <button type="submit" className="polynet-onboarding-next" disabled={!canSaveProfile || isSavingActiveStep}>
-              {isSavingActiveStep ? "Saving..." : "Save profile"}
+              {isSavingActiveStep
+                ? isCreateMode
+                  ? "Creating..."
+                  : "Saving..."
+                : isCreateMode
+                  ? "Create community"
+                  : "Save profile"}
             </button>
           </div>
         </form>
@@ -755,7 +867,7 @@ export function WebCommunityLaunchSetupModal(
     }
 
     if (activeStep === "publish") {
-      const isPublished = String(community.visibility ?? "").trim().toLowerCase() === "published";
+      const isPublished = String(effectiveCommunity.visibility ?? "").trim().toLowerCase() === "published";
       return (
         <div className="community-launch-inline-form">
           {publishMissing.length > 0 ? (
@@ -820,16 +932,16 @@ export function WebCommunityLaunchSetupModal(
             <div className="polynet-onboarding-brand">
               <CommunityAvatar
                 className="community-launch-brand-avatar"
-                imageUrl={community.avatar_url}
-                focusX={community.avatar_focus_x}
-                focusY={community.avatar_focus_y}
-                zoom={community.avatar_zoom}
-                name={community.name}
+                imageUrl={effectiveCommunity.avatar_url}
+                focusX={effectiveCommunity.avatar_focus_x}
+                focusY={effectiveCommunity.avatar_focus_y}
+                zoom={effectiveCommunity.avatar_zoom}
+                name={effectiveCommunity.name}
                 fallbackClassName="community-launch-brand-avatar-fallback"
                 imageClassName="community-launch-brand-avatar-image"
                 aria-hidden
               />
-              <span>{community.name}</span>
+              <span>{effectiveCommunity.name}</span>
             </div>
             <button
               className="polynet-onboarding-close"
@@ -858,8 +970,10 @@ export function WebCommunityLaunchSetupModal(
             </div>
             <div>
               <p className="polynet-landing-kicker">Community launch</p>
-              <h1 id="community-launch-title">Set up {community.name}</h1>
-              <p>{progress}% complete</p>
+              <h1 id="community-launch-title">
+                {isCreateMode ? "Create community" : `Set up ${effectiveCommunity.name}`}
+              </h1>
+              <p>{isCreateMode ? "Start the launch setup." : `${progress}% complete`}</p>
             </div>
           </div>
 
@@ -867,13 +981,16 @@ export function WebCommunityLaunchSetupModal(
             <nav className="polynet-onboarding-steps" aria-label="Community launch steps">
               {STEP_ORDER.map((step) => {
                 const active = step === activeStep;
-                const complete = isStepComplete(status, step);
+                const complete = isStepComplete(effectiveStatus, step);
+                const disabled = isCreateMode && step !== "profile";
                 return (
                   <button
                     key={step}
                     type="button"
                     className={`${active ? "active" : ""}${complete ? " complete" : ""}`}
+                    disabled={disabled}
                     onClick={() => {
+                      if (disabled) return;
                       setActiveStep(step);
                       setStepError(null);
                       setStepSuccess(null);
@@ -930,7 +1047,7 @@ export function WebCommunityLaunchSetupModal(
           </div>
 
           <button className="polynet-onboarding-finish-later" type="button" onClick={onClose}>
-            Finish later
+            {isCreateMode ? "Cancel" : "Finish later"}
           </button>
         </section>
       </div>

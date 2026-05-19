@@ -69,7 +69,7 @@ export function buildWebShellChromeHostProps(params: {
   handleOpenDiscover: () => void;
   openMobileCreateCommunity: () => void;
   hasCommunityCreateAccess: boolean;
-  openCreateCommunityModal: () => void;
+  openCommunityCreateFlow: () => void;
   communities: CommunityLike[];
   railCommunities: CommunityLike[];
   communityRailAttentionById: WebShellChromeHostProps["communityShell"]["communityRailAttentionById"];
@@ -227,7 +227,7 @@ export function buildWebShellChromeHostProps(params: {
       getCommunityRailItemBindings: params.getCommunityRailItemBindings,
       onOpenCommunityCreateCta: () => {
         if (params.hasCommunityCreateAccess) {
-          params.openCreateCommunityModal();
+          params.openCommunityCreateFlow();
           return;
         }
         params.setIsFreeAccountInfoOpen(true);
