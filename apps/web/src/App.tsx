@@ -122,7 +122,6 @@ import {
 import {
   createCloudCommunity,
   prepareCloudCommunityBrandingField,
-  saveCloudCommunityResource,
   setCloudCommunityFreeAccessMode,
 } from "../../../shared/cloudCommunityAdminGateway";
 import {
@@ -7361,35 +7360,6 @@ export default function App() {
       applyCommunityLaunchProfileResult(result);
       await refreshActiveCommunityLaunchSetupStatus();
     };
-    const handleAddCommunityLaunchKnowledge = async (draft: {
-      title: string;
-      bodyMd: string;
-      url: string;
-    }) => {
-      const { session, community } = requireCommunityLaunchSaveContext();
-      const title = draft.title.trim();
-      const bodyMd = draft.bodyMd.trim();
-      const url = draft.url.trim();
-      if (!title) throw new Error("Add a resource title.");
-      if (!bodyMd && !url) throw new Error("Add resource body or a source link.");
-      await saveCloudCommunityResource({
-        session,
-        resourceId: null,
-        isPatch: false,
-        payload: {
-          community_id: community.id,
-          title,
-          body_md: bodyMd || null,
-          url: url || null,
-          type: url ? "link" : "post",
-          resource_role: "page",
-          resource_status: "published",
-          pinned: false,
-        },
-      });
-      await loadCommunityResources(community.id, session);
-      await refreshActiveCommunityLaunchSetupStatus();
-    };
     const handleSaveCommunityLaunchAgent = async (draft: {
       systemPrompt: string;
       starterPrompts: string[];
@@ -9011,7 +8981,6 @@ export default function App() {
         onCreateCommunity={handleCreateCommunityFromLaunch}
         onSaveProfile={handleSaveCommunityLaunchProfile}
         onSaveAbout={handleSaveCommunityLaunchAbout}
-        onAddKnowledge={handleAddCommunityLaunchKnowledge}
         onSaveAgent={handleSaveCommunityLaunchAgent}
         onSaveAccess={handleSaveCommunityLaunchAccess}
         onSavePublish={handleSaveCommunityLaunchPublish}

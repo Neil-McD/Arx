@@ -64,12 +64,6 @@ export type CommunityLaunchAboutSaveDraft = {
   about: string;
 };
 
-export type CommunityLaunchKnowledgeSaveDraft = {
-  title: string;
-  bodyMd: string;
-  url: string;
-};
-
 export type CommunityLaunchAgentSaveDraft = {
   systemPrompt: string;
   starterPrompts: string[];
@@ -93,7 +87,6 @@ type WebCommunityLaunchSetupModalProps = {
   onCreateCommunity?: (draft: CommunityLaunchProfileSaveDraft) => Promise<void>;
   onSaveProfile: (draft: CommunityLaunchProfileSaveDraft) => Promise<void>;
   onSaveAbout: (draft: CommunityLaunchAboutSaveDraft) => Promise<void>;
-  onAddKnowledge: (draft: CommunityLaunchKnowledgeSaveDraft) => Promise<void>;
   onSaveAgent: (draft: CommunityLaunchAgentSaveDraft) => Promise<void>;
   onSaveAccess: (draft: CommunityLaunchAccessSaveDraft) => Promise<void>;
   onSavePublish: (draft: CommunityLaunchPublishSaveDraft) => Promise<void>;
@@ -103,9 +96,9 @@ const STEP_ORDER: CommunityLaunchSetupStep[] = [
   "profile",
   "about",
   "agent",
-  "knowledge",
   "workflows",
   "access",
+  "knowledge",
   "publish",
 ];
 
@@ -136,12 +129,6 @@ const STEP_META: Record<
     action: "Open agent",
     icon: <Bot size={15} strokeWidth={2} aria-hidden="true" />,
   },
-  knowledge: {
-    label: "Knowledge",
-    title: "Add community knowledge",
-    action: "Open resources",
-    icon: <BookOpen size={15} strokeWidth={2} aria-hidden="true" />,
-  },
   workflows: {
     label: "Workflows",
     title: "Connect workflows",
@@ -153,6 +140,12 @@ const STEP_META: Record<
     title: "Choose access",
     action: "Open access",
     icon: <LockKeyhole size={15} strokeWidth={2} aria-hidden="true" />,
+  },
+  knowledge: {
+    label: "Knowledge",
+    title: "Build the knowledge base",
+    action: "Open resources",
+    icon: <BookOpen size={15} strokeWidth={2} aria-hidden="true" />,
   },
   publish: {
     label: "Publish",
@@ -212,7 +205,6 @@ export function WebCommunityLaunchSetupModal(
     onCreateCommunity,
     onSaveProfile,
     onSaveAbout,
-    onAddKnowledge,
     onSaveAgent,
     onSaveAccess,
     onSavePublish,
@@ -240,11 +232,6 @@ export function WebCommunityLaunchSetupModal(
     bannerUrl: "",
   });
   const [aboutDraft, setAboutDraft] = useState("");
-  const [knowledgeDraft, setKnowledgeDraft] = useState<CommunityLaunchKnowledgeSaveDraft>({
-    title: "",
-    bodyMd: "",
-    url: "",
-  });
   const [agentDraft, setAgentDraft] = useState<CommunityLaunchAgentSaveDraft>({
     systemPrompt: "",
     starterPrompts: ["", "", ""],
@@ -462,18 +449,6 @@ export function WebCommunityLaunchSetupModal(
       "about",
       () => onSaveAbout({ about: aboutDraft }),
       "About saved.",
-    );
-  };
-
-  const handleAddKnowledge = (event: FormEvent) => {
-    event.preventDefault();
-    void runStepSave(
-      "knowledge",
-      async () => {
-        await onAddKnowledge(knowledgeDraft);
-        setKnowledgeDraft({ title: "", bodyMd: "", url: "" });
-      },
-      "Resource added.",
     );
   };
 
@@ -738,46 +713,68 @@ export function WebCommunityLaunchSetupModal(
     }
 
     if (activeStep === "knowledge") {
-      const canAddKnowledge = Boolean(
-        knowledgeDraft.title.trim() &&
-        (knowledgeDraft.bodyMd.trim() || knowledgeDraft.url.trim()),
-      );
       return (
-        <form className="community-launch-inline-form" onSubmit={handleAddKnowledge}>
-          <label className="community-launch-field">
-            <span>Resource title</span>
-            <input
-              value={knowledgeDraft.title}
-              onChange={(event) => setKnowledgeDraft((draft) => ({ ...draft, title: event.target.value }))}
-              placeholder="Start here"
-            />
-          </label>
-          <label className="community-launch-field">
-            <span>Resource body</span>
-            <textarea
-              value={knowledgeDraft.bodyMd}
-              onChange={(event) => setKnowledgeDraft((draft) => ({ ...draft, bodyMd: event.target.value }))}
-              rows={5}
-              placeholder="Paste the first useful page, summary, or operating note."
-            />
-          </label>
-          <label className="community-launch-field">
-            <span>Source link</span>
-            <input
-              value={knowledgeDraft.url}
-              onChange={(event) => setKnowledgeDraft((draft) => ({ ...draft, url: event.target.value }))}
-              placeholder="https://..."
-            />
-          </label>
+        <div className="community-launch-inline-form community-launch-knowledge-gateway">
+          <div className="community-launch-knowledge-stack">
+            <section className="community-launch-knowledge-row">
+              <span className="community-launch-knowledge-icon" aria-hidden="true">
+                <BookOpen size={15} strokeWidth={2} />
+              </span>
+              <div>
+                <span className="community-launch-knowledge-kicker">Starter guide</span>
+                <strong>Generate the Get Started path</strong>
+                <p>Use the profile, about page, agent behavior, workflows, and access settings as source context.</p>
+              </div>
+              <span className="community-launch-knowledge-pill">Planned</span>
+            </section>
+            <section className="community-launch-knowledge-row">
+              <span className="community-launch-knowledge-icon" aria-hidden="true">
+                <FileText size={15} strokeWidth={2} />
+              </span>
+              <div>
+                <span className="community-launch-knowledge-kicker">Sources</span>
+                <strong>Drag and drop source material</strong>
+                <p>Files, PDFs, presentations, videos, and notes should enter the canonical resources system here.</p>
+                <div className="community-launch-knowledge-dropzone" aria-label="Knowledge upload placeholder">
+                  Drop files here once ingestion is enabled
+                </div>
+              </div>
+              <span className="community-launch-knowledge-pill">Next</span>
+            </section>
+            <section className="community-launch-knowledge-row">
+              <span className="community-launch-knowledge-icon" aria-hidden="true">
+                <PlugZap size={15} strokeWidth={2} />
+              </span>
+              <div>
+                <span className="community-launch-knowledge-kicker">Integrations</span>
+                <strong>Connect source systems</strong>
+                <div className="community-launch-knowledge-integrations">
+                  <span>Google Drive</span>
+                  <span>Links</span>
+                  <span>GitHub</span>
+                </div>
+              </div>
+              <span className="community-launch-knowledge-pill">Planned</span>
+            </section>
+          </div>
           <div className="community-launch-step-actions">
             <button type="button" className="polynet-onboarding-back" onClick={() => onOpenStep("knowledge")}>
               Open resources
             </button>
-            <button type="submit" className="polynet-onboarding-next" disabled={!canAddKnowledge || isSavingActiveStep}>
-              {isSavingActiveStep ? "Adding..." : "Add resource"}
+            <button
+              type="button"
+              className="polynet-onboarding-next"
+              onClick={() => {
+                setStepOverride("publish");
+                setActiveStep("publish");
+                setStepError(null);
+                setStepSuccess(null);
+              }}
+            >
+              Review publish
             </button>
           </div>
-        </form>
+        </div>
       );
     }
 

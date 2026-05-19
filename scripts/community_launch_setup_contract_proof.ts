@@ -27,9 +27,9 @@ assert.deepEqual(COMMUNITY_LAUNCH_SETUP_STEPS, [
   "profile",
   "about",
   "agent",
-  "knowledge",
   "workflows",
   "access",
+  "knowledge",
   "publish",
 ]);
 assert.match(
@@ -82,6 +82,36 @@ const agentBeforeKnowledgeStatus = buildCommunityLaunchSetupStatus({
   visibility: "unlisted",
 });
 assert.equal(agentBeforeKnowledgeStatus.current_step, "agent");
+
+const workflowsBeforeKnowledgeStatus = buildCommunityLaunchSetupStatus({
+  name: "Operators",
+  oneLiner: "Operators building with AI.",
+  avatarUrl: "https://example.com/avatar.png",
+  bannerUrl: "https://example.com/banner.png",
+  about: "A community for operators.",
+  hasKnowledgeMaterial: false,
+  hasPublishedKnowledge: false,
+  hasAgentConfig: true,
+  hasWorkflow: false,
+  entryPolicy: "approval",
+  visibility: "unlisted",
+});
+assert.equal(workflowsBeforeKnowledgeStatus.current_step, "workflows");
+
+const accessBeforeKnowledgeStatus = buildCommunityLaunchSetupStatus({
+  name: "Operators",
+  oneLiner: "Operators building with AI.",
+  avatarUrl: "https://example.com/avatar.png",
+  bannerUrl: "https://example.com/banner.png",
+  about: "A community for operators.",
+  hasKnowledgeMaterial: false,
+  hasPublishedKnowledge: false,
+  hasAgentConfig: true,
+  hasWorkflow: true,
+  entryPolicy: null,
+  visibility: "unlisted",
+});
+assert.equal(accessBeforeKnowledgeStatus.current_step, "access");
 
 const stagedKnowledgeStatus = buildCommunityLaunchSetupStatus({
   name: "Operators",
@@ -256,7 +286,7 @@ assert.match(
 );
 assert.match(
   setupModal,
-  /Profile[\s\S]*About[\s\S]*Agent[\s\S]*Knowledge[\s\S]*Workflows[\s\S]*Access[\s\S]*Publish/,
+  /Profile[\s\S]*About[\s\S]*Agent[\s\S]*Workflows[\s\S]*Access[\s\S]*Knowledge[\s\S]*Publish/,
   "launch modal must expose the agreed setup sequence",
 );
 assert.match(
@@ -351,8 +381,13 @@ assert.match(
 );
 assert.doesNotMatch(
   setupModal,
-  /community-launch-checklist|Add source material|Publish one usable resource/,
+  /community-launch-checklist|Add source material|Publish one usable resource|Resource title|Resource body|Add resource|knowledgeDraft|handleAddKnowledge/,
   "launch modal must not render per-item checklist rows inside the step card",
+);
+assert.match(
+  setupModal,
+  /Generate the Get Started path[\s\S]*Drag and drop source material[\s\S]*Google Drive[\s\S]*Links[\s\S]*GitHub[\s\S]*Open resources/,
+  "launch knowledge step must act as a source and automation gateway instead of a manual resource form",
 );
 assert.match(
   setupModal,
@@ -376,7 +411,7 @@ assert.match(
 );
 assert.match(
   setupModal,
-  /onSaveProfile[\s\S]*onSaveAbout[\s\S]*onAddKnowledge[\s\S]*onSaveAgent/,
+  /onSaveProfile[\s\S]*onSaveAbout[\s\S]*onSaveAgent[\s\S]*onSaveAccess/,
   "launch modal must support inline canonical saves for the core setup surfaces",
 );
 assert.match(

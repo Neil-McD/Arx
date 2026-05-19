@@ -3316,6 +3316,118 @@ body {
   min-height: 56px;
 }
 
+.community-launch-knowledge-gateway {
+  gap: 14px;
+}
+
+.community-launch-knowledge-stack {
+  display: grid;
+  gap: 0;
+  border: 1px solid color-mix(in srgb, var(--border-muted) 70%, transparent);
+  border-radius: 12px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--bg-page) 30%, transparent);
+}
+
+.community-launch-knowledge-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+  min-height: 86px;
+  padding: 14px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border-muted) 62%, transparent);
+}
+
+.community-launch-knowledge-row:last-child {
+  border-bottom: 0;
+}
+
+.community-launch-knowledge-icon {
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid color-mix(in srgb, var(--border-muted) 70%, transparent);
+  border-radius: 8px;
+  color: color-mix(in srgb, var(--text-primary) 72%, var(--text-secondary));
+  background: rgba(0, 0, 0, 0.16);
+}
+
+.community-launch-knowledge-row > div {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+}
+
+.community-launch-knowledge-kicker {
+  color: color-mix(in srgb, var(--text-primary) 72%, var(--text-secondary));
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  line-height: 1.15;
+  text-transform: uppercase;
+}
+
+.community-launch-knowledge-row strong {
+  color: var(--text-primary);
+  font-size: 14px;
+  line-height: 1.22;
+}
+
+.community-launch-knowledge-row p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.42;
+}
+
+.community-launch-knowledge-pill {
+  border: 1px solid color-mix(in srgb, var(--border-muted) 76%, transparent);
+  border-radius: 999px;
+  padding: 5px 8px;
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--bg-page) 46%, transparent);
+  font-size: 11px;
+  font-weight: 750;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.community-launch-knowledge-dropzone {
+  min-height: 46px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed color-mix(in srgb, var(--text-secondary) 24%, var(--border-muted));
+  border-radius: 10px;
+  margin-top: 4px;
+  color: var(--text-secondary);
+  background: rgba(0, 0, 0, 0.18);
+  font-size: 12px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.community-launch-knowledge-integrations {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 2px;
+}
+
+.community-launch-knowledge-integrations span {
+  border: 1px solid color-mix(in srgb, var(--border-muted) 76%, transparent);
+  border-radius: 999px;
+  padding: 7px 9px;
+  color: color-mix(in srgb, var(--text-primary) 76%, var(--text-secondary));
+  background: rgba(0, 0, 0, 0.16);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+}
+
 .community-launch-choice-row {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -3462,6 +3574,15 @@ body {
   .community-launch-step-actions {
     flex-direction: column-reverse;
     align-items: stretch;
+  }
+
+  .community-launch-knowledge-row {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .community-launch-knowledge-pill {
+    grid-column: 2;
+    width: fit-content;
   }
 }
 

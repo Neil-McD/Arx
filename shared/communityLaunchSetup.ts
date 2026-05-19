@@ -7,9 +7,9 @@ export type CommunityLaunchSetupStep =
   | "profile"
   | "about"
   | "agent"
-  | "knowledge"
   | "workflows"
   | "access"
+  | "knowledge"
   | "publish";
 
 export type CommunityLaunchSetupCurrentStep = CommunityLaunchSetupStep | "complete";
@@ -63,9 +63,9 @@ export const COMMUNITY_LAUNCH_SETUP_STEPS: CommunityLaunchSetupStep[] = [
   "profile",
   "about",
   "agent",
-  "knowledge",
   "workflows",
   "access",
+  "knowledge",
   "publish",
 ];
 
@@ -143,9 +143,9 @@ export function buildCommunityLaunchSetupStatus(
     buildStepStatus("profile", profileMissing, COMMUNITY_PROFILE_TOTAL_ITEMS),
     buildStepStatus("about", aboutMissing, 1),
     buildStepStatus("agent", agentMissing, 1),
-    buildStepStatus("knowledge", knowledgeMissing, 2),
     buildStepStatus("workflows", workflowMissing, 1),
     buildStepStatus("access", accessMissing, 1),
+    buildStepStatus("knowledge", knowledgeMissing, 2),
     buildStepStatus("publish", publishMissing, 1),
   ];
   const missing = steps.flatMap((step) => step.missing);
