@@ -177,6 +177,12 @@ function normalizeActiveStep(
   return "profile";
 }
 
+function getNextLaunchStep(step: CommunityLaunchSetupStep): CommunityLaunchSetupStep | null {
+  const index = STEP_ORDER.indexOf(step);
+  if (index < 0 || index >= STEP_ORDER.length - 1) return null;
+  return STEP_ORDER[index + 1];
+}
+
 function getStarterPrompts(community: CommunityLaunchSetupCommunity | null): string[] {
   const prompts = Array.isArray(community?.agent_starter_prompts)
     ? community.agent_starter_prompts
@@ -215,6 +221,7 @@ export function WebCommunityLaunchSetupModal(
   const [activeStep, setActiveStep] = useState<CommunityLaunchSetupStep>(() =>
     normalizeActiveStep(status),
   );
+  const [stepOverride, setStepOverride] = useState<CommunityLaunchSetupStep | null>(null);
   const [savingStep, setSavingStep] = useState<CommunityLaunchSetupStep | null>(null);
   const [stepError, setStepError] = useState<string | null>(null);
   const [stepSuccess, setStepSuccess] = useState<string | null>(null);
@@ -246,8 +253,14 @@ export function WebCommunityLaunchSetupModal(
 
   useEffect(() => {
     if (!isOpen) return;
+    setStepOverride(null);
     setActiveStep(isCreateMode ? "profile" : normalizeActiveStep(status));
-  }, [isCreateMode, isOpen, status?.current_step]);
+  }, [community?.id, isCreateMode, isOpen]);
+
+  useEffect(() => {
+    if (!isOpen || stepOverride) return;
+    setActiveStep(isCreateMode ? "profile" : normalizeActiveStep(status));
+  }, [isCreateMode, isOpen, status?.current_step, stepOverride]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -387,7 +400,14 @@ export function WebCommunityLaunchSetupModal(
     setStepSuccess(null);
     try {
       await action();
-      setStepSuccess(successMessage);
+      const nextStep = getNextLaunchStep(step);
+      if (nextStep) {
+        setStepOverride(nextStep);
+        setActiveStep(nextStep);
+        setStepSuccess(null);
+      } else {
+        setStepSuccess(successMessage);
+      }
     } catch (error) {
       const message =
         typeof error === "string"
@@ -967,6 +987,7 @@ export function WebCommunityLaunchSetupModal(
                     disabled={disabled}
                     onClick={() => {
                       if (disabled) return;
+                      setStepOverride(step);
                       setActiveStep(step);
                       setStepError(null);
                       setStepSuccess(null);

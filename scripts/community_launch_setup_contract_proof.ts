@@ -280,6 +280,21 @@ assert.match(
   "launch modal close button should align with the modal header instead of reserving a topbar",
 );
 assert.match(
+  setupModal,
+  /function getNextLaunchStep[\s\S]*STEP_ORDER\.indexOf\(step\)[\s\S]*STEP_ORDER\[index \+ 1\]/,
+  "launch modal saves must know the next onboarding step",
+);
+assert.match(
+  setupModal,
+  /await action\(\);[\s\S]*const nextStep = getNextLaunchStep\(step\);[\s\S]*setStepOverride\(nextStep\);[\s\S]*setActiveStep\(nextStep\);/,
+  "launch modal must advance to the next step after a successful save/create",
+);
+assert.match(
+  setupModal,
+  /if \(!isOpen \|\| stepOverride\) return;/,
+  "launch modal status refreshes must not pull the user back after a successful step advance",
+);
+assert.match(
   baseCss,
   /\.community-launch-field input,[\s\S]*?background: linear-gradient\(180deg, rgba\(5, 5, 7, 0\.86\), rgba\(8, 8, 11, 0\.9\)\)/,
   "launch modal text fields must be visibly darker than the card surface",
