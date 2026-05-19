@@ -248,6 +248,11 @@ assert.match(
 );
 assert.match(
   setupModal,
+  /StripeWordmark[\s\S]*community-launch-stripe-wordmark/,
+  "launch access setup must reuse the Stripe wordmark for the paid setup path",
+);
+assert.match(
+  setupModal,
   /community-launch-step-summary[\s\S]*completed_items[\s\S]*total_items/,
   "launch modal must show the compact aggregate progress indicator for each step",
 );

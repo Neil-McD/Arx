@@ -22,6 +22,7 @@ import {
   readBannerFileAsWideDataUrlWithinLimit,
   readCommunityAvatarFileAsDataUrlWithinLimit,
 } from "../../../../shared/imageTransforms";
+import { StripeWordmark } from "./StripeWordmark";
 
 const COMMUNITY_LAUNCH_IMAGE_DATA_URL_MAX_CHARS = 600_000;
 
@@ -715,12 +716,24 @@ export function WebCommunityLaunchSetupModal(
               <button
                 key={value}
                 type="button"
-                className={`community-launch-choice${accessDraft === value ? " selected" : ""}`}
+                className={`community-launch-choice${accessDraft === value ? " selected" : ""}${
+                  value === "paid_subscription" ? " stripe-connect" : ""
+                }`}
                 onClick={() => setAccessDraft(value as CommunityEntryPolicy)}
                 role="radio"
                 aria-checked={accessDraft === value}
+                aria-label={label}
               >
-                <strong>{label}</strong>
+                <strong>
+                  {value === "paid_subscription" ? (
+                    <span className="community-launch-stripe-label">
+                      <StripeWordmark className="community-launch-stripe-wordmark" />
+                      <span>Connect</span>
+                    </span>
+                  ) : (
+                    label
+                  )}
+                </strong>
                 <span>{description}</span>
               </button>
             ))}
