@@ -5,7 +5,6 @@ import {
   Check,
   Circle,
   FileText,
-  Globe2,
   Image,
   Link2,
   LockKeyhole,
@@ -109,6 +108,24 @@ const STEP_ORDER: CommunityLaunchSetupStep[] = [
   "publish",
 ];
 
+const PUBLISHED_COMMUNITY_GLOBE_ICON = (
+  <svg
+    width="15"
+    height="15"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
+    <circle cx="12" cy="12" r="10" />
+    <path d="M2 12h20" />
+    <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+  </svg>
+);
+
 const STEP_META: Record<
   CommunityLaunchSetupStep,
   {
@@ -158,7 +175,7 @@ const STEP_META: Record<
     label: "Publish",
     title: "Publish the community",
     action: "Open publish",
-    icon: <Globe2 size={15} strokeWidth={2} aria-hidden="true" />,
+    icon: PUBLISHED_COMMUNITY_GLOBE_ICON,
   },
 };
 

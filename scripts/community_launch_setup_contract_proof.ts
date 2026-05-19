@@ -289,6 +289,16 @@ assert.match(
   /Profile[\s\S]*About[\s\S]*Agent[\s\S]*Workflows[\s\S]*Access[\s\S]*Knowledge[\s\S]*Publish/,
   "launch modal must expose the agreed setup sequence",
 );
+assert.doesNotMatch(
+  setupModal,
+  /Globe2/,
+  "launch publish step must not use the wrong lucide globe icon",
+);
+assert.match(
+  setupModal,
+  /PUBLISHED_COMMUNITY_GLOBE_ICON[\s\S]*<path d="M2 12h20" \/>[\s\S]*M12 2a15\.3 15\.3/,
+  "launch publish step must reuse the published-community globe shape",
+);
 assert.match(
   setupModal,
   /Stripe Connect/,
