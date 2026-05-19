@@ -59,7 +59,7 @@ export function useWebSendFlowController<
     attachments?: AttachmentT[];
     clearComposer?: () => void;
     pinToBottom?: () => void;
-    forceNonStreamingRuntimeTurn?: boolean;
+    forceCodexPrimaryStreamingCanaryTurn?: boolean;
   }) => {
     const current = argsRef.current;
     const setErrorForThread = (
@@ -76,7 +76,7 @@ export function useWebSendFlowController<
     const clearComposer = opts?.clearComposer ?? current.clearWorkspaceComposer;
     const pinToBottom = opts?.pinToBottom ?? current.pinWorkspaceToBottom;
     if (!text && !hasAttachments) return;
-    if (opts?.forceNonStreamingRuntimeTurn === true && hasAttachments) {
+    if (opts?.forceCodexPrimaryStreamingCanaryTurn === true && hasAttachments) {
       setErrorForThread(
         current.activeThreadId ?? null,
         "Codex primary canary does not support attachments yet.",
@@ -308,8 +308,8 @@ export function useWebSendFlowController<
         requestedAgenticTools: runtimeFlags.requestedAgenticTools,
         replyToId: messageId,
         messages: optimisticThreadMessages,
-        stream: opts?.forceNonStreamingRuntimeTurn === true ? false : undefined,
-        codexPrimaryCanary: opts?.forceNonStreamingRuntimeTurn === true,
+        stream: opts?.forceCodexPrimaryStreamingCanaryTurn === true ? true : undefined,
+        codexPrimaryCanary: opts?.forceCodexPrimaryStreamingCanaryTurn === true,
       });
       if (turnResult.error) throw new Error(turnResult.error);
       current.onWorkspaceRunSucceeded?.({

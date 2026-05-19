@@ -171,9 +171,9 @@ For Codex harness work, additionally verify:
 
 Use `POLYNET_CODEX_HARNESS_PROBE_MODE=tool_call_canary` only as a temporary diagnostic mode. It creates a short-lived marker file in the Daytona workspace, asks Codex app-server to read it through a read-only turn, records hash/length/tool-event evidence, and removes the file. Reset staging back to `canary` after the proof unless the current test specifically needs tool-call evidence.
 
-For the Codex primary visible-turn canary, staging exposes the one-turn Codex primary toggle for signed-in users on `polynet-staging.vercel.app` without requiring a staging `operatorRoles` seed. The operator data panel remains operator-only, and production must not depend on this staging-only debug path.
+For the Codex primary streaming canary, staging exposes the one-turn Codex primary toggle for signed-in users on `polynet-staging.vercel.app` without requiring a staging `operatorRoles` seed. The operator data panel remains operator-only, and production must not depend on this staging-only debug path.
 
-The staging web bundle must send the explicit `codex_primary_canary` request flag for Codex primary visible-turn canaries. Runtime no longer infers a canary turn from non-streaming staging requests.
+The staging web bundle must send the explicit `codex_primary_canary` request flag and keep the request on streaming SSE for Codex primary canaries. Runtime no longer infers a canary turn from non-streaming staging requests.
 
 For Codex primary token streaming, use `npm run check:staging-codex-primary-streaming-canary` after staging has `POLYNET_CODEX_HARNESS_PRIMARY_STREAMING_ENABLED=true`. The canary runs a real streaming runtime turn through the staging maintenance gate, parses SSE `delta`/`done` evidence, and verifies Codex stream summary events without returning raw assistant text.
 

@@ -34,6 +34,7 @@ async function readStagingBundleFingerprint(stagingUrl: string, deploymentName: 
   let stagingHostPresent = false;
   let codexPrimaryCanaryFlagPresent = false;
   let codexPrimaryCanaryTogglePresent = false;
+  let codexPrimaryStreamingCanaryPresent = false;
   for (const assetPath of assetPaths.slice(0, 6)) {
     const asset = await fetchText(`${normalizedBase}${assetPath}`);
     if (asset.status < 200 || asset.status >= 300) continue;
@@ -41,11 +42,15 @@ async function readStagingBundleFingerprint(stagingUrl: string, deploymentName: 
     if (asset.text.includes("polynet-staging")) stagingHostPresent = true;
     if (asset.text.includes("codex_primary_canary")) codexPrimaryCanaryFlagPresent = true;
     if (asset.text.includes("workspace-codex-canary-toggle")) codexPrimaryCanaryTogglePresent = true;
+    if (asset.text.includes("forceCodexPrimaryStreamingCanaryTurn")) {
+      codexPrimaryStreamingCanaryPresent = true;
+    }
     if (
       convexUrlPresent &&
       stagingHostPresent &&
       codexPrimaryCanaryFlagPresent &&
-      codexPrimaryCanaryTogglePresent
+      codexPrimaryCanaryTogglePresent &&
+      codexPrimaryStreamingCanaryPresent
     ) break;
   }
 
@@ -57,6 +62,7 @@ async function readStagingBundleFingerprint(stagingUrl: string, deploymentName: 
     stagingHostPresent,
     codexPrimaryCanaryFlagPresent,
     codexPrimaryCanaryTogglePresent,
+    codexPrimaryStreamingCanaryPresent,
   };
 }
 
@@ -123,6 +129,7 @@ assert(web.convexUrlPresent, `staging web bundle must point at ${web.expectedCon
 assert(web.stagingHostPresent, "staging web bundle must include staging host wiring");
 assert(web.codexPrimaryCanaryFlagPresent, "staging web bundle must send the explicit codex_primary_canary flag");
 assert(web.codexPrimaryCanaryTogglePresent, "staging web bundle must include the Codex primary canary toggle");
+assert(web.codexPrimaryStreamingCanaryPresent, "staging web bundle must keep the Codex primary canary on streaming SSE");
 
 console.log(
   JSON.stringify(
@@ -143,6 +150,7 @@ console.log(
         stagingHostPresent: web.stagingHostPresent,
         codexPrimaryCanaryFlagPresent: web.codexPrimaryCanaryFlagPresent,
         codexPrimaryCanaryTogglePresent: web.codexPrimaryCanaryTogglePresent,
+        codexPrimaryStreamingCanaryPresent: web.codexPrimaryStreamingCanaryPresent,
       },
     },
     null,

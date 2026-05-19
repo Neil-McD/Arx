@@ -7527,7 +7527,7 @@ export default function App() {
         text,
         attachments: attachments as MessageAttachment[],
         clearComposer,
-        forceNonStreamingRuntimeTurn: useCodexPrimaryCanaryForNextTurn,
+        forceCodexPrimaryStreamingCanaryTurn: useCodexPrimaryCanaryForNextTurn,
       });
       if (useCodexPrimaryCanaryForNextTurn) {
         setIsCodexPrimaryCanaryEnabled(false);

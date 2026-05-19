@@ -21,8 +21,8 @@ assert.match(
 
 assert.match(
   app,
-  /forceNonStreamingRuntimeTurn: useCodexPrimaryCanaryForNextTurn/,
-  "workspace sends should pass the canary through as a one-turn non-streaming runtime override",
+  /forceCodexPrimaryStreamingCanaryTurn: useCodexPrimaryCanaryForNextTurn/,
+  "workspace sends should pass the canary through as a one-turn streaming runtime override",
 );
 
 assert.match(
@@ -63,19 +63,19 @@ assert.match(
 
 assert.match(
   sendFlow,
-  /forceNonStreamingRuntimeTurn\?: boolean;/,
+  /forceCodexPrimaryStreamingCanaryTurn\?: boolean;/,
   "send flow should use a specific canary option rather than changing default sends",
 );
 
 assert.match(
   sendFlow,
-  /stream: opts\?\.forceNonStreamingRuntimeTurn === true \? false : undefined/,
-  "canary sends should force exactly one non-streaming runtime turn",
+  /stream: opts\?\.forceCodexPrimaryStreamingCanaryTurn === true \? true : undefined/,
+  "canary sends should force exactly one streaming runtime turn",
 );
 
 assert.match(
   sendFlow,
-  /codexPrimaryCanary: opts\?\.forceNonStreamingRuntimeTurn === true/,
+  /codexPrimaryCanary: opts\?\.forceCodexPrimaryStreamingCanaryTurn === true/,
   "canary sends should mark the runtime request as a Codex primary canary",
 );
 
@@ -100,7 +100,7 @@ assert.doesNotMatch(
 assert.match(
   turnRunner,
   /const streamRuntimeTurn = params\.stream !== false;/,
-  "web turn runner should default to streaming unless the canary explicitly disables it",
+  "web turn runner should default to streaming and keep the Codex canary on SSE",
 );
 
 assert.match(
