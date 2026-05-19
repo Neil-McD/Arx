@@ -324,6 +324,16 @@ assert.match(
   /polynet-onboarding-close community-launch-close/,
   "launch modal close button should align with the modal header instead of reserving a topbar",
 );
+assert.doesNotMatch(
+  setupModal,
+  /Open full editor|polynet-onboarding-finish-later/,
+  "launch modal must not keep the old full-editor escape button or detached finish-later footer",
+);
+assert.match(
+  setupModal,
+  /renderFinishLaterButton[\s\S]*polynet-onboarding-back[\s\S]*onClose[\s\S]*Finish later/,
+  "launch modal must place Finish later in the per-step action row",
+);
 assert.match(
   setupModal,
   /function getNextLaunchStep[\s\S]*STEP_ORDER\.indexOf\(step\)[\s\S]*STEP_ORDER\[index \+ 1\]/,
@@ -386,7 +396,7 @@ assert.doesNotMatch(
 );
 assert.match(
   setupModal,
-  /Generate the Get Started path[\s\S]*Drag and drop source material[\s\S]*Google Drive[\s\S]*Links[\s\S]*GitHub[\s\S]*Open resources/,
+  /Generate the Get Started path[\s\S]*Drag and drop source material[\s\S]*Google Drive[\s\S]*Links[\s\S]*GitHub[\s\S]*Review publish/,
   "launch knowledge step must act as a source and automation gateway instead of a manual resource form",
 );
 assert.match(

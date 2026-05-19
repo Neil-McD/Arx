@@ -408,6 +408,12 @@ export function WebCommunityLaunchSetupModal(
     }
   };
 
+  const renderFinishLaterButton = () => (
+    <button type="button" className="polynet-onboarding-back" onClick={onClose}>
+      {isCreateMode ? "Cancel" : "Finish later"}
+    </button>
+  );
+
   const handleProfileImageDrop = (
     kind: "avatar" | "banner",
     event: DragEvent<HTMLDivElement>,
@@ -669,11 +675,7 @@ export function WebCommunityLaunchSetupModal(
           </div>
           {profileMediaError ? <p className="community-launch-step-message error">{profileMediaError}</p> : null}
           <div className="community-launch-step-actions">
-            {isCreateMode ? null : (
-              <button type="button" className="polynet-onboarding-back" onClick={() => onOpenStep("profile")}>
-                Open full editor
-              </button>
-            )}
+            {renderFinishLaterButton()}
             <button type="submit" className="polynet-onboarding-next" disabled={!canSaveProfile || isSavingActiveStep}>
               {isSavingActiveStep
                 ? isCreateMode
@@ -701,9 +703,7 @@ export function WebCommunityLaunchSetupModal(
             />
           </label>
           <div className="community-launch-step-actions">
-            <button type="button" className="polynet-onboarding-back" onClick={() => onOpenStep("about")}>
-              Open full editor
-            </button>
+            {renderFinishLaterButton()}
             <button type="submit" className="polynet-onboarding-next" disabled={isSavingActiveStep}>
               {isSavingActiveStep ? "Saving..." : "Save about"}
             </button>
@@ -758,9 +758,7 @@ export function WebCommunityLaunchSetupModal(
             </section>
           </div>
           <div className="community-launch-step-actions">
-            <button type="button" className="polynet-onboarding-back" onClick={() => onOpenStep("knowledge")}>
-              Open resources
-            </button>
+            {renderFinishLaterButton()}
             <button
               type="button"
               className="polynet-onboarding-next"
@@ -814,9 +812,7 @@ export function WebCommunityLaunchSetupModal(
             </div>
           </details>
           <div className="community-launch-step-actions">
-            <button type="button" className="polynet-onboarding-back" onClick={() => onOpenStep("agent")}>
-              Open agent
-            </button>
+            {renderFinishLaterButton()}
             <button type="submit" className="polynet-onboarding-next" disabled={isSavingActiveStep}>
               {isSavingActiveStep ? "Saving..." : "Save agent"}
             </button>
@@ -860,9 +856,7 @@ export function WebCommunityLaunchSetupModal(
             ))}
           </div>
           <div className="community-launch-step-actions">
-            <button type="button" className="polynet-onboarding-back" onClick={() => onOpenStep("access")}>
-              Open access
-            </button>
+            {renderFinishLaterButton()}
             <button
               type="submit"
               className="polynet-onboarding-next"
@@ -889,14 +883,7 @@ export function WebCommunityLaunchSetupModal(
             </p>
           )}
           <div className="community-launch-step-actions">
-            <button
-              type="button"
-              className="polynet-onboarding-back"
-              onClick={() => savePublishState("unlisted")}
-              disabled={isSavingActiveStep || !isPublished}
-            >
-              Keep unlisted
-            </button>
+            {renderFinishLaterButton()}
             <button
               type="button"
               className="polynet-onboarding-next"
@@ -916,6 +903,7 @@ export function WebCommunityLaunchSetupModal(
           Workflow imports use the existing community apps and skills surfaces for now, so connected tools stay canonical.
         </p>
         <div className="community-launch-step-actions">
+          {renderFinishLaterButton()}
           <button
             type="button"
             className="polynet-onboarding-next"
@@ -1028,10 +1016,6 @@ export function WebCommunityLaunchSetupModal(
               </div>
             </div>
           </div>
-
-          <button className="polynet-onboarding-finish-later" type="button" onClick={onClose}>
-            {isCreateMode ? "Cancel" : "Finish later"}
-          </button>
         </section>
       </div>
     </div>
