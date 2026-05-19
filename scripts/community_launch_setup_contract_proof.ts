@@ -15,6 +15,7 @@ const launchQuery = read("convex/communityLaunchSetup.ts");
 const communityBarrel = read("convex/community.ts");
 const setupCard = read("apps/web/src/components/WebCommunityLaunchSetupCard.tsx");
 const setupModal = read("apps/web/src/components/WebCommunityLaunchSetupModal.tsx");
+const baseCss = read("apps/web/src/base.css");
 const appShell = read("apps/web/src/App.tsx");
 const shellChromeHostProps = read("apps/web/src/controllers/buildWebShellChromeHostProps.ts");
 const mobileShellController = read("apps/web/src/controllers/useWebMobileShellController.ts");
@@ -277,6 +278,11 @@ assert.match(
   setupModal,
   /polynet-onboarding-close community-launch-close/,
   "launch modal close button should align with the modal header instead of reserving a topbar",
+);
+assert.match(
+  baseCss,
+  /\.community-launch-field input,[\s\S]*?background: linear-gradient\(180deg, rgba\(5, 5, 7, 0\.86\), rgba\(8, 8, 11, 0\.9\)\)/,
+  "launch modal text fields must be visibly darker than the card surface",
 );
 assert.match(
   appShell,
