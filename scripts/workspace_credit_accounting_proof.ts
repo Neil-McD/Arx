@@ -16,6 +16,14 @@ function sliceBetween(source: string, startNeedle: string, endNeedle: string): s
   return source.slice(start, end);
 }
 
+function assertSourceOrder(source: string, firstNeedle: string, secondNeedle: string, message: string) {
+  const first = source.indexOf(firstNeedle);
+  const second = source.indexOf(secondNeedle);
+  assert.notEqual(first, -1, `expected source to include ${firstNeedle}`);
+  assert.notEqual(second, -1, `expected source to include ${secondNeedle}`);
+  assert.ok(first < second, message);
+}
+
 async function proveWorkspaceCreditAccountingContract() {
   const schemaSource = await readRepoFile("convex/schema.ts");
   const authSource = await readRepoFile("convex/auth.ts");
@@ -60,6 +68,11 @@ async function proveWorkspaceCreditAccountingContract() {
     creditsSource,
     "export const completeWorkspaceCreditTopupCheckoutSessionInternal",
     "export const recordWorkspaceComputeChargeInternal",
+  );
+  const pendingTopupCreationBlock = sliceBetween(
+    creditsSource,
+    "export const createPendingWorkspaceCreditTopupCheckoutSessionInternal",
+    "export const attachWorkspaceCreditTopupStripeCheckoutSessionInternal",
   );
   const operatorDiagnosticsBlock = sliceBetween(
     creditsSource,
@@ -360,6 +373,39 @@ async function proveWorkspaceCreditAccountingContract() {
   );
   assert.match(
     creditsSource,
+    /assertWorkspaceCreditBalanceReadyForTopupInternal[\s\S]*readCanonicalWorkspaceCreditBalance\(ctx, args\.userId\)/,
+    "expected top-up checkout to have an internal duplicate-balance preflight",
+  );
+  assert.match(
+    workspaceTopupCheckoutBlock,
+    /ctx\.runQuery\([\s\S]*internal\.workspaceCredits\.assertWorkspaceCreditBalanceReadyForTopupInternal[\s\S]*userId/,
+    "expected public top-up checkout action to preflight accounting state before Stripe",
+  );
+  assertSourceOrder(
+    workspaceTopupCheckoutBlock,
+    "assertWorkspaceCreditBalanceReadyForTopupInternal",
+    "ensureStripeCustomerForUser",
+    "expected duplicate-balance preflight before Stripe customer creation",
+  );
+  assertSourceOrder(
+    workspaceTopupCheckoutBlock,
+    "assertWorkspaceCreditBalanceReadyForTopupInternal",
+    "createPendingWorkspaceCreditTopupCheckoutSessionInternal",
+    "expected duplicate-balance preflight before local checkout row creation",
+  );
+  assertSourceOrder(
+    workspaceTopupCheckoutBlock,
+    "assertWorkspaceCreditBalanceReadyForTopupInternal",
+    "stripe.checkout.sessions.create",
+    "expected duplicate-balance preflight before Stripe Checkout creation",
+  );
+  assert.match(
+    pendingTopupCreationBlock,
+    /readCanonicalWorkspaceCreditBalance\(ctx, args\.ownerUserId\)[\s\S]*ctx\.db\.insert\("checkoutSessions"/,
+    "expected internal checkout-row creation to also fail closed on duplicate balances",
+  );
+  assert.match(
+    creditsSource,
     /line_items:[\s\S]*price_data:[\s\S]*unit_amount:\s*Math\.round\(pack\.priceUsd\s*\*\s*100\)/,
     "expected Stripe Checkout top-ups to price fixed dollar packs server-side",
   );
@@ -461,8 +507,43 @@ async function proveWorkspaceCreditAccountingContract() {
   );
   assert.match(
     creditsSource,
-    /repairDuplicateWorkspaceCreditBalancesInternal[\s\S]*mergeWorkspaceCreditBalanceRows[\s\S]*ctx\.db\.delete/,
+    /readCanonicalWorkspaceCreditBalance[\s\S]*readWorkspaceCreditBalanceRowsByUser\(ctx, userId, 2\)[\s\S]*DUPLICATE_WORKSPACE_CREDIT_BALANCE_ERROR/,
+    "expected paid-tool balance reads to fail closed when duplicate materialized balance rows exist",
+  );
+  assert.match(
+    reserveCreditsBlock,
+    /readCanonicalWorkspaceCreditBalance\(ctx, args\.userId\)/,
+    "expected paid-tool reservations to use the duplicate-safe canonical balance reader",
+  );
+  assert.match(
+    settleCreditsBlock,
+    /readCanonicalWorkspaceCreditBalance\(ctx, entry\.userId\)/,
+    "expected paid-tool settlement/refund paths to use the duplicate-safe canonical balance reader",
+  );
+  assert.doesNotMatch(
+    creditsSource,
+    /query\("workspaceCreditBalances"\)[\s\S]{0,160}\.collect\(\)/,
+    "workspace credit balance diagnostics and repair must stay bounded instead of full-collecting the balance table",
+  );
+  assert.match(
+    creditsSource,
+    /repairWorkspaceCreditBalanceRowsForUser[\s\S]*mergeWorkspaceCreditBalanceRows[\s\S]*ctx\.db\.delete/,
     "expected duplicate tool-balance rows to have an auditable merge-and-delete repair path",
+  );
+  assert.match(
+    creditsSource,
+    /repairDuplicateWorkspaceCreditBalancesInternal[\s\S]*repairWorkspaceCreditBalanceRowsForUser/,
+    "expected sampled duplicate-balance repair to reuse the capped user repair helper",
+  );
+  assert.match(
+    creditsSource,
+    /repairWorkspaceCreditBalanceForOperator = mutation[\s\S]*requireOperatorRole\(ctx, args\.authSubject, "operator"\)[\s\S]*repairWorkspaceCreditBalanceRowsForUser/,
+    "expected known duplicate-balance users to have a targeted operator repair mutation",
+  );
+  assert.match(
+    creditsSource,
+    /workspace_credit_balance_repair_row_limit_exceeded/,
+    "expected targeted duplicate-balance repair to refuse destructive repair when the user row scan is capped",
   );
   assert.match(
     creditsSource,
@@ -478,6 +559,11 @@ async function proveWorkspaceCreditAccountingContract() {
     operatorDiagnosticsBlock,
     /duplicateBalanceRowsDryRun/,
     "expected operator diagnostics to report duplicate balances, stale top-ups, pending settlements, and uncollected usage",
+  );
+  assert.doesNotMatch(
+    operatorDiagnosticsBlock,
+    /repairMutation/,
+    "operator diagnostics should not expose a fake repair action string without a real operator mutation",
   );
   assert.match(operatorDiagnosticsBlock, /staleTopupCheckouts/, "expected operator diagnostics to report stale top-up checkouts");
   assert.match(operatorDiagnosticsBlock, /pendingSettlements/, "expected operator diagnostics to report pending settlement retries");

@@ -91,6 +91,8 @@
     "check:runtime-preview-diagnostics-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_preview_diagnostics_proof.ts",
     "check:runtime-preview-probe-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_preview_probe_proof.ts",
     "check:workspace-credit-accounting-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/workspace_credit_accounting_proof.ts",
+    "check:workspace-credit-accounting-behavior": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/workspace_credit_accounting_behavior_test.ts",
+    "smoke:workspace-credit-accounting-health": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/workspace_credit_accounting_health_smoke.ts",
     "check:workspace-inspector-boundary-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/workspace_inspector_boundary_proof.ts",
     "check:runtime-prompt-layout-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_prompt_layout_proof.ts",
     "check:platform-harness-prompt-contract": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/platform_harness_prompt_contract_proof.ts",

@@ -31,6 +31,8 @@ type MoneyMetric = {
 
 const ACTIVE_SUBSCRIPTION_STATUSES = new Set(["active", "past_due", "cancel_at_period_end"]);
 const CHECKOUT_STATUSES = ["pending", "complete", "expired"] as const;
+const FREE_ACCOUNT_COMMUNITY_PLATFORM_FEE_BPS = 1500;
+const ARCHITECT_ACCOUNT_COMMUNITY_PLATFORM_FEE_BPS = 300;
 const STALE_COMMUNITY_ACTIVITY_AGE_MS = 30 * 86400000;
 const COMMUNITY_SETUP_RISK_FLAGS = new Set([
   "no_members",
@@ -372,6 +374,16 @@ function divideMoney(metric: MoneyMetric | null, divisor: number): MoneyMetric |
   };
 }
 
+function applyBpsToMoneyMetric(metric: MoneyMetric | null, bps: number): MoneyMetric | null {
+  if (!metric) return null;
+  const normalizedBps = Math.max(0, Math.floor(Number(bps) || 0));
+  if (normalizedBps <= 0) return null;
+  return {
+    ...metric,
+    amountBaseUnits: Math.round(metric.amountBaseUnits * normalizedBps / 10000),
+  };
+}
+
 function moneyFromUsd(value: number): MoneyMetric | null {
   const dollars = Number(value);
   if (!Number.isFinite(dollars) || dollars <= 0) return null;
@@ -380,6 +392,12 @@ function moneyFromUsd(value: number): MoneyMetric | null {
     amountBaseUnits: Math.round(dollars * 100),
     currencyDecimals: 2,
   };
+}
+
+function platformFeeBpsForTier(tier: "free" | "architect" | "unknown"): number {
+  return tier === "architect"
+    ? ARCHITECT_ACCOUNT_COMMUNITY_PLATFORM_FEE_BPS
+    : FREE_ACCOUNT_COMMUNITY_PLATFORM_FEE_BPS;
 }
 
 function moneyFromCheckout(row: any): MoneyMetric | null {
@@ -2078,6 +2096,23 @@ export const getOperatorMonetizationInternal = internalQuery({
       (total: MoneyMetric | null, row: any) => addMoney(total, moneyFromCheckout(row)),
       null,
     );
+    const platformFeeBpsByOwnerId = new Map<string, number>();
+    let communityPlatformRevShareInRange: MoneyMetric | null = null;
+    for (const row of communityJoinCompletions) {
+      const communityId = String(row.communityId ?? "").trim();
+      const community = communityById.get(communityId);
+      const ownerId = String(community?.ownerId ?? "").trim();
+      if (!ownerId) continue;
+      let platformFeeBps = platformFeeBpsByOwnerId.get(ownerId);
+      if (typeof platformFeeBps !== "number") {
+        platformFeeBps = platformFeeBpsForTier(await readActiveTier(ctx, community.ownerId, nowMs));
+        platformFeeBpsByOwnerId.set(ownerId, platformFeeBps);
+      }
+      communityPlatformRevShareInRange = addMoney(
+        communityPlatformRevShareInRange,
+        applyBpsToMoneyMetric(moneyFromCheckout(row), platformFeeBps),
+      );
+    }
     const creditTopupRevenueInRange = creditTopupCompletions.reduce((total: MoneyMetric | null, row: any) => {
       const credits = Number(row.workspaceCreditsAmount ?? 0);
       const usd = credits > 0 ? credits / WORKSPACE_CREDITS_PER_USD : 0;
@@ -2161,6 +2196,8 @@ export const getOperatorMonetizationInternal = internalQuery({
         revenue: {
           communitySubscriptionMrr: estimatedCommunityMrr,
           communityCheckoutRevenueInRange,
+          communityPlatformRevShareInRange,
+          communityPlatformRevShareAvailability: "estimated_from_current_fee_policy",
           creditTopupRevenueInRange,
           grossRevenueInRange,
           averageRecordedLifetimeValue: divideMoney(lifetimeGrossRevenue, lifetimeCheckoutPurchaserIds.size),

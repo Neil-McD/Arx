@@ -69,6 +69,10 @@ export function OperatorBusinessPanelView(props: {
     businessKpis?.revenue.platformNetRevenueAvailability === "available"
       ? "Net platform revenue in the selected window."
       : "Credit top-ups; take-rate pending.";
+  const communityRevShareNote =
+    businessKpis?.revenue.communityPlatformRevShareAvailability === "estimated_from_current_fee_policy"
+      ? "Estimated Polynet share of completed community checkouts."
+      : "Community fee attribution pending.";
 
   return (
     <div className="workspace-right-panel__grid">
@@ -89,6 +93,16 @@ export function OperatorBusinessPanelView(props: {
           <span>Ready users</span>
           <strong>{accountSetupOverview?.totals.completed ?? 0}</strong>
           <span className="operator-dashboard__metric-note">{formatPercent(accountSetupCompletionRate)} of real accounts ready.</span>
+        </div>
+        <div>
+          <span>Community rev share</span>
+          <strong>{formatMoney(businessKpis?.revenue.communityPlatformRevShareInRange ?? null)}</strong>
+          <span className="operator-dashboard__metric-note">{communityRevShareNote}</span>
+        </div>
+        <div>
+          <span>Tool usage</span>
+          <strong>{formatUsdAmount(toolEconomics?.totals.revenueUsd)}</strong>
+          <span className="operator-dashboard__metric-note">Settled paid-tool usage in the selected window.</span>
         </div>
         <div>
           <span>Platform revenue</span>

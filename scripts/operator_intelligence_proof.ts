@@ -160,6 +160,11 @@ assert.match(
   /activePayingCustomers: number/,
   "operator business KPIs should expose active paying users",
 );
+assert.match(
+  operatorTypes,
+  /communityPlatformRevShareInRange: OperatorMoneyMetric \| null/,
+  "operator business KPIs should expose community rev-share separately from gross community revenue",
+);
 assert.doesNotMatch(
   operatorTypes,
   /accountSetupCompleted: number|accountSetupCompletionRate: number \| null/,
@@ -384,6 +389,11 @@ assert.match(
   monetizationQuery,
   /const grossRevenueInRange = addMoney\(communityCheckoutRevenueInRange, creditTopupRevenueInRange\)/,
   "operator gross revenue should combine community checkout and credit top-up revenue",
+);
+assert.match(
+  monetizationQuery,
+  /communityPlatformRevShareInRange[\s\S]*applyBpsToMoneyMetric\(moneyFromCheckout\(row\), platformFeeBps\)/,
+  "operator community rev-share should be estimated from completed community checkout rows",
 );
 assert.match(
   operatorIntelligence,

@@ -174,6 +174,8 @@ export type OperatorMonetizationSnapshot = {
     revenue: {
       communitySubscriptionMrr: OperatorMoneyMetric | null;
       communityCheckoutRevenueInRange: OperatorMoneyMetric | null;
+      communityPlatformRevShareInRange: OperatorMoneyMetric | null;
+      communityPlatformRevShareAvailability: "estimated_from_current_fee_policy" | "not_instrumented";
       creditTopupRevenueInRange: OperatorMoneyMetric | null;
       grossRevenueInRange: OperatorMoneyMetric | null;
       averageRecordedLifetimeValue: OperatorMoneyMetric | null;

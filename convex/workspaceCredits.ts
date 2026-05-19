@@ -1,5 +1,5 @@
 import { internal } from "./_generated/api";
-import { action, internalAction, internalMutation, internalQuery, query } from "./_generated/server";
+import { action, internalAction, internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import {
   DEFAULT_INCLUDED_TOOL_CREDITS,
@@ -69,6 +69,30 @@ function clampCredits(value: number, min: number, max: number): number {
 
 function readUncollectedCreditsBalance(balance: any): number {
   return roundCredits(Math.max(0, Number(balance?.uncollectedCreditsBalance ?? 0)));
+}
+
+const DUPLICATE_WORKSPACE_CREDIT_BALANCE_ERROR = "workspace_credit_balance_duplicate";
+const WORKSPACE_CREDIT_BALANCE_REPAIR_ROW_LIMIT = 25;
+
+async function readWorkspaceCreditBalanceRowsByUser(ctx: any, userId: any, limit = 2) {
+  return await ctx.db
+    .query("workspaceCreditBalances")
+    .withIndex("by_user", (q: any) => q.eq("userId", userId))
+    .take(Math.max(1, Math.min(WORKSPACE_CREDIT_BALANCE_REPAIR_ROW_LIMIT, Math.floor(limit))));
+}
+
+async function readCanonicalWorkspaceCreditBalance(ctx: any, userId: any) {
+  const rows = await readWorkspaceCreditBalanceRowsByUser(ctx, userId, 2);
+  if (rows.length > 1) throw new Error(DUPLICATE_WORKSPACE_CREDIT_BALANCE_ERROR);
+  return rows[0] ?? null;
+}
+
+async function readRecentWorkspaceCreditBalanceRows(ctx: any, limit: number) {
+  return await ctx.db
+    .query("workspaceCreditBalances")
+    .withIndex("by_updatedAt")
+    .order("desc")
+    .take(Math.max(1, Math.min(500, Math.floor(limit))));
 }
 
 function buildEmptyWorkspaceCreditBalanceForUser(userId: unknown, nowMs: number) {
@@ -222,10 +246,7 @@ async function debitAvailableWorkspaceCredits(params: {
   if (!(requestedCredits > 0)) {
     return { includedDebited: 0, purchasedDebited: 0 };
   }
-  const balance = await params.ctx.db
-    .query("workspaceCreditBalances")
-    .withIndex("by_user", (q: any) => q.eq("userId", params.userId))
-    .first();
+  const balance = await readCanonicalWorkspaceCreditBalance(params.ctx, params.userId);
   if (!balance) {
     return { includedDebited: 0, purchasedDebited: 0 };
   }
@@ -256,10 +277,7 @@ async function addUncollectedWorkspaceCredits(params: {
 }): Promise<number> {
   const uncollectedCredits = roundCredits(Math.max(0, Number(params.credits) || 0));
   if (!(uncollectedCredits > 0)) return 0;
-  const balance = await params.ctx.db
-    .query("workspaceCreditBalances")
-    .withIndex("by_user", (q: any) => q.eq("userId", params.userId))
-    .first();
+  const balance = await readCanonicalWorkspaceCreditBalance(params.ctx, params.userId);
   if (!balance) {
     await params.ctx.db.insert("workspaceCreditBalances", {
       userId: params.userId,
@@ -288,10 +306,7 @@ export const getWorkspaceCreditBalanceInternal = internalQuery({
     userId: v.id("users"),
   },
   handler: async (ctx, args) => {
-    return await ctx.db
-      .query("workspaceCreditBalances")
-      .withIndex("by_user", (q) => q.eq("userId", args.userId))
-      .first();
+    return await readCanonicalWorkspaceCreditBalance(ctx, args.userId);
   },
 });
 
@@ -305,10 +320,15 @@ export const getWorkspaceToolBalance = query({
       ctx,
       authSubject: args.authSubject ?? null,
     });
-    const row = await ctx.db
-      .query("workspaceCreditBalances")
-      .withIndex("by_user", (q) => q.eq("userId", actor.dbUserId))
-      .first();
+    const rows = await readWorkspaceCreditBalanceRowsByUser(ctx, actor.dbUserId, 2);
+    if (rows.length > 1) {
+      return {
+        ...buildWorkspaceToolBalanceProjection(null, actor.dbUserId, args.nowMs ?? Date.now()),
+        blocked: true,
+        blockedReason: DUPLICATE_WORKSPACE_CREDIT_BALANCE_ERROR,
+      };
+    }
+    const row = rows[0] ?? null;
     return buildWorkspaceToolBalanceProjection(row, actor.dbUserId, args.nowMs ?? Date.now());
   },
 });
@@ -325,10 +345,7 @@ export const upsertWorkspaceCreditBalanceInternal = internalMutation({
   },
   handler: async (ctx, args) => {
     const nowMs = args.nowMs ?? Date.now();
-    const existing = await ctx.db
-      .query("workspaceCreditBalances")
-      .withIndex("by_user", (q) => q.eq("userId", args.userId))
-      .first();
+    const existing = await readCanonicalWorkspaceCreditBalance(ctx, args.userId);
     const patch = {
       includedCreditsBalance:
         typeof args.includedCreditsBalance === "number"
@@ -409,6 +426,54 @@ function mergeWorkspaceCreditBalanceRows(rows: any[], nowMs: number) {
       updatedAt: nowMs,
     },
     duplicateRows: ordered.slice(1),
+  };
+}
+
+async function repairWorkspaceCreditBalanceRowsForUser(params: {
+  ctx: any;
+  userId: any;
+  nowMs: number;
+  dryRun: boolean;
+}) {
+  const rows = await readWorkspaceCreditBalanceRowsByUser(
+    params.ctx,
+    params.userId,
+    WORKSPACE_CREDIT_BALANCE_REPAIR_ROW_LIMIT,
+  );
+  const truncated = rows.length >= WORKSPACE_CREDIT_BALANCE_REPAIR_ROW_LIMIT;
+  if (rows.length <= 1) {
+    return {
+      userId: String(params.userId),
+      rows: rows.length,
+      duplicateRows: 0,
+      mergedDuplicateRows: 0,
+      canonicalId: rows[0]?._id ? String(rows[0]._id) : null,
+      dryRun: params.dryRun,
+      repaired: false,
+      truncated,
+    };
+  }
+  if (truncated && !params.dryRun) {
+    throw new Error("workspace_credit_balance_repair_row_limit_exceeded");
+  }
+
+  const merged = mergeWorkspaceCreditBalanceRows(rows, params.nowMs);
+  if (!params.dryRun) {
+    await params.ctx.db.patch(merged.canonical._id, merged.patch);
+    for (const duplicate of merged.duplicateRows) {
+      await params.ctx.db.delete(duplicate._id);
+    }
+  }
+
+  return {
+    userId: String(params.userId),
+    rows: rows.length,
+    duplicateRows: merged.duplicateRows.length,
+    mergedDuplicateRows: merged.duplicateRows.length,
+    canonicalId: String(merged.canonical._id),
+    dryRun: params.dryRun,
+    repaired: !params.dryRun,
+    truncated,
   };
 }
 
@@ -514,7 +579,19 @@ export const getWorkspaceToolCreditDiagnosticsForOperator = query({
     const operator = await requireOperatorRole(ctx, args.authSubject, "operator");
     const nowMs = args.nowMs ?? Date.now();
     const limit = boundedLimit(args.limit, 25, 100);
-    const balanceRows = await ctx.db.query("workspaceCreditBalances").collect();
+    const recentBalanceRows = await readRecentWorkspaceCreditBalanceRows(ctx, limit);
+    const balanceRowsById = new Map<string, any>();
+    for (const row of recentBalanceRows) {
+      balanceRowsById.set(String(row._id), row);
+    }
+    const sampledUserIds = new Set(recentBalanceRows.map((row: any) => String(row.userId)));
+    for (const userId of sampledUserIds) {
+      const userRows = await readWorkspaceCreditBalanceRowsByUser(ctx, userId, 5);
+      for (const row of userRows) {
+        balanceRowsById.set(String(row._id), row);
+      }
+    }
+    const balanceRows = [...balanceRowsById.values()];
     const balanceDiagnostics = buildWorkspaceCreditBalanceDiagnostics(balanceRows, nowMs, limit);
     const pendingTopups = await ctx.db
       .query("checkoutSessions")
@@ -577,7 +654,6 @@ export const getWorkspaceToolCreditDiagnosticsForOperator = query({
           mergedDuplicateRows: balanceDiagnostics.duplicateRows,
           samples: balanceDiagnostics.duplicateSamples,
         },
-        repairMutation: "workspaceCredits:repairDuplicateWorkspaceCreditBalancesInternal",
       },
     };
   },
@@ -593,46 +669,82 @@ export const repairDuplicateWorkspaceCreditBalancesInternal = internalMutation({
     const nowMs = args.nowMs ?? Date.now();
     const dryRun = args.dryRun === true;
     const limitUsers = Math.max(1, Math.min(100, Math.floor(args.limitUsers ?? 25)));
-    const rows = await ctx.db.query("workspaceCreditBalances").collect();
+    const recentRows = await readRecentWorkspaceCreditBalanceRows(ctx, limitUsers * 5);
     const byUser = new Map<string, any[]>();
-    for (const row of rows) {
-      const key = String(row.userId);
-      byUser.set(key, [...(byUser.get(key) ?? []), row]);
+    for (const recentRow of recentRows) {
+      const userRows = await readWorkspaceCreditBalanceRowsByUser(ctx, recentRow.userId, 25);
+      const key = String(recentRow.userId);
+      byUser.set(key, userRows);
     }
 
     let duplicateUsers = 0;
     let repairedUsers = 0;
     let deletedRows = 0;
-    const samples: Array<{ userId: string; rows: number; canonicalId: string }> = [];
+    const samples: Array<{ userId: string; rows: number; canonicalId: string | null; truncated: boolean }> = [];
     for (const [userId, userRows] of byUser.entries()) {
       if (userRows.length <= 1) continue;
       duplicateUsers += 1;
       if (repairedUsers >= limitUsers) continue;
-      const merged = mergeWorkspaceCreditBalanceRows(userRows, nowMs);
+      const repaired = await repairWorkspaceCreditBalanceRowsForUser({
+        ctx,
+        userId: userRows[0].userId,
+        nowMs,
+        dryRun,
+      });
       samples.push({
         userId,
-        rows: userRows.length,
-        canonicalId: String(merged.canonical._id),
+        rows: repaired.rows,
+        canonicalId: repaired.canonicalId,
+        truncated: repaired.truncated,
       });
-      if (!dryRun) {
-        await ctx.db.patch(merged.canonical._id, merged.patch);
-        for (const duplicate of merged.duplicateRows) {
-          await ctx.db.delete(duplicate._id);
-          deletedRows += 1;
-        }
-      } else {
-        deletedRows += merged.duplicateRows.length;
-      }
+      deletedRows += repaired.mergedDuplicateRows;
       repairedUsers += 1;
     }
     return {
-      scannedRows: rows.length,
+      scannedRows: recentRows.length,
       duplicateUsers,
       repairedUsers,
       mergedDuplicateRows: deletedRows,
       dryRun,
       samples,
     };
+  },
+});
+
+export const repairWorkspaceCreditBalanceForOperator = mutation({
+  args: {
+    authSubject: v.optional(v.string()),
+    userId: v.id("users"),
+    dryRun: v.optional(v.boolean()),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const operator = await requireOperatorRole(ctx, args.authSubject, "operator");
+    const nowMs = args.nowMs ?? Date.now();
+    const result = await repairWorkspaceCreditBalanceRowsForUser({
+      ctx,
+      userId: args.userId,
+      nowMs,
+      dryRun: args.dryRun !== false,
+    });
+    return {
+      generatedAt: nowMs,
+      operator: {
+        userId: operator.userId,
+        role: operator.role,
+      },
+      ...result,
+    };
+  },
+});
+
+export const assertWorkspaceCreditBalanceReadyForTopupInternal = internalQuery({
+  args: {
+    userId: v.id("users"),
+  },
+  handler: async (ctx, args) => {
+    await readCanonicalWorkspaceCreditBalance(ctx, args.userId);
+    return { ok: true };
   },
 });
 
@@ -661,6 +773,7 @@ export const createPendingWorkspaceCreditTopupCheckoutSessionInternal = internal
   },
   handler: async (ctx, args) => {
     const nowMs = args.nowMs ?? Date.now();
+    await readCanonicalWorkspaceCreditBalance(ctx, args.ownerUserId);
     await ctx.db.insert("checkoutSessions", {
       sessionId: args.sessionId,
       mode: "workspace_credit_topup",
@@ -795,10 +908,7 @@ export const completeWorkspaceCreditTopupCheckoutSessionInternal = internalMutat
       throw new Error("workspace_credit_topup_amount_invalid");
     }
 
-    const existingBalance = await ctx.db
-      .query("workspaceCreditBalances")
-      .withIndex("by_user", (q) => q.eq("userId", ownerUserId))
-      .first();
+    const existingBalance = await readCanonicalWorkspaceCreditBalance(ctx, ownerUserId);
 
     let uncollectedCreditsPaid = 0;
     if (!existingBalance) {
@@ -914,10 +1024,7 @@ export const recordWorkspaceComputeChargeInternal = internalMutation({
         });
         const hasRefund = split.includedRefunded > 0 || split.purchasedRefunded > 0;
         if (hasRefund) {
-          const balance = await ctx.db
-            .query("workspaceCreditBalances")
-            .withIndex("by_user", (q) => q.eq("userId", reservation.userId))
-            .first();
+          const balance = await readCanonicalWorkspaceCreditBalance(ctx, reservation.userId);
           if (balance) {
             await ctx.db.patch(balance._id, {
               includedCreditsBalance: roundCredits(
@@ -1114,10 +1221,7 @@ export const reserveCreditsInternal = internalMutation({
     const requestedCredits = roundCredits(args.credits);
     if (!(requestedCredits > 0)) throw new Error("credits_amount_invalid");
 
-    const balance = await ctx.db
-      .query("workspaceCreditBalances")
-      .withIndex("by_user", (q) => q.eq("userId", args.userId))
-      .first();
+    const balance = await readCanonicalWorkspaceCreditBalance(ctx, args.userId);
     if (readUncollectedCreditsBalance(balance) > 0) {
       throw new Error("credits_exhausted");
     }
@@ -1247,10 +1351,7 @@ export const settleCreditsInternal = internalMutation({
       args.status === "succeeded"
         ? creditsToUsd(creditsSettled)
         : 0;
-    const balance = await ctx.db
-      .query("workspaceCreditBalances")
-      .withIndex("by_user", (q) => q.eq("userId", entry.userId))
-      .first();
+    const balance = await readCanonicalWorkspaceCreditBalance(ctx, entry.userId);
     const refund = balance
       ? applyCycleAwareRefund({ split, balance, entry })
       : {
@@ -1478,10 +1579,7 @@ export const reconcileExpiredCreditReservationsInternal = internalMutation({
         purchasedDebited: entry.purchasedCreditsDebited,
         creditsSettled: 0,
       });
-      const balance = await ctx.db
-        .query("workspaceCreditBalances")
-        .withIndex("by_user", (q) => q.eq("userId", entry.userId))
-        .first();
+      const balance = await readCanonicalWorkspaceCreditBalance(ctx, entry.userId);
       const refund = balance
         ? applyCycleAwareRefund({ split, balance, entry })
         : {
@@ -1549,6 +1647,12 @@ export const startWorkspaceCreditTopupCheckout = action({
     })) as { dbUserId?: unknown; email?: string | null };
     const userId = actor?.dbUserId;
     if (!userId) throw new Error("user_not_found");
+    await ctx.runQuery(
+      internal.workspaceCredits.assertWorkspaceCreditBalanceReadyForTopupInternal as any,
+      {
+        userId,
+      },
+    );
     const stripeCustomerId = await ensureStripeCustomerForUser({
       ctx,
       userId,
