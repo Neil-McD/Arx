@@ -50,6 +50,7 @@ type UseWebWorkspaceCoreControllerParams<SessionT, ThreadT extends ThreadLike> =
   activePage: AppPage;
   activeView: AppView;
   activeThreadId: string | null;
+  activeCommunitySlug: string | null;
   navigateTo: (path: string, opts?: { replace?: boolean }) => void;
   setActivePage: Dispatch<SetStateAction<AppPage>>;
   setActiveView: Dispatch<SetStateAction<AppView>>;
@@ -74,6 +75,7 @@ export function useWebWorkspaceCoreController<SessionT, ThreadT extends ThreadLi
     activePage: params.activePage,
     activeView: params.activeView,
     activeThreadId: params.activeThreadId,
+    activeCommunitySlug: params.activeCommunitySlug,
     navigateTo: params.navigateTo,
     setActivePage: params.setActivePage,
     setActiveView: params.setActiveView,

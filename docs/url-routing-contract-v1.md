@@ -24,6 +24,7 @@ Current canonical/pathname routes include:
 
 - `/discover`
 - `/workspace`
+- `/workspace/community/:slug`
 - `/workspace/thread/:threadId`
 - `/settings/profile`
 - `/settings/account`
@@ -122,9 +123,10 @@ Preferred direction:
 
 This keeps object identity stable while making the active view explicit.
 
-For workspace threads, the same principle applies:
+For workspace operating routes, the same principle applies:
 
 - `/workspace`
+- `/workspace/community/:slug`
 - `/workspace/thread/:threadId`
 
 This is now the active route direction in the web app.

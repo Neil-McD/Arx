@@ -136,6 +136,12 @@ export function buildWorkspaceDraftPath(): string {
   return "/workspace";
 }
 
+export function buildWorkspaceCommunityDraftPath(communitySlug: string | null | undefined): string | null {
+  const slug = String(communitySlug ?? "").trim();
+  if (!slug) return null;
+  return `/workspace/community/${encodeURIComponent(slug)}`;
+}
+
 export function buildWorkspaceThreadPath(threadId: string | null | undefined): string {
   const normalized = String(threadId ?? "").trim();
   if (!isUuid(normalized)) return buildWorkspaceDraftPath();
@@ -400,6 +406,18 @@ function parseAppRouteFromPathname(pathname: string): AppRoutePathState | null {
         threadId: null,
       };
     }
+    if (segments[1] === "community" && segments.length === 3) {
+      const slug = String(segments[2] ?? "").trim();
+      if (!slug) return null;
+      return {
+        page: "workspace",
+        view: "home",
+        settingsPage: "agent",
+        communitySlug: slug,
+        communityTab: "chat",
+        threadId: null,
+      };
+    }
     if (segments[1] === "thread" && segments.length >= 3) {
       const rawThreadId = String(segments[2] ?? "").trim();
       return {
@@ -536,5 +554,9 @@ export function buildAppRoutePath(state: AppRoutePathState): string | null {
     return "/onboarding";
   }
 
-  return state.threadId ? buildWorkspaceThreadPath(state.threadId) : buildWorkspaceDraftPath();
+  if (state.threadId) {
+    return buildWorkspaceThreadPath(state.threadId);
+  }
+
+  return buildWorkspaceCommunityDraftPath(state.communitySlug) ?? buildWorkspaceDraftPath();
 }

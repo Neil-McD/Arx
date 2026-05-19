@@ -2847,6 +2847,11 @@ export default function App() {
       setCommunityResourceModuleId(
         nextAppRoute.communityTab === "resources" ? nextAppRoute.communityResourceModuleId ?? null : null,
       );
+    } else if (nextAppRoute.page === "workspace" && nextAppRoute.view === "home") {
+      applyCommunityShellState({
+        communitySlug: nextThreadId ? undefined : normalizedCommunitySlug,
+      });
+      setCommunityResourceModuleId(null);
     } else {
       setCommunityResourceModuleId(null);
     }
@@ -3051,6 +3056,7 @@ export default function App() {
     activePage,
     activeView,
     activeThreadId,
+    activeCommunitySlug: selectedActiveCommunitySlug,
     navigateTo,
     setActivePage,
     setActiveView,
@@ -3275,6 +3281,30 @@ export default function App() {
   useEffect(() => {
     setHasResolvedCommunities(false);
   }, [canonicalSessionUserId]);
+
+  useEffect(() => {
+    if (activePage !== "workspace" || activeView !== "home" || activeThreadId) return;
+    const slug = String(selectedActiveCommunitySlug ?? "").trim();
+    if (!slug || !hasResolvedCommunities || isLoadingCommunities) return;
+    const matchedCommunity = communities.find((community) => String(community.slug ?? "").trim() === slug) ?? null;
+    if (matchedCommunity) return;
+    applyCommunityShellState({
+      communityId: null,
+      communitySlug: null,
+    });
+    navigateTo(buildWorkspaceDraftPath(), { replace: true });
+  }, [
+    activePage,
+    activeThreadId,
+    activeView,
+    applyCommunityShellState,
+    communities,
+    hasResolvedCommunities,
+    isLoadingCommunities,
+    navigateTo,
+    selectedActiveCommunitySlug,
+  ]);
+
   const enterJoinedCommunity = useCallback(
     (opts: { communityId: string; communitySlug?: string | null }) => {
       const communityId = String(opts.communityId ?? "").trim();

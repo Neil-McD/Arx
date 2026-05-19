@@ -1,6 +1,10 @@
 import { useCallback, useRef } from "react";
 import type { AppPage, AppView } from "../../../../shared/appShellNavigation";
-import { buildWorkspaceDraftPath, buildWorkspaceThreadPath } from "../../../../shared/webAppRouteState";
+import {
+  buildWorkspaceCommunityDraftPath,
+  buildWorkspaceDraftPath,
+  buildWorkspaceThreadPath,
+} from "../../../../shared/webAppRouteState";
 
 type NavigateFn = (path: string, opts?: { replace?: boolean }) => void;
 
@@ -8,6 +12,7 @@ type UseWebWorkspaceRouteControllerArgs = {
   activePage: AppPage;
   activeView: AppView;
   activeThreadId: string | null;
+  activeCommunitySlug: string | null;
   navigateTo: NavigateFn;
   setActivePage: (value: AppPage | ((prev: AppPage) => AppPage)) => void;
   setActiveView: (value: AppView | ((prev: AppView) => AppView)) => void;
@@ -65,6 +70,7 @@ export function useWebWorkspaceRouteController(args: UseWebWorkspaceRouteControl
     (opts?: {
       replace?: boolean;
       projectId?: string | null;
+      communitySlug?: string | null;
       focusComposer?: () => void;
     }) => {
       const current = argsRef.current;
@@ -75,7 +81,13 @@ export function useWebWorkspaceRouteController(args: UseWebWorkspaceRouteControl
       current.setActiveView("home");
       current.setWorkspaceWantsNewChatMode(true);
       current.setActiveThreadId(null);
-      current.navigateTo(buildWorkspaceDraftPath(), { replace: opts?.replace ?? true });
+      const requestedSlug =
+        opts?.communitySlug !== undefined
+          ? String(opts.communitySlug ?? "").trim() || null
+          : String(current.activeCommunitySlug ?? "").trim() || null;
+      current.navigateTo(buildWorkspaceCommunityDraftPath(requestedSlug) ?? buildWorkspaceDraftPath(), {
+        replace: opts?.replace ?? true,
+      });
       opts?.focusComposer?.();
     },
     [],
@@ -137,7 +149,10 @@ export function useWebWorkspaceRouteController(args: UseWebWorkspaceRouteControl
       }
       if (!current.activeThreadId && current.activePage === "workspace" && current.activeView === "home") {
         current.setWorkspaceWantsNewChatMode(true);
-        current.navigateTo(buildWorkspaceDraftPath(), { replace: true });
+        current.navigateTo(
+          buildWorkspaceCommunityDraftPath(current.activeCommunitySlug) ?? buildWorkspaceDraftPath(),
+          { replace: true },
+        );
         opts.focusComposer?.();
         return;
       }
