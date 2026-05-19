@@ -268,10 +268,15 @@ assert.doesNotMatch(
   /activeMeta\.body|make the community recognizable across Discover/,
   "launch modal step cards should keep the active card focused on title and fields",
 );
+assert.doesNotMatch(
+  setupModal,
+  /polynet-onboarding-topbar|community-launch-brand-avatar/,
+  "launch modal must not render the synthetic top-left community brand row",
+);
 assert.match(
   setupModal,
-  /community-launch-topbar\$\{isCreateMode \? " no-brand" : ""\}/,
-  "launch modal create mode should hide the synthetic New community brand row",
+  /polynet-onboarding-close community-launch-close/,
+  "launch modal close button should align with the modal header instead of reserving a topbar",
 );
 assert.match(
   appShell,

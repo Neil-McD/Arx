@@ -920,34 +920,14 @@ export function WebCommunityLaunchSetupModal(
         aria-labelledby="community-launch-title"
       >
         <section className="polynet-onboarding-panel">
-          <div
-            className={`polynet-onboarding-topbar community-launch-topbar${isCreateMode ? " no-brand" : ""}`}
+          <button
+            className="polynet-onboarding-close community-launch-close"
+            type="button"
+            onClick={onClose}
+            aria-label="Close community launch setup"
           >
-            {isCreateMode ? null : (
-              <div className="polynet-onboarding-brand">
-                <CommunityAvatar
-                  className="community-launch-brand-avatar"
-                  imageUrl={effectiveCommunity.avatar_url}
-                  focusX={effectiveCommunity.avatar_focus_x}
-                  focusY={effectiveCommunity.avatar_focus_y}
-                  zoom={effectiveCommunity.avatar_zoom}
-                  name={effectiveCommunity.name}
-                  fallbackClassName="community-launch-brand-avatar-fallback"
-                  imageClassName="community-launch-brand-avatar-image"
-                  aria-hidden
-                />
-                <span>{effectiveCommunity.name}</span>
-              </div>
-            )}
-            <button
-              className="polynet-onboarding-close"
-              type="button"
-              onClick={onClose}
-              aria-label="Close community launch setup"
-            >
-              <X size={16} strokeWidth={2} aria-hidden="true" />
-            </button>
-          </div>
+            <X size={16} strokeWidth={2} aria-hidden="true" />
+          </button>
 
           <div className="polynet-onboarding-header">
             <div className="polynet-onboarding-progress-ring" aria-hidden="true">
