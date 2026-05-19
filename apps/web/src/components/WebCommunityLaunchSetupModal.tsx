@@ -12,11 +12,18 @@ import {
   X,
 } from "lucide-react";
 import { CommunityAvatar } from "../../../../shared/CommunityAvatar";
+import { getCommunityBannerImageStyle } from "../../../../shared/communityBannerUi";
 import type {
   CommunityLaunchSetupMissing,
   CommunityLaunchSetupStatus,
   CommunityLaunchSetupStep,
 } from "../../../../shared/communityLaunchSetup";
+import {
+  readBannerFileAsWideDataUrlWithinLimit,
+  readCommunityAvatarFileAsDataUrlWithinLimit,
+} from "../../../../shared/imageTransforms";
+
+const COMMUNITY_LAUNCH_IMAGE_DATA_URL_MAX_CHARS = 600_000;
 
 type CommunityEntryPolicy = "open" | "approval" | "paid_subscription";
 
@@ -130,8 +137,8 @@ const STEP_META: Record<
   },
   agent: {
     label: "Agent",
-    title: "Configure the community agent.",
-    body: "Set the community-wide instructions and starter prompts for the selected workspace lens.",
+    title: "Set the agent behavior.",
+    body: "Give the agent a clear job, a few priorities, and simple boundaries.",
     action: "Open agent",
     icon: <Bot size={15} strokeWidth={2} aria-hidden="true" />,
   },
@@ -211,6 +218,10 @@ export function WebCommunityLaunchSetupModal(
   const [savingStep, setSavingStep] = useState<CommunityLaunchSetupStep | null>(null);
   const [stepError, setStepError] = useState<string | null>(null);
   const [stepSuccess, setStepSuccess] = useState<string | null>(null);
+  const [profileMediaError, setProfileMediaError] = useState<string | null>(null);
+  const [profileAvatarFileName, setProfileAvatarFileName] = useState("");
+  const [profileBannerFileName, setProfileBannerFileName] = useState("");
+  const [processingProfileMedia, setProcessingProfileMedia] = useState<"avatar" | "banner" | null>(null);
   const [profileDraft, setProfileDraft] = useState<CommunityLaunchProfileSaveDraft>({
     name: "",
     slug: "",
@@ -252,6 +263,10 @@ export function WebCommunityLaunchSetupModal(
     setAccessDraft(community.entry_policy ?? "open");
     setStepError(null);
     setStepSuccess(null);
+    setProfileMediaError(null);
+    setProfileAvatarFileName("");
+    setProfileBannerFileName("");
+    setProcessingProfileMedia(null);
   }, [
     isOpen,
     community?.id,
@@ -370,6 +385,43 @@ export function WebCommunityLaunchSetupModal(
     );
   };
 
+  const readProfileImage = async (kind: "avatar" | "banner", file: File | null) => {
+    if (!file) return;
+    setProfileMediaError(null);
+    setProcessingProfileMedia(kind);
+    try {
+      const dataUrl =
+        kind === "avatar"
+          ? await readCommunityAvatarFileAsDataUrlWithinLimit(
+              file,
+              COMMUNITY_LAUNCH_IMAGE_DATA_URL_MAX_CHARS,
+            )
+          : await readBannerFileAsWideDataUrlWithinLimit(
+              file,
+              COMMUNITY_LAUNCH_IMAGE_DATA_URL_MAX_CHARS,
+            );
+      setProfileDraft((draft) => ({
+        ...draft,
+        [kind === "avatar" ? "avatarUrl" : "bannerUrl"]: dataUrl,
+      }));
+      if (kind === "avatar") {
+        setProfileAvatarFileName(file.name || "Selected avatar");
+      } else {
+        setProfileBannerFileName(file.name || "Selected banner");
+      }
+    } catch (error) {
+      setProfileMediaError(
+        error instanceof Error
+          ? error.message
+          : kind === "avatar"
+            ? "Could not read avatar image."
+            : "Could not read banner image.",
+      );
+    } finally {
+      setProcessingProfileMedia(null);
+    }
+  };
+
   const renderStepEditor = () => {
     if (activeStep === "profile") {
       const canSaveProfile = Boolean(profileDraft.name.trim() && profileDraft.slug.trim());
@@ -402,24 +454,102 @@ export function WebCommunityLaunchSetupModal(
               placeholder="A short line about who this community is for."
             />
           </label>
-          <div className="community-launch-field-grid">
-            <label className="community-launch-field">
-              <span>Avatar URL</span>
-              <input
-                value={profileDraft.avatarUrl}
-                onChange={(event) => setProfileDraft((draft) => ({ ...draft, avatarUrl: event.target.value }))}
-                placeholder="https://..."
+          <div className="community-launch-media-grid">
+            <div className="community-launch-media-card">
+              <CommunityAvatar
+                className="community-launch-avatar-preview"
+                imageUrl={profileDraft.avatarUrl || null}
+                focusX={community.avatar_focus_x}
+                focusY={community.avatar_focus_y}
+                zoom={community.avatar_zoom}
+                name={profileDraft.name || community.name}
+                alt="Community avatar preview"
               />
-            </label>
-            <label className="community-launch-field">
-              <span>Banner URL</span>
-              <input
-                value={profileDraft.bannerUrl}
-                onChange={(event) => setProfileDraft((draft) => ({ ...draft, bannerUrl: event.target.value }))}
-                placeholder="https://..."
-              />
-            </label>
+              <div className="community-launch-media-copy">
+                <strong>Avatar</strong>
+                <span>{profileAvatarFileName || "Square image for rails and Discover."}</span>
+                <div className="community-launch-media-actions">
+                  <label className="community-launch-upload-button">
+                    {processingProfileMedia === "avatar" ? "Reading..." : "Upload"}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      disabled={Boolean(processingProfileMedia)}
+                      onChange={(event) => {
+                        const file = event.target.files?.[0] ?? null;
+                        event.target.value = "";
+                        void readProfileImage("avatar", file);
+                      }}
+                    />
+                  </label>
+                  {profileDraft.avatarUrl ? (
+                    <button
+                      type="button"
+                      className="community-launch-media-remove"
+                      disabled={Boolean(processingProfileMedia)}
+                      onClick={() => {
+                        setProfileDraft((draft) => ({ ...draft, avatarUrl: "" }));
+                        setProfileAvatarFileName("");
+                      }}
+                    >
+                      Remove
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+            <div className="community-launch-media-card banner">
+              <div className="community-launch-banner-preview">
+                {profileDraft.bannerUrl ? (
+                  <img
+                    src={profileDraft.bannerUrl}
+                    alt="Community banner preview"
+                    draggable={false}
+                    style={getCommunityBannerImageStyle({
+                      focusX: community.banner_focus_x,
+                      focusY: community.banner_focus_y,
+                      zoom: community.banner_zoom,
+                    })}
+                  />
+                ) : (
+                  <span>Banner</span>
+                )}
+              </div>
+              <div className="community-launch-media-copy">
+                <strong>Banner</strong>
+                <span>{profileBannerFileName || "Wide image for the public surface."}</span>
+                <div className="community-launch-media-actions">
+                  <label className="community-launch-upload-button">
+                    {processingProfileMedia === "banner" ? "Reading..." : "Upload"}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      disabled={Boolean(processingProfileMedia)}
+                      onChange={(event) => {
+                        const file = event.target.files?.[0] ?? null;
+                        event.target.value = "";
+                        void readProfileImage("banner", file);
+                      }}
+                    />
+                  </label>
+                  {profileDraft.bannerUrl ? (
+                    <button
+                      type="button"
+                      className="community-launch-media-remove"
+                      disabled={Boolean(processingProfileMedia)}
+                      onClick={() => {
+                        setProfileDraft((draft) => ({ ...draft, bannerUrl: "" }));
+                        setProfileBannerFileName("");
+                      }}
+                    >
+                      Remove
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            </div>
           </div>
+          {profileMediaError ? <p className="community-launch-step-message error">{profileMediaError}</p> : null}
           <div className="community-launch-step-actions">
             <button type="button" className="polynet-onboarding-back" onClick={() => onOpenStep("profile")}>
               Open full editor
@@ -504,29 +634,36 @@ export function WebCommunityLaunchSetupModal(
       return (
         <form className="community-launch-inline-form" onSubmit={handleSaveAgent}>
           <label className="community-launch-field">
-            <span>Community agent instructions</span>
+            <span>Agent instructions</span>
             <textarea
               value={agentDraft.systemPrompt}
               onChange={(event) => setAgentDraft((draft) => ({ ...draft, systemPrompt: event.target.value }))}
               rows={6}
-              placeholder="Tell the community agent how to behave, what to prioritize, and what boundaries to respect."
+              placeholder="How should the agent help this community?"
             />
           </label>
-          <div className="community-launch-field-grid">
-            {agentDraft.starterPrompts.map((prompt, index) => (
-              <label className="community-launch-field" key={index}>
-                <span>Starter {index + 1}</span>
-                <input
-                  value={prompt}
-                  onChange={(event) => {
-                    const nextPrompts = [...agentDraft.starterPrompts];
-                    nextPrompts[index] = event.target.value;
-                    setAgentDraft((draft) => ({ ...draft, starterPrompts: nextPrompts }));
-                  }}
-                  placeholder="Starter prompt"
-                />
-              </label>
-            ))}
+          <div className="community-launch-starter-panel">
+            <div>
+              <strong>Starter prompts</strong>
+              <span>Optional quick questions members can tap.</span>
+            </div>
+            <div className="community-launch-starter-list">
+              {agentDraft.starterPrompts.map((prompt, index) => (
+                <label className="community-launch-field" key={index}>
+                  <span>Prompt {index + 1}</span>
+                  <textarea
+                    value={prompt}
+                    onChange={(event) => {
+                      const nextPrompts = [...agentDraft.starterPrompts];
+                      nextPrompts[index] = event.target.value;
+                      setAgentDraft((draft) => ({ ...draft, starterPrompts: nextPrompts }));
+                    }}
+                    rows={2}
+                    placeholder="Suggested first question"
+                  />
+                </label>
+              ))}
+            </div>
           </div>
           <div className="community-launch-step-actions">
             <button type="button" className="polynet-onboarding-back" onClick={() => onOpenStep("agent")}>

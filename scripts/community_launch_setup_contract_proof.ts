@@ -15,6 +15,7 @@ const launchQuery = read("convex/communityLaunchSetup.ts");
 const communityBarrel = read("convex/community.ts");
 const setupCard = read("apps/web/src/components/WebCommunityLaunchSetupCard.tsx");
 const setupModal = read("apps/web/src/components/WebCommunityLaunchSetupModal.tsx");
+const appShell = read("apps/web/src/App.tsx");
 const workspaceLandingProjection = read(
   "apps/web/src/controllers/buildWebWorkspaceLandingProjection.tsx",
 );
@@ -249,6 +250,21 @@ assert.doesNotMatch(
   setupModal,
   /community-launch-checklist|Add source material|Publish one usable resource/,
   "launch modal must not render per-item checklist rows inside the step card",
+);
+assert.match(
+  setupModal,
+  /community-launch-media-grid[\s\S]*type="file"[\s\S]*accept="image\/\*"/,
+  "launch profile setup must use raw image file inputs instead of URL fields",
+);
+assert.doesNotMatch(
+  setupModal,
+  /Avatar URL|Banner URL/,
+  "launch profile setup must not expose resolved storage URLs as editable fields",
+);
+assert.match(
+  appShell,
+  /prepareCloudCommunityBrandingField[\s\S]*saveCloudCommunityLaunchProfile/,
+  "launch profile saves must upload raw branding images through the canonical storage path",
 );
 assert.match(
   setupModal,

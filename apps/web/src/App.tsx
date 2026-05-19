@@ -120,6 +120,7 @@ import {
   saveCloudCommunityAgentConfig as saveCloudCommunityAgentConfigDirect,
 } from "../../../shared/cloudCommunityAgentGateway";
 import {
+  prepareCloudCommunityBrandingField,
   saveCloudCommunityResource,
   setCloudCommunityFreeAccessMode,
 } from "../../../shared/cloudCommunityAdminGateway";
@@ -7267,18 +7268,34 @@ export default function App() {
         oneLiner: draft.oneLiner.trim() || null,
       };
       if (nextAvatarUrl !== currentAvatarUrl) {
-        input.avatarUrl = nextAvatarUrl || null;
-        input.avatarStorageId = null;
-        input.avatarFocusX = community.avatar_focus_x ?? 0.5;
-        input.avatarFocusY = community.avatar_focus_y ?? 0.5;
-        input.avatarZoom = community.avatar_zoom ?? 1;
+        const avatarField = await prepareCloudCommunityBrandingField({
+          session,
+          kind: "avatar",
+          nextValue: nextAvatarUrl || null,
+          currentStorageId: community.avatar_storage_id ?? null,
+          currentResolvedUrl: currentAvatarUrl || null,
+        });
+        const isNewAvatarUpload = nextAvatarUrl.toLowerCase().startsWith("data:image/");
+        input.avatarUrl = avatarField.url ?? null;
+        input.avatarStorageId = avatarField.storageId ?? null;
+        input.avatarFocusX = isNewAvatarUpload ? 0.5 : community.avatar_focus_x ?? 0.5;
+        input.avatarFocusY = isNewAvatarUpload ? 0.5 : community.avatar_focus_y ?? 0.5;
+        input.avatarZoom = isNewAvatarUpload ? 1 : community.avatar_zoom ?? 1;
       }
       if (nextBannerUrl !== currentBannerUrl) {
-        input.bannerUrl = nextBannerUrl || null;
-        input.bannerStorageId = null;
-        input.bannerFocusX = community.banner_focus_x ?? 0.5;
-        input.bannerFocusY = community.banner_focus_y ?? 0.5;
-        input.bannerZoom = community.banner_zoom ?? 1;
+        const bannerField = await prepareCloudCommunityBrandingField({
+          session,
+          kind: "banner",
+          nextValue: nextBannerUrl || null,
+          currentStorageId: community.banner_storage_id ?? null,
+          currentResolvedUrl: currentBannerUrl || null,
+        });
+        const isNewBannerUpload = nextBannerUrl.toLowerCase().startsWith("data:image/");
+        input.bannerUrl = bannerField.url ?? null;
+        input.bannerStorageId = bannerField.storageId ?? null;
+        input.bannerFocusX = isNewBannerUpload ? 0.5 : community.banner_focus_x ?? 0.5;
+        input.bannerFocusY = isNewBannerUpload ? 0.5 : community.banner_focus_y ?? 0.5;
+        input.bannerZoom = isNewBannerUpload ? 1 : community.banner_zoom ?? 1;
       }
       const result = await saveCloudCommunityLaunchProfile({
         session,
