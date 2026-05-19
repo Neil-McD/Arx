@@ -25,11 +25,10 @@ export type CodexHarnessReadinessStatus =
 
 export type CodexHarnessRouteReason =
   | "experiment_disabled"
-  | "chat_turn_uses_current_harness"
+  | "workspace_tool_call_required"
   | "project_workspace_required"
   | "chatgpt_subscription_required_for_first_slice"
-  | "tool_surface_required"
-  | "codex_app_server_candidate";
+  | "explicit_codex_primary_request";
 
 export type CodexHarnessExecutorReason =
   | "executor_disabled"
@@ -173,10 +172,9 @@ function currentHarnessExecutorDecision(params: {
 
 export function resolveCodexHarnessRoute(params: {
   experimentEnabled: boolean;
-  runtimeExecutionMode: RuntimeExecutionMode;
+  explicitPrimaryRequest?: boolean;
   inferenceSource: RuntimeInferenceSource;
   projectId?: string | null;
-  allowedToolNames: readonly string[];
 }): CodexHarnessRoute {
   if (!params.experimentEnabled) {
     return currentHarnessRoute({
@@ -184,10 +182,10 @@ export function resolveCodexHarnessRoute(params: {
       reason: "experiment_disabled",
     });
   }
-  if (params.runtimeExecutionMode !== "agentic") {
+  if (params.explicitPrimaryRequest !== true) {
     return currentHarnessRoute({
       experimentEnabled: true,
-      reason: "chat_turn_uses_current_harness",
+      reason: "workspace_tool_call_required",
     });
   }
   if (!String(params.projectId ?? "").trim()) {
@@ -202,16 +200,10 @@ export function resolveCodexHarnessRoute(params: {
       reason: "chatgpt_subscription_required_for_first_slice",
     });
   }
-  if (params.allowedToolNames.length === 0) {
-    return currentHarnessRoute({
-      experimentEnabled: true,
-      reason: "tool_surface_required",
-    });
-  }
   return {
     experimentEnabled: true,
     selected: true,
-    reason: "codex_app_server_candidate",
+    reason: "explicit_codex_primary_request",
     engine: "codex_app_server",
     executionPlacement: "daytona_sidecar",
     authBridge: "chatgpt_subscription",

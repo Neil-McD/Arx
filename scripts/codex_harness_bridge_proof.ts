@@ -91,10 +91,9 @@ function proveRouteSelection() {
   assert.deepEqual(
     resolveCodexHarnessRoute({
       experimentEnabled: false,
-      runtimeExecutionMode: "agentic",
+      explicitPrimaryRequest: true,
       inferenceSource: "chatgpt",
       projectId: "project-1",
-      allowedToolNames: ["terminal_start"],
     }),
     {
       experimentEnabled: false,
@@ -114,56 +113,58 @@ function proveRouteSelection() {
   assert.equal(
     resolveCodexHarnessRoute({
       experimentEnabled: true,
-      runtimeExecutionMode: "chat",
+      explicitPrimaryRequest: false,
       inferenceSource: "chatgpt",
       projectId: "project-1",
-      allowedToolNames: ["terminal_start"],
     }).reason,
-    "chat_turn_uses_current_harness",
-    "chat-only turns should not enter the Codex app-server path",
+    "workspace_tool_call_required",
+    "ordinary turns should not enter the Codex app-server path before a workspace capability is explicitly requested",
+  );
+  const broadEligibleTurn = resolveCodexHarnessRoute({
+    experimentEnabled: true,
+    explicitPrimaryRequest: false,
+    inferenceSource: "chatgpt",
+    projectId: "project-1",
+  });
+  assert.equal(
+    broadEligibleTurn.selected,
+    false,
+    "broad eligibility facts must not select the Codex app-server route",
+  );
+  assert.equal(
+    broadEligibleTurn.reason,
+    "workspace_tool_call_required",
+    "Codex should wait for an explicit workspace/computer capability request instead of pre-turn routing",
   );
   assert.equal(
     resolveCodexHarnessRoute({
       experimentEnabled: true,
-      runtimeExecutionMode: "agentic",
+      explicitPrimaryRequest: true,
       inferenceSource: "chatgpt",
       projectId: null,
-      allowedToolNames: ["terminal_start"],
     }).reason,
     "project_workspace_required",
-    "first Codex harness slice should require a Daytona-backed project workspace",
+    "explicit Codex requests should require a Daytona-backed project workspace",
   );
   assert.equal(
     resolveCodexHarnessRoute({
       experimentEnabled: true,
-      runtimeExecutionMode: "agentic",
+      explicitPrimaryRequest: true,
       inferenceSource: "platform",
       projectId: "project-1",
-      allowedToolNames: ["terminal_start"],
     }).reason,
     "chatgpt_subscription_required_for_first_slice",
-    "first Codex harness slice should not silently spend platform API-key quota",
-  );
-  assert.equal(
-    resolveCodexHarnessRoute({
-      experimentEnabled: true,
-      runtimeExecutionMode: "agentic",
-      inferenceSource: "chatgpt",
-      projectId: "project-1",
-      allowedToolNames: [],
-    }).reason,
-    "tool_surface_required",
-    "agentic Codex route should require an explicit tool surface",
+    "explicit Codex requests should not silently spend platform API-key quota",
   );
 
   const selected = resolveCodexHarnessRoute({
     experimentEnabled: true,
-    runtimeExecutionMode: "agentic",
+    explicitPrimaryRequest: true,
     inferenceSource: "chatgpt",
     projectId: "project-1",
-    allowedToolNames: ["terminal_start"],
   });
-  assert.equal(selected.selected, true, "eligible turn should select Codex app-server candidate route");
+  assert.equal(selected.selected, true, "explicit staging/probe request should select Codex app-server candidate route");
+  assert.equal(selected.reason, "explicit_codex_primary_request");
   assert.equal(selected.engine, "codex_app_server");
   assert.equal(selected.executionPlacement, "daytona_sidecar");
   assert.equal(selected.authBridge, "chatgpt_subscription");
@@ -608,6 +609,11 @@ function proveDaytonaProbeBridge() {
     httpDaytona,
     /await executeCodexHarnessProbeIfSelected\(\{/,
     "retrieval loop should call the Codex bridge helper from the product path",
+  );
+  assert.match(
+    httpDaytona,
+    /explicitPrimaryRequest:\s*params\.codexPrimaryCanary === true/,
+    "retrieval loop should keep Daytona probe execution behind the explicit Codex canary request",
   );
   assert.doesNotMatch(
     httpDaytona,
@@ -1208,6 +1214,11 @@ function proveDaytonaProbeBridge() {
     codexBridge,
     /toolName:\s*"codex_harness_probe"/,
     "Daytona bridge should allocate workspace access through the existing execution session",
+  );
+  assert.match(
+    codexBridge,
+    /explicitPrimaryRequest:\s*params\.explicitPrimaryRequest === true/,
+    "Daytona bridge should not treat probe-mode environment flags as enough to start Codex on normal turns",
   );
   assert.match(
     codexBridge,

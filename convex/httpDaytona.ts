@@ -1109,10 +1109,9 @@ async function executeRetrievalAgentLoop(
   const initialProviderTools = buildActiveProviderTools();
   const codexPrimaryRoute = resolveCodexHarnessRoute({
     experimentEnabled: isCodexHarnessExperimentEnabled(),
-    runtimeExecutionMode: "agentic",
+    explicitPrimaryRequest: params.codexPrimaryCanary === true,
     inferenceSource: params.inferenceSource,
     projectId: params.projectId,
-    allowedToolNames: params.allowedToolNames,
   });
   if (codexPrimaryRoute.experimentEnabled || codexMcpProjection.tools.length > 0) {
     try {
@@ -1450,6 +1449,7 @@ async function executeRetrievalAgentLoop(
       userId: params.userId,
       runId: params.runId,
       projectId: params.projectId,
+      explicitPrimaryRequest: params.codexPrimaryCanary === true,
       inferenceSource: params.inferenceSource,
       allowedToolNames: params.allowedToolNames,
       messages: params.messages,

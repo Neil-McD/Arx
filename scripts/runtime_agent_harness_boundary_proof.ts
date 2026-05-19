@@ -219,8 +219,26 @@ assert.match(
 
 assert.match(
   httpDaytona,
-  /const codexPrimaryRoute = resolveCodexHarnessRoute\(\{[\s\S]*runtimeExecutionMode: "agentic"[\s\S]*allowedToolNames: params\.allowedToolNames/,
-  "runtime should resolve Codex primary route eligibility from the same turn facts",
+  /const codexPrimaryRoute = resolveCodexHarnessRoute\(\{[\s\S]*explicitPrimaryRequest: params\.codexPrimaryCanary === true[\s\S]*projectId: params\.projectId/,
+  "runtime should only request the Codex primary route for an explicit staging canary",
+);
+assert.doesNotMatch(
+  httpDaytona.slice(
+    httpDaytona.indexOf("const codexPrimaryRoute = resolveCodexHarnessRoute"),
+    httpDaytona.indexOf("const runtimeHarnessSelection = resolveRuntimeAgentHarnessSelection"),
+  ),
+  /runtimeExecutionMode: "agentic"|allowedToolNames: params\.allowedToolNames/,
+  "Codex primary selection must not use broad agentic/tool availability facts as a router",
+);
+assert.match(
+  runtimeTurnHandlers,
+  /explicitPrimaryRequest: codexPrimaryCanaryRequested/,
+  "runtime route evidence should track the explicit Codex canary request",
+);
+assert.doesNotMatch(
+  runtimeTurnHandlers,
+  /codexPrimaryCanaryRequested\s*\|\|\s*codexHarnessProbeMode !== "off"/,
+  "probe-mode environment flags must not select Codex route evidence for ordinary turns",
 );
 
 assert.match(

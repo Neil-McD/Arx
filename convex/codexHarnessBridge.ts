@@ -1918,6 +1918,7 @@ export async function executeCodexHarnessProbeIfSelected(params: {
   userId: string;
   runId: string;
   projectId?: string | null;
+  explicitPrimaryRequest?: boolean;
   inferenceSource: RuntimeInferenceSource;
   allowedToolNames: readonly RetrievalToolName[];
   messages: readonly InferenceMessage[];
@@ -1925,15 +1926,14 @@ export async function executeCodexHarnessProbeIfSelected(params: {
   executionSession: CodexHarnessProbeExecutionSession;
   appendRunEvent: RuntimeRunEventAppender;
 }): Promise<void> {
+  const probeMode = resolveCodexHarnessProbeMode();
   const route = resolveCodexHarnessRoute({
     experimentEnabled: isCodexHarnessExperimentEnabled(),
-    runtimeExecutionMode: "agentic",
+    explicitPrimaryRequest: params.explicitPrimaryRequest === true,
     inferenceSource: params.inferenceSource,
     projectId: params.projectId,
-    allowedToolNames: params.allowedToolNames,
   });
   if (!route.selected) return;
-  const probeMode = resolveCodexHarnessProbeMode();
   if (probeMode === "off") return;
   const executionSmokeRequested = probeMode === "execution_canary";
   const shadowTurnRequested = probeMode === "shadow_turn";

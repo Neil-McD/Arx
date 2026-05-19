@@ -1014,15 +1014,14 @@ export async function handleRuntimeTurnRequest(args: {
         harness_profile: resolvedRuntimeHarnessProfile,
       },
     });
+    const codexHarnessProbeMode = resolveCodexHarnessProbeMode();
     const codexHarnessRoute = resolveCodexHarnessRoute({
       experimentEnabled: isCodexHarnessExperimentEnabled(),
-      runtimeExecutionMode,
+      explicitPrimaryRequest: codexPrimaryCanaryRequested,
       inferenceSource,
       projectId: runtimeProjectId,
-      allowedToolNames,
     });
     if (codexHarnessRoute.experimentEnabled) {
-      const codexHarnessProbeMode = resolveCodexHarnessProbeMode();
       const codexHarnessExecutorDecision = resolveCodexHarnessExecutorDecision({
         route: codexHarnessRoute,
         executorEnabled: isCodexHarnessExecutorEnabled(),
