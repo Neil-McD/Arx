@@ -3142,6 +3142,10 @@ body {
   background-color: color-mix(in srgb, var(--text-secondary) 38%, transparent);
 }
 
+.community-launch-topbar.no-brand {
+  justify-content: flex-end;
+}
+
 .community-launch-brand-avatar {
   width: 30px;
   height: 30px;
@@ -3170,7 +3174,7 @@ body {
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 14px;
   border: 1px solid var(--border-muted);
   border-radius: 14px;
   padding: 18px 18px 78px;
@@ -3178,9 +3182,7 @@ body {
 }
 
 .community-launch-step-heading {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
+  display: block;
 }
 
 .community-launch-step-heading h2 {
@@ -3189,13 +3191,6 @@ body {
   font-size: 22px;
   line-height: 1.12;
   letter-spacing: 0;
-}
-
-.community-launch-step-card > p {
-  margin: 0;
-  color: var(--text-secondary);
-  font-size: 14px;
-  line-height: 1.55;
 }
 
 .community-launch-step-summary {

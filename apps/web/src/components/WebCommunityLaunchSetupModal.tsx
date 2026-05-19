@@ -114,57 +114,49 @@ const STEP_META: Record<
   {
     label: string;
     title: string;
-    body: string;
     action: string;
     icon: ReactNode;
   }
 > = {
   profile: {
     label: "Profile",
-    title: "Shape the public identity.",
-    body: "Name, one-liner, avatar, and banner make the community recognizable across Discover and the public funnel.",
+    title: "Shape the public identity",
     action: "Open profile",
     icon: <Image size={15} strokeWidth={2} aria-hidden="true" />,
   },
   about: {
     label: "About",
-    title: "Explain who this is for.",
-    body: "Add the longer public description, promise, tone, and basic context members should see before joining.",
+    title: "Write the about page",
     action: "Open about",
     icon: <FileText size={15} strokeWidth={2} aria-hidden="true" />,
   },
   knowledge: {
     label: "Knowledge",
-    title: "Stage and publish knowledge.",
-    body: "Create a first resource page here. It lands in the canonical resources directory for members and agents.",
+    title: "Add community knowledge",
     action: "Open resources",
     icon: <BookOpen size={15} strokeWidth={2} aria-hidden="true" />,
   },
   agent: {
     label: "Agent",
-    title: "Set the agent behavior.",
-    body: "Give the agent a clear job, a few priorities, and simple boundaries.",
+    title: "Set the agent behavior",
     action: "Open agent",
     icon: <Bot size={15} strokeWidth={2} aria-hidden="true" />,
   },
   workflows: {
     label: "Workflows",
-    title: "Connect useful tools.",
-    body: "Attach a skill, app, GitHub workflow, or imported agent workflow when the community needs one.",
+    title: "Connect workflows",
     action: "Open workflows",
     icon: <PlugZap size={15} strokeWidth={2} aria-hidden="true" />,
   },
   access: {
     label: "Access",
-    title: "Choose how members enter.",
-    body: "Keep the community open, approval-based, or paid depending on the operating model.",
+    title: "Choose access",
     action: "Open access",
     icon: <LockKeyhole size={15} strokeWidth={2} aria-hidden="true" />,
   },
   publish: {
     label: "Publish",
-    title: "Review and publish.",
-    body: "Publish to Discover when the public surface is ready, or keep the community unlisted while you finish.",
+    title: "Publish the community",
     action: "Open publish",
     icon: <Globe2 size={15} strokeWidth={2} aria-hidden="true" />,
   },
@@ -334,7 +326,7 @@ export function WebCommunityLaunchSetupModal(
         hasPublishedKnowledge: false,
         hasAgentConfig: false,
         hasWorkflow: false,
-        entryPolicy: "approval",
+        entryPolicy: null,
         visibility: "unlisted",
       }),
     [
@@ -928,21 +920,25 @@ export function WebCommunityLaunchSetupModal(
         aria-labelledby="community-launch-title"
       >
         <section className="polynet-onboarding-panel">
-          <div className="polynet-onboarding-topbar">
-            <div className="polynet-onboarding-brand">
-              <CommunityAvatar
-                className="community-launch-brand-avatar"
-                imageUrl={effectiveCommunity.avatar_url}
-                focusX={effectiveCommunity.avatar_focus_x}
-                focusY={effectiveCommunity.avatar_focus_y}
-                zoom={effectiveCommunity.avatar_zoom}
-                name={effectiveCommunity.name}
-                fallbackClassName="community-launch-brand-avatar-fallback"
-                imageClassName="community-launch-brand-avatar-image"
-                aria-hidden
-              />
-              <span>{effectiveCommunity.name}</span>
-            </div>
+          <div
+            className={`polynet-onboarding-topbar community-launch-topbar${isCreateMode ? " no-brand" : ""}`}
+          >
+            {isCreateMode ? null : (
+              <div className="polynet-onboarding-brand">
+                <CommunityAvatar
+                  className="community-launch-brand-avatar"
+                  imageUrl={effectiveCommunity.avatar_url}
+                  focusX={effectiveCommunity.avatar_focus_x}
+                  focusY={effectiveCommunity.avatar_focus_y}
+                  zoom={effectiveCommunity.avatar_zoom}
+                  name={effectiveCommunity.name}
+                  fallbackClassName="community-launch-brand-avatar-fallback"
+                  imageClassName="community-launch-brand-avatar-image"
+                  aria-hidden
+                />
+                <span>{effectiveCommunity.name}</span>
+              </div>
+            )}
             <button
               className="polynet-onboarding-close"
               type="button"
@@ -973,7 +969,7 @@ export function WebCommunityLaunchSetupModal(
               <h1 id="community-launch-title">
                 {isCreateMode ? "Create community" : `Set up ${effectiveCommunity.name}`}
               </h1>
-              <p>{isCreateMode ? "Start the launch setup." : `${progress}% complete`}</p>
+              <p>{progress}% complete</p>
             </div>
           </div>
 
@@ -1012,19 +1008,8 @@ export function WebCommunityLaunchSetupModal(
             <div className="polynet-onboarding-step-body">
               <div className="community-launch-step-card">
                 <div className="community-launch-step-heading">
-                  <span className="polynet-onboarding-step-icon">
-                    {activeComplete ? (
-                      <Check size={14} strokeWidth={2.4} aria-hidden="true" />
-                    ) : (
-                      activeMeta.icon
-                    )}
-                  </span>
-                  <div>
-                    <p className="polynet-landing-kicker">{activeMeta.label}</p>
-                    <h2>{activeMeta.title}</h2>
-                  </div>
+                  <h2>{activeMeta.title}</h2>
                 </div>
-                <p>{activeMeta.body}</p>
                 {stepError ? <p className="community-launch-step-message error">{stepError}</p> : null}
                 {stepSuccess ? <p className="community-launch-step-message success">{stepSuccess}</p> : null}
                 {renderStepEditor()}

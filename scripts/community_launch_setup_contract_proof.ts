@@ -259,6 +259,21 @@ assert.match(
   "launch modal must support create mode before a community exists",
 );
 assert.match(
+  setupModal,
+  /entryPolicy: null/,
+  "launch modal create mode must not count access as complete before the community exists",
+);
+assert.doesNotMatch(
+  setupModal,
+  /activeMeta\.body|make the community recognizable across Discover/,
+  "launch modal step cards should keep the active card focused on title and fields",
+);
+assert.match(
+  setupModal,
+  /community-launch-topbar\$\{isCreateMode \? " no-brand" : ""\}/,
+  "launch modal create mode should hide the synthetic New community brand row",
+);
+assert.match(
   appShell,
   /openCommunityLaunchCreateFlow[\s\S]*setIsCommunityLaunchCreateMode\(true\)[\s\S]*setIsCommunityLaunchSetupModalOpen\(true\)/,
   "app shell must open the launch onboarding modal for new community creation",
