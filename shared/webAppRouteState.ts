@@ -139,7 +139,7 @@ export function buildWorkspaceDraftPath(): string {
 export function buildWorkspaceCommunityDraftPath(communitySlug: string | null | undefined): string | null {
   const slug = String(communitySlug ?? "").trim();
   if (!slug) return null;
-  return `/workspace/community/${encodeURIComponent(slug)}`;
+  return `/workspace/${encodeURIComponent(slug)}`;
 }
 
 export function buildWorkspaceThreadPath(threadId: string | null | undefined): string {
@@ -344,6 +344,17 @@ function parseCommunityTabSegment(value: string | null | undefined): CommunityTa
   }
 }
 
+const RESERVED_WORKSPACE_ROUTE_SEGMENTS = new Set([
+  "apps",
+  "community",
+  "files",
+  "project",
+  "projects",
+  "settings",
+  "skills",
+  "thread",
+]);
+
 function parseAppRouteFromPathname(pathname: string): AppRoutePathState | null {
   const segments = splitPathSegments(pathname);
   if (segments.length === 0) {
@@ -406,6 +417,17 @@ function parseAppRouteFromPathname(pathname: string): AppRoutePathState | null {
         threadId: null,
       };
     }
+    if (segments[1] === "thread" && segments.length >= 3) {
+      const rawThreadId = String(segments[2] ?? "").trim();
+      return {
+        page: "workspace",
+        view: "home",
+        settingsPage: "agent",
+        communitySlug: null,
+        communityTab: "chat",
+        threadId: isUuid(rawThreadId) ? rawThreadId : null,
+      };
+    }
     if (segments[1] === "community" && segments.length === 3) {
       const slug = String(segments[2] ?? "").trim();
       if (!slug) return null;
@@ -418,15 +440,16 @@ function parseAppRouteFromPathname(pathname: string): AppRoutePathState | null {
         threadId: null,
       };
     }
-    if (segments[1] === "thread" && segments.length >= 3) {
-      const rawThreadId = String(segments[2] ?? "").trim();
+    if (segments.length === 2 && !RESERVED_WORKSPACE_ROUTE_SEGMENTS.has(segments[1])) {
+      const slug = String(segments[1] ?? "").trim();
+      if (!slug) return null;
       return {
         page: "workspace",
         view: "home",
         settingsPage: "agent",
-        communitySlug: null,
+        communitySlug: slug,
         communityTab: "chat",
-        threadId: isUuid(rawThreadId) ? rawThreadId : null,
+        threadId: null,
       };
     }
   }
