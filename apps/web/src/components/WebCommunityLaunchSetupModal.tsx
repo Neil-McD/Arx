@@ -158,39 +158,6 @@ const STEP_META: Record<
   },
 };
 
-type StepChecklistItem = {
-  missing: CommunityLaunchSetupMissing;
-  label: string;
-};
-
-const STEP_CHECKLIST: Record<CommunityLaunchSetupStep, StepChecklistItem[]> = {
-  profile: [
-    { missing: "community_name", label: "Add community name" },
-    { missing: "community_one_liner", label: "Add one-liner" },
-    { missing: "community_avatar", label: "Add avatar" },
-    { missing: "community_banner", label: "Add banner" },
-  ],
-  about: [
-    { missing: "community_about", label: "Write about page" },
-  ],
-  knowledge: [
-    { missing: "community_knowledge_material", label: "Add source material" },
-    { missing: "community_knowledge_published", label: "Publish one usable resource" },
-  ],
-  agent: [
-    { missing: "community_agent", label: "Configure community agent" },
-  ],
-  workflows: [
-    { missing: "community_workflow", label: "Connect one workflow" },
-  ],
-  access: [
-    { missing: "community_access", label: "Configure access" },
-  ],
-  publish: [
-    { missing: "community_publish", label: "Publish community" },
-  ],
-};
-
 function isStepComplete(
   status: CommunityLaunchSetupStatus,
   step: CommunityLaunchSetupStep,
@@ -307,7 +274,6 @@ export function WebCommunityLaunchSetupModal(
   const activeStatus = status?.steps.find((step) => step.step === activeStep) ?? null;
   const activeComplete = Boolean(activeStatus?.completed);
   const missingCount = activeStatus?.missing.length ?? 0;
-  const activeChecklistItems = STEP_CHECKLIST[activeStep];
   const publishMissing = status?.missing.filter(isPublishProfileMissing) ?? [];
   const isSavingActiveStep = savingStep === activeStep;
   const stepSummary = useMemo(() => {
@@ -766,44 +732,23 @@ export function WebCommunityLaunchSetupModal(
                   </div>
                 </div>
                 <p>{activeMeta.body}</p>
-                <div className="community-launch-checklist" aria-label={`${activeMeta.label} checklist`}>
-                  {activeChecklistItems.map((item) => {
-                    const itemComplete = activeStatus ? !activeStatus.missing.includes(item.missing) : false;
-                    return (
-                      <div
-                        key={item.missing}
-                        className={`community-launch-checklist-item${itemComplete ? " complete" : ""}`}
-                      >
-                        <span className="community-launch-checklist-icon">
-                          {itemComplete ? (
-                            <Check size={13} strokeWidth={2.4} aria-hidden="true" />
-                          ) : (
-                            <Circle size={9} strokeWidth={2.4} aria-hidden="true" />
-                          )}
-                        </span>
-                        <span>{item.label}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-                <div className="community-launch-step-summary">
-                  <span
-                    className={`community-launch-status-chip${activeComplete ? " complete" : ""}`}
-                  >
-                    {activeComplete ? (
-                      <Check size={13} strokeWidth={2.4} aria-hidden="true" />
-                    ) : (
-                      <Circle size={10} strokeWidth={2.4} aria-hidden="true" />
-                    )}
-                    {stepSummary}
-                  </span>
-                  <span>
-                    {activeStatus?.completed_items ?? 0}/{activeStatus?.total_items ?? 0}
-                  </span>
-                </div>
                 {stepError ? <p className="community-launch-step-message error">{stepError}</p> : null}
                 {stepSuccess ? <p className="community-launch-step-message success">{stepSuccess}</p> : null}
                 {renderStepEditor()}
+                <div
+                  className={`community-launch-step-summary${activeComplete ? " complete" : ""}`}
+                  aria-label={`${activeMeta.label} progress: ${stepSummary}, ${activeStatus?.completed_items ?? 0} of ${activeStatus?.total_items ?? 0}`}
+                >
+                  {activeComplete ? (
+                    <Check size={13} strokeWidth={2.4} aria-hidden="true" />
+                  ) : (
+                    <Circle size={10} strokeWidth={2.4} aria-hidden="true" />
+                  )}
+                  <span>{stepSummary}</span>
+                  <span className="community-launch-status-count">
+                    {activeStatus?.completed_items ?? 0}/{activeStatus?.total_items ?? 0}
+                  </span>
+                </div>
               </div>
             </div>
           </div>

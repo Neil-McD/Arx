@@ -3133,8 +3133,8 @@ body {
 
 .community-launch-step-card {
   min-height: 320px;
-  display: grid;
-  align-content: start;
+  display: flex;
+  flex-direction: column;
   gap: 16px;
   border: 1px solid var(--border-muted);
   border-radius: 14px;
@@ -3163,61 +3163,31 @@ body {
   line-height: 1.55;
 }
 
-.community-launch-checklist {
-  display: grid;
-  gap: 8px;
-}
-
-.community-launch-checklist-item {
-  min-height: 34px;
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  border: 1px solid color-mix(in srgb, var(--border-muted) 82%, transparent);
-  border-radius: 10px;
-  padding: 0 10px;
-  color: var(--text-secondary);
-  font-size: 13px;
-  font-weight: 650;
-}
-
-.community-launch-checklist-item.complete {
-  color: color-mix(in srgb, var(--accent-gold) 72%, var(--text-primary));
-  background: color-mix(in srgb, var(--accent-gold) 7%, transparent);
-  border-color: color-mix(in srgb, var(--accent-gold) 24%, var(--border-muted));
-}
-
-.community-launch-checklist-icon {
-  width: 20px;
-  height: 20px;
-  display: grid;
-  place-items: center;
-  flex-shrink: 0;
-  color: currentColor;
-}
-
 .community-launch-step-summary {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  border: 1px solid var(--border-muted);
-  border-radius: 12px;
-  padding: 12px;
-  color: var(--text-secondary);
-  font-size: 13px;
-}
-
-.community-launch-status-chip {
+  width: fit-content;
+  max-width: 100%;
+  margin-top: auto;
   display: inline-flex;
   align-items: center;
-  gap: 7px;
+  justify-content: flex-start;
+  gap: 8px;
+  border: 1px solid var(--border-muted);
+  border-radius: 999px;
+  padding: 8px 10px;
   color: var(--text-secondary);
+  font-size: 13px;
   font-weight: 700;
 }
 
-.community-launch-status-chip.complete {
+.community-launch-step-summary.complete {
   color: color-mix(in srgb, var(--accent-gold) 72%, var(--text-primary));
+  border-color: color-mix(in srgb, var(--accent-gold) 24%, var(--border-muted));
+  background: color-mix(in srgb, var(--accent-gold) 7%, transparent);
+}
+
+.community-launch-status-count {
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
 }
 
 .community-launch-inline-form {

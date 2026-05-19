@@ -242,8 +242,13 @@ assert.match(
 );
 assert.match(
   setupModal,
-  /Add source material[\s\S]*Publish one usable resource/,
-  "launch modal knowledge step must show source material and publish activation points",
+  /community-launch-step-summary[\s\S]*completed_items[\s\S]*total_items/,
+  "launch modal must show the compact aggregate progress indicator for each step",
+);
+assert.doesNotMatch(
+  setupModal,
+  /community-launch-checklist|Add source material|Publish one usable resource/,
+  "launch modal must not render per-item checklist rows inside the step card",
 );
 assert.match(
   setupModal,
