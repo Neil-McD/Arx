@@ -7361,37 +7361,40 @@ export default function App() {
       applyCommunityLaunchProfileResult(result);
       await refreshActiveCommunityLaunchSetupStatus();
     };
-    const handleAddCommunityLaunchKnowledgeLink = async (draft: { url: string }) => {
+    const handleAddCommunityLaunchKnowledgeLink = async (draft: { urls: string[] }) => {
       const { session, community } = requireCommunityLaunchSaveContext();
-      const rawUrl = draft.url.trim();
-      if (!rawUrl) throw new Error("Add a source link.");
-      const normalizedUrl = /^[a-z][a-z0-9+.-]*:\/\//i.test(rawUrl) ? rawUrl : `https://${rawUrl}`;
-      let parsedUrl: URL;
-      try {
-        parsedUrl = new URL(normalizedUrl);
-      } catch {
-        throw new Error("Add a valid source link.");
+      const rawUrls = draft.urls.map((url) => url.trim()).filter(Boolean);
+      if (rawUrls.length === 0) throw new Error("Add a source link.");
+      if (rawUrls.length > 5) throw new Error("Add up to five source links at a time.");
+      for (const rawUrl of rawUrls) {
+        const normalizedUrl = /^[a-z][a-z0-9+.-]*:\/\//i.test(rawUrl) ? rawUrl : `https://${rawUrl}`;
+        let parsedUrl: URL;
+        try {
+          parsedUrl = new URL(normalizedUrl);
+        } catch {
+          throw new Error("Add valid source links.");
+        }
+        if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
+          throw new Error("Add http or https source links.");
+        }
+        const titlePath = parsedUrl.pathname && parsedUrl.pathname !== "/" ? parsedUrl.pathname : "";
+        const title = `${parsedUrl.hostname.replace(/^www\./, "")}${titlePath}`.slice(0, 120);
+        await saveCloudCommunityResource({
+          session,
+          resourceId: null,
+          isPatch: false,
+          payload: {
+            community_id: community.id,
+            title: title || "Source link",
+            body_md: null,
+            url: parsedUrl.toString(),
+            type: "link",
+            resource_role: "page",
+            resource_status: "published",
+            pinned: false,
+          },
+        });
       }
-      if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
-        throw new Error("Add an http or https source link.");
-      }
-      const titlePath = parsedUrl.pathname && parsedUrl.pathname !== "/" ? parsedUrl.pathname : "";
-      const title = `${parsedUrl.hostname.replace(/^www\./, "")}${titlePath}`.slice(0, 120);
-      await saveCloudCommunityResource({
-        session,
-        resourceId: null,
-        isPatch: false,
-        payload: {
-          community_id: community.id,
-          title: title || "Source link",
-          body_md: null,
-          url: parsedUrl.toString(),
-          type: "link",
-          resource_role: "page",
-          resource_status: "published",
-          pinned: false,
-        },
-      });
       await loadCommunityResources(community.id, session);
       await refreshActiveCommunityLaunchSetupStatus();
     };

@@ -401,12 +401,17 @@ assert.match(
 );
 assert.match(
   setupModal,
-  /onAddKnowledgeLink[\s\S]*handleAddKnowledgeLink[\s\S]*community-launch-knowledge-link-composer/,
-  "launch knowledge link entry must write through the onboarding save path",
+  /COMMUNITY_LAUNCH_MAX_KNOWLEDGE_LINKS = 5[\s\S]*knowledgeLinkDrafts[\s\S]*Add new link[\s\S]*Add links/,
+  "launch knowledge link entry must support adding up to five links",
+);
+assert.match(
+  setupModal,
+  /onAddKnowledgeLink[\s\S]*handleAddKnowledgeLink[\s\S]*urls: knowledgeLinkDrafts[\s\S]*community-launch-knowledge-link-composer/,
+  "launch knowledge link entries must write through the onboarding save path",
 );
 assert.match(
   appShell,
-  /handleAddCommunityLaunchKnowledgeLink[\s\S]*saveCloudCommunityResource[\s\S]*type: "link"[\s\S]*resource_status: "published"/,
+  /handleAddCommunityLaunchKnowledgeLink[\s\S]*urls: string\[\][\s\S]*rawUrls\.length > 5[\s\S]*saveCloudCommunityResource[\s\S]*type: "link"[\s\S]*resource_status: "published"/,
   "launch knowledge links must create canonical published link resources",
 );
 assert.doesNotMatch(
@@ -416,8 +421,13 @@ assert.doesNotMatch(
 );
 assert.match(
   setupModal,
-  /\/app-logos\/google-drive\.svg[\s\S]*\/app-logos\/github\.svg/,
-  "launch knowledge integrations must show Google Drive and GitHub logos",
+  /community-launch-knowledge-provider-logo drive[\s\S]*\/app-logos\/google-drive\.svg[\s\S]*community-launch-knowledge-provider-logo github[\s\S]*\/app-logos\/github\.svg/,
+  "launch knowledge integrations must show Google Drive and light GitHub logos",
+);
+assert.match(
+  baseCss,
+  /\.community-launch-knowledge-provider-logo\.github[\s\S]*filter: brightness\(0\) invert\(1\)/,
+  "launch knowledge GitHub logo must be light on the dark background",
 );
 assert.match(
   setupModal,

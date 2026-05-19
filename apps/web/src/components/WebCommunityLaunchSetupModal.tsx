@@ -28,6 +28,7 @@ import {
 import { StripeWordmark } from "./StripeWordmark";
 
 const COMMUNITY_LAUNCH_IMAGE_DATA_URL_MAX_CHARS = 600_000;
+const COMMUNITY_LAUNCH_MAX_KNOWLEDGE_LINKS = 5;
 
 type CommunityEntryPolicy = "open" | "approval" | "paid_subscription";
 
@@ -66,7 +67,7 @@ export type CommunityLaunchAboutSaveDraft = {
 };
 
 export type CommunityLaunchKnowledgeLinkSaveDraft = {
-  url: string;
+  urls: string[];
 };
 
 export type CommunityLaunchAgentSaveDraft = {
@@ -239,7 +240,7 @@ export function WebCommunityLaunchSetupModal(
     bannerUrl: "",
   });
   const [aboutDraft, setAboutDraft] = useState("");
-  const [knowledgeLinkDraft, setKnowledgeLinkDraft] = useState("");
+  const [knowledgeLinkDrafts, setKnowledgeLinkDrafts] = useState<string[]>([""]);
   const [agentDraft, setAgentDraft] = useState<CommunityLaunchAgentSaveDraft>({
     systemPrompt: "",
     starterPrompts: ["", "", ""],
@@ -268,7 +269,7 @@ export function WebCommunityLaunchSetupModal(
         bannerUrl: "",
       });
       setAboutDraft("");
-      setKnowledgeLinkDraft("");
+      setKnowledgeLinkDrafts([""]);
       setAgentDraft({
         systemPrompt: "",
         starterPrompts: ["", "", ""],
@@ -294,7 +295,7 @@ export function WebCommunityLaunchSetupModal(
       bannerUrl: community.banner_url ?? "",
     });
     setAboutDraft(community.about ?? "");
-    setKnowledgeLinkDraft("");
+    setKnowledgeLinkDrafts([""]);
     setAgentDraft({
       systemPrompt: community.agent_system_prompt ?? "",
       starterPrompts: getStarterPrompts(community),
@@ -470,14 +471,27 @@ export function WebCommunityLaunchSetupModal(
 
   const handleAddKnowledgeLink = (event: FormEvent) => {
     event.preventDefault();
-    void runStepSave(
-      "knowledge",
-      async () => {
-        await onAddKnowledgeLink({ url: knowledgeLinkDraft });
-        setKnowledgeLinkDraft("");
-      },
-      "Link added.",
-    );
+    if (savingStep) return;
+    setSavingStep("knowledge");
+    setStepError(null);
+    setStepSuccess(null);
+    void (async () => {
+      try {
+        await onAddKnowledgeLink({ urls: knowledgeLinkDrafts });
+        setKnowledgeLinkDrafts([""]);
+        setStepSuccess("Links added.");
+      } catch (error) {
+        const message =
+          typeof error === "string"
+            ? error
+            : error instanceof Error
+              ? error.message
+              : "Failed to add links.";
+        setStepError(message);
+      } finally {
+        setSavingStep(null);
+      }
+    })();
   };
 
   const handleSaveAgent = (event: FormEvent) => {
@@ -735,7 +749,8 @@ export function WebCommunityLaunchSetupModal(
     }
 
     if (activeStep === "knowledge") {
-      const canAddKnowledgeLink = Boolean(knowledgeLinkDraft.trim());
+      const canAddKnowledgeLink = knowledgeLinkDrafts.some((url) => url.trim());
+      const canAddKnowledgeLinkRow = knowledgeLinkDrafts.length < COMMUNITY_LAUNCH_MAX_KNOWLEDGE_LINKS;
       return (
         <div className="community-launch-inline-form community-launch-knowledge-gateway">
           <div className="community-launch-knowledge-stack">
@@ -762,15 +777,41 @@ export function WebCommunityLaunchSetupModal(
                 <strong>Add source links</strong>
                 <p>Paste docs, videos, articles, or public resource URLs into the community resource directory.</p>
                 <form className="community-launch-knowledge-link-composer" onSubmit={handleAddKnowledgeLink}>
-                  <input
-                    aria-label="Source link URL"
-                    value={knowledgeLinkDraft}
-                    onChange={(event) => setKnowledgeLinkDraft(event.target.value)}
-                    placeholder="https://..."
-                  />
-                  <button type="submit" disabled={!canAddKnowledgeLink || isSavingActiveStep}>
-                    {isSavingActiveStep ? "Adding..." : "Add link"}
-                  </button>
+                  <div className="community-launch-knowledge-link-list">
+                    {knowledgeLinkDrafts.map((url, index) => (
+                      <input
+                        key={index}
+                        aria-label={`Source link URL ${index + 1}`}
+                        value={url}
+                        onChange={(event) => {
+                          const nextUrls = [...knowledgeLinkDrafts];
+                          nextUrls[index] = event.target.value;
+                          setKnowledgeLinkDrafts(nextUrls);
+                        }}
+                        placeholder="https://..."
+                      />
+                    ))}
+                  </div>
+                  <div className="community-launch-knowledge-link-actions">
+                    <button
+                      type="button"
+                      className="secondary"
+                      disabled={!canAddKnowledgeLinkRow || isSavingActiveStep}
+                      onClick={() => {
+                        if (!canAddKnowledgeLinkRow) return;
+                        setKnowledgeLinkDrafts((urls) => [
+                          ...urls,
+                          "",
+                        ].slice(0, COMMUNITY_LAUNCH_MAX_KNOWLEDGE_LINKS));
+                      }}
+                    >
+                      Add new link
+                    </button>
+                    <span>{knowledgeLinkDrafts.length}/{COMMUNITY_LAUNCH_MAX_KNOWLEDGE_LINKS}</span>
+                    <button type="submit" disabled={!canAddKnowledgeLink || isSavingActiveStep}>
+                      {isSavingActiveStep ? "Adding..." : "Add links"}
+                    </button>
+                  </div>
                 </form>
               </div>
               <span className="community-launch-knowledge-pill">Next</span>
@@ -785,11 +826,21 @@ export function WebCommunityLaunchSetupModal(
                 <p>Connect cloud sources that can become community context once scoped and approved.</p>
                 <div className="community-launch-knowledge-integrations" aria-label="Knowledge integrations">
                   <button type="button" onClick={() => onOpenStep("workflows")}>
-                    <img src="/app-logos/google-drive.svg" alt="" aria-hidden="true" />
+                    <img
+                      className="community-launch-knowledge-provider-logo drive"
+                      src="/app-logos/google-drive.svg"
+                      alt=""
+                      aria-hidden="true"
+                    />
                     <span>Google Drive</span>
                   </button>
                   <button type="button" onClick={() => onOpenStep("workflows")}>
-                    <img src="/app-logos/github.svg" alt="" aria-hidden="true" />
+                    <img
+                      className="community-launch-knowledge-provider-logo github"
+                      src="/app-logos/github.svg"
+                      alt=""
+                      aria-hidden="true"
+                    />
                     <span>GitHub</span>
                   </button>
                 </div>

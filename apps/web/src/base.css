@@ -3412,9 +3412,13 @@ body {
 
 .community-launch-knowledge-link-composer {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
   gap: 8px;
   padding-top: 4px;
+}
+
+.community-launch-knowledge-link-list {
+  display: grid;
+  gap: 7px;
 }
 
 .community-launch-knowledge-link-composer input {
@@ -3434,6 +3438,20 @@ body {
   color: color-mix(in srgb, var(--text-secondary) 82%, transparent);
 }
 
+.community-launch-knowledge-link-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.community-launch-knowledge-link-actions > span {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 750;
+  line-height: 1;
+}
+
 .community-launch-knowledge-link-composer button,
 .community-launch-knowledge-integrations button {
   border: 1px solid color-mix(in srgb, var(--border-muted) 76%, transparent);
@@ -3448,7 +3466,13 @@ body {
 }
 
 .community-launch-knowledge-link-composer button {
+  min-height: 34px;
   padding: 0 12px;
+}
+
+.community-launch-knowledge-link-composer button.secondary {
+  color: var(--text-secondary);
+  background: rgba(0, 0, 0, 0.1);
 }
 
 .community-launch-knowledge-link-composer button:hover:not(:disabled),
@@ -3478,11 +3502,22 @@ body {
   padding: 8px 10px;
 }
 
-.community-launch-knowledge-integrations img {
-  width: 18px;
-  height: 18px;
+.community-launch-knowledge-provider-logo {
+  width: 20px;
+  height: 20px;
   display: block;
   flex: 0 0 auto;
+  object-fit: contain;
+}
+
+.community-launch-knowledge-provider-logo.drive {
+  width: 22px;
+  height: 20px;
+}
+
+.community-launch-knowledge-provider-logo.github {
+  filter: brightness(0) invert(1);
+  opacity: 0.94;
 }
 
 .community-launch-knowledge-integrations span {
@@ -3646,8 +3681,13 @@ body {
     width: fit-content;
   }
 
-  .community-launch-knowledge-link-composer {
-    grid-template-columns: 1fr;
+  .community-launch-knowledge-link-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .community-launch-knowledge-link-actions > span {
+    align-self: flex-start;
   }
 
   .community-launch-knowledge-link-composer button {
