@@ -4,9 +4,34 @@ import {
   buildCommunityLaunchSetupStatus,
   COMMUNITY_LAUNCH_SETUP_STEPS,
 } from "../shared/communityLaunchSetup.ts";
+import { buildCommunityWorkflowImportFunctionTools } from "../shared/communityWorkflowImportToolProtocol.ts";
 
 function read(path: string): string {
   return readFileSync(path, "utf8");
+}
+
+function assertToolSchemaRequiresEveryProperty(value: unknown, label: string) {
+  assert.equal(
+    Boolean(value) && typeof value === "object" && !Array.isArray(value),
+    true,
+    `${label} must use an object schema`,
+  );
+  const schema = value as Record<string, unknown>;
+  assert.equal(schema.type, "object", `${label} schema must be an object`);
+  assert.equal(schema.additionalProperties, false, `${label} must reject extra top-level args`);
+  const properties =
+    schema.properties && typeof schema.properties === "object" && !Array.isArray(schema.properties)
+      ? (schema.properties as Record<string, unknown>)
+      : null;
+  assert.ok(properties, `${label} must define properties`);
+  const required = Array.isArray(schema.required)
+    ? schema.required.map((entry) => String(entry ?? ""))
+    : [];
+  assert.deepEqual(
+    required.sort(),
+    Object.keys(properties).sort(),
+    `${label} must mark every top-level property required for ChatGPT Responses strict schema validation`,
+  );
 }
 
 const launchSetup = read("shared/communityLaunchSetup.ts");
@@ -666,6 +691,9 @@ assert.match(
   /CommunityWorkflowImportToolName[\s\S]*"read_import_context"[\s\S]*"search_import_candidates"[\s\S]*"write_import_ledger"[\s\S]*"finish_import_analysis"/,
   "workflow import analysis agent must expose exactly the simple read, search, write, and finish tool surface",
 );
+for (const tool of buildCommunityWorkflowImportFunctionTools()) {
+  assertToolSchemaRequiresEveryProperty(tool.parameters, `workflow import tool ${tool.name}`);
+}
 assert.match(
   workflowImports,
   /runCommunityWorkflowImportAnalysisInternal = internalAction[\s\S]*runNativeRuntimeKernel<CommunityWorkflowImportToolName>[\s\S]*runChatgptNativeToolCompletion[\s\S]*buildCommunityWorkflowImportFunctionTools/,

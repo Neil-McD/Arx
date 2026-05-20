@@ -36,31 +36,42 @@ export type CommunityWorkflowImportFunctionTool = {
   strict: boolean;
 };
 
-const LIMIT_SCHEMA: JsonSchema = {
-  type: "integer",
+const NULLABLE_LIMIT_SCHEMA: JsonSchema = {
+  type: ["integer", "null"],
   minimum: 1,
   maximum: 8,
 };
 
-const CONTEXT_SECTION_SCHEMA: JsonSchema = {
-  type: "string",
+const NULLABLE_CONTEXT_SECTION_SCHEMA: JsonSchema = {
+  type: ["string", "null"],
   enum: [
     "all",
     "community",
     "harness_output",
     "ledger",
     "existing_integrations",
+    null,
   ],
 };
 
-const CANDIDATE_KIND_SCHEMA: JsonSchema = {
-  type: "string",
-  enum: ["all", "mcp_server", "skill", "markdown", "repository"],
+const NULLABLE_CANDIDATE_KIND_SCHEMA: JsonSchema = {
+  type: ["string", "null"],
+  enum: ["all", "mcp_server", "skill", "markdown", "repository", null],
 };
 
 const LEDGER_SCHEMA: JsonSchema = {
   type: "object",
   additionalProperties: true,
+};
+
+const NULLABLE_LEDGER_SCHEMA: JsonSchema = {
+  type: ["object", "null"],
+  additionalProperties: true,
+};
+
+const NULLABLE_SHORT_TEXT_SCHEMA: JsonSchema = {
+  type: ["string", "null"],
+  maxLength: 500,
 };
 
 const TOOL_DEFINITIONS: Record<
@@ -76,8 +87,9 @@ const TOOL_DEFINITIONS: Record<
     parameters: {
       type: "object",
       additionalProperties: false,
+      required: ["section"],
       properties: {
-        section: CONTEXT_SECTION_SCHEMA,
+        section: NULLABLE_CONTEXT_SECTION_SCHEMA,
       },
     },
   },
@@ -90,15 +102,15 @@ const TOOL_DEFINITIONS: Record<
     parameters: {
       type: "object",
       additionalProperties: false,
-      required: ["query"],
+      required: ["query", "kind", "limit"],
       properties: {
         query: {
           type: "string",
           minLength: 1,
           maxLength: 512,
         },
-        kind: CANDIDATE_KIND_SCHEMA,
-        limit: LIMIT_SCHEMA,
+        kind: NULLABLE_CANDIDATE_KIND_SCHEMA,
+        limit: NULLABLE_LIMIT_SCHEMA,
       },
     },
   },
@@ -111,13 +123,10 @@ const TOOL_DEFINITIONS: Record<
     parameters: {
       type: "object",
       additionalProperties: false,
-      required: ["ledger"],
+      required: ["ledger", "note"],
       properties: {
         ledger: LEDGER_SCHEMA,
-        note: {
-          type: "string",
-          maxLength: 500,
-        },
+        note: NULLABLE_SHORT_TEXT_SCHEMA,
       },
     },
   },
@@ -130,22 +139,19 @@ const TOOL_DEFINITIONS: Record<
     parameters: {
       type: "object",
       additionalProperties: false,
-      required: ["status", "summary"],
+      required: ["status", "ledger", "summary", "errorMessage"],
       properties: {
         status: {
           type: "string",
           enum: ["ready_for_review", "failed"],
         },
-        ledger: LEDGER_SCHEMA,
+        ledger: NULLABLE_LEDGER_SCHEMA,
         summary: {
           type: "string",
           minLength: 1,
           maxLength: 1200,
         },
-        errorMessage: {
-          type: "string",
-          maxLength: 500,
-        },
+        errorMessage: NULLABLE_SHORT_TEXT_SCHEMA,
       },
     },
   },
@@ -238,7 +244,9 @@ export function normalizeCommunityWorkflowImportToolArguments(
       status: normalizeFinishStatus(args.status),
       summary: requireNonEmptyString(args.summary, "summary", 1200),
     };
-    if (args.ledger !== undefined) normalized.ledger = requirePayloadObject(args.ledger, "ledger");
+    if (args.ledger !== undefined && args.ledger !== null) {
+      normalized.ledger = requirePayloadObject(args.ledger, "ledger");
+    }
     const errorMessage = boundedString(args.errorMessage, 500);
     if (errorMessage) normalized.errorMessage = errorMessage;
     return normalized;
