@@ -490,6 +490,21 @@ assert.match(
   /communityHarnessImportSources\.map[\s\S]*<img src=\{source\.logoUrl\} alt="" loading="lazy" \/>/,
   "launch workflow import path must render real harness logo images from the registry",
 );
+assert.match(
+  setupModal,
+  /Select a harness to import from[\s\S]*communityHarnessImportSources\.map/,
+  "launch workflow import path must open an in-card harness selector before the export prompt",
+);
+assert.match(
+  setupModal,
+  /setWorkflowPathDraft\("import"\)[\s\S]*setWorkflowImportStage\("harness"\)[\s\S]*Import from existing harness/,
+  "launch workflow import card must transition directly into the harness selector",
+);
+assert.match(
+  setupModal,
+  /selectedHarnessImportSourceId === source\.id[\s\S]*setSelectedHarnessImportSourceId\(source\.id\)[\s\S]*Export prompt next/,
+  "launch workflow harness selector must support selecting a source while keeping the export prompt as the next slice",
+);
 assert.doesNotMatch(
   setupModal,
   /title="CLAW"|>CLAW<|>OC<|>H</,
@@ -517,6 +532,11 @@ assert.match(
   baseCss,
   /\.community-launch-workflow-option \{[\s\S]*background: linear-gradient\(180deg, rgba\(255, 255, 255, 0\.072\), rgba\(255, 255, 255, 0\.044\)\)/,
   "launch workflow selector cards must use a visibly raised neutral button surface",
+);
+assert.match(
+  baseCss,
+  /\.community-launch-harness-selector-grid \{[\s\S]*grid-template-columns: repeat\(4, minmax\(0, 1fr\)\)/,
+  "launch harness selector must present the current import sources as a dedicated grid",
 );
 assert.match(
   baseCss,

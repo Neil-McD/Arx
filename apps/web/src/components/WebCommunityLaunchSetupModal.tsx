@@ -32,6 +32,7 @@ const COMMUNITY_LAUNCH_MAX_KNOWLEDGE_LINKS = 5;
 
 type CommunityEntryPolicy = "open" | "approval" | "paid_subscription";
 type CommunityLaunchWorkflowPath = "import" | "build";
+type CommunityLaunchWorkflowImportStage = "path" | "harness";
 
 type CommunityLaunchSetupCommunity = {
   id: string;
@@ -267,6 +268,10 @@ export function WebCommunityLaunchSetupModal(
   const [accessDraft, setAccessDraft] = useState<CommunityEntryPolicy>("open");
   const [workflowPathDraft, setWorkflowPathDraft] =
     useState<CommunityLaunchWorkflowPath | null>(null);
+  const [workflowImportStage, setWorkflowImportStage] =
+    useState<CommunityLaunchWorkflowImportStage>("path");
+  const [selectedHarnessImportSourceId, setSelectedHarnessImportSourceId] =
+    useState<string | null>(null);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -297,6 +302,8 @@ export function WebCommunityLaunchSetupModal(
       });
       setAccessDraft("approval");
       setWorkflowPathDraft(null);
+      setWorkflowImportStage("path");
+      setSelectedHarnessImportSourceId(null);
       setStepError(null);
       setStepSuccess(null);
       setProfileMediaError(null);
@@ -324,6 +331,8 @@ export function WebCommunityLaunchSetupModal(
     });
     setAccessDraft(community.entry_policy ?? "open");
     setWorkflowPathDraft(null);
+    setWorkflowImportStage("path");
+    setSelectedHarnessImportSourceId(null);
     setStepError(null);
     setStepSuccess(null);
     setProfileMediaError(null);
@@ -396,6 +405,10 @@ export function WebCommunityLaunchSetupModal(
   const progressDashOffset =
     progressCircumference - (progress / 100) * progressCircumference;
   const activeMeta = STEP_META[activeStep];
+  const activeTitle =
+    activeStep === "workflows" && workflowImportStage === "harness"
+      ? "Select a harness to import from"
+      : activeMeta.title;
   const activeStatus = effectiveStatus?.steps.find((step) => step.step === activeStep) ?? null;
   const activeComplete = Boolean(activeStatus?.completed);
   const missingCount = activeStatus?.missing.length ?? 0;
@@ -936,13 +949,80 @@ export function WebCommunityLaunchSetupModal(
     }
 
     if (activeStep === "workflows") {
+      const selectedHarnessImportSource = communityHarnessImportSources.find(
+        (source) => source.id === selectedHarnessImportSourceId,
+      );
+      if (workflowImportStage === "harness") {
+        return (
+          <div className="community-launch-inline-form">
+            <div className="community-launch-harness-selector">
+              <div className="community-launch-harness-selector-header">
+                <button
+                  type="button"
+                  className="community-launch-harness-back"
+                  onClick={() => {
+                    setWorkflowImportStage("path");
+                    setWorkflowPathDraft(null);
+                    setSelectedHarnessImportSourceId(null);
+                  }}
+                >
+                  Back
+                </button>
+                <div>
+                  <span>Import source</span>
+                  <p>Choose where this workflow currently lives. PolyNet will use a source-specific export prompt next.</p>
+                </div>
+              </div>
+              <div className="community-launch-harness-selector-grid" role="radiogroup" aria-label="Harness import source">
+                {communityHarnessImportSources.map((source) => {
+                  const selected = selectedHarnessImportSourceId === source.id;
+                  return (
+                    <button
+                      key={source.id}
+                      type="button"
+                      className={`community-launch-harness-selector-option${selected ? " selected" : ""}`}
+                      onClick={() => setSelectedHarnessImportSourceId(source.id)}
+                      aria-pressed={selected}
+                    >
+                      <span className={`community-launch-harness-logo ${source.id}`} aria-hidden="true">
+                        <img src={source.logoUrl} alt="" loading="lazy" />
+                      </span>
+                      <strong>{source.label}</strong>
+                      <span>{selected ? "Selected" : "Import source"}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              {selectedHarnessImportSource ? (
+                <p className="community-launch-inline-note">
+                  {selectedHarnessImportSource.label} selected. The export prompt screen is next.
+                </p>
+              ) : null}
+            </div>
+            <div className="community-launch-step-actions">
+              {renderFinishLaterButton()}
+              <button
+                type="button"
+                className="polynet-onboarding-next"
+                disabled
+              >
+                Export prompt next
+              </button>
+            </div>
+          </div>
+        );
+      }
       return (
         <div className="community-launch-inline-form">
           <div className="community-launch-workflow-options">
             <button
               type="button"
               className={`community-launch-workflow-option${workflowPathDraft === "import" ? " selected" : ""}`}
-              onClick={() => setWorkflowPathDraft("import")}
+              onClick={() => {
+                setWorkflowPathDraft("import");
+                setWorkflowImportStage("harness");
+                setSelectedHarnessImportSourceId(null);
+              }}
               aria-pressed={workflowPathDraft === "import"}
             >
               <span className="community-launch-workflow-option-top">
@@ -973,7 +1053,11 @@ export function WebCommunityLaunchSetupModal(
             <button
               type="button"
               className={`community-launch-workflow-option${workflowPathDraft === "build" ? " selected" : ""}`}
-              onClick={() => setWorkflowPathDraft("build")}
+              onClick={() => {
+                setWorkflowPathDraft("build");
+                setWorkflowImportStage("path");
+                setSelectedHarnessImportSourceId(null);
+              }}
               aria-pressed={workflowPathDraft === "build"}
             >
               <span className="community-launch-workflow-option-icon" aria-hidden="true">
@@ -984,20 +1068,15 @@ export function WebCommunityLaunchSetupModal(
               <span className="community-launch-workflow-option-status">Available</span>
             </button>
           </div>
-          {workflowPathDraft === "import" ? (
-            <p className="community-launch-inline-note">
-              Harness import will start with a source selector and export prompt before anything is added to this community.
-            </p>
-          ) : null}
           <div className="community-launch-step-actions">
             {renderFinishLaterButton()}
             <button
               type="button"
               className="polynet-onboarding-next"
-              disabled={!workflowPathDraft || workflowPathDraft === "import"}
+              disabled={workflowPathDraft !== "build"}
               onClick={() => onOpenStep("workflows")}
             >
-              {workflowPathDraft === "import" ? "Import flow next" : "Open workflows"}
+              Open workflows
             </button>
           </div>
         </div>
@@ -1177,7 +1256,7 @@ export function WebCommunityLaunchSetupModal(
             <div className="polynet-onboarding-step-body">
               <div className="community-launch-step-card">
                 <div className="community-launch-step-heading">
-                  <h2>{activeMeta.title}</h2>
+                  <h2>{activeTitle}</h2>
                 </div>
                 {stepError ? <p className="community-launch-step-message error">{stepError}</p> : null}
                 {stepSuccess ? <p className="community-launch-step-message success">{stepSuccess}</p> : null}

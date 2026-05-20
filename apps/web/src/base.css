@@ -3666,6 +3666,124 @@ body {
   line-height: 1;
 }
 
+.community-launch-harness-selector {
+  display: grid;
+  gap: 14px;
+}
+
+.community-launch-harness-selector-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 0;
+}
+
+.community-launch-harness-selector-header > div {
+  min-width: 0;
+}
+
+.community-launch-harness-selector-header span {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.community-launch-harness-selector-header p {
+  max-width: 520px;
+  margin: 6px 0 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.42;
+}
+
+.community-launch-harness-back {
+  min-width: 62px;
+  height: 32px;
+  border: 1px solid color-mix(in srgb, var(--border-muted) 70%, transparent);
+  border-radius: 9px;
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--bg-page) 58%, transparent);
+  font-size: 12px;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.community-launch-harness-back:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.community-launch-harness-selector-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.community-launch-harness-selector-option {
+  min-height: 126px;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.115);
+  border-radius: 12px;
+  padding: 14px 10px;
+  color: var(--text-secondary);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.072), rgba(255, 255, 255, 0.044));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.045),
+    0 1px 0 rgba(0, 0, 0, 0.2);
+  text-align: center;
+  cursor: pointer;
+  transition:
+    border-color 140ms ease,
+    background 140ms ease,
+    box-shadow 140ms ease,
+    transform 140ms ease;
+}
+
+.community-launch-harness-selector-option:hover,
+.community-launch-harness-selector-option.selected {
+  border-color: color-mix(in srgb, var(--accent-pink) 48%, rgba(255, 255, 255, 0.14));
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--accent-pink) 14%, rgba(255, 255, 255, 0.075)),
+    color-mix(in srgb, var(--accent-pink) 8%, rgba(255, 255, 255, 0.05))
+  );
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.055),
+    0 0 0 1px color-mix(in srgb, var(--accent-pink) 10%, transparent),
+    0 8px 20px rgba(0, 0, 0, 0.12);
+}
+
+.community-launch-harness-selector-option:hover {
+  transform: translateY(-1px);
+}
+
+.community-launch-harness-selector-option .community-launch-harness-logo {
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
+}
+
+.community-launch-harness-selector-option strong {
+  color: var(--text-primary);
+  font-size: 14px;
+  line-height: 1.12;
+}
+
+.community-launch-harness-selector-option > span:last-child {
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 750;
+  line-height: 1;
+}
+
 .community-launch-choice-row {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -3815,6 +3933,10 @@ body {
   .community-launch-workflow-options,
   .community-launch-choice-row {
     grid-template-columns: 1fr;
+  }
+
+  .community-launch-harness-selector-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .community-launch-step-card {
