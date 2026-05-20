@@ -3593,7 +3593,9 @@ body {
 .community-launch-harness-logo-row {
   display: inline-flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 6px;
+  max-width: 136px;
   min-width: 0;
 }
 
@@ -3639,6 +3641,36 @@ body {
 .community-launch-harness-logo.hermes {
   border-color: rgba(246, 211, 101, 0.24);
   background: rgba(246, 211, 101, 0.08);
+}
+
+.community-launch-harness-logo.cursor {
+  padding: 0;
+  border-color: rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.community-launch-harness-logo.cursor img {
+  border-radius: 6px;
+}
+
+.community-launch-harness-logo.opencode {
+  border-color: rgba(241, 236, 236, 0.2);
+  background: rgba(241, 236, 236, 0.055);
+}
+
+.community-launch-harness-logo.gemini-cli {
+  border-color: rgba(151, 157, 255, 0.24);
+  background: rgba(151, 157, 255, 0.075);
+}
+
+.community-launch-harness-logo.antigravity {
+  border-color: rgba(248, 198, 73, 0.25);
+  background: rgba(248, 198, 73, 0.075);
+}
+
+.community-launch-harness-logo.antigravity img {
+  object-fit: cover;
+  object-position: left center;
 }
 
 .community-launch-workflow-option strong {

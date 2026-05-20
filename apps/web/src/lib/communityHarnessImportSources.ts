@@ -25,4 +25,24 @@ export const communityHarnessImportSources: CommunityHarnessImportSource[] = [
     label: "Hermes",
     logoUrl: "/harness-logos/hermes.svg",
   },
+  {
+    id: "cursor",
+    label: "Cursor",
+    logoUrl: "/harness-logos/cursor.png",
+  },
+  {
+    id: "opencode",
+    label: "OpenCode",
+    logoUrl: "/harness-logos/opencode.svg",
+  },
+  {
+    id: "gemini-cli",
+    label: "Gemini CLI",
+    logoUrl: "/harness-logos/gemini-cli.svg",
+  },
+  {
+    id: "antigravity",
+    label: "Antigravity",
+    logoUrl: "/harness-logos/antigravity.svg",
+  },
 ];

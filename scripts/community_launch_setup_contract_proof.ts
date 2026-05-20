@@ -472,13 +472,13 @@ assert.match(
 );
 assert.match(
   setupModal,
-  /Import from existing harness[\s\S]*MCP servers[\s\S]*Claude[\s\S]*Codex[\s\S]*OpenClaw[\s\S]*Hermes/,
-  "launch workflow import path must frame harness import as MCPs, skills, prompts, and repo context",
+  /Import from existing harness[\s\S]*MCP servers[\s\S]*skills[\s\S]*prompts[\s\S]*repo context[\s\S]*current agent harness/,
+  "launch workflow import path must frame harness import as MCPs, skills, prompts, and repo context without overcrowding the card",
 );
 assert.match(
   harnessImportSources,
-  /label: "Claude"[\s\S]*logoUrl: "\/harness-logos\/claude\.svg"[\s\S]*label: "Codex"[\s\S]*logoUrl: "\/harness-logos\/codex\.png"[\s\S]*label: "OpenClaw"[\s\S]*logoUrl: "\/harness-logos\/openclaw\.svg"[\s\S]*label: "Hermes"[\s\S]*logoUrl: "\/harness-logos\/hermes\.svg"/,
-  "launch workflow import path must use a dedicated asset-backed harness source registry",
+  /label: "Claude"[\s\S]*logoUrl: "\/harness-logos\/claude\.svg"[\s\S]*label: "Codex"[\s\S]*logoUrl: "\/harness-logos\/codex\.png"[\s\S]*label: "OpenClaw"[\s\S]*logoUrl: "\/harness-logos\/openclaw\.svg"[\s\S]*label: "Hermes"[\s\S]*logoUrl: "\/harness-logos\/hermes\.svg"[\s\S]*label: "Cursor"[\s\S]*logoUrl: "\/harness-logos\/cursor\.png"[\s\S]*label: "OpenCode"[\s\S]*logoUrl: "\/harness-logos\/opencode\.svg"[\s\S]*label: "Gemini CLI"[\s\S]*logoUrl: "\/harness-logos\/gemini-cli\.svg"[\s\S]*label: "Antigravity"[\s\S]*logoUrl: "\/harness-logos\/antigravity\.svg"/,
+  "launch workflow import path must use a dedicated eight-source asset-backed harness registry",
 );
 assert.doesNotMatch(
   harnessImportSources,
@@ -515,6 +515,10 @@ for (const logoPath of [
   "apps/web/public/harness-logos/codex.png",
   "apps/web/public/harness-logos/openclaw.svg",
   "apps/web/public/harness-logos/hermes.svg",
+  "apps/web/public/harness-logos/cursor.png",
+  "apps/web/public/harness-logos/opencode.svg",
+  "apps/web/public/harness-logos/gemini-cli.svg",
+  "apps/web/public/harness-logos/antigravity.svg",
 ]) {
   assert.equal(existsSync(logoPath), true, `missing harness logo asset: ${logoPath}`);
 }
