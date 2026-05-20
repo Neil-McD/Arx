@@ -476,6 +476,11 @@ assert.match(
 );
 assert.match(
   setupModal,
+  /community-launch-harness-logo-row[\s\S]*title="CLAW"[\s\S]*title="Codex"[\s\S]*title="OpenCLAW"[\s\S]*title="Hermes"/,
+  "launch workflow import path must show the supported harness logo strip",
+);
+assert.match(
+  setupModal,
   /Build in PolyNet[\s\S]*onOpenStep\("workflows"\)/,
   "launch workflow build path must continue to the canonical PolyNet workflows surface",
 );

@@ -944,8 +944,19 @@ export function WebCommunityLaunchSetupModal(
               onClick={() => setWorkflowPathDraft("import")}
               aria-pressed={workflowPathDraft === "import"}
             >
-              <span className="community-launch-workflow-option-icon" aria-hidden="true">
-                <FileText size={16} strokeWidth={2} />
+              <span className="community-launch-workflow-option-top">
+                <span className="community-launch-workflow-option-icon" aria-hidden="true">
+                  <FileText size={16} strokeWidth={2} />
+                </span>
+                <span
+                  className="community-launch-harness-logo-row"
+                  aria-label="Supported harnesses: CLAW, Codex, OpenCLAW, Hermes"
+                >
+                  <span className="community-launch-harness-logo claw" title="CLAW">CLAW</span>
+                  <span className="community-launch-harness-logo codex" title="Codex">Codex</span>
+                  <span className="community-launch-harness-logo openclaw" title="OpenCLAW">OC</span>
+                  <span className="community-launch-harness-logo hermes" title="Hermes">H</span>
+                </span>
               </span>
               <strong>Import from existing harness</strong>
               <span>
