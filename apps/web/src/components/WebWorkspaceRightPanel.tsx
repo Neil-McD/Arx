@@ -106,7 +106,10 @@ export function WebWorkspaceRightPanel(props: {
             onRecentSignalsExpandedChange={props.onCommunityRecentSignalsExpandedChange}
           />
         ) : activeInsightTab === "partner" && props.builderPartnerProgramPanel ? (
-          <WebBuilderPartnerProgramPanel {...props.builderPartnerProgramPanel} />
+          <WebBuilderPartnerProgramPanel
+            {...props.builderPartnerProgramPanel}
+            showProgramOverview={false}
+          />
         ) : activeInsightTab === "platform" ? (
           <OperatorPlatformPanelView
             webDeploy={props.state.webDeploy}

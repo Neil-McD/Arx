@@ -245,6 +245,21 @@ function proveUiContract(uiSource: string, settingsWrapperSource: string, partne
     "export function WebBuilderPartnerProgramPanel",
     "partner dashboard UI must live in the reusable partner panel",
   );
+  assertIncludes(
+    partnerPanelSource,
+    "showProgramOverview?: boolean",
+    "partner dashboard UI must support hiding the overview when embedded in the right panel",
+  );
+  assertIncludes(
+    partnerPanelSource,
+    "const showProgramOverview = props.showProgramOverview ?? true",
+    "partner dashboard UI must keep the settings overview visible by default",
+  );
+  assert.doesNotMatch(
+    settingsWrapperSource,
+    /showProgramOverview=\{false\}/,
+    "partner settings wrapper must keep the full partner program overview",
+  );
   assert.doesNotMatch(
     settingsWrapperSource,
     /Partner link|builder-partner-dashboard|builder-partner-payout-history/,
@@ -399,7 +414,12 @@ function provePartnerRightPanelContract(
   );
   assertIncludes(
     rightPanelSource,
-    "<WebBuilderPartnerProgramPanel {...props.builderPartnerProgramPanel} />",
+    "showProgramOverview={false}",
+    "workspace right panel must hide the reusable partner program overview",
+  );
+  assertIncludes(
+    rightPanelSource,
+    "...props.builderPartnerProgramPanel",
     "workspace right panel must delegate Partner rendering to the reusable partner panel",
   );
   assertIncludes(

@@ -31,6 +31,7 @@ type SessionLike = {
 } | null;
 
 export type WebBuilderPartnerProgramPanelProps = {
+  showProgramOverview?: boolean;
   session: SessionLike;
   requireSignIn: () => void;
   accountCommerceStatus: AccountCommerceStatus | null;
@@ -104,6 +105,7 @@ function formatPayoutStatus(value: string): string {
 export function WebBuilderPartnerProgramPanel(props: WebBuilderPartnerProgramPanelProps) {
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
   const [stripeConnectCountry, setStripeConnectCountry] = useState("");
+  const showProgramOverview = props.showProgramOverview ?? true;
   const partnerPlatformFeeShareBps = BUILDER_PARTNER_PLATFORM_FEE_SHARE_BPS;
   const toolUsageRevenueShareBps = BUILDER_PARTNER_TOOL_USAGE_REVENUE_SHARE_BPS;
   const communityCommission = calculateBuilderPartnerCommunityRevenueCommission({
@@ -180,82 +182,84 @@ export function WebBuilderPartnerProgramPanel(props: WebBuilderPartnerProgramPan
 
   return (
     <>
-      <div className="settings-section">
-        <div className="settings-section-title">
-          <Handshake />
-          Builder Partner Program
-        </div>
-        <div className="settings-section-desc">
-          Platform-level partner program for builders bringing new communities and paid tool usage to PolyNet.
-        </div>
-
-        <div className="builder-partner-hero">
-          <div className="builder-partner-hero-copy">
-            <span className="builder-partner-kicker">Platform partner program</span>
-            <h2>{isActive ? "Your Builder Partner account is active." : "Bring builders to PolyNet and share in the value they create."}</h2>
-            <p>
-              Builder Partners earn from referred creators' community revenue and settled paid tool usage.
-              Partner links are generated automatically when the requirements are met.
-            </p>
+      {showProgramOverview ? (
+        <div className="settings-section">
+          <div className="settings-section-title">
+            <Handshake />
+            Builder Partner Program
           </div>
-          <div className="builder-partner-status-stack" aria-label="Builder Partner status">
-            <div className="builder-partner-status">
-              <span>Status</span>
-              <strong className={isActive ? "is-ready" : "is-not-ready"}>
-                {isActive ? <CheckCircle2 /> : <Clock3 />}
-                {statusLabel}
+          <div className="settings-section-desc">
+            Platform-level partner program for builders bringing new communities and paid tool usage to PolyNet.
+          </div>
+
+          <div className="builder-partner-hero">
+            <div className="builder-partner-hero-copy">
+              <span className="builder-partner-kicker">Platform partner program</span>
+              <h2>{isActive ? "Your Builder Partner account is active." : "Bring builders to PolyNet and share in the value they create."}</h2>
+              <p>
+                Builder Partners earn from referred creators' community revenue and settled paid tool usage.
+                Partner links are generated automatically when the requirements are met.
+              </p>
+            </div>
+            <div className="builder-partner-status-stack" aria-label="Builder Partner status">
+              <div className="builder-partner-status">
+                <span>Status</span>
+                <strong className={isActive ? "is-ready" : "is-not-ready"}>
+                  {isActive ? <CheckCircle2 /> : <Clock3 />}
+                  {statusLabel}
+                </strong>
+              </div>
+              <div className="builder-partner-status">
+                <span>Payouts</span>
+                <strong className={payoutReady ? "is-ready" : "is-not-ready"}>
+                  {payoutReady ? <CheckCircle2 /> : <XCircle />}
+                  {payoutLabel}
+                </strong>
+              </div>
+            </div>
+          </div>
+
+          <div className="builder-partner-metrics" role="list" aria-label="Builder Partner economics">
+            <div className="builder-partner-metric" role="listitem">
+              <BadgeDollarSign />
+              <span>Community revenue</span>
+              <strong>
+                Earn {formatBps(effectiveCommunityRevenueShareBps)} of referred creators'
+                community revenue.
               </strong>
+              <small>Calculated from PolyNet's platform fee on eligible referred creators.</small>
             </div>
-            <div className="builder-partner-status">
-              <span>Payouts</span>
-              <strong className={payoutReady ? "is-ready" : "is-not-ready"}>
-                {payoutReady ? <CheckCircle2 /> : <XCircle />}
-                {payoutLabel}
+            <div className="builder-partner-metric" role="listitem">
+              <BadgeDollarSign />
+              <span>Paid tool usage</span>
+              <strong>
+                Earn up to {formatBps(toolUsageRevenueShareBps)} of referred creators' settled tool usage.
               </strong>
+              <small>Tool commissions preserve PolyNet's retained margin target before payout.</small>
+            </div>
+            <div className="builder-partner-metric" role="listitem">
+              <ShieldCheck />
+              <span>Settlement</span>
+              <strong>Risk hold, then payout buffer</strong>
+              <small>Commissions clear a 30-day hold and 14-day payout review buffer.</small>
             </div>
           </div>
-        </div>
 
-        <div className="builder-partner-metrics" role="list" aria-label="Builder Partner economics">
-          <div className="builder-partner-metric" role="listitem">
-            <BadgeDollarSign />
-            <span>Community revenue</span>
-            <strong>
-              Earn {formatBps(effectiveCommunityRevenueShareBps)} of referred creators'
-              community revenue.
-            </strong>
-            <small>Calculated from PolyNet's platform fee on eligible referred creators.</small>
-          </div>
-          <div className="builder-partner-metric" role="listitem">
-            <BadgeDollarSign />
-            <span>Paid tool usage</span>
-            <strong>
-              Earn up to {formatBps(toolUsageRevenueShareBps)} of referred creators' settled tool usage.
-            </strong>
-            <small>Tool commissions preserve PolyNet's retained margin target before payout.</small>
-          </div>
-          <div className="builder-partner-metric" role="listitem">
-            <ShieldCheck />
-            <span>Settlement</span>
-            <strong>Risk hold, then payout buffer</strong>
-            <small>Commissions clear a 30-day hold and 14-day payout review buffer.</small>
-          </div>
+          {!isSignedIn ? (
+            <div className="account-row">
+              <div className="account-identity">
+                <span>Partner account</span>
+                <strong>Sign in to check requirements</strong>
+              </div>
+              <div className="auth-actions">
+                <button type="button" onClick={props.requireSignIn}>
+                  Continue to sign in
+                </button>
+              </div>
+            </div>
+          ) : null}
         </div>
-
-        {!isSignedIn ? (
-          <div className="account-row">
-            <div className="account-identity">
-              <span>Partner account</span>
-              <strong>Sign in to check requirements</strong>
-            </div>
-            <div className="auth-actions">
-              <button type="button" onClick={props.requireSignIn}>
-                Continue to sign in
-              </button>
-            </div>
-          </div>
-        ) : null}
-      </div>
+      ) : null}
 
       {isSignedIn ? (
         <div className="settings-section">
