@@ -166,6 +166,15 @@ export default defineSchema({
     commissionRateBps: v.number(),
     commissionAmountUsd: v.number(),
     currency: v.string(),
+    commissionSettlementCents: v.optional(v.number()),
+    adjustmentSettlementCents: v.optional(v.number()),
+    reservedSettlementCents: v.optional(v.number()),
+    settledSettlementCents: v.optional(v.number()),
+    netSettlementCents: v.optional(v.number()),
+    openSettlementCents: v.optional(v.number()),
+    payoutOpen: v.optional(v.boolean()),
+    payoutDebt: v.optional(v.boolean()),
+    settlementUpdatedAt: v.optional(v.number()),
     status: v.union(
       v.literal("locked"),
       v.literal("risk_hold"),
@@ -190,6 +199,10 @@ export default defineSchema({
     .index("by_referredUser", ["referredUserId"])
     .index("by_status_holdUntil", ["status", "holdUntil"])
     .index("by_status_payableAt", ["status", "payableAt"])
+    .index("by_status_payoutOpen_payableAt", ["status", "payoutOpen", "payableAt"])
+    .index("by_partner_status_payoutOpen_payableAt", ["partnerId", "status", "payoutOpen", "payableAt"])
+    .index("by_partner_status_payoutDebt", ["partnerId", "status", "payoutDebt"])
+    .index("by_status_createdAt", ["status", "createdAt"])
     .index("by_checkout_session", ["sourceCheckoutSessionId"])
     .index("by_provider_invoice", ["sourceProviderInvoiceId"])
     .index("by_payment_intent", ["sourceProviderPaymentIntentId"])

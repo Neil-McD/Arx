@@ -81,6 +81,11 @@ function proveSchemaContract(schemaSource: string) {
   );
   assert.match(
     schemaSource,
+    /partnerCommissionLedger:[\s\S]*commissionSettlementCents:\s*v\.optional\(v\.number\(\)\)[\s\S]*adjustmentSettlementCents:\s*v\.optional\(v\.number\(\)\)[\s\S]*reservedSettlementCents:\s*v\.optional\(v\.number\(\)\)[\s\S]*settledSettlementCents:\s*v\.optional\(v\.number\(\)\)[\s\S]*netSettlementCents:\s*v\.optional\(v\.number\(\)\)[\s\S]*openSettlementCents:\s*v\.optional\(v\.number\(\)\)[\s\S]*payoutOpen:\s*v\.optional\(v\.boolean\(\)\)[\s\S]*payoutDebt:\s*v\.optional\(v\.boolean\(\)\)[\s\S]*settlementUpdatedAt:\s*v\.optional\(v\.number\(\)\)/,
+    "expected commission ledger to materialize payout settlement state",
+  );
+  assert.match(
+    schemaSource,
     /partnerCommissionLedger:[\s\S]*sourceCheckoutSessionId:\s*v\.optional\(v\.string\(\)\)[\s\S]*sourceProviderInvoiceId:\s*v\.optional\(v\.string\(\)\)[\s\S]*sourceProviderPaymentIntentId:\s*v\.optional\(v\.string\(\)\)[\s\S]*sourceProviderChargeId:\s*v\.optional\(v\.string\(\)\)[\s\S]*sourceCreditLedgerEntryId:\s*v\.optional\(v\.id\("creditLedgerEntries"\)\)/,
     "expected commission rows to point at checkout, invoice, payment, charge, and paid-tool evidence",
   );
@@ -118,6 +123,26 @@ function proveSchemaContract(schemaSource: string) {
     schemaSource,
     /\.index\("by_status_payableAt",\s*\["status",\s*"payableAt"\]\)/,
     "expected payable commission planning index",
+  );
+  assert.match(
+    schemaSource,
+    /\.index\("by_status_payoutOpen_payableAt",\s*\["status",\s*"payoutOpen",\s*"payableAt"\]\)/,
+    "expected open payable commission planning index",
+  );
+  assert.match(
+    schemaSource,
+    /\.index\("by_partner_status_payoutOpen_payableAt",\s*\["partnerId",\s*"status",\s*"payoutOpen",\s*"payableAt"\]\)/,
+    "expected partner-local open payable commission index",
+  );
+  assert.match(
+    schemaSource,
+    /\.index\("by_partner_status_payoutDebt",\s*\["partnerId",\s*"status",\s*"payoutDebt"\]\)/,
+    "expected partner-local carryforward debt index",
+  );
+  assert.match(
+    schemaSource,
+    /\.index\("by_status_createdAt",\s*\["status",\s*"createdAt"\]\)/,
+    "expected bounded commission settlement backfill index",
   );
   assert.match(
     schemaSource,
@@ -897,6 +922,10 @@ function provePartnerPayoutSettlementContract(
   cronsSource: string,
   docsSource: string,
 ) {
+  const commissionSummarySource = builderPartnersSource.slice(
+    builderPartnersSource.indexOf("async function readCommissionSummary"),
+    builderPartnersSource.indexOf("async function readPayoutHistory"),
+  );
   assert.doesNotMatch(
     builderPartnersSource,
     /export const previewPartnerPayoutBatch/,
@@ -1133,6 +1162,16 @@ function provePartnerPayoutSettlementContract(
     "Builder Partner dashboard summary must expose carryforward debt separately from payable balances",
   );
   assertIncludes(
+    commissionSummarySource,
+    "settlementStateByCommissionId",
+    "Builder Partner dashboard summary should read materialized commission settlement state",
+  );
+  assert.doesNotMatch(
+    commissionSummarySource,
+    /query\("partnerCommissionAdjustments"|query\("partnerPayoutItems"/,
+    "Builder Partner dashboard summary must not use full adjustment or payout-item table reads as authority",
+  );
+  assertIncludes(
     builderPartnersSource,
     "usdToSettlementCents",
     "Builder Partner payout settlement must normalize settlement amounts to cents",
@@ -1144,13 +1183,48 @@ function provePartnerPayoutSettlementContract(
   );
   assertIncludes(
     builderPartnersSource,
+    "type PartnerCommissionSettlementState",
+    "Builder Partner commission ledger must have one materialized settlement state model",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "calculatePartnerCommissionSettlementState",
+    "Builder Partner settlement materialization must derive state from adjustment and payout item truth",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "recomputePartnerCommissionSettlementState",
+    "Builder Partner payout mutations must refresh materialized settlement state",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "backfillPartnerCommissionSettlementStateInternal",
+    "Builder Partner settlement materialization must provide a bounded backfill path",
+  );
+  assertIncludes(
+    builderPartnersSource,
     "idempotencyKey: String(transfer.idempotencyKey ?? \"\").trim()",
     "Builder Partner payout settlement must use transfer idempotency keys",
   );
   assertIncludes(
     builderPartnersSource,
-    "readCommissionPayoutItemTotalUsd",
-    "Builder Partner payout settlement must subtract reserved and settled payout items",
+    "reservedSettlementCents",
+    "Builder Partner payout settlement must materialize reserved payout item totals",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "settledSettlementCents",
+    "Builder Partner payout settlement must materialize settled payout item totals",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "openSettlementCents",
+    "Builder Partner payout settlement must materialize remaining open payout balance",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "payoutDebt",
+    "Builder Partner payout settlement must materialize carryforward payout debt",
   );
   assertIncludes(
     builderPartnersSource,
@@ -1164,8 +1238,28 @@ function provePartnerPayoutSettlementContract(
   );
   assertIncludes(
     builderPartnersSource,
-    ".withIndex(\"by_status_payableAt\"",
-    "Builder Partner payout planning must start from payable commission rows",
+    ".withIndex(\"by_status_payoutOpen_payableAt\"",
+    "Builder Partner payout planning must start from open materialized payable commission rows",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    ".withIndex(\"by_partner_status_payoutOpen_payableAt\"",
+    "Builder Partner payout partner reads must use materialized open balance index",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    ".withIndex(\"by_partner_status_payoutDebt\"",
+    "Builder Partner payout partner reads must use materialized debt index",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "allowLegacyBackfill: false",
+    "Builder Partner payout planning must not use partner-wide legacy recomputation in steady state",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "readMaterializedPartnerCommissionSettlementState(row)",
+    "Builder Partner payout planning must keep bounded legacy settlement backfill separate from primary open-row planning",
   );
   assertIncludes(
     builderPartnersSource,
@@ -1204,8 +1298,23 @@ function provePartnerPayoutSettlementContract(
   );
   assertIncludes(
     builderPartnersSource,
+    "const reservedCommissionIds = new Map<string, any>();",
+    "Builder Partner payout reservations must collect affected commissions for settlement-state recompute",
+  );
+  assertIncludes(
+    builderPartnersSource,
     "status: \"settled\"",
     "Builder Partner payout settlement must mark items settled only after transfer success",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "const settledCommissionIds = new Map<string, any>();",
+    "Builder Partner payout settlements must collect affected commissions for settlement-state recompute",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "const releasedCommissionIds = new Map<string, any>();",
+    "Builder Partner payout releases must collect affected commissions for settlement-state recompute",
   );
   assertIncludes(
     builderPartnersSource,

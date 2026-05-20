@@ -378,6 +378,135 @@ async function readCommissionSettledPayoutTotalUsd(ctx: any, commissionId: any) 
   );
 }
 
+type PartnerCommissionSettlementState = {
+  commissionSettlementCents: number;
+  adjustmentSettlementCents: number;
+  reservedSettlementCents: number;
+  settledSettlementCents: number;
+  netSettlementCents: number;
+  openSettlementCents: number;
+  payoutOpen: boolean;
+  payoutDebt: boolean;
+};
+
+function finiteIntegerOrNull(value: unknown): number | null {
+  const normalized = Number(value);
+  if (!Number.isFinite(normalized)) return null;
+  return Math.trunc(normalized);
+}
+
+function readMaterializedPartnerCommissionSettlementState(row: any): PartnerCommissionSettlementState | null {
+  const commissionSettlementCents = finiteIntegerOrNull(row?.commissionSettlementCents);
+  const adjustmentSettlementCents = finiteIntegerOrNull(row?.adjustmentSettlementCents);
+  const reservedSettlementCents = finiteIntegerOrNull(row?.reservedSettlementCents);
+  const settledSettlementCents = finiteIntegerOrNull(row?.settledSettlementCents);
+  const netSettlementCents = finiteIntegerOrNull(row?.netSettlementCents);
+  const openSettlementCents = finiteIntegerOrNull(row?.openSettlementCents);
+  if (
+    commissionSettlementCents === null ||
+    adjustmentSettlementCents === null ||
+    reservedSettlementCents === null ||
+    settledSettlementCents === null ||
+    netSettlementCents === null ||
+    openSettlementCents === null ||
+    typeof row?.payoutOpen !== "boolean" ||
+    typeof row?.payoutDebt !== "boolean"
+  ) {
+    return null;
+  }
+  return {
+    commissionSettlementCents,
+    adjustmentSettlementCents,
+    reservedSettlementCents,
+    settledSettlementCents,
+    netSettlementCents,
+    openSettlementCents,
+    payoutOpen: row.payoutOpen,
+    payoutDebt: row.payoutDebt,
+  };
+}
+
+async function calculatePartnerCommissionSettlementState(
+  ctx: any,
+  commission: any,
+  args: {
+    excludeBatchId?: any;
+  } = {},
+): Promise<PartnerCommissionSettlementState> {
+  const [adjustments, payoutItems] = await Promise.all([
+    collectAppliedCommissionAdjustments(ctx, commission._id),
+    collectPartnerPayoutItemsByCommission(ctx, commission._id),
+  ]);
+  const adjustmentSettlementCents = adjustments.reduce(
+    (total: number, row: any) => total + signedUsdToSettlementCents(Number(row.amountUsd ?? 0)),
+    0,
+  );
+  const includedPayoutItems = payoutItems.filter((row: any) =>
+    args.excludeBatchId ? String(row.batchId) !== String(args.excludeBatchId) : true,
+  );
+  const reservedSettlementCents = includedPayoutItems
+    .filter((row: any) => row.status === "reserved")
+    .reduce((total: number, row: any) => total + usdToSettlementCents(Number(row.amountUsd ?? 0)), 0);
+  const settledSettlementCents = includedPayoutItems
+    .filter((row: any) => row.status === "settled")
+    .reduce((total: number, row: any) => total + usdToSettlementCents(Number(row.amountUsd ?? 0)), 0);
+  const commissionSettlementCents =
+    commission.status === "voided"
+      ? 0
+      : usdToSettlementCents(Number(commission.commissionAmountUsd ?? 0));
+  const netSettlementCents =
+    commissionSettlementCents +
+    adjustmentSettlementCents -
+    reservedSettlementCents -
+    settledSettlementCents;
+  const openSettlementCents = Math.max(0, netSettlementCents);
+  const payoutOpen = commission.status === "payable" && openSettlementCents > 0;
+  const payoutDebt = commission.status === "payable" && netSettlementCents < 0;
+  return {
+    commissionSettlementCents,
+    adjustmentSettlementCents,
+    reservedSettlementCents,
+    settledSettlementCents,
+    netSettlementCents,
+    openSettlementCents,
+    payoutOpen,
+    payoutDebt,
+  };
+}
+
+async function readPartnerCommissionSettlementState(
+  ctx: any,
+  commission: any,
+  args: {
+    excludeBatchId?: any;
+  } = {},
+): Promise<PartnerCommissionSettlementState> {
+  if (!args.excludeBatchId) {
+    const materialized = readMaterializedPartnerCommissionSettlementState(commission);
+    if (materialized) return materialized;
+  }
+  return await calculatePartnerCommissionSettlementState(ctx, commission, args);
+}
+
+async function recomputePartnerCommissionSettlementState(
+  ctx: any,
+  commissionId: any,
+  nowMs = Date.now(),
+) {
+  const commission = await ctx.db.get(commissionId);
+  if (!commission) return null;
+  const state = await calculatePartnerCommissionSettlementState(ctx, commission);
+  await ctx.db.patch(commission._id, {
+    ...state,
+    settlementUpdatedAt: nowMs,
+    updatedAt: nowMs,
+  });
+  return {
+    commission: await ctx.db.get(commission._id),
+    state,
+  };
+}
+
 async function capNegativeCommissionAdjustmentUsd(ctx: any, commission: any, amountUsd: number) {
   const requestedAmountUsd = roundSignedPartnerMoney(Number(amountUsd ?? 0));
   if (!(requestedAmountUsd < 0)) return requestedAmountUsd;
@@ -470,7 +599,10 @@ async function insertPartnerCommissionAdjustmentIfMissing(ctx: any, args: {
   const adjustmentKey = String(args.adjustmentKey ?? "").trim();
   if (!adjustmentKey) throw new Error("partner_commission_adjustment_key_required");
   const existing = await getCommissionAdjustmentByKey(ctx, adjustmentKey);
-  if (existing) return existing;
+  if (existing) {
+    await recomputePartnerCommissionSettlementState(ctx, args.commission._id, args.nowMs);
+    return existing;
+  }
   const id = await ctx.db.insert("partnerCommissionAdjustments" as any, {
     adjustmentKey,
     commissionId: args.commission._id,
@@ -498,6 +630,7 @@ async function insertPartnerCommissionAdjustmentIfMissing(ctx: any, args: {
     createdAt: args.nowMs,
     updatedAt: args.nowMs,
   });
+  await recomputePartnerCommissionSettlementState(ctx, args.commission._id, args.nowMs);
   return await ctx.db.get(id);
 }
 
@@ -690,6 +823,7 @@ async function insertPartnerCommissionIfEligible(ctx: any, args: {
   const basisAmountUsd = roundBuilderPartnerMoney(args.basisAmountUsd);
   const commissionAmountUsd = roundBuilderPartnerMoney(args.commissionAmountUsd);
   if (!(basisAmountUsd > 0) || !(commissionAmountUsd > 0)) return null;
+  const commissionSettlementCents = usdToSettlementCents(commissionAmountUsd);
   const id = await ctx.db.insert("partnerCommissionLedger", {
     commissionKey: args.commissionKey,
     partnerId: args.partner._id,
@@ -702,6 +836,15 @@ async function insertPartnerCommissionIfEligible(ctx: any, args: {
     commissionRateBps: args.commissionRateBps,
     commissionAmountUsd,
     currency: "usd",
+    commissionSettlementCents,
+    adjustmentSettlementCents: 0,
+    reservedSettlementCents: 0,
+    settledSettlementCents: 0,
+    netSettlementCents: commissionSettlementCents,
+    openSettlementCents: commissionSettlementCents,
+    payoutOpen: false,
+    payoutDebt: false,
+    settlementUpdatedAt: args.nowMs,
     status: "locked",
     sourceCheckoutSessionId: args.sourceCheckoutSessionId,
     sourceProviderSubscriptionId: args.sourceProviderSubscriptionId,
@@ -922,6 +1065,7 @@ export const recordPartnerCommissionRefundAdjustmentInternal = internalMutation(
           voidReason: `stripe_refund:${refundId}`,
           updatedAt: nowMs,
         });
+        await recomputePartnerCommissionSettlementState(ctx, row._id, nowMs);
         voided += 1;
       }
     }
@@ -997,6 +1141,7 @@ export const recordPartnerCommissionDisputeOpenedInternal = internalMutation({
           status: "risk_hold",
           updatedAt: nowMs,
         });
+        await recomputePartnerCommissionSettlementState(ctx, row._id, nowMs);
         held += 1;
       }
     }
@@ -1094,6 +1239,7 @@ export const recordPartnerCommissionDisputeClosedInternal = internalMutation({
             voidReason: `stripe_dispute_lost:${disputeId}`,
             updatedAt: nowMs,
           });
+          await recomputePartnerCommissionSettlementState(ctx, row._id, nowMs);
           voided += 1;
         } else if (row.status === "risk_hold") {
           const nextStatus = riskReleaseStatusForCommission(row, nowMs);
@@ -1102,6 +1248,7 @@ export const recordPartnerCommissionDisputeClosedInternal = internalMutation({
             payableAt: nextStatus === "payable" ? nowMs : row.payableAt,
             updatedAt: nowMs,
           });
+          await recomputePartnerCommissionSettlementState(ctx, row._id, nowMs);
           released += 1;
         }
       }
@@ -1145,12 +1292,62 @@ export const advancePartnerCommissionsToPayableInternal = internalMutation({
         payableAt: nowMs,
         updatedAt: nowMs,
       });
+      await recomputePartnerCommissionSettlementState(ctx, row._id, nowMs);
       advanced += 1;
     }
     return {
       ok: true,
       advanced,
       deferredForEvidence,
+    };
+  },
+});
+
+export const backfillPartnerCommissionSettlementStateInternal = internalMutation({
+  args: {
+    status: v.union(
+      v.literal("locked"),
+      v.literal("risk_hold"),
+      v.literal("payable"),
+      v.literal("voided"),
+    ),
+    afterCreatedAt: v.optional(v.number()),
+    limit: v.optional(v.number()),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const nowMs = args.nowMs ?? Date.now();
+    const limit = Math.max(1, Math.min(500, Math.floor(args.limit ?? 100)));
+    const afterCreatedAt = Number(args.afterCreatedAt ?? 0);
+    const statuses = [args.status] as const;
+    const rows = [];
+    for (const status of statuses) {
+      if (rows.length >= limit) break;
+      const remaining = limit - rows.length;
+      const nextRows = await ctx.db
+        .query("partnerCommissionLedger")
+        .withIndex("by_status_createdAt", (q: any) => {
+          const scoped = q.eq("status", status);
+          return Number.isFinite(afterCreatedAt) && afterCreatedAt > 0
+            ? scoped.gt("createdAt", afterCreatedAt)
+            : scoped;
+        })
+        .take(remaining);
+      rows.push(...nextRows);
+    }
+    let recomputed = 0;
+    let nextAfterCreatedAt: number | null = null;
+    for (const row of rows) {
+      await recomputePartnerCommissionSettlementState(ctx, row._id, nowMs);
+      recomputed += 1;
+      nextAfterCreatedAt = Math.max(nextAfterCreatedAt ?? 0, Number(row.createdAt ?? 0)) || nextAfterCreatedAt;
+    }
+    return {
+      ok: true,
+      scanned: rows.length,
+      recomputed,
+      nextAfterCreatedAt,
+      status: args.status,
     };
   },
 });
@@ -1200,61 +1397,26 @@ async function readCommissionSummary(ctx: any, partner: any) {
       ),
     )
   ).flat();
-  const adjustments = await ctx.db
-    .query("partnerCommissionAdjustments" as any)
-    .withIndex("by_partner_createdAt", (q: any) => q.eq("partnerId", partner._id))
-    .collect();
-  const payoutItems = await ctx.db
-    .query("partnerPayoutItems" as any)
-    .withIndex("by_partner_createdAt", (q: any) => q.eq("partnerId", partner._id))
-    .collect();
-  const rowById = new Map(rows.map((row: any) => [String(row._id), row]));
-  const adjustmentTotalByCommissionId = new Map<string, number>();
-  for (const adjustment of adjustments) {
-    if (adjustment.status !== "applied") continue;
-    const commissionId = String(adjustment.commissionId ?? "");
-    if (!rowById.has(commissionId)) continue;
-    adjustmentTotalByCommissionId.set(
-      commissionId,
-      roundSignedPartnerMoney(
-        Number(adjustmentTotalByCommissionId.get(commissionId) ?? 0) +
-        Number(adjustment.amountUsd ?? 0),
-      ),
+  const settlementStateByCommissionId = new Map<string, PartnerCommissionSettlementState>();
+  for (const row of rows) {
+    settlementStateByCommissionId.set(
+      String(row._id),
+      await readPartnerCommissionSettlementState(ctx, row),
     );
   }
-  const reservedOrSettledPayoutTotalByCommissionId = new Map<string, number>();
-  const settledPayoutTotalByCommissionId = new Map<string, number>();
-  for (const item of payoutItems) {
-    const commissionId = String(item.commissionId ?? "");
-    if (item.status !== "reserved" && item.status !== "settled") continue;
-    if (rowById.has(commissionId)) {
-      reservedOrSettledPayoutTotalByCommissionId.set(
-        commissionId,
-        roundSignedPartnerMoney(
-          Number(reservedOrSettledPayoutTotalByCommissionId.get(commissionId) ?? 0) +
-          Number(item.amountUsd ?? 0),
-        ),
-      );
-    }
-    if (item.status === "settled") {
-      settledPayoutTotalByCommissionId.set(
-        commissionId,
-        roundSignedPartnerMoney(
-          Number(settledPayoutTotalByCommissionId.get(commissionId) ?? 0) +
-          Number(item.amountUsd ?? 0),
-        ),
-      );
-    }
-  }
-  const rowNetSettlementCents = (row: any) =>
-    signedUsdToSettlementCents(
-      roundSignedPartnerMoney(
-        Number(row.commissionAmountUsd ?? 0) +
-          Number(adjustmentTotalByCommissionId.get(String(row._id)) ?? 0) -
-          Number(reservedOrSettledPayoutTotalByCommissionId.get(String(row._id)) ?? 0),
-      ),
-    );
-  const rowPositiveSettlementCents = (row: any) => Math.max(0, rowNetSettlementCents(row));
+  const rowSettlementState = (row: any) =>
+    settlementStateByCommissionId.get(String(row._id)) ?? {
+      commissionSettlementCents: 0,
+      adjustmentSettlementCents: 0,
+      reservedSettlementCents: 0,
+      settledSettlementCents: 0,
+      netSettlementCents: 0,
+      openSettlementCents: 0,
+      payoutOpen: false,
+      payoutDebt: false,
+    };
+  const rowNetSettlementCents = (row: any) => rowSettlementState(row).netSettlementCents;
+  const rowPositiveSettlementCents = (row: any) => rowSettlementState(row).openSettlementCents;
   const sumPositiveCents = (statusSet: ReadonlySet<string>) =>
     rows
       .filter((row: any) => statusSet.has(String(row.status ?? "")))
@@ -1317,13 +1479,11 @@ async function readCommissionSummary(ctx: any, partner: any) {
   const readyUsd = settlementCentsToUsd(readyNet.totalCents);
   const bufferedUsd = settlementCentsToUsd(bufferedNet.totalCents);
   const clawbackDebtUsd = settlementCentsToUsd(clawbackDebtCents);
-  const settledPaidUsd = roundBuilderPartnerMoney(
-    Array.from(settledPayoutTotalByCommissionId.values()).reduce(
-      (total, amount) => total + amount,
-      0,
-    ),
+  const settledPaidCents = rows.reduce(
+    (total: number, row: any) => total + rowSettlementState(row).settledSettlementCents,
+    0,
   );
-  const paidUsd = settledPaidUsd;
+  const paidUsd = settlementCentsToUsd(settledPaidCents);
   return {
     pendingUsd,
     bufferedUsd,
@@ -1334,12 +1494,7 @@ async function readCommissionSummary(ctx: any, partner: any) {
     pendingCount: rows.filter((row: any) => pendingSet.has(String(row.status ?? "")) && rowPositiveSettlementCents(row) > 0).length,
     bufferedCount: bufferedNet.count,
     readyCount: readyNet.count,
-    paidCount:
-      new Set(
-        payoutItems
-          .filter((row: any) => row.status === "settled")
-          .map((row: any) => String(row.commissionId ?? "")),
-      ).size,
+    paidCount: rows.filter((row: any) => rowSettlementState(row).settledSettlementCents > 0).length,
     clawbackDebtCount: payableRows.filter((row: any) => rowNetSettlementCents(row) < 0).length,
   };
 }
@@ -1590,33 +1745,60 @@ async function readReadyStripeConnectPayoutAccount(ctx: any, userId: any) {
 async function readPartnerPayablePayoutEntries(ctx: any, partner: any, args: {
   payableCutoffAt: number;
   excludeBatchId?: any;
+  allowLegacyBackfill?: boolean;
 }) {
   if (!partner?._id || partner.status !== "active") return [];
-  const rows = await ctx.db
-    .query("partnerCommissionLedger")
-    .withIndex("by_partner_status", (q: any) =>
-      q.eq("partnerId", partner._id).eq("status", "payable"),
-    )
-    .collect();
-  const reservedOrSettledStatuses = new Set<PartnerPayoutItemStatus>(["reserved", "settled"]);
+  const shouldReadLegacyRows = Boolean(args.excludeBatchId || args.allowLegacyBackfill);
+  const [openRows, debtRows, legacyRows] = await Promise.all([
+    ctx.db
+      .query("partnerCommissionLedger")
+      .withIndex("by_partner_status_payoutOpen_payableAt", (q: any) =>
+        q.eq("partnerId", partner._id)
+          .eq("status", "payable")
+          .eq("payoutOpen", true)
+          .lte("payableAt", args.payableCutoffAt),
+      )
+      .collect(),
+    ctx.db
+      .query("partnerCommissionLedger")
+      .withIndex("by_partner_status_payoutDebt", (q: any) =>
+        q.eq("partnerId", partner._id).eq("status", "payable").eq("payoutDebt", true),
+      )
+      .collect(),
+    shouldReadLegacyRows
+      ? ctx.db
+          .query("partnerCommissionLedger")
+          .withIndex("by_partner_status", (q: any) =>
+            q.eq("partnerId", partner._id).eq("status", "payable"),
+          )
+          .collect()
+      : Promise.resolve([]),
+  ]);
+  const rowById = new Map<string, any>();
+  for (const row of [...openRows, ...debtRows]) {
+    rowById.set(String(row._id), row);
+  }
+  for (const row of legacyRows) {
+    if (rowById.has(String(row._id))) continue;
+    if (args.excludeBatchId) {
+      rowById.set(String(row._id), row);
+      continue;
+    }
+    if (readMaterializedPartnerCommissionSettlementState(row)) continue;
+    const recomputed = await recomputePartnerCommissionSettlementState(ctx, row._id);
+    const nextRow = recomputed?.commission ?? row;
+    const state = recomputed?.state ?? await readPartnerCommissionSettlementState(ctx, nextRow);
+    if (state.payoutOpen || state.payoutDebt) rowById.set(String(nextRow._id), nextRow);
+  }
+  const rows = Array.from(rowById.values());
   const candidates = [];
   let carryforwardDebtCents = 0;
   for (const row of rows) {
     if (normalizeUsdCurrency(row.currency) !== "usd") continue;
-    const adjustmentTotalUsd = await readAppliedCommissionAdjustmentTotalUsd(ctx, row._id);
-    const reservedOrSettledPayoutUsd = await readCommissionPayoutItemTotalUsd(
-      ctx,
-      row._id,
-      reservedOrSettledStatuses,
-      args.excludeBatchId,
-    );
-    const netSettlementCents = signedUsdToSettlementCents(
-      roundSignedPartnerMoney(
-        Number(row.commissionAmountUsd ?? 0) +
-          adjustmentTotalUsd -
-          reservedOrSettledPayoutUsd,
-      ),
-    );
+    const settlementState = await readPartnerCommissionSettlementState(ctx, row, {
+      excludeBatchId: args.excludeBatchId,
+    });
+    const netSettlementCents = settlementState.netSettlementCents;
     if (netSettlementCents < 0) {
       carryforwardDebtCents += Math.abs(netSettlementCents);
       continue;
@@ -1631,7 +1813,7 @@ async function readPartnerPayablePayoutEntries(ctx: any, partner: any, args: {
     }
     candidates.push({
       commissionId: row._id,
-      settlementCents: netSettlementCents,
+      settlementCents: settlementState.openSettlementCents,
       payableAt: Number(row.payableAt ?? 0),
       createdAt: Number(row.createdAt ?? 0),
     });
@@ -1665,12 +1847,38 @@ async function readPartnerPayoutPlans(ctx: any, args: {
   const limit = normalizePayoutLimit(args.limit);
   const scanLimit = normalizePayoutCommissionScanLimit(args.limit);
   const payableCutoffAt = normalizePayableCutoffAt(args.payableCutoffAt);
-  const payableRows = await ctx.db
+  const openRows = await ctx.db
     .query("partnerCommissionLedger")
-    .withIndex("by_status_payableAt", (q: any) =>
-      q.eq("status", "payable").lte("payableAt", payableCutoffAt),
+    .withIndex("by_status_payoutOpen_payableAt", (q: any) =>
+      q.eq("status", "payable").eq("payoutOpen", true).lte("payableAt", payableCutoffAt),
     )
     .take(scanLimit);
+  const payableRowById = new Map<string, any>();
+  for (const row of openRows) {
+    payableRowById.set(String(row._id), row);
+  }
+  if (openRows.length < scanLimit) {
+    const legacyRows = await ctx.db
+      .query("partnerCommissionLedger")
+      .withIndex("by_status_payableAt", (q: any) =>
+        q.eq("status", "payable").lte("payableAt", payableCutoffAt),
+      )
+      .take(scanLimit);
+    for (const row of legacyRows) {
+      if (payableRowById.has(String(row._id))) continue;
+      if (readMaterializedPartnerCommissionSettlementState(row)) continue;
+      const recomputed = await recomputePartnerCommissionSettlementState(ctx, row._id);
+      if (recomputed?.state.payoutOpen && recomputed.commission) {
+        payableRowById.set(String(recomputed.commission._id), recomputed.commission);
+      }
+    }
+  }
+  const payableRows = Array.from(payableRowById.values()).sort(
+    (a: any, b: any) =>
+      Number(a.payableAt ?? 0) - Number(b.payableAt ?? 0) ||
+      Number(a.createdAt ?? 0) - Number(b.createdAt ?? 0) ||
+      String(a._id).localeCompare(String(b._id)),
+  );
   const partnerIds = [];
   const seenPartnerIds = new Set<string>();
   for (const row of payableRows) {
@@ -1693,7 +1901,10 @@ async function readPartnerPayoutPlans(ctx: any, args: {
     if (!partner || partner.status !== "active") continue;
     const stripeAccount = await readReadyStripeConnectPayoutAccount(ctx, partner.userId);
     if (!stripeAccount) continue;
-    const entries = await readPartnerPayablePayoutEntries(ctx, partner, { payableCutoffAt });
+    const entries = await readPartnerPayablePayoutEntries(ctx, partner, {
+      payableCutoffAt,
+      allowLegacyBackfill: false,
+    });
     const amountUsd = roundBuilderPartnerMoney(
       entries.reduce((total: number, entry: any) => total + Number(entry.amountUsd ?? 0), 0),
     );
@@ -1960,7 +2171,6 @@ async function validatePartnerPayoutBatchStillPayable(ctx: any, batchId: any) {
     }
   }
 
-  const reservedOrSettledStatuses = new Set<PartnerPayoutItemStatus>(["reserved", "settled"]);
   for (const itemTotal of itemTotalByCommissionId.values()) {
     const commission = await ctx.db.get(itemTotal.commissionId);
     if (!commission) {
@@ -1983,23 +2193,11 @@ async function validatePartnerPayoutBatchStillPayable(ctx: any, batchId: any) {
     if (!partner || partner.status !== "active") {
       return { ok: false, reason: "partner_payout_partner_not_active" };
     }
-    const adjustmentTotalUsd = await readAppliedCommissionAdjustmentTotalUsd(ctx, commission._id);
-    const otherReservedOrSettledPayoutUsd = await readCommissionPayoutItemTotalUsd(
-      ctx,
-      commission._id,
-      reservedOrSettledStatuses,
-      batchId,
-    );
-    const availableUsd = Math.max(
-      0,
-      roundBuilderPartnerMoney(
-        Number(commission.commissionAmountUsd ?? 0) +
-        adjustmentTotalUsd -
-        otherReservedOrSettledPayoutUsd,
-      ),
-    );
+    const settlementState = await readPartnerCommissionSettlementState(ctx, commission, {
+      excludeBatchId: batchId,
+    });
     const requestedCents = usdToSettlementCents(itemTotal.amountUsd);
-    const availableCents = usdToSettlementCents(availableUsd);
+    const availableCents = settlementState.openSettlementCents;
     if (requestedCents <= 0 || requestedCents > availableCents) {
       return { ok: false, reason: "partner_payout_stale_payable_balance" };
     }
@@ -2063,12 +2261,17 @@ async function markPartnerPayoutBatchStale(ctx: any, args: {
       updatedAt: args.nowMs,
     });
   }
+  const releasedCommissionIds = new Map<string, any>();
   for (const item of items) {
     if (item.status !== "reserved") continue;
     await ctx.db.patch(item._id, {
       status: "released",
       updatedAt: args.nowMs,
     });
+    releasedCommissionIds.set(String(item.commissionId), item.commissionId);
+  }
+  for (const commissionId of releasedCommissionIds.values()) {
+    await recomputePartnerCommissionSettlementState(ctx, commissionId, args.nowMs);
   }
   await recordPartnerPayoutAudit(ctx, {
     eventType: "builder_partner_payout_batch_finalized",
@@ -2372,6 +2575,7 @@ export const createPartnerPayoutCycleInternal = internalMutation({
       updatedAt: nowMs,
     });
 
+    const reservedCommissionIds = new Map<string, any>();
     for (const plan of plans) {
       const transferId = await ctx.db.insert("partnerPayoutTransfers" as any, {
         batchId,
@@ -2398,7 +2602,11 @@ export const createPartnerPayoutCycleInternal = internalMutation({
           createdAt: nowMs,
           updatedAt: nowMs,
         });
+        reservedCommissionIds.set(String(entry.commissionId), entry.commissionId);
       }
+    }
+    for (const commissionId of reservedCommissionIds.values()) {
+      await recomputePartnerCommissionSettlementState(ctx, commissionId, nowMs);
     }
 
     await recordPartnerPayoutAudit(ctx, {
@@ -2676,12 +2884,17 @@ export const rejectPartnerPayoutCycle = mutation({
         updatedAt: nowMs,
       });
     }
+    const releasedCommissionIds = new Map<string, any>();
     for (const item of items) {
       if (item.status === "settled") continue;
       await ctx.db.patch(item._id, {
         status: "released",
         updatedAt: nowMs,
       });
+      releasedCommissionIds.set(String(item.commissionId), item.commissionId);
+    }
+    for (const commissionId of releasedCommissionIds.values()) {
+      await recomputePartnerCommissionSettlementState(ctx, commissionId, nowMs);
     }
     await recordPartnerPayoutAudit(ctx, {
       eventType: "builder_partner_payout_cycle_rejected",
@@ -2800,11 +3013,16 @@ export const recordPartnerPayoutTransferSucceededInternal = internalMutation({
       .query("partnerPayoutItems" as any)
       .withIndex("by_transfer", (q: any) => q.eq("transferId", args.transferId))
       .collect();
+    const settledCommissionIds = new Map<string, any>();
     for (const item of items) {
       await ctx.db.patch(item._id, {
         status: "settled",
         updatedAt: args.nowMs,
       });
+      settledCommissionIds.set(String(item.commissionId), item.commissionId);
+    }
+    for (const commissionId of settledCommissionIds.values()) {
+      await recomputePartnerCommissionSettlementState(ctx, commissionId, args.nowMs);
     }
     await recordPartnerPayoutAudit(ctx, {
       eventType: "builder_partner_payout_transfer_succeeded",
