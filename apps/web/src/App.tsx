@@ -352,6 +352,7 @@ import {
   loadBuilderPartnerProgramCanonical,
   type BuilderPartnerProgramSnapshot,
 } from "../../../shared/builderPartnerProgramGateway";
+import type { WebBuilderPartnerProgramPanelProps } from "./components/WebBuilderPartnerProgramPanel";
 import { startCloudWorkspaceCreditTopupCheckout } from "../../../shared/cloudAccountCommerceGateway";
 import { loadOptionalOperatorAccessCanonical } from "../../../shared/cloudOperatorDashboardGateway";
 import type { OperatorAccessSnapshot } from "../../../shared/operatorTypes";
@@ -8191,6 +8192,58 @@ export default function App() {
     setCheckoutError,
     setCheckoutStatus,
   ]);
+  const openOwnedPartnerCommunitySettings = useCallback((communityId: string) => {
+    if (
+      !confirmDiscardUnsavedCommunitySettingsWeb({
+        isCommunitySettingsDirty: communitySettingsDirtyRef.current,
+        isCommunityAgentConfigDirty: communityAgentConfigDirtyRef.current,
+        activeCommunityId: selectedActiveCommunityId,
+        nextCommunityId: communityId,
+        confirmDiscard: (message) => window.confirm(message),
+      })
+    ) {
+      return;
+    }
+    const nextCommunitySlug =
+      resolveKnownCommunitySlugById(communityId) ??
+      (String(
+        communities.find((community) => community.id === communityId)?.slug ?? "",
+      ).trim() || null);
+    if (!nextCommunitySlug) return;
+    openCommunityTab(nextCommunitySlug, "settings", { pushSnapshot: false });
+  }, [
+    communities,
+    openCommunityTab,
+    resolveKnownCommunitySlugById,
+    selectedActiveCommunityId,
+  ]);
+  const builderPartnerProgramPanelProps: WebBuilderPartnerProgramPanelProps = {
+    session: session,
+    requireSignIn,
+    accountCommerceStatus,
+    accountCommerceError,
+    builderPartnerProgram,
+    isLoadingBuilderPartnerProgram,
+    builderPartnerProgramError,
+    isAcceptingBuilderPartnerTerms,
+    loadBuilderPartnerProgram: async (nextSession) => {
+      await loadBuilderPartnerProgram(nextSession as AuthSession);
+    },
+    acceptBuilderPartnerTerms,
+    openAccountSetup: openProfileSetup,
+    openCreateCommunityModal: () => openCreateCommunityModal(),
+    communities,
+    communityRoleById,
+    openOwnedCommunitySettings: openOwnedPartnerCommunitySettings,
+    startStripeConnectOnboarding: (opts) => {
+      void startStripeConnectOnboarding({
+        context: opts?.context ?? "account",
+        communitySlug: opts?.communitySlug ?? null,
+        country: opts?.country ?? null,
+      });
+    },
+    isStartingStripeConnectOnboarding,
+  };
   const settingsPanelsProps: WebSettingsPanelsProps = {
     settingsGroup: settingsGroup as SettingsGroup,
     profile: {
@@ -8216,26 +8269,7 @@ export default function App() {
       formatRelativeTime,
       communities,
       communityRoleById,
-      openOwnedCommunitySettings: (communityId) => {
-        if (
-          !confirmDiscardUnsavedCommunitySettingsWeb({
-            isCommunitySettingsDirty: communitySettingsDirtyRef.current,
-            isCommunityAgentConfigDirty: communityAgentConfigDirtyRef.current,
-            activeCommunityId: selectedActiveCommunityId,
-            nextCommunityId: communityId,
-            confirmDiscard: (message) => window.confirm(message),
-          })
-        ) {
-          return;
-        }
-        const nextCommunitySlug =
-          resolveKnownCommunitySlugById(communityId) ??
-          (String(
-            communities.find((community) => community.id === communityId)?.slug ?? "",
-          ).trim() || null);
-        if (!nextCommunitySlug) return;
-        openCommunityTab(nextCommunitySlug, "settings", { pushSnapshot: false });
-      },
+      openOwnedCommunitySettings: openOwnedPartnerCommunitySettings,
       communityInitials,
       builderPartnerProgram,
       isLoadingBuilderPartnerProgram,
@@ -8629,6 +8663,22 @@ export default function App() {
     hasOperatorRightPanelAccess,
     isOpen: isWorkspaceRightPanelOpen,
   });
+  const shouldLoadBuilderPartnerRightPanel = Boolean(
+    session &&
+    showWorkspaceRightPanelControl &&
+    isWorkspaceRightPanelVisible
+  );
+
+  useEffect(() => {
+    if (!shouldLoadBuilderPartnerRightPanel || !session) return;
+    void loadBuilderPartnerProgram(session as AuthSession);
+  }, [
+    canonicalSessionUserId,
+    communities.length,
+    loadBuilderPartnerProgram,
+    session,
+    shouldLoadBuilderPartnerRightPanel,
+  ]);
 
   useEffect(() => {
     if (showWorkspaceRightPanelControl) return;
@@ -8871,6 +8921,7 @@ export default function App() {
         ...workspaceHostProps,
         showWorkspaceRightPanel: showWorkspaceRightPanelControl,
         operatorRightPanelSession: showWorkspaceRightPanelOperatorTabs ? session : null,
+        builderPartnerProgramPanel: builderPartnerProgramPanelProps,
         workspaceRightPanelOpen: isWorkspaceRightPanelVisible,
         workspaceUserDataPanel,
         onWorkspaceRightPanelLayoutChange: handleWorkspaceRightPanelLayoutChange,

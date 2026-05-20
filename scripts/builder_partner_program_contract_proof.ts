@@ -8,7 +8,10 @@ import {
   BUILDER_PARTNER_PLATFORM_FEE_SHARE_BPS,
   BUILDER_PARTNER_PROGRAM_VERSION,
   BUILDER_PARTNER_TERMS_VERSION,
+  BUILDER_PARTNER_TOOL_USAGE_POLYNET_RETAINED_REVENUE_BPS,
+  BUILDER_PARTNER_TOOL_USAGE_REVENUE_SHARE_BPS,
   calculateBuilderPartnerCommunityRevenueCommission,
+  calculateBuilderPartnerToolUsageCommission,
 } from "../shared/builderPartnerProgram.ts";
 import { buildAttributionRouteLabel } from "../shared/routePrivacy.ts";
 
@@ -25,6 +28,8 @@ function proveConstants() {
   assert.equal(BUILDER_PARTNER_TERMS_VERSION, "builder_partner_terms_v1");
   assert.equal(BUILDER_PARTNER_COMMUNITY_PLATFORM_FEE_BPS, 1500);
   assert.equal(BUILDER_PARTNER_PLATFORM_FEE_SHARE_BPS, 4000);
+  assert.equal(BUILDER_PARTNER_TOOL_USAGE_REVENUE_SHARE_BPS, 2000);
+  assert.equal(BUILDER_PARTNER_TOOL_USAGE_POLYNET_RETAINED_REVENUE_BPS, 4000);
   assert.equal(BUILDER_PARTNER_ATTRIBUTION_WINDOW_MS, 30 * 24 * 60 * 60 * 1000);
   assert.equal(BUILDER_PARTNER_COMMISSION_HOLD_MS, 30 * 24 * 60 * 60 * 1000);
   assert.equal(BUILDER_PARTNER_PAYOUT_BUFFER_MS, 14 * 24 * 60 * 60 * 1000);
@@ -40,6 +45,34 @@ function proveCommunityCommissionMath() {
     commissionAmountUsd: 6,
     effectiveCommunityRevenueShareBps: 600,
   });
+  assert.deepEqual(
+    calculateBuilderPartnerToolUsageCommission({
+      polynetPriceUsd: 1,
+      rawVendorCostUsd: 0.4,
+    }),
+    {
+      toolRevenueUsd: 1,
+      rawVendorCostUsd: 0.4,
+      grossMarginUsd: 0.6,
+      commissionAmountUsd: 0.2,
+      retainedPolynetRevenueUsd: 0.4,
+      effectiveToolUsageRevenueShareBps: 2000,
+    },
+  );
+  assert.deepEqual(
+    calculateBuilderPartnerToolUsageCommission({
+      polynetPriceUsd: 1,
+      rawVendorCostUsd: 0.5,
+    }),
+    {
+      toolRevenueUsd: 1,
+      rawVendorCostUsd: 0.5,
+      grossMarginUsd: 0.5,
+      commissionAmountUsd: 0.1,
+      retainedPolynetRevenueUsd: 0.4,
+      effectiveToolUsageRevenueShareBps: 1000,
+    },
+  );
 }
 
 function proveSchemaContract(schemaSource: string) {
@@ -76,8 +109,8 @@ function proveSchemaContract(schemaSource: string) {
   );
   assert.match(
     schemaSource,
-    /partnerCommissionLedger:[\s\S]*commissionKey:\s*v\.string\(\)[\s\S]*basisType:\s*v\.literal\("community_platform_fee"\)[\s\S]*basisAmountUsd:\s*v\.number\(\)[\s\S]*commissionRateBps:\s*v\.number\(\)[\s\S]*commissionAmountUsd:\s*v\.number\(\)/,
-    "expected commission ledger to be idempotent and limited to community revenue basis",
+    /partnerCommissionLedger:[\s\S]*commissionKey:\s*v\.string\(\)[\s\S]*basisType:\s*v\.union\([\s\S]*v\.literal\("community_platform_fee"\)[\s\S]*v\.literal\("paid_tool_usage"\)[\s\S]*basisAmountUsd:\s*v\.number\(\)[\s\S]*commissionRateBps:\s*v\.number\(\)[\s\S]*commissionAmountUsd:\s*v\.number\(\)/,
+    "expected commission ledger to be idempotent across community revenue and paid-tool usage basis rows",
   );
   assert.match(
     schemaSource,
@@ -201,7 +234,22 @@ function proveSchemaContract(schemaSource: string) {
   );
 }
 
-function proveUiContract(uiSource: string) {
+function proveUiContract(uiSource: string, settingsWrapperSource: string, partnerPanelSource: string) {
+  assertIncludes(
+    settingsWrapperSource,
+    "WebBuilderPartnerProgramPanel",
+    "partner settings UI must delegate to the reusable partner panel",
+  );
+  assertIncludes(
+    partnerPanelSource,
+    "export function WebBuilderPartnerProgramPanel",
+    "partner dashboard UI must live in the reusable partner panel",
+  );
+  assert.doesNotMatch(
+    settingsWrapperSource,
+    /Partner link|builder-partner-dashboard|builder-partner-payout-history/,
+    "partner settings wrapper must not duplicate the partner dashboard implementation",
+  );
   assertIncludes(
     uiSource,
     "BUILDER_PARTNER_COMMUNITY_PLATFORM_FEE_BPS",
@@ -217,14 +265,19 @@ function proveUiContract(uiSource: string) {
     "BUILDER_PARTNER_PLATFORM_FEE_SHARE_BPS",
     "partner settings UI",
   );
-  assert.doesNotMatch(
+  assertIncludes(
     uiSource,
-    /BUILDER_PARTNER_TOOL_GROSS_MARGIN_SHARE_BPS|Tool usage|gross margin/i,
-    "partner settings UI should not expose deferred paid-tool partner economics",
+    "BUILDER_PARTNER_TOOL_USAGE_REVENUE_SHARE_BPS",
+    "partner settings UI",
   );
   assertIncludes(
     uiSource,
-    "Builder Partners earn from referred creators' community revenue.",
+    "Paid tool usage",
+    "partner settings UI",
+  );
+  assertIncludes(
+    uiSource,
+    "Builder Partners earn from referred creators' community revenue and settled paid tool usage.",
     "partner settings UI",
   );
   assertIncludes(
@@ -299,7 +352,7 @@ function proveUiContract(uiSource: string) {
   );
   assert.doesNotMatch(
     uiSource,
-    /20% of gross margin/i,
+    /20% of gross margin|BUILDER_PARTNER_TOOL_GROSS_MARGIN_SHARE_BPS/i,
     "partner settings UI should not describe tool usage as gross margin",
   );
   assert.doesNotMatch(
@@ -316,6 +369,106 @@ function proveUiContract(uiSource: string) {
     uiSource,
     /Ledger-backed|commission rows/i,
     "partner settings UI should not expose backend ledger implementation details",
+  );
+}
+
+function provePartnerRightPanelContract(
+  appSource: string,
+  rightPanelSource: string,
+  rightPanelModelSource: string,
+) {
+  assertIncludes(
+    rightPanelModelSource,
+    "showPartnerTab",
+    "workspace right-panel model must gate the Partner tab explicitly",
+  );
+  assertIncludes(
+    rightPanelModelSource,
+    "{ id: \"partner\" as const, label: \"Partner\" }",
+    "workspace right-panel model must add the Partner tab only when available",
+  );
+  assertIncludes(
+    rightPanelModelSource,
+    "value === \"partner\"",
+    "workspace right-panel stored tab parser must understand the Partner tab",
+  );
+  assertIncludes(
+    rightPanelSource,
+    "activeInsightTab === \"partner\" && props.builderPartnerProgramPanel",
+    "workspace right panel must render Partner only when partner panel props are present",
+  );
+  assertIncludes(
+    rightPanelSource,
+    "<WebBuilderPartnerProgramPanel {...props.builderPartnerProgramPanel} />",
+    "workspace right panel must delegate Partner rendering to the reusable partner panel",
+  );
+  assertIncludes(
+    rightPanelSource,
+    "props.builderPartnerProgramPanel?.builderPartnerProgram?.partner",
+    "workspace right panel tab availability must be based on a real partner record",
+  );
+  assertIncludes(
+    appSource,
+    "shouldLoadBuilderPartnerRightPanel",
+    "App shell must load partner status for right-panel tab eligibility",
+  );
+  assertIncludes(
+    appSource,
+    "builderPartnerProgramPanel: builderPartnerProgramPanelProps",
+    "App shell must pass the existing partner snapshot/actions into the workspace right panel",
+  );
+  assert.doesNotMatch(
+    rightPanelSource,
+    /builderPartners:getMyBuilderPartnerProgram|acceptBuilderPartnerTermsCanonical|loadBuilderPartnerProgramCanonical/,
+    "workspace right-panel components must not create a second partner data-loading path",
+  );
+}
+
+function proveBuilderPartnerRuntimeSmokeContract(runtimeSmokeSource: string) {
+  assertIncludes(
+    runtimeSmokeSource,
+    "buildSmokePayoutCyclePeriodCandidates",
+    "Builder Partner runtime smoke must isolate payout-cycle periods across repeated runs",
+  );
+  assertIncludes(
+    runtimeSmokeSource,
+    "SMOKE_PAYOUT_CYCLE_BASE_YEAR",
+    "Builder Partner runtime smoke must use smoke-only payout-cycle periods",
+  );
+  assertIncludes(
+    runtimeSmokeSource,
+    "cyclePeriod,",
+    "Builder Partner runtime smoke must pass an explicit payout cycle period",
+  );
+  assertIncludes(
+    runtimeSmokeSource,
+    "reason === \"partner_payout_cycle_active\"",
+    "Builder Partner runtime smoke must handle repeat-run active smoke payout cycles",
+  );
+  assertIncludes(
+    runtimeSmokeSource,
+    "cycleKey.startsWith(\"partner_payout_smoke:\")",
+    "Builder Partner runtime smoke must only skip active cycles that are known smoke artifacts",
+  );
+  assertIncludes(
+    runtimeSmokeSource,
+    "beforePayoutReservation",
+    "Builder Partner runtime smoke must prove the current partner has ready commission before payout generation",
+  );
+  assertIncludes(
+    runtimeSmokeSource,
+    "afterPayoutReservation",
+    "Builder Partner runtime smoke must prove the current partner commission was reserved by payout generation",
+  );
+  assertIncludes(
+    runtimeSmokeSource,
+    "Number(payoutCycle.cycle?.totalAmountUsd) >= 6",
+    "Builder Partner runtime smoke must tolerate older open smoke rows in shared dev deployments",
+  );
+  assert.doesNotMatch(
+    runtimeSmokeSource,
+    /batchKey:\s*`partner_payout_smoke:\$\{runId\}`,[\s\S]*payableCutoffAt:\s*holdClearedAt/,
+    "Builder Partner runtime smoke must not rely on the default current payout period",
   );
 }
 
@@ -1155,10 +1308,40 @@ function proveCommissionProducerContract(
     "requireCommunityRevenueEligibility: true",
     "Builder Partner commission producer",
   );
+  assertIncludes(
+    builderPartnersSource,
+    "recordPaidToolUsagePartnerCommission",
+    "Builder Partner paid-tool commission producer",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "paid_tool_usage:${creditKey}",
+    "Builder Partner paid-tool commission idempotency",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "calculateBuilderPartnerToolUsageCommission",
+    "Builder Partner paid-tool commission math",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "basisType: \"paid_tool_usage\"",
+    "Builder Partner paid-tool commission basis",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "commissionRateBps: commission.effectiveToolUsageRevenueShareBps",
+    "Builder Partner paid-tool commission should record the effective capped rate",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "if (commissionSettlementCents <= 0) return null;",
+    "Builder Partner commissions should not materialize sub-cent zero-settlement rows",
+  );
   assert.doesNotMatch(
     builderPartnersSource,
-    /recordToolUsagePartnerCommission|tool_gross_margin:\$\{String\(args\.creditLedgerEntryId\)\}|calculateBuilderPartnerToolGrossMarginCommission|BUILDER_PARTNER_TOOL_GROSS_MARGIN_SHARE_BPS/,
-    "Builder Partner producer should not create new paid-tool commissions during MVP",
+    /tool_gross_margin:\$\{String\(args\.creditLedgerEntryId\)\}|calculateBuilderPartnerToolGrossMarginCommission|BUILDER_PARTNER_TOOL_GROSS_MARGIN_SHARE_BPS|sourceCreditLedgerEntryId/,
+    "Builder Partner paid-tool producer should not revive the old gross-margin/source-id model",
   );
   assertIncludes(
     builderPartnersSource,
@@ -1215,10 +1398,20 @@ function proveCommissionProducerContract(
     "communitySubscriptionStatusGrantsAccess(communitySubscriptionStatus)",
     "community checkout settlement",
   );
-  assert.doesNotMatch(
+  assertIncludes(
     workspaceCreditsSource,
-    /recordToolUsagePartnerCommission\(ctx,|paidUsageRatio|tool_gross_margin/,
-    "paid tool usage settlement should not emit partner commissions during MVP",
+    "recordSettledPaidToolPartnerCommission(ctx,",
+    "paid tool usage settlement should emit partner commissions from settled ledger rows",
+  );
+  assertIncludes(
+    workspaceCreditsSource,
+    "purchasedCreditsSettled",
+    "paid tool usage partner commissions should be based on purchased settled credits",
+  );
+  assertIncludes(
+    workspaceCreditsSource,
+    "rawVendorCostUsd: roundCurrency(args.rawVendorCostUsd * paidUsageRatio)",
+    "paid tool usage partner commissions should prorate vendor cost to purchased usage",
   );
 }
 
@@ -1390,6 +1583,10 @@ function provePartnerPayoutSettlementContract(
     builderPartnersSource.indexOf("export const retryPartnerPayoutCycle"),
     builderPartnersSource.indexOf("export const holdPartnerPayoutCycle"),
   );
+  const operatorPerformanceSource = builderPartnersSource.slice(
+    builderPartnersSource.indexOf("export const listPartnerPerformanceForOperator"),
+    builderPartnersSource.indexOf("export const listPartnerPayoutCyclesForOperator"),
+  );
   assert.doesNotMatch(
     builderPartnersSource,
     /export const previewPartnerPayoutBatch/,
@@ -1409,6 +1606,11 @@ function provePartnerPayoutSettlementContract(
     builderPartnersSource,
     "listPartnerPayoutCyclesForOperator",
     "Builder Partner payout settlement should expose generated cycles to operators",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "listPartnerPerformanceForOperator",
+    "Builder Partner payout settlement should expose ledger-derived partner performance to operators",
   );
   assert.doesNotMatch(
     builderPartnersSource,
@@ -1857,6 +2059,76 @@ function provePartnerPayoutSettlementContract(
   );
   assertIncludes(
     operatorGatewaySource,
+    "builderPartners:listPartnerPerformanceForOperator",
+    "Operator dashboard gateway must load partner performance from the partner ledger",
+  );
+  assertIncludes(
+    operatorGatewaySource,
+    "range: params.range ?? \"30d\"",
+    "Operator dashboard gateway must align partner performance to the Business window",
+  );
+  assertIncludes(
+    operatorPerformanceSource,
+    "requireOperatorRole(ctx, args.authSubject, \"operator\")",
+    "Operator partner performance must be operator gated",
+  );
+  assertIncludes(
+    operatorPerformanceSource,
+    "range: v.optional(v.union(v.literal(\"7d\"), v.literal(\"30d\"), v.literal(\"90d\"), v.literal(\"all\")))",
+    "Operator partner performance must accept the same range vocabulary as Business",
+  );
+  assertIncludes(
+    operatorPerformanceSource,
+    "normalizePartnerPerformanceRangeStart",
+    "Operator partner performance must compute a range start",
+  );
+  assertIncludes(
+    operatorPerformanceSource,
+    "\"partnerCommissionLedger\"",
+    "Operator partner performance must derive generated commission from commission ledger truth",
+  );
+  assertIncludes(
+    operatorPerformanceSource,
+    "\"partnerPayoutTransfers\"",
+    "Operator partner performance must derive paid-out money from successful transfer truth",
+  );
+  assertIncludes(
+    operatorPerformanceSource,
+    "scoped.gte(\"createdAt\", rangeStart)",
+    "Operator partner performance must range-scope generated commission rows",
+  );
+  assertIncludes(
+    operatorPerformanceSource,
+    ".withIndex(\"by_status_processedAt\"",
+    "Operator partner paid-out performance must read transfers by successful processing time",
+  );
+  assertIncludes(
+    operatorPerformanceSource,
+    "scoped.gte(\"processedAt\", rangeStart)",
+    "Operator partner paid-out performance must range-scope successful transfers",
+  );
+  assertIncludes(
+    operatorPerformanceSource,
+    "readMaterializedPartnerCommissionSettlementState",
+    "Operator partner performance must read materialized settlement state instead of recalculating payout internals",
+  );
+  assert.doesNotMatch(
+    operatorPerformanceSource,
+    /readPartnerCommissionSettlementState|collectPartnerPayoutItemsByCommission|collectAppliedCommissionAdjustments/,
+    "Operator partner performance must not fan out into per-commission adjustment or payout-item reads",
+  );
+  assertIncludes(
+    operatorPerformanceSource,
+    "commissionGeneratedUsd",
+    "Operator partner performance must keep generated commission separate from paid-out transfers",
+  );
+  assertIncludes(
+    operatorPerformanceSource,
+    "partnerPaidOutUsd",
+    "Operator partner performance must label only successful transfers as partner paid out",
+  );
+  assertIncludes(
+    operatorGatewaySource,
     "builderPartners:approvePartnerPayoutCycle",
     "Operator dashboard gateway must approve payout cycles",
   );
@@ -1879,6 +2151,36 @@ function provePartnerPayoutSettlementContract(
     operatorPanelSource,
     "Partner payout cycles",
     "Operator dashboard should show partner payout cycles",
+  );
+  assertIncludes(
+    operatorPanelSource,
+    "Partners",
+    "Operator dashboard should show active partner count in Business",
+  );
+  assertIncludes(
+    operatorPanelSource,
+    "Partner paid out",
+    "Operator dashboard should show successful partner transfers in Business",
+  );
+  assertIncludes(
+    operatorPanelSource,
+    "Succeeded partner transfers in the selected window.",
+    "Operator dashboard should label partner paid-out as a selected-window metric",
+  );
+  assertIncludes(
+    operatorPanelSource,
+    "Partner ledger unavailable.",
+    "Operator dashboard should not render missing partner metrics as true zero",
+  );
+  assertIncludes(
+    operatorPanelSource,
+    "Top partners",
+    "Operator dashboard should rank top partners in Business",
+  );
+  assertIncludes(
+    operatorPanelSource,
+    "Ranking uses generated partner commission in the selected window.",
+    "Operator dashboard should disclose top-partner ranking basis",
   );
   assertIncludes(
     operatorPanelSource,
@@ -2002,6 +2304,21 @@ function provePartnerPayoutSettlementContract(
   );
   assertIncludes(
     docsSource,
+    "Partner commissions are produced from eligible community revenue and settled paid-tool usage.",
+    "Builder Partner payout docs",
+  );
+  assertIncludes(
+    docsSource,
+    "target 20% of collected paid-tool usage",
+    "Builder Partner payout docs",
+  );
+  assertIncludes(
+    docsSource,
+    "preserve a 40% PolyNet retained-revenue floor",
+    "Builder Partner payout docs",
+  );
+  assertIncludes(
+    docsSource,
     "Partner payout settlement should run through system-generated monthly payout cycles",
     "Builder Partner payout docs",
   );
@@ -2050,6 +2367,11 @@ function provePartnerPayoutSettlementContract(
     ".index(\"by_commission\", [\"commissionId\"])",
     "Builder Partner payout schema",
   );
+  assertIncludes(
+    schemaSource,
+    ".index(\"by_status_processedAt\", [\"status\", \"processedAt\"])",
+    "Builder Partner payout transfers need a processed-time index for operator paid-out windows",
+  );
   assert.doesNotMatch(
     uiSource,
     /executePartnerPayoutBatch|approvePartnerPayoutBatch|createPartnerPayoutBatch/,
@@ -2059,12 +2381,23 @@ function provePartnerPayoutSettlementContract(
 
 function main() {
   const schemaSource = readText(new URL("../convex/schema.ts", import.meta.url));
-  const uiSource = readText(
+  const settingsWrapperSource = readText(
     new URL("../apps/web/src/components/WebBuilderPartnerSettingsSection.tsx", import.meta.url),
   );
+  const partnerPanelSource = readText(
+    new URL("../apps/web/src/components/WebBuilderPartnerProgramPanel.tsx", import.meta.url),
+  );
+  const uiSource = [settingsWrapperSource, partnerPanelSource].join("\n");
   const builderPartnersSource = readText(new URL("../convex/builderPartners.ts", import.meta.url));
   const gatewaySource = readText(new URL("../shared/builderPartnerProgramGateway.ts", import.meta.url));
   const operatorGatewaySource = readText(new URL("../shared/cloudOperatorDashboardGateway.ts", import.meta.url));
+  const rightPanelSource = [
+    readText(new URL("../apps/web/src/components/WebWorkspaceHost.tsx", import.meta.url)),
+    readText(new URL("../apps/web/src/components/WebWorkspaceRightPanel.tsx", import.meta.url)),
+  ].join("\n");
+  const rightPanelModelSource = readText(
+    new URL("../apps/web/src/components/workspaceRightPanelModel.ts", import.meta.url),
+  );
   const operatorPanelSource = [
     readText(new URL("../apps/web/src/components/WebWorkspaceRightPanel.tsx", import.meta.url)),
     readText(new URL("../apps/web/src/components/useOperatorDashboardData.ts", import.meta.url)),
@@ -2085,6 +2418,7 @@ function main() {
   const packageSource = readText(new URL("../package.json", import.meta.url));
   const accountSetupCoreSource = readText(new URL("../convex/accountSetupCore.ts", import.meta.url));
   const communityLifecycleSource = readText(new URL("../convex/communityLifecycle.ts", import.meta.url));
+  const runtimeSmokeSource = readText(new URL("../scripts/builder_partner_program_runtime_smoke.ts", import.meta.url));
   const communityPublishReadinessSource = readText(
     new URL("../shared/communityPublishReadiness.ts", import.meta.url),
   );
@@ -2098,7 +2432,9 @@ function main() {
   proveAttributionRoutePrivacy();
   proveEndToEndPartnerLifecycleBehavior();
   proveSchemaContract(schemaSource);
-  proveUiContract(uiSource);
+  proveUiContract(uiSource, settingsWrapperSource, partnerPanelSource);
+  provePartnerRightPanelContract(appSource, rightPanelSource, rightPanelModelSource);
+  proveBuilderPartnerRuntimeSmokeContract(runtimeSmokeSource);
   proveAutomaticUnlockContract(builderPartnersSource, gatewaySource, appSource);
   proveEndToEndPartnerLifecycleSourceContract(
     builderPartnersSource,

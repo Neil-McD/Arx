@@ -5,6 +5,9 @@ const targetArgs = buildTargetArgs();
 const runId = `partner-smoke-${Date.now().toString(36)}`;
 const nowMs = Date.now();
 const DAY_MS = 24 * 60 * 60 * 1000;
+const SMOKE_PAYOUT_CYCLE_BASE_YEAR = 2200;
+const SMOKE_PAYOUT_CYCLE_MAX_YEAR = 9999;
+const SMOKE_PAYOUT_CYCLE_ATTEMPT_COUNT = 36;
 const purchaseNowMs = nowMs - 46 * DAY_MS;
 const partnerSubject = `smoke:${runId}:partner`;
 const referredSubject = `smoke:${runId}:referred`;
@@ -64,6 +67,72 @@ function runConvex(functionName: string, args: Record<string, unknown>, options:
   const jsonOffset = firstJsonOffset(output);
   assert.ok(jsonOffset >= 0, `expected ${functionName} to return JSON, got: ${output}`);
   return JSON.parse(output.slice(jsonOffset));
+}
+
+function hashStringToPositiveInteger(value: string): number {
+  let hash = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    hash = Math.imul(hash ^ value.charCodeAt(index), 16777619) >>> 0;
+  }
+  return hash;
+}
+
+function formatSmokePayoutCyclePeriod(monthOffset: number): string {
+  const normalizedOffset = Math.max(0, Math.floor(monthOffset));
+  const year = SMOKE_PAYOUT_CYCLE_BASE_YEAR + Math.floor(normalizedOffset / 12);
+  const month = String((normalizedOffset % 12) + 1).padStart(2, "0");
+  return `${year}-${month}`;
+}
+
+function buildSmokePayoutCyclePeriodCandidates(smokeRunId: string): string[] {
+  const maxMonthOffset =
+    ((SMOKE_PAYOUT_CYCLE_MAX_YEAR - SMOKE_PAYOUT_CYCLE_BASE_YEAR + 1) * 12) -
+    SMOKE_PAYOUT_CYCLE_ATTEMPT_COUNT;
+  const startOffset = hashStringToPositiveInteger(smokeRunId) % Math.max(1, maxMonthOffset);
+  return Array.from({ length: SMOKE_PAYOUT_CYCLE_ATTEMPT_COUNT }, (_, index) =>
+    formatSmokePayoutCyclePeriod(startOffset + index),
+  );
+}
+
+function createSmokePayoutCycle(input: {
+  runId: string;
+  limit: number;
+  payableCutoffAt: number;
+  nowMs: number;
+}) {
+  const skippedActiveCycles: Array<{ cyclePeriod: string; cycleKey: string }> = [];
+  for (const cyclePeriod of buildSmokePayoutCyclePeriodCandidates(input.runId)) {
+    const result = runConvex("builderPartners:createPartnerPayoutCycleInternal", {
+      batchKey: `partner_payout_smoke:${input.runId}:${cyclePeriod}`,
+      cyclePeriod,
+      limit: input.limit,
+      payableCutoffAt: input.payableCutoffAt,
+      nowMs: input.nowMs,
+    });
+    assert.equal(result?.ok, true, JSON.stringify(result));
+    if (result.created === true) {
+      return {
+        cyclePeriod,
+        payoutCycle: result,
+        skippedActiveCycles,
+      };
+    }
+    if (result.reason === "partner_payout_cycle_active") {
+      const cycleKey = String(result.cycle?.cycleKey ?? "");
+      assert.ok(
+        cycleKey.startsWith("partner_payout_smoke:"),
+        `active non-smoke payout cycle blocked smoke period ${cyclePeriod}: ${JSON.stringify(result)}`,
+      );
+      skippedActiveCycles.push({ cyclePeriod, cycleKey });
+      continue;
+    }
+    assert.fail(`unexpected payout cycle smoke result for ${cyclePeriod}: ${JSON.stringify(result)}`);
+  }
+  assert.fail(
+    `exhausted smoke payout cycle periods after ${SMOKE_PAYOUT_CYCLE_ATTEMPT_COUNT} attempts: ${
+      JSON.stringify(skippedActiveCycles)
+    }`,
+  );
 }
 
 function identity(subject: string, email: string) {
@@ -357,19 +426,35 @@ const maturity = runConvex("builderPartners:advancePartnerCommissionsToPayableIn
 });
 assert.equal(maturity.ok, true);
 assert.ok(Number(maturity.advanced) >= 1, "expected at least one partner commission to mature");
+const beforePayoutReservation = runConvex(
+  "builderPartners:getMyBuilderPartnerProgram",
+  { authSubject: partnerSubject },
+  { identity: partner.identity },
+);
+assert.equal(Number(beforePayoutReservation.commissionSummary.readyUsd), 6);
+assert.equal(Number(beforePayoutReservation.commissionSummary.readyCount), 1);
 
 const payoutNowMs = nowMs;
-const payoutCycle = runConvex("builderPartners:createPartnerPayoutCycleInternal", {
-  batchKey: `partner_payout_smoke:${runId}`,
-  limit: 10,
+const smokePayoutCycle = createSmokePayoutCycle({
+  runId,
+  limit: 250,
   payableCutoffAt: holdClearedAt,
   nowMs: payoutNowMs,
 });
+const payoutCycle = smokePayoutCycle.payoutCycle;
 assert.equal(payoutCycle.ok, true);
 assert.equal(payoutCycle.created, true, JSON.stringify(payoutCycle));
-assert.equal(Number(payoutCycle.cycle?.totalAmountUsd), 6);
-assert.equal(Number(payoutCycle.cycle?.partnerCount), 1);
-assert.equal(Number(payoutCycle.cycle?.itemCount), 1);
+assert.equal(payoutCycle.cycle?.cycleKey, `partner_payout_smoke:${runId}:${smokePayoutCycle.cyclePeriod}`);
+assert.ok(Number(payoutCycle.cycle?.totalAmountUsd) >= 6, JSON.stringify(payoutCycle));
+assert.ok(Number(payoutCycle.cycle?.partnerCount) >= 1, JSON.stringify(payoutCycle));
+assert.ok(Number(payoutCycle.cycle?.itemCount) >= 1, JSON.stringify(payoutCycle));
+const afterPayoutReservation = runConvex(
+  "builderPartners:getMyBuilderPartnerProgram",
+  { authSubject: partnerSubject },
+  { identity: partner.identity },
+);
+assert.equal(Number(afterPayoutReservation.commissionSummary.readyUsd), 0);
+assert.equal(Number(afterPayoutReservation.commissionSummary.readyCount), 0);
 
 console.log(JSON.stringify({
   ok: true,
@@ -380,6 +465,10 @@ console.log(JSON.stringify({
   referralCode,
   checkoutCommissionUsd: afterCheckout.commissionSummary.pendingUsd,
   maturity,
+  beforePayoutReservation: beforePayoutReservation.commissionSummary,
+  afterPayoutReservation: afterPayoutReservation.commissionSummary,
+  payoutCyclePeriod: smokePayoutCycle.cyclePeriod,
   payoutCycle: payoutCycle.cycle,
+  skippedActivePayoutCycles: smokePayoutCycle.skippedActiveCycles,
 }, null, 2));
 console.log("PASS: builder partner runtime smoke passed");

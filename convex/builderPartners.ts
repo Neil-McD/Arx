@@ -15,7 +15,10 @@ import {
   BUILDER_PARTNER_PROGRAM_VERSION,
   BUILDER_PARTNER_PLATFORM_FEE_SHARE_BPS,
   BUILDER_PARTNER_TERMS_VERSION,
+  BUILDER_PARTNER_TOOL_USAGE_POLYNET_RETAINED_REVENUE_BPS,
+  BUILDER_PARTNER_TOOL_USAGE_REVENUE_SHARE_BPS,
   calculateBuilderPartnerCommunityRevenueCommission,
+  calculateBuilderPartnerToolUsageCommission,
   roundBuilderPartnerMoney,
 } from "../shared/builderPartnerProgram";
 import { buildAttributionRouteLabel } from "../shared/routePrivacy";
@@ -38,12 +41,32 @@ type PartnerPayoutCycleOperatorStatus =
   | "held"
   | "failed"
   | "rejected";
+type BuilderPartnerStatus = "active" | "paused" | "disabled";
+type OperatorPartnerPerformanceRange = "7d" | "30d" | "90d" | "all";
+
+type OperatorPartnerPerformanceAggregate = {
+  partnerId: any;
+  partnerUserId: any;
+  code: string;
+  status: BuilderPartnerStatus;
+  createdAt: number;
+  commissionGeneratedCents: number;
+  pendingCents: number;
+  readyCents: number;
+  paidOutCents: number;
+  boundReferrals: number;
+  latestCommissionAt: number | null;
+};
 
 const BUILDER_PARTNER_MISSING_EVIDENCE_RECHECK_MS = 24 * 60 * 60 * 1000;
 const BUILDER_PARTNER_PAYOUT_COMMISSION_SCAN_MULTIPLIER = 20;
 const BUILDER_PARTNER_PAYOUT_COMMISSION_MAX_SCAN = 5000;
 const BUILDER_PARTNER_OPERATOR_PAYOUT_CYCLE_LIMIT = 24;
 const BUILDER_PARTNER_LARGE_PAYOUT_CYCLE_USD = 1000;
+const BUILDER_PARTNER_OPERATOR_PERFORMANCE_PARTNER_SCAN_LIMIT = 500;
+const BUILDER_PARTNER_OPERATOR_PERFORMANCE_COMMISSION_SCAN_LIMIT = 2000;
+const BUILDER_PARTNER_OPERATOR_PERFORMANCE_TRANSFER_SCAN_LIMIT = 1000;
+const BUILDER_PARTNER_OPERATOR_PERFORMANCE_TOP_LIMIT = 12;
 
 function authLookupIsOptionalFailure(error: unknown): boolean {
   const message =
@@ -171,6 +194,136 @@ function normalizePartnerPayoutCycleOperatorLimit(value: unknown): number {
   const limit = Math.floor(Number(value ?? BUILDER_PARTNER_OPERATOR_PAYOUT_CYCLE_LIMIT));
   if (!Number.isFinite(limit) || limit <= 0) return BUILDER_PARTNER_OPERATOR_PAYOUT_CYCLE_LIMIT;
   return Math.min(BUILDER_PARTNER_OPERATOR_PAYOUT_CYCLE_LIMIT, limit);
+}
+
+function normalizePartnerPerformanceTopLimit(value: unknown): number {
+  const limit = Math.floor(Number(value ?? BUILDER_PARTNER_OPERATOR_PERFORMANCE_TOP_LIMIT));
+  if (!Number.isFinite(limit) || limit <= 0) return BUILDER_PARTNER_OPERATOR_PERFORMANCE_TOP_LIMIT;
+  return Math.min(BUILDER_PARTNER_OPERATOR_PERFORMANCE_TOP_LIMIT * 2, limit);
+}
+
+function normalizePartnerPerformanceRange(value: unknown): OperatorPartnerPerformanceRange {
+  if (value === "7d") return "7d";
+  if (value === "90d") return "90d";
+  if (value === "all") return "all";
+  return "30d";
+}
+
+function normalizePartnerPerformanceRangeStart(
+  range: OperatorPartnerPerformanceRange,
+  nowMs: number,
+): number | null {
+  switch (range) {
+    case "7d":
+      return nowMs - 7 * 86400000;
+    case "30d":
+      return nowMs - 30 * 86400000;
+    case "90d":
+      return nowMs - 90 * 86400000;
+    case "all":
+    default:
+      return null;
+  }
+}
+
+function readBuilderPartnerStatus(value: unknown): BuilderPartnerStatus {
+  if (value === "paused") return "paused";
+  if (value === "disabled") return "disabled";
+  return "active";
+}
+
+function createOperatorPartnerPerformanceAggregate(partner: any): OperatorPartnerPerformanceAggregate {
+  return {
+    partnerId: partner._id,
+    partnerUserId: partner.userId,
+    code: String(partner.code ?? ""),
+    status: readBuilderPartnerStatus(partner.status),
+    createdAt: Number(partner.createdAt ?? 0),
+    commissionGeneratedCents: 0,
+    pendingCents: 0,
+    readyCents: 0,
+    paidOutCents: 0,
+    boundReferrals: 0,
+    latestCommissionAt: null,
+  };
+}
+
+function upsertOperatorPartnerPerformanceAggregate(
+  aggregateByPartnerId: Map<string, OperatorPartnerPerformanceAggregate>,
+  partner: any,
+) {
+  const partnerId = String(partner?._id ?? "");
+  if (!partnerId) return null;
+  const existing = aggregateByPartnerId.get(partnerId);
+  if (existing) return existing;
+  const aggregate = createOperatorPartnerPerformanceAggregate(partner);
+  aggregateByPartnerId.set(partnerId, aggregate);
+  return aggregate;
+}
+
+function upsertOperatorPartnerPerformanceAggregateFromLedger(
+  aggregateByPartnerId: Map<string, OperatorPartnerPerformanceAggregate>,
+  args: {
+    partnerId: any;
+    partnerUserId?: any;
+    createdAt?: number | null;
+  },
+) {
+  const key = String(args.partnerId ?? "");
+  if (!key) return null;
+  const existing = aggregateByPartnerId.get(key);
+  if (existing) return existing;
+  const aggregate: OperatorPartnerPerformanceAggregate = {
+    partnerId: args.partnerId,
+    partnerUserId: args.partnerUserId ?? null,
+    code: "",
+    status: "active",
+    createdAt: Number(args.createdAt ?? 0),
+    commissionGeneratedCents: 0,
+    pendingCents: 0,
+    readyCents: 0,
+    paidOutCents: 0,
+    boundReferrals: 0,
+    latestCommissionAt: null,
+  };
+  aggregateByPartnerId.set(key, aggregate);
+  return aggregate;
+}
+
+async function readOperatorPartnerBoundReferralCount(ctx: any, partnerId: any) {
+  const rows = await ctx.db
+    .query("partnerAttributions")
+    .withIndex("by_partner_status", (q: any) =>
+      q.eq("partnerId", partnerId).eq("status", "bound"),
+    )
+    .take(1000);
+  return rows.length;
+}
+
+async function readOperatorPartnerDisplay(ctx: any, userId: any) {
+  const user = userId ? await ctx.db.get(userId) : null;
+  const displayName = String(user?.displayName ?? "").trim();
+  const handle = String(user?.handle ?? user?.normalizedHandle ?? "").trim();
+  return {
+    displayName: displayName || null,
+    handle: handle || null,
+  };
+}
+
+async function readOperatorPartnerPerformanceIdentity(
+  ctx: any,
+  aggregate: OperatorPartnerPerformanceAggregate,
+) {
+  const partner = aggregate.partnerId ? await ctx.db.get(aggregate.partnerId) : null;
+  const partnerUserId = partner?.userId ?? aggregate.partnerUserId;
+  const display = await readOperatorPartnerDisplay(ctx, partnerUserId);
+  return {
+    partnerUserId,
+    code: String(partner?.code ?? aggregate.code ?? ""),
+    status: readBuilderPartnerStatus(partner?.status ?? aggregate.status),
+    createdAt: Number(partner?.createdAt ?? aggregate.createdAt ?? 0),
+    ...display,
+  };
 }
 
 function normalizeOperatorDecisionReason(value: unknown, fallback: string): string {
@@ -807,7 +960,7 @@ async function insertPartnerCommissionIfEligible(ctx: any, args: {
   attribution: any;
   referredUserId: any;
   referredCommunityId?: any;
-  basisType: "community_platform_fee";
+  basisType: "community_platform_fee" | "paid_tool_usage";
   basisAmountUsd: number;
   commissionRateBps: number;
   commissionAmountUsd: number;
@@ -824,6 +977,7 @@ async function insertPartnerCommissionIfEligible(ctx: any, args: {
   const commissionAmountUsd = roundBuilderPartnerMoney(args.commissionAmountUsd);
   if (!(basisAmountUsd > 0) || !(commissionAmountUsd > 0)) return null;
   const commissionSettlementCents = usdToSettlementCents(commissionAmountUsd);
+  if (commissionSettlementCents <= 0) return null;
   const id = await ctx.db.insert("partnerCommissionLedger", {
     commissionKey: args.commissionKey,
     partnerId: args.partner._id,
@@ -942,6 +1096,58 @@ export async function recordCommunityRevenuePartnerCommission(ctx: any, args: {
     sourceProviderPaymentIntentId:
       String(args.sourceProviderPaymentIntentId ?? "").trim() || undefined,
     sourceProviderChargeId: String(args.sourceProviderChargeId ?? "").trim() || undefined,
+    nowMs,
+  });
+}
+
+export async function recordPaidToolUsagePartnerCommission(ctx: any, args: {
+  referredUserId: any;
+  creditKey: string;
+  polynetPriceUsd?: number | null;
+  rawVendorCostUsd?: number | null;
+  nowMs?: number;
+}) {
+  const nowMs = args.nowMs ?? Date.now();
+  const creditKey = String(args.creditKey ?? "").trim();
+  if (!creditKey) return null;
+  const commissionKey = `paid_tool_usage:${creditKey}`;
+  const existing = await getCommissionByKey(ctx, commissionKey);
+  if (existing) return existing;
+
+  const match = await findBoundPartnerAttributionForCommission(ctx, {
+    referredUserId: args.referredUserId,
+    nowMs,
+    requireCommunityRevenueEligibility: true,
+  });
+  if (!match) return null;
+
+  if (
+    typeof args.polynetPriceUsd !== "number" ||
+    !Number.isFinite(args.polynetPriceUsd) ||
+    typeof args.rawVendorCostUsd !== "number" ||
+    !Number.isFinite(args.rawVendorCostUsd)
+  ) {
+    return null;
+  }
+  const commission = calculateBuilderPartnerToolUsageCommission({
+    polynetPriceUsd: args.polynetPriceUsd,
+    rawVendorCostUsd: args.rawVendorCostUsd,
+    partnerToolUsageRevenueShareBps: BUILDER_PARTNER_TOOL_USAGE_REVENUE_SHARE_BPS,
+    polynetRetainedRevenueBps: BUILDER_PARTNER_TOOL_USAGE_POLYNET_RETAINED_REVENUE_BPS,
+  });
+  if (!(commission.toolRevenueUsd > 0) || !(commission.commissionAmountUsd > 0)) {
+    return null;
+  }
+
+  return await insertPartnerCommissionIfEligible(ctx, {
+    commissionKey,
+    partner: match.partner,
+    attribution: match.attribution,
+    referredUserId: args.referredUserId,
+    basisType: "paid_tool_usage",
+    basisAmountUsd: commission.toolRevenueUsd,
+    commissionRateBps: commission.effectiveToolUsageRevenueShareBps,
+    commissionAmountUsd: commission.commissionAmountUsd,
     nowMs,
   });
 }
@@ -2524,6 +2730,214 @@ export const createPartnerPayoutCycleInternal = internalMutation({
       created: true,
       reason: null,
       cycle: readPartnerPayoutCycleSummary(await ctx.db.get(batchId)),
+    };
+  },
+});
+
+export const listPartnerPerformanceForOperator = query({
+  args: {
+    authSubject: v.optional(v.string()),
+    range: v.optional(v.union(v.literal("7d"), v.literal("30d"), v.literal("90d"), v.literal("all"))),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    await requireOperatorRole(ctx, args.authSubject, "operator");
+    const topLimit = normalizePartnerPerformanceTopLimit(args.limit);
+    const range = normalizePartnerPerformanceRange(args.range);
+    const partnerStatuses = ["active", "paused", "disabled"] as const;
+    const commissionStatuses = ["locked", "risk_hold", "payable"] as const;
+    const nowMs = Date.now();
+    const rangeStart = normalizePartnerPerformanceRangeStart(range, nowMs);
+    const payoutReadyCutoffAt = nowMs - BUILDER_PARTNER_PAYOUT_BUFFER_MS;
+    let isTruncated = false;
+    const aggregateByPartnerId = new Map<string, OperatorPartnerPerformanceAggregate>();
+
+    const partnerRowsByStatus = await Promise.all(
+      partnerStatuses.map(async (status) => {
+        const rows = await ctx.db
+          .query("builderPartners")
+          .withIndex("by_status_createdAt", (q: any) => q.eq("status", status))
+          .order("desc")
+          .take(BUILDER_PARTNER_OPERATOR_PERFORMANCE_PARTNER_SCAN_LIMIT + 1);
+        if (rows.length > BUILDER_PARTNER_OPERATOR_PERFORMANCE_PARTNER_SCAN_LIMIT) {
+          isTruncated = true;
+        }
+        return rows.slice(0, BUILDER_PARTNER_OPERATOR_PERFORMANCE_PARTNER_SCAN_LIMIT);
+      }),
+    );
+    const partnerRows = partnerRowsByStatus
+      .flat()
+      .filter((partner: any, index, allRows: any[]) =>
+        allRows.findIndex((candidate: any) => String(candidate._id) === String(partner._id)) === index,
+      );
+    for (const partner of partnerRows) {
+      upsertOperatorPartnerPerformanceAggregate(aggregateByPartnerId, partner);
+    }
+
+    const commissionRowsByStatus = await Promise.all(
+      commissionStatuses.map(async (status) => {
+        const rows = await ctx.db
+          .query("partnerCommissionLedger")
+          .withIndex("by_status_createdAt", (q: any) => {
+            const scoped = q.eq("status", status);
+            return rangeStart == null ? scoped : scoped.gte("createdAt", rangeStart);
+          })
+          .order("desc")
+          .take(BUILDER_PARTNER_OPERATOR_PERFORMANCE_COMMISSION_SCAN_LIMIT + 1);
+        if (rows.length > BUILDER_PARTNER_OPERATOR_PERFORMANCE_COMMISSION_SCAN_LIMIT) {
+          isTruncated = true;
+        }
+        return rows.slice(0, BUILDER_PARTNER_OPERATOR_PERFORMANCE_COMMISSION_SCAN_LIMIT);
+      }),
+    );
+    let commissionGeneratedCents = 0;
+    for (const row of commissionRowsByStatus.flat()) {
+      const settlementState = readMaterializedPartnerCommissionSettlementState(row) ?? {
+        commissionSettlementCents: usdToSettlementCents(Number(row.commissionAmountUsd ?? 0)),
+        openSettlementCents: 0,
+        payoutOpen: false,
+      };
+      commissionGeneratedCents += settlementState.commissionSettlementCents;
+      const aggregate = upsertOperatorPartnerPerformanceAggregateFromLedger(aggregateByPartnerId, {
+        partnerId: row.partnerId,
+        partnerUserId: row.partnerUserId,
+        createdAt: Number(row.createdAt ?? 0),
+      });
+      if (!aggregate) continue;
+      aggregate.commissionGeneratedCents += settlementState.commissionSettlementCents;
+      const latestCommissionAt = Number(row.createdAt ?? row.updatedAt ?? 0);
+      if (
+        Number.isFinite(latestCommissionAt) &&
+        latestCommissionAt > Number(aggregate.latestCommissionAt ?? 0)
+      ) {
+        aggregate.latestCommissionAt = latestCommissionAt;
+      }
+      if (row.status === "payable") {
+        const isReady =
+          settlementState.payoutOpen &&
+          typeof row.payableAt === "number" &&
+          Number.isFinite(row.payableAt) &&
+          row.payableAt <= payoutReadyCutoffAt;
+        if (isReady) {
+          aggregate.readyCents += settlementState.openSettlementCents;
+        } else {
+          aggregate.pendingCents += settlementState.openSettlementCents;
+        }
+      } else {
+        aggregate.pendingCents += settlementState.openSettlementCents;
+      }
+    }
+
+    const transferRows = await ctx.db
+      .query("partnerPayoutTransfers" as any)
+      .withIndex("by_status_processedAt", (q: any) => {
+        const scoped = q.eq("status", "succeeded");
+        return rangeStart == null ? scoped : scoped.gte("processedAt", rangeStart);
+      })
+      .order("desc")
+      .take(BUILDER_PARTNER_OPERATOR_PERFORMANCE_TRANSFER_SCAN_LIMIT + 1);
+    if (transferRows.length > BUILDER_PARTNER_OPERATOR_PERFORMANCE_TRANSFER_SCAN_LIMIT) {
+      isTruncated = true;
+    }
+    let partnerPaidOutCents = 0;
+    for (const row of transferRows.slice(0, BUILDER_PARTNER_OPERATOR_PERFORMANCE_TRANSFER_SCAN_LIMIT)) {
+      const transferCents = usdToSettlementCents(Number(row.amountUsd ?? 0));
+      partnerPaidOutCents += transferCents;
+      const aggregate = upsertOperatorPartnerPerformanceAggregateFromLedger(aggregateByPartnerId, {
+        partnerId: row.partnerId,
+        partnerUserId: row.partnerUserId,
+        createdAt: Number(row.createdAt ?? 0),
+      });
+      if (aggregate) aggregate.paidOutCents += transferCents;
+    }
+
+    const partnerCounts = partnerRows.reduce(
+      (totals, partner: any) => {
+        const status = readBuilderPartnerStatus(partner.status);
+        totals.totalPartners += 1;
+        if (status === "active") totals.activePartners += 1;
+        if (status === "paused") totals.pausedPartners += 1;
+        if (status === "disabled") totals.disabledPartners += 1;
+        return totals;
+      },
+      { totalPartners: 0, activePartners: 0, pausedPartners: 0, disabledPartners: 0 },
+    );
+
+    const topAggregates = Array.from(aggregateByPartnerId.values())
+      .filter((aggregate) =>
+        aggregate.commissionGeneratedCents > 0 ||
+        aggregate.paidOutCents > 0 ||
+        aggregate.readyCents > 0 ||
+        aggregate.pendingCents > 0,
+      )
+      .sort(
+        (a, b) =>
+          b.commissionGeneratedCents - a.commissionGeneratedCents ||
+          b.paidOutCents - a.paidOutCents ||
+          Number(b.latestCommissionAt ?? 0) - Number(a.latestCommissionAt ?? 0) ||
+          Number(b.createdAt ?? 0) - Number(a.createdAt ?? 0) ||
+          String(a.partnerId).localeCompare(String(b.partnerId)),
+      )
+      .slice(0, topLimit);
+    for (const aggregate of topAggregates) {
+      aggregate.boundReferrals = await readOperatorPartnerBoundReferralCount(ctx, aggregate.partnerId);
+    }
+
+    const topPartners = await Promise.all(
+      topAggregates
+        .sort(
+          (a, b) =>
+            b.commissionGeneratedCents - a.commissionGeneratedCents ||
+            b.paidOutCents - a.paidOutCents ||
+            b.boundReferrals - a.boundReferrals ||
+            Number(b.latestCommissionAt ?? 0) - Number(a.latestCommissionAt ?? 0) ||
+            Number(b.createdAt ?? 0) - Number(a.createdAt ?? 0) ||
+            String(a.partnerId).localeCompare(String(b.partnerId)),
+        )
+        .slice(0, topLimit)
+        .map(async (aggregate) => {
+          const identity = await readOperatorPartnerPerformanceIdentity(ctx, aggregate);
+          return {
+            partnerId: String(aggregate.partnerId),
+            partnerUserId: identity.partnerUserId ? String(identity.partnerUserId) : "",
+            code: identity.code,
+            status: identity.status,
+            displayName: identity.displayName,
+            handle: identity.handle,
+            boundReferrals: aggregate.boundReferrals,
+            commissionGeneratedUsd: settlementCentsToUsd(aggregate.commissionGeneratedCents),
+            pendingUsd: settlementCentsToUsd(aggregate.pendingCents),
+            readyUsd: settlementCentsToUsd(aggregate.readyCents),
+            paidOutUsd: settlementCentsToUsd(aggregate.paidOutCents),
+            latestCommissionAt: aggregate.latestCommissionAt,
+            createdAt: identity.createdAt,
+          };
+        }),
+    );
+
+    return {
+      range,
+      summary: {
+        ...partnerCounts,
+        commissionGeneratedUsd: settlementCentsToUsd(commissionGeneratedCents),
+        partnerPaidOutUsd: settlementCentsToUsd(partnerPaidOutCents),
+      },
+      topPartners,
+      evidence: {
+        sourceTables: [
+          "builderPartners",
+          "partnerAttributions",
+          "partnerCommissionLedger",
+          "partnerPayoutTransfers",
+        ],
+        computedAt: nowMs,
+        rangeStart,
+        rangeEnd: nowMs,
+        scannedPartnerLimit: BUILDER_PARTNER_OPERATOR_PERFORMANCE_PARTNER_SCAN_LIMIT,
+        scannedCommissionLimit: BUILDER_PARTNER_OPERATOR_PERFORMANCE_COMMISSION_SCAN_LIMIT,
+        scannedTransferLimit: BUILDER_PARTNER_OPERATOR_PERFORMANCE_TRANSFER_SCAN_LIMIT,
+        isTruncated,
+      },
     };
   },
 });

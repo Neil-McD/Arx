@@ -14,6 +14,10 @@ import {
 import { OperatorBusinessPanelView } from "./OperatorBusinessPanelView";
 import { OperatorCommunitiesPanelView } from "./OperatorCommunitiesPanelView";
 import { OperatorPlatformPanelView } from "./OperatorPlatformPanelView";
+import {
+  WebBuilderPartnerProgramPanel,
+  type WebBuilderPartnerProgramPanelProps,
+} from "./WebBuilderPartnerProgramPanel";
 import type { OperatorDashboardState } from "./useOperatorDashboardData";
 import type { PartnerPayoutCycleActions } from "./workspaceRightPanelOperatorShared";
 
@@ -36,6 +40,7 @@ export function WebWorkspaceRightPanel(props: {
   state: OperatorDashboardState;
   topCommunities: OperatorCommunityRecord[];
   partnerPayoutCycleActions: PartnerPayoutCycleActions;
+  builderPartnerProgramPanel: WebBuilderPartnerProgramPanelProps | null;
   isLoading: boolean;
   error: string | null;
   activeInsightTab: WorkspaceRightPanelTab;
@@ -100,6 +105,8 @@ export function WebWorkspaceRightPanel(props: {
             isRecentSignalsExpanded={props.isCommunityRecentSignalsExpanded}
             onRecentSignalsExpandedChange={props.onCommunityRecentSignalsExpandedChange}
           />
+        ) : activeInsightTab === "partner" && props.builderPartnerProgramPanel ? (
+          <WebBuilderPartnerProgramPanel {...props.builderPartnerProgramPanel} />
         ) : activeInsightTab === "platform" ? (
           <OperatorPlatformPanelView
             webDeploy={props.state.webDeploy}
@@ -114,6 +121,7 @@ export function WebWorkspaceRightPanel(props: {
             monetization={props.state.monetization}
             accountSetup={props.state.accountSetup}
             toolEconomics={props.state.toolEconomics}
+            partnerPerformance={props.state.partnerPerformance}
             partnerPayoutCycles={props.state.partnerPayoutCycles}
             partnerPayoutCycleActions={props.partnerPayoutCycleActions}
             risks={props.state.risks}

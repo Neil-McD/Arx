@@ -5,6 +5,7 @@ import type {
   OperatorEventRecord,
   OperatorMonetizationSnapshot,
   OperatorOverviewSnapshot,
+  OperatorPartnerPerformanceSnapshot,
   OperatorPartnerPayoutCycle,
   OperatorPartnerPayoutCyclesSnapshot,
   OperatorRiskItem,
@@ -34,17 +35,35 @@ const OPERATOR_ACCOUNT_SETUP_MISSING_ORDER = [
   "agent_name",
 ] as const;
 
+function formatPartnerHandle(handle: string | null): string | null {
+  const normalized = String(handle ?? "").trim();
+  if (!normalized) return null;
+  return normalized.startsWith("@") ? normalized : `@${normalized}`;
+}
+
+function readPartnerPerformanceName(
+  partner: OperatorPartnerPerformanceSnapshot["topPartners"][number],
+): string {
+  return partner.displayName || formatPartnerHandle(partner.handle) || partner.code || partner.partnerId.slice(0, 8);
+}
+
+function formatKnownOperatorCount(value: number | null | undefined): string {
+  return typeof value === "number" && Number.isFinite(value) ? String(value) : "--";
+}
+
 export function OperatorBusinessPanelView(props: {
   overview: OperatorOverviewSnapshot | null;
   monetization: OperatorMonetizationSnapshot | null;
   accountSetup: OperatorAccountSetupSnapshot | null;
   toolEconomics: OperatorToolEconomicsSnapshot | null;
+  partnerPerformance: OperatorPartnerPerformanceSnapshot | null;
   partnerPayoutCycles: OperatorPartnerPayoutCyclesSnapshot | null;
   partnerPayoutCycleActions: PartnerPayoutCycleActions;
   risks: OperatorRiskItem[];
   events: OperatorEventRecord[];
 }) {
   const businessKpis = props.monetization?.businessKpis ?? null;
+  const partnerPerformance = props.partnerPerformance;
   const accountSetupOverview = props.accountSetup?.overview ?? null;
   const accountSetupCompletionRate =
     accountSetupOverview && accountSetupOverview.totals.users > 0
@@ -108,6 +127,22 @@ export function OperatorBusinessPanelView(props: {
           <span>Platform revenue</span>
           <strong>{formatMoney(platformRevenueMetric)}</strong>
           <span className="operator-dashboard__metric-note">{platformRevenueNote}</span>
+        </div>
+        <div>
+          <span>Partners</span>
+          <strong>{formatKnownOperatorCount(partnerPerformance?.summary.totalPartners)}</strong>
+          <span className="operator-dashboard__metric-note">
+            {partnerPerformance
+              ? `${partnerPerformance.summary.activePartners} active · ${partnerPerformance.summary.pausedPartners} paused · ${partnerPerformance.summary.disabledPartners} disabled${partnerPerformance.evidence.isTruncated ? " · sampled" : ""}`
+              : "Partner ledger unavailable."}
+          </span>
+        </div>
+        <div>
+          <span>Partner paid out</span>
+          <strong>{partnerPerformance ? formatUsdAmount(partnerPerformance.summary.partnerPaidOutUsd) : "--"}</strong>
+          <span className="operator-dashboard__metric-note">
+            {partnerPerformance ? "Succeeded partner transfers in the selected window." : "Partner ledger unavailable."}
+          </span>
         </div>
       </section>
 
@@ -451,6 +486,48 @@ export function OperatorBusinessPanelView(props: {
             <strong>{formatPercent(businessKpis?.communities.paidCommunityMemberActivationRate ?? null)}</strong>
           </div>
           <div className="operator-dashboard__empty">Community revenue details live in Communities; activation here is only the business funnel checkpoint.</div>
+        </div>
+      </section>
+
+      <section className="operator-dashboard__panel operator-dashboard__panel--full">
+        <h2>Top partners</h2>
+        <div className="operator-dashboard__table">
+          {partnerPerformance?.topPartners.length ? (
+            partnerPerformance.topPartners.map((partner) => (
+              <div className="operator-dashboard__row operator-dashboard__community-row" key={partner.partnerId}>
+                <div className="operator-dashboard__community-main">
+                  <strong>{readPartnerPerformanceName(partner)}</strong>
+                  <span>
+                    {[
+                      partner.code,
+                      partner.status,
+                      `${partner.boundReferrals} bound referral${partner.boundReferrals === 1 ? "" : "s"}`,
+                      partner.latestCommissionAt ? formatEventTime(partner.latestCommissionAt) : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </span>
+                </div>
+                <span>
+                  {[
+                    `${formatUsdAmount(partner.commissionGeneratedUsd)} generated`,
+                    `${formatUsdAmount(partner.readyUsd)} ready`,
+                    `${formatUsdAmount(partner.paidOutUsd)} paid`,
+                  ].join(" · ")}
+                </span>
+              </div>
+            ))
+          ) : partnerPerformance ? (
+            <div className="operator-dashboard__empty">No partner commission ledger activity returned.</div>
+          ) : (
+            <div className="operator-dashboard__empty">Partner performance unavailable.</div>
+          )}
+          {partnerPerformance ? (
+            <div className="operator-dashboard__empty">Ranking uses generated partner commission in the selected window.</div>
+          ) : null}
+          {partnerPerformance?.evidence.isTruncated ? (
+            <div className="operator-dashboard__empty">Partner performance is sampled from the bounded operator ledger scan.</div>
+          ) : null}
         </div>
       </section>
 

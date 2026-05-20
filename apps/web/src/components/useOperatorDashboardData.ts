@@ -10,6 +10,7 @@ import {
   loadOperatorFrontendErrorDiagnosticsCanonical,
   loadOperatorMonetizationCanonical,
   loadOperatorOverviewCanonical,
+  loadOperatorPartnerPerformanceCanonical,
   loadOperatorPartnerPayoutCyclesCanonical,
   loadOperatorRisksCanonical,
   loadOperatorRuntimeToolDiagnosticsCanonical,
@@ -28,6 +29,7 @@ import type {
   OperatorFrontendErrorDiagnosticsSnapshot,
   OperatorMonetizationSnapshot,
   OperatorOverviewSnapshot,
+  OperatorPartnerPerformanceSnapshot,
   OperatorPartnerPayoutCyclesSnapshot,
   OperatorRiskItem,
   OperatorRuntimeToolDiagnosticsSnapshot,
@@ -47,6 +49,7 @@ export type OperatorDashboardState = {
   toolEconomics: OperatorToolEconomicsSnapshot | null;
   frontendErrors: OperatorFrontendErrorDiagnosticsSnapshot | null;
   accountSetup: OperatorAccountSetupSnapshot | null;
+  partnerPerformance: OperatorPartnerPerformanceSnapshot | null;
   partnerPayoutCycles: OperatorPartnerPayoutCyclesSnapshot | null;
   communityRows: OperatorCommunityRecord[];
   risks: OperatorRiskItem[];
@@ -64,6 +67,7 @@ export function createEmptyOperatorDashboardState(): OperatorDashboardState {
     toolEconomics: null,
     frontendErrors: null,
     accountSetup: null,
+    partnerPerformance: null,
     partnerPayoutCycles: null,
     communityRows: [],
     risks: [],
@@ -102,8 +106,11 @@ export function useOperatorDashboardData(params: {
   }>({ inFlightCycleId: null, inFlightAction: null, error: null });
 
   const refreshPartnerPayoutCycles = useCallback(async (session: AuthSessionLike) => {
-    const partnerPayoutCycles = await loadOperatorPartnerPayoutCyclesCanonical({ session, limit: 12 });
-    setState((prev) => ({ ...prev, partnerPayoutCycles }));
+    const [partnerPayoutCycles, partnerPerformance] = await Promise.all([
+      loadOperatorPartnerPayoutCyclesCanonical({ session, limit: 12 }),
+      loadOperatorPartnerPerformanceCanonical({ session, range: "30d", limit: 12 }),
+    ]);
+    setState((prev) => ({ ...prev, partnerPayoutCycles, partnerPerformance }));
   }, []);
 
   const runPartnerPayoutCycleAction = useCallback(
@@ -175,6 +182,7 @@ export function useOperatorDashboardData(params: {
           loadOperatorToolEconomicsCanonical({ session, range: "30d" }),
           loadOperatorFrontendErrorDiagnosticsCanonical({ session, range: "30d" }),
           loadOperatorAccountSetupSnapshotCanonical({ session, completed: false, limit: 24 }),
+          loadOperatorPartnerPerformanceCanonical({ session, range: "30d", limit: 12 }),
           loadOperatorPartnerPayoutCyclesCanonical({ session, limit: 12 }),
           loadOperatorCommunitiesCanonical({ session, limit: 12 }),
           loadOperatorRisksCanonical({ session, limit: 12 }),
@@ -190,6 +198,7 @@ export function useOperatorDashboardData(params: {
           toolEconomics,
           frontendErrors,
           accountSetup,
+          partnerPerformance,
           partnerPayoutCycles,
           communityRows,
           risks,
@@ -205,6 +214,7 @@ export function useOperatorDashboardData(params: {
           ["tool_economics", toolEconomics],
           ["frontend_errors", frontendErrors],
           ["account_setup", accountSetup],
+          ["partner_performance", partnerPerformance],
           ["partner_payout_cycles", partnerPayoutCycles],
           ["communities", communityRows],
           ["risks", risks],
@@ -220,6 +230,7 @@ export function useOperatorDashboardData(params: {
           toolEconomics: fulfilledValue(toolEconomics),
           frontendErrors: fulfilledValue(frontendErrors),
           accountSetup: fulfilledValue(accountSetup),
+          partnerPerformance: fulfilledValue(partnerPerformance),
           partnerPayoutCycles: fulfilledValue(partnerPayoutCycles),
           communityRows: fulfilledList(communityRows),
           risks: fulfilledList(risks),
@@ -239,6 +250,7 @@ export function useOperatorDashboardData(params: {
             toolEconomics: nextState.toolEconomics ?? prev.toolEconomics,
             frontendErrors: nextState.frontendErrors ?? prev.frontendErrors,
             accountSetup: nextState.accountSetup ?? prev.accountSetup,
+            partnerPerformance: nextState.partnerPerformance ?? prev.partnerPerformance,
             partnerPayoutCycles: nextState.partnerPayoutCycles ?? prev.partnerPayoutCycles,
             communityRows: nextState.communityRows ?? prev.communityRows,
             risks: nextState.risks ?? prev.risks,

@@ -158,7 +158,10 @@ export default defineSchema({
     attributionId: v.optional(v.id("partnerAttributions")),
     referredUserId: v.optional(v.id("users")),
     referredCommunityId: v.optional(v.id("communities")),
-    basisType: v.literal("community_platform_fee"),
+    basisType: v.union(
+      v.literal("community_platform_fee"),
+      v.literal("paid_tool_usage"),
+    ),
     basisAmountUsd: v.number(),
     commissionRateBps: v.number(),
     commissionAmountUsd: v.number(),
@@ -292,6 +295,7 @@ export default defineSchema({
     .index("by_batch", ["batchId"])
     .index("by_partner_createdAt", ["partnerId", "createdAt"])
     .index("by_status_createdAt", ["status", "createdAt"])
+    .index("by_status_processedAt", ["status", "processedAt"])
     .index("by_idempotencyKey", ["idempotencyKey"])
     .index("by_stripeTransferId", ["stripeTransferId"]),
 

@@ -253,6 +253,45 @@ export type OperatorPartnerPayoutCyclesSnapshot = {
   };
 };
 
+export type OperatorPartnerPerformanceRecord = {
+  partnerId: string;
+  partnerUserId: string;
+  code: string;
+  status: "active" | "paused" | "disabled";
+  displayName: string | null;
+  handle: string | null;
+  boundReferrals: number;
+  commissionGeneratedUsd: number;
+  pendingUsd: number;
+  readyUsd: number;
+  paidOutUsd: number;
+  latestCommissionAt: number | null;
+  createdAt: number;
+};
+
+export type OperatorPartnerPerformanceSnapshot = {
+  range: OperatorRange;
+  summary: {
+    totalPartners: number;
+    activePartners: number;
+    pausedPartners: number;
+    disabledPartners: number;
+    commissionGeneratedUsd: number;
+    partnerPaidOutUsd: number;
+  };
+  topPartners: OperatorPartnerPerformanceRecord[];
+  evidence: {
+    sourceTables: string[];
+    computedAt: number;
+    rangeStart: number | null;
+    rangeEnd: number;
+    scannedPartnerLimit: number;
+    scannedCommissionLimit: number;
+    scannedTransferLimit: number;
+    isTruncated: boolean;
+  };
+};
+
 export type OperatorRiskItem = {
   id: string;
   severity: "warning" | "error";

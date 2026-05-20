@@ -23666,6 +23666,39 @@ button.message-citation-chip:hover {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.workspace-right-panel .builder-partner-hero {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  padding: 14px;
+}
+
+.workspace-right-panel .builder-partner-hero h2 {
+  font-size: 18px;
+}
+
+.workspace-right-panel .builder-partner-metrics,
+.workspace-right-panel .builder-partner-dashboard-grid,
+.workspace-right-panel .builder-partner-payout-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.workspace-right-panel .builder-partner-requirement {
+  grid-template-columns: 22px minmax(0, 1fr);
+}
+
+.workspace-right-panel .builder-partner-requirement-action {
+  grid-column: 2;
+  min-width: 0;
+}
+
+.workspace-right-panel .builder-partner-link-card {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.workspace-right-panel .builder-partner-link-card button {
+  width: fit-content;
+}
+
 .workspace-user-data-panel__grid {
   display: grid;
   gap: 12px;

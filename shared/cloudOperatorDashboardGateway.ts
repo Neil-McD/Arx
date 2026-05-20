@@ -9,6 +9,7 @@ import type {
   OperatorFrontendErrorDiagnosticsSnapshot,
   OperatorMonetizationSnapshot,
   OperatorOverviewSnapshot,
+  OperatorPartnerPerformanceSnapshot,
   OperatorPartnerPayoutCyclesSnapshot,
   OperatorRange,
   OperatorRiskItem,
@@ -447,6 +448,19 @@ export async function loadOperatorPartnerPayoutCyclesCanonical(params: {
     authSubject,
     limit: params.limit ?? 12,
   })) as OperatorPartnerPayoutCyclesSnapshot;
+}
+
+export async function loadOperatorPartnerPerformanceCanonical(params: {
+  session: AuthSessionLike;
+  range?: OperatorRange;
+  limit?: number;
+}): Promise<OperatorPartnerPerformanceSnapshot> {
+  const { client, authSubject } = await withOperatorAuth(params.session);
+  return (await client.query("builderPartners:listPartnerPerformanceForOperator" as any, {
+    authSubject,
+    range: params.range ?? "30d",
+    limit: params.limit ?? 12,
+  })) as OperatorPartnerPerformanceSnapshot;
 }
 
 export async function approveOperatorPartnerPayoutCycleCanonical(params: {

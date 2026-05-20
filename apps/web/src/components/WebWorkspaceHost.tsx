@@ -55,6 +55,7 @@ import {
   WORKSPACE_RIGHT_PANEL_KEYBOARD_STEP,
   WebWorkspaceRightPanel,
 } from "./WebWorkspaceRightPanel";
+import type { WebBuilderPartnerProgramPanelProps } from "./WebBuilderPartnerProgramPanel";
 import { useOperatorDashboardData } from "./useOperatorDashboardData";
 import {
   buildWorkspaceRightPanelTabs,
@@ -240,6 +241,7 @@ export type WebWorkspaceHostProps = {
   copyTextToClipboard: (text: string) => Promise<void> | void;
   showWorkspaceRightPanel?: boolean;
   operatorRightPanelSession?: AuthSessionLike | null;
+  builderPartnerProgramPanel?: WebBuilderPartnerProgramPanelProps | null;
   workspaceRightPanelOpen?: boolean;
   workspaceUserDataPanel?: WorkspaceUserDataPanelDataProps | null;
 };
@@ -1106,6 +1108,7 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
   });
   const showWorkspaceRightPanel = Boolean(props.showWorkspaceRightPanel && props.workspaceUserDataPanel);
   const isWorkspaceRightPanelVisible = Boolean(showWorkspaceRightPanel && props.workspaceRightPanelOpen);
+  const showPartnerTab = Boolean(props.builderPartnerProgramPanel?.builderPartnerProgram?.partner);
   const showOperatorTabs = Boolean(props.operatorRightPanelSession);
   const rightPanelStorageUserId = useMemo(() => resolveAuthSubject(props.session), [props.session]);
   const activeRightPanelCommunityName = normalizeWorkspaceRightPanelCommunityLabel(
@@ -1115,10 +1118,11 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
   const workspaceRightPanelTabs = useMemo(
     () =>
       buildWorkspaceRightPanelTabs({
+        showPartnerTab,
         showOperatorTabs,
         communityLabel: workspaceRightPanelCommunityLabel,
       }),
-    [showOperatorTabs, workspaceRightPanelCommunityLabel],
+    [showOperatorTabs, showPartnerTab, workspaceRightPanelCommunityLabel],
   );
   const activeRightPanelTab = resolveWorkspaceRightPanelTab(requestedRightPanelTab, workspaceRightPanelTabs);
   const isOperatorRightPanelTabActive = isOperatorInsightTab(activeRightPanelTab);
@@ -2081,6 +2085,7 @@ export function WebWorkspaceHost(props: WebWorkspaceHostProps) {
             state={operatorData.state}
             topCommunities={operatorData.topCommunities}
             partnerPayoutCycleActions={operatorData.partnerPayoutCycleActions}
+            builderPartnerProgramPanel={props.builderPartnerProgramPanel ?? null}
             isLoading={operatorData.isLoading}
             error={operatorData.error}
             insightTabs={workspaceRightPanelTabs}
