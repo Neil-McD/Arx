@@ -58,8 +58,13 @@ assert.doesNotMatch(
 );
 assert.match(
   operatorSentryDiagnostics,
-  /ctx\.runQuery\(\(api as any\)\.operatorDashboard\.getOperatorAccess/,
-  "frontend error diagnostics action must be operator-gated",
+  /ctx\.runQuery\(\(api as any\)\.operatorAccess\.getMyOperatorAccessOptional[\s\S]*if \(!operatorAccess\)[\s\S]*operator_access_required/,
+  "frontend error diagnostics action must be operator-gated without logging expected access denials",
+);
+assert.doesNotMatch(
+  operatorSentryDiagnostics,
+  /operatorDashboard\.getOperatorAccess/,
+  "frontend error diagnostics must not use the noisy throwing operator dashboard access query",
 );
 for (const envName of ["SENTRY_AUTH_TOKEN", "SENTRY_ORG", "SENTRY_PROJECT", "SENTRY_PROJECT_ID", "SENTRY_BASE_URL"]) {
   assert.match(operatorSentryDiagnostics, new RegExp(envName), `frontend error diagnostics missing ${envName}`);

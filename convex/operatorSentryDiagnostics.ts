@@ -218,9 +218,26 @@ export const getOperatorFrontendErrorDiagnostics = action({
     frontendSentryRelease: v.optional(v.string()),
   },
   handler: async (ctx, args): Promise<unknown> => {
-    await ctx.runQuery((api as any).operatorDashboard.getOperatorAccess, {
+    const operatorAccess = await ctx.runQuery((api as any).operatorAccess.getMyOperatorAccessOptional, {
       authSubject: args.authSubject,
     });
+    if (!operatorAccess) {
+      return buildUnavailableSnapshot({
+        range: args.range,
+        endpointMode: "organization_issues",
+        org: null,
+        project: null,
+        projectId: null,
+        environment: DEFAULT_SENTRY_ENVIRONMENT,
+        query: "is:unresolved",
+        statsPeriod: statsPeriodForRange(args.range, "organization_issues"),
+        currentBuildId: cleanOptionalString(args.currentBuildId, 120),
+        sentryRelease: cleanOptionalString(args.frontendSentryRelease, 120),
+        issueLimit: SENTRY_ISSUE_LIMIT,
+        configured: false,
+        reason: "operator_access_required",
+      });
+    }
 
     const token = String(process.env.SENTRY_AUTH_TOKEN ?? "").trim();
     const org = cleanOptionalString(process.env.SENTRY_ORG, 120);
