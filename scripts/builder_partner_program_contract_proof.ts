@@ -921,10 +921,25 @@ function provePartnerPayoutSettlementContract(
   operatorGatewaySource: string,
   cronsSource: string,
   docsSource: string,
+  packageSource: string,
+  backfillRunnerSource: string,
+  backfillRunbookSource: string,
 ) {
   const commissionSummarySource = builderPartnersSource.slice(
     builderPartnersSource.indexOf("async function readCommissionSummary"),
     builderPartnersSource.indexOf("async function readPayoutHistory"),
+  );
+  const payoutExecutionBeginSource = builderPartnersSource.slice(
+    builderPartnersSource.indexOf("export const beginPartnerPayoutBatchExecutionInternal"),
+    builderPartnersSource.indexOf("export const recordPartnerPayoutTransferSucceededInternal"),
+  );
+  const retryPayoutCycleSource = builderPartnersSource.slice(
+    builderPartnersSource.indexOf("export const retryPartnerPayoutCycle"),
+    builderPartnersSource.indexOf("export const holdPartnerPayoutCycle"),
+  );
+  const settlementBackfillOperatorSource = builderPartnersSource.slice(
+    builderPartnersSource.indexOf("export const backfillPartnerCommissionSettlementStateForOperator"),
+    builderPartnersSource.indexOf("async function readPayoutStatus"),
   );
   assert.doesNotMatch(
     builderPartnersSource,
@@ -1122,6 +1137,16 @@ function provePartnerPayoutSettlementContract(
     "Builder Partner approval should schedule transfer execution automatically",
   );
   assertIncludes(
+    retryPayoutCycleSource,
+    "ctx.scheduler.runAfter(0, (internal as any).builderPartners.executePartnerPayoutBatchInternal",
+    "Builder Partner retry should schedule transfer execution through the canonical internal action",
+  );
+  assertIncludes(
+    retryPayoutCycleSource,
+    "builder_partner_payout_cycle_retried",
+    "Builder Partner retry should audit explicit operator retry intent",
+  );
+  assertIncludes(
     builderPartnersSource,
     "markPartnerPayoutBatchStale",
     "Builder Partner payout execution must fail stale batches before Stripe",
@@ -1130,6 +1155,21 @@ function provePartnerPayoutSettlementContract(
     builderPartnersSource,
     "if (begin?.blocked)",
     "Builder Partner payout action must return before Stripe on stale batches",
+  );
+  assertIncludes(
+    payoutExecutionBeginSource,
+    "if (rawBatchStatus === \"failed\") throw new Error(\"partner_payout_batch_retry_required\");",
+    "Builder Partner payout execution must not directly restart failed cycles",
+  );
+  assertIncludes(
+    payoutExecutionBeginSource,
+    "if (operatorStatus !== \"approved\" && operatorStatus !== \"processing\")",
+    "Builder Partner payout execution must allowlist executable cycle states",
+  );
+  assertIncludes(
+    payoutExecutionBeginSource,
+    "throw new Error(\"partner_payout_batch_not_executable\");",
+    "Builder Partner payout execution must fail closed for unknown cycle states",
   );
   assertIncludes(
     builderPartnersSource,
@@ -1200,6 +1240,83 @@ function provePartnerPayoutSettlementContract(
     builderPartnersSource,
     "backfillPartnerCommissionSettlementStateInternal",
     "Builder Partner settlement materialization must provide a bounded backfill path",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "backfillPartnerCommissionSettlementStateForOperator = mutation",
+    "Builder Partner settlement backfill should have an explicit operator maintenance entrypoint",
+  );
+  assertIncludes(
+    settlementBackfillOperatorSource,
+    "requireOperatorRole(ctx, args.authSubject, \"operator\")",
+    "Builder Partner settlement backfill must require operator write access",
+  );
+  assertIncludes(
+    settlementBackfillOperatorSource,
+    "builderPartners.backfillPartnerCommissionSettlementStateInternal",
+    "Builder Partner settlement backfill operator entrypoint must call the bounded internal mutation",
+  );
+  assertIncludes(
+    settlementBackfillOperatorSource,
+    "builder_partner_commission_settlement_backfilled",
+    "Builder Partner settlement backfill should record critical audit evidence",
+  );
+  assertIncludes(
+    criticalAuditSource,
+    "builder_partner_commission_settlement_backfilled",
+    "critical audit allowlist must include partner settlement backfills",
+  );
+  assertIncludes(
+    packageSource,
+    "maintenance:partner-settlement-backfill",
+    "package scripts should expose the partner settlement backfill runner",
+  );
+  assertIncludes(
+    backfillRunnerSource,
+    "builderPartners:backfillPartnerCommissionSettlementStateForOperator",
+    "backfill runner should call the operator-gated maintenance mutation",
+  );
+  assertIncludes(
+    backfillRunnerSource,
+    "dryRun: true",
+    "backfill runner should be dry-run by default",
+  );
+  assertIncludes(
+    backfillRunnerSource,
+    "hasArg(\"--execute\")",
+    "backfill runner should require an explicit execute flag before mutation",
+  );
+  assertIncludes(
+    backfillRunnerSource,
+    "explicit_target_required",
+    "backfill runner should require an explicit Convex target",
+  );
+  assertIncludes(
+    backfillRunnerSource,
+    "POLYNET_OPERATOR_AUTH_SUBJECT",
+    "backfill runner should require operator auth through environment",
+  );
+  for (const status of ["locked", "risk_hold", "payable", "voided"]) {
+    assertIncludes(
+      backfillRunnerSource,
+      `"${status}"`,
+      `backfill runner should support ${status} commission rows`,
+    );
+  }
+  assertIncludes(
+    backfillRunbookSource,
+    "Run one commission status at a time.",
+    "backfill runbook should preserve one-status-at-a-time operation",
+  );
+  assertIncludes(
+    backfillRunbookSource,
+    "Do not run any Vercel release command for this backfill.",
+    "backfill runbook should keep Convex maintenance separate from web release commands",
+  );
+  assertIncludes(
+    backfillRunbookSource,
+    "builder_partner_commission_settlement_backfilled",
+    "backfill runbook should document audit evidence",
   );
   assertIncludes(
     builderPartnersSource,
@@ -1583,6 +1700,13 @@ function main() {
   const httpBillingSource = readText(new URL("../convex/httpBilling.ts", import.meta.url));
   const criticalAuditSource = readText(new URL("../convex/criticalAudit.ts", import.meta.url));
   const cronsSource = readText(new URL("../convex/crons.ts", import.meta.url));
+  const packageSource = readText(new URL("../package.json", import.meta.url));
+  const backfillRunnerSource = readText(
+    new URL("../scripts/backfill_partner_commission_settlement_state.ts", import.meta.url),
+  );
+  const backfillRunbookSource = readText(
+    new URL("../docs/partner-commission-settlement-backfill-runbook.md", import.meta.url),
+  );
   const accountSetupCoreSource = readText(new URL("../convex/accountSetupCore.ts", import.meta.url));
   const communityLifecycleSource = readText(new URL("../convex/communityLifecycle.ts", import.meta.url));
   const communityPublishReadinessSource = readText(
@@ -1624,6 +1748,9 @@ function main() {
     operatorGatewaySource,
     cronsSource,
     billingDocsSource,
+    packageSource,
+    backfillRunnerSource,
+    backfillRunbookSource,
   );
   console.log("PASS: builder partner program contract proof passed");
 }

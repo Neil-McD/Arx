@@ -137,12 +137,17 @@ assert.match(
 );
 assert.match(
   operatorTypes,
-  /export type OperatorPaidToolEconomicsLane = [\s\S]*revenueUsd: number[\s\S]*vendorCostUsd: number[\s\S]*grossMarginUsd: number[\s\S]*partnerCommissionUsd: number[\s\S]*netAfterPartnerUsd: number/,
+  /export type OperatorPaidToolEconomicsLane = [\s\S]*revenueUsd: number[\s\S]*vendorCostUsd: number[\s\S]*grossMarginUsd: number[\s\S]*grossMarginRate: number \| null[\s\S]*missingCostRows: number/,
   "runtime/tool diagnostics must expose paid-tool economics fields",
+);
+assert.doesNotMatch(
+  operatorTypes,
+  /partnerCommissionUsd|partnerShareOfGrossMargin|netAfterPartnerUsd|netAfterPartnerMarginRate|partnerGrossMarginShareBps|partnerCommissionRows|voidedPartnerCommissionUsd/,
+  "operator tool economics must not expose deferred paid-tool partner commission fields",
 );
 assert.match(
   operatorTypes,
-  /paidToolEconomics:[\s\S]*grossMarginBps: number[\s\S]*partnerGrossMarginShareBps: number[\s\S]*costEvidenceCoverage: number \| null[\s\S]*lanes: OperatorPaidToolEconomicsLane\[\]/,
+  /paidToolEconomics:[\s\S]*grossMarginBps: number[\s\S]*costEvidenceCoverage: number \| null[\s\S]*lanes: OperatorPaidToolEconomicsLane\[\]/,
   "operator tool economics must expose paid-tool economics",
 );
 assert.match(
@@ -152,8 +157,8 @@ assert.match(
 );
 assert.match(
   operatorTypes,
-  /evidence:[\s\S]*scannedCreditLimit: number[\s\S]*scannedCommissionLimit: number[\s\S]*scannedComputeLimit: number[\s\S]*scannedBalanceLimit: number[\s\S]*scannedIntegritySampleLimit: number/,
-  "operator tool economics evidence must expose commission and integrity scan limits",
+  /evidence:[\s\S]*scannedCreditLimit: number[\s\S]*scannedComputeLimit: number[\s\S]*scannedBalanceLimit: number[\s\S]*scannedIntegritySampleLimit: number/,
+  "operator tool economics evidence must expose paid-tool and integrity scan limits",
 );
 
 assert.match(
@@ -191,15 +196,15 @@ assert.doesNotMatch(
   /topFailingTools: buildRuntimeBucket\(toolFailureRows, readToolName/,
   "runtime/tool diagnostics must not use raw tool failures for execution-only top failing tools",
 );
-assert.match(
+assert.doesNotMatch(
   schema,
-  /partnerCommissionLedger:[\s\S]*\.index\("by_basis_createdAt", \["basisType", "createdAt"\]\)/,
-  "partner commission ledger must support bounded basis/time economics reads",
+  /partnerCommissionLedger:[\s\S]*\.index\("by_basis_createdAt", \["basisType", "createdAt"\]\)|partnerCommissionLedger:[\s\S]*\.index\("by_credit_ledger_entry", \["sourceCreditLedgerEntryId"\]\)/,
+  "partner commission ledger must not retain paid-tool-only read indexes",
 );
-assert.match(
+assert.doesNotMatch(
   operatorIntelligence,
-  /readPartnerCommissionLedgerRowsByBasisType[\s\S]*partnerCommissionLedger[\s\S]*by_basis_createdAt[\s\S]*buildToolGrossMarginPartnerCommissionByEntryId[\s\S]*sourceCreditLedgerEntryId[\s\S]*buildPaidToolEconomics\(paidToolLedgerRows: any\[\], partnerCommissionRows: any\[\]\)[\s\S]*grossMarginBps: PAID_TOOL_TARGET_GROSS_MARGIN_BPS[\s\S]*partnerGrossMarginShareBps: 0/,
-  "operator tool economics must compute paid-tool economics from ledger rows while treating new partner tool-share target as deferred",
+  /readPartnerCommissionLedgerRowsByBasisType|buildToolGrossMarginPartnerCommissionByEntryId|partnerGrossMarginShareBps|sourceCreditLedgerEntryId[\s\S]*buildPaidToolEconomics/,
+  "operator tool economics must not read deferred paid-tool partner commission rows",
 );
 assert.doesNotMatch(
   operatorIntelligence,
@@ -208,18 +213,18 @@ assert.doesNotMatch(
 );
 assert.match(
   operatorIntelligence,
-  /readSignedLedgerUsd[\s\S]*netAfterPartnerUsd = readSignedLedgerUsd\(lane\.grossMarginUsd - lane\.partnerCommissionUsd\)[\s\S]*grossMarginUsd = readSignedLedgerUsd\(revenueUsd - vendorCostUsd\)/,
-  "operator tool economics must preserve signed gross and net margin truth",
+  /grossMarginUsd: readSignedLedgerUsd\(lane\.grossMarginUsd\)[\s\S]*grossMarginUsd = readSignedLedgerUsd\(revenueUsd - vendorCostUsd\)/,
+  "operator tool economics must preserve signed gross margin truth",
 );
 assert.doesNotMatch(
   operatorIntelligence,
-  /Math\.max\(0, (?:revenueUsd - vendorCostUsd|lane\.grossMarginUsd - lane\.partnerCommissionUsd)\)/,
+  /Math\.max\(0, revenueUsd - vendorCostUsd\)/,
   "operator tool economics must not clamp losses to zero",
 );
 assert.match(
   toolEconomicsBuilderBlock,
-  /readPartnerCommissionLedgerRowsByBasisType\(ctx, "tool_gross_margin", rangeStart, scannedCommissionLimit\)[\s\S]*const paidToolEconomics = buildPaidToolEconomics\(paidToolLedgerRows, toolGrossMarginPartnerCommissionRows\)[\s\S]*paidToolEconomics,/,
-  "operator tool economics must return paid-tool economics from actual ledger rows",
+  /const paidToolEconomics = buildPaidToolEconomics\(paidToolLedgerRows\)[\s\S]*paidToolEconomics,/,
+  "operator tool economics must return paid-tool economics from paid-tool ledger rows",
 );
 assert.match(
   toolEconomicsBuilderBlock,
@@ -288,8 +293,13 @@ assert.match(
 );
 assert.match(
   toolEconomicsBuilderBlock,
-  /sourceTables:[\s\S]*"creditLedgerEntries"[\s\S]*"partnerCommissionLedger"[\s\S]*"workspaceComputeCharges"[\s\S]*"workspaceCreditBalances"[\s\S]*"checkoutSessions"[\s\S]*scannedCommissionLimit[\s\S]*scannedBalanceLimit[\s\S]*toolGrossMarginPartnerCommissionRows\.length >= scannedCommissionLimit/,
+  /sourceTables:[\s\S]*"creditLedgerEntries"[\s\S]*"workspaceComputeCharges"[\s\S]*"workspaceCreditBalances"[\s\S]*"checkoutSessions"[\s\S]*scannedCreditLimit[\s\S]*scannedBalanceLimit/,
   "operator tool economics evidence must name finance and materialized-balance source tables",
+);
+assert.doesNotMatch(
+  toolEconomicsBuilderBlock,
+  /"partnerCommissionLedger"|scannedCommissionLimit|toolGrossMarginPartnerCommissionRows/,
+  "operator tool economics evidence must not include deferred paid-tool partner commission scans",
 );
 assert.doesNotMatch(
   runtimeDiagnosticsBlock,
@@ -394,8 +404,13 @@ assert.match(
 );
 assert.match(
   toolBalancePanelBlock,
-  /Tool economics[\s\S]*Tool revenue[\s\S]*Vendor cost[\s\S]*Gross margin[\s\S]*Partner commissions[\s\S]*Net after partner[\s\S]*Cost evidence[\s\S]*Tool economics are sampled for this window[\s\S]*Partner tool-usage commission is deferred for MVP\./,
+  /Tool economics[\s\S]*Tool revenue[\s\S]*Vendor cost[\s\S]*Gross margin[\s\S]*Cost evidence[\s\S]*Tool economics are sampled for this window[\s\S]*Target:/,
   "operator Business panel must render paid-tool economics",
+);
+assert.doesNotMatch(
+  toolBalancePanelBlock,
+  /Partner commissions|Partner share|Net after partner|Partner tool-usage commission|partnerCommissionUsd/,
+  "operator Business panel must not render deferred paid-tool partner commission fields",
 );
 assert.match(
   toolBalancePanelBlock,

@@ -1352,6 +1352,70 @@ export const backfillPartnerCommissionSettlementStateInternal = internalMutation
   },
 });
 
+export const backfillPartnerCommissionSettlementStateForOperator = mutation({
+  args: {
+    authSubject: v.optional(v.string()),
+    status: v.union(
+      v.literal("locked"),
+      v.literal("risk_hold"),
+      v.literal("payable"),
+      v.literal("voided"),
+    ),
+    afterCreatedAt: v.optional(v.number()),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args): Promise<any> => {
+    const operator = await requireOperatorRole(ctx, args.authSubject, "operator");
+    const startedAt = Date.now();
+    try {
+      const result: any = await ctx.runMutation(
+        (internal as any).builderPartners.backfillPartnerCommissionSettlementStateInternal,
+        {
+          status: args.status,
+          afterCreatedAt: args.afterCreatedAt,
+          limit: args.limit,
+          nowMs: startedAt,
+        },
+      );
+      await recordCriticalAuditEventBestEffort(ctx, {
+        eventKey: `builder_partner_commission_settlement_backfilled:${operator.userId}:${args.status}:${startedAt}`,
+        eventType: "builder_partner_commission_settlement_backfilled",
+        severity: "warning",
+        status: "succeeded",
+        actorUserId: operator.dbUserId,
+        provider: "polynet",
+        metadata: {
+          status: args.status,
+          afterCreatedAt: args.afterCreatedAt,
+          limit: args.limit,
+          scanned: result?.scanned,
+          recomputed: result?.recomputed,
+          nextAfterCreatedAt: result?.nextAfterCreatedAt,
+        },
+        createdAt: startedAt,
+      });
+      return result;
+    } catch (error) {
+      await recordCriticalAuditEventBestEffort(ctx, {
+        eventKey: `builder_partner_commission_settlement_backfilled:${operator.userId}:${args.status}:${startedAt}`,
+        eventType: "builder_partner_commission_settlement_backfilled",
+        severity: "error",
+        status: "failed",
+        actorUserId: operator.dbUserId,
+        provider: "polynet",
+        metadata: {
+          status: args.status,
+          afterCreatedAt: args.afterCreatedAt,
+          limit: args.limit,
+          errorMessage: error instanceof Error ? error.message : String(error ?? ""),
+        },
+        createdAt: startedAt,
+      });
+      throw error;
+    }
+  },
+});
+
 async function readPayoutStatus(ctx: any, userId: any) {
   const row = await ctx.db
     .query("userStripeConnectAccounts")
@@ -2922,12 +2986,17 @@ export const beginPartnerPayoutBatchExecutionInternal = internalMutation({
   handler: async (ctx, args) => {
     const batch = await ctx.db.get(args.batchId);
     if (!batch) throw new Error("partner_payout_batch_not_found");
+    const rawBatchStatus = String(batch?.status ?? "").trim();
     const operatorStatus = toPartnerPayoutCycleOperatorStatus(batch);
     if (operatorStatus === "pending_approval") throw new Error("partner_payout_batch_not_approved");
     if (operatorStatus === "held") throw new Error("partner_payout_batch_held");
     if (operatorStatus === "rejected") throw new Error("partner_payout_batch_rejected");
     if (operatorStatus === "paid") {
       return { transfers: [] };
+    }
+    if (rawBatchStatus === "failed") throw new Error("partner_payout_batch_retry_required");
+    if (operatorStatus !== "approved" && operatorStatus !== "processing") {
+      throw new Error("partner_payout_batch_not_executable");
     }
     const nowMs = Date.now();
     const actorUserId = args.actorUserId ?? batch.approvedByUserId;

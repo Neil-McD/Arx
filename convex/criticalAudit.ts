@@ -18,6 +18,7 @@ export const CRITICAL_AUDIT_EVENT_TYPES = [
   "builder_partner_payout_transfer_succeeded",
   "builder_partner_payout_transfer_failed",
   "builder_partner_payout_batch_finalized",
+  "builder_partner_commission_settlement_backfilled",
   "harness_app_source_provenance_backfill",
   "operator_dashboard_accessed",
   "operator_role_deactivated",
@@ -115,6 +116,15 @@ const CRITICAL_AUDIT_METADATA_ALLOWLIST: Record<string, readonly string[]> = {
   builder_partner_payout_transfer_succeeded: ["batchId", "transferId", "amountUsd"],
   builder_partner_payout_transfer_failed: ["batchId", "transferId", "amountUsd", "errorMessage"],
   builder_partner_payout_batch_finalized: ["batchId", "transferCount", "failedTransferCount", "totalAmountUsd"],
+  builder_partner_commission_settlement_backfilled: [
+    "status",
+    "afterCreatedAt",
+    "limit",
+    "scanned",
+    "recomputed",
+    "nextAfterCreatedAt",
+    "errorMessage",
+  ],
   harness_app_source_provenance_backfill: [
     "dryRun",
     "limit",

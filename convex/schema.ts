@@ -206,9 +206,7 @@ export default defineSchema({
     .index("by_checkout_session", ["sourceCheckoutSessionId"])
     .index("by_provider_invoice", ["sourceProviderInvoiceId"])
     .index("by_payment_intent", ["sourceProviderPaymentIntentId"])
-    .index("by_charge", ["sourceProviderChargeId"])
-    .index("by_basis_createdAt", ["basisType", "createdAt"])
-    .index("by_credit_ledger_entry", ["sourceCreditLedgerEntryId"]),
+    .index("by_charge", ["sourceProviderChargeId"]),
 
   partnerCommissionAdjustments: defineTable({
     adjustmentKey: v.string(),

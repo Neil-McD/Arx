@@ -457,10 +457,6 @@ export type OperatorPaidToolEconomicsLane = {
   vendorCostUsd: number;
   grossMarginUsd: number;
   grossMarginRate: number | null;
-  partnerCommissionUsd: number;
-  partnerShareOfGrossMargin: number | null;
-  netAfterPartnerUsd: number;
-  netAfterPartnerMarginRate: number | null;
   missingCostRows: number;
   latestAt: number | null;
 };
@@ -564,12 +560,9 @@ export type OperatorToolEconomicsSnapshot = {
   paidToolEconomics: {
     targets: {
       grossMarginBps: number;
-      partnerGrossMarginShareBps: number;
     };
     totals: OperatorPaidToolEconomicsLane & {
       costEvidenceCoverage: number | null;
-      partnerCommissionRows: number;
-      voidedPartnerCommissionUsd: number;
     };
     lanes: OperatorPaidToolEconomicsLane[];
   };
@@ -594,7 +587,6 @@ export type OperatorToolEconomicsSnapshot = {
   evidence: {
     sourceTables: string[];
     scannedCreditLimit: number;
-    scannedCommissionLimit: number;
     scannedComputeLimit: number;
     scannedBalanceLimit: number;
     scannedIntegritySampleLimit: number;

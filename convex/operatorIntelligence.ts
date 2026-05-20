@@ -507,19 +507,6 @@ async function readCreditLedgerEntriesByTool(
   return await query.order("desc").take(limit);
 }
 
-async function readPartnerCommissionLedgerRowsByBasisType(
-  ctx: any,
-  basisType: "community_platform_fee" | "tool_gross_margin",
-  rangeStart: number | null,
-  limit: number,
-) {
-  const query = ctx.db.query("partnerCommissionLedger").withIndex("by_basis_createdAt", (q: any) => {
-    const scoped = q.eq("basisType", basisType);
-    return rangeStart == null ? scoped : scoped.gte("createdAt", rangeStart);
-  });
-  return await query.order("desc").take(limit);
-}
-
 async function readWorkspaceComputeChargesByDebitSource(
   ctx: any,
   debitSource: "included" | "purchased" | "mixed" | "unbilled",
@@ -858,10 +845,6 @@ function buildEmptyToolEconomicsLane(toolName: string) {
     vendorCostUsd: 0,
     grossMarginUsd: 0,
     grossMarginRate: null as number | null,
-    partnerCommissionUsd: 0,
-    partnerShareOfGrossMargin: null as number | null,
-    netAfterPartnerUsd: 0,
-    netAfterPartnerMarginRate: null as number | null,
     missingCostRows: 0,
     latestAt: null as number | null,
   };
@@ -869,50 +852,16 @@ function buildEmptyToolEconomicsLane(toolName: string) {
 
 function finalizeToolEconomicsLane<T extends ReturnType<typeof buildEmptyToolEconomicsLane>>(lane: T): T {
   const grossMarginRate = lane.revenueUsd > 0 ? lane.grossMarginUsd / lane.revenueUsd : null;
-  const partnerShareOfGrossMargin = lane.grossMarginUsd > 0
-    ? lane.partnerCommissionUsd / lane.grossMarginUsd
-    : null;
-  const netAfterPartnerUsd = readSignedLedgerUsd(lane.grossMarginUsd - lane.partnerCommissionUsd);
   return {
     ...lane,
     revenueUsd: readLedgerUsd(lane.revenueUsd),
     vendorCostUsd: readLedgerUsd(lane.vendorCostUsd),
     grossMarginUsd: readSignedLedgerUsd(lane.grossMarginUsd),
     grossMarginRate,
-    partnerCommissionUsd: readLedgerUsd(lane.partnerCommissionUsd),
-    partnerShareOfGrossMargin,
-    netAfterPartnerUsd,
-    netAfterPartnerMarginRate: lane.revenueUsd > 0 ? netAfterPartnerUsd / lane.revenueUsd : null,
   };
 }
 
-function buildToolGrossMarginPartnerCommissionByEntryId(partnerCommissionRows: any[]) {
-  const byEntryId = new Map<string, {
-    activeCommissionUsd: number;
-    voidedCommissionUsd: number;
-    rows: number;
-  }>();
-  for (const row of partnerCommissionRows) {
-    if (row.basisType !== "tool_gross_margin" || !row.sourceCreditLedgerEntryId) continue;
-    const entryId = String(row.sourceCreditLedgerEntryId);
-    const total = byEntryId.get(entryId) ?? {
-      activeCommissionUsd: 0,
-      voidedCommissionUsd: 0,
-      rows: 0,
-    };
-    const amount = readLedgerUsd(row.commissionAmountUsd);
-    if (row.status === "voided") {
-      total.voidedCommissionUsd = readLedgerUsd(total.voidedCommissionUsd + amount);
-    } else {
-      total.activeCommissionUsd = readLedgerUsd(total.activeCommissionUsd + amount);
-    }
-    total.rows += 1;
-    byEntryId.set(entryId, total);
-  }
-  return byEntryId;
-}
-
-function buildPaidToolEconomics(paidToolLedgerRows: any[], partnerCommissionRows: any[]) {
+function buildPaidToolEconomics(paidToolLedgerRows: any[]) {
   const lanes = new Map<string, ReturnType<typeof buildEmptyToolEconomicsLane>>(
     PAID_TOOL_LEDGER_TOOL_NAMES.map((toolName) => [
       toolName,
@@ -920,9 +869,6 @@ function buildPaidToolEconomics(paidToolLedgerRows: any[], partnerCommissionRows
     ]),
   );
   const settledRows = paidToolLedgerRows.filter((row: any) => row.status === "succeeded");
-  const partnerCommissionByEntryId = buildToolGrossMarginPartnerCommissionByEntryId(partnerCommissionRows);
-  let voidedPartnerCommissionUsd = 0;
-  let partnerCommissionRowCount = 0;
 
   for (const row of settledRows) {
     const toolName = String(row?.toolName ?? "unknown").trim() || "unknown";
@@ -933,23 +879,15 @@ function buildPaidToolEconomics(paidToolLedgerRows: any[], partnerCommissionRows
     const hasCostEvidence = typeof row?.rawVendorCostUsd === "number" && Number.isFinite(row.rawVendorCostUsd);
     const vendorCostUsd = hasCostEvidence ? readLedgerUsd(row.rawVendorCostUsd) : 0;
     const grossMarginUsd = readSignedLedgerUsd(revenueUsd - vendorCostUsd);
-    const commission = partnerCommissionByEntryId.get(String(row._id)) ?? {
-      activeCommissionUsd: 0,
-      voidedCommissionUsd: 0,
-      rows: 0,
-    };
 
     lane.settledRows += 1;
     lane.revenueUsd = readLedgerUsd(lane.revenueUsd + revenueUsd);
     lane.vendorCostUsd = readLedgerUsd(lane.vendorCostUsd + vendorCostUsd);
     lane.grossMarginUsd = readSignedLedgerUsd(lane.grossMarginUsd + grossMarginUsd);
-    lane.partnerCommissionUsd = readLedgerUsd(lane.partnerCommissionUsd + commission.activeCommissionUsd);
     if (!hasCostEvidence) lane.missingCostRows += 1;
     const latestAt = readRowCreatedAt(row);
     lane.latestAt = Math.max(lane.latestAt ?? 0, latestAt) || lane.latestAt;
     lanes.set(toolName, lane);
-    voidedPartnerCommissionUsd = readLedgerUsd(voidedPartnerCommissionUsd + commission.voidedCommissionUsd);
-    partnerCommissionRowCount += commission.rows;
   }
 
   const finalizedLanes = [...lanes.values()]
@@ -967,7 +905,6 @@ function buildPaidToolEconomics(paidToolLedgerRows: any[], partnerCommissionRows
       revenueUsd: readLedgerUsd(total.revenueUsd + lane.revenueUsd),
       vendorCostUsd: readLedgerUsd(total.vendorCostUsd + lane.vendorCostUsd),
       grossMarginUsd: readSignedLedgerUsd(total.grossMarginUsd + lane.grossMarginUsd),
-      partnerCommissionUsd: readLedgerUsd(total.partnerCommissionUsd + lane.partnerCommissionUsd),
       missingCostRows: total.missingCostRows + lane.missingCostRows,
       latestAt: Math.max(total.latestAt ?? 0, lane.latestAt ?? 0) || total.latestAt,
     }), buildEmptyToolEconomicsLane("total")),
@@ -976,7 +913,6 @@ function buildPaidToolEconomics(paidToolLedgerRows: any[], partnerCommissionRows
   return {
     targets: {
       grossMarginBps: PAID_TOOL_TARGET_GROSS_MARGIN_BPS,
-      partnerGrossMarginShareBps: 0,
     },
     totals: {
       ...totals,
@@ -985,8 +921,6 @@ function buildPaidToolEconomics(paidToolLedgerRows: any[], partnerCommissionRows
       costEvidenceCoverage: totals.settledRows > 0
         ? (totals.settledRows - totals.missingCostRows) / totals.settledRows
         : null,
-      partnerCommissionRows: partnerCommissionRowCount,
-      voidedPartnerCommissionUsd,
     },
     lanes: finalizedLanes,
   };
@@ -1298,7 +1232,6 @@ async function buildOperatorToolEconomicsSnapshot(ctx: any, range: "7d" | "30d" 
   const rangeStart = normalizeRangeStart(range, nowMs);
   const scannedCreditLimit = 300;
   const scannedComputeLimit = 200;
-  const scannedCommissionLimit = PAID_TOOL_LEDGER_TOOL_NAMES.length * scannedCreditLimit;
   const scannedBalanceLimit = 200;
   const scannedIntegritySampleLimit = 25;
   const userLedgerLimit = 500;
@@ -1306,7 +1239,6 @@ async function buildOperatorToolEconomicsSnapshot(ctx: any, range: "7d" | "30d" 
   const userComputeLimit = 250;
   const [
     paidToolCreditGroups,
-    toolGrossMarginPartnerCommissionRows,
     unbilledComputeCharges,
     balanceRows,
     staleReservedRows,
@@ -1317,7 +1249,6 @@ async function buildOperatorToolEconomicsSnapshot(ctx: any, range: "7d" | "30d" 
         readCreditLedgerEntriesByTool(ctx, toolName, rangeStart, scannedCreditLimit),
       ),
     ),
-    readPartnerCommissionLedgerRowsByBasisType(ctx, "tool_gross_margin", rangeStart, scannedCommissionLimit),
     readWorkspaceComputeChargesByDebitSource(ctx, "unbilled", rangeStart, scannedComputeLimit),
     readWorkspaceCreditBalanceRows(ctx, scannedBalanceLimit),
     readStaleReservedCreditLedgerRows(ctx, nowMs, scannedIntegritySampleLimit),
@@ -1352,7 +1283,7 @@ async function buildOperatorToolEconomicsSnapshot(ctx: any, range: "7d" | "30d" 
       Math.min(30, unbilledComputeCharges.length * 10),
   );
   const paidTools = buildPaidToolDiagnostics(paidToolLedgerRows, unbilledComputeCharges);
-  const paidToolEconomics = buildPaidToolEconomics(paidToolLedgerRows, toolGrossMarginPartnerCommissionRows);
+  const paidToolEconomics = buildPaidToolEconomics(paidToolLedgerRows);
   const accountingIntegrity = await buildToolBalanceAccountingIntegrity({
     ctx,
     nowMs,
@@ -1388,19 +1319,16 @@ async function buildOperatorToolEconomicsSnapshot(ctx: any, range: "7d" | "30d" 
     evidence: {
       sourceTables: [
         "creditLedgerEntries",
-        "partnerCommissionLedger",
         "workspaceComputeCharges",
         "workspaceCreditBalances",
         "checkoutSessions",
       ],
       scannedCreditLimit,
-      scannedCommissionLimit,
       scannedComputeLimit,
       scannedBalanceLimit,
       scannedIntegritySampleLimit,
       isTruncated:
         paidToolCreditGroups.some((group: any[]) => group.length >= scannedCreditLimit) ||
-        toolGrossMarginPartnerCommissionRows.length >= scannedCommissionLimit ||
         unbilledComputeCharges.length >= scannedComputeLimit ||
         balanceRows.length >= scannedBalanceLimit ||
         staleReservedRows.length >= scannedIntegritySampleLimit ||

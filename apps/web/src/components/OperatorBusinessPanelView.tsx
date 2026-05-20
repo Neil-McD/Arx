@@ -349,18 +349,6 @@ export function OperatorBusinessPanelView(props: {
             <strong>{formatPercent(toolEconomics?.totals.grossMarginRate ?? null)}</strong>
           </div>
           <div className="operator-dashboard__row">
-            <span>Partner commissions</span>
-            <strong>{formatUsdAmount(toolEconomics?.totals.partnerCommissionUsd)}</strong>
-          </div>
-          <div className="operator-dashboard__row">
-            <span>Partner share</span>
-            <strong>{formatPercent(toolEconomics?.totals.partnerShareOfGrossMargin ?? null)}</strong>
-          </div>
-          <div className="operator-dashboard__row">
-            <span>Net after partner</span>
-            <strong>{formatPercent(toolEconomics?.totals.netAfterPartnerMarginRate ?? null)}</strong>
-          </div>
-          <div className="operator-dashboard__row">
             <span>Cost evidence</span>
             <strong>{formatPercent(toolEconomics?.totals.costEvidenceCoverage ?? null)}</strong>
           </div>
@@ -380,7 +368,6 @@ export function OperatorBusinessPanelView(props: {
                         `${lane.settledRows} settled`,
                         formatUsdAmount(lane.revenueUsd),
                         `${formatPercent(lane.grossMarginRate)} margin`,
-                        lane.partnerCommissionUsd > 0 ? `${formatUsdAmount(lane.partnerCommissionUsd)} partner` : null,
                       ]
                         .filter(Boolean)
                         .join(" · ")}
@@ -393,7 +380,7 @@ export function OperatorBusinessPanelView(props: {
             <div className="operator-dashboard__empty">No settled paid-tool ledger rows returned.</div>
           )}
           <div className="operator-dashboard__empty">
-            Target: {formatPercent((toolEconomics?.targets.grossMarginBps ?? 6000) / 10000)} gross margin. Partner tool-usage commission is deferred for MVP.
+            Target: {formatPercent((toolEconomics?.targets.grossMarginBps ?? 6000) / 10000)} gross margin.
           </div>
         </div>
       </section>

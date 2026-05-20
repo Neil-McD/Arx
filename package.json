@@ -12,6 +12,7 @@
     "convex:deploy": "convex deploy -y",
     "convex:codegen": "convex codegen",
     "auth:prune-sessions": "bash scripts/auth_prune_sessions.sh",
+    "maintenance:partner-settlement-backfill": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/backfill_partner_commission_settlement_state.ts",
     "operator:seed-owner": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/seed_operator_owner.ts",
     "check:web-typecheck": "npm --prefix apps/web run typecheck",
     "check:web-bundle-budget": "npm --prefix apps/web run check:bundle-budget",
