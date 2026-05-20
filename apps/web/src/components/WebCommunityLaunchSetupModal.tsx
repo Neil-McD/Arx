@@ -1537,6 +1537,22 @@ export function WebCommunityLaunchSetupModal(
                     {importBody}
                   </p>
                 </div>
+                {!importReady && !importFailed ? (
+                  <div className="community-launch-import-agent-activity" aria-hidden="true">
+                    <div className="community-launch-import-agent-orbit">
+                      <span />
+                      <span />
+                      <span />
+                      <span />
+                    </div>
+                    <div className="community-launch-import-agent-caption">
+                      <span>Read context</span>
+                      <span>Search candidates</span>
+                      <span>Write ledger</span>
+                      <span>Finish analysis</span>
+                    </div>
+                  </div>
+                ) : null}
                 <div className="community-launch-import-working-rows">
                   <span>Harness output saved</span>
                   <span>Event trace started</span>

@@ -683,6 +683,11 @@ assert.match(
 );
 assert.match(
   workflowImports,
+  /const WORKFLOW_IMPORT_MAX_TOOL_STEPS = 48/,
+  "workflow import analysis must allow enough bounded tool steps for real harness inventories",
+);
+assert.match(
+  workflowImports,
   /draft\.status !== "working"[\s\S]*status === "working"[\s\S]*status === "ready_for_review"[\s\S]*workflow_import_terminal_draft_requires_retry/,
   "workflow import ledger writes must not reopen terminal drafts without a dedicated retry path",
 );
@@ -773,6 +778,11 @@ assert.match(
   setupModal,
   /onLoadWorkflowImport[\s\S]*window\.setInterval[\s\S]*workflowImportDraftStatus/,
   "launch workflow understanding step must poll the sanitized draft status",
+);
+assert.match(
+  setupModal + baseCss,
+  /community-launch-import-agent-activity[\s\S]*community-launch-import-agent-orbit[\s\S]*community-launch-import-sweep/,
+  "launch workflow understanding step must show live agent activity while analysis is running",
 );
 assert.match(
   setupModal,
