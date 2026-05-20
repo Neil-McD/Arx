@@ -393,8 +393,7 @@ export function OperatorBusinessPanelView(props: {
             <div className="operator-dashboard__empty">No settled paid-tool ledger rows returned.</div>
           )}
           <div className="operator-dashboard__empty">
-            Targets: {formatPercent((toolEconomics?.targets.grossMarginBps ?? 6000) / 10000)} gross margin,{" "}
-            {formatPercent((toolEconomics?.targets.partnerGrossMarginShareBps ?? 2000) / 10000)} partner share of gross margin.
+            Target: {formatPercent((toolEconomics?.targets.grossMarginBps ?? 6000) / 10000)} gross margin. Partner tool-usage commission is deferred for MVP.
           </div>
         </div>
       </section>

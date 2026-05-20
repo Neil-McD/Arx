@@ -23,7 +23,6 @@ import { resolveAuthenticatedActor } from "./authActor";
 import {
   getStripeClient,
 } from "./stripeCore";
-import { recordToolUsagePartnerCommission } from "./builderPartners";
 import {
   attachStripeCustomerToUser,
   ensureStripeCustomerForUser,
@@ -1116,17 +1115,6 @@ export const recordWorkspaceComputeChargeInternal = internalMutation({
           settledAt: nowMs,
           updatedAt: nowMs,
         });
-        const paidUsageRatio = totalCreditsSettled > 0
-          ? debitPurchased / totalCreditsSettled
-          : 0;
-        await recordToolUsagePartnerCommission(ctx, {
-          creditLedgerEntryId: reservation._id,
-          referredUserId: reservation.userId,
-          polynetPriceUsd: creditsToUsd(totalCreditsSettled),
-          rawVendorCostUsd: roundCurrency(computeCostUsd * chargedRatio),
-          paidUsageRatio,
-          nowMs,
-        });
       } else if (reservation?.status === "succeeded") {
         const settledCredits = roundCredits(
           typeof reservation.creditsSettled === "number"
@@ -1427,20 +1415,6 @@ export const settleCreditsInternal = internalMutation({
       settledAt: nowMs,
       updatedAt: nowMs,
     });
-    if (args.status === "succeeded") {
-      const purchasedSettled = roundCredits(split.purchasedSettled + extraPurchasedDebited);
-      const paidUsageRatio = creditsSettled > 0
-        ? purchasedSettled / creditsSettled
-        : 0;
-      await recordToolUsagePartnerCommission(ctx, {
-        creditLedgerEntryId: entry._id,
-        referredUserId: entry.userId,
-        polynetPriceUsd: settledPolynetPriceUsd,
-        rawVendorCostUsd: settledRawVendorCostUsd,
-        paidUsageRatio,
-        nowMs,
-      });
-    }
     return await ctx.db.get(entry._id);
   },
 });

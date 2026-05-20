@@ -378,7 +378,7 @@ import {
   type CommunityMembersJoinReviewMode,
 } from "./communityJoinPolicy";
 import { useWebAccountCommerceActions } from "./controllers/useWebAccountCommerceActions";
-import { useWebCommerceAffiliateActions } from "./controllers/useWebCommerceAffiliateActions";
+import { useWebCommerceClaimActions } from "./controllers/useWebCommerceClaimActions";
 import { useWebPublicFunnelActions } from "./controllers/useWebPublicFunnelActions";
 import { useWebCommunityChatPreloadLifecycle } from "./controllers/useWebCommunityChatPreloadLifecycle";
 import { useWebDiscoverPreloadLifecycle } from "./controllers/useWebDiscoverPreloadLifecycle";
@@ -5251,7 +5251,7 @@ export default function App() {
     loadPendingPurchaseClaims,
     loadAccountCommerceStatus,
     redeemPendingPurchases,
-  } = useWebCommerceAffiliateActions({
+  } = useWebCommerceClaimActions({
     getSession: () => sessionRef.current,
     ensureSession: ensureUsableAuthSession,
     requireSignIn,

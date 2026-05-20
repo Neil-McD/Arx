@@ -12,7 +12,6 @@ import {
   PAID_TOOL_TARGET_GROSS_MARGIN_BPS,
   WORKSPACE_CREDITS_PER_USD,
 } from "../shared/workspaceCredits";
-import { BUILDER_PARTNER_TOOL_GROSS_MARGIN_SHARE_BPS } from "../shared/builderPartnerProgram";
 import {
   ACCOUNT_SETUP_MISSING_FIELDS,
   ACCOUNT_SETUP_STEPS,
@@ -977,7 +976,7 @@ function buildPaidToolEconomics(paidToolLedgerRows: any[], partnerCommissionRows
   return {
     targets: {
       grossMarginBps: PAID_TOOL_TARGET_GROSS_MARGIN_BPS,
-      partnerGrossMarginShareBps: BUILDER_PARTNER_TOOL_GROSS_MARGIN_SHARE_BPS,
+      partnerGrossMarginShareBps: 0,
     },
     totals: {
       ...totals,

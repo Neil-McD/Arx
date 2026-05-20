@@ -2,7 +2,6 @@ export const BUILDER_PARTNER_PROGRAM_VERSION = "builder_partner_v1";
 export const BUILDER_PARTNER_TERMS_VERSION = "builder_partner_terms_v1";
 export const BUILDER_PARTNER_COMMUNITY_PLATFORM_FEE_BPS = 1500;
 export const BUILDER_PARTNER_PLATFORM_FEE_SHARE_BPS = 4000;
-export const BUILDER_PARTNER_TOOL_GROSS_MARGIN_SHARE_BPS = 2000;
 export const BUILDER_PARTNER_ATTRIBUTION_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
 export const BUILDER_PARTNER_COMMISSION_HOLD_MS = 30 * 24 * 60 * 60 * 1000;
 export const BUILDER_PARTNER_PAYOUT_BUFFER_MS = 14 * 24 * 60 * 60 * 1000;
@@ -54,35 +53,5 @@ export function calculateBuilderPartnerCommunityRevenueCommission(params: {
     effectiveCommunityRevenueShareBps: Math.round(
       platformFeeBps * (partnerPlatformFeeShareBps / 10000),
     ),
-  };
-}
-
-export function calculateBuilderPartnerToolGrossMarginCommission(params: {
-  polynetPriceUsd: number;
-  rawVendorCostUsd: number;
-  partnerToolGrossMarginShareBps?: number;
-}): {
-  grossMarginUsd: number;
-  commissionAmountUsd: number;
-  grossMarginBps: number;
-} {
-  const polynetPriceUsd = roundBuilderPartnerMoney(params.polynetPriceUsd);
-  const rawVendorCostUsd = roundBuilderPartnerMoney(params.rawVendorCostUsd);
-  const partnerToolGrossMarginShareBps = normalizeBps(
-    params.partnerToolGrossMarginShareBps ?? BUILDER_PARTNER_TOOL_GROSS_MARGIN_SHARE_BPS,
-  );
-  const grossMarginUsd = roundBuilderPartnerMoney(
-    Math.max(0, polynetPriceUsd - rawVendorCostUsd),
-  );
-  const commissionAmountUsd = roundBuilderPartnerMoney(
-    grossMarginUsd * (partnerToolGrossMarginShareBps / 10000),
-  );
-  return {
-    grossMarginUsd,
-    commissionAmountUsd,
-    grossMarginBps:
-      polynetPriceUsd > 0
-        ? Math.round((grossMarginUsd / polynetPriceUsd) * 10000)
-        : 0,
   };
 }

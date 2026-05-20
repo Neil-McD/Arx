@@ -13,7 +13,7 @@ import {
 } from "../../../../shared/accountCommerceStatusGateway";
 import type { AuthSession } from "../auth";
 
-type UseWebCommerceAffiliateActionsArgs = {
+type UseWebCommerceClaimActionsArgs = {
   getSession: () => AuthSession | null;
   ensureSession?: () => Promise<AuthSession | null>;
   requireSignIn: (intent: PendingAuthIntentInput) => void;
@@ -36,7 +36,7 @@ type UseWebCommerceAffiliateActionsArgs = {
   redeemPendingPurchasesInFlightRef: { current: boolean };
 };
 
-export function useWebCommerceAffiliateActions(args: UseWebCommerceAffiliateActionsArgs) {
+export function useWebCommerceClaimActions(args: UseWebCommerceClaimActionsArgs) {
   const accountCommerceLoadRequestIdRef = useRef(0);
   const accountCommerceLoadPendingCountRef = useRef(0);
 

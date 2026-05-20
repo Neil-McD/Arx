@@ -15,9 +15,7 @@ import {
   BUILDER_PARTNER_PROGRAM_VERSION,
   BUILDER_PARTNER_PLATFORM_FEE_SHARE_BPS,
   BUILDER_PARTNER_TERMS_VERSION,
-  BUILDER_PARTNER_TOOL_GROSS_MARGIN_SHARE_BPS,
   calculateBuilderPartnerCommunityRevenueCommission,
-  calculateBuilderPartnerToolGrossMarginCommission,
   roundBuilderPartnerMoney,
 } from "../shared/builderPartnerProgram";
 import { buildAttributionRouteLabel } from "../shared/routePrivacy";
@@ -672,7 +670,7 @@ async function insertPartnerCommissionIfEligible(ctx: any, args: {
   attribution: any;
   referredUserId: any;
   referredCommunityId?: any;
-  basisType: "community_platform_fee" | "tool_gross_margin";
+  basisType: "community_platform_fee";
   basisAmountUsd: number;
   commissionRateBps: number;
   commissionAmountUsd: number;
@@ -681,7 +679,6 @@ async function insertPartnerCommissionIfEligible(ctx: any, args: {
   sourceProviderInvoiceId?: string;
   sourceProviderPaymentIntentId?: string;
   sourceProviderChargeId?: string;
-  sourceCreditLedgerEntryId?: any;
   nowMs: number;
 }) {
   const existing = await getCommissionByKey(ctx, args.commissionKey);
@@ -707,7 +704,6 @@ async function insertPartnerCommissionIfEligible(ctx: any, args: {
     sourceProviderInvoiceId: args.sourceProviderInvoiceId,
     sourceProviderPaymentIntentId: args.sourceProviderPaymentIntentId,
     sourceProviderChargeId: args.sourceProviderChargeId,
-    sourceCreditLedgerEntryId: args.sourceCreditLedgerEntryId,
     holdUntil: args.nowMs + BUILDER_PARTNER_COMMISSION_HOLD_MS,
     createdAt: args.nowMs,
     updatedAt: args.nowMs,
@@ -856,46 +852,6 @@ export const recordCommunitySubscriptionInvoicePartnerCommissionInternal = inter
     };
   },
 });
-
-export async function recordToolUsagePartnerCommission(ctx: any, args: {
-  creditLedgerEntryId: any;
-  referredUserId: any;
-  polynetPriceUsd?: number | null;
-  rawVendorCostUsd?: number | null;
-  paidUsageRatio?: number | null;
-  nowMs?: number;
-}) {
-  const nowMs = args.nowMs ?? Date.now();
-  const commissionKey = `tool_gross_margin:${String(args.creditLedgerEntryId)}`;
-  const existing = await getCommissionByKey(ctx, commissionKey);
-  if (existing) return existing;
-  const paidUsageRatio = Math.min(1, Math.max(0, Number(args.paidUsageRatio ?? 0)));
-  if (!(paidUsageRatio > 0)) return null;
-  const match = await findBoundPartnerAttributionForCommission(ctx, {
-    referredUserId: args.referredUserId,
-    nowMs,
-  });
-  if (!match) return null;
-  const polynetPriceUsd = roundBuilderPartnerMoney(Number(args.polynetPriceUsd ?? 0) * paidUsageRatio);
-  const rawVendorCostUsd = roundBuilderPartnerMoney(Number(args.rawVendorCostUsd ?? 0) * paidUsageRatio);
-  const commission = calculateBuilderPartnerToolGrossMarginCommission({
-    polynetPriceUsd,
-    rawVendorCostUsd,
-    partnerToolGrossMarginShareBps: BUILDER_PARTNER_TOOL_GROSS_MARGIN_SHARE_BPS,
-  });
-  return await insertPartnerCommissionIfEligible(ctx, {
-    commissionKey,
-    partner: match.partner,
-    attribution: match.attribution,
-    referredUserId: args.referredUserId,
-    basisType: "tool_gross_margin",
-    basisAmountUsd: commission.grossMarginUsd,
-    commissionRateBps: BUILDER_PARTNER_TOOL_GROSS_MARGIN_SHARE_BPS,
-    commissionAmountUsd: commission.commissionAmountUsd,
-    sourceCreditLedgerEntryId: args.creditLedgerEntryId,
-    nowMs,
-  });
-}
 
 export const recordPartnerCommissionRefundAdjustmentInternal = internalMutation({
   args: {

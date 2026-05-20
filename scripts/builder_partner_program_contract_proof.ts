@@ -8,9 +8,7 @@ import {
   BUILDER_PARTNER_PLATFORM_FEE_SHARE_BPS,
   BUILDER_PARTNER_PROGRAM_VERSION,
   BUILDER_PARTNER_TERMS_VERSION,
-  BUILDER_PARTNER_TOOL_GROSS_MARGIN_SHARE_BPS,
   calculateBuilderPartnerCommunityRevenueCommission,
-  calculateBuilderPartnerToolGrossMarginCommission,
 } from "../shared/builderPartnerProgram.ts";
 import { buildAttributionRouteLabel } from "../shared/routePrivacy.ts";
 
@@ -27,7 +25,6 @@ function proveConstants() {
   assert.equal(BUILDER_PARTNER_TERMS_VERSION, "builder_partner_terms_v1");
   assert.equal(BUILDER_PARTNER_COMMUNITY_PLATFORM_FEE_BPS, 1500);
   assert.equal(BUILDER_PARTNER_PLATFORM_FEE_SHARE_BPS, 4000);
-  assert.equal(BUILDER_PARTNER_TOOL_GROSS_MARGIN_SHARE_BPS, 2000);
   assert.equal(BUILDER_PARTNER_ATTRIBUTION_WINDOW_MS, 30 * 24 * 60 * 60 * 1000);
   assert.equal(BUILDER_PARTNER_COMMISSION_HOLD_MS, 30 * 24 * 60 * 60 * 1000);
   assert.equal(BUILDER_PARTNER_PAYOUT_BUFFER_MS, 14 * 24 * 60 * 60 * 1000);
@@ -43,25 +40,6 @@ function proveCommunityCommissionMath() {
     commissionAmountUsd: 6,
     effectiveCommunityRevenueShareBps: 600,
   });
-}
-
-function proveToolCommissionMath() {
-  const result = calculateBuilderPartnerToolGrossMarginCommission({
-    polynetPriceUsd: 10,
-    rawVendorCostUsd: 4,
-  });
-  assert.deepEqual(result, {
-    grossMarginUsd: 6,
-    commissionAmountUsd: 1.2,
-    grossMarginBps: 6000,
-  });
-
-  const underwater = calculateBuilderPartnerToolGrossMarginCommission({
-    polynetPriceUsd: 4,
-    rawVendorCostUsd: 10,
-  });
-  assert.equal(underwater.grossMarginUsd, 0);
-  assert.equal(underwater.commissionAmountUsd, 0);
 }
 
 function proveSchemaContract(schemaSource: string) {
@@ -184,9 +162,14 @@ function proveUiContract(uiSource: string) {
     "BUILDER_PARTNER_PLATFORM_FEE_SHARE_BPS",
     "partner settings UI",
   );
+  assert.doesNotMatch(
+    uiSource,
+    /BUILDER_PARTNER_TOOL_GROSS_MARGIN_SHARE_BPS|Tool usage|gross margin/i,
+    "partner settings UI should not expose deferred paid-tool partner economics",
+  );
   assertIncludes(
     uiSource,
-    "BUILDER_PARTNER_TOOL_GROSS_MARGIN_SHARE_BPS",
+    "Builder Partners earn from referred creators' community revenue.",
     "partner settings UI",
   );
   assertIncludes(
@@ -196,7 +179,12 @@ function proveUiContract(uiSource: string) {
   );
   assertIncludes(
     uiSource,
-    "Partner links are generated automatically when the requirements are met.",
+    "Partner links are",
+    "partner settings UI",
+  );
+  assertIncludes(
+    uiSource,
+    "generated automatically when the requirements are met.",
     "partner settings UI",
   );
   assertIncludes(
@@ -384,7 +372,7 @@ function proveAutomaticUnlockContract(convexSource: string, gatewaySource: strin
   );
   assert.doesNotMatch(
     gatewaySource,
-    /pending_review|params\.get\("affiliate"\)/,
+    /pending_review|params\.get\("affiliate"\)|params\.get\("ref"\)/,
     "Builder Partner gateway should stay on the branded platform-partner contract",
   );
   assertIncludes(
@@ -643,7 +631,7 @@ function provePricingFoundation(authSource: string, workspaceCreditsSource: stri
   assert.match(
     workspaceCreditsSource,
     /PAID_TOOL_TARGET_GROSS_MARGIN_BPS\s*=\s*6000/,
-    "expected partner tool economics to sit on the 60% paid-tool gross margin target",
+    "expected paid-tool pricing to keep the 60% gross margin target",
   );
 }
 
@@ -677,15 +665,10 @@ function proveCommissionProducerContract(
     "requireCommunityRevenueEligibility: true",
     "Builder Partner commission producer",
   );
-  assertIncludes(
+  assert.doesNotMatch(
     builderPartnersSource,
-    "recordToolUsagePartnerCommission",
-    "Builder Partner commission producer",
-  );
-  assertIncludes(
-    builderPartnersSource,
-    "tool_gross_margin:${String(args.creditLedgerEntryId)}",
-    "Builder Partner commission producer",
+    /recordToolUsagePartnerCommission|tool_gross_margin:\$\{String\(args\.creditLedgerEntryId\)\}|calculateBuilderPartnerToolGrossMarginCommission|BUILDER_PARTNER_TOOL_GROSS_MARGIN_SHARE_BPS/,
+    "Builder Partner producer should not create new paid-tool commissions during MVP",
   );
   assertIncludes(
     builderPartnersSource,
@@ -742,20 +725,10 @@ function proveCommissionProducerContract(
     "communitySubscriptionStatusGrantsAccess(communitySubscriptionStatus)",
     "community checkout settlement",
   );
-  assert.match(
+  assert.doesNotMatch(
     workspaceCreditsSource,
-    /recordToolUsagePartnerCommission\(ctx,[\s\S]*creditLedgerEntryId:\s*(reservation|entry)\._id[\s\S]*paidUsageRatio/,
-    "expected paid tool usage settlement to emit partner commissions from credit ledger evidence",
-  );
-  const toolCommissionCalls = workspaceCreditsSource.match(/recordToolUsagePartnerCommission\(ctx,/g)?.length ?? 0;
-  assert.ok(
-    toolCommissionCalls >= 2,
-    "expected both generic credit settlement and workspace compute reservation settlement to emit partner commissions",
-  );
-  assert.match(
-    workspaceCreditsSource,
-    /purchasedSettled[\s\S]*creditsSettled[\s\S]*paidUsageRatio/,
-    "paid tool usage settlement",
+    /recordToolUsagePartnerCommission\(ctx,|paidUsageRatio|tool_gross_margin/,
+    "paid tool usage settlement should not emit partner commissions during MVP",
   );
 }
 
@@ -1423,7 +1396,6 @@ function main() {
 
   proveConstants();
   proveCommunityCommissionMath();
-  proveToolCommissionMath();
   proveAttributionRoutePrivacy();
   proveSchemaContract(schemaSource);
   proveUiContract(uiSource);

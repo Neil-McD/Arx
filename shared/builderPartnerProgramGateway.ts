@@ -97,11 +97,7 @@ function normalizeReferralCode(value: unknown): string {
 function readCurrentPartnerCode(): string | null {
   if (typeof window === "undefined") return null;
   const params = new URLSearchParams(window.location.search);
-  return (
-    normalizeReferralCode(params.get("partner")) ||
-    normalizeReferralCode(params.get("ref")) ||
-    null
-  );
+  return normalizeReferralCode(params.get("partner")) || null;
 }
 
 function readCurrentAttributionRouteLabel(): string | undefined {

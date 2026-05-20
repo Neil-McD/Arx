@@ -198,8 +198,8 @@ assert.match(
 );
 assert.match(
   operatorIntelligence,
-  /readPartnerCommissionLedgerRowsByBasisType[\s\S]*partnerCommissionLedger[\s\S]*by_basis_createdAt[\s\S]*buildToolGrossMarginPartnerCommissionByEntryId[\s\S]*sourceCreditLedgerEntryId[\s\S]*buildPaidToolEconomics\(paidToolLedgerRows: any\[\], partnerCommissionRows: any\[\]\)[\s\S]*grossMarginBps: PAID_TOOL_TARGET_GROSS_MARGIN_BPS[\s\S]*partnerGrossMarginShareBps: BUILDER_PARTNER_TOOL_GROSS_MARGIN_SHARE_BPS/,
-  "operator tool economics must compute paid-tool economics from ledger rows and partner commission rows",
+  /readPartnerCommissionLedgerRowsByBasisType[\s\S]*partnerCommissionLedger[\s\S]*by_basis_createdAt[\s\S]*buildToolGrossMarginPartnerCommissionByEntryId[\s\S]*sourceCreditLedgerEntryId[\s\S]*buildPaidToolEconomics\(paidToolLedgerRows: any\[\], partnerCommissionRows: any\[\]\)[\s\S]*grossMarginBps: PAID_TOOL_TARGET_GROSS_MARGIN_BPS[\s\S]*partnerGrossMarginShareBps: 0/,
+  "operator tool economics must compute paid-tool economics from ledger rows while treating new partner tool-share target as deferred",
 );
 assert.doesNotMatch(
   operatorIntelligence,
@@ -394,7 +394,7 @@ assert.match(
 );
 assert.match(
   toolBalancePanelBlock,
-  /Tool economics[\s\S]*Tool revenue[\s\S]*Vendor cost[\s\S]*Gross margin[\s\S]*Partner commissions[\s\S]*Net after partner[\s\S]*Cost evidence[\s\S]*Tool economics are sampled for this window[\s\S]*Targets:/,
+  /Tool economics[\s\S]*Tool revenue[\s\S]*Vendor cost[\s\S]*Gross margin[\s\S]*Partner commissions[\s\S]*Net after partner[\s\S]*Cost evidence[\s\S]*Tool economics are sampled for this window[\s\S]*Partner tool-usage commission is deferred for MVP\./,
   "operator Business panel must render paid-tool economics",
 );
 assert.match(

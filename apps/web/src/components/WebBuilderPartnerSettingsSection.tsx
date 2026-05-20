@@ -14,7 +14,6 @@ import type { AccountCommerceStatus } from "../../../../shared/accountCommerceSt
 import {
   BUILDER_PARTNER_COMMUNITY_PLATFORM_FEE_BPS,
   BUILDER_PARTNER_PLATFORM_FEE_SHARE_BPS,
-  BUILDER_PARTNER_TOOL_GROSS_MARGIN_SHARE_BPS,
   calculateBuilderPartnerCommunityRevenueCommission,
 } from "../../../../shared/builderPartnerProgram";
 import type {
@@ -111,7 +110,6 @@ export function WebBuilderPartnerSettingsSection(props: WebBuilderPartnerSetting
     partnerPlatformFeeShareBps,
   });
   const effectiveCommunityRevenueShareBps = communityCommission.effectiveCommunityRevenueShareBps;
-  const toolUsageShareBps = BUILDER_PARTNER_TOOL_GROSS_MARGIN_SHARE_BPS;
   const isSignedIn = Boolean(props.session);
   const snapshot = props.builderPartnerProgram;
   const partner = snapshot?.partner ?? null;
@@ -194,8 +192,8 @@ export function WebBuilderPartnerSettingsSection(props: WebBuilderPartnerSetting
             <span className="builder-partner-kicker">Platform partner program</span>
             <h2>{isActive ? "Your Builder Partner account is active." : "Bring builders to PolyNet and share in the value they create."}</h2>
             <p>
-              Builder Partners earn from referred creators' community revenue and settled paid
-              tool usage. Partner links are generated automatically when the requirements are met.
+              Builder Partners earn from referred creators' community revenue. Partner links are
+              generated automatically when the requirements are met.
             </p>
           </div>
           <div className="builder-partner-status-stack" aria-label="Builder Partner status">
@@ -225,14 +223,6 @@ export function WebBuilderPartnerSettingsSection(props: WebBuilderPartnerSetting
               community revenue.
             </strong>
             <small>Calculated from PolyNet's platform fee on eligible referred creators.</small>
-          </div>
-          <div className="builder-partner-metric" role="listitem">
-            <CircleDashed />
-            <span>Tool usage</span>
-            <strong>
-              Earn {formatBps(toolUsageShareBps)} of referred creators' tool usage.
-            </strong>
-            <small>Calculated on settled paid tool usage after vendor cost.</small>
           </div>
           <div className="builder-partner-metric" role="listitem">
             <ShieldCheck />
