@@ -480,6 +480,16 @@ assert.match(
   "launch workflow build path must continue to the canonical PolyNet workflows surface",
 );
 assert.match(
+  baseCss,
+  /\.community-launch-workflow-option \{[\s\S]*background: linear-gradient\(180deg, rgba\(255, 255, 255, 0\.072\), rgba\(255, 255, 255, 0\.044\)\)/,
+  "launch workflow selector cards must use a visibly raised neutral button surface",
+);
+assert.match(
+  baseCss,
+  /\.community-launch-choice \{[\s\S]*background: linear-gradient\(180deg, rgba\(255, 255, 255, 0\.072\), rgba\(255, 255, 255, 0\.044\)\)/,
+  "launch access selector cards must use a visibly raised neutral button surface",
+);
+assert.match(
   workspaceLandingProjection,
   /WebCommunityLaunchSetupCard/,
   "workspace landing must be able to render the community launch setup card",

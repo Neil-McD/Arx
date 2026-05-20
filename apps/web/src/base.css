@@ -3536,19 +3536,39 @@ body {
   display: grid;
   align-content: start;
   gap: 8px;
-  border: 1px solid color-mix(in srgb, var(--border-muted) 84%, transparent);
+  border: 1px solid rgba(255, 255, 255, 0.115);
   border-radius: 12px;
   padding: 14px;
   color: var(--text-secondary);
-  background: color-mix(in srgb, var(--bg-page) 48%, transparent);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.072), rgba(255, 255, 255, 0.044));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.045),
+    0 1px 0 rgba(0, 0, 0, 0.2);
   text-align: left;
   cursor: pointer;
+  transition:
+    border-color 140ms ease,
+    background 140ms ease,
+    box-shadow 140ms ease,
+    transform 140ms ease;
 }
 
 .community-launch-workflow-option:hover,
 .community-launch-workflow-option.selected {
-  border-color: color-mix(in srgb, var(--accent-gold) 32%, var(--border-muted));
-  background: color-mix(in srgb, var(--accent-gold) 7%, var(--bg-card-alt));
+  border-color: color-mix(in srgb, var(--accent-gold) 42%, rgba(255, 255, 255, 0.14));
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--accent-gold) 14%, rgba(255, 255, 255, 0.075)),
+    color-mix(in srgb, var(--accent-gold) 8%, rgba(255, 255, 255, 0.05))
+  );
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.055),
+    0 0 0 1px color-mix(in srgb, var(--accent-gold) 9%, transparent),
+    0 8px 20px rgba(0, 0, 0, 0.12);
+}
+
+.community-launch-workflow-option:hover {
+  transform: translateY(-1px);
 }
 
 .community-launch-workflow-option-icon {
@@ -3599,13 +3619,21 @@ body {
   display: grid;
   align-content: start;
   gap: 5px;
-  border: 1px solid color-mix(in srgb, var(--border-muted) 86%, transparent);
+  border: 1px solid rgba(255, 255, 255, 0.115);
   border-radius: 12px;
-  background: color-mix(in srgb, var(--bg-page) 48%, transparent);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.072), rgba(255, 255, 255, 0.044));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.045),
+    0 1px 0 rgba(0, 0, 0, 0.2);
   color: var(--text-secondary);
   padding: 12px;
   text-align: left;
   cursor: pointer;
+  transition:
+    border-color 140ms ease,
+    background 140ms ease,
+    box-shadow 140ms ease,
+    transform 140ms ease;
 }
 
 .community-launch-choice strong {
@@ -3621,8 +3649,20 @@ body {
 
 .community-launch-choice:hover,
 .community-launch-choice.selected {
-  border-color: color-mix(in srgb, var(--accent-gold) 34%, var(--border-muted));
-  background: color-mix(in srgb, var(--accent-gold) 8%, var(--bg-card-alt));
+  border-color: color-mix(in srgb, var(--accent-gold) 42%, rgba(255, 255, 255, 0.14));
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--accent-gold) 14%, rgba(255, 255, 255, 0.075)),
+    color-mix(in srgb, var(--accent-gold) 8%, rgba(255, 255, 255, 0.05))
+  );
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.055),
+    0 0 0 1px color-mix(in srgb, var(--accent-gold) 9%, transparent),
+    0 8px 20px rgba(0, 0, 0, 0.12);
+}
+
+.community-launch-choice:hover {
+  transform: translateY(-1px);
 }
 
 .community-launch-choice.stripe-connect {
