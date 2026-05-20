@@ -126,8 +126,8 @@ function proveSchemaContract(schemaSource: string) {
   );
   assert.match(
     schemaSource,
-    /partnerPayoutBatches:[\s\S]*status:\s*v\.union\([\s\S]*v\.literal\("draft"\)[\s\S]*v\.literal\("approved"\)[\s\S]*v\.literal\("processing"\)[\s\S]*v\.literal\("completed"\)[\s\S]*v\.literal\("failed"\)[\s\S]*v\.literal\("voided"\)[\s\S]*payableCutoffAt:\s*v\.optional\(v\.number\(\)\)[\s\S]*payoutBufferMs:\s*v\.optional\(v\.number\(\)\)[\s\S]*approvedByUserId:\s*v\.optional\(v\.id\("users"\)\)[\s\S]*processedByUserId:\s*v\.optional\(v\.id\("users"\)\)/,
-    "expected partner payout batches to be auditable settlement objects with an auditable payout cutoff",
+    /partnerPayoutBatches:[\s\S]*status:\s*v\.union\([\s\S]*v\.literal\("pending_approval"\)[\s\S]*v\.literal\("approved"\)[\s\S]*v\.literal\("processing"\)[\s\S]*v\.literal\("paid"\)[\s\S]*v\.literal\("held"\)[\s\S]*v\.literal\("rejected"\)[\s\S]*v\.literal\("failed"\)[\s\S]*payableCutoffAt:\s*v\.optional\(v\.number\(\)\)[\s\S]*payoutBufferMs:\s*v\.optional\(v\.number\(\)\)[\s\S]*approvedByUserId:\s*v\.optional\(v\.id\("users"\)\)[\s\S]*processedByUserId:\s*v\.optional\(v\.id\("users"\)\)[\s\S]*holdReason:\s*v\.optional\(v\.string\(\)\)[\s\S]*rejectReason:\s*v\.optional\(v\.string\(\)\)/,
+    "expected partner payout batches to use explicit product states with auditable payout cutoff and decision reasons",
   );
   assert.doesNotMatch(
     payoutBatchSchemaSource,
@@ -141,8 +141,8 @@ function proveSchemaContract(schemaSource: string) {
   );
   assert.match(
     schemaSource,
-    /partnerPayoutItems:[\s\S]*commissionId:\s*v\.id\("partnerCommissionLedger"\)[\s\S]*status:\s*v\.union\([\s\S]*v\.literal\("reserved"\)[\s\S]*v\.literal\("settled"\)[\s\S]*v\.literal\("voided"\)/,
-    "expected partner payout items to reserve and settle payable commission rows",
+    /partnerPayoutItems:[\s\S]*commissionId:\s*v\.id\("partnerCommissionLedger"\)[\s\S]*status:\s*v\.union\([\s\S]*v\.literal\("reserved"\)[\s\S]*v\.literal\("settled"\)[\s\S]*v\.literal\("released"\)/,
+    "expected partner payout items to reserve, settle, or release payable commission rows",
   );
 }
 
@@ -1203,6 +1203,11 @@ function provePartnerPayoutSettlementContract(
     "Builder Partner payout hold events must be audited",
   );
   assertIncludes(
+    criticalAuditSource,
+    "builder_partner_payout_cycle_rejected",
+    "Builder Partner payout reject events must be audited",
+  );
+  assertIncludes(
     operatorGatewaySource,
     "builderPartners:listPartnerPayoutCyclesForOperator",
     "Operator dashboard gateway must load generated payout cycles",
@@ -1290,7 +1295,37 @@ function provePartnerPayoutSettlementContract(
   assertIncludes(
     builderPartnersSource,
     "row.status === \"processing\" || row.status === \"succeeded\" || row.status === \"failed\"",
-    "Builder Partner payout history must hide draft transfer rows",
+    "Builder Partner payout history must hide pending transfer rows",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "status: \"pending_approval\"",
+    "Builder Partner payout cycles should be created in explicit pending approval state",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "status: \"held\"",
+    "Builder Partner payout holds should use an explicit held state",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "status: \"rejected\"",
+    "Builder Partner payout rejects should use an explicit rejected state",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "status: \"released\"",
+    "Builder Partner payout rejects should release reserved payout items",
+  );
+  assert.match(
+    builderPartnersSource,
+    /const paid = transfers\.length > 0[\s\S]*status: paid \? "paid" : processingTransfers\.length > 0 \? "processing" : "failed"/,
+    "Builder Partner payout finalization should use an explicit paid state",
+  );
+  assert.doesNotMatch(
+    builderPartnersSource,
+    /failureReason:\s*`held:/,
+    "Builder Partner payout holds should not be encoded inside failureReason",
   );
   assertIncludes(
     uiSource,

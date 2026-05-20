@@ -189,7 +189,7 @@ function normalizeProgramSnapshot(row: BuilderPartnerProgramSnapshot): BuilderPa
             id: String(transfer.id ?? ""),
             amountUsd: Number(transfer.amountUsd ?? 0),
             currency: String(transfer.currency ?? "usd"),
-            status: String(transfer.status ?? "draft"),
+            status: String(transfer.status ?? "pending"),
             createdAt: Number(transfer.createdAt ?? 0),
             processedAt:
               typeof transfer.processedAt === "number" && Number.isFinite(transfer.processedAt)
