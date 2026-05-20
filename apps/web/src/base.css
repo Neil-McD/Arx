@@ -3810,6 +3810,69 @@ body {
   max-width: 320px;
 }
 
+.community-launch-harness-output-field textarea {
+  min-height: 150px;
+}
+
+.community-launch-harness-export-panel {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--border-muted) 78%, transparent);
+  border-radius: 12px;
+  background: linear-gradient(180deg, rgba(5, 5, 7, 0.82), rgba(8, 8, 11, 0.9));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.026),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.2);
+}
+
+.community-launch-harness-export-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border-muted) 72%, transparent);
+  padding: 10px 11px;
+}
+
+.community-launch-harness-export-header span {
+  color: color-mix(in srgb, var(--text-primary) 76%, var(--text-secondary));
+  font-size: 11px;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.community-launch-harness-copy {
+  border: 1px solid color-mix(in srgb, var(--border-muted) 78%, transparent);
+  border-radius: 999px;
+  padding: 6px 9px;
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--bg-page) 55%, transparent);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.community-launch-harness-copy:hover,
+.community-launch-harness-copy.is-copied {
+  border-color: color-mix(in srgb, var(--accent-gold) 34%, rgba(255, 255, 255, 0.12));
+  background: color-mix(in srgb, var(--accent-gold) 12%, rgba(255, 255, 255, 0.06));
+}
+
+.community-launch-harness-prompt {
+  max-height: 190px;
+  margin: 0;
+  overflow: auto;
+  padding: 12px;
+  color: var(--text-secondary);
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
 .community-launch-harness-selector-option strong {
   color: var(--text-primary);
   font-size: 14px;

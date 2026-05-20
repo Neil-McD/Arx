@@ -25,6 +25,7 @@ import {
   readBannerFileAsWideDataUrlWithinLimit,
   readCommunityAvatarFileAsDataUrlWithinLimit,
 } from "../../../../shared/imageTransforms";
+import { copyTextToClipboard } from "../../../../shared/chatUi";
 import { communityHarnessImportSources } from "../lib/communityHarnessImportSources";
 import { StripeWordmark } from "./StripeWordmark";
 
@@ -33,7 +34,7 @@ const COMMUNITY_LAUNCH_MAX_KNOWLEDGE_LINKS = 5;
 
 type CommunityEntryPolicy = "open" | "approval" | "paid_subscription";
 type CommunityLaunchWorkflowPath = "import" | "build";
-type CommunityLaunchWorkflowImportStage = "path" | "harness";
+type CommunityLaunchWorkflowImportStage = "path" | "harness" | "prompt";
 
 type CommunityLaunchSetupCommunity = {
   id: string;
@@ -220,6 +221,27 @@ function isPublishProfileMissing(missing: CommunityLaunchSetupMissing): boolean 
   );
 }
 
+function buildHarnessImportPrompt(harnessName: string): string {
+  return [
+    `I am importing my current ${harnessName} agent workflow into PolyNet.`,
+    "",
+    "Audit this harness/workspace and return a structured export that another system can recreate safely.",
+    "",
+    "Return Markdown with these exact sections:",
+    "1. Harness summary: what this workflow does and who it serves.",
+    "2. MCP servers: names, purpose, required config keys, and install/start commands if available.",
+    "3. Skills, plugins, or slash commands: name, purpose, location, and invocation pattern.",
+    "4. System prompts and instructions: active instructions, project rules, and important behavioral constraints.",
+    "5. Repositories and files: repo URLs, key paths, setup commands, and branch/context notes.",
+    "6. Knowledge and resources: docs, folders, links, PDFs, videos, or notes this workflow depends on.",
+    "7. Environment and secrets: list required secret names only. Do not include secret values.",
+    "8. Gaps and manual steps: anything PolyNet should ask me to confirm before importing.",
+    "",
+    "Do not include API keys, tokens, passwords, private keys, or raw secret values.",
+    "Be specific enough that PolyNet can map this into MCP servers, skills, repositories, prompts, and knowledge sources.",
+  ].join("\n");
+}
+
 export function WebCommunityLaunchSetupModal(
   props: WebCommunityLaunchSetupModalProps,
 ) {
@@ -274,6 +296,8 @@ export function WebCommunityLaunchSetupModal(
   const [selectedHarnessImportSourceId, setSelectedHarnessImportSourceId] =
     useState<string | null>(null);
   const [selectedHarnessOtherName, setSelectedHarnessOtherName] = useState("");
+  const [harnessImportOutputDraft, setHarnessImportOutputDraft] = useState("");
+  const [didCopyHarnessImportPrompt, setDidCopyHarnessImportPrompt] = useState(false);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -307,6 +331,8 @@ export function WebCommunityLaunchSetupModal(
       setWorkflowImportStage("path");
       setSelectedHarnessImportSourceId(null);
       setSelectedHarnessOtherName("");
+      setHarnessImportOutputDraft("");
+      setDidCopyHarnessImportPrompt(false);
       setStepError(null);
       setStepSuccess(null);
       setProfileMediaError(null);
@@ -337,6 +363,8 @@ export function WebCommunityLaunchSetupModal(
     setWorkflowImportStage("path");
     setSelectedHarnessImportSourceId(null);
     setSelectedHarnessOtherName("");
+    setHarnessImportOutputDraft("");
+    setDidCopyHarnessImportPrompt(false);
     setStepError(null);
     setStepSuccess(null);
     setProfileMediaError(null);
@@ -412,6 +440,8 @@ export function WebCommunityLaunchSetupModal(
   const activeTitle =
     activeStep === "workflows" && workflowImportStage === "harness"
       ? "Select a harness to import from"
+      : activeStep === "workflows" && workflowImportStage === "prompt"
+        ? "Follow the instructions"
       : activeMeta.title;
   const activeStatus = effectiveStatus?.steps.find((step) => step.step === activeStep) ?? null;
   const activeComplete = Boolean(activeStatus?.completed);
@@ -956,6 +986,94 @@ export function WebCommunityLaunchSetupModal(
       const selectedHarnessImportSource = communityHarnessImportSources.find(
         (source) => source.id === selectedHarnessImportSourceId,
       );
+      const selectedHarnessName =
+        selectedHarnessImportSource?.id === "other" && selectedHarnessOtherName.trim()
+          ? selectedHarnessOtherName.trim()
+          : selectedHarnessImportSource?.label ?? "your harness";
+      const harnessImportPrompt = buildHarnessImportPrompt(selectedHarnessName);
+      const handleCopyHarnessImportPrompt = async () => {
+        await copyTextToClipboard(harnessImportPrompt);
+        setDidCopyHarnessImportPrompt(true);
+        window.setTimeout(() => setDidCopyHarnessImportPrompt(false), 1800);
+      };
+      if (workflowImportStage === "prompt" && selectedHarnessImportSource) {
+        return (
+          <div className="community-launch-inline-form">
+            <div className="community-launch-harness-selector">
+              <div className="community-launch-harness-selector-header">
+                <button
+                  type="button"
+                  className="community-launch-harness-back"
+                  onClick={() => {
+                    setWorkflowImportStage("harness");
+                    setHarnessImportOutputDraft("");
+                    setDidCopyHarnessImportPrompt(false);
+                    setStepError(null);
+                    setStepSuccess(null);
+                  }}
+                  aria-label="Back to harness choices"
+                >
+                  <ArrowLeft size={16} strokeWidth={2.3} aria-hidden="true" />
+                </button>
+                <div>
+                  <span>{selectedHarnessName} import</span>
+                  <p>Copy the prompt into your agent harness, then paste the returned details here.</p>
+                </div>
+              </div>
+              {selectedHarnessImportSource.id === "other" ? (
+                <label className="community-launch-field community-launch-harness-other-field">
+                  <span>Harness name</span>
+                  <input
+                    type="text"
+                    value={selectedHarnessOtherName}
+                    onChange={(event) => {
+                      setSelectedHarnessOtherName(event.target.value);
+                      setDidCopyHarnessImportPrompt(false);
+                    }}
+                    placeholder="Name the harness you use"
+                  />
+                </label>
+              ) : null}
+              <div className="community-launch-harness-export-panel">
+                <div className="community-launch-harness-export-header">
+                  <span>Prompt to copy</span>
+                  <button
+                    type="button"
+                    className={`community-launch-harness-copy${didCopyHarnessImportPrompt ? " is-copied" : ""}`}
+                    onClick={() => void handleCopyHarnessImportPrompt()}
+                  >
+                    {didCopyHarnessImportPrompt ? "Copied" : "Copy prompt"}
+                  </button>
+                </div>
+                <pre className="community-launch-harness-prompt">{harnessImportPrompt}</pre>
+              </div>
+              <label className="community-launch-field community-launch-harness-output-field">
+                <span>Harness output</span>
+                <textarea
+                  value={harnessImportOutputDraft}
+                  onChange={(event) => setHarnessImportOutputDraft(event.target.value)}
+                  rows={8}
+                  placeholder={`Paste the ${selectedHarnessName} export here`}
+                />
+              </label>
+              <p className="community-launch-inline-note">
+                PolyNet will use this output to map MCP servers, skills, prompts, repositories, and knowledge sources into the community workflow setup.
+              </p>
+            </div>
+            <div className="community-launch-step-actions">
+              {renderFinishLaterButton()}
+              <button
+                type="button"
+                className="polynet-onboarding-next"
+                disabled={!harnessImportOutputDraft.trim()}
+                onClick={() => setStepSuccess("Import parsing is the next workflow slice.")}
+              >
+                Review import
+              </button>
+            </div>
+          </div>
+        );
+      }
       if (workflowImportStage === "harness") {
         return (
           <div className="community-launch-inline-form">
@@ -969,6 +1087,8 @@ export function WebCommunityLaunchSetupModal(
                     setWorkflowPathDraft(null);
                     setSelectedHarnessImportSourceId(null);
                     setSelectedHarnessOtherName("");
+                    setHarnessImportOutputDraft("");
+                    setDidCopyHarnessImportPrompt(false);
                   }}
                   aria-label="Back to workflow path options"
                 >
@@ -990,6 +1110,9 @@ export function WebCommunityLaunchSetupModal(
                       onClick={() => {
                         setSelectedHarnessImportSourceId(source.id);
                         if (source.id !== "other") setSelectedHarnessOtherName("");
+                        setHarnessImportOutputDraft("");
+                        setDidCopyHarnessImportPrompt(false);
+                        setWorkflowImportStage("prompt");
                       }}
                       aria-pressed={selected}
                     >
@@ -1006,34 +1129,9 @@ export function WebCommunityLaunchSetupModal(
                   );
                 })}
               </div>
-              {selectedHarnessImportSourceId === "other" ? (
-                <label className="community-launch-field community-launch-harness-other-field">
-                  <span>Harness name</span>
-                  <input
-                    type="text"
-                    value={selectedHarnessOtherName}
-                    onChange={(event) => setSelectedHarnessOtherName(event.target.value)}
-                    placeholder="Name the harness you use"
-                  />
-                </label>
-              ) : null}
-              {selectedHarnessImportSource ? (
-                <p className="community-launch-inline-note">
-                  {selectedHarnessImportSource.id === "other" && selectedHarnessOtherName.trim()
-                    ? `${selectedHarnessOtherName.trim()} selected. The export prompt screen is next.`
-                    : `${selectedHarnessImportSource.label} selected. The export prompt screen is next.`}
-                </p>
-              ) : null}
             </div>
             <div className="community-launch-step-actions">
               {renderFinishLaterButton()}
-              <button
-                type="button"
-                className="polynet-onboarding-next"
-                disabled
-              >
-                Export prompt next
-              </button>
             </div>
           </div>
         );
@@ -1049,6 +1147,8 @@ export function WebCommunityLaunchSetupModal(
                 setWorkflowImportStage("harness");
                 setSelectedHarnessImportSourceId(null);
                 setSelectedHarnessOtherName("");
+                setHarnessImportOutputDraft("");
+                setDidCopyHarnessImportPrompt(false);
               }}
               aria-pressed={workflowPathDraft === "import"}
             >
@@ -1085,6 +1185,8 @@ export function WebCommunityLaunchSetupModal(
                 setWorkflowImportStage("path");
                 setSelectedHarnessImportSourceId(null);
                 setSelectedHarnessOtherName("");
+                setHarnessImportOutputDraft("");
+                setDidCopyHarnessImportPrompt(false);
               }}
               aria-pressed={workflowPathDraft === "build"}
             >

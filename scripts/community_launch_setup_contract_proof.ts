@@ -502,7 +502,7 @@ assert.match(
 );
 assert.match(
   setupModal,
-  /selectedHarnessImportSourceId === "other"[\s\S]*Harness name[\s\S]*Name the harness you use/,
+  /selectedHarnessImportSource\.id === "other"[\s\S]*Harness name[\s\S]*Name the harness you use/,
   "launch workflow Other selector must expose a harness name field",
 );
 assert.match(
@@ -512,13 +512,33 @@ assert.match(
 );
 assert.match(
   setupModal,
+  /Follow the instructions/,
+  "launch workflow import path must use an in-card instructions step after source selection",
+);
+assert.match(
+  setupModal,
   /setWorkflowPathDraft\("import"\)[\s\S]*setWorkflowImportStage\("harness"\)[\s\S]*Import from existing harness/,
   "launch workflow import card must transition directly into the harness selector",
 );
 assert.match(
   setupModal,
-  /selectedHarnessImportSourceId === source\.id[\s\S]*setSelectedHarnessImportSourceId\(source\.id\)[\s\S]*Export prompt next/,
-  "launch workflow harness selector must support selecting a source while keeping the export prompt as the next slice",
+  /setSelectedHarnessImportSourceId\(source\.id\)[\s\S]*setWorkflowImportStage\("prompt"\)/,
+  "launch workflow harness selector must advance directly into the prompt step when a source is selected",
+);
+assert.doesNotMatch(
+  setupModal,
+  /Export prompt next/,
+  "launch workflow harness selector must not require a separate disabled export-prompt button",
+);
+assert.match(
+  setupModal,
+  /buildHarnessImportPrompt[\s\S]*MCP servers[\s\S]*Skills, plugins, or slash commands[\s\S]*Do not include API keys, tokens, passwords, private keys, or raw secret values/,
+  "launch workflow import prompt must ask for portable workflow details while protecting secret values",
+);
+assert.match(
+  setupModal,
+  /copyTextToClipboard\(harnessImportPrompt\)[\s\S]*Copy prompt[\s\S]*Harness output[\s\S]*Paste the \$\{selectedHarnessName\} export here/,
+  "launch workflow prompt step must provide copyable instructions and a paste target for provider output",
 );
 assert.doesNotMatch(
   setupModal,
