@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import {
   buildCommunityLaunchSetupStatus,
   COMMUNITY_LAUNCH_SETUP_STEPS,
@@ -15,6 +15,7 @@ const launchQuery = read("convex/communityLaunchSetup.ts");
 const communityBarrel = read("convex/community.ts");
 const setupCard = read("apps/web/src/components/WebCommunityLaunchSetupCard.tsx");
 const setupModal = read("apps/web/src/components/WebCommunityLaunchSetupModal.tsx");
+const harnessImportSources = read("apps/web/src/lib/communityHarnessImportSources.ts");
 const baseCss = read("apps/web/src/base.css");
 const appShell = read("apps/web/src/App.tsx");
 const shellChromeHostProps = read("apps/web/src/controllers/buildWebShellChromeHostProps.ts");
@@ -471,14 +472,32 @@ assert.match(
 );
 assert.match(
   setupModal,
-  /Import from existing harness[\s\S]*MCP servers[\s\S]*Claude Code[\s\S]*Codex[\s\S]*OpenCode[\s\S]*OpenClaw[\s\S]*Hermes/,
+  /Import from existing harness[\s\S]*MCP servers[\s\S]*Clawd[\s\S]*Codex[\s\S]*OpenClaw[\s\S]*Hermes/,
   "launch workflow import path must frame harness import as MCPs, skills, prompts, and repo context",
 );
 assert.match(
-  setupModal,
-  /community-launch-harness-logo-row[\s\S]*title="CLAW"[\s\S]*title="Codex"[\s\S]*title="OpenCLAW"[\s\S]*title="Hermes"/,
-  "launch workflow import path must show the supported harness logo strip",
+  harnessImportSources,
+  /label: "Clawd"[\s\S]*logoUrl: "\/harness-logos\/clawd\.png"[\s\S]*label: "Codex"[\s\S]*logoUrl: "\/harness-logos\/codex\.png"[\s\S]*label: "OpenClaw"[\s\S]*logoUrl: "\/harness-logos\/openclaw\.svg"[\s\S]*label: "Hermes"[\s\S]*logoUrl: "\/harness-logos\/hermes\.svg"/,
+  "launch workflow import path must use a dedicated asset-backed harness source registry",
 );
+assert.match(
+  setupModal,
+  /communityHarnessImportSources\.map[\s\S]*<img src=\{source\.logoUrl\} alt="" loading="lazy" \/>/,
+  "launch workflow import path must render real harness logo images from the registry",
+);
+assert.doesNotMatch(
+  setupModal,
+  /title="CLAW"|>CLAW<|>OC<|>H</,
+  "launch workflow import path must not render fake text logo chips",
+);
+for (const logoPath of [
+  "apps/web/public/harness-logos/clawd.png",
+  "apps/web/public/harness-logos/codex.png",
+  "apps/web/public/harness-logos/openclaw.svg",
+  "apps/web/public/harness-logos/hermes.svg",
+]) {
+  assert.equal(existsSync(logoPath), true, `missing harness logo asset: ${logoPath}`);
+}
 assert.match(
   setupModal,
   /Build in PolyNet[\s\S]*onOpenStep\("workflows"\)/,

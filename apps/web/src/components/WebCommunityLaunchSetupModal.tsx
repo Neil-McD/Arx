@@ -24,6 +24,7 @@ import {
   readBannerFileAsWideDataUrlWithinLimit,
   readCommunityAvatarFileAsDataUrlWithinLimit,
 } from "../../../../shared/imageTransforms";
+import { communityHarnessImportSources } from "../lib/communityHarnessImportSources";
 import { StripeWordmark } from "./StripeWordmark";
 
 const COMMUNITY_LAUNCH_IMAGE_DATA_URL_MAX_CHARS = 600_000;
@@ -950,18 +951,22 @@ export function WebCommunityLaunchSetupModal(
                 </span>
                 <span
                   className="community-launch-harness-logo-row"
-                  aria-label="Supported harnesses: CLAW, Codex, OpenCLAW, Hermes"
+                  aria-label="Supported harnesses: Clawd, Codex, OpenClaw, Hermes"
                 >
-                  <span className="community-launch-harness-logo claw" title="CLAW">CLAW</span>
-                  <span className="community-launch-harness-logo codex" title="Codex">Codex</span>
-                  <span className="community-launch-harness-logo openclaw" title="OpenCLAW">OC</span>
-                  <span className="community-launch-harness-logo hermes" title="Hermes">H</span>
+                  {communityHarnessImportSources.map((source) => (
+                    <span
+                      key={source.id}
+                      className={`community-launch-harness-logo ${source.id}`}
+                      title={source.label}
+                    >
+                      <img src={source.logoUrl} alt="" loading="lazy" />
+                    </span>
+                  ))}
                 </span>
               </span>
               <strong>Import from existing harness</strong>
               <span>
-                Bring over MCP servers, skills, prompts, and repo context from Claude Code, Codex, OpenCode, OpenClaw,
-                or Hermes.
+                Bring over MCP servers, skills, prompts, and repo context from Clawd, Codex, OpenClaw, or Hermes.
               </span>
               <span className="community-launch-workflow-option-status">Next</span>
             </button>
