@@ -475,6 +475,11 @@ assert.match(
   /Import from existing harness[\s\S]*MCP servers[\s\S]*skills[\s\S]*prompts[\s\S]*repo context[\s\S]*current agent harness/,
   "launch workflow import path must frame harness import as MCPs, skills, prompts, and repo context without overcrowding the card",
 );
+assert.doesNotMatch(
+  setupModal,
+  /community-launch-harness-logo-row/,
+  "launch workflow choice card must not preview the full harness logo grid before the import selector opens",
+);
 assert.match(
   harnessImportSources,
   /label: "Claude"[\s\S]*logoUrl: "\/harness-logos\/claude\.svg"[\s\S]*label: "Codex"[\s\S]*logoUrl: "\/harness-logos\/codex\.png"[\s\S]*label: "OpenClaw"[\s\S]*logoUrl: "\/harness-logos\/openclaw\.svg"[\s\S]*label: "Hermes"[\s\S]*logoUrl: "\/harness-logos\/hermes\.svg"[\s\S]*label: "Cursor"[\s\S]*logoUrl: "\/harness-logos\/cursor\.png"[\s\S]*label: "OpenCode"[\s\S]*logoUrl: "\/harness-logos\/opencode\.svg"[\s\S]*label: "Gemini CLI"[\s\S]*logoUrl: "\/harness-logos\/gemini-cli\.svg"[\s\S]*label: "Antigravity"[\s\S]*logoUrl: "\/harness-logos\/antigravity\.svg"/,

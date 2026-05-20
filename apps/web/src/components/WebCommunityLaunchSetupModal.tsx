@@ -1031,22 +1031,6 @@ export function WebCommunityLaunchSetupModal(
                 <span className="community-launch-workflow-option-icon" aria-hidden="true">
                   <FileText size={16} strokeWidth={2} />
                 </span>
-                <span
-                  className="community-launch-harness-logo-row"
-                  aria-label={`Supported harnesses: ${communityHarnessImportSources
-                    .map((source) => source.label)
-                    .join(", ")}`}
-                >
-                  {communityHarnessImportSources.map((source) => (
-                    <span
-                      key={source.id}
-                      className={`community-launch-harness-logo ${source.id}`}
-                      title={source.label}
-                    >
-                      <img src={source.logoUrl} alt="" loading="lazy" />
-                    </span>
-                  ))}
-                </span>
               </span>
               <strong>Import from existing harness</strong>
               <span>

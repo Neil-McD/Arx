@@ -3590,15 +3590,6 @@ body {
   background: rgba(0, 0, 0, 0.2);
 }
 
-.community-launch-harness-logo-row {
-  display: inline-flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 6px;
-  max-width: 136px;
-  min-width: 0;
-}
-
 .community-launch-harness-logo {
   width: 28px;
   height: 28px;
@@ -3658,14 +3649,10 @@ body {
   background: rgba(241, 236, 236, 0.055);
 }
 
-.community-launch-harness-logo.gemini-cli {
+.community-launch-harness-logo.gemini-cli,
+.community-launch-harness-logo.antigravity {
   border-color: rgba(151, 157, 255, 0.24);
   background: rgba(151, 157, 255, 0.075);
-}
-
-.community-launch-harness-logo.antigravity {
-  border-color: rgba(248, 198, 73, 0.25);
-  background: rgba(248, 198, 73, 0.075);
 }
 
 .community-launch-harness-logo.antigravity img {
