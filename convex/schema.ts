@@ -158,10 +158,7 @@ export default defineSchema({
     attributionId: v.optional(v.id("partnerAttributions")),
     referredUserId: v.optional(v.id("users")),
     referredCommunityId: v.optional(v.id("communities")),
-    basisType: v.union(
-      v.literal("community_platform_fee"),
-      v.literal("tool_gross_margin"),
-    ),
+    basisType: v.literal("community_platform_fee"),
     basisAmountUsd: v.number(),
     commissionRateBps: v.number(),
     commissionAmountUsd: v.number(),
@@ -186,7 +183,6 @@ export default defineSchema({
     sourceProviderInvoiceId: v.optional(v.string()),
     sourceProviderPaymentIntentId: v.optional(v.string()),
     sourceProviderChargeId: v.optional(v.string()),
-    sourceCreditLedgerEntryId: v.optional(v.id("creditLedgerEntries")),
     holdUntil: v.optional(v.number()),
     payableAt: v.optional(v.number()),
     voidedAt: v.optional(v.number()),
@@ -198,7 +194,6 @@ export default defineSchema({
     .index("by_partner_status", ["partnerId", "status"])
     .index("by_referredUser", ["referredUserId"])
     .index("by_status_holdUntil", ["status", "holdUntil"])
-    .index("by_status_payableAt", ["status", "payableAt"])
     .index("by_status_payoutOpen_payableAt", ["status", "payoutOpen", "payableAt"])
     .index("by_partner_status_payoutOpen_payableAt", ["partnerId", "status", "payoutOpen", "payableAt"])
     .index("by_partner_status_payoutDebt", ["partnerId", "status", "payoutDebt"])
@@ -246,15 +241,12 @@ export default defineSchema({
     replacesBatchId: v.optional(v.id("partnerPayoutBatches")),
     status: v.union(
       v.literal("pending_approval"),
-      v.literal("draft"),
       v.literal("approved"),
       v.literal("processing"),
       v.literal("paid"),
-      v.literal("completed"),
       v.literal("held"),
       v.literal("rejected"),
       v.literal("failed"),
-      v.literal("voided"),
     ),
     totalAmountUsd: v.number(),
     currency: v.string(),
@@ -285,7 +277,6 @@ export default defineSchema({
     currency: v.string(),
     status: v.union(
       v.literal("pending"),
-      v.literal("draft"),
       v.literal("processing"),
       v.literal("succeeded"),
       v.literal("failed"),
@@ -316,7 +307,6 @@ export default defineSchema({
       v.literal("reserved"),
       v.literal("settled"),
       v.literal("released"),
-      v.literal("voided"),
     ),
     createdAt: v.number(),
     updatedAt: v.number(),

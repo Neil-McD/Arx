@@ -8,7 +8,7 @@ export const BUILDER_PARTNER_PAYOUT_BUFFER_MS = 14 * 24 * 60 * 60 * 1000;
 
 export type BuilderPartnerStatus = "active" | "paused" | "disabled";
 export type BuilderPartnerAttributionStatus = "active" | "bound" | "expired" | "voided";
-export type BuilderPartnerCommissionBasisType = "community_platform_fee" | "tool_gross_margin";
+export type BuilderPartnerCommissionBasisType = "community_platform_fee";
 export type BuilderPartnerCommissionStatus =
   | "locked"
   | "risk_hold"

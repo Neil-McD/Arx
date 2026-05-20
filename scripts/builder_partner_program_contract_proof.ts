@@ -76,8 +76,8 @@ function proveSchemaContract(schemaSource: string) {
   );
   assert.match(
     schemaSource,
-    /partnerCommissionLedger:[\s\S]*commissionKey:\s*v\.string\(\)[\s\S]*basisType:\s*v\.union\([\s\S]*v\.literal\("community_platform_fee"\)[\s\S]*v\.literal\("tool_gross_margin"\)[\s\S]*basisAmountUsd:\s*v\.number\(\)[\s\S]*commissionRateBps:\s*v\.number\(\)[\s\S]*commissionAmountUsd:\s*v\.number\(\)/,
-    "expected commission ledger to be idempotent and basis-explicit",
+    /partnerCommissionLedger:[\s\S]*commissionKey:\s*v\.string\(\)[\s\S]*basisType:\s*v\.literal\("community_platform_fee"\)[\s\S]*basisAmountUsd:\s*v\.number\(\)[\s\S]*commissionRateBps:\s*v\.number\(\)[\s\S]*commissionAmountUsd:\s*v\.number\(\)/,
+    "expected commission ledger to be idempotent and limited to community revenue basis",
   );
   assert.match(
     schemaSource,
@@ -86,8 +86,13 @@ function proveSchemaContract(schemaSource: string) {
   );
   assert.match(
     schemaSource,
-    /partnerCommissionLedger:[\s\S]*sourceCheckoutSessionId:\s*v\.optional\(v\.string\(\)\)[\s\S]*sourceProviderInvoiceId:\s*v\.optional\(v\.string\(\)\)[\s\S]*sourceProviderPaymentIntentId:\s*v\.optional\(v\.string\(\)\)[\s\S]*sourceProviderChargeId:\s*v\.optional\(v\.string\(\)\)[\s\S]*sourceCreditLedgerEntryId:\s*v\.optional\(v\.id\("creditLedgerEntries"\)\)/,
-    "expected commission rows to point at checkout, invoice, payment, charge, and paid-tool evidence",
+    /partnerCommissionLedger:[\s\S]*sourceCheckoutSessionId:\s*v\.optional\(v\.string\(\)\)[\s\S]*sourceProviderInvoiceId:\s*v\.optional\(v\.string\(\)\)[\s\S]*sourceProviderPaymentIntentId:\s*v\.optional\(v\.string\(\)\)[\s\S]*sourceProviderChargeId:\s*v\.optional\(v\.string\(\)\)/,
+    "expected commission rows to point at checkout, invoice, payment, and charge evidence",
+  );
+  assert.doesNotMatch(
+    commissionSchemaSource,
+    /tool_gross_margin|sourceCreditLedgerEntryId/,
+    "commission rows should not retain deferred paid-tool partner commission fields",
   );
   assert.match(
     schemaSource,
@@ -119,10 +124,10 @@ function proveSchemaContract(schemaSource: string) {
     /\.index\("by_payment_intent",\s*\["sourceProviderPaymentIntentId"\]\)[\s\S]*\.index\("by_charge",\s*\["sourceProviderChargeId"\]\)/,
     "expected commission ledger rows to be searchable by Stripe payment and charge evidence",
   );
-  assert.match(
-    schemaSource,
+  assert.doesNotMatch(
+    commissionSchemaSource,
     /\.index\("by_status_payableAt",\s*\["status",\s*"payableAt"\]\)/,
-    "expected payable commission planning index",
+    "commission schema should not keep legacy payable fallback index",
   );
   assert.match(
     schemaSource,
@@ -159,6 +164,11 @@ function proveSchemaContract(schemaSource: string) {
     /partnerPayoutBatches:[\s\S]*batchKey:\s*v\.string\(\)[\s\S]*cyclePeriod:\s*v\.optional\(v\.string\(\)\)[\s\S]*runNumber:\s*v\.optional\(v\.number\(\)\)[\s\S]*replacesBatchId:\s*v\.optional\(v\.id\("partnerPayoutBatches"\)\)[\s\S]*status:\s*v\.union\([\s\S]*v\.literal\("pending_approval"\)[\s\S]*v\.literal\("approved"\)[\s\S]*v\.literal\("processing"\)[\s\S]*v\.literal\("paid"\)[\s\S]*v\.literal\("held"\)[\s\S]*v\.literal\("rejected"\)[\s\S]*v\.literal\("failed"\)[\s\S]*payableCutoffAt:\s*v\.optional\(v\.number\(\)\)[\s\S]*payoutBufferMs:\s*v\.optional\(v\.number\(\)\)[\s\S]*approvedByUserId:\s*v\.optional\(v\.id\("users"\)\)[\s\S]*processedByUserId:\s*v\.optional\(v\.id\("users"\)\)[\s\S]*holdReason:\s*v\.optional\(v\.string\(\)\)[\s\S]*rejectReason:\s*v\.optional\(v\.string\(\)\)/,
     "expected partner payout batches to use explicit product states with auditable payout cutoff and decision reasons",
   );
+  assert.doesNotMatch(
+    payoutBatchSchemaSource,
+    /v\.literal\("draft"\)|v\.literal\("completed"\)|v\.literal\("voided"\)/,
+    "partner payout batches should not keep deleted legacy states",
+  );
   assert.match(
     schemaSource,
     /\.index\("by_cyclePeriod_runNumber",\s*\["cyclePeriod",\s*"runNumber"\]\)/,
@@ -174,10 +184,20 @@ function proveSchemaContract(schemaSource: string) {
     /partnerPayoutTransfers:[\s\S]*batchId:\s*v\.id\("partnerPayoutBatches"\)[\s\S]*stripeAccountId:\s*v\.string\(\)[\s\S]*stripeTransferId:\s*v\.optional\(v\.string\(\)\)[\s\S]*idempotencyKey:\s*v\.string\(\)/,
     "expected partner payout transfers to target Stripe Connect accounts idempotently",
   );
+  assert.doesNotMatch(
+    schemaSource.slice(payoutBatchSchemaEnd, schemaSource.indexOf("partnerPayoutItems: defineTable")),
+    /v\.literal\("draft"\)/,
+    "partner payout transfers should not keep deleted draft state",
+  );
   assert.match(
     schemaSource,
     /partnerPayoutItems:[\s\S]*commissionId:\s*v\.id\("partnerCommissionLedger"\)[\s\S]*status:\s*v\.union\([\s\S]*v\.literal\("reserved"\)[\s\S]*v\.literal\("settled"\)[\s\S]*v\.literal\("released"\)/,
     "expected partner payout items to reserve, settle, or release payable commission rows",
+  );
+  assert.doesNotMatch(
+    schemaSource.slice(schemaSource.indexOf("partnerPayoutItems: defineTable"), schemaSource.indexOf("workspaceCreditBalances: defineTable")),
+    /v\.literal\("voided"\)/,
+    "partner payout items should not keep deleted voided state",
   );
 }
 
@@ -588,15 +608,10 @@ function proveReductionAndCleanupContract(accountSource: string, docsSource: str
     "preserve(\"partnerCommissionLedger\", referredPartnerCommissions.length)",
     "account deletion must preserve referred-user partner commission history",
   );
-  assertIncludes(
+  assert.doesNotMatch(
     accountSource,
-    "financeLinkedCreditLedgerEntryIds",
-    "account deletion must preserve credit ledger rows used as partner finance evidence",
-  );
-  assertIncludes(
-    accountSource,
-    "preserve(\"creditLedgerEntries\", 1)",
-    "account deletion must preserve credit ledger rows used as partner finance evidence",
+    /financeLinkedCreditLedgerEntryIds|sourceCreditLedgerEntryId/,
+    "account deletion should not preserve deleted paid-tool partner commission evidence",
   );
   assertIncludes(
     accountSource,
@@ -922,8 +937,6 @@ function provePartnerPayoutSettlementContract(
   cronsSource: string,
   docsSource: string,
   packageSource: string,
-  backfillRunnerSource: string,
-  backfillRunbookSource: string,
 ) {
   const commissionSummarySource = builderPartnersSource.slice(
     builderPartnersSource.indexOf("async function readCommissionSummary"),
@@ -936,10 +949,6 @@ function provePartnerPayoutSettlementContract(
   const retryPayoutCycleSource = builderPartnersSource.slice(
     builderPartnersSource.indexOf("export const retryPartnerPayoutCycle"),
     builderPartnersSource.indexOf("export const holdPartnerPayoutCycle"),
-  );
-  const settlementBackfillOperatorSource = builderPartnersSource.slice(
-    builderPartnersSource.indexOf("export const backfillPartnerCommissionSettlementStateForOperator"),
-    builderPartnersSource.indexOf("async function readPayoutStatus"),
   );
   assert.doesNotMatch(
     builderPartnersSource,
@@ -1236,87 +1245,20 @@ function provePartnerPayoutSettlementContract(
     "recomputePartnerCommissionSettlementState",
     "Builder Partner payout mutations must refresh materialized settlement state",
   );
-  assertIncludes(
+  assert.doesNotMatch(
     builderPartnersSource,
-    "backfillPartnerCommissionSettlementStateInternal",
-    "Builder Partner settlement materialization must provide a bounded backfill path",
+    /backfillPartnerCommissionSettlementState/,
+    "completed settlement backfill maintenance surface should be deleted after production backfill",
   );
-  assertIncludes(
-    builderPartnersSource,
-    "backfillPartnerCommissionSettlementStateForOperator = mutation",
-    "Builder Partner settlement backfill should have an explicit operator maintenance entrypoint",
-  );
-  assertIncludes(
-    settlementBackfillOperatorSource,
-    "requireOperatorRole(ctx, args.authSubject, \"operator\")",
-    "Builder Partner settlement backfill must require operator write access",
-  );
-  assertIncludes(
-    settlementBackfillOperatorSource,
-    "builderPartners.backfillPartnerCommissionSettlementStateInternal",
-    "Builder Partner settlement backfill operator entrypoint must call the bounded internal mutation",
-  );
-  assertIncludes(
-    settlementBackfillOperatorSource,
-    "builder_partner_commission_settlement_backfilled",
-    "Builder Partner settlement backfill should record critical audit evidence",
-  );
-  assertIncludes(
+  assert.doesNotMatch(
     criticalAuditSource,
-    "builder_partner_commission_settlement_backfilled",
-    "critical audit allowlist must include partner settlement backfills",
+    /builder_partner_commission_settlement_backfilled/,
+    "completed settlement backfill audit allowlist should be deleted with the maintenance surface",
   );
-  assertIncludes(
+  assert.doesNotMatch(
     packageSource,
-    "maintenance:partner-settlement-backfill",
-    "package scripts should expose the partner settlement backfill runner",
-  );
-  assertIncludes(
-    backfillRunnerSource,
-    "builderPartners:backfillPartnerCommissionSettlementStateForOperator",
-    "backfill runner should call the operator-gated maintenance mutation",
-  );
-  assertIncludes(
-    backfillRunnerSource,
-    "dryRun: true",
-    "backfill runner should be dry-run by default",
-  );
-  assertIncludes(
-    backfillRunnerSource,
-    "hasArg(\"--execute\")",
-    "backfill runner should require an explicit execute flag before mutation",
-  );
-  assertIncludes(
-    backfillRunnerSource,
-    "explicit_target_required",
-    "backfill runner should require an explicit Convex target",
-  );
-  assertIncludes(
-    backfillRunnerSource,
-    "POLYNET_OPERATOR_AUTH_SUBJECT",
-    "backfill runner should require operator auth through environment",
-  );
-  for (const status of ["locked", "risk_hold", "payable", "voided"]) {
-    assertIncludes(
-      backfillRunnerSource,
-      `"${status}"`,
-      `backfill runner should support ${status} commission rows`,
-    );
-  }
-  assertIncludes(
-    backfillRunbookSource,
-    "Run one commission status at a time.",
-    "backfill runbook should preserve one-status-at-a-time operation",
-  );
-  assertIncludes(
-    backfillRunbookSource,
-    "Do not run any Vercel release command for this backfill.",
-    "backfill runbook should keep Convex maintenance separate from web release commands",
-  );
-  assertIncludes(
-    backfillRunbookSource,
-    "builder_partner_commission_settlement_backfilled",
-    "backfill runbook should document audit evidence",
+    /maintenance:partner-settlement-backfill|backfill_partner_commission_settlement_state/,
+    "package scripts should not expose completed partner settlement backfill runner",
   );
   assertIncludes(
     builderPartnersSource,
@@ -1368,15 +1310,15 @@ function provePartnerPayoutSettlementContract(
     ".withIndex(\"by_partner_status_payoutDebt\"",
     "Builder Partner payout partner reads must use materialized debt index",
   );
-  assertIncludes(
+  assert.doesNotMatch(
     builderPartnersSource,
-    "allowLegacyBackfill: false",
-    "Builder Partner payout planning must not use partner-wide legacy recomputation in steady state",
+    /allowLegacyBackfill|shouldReadLegacyRows|legacyRows|by_status_payableAt/,
+    "Builder Partner payout planning must not retain legacy settlement fallback reads",
   );
-  assertIncludes(
+  assert.doesNotMatch(
     builderPartnersSource,
-    "readMaterializedPartnerCommissionSettlementState(row)",
-    "Builder Partner payout planning must keep bounded legacy settlement backfill separate from primary open-row planning",
+    /buildLegacyPartnerPayoutCycleKey/,
+    "Builder Partner payout cycle generation should not keep legacy batch-key compatibility",
   );
   assertIncludes(
     builderPartnersSource,
@@ -1595,7 +1537,7 @@ function provePartnerPayoutSettlementContract(
   );
   assertIncludes(
     builderPartnersSource,
-    "row.status === \"pending\" || row.status === \"draft\" || row.status === \"failed\" || row.status === \"processing\"",
+    "row.status === \"pending\" || row.status === \"failed\" || row.status === \"processing\"",
     "Builder Partner payout retry must reuse existing transfer rows and idempotency keys",
   );
   assert.match(
@@ -1701,12 +1643,6 @@ function main() {
   const criticalAuditSource = readText(new URL("../convex/criticalAudit.ts", import.meta.url));
   const cronsSource = readText(new URL("../convex/crons.ts", import.meta.url));
   const packageSource = readText(new URL("../package.json", import.meta.url));
-  const backfillRunnerSource = readText(
-    new URL("../scripts/backfill_partner_commission_settlement_state.ts", import.meta.url),
-  );
-  const backfillRunbookSource = readText(
-    new URL("../docs/partner-commission-settlement-backfill-runbook.md", import.meta.url),
-  );
   const accountSetupCoreSource = readText(new URL("../convex/accountSetupCore.ts", import.meta.url));
   const communityLifecycleSource = readText(new URL("../convex/communityLifecycle.ts", import.meta.url));
   const communityPublishReadinessSource = readText(
@@ -1749,8 +1685,6 @@ function main() {
     cronsSource,
     billingDocsSource,
     packageSource,
-    backfillRunnerSource,
-    backfillRunbookSource,
   );
   console.log("PASS: builder partner program contract proof passed");
 }

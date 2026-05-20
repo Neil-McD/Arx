@@ -137,9 +137,7 @@ async function readBuilderPartnerFinanceDeletionState(ctx: any, partner: any) {
     return netCents !== 0;
   });
   const reservedPayoutItems = payoutItems.filter((row: any) => row.status === "reserved");
-  const inFlightPayoutTransfers = payoutTransfers.filter((row: any) =>
-    row.status === "draft" || row.status === "processing",
-  );
+  const inFlightPayoutTransfers = payoutTransfers.filter((row: any) => row.status === "processing");
   const financeAttributionIds = new Set<string>();
   for (const row of commissionRows) {
     if (row.attributionId) financeAttributionIds.add(String(row.attributionId));
@@ -390,12 +388,8 @@ export const deleteOwnAccount = mutation({
       .withIndex("by_referredUser", (q: any) => q.eq("referredUserId", userId))
       .collect();
     const financeLinkedReferredAttributionIds = new Set<string>();
-    const financeLinkedCreditLedgerEntryIds = new Set<string>();
     for (const commission of referredPartnerCommissions) {
       if (commission.attributionId) financeLinkedReferredAttributionIds.add(String(commission.attributionId));
-      if (commission.sourceCreditLedgerEntryId) {
-        financeLinkedCreditLedgerEntryIds.add(String(commission.sourceCreditLedgerEntryId));
-      }
     }
 
     await record("authSessions", await deleteRowsByIndex(ctx, "authSessions", "by_user", "userId", userId));
@@ -408,10 +402,6 @@ export const deleteOwnAccount = mutation({
       .withIndex("by_user_createdAt", (q) => q.eq("userId", userId))
       .collect();
     for (const entry of creditLedgerEntries) {
-      if (financeLinkedCreditLedgerEntryIds.has(String(entry._id))) {
-        await preserve("creditLedgerEntries", 1);
-        continue;
-      }
       await ctx.db.delete(entry._id);
       await record("creditLedgerEntries", 1);
     }
