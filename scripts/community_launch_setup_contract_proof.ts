@@ -11,8 +11,14 @@ function read(path: string): string {
 
 const launchSetup = read("shared/communityLaunchSetup.ts");
 const launchGateway = read("shared/cloudCommunityLaunchSetupGateway.ts");
+const convexSchema = read("convex/schema.ts");
 const launchQuery = read("convex/communityLaunchSetup.ts");
 const communityBarrel = read("convex/community.ts");
+const workflowImports = read("convex/communityWorkflowImports.ts");
+const workflowImportTools = read("shared/communityWorkflowImportToolProtocol.ts");
+const workflowImportPrompt = read("shared/communityWorkflowImportPrompt.ts");
+const workflowImportCandidateIds = read("shared/communityWorkflowImportCandidateIds.ts");
+const workflowImportReviewProjection = read("shared/communityWorkflowImportReviewProjection.ts");
 const setupCard = read("apps/web/src/components/WebCommunityLaunchSetupCard.tsx");
 const setupModal = read("apps/web/src/components/WebCommunityLaunchSetupModal.tsx");
 const harnessImportSources = read("apps/web/src/lib/communityHarnessImportSources.ts");
@@ -531,14 +537,294 @@ assert.doesNotMatch(
   "launch workflow harness selector must not require a separate disabled export-prompt button",
 );
 assert.match(
+  workflowImportPrompt,
+  /buildCommunityWorkflowImportPrompt[\s\S]*read-only workflow audit[\s\S]*agent_workflow_inventory_v2[\s\S]*mcpServers[\s\S]*skills[\s\S]*markdownFiles[\s\S]*repository/,
+  "launch workflow import prompt must ask for a focused MCP, skill, markdown, and repository inventory",
+);
+assert.match(
+  workflowImportPrompt,
+  /Research pass:[\s\S]*web\/search\/docs tools[\s\S]*official docs[\s\S]*package registry pages[\s\S]*public GitHub repositories[\s\S]*scanSummary\.importantOmissions/,
+  "launch workflow import prompt must ask the source harness to gather docs/package/source evidence when available",
+);
+assert.match(
+  workflowImportPrompt,
+  /docsUrl[\s\S]*packageUrl[\s\S]*sourceUrl[\s\S]*publiclyVerifiable[\s\S]*configExampleFound[\s\S]*polynetAction[\s\S]*evidenceUrls/,
+  "launch workflow import prompt must return integration readiness and source URL fields for downstream classification",
+);
+assert.match(
+  workflowImportPrompt,
+  /buildCommunityWorkflowImportPrompt[\s\S]*Do not include API keys, tokens, passwords, private keys, credential values, or secret values/,
+  "launch workflow import prompt must protect secret values",
+);
+assert.match(
+  workflowImportPrompt,
+  /Important Markdown decision rule:[\s\S]*stand alone as reusable agent behavior[\s\S]*dependsOnRepoContext[\s\S]*recommendedHandling/,
+  "launch workflow import prompt must classify repo-bound markdown separately from standalone skill candidates",
+);
+assert.match(
+  workflowImportPrompt,
+  /Repository judgment guidance:[\s\S]*publicSharingRecommendation[\s\S]*keep_private_import_mcp_and_skills_only/,
+  "launch workflow import prompt must judge GitHub sharing versus private MCP and skill import",
+);
+assert.doesNotMatch(
   setupModal,
-  /buildHarnessImportPrompt[\s\S]*MCP servers[\s\S]*Skills, plugins, or slash commands[\s\S]*Do not include API keys, tokens, passwords, private keys, or raw secret values/,
-  "launch workflow import prompt must ask for portable workflow details while protecting secret values",
+  /function buildHarnessImportPrompt|function buildCommunityLaunchWorkflowReviewProjection|DISCOVER_APP_CATALOG/,
+  "launch modal must not own workflow import prompt, projection, or catalog-logo matching logic",
 );
 assert.match(
   setupModal,
   /copyTextToClipboard\(harnessImportPrompt\)[\s\S]*Copy prompt[\s\S]*Harness output[\s\S]*Paste the \$\{selectedHarnessName\} export here/,
   "launch workflow prompt step must provide copyable instructions and a paste target for provider output",
+);
+assert.match(
+  convexSchema,
+  /communityWorkflowImportDrafts: defineTable\([\s\S]*communityId: v\.id\("communities"\)[\s\S]*builderUserId: v\.id\("users"\)[\s\S]*sourceHarness: v\.string\(\)[\s\S]*status: v\.union\([\s\S]*working[\s\S]*ready_for_review[\s\S]*applied[\s\S]*failed[\s\S]*rawHarnessOutput: v\.string\(\)[\s\S]*currentLedgerJson/,
+  "workflow import must have a dedicated community-scoped draft ledger table",
+);
+assert.match(
+  convexSchema,
+  /communityWorkflowImportEvents: defineTable\([\s\S]*draftId: v\.id\("communityWorkflowImportDrafts"\)[\s\S]*seq: v\.number\(\)[\s\S]*eventType: v\.string\(\)[\s\S]*payload: v\.any\(\)[\s\S]*\.index\("by_draft_seq", \["draftId", "seq"\]\)/,
+  "workflow import must have a sequenced event ledger keyed by import draft",
+);
+assert.match(
+  workflowImports,
+  /normalizeHarnessOutput[\s\S]*redactLikelySecretValues/,
+  "workflow import harness output must be bounded and secret-redacted",
+);
+assert.match(
+  workflowImports,
+  /sanitizeWorkflowImportJsonArtifact[\s\S]*redactLikelySecretValues[\s\S]*WORKFLOW_IMPORT_LEDGER_MAX_JSON_CHARS/,
+  "workflow import ledger artifacts must be recursively redacted and bounded before becoming review data",
+);
+assert.match(
+  workflowImports,
+  /createCommunityWorkflowImportDraft[\s\S]*resolveUserIdForAuthenticatedRequest[\s\S]*requireCommunityManager[\s\S]*normalizeHarnessOutput/,
+  "workflow import draft creation must be authenticated and manager-gated",
+);
+assert.match(
+  workflowImports,
+  /eventType: "draft_created"[\s\S]*eventType: "harness_output_received"[\s\S]*eventType: "agent_contract_prepared"/,
+  "workflow import creation must write the initial draft and prepared-contract event trace",
+);
+assert.match(
+  workflowImports,
+  /ctx\.scheduler\.runAfter\([\s\S]*runCommunityWorkflowImportAnalysisInternal[\s\S]*eventType: "analysis_scheduled"/,
+  "workflow import draft creation must schedule the internal import analysis loop",
+);
+assert.doesNotMatch(
+  workflowImports,
+  /eventType: "agent_started"/,
+  "workflow import draft creation must not claim that the agent has started before the agent loop runs",
+);
+assert.match(
+  workflowImports,
+  /readCommunityWorkflowImportContextInternal[\s\S]*raw_harness_output: draft\.rawHarnessOutput/,
+  "raw harness output must be available only through the internal import-agent context path",
+);
+assert.doesNotMatch(
+  launchGateway,
+  /raw_harness_output/,
+  "web-facing launch gateway draft summaries must not expose raw harness output",
+);
+assert.match(
+  workflowImports,
+  /writeCommunityWorkflowImportLedgerInternal[\s\S]*v\.literal\("working"\)[\s\S]*v\.literal\("ready_for_review"\)[\s\S]*v\.literal\("failed"\)[\s\S]*writeWorkflowImportLedgerPatch/,
+  "workflow import ledger writes must be internal to the import agent loop",
+);
+assert.doesNotMatch(
+  workflowImports,
+  /export const writeCommunityWorkflowImportLedger = mutation/,
+  "workflow import must not expose a public manager-writable ledger mutation",
+);
+assert.doesNotMatch(
+  communityBarrel,
+  /writeCommunityWorkflowImportLedger/,
+  "community barrel must not expose the workflow import ledger write path",
+);
+assert.match(
+  workflowImports,
+  /WORKFLOW_IMPORT_RAW_HARNESS_OUTPUT_PURGED[\s\S]*status !== "working"[\s\S]*patch\.rawHarnessOutput = WORKFLOW_IMPORT_RAW_HARNESS_OUTPUT_PURGED[\s\S]*eventType: "harness_output_purged"/,
+  "workflow import must purge raw pasted harness output when a draft leaves the working state",
+);
+assert.match(
+  workflowImports,
+  /payload: sanitizeWorkflowImportJsonArtifact[\s\S]*patch\.currentLedgerJson = sanitizeWorkflowImportJsonArtifact/,
+  "workflow import ledger and event writes must sanitize model-written JSON before storage",
+);
+assert.match(
+  workflowImports,
+  /runCommunityWorkflowImportAnalysisInternal[\s\S]*if \(context\.status !== "working"\)[\s\S]*stop_reason: "draft_not_working"/,
+  "workflow import analysis must not reopen drafts that already left the working state",
+);
+assert.match(
+  workflowImports,
+  /draft\.status !== "working"[\s\S]*status === "working"[\s\S]*status === "ready_for_review"[\s\S]*workflow_import_terminal_draft_requires_retry/,
+  "workflow import ledger writes must not reopen terminal drafts without a dedicated retry path",
+);
+assert.match(
+  workflowImportTools,
+  /CommunityWorkflowImportToolName[\s\S]*"read_import_context"[\s\S]*"search_import_candidates"[\s\S]*"write_import_ledger"[\s\S]*"finish_import_analysis"/,
+  "workflow import analysis agent must expose exactly the simple read, search, write, and finish tool surface",
+);
+assert.match(
+  workflowImports,
+  /runCommunityWorkflowImportAnalysisInternal = internalAction[\s\S]*runNativeRuntimeKernel<CommunityWorkflowImportToolName>[\s\S]*runChatgptNativeToolCompletion[\s\S]*buildCommunityWorkflowImportFunctionTools/,
+  "workflow import analysis must run through the platform runtime kernel with native tool calling",
+);
+assert.match(
+  workflowImports,
+  /executeWorkflowImportTool[\s\S]*read_import_context[\s\S]*search_import_candidates[\s\S]*write_import_ledger[\s\S]*finish_import_analysis/,
+  "workflow import analysis loop must implement all four import tools",
+);
+assert.match(
+  workflowImports,
+  /writeCommunityWorkflowImportLedgerInternal = internalMutation[\s\S]*writeWorkflowImportLedgerPatch/,
+  "workflow import agent must write the ledger through an internal mutation instead of exposing raw context to the web",
+);
+assert.match(
+  workflowImports,
+  /requireSelectedWorkflowImportApplyPlanItems[\s\S]*selectedItemIds[\s\S]*buildWorkflowImportApplyPlan[\s\S]*workflow_import_selection_invalid[\s\S]*applyCommunityWorkflowImportReview = action\([\s\S]*selectedItemIds: v\.array\(v\.string\(\)\)[\s\S]*requireSelectedWorkflowImportApplyPlanItems/,
+  "workflow import apply must accept selected review item ids but rederive authority through a server-side apply plan",
+);
+assert.match(
+  workflowImports,
+  /applyCommunityWorkflowImportReview = action\([\s\S]*context\.status !== "ready_for_review"[\s\S]*workflow_import_not_ready_for_review/,
+  "workflow import apply must only run after analysis reaches ready-for-review",
+);
+assert.match(
+  workflowImports,
+  /readExplicitWorkflowImportCatalogAppId[\s\S]*catalog_app_id[\s\S]*catalogAppId[\s\S]*buildWorkflowImportMcpApplyPlanItems[\s\S]*No explicit vetted catalog app id[\s\S]*applyWorkflowImportMcpPlanItem[\s\S]*api\.community\.connectCommunityApp[\s\S]*needs_manual_setup/,
+  "workflow import apply must only auto-connect explicit catalog-backed MCPs and leave fuzzy or unknown MCPs for manual setup",
+);
+assert.match(
+  workflowImports,
+  /applyWorkflowImportSkillPlanItem[\s\S]*needs_skill_body_review[\s\S]*findWorkflowImportSkillPackageByMentionTokenInternal[\s\S]*createSkillPackageInternal[\s\S]*upsertCommunitySkillAttachmentInternal/,
+  "workflow import apply must create or attach skills only when a complete skill body exists and must reuse matching builder skills",
+);
+assert.match(
+  workflowImports,
+  /already_connected[\s\S]*already_attached[\s\S]*apply_plan[\s\S]*outcomes/,
+  "workflow import apply must record item-level idempotent outcomes and the server-side apply plan",
+);
+assert.match(
+  workflowImports,
+  /markCommunityWorkflowImportAppliedInternal = internalMutation[\s\S]*status: "applied"[\s\S]*eventType: "review_applied"/,
+  "workflow import apply must persist an applied review event and terminal applied status",
+);
+assert.doesNotMatch(
+  workflowImports,
+  /saveCommunityResource|createCloudCommunityResource/,
+  "workflow import apply must not write resources or knowledge in this slice",
+);
+assert.match(
+  communityBarrel,
+  /createCommunityWorkflowImportDraft[\s\S]*getCommunityWorkflowImportDraft[\s\S]*listCommunityWorkflowImportEvents[\s\S]*applyCommunityWorkflowImportReview/,
+  "community barrel must expose draft, event, and review apply functions without exposing raw ledger writes",
+);
+assert.match(
+  launchGateway,
+  /CloudCommunityWorkflowImportDraft[\s\S]*community:createCommunityWorkflowImportDraft/,
+  "web gateway must create workflow import drafts through the community backend",
+);
+assert.match(
+  launchGateway,
+  /loadCloudCommunityWorkflowImportDraft[\s\S]*community:getCommunityWorkflowImportDraft/,
+  "web gateway must be able to poll sanitized workflow import draft status",
+);
+assert.match(
+  launchGateway,
+  /applyCloudCommunityWorkflowImportReview[\s\S]*selectedItemIds[\s\S]*community:applyCommunityWorkflowImportReview/,
+  "web gateway must apply workflow import review by selected ids only",
+);
+assert.match(
+  setupModal,
+  /onStartWorkflowImport[\s\S]*handleStartWorkflowImport[\s\S]*setWorkflowImportStage\("understanding"\)/,
+  "launch workflow prompt step must hand pasted output to the backend",
+);
+assert.match(
+  setupModal,
+  /onLoadWorkflowImport[\s\S]*window\.setInterval[\s\S]*workflowImportDraftStatus/,
+  "launch workflow understanding step must poll the sanitized draft status",
+);
+assert.match(
+  setupModal,
+  /type CommunityLaunchWorkflowImportStage = "path" \| "harness" \| "prompt" \| "understanding" \| "review"/,
+  "launch workflow import must have a real review stage after understanding",
+);
+assert.match(
+  setupModal,
+  /importReady[\s\S]*setWorkflowImportStage\("review"\)[\s\S]*Review integrations/,
+  "launch workflow ready state must advance into the real review screen",
+);
+assert.doesNotMatch(
+  setupModal,
+  /Review import next/,
+  "launch workflow ready state must not render a fake disabled review action",
+);
+assert.match(
+  workflowImportReviewProjection,
+  /buildCommunityWorkflowImportReviewProjection[\s\S]*mcp_servers[\s\S]*mcpServers[\s\S]*markdown_files[\s\S]*markdownFiles[\s\S]*repository/,
+  "launch workflow review must project the saved ledger across snake_case and camelCase provider output",
+);
+assert.match(
+  workflowImportReviewProjection,
+  /catalogAppId[\s\S]*endpointUrl[\s\S]*authType[\s\S]*instructionsMd/,
+  "launch workflow review projection must expose server-usable MCP and skill apply metadata from the sanitized ledger",
+);
+assert.match(
+  workflowImportCandidateIds,
+  /normalizeCommunityWorkflowImportCandidateKey[\s\S]*buildCommunityWorkflowImportMcpReviewItemId[\s\S]*buildCommunityWorkflowImportSkillReviewItemId[\s\S]*buildCommunityWorkflowImportMarkdownSkillReviewItemId/,
+  "workflow import review ids must come from a shared deterministic candidate id helper",
+);
+assert.match(
+  workflowImportReviewProjection,
+  /communityWorkflowImportCandidateIds[\s\S]*buildCommunityWorkflowImportMcpReviewItemId[\s\S]*buildCommunityWorkflowImportSkillReviewItemId[\s\S]*buildCommunityWorkflowImportMarkdownSkillReviewItemId/,
+  "web review projection must use the shared workflow import candidate id helper",
+);
+assert.match(
+  workflowImports,
+  /communityWorkflowImportCandidateIds[\s\S]*buildCommunityWorkflowImportMcpReviewItemId[\s\S]*buildCommunityWorkflowImportSkillReviewItemId[\s\S]*buildCommunityWorkflowImportMarkdownSkillReviewItemId/,
+  "server apply planning must use the same workflow import candidate ids shown to the user",
+);
+assert.match(
+  setupModal,
+  /MCP servers[\s\S]*showSummary: false[\s\S]*Skills[\s\S]*showSummary: true[\s\S]*GitHub/,
+  "launch workflow review must keep MCP rows minimal while giving skills a compact explanation surface",
+);
+assert.match(
+  setupModal,
+  /community-launch-review-logo[\s\S]*item\.logoUrl[\s\S]*item\.name[\s\S]*community-launch-review-toggle/,
+  "launch workflow review MCP and repo rows must expose logo, name, and keep/remove control",
+);
+assert.match(
+  setupModal,
+  /community-launch-review-preview[\s\S]*Preview[\s\S]*community-launch-skill-preview/,
+  "launch workflow review skills must have a compact preview path before confirmation",
+);
+assert.match(
+  setupModal,
+  /handleConfirmAllWorkflowReviewItems[\s\S]*Confirm all/,
+  "launch workflow review must allow local bulk confirmation",
+);
+assert.match(
+  setupModal,
+  /onApplyWorkflowImport[\s\S]*selectedItemIds[\s\S]*Apply selected/,
+  "launch workflow review must apply only the selected review ids",
+);
+assert.doesNotMatch(
+  setupModal,
+  /Apply next/,
+  "launch workflow review must not render a fake disabled apply affordance before apply exists",
+);
+assert.doesNotMatch(
+  setupModal,
+  /connectCommunityApp|attachSkillPackageToCommunity|saveCommunityResource|createCloudCommunityResource/,
+  "launch workflow review UI must not own canonical app, skill, or resource writes",
+);
+assert.match(
+  appShell,
+  /handleStartCommunityLaunchWorkflowImport[\s\S]*currentLedgerJson: result\.current_ledger_json[\s\S]*handleLoadCommunityLaunchWorkflowImport[\s\S]*currentLedgerJson: result\.current_ledger_json[\s\S]*handleApplyCommunityLaunchWorkflowImport[\s\S]*applyCloudCommunityWorkflowImportReview[\s\S]*onApplyWorkflowImport=\{handleApplyCommunityLaunchWorkflowImport\}/,
+  "app shell must pass sanitized workflow import ledger data into the review screen and wire the real apply path",
 );
 assert.doesNotMatch(
   setupModal,

@@ -64,6 +64,7 @@ import type * as communityRecentContext from "../communityRecentContext.js";
 import type * as communityRecipientCore from "../communityRecipientCore.js";
 import type * as communityResources from "../communityResources.js";
 import type * as communitySkillAttachments from "../communitySkillAttachments.js";
+import type * as communityWorkflowImports from "../communityWorkflowImports.js";
 import type * as creatorCommerce from "../creatorCommerce.js";
 import type * as criticalAudit from "../criticalAudit.js";
 import type * as crons from "../crons.js";
@@ -223,6 +224,7 @@ declare const fullApi: ApiFromModules<{
   communityRecipientCore: typeof communityRecipientCore;
   communityResources: typeof communityResources;
   communitySkillAttachments: typeof communitySkillAttachments;
+  communityWorkflowImports: typeof communityWorkflowImports;
   creatorCommerce: typeof creatorCommerce;
   criticalAudit: typeof criticalAudit;
   crons: typeof crons;

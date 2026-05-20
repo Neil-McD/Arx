@@ -126,6 +126,9 @@ import {
   setCloudCommunityFreeAccessMode,
 } from "../../../shared/cloudCommunityAdminGateway";
 import {
+  applyCloudCommunityWorkflowImportReview,
+  createCloudCommunityWorkflowImportDraft,
+  loadCloudCommunityWorkflowImportDraft,
   loadCloudCommunityLaunchSetupStatus,
   saveCloudCommunityLaunchProfile,
   type CloudCommunityLaunchProfileSaveInput,
@@ -7459,6 +7462,66 @@ export default function App() {
       setActiveCommunityAgentLanding(normalizedLanding);
       await refreshActiveCommunityLaunchSetupStatus();
     };
+    const handleStartCommunityLaunchWorkflowImport = async (draft: {
+      sourceHarness: string;
+      rawHarnessOutput: string;
+    }) => {
+      const { session, community } = requireCommunityLaunchSaveContext();
+      const result = await createCloudCommunityWorkflowImportDraft({
+        session,
+        communityId: community.id,
+        sourceHarness: draft.sourceHarness,
+        rawHarnessOutput: draft.rawHarnessOutput,
+      });
+      if (!result) throw new Error("Failed to start workflow import.");
+      return {
+        id: result.id,
+        status: result.status,
+        currentLedgerJson: result.current_ledger_json,
+      };
+    };
+    const handleLoadCommunityLaunchWorkflowImport = async (draftId: string) => {
+      const { session, community } = requireCommunityLaunchSaveContext();
+      const result = await loadCloudCommunityWorkflowImportDraft({
+        session,
+        communityId: community.id,
+        draftId,
+      });
+      if (!result) throw new Error("Failed to load workflow import.");
+      return {
+        id: result.id,
+        status: result.status,
+        currentLedgerJson: result.current_ledger_json,
+        errorMessage: result.error_message,
+      };
+    };
+    const handleApplyCommunityLaunchWorkflowImport = async (draft: {
+      draftId: string;
+      selectedItemIds: string[];
+    }) => {
+      const { session, community } = requireCommunityLaunchSaveContext();
+      const result = await applyCloudCommunityWorkflowImportReview({
+        session,
+        communityId: community.id,
+        draftId: draft.draftId,
+        selectedItemIds: draft.selectedItemIds,
+      });
+      if (!result) throw new Error("Failed to apply workflow import.");
+      await Promise.all([
+        loadCommunityAppMounts(community.id, session),
+        loadCommunitySkillAttachments(community.id, session),
+        loadOwnedSkillPackages(session),
+        refreshActiveCommunityLaunchSetupStatus(),
+      ]);
+      return {
+        id: result.id,
+        status: result.status,
+        currentLedgerJson: result.current_ledger_json,
+        errorMessage: result.error_message,
+        outcomes: result.outcomes,
+        summary: result.summary,
+      };
+    };
     const handleSaveCommunityLaunchAccess = async (draft: {
       entryPolicy: "open" | "approval";
     }) => {
@@ -9106,6 +9169,9 @@ export default function App() {
         onSaveAbout={handleSaveCommunityLaunchAbout}
         onAddKnowledgeLink={handleAddCommunityLaunchKnowledgeLink}
         onSaveAgent={handleSaveCommunityLaunchAgent}
+        onStartWorkflowImport={handleStartCommunityLaunchWorkflowImport}
+        onLoadWorkflowImport={handleLoadCommunityLaunchWorkflowImport}
+        onApplyWorkflowImport={handleApplyCommunityLaunchWorkflowImport}
         onSaveAccess={handleSaveCommunityLaunchAccess}
         onSavePublish={handleSaveCommunityLaunchPublish}
       />

@@ -26,6 +26,11 @@ import {
   readCommunityAvatarFileAsDataUrlWithinLimit,
 } from "../../../../shared/imageTransforms";
 import { copyTextToClipboard } from "../../../../shared/chatUi";
+import { buildCommunityWorkflowImportPrompt } from "../../../../shared/communityWorkflowImportPrompt";
+import {
+  buildCommunityWorkflowImportReviewProjection,
+  type CommunityWorkflowImportReviewItem as CommunityLaunchWorkflowReviewItem,
+} from "../../../../shared/communityWorkflowImportReviewProjection";
 import { communityHarnessImportSources } from "../lib/communityHarnessImportSources";
 import { StripeWordmark } from "./StripeWordmark";
 
@@ -34,7 +39,8 @@ const COMMUNITY_LAUNCH_MAX_KNOWLEDGE_LINKS = 5;
 
 type CommunityEntryPolicy = "open" | "approval" | "paid_subscription";
 type CommunityLaunchWorkflowPath = "import" | "build";
-type CommunityLaunchWorkflowImportStage = "path" | "harness" | "prompt";
+type CommunityLaunchWorkflowImportStage = "path" | "harness" | "prompt" | "understanding" | "review";
+type CommunityLaunchWorkflowReviewPanel = "mcp" | "skills" | null;
 
 type CommunityLaunchSetupCommunity = {
   id: string;
@@ -87,6 +93,46 @@ export type CommunityLaunchPublishSaveDraft = {
   visibility: "published" | "unlisted";
 };
 
+export type CommunityLaunchWorkflowImportDraft = {
+  sourceHarness: string;
+  rawHarnessOutput: string;
+};
+
+export type CommunityLaunchWorkflowImportStartResult = {
+  id: string;
+  status: string;
+  currentLedgerJson?: unknown | null;
+  errorMessage?: string | null;
+};
+
+export type CommunityLaunchWorkflowImportApplyOutcome = {
+  id: string;
+  kind: "mcp" | "skill" | "repo";
+  name: string;
+  status:
+    | "connected"
+    | "attached"
+    | "needs_manual_setup"
+    | "needs_skill_body_review"
+    | "next_action_recorded"
+    | "failed";
+  reason: string;
+  referenceId?: string | null;
+};
+
+export type CommunityLaunchWorkflowImportApplyResult =
+  CommunityLaunchWorkflowImportStartResult & {
+    outcomes?: CommunityLaunchWorkflowImportApplyOutcome[];
+    summary?: {
+      selected_count: number;
+      mcp_connected: number;
+      mcp_needs_setup: number;
+      skills_attached: number;
+      skills_need_review: number;
+      repo_next_actions: number;
+    };
+  };
+
 type WebCommunityLaunchSetupModalProps = {
   isOpen: boolean;
   mode?: "setup" | "create";
@@ -99,6 +145,16 @@ type WebCommunityLaunchSetupModalProps = {
   onSaveAbout: (draft: CommunityLaunchAboutSaveDraft) => Promise<void>;
   onAddKnowledgeLink: (draft: CommunityLaunchKnowledgeLinkSaveDraft) => Promise<void>;
   onSaveAgent: (draft: CommunityLaunchAgentSaveDraft) => Promise<void>;
+  onStartWorkflowImport?: (
+    draft: CommunityLaunchWorkflowImportDraft,
+  ) => Promise<CommunityLaunchWorkflowImportStartResult | null | void>;
+  onLoadWorkflowImport?: (
+    draftId: string,
+  ) => Promise<CommunityLaunchWorkflowImportStartResult | null | void>;
+  onApplyWorkflowImport?: (draft: {
+    draftId: string;
+    selectedItemIds: string[];
+  }) => Promise<CommunityLaunchWorkflowImportApplyResult | null | void>;
   onSaveAccess: (draft: CommunityLaunchAccessSaveDraft) => Promise<void>;
   onSavePublish: (draft: CommunityLaunchPublishSaveDraft) => Promise<void>;
 };
@@ -221,25 +277,22 @@ function isPublishProfileMissing(missing: CommunityLaunchSetupMissing): boolean 
   );
 }
 
-function buildHarnessImportPrompt(harnessName: string): string {
-  return [
-    `I am importing my current ${harnessName} agent workflow into PolyNet.`,
-    "",
-    "Audit this harness/workspace and return a structured export that another system can recreate safely.",
-    "",
-    "Return Markdown with these exact sections:",
-    "1. Harness summary: what this workflow does and who it serves.",
-    "2. MCP servers: names, purpose, required config keys, and install/start commands if available.",
-    "3. Skills, plugins, or slash commands: name, purpose, location, and invocation pattern.",
-    "4. System prompts and instructions: active instructions, project rules, and important behavioral constraints.",
-    "5. Repositories and files: repo URLs, key paths, setup commands, and branch/context notes.",
-    "6. Knowledge and resources: docs, folders, links, PDFs, videos, or notes this workflow depends on.",
-    "7. Environment and secrets: list required secret names only. Do not include secret values.",
-    "8. Gaps and manual steps: anything PolyNet should ask me to confirm before importing.",
-    "",
-    "Do not include API keys, tokens, passwords, private keys, or raw secret values.",
-    "Be specific enough that PolyNet can map this into MCP servers, skills, repositories, prompts, and knowledge sources.",
-  ].join("\n");
+function getWorkflowImportStageTitle(
+  stage: CommunityLaunchWorkflowImportStage,
+  fallback: string,
+): string {
+  switch (stage) {
+    case "harness":
+      return "Select a harness to import from";
+    case "prompt":
+      return "Follow the instructions";
+    case "understanding":
+      return "Understanding your workflow";
+    case "review":
+      return "Review integrations";
+    default:
+      return fallback;
+  }
 }
 
 export function WebCommunityLaunchSetupModal(
@@ -257,6 +310,9 @@ export function WebCommunityLaunchSetupModal(
     onSaveAbout,
     onAddKnowledgeLink,
     onSaveAgent,
+    onStartWorkflowImport,
+    onLoadWorkflowImport,
+    onApplyWorkflowImport,
     onSaveAccess,
     onSavePublish,
   } = props;
@@ -297,6 +353,17 @@ export function WebCommunityLaunchSetupModal(
     useState<string | null>(null);
   const [selectedHarnessOtherName, setSelectedHarnessOtherName] = useState("");
   const [harnessImportOutputDraft, setHarnessImportOutputDraft] = useState("");
+  const [workflowImportDraftId, setWorkflowImportDraftId] = useState<string | null>(null);
+  const [workflowImportDraftStatus, setWorkflowImportDraftStatus] = useState<string | null>(null);
+  const [workflowImportLedgerJson, setWorkflowImportLedgerJson] = useState<unknown | null>(null);
+  const [workflowImportDraftError, setWorkflowImportDraftError] = useState<string | null>(null);
+  const [workflowImportPollError, setWorkflowImportPollError] = useState<string | null>(null);
+  const [workflowImportApplyResult, setWorkflowImportApplyResult] =
+    useState<CommunityLaunchWorkflowImportApplyResult | null>(null);
+  const [workflowReviewSelections, setWorkflowReviewSelections] = useState<Record<string, boolean>>({});
+  const [workflowReviewPanel, setWorkflowReviewPanel] =
+    useState<CommunityLaunchWorkflowReviewPanel>(null);
+  const [workflowSkillPreviewId, setWorkflowSkillPreviewId] = useState<string | null>(null);
   const [didCopyHarnessImportPrompt, setDidCopyHarnessImportPrompt] = useState(false);
 
   useEffect(() => {
@@ -332,6 +399,15 @@ export function WebCommunityLaunchSetupModal(
       setSelectedHarnessImportSourceId(null);
       setSelectedHarnessOtherName("");
       setHarnessImportOutputDraft("");
+      setWorkflowImportDraftId(null);
+      setWorkflowImportDraftStatus(null);
+      setWorkflowImportLedgerJson(null);
+      setWorkflowImportDraftError(null);
+      setWorkflowImportPollError(null);
+      setWorkflowImportApplyResult(null);
+      setWorkflowReviewSelections({});
+      setWorkflowReviewPanel(null);
+      setWorkflowSkillPreviewId(null);
       setDidCopyHarnessImportPrompt(false);
       setStepError(null);
       setStepSuccess(null);
@@ -364,6 +440,15 @@ export function WebCommunityLaunchSetupModal(
     setSelectedHarnessImportSourceId(null);
     setSelectedHarnessOtherName("");
     setHarnessImportOutputDraft("");
+    setWorkflowImportDraftId(null);
+    setWorkflowImportDraftStatus(null);
+    setWorkflowImportLedgerJson(null);
+    setWorkflowImportDraftError(null);
+    setWorkflowImportPollError(null);
+    setWorkflowImportApplyResult(null);
+    setWorkflowReviewSelections({});
+    setWorkflowReviewPanel(null);
+    setWorkflowSkillPreviewId(null);
     setDidCopyHarnessImportPrompt(false);
     setStepError(null);
     setStepSuccess(null);
@@ -387,6 +472,52 @@ export function WebCommunityLaunchSetupModal(
     community?.entry_policy,
     community?.agent_system_prompt,
     community?.agent_starter_prompts,
+  ]);
+
+  useEffect(() => {
+    if (
+      !isOpen ||
+      activeStep !== "workflows" ||
+      workflowImportStage !== "understanding" ||
+      !workflowImportDraftId ||
+      !onLoadWorkflowImport ||
+      (workflowImportDraftStatus && workflowImportDraftStatus !== "working")
+    ) {
+      return;
+    }
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const result = await onLoadWorkflowImport(workflowImportDraftId);
+        if (cancelled || !result) return;
+        setWorkflowImportDraftStatus(result.status);
+        setWorkflowImportLedgerJson(result.currentLedgerJson ?? null);
+        setWorkflowImportDraftError(result.errorMessage ?? null);
+        setWorkflowImportPollError(null);
+      } catch (error) {
+        if (cancelled) return;
+        const message =
+          typeof error === "string"
+            ? error
+            : error instanceof Error
+              ? error.message
+              : "Failed to refresh workflow import.";
+        setWorkflowImportPollError(message);
+      }
+    };
+    void poll();
+    const interval = window.setInterval(() => void poll(), 2500);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [
+    activeStep,
+    isOpen,
+    onLoadWorkflowImport,
+    workflowImportDraftId,
+    workflowImportDraftStatus,
+    workflowImportStage,
   ]);
 
   const createModeStatus = useMemo(
@@ -438,10 +569,8 @@ export function WebCommunityLaunchSetupModal(
     progressCircumference - (progress / 100) * progressCircumference;
   const activeMeta = STEP_META[activeStep];
   const activeTitle =
-    activeStep === "workflows" && workflowImportStage === "harness"
-      ? "Select a harness to import from"
-      : activeStep === "workflows" && workflowImportStage === "prompt"
-        ? "Follow the instructions"
+    activeStep === "workflows"
+      ? getWorkflowImportStageTitle(workflowImportStage, activeMeta.title)
       : activeMeta.title;
   const activeStatus = effectiveStatus?.steps.find((step) => step.step === activeStep) ?? null;
   const activeComplete = Boolean(activeStatus?.completed);
@@ -454,6 +583,37 @@ export function WebCommunityLaunchSetupModal(
     if (missingCount === 1) return "1 item left";
     return `${missingCount} items left`;
   }, [activeStatus, missingCount]);
+  const workflowReviewProjection = useMemo(
+    () => buildCommunityWorkflowImportReviewProjection(workflowImportLedgerJson),
+    [workflowImportLedgerJson],
+  );
+  const workflowReviewItems = useMemo(
+    () => [
+      ...workflowReviewProjection.mcpServers,
+      ...workflowReviewProjection.skills,
+      ...(workflowReviewProjection.repository ? [workflowReviewProjection.repository] : []),
+    ],
+    [workflowReviewProjection],
+  );
+  const getWorkflowReviewSelected = (item: CommunityLaunchWorkflowReviewItem) =>
+    workflowReviewSelections[item.id] ?? item.defaultSelected;
+  const handleToggleWorkflowReviewItem = (item: CommunityLaunchWorkflowReviewItem) => {
+    setWorkflowReviewSelections((prev) => ({
+      ...prev,
+      [item.id]: !(prev[item.id] ?? item.defaultSelected),
+    }));
+  };
+  const handleConfirmAllWorkflowReviewItems = () => {
+    setWorkflowReviewSelections((prev) => {
+      const next = { ...prev };
+      for (const item of workflowReviewItems) {
+        next[item.id] = true;
+      }
+      return next;
+    });
+  };
+  const workflowSkillPreviewItem =
+    workflowReviewProjection.skills.find((item) => item.id === workflowSkillPreviewId) ?? null;
 
   if (!isOpen || !effectiveCommunity || !effectiveStatus) return null;
 
@@ -990,12 +1150,450 @@ export function WebCommunityLaunchSetupModal(
         selectedHarnessImportSource?.id === "other" && selectedHarnessOtherName.trim()
           ? selectedHarnessOtherName.trim()
           : selectedHarnessImportSource?.label ?? "your harness";
-      const harnessImportPrompt = buildHarnessImportPrompt(selectedHarnessName);
+      const harnessImportPrompt = buildCommunityWorkflowImportPrompt(selectedHarnessName);
       const handleCopyHarnessImportPrompt = async () => {
         await copyTextToClipboard(harnessImportPrompt);
         setDidCopyHarnessImportPrompt(true);
         window.setTimeout(() => setDidCopyHarnessImportPrompt(false), 1800);
       };
+      const handleStartWorkflowImport = async () => {
+        if (savingStep || !onStartWorkflowImport) return;
+        const rawHarnessOutput = harnessImportOutputDraft.trim();
+        if (!rawHarnessOutput) {
+          setStepError("Paste the harness output first.");
+          return;
+        }
+        setSavingStep("workflows");
+        setStepError(null);
+        setStepSuccess(null);
+        try {
+          const result = await onStartWorkflowImport({
+            sourceHarness: selectedHarnessName,
+            rawHarnessOutput,
+          });
+          setWorkflowImportDraftId(result?.id ?? null);
+          setWorkflowImportDraftStatus(result?.status ?? "working");
+          setWorkflowImportLedgerJson(result?.currentLedgerJson ?? null);
+          setWorkflowImportDraftError(result?.errorMessage ?? null);
+          setWorkflowImportPollError(null);
+          setWorkflowImportApplyResult(null);
+          setWorkflowReviewSelections({});
+          setWorkflowReviewPanel(null);
+          setWorkflowSkillPreviewId(null);
+          setWorkflowImportStage("understanding");
+        } catch (error) {
+          const message =
+            typeof error === "string"
+              ? error
+              : error instanceof Error
+                ? error.message
+                : "Failed to start workflow import.";
+          setStepError(message);
+        } finally {
+          setSavingStep(null);
+        }
+      };
+      const handleApplyWorkflowImport = async () => {
+        if (savingStep || !workflowImportDraftId || !onApplyWorkflowImport) return;
+        const selectedItemIds = workflowReviewItems
+          .filter(getWorkflowReviewSelected)
+          .map((item) => item.id);
+        if (selectedItemIds.length === 0) {
+          setStepError("Select at least one integration to apply.");
+          return;
+        }
+        setSavingStep("workflows");
+        setStepError(null);
+        setStepSuccess(null);
+        try {
+          const result = await onApplyWorkflowImport({
+            draftId: workflowImportDraftId,
+            selectedItemIds,
+          });
+          setWorkflowImportDraftStatus(result?.status ?? "applied");
+          setWorkflowImportLedgerJson(result?.currentLedgerJson ?? workflowImportLedgerJson);
+          setWorkflowImportDraftError(result?.errorMessage ?? null);
+          setWorkflowImportApplyResult(result ?? null);
+          setStepSuccess("Workflow review applied.");
+        } catch (error) {
+          const message =
+            typeof error === "string"
+              ? error
+              : error instanceof Error
+                ? error.message
+                : "Failed to apply workflow import.";
+          setStepError(message);
+        } finally {
+          setSavingStep(null);
+        }
+      };
+      const renderWorkflowReviewItemRow = (
+        item: CommunityLaunchWorkflowReviewItem,
+        options: { showSummary?: boolean; compact?: boolean } = {},
+      ) => {
+        const selected = getWorkflowReviewSelected(item);
+        const initials = item.name
+          .split(/\s+/)
+          .filter(Boolean)
+          .slice(0, 2)
+          .map((word) => word[0]?.toUpperCase() ?? "")
+          .join("");
+        return (
+          <div
+            key={item.id}
+            className={`community-launch-review-row ${item.kind}${selected ? " selected" : ""}${options.compact ? " compact" : ""}`}
+          >
+            {item.kind === "mcp" || item.kind === "repo" ? (
+              <span className="community-launch-review-logo" aria-hidden="true">
+                {item.logoUrl ? (
+                  <img src={item.logoUrl} alt="" loading="lazy" />
+                ) : (
+                  <span>{initials || item.name[0] || "?"}</span>
+                )}
+              </span>
+            ) : null}
+            <span className="community-launch-review-row-text">
+              <strong>{item.name}</strong>
+              {options.showSummary && item.summary ? <span>{item.summary}</span> : null}
+            </span>
+            {item.kind === "skill" && item.preview ? (
+              <button
+                type="button"
+                className="community-launch-review-preview"
+                onClick={() => {
+                  setWorkflowReviewPanel(null);
+                  setWorkflowSkillPreviewId(item.id);
+                }}
+              >
+                Preview
+              </button>
+            ) : null}
+            <button
+              type="button"
+              className={`community-launch-review-toggle${selected ? " selected" : ""}`}
+              onClick={() => handleToggleWorkflowReviewItem(item)}
+              aria-label={`${selected ? "Remove" : "Keep"} ${item.name}`}
+              aria-pressed={selected}
+            >
+              {selected ? (
+                <Check size={15} strokeWidth={2.4} aria-hidden="true" />
+              ) : (
+                <X size={15} strokeWidth={2.4} aria-hidden="true" />
+              )}
+            </button>
+          </div>
+        );
+      };
+      const renderWorkflowReviewPanel = () => {
+        if (!workflowReviewPanel) return null;
+        const isMcpPanel = workflowReviewPanel === "mcp";
+        const items = isMcpPanel
+          ? workflowReviewProjection.mcpServers
+          : workflowReviewProjection.skills;
+        return (
+          <div className="community-launch-review-panel-backdrop" role="dialog" aria-modal="true">
+            <div className="community-launch-review-panel">
+              <div className="community-launch-review-panel-header">
+                <strong>{isMcpPanel ? "MCP servers" : "Skills"}</strong>
+                <button
+                  type="button"
+                  className="community-launch-review-panel-close"
+                  onClick={() => setWorkflowReviewPanel(null)}
+                  aria-label="Close review list"
+                >
+                  <X size={16} strokeWidth={2.3} aria-hidden="true" />
+                </button>
+              </div>
+              <div className="community-launch-review-list expanded">
+                {items.length > 0 ? (
+                  items.map((item) =>
+                    renderWorkflowReviewItemRow(item, {
+                      showSummary: item.kind === "skill",
+                      compact: true,
+                    }),
+                  )
+                ) : (
+                  <p className="community-launch-review-empty">
+                    {isMcpPanel ? "No MCP servers detected." : "No skill candidates detected."}
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      };
+      const renderWorkflowSkillPreview = () => {
+        if (!workflowSkillPreviewItem) return null;
+        return (
+          <div className="community-launch-review-panel-backdrop" role="dialog" aria-modal="true">
+            <div className="community-launch-review-panel">
+              <div className="community-launch-review-panel-header">
+                <strong>{workflowSkillPreviewItem.name}</strong>
+                <button
+                  type="button"
+                  className="community-launch-review-panel-close"
+                  onClick={() => setWorkflowSkillPreviewId(null)}
+                  aria-label="Close skill preview"
+                >
+                  <X size={16} strokeWidth={2.3} aria-hidden="true" />
+                </button>
+              </div>
+              <div className="community-launch-skill-preview">
+                <p>{workflowSkillPreviewItem.summary}</p>
+                {workflowSkillPreviewItem.source ? (
+                  <span>{workflowSkillPreviewItem.source}</span>
+                ) : null}
+                {workflowSkillPreviewItem.preview ? (
+                  <pre>{workflowSkillPreviewItem.preview}</pre>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        );
+      };
+      const renderWorkflowApplyResult = () => {
+        if (!workflowImportApplyResult?.summary) return null;
+        const summary = workflowImportApplyResult.summary;
+        const outcomes = workflowImportApplyResult.outcomes ?? [];
+        return (
+          <div className="community-launch-review-apply-result">
+            <div className="community-launch-review-apply-summary">
+              <span>{summary.mcp_connected} MCP connected</span>
+              <span>{summary.mcp_needs_setup} MCP need setup</span>
+              <span>{summary.skills_attached} skills attached</span>
+              <span>{summary.skills_need_review} skills need review</span>
+              {summary.repo_next_actions > 0 ? (
+                <span>{summary.repo_next_actions} GitHub next action</span>
+              ) : null}
+            </div>
+            {outcomes.length > 0 ? (
+              <div className="community-launch-review-apply-list">
+                {outcomes.slice(0, 4).map((outcome) => (
+                  <span key={outcome.id}>
+                    <strong>{outcome.name}</strong>
+                    <em>{outcome.status.replace(/_/g, " ")}</em>
+                  </span>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        );
+      };
+      if (workflowImportStage === "review" && selectedHarnessImportSource) {
+        const selectedCount = workflowReviewItems.filter(getWorkflowReviewSelected).length;
+        const reviewApplied = workflowImportDraftStatus === "applied";
+        return (
+          <div className="community-launch-inline-form">
+            <div className="community-launch-review-shell">
+              <div className="community-launch-review-status-row">
+                <span>{selectedCount}/{workflowReviewItems.length} selected</span>
+                {workflowReviewProjection.secretCount > 0 ? (
+                  <span>{workflowReviewProjection.secretCount} secret placeholders</span>
+                ) : null}
+                {workflowReviewProjection.questionCount > 0 ? (
+                  <span>{workflowReviewProjection.questionCount} questions</span>
+                ) : null}
+              </div>
+              <div className="community-launch-review-sections">
+                <section className="community-launch-review-section">
+                  <div className="community-launch-review-section-header">
+                    <strong>MCP servers</strong>
+                    {workflowReviewProjection.mcpServers.length > 2 ? (
+                      <button type="button" onClick={() => setWorkflowReviewPanel("mcp")}>
+                        See all
+                      </button>
+                    ) : null}
+                  </div>
+                  <div className="community-launch-review-list">
+                    {workflowReviewProjection.mcpServers.length > 0 ? (
+                      workflowReviewProjection.mcpServers
+                        .slice(0, 2)
+                        .map((item) => renderWorkflowReviewItemRow(item, { showSummary: false }))
+                    ) : (
+                      <p className="community-launch-review-empty">No MCP servers detected.</p>
+                    )}
+                  </div>
+                </section>
+                <section className="community-launch-review-section">
+                  <div className="community-launch-review-section-header">
+                    <strong>Skills</strong>
+                    {workflowReviewProjection.skills.length > 2 ? (
+                      <button type="button" onClick={() => setWorkflowReviewPanel("skills")}>
+                        See all
+                      </button>
+                    ) : null}
+                  </div>
+                  <div className="community-launch-review-list">
+                    {workflowReviewProjection.skills.length > 0 ? (
+                      workflowReviewProjection.skills
+                        .slice(0, 2)
+                        .map((item) => renderWorkflowReviewItemRow(item, { showSummary: true }))
+                    ) : (
+                      <p className="community-launch-review-empty">No skill candidates detected.</p>
+                    )}
+                  </div>
+                </section>
+                <section className="community-launch-review-section">
+                  <div className="community-launch-review-section-header">
+                    <strong>GitHub</strong>
+                  </div>
+                  <div className="community-launch-review-list">
+                    {workflowReviewProjection.repository ? (
+                      renderWorkflowReviewItemRow(workflowReviewProjection.repository, { showSummary: true })
+                    ) : (
+                      <p className="community-launch-review-empty">No public repository ready.</p>
+                    )}
+                  </div>
+                </section>
+              </div>
+              {renderWorkflowApplyResult()}
+              {renderWorkflowReviewPanel()}
+              {renderWorkflowSkillPreview()}
+            </div>
+            <div className="community-launch-step-actions">
+              {renderFinishLaterButton()}
+              <button
+                type="button"
+                className="community-launch-review-confirm-all"
+                disabled={workflowReviewItems.length === 0 || reviewApplied}
+                onClick={handleConfirmAllWorkflowReviewItems}
+              >
+                Confirm all
+              </button>
+              <button
+                type="button"
+                className="polynet-onboarding-next"
+                disabled={
+                  selectedCount === 0 ||
+                  reviewApplied ||
+                  !workflowImportDraftId ||
+                  !onApplyWorkflowImport ||
+                  isSavingActiveStep
+                }
+                onClick={() => void handleApplyWorkflowImport()}
+              >
+                {reviewApplied
+                  ? "Applied"
+                  : isSavingActiveStep
+                    ? "Applying..."
+                    : "Apply selected"}
+              </button>
+            </div>
+          </div>
+        );
+      }
+      if (workflowImportStage === "understanding" && selectedHarnessImportSource) {
+        const importStatus = workflowImportDraftStatus ?? "working";
+        const importReady = importStatus === "ready_for_review";
+        const importFailed = importStatus === "failed";
+        const importTitle = importReady
+          ? "Import analysis ready"
+          : importFailed
+            ? "Import analysis failed"
+            : "Analyzing workflow";
+        const importBody = importReady
+          ? "The import ledger is ready. The next screen will let you confirm MCP servers, skills, Markdown decisions, and repository handling."
+          : importFailed
+            ? workflowImportDraftError || "The import agent could not finish this analysis."
+            : "The workflow onboarding agent is reading the saved harness output and preparing the import ledger.";
+        return (
+          <div className="community-launch-inline-form">
+            <div className="community-launch-harness-selector">
+              <div className="community-launch-harness-selector-header">
+                <button
+                  type="button"
+                  className="community-launch-harness-back"
+                  onClick={() => {
+                    setWorkflowImportStage("prompt");
+                    setWorkflowImportDraftId(null);
+                    setWorkflowImportDraftStatus(null);
+                    setWorkflowImportLedgerJson(null);
+                    setWorkflowImportDraftError(null);
+                    setWorkflowImportPollError(null);
+                    setWorkflowImportApplyResult(null);
+                    setWorkflowReviewSelections({});
+                    setWorkflowReviewPanel(null);
+                    setWorkflowSkillPreviewId(null);
+                    setStepError(null);
+                    setStepSuccess(null);
+                  }}
+                  aria-label="Back to import instructions"
+                >
+                  <ArrowLeft size={16} strokeWidth={2.3} aria-hidden="true" />
+                </button>
+                <div>
+                  <span>{selectedHarnessName} import</span>
+                  <p>The pasted output is saved. PolyNet is tracking the import ledger for this community.</p>
+                </div>
+              </div>
+              <div
+                className={`community-launch-import-working-panel status-${importStatus}`}
+                aria-live="polite"
+              >
+                <div>
+                  <span>Draft ledger</span>
+                  <strong>{importTitle}</strong>
+                  <p>
+                    {importBody}
+                  </p>
+                </div>
+                <div className="community-launch-import-working-rows">
+                  <span>Harness output saved</span>
+                  <span>Event trace started</span>
+                  <span>
+                    {importReady
+                      ? "Ready for review"
+                      : importFailed
+                        ? "Needs another pass"
+                        : "Four-tool agent running"}
+                  </span>
+                </div>
+                {workflowImportPollError ? (
+                  <p className="community-launch-inline-note">{workflowImportPollError}</p>
+                ) : null}
+                {workflowImportDraftId ? (
+                  <code className="community-launch-import-draft-id">{workflowImportDraftId}</code>
+                ) : null}
+              </div>
+            </div>
+            <div className="community-launch-step-actions">
+              {renderFinishLaterButton()}
+              {importFailed ? (
+                <button
+                  type="button"
+                  className="polynet-onboarding-next"
+                  onClick={() => {
+                    setWorkflowImportStage("prompt");
+                    setWorkflowImportDraftId(null);
+                    setWorkflowImportDraftStatus(null);
+                    setWorkflowImportLedgerJson(null);
+                    setWorkflowImportDraftError(null);
+                    setWorkflowImportPollError(null);
+                    setWorkflowImportApplyResult(null);
+                    setWorkflowReviewSelections({});
+                    setWorkflowReviewPanel(null);
+                    setWorkflowSkillPreviewId(null);
+                  }}
+                >
+                  Paste again
+                </button>
+              ) : importReady ? (
+                <button
+                  type="button"
+                  className="polynet-onboarding-next"
+                  onClick={() => setWorkflowImportStage("review")}
+                >
+                  Review integrations
+                </button>
+              ) : (
+                <span className="community-launch-import-action-status">
+                  Analyzing...
+                </span>
+              )}
+            </div>
+          </div>
+        );
+      }
       if (workflowImportStage === "prompt" && selectedHarnessImportSource) {
         return (
           <div className="community-launch-inline-form">
@@ -1007,6 +1605,15 @@ export function WebCommunityLaunchSetupModal(
                   onClick={() => {
                     setWorkflowImportStage("harness");
                     setHarnessImportOutputDraft("");
+                    setWorkflowImportDraftId(null);
+                    setWorkflowImportDraftStatus(null);
+                    setWorkflowImportLedgerJson(null);
+                    setWorkflowImportDraftError(null);
+                    setWorkflowImportPollError(null);
+                    setWorkflowImportApplyResult(null);
+                    setWorkflowReviewSelections({});
+                    setWorkflowReviewPanel(null);
+                    setWorkflowSkillPreviewId(null);
                     setDidCopyHarnessImportPrompt(false);
                     setStepError(null);
                     setStepSuccess(null);
@@ -1057,7 +1664,7 @@ export function WebCommunityLaunchSetupModal(
                 />
               </label>
               <p className="community-launch-inline-note">
-                PolyNet will use this output to map MCP servers, skills, prompts, repositories, and knowledge sources into the community workflow setup.
+                PolyNet will use this output to map MCP servers, skills, Markdown files, and repository decisions into the community workflow setup.
               </p>
             </div>
             <div className="community-launch-step-actions">
@@ -1065,10 +1672,10 @@ export function WebCommunityLaunchSetupModal(
               <button
                 type="button"
                 className="polynet-onboarding-next"
-                disabled={!harnessImportOutputDraft.trim()}
-                onClick={() => setStepSuccess("Import parsing is the next workflow slice.")}
+                disabled={!harnessImportOutputDraft.trim() || !onStartWorkflowImport || isSavingActiveStep}
+                onClick={() => void handleStartWorkflowImport()}
               >
-                Review import
+                {isSavingActiveStep ? "Starting..." : "Start import"}
               </button>
             </div>
           </div>
@@ -1088,6 +1695,15 @@ export function WebCommunityLaunchSetupModal(
                     setSelectedHarnessImportSourceId(null);
                     setSelectedHarnessOtherName("");
                     setHarnessImportOutputDraft("");
+                    setWorkflowImportDraftId(null);
+                    setWorkflowImportDraftStatus(null);
+                    setWorkflowImportLedgerJson(null);
+                    setWorkflowImportDraftError(null);
+                    setWorkflowImportPollError(null);
+                    setWorkflowImportApplyResult(null);
+                    setWorkflowReviewSelections({});
+                    setWorkflowReviewPanel(null);
+                    setWorkflowSkillPreviewId(null);
                     setDidCopyHarnessImportPrompt(false);
                   }}
                   aria-label="Back to workflow path options"
@@ -1111,6 +1727,15 @@ export function WebCommunityLaunchSetupModal(
                         setSelectedHarnessImportSourceId(source.id);
                         if (source.id !== "other") setSelectedHarnessOtherName("");
                         setHarnessImportOutputDraft("");
+                        setWorkflowImportDraftId(null);
+                        setWorkflowImportDraftStatus(null);
+                        setWorkflowImportLedgerJson(null);
+                        setWorkflowImportDraftError(null);
+                        setWorkflowImportPollError(null);
+                        setWorkflowImportApplyResult(null);
+                        setWorkflowReviewSelections({});
+                        setWorkflowReviewPanel(null);
+                        setWorkflowSkillPreviewId(null);
                         setDidCopyHarnessImportPrompt(false);
                         setWorkflowImportStage("prompt");
                       }}
@@ -1148,6 +1773,15 @@ export function WebCommunityLaunchSetupModal(
                 setSelectedHarnessImportSourceId(null);
                 setSelectedHarnessOtherName("");
                 setHarnessImportOutputDraft("");
+                setWorkflowImportDraftId(null);
+                setWorkflowImportDraftStatus(null);
+                setWorkflowImportLedgerJson(null);
+                setWorkflowImportDraftError(null);
+                setWorkflowImportPollError(null);
+                setWorkflowImportApplyResult(null);
+                setWorkflowReviewSelections({});
+                setWorkflowReviewPanel(null);
+                setWorkflowSkillPreviewId(null);
                 setDidCopyHarnessImportPrompt(false);
               }}
               aria-pressed={workflowPathDraft === "import"}
@@ -1186,6 +1820,15 @@ export function WebCommunityLaunchSetupModal(
                 setSelectedHarnessImportSourceId(null);
                 setSelectedHarnessOtherName("");
                 setHarnessImportOutputDraft("");
+                setWorkflowImportDraftId(null);
+                setWorkflowImportDraftStatus(null);
+                setWorkflowImportLedgerJson(null);
+                setWorkflowImportDraftError(null);
+                setWorkflowImportPollError(null);
+                setWorkflowImportApplyResult(null);
+                setWorkflowReviewSelections({});
+                setWorkflowReviewPanel(null);
+                setWorkflowSkillPreviewId(null);
                 setDidCopyHarnessImportPrompt(false);
               }}
               aria-pressed={workflowPathDraft === "build"}
