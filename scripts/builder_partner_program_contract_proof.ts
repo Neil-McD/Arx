@@ -116,6 +116,11 @@ function proveSchemaContract(schemaSource: string) {
   );
   assert.match(
     schemaSource,
+    /\.index\("by_status_payableAt",\s*\["status",\s*"payableAt"\]\)/,
+    "expected payable commission planning index",
+  );
+  assert.match(
+    schemaSource,
     /partnerCommissionAdjustments:[\s\S]*adjustmentKey:\s*v\.string\(\)[\s\S]*adjustmentType:\s*v\.union\([\s\S]*v\.literal\("refund"\)[\s\S]*v\.literal\("dispute_opened"\)[\s\S]*v\.literal\("dispute_won"\)[\s\S]*v\.literal\("dispute_lost"\)[\s\S]*amountUsd:\s*v\.number\(\)/,
     "expected partner adjustment ledger to record refunds and disputes as signed money events",
   );
@@ -126,8 +131,13 @@ function proveSchemaContract(schemaSource: string) {
   );
   assert.match(
     schemaSource,
-    /partnerPayoutBatches:[\s\S]*status:\s*v\.union\([\s\S]*v\.literal\("pending_approval"\)[\s\S]*v\.literal\("approved"\)[\s\S]*v\.literal\("processing"\)[\s\S]*v\.literal\("paid"\)[\s\S]*v\.literal\("held"\)[\s\S]*v\.literal\("rejected"\)[\s\S]*v\.literal\("failed"\)[\s\S]*payableCutoffAt:\s*v\.optional\(v\.number\(\)\)[\s\S]*payoutBufferMs:\s*v\.optional\(v\.number\(\)\)[\s\S]*approvedByUserId:\s*v\.optional\(v\.id\("users"\)\)[\s\S]*processedByUserId:\s*v\.optional\(v\.id\("users"\)\)[\s\S]*holdReason:\s*v\.optional\(v\.string\(\)\)[\s\S]*rejectReason:\s*v\.optional\(v\.string\(\)\)/,
+    /partnerPayoutBatches:[\s\S]*batchKey:\s*v\.string\(\)[\s\S]*cyclePeriod:\s*v\.optional\(v\.string\(\)\)[\s\S]*runNumber:\s*v\.optional\(v\.number\(\)\)[\s\S]*replacesBatchId:\s*v\.optional\(v\.id\("partnerPayoutBatches"\)\)[\s\S]*status:\s*v\.union\([\s\S]*v\.literal\("pending_approval"\)[\s\S]*v\.literal\("approved"\)[\s\S]*v\.literal\("processing"\)[\s\S]*v\.literal\("paid"\)[\s\S]*v\.literal\("held"\)[\s\S]*v\.literal\("rejected"\)[\s\S]*v\.literal\("failed"\)[\s\S]*payableCutoffAt:\s*v\.optional\(v\.number\(\)\)[\s\S]*payoutBufferMs:\s*v\.optional\(v\.number\(\)\)[\s\S]*approvedByUserId:\s*v\.optional\(v\.id\("users"\)\)[\s\S]*processedByUserId:\s*v\.optional\(v\.id\("users"\)\)[\s\S]*holdReason:\s*v\.optional\(v\.string\(\)\)[\s\S]*rejectReason:\s*v\.optional\(v\.string\(\)\)/,
     "expected partner payout batches to use explicit product states with auditable payout cutoff and decision reasons",
+  );
+  assert.match(
+    schemaSource,
+    /\.index\("by_cyclePeriod_runNumber",\s*\["cyclePeriod",\s*"runNumber"\]\)/,
+    "expected partner payout cycles to support period/run lookup",
   );
   assert.doesNotMatch(
     payoutBatchSchemaSource,
@@ -1144,13 +1154,18 @@ function provePartnerPayoutSettlementContract(
   );
   assertIncludes(
     builderPartnersSource,
-    "normalizePayoutPartnerScanLimit",
-    "Builder Partner payout planning must scan beyond the returned payout limit",
+    "normalizePayoutCommissionScanLimit",
+    "Builder Partner payout planning must scan payable commission rows beyond the returned payout limit",
   );
   assertIncludes(
     builderPartnersSource,
-    "BUILDER_PARTNER_PAYOUT_PLAN_SCAN_MULTIPLIER",
+    "BUILDER_PARTNER_PAYOUT_COMMISSION_SCAN_MULTIPLIER",
     "Builder Partner payout planning must use a bounded scan multiplier",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    ".withIndex(\"by_status_payableAt\"",
+    "Builder Partner payout planning must start from payable commission rows",
   );
   assertIncludes(
     builderPartnersSource,
@@ -1164,8 +1179,23 @@ function provePartnerPayoutSettlementContract(
   );
   assert.doesNotMatch(
     builderPartnersSource,
-    /async function readPartnerPayoutPlans[\s\S]*\.take\(limit\);[\s\S]*for \(const partner of partners\)/,
-    "Builder Partner payout planning should not scan only the requested payout count before filtering",
+    /async function readPartnerPayoutPlans[\s\S]*query\("builderPartners"\)[\s\S]*for \(const partner of partners\)/,
+    "Builder Partner payout planning should not start from active partner rows",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "findActivePartnerPayoutCycleForGeneration",
+    "Builder Partner payout generation must block only active cycles for the payout period",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "partner_payout_cycle_active",
+    "Builder Partner payout generation must report active cycles without creating duplicates",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "buildPartnerPayoutCycleKey(cyclePeriod, runNumber)",
+    "Builder Partner payout generation must use attempt-specific period/run keys",
   );
   assertIncludes(
     builderPartnersSource,
@@ -1208,6 +1238,11 @@ function provePartnerPayoutSettlementContract(
     "Builder Partner payout reject events must be audited",
   );
   assertIncludes(
+    criticalAuditSource,
+    "builder_partner_payout_cycle_retried",
+    "Builder Partner payout retry events must be audited",
+  );
+  assertIncludes(
     operatorGatewaySource,
     "builderPartners:listPartnerPayoutCyclesForOperator",
     "Operator dashboard gateway must load generated payout cycles",
@@ -1216,6 +1251,11 @@ function provePartnerPayoutSettlementContract(
     operatorGatewaySource,
     "builderPartners:approvePartnerPayoutCycle",
     "Operator dashboard gateway must approve payout cycles",
+  );
+  assertIncludes(
+    operatorGatewaySource,
+    "builderPartners:retryPartnerPayoutCycle",
+    "Operator dashboard gateway must retry failed payout cycles",
   );
   assertIncludes(
     operatorGatewaySource,
@@ -1241,6 +1281,11 @@ function provePartnerPayoutSettlementContract(
     operatorPanelSource,
     "Approve and execute",
     "Operator dashboard should confirm before executing payout approval",
+  );
+  assertIncludes(
+    operatorPanelSource,
+    "Retry",
+    "Operator dashboard should expose retry for failed retryable payout cycles",
   );
   assertIncludes(
     operatorPanelSource,
@@ -1317,6 +1362,16 @@ function provePartnerPayoutSettlementContract(
     "status: \"released\"",
     "Builder Partner payout rejects should release reserved payout items",
   );
+  assertIncludes(
+    builderPartnersSource,
+    "canRetry: operatorStatus === \"failed\"",
+    "Builder Partner payout cycles should expose retry only for failed cycles with reserved items",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "row.status === \"pending\" || row.status === \"draft\" || row.status === \"failed\" || row.status === \"processing\"",
+    "Builder Partner payout retry must reuse existing transfer rows and idempotency keys",
+  );
   assert.match(
     builderPartnersSource,
     /const paid = transfers\.length > 0[\s\S]*status: paid \? "paid" : processingTransfers\.length > 0 \? "processing" : "failed"/,
@@ -1344,7 +1399,7 @@ function provePartnerPayoutSettlementContract(
   );
   assertIncludes(
     docsSource,
-    "Operators should only approve, hold, or reject generated payout cycles",
+    "Operators should only approve, retry, hold, or reject generated payout cycles",
     "Builder Partner payout docs",
   );
   assertIncludes(

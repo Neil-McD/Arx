@@ -18,6 +18,7 @@ import {
   loadOperatorWebDeployDiagnosticsCanonical,
   recordOperatorDashboardAccessCanonical,
   rejectOperatorPartnerPayoutCycleCanonical,
+  retryOperatorPartnerPayoutCycleCanonical,
 } from "../../../../shared/cloudOperatorDashboardGateway";
 import type {
   OperatorAccountSetupSnapshot,
@@ -116,6 +117,8 @@ export function useOperatorDashboardData(params: {
       try {
         if (action === "approve") {
           await approveOperatorPartnerPayoutCycleCanonical({ session, cycleId });
+        } else if (action === "retry") {
+          await retryOperatorPartnerPayoutCycleCanonical({ session, cycleId });
         } else if (action === "hold") {
           await holdOperatorPartnerPayoutCycleCanonical({ session, cycleId, reason: "operator_hold" });
         } else {
@@ -138,6 +141,7 @@ export function useOperatorDashboardData(params: {
     () => ({
       ...cycleActionState,
       approve: (cycleId: string) => runPartnerPayoutCycleAction("approve", cycleId),
+      retry: (cycleId: string) => runPartnerPayoutCycleAction("retry", cycleId),
       hold: (cycleId: string) => runPartnerPayoutCycleAction("hold", cycleId),
       reject: (cycleId: string) => runPartnerPayoutCycleAction("reject", cycleId),
     }),

@@ -40,8 +40,8 @@ type PartnerPayoutCycleOperatorStatus =
   | "rejected";
 
 const BUILDER_PARTNER_MISSING_EVIDENCE_RECHECK_MS = 24 * 60 * 60 * 1000;
-const BUILDER_PARTNER_PAYOUT_PLAN_SCAN_MULTIPLIER = 5;
-const BUILDER_PARTNER_PAYOUT_PLAN_MAX_SCAN = 1000;
+const BUILDER_PARTNER_PAYOUT_COMMISSION_SCAN_MULTIPLIER = 20;
+const BUILDER_PARTNER_PAYOUT_COMMISSION_MAX_SCAN = 5000;
 const BUILDER_PARTNER_OPERATOR_PAYOUT_CYCLE_LIMIT = 24;
 const BUILDER_PARTNER_LARGE_PAYOUT_CYCLE_USD = 1000;
 
@@ -1461,11 +1461,11 @@ function normalizePayoutLimit(value: unknown): number {
   return Math.min(250, limit);
 }
 
-function normalizePayoutPartnerScanLimit(value: unknown): number {
+function normalizePayoutCommissionScanLimit(value: unknown): number {
   const payoutLimit = normalizePayoutLimit(value);
   return Math.min(
-    BUILDER_PARTNER_PAYOUT_PLAN_MAX_SCAN,
-    Math.max(payoutLimit, payoutLimit * BUILDER_PARTNER_PAYOUT_PLAN_SCAN_MULTIPLIER),
+    BUILDER_PARTNER_PAYOUT_COMMISSION_MAX_SCAN,
+    Math.max(payoutLimit, payoutLimit * BUILDER_PARTNER_PAYOUT_COMMISSION_SCAN_MULTIPLIER),
   );
 }
 
@@ -1478,11 +1478,25 @@ function normalizePayableCutoffAt(value: unknown, nowMs = Date.now()): number {
   return Math.min(cutoffAt, latestAllowedCutoffAt);
 }
 
-function buildPartnerPayoutCycleKey(nowMs: number): string {
+function buildPartnerPayoutCyclePeriod(nowMs: number): string {
   const date = new Date(Number.isFinite(nowMs) ? nowMs : Date.now());
   const year = date.getUTCFullYear();
   const month = String(date.getUTCMonth() + 1).padStart(2, "0");
-  return `partner_payout_cycle:${year}-${month}`;
+  return `${year}-${month}`;
+}
+
+function normalizePartnerPayoutCyclePeriod(value: unknown, nowMs: number): string {
+  const normalized = String(value ?? "").trim();
+  if (/^\d{4}-\d{2}$/.test(normalized)) return normalized;
+  return buildPartnerPayoutCyclePeriod(nowMs);
+}
+
+function buildLegacyPartnerPayoutCycleKey(cyclePeriod: string): string {
+  return `partner_payout_cycle:${cyclePeriod}`;
+}
+
+function buildPartnerPayoutCycleKey(cyclePeriod: string, runNumber: number): string {
+  return `partner_payout_cycle:${cyclePeriod}:run:${Math.max(1, Math.floor(runNumber))}`;
 }
 
 function usdToSettlementCents(amountUsd: number): number {
@@ -1522,6 +1536,7 @@ async function recordPartnerPayoutAudit(ctx: any, input: {
   eventType:
     | "builder_partner_payout_batch_created"
     | "builder_partner_payout_batch_approved"
+    | "builder_partner_payout_cycle_retried"
     | "builder_partner_payout_cycle_held"
     | "builder_partner_payout_cycle_rejected"
     | "builder_partner_payout_execution_started"
@@ -1648,15 +1663,34 @@ async function readPartnerPayoutPlans(ctx: any, args: {
   payableCutoffAt?: number | null;
 }) {
   const limit = normalizePayoutLimit(args.limit);
-  const scanLimit = normalizePayoutPartnerScanLimit(args.limit);
+  const scanLimit = normalizePayoutCommissionScanLimit(args.limit);
   const payableCutoffAt = normalizePayableCutoffAt(args.payableCutoffAt);
-  const partners = await ctx.db
-    .query("builderPartners")
-    .withIndex("by_status_createdAt", (q: any) => q.eq("status", "active"))
+  const payableRows = await ctx.db
+    .query("partnerCommissionLedger")
+    .withIndex("by_status_payableAt", (q: any) =>
+      q.eq("status", "payable").lte("payableAt", payableCutoffAt),
+    )
     .take(scanLimit);
+  const partnerIds = [];
+  const seenPartnerIds = new Set<string>();
+  for (const row of payableRows) {
+    if (
+      typeof row.payableAt !== "number" ||
+      !Number.isFinite(row.payableAt) ||
+      normalizeUsdCurrency(row.currency) !== "usd"
+    ) {
+      continue;
+    }
+    const partnerId = String(row.partnerId ?? "");
+    if (!partnerId || seenPartnerIds.has(partnerId)) continue;
+    seenPartnerIds.add(partnerId);
+    partnerIds.push(row.partnerId);
+  }
   const plans = [];
-  for (const partner of partners) {
+  for (const partnerId of partnerIds) {
     if (plans.length >= limit) break;
+    const partner = await ctx.db.get(partnerId);
+    if (!partner || partner.status !== "active") continue;
     const stripeAccount = await readReadyStripeConnectPayoutAccount(ctx, partner.userId);
     if (!stripeAccount) continue;
     const entries = await readPartnerPayablePayoutEntries(ctx, partner, { payableCutoffAt });
@@ -1689,6 +1723,88 @@ function readPartnerPayoutCycleSummary(batch: any) {
     createdAt: Number(batch.createdAt ?? 0),
     updatedAt: Number(batch.updatedAt ?? 0),
   };
+}
+
+async function readPartnerPayoutCycleRowsForPeriod(ctx: any, cyclePeriod: string) {
+  const rows = await ctx.db
+    .query("partnerPayoutBatches" as any)
+    .withIndex("by_cyclePeriod_runNumber", (q: any) => q.eq("cyclePeriod", cyclePeriod))
+    .order("desc")
+    .take(100);
+  const legacy = await ctx.db
+    .query("partnerPayoutBatches" as any)
+    .withIndex("by_batchKey", (q: any) => q.eq("batchKey", buildLegacyPartnerPayoutCycleKey(cyclePeriod)))
+    .first();
+  const allRows = legacy ? [legacy, ...rows] : rows;
+  return allRows.filter((row: any, index: number, candidates: any[]) =>
+    candidates.findIndex((candidate: any) => String(candidate._id) === String(row._id)) === index,
+  );
+}
+
+function readPartnerPayoutCycleRunNumber(row: any, cyclePeriod: string): number {
+  const explicit = Number(row?.runNumber ?? 0);
+  if (Number.isFinite(explicit) && explicit > 0) return Math.floor(explicit);
+  const key = String(row?.batchKey ?? "");
+  const match = key.match(/:run:(\d+)$/);
+  if (match?.[1]) return Math.max(1, Math.floor(Number(match[1])));
+  if (key === buildLegacyPartnerPayoutCycleKey(cyclePeriod)) return 1;
+  return 0;
+}
+
+async function partnerPayoutCycleHasReservedItems(ctx: any, batchId: any): Promise<boolean> {
+  const rows = await ctx.db
+    .query("partnerPayoutItems" as any)
+    .withIndex("by_batch", (q: any) => q.eq("batchId", batchId))
+    .collect();
+  return rows.some((row: any) => row.status === "reserved");
+}
+
+async function isActivePartnerPayoutCycleForGeneration(ctx: any, row: any): Promise<boolean> {
+  const status = toPartnerPayoutCycleOperatorStatus(row);
+  if (
+    status === "pending_approval" ||
+    status === "held" ||
+    status === "approved" ||
+    status === "processing"
+  ) {
+    return true;
+  }
+  if (status === "failed") {
+    return await partnerPayoutCycleHasReservedItems(ctx, row._id);
+  }
+  return false;
+}
+
+async function findActivePartnerPayoutCycleForGeneration(ctx: any, rows: any[]) {
+  const sortedRows = [...rows].sort(
+    (a: any, b: any) =>
+      Number(b.createdAt ?? 0) - Number(a.createdAt ?? 0) ||
+      String(b._id).localeCompare(String(a._id)),
+  );
+  for (const row of sortedRows) {
+    if (await isActivePartnerPayoutCycleForGeneration(ctx, row)) return row;
+  }
+  return null;
+}
+
+async function findLatestReplaceablePartnerPayoutCycle(ctx: any, rows: any[]) {
+  const sortedRows = [...rows].sort(
+    (a: any, b: any) =>
+      Number(b.createdAt ?? 0) - Number(a.createdAt ?? 0) ||
+      String(b._id).localeCompare(String(a._id)),
+  );
+  for (const row of sortedRows) {
+    if (!(await isActivePartnerPayoutCycleForGeneration(ctx, row))) return row;
+  }
+  return null;
+}
+
+function readNextPartnerPayoutCycleRunNumber(rows: any[], cyclePeriod: string): number {
+  const maxRunNumber = rows.reduce(
+    (max: number, row: any) => Math.max(max, readPartnerPayoutCycleRunNumber(row, cyclePeriod)),
+    0,
+  );
+  return Math.max(1, maxRunNumber + 1);
 }
 
 async function readPartnerPayoutCycleRiskFlags(ctx: any, args: {
@@ -1765,6 +1881,7 @@ async function readPartnerPayoutCycleOperatorRow(ctx: any, batch: any) {
     riskFlags,
     actions: {
       canApprove: operatorStatus === "pending_approval" || operatorStatus === "held",
+      canRetry: operatorStatus === "failed" && items.some((item: any) => item.status === "reserved"),
       canHold: operatorStatus === "pending_approval",
       canReject: operatorStatus === "pending_approval" || operatorStatus === "held" || operatorStatus === "failed",
     },
@@ -2184,6 +2301,7 @@ export const recordBuilderPartnerAttribution = mutation({
 export const createPartnerPayoutCycleInternal = internalMutation({
   args: {
     batchKey: v.optional(v.string()),
+    cyclePeriod: v.optional(v.string()),
     limit: v.optional(v.number()),
     payableCutoffAt: v.optional(v.number()),
     nowMs: v.optional(v.number()),
@@ -2191,18 +2309,31 @@ export const createPartnerPayoutCycleInternal = internalMutation({
   handler: async (ctx, args) => {
     const nowMs = args.nowMs ?? Date.now();
     const payableCutoffAt = normalizePayableCutoffAt(args.payableCutoffAt, nowMs);
+    const cyclePeriod = normalizePartnerPayoutCyclePeriod(args.cyclePeriod, nowMs);
     const rawBatchKey = String(args.batchKey ?? "").trim();
-    const batchKey = rawBatchKey || buildPartnerPayoutCycleKey(nowMs);
-    const existing = await ctx.db
-      .query("partnerPayoutBatches" as any)
-      .withIndex("by_batchKey", (q: any) => q.eq("batchKey", batchKey))
-      .first();
-    if (existing) {
+    const existingByExplicitKey = rawBatchKey
+      ? await ctx.db
+          .query("partnerPayoutBatches" as any)
+          .withIndex("by_batchKey", (q: any) => q.eq("batchKey", rawBatchKey))
+          .first()
+      : null;
+    if (existingByExplicitKey) {
       return {
         ok: true,
         created: false,
         reason: "partner_payout_cycle_exists",
-        cycle: readPartnerPayoutCycleSummary(existing),
+        cycle: readPartnerPayoutCycleSummary(existingByExplicitKey),
+      };
+    }
+
+    const existingCyclesForPeriod = await readPartnerPayoutCycleRowsForPeriod(ctx, cyclePeriod);
+    const activeCycle = await findActivePartnerPayoutCycleForGeneration(ctx, existingCyclesForPeriod);
+    if (activeCycle) {
+      return {
+        ok: true,
+        created: false,
+        reason: "partner_payout_cycle_active",
+        cycle: readPartnerPayoutCycleSummary(activeCycle),
       };
     }
 
@@ -2222,8 +2353,14 @@ export const createPartnerPayoutCycleInternal = internalMutation({
       plans.reduce((total: number, plan: any) => total + Number(plan.amountUsd ?? 0), 0),
     );
     const itemCount = plans.reduce((total: number, plan: any) => total + plan.entries.length, 0);
+    const runNumber = readNextPartnerPayoutCycleRunNumber(existingCyclesForPeriod, cyclePeriod);
+    const batchKey = rawBatchKey || buildPartnerPayoutCycleKey(cyclePeriod, runNumber);
+    const replacesBatch = await findLatestReplaceablePartnerPayoutCycle(ctx, existingCyclesForPeriod);
     const batchId = await ctx.db.insert("partnerPayoutBatches" as any, {
       batchKey,
+      cyclePeriod,
+      runNumber,
+      replacesBatchId: replacesBatch?._id,
       status: "pending_approval",
       totalAmountUsd,
       currency: "usd",
@@ -2269,6 +2406,9 @@ export const createPartnerPayoutCycleInternal = internalMutation({
       status: "succeeded",
       metadata: {
         batchId: String(batchId),
+        cyclePeriod,
+        runNumber,
+        replacesBatchId: replacesBatch?._id ? String(replacesBatch._id) : null,
         totalAmountUsd,
         partnerCount: plans.length,
         itemCount,
@@ -2381,6 +2521,70 @@ export const approvePartnerPayoutCycle = mutation({
     });
     await ctx.scheduler.runAfter(0, (internal as any).builderPartners.executePartnerPayoutBatchInternal, {
       batchId: args.batchId,
+      actorUserId: operator.dbUserId,
+    });
+    return {
+      ok: true,
+      cycleId: String(args.batchId),
+      status: "approved",
+    };
+  },
+});
+
+export const retryPartnerPayoutCycle = mutation({
+  args: {
+    authSubject: v.optional(v.string()),
+    batchId: v.id("partnerPayoutBatches"),
+  },
+  handler: async (ctx, args) => {
+    const operator = await requireOperatorRole(ctx, args.authSubject, "operator");
+    const batch = await ctx.db.get(args.batchId);
+    if (!batch) throw new Error("partner_payout_batch_not_found");
+    if (toPartnerPayoutCycleOperatorStatus(batch) !== "failed") {
+      throw new Error("partner_payout_cycle_not_retryable");
+    }
+    const items = await ctx.db
+      .query("partnerPayoutItems" as any)
+      .withIndex("by_batch", (q: any) => q.eq("batchId", args.batchId))
+      .collect();
+    if (!items.some((item: any) => item.status === "reserved")) {
+      throw new Error("partner_payout_cycle_not_retryable");
+    }
+    const nowMs = Date.now();
+    const validation = await validatePartnerPayoutBatchStillPayable(ctx, args.batchId);
+    if (!validation.ok) {
+      await markPartnerPayoutBatchStale(ctx, {
+        batch,
+        batchId: args.batchId,
+        reason: validation.reason ?? "partner_payout_batch_stale",
+        actorUserId: operator.dbUserId,
+        nowMs,
+      });
+      throw new Error(validation.reason ?? "partner_payout_batch_stale");
+    }
+    await ctx.db.patch(args.batchId, {
+      status: "approved",
+      approvedByUserId: batch.approvedByUserId ?? operator.dbUserId,
+      approvedAt: batch.approvedAt ?? nowMs,
+      processedByUserId: operator.dbUserId,
+      failureReason: undefined,
+      updatedAt: nowMs,
+    });
+    await recordPartnerPayoutAudit(ctx, {
+      eventType: "builder_partner_payout_cycle_retried",
+      status: "started",
+      actorUserId: operator.dbUserId,
+      metadata: {
+        batchId: String(args.batchId),
+        totalAmountUsd: Number(batch.totalAmountUsd ?? 0),
+        partnerCount: Number(batch.partnerCount ?? 0),
+        itemCount: Number(batch.itemCount ?? 0),
+      },
+      nowMs,
+    });
+    await ctx.scheduler.runAfter(0, (internal as any).builderPartners.executePartnerPayoutBatchInternal, {
+      batchId: args.batchId,
+      actorUserId: operator.dbUserId,
     });
     return {
       ok: true,
@@ -2692,10 +2896,12 @@ export const finalizePartnerPayoutBatchExecutionInternal = internalMutation({
 export const executePartnerPayoutBatchInternal = internalAction({
   args: {
     batchId: v.id("partnerPayoutBatches"),
+    actorUserId: v.optional(v.id("users")),
   },
   handler: async (ctx, args): Promise<any> => {
     const begin = await ctx.runMutation((internal as any).builderPartners.beginPartnerPayoutBatchExecutionInternal, {
       batchId: args.batchId,
+      actorUserId: args.actorUserId,
     });
     if (begin?.blocked) {
       return { ok: false, blocked: true, reason: begin.reason ?? "partner_payout_batch_stale" };

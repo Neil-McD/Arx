@@ -613,6 +613,17 @@ function OperatorPartnerPayoutCycles(props: {
                 </button>
                 <button
                   type="button"
+                  className="operator-dashboard__action"
+                  disabled={!cycle.actions.canRetry || Boolean(props.actions.inFlightCycleId)}
+                  onClick={() => {
+                    setApprovalConfirmCycleId(null);
+                    void props.actions.retry(cycle.id);
+                  }}
+                >
+                  {isActing(cycle, "retry") ? "Retrying" : "Retry"}
+                </button>
+                <button
+                  type="button"
                   className="operator-dashboard__action operator-dashboard__action--secondary"
                   disabled={!cycle.actions.canHold || Boolean(props.actions.inFlightCycleId)}
                   onClick={() => {

@@ -459,6 +459,17 @@ export async function approveOperatorPartnerPayoutCycleCanonical(params: {
   });
 }
 
+export async function retryOperatorPartnerPayoutCycleCanonical(params: {
+  session: AuthSessionLike;
+  cycleId: string;
+}): Promise<void> {
+  const { client, authSubject } = await withOperatorAuth(params.session);
+  await client.mutation("builderPartners:retryPartnerPayoutCycle" as any, {
+    authSubject,
+    batchId: params.cycleId,
+  });
+}
+
 export async function holdOperatorPartnerPayoutCycleCanonical(params: {
   session: AuthSessionLike;
   cycleId: string;

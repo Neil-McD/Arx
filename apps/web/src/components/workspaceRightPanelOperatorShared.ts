@@ -9,13 +9,14 @@ import type {
   OperatorWebDeployDiagnosticsSnapshot,
 } from "../../../../shared/operatorTypes";
 
-export type PartnerPayoutCycleActionName = "approve" | "hold" | "reject";
+export type PartnerPayoutCycleActionName = "approve" | "retry" | "hold" | "reject";
 
 export type PartnerPayoutCycleActions = {
   inFlightCycleId: string | null;
   inFlightAction: PartnerPayoutCycleActionName | null;
   error: string | null;
   approve: (cycleId: string) => Promise<void>;
+  retry: (cycleId: string) => Promise<void>;
   hold: (cycleId: string) => Promise<void>;
   reject: (cycleId: string) => Promise<void>;
 };

@@ -239,6 +239,7 @@ export type OperatorPartnerPayoutCycle = {
   riskFlags: string[];
   actions: {
     canApprove: boolean;
+    canRetry: boolean;
     canHold: boolean;
     canReject: boolean;
   };

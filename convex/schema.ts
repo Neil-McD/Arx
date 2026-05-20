@@ -189,6 +189,7 @@ export default defineSchema({
     .index("by_partner_status", ["partnerId", "status"])
     .index("by_referredUser", ["referredUserId"])
     .index("by_status_holdUntil", ["status", "holdUntil"])
+    .index("by_status_payableAt", ["status", "payableAt"])
     .index("by_checkout_session", ["sourceCheckoutSessionId"])
     .index("by_provider_invoice", ["sourceProviderInvoiceId"])
     .index("by_payment_intent", ["sourceProviderPaymentIntentId"])
@@ -229,6 +230,9 @@ export default defineSchema({
 
   partnerPayoutBatches: defineTable({
     batchKey: v.string(),
+    cyclePeriod: v.optional(v.string()),
+    runNumber: v.optional(v.number()),
+    replacesBatchId: v.optional(v.id("partnerPayoutBatches")),
     status: v.union(
       v.literal("pending_approval"),
       v.literal("draft"),
@@ -258,6 +262,7 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_batchKey", ["batchKey"])
+    .index("by_cyclePeriod_runNumber", ["cyclePeriod", "runNumber"])
     .index("by_status_createdAt", ["status", "createdAt"]),
 
   partnerPayoutTransfers: defineTable({
