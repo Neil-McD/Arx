@@ -535,8 +535,13 @@ assert.match(
 );
 assert.match(
   baseCss,
-  /\.community-launch-workflow-option:hover,[\s\S]*\.community-launch-workflow-option\.selected \{[\s\S]*var\(--accent-pink\)/,
-  "launch workflow selector cards must use the same pink hover language as other launch choices",
+  /\.community-launch-workflow-option:hover,[\s\S]*\.community-launch-workflow-option\.selected \{[\s\S]*var\(--accent-gold\)/,
+  "launch workflow selector cards must use the same hover language as access choices",
+);
+assert.match(
+  baseCss,
+  /\.community-launch-harness-selector-option:hover,[\s\S]*\.community-launch-harness-selector-option\.selected \{[\s\S]*var\(--accent-gold\)/,
+  "launch harness selector cards must use the same hover language as access choices",
 );
 assert.match(
   setupModal,
