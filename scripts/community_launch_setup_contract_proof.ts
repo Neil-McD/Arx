@@ -472,13 +472,18 @@ assert.match(
 );
 assert.match(
   setupModal,
-  /Import from existing harness[\s\S]*MCP servers[\s\S]*Clawd[\s\S]*Codex[\s\S]*OpenClaw[\s\S]*Hermes/,
+  /Import from existing harness[\s\S]*MCP servers[\s\S]*Claude[\s\S]*Codex[\s\S]*OpenClaw[\s\S]*Hermes/,
   "launch workflow import path must frame harness import as MCPs, skills, prompts, and repo context",
 );
 assert.match(
   harnessImportSources,
-  /label: "Clawd"[\s\S]*logoUrl: "\/harness-logos\/clawd\.png"[\s\S]*label: "Codex"[\s\S]*logoUrl: "\/harness-logos\/codex\.png"[\s\S]*label: "OpenClaw"[\s\S]*logoUrl: "\/harness-logos\/openclaw\.svg"[\s\S]*label: "Hermes"[\s\S]*logoUrl: "\/harness-logos\/hermes\.svg"/,
+  /label: "Claude"[\s\S]*logoUrl: "\/harness-logos\/claude\.svg"[\s\S]*label: "Codex"[\s\S]*logoUrl: "\/harness-logos\/codex\.png"[\s\S]*label: "OpenClaw"[\s\S]*logoUrl: "\/harness-logos\/openclaw\.svg"[\s\S]*label: "Hermes"[\s\S]*logoUrl: "\/harness-logos\/hermes\.svg"/,
   "launch workflow import path must use a dedicated asset-backed harness source registry",
+);
+assert.doesNotMatch(
+  harnessImportSources,
+  /Clawd|clawd/,
+  "launch workflow import path must not keep the incorrect Clawd source",
 );
 assert.match(
   setupModal,
@@ -491,13 +496,18 @@ assert.doesNotMatch(
   "launch workflow import path must not render fake text logo chips",
 );
 for (const logoPath of [
-  "apps/web/public/harness-logos/clawd.png",
+  "apps/web/public/harness-logos/claude.svg",
   "apps/web/public/harness-logos/codex.png",
   "apps/web/public/harness-logos/openclaw.svg",
   "apps/web/public/harness-logos/hermes.svg",
 ]) {
   assert.equal(existsSync(logoPath), true, `missing harness logo asset: ${logoPath}`);
 }
+assert.equal(
+  existsSync("apps/web/public/harness-logos/clawd.png"),
+  false,
+  "incorrect Clawd logo asset must not be kept",
+);
 assert.match(
   setupModal,
   /Build in PolyNet[\s\S]*onOpenStep\("workflows"\)/,

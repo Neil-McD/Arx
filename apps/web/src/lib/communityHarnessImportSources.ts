@@ -6,9 +6,9 @@ export type CommunityHarnessImportSource = {
 
 export const communityHarnessImportSources: CommunityHarnessImportSource[] = [
   {
-    id: "clawd",
-    label: "Clawd",
-    logoUrl: "/harness-logos/clawd.png",
+    id: "claude",
+    label: "Claude",
+    logoUrl: "/harness-logos/claude.svg",
   },
   {
     id: "codex",

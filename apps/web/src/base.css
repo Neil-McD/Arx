@@ -3626,6 +3626,11 @@ body {
   box-shadow: none;
 }
 
+.community-launch-harness-logo.claude {
+  border-color: rgba(217, 119, 87, 0.24);
+  background: rgba(217, 119, 87, 0.08);
+}
+
 .community-launch-harness-logo.openclaw {
   border-color: rgba(255, 95, 95, 0.22);
   background: rgba(255, 95, 95, 0.08);

@@ -951,7 +951,7 @@ export function WebCommunityLaunchSetupModal(
                 </span>
                 <span
                   className="community-launch-harness-logo-row"
-                  aria-label="Supported harnesses: Clawd, Codex, OpenClaw, Hermes"
+                  aria-label="Supported harnesses: Claude, Codex, OpenClaw, Hermes"
                 >
                   {communityHarnessImportSources.map((source) => (
                     <span
@@ -966,7 +966,7 @@ export function WebCommunityLaunchSetupModal(
               </span>
               <strong>Import from existing harness</strong>
               <span>
-                Bring over MCP servers, skills, prompts, and repo context from Clawd, Codex, OpenClaw, or Hermes.
+                Bring over MCP servers, skills, prompts, and repo context from Claude, Codex, OpenClaw, or Hermes.
               </span>
               <span className="community-launch-workflow-option-status">Next</span>
             </button>
