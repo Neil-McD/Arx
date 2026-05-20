@@ -121,7 +121,7 @@ assert.doesNotMatch(
 
 assert.match(
   resourcesPanel,
-  /showInitialResourceLoading[\s\S]*Refreshing resources\.\.\.[\s\S]*\{showInitialResourceLoading \?/,
+  /showInitialResourceLoading[\s\S]*Refreshing knowledge\.\.\.[\s\S]*\{showInitialResourceLoading \?/,
   "resources tab must keep existing content visible during background refresh",
 );
 assert.match(

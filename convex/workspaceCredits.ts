@@ -309,27 +309,40 @@ export const getWorkspaceCreditBalanceInternal = internalQuery({
   },
 });
 
+async function readWorkspaceToolBalanceProjection(ctx: any, args: {
+  authSubject?: string;
+  nowMs?: number;
+}) {
+  const actor = await resolveAuthenticatedActor({
+    ctx,
+    authSubject: args.authSubject ?? null,
+  });
+  const rows = await readWorkspaceCreditBalanceRowsByUser(ctx, actor.dbUserId, 2);
+  if (rows.length > 1) {
+    return {
+      ...buildWorkspaceToolBalanceProjection(null, actor.dbUserId, args.nowMs ?? Date.now()),
+      blocked: true,
+      blockedReason: DUPLICATE_WORKSPACE_CREDIT_BALANCE_ERROR,
+    };
+  }
+  const row = rows[0] ?? null;
+  return buildWorkspaceToolBalanceProjection(row, actor.dbUserId, args.nowMs ?? Date.now());
+}
+
 export const getWorkspaceToolBalance = query({
   args: {
     authSubject: v.optional(v.string()),
     nowMs: v.optional(v.number()),
   },
-  handler: async (ctx, args) => {
-    const actor = await resolveAuthenticatedActor({
-      ctx,
-      authSubject: args.authSubject ?? null,
-    });
-    const rows = await readWorkspaceCreditBalanceRowsByUser(ctx, actor.dbUserId, 2);
-    if (rows.length > 1) {
-      return {
-        ...buildWorkspaceToolBalanceProjection(null, actor.dbUserId, args.nowMs ?? Date.now()),
-        blocked: true,
-        blockedReason: DUPLICATE_WORKSPACE_CREDIT_BALANCE_ERROR,
-      };
-    }
-    const row = rows[0] ?? null;
-    return buildWorkspaceToolBalanceProjection(row, actor.dbUserId, args.nowMs ?? Date.now());
+  handler: async (ctx, args) => await readWorkspaceToolBalanceProjection(ctx, args),
+});
+
+export const getWorkspaceCreditBalance = query({
+  args: {
+    authSubject: v.optional(v.string()),
+    nowMs: v.optional(v.number()),
   },
+  handler: async (ctx, args) => await readWorkspaceToolBalanceProjection(ctx, args),
 });
 
 export const upsertWorkspaceCreditBalanceInternal = internalMutation({

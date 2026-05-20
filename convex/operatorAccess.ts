@@ -51,7 +51,7 @@ async function readOperatorRole(ctx: any, actor: { dbUserId: unknown; email: str
   return null;
 }
 
-export async function requireOperatorRole(
+async function readOperatorAccess(
   ctx: any,
   authSubject: string | null | undefined,
   minimumRole: OperatorRole = "readonly",
@@ -64,7 +64,7 @@ export async function requireOperatorRole(
   const role = (roleRow?.role ?? null) as OperatorRole | null;
 
   if (!role || roleRank(role) < roleRank(minimumRole)) {
-    throw new Error("operator_access_forbidden");
+    return null;
   }
 
   return {
@@ -75,6 +75,29 @@ export async function requireOperatorRole(
     role,
     source: "operator_role",
   };
+}
+
+function toOperatorAccessSnapshot(operator: Awaited<ReturnType<typeof readOperatorAccess>>) {
+  if (!operator) return null;
+  return {
+    userId: operator.userId,
+    email: operator.email,
+    displayName: operator.displayName,
+    role: operator.role,
+    source: operator.source,
+  };
+}
+
+export async function requireOperatorRole(
+  ctx: any,
+  authSubject: string | null | undefined,
+  minimumRole: OperatorRole = "readonly",
+) {
+  const operator = await readOperatorAccess(ctx, authSubject, minimumRole);
+  if (!operator) {
+    throw new Error("operator_access_forbidden");
+  }
+  return operator;
 }
 
 async function recordOperatorAudit(
@@ -114,6 +137,21 @@ export const getMyOperatorAccess = query({
       role: operator.role,
       source: operator.source,
     };
+  },
+});
+
+export const getMyOperatorAccessOptional = query({
+  args: {
+    authSubject: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    try {
+      return toOperatorAccessSnapshot(await readOperatorAccess(ctx, args.authSubject, "readonly"));
+    } catch (error) {
+      const code = normalizeAccessErrorCode(error);
+      if (code === "auth_required" || code === "operator_access_forbidden") return null;
+      throw error;
+    }
   },
 });
 

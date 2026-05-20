@@ -353,7 +353,7 @@ import {
   type BuilderPartnerProgramSnapshot,
 } from "../../../shared/builderPartnerProgramGateway";
 import { startCloudWorkspaceCreditTopupCheckout } from "../../../shared/cloudAccountCommerceGateway";
-import { loadOperatorAccessCanonical } from "../../../shared/cloudOperatorDashboardGateway";
+import { loadOptionalOperatorAccessCanonical } from "../../../shared/cloudOperatorDashboardGateway";
 import type { OperatorAccessSnapshot } from "../../../shared/operatorTypes";
 import { loadWorkspaceCreditBalanceCanonical, type WorkspaceCreditBalance } from "../../../shared/workspaceCreditsGateway";
 import {
@@ -1510,9 +1510,13 @@ export default function App() {
       return;
     }
 
-    loadOperatorAccessCanonical({ session }).then(
+    loadOptionalOperatorAccessCanonical({ session }).then(
       (access) => {
         if (!isAlive) return;
+        if (!access) {
+          setOperatorAccessState((prev) => (prev?.subject === operatorSubject ? null : prev));
+          return;
+        }
         setOperatorAccessState({ subject: operatorSubject, access });
       },
       (error) => {

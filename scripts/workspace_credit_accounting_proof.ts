@@ -54,6 +54,13 @@ async function proveWorkspaceCreditAccountingContract() {
   const inferenceIssueModalSource = await readRepoFile("apps/web/src/components/WebInferenceIssueModal.tsx");
   const billingEntitlementsDoc = await readRepoFile("docs/product/reference/billing-entitlements.md");
   const authMoneyAccessDoc = await readRepoFile("docs/auth-money-access-matrix.md");
+  const browserWorkspaceCreditSources = [
+    workspaceCreditsGatewaySource,
+    appSource,
+    webAgentSettingsSource,
+    workspaceUserPanelSource,
+    inferenceIssueModalSource,
+  ].join("\n");
   const reserveCreditsBlock = sliceBetween(
     creditsSource,
     "export const reserveCreditsInternal",
@@ -585,13 +592,18 @@ async function proveWorkspaceCreditAccountingContract() {
   );
   assert.match(
     creditsSource,
-    /export const getWorkspaceToolBalance[\s\S]*buildWorkspaceToolBalanceProjection/,
+    /readWorkspaceToolBalanceProjection[\s\S]*buildWorkspaceToolBalanceProjection[\s\S]*export const getWorkspaceToolBalance[\s\S]*readWorkspaceToolBalanceProjection/,
     "expected backend to expose a canonical tool-balance projection query",
   );
-  assert.doesNotMatch(
+  assert.match(
     creditsSource,
-    /export const getWorkspaceCreditBalance = query/,
-    "frontend must not use the raw workspace credit balance query after canonical projection exists",
+    /export const getWorkspaceCreditBalance = query[\s\S]*readWorkspaceToolBalanceProjection/,
+    "expected stale-client compatibility query to delegate to the canonical tool-balance projection",
+  );
+  assert.doesNotMatch(
+    browserWorkspaceCreditSources,
+    /workspaceCredits:getWorkspaceCreditBalance/,
+    "browser code must not call the stale workspace credit balance query after canonical projection exists",
   );
   assert.doesNotMatch(
     settlementCallSiteSources,

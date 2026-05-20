@@ -374,6 +374,21 @@ export async function loadOperatorAccessCanonical(params: {
   return access;
 }
 
+export async function loadOptionalOperatorAccessCanonical(params: {
+  session: AuthSessionLike;
+}): Promise<OperatorAccessSnapshot | null> {
+  const { client, authSubject, bootstrap } = await withOperatorAuth(params.session);
+  const access = (await client.query("operatorAccess:getMyOperatorAccessOptional" as any, {
+    authSubject,
+  })) as OperatorAccessSnapshot | null;
+  if (!access) return null;
+  const dbUserId = String(bootstrap?.dbUserId ?? "").trim();
+  if (dbUserId && access.userId !== dbUserId) {
+    throw new Error("operator_access_identity_mismatch");
+  }
+  return access;
+}
+
 export async function recordOperatorDashboardAccessCanonical(params: {
   session: AuthSessionLike;
   surface?: string;

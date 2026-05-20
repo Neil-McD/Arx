@@ -59,6 +59,11 @@ assert.match(
 );
 assert.match(
   operatorAccess,
+  /getMyOperatorAccessOptional = query[\s\S]*readOperatorAccess\(ctx, args\.authSubject, "readonly"\)[\s\S]*return null/,
+  "operator UI gating should use a non-throwing current-user access probe",
+);
+assert.match(
+  operatorAccess,
   /upsertOperatorRole = mutation[\s\S]*requireOperatorRole\(ctx, args\.authSubject, "owner"\)/,
   "operator role writes must require owner access",
 );
@@ -144,6 +149,11 @@ assert.match(
 );
 assert.match(
   operatorGateway,
+  /operatorAccess:getMyOperatorAccessOptional/,
+  "operator gateway must use the non-throwing operator access probe for UI gating",
+);
+assert.match(
+  operatorGateway,
   /bootstrap\?\.dbUserId[\s\S]*operator_access_identity_mismatch/,
   "operator access must validate the returned operator role against the authenticated Convex user id",
 );
@@ -162,8 +172,8 @@ assert.doesNotMatch(
 );
 assert.match(
   app,
-  /operatorAccessState\?\.subject === canonicalSessionUserId \? operatorAccessState\.access : null[\s\S]*loadOperatorAccessCanonical\(\{ session \}\)[\s\S]*setOperatorAccessState\(\{ subject: operatorSubject, access \}\)/,
-  "workspace must only enable operator UI after the gated operator access query succeeds for the current subject",
+  /operatorAccessState\?\.subject === canonicalSessionUserId \? operatorAccessState\.access : null[\s\S]*loadOptionalOperatorAccessCanonical\(\{ session \}\)[\s\S]*if \(!access\)[\s\S]*setOperatorAccessState\(\{ subject: operatorSubject, access \}\)/,
+  "workspace must only enable operator UI after the non-throwing operator access probe returns a current-subject snapshot",
 );
 assert.match(
   app,
