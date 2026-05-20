@@ -3524,6 +3524,70 @@ body {
   color: inherit;
 }
 
+.community-launch-workflow-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.community-launch-workflow-option {
+  position: relative;
+  min-height: 152px;
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  border: 1px solid color-mix(in srgb, var(--border-muted) 84%, transparent);
+  border-radius: 12px;
+  padding: 14px;
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--bg-page) 48%, transparent);
+  text-align: left;
+  cursor: pointer;
+}
+
+.community-launch-workflow-option:hover,
+.community-launch-workflow-option.selected {
+  border-color: color-mix(in srgb, var(--accent-gold) 32%, var(--border-muted));
+  background: color-mix(in srgb, var(--accent-gold) 7%, var(--bg-card-alt));
+}
+
+.community-launch-workflow-option-icon {
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid color-mix(in srgb, var(--border-muted) 70%, transparent);
+  border-radius: 9px;
+  color: color-mix(in srgb, var(--text-primary) 74%, var(--text-secondary));
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.community-launch-workflow-option strong {
+  color: var(--text-primary);
+  font-size: 14px;
+  line-height: 1.16;
+}
+
+.community-launch-workflow-option > span:not(.community-launch-workflow-option-icon):not(.community-launch-workflow-option-status) {
+  max-width: 94%;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.42;
+}
+
+.community-launch-workflow-option-status {
+  width: fit-content;
+  border: 1px solid color-mix(in srgb, var(--border-muted) 76%, transparent);
+  border-radius: 999px;
+  padding: 5px 8px;
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--bg-page) 46%, transparent);
+  font-size: 11px;
+  font-weight: 750;
+  line-height: 1;
+}
+
 .community-launch-choice-row {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -3650,6 +3714,7 @@ body {
 
 @media (max-width: 820px) {
   .community-launch-field-grid,
+  .community-launch-workflow-options,
   .community-launch-choice-row {
     grid-template-columns: 1fr;
   }

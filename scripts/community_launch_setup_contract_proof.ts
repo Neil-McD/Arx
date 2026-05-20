@@ -465,6 +465,21 @@ assert.match(
   "launch modal must support inline canonical saves for the core setup surfaces",
 );
 assert.match(
+  setupModal,
+  /Choose workflow path[\s\S]*Import from existing harness[\s\S]*Build in PolyNet/,
+  "launch workflow step must start with the two-path choice layer",
+);
+assert.match(
+  setupModal,
+  /Import from existing harness[\s\S]*MCP servers[\s\S]*Claude Code[\s\S]*Codex[\s\S]*OpenCode[\s\S]*OpenClaw[\s\S]*Hermes/,
+  "launch workflow import path must frame harness import as MCPs, skills, prompts, and repo context",
+);
+assert.match(
+  setupModal,
+  /Build in PolyNet[\s\S]*onOpenStep\("workflows"\)/,
+  "launch workflow build path must continue to the canonical PolyNet workflows surface",
+);
+assert.match(
   workspaceLandingProjection,
   /WebCommunityLaunchSetupCard/,
   "workspace landing must be able to render the community launch setup card",

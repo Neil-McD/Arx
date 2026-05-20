@@ -30,6 +30,7 @@ const COMMUNITY_LAUNCH_IMAGE_DATA_URL_MAX_CHARS = 600_000;
 const COMMUNITY_LAUNCH_MAX_KNOWLEDGE_LINKS = 5;
 
 type CommunityEntryPolicy = "open" | "approval" | "paid_subscription";
+type CommunityLaunchWorkflowPath = "import" | "build";
 
 type CommunityLaunchSetupCommunity = {
   id: string;
@@ -155,8 +156,8 @@ const STEP_META: Record<
   },
   workflows: {
     label: "Workflows",
-    title: "Connect workflows",
-    action: "Open workflows",
+    title: "Choose workflow path",
+    action: "Choose workflows",
     icon: <PlugZap size={15} strokeWidth={2} aria-hidden="true" />,
   },
   access: {
@@ -263,6 +264,8 @@ export function WebCommunityLaunchSetupModal(
     starterPrompts: ["", "", ""],
   });
   const [accessDraft, setAccessDraft] = useState<CommunityEntryPolicy>("open");
+  const [workflowPathDraft, setWorkflowPathDraft] =
+    useState<CommunityLaunchWorkflowPath | null>(null);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -292,6 +295,7 @@ export function WebCommunityLaunchSetupModal(
         starterPrompts: ["", "", ""],
       });
       setAccessDraft("approval");
+      setWorkflowPathDraft(null);
       setStepError(null);
       setStepSuccess(null);
       setProfileMediaError(null);
@@ -318,6 +322,7 @@ export function WebCommunityLaunchSetupModal(
       starterPrompts: getStarterPrompts(community),
     });
     setAccessDraft(community.entry_policy ?? "open");
+    setWorkflowPathDraft(null);
     setStepError(null);
     setStepSuccess(null);
     setProfileMediaError(null);
@@ -926,6 +931,60 @@ export function WebCommunityLaunchSetupModal(
             </button>
           </div>
         </form>
+      );
+    }
+
+    if (activeStep === "workflows") {
+      return (
+        <div className="community-launch-inline-form">
+          <div className="community-launch-workflow-options">
+            <button
+              type="button"
+              className={`community-launch-workflow-option${workflowPathDraft === "import" ? " selected" : ""}`}
+              onClick={() => setWorkflowPathDraft("import")}
+              aria-pressed={workflowPathDraft === "import"}
+            >
+              <span className="community-launch-workflow-option-icon" aria-hidden="true">
+                <FileText size={16} strokeWidth={2} />
+              </span>
+              <strong>Import from existing harness</strong>
+              <span>
+                Bring over MCP servers, skills, prompts, and repo context from Claude Code, Codex, OpenCode, OpenClaw,
+                or Hermes.
+              </span>
+              <span className="community-launch-workflow-option-status">Next</span>
+            </button>
+            <button
+              type="button"
+              className={`community-launch-workflow-option${workflowPathDraft === "build" ? " selected" : ""}`}
+              onClick={() => setWorkflowPathDraft("build")}
+              aria-pressed={workflowPathDraft === "build"}
+            >
+              <span className="community-launch-workflow-option-icon" aria-hidden="true">
+                <PlugZap size={16} strokeWidth={2} />
+              </span>
+              <strong>Build in PolyNet</strong>
+              <span>Connect community apps and skills through the existing PolyNet workflow surfaces.</span>
+              <span className="community-launch-workflow-option-status">Available</span>
+            </button>
+          </div>
+          {workflowPathDraft === "import" ? (
+            <p className="community-launch-inline-note">
+              Harness import will start with a source selector and export prompt before anything is added to this community.
+            </p>
+          ) : null}
+          <div className="community-launch-step-actions">
+            {renderFinishLaterButton()}
+            <button
+              type="button"
+              className="polynet-onboarding-next"
+              disabled={!workflowPathDraft || workflowPathDraft === "import"}
+              onClick={() => onOpenStep("workflows")}
+            >
+              {workflowPathDraft === "import" ? "Import flow next" : "Open workflows"}
+            </button>
+          </div>
+        </div>
       );
     }
 
