@@ -273,6 +273,7 @@ export function WebCommunityLaunchSetupModal(
     useState<CommunityLaunchWorkflowImportStage>("path");
   const [selectedHarnessImportSourceId, setSelectedHarnessImportSourceId] =
     useState<string | null>(null);
+  const [selectedHarnessOtherName, setSelectedHarnessOtherName] = useState("");
 
   useEffect(() => {
     if (!isOpen) return;
@@ -305,6 +306,7 @@ export function WebCommunityLaunchSetupModal(
       setWorkflowPathDraft(null);
       setWorkflowImportStage("path");
       setSelectedHarnessImportSourceId(null);
+      setSelectedHarnessOtherName("");
       setStepError(null);
       setStepSuccess(null);
       setProfileMediaError(null);
@@ -334,6 +336,7 @@ export function WebCommunityLaunchSetupModal(
     setWorkflowPathDraft(null);
     setWorkflowImportStage("path");
     setSelectedHarnessImportSourceId(null);
+    setSelectedHarnessOtherName("");
     setStepError(null);
     setStepSuccess(null);
     setProfileMediaError(null);
@@ -965,6 +968,7 @@ export function WebCommunityLaunchSetupModal(
                     setWorkflowImportStage("path");
                     setWorkflowPathDraft(null);
                     setSelectedHarnessImportSourceId(null);
+                    setSelectedHarnessOtherName("");
                   }}
                   aria-label="Back to workflow path options"
                 >
@@ -983,11 +987,18 @@ export function WebCommunityLaunchSetupModal(
                       key={source.id}
                       type="button"
                       className={`community-launch-harness-selector-option${selected ? " selected" : ""}`}
-                      onClick={() => setSelectedHarnessImportSourceId(source.id)}
+                      onClick={() => {
+                        setSelectedHarnessImportSourceId(source.id);
+                        if (source.id !== "other") setSelectedHarnessOtherName("");
+                      }}
                       aria-pressed={selected}
                     >
                       <span className={`community-launch-harness-logo ${source.id}`} aria-hidden="true">
-                        <img src={source.logoUrl} alt="" loading="lazy" />
+                        {source.logoUrl ? (
+                          <img src={source.logoUrl} alt="" loading="lazy" />
+                        ) : (
+                          <span className="community-launch-harness-logo-fallback">?</span>
+                        )}
                       </span>
                       <strong>{source.label}</strong>
                       <span>{selected ? "Selected" : "Import source"}</span>
@@ -995,9 +1006,22 @@ export function WebCommunityLaunchSetupModal(
                   );
                 })}
               </div>
+              {selectedHarnessImportSourceId === "other" ? (
+                <label className="community-launch-field community-launch-harness-other-field">
+                  <span>Harness name</span>
+                  <input
+                    type="text"
+                    value={selectedHarnessOtherName}
+                    onChange={(event) => setSelectedHarnessOtherName(event.target.value)}
+                    placeholder="Name the harness you use"
+                  />
+                </label>
+              ) : null}
               {selectedHarnessImportSource ? (
                 <p className="community-launch-inline-note">
-                  {selectedHarnessImportSource.label} selected. The export prompt screen is next.
+                  {selectedHarnessImportSource.id === "other" && selectedHarnessOtherName.trim()
+                    ? `${selectedHarnessOtherName.trim()} selected. The export prompt screen is next.`
+                    : `${selectedHarnessImportSource.label} selected. The export prompt screen is next.`}
                 </p>
               ) : null}
             </div>
@@ -1024,12 +1048,27 @@ export function WebCommunityLaunchSetupModal(
                 setWorkflowPathDraft("import");
                 setWorkflowImportStage("harness");
                 setSelectedHarnessImportSourceId(null);
+                setSelectedHarnessOtherName("");
               }}
               aria-pressed={workflowPathDraft === "import"}
             >
               <span className="community-launch-workflow-option-top">
                 <span className="community-launch-workflow-option-icon" aria-hidden="true">
                   <FileText size={16} strokeWidth={2} />
+                </span>
+                <span
+                  className="community-launch-harness-logo-row"
+                  aria-label="Supported harnesses: Claude, Codex, OpenClaw, Hermes"
+                >
+                  {communityHarnessImportSources.slice(0, 4).map((source) => (
+                    <span
+                      key={source.id}
+                      className={`community-launch-harness-logo ${source.id}`}
+                      title={source.label}
+                    >
+                      <img src={source.logoUrl ?? ""} alt="" loading="lazy" />
+                    </span>
+                  ))}
                 </span>
               </span>
               <strong>Import from existing harness</strong>
@@ -1045,6 +1084,7 @@ export function WebCommunityLaunchSetupModal(
                 setWorkflowPathDraft("build");
                 setWorkflowImportStage("path");
                 setSelectedHarnessImportSourceId(null);
+                setSelectedHarnessOtherName("");
               }}
               aria-pressed={workflowPathDraft === "build"}
             >

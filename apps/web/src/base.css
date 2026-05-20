@@ -3590,6 +3590,13 @@ body {
   background: rgba(0, 0, 0, 0.2);
 }
 
+.community-launch-harness-logo-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
 .community-launch-harness-logo {
   width: 28px;
   height: 28px;
@@ -3644,11 +3651,6 @@ body {
   border-radius: 6px;
 }
 
-.community-launch-harness-logo.opencode {
-  border-color: rgba(241, 236, 236, 0.2);
-  background: rgba(241, 236, 236, 0.055);
-}
-
 .community-launch-harness-logo.gemini-cli,
 .community-launch-harness-logo.antigravity {
   border-color: rgba(151, 157, 255, 0.24);
@@ -3658,6 +3660,18 @@ body {
 .community-launch-harness-logo.antigravity img {
   object-fit: cover;
   object-position: left center;
+}
+
+.community-launch-harness-logo.other {
+  border-color: rgba(151, 157, 255, 0.24);
+  background: rgba(151, 157, 255, 0.075);
+}
+
+.community-launch-harness-logo-fallback {
+  color: var(--text-primary);
+  font-size: 16px;
+  font-weight: 850;
+  line-height: 1;
 }
 
 .community-launch-workflow-option strong {
@@ -3790,6 +3804,10 @@ body {
   width: 40px;
   height: 40px;
   border-radius: 11px;
+}
+
+.community-launch-harness-other-field {
+  max-width: 320px;
 }
 
 .community-launch-harness-selector-option strong {

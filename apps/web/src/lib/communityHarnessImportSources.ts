@@ -1,7 +1,7 @@
 export type CommunityHarnessImportSource = {
   id: string;
   label: string;
-  logoUrl: string;
+  logoUrl?: string;
 };
 
 export const communityHarnessImportSources: CommunityHarnessImportSource[] = [
@@ -31,11 +31,6 @@ export const communityHarnessImportSources: CommunityHarnessImportSource[] = [
     logoUrl: "/harness-logos/cursor.png",
   },
   {
-    id: "opencode",
-    label: "OpenCode",
-    logoUrl: "/harness-logos/opencode.svg",
-  },
-  {
     id: "gemini-cli",
     label: "Gemini CLI",
     logoUrl: "/harness-logos/gemini-cli.svg",
@@ -44,5 +39,9 @@ export const communityHarnessImportSources: CommunityHarnessImportSource[] = [
     id: "antigravity",
     label: "Antigravity",
     logoUrl: "/harness-logos/antigravity.svg",
+  },
+  {
+    id: "other",
+    label: "Other",
   },
 ];

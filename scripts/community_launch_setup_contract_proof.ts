@@ -475,15 +475,20 @@ assert.match(
   /Import from existing harness[\s\S]*MCP servers[\s\S]*skills[\s\S]*prompts[\s\S]*repo context[\s\S]*current agent harness/,
   "launch workflow import path must frame harness import as MCPs, skills, prompts, and repo context without overcrowding the card",
 );
-assert.doesNotMatch(
+assert.match(
   setupModal,
-  /community-launch-harness-logo-row/,
-  "launch workflow choice card must not preview the full harness logo grid before the import selector opens",
+  /community-launch-harness-logo-row[\s\S]*Supported harnesses: Claude, Codex, OpenClaw, Hermes[\s\S]*slice\(0, 4\)/,
+  "launch workflow choice card must preview only the original four primary harnesses before the import selector opens",
 );
 assert.match(
   harnessImportSources,
-  /label: "Claude"[\s\S]*logoUrl: "\/harness-logos\/claude\.svg"[\s\S]*label: "Codex"[\s\S]*logoUrl: "\/harness-logos\/codex\.png"[\s\S]*label: "OpenClaw"[\s\S]*logoUrl: "\/harness-logos\/openclaw\.svg"[\s\S]*label: "Hermes"[\s\S]*logoUrl: "\/harness-logos\/hermes\.svg"[\s\S]*label: "Cursor"[\s\S]*logoUrl: "\/harness-logos\/cursor\.png"[\s\S]*label: "OpenCode"[\s\S]*logoUrl: "\/harness-logos\/opencode\.svg"[\s\S]*label: "Gemini CLI"[\s\S]*logoUrl: "\/harness-logos\/gemini-cli\.svg"[\s\S]*label: "Antigravity"[\s\S]*logoUrl: "\/harness-logos\/antigravity\.svg"/,
-  "launch workflow import path must use a dedicated eight-source asset-backed harness registry",
+  /label: "Claude"[\s\S]*logoUrl: "\/harness-logos\/claude\.svg"[\s\S]*label: "Codex"[\s\S]*logoUrl: "\/harness-logos\/codex\.png"[\s\S]*label: "OpenClaw"[\s\S]*logoUrl: "\/harness-logos\/openclaw\.svg"[\s\S]*label: "Hermes"[\s\S]*logoUrl: "\/harness-logos\/hermes\.svg"[\s\S]*label: "Cursor"[\s\S]*logoUrl: "\/harness-logos\/cursor\.png"[\s\S]*label: "Gemini CLI"[\s\S]*logoUrl: "\/harness-logos\/gemini-cli\.svg"[\s\S]*label: "Antigravity"[\s\S]*logoUrl: "\/harness-logos\/antigravity\.svg"[\s\S]*id: "other"[\s\S]*label: "Other"/,
+  "launch workflow import path must use seven named harnesses plus Other in the final selector slot",
+);
+assert.doesNotMatch(
+  harnessImportSources,
+  /OpenCode|opencode/,
+  "launch workflow import path must not keep OpenCode as a default source",
 );
 assert.doesNotMatch(
   harnessImportSources,
@@ -492,8 +497,13 @@ assert.doesNotMatch(
 );
 assert.match(
   setupModal,
-  /communityHarnessImportSources\.map[\s\S]*<img src=\{source\.logoUrl\} alt="" loading="lazy" \/>/,
-  "launch workflow import path must render real harness logo images from the registry",
+  /communityHarnessImportSources\.map[\s\S]*source\.logoUrl \?[\s\S]*<img src=\{source\.logoUrl\} alt="" loading="lazy" \/>[\s\S]*community-launch-harness-logo-fallback/,
+  "launch workflow import path must render real harness logo images while supporting the Other fallback tile",
+);
+assert.match(
+  setupModal,
+  /selectedHarnessImportSourceId === "other"[\s\S]*Harness name[\s\S]*Name the harness you use/,
+  "launch workflow Other selector must expose a harness name field",
 );
 assert.match(
   setupModal,
@@ -521,12 +531,16 @@ for (const logoPath of [
   "apps/web/public/harness-logos/openclaw.svg",
   "apps/web/public/harness-logos/hermes.svg",
   "apps/web/public/harness-logos/cursor.png",
-  "apps/web/public/harness-logos/opencode.svg",
   "apps/web/public/harness-logos/gemini-cli.svg",
   "apps/web/public/harness-logos/antigravity.svg",
 ]) {
   assert.equal(existsSync(logoPath), true, `missing harness logo asset: ${logoPath}`);
 }
+assert.equal(
+  existsSync("apps/web/public/harness-logos/opencode.svg"),
+  false,
+  "removed OpenCode source must not leave an unused harness logo asset",
+);
 assert.equal(
   existsSync("apps/web/public/harness-logos/clawd.png"),
   false,
