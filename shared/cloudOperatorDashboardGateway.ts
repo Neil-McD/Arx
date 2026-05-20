@@ -360,20 +360,6 @@ async function enrichWebDeployDiagnosticsWithBrowserProbes(
   };
 }
 
-export async function loadOperatorAccessCanonical(params: {
-  session: AuthSessionLike;
-}): Promise<OperatorAccessSnapshot> {
-  const { client, authSubject, bootstrap } = await withOperatorAuth(params.session);
-  const access = (await client.query("operatorDashboard:getOperatorAccess" as any, {
-    authSubject,
-  })) as OperatorAccessSnapshot;
-  const dbUserId = String(bootstrap?.dbUserId ?? "").trim();
-  if (dbUserId && access.userId !== dbUserId) {
-    throw new Error("operator_access_identity_mismatch");
-  }
-  return access;
-}
-
 export async function loadOptionalOperatorAccessCanonical(params: {
   session: AuthSessionLike;
 }): Promise<OperatorAccessSnapshot | null> {

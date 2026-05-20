@@ -95,7 +95,17 @@ for (const queryName of [
   assert.ok(operatorQueryNames.includes(queryName), `${queryName} must be public query`);
 }
 
-for (const queryName of operatorQueryNames) {
+assert.match(
+  operatorDashboard,
+  /export const getOperatorAccess = query\([\s\S]*try \{[\s\S]*await requireOperatorAccess\(ctx, args\.authSubject\)[\s\S]*catch \(error\)[\s\S]*isExpectedOperatorAccessProbeMiss\(error\)[\s\S]*return null/,
+  "legacy operator access probe must return null for expected non-operator/auth misses",
+);
+assert.match(
+  operatorDashboard,
+  /isExpectedOperatorAccessProbeMiss[\s\S]*operator_access_forbidden[\s\S]*auth[\s\S]*identity/,
+  "legacy operator access probe must only quiet expected access/auth misses",
+);
+for (const queryName of operatorQueryNames.filter((queryName) => queryName !== "getOperatorAccess")) {
   assert.match(
     operatorDashboard,
     new RegExp(`export const ${queryName} = query\\([\\s\\S]*?await requireOperatorAccess\\(ctx, args\\.authSubject\\)`),
@@ -151,6 +161,11 @@ assert.match(
   operatorGateway,
   /operatorAccess:getMyOperatorAccessOptional/,
   "operator gateway must use the non-throwing operator access probe for UI gating",
+);
+assert.doesNotMatch(
+  operatorGateway,
+  /operatorDashboard:getOperatorAccess|loadOperatorAccessCanonical/,
+  "browser gateway must not call the noisy legacy operator dashboard access probe",
 );
 assert.match(
   operatorGateway,

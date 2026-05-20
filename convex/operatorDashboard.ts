@@ -24,6 +24,16 @@ async function requireOperatorWriteAccess(ctx: any, authSubject: string | null |
   return await requireOperatorRole(ctx, authSubject, "operator");
 }
 
+function isExpectedOperatorAccessProbeMiss(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  const normalized = message.trim().toLowerCase();
+  return (
+    normalized.includes("operator_access_forbidden") ||
+    normalized.includes("auth") ||
+    normalized.includes("identity")
+  );
+}
+
 export const getOperatorAccess = query({
   args: {
     authSubject: v.optional(v.string()),
@@ -31,15 +41,20 @@ export const getOperatorAccess = query({
   handler: async (
     ctx,
     args,
-  ): Promise<{ userId: string; email: string | null; displayName: string | null; role: string; source: string }> => {
-    const operator = await requireOperatorAccess(ctx, args.authSubject);
-    return {
-      userId: operator.userId,
-      email: operator.email,
-      displayName: operator.displayName,
-      role: operator.role,
-      source: operator.source,
-    };
+  ): Promise<{ userId: string; email: string | null; displayName: string | null; role: string; source: string } | null> => {
+    try {
+      const operator = await requireOperatorAccess(ctx, args.authSubject);
+      return {
+        userId: operator.userId,
+        email: operator.email,
+        displayName: operator.displayName,
+        role: operator.role,
+        source: operator.source,
+      };
+    } catch (error) {
+      if (isExpectedOperatorAccessProbeMiss(error)) return null;
+      throw error;
+    }
   },
 });
 
