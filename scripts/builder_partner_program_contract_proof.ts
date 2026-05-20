@@ -672,6 +672,446 @@ function proveAttributionRoutePrivacy() {
   );
 }
 
+type PartnerLifecycleCommission = {
+  commissionKey: string;
+  status: "locked" | "risk_hold" | "payable" | "voided";
+  commissionAmountUsd: number;
+  holdUntil: number;
+  payableAt?: number;
+  sourceProviderInvoiceId?: string;
+  sourceProviderChargeId?: string;
+  reservedUsd: number;
+  settledUsd: number;
+  adjustmentsUsd: number;
+};
+
+function summarizePartnerLifecycle(commissions: PartnerLifecycleCommission[], nowMs: number) {
+  const payoutReadyCutoffAt = nowMs - BUILDER_PARTNER_PAYOUT_BUFFER_MS;
+  let pendingUsd = 0;
+  let bufferedUsd = 0;
+  let readyUsd = 0;
+  let paidUsd = 0;
+  let clawbackDebtUsd = 0;
+  const readyCandidates: number[] = [];
+  const bufferedCandidates: number[] = [];
+
+  for (const commission of commissions) {
+    const netUsd =
+      commission.commissionAmountUsd +
+      commission.adjustmentsUsd -
+      commission.reservedUsd -
+      commission.settledUsd;
+    const openUsd = Math.max(0, netUsd);
+    if (commission.status === "locked" || commission.status === "risk_hold") {
+      pendingUsd += openUsd;
+    }
+    if (commission.status === "payable" && netUsd < 0) {
+      clawbackDebtUsd += Math.abs(netUsd);
+    }
+    if (commission.status === "payable" && openUsd > 0) {
+      if (typeof commission.payableAt === "number" && commission.payableAt <= payoutReadyCutoffAt) {
+        readyCandidates.push(openUsd);
+      } else {
+        bufferedCandidates.push(openUsd);
+      }
+    }
+    paidUsd += commission.settledUsd;
+  }
+  let remainingDebtUsd = clawbackDebtUsd;
+  for (const amountUsd of readyCandidates) {
+    const offsetUsd = Math.min(remainingDebtUsd, amountUsd);
+    remainingDebtUsd = roundMoneyForProof(remainingDebtUsd - offsetUsd);
+    readyUsd += roundMoneyForProof(amountUsd - offsetUsd);
+  }
+  for (const amountUsd of bufferedCandidates) {
+    const offsetUsd = Math.min(remainingDebtUsd, amountUsd);
+    remainingDebtUsd = roundMoneyForProof(remainingDebtUsd - offsetUsd);
+    bufferedUsd += roundMoneyForProof(amountUsd - offsetUsd);
+  }
+
+  return {
+    pendingUsd: roundMoneyForProof(pendingUsd),
+    bufferedUsd: roundMoneyForProof(bufferedUsd),
+    readyUsd: roundMoneyForProof(readyUsd),
+    paidUsd: roundMoneyForProof(paidUsd),
+    clawbackDebtUsd: roundMoneyForProof(clawbackDebtUsd),
+  };
+}
+
+function roundMoneyForProof(value: number): number {
+  return Math.round(value * 10000) / 10000;
+}
+
+function proveEndToEndPartnerLifecycleBehavior() {
+  const firstTouchAt = Date.UTC(2026, 0, 1);
+  const bindAt = firstTouchAt + 60_000;
+  const purchaseAt = bindAt + 60_000;
+  const holdClearedAt = purchaseAt + BUILDER_PARTNER_COMMISSION_HOLD_MS;
+  const bufferClearedAt = holdClearedAt + BUILDER_PARTNER_PAYOUT_BUFFER_MS;
+  const referralCode = "alpha-builder";
+  const visitorKeyHash = "hashed:visitor-1";
+
+  const attribution = {
+    referralCode,
+    anonymousVisitorKeyHash: visitorKeyHash,
+    referredUserId: "user_referred",
+    status: "bound",
+    referredUserHadOwnedCommunityAtBind: false,
+    eligibleForCommunityRevenue: true,
+    firstTouchAt,
+    lastTouchAt: bindAt,
+    expiresAt: firstTouchAt + BUILDER_PARTNER_ATTRIBUTION_WINDOW_MS,
+  };
+  assert.equal(attribution.status, "bound");
+  assert.equal(attribution.eligibleForCommunityRevenue, true);
+  assert.equal(attribution.expiresAt - attribution.firstTouchAt, BUILDER_PARTNER_ATTRIBUTION_WINDOW_MS);
+  assert.ok(attribution.lastTouchAt < attribution.expiresAt);
+
+  const initial = calculateBuilderPartnerCommunityRevenueCommission({
+    communityRevenueUsd: 100,
+    platformFeeBps: BUILDER_PARTNER_COMMUNITY_PLATFORM_FEE_BPS,
+    partnerPlatformFeeShareBps: BUILDER_PARTNER_PLATFORM_FEE_SHARE_BPS,
+  });
+  assert.deepEqual(initial, {
+    platformFeeUsd: 15,
+    commissionAmountUsd: 6,
+    effectiveCommunityRevenueShareBps: 600,
+  });
+
+  const commissions: PartnerLifecycleCommission[] = [
+    {
+      commissionKey: "community_platform_fee:invoice:in_initial",
+      status: "locked",
+      commissionAmountUsd: initial.commissionAmountUsd,
+      holdUntil: purchaseAt + BUILDER_PARTNER_COMMISSION_HOLD_MS,
+      sourceProviderInvoiceId: "in_initial",
+      sourceProviderChargeId: "ch_initial",
+      reservedUsd: 0,
+      settledUsd: 0,
+      adjustmentsUsd: 0,
+    },
+  ];
+
+  const duplicateInvoiceKeys = new Set([
+    commissions[0].commissionKey,
+    "community_platform_fee:invoice:in_initial",
+  ]);
+  assert.equal(duplicateInvoiceKeys.size, 1, "provider invoice should be the durable commission idempotency key");
+  assert.deepEqual(summarizePartnerLifecycle(commissions, holdClearedAt - 1), {
+    pendingUsd: 6,
+    bufferedUsd: 0,
+    readyUsd: 0,
+    paidUsd: 0,
+    clawbackDebtUsd: 0,
+  });
+
+  commissions[0].status = "payable";
+  commissions[0].payableAt = holdClearedAt;
+  assert.deepEqual(summarizePartnerLifecycle(commissions, bufferClearedAt - 1), {
+    pendingUsd: 0,
+    bufferedUsd: 6,
+    readyUsd: 0,
+    paidUsd: 0,
+    clawbackDebtUsd: 0,
+  });
+  assert.deepEqual(summarizePartnerLifecycle(commissions, bufferClearedAt), {
+    pendingUsd: 0,
+    bufferedUsd: 0,
+    readyUsd: 6,
+    paidUsd: 0,
+    clawbackDebtUsd: 0,
+  });
+
+  const transferIdempotencyKey = "partner_payout:batch_1:partner_1";
+  assert.match(transferIdempotencyKey, /^partner_payout:[^:]+:[^:]+$/);
+  commissions[0].reservedUsd = 6;
+  assert.deepEqual(summarizePartnerLifecycle(commissions, bufferClearedAt), {
+    pendingUsd: 0,
+    bufferedUsd: 0,
+    readyUsd: 0,
+    paidUsd: 0,
+    clawbackDebtUsd: 0,
+  });
+  commissions[0].reservedUsd = 0;
+  commissions[0].settledUsd = 6;
+  assert.deepEqual(summarizePartnerLifecycle(commissions, bufferClearedAt), {
+    pendingUsd: 0,
+    bufferedUsd: 0,
+    readyUsd: 0,
+    paidUsd: 6,
+    clawbackDebtUsd: 0,
+  });
+
+  commissions[0].adjustmentsUsd = -6;
+  assert.deepEqual(summarizePartnerLifecycle(commissions, bufferClearedAt), {
+    pendingUsd: 0,
+    bufferedUsd: 0,
+    readyUsd: 0,
+    paidUsd: 6,
+    clawbackDebtUsd: 6,
+  });
+
+  const next = calculateBuilderPartnerCommunityRevenueCommission({
+    communityRevenueUsd: 100,
+    platformFeeBps: BUILDER_PARTNER_COMMUNITY_PLATFORM_FEE_BPS,
+    partnerPlatformFeeShareBps: BUILDER_PARTNER_PLATFORM_FEE_SHARE_BPS,
+  });
+  commissions.push({
+    commissionKey: "community_platform_fee:invoice:in_next",
+    status: "payable",
+    commissionAmountUsd: next.commissionAmountUsd,
+    holdUntil: holdClearedAt,
+    payableAt: holdClearedAt,
+    sourceProviderInvoiceId: "in_next",
+    sourceProviderChargeId: "ch_next",
+    reservedUsd: 0,
+    settledUsd: 0,
+    adjustmentsUsd: 0,
+  });
+  const afterDebt = summarizePartnerLifecycle(commissions, bufferClearedAt);
+  assert.equal(afterDebt.clawbackDebtUsd, 6);
+  assert.equal(afterDebt.readyUsd, 0, "carryforward partner debt should offset the next ready commission before payout");
+}
+
+function proveEndToEndPartnerLifecycleSourceContract(
+  builderPartnersSource: string,
+  gatewaySource: string,
+  appSource: string,
+  communityCommerceSource: string,
+  httpBillingSource: string,
+  operatorGatewaySource: string,
+  operatorPanelSource: string,
+  uiSource: string,
+) {
+  const attributionSource = builderPartnersSource.slice(
+    builderPartnersSource.indexOf("export const recordBuilderPartnerAttribution"),
+    builderPartnersSource.indexOf("export const createPartnerPayoutCycleInternal"),
+  );
+  const commissionProducerSource = builderPartnersSource.slice(
+    builderPartnersSource.indexOf("export async function recordCommunityRevenuePartnerCommission"),
+    builderPartnersSource.indexOf("export const recordCommunitySubscriptionInvoicePartnerCommissionInternal"),
+  );
+  const maturitySource = builderPartnersSource.slice(
+    builderPartnersSource.indexOf("export const advancePartnerCommissionsToPayableInternal"),
+    builderPartnersSource.indexOf("async function readPayoutStatus"),
+  );
+  const payoutPlannerSource = builderPartnersSource.slice(
+    builderPartnersSource.indexOf("async function readPartnerPayablePayoutEntries"),
+    builderPartnersSource.indexOf("function readPartnerPayoutCycleSummary"),
+  );
+
+  assertIncludes(
+    appSource,
+    "captureBuilderPartnerAttributionFromCurrentUrl({",
+    "Builder Partner E2E frontend attribution capture",
+  );
+  assertIncludes(
+    gatewaySource,
+    "getBusinessVisitorKey()",
+    "Builder Partner E2E anonymous visitor attribution",
+  );
+  assertIncludes(
+    gatewaySource,
+    "buildAttributionRouteLabel",
+    "Builder Partner E2E route privacy",
+  );
+  assert.doesNotMatch(
+    gatewaySource,
+    /params\.get\("affiliate"\)|params\.get\("ref"\)/,
+    "Builder Partner E2E should capture only the branded partner query parameter",
+  );
+  assertIncludes(
+    attributionSource,
+    "partnerProgramState.state !== \"active\"",
+    "Builder Partner E2E rejects paused, disabled, or otherwise locked partners",
+  );
+  assertIncludes(
+    attributionSource,
+    "self_referral_ignored",
+    "Builder Partner E2E rejects self-referrals",
+  );
+  assertIncludes(
+    attributionSource,
+    "missing_attribution_subject",
+    "Builder Partner E2E rejects anonymous records without a visitor key",
+  );
+  assertIncludes(
+    attributionSource,
+    "referred_user_already_bound",
+    "Builder Partner E2E does not let a later partner steal a bound referred creator",
+  );
+  assertIncludes(
+    attributionSource,
+    "superseded_by_new_referral",
+    "Builder Partner E2E voids unbound earlier referrals when a newer referral wins",
+  );
+  assertIncludes(
+    attributionSource,
+    "expireClosedAttributions(ctx, candidateRows, nowMs)",
+    "Builder Partner E2E expires stale attribution rows before bind decisions",
+  );
+  assertIncludes(
+    attributionSource,
+    "eligibleForCommunityRevenue",
+    "Builder Partner E2E stores whether the referred creator was already a community owner at bind time",
+  );
+  assertIncludes(
+    attributionSource,
+    "status: nextReferredUserId ? \"bound\" : \"active\"",
+    "Builder Partner E2E upgrades anonymous attribution to bound user attribution",
+  );
+
+  assertIncludes(
+    communityCommerceSource,
+    "recordCommunityRevenuePartnerCommission(ctx,",
+    "Builder Partner E2E checkout finalization emits partner commission from community revenue",
+  );
+  assertIncludes(
+    httpBillingSource,
+    "recordCommunitySubscriptionInvoicePartnerCommissionInternal",
+    "Builder Partner E2E recurring invoices emit partner commission from provider evidence",
+  );
+  assertIncludes(
+    commissionProducerSource,
+    "if (!sourceCheckoutSessionId && !sourceProviderInvoiceId) return null;",
+    "Builder Partner E2E refuses commission rows without checkout or invoice evidence",
+  );
+  assertIncludes(
+    commissionProducerSource,
+    "requireCommunityRevenueEligibility: true",
+    "Builder Partner E2E limits MVP commission to eligible referred community revenue",
+  );
+  assertIncludes(
+    commissionProducerSource,
+    "communityCreatedAt < attributionStartedAt",
+    "Builder Partner E2E blocks retroactive commission for communities created before attribution",
+  );
+  assertIncludes(
+    commissionProducerSource,
+    "community_platform_fee:invoice:${sourceProviderInvoiceId}",
+    "Builder Partner E2E uses provider invoice idempotency for recurring invoices",
+  );
+  assertIncludes(
+    commissionProducerSource,
+    "community_platform_fee:${sourceCheckoutSessionId}",
+    "Builder Partner E2E uses checkout session idempotency for initial settlement",
+  );
+  assertIncludes(
+    commissionProducerSource,
+    "patchCommissionSourceEvidence",
+    "Builder Partner E2E patches later provider evidence onto an existing commission instead of duplicating it",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "status: \"locked\"",
+    "Builder Partner E2E creates commissions inside the refund and dispute risk hold",
+  );
+
+  assertIncludes(
+    maturitySource,
+    "hasCommunityRevenueProviderEvidence(row)",
+    "Builder Partner E2E requires provider evidence before maturity",
+  );
+  assertIncludes(
+    maturitySource,
+    "holdUntil: nowMs + BUILDER_PARTNER_MISSING_EVIDENCE_RECHECK_MS",
+    "Builder Partner E2E rotates missing-evidence rows instead of starving the maturity scan",
+  );
+  assertIncludes(
+    maturitySource,
+    "status: \"payable\"",
+    "Builder Partner E2E has one maturity transition from locked to payable",
+  );
+  assertIncludes(
+    maturitySource,
+    "payableAt: nowMs",
+    "Builder Partner E2E records the payable timestamp used by payout buffer planning",
+  );
+
+  assertIncludes(
+    builderPartnersSource,
+    "recordPartnerCommissionRefundAdjustmentInternal",
+    "Builder Partner E2E refund webhook path writes adjustment ledger rows",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "recordPartnerCommissionDisputeOpenedInternal",
+    "Builder Partner E2E dispute-open path can hold unpaid commission or create post-payout debt",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "recordPartnerCommissionDisputeClosedInternal",
+    "Builder Partner E2E dispute-close path resolves risk hold, voids lost unpaid commission, or carries debt",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "capNegativeCommissionAdjustmentUsd",
+    "Builder Partner E2E caps negative adjustments to commission exposure",
+  );
+
+  assertIncludes(
+    payoutPlannerSource,
+    ".eq(\"payoutOpen\", true)",
+    "Builder Partner E2E payout planning starts from materialized open payable balance",
+  );
+  assertIncludes(
+    payoutPlannerSource,
+    ".eq(\"payoutDebt\", true)",
+    "Builder Partner E2E payout planning includes carryforward debt rows",
+  );
+  assertIncludes(
+    payoutPlannerSource,
+    "if (!stripeAccount) continue",
+    "Builder Partner E2E excludes partners without ready Stripe Connect payouts",
+  );
+  assertIncludes(
+    payoutPlannerSource,
+    "row.payableAt > args.payableCutoffAt",
+    "Builder Partner E2E excludes rows still inside the payout buffer",
+  );
+  assertIncludes(
+    payoutPlannerSource,
+    "const offsetCents = Math.min(carryforwardDebtCents, candidate.settlementCents)",
+    "Builder Partner E2E offsets refund and dispute debt before transfer planning",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "idempotencyKey: `partner_payout:${String(batchId)}:${String(plan.partner._id)}`",
+    "Builder Partner E2E transfer creation uses stable Stripe idempotency keys",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "status: \"reserved\"",
+    "Builder Partner E2E reserves payout items before Stripe execution",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "status: \"settled\"",
+    "Builder Partner E2E settles payout items only after transfer success is recorded",
+  );
+
+  assertIncludes(
+    operatorGatewaySource,
+    "builderPartners:listPartnerPayoutCyclesForOperator",
+    "Builder Partner E2E projects generated payout cycles to operators",
+  );
+  assertIncludes(
+    operatorPanelSource,
+    "Partner payout cycles",
+    "Builder Partner E2E gives operators the payout-cycle review surface",
+  );
+  assertIncludes(
+    uiSource,
+    "ready for the next payout cycle.",
+    "Builder Partner E2E shows partner-ready payout balance to the partner",
+  );
+  assertIncludes(
+    uiSource,
+    "Future payouts are reduced until prior refunds or disputes are cleared.",
+    "Builder Partner E2E explains carryforward partner debt without exposing settlement internals",
+  );
+}
+
 function provePricingFoundation(authSource: string, workspaceCreditsSource: string) {
   assert.match(
     authSource,
@@ -1656,9 +2096,20 @@ function main() {
   proveConstants();
   proveCommunityCommissionMath();
   proveAttributionRoutePrivacy();
+  proveEndToEndPartnerLifecycleBehavior();
   proveSchemaContract(schemaSource);
   proveUiContract(uiSource);
   proveAutomaticUnlockContract(builderPartnersSource, gatewaySource, appSource);
+  proveEndToEndPartnerLifecycleSourceContract(
+    builderPartnersSource,
+    gatewaySource,
+    appSource,
+    communityCommerceSource,
+    httpBillingSource,
+    operatorGatewaySource,
+    operatorPanelSource,
+    uiSource,
+  );
   proveEligibilityGateContract(
     builderPartnersSource,
     gatewaySource,
