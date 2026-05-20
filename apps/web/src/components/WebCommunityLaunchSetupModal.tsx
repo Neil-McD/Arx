@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type DragEvent, type FormEvent, type ReactNode } from "react";
 import {
+  ArrowLeft,
   BookOpen,
   Bot,
   Check,
@@ -965,8 +966,9 @@ export function WebCommunityLaunchSetupModal(
                     setWorkflowPathDraft(null);
                     setSelectedHarnessImportSourceId(null);
                   }}
+                  aria-label="Back to workflow path options"
                 >
-                  Back
+                  <ArrowLeft size={16} strokeWidth={2.3} aria-hidden="true" />
                 </button>
                 <div>
                   <span>Import source</span>

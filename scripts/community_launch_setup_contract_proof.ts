@@ -535,6 +535,16 @@ assert.match(
 );
 assert.match(
   baseCss,
+  /\.community-launch-workflow-option:hover,[\s\S]*\.community-launch-workflow-option\.selected \{[\s\S]*var\(--accent-pink\)/,
+  "launch workflow selector cards must use the same pink hover language as other launch choices",
+);
+assert.match(
+  setupModal,
+  /ArrowLeft[\s\S]*aria-label="Back to workflow path options"/,
+  "launch workflow import back control must use an icon button instead of text",
+);
+assert.match(
+  baseCss,
   /\.community-launch-harness-selector-grid \{[\s\S]*grid-template-columns: repeat\(4, minmax\(0, 1fr\)\)/,
   "launch harness selector must present the current import sources as a dedicated grid",
 );
