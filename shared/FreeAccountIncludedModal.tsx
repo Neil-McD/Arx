@@ -11,7 +11,7 @@ export function FreeAccountIncludedModal({
 }: FreeAccountIncludedModalProps) {
   if (!isOpen) return null;
 
-  const accountInfoLead = "Free accounts can create one community. Tool balance covers workspace tools, web research, and voice input.";
+  const accountInfoLead = "Free accounts can create two communities. Tool balance covers workspace tools, web research, and voice input.";
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -38,7 +38,7 @@ export function FreeAccountIncludedModal({
                 <span className="plan-price-period">/mo</span>
               </div>
               <ul className="plan-points">
-                <li>Create one community.</li>
+                <li>Create two communities.</li>
                 <li>Join and use communities.</li>
                 <li>Connect Stripe to monetize access.</li>
               </ul>

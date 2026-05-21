@@ -677,7 +677,7 @@ export function WebLandingPage(props: WebLandingPageProps) {
               <span>Polynet</span>
             </div>
             <strong>Free</strong>
-            <p>Build one community, launch your agent, and monetize access from one platform.</p>
+            <p>Build two communities, launch your agent, and monetize access from one platform.</p>
           </button>
         </div>
       </section>
@@ -693,7 +693,7 @@ export function WebLandingPage(props: WebLandingPageProps) {
           <div className="polynet-landing-offer-plan">
             <span>Free account</span>
             <ul>
-              <li>Build one community</li>
+              <li>Build two communities</li>
               <li>Join and use communities</li>
               <li>Launch an agent-powered member experience</li>
               <li>Monetize access with Stripe</li>

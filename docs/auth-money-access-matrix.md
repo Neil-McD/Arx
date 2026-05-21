@@ -12,7 +12,7 @@ Scope: canonical web runtime, community monetization, provider-funded inference,
    - no community membership
    - no paid-tool balance
 2. `authenticated free`
-   - can own one community
+   - can own two communities
    - can join and use communities when membership/entitlement exists
    - can connect Stripe and monetize paid community access
    - pays the default 15% Polynet platform fee on paid community revenue
@@ -95,7 +95,7 @@ Prompt injection is not tiered. Authenticated free and internal architect accoun
 
 ## 5) Community Money Rules
 
-1. Free authenticated users can create one community.
+1. Free authenticated users can create two communities.
 2. Community creation is limited by `max_communities`, not by requiring a new platform-plan checkout.
 3. Paid community checkout requires:
    - paid community entry policy
