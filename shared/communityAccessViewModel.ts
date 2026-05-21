@@ -56,7 +56,7 @@ export function deriveCommunityAccessCapabilities(
     canViewCommunity: canEnterCommunity,
     isOwner,
     canViewMembers: canEnterCommunity,
-    canViewSettings: canEnterCommunity,
+    canViewSettings: isOwner || isAdmin,
     canPostMessages: Boolean(access?.can_post_chat ?? access?.can_post_message),
     canManageResources,
     canModerateContent,

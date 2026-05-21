@@ -39,7 +39,6 @@ export const COMMUNITY_SETTINGS_PANES = [
   "community",
   "onboarding",
   "integrations",
-  "personal",
   "danger",
 ] as const;
 
@@ -96,8 +95,6 @@ export function parseCommunitySettingsPane(value: string | null | undefined): Co
       return "onboarding";
     case "integrations":
       return "integrations";
-    case "personal":
-      return "personal";
     case "danger":
       return "danger";
     case "community":

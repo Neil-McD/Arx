@@ -11,16 +11,22 @@ const app = read("apps/web/src/App.tsx");
 const routeLifecycle = read("apps/web/src/controllers/useWebPathRouteLifecycle.ts");
 const surfaceProjection = read("apps/web/src/controllers/buildWebCommunitySurfaceProjection.ts");
 const settingsSection = read("apps/web/src/components/WebCommunitySettingsSection.tsx");
+const accessViewModel = read("shared/communityAccessViewModel.ts");
 
-for (const pane of ["community", "onboarding", "integrations", "personal", "danger"] as const) {
+for (const pane of ["community", "onboarding", "integrations", "danger"] as const) {
   assert.match(navigation, new RegExp(`"${pane}"`), `navigation contract missing ${pane} pane slug`);
   assert.match(settingsSection, new RegExp(`${pane}`), `settings UI missing ${pane} pane`);
 }
 
 assert.match(
   navigation,
-  /export const COMMUNITY_SETTINGS_PANES = \[[\s\S]*"community"[\s\S]*"onboarding"[\s\S]*"integrations"[\s\S]*"personal"[\s\S]*"danger"[\s\S]*\] as const/,
+  /export const COMMUNITY_SETTINGS_PANES = \[[\s\S]*"community"[\s\S]*"onboarding"[\s\S]*"integrations"[\s\S]*"danger"[\s\S]*\] as const/,
   "community settings panes must be a shared slug union",
+);
+assert.doesNotMatch(
+  navigation,
+  /"personal"/,
+  "personal must not be a community settings pane; personal profile/account controls belong in global settings",
 );
 assert.match(
   navigation,
@@ -117,10 +123,31 @@ assert.match(
   /onSelectPane\(availableSettingsPanes\[0\]!, \{ replace: true \}\)/,
   "invalid or unauthorized pane fallback must replace the current URL",
 );
+assert.match(
+  settingsSection,
+  /Only community owners and admins can manage settings\./,
+  "non-managers must not see member-level community settings tabs",
+);
+assert.match(
+  settingsSection,
+  /const availableSettingsPanes = canManageCommunitySettings \? ownerSettingsPanes : \[\]/,
+  "community settings panes must be owner/admin-only",
+);
+assert.doesNotMatch(
+  settingsSection,
+  /memberSettingsPanes|CommunityPersonalSettingsSection|selectedSettingsPane === "personal"/,
+  "member/personal community settings panes must be deleted",
+);
 assert.doesNotMatch(
   settingsSection,
   /useState<CommunitySettingsPane>/,
   "settings section must not keep pane selection in local component state",
 );
 
-console.log("PASS: community settings panes are route-backed and refresh-safe.");
+assert.match(
+  accessViewModel,
+  /canViewSettings: isOwner \|\| isAdmin/,
+  "community settings nav visibility must be owner/admin-only",
+);
+
+console.log("PASS: community settings panes are route-backed, manager-only, and refresh-safe.");

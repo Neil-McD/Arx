@@ -183,61 +183,10 @@ function buildPersonalOptInInput(args: {
   };
 }
 
-function CommunityPersonalSettingsSection({
-  state,
-  actions,
-  canLeaveCommunity,
-  title = "Personal",
-  description,
-}: SharedSettingsProps & {
-  canLeaveCommunity: boolean;
-  title?: string;
-  description?: string;
-}) {
-  return (
-    <div className="settings-section">
-      <div className="settings-section-title">{title}</div>
-      {description ? <div className="settings-section-desc">{description}</div> : null}
-      <div className="model-list">
-        <label className="model-toggle">
-          <span>Mute community</span>
-          <input
-            type="checkbox"
-            checked={state.communityMemberMuted}
-            disabled={state.isLoadingCommunityMemberSettings || state.isLeavingCommunity}
-            onChange={(event) => void actions.handleToggleCommunityMute(event.target.checked)}
-          />
-        </label>
-      </div>
-      <div className="model-note">
-        Muted communities won't send notifications (when notifications ship).
-      </div>
-      {canLeaveCommunity ? (
-        <div className="create-community-actions" style={{ marginTop: 12 }}>
-          <button
-            className="danger"
-            type="button"
-            disabled={state.isLeavingCommunity || state.isLoadingCommunityMemberSettings}
-            onClick={() => void actions.handleLeaveCommunity()}
-          >
-            {state.isLeavingCommunity ? "Leaving…" : "Leave community"}
-          </button>
-        </div>
-      ) : null}
-      {state.communityMemberSettingsError ? (
-        <div className="auth-error" style={{ marginTop: 10 }}>
-          {state.communityMemberSettingsError}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
 const COMMUNITY_SETTINGS_PANE_LABELS: Record<CommunitySettingsPane, string> = {
   community: "Community",
   onboarding: "Onboarding",
   integrations: "Integrations",
-  personal: "Personal",
   danger: "Danger",
 };
 
@@ -977,18 +926,11 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
     state,
     actions,
   } = props;
-  const isMemberSettingsLayer = communitySettingsLayer === "member";
   const isOwnerSettingsLayer = communitySettingsLayer === "owner";
-  const canLeaveCommunity = communitySettingsLayer !== "owner";
   const ownerSettingsPanes: CommunitySettingsPane[] = canDeleteCommunity
-    ? ["community", "onboarding", "integrations", "personal", "danger"]
-    : ["community", "onboarding", "integrations", "personal"];
-  const memberSettingsPanes: CommunitySettingsPane[] = ["integrations", "personal"];
-  const availableSettingsPanes = canManageCommunitySettings
-    ? ownerSettingsPanes
-    : isMemberSettingsLayer
-      ? memberSettingsPanes
-      : [];
+    ? ["community", "onboarding", "integrations", "danger"]
+    : ["community", "onboarding", "integrations"];
+  const availableSettingsPanes = canManageCommunitySettings ? ownerSettingsPanes : [];
   const selectedSettingsPane = availableSettingsPanes.includes(activePane)
     ? activePane
     : availableSettingsPanes[0] ?? "community";
@@ -1028,8 +970,8 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
             Sign in
           </button>
         </div>
-      ) : !canViewActiveCommunitySettings ? (
-        <div className="chat-empty">Join this community to view settings.</div>
+      ) : !canViewActiveCommunitySettings || !canManageCommunitySettings ? (
+        <div className="chat-empty">Only community owners and admins can manage settings.</div>
       ) : canManageCommunitySettings ? (
         <>
           <div className="create-community-form community-settings-form">
@@ -1092,42 +1034,8 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
                 integrations={communityIntegrations}
               />
             ) : null}
-            {selectedSettingsPane === "personal" ? (
-              <CommunityPersonalSettingsSection
-                state={state}
-                actions={actions}
-                canLeaveCommunity={canLeaveCommunity}
-              />
-            ) : null}
             {selectedSettingsPane === "danger" && canDeleteCommunity ? (
               <CommunityDangerZoneSection state={state} actions={actions} />
-            ) : null}
-          </div>
-        </>
-      ) : isMemberSettingsLayer ? (
-        <>
-          <div className="create-community-form community-settings-form">
-            <CommunitySettingsPaneSwitcher
-              activePane={selectedSettingsPane}
-              panes={memberSettingsPanes}
-              onSelectPane={onSelectPane}
-            />
-            {selectedSettingsPane === "integrations" ? (
-              <CommunityIntegrationsSettingsSection
-                canManage={false}
-                hasSession={hasSession}
-                requireSignIn={requireSignIn}
-                integrations={communityIntegrations}
-              />
-            ) : null}
-            {selectedSettingsPane === "personal" ? (
-              <CommunityPersonalSettingsSection
-                state={state}
-                actions={actions}
-                canLeaveCommunity={canLeaveCommunity}
-                title="Personal settings"
-                description="Manage your relationship with this community."
-              />
             ) : null}
           </div>
         </>
