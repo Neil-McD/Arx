@@ -114,6 +114,7 @@ import {
   type CloudProfileHandleAvailability,
   upsertCloudProfileDetail,
 } from "../../../shared/cloudProfilesGateway";
+import { formatProfileMutationError } from "../../../shared/profileMutationErrors";
 import {
   isAccountSetupStatusIdentityComplete,
   type AccountSetupStatus,
@@ -572,22 +573,6 @@ type UserMemorySettings = {
   agent_name: string;
   agent_soul: string;
 };
-
-function formatProfileMutationError(error: unknown, fallback: string): string {
-  const message = error instanceof Error ? error.message : String(error ?? "");
-  if (message.includes("profile_handle_taken")) return "That handle is already taken.";
-  if (message.includes("profile_handle_reserved")) return "That handle is reserved.";
-  if (message.includes("profile_handle_too_short")) return "Handle must be at least 3 characters.";
-  if (message.includes("profile_handle_too_long")) return "Handle must be 32 characters or less.";
-  if (message.includes("profile_handle_invalid_format")) {
-    return "Handle can use lowercase letters, numbers, underscores, and hyphens.";
-  }
-  if (message.includes("profile_avatar_invalid")) return "Upload a valid profile photo and try again.";
-  if (message.includes("profile_link_invalid_youtube")) return "Enter a valid YouTube profile URL.";
-  if (message.includes("profile_link_invalid_x")) return "Enter a valid X profile URL.";
-  if (message.includes("profile_link_invalid_instagram")) return "Enter a valid Instagram profile URL.";
-  return message || fallback;
-}
 
 type MobileOverlay = "agent" | "community" | "community_selector";
 

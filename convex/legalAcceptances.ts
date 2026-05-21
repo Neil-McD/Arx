@@ -3,11 +3,20 @@ import {
   PRIVACY_AI_DATA_POLICY_DOCUMENT,
   TERMS_OF_SERVICE_DOCUMENT,
 } from "../shared/legalDocuments";
+import { ConvexError } from "convex/values";
 
 type LegalAcceptanceRow = {
   documentKey?: string;
   documentVersion?: string;
 };
+
+type PlatformLegalAcceptanceErrorCode =
+  | "terms_of_service_version_stale"
+  | "privacy_policy_version_stale";
+
+function throwPlatformLegalAcceptanceError(code: PlatformLegalAcceptanceErrorCode): never {
+  throw new ConvexError({ code, reason: code });
+}
 
 function hasLegalAcceptance(
   rows: LegalAcceptanceRow[],
@@ -72,10 +81,10 @@ export async function recordCurrentPlatformLegalAcceptance(ctx: any, args: {
   acceptedAt: number;
 }) {
   if (args.termsVersion !== TERMS_OF_SERVICE_DOCUMENT.version) {
-    throw new Error("terms_of_service_version_stale");
+    throwPlatformLegalAcceptanceError("terms_of_service_version_stale");
   }
   if (args.privacyPolicyVersion !== PRIVACY_AI_DATA_POLICY_DOCUMENT.version) {
-    throw new Error("privacy_policy_version_stale");
+    throwPlatformLegalAcceptanceError("privacy_policy_version_stale");
   }
   await recordLegalAcceptanceIfMissing(ctx, {
     userId: args.userId,

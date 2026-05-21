@@ -1,5 +1,5 @@
 import { mutation, query } from "./_generated/server";
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { ensureAuthenticatedActor, resolveUserIdForAuthenticatedRequest } from "./authActor";
 import { validateProfileHandle } from "../shared/profileHandle";
 import { maybeDeleteStorageAsset } from "./communityCore";
@@ -17,6 +17,25 @@ import {
   type AccountSetupProfileDetailRow as ProfileDetailRow,
   type AccountSetupUserRow as UserRow,
 } from "./accountSetupCore";
+
+type ProfileMutationErrorCode =
+  | "profile_avatar_invalid"
+  | "profile_handle_taken"
+  | "profile_handle_empty"
+  | "profile_handle_reserved"
+  | "profile_handle_too_short"
+  | "profile_handle_too_long"
+  | "profile_handle_invalid_format"
+  | "profile_forbidden"
+  | "profile_link_invalid_youtube"
+  | "profile_link_invalid_x"
+  | "profile_link_invalid_instagram"
+  | "platform_legal_versions_required"
+  | "user_not_found";
+
+function throwProfileMutationError(code: ProfileMutationErrorCode): never {
+  throw new ConvexError({ code, reason: code });
+}
 
 function normalizeSubject(value: unknown): string {
   return String(value ?? "").trim();
@@ -43,7 +62,7 @@ function normalizeProfileSocialLink(kind: SocialProfileKind, raw: unknown): stri
   const trimmed = String(raw ?? "").trim();
   if (!trimmed) return "";
   const normalized = normalizeSocialProfileUrl(kind, trimmed);
-  if (!normalized) throw new Error(`profile_link_invalid_${kind}`);
+  if (!normalized) throwProfileMutationError(`profile_link_invalid_${kind}`);
   return normalized;
 }
 
@@ -72,7 +91,7 @@ async function assertProfileAvatarStorageResolvable(ctx: any, storageId: unknown
   } catch {
     // Normalize storage errors into the profile mutation contract.
   }
-  throw new Error("profile_avatar_invalid");
+  throwProfileMutationError("profile_avatar_invalid");
 }
 
 async function findUserBySubject(ctx: any, authSubject: string): Promise<UserRow | null> {
@@ -144,7 +163,7 @@ async function assertHandleAvailable(ctx: any, normalizedHandle: string, userId:
     .withIndex("by_normalizedHandle", (q: any) => q.eq("normalizedHandle", normalizedHandle))
     .first();
   if (existing && existing._id !== userId) {
-    throw new Error("profile_handle_taken");
+    throwProfileMutationError("profile_handle_taken");
   }
 }
 
@@ -261,11 +280,11 @@ export const resolveOnboardingProfileDetail = mutation({
     });
     const requestedSubject = normalizeSubject(args.userId ?? actor.authSubject);
     if (requestedSubject !== actor.authSubject) {
-      throw new Error("profile_forbidden");
+      throwProfileMutationError("profile_forbidden");
     }
 
     const user = (await ctx.db.get(actor.dbUserId)) as UserRow | null;
-    if (!user) throw new Error("user_not_found");
+    if (!user) throwProfileMutationError("user_not_found");
 
     const existingDetail = (await ctx.db
       .query("userProfileDetails")
@@ -286,7 +305,7 @@ export const getMyAccountSetupStatus = query({
       authSubject: args.authSubject ?? null,
     });
     const user = (await ctx.db.get(userId)) as UserRow | null;
-    if (!user) throw new Error("user_not_found");
+    if (!user) throwProfileMutationError("user_not_found");
     const detail = (await ctx.db
       .query("userProfileDetails")
       .withIndex("by_user", (q: any) => q.eq("userId", userId))
@@ -343,7 +362,7 @@ export const upsertProfileDetail = mutation({
     });
     const requestedSubject = normalizeSubject(args.userId ?? actor.authSubject);
     if (requestedSubject !== actor.authSubject) {
-      throw new Error("profile_forbidden");
+      throwProfileMutationError("profile_forbidden");
     }
 
     const userPatch: Record<string, unknown> = { updatedAt: nowMs };
@@ -357,7 +376,7 @@ export const upsertProfileDetail = mutation({
         userPatch.normalizedHandle = undefined;
       } else {
         const handle = validateProfileHandle(rawHandle);
-        if (!handle.ok) throw new Error(`profile_handle_${handle.reason}`);
+        if (!handle.ok) throwProfileMutationError(`profile_handle_${handle.reason}`);
         await assertHandleAvailable(ctx, handle.normalizedHandle, actor.dbUserId);
         userPatch.handle = handle.handle;
         userPatch.normalizedHandle = handle.normalizedHandle;
@@ -379,7 +398,7 @@ export const upsertProfileDetail = mutation({
     const privacyPolicyVersion = normalizeOptionalText(args.privacyPolicyVersion);
     if (termsOfServiceVersion || privacyPolicyVersion) {
       if (!termsOfServiceVersion || !privacyPolicyVersion) {
-        throw new Error("platform_legal_versions_required");
+        throwProfileMutationError("platform_legal_versions_required");
       }
       await recordCurrentPlatformLegalAcceptance(ctx, {
         userId: actor.dbUserId,
@@ -471,7 +490,7 @@ export const upsertProfileDetail = mutation({
     const refreshedUser = (await ctx.db.get(actor.dbUserId)) as UserRow | null;
     const detail = await findProfileDetailByUserId(ctx, actor.dbUserId);
 
-    if (!refreshedUser) throw new Error("user_not_found");
+    if (!refreshedUser) throwProfileMutationError("user_not_found");
 
     return await mapProfileDetailWithSetup(ctx, refreshedUser, detail);
   },

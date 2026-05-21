@@ -1,6 +1,7 @@
 import { useCallback, useRef, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
 import { resolveUsableSession, type EnsureSessionFn } from "./ensureUsableSession";
 import { resolveAuthSubject } from "./authSession";
+import { formatProfileMutationError } from "./profileMutationErrors";
 import type { SocialProfileLinks } from "./socialProfileLinks";
 import {
   type AnalyticsMetricSeriesLike,
@@ -104,22 +105,6 @@ type UseCommunityAdminControllerArgs<
   setCommunityAnalyticsSummary: Dispatch<SetStateAction<AnalyticsSummaryLike>>;
   setCommunityAnalyticsSeries: Dispatch<SetStateAction<AnalyticsMetricSeriesLike>>;
 };
-
-function formatProfileSaveError(error: unknown, fallback: string): string {
-  const message = error instanceof Error ? error.message : String(error ?? "");
-  if (message.includes("profile_handle_taken")) return "That handle is already taken.";
-  if (message.includes("profile_handle_reserved")) return "That handle is reserved.";
-  if (message.includes("profile_handle_too_short")) return "Handle must be at least 3 characters.";
-  if (message.includes("profile_handle_too_long")) return "Handle must be 32 characters or less.";
-  if (message.includes("profile_handle_invalid_format")) {
-    return "Handle can use lowercase letters, numbers, underscores, and hyphens.";
-  }
-  if (message.includes("profile_avatar_invalid")) return "Upload a valid profile photo and try again.";
-  if (message.includes("profile_link_invalid_youtube")) return "Enter a valid YouTube profile URL.";
-  if (message.includes("profile_link_invalid_x")) return "Enter a valid X profile URL.";
-  if (message.includes("profile_link_invalid_instagram")) return "Enter a valid Instagram profile URL.";
-  return message || fallback;
-}
 
 export function useCommunityAdminController<
   SessionT extends SessionLike,
@@ -447,7 +432,7 @@ export function useCommunityAdminController<
       current.setProfileSaveSuccess(true);
       current.profileSaveTimeoutRef.current = window.setTimeout(() => current.setProfileSaveSuccess(false), 2000);
     } catch (error) {
-      current.setProfileSaveError(formatProfileSaveError(error, current.profileSaveFailureMessage));
+      current.setProfileSaveError(formatProfileMutationError(error, current.profileSaveFailureMessage));
     } finally {
       current.setIsSavingProfile(false);
     }
