@@ -12,7 +12,7 @@ export const COMMUNITY_WORKFLOW_EXPORT_PACKAGE_LIMITS = {
   maxTotalTextBytes: 5 * 1024 * 1024,
   maxJsonChars: 400_000,
   maxSkillBodyChars: 40_000,
-  maxSkills: 50,
+  maxSkills: 30,
   maxMcpServers: 100,
 };
 

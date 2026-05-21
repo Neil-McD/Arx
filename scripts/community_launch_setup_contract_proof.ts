@@ -132,6 +132,69 @@ assert.equal(
     ?.proposedInstructionsMd,
   "# Frontend Skill\n\nUse this complete standalone behavior to review and improve frontend work in PolyNet communities.",
 );
+
+const rankedSkillFiles: Record<string, string> = {
+  "manifest.json": JSON.stringify({
+    schemaVersion: "polynet_workflow_export_v1",
+    sourceHarness: "Codex",
+    summary: { name: "Ranked Codex skill surface", purpose: "Import the most relevant actual skills" },
+    scanSummary: {
+      searchedLocations: ["~/.codex/skills", "~/.codex/plugins/cache"],
+      skillSearchLocations: ["~/.codex/skills/**/SKILL.md", "~/.codex/plugins/cache/**/skills/**/SKILL.md"],
+      skillLikeItemsSeen: 85,
+      selectedSkillCandidates: 30,
+      packagedSkillLimit: 30,
+      skippedSkillCandidates: [{ reason: "package_skill_cutoff", count: 55 }],
+      completenessConfidence: "high",
+    },
+  }),
+};
+for (let index = 0; index < 30; index += 1) {
+  const slug = `codex-skill-${index + 1}`;
+  rankedSkillFiles[`skills/${slug}/SKILL.md`] =
+    `# Codex Skill ${index + 1}\n\nUse this actual readable harness skill file as a review candidate for PolyNet workflow import.`;
+  rankedSkillFiles[`skills/${slug}/metadata.json`] = JSON.stringify({
+    name: `Codex Skill ${index + 1}`,
+    originKind: index < 2 ? "existing_skill_file" : "plugin_skill",
+    sourcePath: index < 2
+      ? `/Users/neilmcdevitt/.codex/skills/${slug}/SKILL.md`
+      : `/Users/neilmcdevitt/.codex/plugins/cache/plugin/skills/${slug}/SKILL.md`,
+    bodyExtraction: "copied_exact",
+    isActualHarnessSkill: true,
+    shouldDefaultImport: index < 2,
+    importRisk: index < 2 ? "low" : "medium",
+  });
+}
+const rankedWorkflowExportPackage = await parseCommunityWorkflowExportPackage(
+  buildWorkflowExportZip(rankedSkillFiles),
+  {
+    communityId: "community_123",
+    builderUserId: "user_123",
+    sourceHarness: "Codex",
+    sourceFilename: "polynet-workflow-export.zip",
+  },
+);
+assert.equal(rankedWorkflowExportPackage.summary.skill_count, 30);
+await assert.rejects(
+  () =>
+    parseCommunityWorkflowExportPackage(
+      buildWorkflowExportZip({
+        ...rankedSkillFiles,
+        "skills/extra/SKILL.md":
+          "# Extra Skill\n\nThis extra actual skill should exceed the first-version PolyNet workflow import package cap.",
+        "skills/extra/metadata.json": JSON.stringify({
+          name: "Extra Skill",
+          originKind: "plugin_skill",
+          sourcePath: "/Users/neilmcdevitt/.codex/plugins/cache/plugin/skills/extra/SKILL.md",
+          bodyExtraction: "copied_exact",
+          isActualHarnessSkill: true,
+          shouldDefaultImport: false,
+        }),
+      }),
+      { communityId: "community_123", builderUserId: "user_123", sourceHarness: "Codex" },
+    ),
+  /workflow_export_too_many_skills/,
+);
 await assert.rejects(
   () =>
     parseCommunityWorkflowExportPackage(
@@ -721,6 +784,31 @@ assert.match(
   workflowImportPrompt,
   /getCommunityWorkflowImportHarnessProfile[\s\S]*Actual skill files first:[\s\S]*originKind[\s\S]*bodyExtraction[\s\S]*isActualHarnessSkill[\s\S]*shouldDefaultImport/,
   "launch workflow import prompt must be driven by source-specific harness profiles and preserve skill provenance fields",
+);
+assert.match(
+  workflowImportPrompt,
+  /act like the source-harness operator[\s\S]*starting map[\s\S]*If this harness stores skills[\s\S]*somewhere else, discover those locations/,
+  "launch workflow import prompt must recruit the source harness as an intelligent scanner instead of treating profile paths as exhaustive",
+);
+assert.match(
+  workflowImportPrompt,
+  /Do whatever safe read-only inspection is needed[\s\S]*plugin manifests[\s\S]*package\/plugin cache folders[\s\S]*Do not exclude plugin\/cache\/system skills solely because they are not user-owned/,
+  "launch workflow import prompt must tell the source harness to find and package real plugin/cache/system skill files for review",
+);
+assert.match(
+  workflowImportPrompt,
+  /Skill ranking and cutoff:[\s\S]*Package the top 20 actual skills[\s\S]*up to 30 actual skills[\s\S]*Do not package a skill merely because it exists[\s\S]*package_skill_cutoff/,
+  "launch workflow import prompt must rank discovered actual skills and cap the first package at 20 to 30 high-signal skills",
+);
+assert.match(
+  workflowImportPrompt,
+  /Do not write derived or rewritten Markdown into skills\/<slug>\/SKILL\.md[\s\S]*skills folder is for complete actual harness skill files only/,
+  "launch workflow import prompt must keep markdown-derived behavior out of packaged skill files",
+);
+assert.match(
+  workflowExportPackage,
+  /maxFiles: 100[\s\S]*maxSkills: 30/,
+  "launch workflow export parser must enforce the first-version 30-skill package cap",
 );
 assert.match(
   workflowImportHarnessProfiles,

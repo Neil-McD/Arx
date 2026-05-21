@@ -124,8 +124,8 @@ export const COMMUNITY_WORKFLOW_IMPORT_HARNESS_PROFILES: readonly CommunityWorkf
     ],
     repositorySignals: GENERIC_REPOSITORY_SIGNALS,
     exportRules: [
-      "User/project skills can be copied when the full SKILL.md is present.",
-      "Bundled or curated plugin skills should be referenced unless they are clearly user-owned and exportable.",
+      "User/project skills should be copied when the full SKILL.md is present and safe.",
+      "System, bundled, plugin, and curated skills should also be copied when the full SKILL.md is readable and safe, but mark originKind as plugin_skill or existing_skill_file, importRisk as medium or unknown when appropriate, and shouldDefaultImport as false unless clearly user-owned/exportable.",
       "AGENTS.md is repo instruction context; export it as a markdown decision unless it is a portable standalone skill.",
     ],
     exclusionRules: GENERIC_EXCLUSION_RULES,
@@ -175,7 +175,7 @@ export const COMMUNITY_WORKFLOW_IMPORT_HARNESS_PROFILES: readonly CommunityWorkf
     repositorySignals: GENERIC_REPOSITORY_SIGNALS,
     exportRules: [
       "OpenClaw channel adapters and gateway credentials are runtime state; do not export them.",
-      "OpenClaw plugin skills are importable only when the full SKILL.md file is visible and user-owned or explicitly exportable.",
+      "OpenClaw plugin skills should be copied when the full SKILL.md file is visible and safe, with plugin provenance and shouldDefaultImport false unless clearly user-owned/exportable.",
       "Imported bundles from Claude, Codex, or Cursor should preserve their original source path and originKind.",
     ],
     exclusionRules: [
