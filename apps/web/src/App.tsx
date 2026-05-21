@@ -79,6 +79,7 @@ import { useWebUserPlatformSkillsController } from "./controllers/useWebUserPlat
 import {
   removePersonalMountFromEffectiveMcpApps,
 } from "../../../shared/effectiveMcpApps";
+import { buildEffectiveSkills } from "../../../shared/effectiveSkills";
 import { useWebWorkspaceProjectStateController } from "./controllers/useWebWorkspaceProjectStateController";
 import { useWebWorkspaceModelStateController } from "./controllers/useWebWorkspaceModelStateController";
 import { useWebWorkspaceSurfaceController } from "./controllers/useWebWorkspaceSurfaceController";
@@ -3720,6 +3721,24 @@ export default function App() {
     [detachCommunitySkill, reloadEffectiveSkills],
   );
 
+  const effectiveSkillsForSettings = useMemo(() => {
+    if (!effectiveSkillsError) return effectiveSkills;
+    return buildEffectiveSkills({
+      personalSkills: userPlatformSkills,
+      communitySkills: communitySkillAttachments,
+    });
+  }, [
+    communitySkillAttachments,
+    effectiveSkills,
+    effectiveSkillsError,
+    userPlatformSkills,
+  ]);
+
+  const effectiveSkillsErrorForSettings =
+    effectiveSkillsError && effectiveSkillsForSettings.length === 0
+      ? effectiveSkillsError
+      : null;
+
   const {
     loadCommunityFunnelConfig,
     handleSaveCommunityFunnel,
@@ -4908,6 +4927,7 @@ export default function App() {
     activeView,
     communityTab,
     session,
+    settingsPage,
     activeCommunityId,
     activeCommunityAccess?.can_enter_community,
     activeCommunityAccess?.can_view,
@@ -5025,7 +5045,10 @@ export default function App() {
   useEffect(() => {
     const shouldLoadCommunitySkills =
       (activePage === "community" && communityTab === "ai_agent") ||
-      activePage === "discover";
+      activePage === "discover" ||
+      (activePage === "workspace" &&
+        activeView === "settings" &&
+        settingsPage === "integrations");
     if (!shouldLoadCommunitySkills) return;
     if (!session || !activeCommunityId || !canManageMembersActiveCommunity) {
       clearCommunitySkillAttachments();
@@ -5035,6 +5058,7 @@ export default function App() {
     void loadCommunitySkillAttachments(activeCommunityId, session);
   }, [
     activePage,
+    activeView,
     communityTab,
     session,
     activeCommunityId,
@@ -8475,9 +8499,9 @@ export default function App() {
       effectiveMcpApps,
       isLoadingEffectiveMcpApps,
       effectiveMcpAppsError,
-      effectiveSkills,
+      effectiveSkills: effectiveSkillsForSettings,
       isLoadingEffectiveSkills,
-      effectiveSkillsError,
+      effectiveSkillsError: effectiveSkillsErrorForSettings,
       isLoadingUserPlatformAppMounts,
       userPlatformAppMountError,
       userPlatformAppMutationError,
@@ -9199,7 +9223,7 @@ export default function App() {
         navigateTo(buildAppRoutePath({
           page: "docs",
           view: "home",
-          settingsPage,
+    settingsPage,
           communitySlug: null,
           communityTab: "chat",
           discoverTab: discoverActiveTab,
