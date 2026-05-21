@@ -7522,6 +7522,7 @@ export default function App() {
         loadCommunityAppMounts(community.id, session),
         loadCommunitySkillAttachments(community.id, session),
         loadOwnedSkillPackages(session),
+        reloadEffectiveMcpApps(),
         refreshActiveCommunityLaunchSetupStatus(),
       ]);
       return {

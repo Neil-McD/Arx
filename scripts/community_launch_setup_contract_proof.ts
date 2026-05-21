@@ -1264,6 +1264,11 @@ assert.match(
   /handleStartCommunityLaunchWorkflowImport[\s\S]*currentLedgerJson: result\.current_ledger_json[\s\S]*handleLoadCommunityLaunchWorkflowImport[\s\S]*currentLedgerJson: result\.current_ledger_json[\s\S]*handleApplyCommunityLaunchWorkflowImport[\s\S]*applyCloudCommunityWorkflowImportReview[\s\S]*onApplyWorkflowImport=\{handleApplyCommunityLaunchWorkflowImport\}/,
   "app shell must pass sanitized workflow import ledger data into the review screen and wire the real apply path",
 );
+assert.match(
+  appShell,
+  /handleApplyCommunityLaunchWorkflowImport[\s\S]*loadCommunityAppMounts\(community\.id, session\)[\s\S]*loadCommunitySkillAttachments\(community\.id, session\)[\s\S]*reloadEffectiveMcpApps\(\)/,
+  "workflow import apply must refresh canonical community rows and the effective harness integrations surface",
+);
 assert.doesNotMatch(
   setupModal,
   /title="CLAW"|>CLAW<|>OC<|>H</,
