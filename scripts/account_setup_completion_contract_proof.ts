@@ -49,6 +49,9 @@ for (const marker of [
   assert.ok(accountSetup.includes(marker), `account setup model missing ${marker}`);
 }
 assert.match(accountSetup, /export function buildAccountSetupStatus/, "setup completion must be derived by one helper");
+assert.match(accountSetup, /export function getFirstIncompleteAccountSetupStep/, "setup model must expose the first incomplete step");
+assert.match(accountSetup, /export function formatAccountSetupMissingGuidance/, "setup model must expose precise missing-setup guidance");
+assert.match(accountSetup, /Connect ChatGPT or an OpenAI API key to finish account setup\./, "inference-only setup guidance must name the exact missing requirement");
 assert.doesNotMatch(accountSetup, /"direction"/, "account setup must not include a direction step");
 assert.match(accountSetup, /validateProfileHandle\(input\.handle\)\.ok/, "profile setup handle completion must use the canonical validator");
 assert.match(accountSetup, /missing\.push\("handle"\)/, "profile setup must require handle");
@@ -126,8 +129,15 @@ assert.match(onboardingPage, /onFinishOnboarding/, "onboarding agent step must f
 assert.doesNotMatch(onboardingPage, /Direction|onBuildCommunity|onDiscoverCommunity|polynet-onboarding-direction/, "onboarding must not expose a direction step");
 assert.doesNotMatch(onboardingPage, /DEFAULT_AGENT_PERSONALITY_PROMPT_TEXT/, "onboarding must not default-select a personality preset");
 assert.match(onboardingPage, /agentNameDraft\.trim\(\)\.length > 0 && agentSoulDraft\.trim\(\)\.length > 0/, "onboarding agent finish must require an explicit personality selection");
+assert.match(onboardingPage, /getFirstIncompleteAccountSetupStep/, "onboarding finish should route users to the exact missing setup step");
+assert.match(onboardingPage, /const setupAfterSave = await props\.onSaveAgent/, "onboarding finish must use the refreshed setup status returned by agent save");
+assert.match(onboardingPage, /formatAccountSetupMissingGuidance\(setupStatus\)/, "onboarding finish must not format guidance from stale pre-save status");
+assert.match(onboardingPage, /polynet-onboarding-guidance/, "onboarding setup blockers should render as guidance, not red server errors");
 assert.match(app, /async function finishOnboarding/, "app shell must finish account onboarding without a direction choice");
 assert.match(app, /completeOnboarding: true/, "finish flow must mark onboarding complete explicitly");
+assert.match(app, /formatAccountSetupMissingGuidance\(latestSetup\)/, "finish flow must use precise canonical missing-setup guidance");
+assert.doesNotMatch(app, /Finish profile, inference, and agent setup to continue\./, "finish flow must not use stale generic missing-setup copy");
+assert.match(app, /saveUserMemorySettingsAndRefreshSetup[\s\S]*Promise<AccountSetupStatus \| null>[\s\S]*return await refreshAccountSetupStatus\(\)/, "agent save must return refreshed account setup status");
 assert.doesNotMatch(app, /onboardingDirection: destination|completeOnboarding\("build_community"|completeOnboarding\("discover_community"/, "finish flow must not store a direction choice");
 assert.match(setupCard, /Finish account setup/, "workspace setup card must replace provider-only nudge");
 assert.match(workspaceLandingProjection, /WebAccountSetupCard/, "workspace empty state must render the account setup card");

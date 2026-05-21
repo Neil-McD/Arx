@@ -3166,6 +3166,13 @@ body {
   font-size: 13px;
 }
 
+.polynet-onboarding-guidance {
+  margin: 0;
+  color: color-mix(in srgb, var(--text-secondary) 82%, var(--accent-primary, #ff4899));
+  font-size: 13px;
+  font-weight: 750;
+}
+
 .polynet-onboarding-success {
   margin: 0;
   color: var(--accent-success, #66b786);

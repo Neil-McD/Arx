@@ -55,6 +55,13 @@ function hasText(value: unknown): boolean {
   return String(value ?? "").trim().length > 0;
 }
 
+function formatList(items: string[]): string {
+  if (items.length === 0) return "";
+  if (items.length === 1) return items[0];
+  if (items.length === 2) return `${items[0]} and ${items[1]}`;
+  return `${items.slice(0, -1).join(", ")}, and ${items[items.length - 1]}`;
+}
+
 export function getAccountSetupIdentityMissingFields(
   input: Pick<AccountSetupStatusInput, "displayName" | "handle" | "avatarUrl" | "avatarStorageId" | "hasAcceptedPlatformLegal">,
 ): AccountSetupMissing[] {
@@ -119,4 +126,39 @@ export function buildAccountSetupStatus(input: AccountSetupStatusInput): Account
     missing,
     steps,
   };
+}
+
+export function getFirstIncompleteAccountSetupStep(
+  status: AccountSetupStatus | null | undefined,
+): Exclude<AccountSetupStep, "complete"> | null {
+  return status?.steps.find((step) => !step.completed)?.step ?? null;
+}
+
+export function formatAccountSetupMissingGuidance(status: AccountSetupStatus | null | undefined): string {
+  if (!status || status.completed || status.missing.length === 0) return "Account setup is complete.";
+
+  if (status.missing.length === 1 && status.missing[0] === "inference_provider") {
+    return "Connect ChatGPT or an OpenAI API key to finish account setup.";
+  }
+
+  if (status.missing.length === 1 && status.missing[0] === "platform_legal") {
+    return "Agree to the Terms of Service and acknowledge the Privacy & AI Data Policy to finish account setup.";
+  }
+
+  const incompleteSteps = status.steps
+    .filter((step) => !step.completed)
+    .map((step) => {
+      if (step.step === "identity") return "profile";
+      if (step.step === "inference") return "inference";
+      return "agent";
+    });
+
+  if (incompleteSteps.length === 1) {
+    const step = incompleteSteps[0];
+    if (step === "profile") return "Finish your profile to continue.";
+    if (step === "agent") return "Give your agent a name to finish account setup.";
+    return "Connect an inference provider to finish account setup.";
+  }
+
+  return `Finish ${formatList(incompleteSteps)} setup to continue.`;
 }

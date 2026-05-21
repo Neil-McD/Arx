@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useState, type DragEvent } from "react";
 import { Bot, Check, CircleUserRound, PlugZap, X } from "lucide-react";
-import type { AccountSetupStatus, AccountSetupStep } from "../../../../shared/accountSetup";
+import {
+  formatAccountSetupMissingGuidance,
+  getFirstIncompleteAccountSetupStep,
+  type AccountSetupStatus,
+  type AccountSetupStep,
+} from "../../../../shared/accountSetup";
 import { renderMarkdown } from "../../../../shared/markdownUi";
 import { normalizeProfileHandle } from "../../../../shared/profileHandle";
 import type { SocialProfileKind, SocialProfileLinks } from "../../../../shared/socialProfileLinks";
@@ -69,7 +74,7 @@ type WebOnboardingPageProps = {
   agentName: string;
   agentSoul: string;
   isSavingAgent: boolean;
-  onSaveAgent: (next: { agentName: string; agentSoul: string }) => Promise<boolean> | boolean;
+  onSaveAgent: (next: { agentName: string; agentSoul: string }) => Promise<AccountSetupStatus | false | null> | AccountSetupStatus | false | null;
   onFinishOnboarding: () => Promise<void> | void;
   onClose?: () => void;
 };
@@ -165,6 +170,7 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
   const [agentSoulDraft, setAgentSoulDraft] = useState(() => normalizeAgentSoulDraft(props.agentSoul));
   const [hasConfirmedPlatformLegal, setHasConfirmedPlatformLegal] = useState(false);
   const [activeLegalDocument, setActiveLegalDocument] = useState<LegalDocumentEntry | null>(null);
+  const [setupGuidance, setSetupGuidance] = useState<string | null>(null);
   const [providerChoice, setProviderChoice] = useState<"chatgpt" | "openai" | null>(() =>
     props.openAiConnected ? "openai" : props.chatgptConnected ? "chatgpt" : null,
   );
@@ -193,6 +199,12 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
   const progressCircumference = 2 * Math.PI * 17;
   const progressDashOffset = progressCircumference - (progress / 100) * progressCircumference;
   const hasInferenceProvider = props.chatgptConnected || props.openAiConnected;
+
+  useEffect(() => {
+    if (props.accountSetupStatus?.completed || hasInferenceProvider) {
+      setSetupGuidance(null);
+    }
+  }, [hasInferenceProvider, props.accountSetupStatus?.completed]);
   const normalizedHandle = normalizeProfileHandle(props.handle);
   const handleAvailabilityMatches = props.handleAvailability?.normalized_handle === normalizedHandle;
   const handleReady =
@@ -229,8 +241,16 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
     () => ["identity", "inference", "agent"],
     [],
   );
+  const setupRequirementMessage =
+    props.error && props.accountSetupStatus && !props.accountSetupStatus.completed
+      ? formatAccountSetupMissingGuidance(props.accountSetupStatus)
+      : null;
+  const displayedStatusMessage = setupGuidance ?? props.error;
+  const displayedStatusMessageIsGuidance =
+    Boolean(setupGuidance) || Boolean(props.error && setupRequirementMessage === props.error);
 
   const goNext = async () => {
+    setSetupGuidance(null);
     if (step === "identity") {
       const ok = await props.onNextProfile(
         platformLegalReady
@@ -244,11 +264,19 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
       return;
     }
     if (step === "agent") {
-      const ok = await props.onSaveAgent({
+      const setupAfterSave = await props.onSaveAgent({
         agentName: agentNameDraft,
         agentSoul: agentSoulDraft,
       });
-      if (ok) await props.onFinishOnboarding();
+      if (setupAfterSave === false) return;
+      const setupStatus = setupAfterSave ?? props.accountSetupStatus;
+      const firstIncompleteStep = getFirstIncompleteAccountSetupStep(setupStatus);
+      if (setupStatus && firstIncompleteStep) {
+        setSetupGuidance(formatAccountSetupMissingGuidance(setupStatus));
+        setStep(firstIncompleteStep);
+        return;
+      }
+      await props.onFinishOnboarding();
       return;
     }
     if (step === "inference") {
@@ -563,7 +591,17 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
             </div>
           ) : null}
 
-          {props.error ? <p className="polynet-onboarding-error">{props.error}</p> : null}
+          {displayedStatusMessage ? (
+            <p
+              className={
+                displayedStatusMessageIsGuidance
+                  ? "polynet-onboarding-guidance"
+                  : "polynet-onboarding-error"
+              }
+            >
+              {displayedStatusMessage}
+            </p>
+          ) : null}
 
           <div className="polynet-onboarding-profile-footer">
             <div className="polynet-onboarding-footer-actions">

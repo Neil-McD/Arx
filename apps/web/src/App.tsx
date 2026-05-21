@@ -116,6 +116,7 @@ import {
 } from "../../../shared/cloudProfilesGateway";
 import { formatProfileMutationError } from "../../../shared/profileMutationErrors";
 import {
+  formatAccountSetupMissingGuidance,
   isAccountSetupStatusIdentityComplete,
   type AccountSetupStatus,
 } from "../../../shared/accountSetup";
@@ -2697,7 +2698,7 @@ export default function App() {
       });
       if (latestSetup) setAccountSetupStatus(latestSetup);
       if (!latestSetup?.completed) {
-        setOnboardingError("Finish profile, inference, and agent setup to continue.");
+        setOnboardingError(formatAccountSetupMissingGuidance(latestSetup));
         setIsOnboardingModalOpen(true);
         return;
       }
@@ -2833,7 +2834,7 @@ export default function App() {
     }
   }
 
-  async function saveOnboardingAgent(next: { agentName: string; agentSoul: string }): Promise<boolean> {
+  async function saveOnboardingAgent(next: { agentName: string; agentSoul: string }): Promise<AccountSetupStatus | false | null> {
     const activeSession = await ensureUsableAuthSession();
     if (!activeSession) {
       requireSignIn({ reason: "try_polynet_free", payload: {} });
@@ -2845,12 +2846,11 @@ export default function App() {
       return false;
     }
     setOnboardingError(null);
-    await saveUserMemorySettingsAndRefreshSetup({
+    return await saveUserMemorySettingsAndRefreshSetup({
       ...userMemorySettings,
       agent_name: agentName,
       agent_soul: next.agentSoul,
     });
-    return true;
   }
 
   async function deleteOwnAccountFromSettings(): Promise<void> {
@@ -4035,9 +4035,9 @@ export default function App() {
     setNewPersonalMemoryContent: personalMemoryUi.setNewPersonalMemoryContent,
     setNewPersonalMemoryPinned: personalMemoryUi.setNewPersonalMemoryPinned,
   });
-  const saveUserMemorySettingsAndRefreshSetup = useCallback(async (next: UserMemorySettings): Promise<void> => {
+  const saveUserMemorySettingsAndRefreshSetup = useCallback(async (next: UserMemorySettings): Promise<AccountSetupStatus | null> => {
     await saveUserMemorySettings(next);
-    await refreshAccountSetupStatus();
+    return await refreshAccountSetupStatus();
   }, [refreshAccountSetupStatus, saveUserMemorySettings]);
 
   const { createThread, updateThreadModel, maybeSetThreadTitleFromText, setThreadCommunityLens } =
@@ -8497,7 +8497,9 @@ export default function App() {
       isExporting,
       userMemorySettings,
       isLoadingUserMemorySettings,
-      saveUserMemorySettings: saveUserMemorySettingsAndRefreshSetup,
+      saveUserMemorySettings: async (next) => {
+        await saveUserMemorySettingsAndRefreshSetup(next);
+      },
       loadPersonalMemoryItems,
       formatRelativeTime,
       handleTogglePersonalMemoryPinned,
