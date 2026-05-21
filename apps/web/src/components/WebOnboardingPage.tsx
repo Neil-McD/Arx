@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type DragEvent, type ReactNode } from "react";
 import { ArrowRight, Bot, Check, CircleUserRound, Compass, PlugZap, PlusCircle, Search, X } from "lucide-react";
 import type { AccountSetupStatus, AccountSetupStep } from "../../../../shared/accountSetup";
+import { DEFAULT_AGENT_PERSONALITY_PROMPT_TEXT } from "../../../../shared/agentPersonalityPresets";
 import { renderMarkdown } from "../../../../shared/markdownUi";
 import { normalizeProfileHandle } from "../../../../shared/profileHandle";
 import type { SocialProfileKind, SocialProfileLinks } from "../../../../shared/socialProfileLinks";
@@ -11,6 +12,7 @@ import {
   type LegalDocumentEntry,
 } from "../docs/legalDocumentsContent";
 import { WebUserAvatarEditorModal } from "./WebUserAvatarEditorModal";
+import { WebAgentPersonalityPicker } from "./WebAgentPersonalityPicker";
 import { WebSocialProfileLinksFields } from "./WebSocialProfileLinksFields";
 
 type OnboardingStep = Exclude<AccountSetupStep, "complete">;
@@ -97,6 +99,10 @@ function stepIndex(step: OnboardingStep): number {
 
 function stepIsComplete(status: AccountSetupStatus | null, step: OnboardingStep): boolean {
   return Boolean(status?.steps.find((item) => item.step === step)?.completed);
+}
+
+function normalizeAgentSoulDraft(agentSoul: string): string {
+  return agentSoul.trim().length > 0 ? agentSoul : DEFAULT_AGENT_PERSONALITY_PROMPT_TEXT;
 }
 
 function StepIcon(props: { step: OnboardingStep }) {
@@ -190,7 +196,7 @@ function formatProviderStatus(
 export function WebOnboardingPage(props: WebOnboardingPageProps) {
   const [step, setStep] = useState<OnboardingStep>(() => normalizeStep(props.accountSetupStatus?.current_step));
   const [agentNameDraft, setAgentNameDraft] = useState(props.agentName);
-  const [agentSoulDraft, setAgentSoulDraft] = useState(props.agentSoul);
+  const [agentSoulDraft, setAgentSoulDraft] = useState(() => normalizeAgentSoulDraft(props.agentSoul));
   const [hasConfirmedPlatformLegal, setHasConfirmedPlatformLegal] = useState(false);
   const [activeLegalDocument, setActiveLegalDocument] = useState<LegalDocumentEntry | null>(null);
   const [providerChoice, setProviderChoice] = useState<"chatgpt" | "openai" | null>(() =>
@@ -203,7 +209,7 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
   }, [props.agentName]);
 
   useEffect(() => {
-    setAgentSoulDraft(props.agentSoul);
+    setAgentSoulDraft(normalizeAgentSoulDraft(props.agentSoul));
   }, [props.agentSoul]);
 
   useEffect(() => {
@@ -577,7 +583,7 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
             <div className="polynet-onboarding-agent">
               <div className="polynet-onboarding-step-intro">
                 <strong>Give your agent a name and a personality.</strong>
-                <p>The name is required. The personality can stay light for now.</p>
+                <p>Pick the starting energy. You can tune it later.</p>
               </div>
               <label>
                 Agent name
@@ -587,15 +593,12 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
                   placeholder="Polynet Agent"
                 />
               </label>
-              <label>
-                Personality (optional)
-                <textarea
-                  value={agentSoulDraft}
-                  onChange={(event) => setAgentSoulDraft(event.target.value)}
-                  placeholder="Tell your agent how to think, collaborate, and behave for you."
-                  rows={7}
-                />
-              </label>
+              <WebAgentPersonalityPicker
+                value={agentSoulDraft}
+                onChange={setAgentSoulDraft}
+                disabled={props.isSavingAgent}
+                variant="onboarding"
+              />
             </div>
           ) : null}
 
