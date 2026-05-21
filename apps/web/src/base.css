@@ -19969,12 +19969,13 @@ button.message-citation-chip:hover {
 .web-social-profile-links.onboarding {
   flex: 0 0 auto;
   margin-left: auto;
+  margin-right: 18px;
   justify-content: flex-end;
 }
 
 .web-social-profile-links.settings {
   width: 100%;
-  gap: 30px;
+  gap: 27px;
   padding: 12px 0 4px;
 }
 
@@ -20028,28 +20029,34 @@ button.message-citation-chip:hover {
 }
 
 .web-social-profile-link-button.youtube svg {
-  width: 32px;
+  width: 29px;
+  height: 25px;
+}
+
+.web-social-profile-link-button.x svg {
+  width: 25px;
+  height: 25px;
 }
 
 .web-social-profile-links.settings .web-social-profile-link-button {
-  width: 68px;
-  height: 68px;
-  min-width: 68px;
+  width: 62px;
+  height: 62px;
+  min-width: 62px;
 }
 
 .web-social-profile-links.settings .web-social-profile-link-button svg {
-  width: 41px;
-  height: 41px;
+  width: 37px;
+  height: 37px;
 }
 
 .web-social-profile-links.settings .web-social-profile-link-button.youtube svg {
-  width: 41px;
-  height: 35px;
+  width: 37px;
+  height: 32px;
 }
 
 .web-social-profile-links.settings .web-social-profile-link-button.x svg {
-  width: 33px;
-  height: 33px;
+  width: 30px;
+  height: 30px;
 }
 
 .web-social-profile-modal-backdrop {
