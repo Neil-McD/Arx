@@ -8,6 +8,7 @@ function read(path: string): string {
 const socialFields = read("apps/web/src/components/WebSocialProfileLinksFields.tsx");
 const adminController = read("shared/useCommunityAdminController.ts");
 const profileSettings = read("apps/web/src/components/WebProfileSettingsSection.tsx");
+const socialProfileLinks = read("shared/socialProfileLinks.ts");
 
 assert.match(
   socialFields,
@@ -44,6 +45,22 @@ assert.match(
   profileSettings,
   /onSave=\{\(nextLinks\) => saveProfileToCloud\(\{ socialLinks: nextLinks \}\)\}/,
   "settings social icons must persist the edited links through the profile save path",
+);
+
+assert.doesNotMatch(
+  socialProfileLinks,
+  /url\.(protocol|username|password|hash|search|hostname|pathname)\s*=/,
+  "shared social URL normalization must not mutate URL properties because Convex does not implement those setters",
+);
+assert.match(
+  socialProfileLinks,
+  /const normalizedHostname = kind === "x" && hostname === "twitter\.com" \? "x\.com" : hostname/,
+  "social URL normalization must preserve twitter-to-x canonicalization without mutating URL.hostname",
+);
+assert.match(
+  socialProfileLinks,
+  /return `https:\/\/\$\{normalizedHostname\}\$\{pathname\}`/,
+  "social URL normalization must reconstruct the sanitized URL explicitly",
 );
 
 console.log("PASS: social profile link modal uses app validation and truthful cloud save state.");

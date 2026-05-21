@@ -38,20 +38,15 @@ export function normalizeSocialProfileUrl(kind: SocialProfileKind, raw: unknown)
   }
 
   if (url.protocol !== "http:" && url.protocol !== "https:") return null;
-  url.protocol = "https:";
-  url.username = "";
-  url.password = "";
-  url.hash = "";
-  url.search = "";
 
   const hostname = url.hostname.toLowerCase().replace(/^www\./, "");
   if (!SOCIAL_PROFILE_HOSTS[kind].includes(hostname)) return null;
-  url.hostname = kind === "x" && hostname === "twitter.com" ? "x.com" : hostname;
+  const normalizedHostname = kind === "x" && hostname === "twitter.com" ? "x.com" : hostname;
 
-  url.pathname = url.pathname.replace(/\/{2,}/g, "/").replace(/\/$/, "");
-  if (!url.pathname || url.pathname === "/") return null;
+  const pathname = url.pathname.replace(/\/{2,}/g, "/").replace(/\/$/, "");
+  if (!pathname || pathname === "/") return null;
 
-  return url.toString().replace(/\/$/, "");
+  return `https://${normalizedHostname}${pathname}`;
 }
 
 export function normalizeSocialProfileLinks(input: Partial<Record<SocialProfileKind, unknown>>): SocialProfileLinks {
