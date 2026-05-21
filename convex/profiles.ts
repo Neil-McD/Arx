@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import { ensureAuthenticatedActor, resolveUserIdForAuthenticatedRequest } from "./authActor";
 import { validateProfileHandle } from "../shared/profileHandle";
 import { maybeDeleteStorageAsset } from "./communityCore";
+import { recordCurrentPlatformLegalAcceptance } from "./legalAcceptances";
 import { resolveUserProfileDisplayProjectionForUser } from "./userProfileProjection";
 import {
   loadAccountSetupStatusForUser,
@@ -290,6 +291,8 @@ export const upsertProfileDetail = mutation({
     markOnboardingDismissed: v.optional(v.boolean()),
     // Compatibility alias for older clients. Account setup truth is the returned `account_setup`.
     completeOnboarding: v.optional(v.boolean()),
+    termsOfServiceVersion: v.optional(v.union(v.string(), v.null())),
+    privacyPolicyVersion: v.optional(v.union(v.string(), v.null())),
     nowMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
@@ -334,6 +337,20 @@ export const upsertProfileDetail = mutation({
       .first()) as ProfileDetailRow | null;
     if (args.avatarStorageId) {
       await assertProfileAvatarStorageResolvable(ctx, args.avatarStorageId);
+    }
+    const termsOfServiceVersion = normalizeOptionalText(args.termsOfServiceVersion);
+    const privacyPolicyVersion = normalizeOptionalText(args.privacyPolicyVersion);
+    if (termsOfServiceVersion || privacyPolicyVersion) {
+      if (!termsOfServiceVersion || !privacyPolicyVersion) {
+        throw new Error("platform_legal_versions_required");
+      }
+      await recordCurrentPlatformLegalAcceptance(ctx, {
+        userId: actor.dbUserId,
+        termsVersion: termsOfServiceVersion,
+        privacyPolicyVersion,
+        source: "account_onboarding_profile",
+        acceptedAt: Date.now(),
+      });
     }
     const nextDisplayName =
       args.displayName !== undefined

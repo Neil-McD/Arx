@@ -31,6 +31,7 @@ const OPERATOR_ACCOUNT_SETUP_MISSING_ORDER = [
   "display_name",
   "handle",
   "avatar",
+  "platform_legal",
   "inference_provider",
   "agent_name",
 ] as const;

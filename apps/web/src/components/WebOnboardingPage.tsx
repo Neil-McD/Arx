@@ -1,8 +1,14 @@
 import { useEffect, useMemo, useState, type DragEvent, type ReactNode } from "react";
 import { ArrowRight, Bot, Check, CircleUserRound, Compass, PlugZap, PlusCircle, Search, X } from "lucide-react";
 import type { AccountSetupStatus, AccountSetupStep } from "../../../../shared/accountSetup";
+import { renderMarkdown } from "../../../../shared/markdownUi";
 import { normalizeProfileHandle } from "../../../../shared/profileHandle";
 import { UserAvatar } from "../../../../shared/UserAvatar";
+import {
+  PRIVACY_AI_DATA_POLICY_ENTRY,
+  TERMS_OF_SERVICE_ENTRY,
+  type LegalDocumentEntry,
+} from "../docs/legalDocumentsContent";
 import { WebUserAvatarEditorModal } from "./WebUserAvatarEditorModal";
 
 type OnboardingStep = Exclude<AccountSetupStep, "complete">;
@@ -41,7 +47,7 @@ type WebOnboardingPageProps = {
   onDisplayNameChange: (value: string) => void;
   onHandleChange: (value: string) => void;
   onBioChange: (value: string) => void;
-  onNextProfile: () => Promise<boolean> | boolean;
+  onNextProfile: (legalAcceptance: PlatformLegalAcceptanceDraft | null) => Promise<boolean> | boolean;
   chatgptConnected: boolean;
   chatgptStatus: string;
   isConnectingChatgpt: boolean;
@@ -62,6 +68,11 @@ type WebOnboardingPageProps = {
   onBuildCommunity: () => void;
   onDiscoverCommunity: () => void;
   onClose?: () => void;
+};
+
+export type PlatformLegalAcceptanceDraft = {
+  termsOfServiceVersion: string;
+  privacyPolicyVersion: string;
 };
 
 const STEP_LABELS: Record<OnboardingStep, string> = {
@@ -176,6 +187,8 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
   const [step, setStep] = useState<OnboardingStep>(() => normalizeStep(props.accountSetupStatus?.current_step));
   const [agentNameDraft, setAgentNameDraft] = useState(props.agentName);
   const [agentSoulDraft, setAgentSoulDraft] = useState(props.agentSoul);
+  const [hasConfirmedPlatformLegal, setHasConfirmedPlatformLegal] = useState(false);
+  const [activeLegalDocument, setActiveLegalDocument] = useState<LegalDocumentEntry | null>(null);
   const [providerChoice, setProviderChoice] = useState<"chatgpt" | "openai" | null>(() =>
     props.openAiConnected ? "openai" : props.chatgptConnected ? "chatgpt" : null,
   );
@@ -210,7 +223,13 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
     Boolean(normalizedHandle) &&
     !props.isCheckingHandleAvailability &&
     Boolean(handleAvailabilityMatches && props.handleAvailability?.available);
-  const profileReady = props.displayName.trim().length > 0 && Boolean(props.avatarUrl?.trim()) && handleReady;
+  const platformLegalMissing = props.accountSetupStatus?.missing.includes("platform_legal") !== false;
+  const platformLegalReady = !platformLegalMissing || hasConfirmedPlatformLegal;
+  const profileReady =
+    props.displayName.trim().length > 0 &&
+    Boolean(props.avatarUrl?.trim()) &&
+    handleReady &&
+    platformLegalReady;
   const agentReady = agentNameDraft.trim().length > 0;
   const handleAvailability = formatHandleAvailability(
     props.handle,
@@ -237,7 +256,14 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
 
   const goNext = async () => {
     if (step === "identity") {
-      const ok = await props.onNextProfile();
+      const ok = await props.onNextProfile(
+        platformLegalReady
+          ? {
+              termsOfServiceVersion: TERMS_OF_SERVICE_ENTRY.version,
+              privacyPolicyVersion: PRIVACY_AI_DATA_POLICY_ENTRY.version,
+            }
+          : null,
+      );
       if (ok) setStep("inference");
       return;
     }
@@ -420,6 +446,34 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
                 />
               </label>
               <small>Name, handle, and profile photo are required.</small>
+              <div className="polynet-onboarding-legal-confirmation">
+                <input
+                  id="polynet-onboarding-platform-legal"
+                  type="checkbox"
+                  checked={platformLegalReady}
+                  disabled={!platformLegalMissing || props.isSaving}
+                  onChange={(event) => setHasConfirmedPlatformLegal(event.currentTarget.checked)}
+                />
+                <span>
+                  <label htmlFor="polynet-onboarding-platform-legal">I agree to the </label>
+                  <button
+                    type="button"
+                    className="polynet-onboarding-legal-link"
+                    onClick={() => setActiveLegalDocument(TERMS_OF_SERVICE_ENTRY)}
+                  >
+                    Terms of Service
+                  </button>
+                  <label htmlFor="polynet-onboarding-platform-legal"> and acknowledge the </label>
+                  <button
+                    type="button"
+                    className="polynet-onboarding-legal-link"
+                    onClick={() => setActiveLegalDocument(PRIVACY_AI_DATA_POLICY_ENTRY)}
+                  >
+                    Privacy &amp; AI Data Policy
+                  </button>
+                  <label htmlFor="polynet-onboarding-platform-legal">.</label>
+                </span>
+              </div>
             </div>
           ) : null}
 
@@ -590,6 +644,42 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
         <button className="polynet-onboarding-finish-later" type="button" onClick={props.onClose}>
           Finish later
         </button>
+      ) : null}
+
+      {activeLegalDocument ? (
+        <div className="modal-overlay polynet-onboarding-legal-overlay" onClick={() => setActiveLegalDocument(null)}>
+          <div
+            className="modal polynet-onboarding-legal-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="polynet-onboarding-legal-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="modal-header">
+              <div>
+                <div className="modal-title" id="polynet-onboarding-legal-title">
+                  {activeLegalDocument.title}
+                </div>
+                <div className="polynet-onboarding-legal-meta">
+                  {activeLegalDocument.version} - Effective {activeLegalDocument.effectiveDate}
+                </div>
+              </div>
+              <button
+                className="modal-close"
+                type="button"
+                onClick={() => setActiveLegalDocument(null)}
+                title="Close"
+              >
+                x
+              </button>
+            </div>
+            <div className="modal-body polynet-onboarding-legal-body">
+              <div className="polynet-onboarding-legal-reader message-text">
+                {renderMarkdown(activeLegalDocument.content)}
+              </div>
+            </div>
+          </div>
+        </div>
       ) : null}
 
       <WebUserAvatarEditorModal

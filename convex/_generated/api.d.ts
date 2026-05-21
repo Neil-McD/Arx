@@ -108,6 +108,7 @@ import type * as httpRuntimeRoutes from "../httpRuntimeRoutes.js";
 import type * as httpRuntimeSupport from "../httpRuntimeSupport.js";
 import type * as httpRuntimeTurnState from "../httpRuntimeTurnState.js";
 import type * as httpVoice from "../httpVoice.js";
+import type * as legalAcceptances from "../legalAcceptances.js";
 import type * as mcpHttpClient from "../mcpHttpClient.js";
 import type * as mcpSnapshotCodec from "../mcpSnapshotCodec.js";
 import type * as modelRegistry from "../modelRegistry.js";
@@ -269,6 +270,7 @@ declare const fullApi: ApiFromModules<{
   httpRuntimeSupport: typeof httpRuntimeSupport;
   httpRuntimeTurnState: typeof httpRuntimeTurnState;
   httpVoice: typeof httpVoice;
+  legalAcceptances: typeof legalAcceptances;
   mcpHttpClient: typeof mcpHttpClient;
   mcpSnapshotCodec: typeof mcpSnapshotCodec;
   modelRegistry: typeof modelRegistry;

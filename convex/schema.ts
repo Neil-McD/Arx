@@ -129,6 +129,7 @@ export default defineSchema({
     source: v.string(),
     createdAt: v.number(),
   })
+    .index("by_user", ["userId"])
     .index("by_user_document_version", ["userId", "documentKey", "documentVersion"])
     .index("by_document_version_acceptedAt", ["documentKey", "documentVersion", "acceptedAt"]),
 

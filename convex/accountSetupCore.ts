@@ -3,6 +3,10 @@ import {
   isAccountSetupIdentityComplete,
   type AccountSetupStatus,
 } from "../shared/accountSetup";
+import {
+  hasAcceptedCurrentPlatformLegalFromRows,
+  listPlatformLegalAcceptancesForUser,
+} from "./legalAcceptances";
 
 export type AccountSetupUserRow = {
   _id: any;
@@ -43,11 +47,18 @@ export type AccountSetupMemorySettingsRow = {
   agentSoul?: string;
 };
 
+export type AccountSetupLegalAcceptanceRow = {
+  userId?: any;
+  documentKey?: string;
+  documentVersion?: string;
+};
+
 export function buildAccountSetupStatusForRows(params: {
   user: AccountSetupUserRow;
   detail: AccountSetupProfileDetailRow | null;
   providerConnections: AccountSetupProviderConnectionRow[];
   memorySettings: AccountSetupMemorySettingsRow | null;
+  legalAcceptances?: AccountSetupLegalAcceptanceRow[];
 }): AccountSetupStatus {
   const hasInferenceProvider = params.providerConnections.some(
     (row) => row?.provider === "chatgpt" || row?.provider === "openai",
@@ -58,6 +69,7 @@ export function buildAccountSetupStatusForRows(params: {
     handle: params.user.handle ?? null,
     avatarUrl: params.detail?.avatarUrl ?? null,
     avatarStorageId: params.detail?.avatarStorageId ? String(params.detail.avatarStorageId) : null,
+    hasAcceptedPlatformLegal: hasAcceptedCurrentPlatformLegalFromRows(params.legalAcceptances ?? []),
     bio: params.detail?.bio ?? null,
     hasInferenceProvider,
     agentName: params.memorySettings?.agentName ?? null,
@@ -69,24 +81,27 @@ export function buildAccountSetupStatusForRows(params: {
 export function isProfileSetupCompleteForRows(
   user: AccountSetupUserRow | null,
   detail: AccountSetupProfileDetailRow | null,
+  legalAcceptances: AccountSetupLegalAcceptanceRow[] = [],
 ): boolean {
   return isAccountSetupIdentityComplete({
     displayName: detail?.displayName ?? null,
     handle: user?.handle ?? null,
     avatarUrl: detail?.avatarUrl ?? null,
     avatarStorageId: detail?.avatarStorageId ? String(detail.avatarStorageId) : null,
+    hasAcceptedPlatformLegal: hasAcceptedCurrentPlatformLegalFromRows(legalAcceptances),
   });
 }
 
 export async function requireProfileSetupCompleteForUser(ctx: any, userId: any): Promise<void> {
-  const [user, detail] = (await Promise.all([
+  const [user, detail, legalAcceptances] = (await Promise.all([
     ctx.db.get(userId),
     ctx.db
       .query("userProfileDetails")
       .withIndex("by_user", (q: any) => q.eq("userId", userId))
       .first(),
-  ])) as [AccountSetupUserRow | null, AccountSetupProfileDetailRow | null];
-  if (!isProfileSetupCompleteForRows(user, detail)) {
+    listPlatformLegalAcceptancesForUser(ctx, userId),
+  ])) as [AccountSetupUserRow | null, AccountSetupProfileDetailRow | null, AccountSetupLegalAcceptanceRow[]];
+  if (!isProfileSetupCompleteForRows(user, detail, legalAcceptances)) {
     throw new Error("profile_setup_required");
   }
 }
@@ -117,14 +132,16 @@ export async function loadAccountSetupStatusForUser(
   user: AccountSetupUserRow,
   detail: AccountSetupProfileDetailRow | null,
 ): Promise<AccountSetupStatus> {
-  const [providerConnections, memorySettings] = await Promise.all([
+  const [providerConnections, memorySettings, legalAcceptances] = await Promise.all([
     ctx.db.query("userProviderConnections").withIndex("by_user", (q: any) => q.eq("userId", user._id)).collect(),
     ctx.db.query("userMemorySettings").withIndex("by_user", (q: any) => q.eq("userId", user._id)).first(),
+    listPlatformLegalAcceptancesForUser(ctx, user._id),
   ]);
   return buildAccountSetupStatusForRows({
     user,
     detail,
     providerConnections,
     memorySettings,
+    legalAcceptances,
   });
 }

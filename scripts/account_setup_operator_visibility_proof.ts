@@ -90,11 +90,14 @@ assert.equal(
 assert.match(operatorPanel, /Showing \$\{users\.length\} of \$\{userList\.totalMatching\}/, "operator setup UI must disclose list truncation context");
 assert.match(operatorPanel, /"handle"/, "operator setup missing-field ordering must include handle");
 assert.match(operatorPanel, /case "handle":[\s\S]*?return "Handle";/, "operator setup UI must label missing handles");
+assert.match(operatorPanel, /case "platform_legal":[\s\S]*?return "Platform legal";/, "operator setup UI must label missing platform legal acceptance");
+assert.match(operatorIntelligence, /"legalAcceptances"/, "operator setup visibility must source platform legal acceptance");
 
 const existingWithoutProfileDetail = buildAccountSetupStatus({
   displayName: "Existing Member",
   handle: "existing",
   avatarUrl: "https://example.com/avatar.png",
+  hasAcceptedPlatformLegal: true,
   hasInferenceProvider: true,
   agentName: "Poly",
   agentSoul: "Helpful.",
@@ -107,6 +110,7 @@ const missingProvider = buildAccountSetupStatus({
   handle: "ready",
   avatarUrl: "https://example.com/avatar.png",
   bio: "Creator.",
+  hasAcceptedPlatformLegal: true,
   hasInferenceProvider: false,
   agentName: "Poly",
   agentSoul: "Helpful.",
@@ -119,11 +123,22 @@ const complete = buildAccountSetupStatus({
   displayName: "Complete",
   handle: "complete",
   avatarUrl: "https://example.com/avatar.png",
+  hasAcceptedPlatformLegal: true,
   hasInferenceProvider: true,
   agentName: "Poly",
 });
 assert.equal(complete.current_step, "complete");
 assert.equal(complete.completed, true);
 assert.equal(complete.percent, 100);
+
+const missingLegal = buildAccountSetupStatus({
+  displayName: "Legal Missing",
+  handle: "legal-missing",
+  avatarUrl: "https://example.com/avatar.png",
+  hasInferenceProvider: true,
+  agentName: "Poly",
+});
+assert.equal(missingLegal.current_step, "identity");
+assert.deepEqual(missingLegal.missing, ["platform_legal"]);
 
 console.log("account_setup_operator_visibility_proof: ok");

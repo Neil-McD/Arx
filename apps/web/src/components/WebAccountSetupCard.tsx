@@ -12,7 +12,9 @@ function formatSetupCardDescription(status: AccountSetupStatus): string {
     const needsName = status.missing.includes("display_name");
     const needsHandle = status.missing.includes("handle");
     const needsAvatar = status.missing.includes("avatar");
+    const needsLegal = status.missing.includes("platform_legal");
     if (needsName && needsHandle && needsAvatar) return "Add your name, handle, and profile image.";
+    if (!needsName && !needsHandle && !needsAvatar && needsLegal) return "Accept the platform terms and privacy policy.";
     if (needsName && needsHandle) return "Add your name and handle.";
     if (needsName && needsAvatar) return "Add your name and profile image.";
     if (needsHandle && needsAvatar) return "Choose your handle and add your profile image.";

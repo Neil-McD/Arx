@@ -94,6 +94,8 @@ export function formatAccountSetupMissing(value: OperatorAccountSetupUserRecord[
       return "Handle";
     case "avatar":
       return "Avatar";
+    case "platform_legal":
+      return "Platform legal";
     case "inference_provider":
       return "Inference";
     case "agent_name":

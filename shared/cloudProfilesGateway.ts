@@ -213,6 +213,8 @@ export async function upsertCloudProfileDetail<SessionT, TProfile extends CloudP
     onboardingDirection?: "build_community" | "discover_community" | "learn_about_polynet" | null;
     markOnboardingDismissed?: boolean;
     completeOnboarding?: boolean;
+    termsOfServiceVersion?: string | null;
+    privacyPolicyVersion?: string | null;
   },
 ): Promise<TProfile | null> {
   const { client, authSubject } = await bootstrapConvexUser(params.session);
@@ -230,6 +232,8 @@ export async function upsertCloudProfileDetail<SessionT, TProfile extends CloudP
     onboardingDirection: params.onboardingDirection,
     markOnboardingDismissed: params.markOnboardingDismissed,
     completeOnboarding: params.completeOnboarding,
+    termsOfServiceVersion: params.termsOfServiceVersion ?? null,
+    privacyPolicyVersion: params.privacyPolicyVersion ?? null,
   });
   return firstGatewayRow<TProfile>(payload);
 }

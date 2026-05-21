@@ -43,6 +43,7 @@ for (const marker of [
   '"display_name"',
   '"handle"',
   '"avatar"',
+  '"platform_legal"',
   '"inference_provider"',
   '"agent_name"',
 ]) {
@@ -51,6 +52,7 @@ for (const marker of [
 assert.match(accountSetup, /export function buildAccountSetupStatus/, "setup completion must be derived by one helper");
 assert.match(accountSetup, /validateProfileHandle\(input\.handle\)\.ok/, "profile setup handle completion must use the canonical validator");
 assert.match(accountSetup, /missing\.push\("handle"\)/, "profile setup must require handle");
+assert.match(accountSetup, /missing\.push\("platform_legal"\)/, "profile setup must require platform legal acceptance");
 assert.doesNotMatch(accountSetup, /identityMissing\.push\("bio"\)/, "profile setup must not require bio");
 assert.doesNotMatch(accountSetup, /agentMissing\.push\("agent_soul"\)/, "agent setup must not require soul text");
 assert.doesNotMatch(accountSetup, /directionMissing/, "path selection must not gate account setup completion");
@@ -73,6 +75,7 @@ assert.match(accountSetupCore, /handle: params\.user\.handle \?\? null/, "bulk s
 assert.match(accountSetupCore, /handle: user\?\.handle \?\? null/, "write guard setup completion must require the first-party account handle");
 assert.match(accountSetupCore, /avatarUrl: params\.detail\?\.avatarUrl \?\? null/, "profile completion must use first-party profile detail avatar");
 assert.match(accountSetupCore, /avatarStorageId: params\.detail\?\.avatarStorageId/, "profile completion must support storage-backed avatars");
+assert.match(accountSetupCore, /hasAcceptedCurrentPlatformLegalFromRows/, "profile completion must require current platform legal acceptance");
 assert.doesNotMatch(accountSetupCore, /displayName: params\.user\.displayName/, "auth-seeded display name must not complete account setup");
 assert.doesNotMatch(accountSetupCore, /avatarUrl: params\.user\.avatarUrl/, "auth-seeded avatar must not complete account setup");
 assert.doesNotMatch(convexAuthenticatedClient, /resolveAuthSessionDisplayName|resolveAuthSessionAvatarUrl/, "Convex bootstrap must not send provider profile metadata");
@@ -80,6 +83,9 @@ assert.doesNotMatch(authBootstrap, /args\.identity\.displayName|args\.identity\.
 assert.match(accountSetupCore, /query\("userProviderConnections"\)/, "inference completion must derive from provider connections");
 assert.match(accountSetupCore, /query\("userMemorySettings"\)/, "agent completion must derive from user memory settings");
 assert.match(profiles, /account_setup: await loadAccountSetupStatusForUser/, "onboarding profile responses must include setup status");
+assert.match(profiles, /recordCurrentPlatformLegalAcceptance/, "profile onboarding must record platform legal acceptance server-side");
+assert.match(profiles, /platform_legal_versions_required/, "profile onboarding must require both legal document versions together");
+assert.match(profiles, /acceptedAt: Date\.now\(\)/, "legal acceptance time must be server-authoritative");
 
 assert.match(settings, /agentName: v\.optional\(v\.string\(\)\)/, "settings mutation must accept agent name");
 assert.match(settings, /agent_name: row\.agentName/, "settings query must return agent_name");
@@ -92,6 +98,8 @@ assert.match(profileGateway, /profiles:getMyAccountSetupStatus/, "profile gatewa
 assert.match(profileGateway, /profiles:checkHandleAvailability/, "profile gateway must expose handle availability");
 assert.match(profileGateway, /onboardingDirection\?: "build_community"/, "profile gateway must save onboarding direction");
 assert.match(profileGateway, /markOnboardingDismissed\?: boolean/, "profile gateway may dismiss onboarding without redefining setup completion");
+assert.match(profileGateway, /termsOfServiceVersion\?: string \| null/, "profile gateway must submit the exact Terms version when accepting platform legal");
+assert.match(profileGateway, /privacyPolicyVersion\?: string \| null/, "profile gateway must submit the exact Privacy version when accepting platform legal");
 assert.match(profileGateway, /prepareCloudProfileAvatarField/, "profile gateway must upload first-party avatar files");
 
 assert.match(settingsGateway, /agent_name\?: unknown/, "settings gateway must load agent_name");
@@ -104,6 +112,9 @@ assert.match(onboardingPage, /accountSetupStatus: AccountSetupStatus \| null/, "
 assert.match(onboardingPage, /handleAvailability: ProfileHandleAvailability \| null/, "onboarding profile step should show handle availability");
 assert.match(onboardingPage, /<span>Bio<\/span>/, "onboarding profile step should expose bio");
 assert.match(onboardingPage, /handleReady[\s\S]*?profileReady[\s\S]*?handleReady/, "onboarding profile step must require an available handle");
+assert.match(onboardingPage, /Terms of Service[\s\S]*Privacy &amp; AI Data Policy/, "onboarding profile step must link the platform legal documents inline");
+assert.match(onboardingPage, /platformLegalReady[\s\S]*?profileReady[\s\S]*?platformLegalReady/, "onboarding profile step must require platform legal acceptance before Next");
+assert.match(onboardingPage, /polynet-onboarding-legal-reader message-text/, "onboarding legal documents must render in a scrollable modal reader");
 assert.match(onboardingPage, /onConnectChatgpt/, "onboarding inference step must reuse ChatGPT provider flow");
 assert.match(onboardingPage, /onConnectOpenAi/, "onboarding inference step must reuse OpenAI provider flow");
 assert.match(onboardingPage, /Use your Plus or Pro plan limits/, "onboarding inference choice should clearly name ChatGPT plan limits");

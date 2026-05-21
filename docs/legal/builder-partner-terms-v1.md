@@ -4,7 +4,7 @@ title: Builder Partner Terms v1
 version: builder_partner_terms_v1
 effective_date: 2026-05-21
 last_updated: 2026-05-21
-status: active
+status: superseded
 ---
 
 # Builder Partner Terms v1

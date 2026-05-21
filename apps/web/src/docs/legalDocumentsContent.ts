@@ -1,6 +1,10 @@
 import builderPartnerTermsV2 from "../../../../docs/legal/builder-partner-terms-v2.md?raw";
+import privacyAiDataPolicyV1 from "../../../../docs/legal/privacy-ai-data-policy-v1.md?raw";
+import termsOfServiceV1 from "../../../../docs/legal/terms-of-service-v1.md?raw";
 import {
   BUILDER_PARTNER_TERMS_DOCUMENT,
+  PRIVACY_AI_DATA_POLICY_DOCUMENT,
+  TERMS_OF_SERVICE_DOCUMENT,
   type LegalDocument,
 } from "../../../../shared/legalDocuments";
 
@@ -30,4 +34,14 @@ function stripMarkdownFrontmatter(source: string): string {
 export const BUILDER_PARTNER_TERMS_ENTRY: LegalDocumentEntry = {
   ...BUILDER_PARTNER_TERMS_DOCUMENT,
   content: stripMarkdownFrontmatter(builderPartnerTermsV2),
+};
+
+export const TERMS_OF_SERVICE_ENTRY: LegalDocumentEntry = {
+  ...TERMS_OF_SERVICE_DOCUMENT,
+  content: stripMarkdownFrontmatter(termsOfServiceV1),
+};
+
+export const PRIVACY_AI_DATA_POLICY_ENTRY: LegalDocumentEntry = {
+  ...PRIVACY_AI_DATA_POLICY_DOCUMENT,
+  content: stripMarkdownFrontmatter(privacyAiDataPolicyV1),
 };

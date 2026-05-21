@@ -2696,6 +2696,12 @@ export default function App() {
       setOnboardingError("Add your display name, handle, and profile photo to continue.");
       return;
     }
+    const currentSetup = accountSetupStatus ?? cloudProfile?.account_setup ?? null;
+    if (currentSetup?.missing.includes("platform_legal") !== false) {
+      setOnboardingError("Agree to the Terms of Service and acknowledge the Privacy & AI Data Policy to continue.");
+      setIsOnboardingModalOpen(true);
+      return;
+    }
 
     setIsSavingOnboarding(true);
     setOnboardingError(null);
@@ -2749,7 +2755,10 @@ export default function App() {
     }
   }
 
-  async function saveOnboardingProfile(): Promise<boolean> {
+  async function saveOnboardingProfile(legalAcceptance: {
+    termsOfServiceVersion: string;
+    privacyPolicyVersion: string;
+  } | null): Promise<boolean> {
     const activeSession = await ensureUsableAuthSession();
     if (!activeSession) {
       requireSignIn({ reason: "try_polynet_free", payload: {} });
@@ -2768,6 +2777,11 @@ export default function App() {
     const avatarUrl = profileUi.profileAvatarUrl?.trim() || null;
     if (!displayName || !handle || !avatarUrl) {
       setOnboardingError("Add your display name, handle, and profile photo to continue.");
+      return false;
+    }
+    const currentSetup = accountSetupStatus ?? cloudProfile?.account_setup ?? null;
+    if (currentSetup?.missing.includes("platform_legal") !== false && !legalAcceptance) {
+      setOnboardingError("Agree to the Terms of Service and acknowledge the Privacy & AI Data Policy to continue.");
       return false;
     }
 
@@ -2792,6 +2806,8 @@ export default function App() {
         avatarZoom: profileUi.profileAvatarZoom,
         bio,
         markOnboardingDismissed: false,
+        termsOfServiceVersion: legalAcceptance?.termsOfServiceVersion ?? null,
+        privacyPolicyVersion: legalAcceptance?.privacyPolicyVersion ?? null,
       });
       if (saved) {
         setCloudProfile(saved);

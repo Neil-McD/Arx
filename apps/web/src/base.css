@@ -2741,6 +2741,47 @@ body {
   color: var(--accent-error, #c75a4a);
 }
 
+.polynet-onboarding-legal-confirmation {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border-muted);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--bg-card-alt) 86%, transparent);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+.polynet-onboarding-legal-confirmation input {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  accent-color: var(--accent);
+}
+
+.polynet-onboarding-legal-confirmation span {
+  min-width: 0;
+}
+
+.polynet-onboarding-legal-link {
+  display: inline;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-weight: 750;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.polynet-onboarding-legal-link:hover {
+  color: var(--accent);
+}
+
 .polynet-onboarding-profile-footer {
   display: flex;
   align-items: center;
@@ -14291,6 +14332,80 @@ button.message-citation-chip:hover {
 .modal-body::-webkit-scrollbar {
   width: 0;
   height: 0;
+}
+
+.polynet-onboarding-legal-modal {
+  width: min(640px, calc(100vw - 32px));
+  max-height: min(82vh, 720px);
+  border-radius: 14px;
+}
+
+.polynet-onboarding-legal-modal .modal-header {
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.polynet-onboarding-legal-modal .modal-title {
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 750;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.polynet-onboarding-legal-meta {
+  margin-top: 4px;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.polynet-onboarding-legal-body {
+  padding: 14px 16px;
+}
+
+.polynet-onboarding-legal-reader {
+  height: min(46vh, 380px);
+  overflow: auto;
+  padding: 14px;
+  border: 1px solid var(--border-muted);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-card-alt) 88%, transparent);
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+  scrollbar-width: thin;
+}
+
+.polynet-onboarding-legal-reader .md-header:first-child {
+  margin-top: 0;
+}
+
+.polynet-onboarding-legal-reader h1.md-header {
+  font-size: 17px;
+  line-height: 1.2;
+}
+
+.polynet-onboarding-legal-reader h2.md-header {
+  margin-top: 18px;
+  font-size: 14px;
+  line-height: 1.25;
+}
+
+.polynet-onboarding-legal-reader .md-paragraph,
+.polynet-onboarding-legal-reader .md-list {
+  margin: 8px 0;
+}
+
+@media (max-width: 640px) {
+  .polynet-onboarding-legal-modal {
+    width: calc(100vw - 20px);
+    max-height: 86vh;
+  }
+
+  .polynet-onboarding-legal-reader {
+    height: min(48vh, 360px);
+  }
 }
 
 .modal-scroll-hint {
