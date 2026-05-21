@@ -174,7 +174,6 @@ function setupUser(input: {
       handle: input.handle,
       avatarUrl: `https://example.test/${input.handle}.png`,
       bio: "Partner runtime smoke identity.",
-      onboardingDirection: "build_community",
       markOnboardingDismissed: true,
       completeOnboarding: true,
       nowMs,

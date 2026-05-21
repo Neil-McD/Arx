@@ -32,7 +32,6 @@ export type AccountSetupProfileDetailRow = {
   avatarZoom?: number;
   bio?: string;
   socialLinks?: SocialProfileLinks;
-  onboardingDirection?: "build_community" | "discover_community" | "learn_about_polynet";
   onboardingCompletedAt?: number;
   createdAt: number;
   updatedAt: number;
@@ -76,7 +75,6 @@ export function buildAccountSetupStatusForRows(params: {
     hasInferenceProvider,
     agentName: params.memorySettings?.agentName ?? null,
     agentSoul: params.memorySettings?.agentSoul ?? null,
-    onboardingDirection: params.detail?.onboardingDirection ?? null,
   });
 }
 

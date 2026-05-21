@@ -77,8 +77,6 @@ export function formatAccountSetupStep(value: OperatorAccountSetupUserRecord["se
       return "Inference";
     case "agent":
       return "Agent";
-    case "direction":
-      return "Direction";
     case "complete":
       return "Complete";
     default:

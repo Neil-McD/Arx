@@ -2661,9 +2661,7 @@ export default function App() {
     }
   }
 
-  async function completeOnboarding(
-    destination: "build_community" | "discover_community",
-  ): Promise<void> {
+  async function finishOnboarding(): Promise<void> {
     const activeSession = await ensureUsableAuthSession();
     if (!activeSession) {
       requireSignIn({ reason: "try_polynet_free", payload: {} });
@@ -2694,6 +2692,15 @@ export default function App() {
     setIsSavingOnboarding(true);
     setOnboardingError(null);
     try {
+      const latestSetup = await loadCloudAccountSetupStatus<AuthSession>({
+        session: activeSession,
+      });
+      if (latestSetup) setAccountSetupStatus(latestSetup);
+      if (!latestSetup?.completed) {
+        setOnboardingError("Finish profile, inference, and agent setup to continue.");
+        setIsOnboardingModalOpen(true);
+        return;
+      }
       const avatarField = await prepareCloudProfileAvatarField<AuthSession>({
         session: activeSession,
         nextValue: profileUi.profileAvatarUrl,
@@ -2712,8 +2719,7 @@ export default function App() {
         avatarZoom: profileUi.profileAvatarZoom,
         bio,
         socialLinks: profileUi.profileSocialLinks,
-        onboardingDirection: destination,
-        markOnboardingDismissed: true,
+        completeOnboarding: true,
       });
       if (saved) {
         setCloudProfile(saved);
@@ -2733,11 +2739,6 @@ export default function App() {
         profileUi.setProfileAvatarFocusX(saved.avatar_focus_x ?? 0.5);
         profileUi.setProfileAvatarFocusY(saved.avatar_focus_y ?? 0.5);
         profileUi.setProfileAvatarZoom(saved.avatar_zoom ?? 1);
-      }
-
-      if (destination === "discover_community") {
-        navigateTo("/discover");
-        return;
       }
 
       navigateTo("/workspace");
@@ -9089,12 +9090,7 @@ export default function App() {
       agentSoul: userMemorySettings.agent_soul,
       isSavingAgent: isLoadingUserMemorySettings,
       onSaveAgent: saveOnboardingAgent,
-      onBuildCommunity: () => {
-        void completeOnboarding("build_community");
-      },
-      onDiscoverCommunity: () => {
-        void completeOnboarding("discover_community");
-      },
+      onFinishOnboarding: finishOnboarding,
       onClose: () => setIsOnboardingModalOpen(false),
     },
     showOnboardingModal: shellPublicRoute.kind === "app" && isOnboardingModalOpen,

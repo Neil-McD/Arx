@@ -92,6 +92,9 @@ assert.match(operatorPanel, /"handle"/, "operator setup missing-field ordering m
 assert.match(operatorPanel, /case "handle":[\s\S]*?return "Handle";/, "operator setup UI must label missing handles");
 assert.match(operatorPanel, /case "platform_legal":[\s\S]*?return "Platform legal";/, "operator setup UI must label missing platform legal acceptance");
 assert.match(operatorIntelligence, /"legalAcceptances"/, "operator setup visibility must source platform legal acceptance");
+assert.doesNotMatch(operatorDashboard, /v\.literal\("direction"\)/, "operator setup filters must not include the deleted direction step");
+assert.doesNotMatch(operatorIntelligence, /v\.literal\("direction"\)/, "operator setup snapshots must not include the deleted direction step");
+assert.doesNotMatch(operatorPanel, /case "direction":|return "Direction";/, "operator setup UI must not label the deleted direction step");
 
 const existingWithoutProfileDetail = buildAccountSetupStatus({
   displayName: "Existing Member",
@@ -114,7 +117,6 @@ const missingProvider = buildAccountSetupStatus({
   hasInferenceProvider: false,
   agentName: "Poly",
   agentSoul: "Helpful.",
-  onboardingDirection: "build_community",
 });
 assert.equal(missingProvider.current_step, "inference");
 assert.deepEqual(missingProvider.missing, ["inference_provider"]);

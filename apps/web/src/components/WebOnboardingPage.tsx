@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState, type DragEvent, type ReactNode } from "react";
-import { ArrowRight, Bot, Check, CircleUserRound, Compass, PlugZap, PlusCircle, Search, X } from "lucide-react";
+import { useEffect, useMemo, useState, type DragEvent } from "react";
+import { Bot, Check, CircleUserRound, PlugZap, X } from "lucide-react";
 import type { AccountSetupStatus, AccountSetupStep } from "../../../../shared/accountSetup";
 import { DEFAULT_AGENT_PERSONALITY_PROMPT_TEXT } from "../../../../shared/agentPersonalityPresets";
 import { renderMarkdown } from "../../../../shared/markdownUi";
@@ -71,8 +71,7 @@ type WebOnboardingPageProps = {
   agentSoul: string;
   isSavingAgent: boolean;
   onSaveAgent: (next: { agentName: string; agentSoul: string }) => Promise<boolean> | boolean;
-  onBuildCommunity: () => void;
-  onDiscoverCommunity: () => void;
+  onFinishOnboarding: () => Promise<void> | void;
   onClose?: () => void;
 };
 
@@ -85,16 +84,15 @@ const STEP_LABELS: Record<OnboardingStep, string> = {
   identity: "Profile",
   inference: "Inference",
   agent: "Agent",
-  direction: "Direction",
 };
 
 function normalizeStep(step: AccountSetupStep | null | undefined): OnboardingStep {
-  if (step === "inference" || step === "agent" || step === "direction") return step;
+  if (step === "inference" || step === "agent") return step;
   return "identity";
 }
 
 function stepIndex(step: OnboardingStep): number {
-  return ["identity", "inference", "agent", "direction"].indexOf(step);
+  return ["identity", "inference", "agent"].indexOf(step);
 }
 
 function stepIsComplete(status: AccountSetupStatus | null, step: OnboardingStep): boolean {
@@ -113,38 +111,7 @@ function StepIcon(props: { step: OnboardingStep }) {
       return <PlugZap size={15} strokeWidth={2} aria-hidden="true" />;
     case "agent":
       return <Bot size={15} strokeWidth={2} aria-hidden="true" />;
-    case "direction":
-      return <Compass size={15} strokeWidth={2} aria-hidden="true" />;
   }
-}
-
-function DirectionButton(props: {
-  title: string;
-  details: string;
-  action: string;
-  icon: ReactNode;
-  tone: "build" | "discover";
-  disabled: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      className={`polynet-onboarding-direction-card ${props.tone}`}
-      type="button"
-      disabled={props.disabled}
-      onClick={props.onClick}
-    >
-      <span className="polynet-onboarding-direction-icon">{props.icon}</span>
-      <span className="polynet-onboarding-direction-copy">
-        <strong>{props.title}</strong>
-        <p>{props.details}</p>
-      </span>
-      <span className="polynet-onboarding-direction-action">
-        {props.action}
-        <ArrowRight size={14} strokeWidth={2.2} aria-hidden="true" />
-      </span>
-    </button>
-  );
 }
 
 function formatHandleAvailability(
@@ -260,7 +227,7 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
     props.isSavingOpenAiConnection,
   );
   const stepOrder = useMemo<OnboardingStep[]>(
-    () => ["identity", "inference", "agent", "direction"],
+    () => ["identity", "inference", "agent"],
     [],
   );
 
@@ -282,7 +249,7 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
         agentName: agentNameDraft,
         agentSoul: agentSoulDraft,
       });
-      if (ok) setStep("direction");
+      if (ok) await props.onFinishOnboarding();
       return;
     }
     if (step === "inference") {
@@ -297,11 +264,6 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
     (step === "identity" && !profileReady) ||
     (step === "inference" && !hasInferenceProvider) ||
     (step === "agent" && !agentReady);
-
-  const chooseDirection = (direction: "build_community" | "discover_community") => {
-    if (direction === "build_community") props.onBuildCommunity();
-    if (direction === "discover_community") props.onDiscoverCommunity();
-  };
 
   const handleClose = () => {
     props.onClose?.();
@@ -602,29 +564,6 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
             </div>
           ) : null}
 
-          {step === "direction" ? (
-            <div className="polynet-onboarding-choice">
-              <DirectionButton
-                title="Build my first community"
-                details="Create a community, configure access, and launch your agent."
-                action="Start building"
-                icon={<PlusCircle size={18} strokeWidth={2} aria-hidden="true" />}
-                tone="build"
-                disabled={props.isSaving}
-                onClick={() => chooseDirection("build_community")}
-              />
-              <DirectionButton
-                title="Discover communities"
-                details="Explore communities, join one, and start using shared agents."
-                action="Explore communities"
-                icon={<Search size={18} strokeWidth={2} aria-hidden="true" />}
-                tone="discover"
-                disabled={props.isSaving}
-                onClick={() => chooseDirection("discover_community")}
-              />
-            </div>
-          ) : null}
-
           {props.error ? <p className="polynet-onboarding-error">{props.error}</p> : null}
 
           <div className="polynet-onboarding-profile-footer">
@@ -639,16 +578,14 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
                   Back
                 </button>
               ) : null}
-              {step !== "direction" ? (
-                <button
-                  type="button"
-                  className="polynet-onboarding-next"
-                  disabled={nextDisabled}
-                  onClick={() => void goNext()}
-                >
-                  {props.isSaving || props.isSavingAgent ? "Saving..." : "Next"}
-                </button>
-              ) : null}
+              <button
+                type="button"
+                className="polynet-onboarding-next"
+                disabled={nextDisabled}
+                onClick={() => void goNext()}
+              >
+                {props.isSaving || props.isSavingAgent ? "Saving..." : step === "agent" ? "Finish" : "Next"}
+              </button>
             </div>
           </div>
         </div>

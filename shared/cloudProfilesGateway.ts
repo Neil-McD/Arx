@@ -27,7 +27,6 @@ export type CloudProfileAvatarFieldInput = {
 export type CloudProfileDetailRow = CloudProfileBase & {
   bio: string | null;
   social_links?: SocialProfileLinks | null;
-  onboarding_direction?: "build_community" | "discover_community" | "learn_about_polynet" | null;
   onboarding_completed_at?: string | null;
   account_setup?: AccountSetupStatus | null;
 };
@@ -213,7 +212,6 @@ export async function upsertCloudProfileDetail<SessionT, TProfile extends CloudP
     avatarZoom?: number | null;
     bio: string | null;
     socialLinks?: SocialProfileLinks | null;
-    onboardingDirection?: "build_community" | "discover_community" | "learn_about_polynet" | null;
     markOnboardingDismissed?: boolean;
     completeOnboarding?: boolean;
     termsOfServiceVersion?: string | null;
@@ -233,7 +231,6 @@ export async function upsertCloudProfileDetail<SessionT, TProfile extends CloudP
     avatarZoom: params.avatarZoom ?? 1,
     bio: params.bio,
     ...(params.socialLinks !== undefined ? { socialLinks: params.socialLinks } : null),
-    onboardingDirection: params.onboardingDirection,
     markOnboardingDismissed: params.markOnboardingDismissed,
     completeOnboarding: params.completeOnboarding,
     termsOfServiceVersion: params.termsOfServiceVersion ?? null,

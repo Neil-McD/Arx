@@ -11,7 +11,6 @@ const accountSetupStep = v.optional(
     v.literal("identity"),
     v.literal("inference"),
     v.literal("agent"),
-    v.literal("direction"),
     v.literal("complete"),
   ),
 );

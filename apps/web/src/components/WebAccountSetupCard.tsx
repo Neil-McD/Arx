@@ -25,7 +25,7 @@ function formatSetupCardDescription(status: AccountSetupStatus): string {
   }
   if (status.current_step === "inference") return "Connect ChatGPT or add an OpenAI API key.";
   if (status.current_step === "agent") return "Name your agent.";
-  return "Choose where you want to start.";
+  return "Finish account setup.";
 }
 
 export function WebAccountSetupCard(props: WebAccountSetupCardProps) {

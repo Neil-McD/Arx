@@ -272,7 +272,6 @@ export type UserProfile = {
 export type UserProfileDetail = UserProfile & {
   bio: string | null;
   social_links?: SocialProfileLinks | null;
-  onboarding_direction?: "build_community" | "discover_community" | "learn_about_polynet" | null;
   onboarding_completed_at?: string | null;
   account_setup?: AccountSetupStatus | null;
 };

@@ -1,6 +1,6 @@
 import { validateProfileHandle } from "./profileHandle.ts";
 
-export type AccountSetupStep = "identity" | "inference" | "agent" | "direction" | "complete";
+export type AccountSetupStep = "identity" | "inference" | "agent" | "complete";
 
 export type AccountSetupMissing =
   | "display_name"
@@ -10,7 +10,7 @@ export type AccountSetupMissing =
   | "inference_provider"
   | "agent_name";
 
-export const ACCOUNT_SETUP_STEPS: AccountSetupStep[] = ["identity", "inference", "agent", "direction", "complete"];
+export const ACCOUNT_SETUP_STEPS: AccountSetupStep[] = ["identity", "inference", "agent", "complete"];
 
 export const ACCOUNT_SETUP_MISSING_FIELDS: AccountSetupMissing[] = [
   "display_name",
@@ -49,7 +49,6 @@ export type AccountSetupStatusInput = {
   hasInferenceProvider?: boolean | null;
   agentName?: string | null;
   agentSoul?: string | null;
-  onboardingDirection?: string | null;
 };
 
 function hasText(value: unknown): boolean {
@@ -105,7 +104,6 @@ export function buildAccountSetupStatus(input: AccountSetupStatusInput): Account
     buildStepStatus("identity", identityMissing, 4),
     buildStepStatus("inference", inferenceMissing, 1),
     buildStepStatus("agent", agentMissing, 1),
-    buildStepStatus("direction", [], 0),
   ];
   const missing = steps.flatMap((step) => step.missing);
   const totalItems = steps.reduce((sum, step) => sum + step.total_items, 0);

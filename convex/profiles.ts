@@ -138,7 +138,6 @@ async function mapProfileDetail(ctx: any, user: UserRow, detail: ProfileDetailRo
     ...(await mapProfileBase(ctx, user, detail)),
     bio: detail?.bio ?? null,
     social_links: normalizeSocialProfileLinks(detail?.socialLinks ?? {}),
-    onboarding_direction: detail?.onboardingDirection ?? null,
     onboarding_completed_at:
       typeof detail?.onboardingCompletedAt === "number"
         ? new Date(detail.onboardingCompletedAt).toISOString()
@@ -336,14 +335,6 @@ export const upsertProfileDetail = mutation({
         v.null(),
       ),
     ),
-    onboardingDirection: v.optional(
-      v.union(
-        v.literal("build_community"),
-        v.literal("discover_community"),
-        v.literal("learn_about_polynet"),
-        v.null(),
-      ),
-    ),
     markOnboardingDismissed: v.optional(v.boolean()),
     // Compatibility alias for older clients. Account setup truth is the returned `account_setup`.
     completeOnboarding: v.optional(v.boolean()),
@@ -439,10 +430,6 @@ export const upsertProfileDetail = mutation({
       args.socialLinks === undefined
         ? existingDetail?.socialLinks
         : normalizeProfileSocialLinksForStorage(args.socialLinks);
-    const nextOnboardingDirection =
-      args.onboardingDirection === undefined
-        ? existingDetail?.onboardingDirection
-        : args.onboardingDirection ?? undefined;
     const shouldMarkOnboardingDismissed =
       args.markOnboardingDismissed === true || args.completeOnboarding === true;
 
@@ -457,7 +444,6 @@ export const upsertProfileDetail = mutation({
         avatarZoom: nextAvatarZoom,
         bio: nextBio,
         socialLinks: nextSocialLinks,
-        onboardingDirection: nextOnboardingDirection,
         ...(shouldMarkOnboardingDismissed ? { onboardingCompletedAt: nowMs } : null),
         createdAt: nowMs,
         updatedAt: nowMs,
@@ -472,7 +458,6 @@ export const upsertProfileDetail = mutation({
         avatarZoom: nextAvatarZoom,
         bio: nextBio,
         socialLinks: nextSocialLinks,
-        onboardingDirection: nextOnboardingDirection,
         ...(shouldMarkOnboardingDismissed && !existingDetail.onboardingCompletedAt
           ? { onboardingCompletedAt: nowMs }
           : null),
