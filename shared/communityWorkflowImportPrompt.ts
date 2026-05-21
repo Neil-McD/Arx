@@ -91,6 +91,7 @@ export function buildCommunityWorkflowImportPrompt(input: CommunityWorkflowImpor
     "- For Codex-like harnesses, actual skills commonly live under user skill roots, project skill roots, system skill roots, and plugin/cache skill roots. For other harnesses, infer equivalent roots from their docs/help/config and record what you checked.",
     "- A packaged skill must come from a complete readable actual skill file, preferably SKILL.md.",
     "- Copy the complete skill body exactly when the source is an actual readable skill file and the file does not contain secrets.",
+    "- Do not package individual skill files larger than 40,000 characters. Record oversized otherwise-useful skills in skippedSkillCandidates with reason skill_body_too_large, sourcePath, originKind, charCount, and a short reason.",
     "- Preserve existing YAML frontmatter when present.",
     "- Mark metadata.originKind as existing_skill_file for user/project skills and plugin_skill for plugin, bundled, curated, marketplace, or system-provided skills.",
     "- Mark metadata.bodyExtraction as copied_exact when copied without rewriting, or sanitized_copy when only secret/value redaction was required.",

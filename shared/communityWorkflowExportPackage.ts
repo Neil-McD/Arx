@@ -12,6 +12,7 @@ export const COMMUNITY_WORKFLOW_EXPORT_PACKAGE_LIMITS = {
   maxTotalTextBytes: 5 * 1024 * 1024,
   maxJsonChars: 400_000,
   maxSkillBodyChars: 40_000,
+  maxSkillFileChars: 120_000,
   maxSkills: 30,
   maxMcpServers: 100,
 };
@@ -41,6 +42,7 @@ export type CommunityWorkflowExportPackageSummary = {
   mcp_count: number;
   markdown_decision_count: number;
   checksum_count: number;
+  oversized_skill_count: number;
 };
 
 export type CommunityWorkflowExportPackageParseResult = {
@@ -172,9 +174,9 @@ function enforceCentralDirectoryEntrySize(
 ) {
   if (
     kind.kind === "skillBody" &&
-    uncompressedSize > COMMUNITY_WORKFLOW_EXPORT_PACKAGE_LIMITS.maxSkillBodyChars
+    uncompressedSize > COMMUNITY_WORKFLOW_EXPORT_PACKAGE_LIMITS.maxSkillFileChars
   ) {
-    throw new Error(`workflow_export_skill_body_too_large:${kind.slug}`);
+    throw new Error(`workflow_export_skill_file_too_large:${kind.slug}`);
   }
   if (
     kind.kind !== "skillBody" &&
@@ -433,6 +435,7 @@ export async function parseCommunityWorkflowExportPackage(
 
   const skillMetadataBySlug = new Map<string, Record<string, unknown>>();
   const skillBodyBySlug = new Map<string, string>();
+  const oversizedSkillBodyBySlug = new Map<string, { charCount: number }>();
   for (const [path, entry] of normalizedEntries.entries()) {
     if (entry.kind.kind === "skillMetadata") {
       skillMetadataBySlug.set(
@@ -440,25 +443,48 @@ export async function parseCommunityWorkflowExportPackage(
         requirePlainRecord(parseJsonText(strFromU8(entry.bytes), path.replace(/[^a-z0-9]/gi, "_")), "workflow_export_skill_metadata"),
       );
     } else if (entry.kind.kind === "skillBody") {
-      const body = normalizeText(strFromU8(entry.bytes), COMMUNITY_WORKFLOW_EXPORT_PACKAGE_LIMITS.maxSkillBodyChars);
+      const rawBody = strFromU8(entry.bytes).trim();
+      if (rawBody.length > COMMUNITY_WORKFLOW_EXPORT_PACKAGE_LIMITS.maxSkillBodyChars) {
+        oversizedSkillBodyBySlug.set(entry.kind.slug, { charCount: rawBody.length });
+        continue;
+      }
+      const body = normalizeText(rawBody, COMMUNITY_WORKFLOW_EXPORT_PACKAGE_LIMITS.maxSkillBodyChars);
       if (body.length < 40) throw new Error(`workflow_export_skill_body_too_short:${entry.kind.slug}`);
       skillBodyBySlug.set(entry.kind.slug, body);
     }
   }
 
   const skills: Record<string, unknown>[] = [];
-  for (const [slug, body] of skillBodyBySlug.entries()) {
+  const skillSlugs = new Set([
+    ...skillBodyBySlug.keys(),
+    ...oversizedSkillBodyBySlug.keys(),
+    ...skillMetadataBySlug.keys(),
+  ]);
+  for (const slug of skillSlugs) {
     const metadata = skillMetadataBySlug.get(slug) ?? {};
+    const body = skillBodyBySlug.get(slug) ?? "";
+    const oversized = oversizedSkillBodyBySlug.get(slug) ?? null;
     skills.push({
       ...metadata,
       name: readRecordString(metadata, ["name", "title"]) || slug.replace(/[-_]+/g, " "),
       kind: readRecordString(metadata, ["kind"]) || "skill",
       location: readRecordString(metadata, ["location", "source_file", "sourceFile"]) || `skills/${slug}/SKILL.md`,
       source_file: `skills/${slug}/SKILL.md`,
-      proposedInstructionsMd: body,
-      recommendedHandling: readRecordString(metadata, ["recommendedHandling", "recommended_handling"]) || "import_as_skill",
-      polynetAction: readRecordString(metadata, ["polynetAction", "polynet_action"]) || "skill_import_candidate",
-      confidence: readRecordString(metadata, ["confidence"]) || "high",
+      ...(body ? { proposedInstructionsMd: body } : {}),
+      ...(oversized
+        ? {
+            bodyTooLarge: true,
+            bodyCharCount: oversized.charCount,
+            bodyMaxImportChars: COMMUNITY_WORKFLOW_EXPORT_PACKAGE_LIMITS.maxSkillBodyChars,
+          }
+        : {}),
+      recommendedHandling:
+        readRecordString(metadata, ["recommendedHandling", "recommended_handling"]) ||
+        (body ? "import_as_skill" : "review_manually"),
+      polynetAction:
+        readRecordString(metadata, ["polynetAction", "polynet_action"]) ||
+        (body ? "skill_import_candidate" : "skill_body_review"),
+      confidence: readRecordString(metadata, ["confidence"]) || (body ? "high" : "medium"),
     });
   }
   if (skills.length > COMMUNITY_WORKFLOW_EXPORT_PACKAGE_LIMITS.maxSkills) {
@@ -517,6 +543,7 @@ export async function parseCommunityWorkflowExportPackage(
       mcp_count: mcpServers.length,
       markdown_decision_count: markdownFiles.length,
       checksum_count: checksumMap.size,
+      oversized_skill_count: oversizedSkillBodyBySlug.size,
     },
   };
 }

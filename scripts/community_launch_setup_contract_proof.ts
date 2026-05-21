@@ -257,16 +257,35 @@ await assert.rejects(
     ),
   /workflow_export_too_many_mcp_servers/,
 );
+const oversizedWorkflowExportPackage = await parseCommunityWorkflowExportPackage(
+  buildWorkflowExportZip({
+    "manifest.json": JSON.stringify({ schemaVersion: "polynet_workflow_export_v1" }),
+    "skills/big/SKILL.md": "A".repeat(41_000),
+    "skills/big/metadata.json": JSON.stringify({ name: "Big Skill" }),
+  }),
+  { communityId: "community_123", builderUserId: "user_123", sourceHarness: "Codex" },
+);
+assert.equal(oversizedWorkflowExportPackage.summary.oversized_skill_count, 1);
+assert.equal(
+  (oversizedWorkflowExportPackage.ledger.skills as Array<Record<string, unknown>>)[0]
+    ?.proposedInstructionsMd,
+  undefined,
+);
+assert.equal(
+  (oversizedWorkflowExportPackage.ledger.skills as Array<Record<string, unknown>>)[0]
+    ?.bodyTooLarge,
+  true,
+);
 await assert.rejects(
   () =>
     parseCommunityWorkflowExportPackage(
       buildWorkflowExportZip({
         "manifest.json": JSON.stringify({ schemaVersion: "polynet_workflow_export_v1" }),
-        "skills/big/SKILL.md": "A".repeat(41_000),
+        "skills/huge/SKILL.md": "A".repeat(121_000),
       }),
       { communityId: "community_123", builderUserId: "user_123", sourceHarness: "Codex" },
     ),
-  /workflow_export_skill_body_too_large:big/,
+  /workflow_export_skill_file_too_large:huge/,
 );
 
 assert.deepEqual(COMMUNITY_LAUNCH_SETUP_STEPS, [
