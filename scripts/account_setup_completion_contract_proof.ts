@@ -124,6 +124,8 @@ assert.match(onboardingPage, /Use a key from your OpenAI account/, "onboarding i
 assert.match(onboardingPage, /onSaveAgent/, "onboarding agent step must persist canonical agent settings");
 assert.match(onboardingPage, /onFinishOnboarding/, "onboarding agent step must finish setup directly");
 assert.doesNotMatch(onboardingPage, /Direction|onBuildCommunity|onDiscoverCommunity|polynet-onboarding-direction/, "onboarding must not expose a direction step");
+assert.doesNotMatch(onboardingPage, /DEFAULT_AGENT_PERSONALITY_PROMPT_TEXT/, "onboarding must not default-select a personality preset");
+assert.match(onboardingPage, /agentNameDraft\.trim\(\)\.length > 0 && agentSoulDraft\.trim\(\)\.length > 0/, "onboarding agent finish must require an explicit personality selection");
 assert.match(app, /async function finishOnboarding/, "app shell must finish account onboarding without a direction choice");
 assert.match(app, /completeOnboarding: true/, "finish flow must mark onboarding complete explicitly");
 assert.doesNotMatch(app, /onboardingDirection: destination|completeOnboarding\("build_community"|completeOnboarding\("discover_community"/, "finish flow must not store a direction choice");

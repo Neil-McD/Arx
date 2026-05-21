@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState, type DragEvent } from "react";
 import { Bot, Check, CircleUserRound, PlugZap, X } from "lucide-react";
 import type { AccountSetupStatus, AccountSetupStep } from "../../../../shared/accountSetup";
-import { DEFAULT_AGENT_PERSONALITY_PROMPT_TEXT } from "../../../../shared/agentPersonalityPresets";
 import { renderMarkdown } from "../../../../shared/markdownUi";
 import { normalizeProfileHandle } from "../../../../shared/profileHandle";
 import type { SocialProfileKind, SocialProfileLinks } from "../../../../shared/socialProfileLinks";
@@ -100,7 +99,7 @@ function stepIsComplete(status: AccountSetupStatus | null, step: OnboardingStep)
 }
 
 function normalizeAgentSoulDraft(agentSoul: string): string {
-  return agentSoul.trim().length > 0 ? agentSoul : DEFAULT_AGENT_PERSONALITY_PROMPT_TEXT;
+  return agentSoul.trim();
 }
 
 function StepIcon(props: { step: OnboardingStep }) {
@@ -207,7 +206,7 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
     Boolean(props.avatarUrl?.trim()) &&
     handleReady &&
     platformLegalReady;
-  const agentReady = agentNameDraft.trim().length > 0;
+  const agentReady = agentNameDraft.trim().length > 0 && agentSoulDraft.trim().length > 0;
   const handleAvailability = formatHandleAvailability(
     props.handle,
     props.handleAvailability,
