@@ -44,6 +44,13 @@ const GENERIC_COMPLETENESS_CHECKS = [
   "If a known location is missing or inaccessible, record it in scanSummary.importantOmissions instead of guessing.",
 ];
 
+const GENERIC_MCP_PORTABILITY_EXPORT_RULES = [
+  "For MCP servers, record sourceHarness.serverName, sourceHarness.scope, sourceHarness.configLocation, sourceHarness.transport, source command/args/url, and env var names before judging portability.",
+  "Do not treat local server aliases or source config names as canonical app IDs.",
+  "If an MCP is stdio or a local wrapper, research an official remote endpoint before marking it portable; otherwise classify it as needs_managed_runtime, not_portable, or unknown.",
+  "Never export OAuth refresh tokens, access tokens, session IDs, client secrets, API keys, cookies, or keychain credential values.",
+];
+
 export const COMMUNITY_WORKFLOW_IMPORT_HARNESS_PROFILES: readonly CommunityWorkflowImportHarnessProfile[] = [
   {
     id: "claude",
@@ -81,6 +88,9 @@ export const COMMUNITY_WORKFLOW_IMPORT_HARNESS_PROFILES: readonly CommunityWorkf
     ],
     repositorySignals: GENERIC_REPOSITORY_SIGNALS,
     exportRules: [
+      ...GENERIC_MCP_PORTABILITY_EXPORT_RULES,
+      "Claude MCP configs can be local, project, user, or plugin scoped; preserve the source scope and config path for each server.",
+      "Claude OAuth/keychain/session state is not portable. Export only auth mode, required secret names, required scopes, and non-secret setup params.",
       "Claude commands are command candidates, not actual skills unless they are backed by a complete SKILL.md file.",
       "CLAUDE.md is repo instruction context; export it as a markdown decision unless it is a complete portable skill by itself.",
       "Only copy full skill bodies from .claude/skills/**/SKILL.md or ~/.claude/skills/**/SKILL.md when they are user-owned.",
@@ -124,6 +134,9 @@ export const COMMUNITY_WORKFLOW_IMPORT_HARNESS_PROFILES: readonly CommunityWorkf
     ],
     repositorySignals: GENERIC_REPOSITORY_SIGNALS,
     exportRules: [
+      ...GENERIC_MCP_PORTABILITY_EXPORT_RULES,
+      "Codex MCP configs in ~/.codex/config.toml are user/global; project .codex or .mcp.json configs are project/workspace scoped. Preserve that distinction.",
+      "Codex stdio MCP entries are local runtime recipes, not portable connections by themselves. Research official remote endpoints or classify them as managed-runtime/manual candidates.",
       "User/project skills should be copied when the full SKILL.md is present and safe.",
       "System, bundled, plugin, and curated skills should also be copied when the full SKILL.md is readable and safe, but mark originKind as plugin_skill or existing_skill_file, importRisk as medium or unknown when appropriate, and shouldDefaultImport as false unless clearly user-owned/exportable.",
       "AGENTS.md is repo instruction context; export it as a markdown decision unless it is a portable standalone skill.",
@@ -174,6 +187,8 @@ export const COMMUNITY_WORKFLOW_IMPORT_HARNESS_PROFILES: readonly CommunityWorkf
     ],
     repositorySignals: GENERIC_REPOSITORY_SIGNALS,
     exportRules: [
+      ...GENERIC_MCP_PORTABILITY_EXPORT_RULES,
+      "OpenClaw MCPs may be native, imported from another harness, plugin-backed, or channel-adapter-backed; preserve original source path and sourceHarness.scope.",
       "OpenClaw channel adapters and gateway credentials are runtime state; do not export them.",
       "OpenClaw plugin skills should be copied when the full SKILL.md file is visible and safe, with plugin provenance and shouldDefaultImport false unless clearly user-owned/exportable.",
       "Imported bundles from Claude, Codex, or Cursor should preserve their original source path and originKind.",
@@ -222,6 +237,8 @@ export const COMMUNITY_WORKFLOW_IMPORT_HARNESS_PROFILES: readonly CommunityWorkf
     ],
     repositorySignals: GENERIC_REPOSITORY_SIGNALS,
     exportRules: [
+      ...GENERIC_MCP_PORTABILITY_EXPORT_RULES,
+      "Hermes MCP and skill storage is less certain; inspect help/config output and classify unknown scope or transport explicitly instead of guessing.",
       "Hermes is less certain than Claude/Codex/Cursor; inspect help/config output and record uncertainty explicitly.",
       "Only package actual Hermes skill files when a full SKILL.md exists.",
       "If Hermes reports a skill by name but its body is not readable, record it as a skippedSkillCandidate, not an importable skill.",
@@ -261,6 +278,8 @@ export const COMMUNITY_WORKFLOW_IMPORT_HARNESS_PROFILES: readonly CommunityWorkf
     preferredLocalCommands: [],
     repositorySignals: GENERIC_REPOSITORY_SIGNALS,
     exportRules: [
+      ...GENERIC_MCP_PORTABILITY_EXPORT_RULES,
+      "Cursor MCP config may be project or user scoped; preserve the config path and do not treat Cursor rule names or MCP aliases as provider identity.",
       "Cursor rules are behavior/context decisions by default, not actual skills.",
       "Cursor commands can become skill candidates only if they describe portable reusable behavior.",
       "Only copy full SKILL.md files from real skill folders as default-on skill imports.",
@@ -302,6 +321,8 @@ export const COMMUNITY_WORKFLOW_IMPORT_HARNESS_PROFILES: readonly CommunityWorkf
     ],
     repositorySignals: GENERIC_REPOSITORY_SIGNALS,
     exportRules: [
+      ...GENERIC_MCP_PORTABILITY_EXPORT_RULES,
+      "Gemini CLI mcpServers settings can be user or project scoped; preserve the settings path and separate local command setup from official remote MCP identity.",
       "GEMINI.md is memory/instruction context and should usually be a markdown decision, not a skill.",
       "Gemini TOML commands are command candidates; convert only portable reusable procedures.",
       "Only full SKILL.md files from real skill folders default on.",
@@ -342,6 +363,8 @@ export const COMMUNITY_WORKFLOW_IMPORT_HARNESS_PROFILES: readonly CommunityWorkf
     ],
     repositorySignals: GENERIC_REPOSITORY_SIGNALS,
     exportRules: [
+      ...GENERIC_MCP_PORTABILITY_EXPORT_RULES,
+      "Antigravity MCP config may come from plugin bundles or local workspace config; preserve bundle/plugin provenance separately from official provider identity.",
       "Plugin skills are importable only when full SKILL.md files are present.",
       "Agents, rules, and hooks are decisions unless they can stand alone without Antigravity runtime internals.",
       "Do not export hook bodies that perform local side effects or contain credentials.",
@@ -393,6 +416,8 @@ export const COMMUNITY_WORKFLOW_IMPORT_HARNESS_PROFILES: readonly CommunityWorkf
     ],
     repositorySignals: GENERIC_REPOSITORY_SIGNALS,
     exportRules: [
+      ...GENERIC_MCP_PORTABILITY_EXPORT_RULES,
+      "For unknown harnesses, identify the harness-specific MCP scope and config roots before deciding whether a server is portable.",
       "Identify the harness name/version, config roots, skill roots, command/rule system, and active workspace before exporting.",
       "Do not invent paths. If you cannot confirm a real file, record an unresolved candidate instead of packaging it.",
       "Default-on skills require full SKILL.md content or equivalent complete user-owned behavior files.",

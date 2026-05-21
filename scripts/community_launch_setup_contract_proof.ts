@@ -102,6 +102,48 @@ const validWorkflowExportPackage = await parseCommunityWorkflowExportPackage(
           purpose: "Repository work",
           auth_type: "oauth",
           confidence: "high",
+          sourceHarness: {
+            serverName: "github",
+            scope: "user",
+            configLocation: "~/.codex/config.toml",
+            transport: "streamable_http",
+            command: "",
+            args: [],
+            url: "https://api.githubcopilot.com/mcp/readonly",
+            envVarNames: [],
+          },
+          officialIdentity: {
+            providerName: "GitHub",
+            officialName: "GitHub MCP",
+            domain: "github.com",
+            packageName: "",
+            docsUrl: "https://docs.github.com",
+            packageUrl: "",
+            sourceUrl: "",
+            logoUrl: "",
+          },
+          officialConnection: {
+            remoteEndpoint: "https://api.githubcopilot.com/mcp/readonly",
+            remoteTransport: "streamable_http",
+            authMode: "oauth",
+            oauthDiscoveryUrl: "",
+            requiresDynamicClientRegistration: "unknown",
+            requiredScopes: [],
+            requiredConfigParams: [],
+            requiredSecretNames: [],
+          },
+          portability: {
+            portableToPolynet: true,
+            classification: "needs_auth",
+            recommendedPolynetAction: "create_mount_needs_auth",
+            reason: "Remote MCP endpoint exists, but PolyNet must authorize independently.",
+          },
+          runtimeValidationHints: {
+            expectedToolNames: ["search_repositories"],
+            toolCount: 1,
+            serverInfoName: "github",
+            serverInfoVersion: "unknown",
+          },
         },
       ],
     }),
@@ -134,6 +176,43 @@ const validWorkflowExportPackage = await parseCommunityWorkflowExportPackage(
 
 assert.equal(validWorkflowExportPackage.summary.skill_count, 1);
 assert.equal(validWorkflowExportPackage.summary.mcp_count, 1);
+const validWorkflowExportMcp = (validWorkflowExportPackage.ledger.mcp_servers as Array<Record<string, unknown>>)[0];
+assert.deepEqual(
+  {
+    sourceHarness: validWorkflowExportMcp?.sourceHarness,
+    officialConnection: validWorkflowExportMcp?.officialConnection,
+    portability: validWorkflowExportMcp?.portability,
+  },
+  {
+    sourceHarness: {
+      serverName: "github",
+      scope: "user",
+      configLocation: "~/.codex/config.toml",
+      transport: "streamable_http",
+      command: "",
+      args: [],
+      url: "https://api.githubcopilot.com/mcp/readonly",
+      envVarNames: [],
+    },
+    officialConnection: {
+      remoteEndpoint: "https://api.githubcopilot.com/mcp/readonly",
+      remoteTransport: "streamable_http",
+      authMode: "oauth",
+      oauthDiscoveryUrl: "",
+      requiresDynamicClientRegistration: "unknown",
+      requiredScopes: [],
+      requiredConfigParams: [],
+      requiredSecretNames: [],
+    },
+    portability: {
+      portableToPolynet: true,
+      classification: "needs_auth",
+      recommendedPolynetAction: "create_mount_needs_auth",
+      reason: "Remote MCP endpoint exists, but PolyNet must authorize independently.",
+    },
+  },
+  "workflow export package parser must preserve nested MCP portability records for downstream registry matching",
+);
 assert.equal(
   (validWorkflowExportPackage.ledger.skills as Array<Record<string, unknown>>)[0]
     ?.proposedInstructionsMd,
@@ -1000,8 +1079,33 @@ assert.match(
 );
 assert.match(
   workflowImportPrompt,
+  /MCP portability audit:[\s\S]*source harness MCP config as evidence[\s\S]*local aliases like github[\s\S]*sourceHarness\.serverName[\s\S]*official remote MCP endpoint[\s\S]*needs_managed_runtime/,
+  "launch workflow import prompt must make the source agent separate local MCP aliases from portable remote connection identity",
+);
+assert.match(
+  workflowImportPrompt,
+  /sourceHarness[\s\S]*serverName[\s\S]*scope[\s\S]*configLocation[\s\S]*officialIdentity[\s\S]*providerName[\s\S]*officialConnection[\s\S]*remoteEndpoint[\s\S]*authMode[\s\S]*requiredSecretNames[\s\S]*portability[\s\S]*classification[\s\S]*runtimeValidationHints/,
+  "launch workflow import prompt must request nested MCP source, official identity, connection, portability, and validation hint records",
+);
+assert.match(
+  workflowImportPrompt,
+  /ready_remote\|needs_auth\|needs_config\|needs_managed_runtime\|not_portable\|unknown/,
+  "launch workflow import prompt must force explicit MCP portability classification values",
+);
+assert.match(
+  workflowImportPrompt,
   /providerName[\s\S]*officialName[\s\S]*logoUrl[\s\S]*skillSearchLocations[\s\S]*skillLikeItemsSeen[\s\S]*complete standalone Markdown body[\s\S]*owner[\s\S]*repo[\s\S]*fullName[\s\S]*defaultBranch/,
   "launch workflow import prompt must request MCP identity, skill completeness, and GitHub repository identity fields",
+);
+assert.match(
+  workflowImportHarnessProfiles,
+  /GENERIC_MCP_PORTABILITY_EXPORT_RULES[\s\S]*sourceHarness\.serverName[\s\S]*sourceHarness\.scope[\s\S]*needs_managed_runtime[\s\S]*OAuth refresh tokens[\s\S]*session IDs/,
+  "launch workflow import harness profiles must carry shared MCP portability and secret-state boundaries",
+);
+assert.match(
+  workflowImportHarnessProfiles,
+  /id: "claude"[\s\S]*local, project, user, or plugin scoped[\s\S]*id: "codex"[\s\S]*~\/\.codex\/config\.toml are user\/global[\s\S]*stdio MCP entries are local runtime recipes/,
+  "launch workflow import harness profiles must distinguish harness-specific MCP scope and local runtime state",
 );
 assert.match(
   workflowImportPrompt,
