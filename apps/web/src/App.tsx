@@ -162,6 +162,7 @@ import {
 import {
   type AppPage,
   type AppView,
+  type CommunitySettingsPane,
   type CommunityTab,
   type DiscoverTab,
   isCommunityRouteManagedTab,
@@ -1823,6 +1824,11 @@ export default function App() {
       ? initialAppRoute.communityResourceModuleId ?? null
       : null,
   );
+  const [communitySettingsPane, setCommunitySettingsPane] = useState<CommunitySettingsPane>(() =>
+    initialAppRoute?.page === "community" && initialAppRoute.communityTab === "settings"
+      ? initialAppRoute.communitySettingsPane ?? "community"
+      : "community",
+  );
   const {
     activeCommunity,
     activeCommunityId,
@@ -2887,13 +2893,18 @@ export default function App() {
       setCommunityResourceModuleId(
         nextAppRoute.communityTab === "resources" ? nextAppRoute.communityResourceModuleId ?? null : null,
       );
+      setCommunitySettingsPane(
+        nextAppRoute.communityTab === "settings" ? nextAppRoute.communitySettingsPane ?? "community" : "community",
+      );
     } else if (nextAppRoute.page === "workspace" && nextAppRoute.view === "home") {
       applyCommunityShellState({
         communitySlug: nextThreadId ? undefined : normalizedCommunitySlug,
       });
       setCommunityResourceModuleId(null);
+      setCommunitySettingsPane("community");
     } else {
       setCommunityResourceModuleId(null);
+      setCommunitySettingsPane("community");
     }
     if (nextAppRoute.page === "workspace" && nextAppRoute.view === "home") {
       setActiveThreadId(nextThreadId);
@@ -3046,6 +3057,8 @@ export default function App() {
         communityTab,
         communityResourceModuleId:
           activePage === "community" && communityTab === "resources" ? communityResourceModuleId : null,
+        communitySettingsPane:
+          activePage === "community" && communityTab === "settings" ? communitySettingsPane : null,
         discoverTab: discoverActiveTab,
         discoverAppId: selectedDiscoverAppId,
         discoverSkillId: selectedDiscoverSkillId,
@@ -4410,6 +4423,7 @@ export default function App() {
     activeCommunitySlug: selectedActiveCommunitySlug,
     communityTab,
     communityResourceModuleId,
+    communitySettingsPane,
     discoverTab: discoverActiveTab,
     discoverAppId: selectedDiscoverAppId,
     discoverSkillId: selectedDiscoverSkillId,
@@ -7908,6 +7922,16 @@ export default function App() {
     syncWorkspaceThreadCommunityLens,
     threads,
   ]);
+
+  const handleSelectCommunitySettingsPane = useCallback((pane: CommunitySettingsPane, opts?: { replace?: boolean }) => {
+    setCommunitySettingsPane(pane);
+    const nextCommunitySlug = String(selectedActiveCommunitySlug ?? activeCommunity?.slug ?? "").trim();
+    if (!nextCommunitySlug) return;
+    const settingsPath = buildCommunityTabPath(nextCommunitySlug, "settings", null, pane);
+    if (!settingsPath) return;
+    navigateTo(settingsPath, opts?.replace ? { replace: true } : {});
+  }, [activeCommunity?.slug, navigateTo, selectedActiveCommunitySlug]);
+
   const { communityChatPanelProps, communitySecondarySurfaceProps } =
     buildWebCommunitySurfaceProjection({
       activePage,
@@ -7922,6 +7946,8 @@ export default function App() {
       sessionUserId: canonicalSessionUserId,
       canViewActiveCommunitySettings,
       communitySettingsLayer,
+      communitySettingsPane,
+      onSelectCommunitySettingsPane: handleSelectCommunitySettingsPane,
       canManageCommunitySettings,
       canDeleteActiveCommunity,
       requireSignIn,

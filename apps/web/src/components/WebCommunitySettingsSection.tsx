@@ -6,6 +6,7 @@ import type { AccountCommerceStatus } from "../../../../shared/accountCommerceSt
 import { getCommunityBannerImageStyle } from "../../../../shared/communityBannerUi";
 import { formatStripeConnectCountry } from "../../../../shared/stripeConnectCountries";
 import { buildPlatformSwitcherStyle } from "../../../../shared/platformSwitcherUi";
+import type { CommunitySettingsPane } from "../../../../shared/appShellNavigation";
 import { buildStripeConnectPresentation } from "../controllers/buildStripeConnectPresentation";
 import { usePersonalAppSetupController } from "../controllers/usePersonalAppSetupController";
 import {
@@ -41,6 +42,8 @@ type WebCommunitySettingsSectionProps = {
   hasSession: boolean;
   canViewActiveCommunitySettings: boolean;
   communitySettingsLayer: CommunitySettingsLayer;
+  activePane: CommunitySettingsPane;
+  onSelectPane: (pane: CommunitySettingsPane, opts?: { replace?: boolean }) => void;
   canManageCommunitySettings: boolean;
   canDeleteCommunity: boolean;
   requireSignIn: () => void;
@@ -226,6 +229,69 @@ function CommunityPersonalSettingsSection({
           {state.communityMemberSettingsError}
         </div>
       ) : null}
+    </div>
+  );
+}
+
+const COMMUNITY_SETTINGS_PANE_LABELS: Record<CommunitySettingsPane, string> = {
+  community: "Community",
+  onboarding: "Onboarding",
+  integrations: "Integrations",
+  personal: "Personal",
+  danger: "Danger",
+};
+
+function CommunitySettingsPaneSwitcher({
+  activePane,
+  panes,
+  onSelectPane,
+}: {
+  activePane: CommunitySettingsPane;
+  panes: CommunitySettingsPane[];
+  onSelectPane: (pane: CommunitySettingsPane, opts?: { replace?: boolean }) => void;
+}) {
+  const switcherStyle = buildPlatformSwitcherStyle(
+    panes.length,
+    Math.max(0, panes.indexOf(activePane)),
+  );
+
+  return (
+    <div
+      className="platform-switcher platform-switcher-compact community-settings-pane-switcher"
+      role="tablist"
+      aria-label="Community settings sections"
+      style={switcherStyle}
+    >
+      {panes.map((pane) => (
+        <button
+          key={pane}
+          type="button"
+          role="tab"
+          aria-selected={activePane === pane}
+          className={`platform-switcher-btn${activePane === pane ? " is-active" : ""}`}
+          onClick={() => {
+            if (activePane !== pane) onSelectPane(pane);
+          }}
+        >
+          {COMMUNITY_SETTINGS_PANE_LABELS[pane]}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function CommunityMemberOnboardingSettingsSection() {
+  return (
+    <div className="settings-section">
+      <div className="settings-section-title">Member onboarding</div>
+      <div className="settings-section-desc">
+        Configure the welcome experience members see after joining this community.
+      </div>
+      <div className="model-note">
+        The member onboarding display will use a clickable welcome bar, an intro video modal,
+        and first-action prompts. This settings pane is ready for that configuration, but the
+        persisted onboarding fields are not wired yet.
+      </div>
     </div>
   );
 }
@@ -898,6 +964,8 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
     hasSession,
     canViewActiveCommunitySettings,
     communitySettingsLayer,
+    activePane,
+    onSelectPane,
     canManageCommunitySettings,
     canDeleteCommunity,
     requireSignIn,
@@ -912,6 +980,25 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
   const isMemberSettingsLayer = communitySettingsLayer === "member";
   const isOwnerSettingsLayer = communitySettingsLayer === "owner";
   const canLeaveCommunity = communitySettingsLayer !== "owner";
+  const ownerSettingsPanes: CommunitySettingsPane[] = canDeleteCommunity
+    ? ["community", "onboarding", "integrations", "personal", "danger"]
+    : ["community", "onboarding", "integrations", "personal"];
+  const memberSettingsPanes: CommunitySettingsPane[] = ["integrations", "personal"];
+  const availableSettingsPanes = canManageCommunitySettings
+    ? ownerSettingsPanes
+    : isMemberSettingsLayer
+      ? memberSettingsPanes
+      : [];
+  const selectedSettingsPane = availableSettingsPanes.includes(activePane)
+    ? activePane
+    : availableSettingsPanes[0] ?? "community";
+  const availableSettingsPaneKey = availableSettingsPanes.join("|");
+
+  useEffect(() => {
+    if (availableSettingsPanes.length > 0 && !availableSettingsPanes.includes(activePane)) {
+      onSelectPane(availableSettingsPanes[0]!, { replace: true });
+    }
+  }, [activePane, availableSettingsPaneKey, onSelectPane]);
 
   useEffect(() => {
     if (!state.communitySettingsAvatarUrl && state.isCommunityAvatarFocusModalOpen) {
@@ -946,78 +1033,102 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
       ) : canManageCommunitySettings ? (
         <>
           <div className="create-community-form community-settings-form">
-            {isOwnerSettingsLayer ? (
-              <CommunityBrandingSettingsSection
-                activeCommunity={activeCommunity}
-                state={state}
-                actions={actions}
+            <CommunitySettingsPaneSwitcher
+              activePane={selectedSettingsPane}
+              panes={ownerSettingsPanes}
+              onSelectPane={onSelectPane}
+            />
+            {selectedSettingsPane === "community" ? (
+              <>
+                {isOwnerSettingsLayer ? (
+                  <CommunityBrandingSettingsSection
+                    activeCommunity={activeCommunity}
+                    state={state}
+                    actions={actions}
+                  />
+                ) : null}
+                <CommunityProfileSettingsSection state={state} actions={actions} />
+                <CommunityMonetizationConfigSection
+                  activeCommunity={activeCommunity}
+                  accountCommerceStatus={accountCommerceStatus}
+                  accountCommerceError={accountCommerceError}
+                  startStripeConnectOnboarding={startStripeConnectOnboarding}
+                  isStartingStripeConnectOnboarding={isStartingStripeConnectOnboarding}
+                  canManagePublishing={isOwnerSettingsLayer}
+                  canManagePayoutAccount={isOwnerSettingsLayer}
+                  state={state}
+                  actions={actions}
+                />
+                {state.communitySettingsError && <div className="auth-error">{state.communitySettingsError}</div>}
+                <div className="create-community-actions">
+                  <button
+                    className={`platform-save-button${
+                      state.isCommunitySettingsDirty ? " is-dirty" : " is-saved"
+                    }`}
+                    onClick={() => void actions.handleSaveCommunitySettings()}
+                    disabled={
+                      state.isSavingCommunitySettings ||
+                      state.isProcessingCommunitySettingsBanner ||
+                      !state.isCommunitySettingsDirty
+                    }
+                  >
+                    {state.isSavingCommunitySettings
+                      ? "Saving..."
+                      : state.isProcessingCommunitySettingsBanner
+                        ? "Processing banner…"
+                        : state.isCommunitySettingsDirty
+                          ? "Save changes"
+                          : "Saved"}
+                  </button>
+                </div>
+              </>
+            ) : null}
+            {selectedSettingsPane === "onboarding" ? <CommunityMemberOnboardingSettingsSection /> : null}
+            {selectedSettingsPane === "integrations" ? (
+              <CommunityIntegrationsSettingsSection
+                canManage={canManageCommunitySettings}
+                hasSession={hasSession}
+                requireSignIn={requireSignIn}
+                integrations={communityIntegrations}
               />
             ) : null}
-            <CommunityProfileSettingsSection state={state} actions={actions} />
-            <CommunityMonetizationConfigSection
-              activeCommunity={activeCommunity}
-              accountCommerceStatus={accountCommerceStatus}
-              accountCommerceError={accountCommerceError}
-              startStripeConnectOnboarding={startStripeConnectOnboarding}
-              isStartingStripeConnectOnboarding={isStartingStripeConnectOnboarding}
-              canManagePublishing={isOwnerSettingsLayer}
-              canManagePayoutAccount={isOwnerSettingsLayer}
-              state={state}
-              actions={actions}
-            />
-            <CommunityIntegrationsSettingsSection
-              canManage={canManageCommunitySettings}
-              hasSession={hasSession}
-              requireSignIn={requireSignIn}
-              integrations={communityIntegrations}
-            />
-            <CommunityPersonalSettingsSection
-              state={state}
-              actions={actions}
-              canLeaveCommunity={canLeaveCommunity}
-            />
-
-            {state.communitySettingsError && <div className="auth-error">{state.communitySettingsError}</div>}
-            <div className="create-community-actions">
-              <button
-                className={`platform-save-button${
-                  state.isCommunitySettingsDirty ? " is-dirty" : " is-saved"
-                }`}
-                onClick={() => void actions.handleSaveCommunitySettings()}
-                disabled={
-                  state.isSavingCommunitySettings ||
-                  state.isProcessingCommunitySettingsBanner ||
-                  !state.isCommunitySettingsDirty
-                }
-              >
-                {state.isSavingCommunitySettings
-                  ? "Saving..."
-                  : state.isProcessingCommunitySettingsBanner
-                    ? "Processing banner…"
-                    : state.isCommunitySettingsDirty
-                      ? "Save changes"
-                      : "Saved"}
-              </button>
-            </div>
-            {canDeleteCommunity ? <CommunityDangerZoneSection state={state} actions={actions} /> : null}
+            {selectedSettingsPane === "personal" ? (
+              <CommunityPersonalSettingsSection
+                state={state}
+                actions={actions}
+                canLeaveCommunity={canLeaveCommunity}
+              />
+            ) : null}
+            {selectedSettingsPane === "danger" && canDeleteCommunity ? (
+              <CommunityDangerZoneSection state={state} actions={actions} />
+            ) : null}
           </div>
         </>
       ) : isMemberSettingsLayer ? (
         <>
           <div className="create-community-form community-settings-form">
-            <CommunityIntegrationsSettingsSection
-              canManage={false}
-              hasSession={hasSession}
-              requireSignIn={requireSignIn}
-              integrations={communityIntegrations}
+            <CommunitySettingsPaneSwitcher
+              activePane={selectedSettingsPane}
+              panes={memberSettingsPanes}
+              onSelectPane={onSelectPane}
             />
-            <CommunityPersonalSettingsSection
-              state={state}
-              actions={actions}
-              canLeaveCommunity={canLeaveCommunity}
-              title="Personal settings"
-              description="Manage your relationship with this community."
-            />
+            {selectedSettingsPane === "integrations" ? (
+              <CommunityIntegrationsSettingsSection
+                canManage={false}
+                hasSession={hasSession}
+                requireSignIn={requireSignIn}
+                integrations={communityIntegrations}
+              />
+            ) : null}
+            {selectedSettingsPane === "personal" ? (
+              <CommunityPersonalSettingsSection
+                state={state}
+                actions={actions}
+                canLeaveCommunity={canLeaveCommunity}
+                title="Personal settings"
+                description="Manage your relationship with this community."
+              />
+            ) : null}
           </div>
         </>
       ) : (

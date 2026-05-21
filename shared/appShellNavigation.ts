@@ -35,6 +35,16 @@ export const COMMUNITY_TABS = [
 
 export type CommunityTab = (typeof COMMUNITY_TABS)[number];
 
+export const COMMUNITY_SETTINGS_PANES = [
+  "community",
+  "onboarding",
+  "integrations",
+  "personal",
+  "danger",
+] as const;
+
+export type CommunitySettingsPane = (typeof COMMUNITY_SETTINGS_PANES)[number];
+
 const COMMUNITY_ROUTE_MANAGED_TAB_SET: ReadonlySet<CommunityTab> = new Set([
   "settings",
   "polynet",
@@ -77,6 +87,22 @@ export function parseCommunityTab(value: string | null | undefined): CommunityTa
       return "analytics";
     default:
       return "chat";
+  }
+}
+
+export function parseCommunitySettingsPane(value: string | null | undefined): CommunitySettingsPane {
+  switch ((value ?? "").trim()) {
+    case "onboarding":
+      return "onboarding";
+    case "integrations":
+      return "integrations";
+    case "personal":
+      return "personal";
+    case "danger":
+      return "danger";
+    case "community":
+    default:
+      return "community";
   }
 }
 

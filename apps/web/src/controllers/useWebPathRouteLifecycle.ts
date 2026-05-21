@@ -4,7 +4,14 @@ import {
   parseStripeConnectReturn,
   type StripeConnectReturn,
 } from "../../../../shared/accountCommerce";
-import type { AppPage, AppView, CommunityTab, DiscoverTab, SettingsPage } from "../../../../shared/appShellNavigation";
+import type {
+  AppPage,
+  AppView,
+  CommunitySettingsPane,
+  CommunityTab,
+  DiscoverTab,
+  SettingsPage,
+} from "../../../../shared/appShellNavigation";
 import type { PublicRoute } from "../../../../shared/webAppRouteState";
 
 function hasPendingOAuthCallbackParams(): boolean {
@@ -28,6 +35,7 @@ export function useWebPathRouteLifecycle(params: {
   activeCommunitySlug: string | null;
   communityTab: CommunityTab;
   communityResourceModuleId: string | null;
+  communitySettingsPane: CommunitySettingsPane;
   discoverTab: DiscoverTab;
   discoverAppId: string | null;
   discoverSkillId: string | null;
@@ -42,6 +50,7 @@ export function useWebPathRouteLifecycle(params: {
     communitySlug: string | null;
     communityTab: CommunityTab;
     communityResourceModuleId?: string | null;
+    communitySettingsPane?: CommunitySettingsPane | null;
     discoverTab: DiscoverTab;
     discoverAppId: string | null;
     discoverSkillId: string | null;
@@ -84,6 +93,10 @@ export function useWebPathRouteLifecycle(params: {
         params.activePage === "community" && params.communityTab === "resources"
           ? params.communityResourceModuleId
           : null,
+      communitySettingsPane:
+        params.activePage === "community" && params.communityTab === "settings"
+          ? params.communitySettingsPane
+          : null,
       discoverTab: params.discoverTab,
       discoverAppId: params.discoverAppId,
       discoverSkillId: params.discoverSkillId,
@@ -103,6 +116,7 @@ export function useWebPathRouteLifecycle(params: {
     params.activeCommunitySlug,
     params.communityTab,
     params.communityResourceModuleId,
+    params.communitySettingsPane,
     params.discoverTab,
     params.discoverAppId,
     params.discoverSkillId,

@@ -1,4 +1,4 @@
-import type { AppPage, CommunityTab } from "../../../../shared/appShellNavigation";
+import type { AppPage, CommunitySettingsPane, CommunityTab } from "../../../../shared/appShellNavigation";
 import type { WebCommunityChatPanelProps } from "../components/WebCommunityChatPanel";
 import type { WebCommunitySecondaryPanelsProps } from "../components/WebCommunitySecondaryPanels";
 
@@ -26,6 +26,8 @@ type BuildWebCommunitySurfaceProjectionParams = {
   sessionUserId: WebCommunityChatPanelProps["sessionUserId"];
   canViewActiveCommunitySettings: WebCommunitySecondaryPanelsProps["settings"]["canViewActiveCommunitySettings"];
   communitySettingsLayer: WebCommunitySecondaryPanelsProps["settings"]["communitySettingsLayer"];
+  communitySettingsPane: CommunitySettingsPane;
+  onSelectCommunitySettingsPane: (pane: CommunitySettingsPane, opts?: { replace?: boolean }) => void;
   canManageCommunitySettings: WebCommunitySecondaryPanelsProps["settings"]["canManageCommunitySettings"];
   canDeleteActiveCommunity: WebCommunitySecondaryPanelsProps["settings"]["canDeleteCommunity"];
   requireSignIn: WebCommunitySecondaryPanelsProps["settings"]["requireSignIn"];
@@ -163,6 +165,8 @@ export function buildWebCommunitySurfaceProjection(
       hasSession: params.hasAuthenticatedPresentation,
       canViewActiveCommunitySettings: params.canViewActiveCommunitySettings,
       communitySettingsLayer: params.communitySettingsLayer,
+      activePane: params.communitySettingsPane,
+      onSelectPane: params.onSelectCommunitySettingsPane,
       canManageCommunitySettings: params.canManageCommunitySettings,
       canDeleteCommunity: params.canDeleteActiveCommunity,
       requireSignIn: params.requireSignIn,

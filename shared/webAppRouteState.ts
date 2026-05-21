@@ -1,9 +1,11 @@
 import { isUuid } from "./appIdentity";
 import {
+  parseCommunitySettingsPane,
   parseCommunityTab,
   parseDiscoverTab,
   type AppPage,
   type AppView,
+  type CommunitySettingsPane,
   type CommunityTab,
   type DiscoverTab,
   type SettingsPage,
@@ -26,6 +28,7 @@ export type AppRouteState = {
   communitySlug: string | null;
   communityTab: CommunityTab;
   communityResourceModuleId?: string | null;
+  communitySettingsPane?: CommunitySettingsPane | null;
   discoverTab?: DiscoverTab | null;
   discoverAppId?: string | null;
   discoverSkillId?: string | null;
@@ -40,6 +43,7 @@ export type AppRoutePathState = {
   communitySlug: string | null;
   communityTab: CommunityTab;
   communityResourceModuleId?: string | null;
+  communitySettingsPane?: CommunitySettingsPane | null;
   discoverTab?: DiscoverTab | null;
   discoverAppId?: string | null;
   discoverSkillId?: string | null;
@@ -175,6 +179,7 @@ export function buildCommunityTabPath(
   communitySlug: string | null | undefined,
   communityTab: CommunityTab,
   communityResourceModuleId?: string | null,
+  communitySettingsPane?: CommunitySettingsPane | null,
 ): string | null {
   const slug = String(communitySlug ?? "").trim();
   if (!slug) return null;
@@ -187,6 +192,10 @@ export function buildCommunityTabPath(
   const moduleId = String(communityResourceModuleId ?? "").trim();
   if (communityTab === "resources" && moduleId) {
     return `/c/${encodeURIComponent(slug)}/${tabSegment}/${encodeURIComponent(moduleId)}`;
+  }
+  const settingsPane = parseCommunitySettingsPane(communitySettingsPane);
+  if (communityTab === "settings") {
+    return `/c/${encodeURIComponent(slug)}/${tabSegment}/${encodeURIComponent(settingsPane)}`;
   }
   return `/c/${encodeURIComponent(slug)}/${tabSegment}`;
 }
@@ -479,6 +488,8 @@ function parseAppRouteFromPathname(pathname: string): AppRoutePathState | null {
     const communityTab = parseCommunityTabSegment(segments[2] ?? null);
     const communityResourceModuleId =
       communityTab === "resources" ? String(segments[3] ?? "").trim() || null : null;
+    const communitySettingsPane =
+      communityTab === "settings" ? parseCommunitySettingsPane(segments[3] ?? null) : null;
     return {
       page: "community",
       view: "home",
@@ -486,6 +497,7 @@ function parseAppRouteFromPathname(pathname: string): AppRoutePathState | null {
       communitySlug: slug,
       communityTab,
       communityResourceModuleId,
+      communitySettingsPane,
       threadId: null,
     };
   }
@@ -529,6 +541,7 @@ export function readAppRouteFromLocation(): AppRouteState {
       communitySlug: fromPath.communitySlug,
       communityTab: fromPath.communityTab,
       communityResourceModuleId: fromPath.communityResourceModuleId ?? null,
+      communitySettingsPane: fromPath.communitySettingsPane ?? null,
       discoverTab: fromPath.discoverTab ?? "communities",
       discoverAppId: fromPath.discoverAppId ?? null,
       discoverSkillId: fromPath.discoverSkillId ?? null,
@@ -570,7 +583,12 @@ export function buildAppRoutePath(state: AppRoutePathState): string | null {
   }
 
   if (state.page === "community") {
-    return buildCommunityTabPath(state.communitySlug, state.communityTab, state.communityResourceModuleId);
+    return buildCommunityTabPath(
+      state.communitySlug,
+      state.communityTab,
+      state.communityResourceModuleId,
+      state.communitySettingsPane,
+    );
   }
 
   if (state.page === "docs") {
