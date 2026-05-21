@@ -115,14 +115,21 @@ function buildEffectiveHarnessSummary(apps: EffectiveMcpApp[]): string {
   const setupCount = apps.filter(
     (app) => !app.live_for_current_user && app.credential_state === "needs_personal_setup",
   ).length;
+  const communityAttachmentCount = apps.filter(
+    (app) => app.is_attached_to_community,
+  ).length;
   const notLiveCount = apps.length - liveCount;
   const scopeLabel = `${apps.length} ${apps.length === 1 ? "app" : "apps"}`;
+  const communitySuffix =
+    communityAttachmentCount > 0
+      ? ` ${communityAttachmentCount} attached to selected community.`
+      : "";
   if (apps.length === 0) return "No apps connected yet.";
-  if (notLiveCount === 0) return `${scopeLabel}. ${liveCount} live.`;
+  if (notLiveCount === 0) return `${scopeLabel}. ${liveCount} live.${communitySuffix}`;
   if (setupCount === notLiveCount) {
-    return `${scopeLabel}. ${liveCount} live, ${setupCount} need setup.`;
+    return `${scopeLabel}. ${liveCount} live, ${setupCount} need setup.${communitySuffix}`;
   }
-  return `${scopeLabel}. ${liveCount} live, ${notLiveCount} not live.`;
+  return `${scopeLabel}. ${liveCount} live, ${notLiveCount} not live.${communitySuffix}`;
 }
 
 export function WebIntegrationsSettingsSection(
@@ -360,6 +367,11 @@ export function WebIntegrationsSettingsSection(
                 canSetup: canSetupPersonal,
                 isBusy,
               });
+              const communityScopeLabel = row.communityMount
+                ? effectiveApp.has_personal_mount
+                  ? "Personal + community"
+                  : "Community"
+                : null;
               return (
                 <div
                   key={effectiveApp.app_identity_key}
@@ -384,6 +396,11 @@ export function WebIntegrationsSettingsSection(
                           <span className="integration-status-pill">
                             {row.toolCountLabel}
                           </span>
+                          {communityScopeLabel ? (
+                            <span className="community-app-status-badge">
+                              {communityScopeLabel}
+                            </span>
+                          ) : null}
                         </div>
                       </div>
                     </div>

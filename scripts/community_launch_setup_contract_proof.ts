@@ -131,12 +131,18 @@ const validWorkflowExportPackage = await parseCommunityWorkflowExportPackage(
     sourceFilename: "polynet-workflow-export.zip",
   },
 );
+
 assert.equal(validWorkflowExportPackage.summary.skill_count, 1);
 assert.equal(validWorkflowExportPackage.summary.mcp_count, 1);
 assert.equal(
   (validWorkflowExportPackage.ledger.skills as Array<Record<string, unknown>>)[0]
     ?.proposedInstructionsMd,
   "# Frontend Skill\n\nUse this complete standalone behavior to review and improve frontend work in PolyNet communities.",
+);
+assert.match(
+  String((validWorkflowExportPackage.ledger.skills as Array<Record<string, unknown>>)[0]?.bodySha256 ?? ""),
+  /^[a-f0-9]{64}$/,
+  "workflow export package parser must stamp imported skill bodies with a server-computed sha256 identity",
 );
 const inferredSupabaseCatalogMatch = resolveCommunityWorkflowImportMcpCatalogMatch({
   name: "Supabase",
@@ -1078,6 +1084,11 @@ assert.match(
   "workflow export package parser must validate package checksums when provided",
 );
 assert.match(
+  workflowExportPackage,
+  /skillBodySha256BySlug[\s\S]*sha256Hex\(new TextEncoder\(\)\.encode\(body\)\)[\s\S]*bodySha256/,
+  "workflow export package parser must compute skill body identity instead of trusting names or paths alone",
+);
+assert.match(
   workflowImports,
   /eventType: "draft_created"[\s\S]*eventType: "harness_output_received"[\s\S]*eventType: "agent_contract_prepared"/,
   "workflow import creation must write the initial draft and prepared-contract event trace",
@@ -1329,13 +1340,13 @@ assert.match(
 );
 assert.match(
   workflowImportReviewProjection,
-  /communityWorkflowImportCandidateIds[\s\S]*buildCommunityWorkflowImportMcpReviewItemId[\s\S]*buildCommunityWorkflowImportSkillReviewItemId[\s\S]*buildCommunityWorkflowImportMarkdownSkillReviewItemId/,
-  "web review projection must use the shared workflow import candidate id helper",
+  /readReviewBodySha256[\s\S]*bodySha256/,
+  "web review projection must preserve skill body identity as review metadata without semantic duplicate collapse",
 );
 assert.match(
   workflowImports,
-  /communityWorkflowImportCandidateIds[\s\S]*buildCommunityWorkflowImportMcpReviewItemId[\s\S]*buildCommunityWorkflowImportSkillReviewItemId[\s\S]*buildCommunityWorkflowImportMarkdownSkillReviewItemId/,
-  "server apply planning must use the same workflow import candidate ids shown to the user",
+  /readWorkflowImportBodySha256[\s\S]*bodySha256[\s\S]*requireSelectedWorkflowImportApplyPlanItems/,
+  "server apply planning must preserve skill body identity while rederiving selected apply items",
 );
 assert.match(
   workflowImports,

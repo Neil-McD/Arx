@@ -435,6 +435,7 @@ export async function parseCommunityWorkflowExportPackage(
 
   const skillMetadataBySlug = new Map<string, Record<string, unknown>>();
   const skillBodyBySlug = new Map<string, string>();
+  const skillBodySha256BySlug = new Map<string, string>();
   const oversizedSkillBodyBySlug = new Map<string, { charCount: number }>();
   for (const [path, entry] of normalizedEntries.entries()) {
     if (entry.kind.kind === "skillMetadata") {
@@ -451,6 +452,7 @@ export async function parseCommunityWorkflowExportPackage(
       const body = normalizeText(rawBody, COMMUNITY_WORKFLOW_EXPORT_PACKAGE_LIMITS.maxSkillBodyChars);
       if (body.length < 40) throw new Error(`workflow_export_skill_body_too_short:${entry.kind.slug}`);
       skillBodyBySlug.set(entry.kind.slug, body);
+      skillBodySha256BySlug.set(entry.kind.slug, await sha256Hex(new TextEncoder().encode(body)));
     }
   }
 
@@ -463,6 +465,7 @@ export async function parseCommunityWorkflowExportPackage(
   for (const slug of skillSlugs) {
     const metadata = skillMetadataBySlug.get(slug) ?? {};
     const body = skillBodyBySlug.get(slug) ?? "";
+    const bodySha256 = skillBodySha256BySlug.get(slug) ?? "";
     const oversized = oversizedSkillBodyBySlug.get(slug) ?? null;
     skills.push({
       ...metadata,
@@ -471,6 +474,7 @@ export async function parseCommunityWorkflowExportPackage(
       location: readRecordString(metadata, ["location", "source_file", "sourceFile"]) || `skills/${slug}/SKILL.md`,
       source_file: `skills/${slug}/SKILL.md`,
       ...(body ? { proposedInstructionsMd: body } : {}),
+      ...(bodySha256 ? { bodySha256 } : {}),
       ...(oversized
         ? {
             bodyTooLarge: true,

@@ -3,7 +3,6 @@ import {
   buildCommunityWorkflowImportMarkdownSkillReviewItemId,
   buildCommunityWorkflowImportMcpReviewItemId,
   buildCommunityWorkflowImportSkillReviewItemId,
-  normalizeCommunityWorkflowImportCandidateKey,
 } from "./communityWorkflowImportCandidateIds";
 import { resolveCommunityWorkflowImportMcpCatalogMatch } from "./communityWorkflowImportCatalogResolver";
 import { buildCommunityWorkflowImportRepositoryIdentity } from "./communityWorkflowImportRepositoryIdentity";
@@ -21,6 +20,7 @@ export type CommunityWorkflowImportReviewItem = {
   endpointUrl?: string | null;
   authType?: DeveloperAppAuthType | null;
   instructionsMd?: string | null;
+  bodySha256?: string | null;
   repositoryUrl?: string | null;
   repositoryRecommendation?: string | null;
 };
@@ -177,6 +177,18 @@ function readReviewInstructionsMd(record: Record<string, unknown>): string | nul
   return value.length >= 40 ? value : null;
 }
 
+function readReviewBodySha256(record: Record<string, unknown>): string | null {
+  const value = readRecordString(record, [
+    "bodySha256",
+    "body_sha256",
+    "instructionsSha256",
+    "instructions_sha256",
+    "skillBodySha256",
+    "skill_body_sha256",
+  ]).toLowerCase();
+  return /^[a-f0-9]{64}$/.test(value) ? value : null;
+}
+
 function itemHasLowConfidence(record: Record<string, unknown>): boolean {
   return readRecordString(record, ["confidence", "confidence_level"]).toLowerCase() === "low";
 }
@@ -302,6 +314,7 @@ export function buildCommunityWorkflowImportReviewProjection(
       readRecordBooleanish(record, ["dependsOnRepoCode", "depends_on_repo_code", "dependsOnRepo", "depends_on_repo"]) === true ||
       readRecordString(record, ["dependsOnRepoCode", "depends_on_repo_code", "dependsOnRepo", "depends_on_repo"]).toLowerCase() === "yes";
     const instructionsMd = readReviewInstructionsMd(record);
+    const bodySha256 = readReviewBodySha256(record);
     const shouldDefaultImport = readRecordBooleanish(record, ["shouldDefaultImport", "should_default_import"]);
     const isActualHarnessSkill = readRecordBooleanish(record, ["isActualHarnessSkill", "is_actual_harness_skill"]);
     const derivedOrSynthesized = isDerivedOrSynthesizedSkillRecord(record, source);
@@ -323,6 +336,7 @@ export function buildCommunityWorkflowImportReviewProjection(
         !itemHasLowConfidence(record) &&
         !isRejectedWorkflowCandidate(record),
       instructionsMd,
+      bodySha256,
     });
   }
 
@@ -344,6 +358,7 @@ export function buildCommunityWorkflowImportReviewProjection(
       `Markdown skill ${index + 1}`,
     );
     const instructionsMd = readReviewInstructionsMd(record);
+    const bodySha256 = readReviewBodySha256(record);
     skills.push({
       id: buildCommunityWorkflowImportMarkdownSkillReviewItemId({ name, source, index }),
       kind: "skill",
@@ -357,16 +372,8 @@ export function buildCommunityWorkflowImportReviewProjection(
       logoUrl: null,
       defaultSelected: false,
       instructionsMd,
+      bodySha256,
     });
-  }
-
-  const dedupedSkills: CommunityWorkflowImportReviewItem[] = [];
-  const seenSkillKeys = new Set<string>();
-  for (const skill of skills) {
-    const key = normalizeCommunityWorkflowImportCandidateKey(`${skill.name}-${skill.source ?? ""}`);
-    if (seenSkillKeys.has(key)) continue;
-    seenSkillKeys.add(key);
-    dedupedSkills.push(skill);
   }
 
   const repositoryRecord = isPlainObject(ledger.repository) ? ledger.repository : null;
@@ -425,7 +432,7 @@ export function buildCommunityWorkflowImportReviewProjection(
   const secretCount = collectRequiredSecretNames(ledger, [...mcpRecords, ...skillRecords]).size;
   return {
     mcpServers,
-    skills: dedupedSkills,
+    skills,
     repository,
     skillScan: {
       itemCount: readRecordNumber(scanSummary, ["skillLikeItemsSeen", "skill_like_items_seen"]),

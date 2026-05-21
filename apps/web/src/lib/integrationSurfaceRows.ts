@@ -4,6 +4,7 @@ import {
   mcpAppIdentitySourcesOverlap,
   type EffectiveMcpApp,
 } from "../../../../shared/effectiveMcpApps";
+import type { HarnessMount } from "../../../../shared/harnessMountTypes";
 import { findDiscoverCatalogEntryForAppIdentity } from "./discoverCatalogMatching";
 
 export type IntegrationSurfaceStateTone =
@@ -28,7 +29,7 @@ export type IntegrationSurfaceRow = {
   canSetup: boolean;
   isBusy: boolean;
   effectiveApp: EffectiveMcpApp | null;
-  communityMount: CommunityMountedApp | null;
+  communityMount: CommunityMountedApp | HarnessMount | null;
 };
 
 export function pluralizeIntegrationTools(count: number): string {
@@ -39,7 +40,9 @@ function uniqueToolNames(toolNames: string[]): string[] {
   return [...new Set(toolNames.map((name) => name.trim()).filter(Boolean))];
 }
 
-function getCommunityMountEnabledToolNames(mount: CommunityMountedApp): string[] {
+function getCommunityMountEnabledToolNames(
+  mount: CommunityMountedApp | HarnessMount,
+): string[] {
   const enabledToolNames = mount.tools
     .filter((tool) => tool.enabled)
     .map((tool) => tool.tool_name);
@@ -48,7 +51,7 @@ function getCommunityMountEnabledToolNames(mount: CommunityMountedApp): string[]
 
 function getIntegrationToolNames(args: {
   effectiveApp: EffectiveMcpApp | null;
-  communityMount?: CommunityMountedApp | null;
+  communityMount?: CommunityMountedApp | HarnessMount | null;
 }): string[] {
   if (args.effectiveApp?.effective_enabled_tools.length) {
     return uniqueToolNames(args.effectiveApp.effective_enabled_tools);
@@ -132,7 +135,7 @@ export function buildIntegrationSurfaceRowFromEffectiveApp(
     canSetup: options.canSetup ?? (effectiveApp.primary_action === "setup_personal"),
     isBusy: options.isBusy ?? false,
     effectiveApp,
-    communityMount: null,
+    communityMount: effectiveApp.community_mount,
   };
 }
 

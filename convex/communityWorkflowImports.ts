@@ -196,6 +196,7 @@ type WorkflowImportApplyPlanItem = {
   endpointUrl?: string | null;
   authType?: DeveloperAppAuthType | null;
   instructionsMd?: string | null;
+  bodySha256?: string | null;
   repositoryUrl?: string | null;
   repositoryRecommendation?: string | null;
 };
@@ -396,6 +397,18 @@ function readWorkflowImportInstructionsMd(record: Record<string, unknown>): stri
     "markdown_body",
   ]);
   return value.length >= 40 ? value : null;
+}
+
+function readWorkflowImportBodySha256(record: Record<string, unknown>): string | null {
+  const value = readWorkflowImportRecordString(record, [
+    "bodySha256",
+    "body_sha256",
+    "instructionsSha256",
+    "instructions_sha256",
+    "skillBodySha256",
+    "skill_body_sha256",
+  ]).toLowerCase();
+  return /^[a-f0-9]{64}$/.test(value) ? value : null;
 }
 
 function isCommunityWorkflowImportToolName(value: unknown): value is CommunityWorkflowImportToolName {
@@ -748,6 +761,7 @@ function buildWorkflowImportSkillApplyPlanItems(
       "invocation",
     ]);
     const instructionsMd = readWorkflowImportInstructionsMd(record);
+    const bodySha256 = readWorkflowImportBodySha256(record);
     const summary = truncateWorkflowImportReviewText(
       readWorkflowImportRecordString(record, [
         "purpose",
@@ -765,6 +779,7 @@ function buildWorkflowImportSkillApplyPlanItems(
         : "This skill candidate has a summary, but no complete importable skill body yet.",
       summary,
       instructionsMd,
+      bodySha256,
     };
   });
 }
@@ -817,6 +832,7 @@ function buildWorkflowImportMarkdownSkillApplyPlanItems(
       `Markdown skill ${index + 1}`,
     );
     const instructionsMd = readWorkflowImportInstructionsMd(record);
+    const bodySha256 = readWorkflowImportBodySha256(record);
     const importable =
       instructionsMd &&
       (handling === "import_as_skill" ||
@@ -838,6 +854,7 @@ function buildWorkflowImportMarkdownSkillApplyPlanItems(
         ]) || "Markdown-based workflow instructions.",
       ),
       instructionsMd,
+      bodySha256,
     });
   }
   return items;

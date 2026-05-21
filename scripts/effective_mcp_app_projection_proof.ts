@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 
 import {
   buildEffectiveMcpApps,
@@ -94,6 +95,80 @@ function provePersonalConnectionSatisfiesCommunityAttachment() {
   assert.equal(linear.community_mount?.source_mount_id, "c-linear");
 
   console.log("PASS: personal live MCP connection satisfies community attachment projection");
+}
+
+function proveSettingsRowPreservesCommunityAttachmentContract() {
+  const personalGithub = mount({
+    id: "user:u-github",
+    source_mount_id: "u-github",
+    scope: "user",
+    live_status: "live",
+    enabled_tools: ["search_repositories", "search_code", "list_pull_requests"],
+    app: {
+      catalog_app_id: "github",
+      name: "GitHub",
+      slug: "github",
+      endpoint_url: "https://api.githubcopilot.com/mcp/readonly",
+      auth_type: "bearer",
+      status: "valid",
+    },
+  });
+  const importedCommunityGithub = mount({
+    id: "community:c-github",
+    source_mount_id: "c-github",
+    scope: "community",
+    live_status: "not_live",
+    not_live_reason: "needs_auth",
+    enabled_tools: ["search_repositories"],
+    app: {
+      catalog_app_id: "github",
+      name: "GitHub",
+      slug: "github-2",
+      endpoint_url: "https://api.githubcopilot.com/mcp/readonly",
+      auth_type: "bearer",
+      status: "invalid",
+    },
+  });
+
+  const rows = buildEffectiveMcpApps([personalGithub, importedCommunityGithub]);
+
+  assert.equal(rows.length, 1);
+  const [github] = rows;
+  assert.equal(github.app_identity_key, "catalog:github");
+  assert.equal(github.live_for_current_user, true);
+  assert.equal(github.is_attached_to_community, true);
+  assert.equal(github.personal_mount?.source_mount_id, "u-github");
+  assert.equal(github.community_mount?.source_mount_id, "c-github");
+
+  const integrationRowsSource = readFileSync(
+    new URL("../apps/web/src/lib/integrationSurfaceRows.ts", import.meta.url),
+    "utf8",
+  );
+  const settingsSource = readFileSync(
+    new URL(
+      "../apps/web/src/components/WebIntegrationsSettingsSection.tsx",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+
+  assert.match(
+    integrationRowsSource,
+    /communityMount:\s*effectiveApp\.community_mount/,
+    "settings row projection must preserve the effective community MCP mount",
+  );
+  assert.match(
+    settingsSource,
+    /const communityScopeLabel = row\.communityMount[\s\S]*Personal \+ community/,
+    "settings rows must label merged personal and selected-community MCPs",
+  );
+  assert.match(
+    settingsSource,
+    /attached to selected community/,
+    "connected app summary must report selected-community MCP attachments",
+  );
+
+  console.log("PASS: settings row preserves imported community MCP attachment");
 }
 
 function proveCommunityAttachmentRequiresMemberSetupWithoutPersonalMount() {
@@ -332,6 +407,7 @@ function provePersonalMountRemovalRebuildsEffectiveProjection() {
 }
 
 provePersonalConnectionSatisfiesCommunityAttachment();
+proveSettingsRowPreservesCommunityAttachmentContract();
 proveCommunityAttachmentRequiresMemberSetupWithoutPersonalMount();
 proveCommunityGrantAloneIsNotRuntimeLive();
 proveEmptyCommunityToolSelectionDoesNotZeroLivePersonalTools();
