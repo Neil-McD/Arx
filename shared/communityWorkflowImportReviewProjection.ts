@@ -128,6 +128,20 @@ function readRecordString(record: Record<string, unknown>, keys: string[]): stri
   return "";
 }
 
+function readRecordBooleanish(record: Record<string, unknown>, keys: string[]): boolean | null {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "boolean") return value;
+    if (typeof value === "number" && Number.isFinite(value)) return value !== 0;
+    if (typeof value === "string" && value.trim()) {
+      const normalized = value.trim().toLowerCase();
+      if (["true", "yes", "y", "1", "default", "selected"].includes(normalized)) return true;
+      if (["false", "no", "n", "0", "manual", "off", "review"].includes(normalized)) return false;
+    }
+  }
+  return null;
+}
+
 function readRecordArray(record: Record<string, unknown>, keys: string[]): unknown[] {
   for (const key of keys) {
     const value = record[key];
@@ -186,6 +200,24 @@ function displayNameFromRaw(value: string, fallback: string): string {
     .replace(/[_-]+/g, " ")
     .replace(/\s+/g, " ")
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function isLikelyActualSkillSource(source: string): boolean {
+  const normalized = source.trim().toLowerCase().replace(/\\/g, "/");
+  return normalized.endsWith("/skill.md") || normalized === "skill.md";
+}
+
+function isDerivedOrSynthesizedSkillRecord(record: Record<string, unknown>, source: string): boolean {
+  const originKind = readRecordString(record, ["originKind", "origin_kind"]).toLowerCase();
+  const bodyExtraction = readRecordString(record, ["bodyExtraction", "body_extraction"]).toLowerCase();
+  const sourcePath = readRecordString(record, ["sourcePath", "source_path", "location", "path", "source_file", "sourceFile"]);
+  const evidenceText = readRecordListText(record, ["evidence"]).toLowerCase();
+  if (bodyExtraction === "synthesized" || bodyExtraction === "summary_only" || bodyExtraction === "unavailable") return true;
+  if (originKind === "derived_from_markdown" || originKind === "command" || originKind === "rule") return true;
+  if (originKind === "existing_skill_file" || originKind === "plugin_skill") return false;
+  if (sourcePath && sourcePath.toLowerCase().endsWith(".md") && !isLikelyActualSkillSource(sourcePath)) return true;
+  if (source && source.toLowerCase().endsWith(".md") && !isLikelyActualSkillSource(source)) return true;
+  return evidenceText.includes("derived from") || evidenceText.includes("converted into");
 }
 
 function getReviewLogoUrl(record: Record<string, unknown>, name: string): string | null {
@@ -402,9 +434,16 @@ export function buildCommunityWorkflowImportReviewProjection(
       readRecordString(record, ["name", "title", "skillName", "skill_name", "invocation"]),
       `Skill ${index + 1}`,
     );
-    const source = readRecordString(record, ["location", "path", "source_file", "sourceFile", "invocation"]);
-    const dependsOnRepo = readRecordString(record, ["dependsOnRepoCode", "depends_on_repo_code"]).toLowerCase() === "yes";
+    const source = readRecordString(record, ["sourcePath", "source_path", "location", "path", "source_file", "sourceFile", "invocation"]);
+    const dependsOnRepo =
+      readRecordBooleanish(record, ["dependsOnRepoCode", "depends_on_repo_code", "dependsOnRepo", "depends_on_repo"]) === true ||
+      readRecordString(record, ["dependsOnRepoCode", "depends_on_repo_code", "dependsOnRepo", "depends_on_repo"]).toLowerCase() === "yes";
     const instructionsMd = readReviewInstructionsMd(record);
+    const shouldDefaultImport = readRecordBooleanish(record, ["shouldDefaultImport", "should_default_import"]);
+    const isActualHarnessSkill = readRecordBooleanish(record, ["isActualHarnessSkill", "is_actual_harness_skill"]);
+    const derivedOrSynthesized = isDerivedOrSynthesizedSkillRecord(record, source);
+    const hasActualSkillProvenance =
+      isActualHarnessSkill === true || (!derivedOrSynthesized && isLikelyActualSkillSource(source));
     skills.push({
       id: buildCommunityWorkflowImportSkillReviewItemId({ name, source, index }),
       kind: "skill",
@@ -415,6 +454,8 @@ export function buildCommunityWorkflowImportReviewProjection(
       logoUrl: null,
       defaultSelected:
         Boolean(instructionsMd) &&
+        hasActualSkillProvenance &&
+        shouldDefaultImport !== false &&
         !dependsOnRepo &&
         !itemHasLowConfidence(record) &&
         !isRejectedWorkflowCandidate(record),
@@ -451,12 +492,7 @@ export function buildCommunityWorkflowImportReviewProjection(
       source: source || null,
       preview: truncateReviewText(readRecordListText(record, ["shortExcerpt", "short_excerpt", "importantHeadings", "evidence"]), 360) || null,
       logoUrl: null,
-      defaultSelected:
-        Boolean(instructionsMd) &&
-        (handling === "import_as_skill" || standalone === "yes") &&
-        dependsOnRepo !== "yes" &&
-        !itemHasLowConfidence(record) &&
-        !isRejectedWorkflowCandidate(record),
+      defaultSelected: false,
       instructionsMd,
     });
   }

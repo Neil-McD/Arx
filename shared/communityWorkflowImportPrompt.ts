@@ -1,23 +1,111 @@
-export function buildCommunityWorkflowImportPrompt(harnessName: string): string {
+import {
+  getCommunityWorkflowImportHarnessProfile,
+  type CommunityWorkflowImportHarnessProfile,
+} from "./communityWorkflowImportHarnessProfiles";
+
+type CommunityWorkflowImportPromptInput =
+  | string
+  | {
+      harnessId?: string | null;
+      harnessName: string;
+    };
+
+function asPromptInput(input: CommunityWorkflowImportPromptInput): {
+  harnessId?: string | null;
+  harnessName: string;
+} {
+  return typeof input === "string" ? { harnessName: input } : input;
+}
+
+function formatBullets(items: string[]): string[] {
+  return items.length ? items.map((item) => `- ${item}`) : ["- None known; discover and record what exists."];
+}
+
+function formatProfileSection(profile: CommunityWorkflowImportHarnessProfile): string[] {
+  return [
+    `${profile.label} scanner profile:`,
+    profile.summary,
+    "",
+    "MCP config locations to inspect:",
+    ...formatBullets(profile.mcpLocations),
+    "",
+    "Actual skill file locations to inspect first:",
+    ...formatBullets(profile.actualSkillLocations),
+    "",
+    "Instruction and markdown locations to triage second:",
+    ...formatBullets(profile.instructionLocations),
+    "",
+    "Command/rule locations to triage second:",
+    ...formatBullets(profile.commandLocations),
+    "",
+    "Plugin/bundle locations to inspect for skills and MCP config:",
+    ...formatBullets(profile.pluginLocations),
+    "",
+    "Safe read-only local commands to use only if available:",
+    ...formatBullets(profile.preferredLocalCommands),
+    "",
+    "Repository signals:",
+    ...formatBullets(profile.repositorySignals),
+    "",
+    "Harness-specific export rules:",
+    ...formatBullets(profile.exportRules),
+    "",
+    "Harness-specific exclusion rules:",
+    ...formatBullets(profile.exclusionRules),
+    "",
+    "Completeness checks:",
+    ...formatBullets(profile.completenessChecks),
+  ];
+}
+
+export function buildCommunityWorkflowImportPrompt(input: CommunityWorkflowImportPromptInput): string {
+  const promptInput = asPromptInput(input);
+  const profile = getCommunityWorkflowImportHarnessProfile(promptInput);
+
   return [
     "You are performing a read-only workflow audit of the current agent harness, workspace, repo, and configuration available to you.",
     "",
     "Your job is to find the portable parts of this workflow so another system can recreate the useful agent capabilities without copying secrets, private source code, or unnecessary noise.",
     "",
-    "Work carefully and comprehensively, but return only high-signal findings.",
+    "Work carefully and comprehensively, but return only high-signal findings. Use the harness-specific scanner profile below before doing generic markdown search.",
+    "",
+    ...formatProfileSection(profile),
     "",
     "Read-only rules:",
     "- Do not modify files, install packages, run destructive commands, or change configuration.",
     "- Do not include API keys, tokens, passwords, private keys, credential values, or secret values.",
-    "- Do not paste full proprietary source files or full Markdown documents.",
+    "- Do not paste full proprietary source files or full Markdown documents, except complete user-owned skill files that are intentionally included as skills/<slug>/SKILL.md in the export zip.",
     "- Include paths, command names, config locations, package names, public URLs, env var names, short excerpts, summaries, and evidence.",
     '- Use "unknown" when uncertain instead of guessing.',
     "",
     "Search scope:",
     "1. MCP servers and app/tool integrations.",
-    "2. Skills, slash commands, hooks, plugins, reusable prompts, or workflow commands.",
-    "3. Important Markdown files that define agent behavior, workflows, setup, playbooks, runbooks, prompts, or member-facing knowledge.",
-    "4. Repository state and whether the repo should be shared through a public GitHub integration or kept private.",
+    "2. Actual skill files from the profile's skill locations.",
+    "3. Commands, rules, hooks, plugins, reusable prompts, and workflow commands.",
+    "4. Important Markdown files that define agent behavior, workflows, setup, playbooks, runbooks, prompts, or member-facing knowledge.",
+    "5. Repository state and whether the repo should be shared through a public GitHub integration or kept private.",
+    "",
+    "Actual skill files first:",
+    "- A default-on importable skill must come from a complete readable user-owned skill file, preferably SKILL.md.",
+    "- Copy the complete skill body exactly when the source is an actual user-owned skill file.",
+    "- Preserve existing YAML frontmatter when present.",
+    "- Mark metadata.originKind as existing_skill_file for copied skill files.",
+    "- Mark metadata.bodyExtraction as copied_exact when copied without rewriting, or sanitized_copy when only secret/value redaction was required.",
+    "- Mark metadata.isActualHarnessSkill as true for actual harness skill files.",
+    "- Mark metadata.shouldDefaultImport as true only for actual complete portable skills.",
+    "- If a named skill exists but the complete body is not readable, put it in manifest.scanSummary.skippedSkillCandidates and do not create skills/<slug>/SKILL.md for it.",
+    "",
+    "Markdown-derived skill candidates second:",
+    "- Markdown files like AGENTS.md, CLAUDE.md, GEMINI.md, README.md, rules, commands, plans, docs, and playbooks are not actual skills just because they are useful.",
+    "- If you derive or rewrite a skill from markdown, metadata.originKind must be derived_from_markdown, metadata.bodyExtraction must be synthesized, metadata.isActualHarnessSkill must be false, and metadata.shouldDefaultImport must be false.",
+    "- Derived markdown skills may be included only when the behavior is clearly portable and high value; otherwise put the file only in markdown/decisions.json.",
+    "- Do not hide derivation. The metadata.location must point at the original markdown source path.",
+    "- If the markdown only works with local repo code, recommend leave_in_repo or add_as_resource instead of importing it as a skill.",
+    "",
+    "MCP search guidance:",
+    "Look for MCP configuration in the profile's MCP locations, harness settings, project config, JSON/TOML/YAML files, package scripts, local config folders, and documented setup instructions.",
+    "For each MCP server, identify what it does, how it starts/connects, required env var names, and whether it looks portable.",
+    "When possible, verify the MCP through official docs, a package registry, a public source repository, or a vendor setup page.",
     "",
     "Research pass:",
     "After local inspection, use any web/search/docs tools available to you to verify important public MCP servers, packages, plugins, skills, CLIs, and repo links.",
@@ -27,23 +115,18 @@ export function buildCommunityWorkflowImportPrompt(harnessName: string): string 
     "Do not invent URLs. If research tools are unavailable, say so in scanSummary.importantOmissions and continue from local evidence only.",
     "Do not include long copied docs. Summarize what the docs confirm in your own words and cite the URL.",
     "",
-    "MCP search guidance:",
-    "Look for MCP configuration in harness settings, project config, JSON/TOML/YAML files, package scripts, local config folders, and documented setup instructions.",
-    "For each MCP server, identify what it does, how it starts/connects, required env var names, and whether it looks portable.",
-    "When possible, verify the MCP through official docs, a package registry, a public source repository, or a vendor setup page.",
-    "",
     "Skill/workflow search guidance:",
     "Find reusable agent behaviors, commands, slash commands, hooks, plugins, prompt files, skill files, scripts, or documented procedures.",
     "A skill candidate should be reusable behavior, not just static knowledge.",
     "If it only works inside this repo with local source code, say so.",
-    "For importable skills, include proposedInstructionsMd: a concise, complete Markdown skill body that can stand alone in another harness.",
-    "If you cannot produce a complete skill body, do not pretend it is importable; mark it review_manually or leave_in_repo.",
+    "For importable skills, include a complete Markdown skill body in skills/<slug>/SKILL.md and matching metadata in skills/<slug>/metadata.json.",
+    "If you cannot produce a complete skill body with clear provenance, do not pretend it is importable; mark it review_manually or leave_in_repo.",
     "",
     "Markdown triage guidance:",
     "Scan Markdown files broadly, but do not list every Markdown file.",
-    "Prioritize files like AGENTS.md, CLAUDE.md, README.md, SKILL.md, .cursor/rules/*.md, .github/copilot-instructions.md, docs, prompts, playbooks, workflows, runbooks, setup guides, and agent instructions.",
+    "Prioritize the profile's instruction, command, and rule locations before generic docs.",
     "For each important Markdown file, decide whether it should:",
-    "- become a standalone skill,",
+    "- become a derived standalone skill candidate,",
     "- become agent instructions,",
     "- stay in the repo because it depends on the source code,",
     "- become member-facing resource/context,",
@@ -53,7 +136,7 @@ export function buildCommunityWorkflowImportPrompt(harnessName: string): string 
     "Important Markdown decision rule:",
     "The key question is whether the Markdown file can stand alone as reusable agent behavior.",
     "If it only makes sense with the repo/source code, recommend leaving it in the repo and connecting/sharing the repo if appropriate.",
-    "If it describes portable repeatable behavior that can work with MCPs/tools outside the repo, recommend importing it as a skill.",
+    "If it describes portable repeatable behavior that can work with MCPs/tools outside the repo, recommend importing it only as a derived skill candidate with shouldDefaultImport false.",
     "",
     "Repository judgment guidance:",
     "Determine whether there is a Git repo, whether it has a remote, whether that remote is GitHub, and whether it appears public, private, local-only, or unknown.",
@@ -64,7 +147,7 @@ export function buildCommunityWorkflowImportPrompt(harnessName: string): string 
     "If the workflow can be recreated through MCPs and skills without the repo, say that.",
     "",
     "Package output:",
-    "Create a zip file named polynet-workflow-export.zip. Do not put source code, secrets, node_modules, .git, .env files, private keys, binaries, or screenshots in the zip.",
+    "Create a zip file named polynet-workflow-export.zip. Do not put source code, secrets, node_modules, .git, .env files, private keys, binaries, screenshots, or caches in the zip.",
     "Only include these paths:",
     "- manifest.json",
     "- mcp/servers.json",
@@ -79,7 +162,7 @@ export function buildCommunityWorkflowImportPrompt(harnessName: string): string 
     "```json",
     "{",
     '  "schemaVersion": "polynet_workflow_export_v1",',
-    `  "sourceHarness": ${JSON.stringify(harnessName)},`,
+    `  "sourceHarness": ${JSON.stringify(profile.label)},`,
     '  "summary": { "name": "", "purpose": "", "mainUseCases": [], "whatMattersMost": [] },',
     '  "scanSummary": {',
     '    "searchedLocations": [],',
@@ -97,7 +180,13 @@ export function buildCommunityWorkflowImportPrompt(harnessName: string): string 
     "",
     "mcp/servers.json should contain { \"mcpServers\": [...] }. Each MCP server should include name, providerName, officialName, purpose, transport, endpoint, command, args, packageName, docsUrl, packageUrl, sourceUrl, logoUrl, configLocation, requiredEnvVars, authMode, capabilities, publiclyVerifiable, configExampleFound, portableToAnotherHarness, polynetAction, confidence, evidenceUrls, and evidence.",
     "",
-    "For every importable skill, write the complete standalone Markdown body to skills/<slug>/SKILL.md and write metadata to skills/<slug>/metadata.json. The metadata should include name, kind, purpose, invocation, location, docsUrl, sourceUrl, requiredEnvVars, dependsOnRepoCode, portableToAnotherHarness, recommendedHandling, polynetAction, confidence, evidenceUrls, and evidence.",
+    "For every importable skill, write the complete standalone Markdown body to skills/<slug>/SKILL.md and write metadata to skills/<slug>/metadata.json. The metadata must include name, kind, purpose, invocation, location, docsUrl, sourceUrl, requiredEnvVars, dependsOnRepoCode, portableToAnotherHarness, recommendedHandling, polynetAction, confidence, evidenceUrls, evidence, originKind, sourcePath, bodyExtraction, isActualHarnessSkill, and shouldDefaultImport.",
+    "",
+    "Allowed skill metadata values:",
+    "- originKind: existing_skill_file, command, rule, derived_from_markdown, plugin_skill, or unknown.",
+    "- bodyExtraction: copied_exact, sanitized_copy, synthesized, summary_only, or unavailable.",
+    "- isActualHarnessSkill: true only when the source was a complete actual harness skill file.",
+    "- shouldDefaultImport: true only when the body is complete, portable, user-owned/exportable, and not derived from generic markdown.",
     "",
     "markdown/decisions.json should contain { \"markdownFiles\": [...] } with path, title, summary, whyItMatters, workflowImportance, standaloneSkillCandidate, dependsOnRepoContext, containsAgentBehaviorRules, containsMemberFacingKnowledge, sensitiveRisk, recommendedHandling, reasoning, importantHeadings, shortExcerpt, confidence, evidenceUrls, and evidence.",
     "",

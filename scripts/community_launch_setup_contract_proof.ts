@@ -47,6 +47,7 @@ const communityBarrel = read("convex/community.ts");
 const workflowImports = read("convex/communityWorkflowImports.ts");
 const workflowImportTools = read("shared/communityWorkflowImportToolProtocol.ts");
 const workflowImportPrompt = read("shared/communityWorkflowImportPrompt.ts");
+const workflowImportHarnessProfiles = read("shared/communityWorkflowImportHarnessProfiles.ts");
 const workflowExportPackage = read("shared/communityWorkflowExportPackage.ts");
 const workflowImportCandidateIds = read("shared/communityWorkflowImportCandidateIds.ts");
 const workflowImportRepositoryIdentity = read("shared/communityWorkflowImportRepositoryIdentity.ts");
@@ -718,6 +719,46 @@ assert.match(
 );
 assert.match(
   workflowImportPrompt,
+  /getCommunityWorkflowImportHarnessProfile[\s\S]*Actual skill files first:[\s\S]*originKind[\s\S]*bodyExtraction[\s\S]*isActualHarnessSkill[\s\S]*shouldDefaultImport/,
+  "launch workflow import prompt must be driven by source-specific harness profiles and preserve skill provenance fields",
+);
+assert.match(
+  workflowImportHarnessProfiles,
+  /id: "claude"[\s\S]*\.claude\/skills\/\*\*\/SKILL\.md[\s\S]*\.mcp\.json[\s\S]*CLAUDE\.md/,
+  "launch workflow Claude import profile must probe Claude skill, MCP, and instruction locations",
+);
+assert.match(
+  workflowImportHarnessProfiles,
+  /id: "codex"[\s\S]*~\/\.codex\/config\.toml mcp_servers[\s\S]*~\/\.codex\/skills\/\*\*\/SKILL\.md[\s\S]*AGENTS\.md/,
+  "launch workflow Codex import profile must probe Codex MCP, skill, and AGENTS locations",
+);
+assert.match(
+  workflowImportHarnessProfiles,
+  /id: "openclaw"[\s\S]*~\/\.openclaw\/skills\/\*\*\/SKILL\.md[\s\S]*openclaw mcp list[\s\S]*openclaw skills list/,
+  "launch workflow OpenClaw import profile must probe OpenClaw MCP and skill surfaces",
+);
+assert.match(
+  workflowImportHarnessProfiles,
+  /id: "hermes"[\s\S]*~\/\.hermes\/skills\/\*\*\/SKILL\.md[\s\S]*hermes skills list[\s\S]*hermes mcp list/,
+  "launch workflow Hermes import profile must probe Hermes MCP and skill surfaces conservatively",
+);
+assert.match(
+  workflowImportHarnessProfiles,
+  /id: "cursor"[\s\S]*\.cursor\/mcp\.json[\s\S]*\.cursor\/rules\/\*\.mdc[\s\S]*\.cursor\/commands\/\*\*\/\*\.md/,
+  "launch workflow Cursor import profile must probe Cursor MCP, rules, and commands",
+);
+assert.match(
+  workflowImportHarnessProfiles,
+  /id: "gemini-cli"[\s\S]*\.gemini\/settings\.json mcpServers[\s\S]*GEMINI\.md[\s\S]*\.gemini\/commands\/\*\*\/\*\.toml/,
+  "launch workflow Gemini CLI import profile must probe Gemini memory, MCP, and command files",
+);
+assert.match(
+  workflowImportHarnessProfiles,
+  /id: "antigravity"[\s\S]*mcp_config\.json[\s\S]*~\/\.gemini\/antigravity-cli\/plugins\/\*\/skills\/\*\*\/SKILL\.md/,
+  "launch workflow Antigravity import profile must probe plugin skill and MCP bundle paths",
+);
+assert.match(
+  workflowImportPrompt,
   /Research pass:[\s\S]*web\/search\/docs tools[\s\S]*official docs[\s\S]*package registry pages[\s\S]*public GitHub repositories[\s\S]*scanSummary\.importantOmissions/,
   "launch workflow import prompt must ask the source harness to gather docs/package/source evidence when available",
 );
@@ -1018,8 +1059,18 @@ assert.doesNotMatch(
 );
 assert.match(
   workflowImportReviewProjection,
-  /Boolean\(instructionsMd\)[\s\S]*!dependsOnRepo[\s\S]*!itemHasLowConfidence[\s\S]*!isRejectedWorkflowCandidate/,
-  "launch workflow review must not default-select skills unless complete importable instructions are present",
+  /Boolean\(instructionsMd\)[\s\S]*hasActualSkillProvenance[\s\S]*shouldDefaultImport !== false[\s\S]*!dependsOnRepo[\s\S]*!itemHasLowConfidence[\s\S]*!isRejectedWorkflowCandidate/,
+  "launch workflow review must not default-select skills unless complete actual skill provenance is present",
+);
+assert.match(
+  workflowImportReviewProjection,
+  /isDerivedOrSynthesizedSkillRecord[\s\S]*bodyExtraction[\s\S]*synthesized[\s\S]*originKind[\s\S]*derived_from_markdown[\s\S]*defaultSelected: false/,
+  "launch workflow review must keep markdown-derived or synthesized skill candidates visible but manually selected",
+);
+assert.match(
+  workflowImportReviewProjection,
+  /sourcePath[\s\S]*source_path[\s\S]*location[\s\S]*hasActualSkillProvenance/,
+  "launch workflow review must use sourcePath skill provenance when judging default selection",
 );
 assert.match(
   workflowImportReviewProjection,

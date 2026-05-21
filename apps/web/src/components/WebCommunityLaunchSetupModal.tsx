@@ -1157,7 +1157,10 @@ export function WebCommunityLaunchSetupModal(
         selectedHarnessImportSource?.id === "other" && selectedHarnessOtherName.trim()
           ? selectedHarnessOtherName.trim()
           : selectedHarnessImportSource?.label ?? "your harness";
-      const harnessImportPrompt = buildCommunityWorkflowImportPrompt(selectedHarnessName);
+      const harnessImportPrompt = buildCommunityWorkflowImportPrompt({
+        harnessId: selectedHarnessImportSource?.id ?? null,
+        harnessName: selectedHarnessName,
+      });
       const handleCopyHarnessImportPrompt = async () => {
         await copyTextToClipboard(harnessImportPrompt);
         setDidCopyHarnessImportPrompt(true);
