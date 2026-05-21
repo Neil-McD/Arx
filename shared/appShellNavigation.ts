@@ -14,7 +14,7 @@ export type SettingsGroup =
   | "integrations"
   | "appearance";
 
-export type AppPage = "landing" | "onboarding" | "workspace" | "community" | "discover" | "docs";
+export type AppPage = "landing" | "onboarding" | "workspace" | "community" | "discover" | "docs" | "legal";
 
 export type AppView = "home" | "settings";
 

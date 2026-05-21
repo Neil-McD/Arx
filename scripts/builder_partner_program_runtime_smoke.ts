@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { BUILDER_PARTNER_TERMS_VERSION } from "../shared/builderPartnerProgram.ts";
 
 const targetArgs = buildTargetArgs();
 const runId = `partner-smoke-${Date.now().toString(36)}`;
@@ -260,7 +261,7 @@ createSmokeCommunity({
 
 const partnerProgram = runConvex(
   "builderPartners:acceptBuilderPartnerTermsAndEnsure",
-  { authSubject: partnerSubject },
+  { authSubject: partnerSubject, termsVersion: BUILDER_PARTNER_TERMS_VERSION },
   { identity: partner.identity },
 );
 const referralCode = String(partnerProgram.partner?.code ?? "");

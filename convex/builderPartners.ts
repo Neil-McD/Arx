@@ -21,6 +21,7 @@ import {
   calculateBuilderPartnerToolUsageCommission,
   roundBuilderPartnerMoney,
 } from "../shared/builderPartnerProgram";
+import { BUILDER_PARTNER_TERMS_DOCUMENT } from "../shared/legalDocuments";
 import { buildAttributionRouteLabel } from "../shared/routePrivacy";
 import { isCommunityPublishReady } from "../shared/communityPublishReadiness";
 import { loadAccountSetupStatusForUserId } from "./accountSetupCore";
@@ -853,6 +854,30 @@ function hasAcceptedCurrentTerms(partner: any): boolean {
     typeof partner?.acceptedTermsAt === "number" &&
     String(partner?.acceptedTermsVersion ?? "") === BUILDER_PARTNER_TERMS_VERSION
   );
+}
+
+async function recordBuilderPartnerTermsAcceptance(ctx: any, args: {
+  userId: any;
+  acceptedAt: number;
+}) {
+  const existing = await (ctx.db as any)
+    .query("legalAcceptances")
+    .withIndex("by_user_document_version", (q: any) =>
+      q
+        .eq("userId", args.userId)
+        .eq("documentKey", BUILDER_PARTNER_TERMS_DOCUMENT.key)
+        .eq("documentVersion", BUILDER_PARTNER_TERMS_DOCUMENT.version),
+    )
+    .first();
+  if (existing) return existing._id;
+  return await (ctx.db as any).insert("legalAcceptances", {
+    userId: args.userId,
+    documentKey: BUILDER_PARTNER_TERMS_DOCUMENT.key,
+    documentVersion: BUILDER_PARTNER_TERMS_DOCUMENT.version,
+    acceptedAt: args.acceptedAt,
+    source: "builder_partner_unlock",
+    createdAt: args.acceptedAt,
+  });
 }
 
 function isOpenAttribution(row: any, nowMs: number): boolean {
@@ -2403,8 +2428,16 @@ export const getMyBuilderPartnerProgram = query({
 export const acceptBuilderPartnerTermsAndEnsure = mutation({
   args: {
     authSubject: v.optional(v.string()),
+    termsVersion: v.string(),
   },
   handler: async (ctx, args) => {
+    const requestedTermsVersion = String(args.termsVersion ?? "").trim();
+    if (!requestedTermsVersion) {
+      throw new Error("builder_partner_terms_version_required");
+    }
+    if (requestedTermsVersion !== BUILDER_PARTNER_TERMS_VERSION) {
+      throw new Error("builder_partner_terms_version_stale");
+    }
     const actor = await resolveAuthenticatedActor({
       ctx,
       authSubject: args.authSubject ?? null,
@@ -2428,11 +2461,20 @@ export const acceptBuilderPartnerTermsAndEnsure = mutation({
     }
     const user = await ctx.db.get(actor.dbUserId);
     const code = existing?.code || await issuePartnerCode(ctx, user, existing?._id);
+    await recordBuilderPartnerTermsAcceptance(ctx, {
+      userId: actor.dbUserId,
+      acceptedAt: nowMs,
+    });
     if (existing) {
+      const acceptedTermsAt =
+        existing.acceptedTermsVersion === BUILDER_PARTNER_TERMS_VERSION &&
+        typeof existing.acceptedTermsAt === "number"
+          ? existing.acceptedTermsAt
+          : nowMs;
       await ctx.db.patch(existing._id, {
         code,
         status: existing.status === "paused" ? "paused" : "active",
-        acceptedTermsAt: existing.acceptedTermsAt ?? nowMs,
+        acceptedTermsAt,
         acceptedTermsVersion: BUILDER_PARTNER_TERMS_VERSION,
         updatedAt: nowMs,
       });

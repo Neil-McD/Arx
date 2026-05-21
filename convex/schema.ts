@@ -121,6 +121,17 @@ export default defineSchema({
     .index("by_code", ["code"])
     .index("by_status_createdAt", ["status", "createdAt"]),
 
+  legalAcceptances: defineTable({
+    userId: v.id("users"),
+    documentKey: v.string(),
+    documentVersion: v.string(),
+    acceptedAt: v.number(),
+    source: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_user_document_version", ["userId", "documentKey", "documentVersion"])
+    .index("by_document_version_acceptedAt", ["documentKey", "documentVersion", "acceptedAt"]),
+
   partnerAttributions: defineTable({
     attributionKey: v.string(),
     partnerId: v.id("builderPartners"),
@@ -711,7 +722,9 @@ export default defineSchema({
     providerSandboxId: v.optional(v.string()),
     providerSandboxState: v.optional(v.string()),
     providerSandboxLastSeenAt: v.optional(v.number()),
+    providerSandboxLastActivityAt: v.optional(v.number()),
     providerSandboxStartedAt: v.optional(v.number()),
+    providerSandboxIdleExpiresAt: v.optional(v.number()),
     providerSandboxCreditReservationKey: v.optional(v.string()),
     providerSandboxCreditBudgetCredits: v.optional(v.number()),
     providerSandboxCreditBudgetExpiresAt: v.optional(v.number()),

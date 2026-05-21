@@ -1567,6 +1567,9 @@ export default function App() {
   const [selectedProductDocSlug, setSelectedProductDocSlug] = useState<string | null>(
     () => initialAppRoute?.docsSlug ?? null,
   );
+  const [selectedLegalDocumentSlug, setSelectedLegalDocumentSlug] = useState<string | null>(
+    () => initialAppRoute?.legalSlug ?? null,
+  );
   const [shouldOpenCreatePersonalSkill, setShouldOpenCreatePersonalSkill] =
     useState(false);
   const settingsGroup = settingsGroupForPage(settingsPage);
@@ -2848,6 +2851,9 @@ export default function App() {
     if (nextAppRoute.page === "docs") {
       setSelectedProductDocSlug(nextAppRoute.docsSlug ?? null);
     }
+    if (nextAppRoute.page === "legal") {
+      setSelectedLegalDocumentSlug(nextAppRoute.legalSlug ?? null);
+    }
     if (nextAppRoute.page === "community") {
       applyCommunityShellState({
         communitySlug: normalizedCommunitySlug,
@@ -3019,6 +3025,7 @@ export default function App() {
         discoverAppId: selectedDiscoverAppId,
         discoverSkillId: selectedDiscoverSkillId,
         docsSlug: activePage === "docs" ? selectedProductDocSlug : null,
+        legalSlug: activePage === "legal" ? selectedLegalDocumentSlug : null,
         threadId: activePage === "workspace" && activeView === "home" ? activeThreadId : null,
       }) ?? "",
       shellVariant,
@@ -4333,6 +4340,7 @@ export default function App() {
     discoverAppId: selectedDiscoverAppId,
     discoverSkillId: selectedDiscoverSkillId,
     docsSlug: activePage === "docs" ? selectedProductDocSlug : null,
+    legalSlug: activePage === "legal" ? selectedLegalDocumentSlug : null,
     activeThreadId,
     applyLocationToState,
     setStripeConnectReturn,
@@ -5326,7 +5334,7 @@ export default function App() {
     [ensureUsableAuthSession],
   );
 
-  const acceptBuilderPartnerTerms = useCallback(async (): Promise<void> => {
+  const acceptBuilderPartnerTerms = useCallback(async (termsVersion: string): Promise<void> => {
     const usableSession = await ensureUsableAuthSession();
     if (!usableSession) {
       requireSignIn();
@@ -5337,6 +5345,7 @@ export default function App() {
     try {
       const snapshot = await acceptBuilderPartnerTermsCanonical({
         session: usableSession,
+        termsVersion,
       });
       setBuilderPartnerProgram(snapshot);
     } catch (error) {
@@ -9134,6 +9143,10 @@ export default function App() {
           threadId: null,
         }) ?? "/docs");
       },
+      renderMarkdown,
+    },
+    legalDocumentPanelProps: {
+      activeSlug: selectedLegalDocumentSlug,
       renderMarkdown,
     },
   });

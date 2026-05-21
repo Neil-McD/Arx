@@ -218,11 +218,13 @@ export async function loadBuilderPartnerProgramCanonical(params: {
 
 export async function acceptBuilderPartnerTermsCanonical(params: {
   session: AuthSessionLike;
+  termsVersion: string;
 }): Promise<BuilderPartnerProgramSnapshot> {
   requireConvexUrl();
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
   const row = (await client.mutation("builderPartners:acceptBuilderPartnerTermsAndEnsure" as any, {
     authSubject,
+    termsVersion: params.termsVersion,
   })) as BuilderPartnerProgramSnapshot;
   return normalizeProgramSnapshot(row);
 }

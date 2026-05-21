@@ -322,6 +322,21 @@ function proveUiContract(uiSource: string, settingsWrapperSource: string, partne
   );
   assertIncludes(
     uiSource,
+    "BUILDER_PARTNER_TERMS_DOCUMENT.route",
+    "partner settings UI must link to the current Builder Partner terms",
+  );
+  assertIncludes(
+    uiSource,
+    "hasConfirmedTermsAcceptance",
+    "partner settings UI must require explicit terms confirmation before unlock",
+  );
+  assertIncludes(
+    uiSource,
+    "props.acceptBuilderPartnerTerms(BUILDER_PARTNER_TERMS_DOCUMENT.version)",
+    "partner settings UI must submit the exact accepted terms version",
+  );
+  assertIncludes(
+    uiSource,
     "Copy link",
     "partner settings UI",
   );
@@ -384,6 +399,134 @@ function proveUiContract(uiSource: string, settingsWrapperSource: string, partne
     uiSource,
     /Ledger-backed|commission rows/i,
     "partner settings UI should not expose backend ledger implementation details",
+  );
+}
+
+function provePartnerTermsAgreementContract(args: {
+  termsDocSource: string;
+  legalRegistrySource: string;
+  legalContentSource: string;
+  legalPanelSource: string;
+  webAppRouteStateSource: string;
+  mainSurfaceHostSource: string;
+  routeLifecycleSource: string;
+  schemaSource: string;
+  builderPartnersSource: string;
+  gatewaySource: string;
+  runtimeSmokeSource: string;
+}) {
+  assertIncludes(
+    args.termsDocSource,
+    "version: builder_partner_terms_v1",
+    "Builder Partner terms legal artifact",
+  );
+  for (const marker of [
+    "## Eligibility",
+    "## Partner Links And Attribution",
+    "## Commission Rules",
+    "## Holds, Payout Buffer, And Payouts",
+    "## Refunds, Disputes, And Clawbacks",
+    "## Marketing Rules",
+    "clearly and conspicuously disclose your financial or referral relationship",
+    "## Taxes",
+    "## Program Changes",
+  ]) {
+    assertIncludes(args.termsDocSource, marker, "Builder Partner terms legal artifact");
+  }
+  assertIncludes(
+    args.legalRegistrySource,
+    "version: BUILDER_PARTNER_TERMS_VERSION",
+    "legal document registry must bind the document to the canonical terms version",
+  );
+  assertIncludes(
+    args.legalRegistrySource,
+    "route: \"/legal/builder-partner-terms\"",
+    "legal document registry must expose the canonical terms route",
+  );
+  assertIncludes(
+    args.legalContentSource,
+    "builder-partner-terms-v1.md?raw",
+    "web legal document content must render the canonical Markdown artifact",
+  );
+  assertIncludes(
+    args.legalContentSource,
+    "stripMarkdownFrontmatter(builderPartnerTermsV1)",
+    "web legal document content must hide source frontmatter from the user-facing legal page",
+  );
+  assertIncludes(
+    args.legalPanelSource,
+    "Current agreement for the PolyNet Builder Partner Program.",
+    "web legal document panel must render a human-readable legal surface",
+  );
+  assertIncludes(
+    args.webAppRouteStateSource,
+    "segments[0] === \"legal\"",
+    "app route state must parse legal document routes",
+  );
+  assertIncludes(
+    args.webAppRouteStateSource,
+    "return `/legal/${slug.split(\"/\").map(encodeURIComponent).join(\"/\")}`;",
+    "app route state must build legal document routes",
+  );
+  assertIncludes(
+    args.mainSurfaceHostSource,
+    "showLegalDocumentPanel",
+    "main surface host must expose the legal document route",
+  );
+  assertIncludes(
+    args.routeLifecycleSource,
+    "legalSlug",
+    "path route lifecycle must preserve legal document route state",
+  );
+  assert.match(
+    args.schemaSource,
+    /legalAcceptances:[\s\S]*userId:\s*v\.id\("users"\)[\s\S]*documentKey:\s*v\.string\(\)[\s\S]*documentVersion:\s*v\.string\(\)[\s\S]*acceptedAt:\s*v\.number\(\)[\s\S]*source:\s*v\.string\(\)/,
+    "expected append-only legal acceptance evidence table",
+  );
+  assert.match(
+    args.schemaSource,
+    /\.index\("by_user_document_version",\s*\["userId",\s*"documentKey",\s*"documentVersion"\]\)/,
+    "expected legal acceptance idempotency lookup index",
+  );
+  assertIncludes(
+    args.builderPartnersSource,
+    "termsVersion: v.string()",
+    "Builder Partner acceptance mutation must require an explicit terms version",
+  );
+  assertIncludes(
+    args.builderPartnersSource,
+    "builder_partner_terms_version_required",
+    "Builder Partner acceptance mutation must reject missing terms versions",
+  );
+  assertIncludes(
+    args.builderPartnersSource,
+    "builder_partner_terms_version_stale",
+    "Builder Partner acceptance mutation must reject stale terms versions",
+  );
+  assertIncludes(
+    args.builderPartnersSource,
+    "recordBuilderPartnerTermsAcceptance(ctx,",
+    "Builder Partner acceptance mutation must write legal acceptance evidence",
+  );
+  assertIncludes(
+    args.builderPartnersSource,
+    "existing.acceptedTermsVersion === BUILDER_PARTNER_TERMS_VERSION",
+    "Builder Partner summary acceptance timestamp must only be preserved for the current terms version",
+  );
+  assertIncludes(
+    args.builderPartnersSource,
+    "source: \"builder_partner_unlock\"",
+    "Builder Partner acceptance event must record its source",
+  );
+  assertIncludes(
+    args.gatewaySource,
+    "termsVersion: params.termsVersion",
+    "Builder Partner gateway must submit the exact terms version",
+  );
+  assertIncludes(
+    args.runtimeSmokeSource,
+    "termsVersion: BUILDER_PARTNER_TERMS_VERSION",
+    "Builder Partner runtime smoke must accept the current terms version explicitly",
   );
 }
 
@@ -2410,6 +2553,15 @@ function main() {
   const uiSource = [settingsWrapperSource, partnerPanelSource].join("\n");
   const builderPartnersSource = readText(new URL("../convex/builderPartners.ts", import.meta.url));
   const gatewaySource = readText(new URL("../shared/builderPartnerProgramGateway.ts", import.meta.url));
+  const termsDocSource = readText(new URL("../docs/legal/builder-partner-terms-v1.md", import.meta.url));
+  const legalRegistrySource = readText(new URL("../shared/legalDocuments.ts", import.meta.url));
+  const legalContentSource = readText(new URL("../apps/web/src/docs/legalDocumentsContent.ts", import.meta.url));
+  const legalPanelSource = readText(new URL("../apps/web/src/components/WebLegalDocumentPanel.tsx", import.meta.url));
+  const webAppRouteStateSource = readText(new URL("../shared/webAppRouteState.ts", import.meta.url));
+  const mainSurfaceHostSource = readText(new URL("../apps/web/src/components/WebAppMainSurfaceHost.tsx", import.meta.url));
+  const routeLifecycleSource = readText(
+    new URL("../apps/web/src/controllers/useWebPathRouteLifecycle.ts", import.meta.url),
+  );
   const operatorGatewaySource = readText(new URL("../shared/cloudOperatorDashboardGateway.ts", import.meta.url));
   const rightPanelSource = [
     readText(new URL("../apps/web/src/components/WebWorkspaceHost.tsx", import.meta.url)),
@@ -2453,6 +2605,19 @@ function main() {
   proveEndToEndPartnerLifecycleBehavior();
   proveSchemaContract(schemaSource);
   proveUiContract(uiSource, settingsWrapperSource, partnerPanelSource);
+  provePartnerTermsAgreementContract({
+    termsDocSource,
+    legalRegistrySource,
+    legalContentSource,
+    legalPanelSource,
+    webAppRouteStateSource,
+    mainSurfaceHostSource,
+    routeLifecycleSource,
+    schemaSource,
+    builderPartnersSource,
+    gatewaySource,
+    runtimeSmokeSource,
+  });
   provePartnerRightPanelContract(appSource, rightPanelSource, rightPanelModelSource);
   proveBuilderPartnerRuntimeSmokeContract(runtimeSmokeSource);
   proveAutomaticUnlockContract(builderPartnersSource, gatewaySource, appSource);

@@ -82,7 +82,7 @@ export type WebSettingsPanelsProps = {
     builderPartnerProgramError: string | null;
     isAcceptingBuilderPartnerTerms: boolean;
     loadBuilderPartnerProgram: (session: NonNullable<SessionLike>) => Promise<void> | void;
-    acceptBuilderPartnerTerms: () => Promise<void> | void;
+    acceptBuilderPartnerTerms: (termsVersion: string) => Promise<void> | void;
     openAccountSetup: () => void;
     openCreateCommunityModal: () => void;
     startStripeConnectOnboarding: (opts?: {
