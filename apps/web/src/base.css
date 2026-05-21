@@ -2780,17 +2780,6 @@ body {
   color: var(--text-primary);
 }
 
-.agent-personality-card.custom {
-  cursor: default;
-}
-
-.agent-personality-card.custom:hover {
-  border-color: rgba(255, 255, 255, 0.22);
-  background: rgba(255, 255, 255, 0.07);
-  color: var(--text-primary);
-  filter: none;
-}
-
 .agent-personality-card:disabled {
   cursor: not-allowed;
   opacity: 0.58;

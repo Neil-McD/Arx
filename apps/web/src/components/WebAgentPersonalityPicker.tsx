@@ -12,7 +12,7 @@ type WebAgentPersonalityPickerProps = {
   variant?: "onboarding" | "settings";
 };
 
-type RobotFaceKind = AgentPersonalityPresetId | "custom";
+type RobotFaceKind = AgentPersonalityPresetId;
 
 function RobotHead(props: { kind: RobotFaceKind }) {
   return (
@@ -143,15 +143,6 @@ function renderRobotFace(kind: RobotFaceKind) {
           <path className="robot-mouth" d="M48 74h24" />
         </>
       );
-    case "custom":
-      return (
-        <>
-          <path className="robot-head" d="M29 39c0-17 14-28 31-28s31 11 31 28v37c0 17-14 28-31 28S29 93 29 76z" />
-          <path className="robot-detail" d="M44 39h32M60 21v-9M50 71h20" />
-          <circle className="robot-eye hollow" cx="49" cy="57" r="7" />
-          <circle className="robot-eye hollow" cx="71" cy="57" r="7" />
-        </>
-      );
   }
 }
 
@@ -185,7 +176,6 @@ export function WebAgentPersonalityPicker({
   variant = "onboarding",
 }: WebAgentPersonalityPickerProps) {
   const selectedPreset = findAgentPersonalityPresetBySoul(value);
-  const hasCustomPersonality = value.trim().length > 0 && !selectedPreset;
 
   return (
     <section className={`agent-personality-picker ${variant}`} aria-label="Agent personality">
@@ -195,15 +185,6 @@ export function WebAgentPersonalityPicker({
       </div>
       <div className="agent-personality-picker-window">
         <div className="agent-personality-track" aria-label="Agent personality presets">
-          {hasCustomPersonality ? (
-            <div className="agent-personality-card custom selected" aria-current="true">
-              <RobotHead kind="custom" />
-              <span className="agent-personality-copy">
-                <strong>Custom</strong>
-                <span>Your current saved personality.</span>
-              </span>
-            </div>
-          ) : null}
           {AGENT_PERSONALITY_PRESETS.map((preset) => (
             <AgentPersonalityCard
               key={preset.id}
