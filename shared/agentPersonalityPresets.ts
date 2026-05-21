@@ -121,11 +121,6 @@ export const AGENT_PERSONALITY_PRESETS: AgentPersonalityPreset[] = [
   },
 ];
 
-export const DEFAULT_AGENT_PERSONALITY_PRESET_ID: AgentPersonalityPresetId = "builder";
-
-export const DEFAULT_AGENT_PERSONALITY_PROMPT_TEXT =
-  AGENT_PERSONALITY_PRESETS.find((preset) => preset.id === DEFAULT_AGENT_PERSONALITY_PRESET_ID)?.promptText ?? "";
-
 export function findAgentPersonalityPresetBySoul(agentSoul: string | null | undefined): AgentPersonalityPreset | null {
   const normalized = String(agentSoul ?? "").trim();
   if (!normalized) return null;
