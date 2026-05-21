@@ -81,6 +81,9 @@ export default defineSchema({
     userId: v.id("users"),
     stripeAccountId: v.string(),
     accountType: v.literal("express"),
+    country: v.optional(v.string()),
+    serviceAgreement: v.optional(v.string()),
+    transfersEnabled: v.optional(v.boolean()),
     status: v.union(
       v.literal("onboarding_required"),
       v.literal("pending_requirements"),
@@ -157,12 +160,22 @@ export default defineSchema({
     referredCommunityId: v.optional(v.id("communities")),
     basisType: v.union(
       v.literal("community_platform_fee"),
+      v.literal("paid_tool_usage"),
       v.literal("tool_gross_margin"),
     ),
     basisAmountUsd: v.number(),
     commissionRateBps: v.number(),
     commissionAmountUsd: v.number(),
     currency: v.string(),
+    commissionSettlementCents: v.optional(v.number()),
+    adjustmentSettlementCents: v.optional(v.number()),
+    reservedSettlementCents: v.optional(v.number()),
+    settledSettlementCents: v.optional(v.number()),
+    netSettlementCents: v.optional(v.number()),
+    openSettlementCents: v.optional(v.number()),
+    payoutOpen: v.optional(v.boolean()),
+    payoutDebt: v.optional(v.boolean()),
+    settlementUpdatedAt: v.optional(v.number()),
     status: v.union(
       v.literal("locked"),
       v.literal("risk_hold"),
@@ -186,6 +199,10 @@ export default defineSchema({
     .index("by_partner_status", ["partnerId", "status"])
     .index("by_referredUser", ["referredUserId"])
     .index("by_status_holdUntil", ["status", "holdUntil"])
+    .index("by_status_payoutOpen_payableAt", ["status", "payoutOpen", "payableAt"])
+    .index("by_partner_status_payoutOpen_payableAt", ["partnerId", "status", "payoutOpen", "payableAt"])
+    .index("by_partner_status_payoutDebt", ["partnerId", "status", "payoutDebt"])
+    .index("by_status_createdAt", ["status", "createdAt"])
     .index("by_checkout_session", ["sourceCheckoutSessionId"])
     .index("by_provider_invoice", ["sourceProviderInvoiceId"])
     .index("by_payment_intent", ["sourceProviderPaymentIntentId"])
@@ -225,6 +242,9 @@ export default defineSchema({
 
   partnerPayoutBatches: defineTable({
     batchKey: v.string(),
+    cyclePeriod: v.optional(v.string()),
+    runNumber: v.optional(v.number()),
+    replacesBatchId: v.optional(v.id("partnerPayoutBatches")),
     status: v.union(
       v.literal("draft"),
       v.literal("approved"),
@@ -232,6 +252,10 @@ export default defineSchema({
       v.literal("completed"),
       v.literal("failed"),
       v.literal("voided"),
+      v.literal("pending_approval"),
+      v.literal("paid"),
+      v.literal("held"),
+      v.literal("rejected"),
     ),
     totalAmountUsd: v.number(),
     currency: v.string(),
@@ -243,11 +267,14 @@ export default defineSchema({
     processedByUserId: v.optional(v.id("users")),
     approvedAt: v.optional(v.number()),
     processedAt: v.optional(v.number()),
+    holdReason: v.optional(v.string()),
+    rejectReason: v.optional(v.string()),
     failureReason: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
     .index("by_batchKey", ["batchKey"])
+    .index("by_cyclePeriod_runNumber", ["cyclePeriod", "runNumber"])
     .index("by_status_createdAt", ["status", "createdAt"]),
 
   partnerPayoutTransfers: defineTable({
@@ -262,6 +289,8 @@ export default defineSchema({
       v.literal("processing"),
       v.literal("succeeded"),
       v.literal("failed"),
+      v.literal("pending"),
+      v.literal("canceled"),
     ),
     stripeTransferId: v.optional(v.string()),
     idempotencyKey: v.string(),
@@ -273,6 +302,7 @@ export default defineSchema({
     .index("by_batch", ["batchId"])
     .index("by_partner_createdAt", ["partnerId", "createdAt"])
     .index("by_status_createdAt", ["status", "createdAt"])
+    .index("by_status_processedAt", ["status", "processedAt"])
     .index("by_idempotencyKey", ["idempotencyKey"])
     .index("by_stripeTransferId", ["stripeTransferId"]),
 
@@ -288,6 +318,7 @@ export default defineSchema({
       v.literal("reserved"),
       v.literal("settled"),
       v.literal("voided"),
+      v.literal("released"),
     ),
     createdAt: v.number(),
     updatedAt: v.number(),
