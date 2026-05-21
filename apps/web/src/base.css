@@ -1593,6 +1593,119 @@ body {
   min-width: 0;
 }
 
+.polynet-landing-calculator {
+  margin-top: 36px;
+  padding: 24px;
+  border: 1px solid var(--border-muted);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.025);
+  display: grid;
+  gap: 20px;
+}
+
+.polynet-landing-calculator-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.polynet-landing-calculator-field {
+  display: grid;
+  gap: 8px;
+}
+
+.polynet-landing-calculator-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.polynet-landing-calculator-label span {
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--text-secondary);
+}
+
+.polynet-landing-calculator-label strong {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--accent);
+}
+
+.polynet-landing-calculator-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  outline: none;
+  cursor: pointer;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.polynet-landing-calculator-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 3px solid var(--accent);
+  box-shadow: 0 0 12px rgba(255, 72, 153, 0.6);
+  transition: transform 120ms ease, border-color 120ms ease;
+  cursor: pointer;
+}
+
+.polynet-landing-calculator-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.15);
+  background: #ffffff;
+}
+
+.polynet-landing-calculator-slider::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 3px solid var(--accent);
+  box-shadow: 0 0 12px rgba(255, 72, 153, 0.6);
+  transition: transform 120ms ease, border-color 120ms ease;
+  cursor: pointer;
+}
+
+.polynet-landing-calculator-slider::-moz-range-thumb:hover {
+  transform: scale(1.15);
+  background: #ffffff;
+}
+
+.polynet-landing-calculator-results {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-muted);
+}
+
+.polynet-landing-calculator-results > div {
+  display: grid;
+  gap: 4px;
+}
+
+.polynet-landing-calculator-results span {
+  font-size: 11px;
+  font-weight: 750;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-tertiary);
+}
+
+.polynet-landing-calculator-results strong {
+  font-size: 24px;
+  font-weight: 900;
+  color: var(--text-primary);
+  letter-spacing: 0;
+}
+
 .polynet-landing-stack-header,
 .polynet-landing-stack-row {
   display: flex;
@@ -1939,6 +2052,7 @@ body {
   font-size: 12px;
   font-weight: 850;
   letter-spacing: 0.01em;
+  flex-shrink: 0;
 }
 
 .polynet-landing-agent-tool span,
@@ -2589,7 +2703,7 @@ body {
 
 .agent-personality-picker {
   display: grid;
-  gap: 8px;
+  gap: 9px;
   min-width: 0;
 }
 
@@ -2611,8 +2725,10 @@ body {
 
 .agent-personality-picker-window {
   min-width: 0;
-  overflow-x: auto;
-  overscroll-behavior-x: contain;
+  max-height: 420px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
   border: 1px solid var(--border-muted);
   border-radius: 10px;
   background: rgba(255, 255, 255, 0.025);
@@ -2621,23 +2737,23 @@ body {
 
 .agent-personality-track {
   display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: minmax(158px, 176px);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
   padding: 10px;
 }
 
 .agent-personality-card {
-  min-height: 148px;
+  min-height: 180px;
   border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.04);
-  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.032);
+  color: rgba(203, 203, 212, 0.74);
   display: grid;
-  align-content: start;
-  gap: 10px;
-  padding: 12px;
-  text-align: left;
+  grid-template-rows: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  padding: 14px 10px 12px;
+  text-align: center;
   cursor: pointer;
   transition:
     background 150ms ease,
@@ -2647,20 +2763,20 @@ body {
 }
 
 .agent-personality-card:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.065);
-  border-color: rgba(255, 255, 255, 0.14);
-  color: var(--text-primary);
-  filter: brightness(1.08);
+  background: rgba(255, 60, 142, 0.055);
+  border-color: rgba(255, 60, 142, 0.38);
+  color: rgba(255, 84, 166, 0.95);
+  filter: none;
 }
 
 .agent-personality-card:focus-visible {
-  outline: 2px solid rgba(255, 211, 106, 0.86);
+  outline: 2px solid rgba(255, 60, 142, 0.66);
   outline-offset: 2px;
 }
 
 .agent-personality-card.selected {
-  border-color: rgba(255, 60, 142, 0.56);
-  background: rgba(255, 60, 142, 0.08);
+  border-color: rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.07);
   color: var(--text-primary);
 }
 
@@ -2669,8 +2785,8 @@ body {
 }
 
 .agent-personality-card.custom:hover {
-  border-color: rgba(255, 60, 142, 0.56);
-  background: rgba(255, 60, 142, 0.08);
+  border-color: rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.07);
   color: var(--text-primary);
   filter: none;
 }
@@ -2680,57 +2796,72 @@ body {
   opacity: 0.58;
 }
 
-.agent-personality-mark {
-  width: 44px;
-  height: 44px;
-  color: rgba(245, 245, 250, 0.72);
+.agent-personality-robot {
+  align-self: center;
+  justify-self: center;
+  width: min(92px, 72%);
+  color: currentColor;
   display: inline-grid;
   place-items: center;
 }
 
-.agent-personality-mark svg {
+.agent-personality-robot svg {
   width: 100%;
   height: 100%;
   overflow: visible;
 }
 
-.agent-personality-mark-base {
-  fill: rgba(255, 255, 255, 0.055);
+.robot-head {
+  fill: rgba(255, 255, 255, 0.035);
   stroke: currentColor;
-  stroke-width: 1.7;
+  stroke-width: 4;
 }
 
-.agent-personality-mark-line {
+.robot-detail,
+.robot-mouth {
   fill: none;
   stroke: currentColor;
   stroke-linecap: round;
   stroke-linejoin: round;
-  stroke-width: 2.6;
+  stroke-width: 4;
+  opacity: 0.68;
 }
 
-.agent-personality-mark-dot {
+.robot-eye {
   fill: currentColor;
 }
 
-.agent-personality-mark.builder .main,
-.agent-personality-mark.operator .alt {
-  stroke-width: 3.3;
+.robot-eye.hollow {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 4;
 }
 
-.agent-personality-mark.strategist .main,
-.agent-personality-mark.researcher .alt {
-  transform: rotate(-18deg);
-  transform-origin: center;
+.robot-eye.wide {
+  fill: rgba(255, 255, 255, 0.035);
+  stroke: currentColor;
+  stroke-width: 4;
 }
 
-.agent-personality-mark.creative .main,
-.agent-personality-mark.mad_scientist .main {
-  stroke-dasharray: 3 4;
+.agent-personality-robot.creative,
+.agent-personality-robot.mad_scientist {
+  width: min(98px, 76%);
+}
+
+.agent-personality-robot.zen,
+.agent-personality-robot.coach {
+  width: min(88px, 70%);
+}
+
+.agent-personality-robot.operator,
+.agent-personality-robot.skeptic {
+  width: min(94px, 74%);
 }
 
 .agent-personality-copy {
   display: grid;
-  gap: 5px;
+  gap: 4px;
+  min-width: 0;
 }
 
 .agent-personality-copy strong {
@@ -2741,9 +2872,9 @@ body {
 
 .agent-personality-copy span {
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 650;
-  line-height: 1.32;
+  line-height: 1.24;
 }
 
 .polynet-onboarding-step-intro {
@@ -5075,6 +5206,16 @@ body {
   .polynet-landing-section {
     gap: 28px;
     padding: 54px 0;
+  }
+
+  .polynet-landing-calculator {
+    padding: 18px;
+    gap: 16px;
+  }
+
+  .polynet-landing-calculator-results {
+    grid-template-columns: 1fr;
+    gap: 12px;
   }
 
   .polynet-landing-section.compact {

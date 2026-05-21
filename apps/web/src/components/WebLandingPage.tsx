@@ -75,7 +75,6 @@ const buildAgentResearchStream = [
     result: "Positioning and examples are ready.",
   },
 ];
-
 const flowCards = [
   {
     title: "Build the agent",
@@ -419,8 +418,15 @@ function renderFlowExample(flow: (typeof flowCards)[number], index: number) {
 export function WebLandingPage(props: WebLandingPageProps) {
   const [activeFlowIndex, setActiveFlowIndex] = useState(0);
   const [isFlowPinned, setIsFlowPinned] = useState(false);
+  const [members, setMembers] = useState(100);
+  const [price, setPrice] = useState(29);
   const mobileFlowRef = useRef<HTMLDivElement | null>(null);
   const activeFlow = flowCards[activeFlowIndex] ?? flowCards[0];
+
+  const monthlyRevenue = members * price;
+  const annualRevenue = monthlyRevenue * 12;
+  const monthlyFormatted = "$" + monthlyRevenue.toLocaleString();
+  const annualFormatted = "$" + annualRevenue.toLocaleString();
 
   useEffect(() => {
     void recordCloudBusinessPageVisit({
@@ -647,6 +653,55 @@ export function WebLandingPage(props: WebLandingPageProps) {
             Polynet compresses agents, community, resources, funnels, and paid
             access into one clean product.
           </p>
+          <div className="polynet-landing-calculator">
+            <h3 className="polynet-landing-calculator-title">Estimate your earnings</h3>
+            <div className="polynet-landing-calculator-field">
+              <div className="polynet-landing-calculator-label">
+                <span>Members</span>
+                <strong>{members}</strong>
+              </div>
+              <input
+                type="range"
+                min="10"
+                max="1000"
+                step="10"
+                value={members}
+                onChange={(e) => setMembers(Number(e.target.value))}
+                className="polynet-landing-calculator-slider"
+                style={{
+                  background: `linear-gradient(to right, var(--accent) 0%, var(--accent) ${((members - 10) / 990) * 100}%, rgba(255, 255, 255, 0.15) ${((members - 10) / 990) * 100}%, rgba(255, 255, 255, 0.15) 100%)`
+                }}
+              />
+            </div>
+            <div className="polynet-landing-calculator-field">
+              <div className="polynet-landing-calculator-label">
+                <span>Price per month</span>
+                <strong>${price}</strong>
+              </div>
+              <input
+                type="range"
+                min="5"
+                max="150"
+                step="5"
+                value={price}
+                onChange={(e) => setPrice(Number(e.target.value))}
+                className="polynet-landing-calculator-slider"
+                style={{
+                  background: `linear-gradient(to right, var(--accent) 0%, var(--accent) ${((price - 5) / 145) * 100}%, rgba(255, 255, 255, 0.15) ${((price - 5) / 145) * 100}%, rgba(255, 255, 255, 0.15) 100%)`
+                }}
+              />
+            </div>
+            <div className="polynet-landing-calculator-results">
+              <div>
+                <span>Monthly earnings</span>
+                <strong>{monthlyFormatted}</strong>
+              </div>
+              <div>
+                <span>Yearly earnings</span>
+                <strong>{annualFormatted}</strong>
+              </div>
+            </div>
+          </div>
         </div>
         <div className="polynet-landing-comparison">
           <div className="polynet-landing-stack-list">
