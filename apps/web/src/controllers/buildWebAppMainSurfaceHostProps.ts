@@ -14,7 +14,6 @@ export function buildWebAppMainSurfaceHostProps(params: {
   communityHostProps: WebAppMainSurfaceHostProps["communityHostProps"];
   discoverPanelProps: WebAppMainSurfaceHostProps["discoverPanelProps"];
   productDocsPanelProps: WebAppMainSurfaceHostProps["productDocsPanelProps"];
-  legalDocumentPanelProps: WebAppMainSurfaceHostProps["legalDocumentPanelProps"];
 }): WebAppMainSurfaceHostProps {
   return {
     activePage: params.activePage,
@@ -25,8 +24,6 @@ export function buildWebAppMainSurfaceHostProps(params: {
       params.publicRoute.kind === "app" && params.activePage === "discover",
     showProductDocsPanel:
       params.publicRoute.kind === "app" && params.activePage === "docs",
-    showLegalDocumentPanel:
-      params.publicRoute.kind === "app" && params.activePage === "legal",
     holdLandingForAuth: params.holdLandingForAuth,
     landingPageProps: params.landingPageProps,
     onboardingPageProps: params.onboardingPageProps,
@@ -36,6 +33,5 @@ export function buildWebAppMainSurfaceHostProps(params: {
     communityHostProps: params.communityHostProps,
     discoverPanelProps: params.discoverPanelProps,
     productDocsPanelProps: params.productDocsPanelProps,
-    legalDocumentPanelProps: params.legalDocumentPanelProps,
   };
 }

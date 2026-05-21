@@ -317,23 +317,43 @@ function proveUiContract(uiSource: string, settingsWrapperSource: string, partne
   );
   assertIncludes(
     uiSource,
-    "Accept and unlock",
+    "Review and accept terms",
     "partner settings UI",
   );
   assertIncludes(
     uiSource,
-    "BUILDER_PARTNER_TERMS_DOCUMENT.route",
-    "partner settings UI must link to the current Builder Partner terms",
+    "BUILDER_PARTNER_TERMS_ENTRY",
+    "partner settings UI must load the canonical Builder Partner terms document",
+  );
+  assertIncludes(
+    uiSource,
+    "isTermsModalOpen",
+    "partner settings UI must present terms in a local acceptance modal",
+  );
+  assertIncludes(
+    uiSource,
+    "builder-partner-terms-reader",
+    "partner settings UI must render terms inside a bounded modal viewport",
   );
   assertIncludes(
     uiSource,
     "hasConfirmedTermsAcceptance",
-    "partner settings UI must require explicit terms confirmation before unlock",
+    "partner settings UI must require explicit terms confirmation inside the modal before unlock",
   );
   assertIncludes(
     uiSource,
-    "props.acceptBuilderPartnerTerms(BUILDER_PARTNER_TERMS_DOCUMENT.version)",
+    "props.renderMarkdown(activeTermsDocument.content)",
+    "partner settings UI must render the terms body inside the modal",
+  );
+  assertIncludes(
+    uiSource,
+    "props.acceptBuilderPartnerTerms(activeTermsDocument.version)",
     "partner settings UI must submit the exact accepted terms version",
+  );
+  assert.doesNotMatch(
+    uiSource,
+    /window\.open|BUILDER_PARTNER_TERMS_DOCUMENT\.route|\/legal\/builder-partner-terms/,
+    "partner terms acceptance must not bounce users to a separate legal page",
   );
   assertIncludes(
     uiSource,
@@ -406,7 +426,6 @@ function provePartnerTermsAgreementContract(args: {
   termsDocSource: string;
   legalRegistrySource: string;
   legalContentSource: string;
-  legalPanelSource: string;
   webAppRouteStateSource: string;
   mainSurfaceHostSource: string;
   routeLifecycleSource: string;
@@ -438,45 +457,40 @@ function provePartnerTermsAgreementContract(args: {
     "version: BUILDER_PARTNER_TERMS_VERSION",
     "legal document registry must bind the document to the canonical terms version",
   );
-  assertIncludes(
+  assert.doesNotMatch(
     args.legalRegistrySource,
-    "route: \"/legal/builder-partner-terms\"",
-    "legal document registry must expose the canonical terms route",
+    /route:|slug:/,
+    "Builder Partner terms should not expose a separate legal-page route for acceptance",
   );
   assertIncludes(
     args.legalContentSource,
     "builder-partner-terms-v1.md?raw",
-    "web legal document content must render the canonical Markdown artifact",
+    "web legal document content must load the canonical Markdown artifact",
   );
   assertIncludes(
     args.legalContentSource,
     "stripMarkdownFrontmatter(builderPartnerTermsV1)",
-    "web legal document content must hide source frontmatter from the user-facing legal page",
+    "web legal document content must hide source frontmatter from the user-facing modal",
   );
   assertIncludes(
-    args.legalPanelSource,
-    "Current agreement for the PolyNet Builder Partner Program.",
-    "web legal document panel must render a human-readable legal surface",
+    args.legalContentSource,
+    "BUILDER_PARTNER_TERMS_ENTRY",
+    "web legal document content must expose the Builder Partner terms entry for the modal",
   );
-  assertIncludes(
+  assert.doesNotMatch(
     args.webAppRouteStateSource,
-    "segments[0] === \"legal\"",
-    "app route state must parse legal document routes",
+    /segments\[0\] === "legal"|buildLegalDocumentPath|legalSlug/,
+    "app route state should not keep a separate legal document route",
   );
-  assertIncludes(
-    args.webAppRouteStateSource,
-    "return `/legal/${slug.split(\"/\").map(encodeURIComponent).join(\"/\")}`;",
-    "app route state must build legal document routes",
-  );
-  assertIncludes(
+  assert.doesNotMatch(
     args.mainSurfaceHostSource,
-    "showLegalDocumentPanel",
-    "main surface host must expose the legal document route",
+    /WebLegalDocumentPanel|showLegalDocumentPanel|legalDocumentPanelProps/,
+    "main surface host should not render a separate Builder Partner terms page",
   );
-  assertIncludes(
+  assert.doesNotMatch(
     args.routeLifecycleSource,
-    "legalSlug",
-    "path route lifecycle must preserve legal document route state",
+    /legalSlug/,
+    "path route lifecycle should not preserve legal document route state",
   );
   assert.match(
     args.schemaSource,
@@ -2556,7 +2570,6 @@ function main() {
   const termsDocSource = readText(new URL("../docs/legal/builder-partner-terms-v1.md", import.meta.url));
   const legalRegistrySource = readText(new URL("../shared/legalDocuments.ts", import.meta.url));
   const legalContentSource = readText(new URL("../apps/web/src/docs/legalDocumentsContent.ts", import.meta.url));
-  const legalPanelSource = readText(new URL("../apps/web/src/components/WebLegalDocumentPanel.tsx", import.meta.url));
   const webAppRouteStateSource = readText(new URL("../shared/webAppRouteState.ts", import.meta.url));
   const mainSurfaceHostSource = readText(new URL("../apps/web/src/components/WebAppMainSurfaceHost.tsx", import.meta.url));
   const routeLifecycleSource = readText(
@@ -2609,7 +2622,6 @@ function main() {
     termsDocSource,
     legalRegistrySource,
     legalContentSource,
-    legalPanelSource,
     webAppRouteStateSource,
     mainSurfaceHostSource,
     routeLifecycleSource,

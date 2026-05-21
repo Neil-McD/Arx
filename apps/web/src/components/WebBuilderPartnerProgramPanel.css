@@ -1,0 +1,137 @@
+.builder-partner-terms-modal {
+  width: min(640px, calc(100vw - 32px));
+  max-height: min(82vh, 720px);
+  border-radius: 14px;
+}
+
+.builder-partner-terms-modal .modal-header {
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.builder-partner-terms-modal .modal-title {
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 750;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.builder-partner-terms-modal-meta {
+  margin-top: 4px;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.builder-partner-terms-modal-body {
+  padding: 14px 16px;
+}
+
+.builder-partner-terms-reader {
+  height: min(46vh, 380px);
+  overflow: auto;
+  padding: 14px;
+  border: 1px solid var(--border-muted);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-card-alt) 88%, transparent);
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+  scrollbar-width: thin;
+}
+
+.builder-partner-terms-reader .md-header:first-child {
+  margin-top: 0;
+}
+
+.builder-partner-terms-reader h1.md-header {
+  font-size: 17px;
+  line-height: 1.2;
+}
+
+.builder-partner-terms-reader h2.md-header {
+  margin-top: 18px;
+  font-size: 14px;
+  line-height: 1.25;
+}
+
+.builder-partner-terms-reader .md-paragraph,
+.builder-partner-terms-reader .md-list {
+  margin: 8px 0;
+}
+
+.builder-partner-terms-footer {
+  display: grid;
+  gap: 12px;
+}
+
+.builder-partner-terms-confirmation {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.builder-partner-terms-confirmation input {
+  margin-top: 2px;
+  accent-color: var(--accent);
+  flex: 0 0 auto;
+}
+
+.builder-partner-terms-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.builder-partner-terms-actions button {
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border-muted);
+  background: var(--accent);
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.builder-partner-terms-actions button.secondary {
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.builder-partner-terms-actions button:hover:not(:disabled) {
+  filter: brightness(1.05);
+}
+
+.builder-partner-terms-actions button.secondary:hover:not(:disabled) {
+  color: var(--text-primary);
+  border-color: var(--border-default);
+}
+
+.builder-partner-terms-actions button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+@media (max-width: 640px) {
+  .builder-partner-terms-modal {
+    width: calc(100vw - 20px);
+    max-height: 86vh;
+  }
+
+  .builder-partner-terms-reader {
+    height: min(48vh, 360px);
+  }
+
+  .builder-partner-terms-actions {
+    flex-direction: column-reverse;
+  }
+
+  .builder-partner-terms-actions button {
+    width: 100%;
+  }
+}

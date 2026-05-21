@@ -1567,9 +1567,6 @@ export default function App() {
   const [selectedProductDocSlug, setSelectedProductDocSlug] = useState<string | null>(
     () => initialAppRoute?.docsSlug ?? null,
   );
-  const [selectedLegalDocumentSlug, setSelectedLegalDocumentSlug] = useState<string | null>(
-    () => initialAppRoute?.legalSlug ?? null,
-  );
   const [shouldOpenCreatePersonalSkill, setShouldOpenCreatePersonalSkill] =
     useState(false);
   const settingsGroup = settingsGroupForPage(settingsPage);
@@ -2851,9 +2848,6 @@ export default function App() {
     if (nextAppRoute.page === "docs") {
       setSelectedProductDocSlug(nextAppRoute.docsSlug ?? null);
     }
-    if (nextAppRoute.page === "legal") {
-      setSelectedLegalDocumentSlug(nextAppRoute.legalSlug ?? null);
-    }
     if (nextAppRoute.page === "community") {
       applyCommunityShellState({
         communitySlug: normalizedCommunitySlug,
@@ -3025,7 +3019,6 @@ export default function App() {
         discoverAppId: selectedDiscoverAppId,
         discoverSkillId: selectedDiscoverSkillId,
         docsSlug: activePage === "docs" ? selectedProductDocSlug : null,
-        legalSlug: activePage === "legal" ? selectedLegalDocumentSlug : null,
         threadId: activePage === "workspace" && activeView === "home" ? activeThreadId : null,
       }) ?? "",
       shellVariant,
@@ -4340,7 +4333,6 @@ export default function App() {
     discoverAppId: selectedDiscoverAppId,
     discoverSkillId: selectedDiscoverSkillId,
     docsSlug: activePage === "docs" ? selectedProductDocSlug : null,
-    legalSlug: activePage === "legal" ? selectedLegalDocumentSlug : null,
     activeThreadId,
     applyLocationToState,
     setStripeConnectReturn,
@@ -8308,6 +8300,7 @@ export default function App() {
     isLoadingBuilderPartnerProgram,
     builderPartnerProgramError,
     isAcceptingBuilderPartnerTerms,
+    renderMarkdown,
     loadBuilderPartnerProgram: async (nextSession) => {
       await loadBuilderPartnerProgram(nextSession as AuthSession);
     },
@@ -8357,6 +8350,7 @@ export default function App() {
       isLoadingBuilderPartnerProgram,
       builderPartnerProgramError,
       isAcceptingBuilderPartnerTerms,
+      renderMarkdown,
       loadBuilderPartnerProgram: async (nextSession) => {
         await loadBuilderPartnerProgram(nextSession as AuthSession);
       },
@@ -9143,10 +9137,6 @@ export default function App() {
           threadId: null,
         }) ?? "/docs");
       },
-      renderMarkdown,
-    },
-    legalDocumentPanelProps: {
-      activeSlug: selectedLegalDocumentSlug,
       renderMarkdown,
     },
   });

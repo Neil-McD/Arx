@@ -3,7 +3,6 @@ import type { AppPage } from "../../../../shared/appShellNavigation";
 import { WebCommunityHost } from "./WebCommunityHost";
 import { WebDiscoverPanel } from "./WebDiscoverPanel";
 import { WebProductDocsPanel } from "./WebProductDocsPanel";
-import { WebLegalDocumentPanel } from "./WebLegalDocumentPanel";
 import { WebPublicCommunityFunnel } from "./WebPublicCommunityFunnel";
 import { WebWorkspaceSurfaceHost } from "./WebWorkspaceSurfaceHost";
 import { WebLandingPage } from "./WebLandingPage";
@@ -15,7 +14,6 @@ export type WebAppMainSurfaceHostProps = {
   showCommunitySurface: boolean;
   showDiscoverPanel: boolean;
   showProductDocsPanel: boolean;
-  showLegalDocumentPanel: boolean;
   holdLandingForAuth: boolean;
   landingPageProps: ComponentProps<typeof WebLandingPage>;
   onboardingPageProps: ComponentProps<typeof WebOnboardingPage>;
@@ -25,7 +23,6 @@ export type WebAppMainSurfaceHostProps = {
   communityHostProps: ComponentProps<typeof WebCommunityHost>;
   discoverPanelProps: ComponentProps<typeof WebDiscoverPanel>;
   productDocsPanelProps: ComponentProps<typeof WebProductDocsPanel>;
-  legalDocumentPanelProps: ComponentProps<typeof WebLegalDocumentPanel>;
 };
 
 export function WebAppMainSurfaceHost(props: WebAppMainSurfaceHostProps) {
@@ -59,8 +56,6 @@ export function WebAppMainSurfaceHost(props: WebAppMainSurfaceHostProps) {
             <WebDiscoverPanel {...props.discoverPanelProps} />
           ) : props.showProductDocsPanel ? (
             <WebProductDocsPanel {...props.productDocsPanelProps} />
-          ) : props.showLegalDocumentPanel ? (
-            <WebLegalDocumentPanel {...props.legalDocumentPanelProps} />
           ) : null}
         </div>
       )}

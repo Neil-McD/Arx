@@ -2,7 +2,6 @@ import builderPartnerTermsV1 from "../../../../docs/legal/builder-partner-terms-
 import {
   BUILDER_PARTNER_TERMS_DOCUMENT,
   type LegalDocument,
-  findLegalDocumentBySlug,
 } from "../../../../shared/legalDocuments";
 
 export type LegalDocumentEntry = LegalDocument & {
@@ -28,16 +27,7 @@ function stripMarkdownFrontmatter(source: string): string {
     .trimStart();
 }
 
-export const LEGAL_DOCUMENT_ENTRIES: readonly LegalDocumentEntry[] = [
-  {
-    ...BUILDER_PARTNER_TERMS_DOCUMENT,
-    content: stripMarkdownFrontmatter(builderPartnerTermsV1),
-  },
-] as const;
-
-export const DEFAULT_LEGAL_DOCUMENT_SLUG = BUILDER_PARTNER_TERMS_DOCUMENT.slug;
-
-export function findLegalDocumentEntryBySlug(slug: string | null | undefined): LegalDocumentEntry | null {
-  const document = findLegalDocumentBySlug(slug) ?? BUILDER_PARTNER_TERMS_DOCUMENT;
-  return LEGAL_DOCUMENT_ENTRIES.find((entry) => entry.key === document.key && entry.version === document.version) ?? null;
-}
+export const BUILDER_PARTNER_TERMS_ENTRY: LegalDocumentEntry = {
+  ...BUILDER_PARTNER_TERMS_DOCUMENT,
+  content: stripMarkdownFrontmatter(builderPartnerTermsV1),
+};

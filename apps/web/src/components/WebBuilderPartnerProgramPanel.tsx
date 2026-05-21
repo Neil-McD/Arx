@@ -9,7 +9,7 @@ import {
   ShieldCheck,
   XCircle,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import type { AccountCommerceStatus } from "../../../../shared/accountCommerceStatusGateway";
 import {
   BUILDER_PARTNER_COMMUNITY_PLATFORM_FEE_BPS,
@@ -17,12 +17,13 @@ import {
   BUILDER_PARTNER_TOOL_USAGE_REVENUE_SHARE_BPS,
   calculateBuilderPartnerCommunityRevenueCommission,
 } from "../../../../shared/builderPartnerProgram";
-import { BUILDER_PARTNER_TERMS_DOCUMENT } from "../../../../shared/legalDocuments";
 import type {
   BuilderPartnerProgramRequirement,
   BuilderPartnerProgramSnapshot,
 } from "../../../../shared/builderPartnerProgramGateway";
+import { BUILDER_PARTNER_TERMS_ENTRY } from "../docs/legalDocumentsContent";
 import { StripeConnectCountrySelect } from "./StripeConnectCountrySelect";
+import "./WebBuilderPartnerProgramPanel.css";
 
 type SessionLike = {
   user: {
@@ -41,6 +42,7 @@ export type WebBuilderPartnerProgramPanelProps = {
   isLoadingBuilderPartnerProgram: boolean;
   builderPartnerProgramError: string | null;
   isAcceptingBuilderPartnerTerms: boolean;
+  renderMarkdown: (text: string) => ReactNode;
   loadBuilderPartnerProgram: (session: NonNullable<SessionLike>) => Promise<void> | void;
   acceptBuilderPartnerTerms: (termsVersion: string) => Promise<void> | void;
   openAccountSetup: () => void;
@@ -106,7 +108,9 @@ function formatPayoutStatus(value: string): string {
 export function WebBuilderPartnerProgramPanel(props: WebBuilderPartnerProgramPanelProps) {
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
   const [stripeConnectCountry, setStripeConnectCountry] = useState("");
+  const [isTermsModalOpen, setIsTermsModalOpen] = useState(false);
   const [hasConfirmedTermsAcceptance, setHasConfirmedTermsAcceptance] = useState(false);
+  const activeTermsDocument = BUILDER_PARTNER_TERMS_ENTRY;
   const showProgramOverview = props.showProgramOverview ?? true;
   const partnerPlatformFeeShareBps = BUILDER_PARTNER_PLATFORM_FEE_SHARE_BPS;
   const toolUsageRevenueShareBps = BUILDER_PARTNER_TOOL_USAGE_REVENUE_SHARE_BPS;
@@ -145,8 +149,29 @@ export function WebBuilderPartnerProgramPanel(props: WebBuilderPartnerProgramPan
   }, [storedStripeConnectCountry]);
   const selectedStripeConnectCountry = stripeConnectCountry || storedStripeConnectCountry || "";
   useEffect(() => {
-    if (!isReadyToUnlock) setHasConfirmedTermsAcceptance(false);
+    if (!isReadyToUnlock) {
+      setIsTermsModalOpen(false);
+      setHasConfirmedTermsAcceptance(false);
+    }
   }, [isReadyToUnlock]);
+
+  function openTermsModal(): void {
+    setHasConfirmedTermsAcceptance(false);
+    setIsTermsModalOpen(true);
+  }
+
+  function closeTermsModal(): void {
+    if (props.isAcceptingBuilderPartnerTerms) return;
+    setIsTermsModalOpen(false);
+    setHasConfirmedTermsAcceptance(false);
+  }
+
+  async function handleAcceptTermsFromModal(): Promise<void> {
+    if (!hasConfirmedTermsAcceptance || props.isAcceptingBuilderPartnerTerms) return;
+    await props.acceptBuilderPartnerTerms(activeTermsDocument.version);
+    setIsTermsModalOpen(false);
+    setHasConfirmedTermsAcceptance(false);
+  }
 
   async function copyPartnerLink(): Promise<void> {
     const link = partner?.partnerLink;
@@ -181,7 +206,7 @@ export function WebBuilderPartnerProgramPanel(props: WebBuilderPartnerProgramPan
       return;
     }
     if (requirement.action === "accept_terms") {
-      window.open(BUILDER_PARTNER_TERMS_DOCUMENT.route, "_blank", "noopener,noreferrer");
+      openTermsModal();
     }
   }
 
@@ -310,35 +335,14 @@ export function WebBuilderPartnerProgramPanel(props: WebBuilderPartnerProgramPan
                 </div>
               ))}
               {isReadyToUnlock ? (
-                <>
-                  <label className="builder-partner-terms-confirmation">
-                    <input
-                      type="checkbox"
-                      checked={hasConfirmedTermsAcceptance}
-                      onChange={(event) => setHasConfirmedTermsAcceptance(event.currentTarget.checked)}
-                      disabled={props.isAcceptingBuilderPartnerTerms}
-                    />
-                    <span>
-                      I have read and agree to{" "}
-                      <a
-                        href={BUILDER_PARTNER_TERMS_DOCUMENT.route}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        {BUILDER_PARTNER_TERMS_DOCUMENT.title}
-                      </a>
-                      .
-                    </span>
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => void props.acceptBuilderPartnerTerms(BUILDER_PARTNER_TERMS_DOCUMENT.version)}
-                    disabled={props.isAcceptingBuilderPartnerTerms || !hasConfirmedTermsAcceptance}
-                  >
-                    <CheckCircle2 />
-                    {props.isAcceptingBuilderPartnerTerms ? "Unlocking..." : "Accept and unlock"}
-                  </button>
-                </>
+                <button
+                  type="button"
+                  onClick={openTermsModal}
+                  disabled={props.isAcceptingBuilderPartnerTerms}
+                >
+                  <CheckCircle2 />
+                  {props.isAcceptingBuilderPartnerTerms ? "Unlocking..." : "Review and accept terms"}
+                </button>
               ) : null}
             </div>
           ) : null}
@@ -498,6 +502,71 @@ export function WebBuilderPartnerProgramPanel(props: WebBuilderPartnerProgramPan
               </div>
             </div>
           ) : null}
+        </div>
+      ) : null}
+
+      {isTermsModalOpen ? (
+        <div className="modal-overlay builder-partner-terms-overlay" onClick={closeTermsModal}>
+          <div
+            className="modal builder-partner-terms-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="builder-partner-terms-modal-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="modal-header">
+              <div>
+                <div className="modal-title" id="builder-partner-terms-modal-title">
+                  {activeTermsDocument.title}
+                </div>
+                <div className="builder-partner-terms-modal-meta">
+                  {activeTermsDocument.version} - Effective {activeTermsDocument.effectiveDate}
+                </div>
+              </div>
+              <button
+                className="modal-close"
+                type="button"
+                onClick={closeTermsModal}
+                title="Close"
+                disabled={props.isAcceptingBuilderPartnerTerms}
+              >
+                x
+              </button>
+            </div>
+            <div className="modal-body builder-partner-terms-modal-body">
+              <div className="builder-partner-terms-reader message-text">
+                {props.renderMarkdown(activeTermsDocument.content)}
+              </div>
+            </div>
+            <div className="modal-footer builder-partner-terms-footer">
+              <label className="builder-partner-terms-confirmation">
+                <input
+                  type="checkbox"
+                  checked={hasConfirmedTermsAcceptance}
+                  onChange={(event) => setHasConfirmedTermsAcceptance(event.currentTarget.checked)}
+                  disabled={props.isAcceptingBuilderPartnerTerms}
+                />
+                <span>I have read and agree to {activeTermsDocument.title}.</span>
+              </label>
+              <div className="builder-partner-terms-actions">
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={closeTermsModal}
+                  disabled={props.isAcceptingBuilderPartnerTerms}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleAcceptTermsFromModal()}
+                  disabled={props.isAcceptingBuilderPartnerTerms || !hasConfirmedTermsAcceptance}
+                >
+                  {props.isAcceptingBuilderPartnerTerms ? "Continuing..." : "Continue"}
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       ) : null}
     </>

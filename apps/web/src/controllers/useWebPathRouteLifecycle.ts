@@ -32,7 +32,6 @@ export function useWebPathRouteLifecycle(params: {
   discoverAppId: string | null;
   discoverSkillId: string | null;
   docsSlug: string | null;
-  legalSlug: string | null;
   activeThreadId: string | null;
   applyLocationToState: () => void;
   setStripeConnectReturn: Dispatch<SetStateAction<StripeConnectReturn | null>>;
@@ -47,7 +46,6 @@ export function useWebPathRouteLifecycle(params: {
     discoverAppId: string | null;
     discoverSkillId: string | null;
     docsSlug: string | null;
-    legalSlug?: string | null;
     threadId: string | null;
   }) => string | null;
 }) {
@@ -90,7 +88,6 @@ export function useWebPathRouteLifecycle(params: {
       discoverAppId: params.discoverAppId,
       discoverSkillId: params.discoverSkillId,
       docsSlug: params.docsSlug,
-      legalSlug: params.legalSlug,
       threadId: params.activePage === "workspace" && params.activeView === "home" ? params.activeThreadId : null,
     });
     if (!nextPath) return;
@@ -110,7 +107,6 @@ export function useWebPathRouteLifecycle(params: {
     params.discoverAppId,
     params.discoverSkillId,
     params.docsSlug,
-    params.legalSlug,
     params.activeThreadId,
   ]);
 }

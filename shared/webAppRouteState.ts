@@ -30,7 +30,6 @@ export type AppRouteState = {
   discoverAppId?: string | null;
   discoverSkillId?: string | null;
   docsSlug?: string | null;
-  legalSlug?: string | null;
   threadId: string | null;
 };
 
@@ -45,7 +44,6 @@ export type AppRoutePathState = {
   discoverAppId?: string | null;
   discoverSkillId?: string | null;
   docsSlug?: string | null;
-  legalSlug?: string | null;
   threadId: string | null;
 };
 
@@ -336,12 +334,6 @@ function buildDocsPath(docsSlug: string | null | undefined): string {
   return `/docs/${slug.split("/").map(encodeURIComponent).join("/")}`;
 }
 
-function buildLegalDocumentPath(legalSlug: string | null | undefined): string {
-  const slug = normalizeDocsSlug(legalSlug);
-  if (!slug) return "/legal";
-  return `/legal/${slug.split("/").map(encodeURIComponent).join("/")}`;
-}
-
 function parseSettingsPage(value: string | null | undefined): SettingsPage {
   switch ((value ?? "").trim()) {
     case "profile":
@@ -418,18 +410,6 @@ function parseAppRouteFromPathname(pathname: string): AppRoutePathState | null {
       communitySlug: null,
       communityTab: "chat",
       docsSlug: normalizeDocsSlug(segments.slice(1).join("/")),
-      threadId: null,
-    };
-  }
-
-  if (segments[0] === "legal") {
-    return {
-      page: "legal",
-      view: "home",
-      settingsPage: "agent",
-      communitySlug: null,
-      communityTab: "chat",
-      legalSlug: normalizeDocsSlug(segments.slice(1).join("/")),
       threadId: null,
     };
   }
@@ -553,7 +533,6 @@ export function readAppRouteFromLocation(): AppRouteState {
       discoverAppId: fromPath.discoverAppId ?? null,
       discoverSkillId: fromPath.discoverSkillId ?? null,
       docsSlug: fromPath.docsSlug ?? null,
-      legalSlug: fromPath.legalSlug ?? null,
       threadId: fromPath.threadId,
     };
   }
@@ -568,7 +547,6 @@ export function readAppRouteFromLocation(): AppRouteState {
     discoverAppId: null,
     discoverSkillId: null,
     docsSlug: null,
-    legalSlug: null,
     threadId: null,
   };
 }
@@ -597,10 +575,6 @@ export function buildAppRoutePath(state: AppRoutePathState): string | null {
 
   if (state.page === "docs") {
     return buildDocsPath(state.docsSlug);
-  }
-
-  if (state.page === "legal") {
-    return buildLegalDocumentPath(state.legalSlug);
   }
 
   if (state.page === "landing") {

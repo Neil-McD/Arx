@@ -1,4 +1,4 @@
-import type { DragEvent } from "react";
+import type { DragEvent, ReactNode } from "react";
 import type { SettingsGroup } from "../../../../shared/appShellNavigation";
 import type { AppTheme } from "../../../../shared/theme";
 import type { AccountCommerceStatus } from "../../../../shared/accountCommerceStatusGateway";
@@ -81,6 +81,7 @@ export type WebSettingsPanelsProps = {
     isLoadingBuilderPartnerProgram: boolean;
     builderPartnerProgramError: string | null;
     isAcceptingBuilderPartnerTerms: boolean;
+    renderMarkdown: (text: string) => ReactNode;
     loadBuilderPartnerProgram: (session: NonNullable<SessionLike>) => Promise<void> | void;
     acceptBuilderPartnerTerms: (termsVersion: string) => Promise<void> | void;
     openAccountSetup: () => void;
@@ -286,6 +287,7 @@ export function WebSettingsPanels(props: WebSettingsPanelsProps) {
     isLoadingBuilderPartnerProgram: account.isLoadingBuilderPartnerProgram,
     builderPartnerProgramError: account.builderPartnerProgramError,
     isAcceptingBuilderPartnerTerms: account.isAcceptingBuilderPartnerTerms,
+    renderMarkdown: account.renderMarkdown,
     loadBuilderPartnerProgram: account.loadBuilderPartnerProgram,
     acceptBuilderPartnerTerms: account.acceptBuilderPartnerTerms,
     openAccountSetup: account.openAccountSetup,
