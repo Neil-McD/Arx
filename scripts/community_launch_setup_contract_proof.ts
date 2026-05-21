@@ -10,6 +10,7 @@ import {
   COMMUNITY_WORKFLOW_EXPORT_PACKAGE_SENTINEL,
   parseCommunityWorkflowExportPackage,
 } from "../shared/communityWorkflowExportPackage.ts";
+import { resolveCommunityWorkflowImportMcpCatalogMatch } from "../shared/communityWorkflowImportCatalogResolver.ts";
 
 function read(path: string): string {
   return readFileSync(path, "utf8");
@@ -50,6 +51,7 @@ const workflowImportPrompt = read("shared/communityWorkflowImportPrompt.ts");
 const workflowImportHarnessProfiles = read("shared/communityWorkflowImportHarnessProfiles.ts");
 const workflowExportPackage = read("shared/communityWorkflowExportPackage.ts");
 const workflowImportCandidateIds = read("shared/communityWorkflowImportCandidateIds.ts");
+const workflowImportCatalogResolver = read("shared/communityWorkflowImportCatalogResolver.ts");
 const workflowImportRepositoryIdentity = read("shared/communityWorkflowImportRepositoryIdentity.ts");
 const workflowImportReviewProjection = read("shared/communityWorkflowImportReviewProjection.ts");
 const discoverCatalog = read("shared/discoverCatalog.ts");
@@ -135,6 +137,118 @@ assert.equal(
   (validWorkflowExportPackage.ledger.skills as Array<Record<string, unknown>>)[0]
     ?.proposedInstructionsMd,
   "# Frontend Skill\n\nUse this complete standalone behavior to review and improve frontend work in PolyNet communities.",
+);
+const inferredSupabaseCatalogMatch = resolveCommunityWorkflowImportMcpCatalogMatch({
+  name: "Supabase",
+  record: {
+    name: "supabase",
+    providerName: "Supabase",
+    packageName: "@supabase/mcp-server-supabase",
+    command: "npx",
+  },
+});
+assert.deepEqual(
+  {
+    catalogAppId: inferredSupabaseCatalogMatch.catalogAppId,
+    endpointUrl: inferredSupabaseCatalogMatch.endpointUrl,
+    authType: inferredSupabaseCatalogMatch.authType,
+    connectable: inferredSupabaseCatalogMatch.connectable,
+  },
+  {
+    catalogAppId: "supabase",
+    endpointUrl: "https://mcp.supabase.com/mcp",
+    authType: "bearer",
+    connectable: true,
+  },
+  "workflow import catalog resolver must make vetted Supabase candidates mountable without explicit ledger catalog ids",
+);
+const inferredGitHubCatalogMatch = resolveCommunityWorkflowImportMcpCatalogMatch({
+  name: "Imported MCP",
+  record: {
+    endpoint_url: "https://api.githubcopilot.com/mcp/readonly",
+  },
+});
+assert.deepEqual(
+  {
+    catalogAppId: inferredGitHubCatalogMatch.catalogAppId,
+    endpointUrl: inferredGitHubCatalogMatch.endpointUrl,
+    authType: inferredGitHubCatalogMatch.authType,
+    connectable: inferredGitHubCatalogMatch.connectable,
+  },
+  {
+    catalogAppId: "github",
+    endpointUrl: "https://api.githubcopilot.com/mcp/readonly",
+    authType: "bearer",
+    connectable: true,
+  },
+  "workflow import catalog resolver must match GitHub only through exact known endpoint hosts or aliases",
+);
+const inferredVercelCatalogMatch = resolveCommunityWorkflowImportMcpCatalogMatch({
+  name: "Vercel",
+  record: {
+    endpoint_url: "https://mcp.vercel.com",
+  },
+});
+assert.equal(
+  inferredVercelCatalogMatch.catalogAppId,
+  "vercel",
+  "workflow import catalog resolver must recognize Vercel catalog identity",
+);
+assert.equal(
+  inferredVercelCatalogMatch.connectable,
+  false,
+  "workflow import catalog resolver must keep recognized catalog apps manual until the catalog connection profile is ready",
+);
+const fakeGitHubProxyCatalogMatch = resolveCommunityWorkflowImportMcpCatalogMatch({
+  name: "Imported proxy",
+  record: {
+    endpoint_url: "https://example.com/github-proxy",
+    sourceUrl: "https://github.com/modelcontextprotocol/server-github",
+  },
+});
+assert.equal(
+  fakeGitHubProxyCatalogMatch.catalogAppId,
+  null,
+  "workflow import catalog resolver must not use fuzzy URL substrings as catalog authority",
+);
+assert.equal(
+  fakeGitHubProxyCatalogMatch.connectable,
+  false,
+  "workflow import catalog resolver must leave fake GitHub-looking endpoints manual",
+);
+const localContext7CatalogMatch = resolveCommunityWorkflowImportMcpCatalogMatch({
+  name: "Context7",
+  record: {
+    name: "context7",
+    packageName: "@upstash/context7-mcp",
+    command: "npx",
+  },
+});
+assert.equal(
+  localContext7CatalogMatch.connectable,
+  false,
+  "workflow import catalog resolver must keep non-catalog local MCP candidates out of automatic mounting",
+);
+assert.equal(
+  localContext7CatalogMatch.reviewLogoUrl,
+  "/app-logos/context7.svg",
+  "workflow import catalog resolver may provide review-only logos without making a candidate connectable",
+);
+const localFlyCatalogMatch = resolveCommunityWorkflowImportMcpCatalogMatch({
+  name: "flyctl",
+  record: {
+    command: "flyctl mcp start",
+  },
+});
+assert.equal(
+  localFlyCatalogMatch.catalogAppId,
+  null,
+  "workflow import catalog resolver must not auto-connect Fly from local CLI shape",
+);
+assert.equal(
+  localFlyCatalogMatch.reviewLogoUrl,
+  "/app-logos/fly-light.svg",
+  "workflow import catalog resolver may provide Fly review-only logos while keeping it manual",
 );
 
 const rankedSkillFiles: Record<string, string> = {
@@ -1063,8 +1177,13 @@ assert.match(
 );
 assert.match(
   workflowImports,
-  /readExplicitWorkflowImportCatalogAppId[\s\S]*catalog_app_id[\s\S]*catalogAppId[\s\S]*buildWorkflowImportMcpApplyPlanItems[\s\S]*No explicit vetted catalog app id[\s\S]*applyWorkflowImportMcpPlanItem[\s\S]*api\.community\.connectCommunityApp[\s\S]*needs_manual_setup/,
-  "workflow import apply must only auto-connect explicit catalog-backed MCPs and leave fuzzy or unknown MCPs for manual setup",
+  /resolveCommunityWorkflowImportMcpCatalogMatch[\s\S]*buildWorkflowImportMcpApplyPlanItems[\s\S]*catalogMatch\.connectable[\s\S]*api\.community\.connectCommunityApp[\s\S]*needs_manual_setup/,
+  "workflow import apply must auto-connect vetted catalog-matched MCPs and leave unknown or non-ready MCPs for manual setup",
+);
+assert.match(
+  workflowImportCatalogResolver,
+  /DISCOVER_APP_ALIASES[\s\S]*github[\s\S]*supabase[\s\S]*resolveCommunityWorkflowImportMcpCatalogMatch[\s\S]*connectable[\s\S]*No vetted PolyNet catalog app matched/,
+  "workflow import catalog resolver must centralize vetted MCP identity matching for review and apply paths",
 );
 assert.match(
   workflowImports,
@@ -1157,16 +1276,26 @@ assert.match(
   "launch workflow review projection must expose server-usable MCP and skill apply metadata from the sanitized ledger",
 );
 assert.match(
-  workflowImportReviewProjection,
+  workflowImportCatalogResolver,
   /DISCOVER_APP_ALIASES[\s\S]*REVIEW_ONLY_LOGO_ALIASES[\s\S]*context7[\s\S]*fly-light[\s\S]*logoUrlDark \?\? app\.logoUrl/,
-  "launch workflow review projection must prefer light-on-dark catalog logos and support review-only known MCP aliases",
+  "launch workflow catalog resolver must prefer light-on-dark catalog logos and support review-only known MCP aliases",
 );
 const reviewCatalogMatcher =
-  workflowImportReviewProjection.match(/function getReviewCatalogApp[\s\S]*?function normalizeReviewAuthType/)?.[0] ?? "";
+  workflowImportCatalogResolver.match(/function catalogCandidatesFromRecord[\s\S]*?function reviewLogoCandidatesFromRecord/)?.[0] ?? "";
 assert.doesNotMatch(
   reviewCatalogMatcher,
   /docsUrl|websiteUrl|packageUrl|sourceUrl/,
   "launch workflow catalog matching must not bind unknown MCPs to catalog apps just because evidence links live on GitHub or another app host",
+);
+assert.doesNotMatch(
+  workflowImportCatalogResolver,
+  /key\.includes|includes\(catalogKey|includes\(aliasKey/,
+  "launch workflow catalog resolver must not use broad substring matching as catalog authority",
+);
+assert.match(
+  workflowImportCatalogResolver,
+  /looksLikeEndpointHostInput[\s\S]*readEndpointHost[\s\S]*DISCOVER_APP_ID_BY_ENDPOINT_HOST[\s\S]*findCatalogAppForCandidate/,
+  "launch workflow catalog resolver must treat parsed endpoint hosts as a separate exact-match authority path",
 );
 assert.match(
   workflowImportReviewProjection,

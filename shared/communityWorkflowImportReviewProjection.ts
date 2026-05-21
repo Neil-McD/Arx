@@ -1,4 +1,3 @@
-import { DISCOVER_APP_CATALOG } from "./discoverCatalog";
 import type { DeveloperAppAuthType } from "./communityAppMountTypes";
 import {
   buildCommunityWorkflowImportMarkdownSkillReviewItemId,
@@ -6,6 +5,7 @@ import {
   buildCommunityWorkflowImportSkillReviewItemId,
   normalizeCommunityWorkflowImportCandidateKey,
 } from "./communityWorkflowImportCandidateIds";
+import { resolveCommunityWorkflowImportMcpCatalogMatch } from "./communityWorkflowImportCatalogResolver";
 import { buildCommunityWorkflowImportRepositoryIdentity } from "./communityWorkflowImportRepositoryIdentity";
 
 export type CommunityWorkflowImportReviewItem = {
@@ -41,82 +41,6 @@ export type CommunityWorkflowImportReviewProjection = {
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
-}
-
-const DISCOVER_APP_LOGO_BY_KEY = new Map<string, string>();
-const DISCOVER_APP_ID_BY_KEY = new Map<string, string>();
-const REVIEW_ONLY_LOGO_BY_KEY = new Map<string, string>();
-
-const DISCOVER_APP_ALIASES: Record<string, string[]> = {
-  github: [
-    "github-mcp",
-    "github-mcp-server",
-    "githubcopilot",
-    "github-copilot",
-    "api.githubcopilot.com",
-    "modelcontextprotocol-server-github",
-    "@modelcontextprotocol/server-github",
-  ],
-  supabase: [
-    "supabase-mcp",
-    "supabase-mcp-server",
-    "mcp.supabase.com",
-    "@supabase/mcp-server-supabase",
-  ],
-  vercel: [
-    "vercel-mcp",
-    "vercel-mcp-server",
-    "mcp.vercel.com",
-  ],
-};
-
-const REVIEW_ONLY_LOGO_ALIASES: Record<string, string[]> = {
-  "/app-logos/context7.svg": [
-    "context7",
-    "context7-mcp",
-    "context7-mcp-server",
-    "upstash-context7",
-    "@upstash/context7-mcp",
-    "mcp.context7.com",
-  ],
-  "/app-logos/fly-light.svg": [
-    "fly",
-    "fly.io",
-    "flydotio",
-    "fly-mcp",
-    "fly-mcp-server",
-    "flyctl",
-  ],
-};
-
-function getReviewCatalogLogoUrl(app: (typeof DISCOVER_APP_CATALOG)[number]): string | null {
-  return app.logoUrlDark ?? app.logoUrl ?? null;
-}
-
-function addDiscoverAppKey(key: string, appId: string, logoUrl: string | null) {
-  const normalizedKey = normalizeCommunityWorkflowImportCandidateKey(key);
-  if (!normalizedKey) return;
-  DISCOVER_APP_ID_BY_KEY.set(normalizedKey, appId);
-  if (logoUrl) DISCOVER_APP_LOGO_BY_KEY.set(normalizedKey, logoUrl);
-}
-
-for (const app of DISCOVER_APP_CATALOG) {
-  const keys = [
-    app.id,
-    app.name,
-    ...(DISCOVER_APP_ALIASES[app.id] ?? []),
-  ];
-  const logoUrl = getReviewCatalogLogoUrl(app);
-  for (const key of keys) {
-    addDiscoverAppKey(key, app.id, logoUrl);
-  }
-}
-
-for (const [logoUrl, aliases] of Object.entries(REVIEW_ONLY_LOGO_ALIASES)) {
-  for (const alias of aliases) {
-    const normalizedKey = normalizeCommunityWorkflowImportCandidateKey(alias);
-    if (normalizedKey) REVIEW_ONLY_LOGO_BY_KEY.set(normalizedKey, logoUrl);
-  }
 }
 
 function readRecordString(record: Record<string, unknown>, keys: string[]): string {
@@ -218,65 +142,6 @@ function isDerivedOrSynthesizedSkillRecord(record: Record<string, unknown>, sour
   if (sourcePath && sourcePath.toLowerCase().endsWith(".md") && !isLikelyActualSkillSource(sourcePath)) return true;
   if (source && source.toLowerCase().endsWith(".md") && !isLikelyActualSkillSource(source)) return true;
   return evidenceText.includes("derived from") || evidenceText.includes("converted into");
-}
-
-function getReviewLogoUrl(record: Record<string, unknown>, name: string): string | null {
-  const app = getReviewCatalogApp(record, name);
-  if (app) return getReviewCatalogLogoUrl(app);
-  const catalogCandidates = [
-    readRecordString(record, ["catalog_app_id", "catalogAppId", "app_id", "appId", "id"]),
-    name,
-    readRecordString(record, ["providerName", "provider_name", "host"]),
-    readRecordString(record, ["package", "packageName", "command", "endpoint", "server"]),
-  ].filter(Boolean);
-  for (const candidate of catalogCandidates) {
-    const key = normalizeCommunityWorkflowImportCandidateKey(candidate);
-    const direct = DISCOVER_APP_LOGO_BY_KEY.get(key);
-    if (direct) return direct;
-    const reviewOnly = REVIEW_ONLY_LOGO_BY_KEY.get(key);
-    if (reviewOnly) return reviewOnly;
-    for (const [catalogKey, logoUrl] of DISCOVER_APP_LOGO_BY_KEY) {
-      if (catalogKey.length > 2 && key.includes(catalogKey)) return logoUrl;
-    }
-    for (const [aliasKey, logoUrl] of REVIEW_ONLY_LOGO_BY_KEY) {
-      if (aliasKey.length > 2 && key.includes(aliasKey)) return logoUrl;
-    }
-  }
-  const evidenceCandidates = [
-    readRecordString(record, ["docsUrl", "docs_url", "packageUrl", "package_url", "sourceUrl", "source_url"]),
-  ].filter(Boolean);
-  for (const candidate of evidenceCandidates) {
-    const key = normalizeCommunityWorkflowImportCandidateKey(candidate);
-    for (const [aliasKey, logoUrl] of REVIEW_ONLY_LOGO_BY_KEY) {
-      if (aliasKey.length > 2 && key.includes(aliasKey)) return logoUrl;
-    }
-  }
-  return null;
-}
-
-function getReviewCatalogApp(
-  record: Record<string, unknown>,
-  name: string,
-): (typeof DISCOVER_APP_CATALOG)[number] | null {
-  const candidates = [
-    readRecordString(record, ["catalog_app_id", "catalogAppId", "app_id", "appId", "id"]),
-    name,
-    readRecordString(record, ["providerName", "provider_name", "host"]),
-    readRecordString(record, ["package", "packageName", "command", "endpoint", "server"]),
-  ].filter(Boolean);
-  for (const candidate of candidates) {
-    const key = normalizeCommunityWorkflowImportCandidateKey(candidate);
-    const directId = DISCOVER_APP_ID_BY_KEY.get(key);
-    if (directId) {
-      return DISCOVER_APP_CATALOG.find((app) => app.id === directId) ?? null;
-    }
-    for (const [catalogKey, appId] of DISCOVER_APP_ID_BY_KEY) {
-      if (catalogKey.length > 2 && key.includes(catalogKey)) {
-        return DISCOVER_APP_CATALOG.find((app) => app.id === appId) ?? null;
-      }
-    }
-  }
-  return null;
 }
 
 function normalizeReviewAuthType(value: string): DeveloperAppAuthType | null {
@@ -401,18 +266,16 @@ export function buildCommunityWorkflowImportReviewProjection(
       `MCP server ${index + 1}`,
     );
     const source = readRecordString(record, ["configLocation", "config_location", "location", "path", "endpoint", "command"]);
-    const catalogApp = getReviewCatalogApp(record, name);
+    const catalogMatch = resolveCommunityWorkflowImportMcpCatalogMatch({
+      record,
+      name,
+    });
     const endpointUrl =
-      readRecordString(record, ["endpoint_url", "endpointUrl", "endpoint", "url"]) ||
-      (catalogApp?.personalConnect.connectionKind === "known"
-        ? catalogApp.personalConnect.endpointUrl ?? ""
-        : "");
+      catalogMatch.endpointUrl ||
+      readRecordString(record, ["endpoint_url", "endpointUrl", "endpoint", "url"]);
     const authType =
-      normalizeReviewAuthType(readRecordString(record, ["auth_type", "authType", "authMode", "auth_mode"])) ??
-      (catalogApp?.personalConnect.connectionKind === "known" &&
-      catalogApp.personalConnect.availability === "ready"
-        ? catalogApp.personalConnect.authType
-        : null);
+      catalogMatch.authType ??
+      normalizeReviewAuthType(readRecordString(record, ["auth_type", "authType", "authMode", "auth_mode"]));
     return {
       id: buildCommunityWorkflowImportMcpReviewItemId({ name, source, index }),
       kind: "mcp",
@@ -420,9 +283,9 @@ export function buildCommunityWorkflowImportReviewProjection(
       summary: truncateReviewText(readRecordString(record, ["purpose", "summary", "description", "capabilities"]) || "MCP server"),
       source: source || null,
       preview: truncateReviewText(readRecordListText(record, ["evidence", "capabilities", "requiredEnvVars", "required_env_vars"]), 260) || null,
-      logoUrl: getReviewLogoUrl(record, name),
+      logoUrl: catalogMatch.reviewLogoUrl,
       defaultSelected: !itemHasLowConfidence(record) && !isRejectedWorkflowCandidate(record),
-      catalogAppId: catalogApp?.id ?? null,
+      catalogAppId: catalogMatch.catalogAppId,
       endpointUrl: endpointUrl || null,
       authType,
     };
@@ -542,10 +405,10 @@ export function buildCommunityWorkflowImportReviewProjection(
             summary: truncateReviewText(`${visibility}${recommendation ? ` | ${recommendation.replace(/_/g, " ")}` : ""}`),
             source: identity.remoteUrl || remoteUrl || null,
             preview: truncateReviewText(readRecordListText(repositoryRecord, ["reasoning", "evidence"]), 320) || null,
-            logoUrl: getReviewLogoUrl(
-              repositoryRecord,
-              identity.host === "github" || identity.remoteUrl.includes("github.com") ? "GitHub" : name,
-            ),
+            logoUrl: resolveCommunityWorkflowImportMcpCatalogMatch({
+              record: repositoryRecord,
+              name: identity.host === "github" || identity.remoteUrl.includes("github.com") ? "GitHub" : name,
+            }).reviewLogoUrl,
             repositoryUrl: identity.remoteUrl || remoteUrl || null,
             repositoryRecommendation: recommendation || null,
             defaultSelected:

@@ -19,6 +19,7 @@ import {
   buildCommunityWorkflowImportMcpReviewItemId,
   buildCommunityWorkflowImportSkillReviewItemId,
 } from "../shared/communityWorkflowImportCandidateIds";
+import { resolveCommunityWorkflowImportMcpCatalogMatch } from "../shared/communityWorkflowImportCatalogResolver";
 import { buildCommunityWorkflowImportRepositoryIdentity } from "../shared/communityWorkflowImportRepositoryIdentity";
 import type { CommunityWorkflowImportReviewItem } from "../shared/communityWorkflowImportReviewProjection";
 import type { DeveloperAppAuthType } from "../shared/communityAppMountTypes";
@@ -383,25 +384,6 @@ function truncateWorkflowImportReviewText(value: string, maxLength = 150): strin
   return `${normalized.slice(0, maxLength - 3).trim()}...`;
 }
 
-function normalizeWorkflowImportAuthType(value: string): DeveloperAppAuthType | null {
-  const normalized = value.toLowerCase();
-  if (
-    normalized === "none" ||
-    normalized === "api_key" ||
-    normalized === "bearer" ||
-    normalized === "oauth"
-  ) {
-    return normalized;
-  }
-  if (normalized === "api key" || normalized === "apikey" || normalized === "token") {
-    return "api_key";
-  }
-  if (normalized === "bearer_token" || normalized === "bearer token") {
-    return "bearer";
-  }
-  return null;
-}
-
 function readWorkflowImportInstructionsMd(record: Record<string, unknown>): string | null {
   const value = readWorkflowImportRecordString(record, [
     "instructionsMd",
@@ -414,18 +396,6 @@ function readWorkflowImportInstructionsMd(record: Record<string, unknown>): stri
     "markdown_body",
   ]);
   return value.length >= 40 ? value : null;
-}
-
-function readExplicitWorkflowImportCatalogAppId(
-  record: Record<string, unknown>,
-): string | null {
-  const raw = readWorkflowImportRecordString(record, [
-    "catalog_app_id",
-    "catalogAppId",
-  ]).toLowerCase();
-  if (!raw) return null;
-  const catalogApp = DISCOVER_APP_CATALOG.find((app) => app.id === raw);
-  return catalogApp?.id ?? null;
 }
 
 function isCommunityWorkflowImportToolName(value: unknown): value is CommunityWorkflowImportToolName {
@@ -707,33 +677,13 @@ function buildWorkflowImportMcpApplyPlanItems(
       "command",
     ]);
     const id = buildCommunityWorkflowImportMcpReviewItemId({ name, source, index });
-    const catalogAppId = readExplicitWorkflowImportCatalogAppId(record);
-    const catalogApp = catalogAppId
-      ? DISCOVER_APP_CATALOG.find((app) => app.id === catalogAppId) ?? null
-      : null;
-    const endpointUrl =
-      readWorkflowImportRecordString(record, [
-        "endpoint_url",
-        "endpointUrl",
-        "endpoint",
-        "url",
-      ]) ||
-      (catalogApp?.personalConnect.connectionKind === "known"
-        ? catalogApp.personalConnect.endpointUrl ?? ""
-        : "");
-    const authType =
-      normalizeWorkflowImportAuthType(
-        readWorkflowImportRecordString(record, [
-          "auth_type",
-          "authType",
-          "authMode",
-          "auth_mode",
-        ]),
-      ) ??
-      (catalogApp?.personalConnect.connectionKind === "known" &&
-      catalogApp.personalConnect.availability === "ready"
-        ? catalogApp.personalConnect.authType
-        : null);
+    const catalogMatch = resolveCommunityWorkflowImportMcpCatalogMatch({
+      record,
+      name,
+    });
+    const catalogAppId = catalogMatch.catalogAppId;
+    const endpointUrl = catalogMatch.endpointUrl;
+    const authType = catalogMatch.authType;
     const summary = truncateWorkflowImportReviewText(
       readWorkflowImportRecordString(record, [
         "purpose",
@@ -742,14 +692,15 @@ function buildWorkflowImportMcpApplyPlanItems(
         "capabilities",
       ]) || "MCP server",
     );
-    if (!catalogAppId || !catalogApp || !endpointUrl || !authType) {
+    if (!catalogMatch.connectable || !catalogAppId || !endpointUrl || !authType) {
       return {
         id,
         kind: "mcp",
         name,
         action: "manual_setup",
         reason:
-          "No explicit vetted catalog app id, endpoint, and auth type were present in the saved import ledger.",
+          catalogMatch.reason ||
+          "No vetted catalog app with a ready endpoint and auth type matched the saved import ledger.",
         summary,
       };
     }
@@ -758,7 +709,7 @@ function buildWorkflowImportMcpApplyPlanItems(
       kind: "mcp",
       name,
       action: "connect_mcp",
-      reason: "Explicit catalog-backed MCP candidate is eligible for canonical connection.",
+      reason: "Vetted catalog-backed MCP candidate is eligible for canonical connection.",
       summary,
       catalogAppId,
       endpointUrl,
