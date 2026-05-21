@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { CreateSkillPackageInput } from "../../../../shared/skillPackageTypes";
 import type { UserPlatformInstalledSkill } from "../../../../shared/userPlatformSkillTypes";
 import type { EffectiveMcpApp } from "../../../../shared/effectiveMcpApps";
+import type { EffectiveSkill } from "../../../../shared/effectiveSkills";
 import type {
   BeginUserPlatformAppOAuthResult,
   ConnectUserPlatformAppInput,
@@ -32,6 +33,9 @@ type WebIntegrationsSettingsSectionProps = {
   effectiveMcpApps: EffectiveMcpApp[];
   isLoadingEffectiveMcpApps: boolean;
   effectiveMcpAppsError: string | null;
+  effectiveSkills: EffectiveSkill[];
+  isLoadingEffectiveSkills: boolean;
+  effectiveSkillsError: string | null;
   isLoadingUserPlatformAppMounts: boolean;
   userPlatformAppMountError: string | null;
   userPlatformAppMutationError: string | null;
@@ -134,6 +138,9 @@ export function WebIntegrationsSettingsSection(
     effectiveMcpApps,
     isLoadingEffectiveMcpApps,
     effectiveMcpAppsError,
+    effectiveSkills,
+    isLoadingEffectiveSkills,
+    effectiveSkillsError,
     isLoadingUserPlatformAppMounts,
     userPlatformAppMountError,
     userPlatformAppMutationError,
@@ -601,12 +608,11 @@ export function WebIntegrationsSettingsSection(
             <path d="M7 7h10v10H7z" />
             <path d="M4 12h3m10 0h3M12 4v3m0 10v3" />
           </svg>
-          My skills
+          Harness skills
         </div>
         <div className="settings-section-desc">
-          Personal reusable skills become part of your baseline runtime guidance
-          for personal threads. Community lenses use the skills attached to that
-          community.
+          Personal skills and selected-community skills are available through the
+          same harness context.
         </div>
         {!session ? (
           <div className="model-note">
@@ -722,96 +728,120 @@ export function WebIntegrationsSettingsSection(
             {userPlatformSkillMutationError ? (
               <div className="auth-error">{userPlatformSkillMutationError}</div>
             ) : null}
+            {effectiveSkillsError ? (
+              <div className="auth-error">{effectiveSkillsError}</div>
+            ) : null}
 
-            {isLoadingUserPlatformSkills ? (
-              <div className="model-note">Loading your skills…</div>
-            ) : userPlatformSkills.length === 0 ? (
+            {isLoadingEffectiveSkills || isLoadingUserPlatformSkills ? (
+              <div className="model-note">Loading harness skills…</div>
+            ) : effectiveSkills.length === 0 ? (
               <div className="model-note">
-                No personal skills yet. Browse Skills from Discover to add a
-                curated skill, or create a custom one here.
+                No skills available yet. Browse Skills from Discover to add a
+                personal skill, or create a custom one here.
               </div>
             ) : (
-              <div className="agent-capability-list" role="list" aria-label="Personal skills">
-                {userPlatformSkills.map((install) => {
+              <div className="agent-capability-list" role="list" aria-label="Harness skills">
+                {effectiveSkills.map((effectiveSkill) => {
+                  const install = effectiveSkill.personal_install;
+                  const attachment = effectiveSkill.community_attachment;
                   const isUpdating =
-                    updatingUserPlatformSkillInstallId === install.id;
+                    install ? updatingUserPlatformSkillInstallId === install.id : false;
                   const isRemoving =
-                    removingUserPlatformSkillInstallId === install.id;
+                    install ? removingUserPlatformSkillInstallId === install.id : false;
                   const isEditing =
-                    editingUserPlatformSkillInstallId === install.id;
+                    install ? editingUserPlatformSkillInstallId === install.id : false;
+                  const scopeLabel = attachment
+                    ? install
+                      ? "Personal + community"
+                      : "Selected community"
+                    : "Personal baseline";
+                  const statusLabel = effectiveSkill.enabled_for_current_context
+                    ? "Enabled"
+                    : "Disabled";
                   return (
-                    <div key={install.id} className="agent-capability-card" role="listitem">
+                    <div
+                      key={effectiveSkill.skill_identity_key}
+                      className="agent-capability-card"
+                      role="listitem"
+                    >
                       <div className="agent-capability-card-header">
                         <div>
                           <div className="agent-capability-card-title-row">
                             <div className="settings-section-subtitle">
-                              {install.skill.name}
+                              {effectiveSkill.skill.name}
                             </div>
                             <span
                               className={`community-app-status-badge${
-                                install.enabled ? "" : " is-muted"
+                                effectiveSkill.enabled_for_current_context ? "" : " is-muted"
                               }`}
                             >
-                              {install.enabled ? "Enabled" : "Disabled"}
+                              {statusLabel}
                             </span>
+                            {attachment ? (
+                              <span className="community-app-status-badge">
+                                Community
+                              </span>
+                            ) : null}
                           </div>
                           <div className="model-note">
-                            ${install.skill.mentionToken}
-                            {install.skill.description
-                              ? ` · ${install.skill.description}`
+                            ${effectiveSkill.skill.mentionToken}
+                            {effectiveSkill.skill.description
+                              ? ` · ${effectiveSkill.skill.description}`
                               : ""}
                           </div>
                         </div>
-                        <div className="agent-capability-toolbar-actions">
-                          <button
-                            type="button"
-                            disabled={isUpdating || isRemoving}
-                            onClick={() => {
-                              if (isEditing) {
-                                setEditingUserPlatformSkillInstallId(null);
-                                setEditingSkillDraft(buildInitialSkillDraft());
-                                return;
-                              }
-                              setEditingUserPlatformSkillInstallId(install.id);
-                              setEditingSkillDraft(buildSkillDraftFromInstall(install));
-                            }}
-                          >
-                            {isEditing ? "Close" : "Edit"}
-                          </button>
-                          <label
-                            className={`members-switch${
-                              isUpdating || isRemoving ? " is-disabled" : ""
-                            }`}
-                            title={
-                              install.enabled ? "Disable skill" : "Enable skill"
-                            }
-                          >
-                            <input
-                              type="checkbox"
-                              checked={install.enabled}
+                        {install ? (
+                          <div className="agent-capability-toolbar-actions">
+                            <button
+                              type="button"
                               disabled={isUpdating || isRemoving}
-                              aria-label={`${
-                                install.enabled ? "Disable" : "Enable"
-                              } ${install.skill.name}`}
-                              onChange={() =>
-                                void onUpdateUserPlatformSkill(install.id, {
-                                  enabled: !install.enabled,
-                                })
+                              onClick={() => {
+                                if (isEditing) {
+                                  setEditingUserPlatformSkillInstallId(null);
+                                  setEditingSkillDraft(buildInitialSkillDraft());
+                                  return;
+                                }
+                                setEditingUserPlatformSkillInstallId(install.id);
+                                setEditingSkillDraft(buildSkillDraftFromInstall(install));
+                              }}
+                            >
+                              {isEditing ? "Close" : "Edit"}
+                            </button>
+                            <label
+                              className={`members-switch${
+                                isUpdating || isRemoving ? " is-disabled" : ""
+                              }`}
+                              title={
+                                install.enabled ? "Disable skill" : "Enable skill"
                               }
-                            />
-                            <span className="members-switch-track">
-                              <span className="members-switch-thumb" />
-                            </span>
-                          </label>
-                          <button
-                            type="button"
-                            className="danger"
-                            disabled={isUpdating || isRemoving}
-                            onClick={() => void onDeleteUserPlatformSkill(install.id)}
-                          >
-                            {isRemoving ? "Deleting…" : "Delete"}
-                          </button>
-                        </div>
+                            >
+                              <input
+                                type="checkbox"
+                                checked={install.enabled}
+                                disabled={isUpdating || isRemoving}
+                                aria-label={`${
+                                  install.enabled ? "Disable" : "Enable"
+                                } ${install.skill.name}`}
+                                onChange={() =>
+                                  void onUpdateUserPlatformSkill(install.id, {
+                                    enabled: !install.enabled,
+                                  })
+                                }
+                              />
+                              <span className="members-switch-track">
+                                <span className="members-switch-thumb" />
+                              </span>
+                            </label>
+                            <button
+                              type="button"
+                              className="danger"
+                              disabled={isUpdating || isRemoving}
+                              onClick={() => void onDeleteUserPlatformSkill(install.id)}
+                            >
+                              {isRemoving ? "Deleting…" : "Delete"}
+                            </button>
+                          </div>
+                        ) : null}
                       </div>
 
                       <div className="agent-capability-metadata">
@@ -820,7 +850,7 @@ export function WebIntegrationsSettingsSection(
                             Scope
                           </span>
                           <span className="agent-capability-metadata-value">
-                            Personal baseline
+                            {scopeLabel}
                           </span>
                         </div>
                         <div className="agent-capability-metadata-item">
@@ -828,7 +858,7 @@ export function WebIntegrationsSettingsSection(
                             Invocation
                           </span>
                           <span className="agent-capability-metadata-value">
-                            Explicit <code>${install.skill.mentionToken}</code>
+                            Explicit <code>${effectiveSkill.skill.mentionToken}</code>
                           </span>
                         </div>
                       </div>

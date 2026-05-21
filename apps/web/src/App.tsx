@@ -73,6 +73,7 @@ import { useWebPublicCommunityUiController } from "./controllers/useWebPublicCom
 import { useWebProfileSettingsUiController } from "./controllers/useWebProfileSettingsUiController";
 import { useWebProviderConnectionUiController } from "./controllers/useWebProviderConnectionUiController";
 import { useWebEffectiveMcpAppsController } from "./controllers/useWebEffectiveMcpAppsController";
+import { useWebEffectiveSkillsController } from "./controllers/useWebEffectiveSkillsController";
 import { useWebUserPlatformAppMountsController } from "./controllers/useWebUserPlatformAppMountsController";
 import { useWebUserPlatformSkillsController } from "./controllers/useWebUserPlatformSkillsController";
 import {
@@ -2508,6 +2509,18 @@ export default function App() {
     ensureSession: ensureUsableAuthSession,
   });
   const {
+    effectiveSkills,
+    isLoadingEffectiveSkills,
+    effectiveSkillsError,
+    effectiveSkillsLoadedKeyRef,
+    clearEffectiveSkills,
+    loadEffectiveSkills,
+  } = useWebEffectiveSkillsController<AuthSession>({
+    activeCommunityId,
+    session,
+    ensureSession: ensureUsableAuthSession,
+  });
+  const {
     userPlatformSkills,
     isLoadingUserPlatformSkills,
     userPlatformSkillError,
@@ -3474,6 +3487,20 @@ export default function App() {
     session,
   ]);
 
+  const reloadEffectiveSkills = useCallback(async () => {
+    if (!session) {
+      clearEffectiveSkills();
+      return;
+    }
+    effectiveSkillsLoadedKeyRef.current = null;
+    await loadEffectiveSkills(session);
+  }, [
+    clearEffectiveSkills,
+    effectiveSkillsLoadedKeyRef,
+    loadEffectiveSkills,
+    session,
+  ]);
+
   const handleConnectCommunityApp = useCallback(
     async (input: ConnectCommunityAppInput) => {
       const ok = await connectCommunityApp(input);
@@ -3607,16 +3634,20 @@ export default function App() {
 
   const handleCreateCommunitySkill = useCallback(
     async (input: CreateSkillPackageInput) => {
-      return await createPersonalSkillAndAttach(input);
+      const ok = await createPersonalSkillAndAttach(input);
+      if (ok) void reloadEffectiveSkills();
+      return ok;
     },
-    [createPersonalSkillAndAttach],
+    [createPersonalSkillAndAttach, reloadEffectiveSkills],
   );
 
   const handleCreateUserPlatformSkill = useCallback(
     async (input: CreateSkillPackageInput) => {
-      return await createUserPlatformSkill(input);
+      const ok = await createUserPlatformSkill(input);
+      if (ok) void reloadEffectiveSkills();
+      return ok;
     },
-    [createUserPlatformSkill],
+    [createUserPlatformSkill, reloadEffectiveSkills],
   );
 
   const handleUpdateUserPlatformSkill = useCallback(
@@ -3626,9 +3657,11 @@ export default function App() {
         enabled?: boolean;
       },
     ) => {
-      return await updateUserPlatformSkill(userPlatformSkillInstallId, patch);
+      const ok = await updateUserPlatformSkill(userPlatformSkillInstallId, patch);
+      if (ok) void reloadEffectiveSkills();
+      return ok;
     },
-    [updateUserPlatformSkill],
+    [reloadEffectiveSkills, updateUserPlatformSkill],
   );
 
   const handleSaveUserPlatformSkill = useCallback(
@@ -3636,23 +3669,29 @@ export default function App() {
       userPlatformSkillInstallId: string,
       input: CreateSkillPackageInput,
     ) => {
-      return await saveUserPlatformSkill(userPlatformSkillInstallId, input);
+      const ok = await saveUserPlatformSkill(userPlatformSkillInstallId, input);
+      if (ok) void reloadEffectiveSkills();
+      return ok;
     },
-    [saveUserPlatformSkill],
+    [reloadEffectiveSkills, saveUserPlatformSkill],
   );
 
   const handleDeleteUserPlatformSkill = useCallback(
     async (userPlatformSkillInstallId: string) => {
-      return await deleteUserPlatformSkill(userPlatformSkillInstallId);
+      const ok = await deleteUserPlatformSkill(userPlatformSkillInstallId);
+      if (ok) void reloadEffectiveSkills();
+      return ok;
     },
-    [deleteUserPlatformSkill],
+    [deleteUserPlatformSkill, reloadEffectiveSkills],
   );
 
   const handleAttachSkillPackageToCommunity = useCallback(
     async (skillPackageId: string) => {
-      return await attachSkillPackageToCommunity(skillPackageId);
+      const ok = await attachSkillPackageToCommunity(skillPackageId);
+      if (ok) void reloadEffectiveSkills();
+      return ok;
     },
-    [attachSkillPackageToCommunity],
+    [attachSkillPackageToCommunity, reloadEffectiveSkills],
   );
 
   const handleUpdateCommunitySkillAttachment = useCallback(
@@ -3662,19 +3701,23 @@ export default function App() {
         enabled?: boolean;
       },
     ) => {
-      return await updateCommunitySkillAttachment(
+      const ok = await updateCommunitySkillAttachment(
         communitySkillAttachmentId,
         patch,
       );
+      if (ok) void reloadEffectiveSkills();
+      return ok;
     },
-    [updateCommunitySkillAttachment],
+    [reloadEffectiveSkills, updateCommunitySkillAttachment],
   );
 
   const handleDetachCommunitySkill = useCallback(
     async (communitySkillAttachmentId: string) => {
-      return await detachCommunitySkill(communitySkillAttachmentId);
+      const ok = await detachCommunitySkill(communitySkillAttachmentId);
+      if (ok) void reloadEffectiveSkills();
+      return ok;
     },
-    [detachCommunitySkill],
+    [detachCommunitySkill, reloadEffectiveSkills],
   );
 
   const {
@@ -4930,6 +4973,30 @@ export default function App() {
     clearEffectiveMcpApps,
     effectiveMcpAppsLoadedKeyRef,
     loadEffectiveMcpApps,
+  ]);
+
+  useEffect(() => {
+    const shouldLoadEffectiveSkills =
+      activePage === "workspace" &&
+      activeView === "settings" &&
+      settingsPage === "integrations";
+    if (!shouldLoadEffectiveSkills) return;
+    if (!session) {
+      clearEffectiveSkills();
+      return;
+    }
+    const loadedKey = `${session.user.id}:${activeCommunityId ?? "personal"}`;
+    if (effectiveSkillsLoadedKeyRef.current === loadedKey) return;
+    void loadEffectiveSkills(session);
+  }, [
+    activeCommunityId,
+    activePage,
+    activeView,
+    session,
+    settingsPage,
+    clearEffectiveSkills,
+    effectiveSkillsLoadedKeyRef,
+    loadEffectiveSkills,
   ]);
 
   useEffect(() => {
@@ -7523,6 +7590,7 @@ export default function App() {
         loadCommunitySkillAttachments(community.id, session),
         loadOwnedSkillPackages(session),
         reloadEffectiveMcpApps(),
+        reloadEffectiveSkills(),
         refreshActiveCommunityLaunchSetupStatus(),
       ]);
       return {
@@ -8407,6 +8475,9 @@ export default function App() {
       effectiveMcpApps,
       isLoadingEffectiveMcpApps,
       effectiveMcpAppsError,
+      effectiveSkills,
+      isLoadingEffectiveSkills,
+      effectiveSkillsError,
       isLoadingUserPlatformAppMounts,
       userPlatformAppMountError,
       userPlatformAppMutationError,

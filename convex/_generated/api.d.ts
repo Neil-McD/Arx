@@ -92,6 +92,7 @@ import type * as eventReminders from "../eventReminders.js";
 import type * as fallbackHtmlSearchTransport from "../fallbackHtmlSearchTransport.js";
 import type * as gates from "../gates.js";
 import type * as harnessMounts from "../harnessMounts.js";
+import type * as harnessSkills from "../harnessSkills.js";
 import type * as http from "../http.js";
 import type * as httpAppOAuth from "../httpAppOAuth.js";
 import type * as httpAuth from "../httpAuth.js";
@@ -252,6 +253,7 @@ declare const fullApi: ApiFromModules<{
   fallbackHtmlSearchTransport: typeof fallbackHtmlSearchTransport;
   gates: typeof gates;
   harnessMounts: typeof harnessMounts;
+  harnessSkills: typeof harnessSkills;
   http: typeof http;
   httpAppOAuth: typeof httpAppOAuth;
   httpAuth: typeof httpAuth;

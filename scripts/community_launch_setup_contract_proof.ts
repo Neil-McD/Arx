@@ -53,8 +53,12 @@ const workflowImportCandidateIds = read("shared/communityWorkflowImportCandidate
 const workflowImportRepositoryIdentity = read("shared/communityWorkflowImportRepositoryIdentity.ts");
 const workflowImportReviewProjection = read("shared/communityWorkflowImportReviewProjection.ts");
 const discoverCatalog = read("shared/discoverCatalog.ts");
+const effectiveSkills = read("shared/effectiveSkills.ts");
+const cloudEffectiveSkillGateway = read("shared/cloudEffectiveSkillGateway.ts");
+const harnessSkills = read("convex/harnessSkills.ts");
 const setupCard = read("apps/web/src/components/WebCommunityLaunchSetupCard.tsx");
 const setupModal = read("apps/web/src/components/WebCommunityLaunchSetupModal.tsx");
+const integrationsSettingsSection = read("apps/web/src/components/WebIntegrationsSettingsSection.tsx");
 const harnessImportSources = read("apps/web/src/lib/communityHarnessImportSources.ts");
 const baseCss = read("apps/web/src/base.css");
 const appShell = read("apps/web/src/App.tsx");
@@ -1266,8 +1270,28 @@ assert.match(
 );
 assert.match(
   appShell,
-  /handleApplyCommunityLaunchWorkflowImport[\s\S]*loadCommunityAppMounts\(community\.id, session\)[\s\S]*loadCommunitySkillAttachments\(community\.id, session\)[\s\S]*reloadEffectiveMcpApps\(\)/,
+  /handleApplyCommunityLaunchWorkflowImport[\s\S]*loadCommunityAppMounts\(community\.id, session\)[\s\S]*loadCommunitySkillAttachments\(community\.id, session\)[\s\S]*reloadEffectiveMcpApps\(\)[\s\S]*reloadEffectiveSkills\(\)/,
   "workflow import apply must refresh canonical community rows and the effective harness integrations surface",
+);
+assert.match(
+  effectiveSkills,
+  /buildEffectiveSkills[\s\S]*personalSkills[\s\S]*communitySkills[\s\S]*personal_install[\s\S]*community_attachment/,
+  "effective skills must merge personal skill installs with selected-community skill attachments",
+);
+assert.match(
+  harnessSkills,
+  /listEffectiveSkills[\s\S]*resolveUserIdForAuthenticatedRequest[\s\S]*requireCommunityChatAccess[\s\S]*buildEffectiveSkills/,
+  "effective skill reads must be authenticated and community-access gated without requiring manager authority",
+);
+assert.match(
+  cloudEffectiveSkillGateway,
+  /harnessSkills:listEffectiveSkills/,
+  "web effective skill gateway must read the dedicated effective harness skill query",
+);
+assert.match(
+  integrationsSettingsSection,
+  /effectiveSkills[\s\S]*Harness skills[\s\S]*Personal skills and selected-community skills are available through the\s+same harness context/,
+  "integrations settings must render the one effective harness skill surface instead of personal-only skills",
 );
 assert.doesNotMatch(
   setupModal,

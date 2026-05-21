@@ -10,6 +10,7 @@ import type {
 } from "../../../../shared/workspaceCredits";
 import type { PendingPurchaseClaim } from "../../../../shared/pay_first";
 import type { EffectiveMcpApp } from "../../../../shared/effectiveMcpApps";
+import type { EffectiveSkill } from "../../../../shared/effectiveSkills";
 import type { CreateSkillPackageInput } from "../../../../shared/skillPackageTypes";
 import type { UserPlatformInstalledSkill } from "../../../../shared/userPlatformSkillTypes";
 import type {
@@ -149,6 +150,9 @@ export type WebSettingsPanelsProps = {
     effectiveMcpApps: EffectiveMcpApp[];
     isLoadingEffectiveMcpApps: boolean;
     effectiveMcpAppsError: string | null;
+    effectiveSkills: EffectiveSkill[];
+    isLoadingEffectiveSkills: boolean;
+    effectiveSkillsError: string | null;
     isLoadingUserPlatformAppMounts: boolean;
     userPlatformAppMountError: string | null;
     userPlatformAppMutationError: string | null;
@@ -362,6 +366,9 @@ export function WebSettingsPanels(props: WebSettingsPanelsProps) {
     effectiveMcpApps: integrations.effectiveMcpApps,
     isLoadingEffectiveMcpApps: integrations.isLoadingEffectiveMcpApps,
     effectiveMcpAppsError: integrations.effectiveMcpAppsError,
+    effectiveSkills: integrations.effectiveSkills,
+    isLoadingEffectiveSkills: integrations.isLoadingEffectiveSkills,
+    effectiveSkillsError: integrations.effectiveSkillsError,
     isLoadingUserPlatformAppMounts: integrations.isLoadingUserPlatformAppMounts,
     userPlatformAppMountError: integrations.userPlatformAppMountError,
     userPlatformAppMutationError: integrations.userPlatformAppMutationError,
