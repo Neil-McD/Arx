@@ -450,12 +450,13 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
                 <input
                   id="polynet-onboarding-platform-legal"
                   type="checkbox"
+                  aria-describedby="polynet-onboarding-platform-legal-copy"
                   checked={platformLegalReady}
                   disabled={!platformLegalMissing || props.isSaving}
                   onChange={(event) => setHasConfirmedPlatformLegal(event.currentTarget.checked)}
                 />
-                <span>
-                  <label htmlFor="polynet-onboarding-platform-legal">I agree to the </label>
+                <span id="polynet-onboarding-platform-legal-copy" className="polynet-onboarding-legal-copy">
+                  I agree to the{" "}
                   <button
                     type="button"
                     className="polynet-onboarding-legal-link"
@@ -463,7 +464,7 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
                   >
                     Terms of Service
                   </button>
-                  <label htmlFor="polynet-onboarding-platform-legal"> and acknowledge the </label>
+                  {" "}and acknowledge the{" "}
                   <button
                     type="button"
                     className="polynet-onboarding-legal-link"
@@ -471,7 +472,7 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
                   >
                     Privacy &amp; AI Data Policy
                   </button>
-                  <label htmlFor="polynet-onboarding-platform-legal">.</label>
+                  .
                 </span>
               </div>
             </div>

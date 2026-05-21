@@ -2744,11 +2744,10 @@ body {
 .polynet-onboarding-legal-confirmation {
   display: flex;
   align-items: flex-start;
-  gap: 10px;
-  padding: 12px;
-  border: 1px solid var(--border-muted);
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--bg-card-alt) 86%, transparent);
+  gap: 8px;
+  padding: 0;
+  border: 0;
+  background: transparent;
   color: var(--text-secondary);
   font-size: 12px;
   font-weight: 600;
@@ -2757,11 +2756,18 @@ body {
 
 .polynet-onboarding-legal-confirmation input {
   flex: 0 0 auto;
-  margin-top: 2px;
+  width: 14px;
+  height: 14px;
+  min-width: 14px;
+  margin: 2px 0 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
   accent-color: var(--accent);
 }
 
-.polynet-onboarding-legal-confirmation span {
+.polynet-onboarding-legal-copy {
+  display: inline;
   min-width: 0;
 }
 
