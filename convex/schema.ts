@@ -171,6 +171,7 @@ export default defineSchema({
     referredCommunityId: v.optional(v.id("communities")),
     basisType: v.union(
       v.literal("community_platform_fee"),
+      v.literal("community_revenue"),
       v.literal("paid_tool_usage"),
     ),
     basisAmountUsd: v.number(),

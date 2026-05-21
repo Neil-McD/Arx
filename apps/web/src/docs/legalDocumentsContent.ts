@@ -1,4 +1,4 @@
-import builderPartnerTermsV1 from "../../../../docs/legal/builder-partner-terms-v1.md?raw";
+import builderPartnerTermsV2 from "../../../../docs/legal/builder-partner-terms-v2.md?raw";
 import {
   BUILDER_PARTNER_TERMS_DOCUMENT,
   type LegalDocument,
@@ -29,5 +29,5 @@ function stripMarkdownFrontmatter(source: string): string {
 
 export const BUILDER_PARTNER_TERMS_ENTRY: LegalDocumentEntry = {
   ...BUILDER_PARTNER_TERMS_DOCUMENT,
-  content: stripMarkdownFrontmatter(builderPartnerTermsV1),
+  content: stripMarkdownFrontmatter(builderPartnerTermsV2),
 };

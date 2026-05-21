@@ -13,7 +13,7 @@ export type LegalDocument = {
 export const BUILDER_PARTNER_TERMS_DOCUMENT: LegalDocument = {
   key: "builder_partner_terms",
   version: BUILDER_PARTNER_TERMS_VERSION,
-  title: "Builder Partner Terms v1",
+  title: "Builder Partner Terms v2",
   effectiveDate: "2026-05-21",
-  sourcePath: "docs/legal/builder-partner-terms-v1.md",
+  sourcePath: "docs/legal/builder-partner-terms-v2.md",
 };

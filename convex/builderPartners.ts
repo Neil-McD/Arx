@@ -11,9 +11,9 @@ import {
   BUILDER_PARTNER_ATTRIBUTION_WINDOW_MS,
   BUILDER_PARTNER_COMMISSION_HOLD_MS,
   BUILDER_PARTNER_COMMUNITY_PLATFORM_FEE_BPS,
+  BUILDER_PARTNER_COMMUNITY_REVENUE_SHARE_BPS,
   BUILDER_PARTNER_PAYOUT_BUFFER_MS,
   BUILDER_PARTNER_PROGRAM_VERSION,
-  BUILDER_PARTNER_PLATFORM_FEE_SHARE_BPS,
   BUILDER_PARTNER_TERMS_VERSION,
   BUILDER_PARTNER_TOOL_USAGE_POLYNET_RETAINED_REVENUE_BPS,
   BUILDER_PARTNER_TOOL_USAGE_REVENUE_SHARE_BPS,
@@ -973,7 +973,7 @@ async function findBoundPartnerAttributionForCommission(ctx: any, args: {
     .sort((a: any, b: any) => Number(b.lastTouchAt ?? 0) - Number(a.lastTouchAt ?? 0));
   for (const attribution of candidates) {
     const partner = await ctx.db.get(attribution.partnerId);
-    if (!partner || partner.status === "disabled") continue;
+    if (!partner || partner.status !== "active" || !hasAcceptedCurrentTerms(partner)) continue;
     return { attribution, partner };
   }
   return null;
@@ -985,7 +985,7 @@ async function insertPartnerCommissionIfEligible(ctx: any, args: {
   attribution: any;
   referredUserId: any;
   referredCommunityId?: any;
-  basisType: "community_platform_fee" | "paid_tool_usage";
+  basisType: "community_platform_fee" | "community_revenue" | "paid_tool_usage";
   basisAmountUsd: number;
   commissionRateBps: number;
   commissionAmountUsd: number;
@@ -1054,9 +1054,12 @@ export async function recordCommunityRevenuePartnerCommission(ctx: any, args: {
   const sourceProviderInvoiceId = String(args.sourceProviderInvoiceId ?? "").trim();
   if (!sourceCheckoutSessionId && !sourceProviderInvoiceId) return null;
   const commissionKey = sourceProviderInvoiceId
+    ? `community_revenue:invoice:${sourceProviderInvoiceId}`
+    : `community_revenue:${sourceCheckoutSessionId}`;
+  const legacyCommissionKey = sourceProviderInvoiceId
     ? `community_platform_fee:invoice:${sourceProviderInvoiceId}`
     : `community_platform_fee:${sourceCheckoutSessionId}`;
-  const existing = await getCommissionByKey(ctx, commissionKey);
+  const existing = await getCommissionByKey(ctx, commissionKey) ?? await getCommissionByKey(ctx, legacyCommissionKey);
   if (existing) {
     return await patchCommissionSourceEvidence(ctx, existing, {
       sourceCheckoutSessionId,
@@ -1103,7 +1106,7 @@ export async function recordCommunityRevenuePartnerCommission(ctx: any, args: {
   const commission = calculateBuilderPartnerCommunityRevenueCommission({
     communityRevenueUsd,
     platformFeeBps: BUILDER_PARTNER_COMMUNITY_PLATFORM_FEE_BPS,
-    partnerPlatformFeeShareBps: BUILDER_PARTNER_PLATFORM_FEE_SHARE_BPS,
+    partnerCommunityRevenueShareBps: BUILDER_PARTNER_COMMUNITY_REVENUE_SHARE_BPS,
   });
   return await insertPartnerCommissionIfEligible(ctx, {
     commissionKey,
@@ -1111,9 +1114,9 @@ export async function recordCommunityRevenuePartnerCommission(ctx: any, args: {
     attribution: match.attribution,
     referredUserId,
     referredCommunityId: args.communityId,
-    basisType: "community_platform_fee",
-    basisAmountUsd: commission.platformFeeUsd,
-    commissionRateBps: BUILDER_PARTNER_PLATFORM_FEE_SHARE_BPS,
+    basisType: "community_revenue",
+    basisAmountUsd: communityRevenueUsd,
+    commissionRateBps: BUILDER_PARTNER_COMMUNITY_REVENUE_SHARE_BPS,
     commissionAmountUsd: commission.commissionAmountUsd,
     sourceCheckoutSessionId: sourceCheckoutSessionId || undefined,
     sourceProviderSubscriptionId: String(args.sourceProviderSubscriptionId ?? "").trim() || undefined,
@@ -1508,7 +1511,7 @@ export const advancePartnerCommissionsToPayableInternal = internalMutation({
     for (const row of rows) {
       if (row.status !== "locked" || Number(row.holdUntil ?? Infinity) > nowMs) continue;
       if (
-        row.basisType === "community_platform_fee" &&
+        (row.basisType === "community_platform_fee" || row.basisType === "community_revenue") &&
         !hasCommunityRevenueProviderEvidence(row)
       ) {
         await ctx.db.patch(row._id, {

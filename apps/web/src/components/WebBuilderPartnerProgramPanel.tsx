@@ -13,7 +13,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import type { AccountCommerceStatus } from "../../../../shared/accountCommerceStatusGateway";
 import {
   BUILDER_PARTNER_COMMUNITY_PLATFORM_FEE_BPS,
-  BUILDER_PARTNER_PLATFORM_FEE_SHARE_BPS,
+  BUILDER_PARTNER_COMMUNITY_REVENUE_SHARE_BPS,
   BUILDER_PARTNER_TOOL_USAGE_REVENUE_SHARE_BPS,
   calculateBuilderPartnerCommunityRevenueCommission,
 } from "../../../../shared/builderPartnerProgram";
@@ -112,12 +112,11 @@ export function WebBuilderPartnerProgramPanel(props: WebBuilderPartnerProgramPan
   const [hasConfirmedTermsAcceptance, setHasConfirmedTermsAcceptance] = useState(false);
   const activeTermsDocument = BUILDER_PARTNER_TERMS_ENTRY;
   const showProgramOverview = props.showProgramOverview ?? true;
-  const partnerPlatformFeeShareBps = BUILDER_PARTNER_PLATFORM_FEE_SHARE_BPS;
   const toolUsageRevenueShareBps = BUILDER_PARTNER_TOOL_USAGE_REVENUE_SHARE_BPS;
   const communityCommission = calculateBuilderPartnerCommunityRevenueCommission({
     communityRevenueUsd: 100,
     platformFeeBps: BUILDER_PARTNER_COMMUNITY_PLATFORM_FEE_BPS,
-    partnerPlatformFeeShareBps,
+    partnerCommunityRevenueShareBps: BUILDER_PARTNER_COMMUNITY_REVENUE_SHARE_BPS,
   });
   const effectiveCommunityRevenueShareBps = communityCommission.effectiveCommunityRevenueShareBps;
   const isSignedIn = Boolean(props.session);
@@ -257,7 +256,7 @@ export function WebBuilderPartnerProgramPanel(props: WebBuilderPartnerProgramPan
                 Earn {formatBps(effectiveCommunityRevenueShareBps)} of referred creators'
                 community revenue.
               </strong>
-              <small>Calculated from PolyNet's platform fee on eligible referred creators.</small>
+              <small>Calculated from eligible referred creator community revenue.</small>
             </div>
             <div className="builder-partner-metric" role="listitem">
               <BadgeDollarSign />

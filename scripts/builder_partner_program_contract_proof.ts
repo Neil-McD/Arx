@@ -3,9 +3,9 @@ import { readFileSync } from "node:fs";
 import {
   BUILDER_PARTNER_ATTRIBUTION_WINDOW_MS,
   BUILDER_PARTNER_COMMUNITY_PLATFORM_FEE_BPS,
+  BUILDER_PARTNER_COMMUNITY_REVENUE_SHARE_BPS,
   BUILDER_PARTNER_COMMISSION_HOLD_MS,
   BUILDER_PARTNER_PAYOUT_BUFFER_MS,
-  BUILDER_PARTNER_PLATFORM_FEE_SHARE_BPS,
   BUILDER_PARTNER_PROGRAM_VERSION,
   BUILDER_PARTNER_TERMS_VERSION,
   BUILDER_PARTNER_TOOL_USAGE_POLYNET_RETAINED_REVENUE_BPS,
@@ -25,9 +25,9 @@ function assertIncludes(haystack: string, needle: string, label: string) {
 
 function proveConstants() {
   assert.equal(BUILDER_PARTNER_PROGRAM_VERSION, "builder_partner_v1");
-  assert.equal(BUILDER_PARTNER_TERMS_VERSION, "builder_partner_terms_v1");
+  assert.equal(BUILDER_PARTNER_TERMS_VERSION, "builder_partner_terms_v2");
   assert.equal(BUILDER_PARTNER_COMMUNITY_PLATFORM_FEE_BPS, 1500);
-  assert.equal(BUILDER_PARTNER_PLATFORM_FEE_SHARE_BPS, 4000);
+  assert.equal(BUILDER_PARTNER_COMMUNITY_REVENUE_SHARE_BPS, 500);
   assert.equal(BUILDER_PARTNER_TOOL_USAGE_REVENUE_SHARE_BPS, 2000);
   assert.equal(BUILDER_PARTNER_TOOL_USAGE_POLYNET_RETAINED_REVENUE_BPS, 4000);
   assert.equal(BUILDER_PARTNER_ATTRIBUTION_WINDOW_MS, 30 * 24 * 60 * 60 * 1000);
@@ -42,8 +42,8 @@ function proveCommunityCommissionMath() {
   });
   assert.deepEqual(result, {
     platformFeeUsd: 15,
-    commissionAmountUsd: 6,
-    effectiveCommunityRevenueShareBps: 600,
+    commissionAmountUsd: 5,
+    effectiveCommunityRevenueShareBps: 500,
   });
   assert.deepEqual(
     calculateBuilderPartnerToolUsageCommission({
@@ -109,8 +109,8 @@ function proveSchemaContract(schemaSource: string) {
   );
   assert.match(
     schemaSource,
-    /partnerCommissionLedger:[\s\S]*commissionKey:\s*v\.string\(\)[\s\S]*basisType:\s*v\.union\([\s\S]*v\.literal\("community_platform_fee"\)[\s\S]*v\.literal\("paid_tool_usage"\)[\s\S]*basisAmountUsd:\s*v\.number\(\)[\s\S]*commissionRateBps:\s*v\.number\(\)[\s\S]*commissionAmountUsd:\s*v\.number\(\)/,
-    "expected commission ledger to be idempotent across community revenue and paid-tool usage basis rows",
+    /partnerCommissionLedger:[\s\S]*commissionKey:\s*v\.string\(\)[\s\S]*basisType:\s*v\.union\([\s\S]*v\.literal\("community_platform_fee"\)[\s\S]*v\.literal\("community_revenue"\)[\s\S]*v\.literal\("paid_tool_usage"\)[\s\S]*basisAmountUsd:\s*v\.number\(\)[\s\S]*commissionRateBps:\s*v\.number\(\)[\s\S]*commissionAmountUsd:\s*v\.number\(\)/,
+    "expected commission ledger to preserve legacy platform-fee rows and support current community revenue plus paid-tool usage basis rows",
   );
   assert.match(
     schemaSource,
@@ -277,7 +277,7 @@ function proveUiContract(uiSource: string, settingsWrapperSource: string, partne
   );
   assertIncludes(
     uiSource,
-    "BUILDER_PARTNER_PLATFORM_FEE_SHARE_BPS",
+    "BUILDER_PARTNER_COMMUNITY_REVENUE_SHARE_BPS",
     "partner settings UI",
   );
   assertIncludes(
@@ -398,7 +398,7 @@ function proveUiContract(uiSource: string, settingsWrapperSource: string, partne
   assert.doesNotMatch(
     uiSource,
     /platform take rate/i,
-    "partner settings UI should not overexplain the 6% community revenue copy",
+    "partner settings UI should not overexplain the community revenue copy",
   );
   assert.doesNotMatch(
     uiSource,
@@ -436,7 +436,7 @@ function provePartnerTermsAgreementContract(args: {
 }) {
   assertIncludes(
     args.termsDocSource,
-    "version: builder_partner_terms_v1",
+    "version: builder_partner_terms_v2",
     "Builder Partner terms legal artifact",
   );
   for (const marker of [
@@ -464,12 +464,12 @@ function provePartnerTermsAgreementContract(args: {
   );
   assertIncludes(
     args.legalContentSource,
-    "builder-partner-terms-v1.md?raw",
+    "builder-partner-terms-v2.md?raw",
     "web legal document content must load the canonical Markdown artifact",
   );
   assertIncludes(
     args.legalContentSource,
-    "stripMarkdownFrontmatter(builderPartnerTermsV1)",
+    "stripMarkdownFrontmatter(builderPartnerTermsV2)",
     "web legal document content must hide source frontmatter from the user-facing modal",
   );
   assertIncludes(
@@ -1100,17 +1100,17 @@ function proveEndToEndPartnerLifecycleBehavior() {
   const initial = calculateBuilderPartnerCommunityRevenueCommission({
     communityRevenueUsd: 100,
     platformFeeBps: BUILDER_PARTNER_COMMUNITY_PLATFORM_FEE_BPS,
-    partnerPlatformFeeShareBps: BUILDER_PARTNER_PLATFORM_FEE_SHARE_BPS,
+    partnerCommunityRevenueShareBps: BUILDER_PARTNER_COMMUNITY_REVENUE_SHARE_BPS,
   });
   assert.deepEqual(initial, {
     platformFeeUsd: 15,
-    commissionAmountUsd: 6,
-    effectiveCommunityRevenueShareBps: 600,
+    commissionAmountUsd: 5,
+    effectiveCommunityRevenueShareBps: 500,
   });
 
   const commissions: PartnerLifecycleCommission[] = [
     {
-      commissionKey: "community_platform_fee:invoice:in_initial",
+      commissionKey: "community_revenue:invoice:in_initial",
       status: "locked",
       commissionAmountUsd: initial.commissionAmountUsd,
       holdUntil: purchaseAt + BUILDER_PARTNER_COMMISSION_HOLD_MS,
@@ -1124,11 +1124,11 @@ function proveEndToEndPartnerLifecycleBehavior() {
 
   const duplicateInvoiceKeys = new Set([
     commissions[0].commissionKey,
-    "community_platform_fee:invoice:in_initial",
+    "community_revenue:invoice:in_initial",
   ]);
   assert.equal(duplicateInvoiceKeys.size, 1, "provider invoice should be the durable commission idempotency key");
   assert.deepEqual(summarizePartnerLifecycle(commissions, holdClearedAt - 1), {
-    pendingUsd: 6,
+    pendingUsd: 5,
     bufferedUsd: 0,
     readyUsd: 0,
     paidUsd: 0,
@@ -1139,7 +1139,7 @@ function proveEndToEndPartnerLifecycleBehavior() {
   commissions[0].payableAt = holdClearedAt;
   assert.deepEqual(summarizePartnerLifecycle(commissions, bufferClearedAt - 1), {
     pendingUsd: 0,
-    bufferedUsd: 6,
+    bufferedUsd: 5,
     readyUsd: 0,
     paidUsd: 0,
     clawbackDebtUsd: 0,
@@ -1147,14 +1147,14 @@ function proveEndToEndPartnerLifecycleBehavior() {
   assert.deepEqual(summarizePartnerLifecycle(commissions, bufferClearedAt), {
     pendingUsd: 0,
     bufferedUsd: 0,
-    readyUsd: 6,
+    readyUsd: 5,
     paidUsd: 0,
     clawbackDebtUsd: 0,
   });
 
   const transferIdempotencyKey = "partner_payout:batch_1:partner_1";
   assert.match(transferIdempotencyKey, /^partner_payout:[^:]+:[^:]+$/);
-  commissions[0].reservedUsd = 6;
+  commissions[0].reservedUsd = 5;
   assert.deepEqual(summarizePartnerLifecycle(commissions, bufferClearedAt), {
     pendingUsd: 0,
     bufferedUsd: 0,
@@ -1163,31 +1163,31 @@ function proveEndToEndPartnerLifecycleBehavior() {
     clawbackDebtUsd: 0,
   });
   commissions[0].reservedUsd = 0;
-  commissions[0].settledUsd = 6;
+  commissions[0].settledUsd = 5;
   assert.deepEqual(summarizePartnerLifecycle(commissions, bufferClearedAt), {
     pendingUsd: 0,
     bufferedUsd: 0,
     readyUsd: 0,
-    paidUsd: 6,
+    paidUsd: 5,
     clawbackDebtUsd: 0,
   });
 
-  commissions[0].adjustmentsUsd = -6;
+  commissions[0].adjustmentsUsd = -5;
   assert.deepEqual(summarizePartnerLifecycle(commissions, bufferClearedAt), {
     pendingUsd: 0,
     bufferedUsd: 0,
     readyUsd: 0,
-    paidUsd: 6,
-    clawbackDebtUsd: 6,
+    paidUsd: 5,
+    clawbackDebtUsd: 5,
   });
 
   const next = calculateBuilderPartnerCommunityRevenueCommission({
     communityRevenueUsd: 100,
     platformFeeBps: BUILDER_PARTNER_COMMUNITY_PLATFORM_FEE_BPS,
-    partnerPlatformFeeShareBps: BUILDER_PARTNER_PLATFORM_FEE_SHARE_BPS,
+    partnerCommunityRevenueShareBps: BUILDER_PARTNER_COMMUNITY_REVENUE_SHARE_BPS,
   });
   commissions.push({
-    commissionKey: "community_platform_fee:invoice:in_next",
+    commissionKey: "community_revenue:invoice:in_next",
     status: "payable",
     commissionAmountUsd: next.commissionAmountUsd,
     holdUntil: holdClearedAt,
@@ -1199,7 +1199,7 @@ function proveEndToEndPartnerLifecycleBehavior() {
     adjustmentsUsd: 0,
   });
   const afterDebt = summarizePartnerLifecycle(commissions, bufferClearedAt);
-  assert.equal(afterDebt.clawbackDebtUsd, 6);
+  assert.equal(afterDebt.clawbackDebtUsd, 5);
   assert.equal(afterDebt.readyUsd, 0, "carryforward partner debt should offset the next ready commission before payout");
 }
 
@@ -1318,13 +1318,18 @@ function proveEndToEndPartnerLifecycleSourceContract(
   );
   assertIncludes(
     commissionProducerSource,
-    "community_platform_fee:invoice:${sourceProviderInvoiceId}",
+    "community_revenue:invoice:${sourceProviderInvoiceId}",
     "Builder Partner E2E uses provider invoice idempotency for recurring invoices",
   );
   assertIncludes(
     commissionProducerSource,
-    "community_platform_fee:${sourceCheckoutSessionId}",
+    "community_revenue:${sourceCheckoutSessionId}",
     "Builder Partner E2E uses checkout session idempotency for initial settlement",
+  );
+  assertIncludes(
+    commissionProducerSource,
+    "legacyCommissionKey",
+    "Builder Partner E2E checks the legacy 6% community platform-fee key before inserting a current 5% community revenue row",
   );
   assertIncludes(
     commissionProducerSource,
@@ -1467,13 +1472,23 @@ function proveCommissionProducerContract(
   );
   assertIncludes(
     builderPartnersSource,
-    "community_platform_fee:${sourceCheckoutSessionId}",
+    "community_revenue:${sourceCheckoutSessionId}",
     "Builder Partner commission producer",
   );
   assertIncludes(
     builderPartnersSource,
-    "community_platform_fee:invoice:${sourceProviderInvoiceId}",
+    "community_revenue:invoice:${sourceProviderInvoiceId}",
     "Builder Partner commission producer",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "community_platform_fee:${sourceCheckoutSessionId}",
+    "Builder Partner commission producer must preserve legacy checkout-key idempotency",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "community_platform_fee:invoice:${sourceProviderInvoiceId}",
+    "Builder Partner commission producer must preserve legacy invoice-key idempotency",
   );
   assertIncludes(
     builderPartnersSource,
@@ -1484,6 +1499,11 @@ function proveCommissionProducerContract(
     builderPartnersSource,
     "requireCommunityRevenueEligibility: true",
     "Builder Partner commission producer",
+  );
+  assertIncludes(
+    builderPartnersSource,
+    "partner.status !== \"active\" || !hasAcceptedCurrentTerms(partner)",
+    "Builder Partner commission producer must only accrue new commissions for active partners on the current terms",
   );
   assertIncludes(
     builderPartnersSource,
@@ -2567,7 +2587,7 @@ function main() {
   const uiSource = [settingsWrapperSource, partnerPanelSource].join("\n");
   const builderPartnersSource = readText(new URL("../convex/builderPartners.ts", import.meta.url));
   const gatewaySource = readText(new URL("../shared/builderPartnerProgramGateway.ts", import.meta.url));
-  const termsDocSource = readText(new URL("../docs/legal/builder-partner-terms-v1.md", import.meta.url));
+  const termsDocSource = readText(new URL("../docs/legal/builder-partner-terms-v2.md", import.meta.url));
   const legalRegistrySource = readText(new URL("../shared/legalDocuments.ts", import.meta.url));
   const legalContentSource = readText(new URL("../apps/web/src/docs/legalDocumentsContent.ts", import.meta.url));
   const webAppRouteStateSource = readText(new URL("../shared/webAppRouteState.ts", import.meta.url));
