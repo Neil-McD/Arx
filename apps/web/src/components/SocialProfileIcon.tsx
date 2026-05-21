@@ -1,6 +1,7 @@
 import type { SVGProps } from "react";
+import type { SocialProfileKind } from "../../../../shared/socialProfileLinks";
 
-export type SocialProfileKind = "instagram" | "x" | "youtube";
+export type { SocialProfileKind };
 
 type SocialProfileIconProps = Omit<SVGProps<SVGSVGElement>, "children"> & {
   kind: SocialProfileKind;

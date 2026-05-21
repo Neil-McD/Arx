@@ -228,6 +228,7 @@ export function WebSettingsPanels(props: WebSettingsPanelsProps) {
     profileName: profile.profileUi.profileName,
     profileHandle: profile.profileUi.profileHandle,
     profileBio: profile.profileUi.profileBio,
+    profileSocialLinks: profile.profileUi.profileSocialLinks,
     isProfileAvatarDragOver: profile.profileUi.isProfileAvatarDragOver,
     profileNeedsSave: profile.profileUi.profileNeedsSave,
     isSavingProfile: profile.profileUi.isSavingProfile,
@@ -253,6 +254,7 @@ export function WebSettingsPanels(props: WebSettingsPanelsProps) {
     setProfileName: profile.profileUi.setProfileName,
     setProfileHandle: profile.profileUi.setProfileHandle,
     setProfileBio: profile.profileUi.setProfileBio,
+    setProfileSocialLink: profile.profileUi.setProfileSocialLink,
     saveProfileToCloud: profile.saveProfileToCloud,
   };
 

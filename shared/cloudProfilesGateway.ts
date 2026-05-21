@@ -1,6 +1,7 @@
 import { bootstrapConvexAuthenticatedClient, type ConvexClient } from "./convexAuthenticatedClient";
 import { coerceGatewayRows, firstGatewayRow } from "./cloudGateway";
 import type { AccountSetupStatus } from "./accountSetup";
+import type { SocialProfileLinks } from "./socialProfileLinks";
 
 type CloudProfilesGatewayParams<SessionT> = {
   session: SessionT;
@@ -25,6 +26,7 @@ export type CloudProfileAvatarFieldInput = {
 
 export type CloudProfileDetailRow = CloudProfileBase & {
   bio: string | null;
+  social_links?: SocialProfileLinks | null;
   onboarding_direction?: "build_community" | "discover_community" | "learn_about_polynet" | null;
   onboarding_completed_at?: string | null;
   account_setup?: AccountSetupStatus | null;
@@ -210,6 +212,7 @@ export async function upsertCloudProfileDetail<SessionT, TProfile extends CloudP
     avatarFocusY?: number | null;
     avatarZoom?: number | null;
     bio: string | null;
+    socialLinks?: SocialProfileLinks | null;
     onboardingDirection?: "build_community" | "discover_community" | "learn_about_polynet" | null;
     markOnboardingDismissed?: boolean;
     completeOnboarding?: boolean;
@@ -229,6 +232,7 @@ export async function upsertCloudProfileDetail<SessionT, TProfile extends CloudP
     avatarFocusY: params.avatarFocusY ?? 0.5,
     avatarZoom: params.avatarZoom ?? 1,
     bio: params.bio,
+    ...(params.socialLinks !== undefined ? { socialLinks: params.socialLinks } : null),
     onboardingDirection: params.onboardingDirection,
     markOnboardingDismissed: params.markOnboardingDismissed,
     completeOnboarding: params.completeOnboarding,

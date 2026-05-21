@@ -640,6 +640,13 @@ export default defineSchema({
     avatarFocusY: v.optional(v.number()),
     avatarZoom: v.optional(v.number()),
     bio: v.optional(v.string()),
+    socialLinks: v.optional(
+      v.object({
+        youtube: v.optional(v.string()),
+        x: v.optional(v.string()),
+        instagram: v.optional(v.string()),
+      }),
+    ),
     onboardingDirection: v.optional(
       v.union(
         v.literal("build_community"),

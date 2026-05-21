@@ -3,6 +3,7 @@ import {
   isAccountSetupIdentityComplete,
   type AccountSetupStatus,
 } from "../shared/accountSetup";
+import type { SocialProfileLinks } from "../shared/socialProfileLinks";
 import {
   hasAcceptedCurrentPlatformLegalFromRows,
   listPlatformLegalAcceptancesForUser,
@@ -30,6 +31,7 @@ export type AccountSetupProfileDetailRow = {
   avatarFocusY?: number;
   avatarZoom?: number;
   bio?: string;
+  socialLinks?: SocialProfileLinks;
   onboardingDirection?: "build_community" | "discover_community" | "learn_about_polynet";
   onboardingCompletedAt?: number;
   createdAt: number;

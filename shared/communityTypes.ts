@@ -1,4 +1,5 @@
 import type { AccountSetupStatus } from "./accountSetup";
+import type { SocialProfileLinks } from "./socialProfileLinks";
 
 export type CommunityEntryPolicy = "open" | "approval" | "paid_subscription";
 export type CommunityBillingPeriod = "monthly" | "annual";
@@ -270,6 +271,7 @@ export type UserProfile = {
 
 export type UserProfileDetail = UserProfile & {
   bio: string | null;
+  social_links?: SocialProfileLinks | null;
   onboarding_direction?: "build_community" | "discover_community" | "learn_about_polynet" | null;
   onboarding_completed_at?: string | null;
   account_setup?: AccountSetupStatus | null;

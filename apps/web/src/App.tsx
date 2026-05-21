@@ -583,6 +583,9 @@ function formatProfileMutationError(error: unknown, fallback: string): string {
     return "Handle can use lowercase letters, numbers, underscores, and hyphens.";
   }
   if (message.includes("profile_avatar_invalid")) return "Upload a valid profile photo and try again.";
+  if (message.includes("profile_link_invalid_youtube")) return "Enter a valid YouTube profile URL.";
+  if (message.includes("profile_link_invalid_x")) return "Enter a valid X profile URL.";
+  if (message.includes("profile_link_invalid_instagram")) return "Enter a valid Instagram profile URL.";
   return message || fallback;
 }
 
@@ -2723,6 +2726,7 @@ export default function App() {
         avatarFocusY: profileUi.profileAvatarFocusY,
         avatarZoom: profileUi.profileAvatarZoom,
         bio,
+        socialLinks: profileUi.profileSocialLinks,
         onboardingDirection: destination,
         markOnboardingDismissed: true,
       });
@@ -2734,6 +2738,11 @@ export default function App() {
         profileUi.setProfileName(saved.display_name ?? "");
         profileUi.setProfileHandle(saved.handle ?? "");
         profileUi.setProfileBio(saved.bio ?? "");
+        profileUi.setProfileSocialLinks(saved.social_links ?? {
+          youtube: "",
+          x: "",
+          instagram: "",
+        });
         profileUi.setProfileAvatarUrl(saved.avatar_url ?? null);
         profileUi.setProfileAvatarStorageId(saved.avatar_storage_id ?? null);
         profileUi.setProfileAvatarFocusX(saved.avatar_focus_x ?? 0.5);
@@ -2805,6 +2814,7 @@ export default function App() {
         avatarFocusY: profileUi.profileAvatarFocusY,
         avatarZoom: profileUi.profileAvatarZoom,
         bio,
+        socialLinks: profileUi.profileSocialLinks,
         markOnboardingDismissed: false,
         termsOfServiceVersion: legalAcceptance?.termsOfServiceVersion ?? null,
         privacyPolicyVersion: legalAcceptance?.privacyPolicyVersion ?? null,
@@ -2816,6 +2826,11 @@ export default function App() {
         profileUi.setProfileName(saved.display_name ?? "");
         profileUi.setProfileHandle(saved.handle ?? "");
         profileUi.setProfileBio(saved.bio ?? "");
+        profileUi.setProfileSocialLinks(saved.social_links ?? {
+          youtube: "",
+          x: "",
+          instagram: "",
+        });
         profileUi.setProfileAvatarUrl(saved.avatar_url ?? null);
         profileUi.setProfileAvatarStorageId(saved.avatar_storage_id ?? null);
         profileUi.setProfileAvatarFocusX(saved.avatar_focus_x ?? 0.5);
@@ -3410,6 +3425,7 @@ export default function App() {
     profileName: profileUi.profileName,
     profileHandle: profileUi.profileHandle,
     profileBio: profileUi.profileBio,
+    profileSocialLinks: profileUi.profileSocialLinks,
     profileAvatarUrl: profileUi.profileAvatarUrl,
     profileAvatarStorageId: profileUi.profileAvatarStorageId,
     profileAvatarFocusX: profileUi.profileAvatarFocusX,
@@ -3440,6 +3456,7 @@ export default function App() {
     setProfileName: profileUi.setProfileName,
     setProfileHandle: profileUi.setProfileHandle,
     setProfileBio: profileUi.setProfileBio,
+    setProfileSocialLinks: profileUi.setProfileSocialLinks,
     setProfileAvatarUrl: profileUi.setProfileAvatarUrl,
     setProfileAvatarStorageId: profileUi.setProfileAvatarStorageId,
     setProfileAvatarFocusX: profileUi.setProfileAvatarFocusX,
@@ -9028,6 +9045,7 @@ export default function App() {
       displayName: profileUi.profileName,
       handle: profileUi.profileHandle,
       bio: profileUi.profileBio,
+      socialLinks: profileUi.profileSocialLinks,
       avatarUrl: profileUi.profileAvatarUrl,
       avatarFocusX: profileUi.profileAvatarFocusX,
       avatarFocusY: profileUi.profileAvatarFocusY,
@@ -9055,6 +9073,7 @@ export default function App() {
       onDisplayNameChange: profileUi.setProfileName,
       onHandleChange: profileUi.setProfileHandle,
       onBioChange: profileUi.setProfileBio,
+      onSocialLinkChange: profileUi.setProfileSocialLink,
       onNextProfile: saveOnboardingProfile,
       chatgptConnected: chatgptConnection.connected,
       chatgptStatus: isLoadingChatgptConnection

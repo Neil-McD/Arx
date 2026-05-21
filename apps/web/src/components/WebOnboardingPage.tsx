@@ -3,6 +3,7 @@ import { ArrowRight, Bot, Check, CircleUserRound, Compass, PlugZap, PlusCircle, 
 import type { AccountSetupStatus, AccountSetupStep } from "../../../../shared/accountSetup";
 import { renderMarkdown } from "../../../../shared/markdownUi";
 import { normalizeProfileHandle } from "../../../../shared/profileHandle";
+import type { SocialProfileKind, SocialProfileLinks } from "../../../../shared/socialProfileLinks";
 import { UserAvatar } from "../../../../shared/UserAvatar";
 import {
   PRIVACY_AI_DATA_POLICY_ENTRY,
@@ -10,6 +11,7 @@ import {
   type LegalDocumentEntry,
 } from "../docs/legalDocumentsContent";
 import { WebUserAvatarEditorModal } from "./WebUserAvatarEditorModal";
+import { WebSocialProfileLinksFields } from "./WebSocialProfileLinksFields";
 
 type OnboardingStep = Exclude<AccountSetupStep, "complete">;
 
@@ -26,6 +28,7 @@ type WebOnboardingPageProps = {
   displayName: string;
   handle: string;
   bio: string;
+  socialLinks: SocialProfileLinks;
   avatarUrl: string | null;
   avatarFocusX: number;
   avatarFocusY: number;
@@ -47,6 +50,7 @@ type WebOnboardingPageProps = {
   onDisplayNameChange: (value: string) => void;
   onHandleChange: (value: string) => void;
   onBioChange: (value: string) => void;
+  onSocialLinkChange: (kind: SocialProfileKind, value: string) => void;
   onNextProfile: (legalAcceptance: PlatformLegalAcceptanceDraft | null) => Promise<boolean> | boolean;
   chatgptConnected: boolean;
   chatgptStatus: string;
@@ -404,6 +408,12 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
                     </>
                   ) : null}
                 </div>
+                <WebSocialProfileLinksFields
+                  values={props.socialLinks}
+                  disabled={props.isSaving}
+                  variant="onboarding"
+                  onChange={props.onSocialLinkChange}
+                />
               </div>
               <label>
                 Display name

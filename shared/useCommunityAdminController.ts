@@ -1,6 +1,7 @@
 import { useCallback, useRef, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
 import { resolveUsableSession, type EnsureSessionFn } from "./ensureUsableSession";
 import { resolveAuthSubject } from "./authSession";
+import type { SocialProfileLinks } from "./socialProfileLinks";
 import {
   type AnalyticsMetricSeriesLike,
   type AnalyticsRange,
@@ -54,6 +55,7 @@ type UseCommunityAdminControllerArgs<
   profileName: string;
   profileHandle: string;
   profileBio: string;
+  profileSocialLinks: SocialProfileLinks;
   profileAvatarUrl: string | null;
   profileAvatarStorageId: string | null;
   profileAvatarFocusX: number;
@@ -83,6 +85,7 @@ type UseCommunityAdminControllerArgs<
   setProfileName: Dispatch<SetStateAction<string>>;
   setProfileHandle: Dispatch<SetStateAction<string>>;
   setProfileBio: Dispatch<SetStateAction<string>>;
+  setProfileSocialLinks: Dispatch<SetStateAction<SocialProfileLinks>>;
   setProfileAvatarUrl: Dispatch<SetStateAction<string | null>>;
   setProfileAvatarStorageId: Dispatch<SetStateAction<string | null>>;
   setProfileAvatarFocusX: Dispatch<SetStateAction<number>>;
@@ -108,6 +111,9 @@ function formatProfileSaveError(error: unknown, fallback: string): string {
     return "Handle can use lowercase letters, numbers, underscores, and hyphens.";
   }
   if (message.includes("profile_avatar_invalid")) return "Upload a valid profile photo and try again.";
+  if (message.includes("profile_link_invalid_youtube")) return "Enter a valid YouTube profile URL.";
+  if (message.includes("profile_link_invalid_x")) return "Enter a valid X profile URL.";
+  if (message.includes("profile_link_invalid_instagram")) return "Enter a valid Instagram profile URL.";
   return message || fallback;
 }
 
@@ -401,6 +407,7 @@ export function useCommunityAdminController<
         avatarFocusY: current.profileAvatarFocusY,
         avatarZoom: current.profileAvatarZoom,
         bio: trimmedBio || null,
+        socialLinks: current.profileSocialLinks,
       });
       if (saved) {
         current.setCloudProfile(saved);
@@ -421,6 +428,11 @@ export function useCommunityAdminController<
         current.setProfileName(saved.display_name ?? "");
         current.setProfileHandle(saved.handle ?? "");
         current.setProfileBio(saved.bio ?? "");
+        current.setProfileSocialLinks(saved.social_links ?? {
+          youtube: "",
+          x: "",
+          instagram: "",
+        });
         current.setProfileAvatarUrl(saved.avatar_url ?? null);
         current.setProfileAvatarStorageId(saved.avatar_storage_id ?? null);
         current.setProfileAvatarFocusX(saved.avatar_focus_x ?? 0.5);

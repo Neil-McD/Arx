@@ -1,4 +1,5 @@
 import type { AccountSetupStatus } from "./accountSetup";
+import type { SocialProfileLinks } from "./socialProfileLinks";
 
 export type SessionLike = {
   user: {
@@ -24,6 +25,7 @@ export type UserProfileLike = {
 
 export type UserProfileDetailLike = UserProfileLike & {
   bio: string | null;
+  social_links?: SocialProfileLinks | null;
   onboarding_direction?: "build_community" | "discover_community" | "learn_about_polynet" | null;
   account_setup?: AccountSetupStatus | null;
 };

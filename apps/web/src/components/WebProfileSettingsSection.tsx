@@ -1,5 +1,7 @@
 import type { DragEvent } from "react";
+import type { SocialProfileKind, SocialProfileLinks } from "../../../../shared/socialProfileLinks";
 import { UserAvatar } from "../../../../shared/UserAvatar";
+import { WebSocialProfileLinksFields } from "./WebSocialProfileLinksFields";
 import { WebUserAvatarEditorModal } from "./WebUserAvatarEditorModal";
 
 type SessionLike = {
@@ -19,6 +21,7 @@ type WebProfileSettingsSectionProps = {
   profileName: string;
   profileHandle: string;
   profileBio: string;
+  profileSocialLinks: SocialProfileLinks;
   isProfileAvatarDragOver: boolean;
   profileNeedsSave: boolean;
   isSavingProfile: boolean;
@@ -38,6 +41,7 @@ type WebProfileSettingsSectionProps = {
   setProfileName: (value: string) => void;
   setProfileHandle: (value: string) => void;
   setProfileBio: (value: string) => void;
+  setProfileSocialLink: (kind: SocialProfileKind, value: string) => void;
   saveProfileToCloud: () => Promise<void> | void;
 };
 
@@ -52,6 +56,7 @@ export function WebProfileSettingsSection(props: WebProfileSettingsSectionProps)
     profileName,
     profileHandle,
     profileBio,
+    profileSocialLinks,
     isProfileAvatarDragOver,
     profileNeedsSave,
     isSavingProfile,
@@ -71,6 +76,7 @@ export function WebProfileSettingsSection(props: WebProfileSettingsSectionProps)
     setProfileName,
     setProfileHandle,
     setProfileBio,
+    setProfileSocialLink,
     saveProfileToCloud,
   } = props;
 
@@ -191,6 +197,12 @@ export function WebProfileSettingsSection(props: WebProfileSettingsSectionProps)
           </button>
         </div>
       </div>
+      <WebSocialProfileLinksFields
+        values={profileSocialLinks}
+        disabled={!session || isSavingProfile}
+        variant="settings"
+        onChange={setProfileSocialLink}
+      />
       {profileSaveError && <div className="auth-error">{profileSaveError}</div>}
       {profileSaveSuccess && <div className="auth-success">Saved.</div>}
       <WebUserAvatarEditorModal

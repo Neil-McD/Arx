@@ -6,6 +6,13 @@ import { maybeDeleteStorageAsset } from "./communityCore";
 import { recordCurrentPlatformLegalAcceptance } from "./legalAcceptances";
 import { resolveUserProfileDisplayProjectionForUser } from "./userProfileProjection";
 import {
+  SOCIAL_PROFILE_KINDS,
+  normalizeSocialProfileLinks,
+  normalizeSocialProfileUrl,
+  type SocialProfileKind,
+  type SocialProfileLinks,
+} from "../shared/socialProfileLinks";
+import {
   loadAccountSetupStatusForUser,
   type AccountSetupProfileDetailRow as ProfileDetailRow,
   type AccountSetupUserRow as UserRow,
@@ -30,6 +37,25 @@ function normalizeAvatarZoom(raw: unknown): number {
   const parsed = Number(raw);
   if (!Number.isFinite(parsed)) return 1;
   return Math.max(1, Math.min(2.5, parsed));
+}
+
+function normalizeProfileSocialLink(kind: SocialProfileKind, raw: unknown): string {
+  const trimmed = String(raw ?? "").trim();
+  if (!trimmed) return "";
+  const normalized = normalizeSocialProfileUrl(kind, trimmed);
+  if (!normalized) throw new Error(`profile_link_invalid_${kind}`);
+  return normalized;
+}
+
+function normalizeProfileSocialLinksForStorage(raw: unknown): SocialProfileLinks | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const input = raw as Partial<Record<SocialProfileKind, unknown>>;
+  const links = {
+    youtube: normalizeProfileSocialLink("youtube", input.youtube),
+    x: normalizeProfileSocialLink("x", input.x),
+    instagram: normalizeProfileSocialLink("instagram", input.instagram),
+  };
+  return SOCIAL_PROFILE_KINDS.some((kind) => links[kind]) ? links : undefined;
 }
 
 async function maybeResolveStorageUrl(ctx: any, storageId: unknown): Promise<string | null> {
@@ -92,6 +118,7 @@ async function mapProfileDetail(ctx: any, user: UserRow, detail: ProfileDetailRo
   return {
     ...(await mapProfileBase(ctx, user, detail)),
     bio: detail?.bio ?? null,
+    social_links: normalizeSocialProfileLinks(detail?.socialLinks ?? {}),
     onboarding_direction: detail?.onboardingDirection ?? null,
     onboarding_completed_at:
       typeof detail?.onboardingCompletedAt === "number"
@@ -280,6 +307,16 @@ export const upsertProfileDetail = mutation({
     avatarFocusY: v.optional(v.number()),
     avatarZoom: v.optional(v.number()),
     bio: v.optional(v.union(v.string(), v.null())),
+    socialLinks: v.optional(
+      v.union(
+        v.object({
+          youtube: v.optional(v.union(v.string(), v.null())),
+          x: v.optional(v.union(v.string(), v.null())),
+          instagram: v.optional(v.union(v.string(), v.null())),
+        }),
+        v.null(),
+      ),
+    ),
     onboardingDirection: v.optional(
       v.union(
         v.literal("build_community"),
@@ -379,6 +416,10 @@ export const upsertProfileDetail = mutation({
         ? normalizeAvatarZoom(args.avatarZoom)
         : normalizeAvatarZoom(existingDetail?.avatarZoom);
     const nextBio = args.bio !== undefined ? String(args.bio ?? "").trim() || undefined : existingDetail?.bio;
+    const nextSocialLinks =
+      args.socialLinks === undefined
+        ? existingDetail?.socialLinks
+        : normalizeProfileSocialLinksForStorage(args.socialLinks);
     const nextOnboardingDirection =
       args.onboardingDirection === undefined
         ? existingDetail?.onboardingDirection
@@ -396,6 +437,7 @@ export const upsertProfileDetail = mutation({
         avatarFocusY: nextAvatarFocusY,
         avatarZoom: nextAvatarZoom,
         bio: nextBio,
+        socialLinks: nextSocialLinks,
         onboardingDirection: nextOnboardingDirection,
         ...(shouldMarkOnboardingDismissed ? { onboardingCompletedAt: nowMs } : null),
         createdAt: nowMs,
@@ -410,6 +452,7 @@ export const upsertProfileDetail = mutation({
         avatarFocusY: nextAvatarFocusY,
         avatarZoom: nextAvatarZoom,
         bio: nextBio,
+        socialLinks: nextSocialLinks,
         onboardingDirection: nextOnboardingDirection,
         ...(shouldMarkOnboardingDismissed && !existingDetail.onboardingCompletedAt
           ? { onboardingCompletedAt: nowMs }
