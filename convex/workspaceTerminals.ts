@@ -454,17 +454,44 @@ export const acquireProjectBackgroundSandboxLeaseInternal = internalMutation({
     if (!project || project.ownerId !== args.ownerId) {
       throw new Error("project_not_found");
     }
+    const state = normalizeOptionalString(project.providerSandboxState);
+    const lastSeenAt = Number(project.providerSandboxLastSeenAt ?? 0);
     const existingSandboxId = normalizeOptionalString(project.providerSandboxId);
     if (existingSandboxId) {
+      const idleExpiresAt = readProjectSandboxIdleExpiresAt(project);
+      const budgetExpiresAt = Number(project.providerSandboxCreditBudgetExpiresAt ?? 0);
+      const staleErrorRegistration =
+        state === "error" &&
+        ((Number.isFinite(idleExpiresAt) && idleExpiresAt > 0 && idleExpiresAt <= args.nowMs) ||
+          (Number.isFinite(budgetExpiresAt) && budgetExpiresAt > 0 && budgetExpiresAt <= args.nowMs));
+      if (!staleErrorRegistration) {
+        return {
+          acquired: false,
+          reason: "registered",
+          providerSandboxId: existingSandboxId,
+        };
+      }
+      await ctx.db.patch(project._id, {
+        providerSandboxId: undefined,
+        providerSandboxState: "creating",
+        providerSandboxLastSeenAt: args.nowMs,
+        providerSandboxLastActivityAt: undefined,
+        providerSandboxIdleExpiresAt: undefined,
+        providerSandboxStopLeaseExpiresAt: undefined,
+        providerSandboxStartedAt: undefined,
+        providerSandboxCreditReservationKey: undefined,
+        providerSandboxCreditBudgetCredits: undefined,
+        providerSandboxCreditBudgetExpiresAt: undefined,
+        updatedAt: args.nowMs,
+      });
       return {
-        acquired: false,
-        reason: "registered",
-        providerSandboxId: existingSandboxId,
+        acquired: true,
+        reason: "replaced_stale_error_registration",
+        previousProviderSandboxId: existingSandboxId,
+        leaseExpiresAt: args.nowMs + PROJECT_BACKGROUND_SANDBOX_CREATE_LEASE_MS,
       };
     }
 
-    const state = normalizeOptionalString(project.providerSandboxState);
-    const lastSeenAt = Number(project.providerSandboxLastSeenAt ?? 0);
     const leaseAgeMs =
       Number.isFinite(lastSeenAt) && lastSeenAt > 0
         ? Math.max(0, args.nowMs - lastSeenAt)

@@ -98,6 +98,11 @@ async function main() {
   );
   assert.match(
     workspaceTerminals,
+    /acquireProjectBackgroundSandboxLeaseInternal[\s\S]*staleErrorRegistration[\s\S]*state === "error"[\s\S]*providerSandboxState:\s*"creating"[\s\S]*reason:\s*"replaced_stale_error_registration"/,
+    "workspace startup should not stay permanently blocked behind an expired failed sandbox registration",
+  );
+  assert.match(
+    workspaceTerminals,
     /clearProjectBackgroundSandboxInternal[\s\S]*providerSandboxLastActivityAt:\s*undefined[\s\S]*providerSandboxIdleExpiresAt:\s*undefined[\s\S]*providerSandboxStopLeaseExpiresAt:\s*undefined/,
     "clearing a project sandbox should clear idle lease and stop lease fields",
   );
