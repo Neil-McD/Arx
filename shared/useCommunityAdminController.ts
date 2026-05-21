@@ -35,6 +35,10 @@ import { preloadImageUrls } from "./preloadImageUrls";
 
 const COMMUNITY_MEMBERS_PAGE_SIZE = 25;
 
+type SaveProfileToCloudOptions = {
+  socialLinks?: SocialProfileLinks;
+};
+
 type UseCommunityAdminControllerArgs<
   SessionT extends SessionLike,
   CommunityMemberT extends CommunityMemberLike,
@@ -361,7 +365,7 @@ export function useCommunityAdminController<
     }
   }, [resolveCanonicalProfileUserId]);
 
-  const saveProfileToCloud = useCallback(async () => {
+  const saveProfileToCloud = useCallback(async (options: SaveProfileToCloudOptions = {}) => {
     const current = argsRef.current;
     const session = await resolveUsableSession(current.getProfileSaveSession(), current.ensureSession);
     if (!session) {
@@ -396,6 +400,7 @@ export function useCommunityAdminController<
         currentStorageId: current.profileAvatarStorageId,
         currentResolvedUrl: current.profileAvatarUrl,
       });
+      const nextSocialLinks = options.socialLinks ?? current.profileSocialLinks;
       const saved = await upsertCloudProfileDetail<SessionT, UserProfileDetailT>({
         session,
         userId: profileUserId,
@@ -407,7 +412,7 @@ export function useCommunityAdminController<
         avatarFocusY: current.profileAvatarFocusY,
         avatarZoom: current.profileAvatarZoom,
         bio: trimmedBio || null,
-        socialLinks: current.profileSocialLinks,
+        socialLinks: nextSocialLinks,
       });
       if (saved) {
         current.setCloudProfile(saved);

@@ -3,6 +3,7 @@ import type { SettingsGroup } from "../../../../shared/appShellNavigation";
 import type { AppTheme } from "../../../../shared/theme";
 import type { AccountCommerceStatus } from "../../../../shared/accountCommerceStatusGateway";
 import type { BuilderPartnerProgramSnapshot } from "../../../../shared/builderPartnerProgramGateway";
+import type { SocialProfileLinks } from "../../../../shared/socialProfileLinks";
 import type { WorkspaceCreditBalance } from "../../../../shared/workspaceCreditsGateway";
 import type {
   WorkspaceCreditTopupSurface,
@@ -52,7 +53,7 @@ export type WebSettingsPanelsProps = {
     handleProfileAvatarDrop: (event: DragEvent<HTMLDivElement>) => void;
     handleProfileAvatarUpload: (file: File | null) => Promise<void> | void;
     getInitials: (value: string) => string;
-    saveProfileToCloud: () => Promise<void> | void;
+    saveProfileToCloud: (options?: { socialLinks?: SocialProfileLinks }) => Promise<void> | void;
   };
   account: {
     session: SessionLike;

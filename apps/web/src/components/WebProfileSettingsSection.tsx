@@ -42,7 +42,7 @@ type WebProfileSettingsSectionProps = {
   setProfileHandle: (value: string) => void;
   setProfileBio: (value: string) => void;
   setProfileSocialLink: (kind: SocialProfileKind, value: string) => void;
-  saveProfileToCloud: () => Promise<void> | void;
+  saveProfileToCloud: (options?: { socialLinks?: SocialProfileLinks }) => Promise<void> | void;
 };
 
 export function WebProfileSettingsSection(props: WebProfileSettingsSectionProps) {
@@ -202,6 +202,7 @@ export function WebProfileSettingsSection(props: WebProfileSettingsSectionProps)
         disabled={!session || isSavingProfile}
         variant="settings"
         onChange={setProfileSocialLink}
+        onSave={(nextLinks) => saveProfileToCloud({ socialLinks: nextLinks })}
       />
       {profileSaveError && <div className="auth-error">{profileSaveError}</div>}
       {profileSaveSuccess && <div className="auth-success">Saved.</div>}
