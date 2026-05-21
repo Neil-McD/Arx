@@ -42,7 +42,7 @@ type WebProfileSettingsSectionProps = {
   setProfileHandle: (value: string) => void;
   setProfileBio: (value: string) => void;
   setProfileSocialLink: (kind: SocialProfileKind, value: string) => void;
-  saveProfileToCloud: (options?: { socialLinks?: SocialProfileLinks }) => Promise<void> | void;
+  saveProfileToCloud: (options?: { socialLinks?: SocialProfileLinks }) => Promise<boolean | void> | boolean | void;
 };
 
 export function WebProfileSettingsSection(props: WebProfileSettingsSectionProps) {

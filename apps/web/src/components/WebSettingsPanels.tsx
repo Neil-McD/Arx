@@ -53,7 +53,7 @@ export type WebSettingsPanelsProps = {
     handleProfileAvatarDrop: (event: DragEvent<HTMLDivElement>) => void;
     handleProfileAvatarUpload: (file: File | null) => Promise<void> | void;
     getInitials: (value: string) => string;
-    saveProfileToCloud: (options?: { socialLinks?: SocialProfileLinks }) => Promise<void> | void;
+    saveProfileToCloud: (options?: { socialLinks?: SocialProfileLinks }) => Promise<boolean | void> | boolean | void;
   };
   account: {
     session: SessionLike;

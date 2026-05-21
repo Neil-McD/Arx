@@ -350,13 +350,13 @@ export function useCommunityAdminController<
     }
   }, [resolveCanonicalProfileUserId]);
 
-  const saveProfileToCloud = useCallback(async (options: SaveProfileToCloudOptions = {}) => {
+  const saveProfileToCloud = useCallback(async (options: SaveProfileToCloudOptions = {}): Promise<boolean> => {
     const current = argsRef.current;
     const session = await resolveUsableSession(current.getProfileSaveSession(), current.ensureSession);
     if (!session) {
       current.setProfileSaveError(current.profileSaveUnauthenticatedErrorMessage);
       current.onProfileSaveUnauthenticated?.();
-      return;
+      return false;
     }
 
     const { trimmedName, trimmedHandle, trimmedBio } = trimProfileFields(
@@ -399,40 +399,44 @@ export function useCommunityAdminController<
         bio: trimmedBio || null,
         socialLinks: nextSocialLinks,
       });
-      if (saved) {
-        current.setCloudProfile(saved);
-        current.setProfilesByUserId((prev) => ({
-          ...prev,
-          [saved.user_id]: {
-            user_id: saved.user_id,
-            display_name: saved.display_name,
-            handle: saved.handle ?? null,
-            normalized_handle: saved.normalized_handle ?? null,
-            avatar_url: saved.avatar_url,
-            avatar_storage_id: saved.avatar_storage_id ?? null,
-            avatar_focus_x: saved.avatar_focus_x ?? 0.5,
-            avatar_focus_y: saved.avatar_focus_y ?? 0.5,
-            avatar_zoom: saved.avatar_zoom ?? 1,
-          } as UserProfileT,
-        }));
-        current.setProfileName(saved.display_name ?? "");
-        current.setProfileHandle(saved.handle ?? "");
-        current.setProfileBio(saved.bio ?? "");
-        current.setProfileSocialLinks(saved.social_links ?? {
-          youtube: "",
-          x: "",
-          instagram: "",
-        });
-        current.setProfileAvatarUrl(saved.avatar_url ?? null);
-        current.setProfileAvatarStorageId(saved.avatar_storage_id ?? null);
-        current.setProfileAvatarFocusX(saved.avatar_focus_x ?? 0.5);
-        current.setProfileAvatarFocusY(saved.avatar_focus_y ?? 0.5);
-        current.setProfileAvatarZoom(saved.avatar_zoom ?? 1);
+      if (!saved) {
+        current.setProfileSaveError(current.profileSaveFailureMessage);
+        return false;
       }
+      current.setCloudProfile(saved);
+      current.setProfilesByUserId((prev) => ({
+        ...prev,
+        [saved.user_id]: {
+          user_id: saved.user_id,
+          display_name: saved.display_name,
+          handle: saved.handle ?? null,
+          normalized_handle: saved.normalized_handle ?? null,
+          avatar_url: saved.avatar_url,
+          avatar_storage_id: saved.avatar_storage_id ?? null,
+          avatar_focus_x: saved.avatar_focus_x ?? 0.5,
+          avatar_focus_y: saved.avatar_focus_y ?? 0.5,
+          avatar_zoom: saved.avatar_zoom ?? 1,
+        } as UserProfileT,
+      }));
+      current.setProfileName(saved.display_name ?? "");
+      current.setProfileHandle(saved.handle ?? "");
+      current.setProfileBio(saved.bio ?? "");
+      current.setProfileSocialLinks(saved.social_links ?? {
+        youtube: "",
+        x: "",
+        instagram: "",
+      });
+      current.setProfileAvatarUrl(saved.avatar_url ?? null);
+      current.setProfileAvatarStorageId(saved.avatar_storage_id ?? null);
+      current.setProfileAvatarFocusX(saved.avatar_focus_x ?? 0.5);
+      current.setProfileAvatarFocusY(saved.avatar_focus_y ?? 0.5);
+      current.setProfileAvatarZoom(saved.avatar_zoom ?? 1);
       current.setProfileSaveSuccess(true);
       current.profileSaveTimeoutRef.current = window.setTimeout(() => current.setProfileSaveSuccess(false), 2000);
+      return true;
     } catch (error) {
       current.setProfileSaveError(formatProfileMutationError(error, current.profileSaveFailureMessage));
+      return false;
     } finally {
       current.setIsSavingProfile(false);
     }

@@ -12,7 +12,7 @@ type WebSocialProfileLinksFieldsProps = {
   disabled?: boolean;
   variant?: "onboarding" | "settings";
   onChange: (kind: SocialProfileKind, value: string) => void;
-  onSave?: (values: SocialProfileLinks) => Promise<void> | void;
+  onSave?: (values: SocialProfileLinks) => Promise<boolean | void> | boolean | void;
 };
 
 const SOCIAL_PROFILE_LABELS: Record<SocialProfileKind, string> = {
@@ -74,8 +74,11 @@ export function WebSocialProfileLinksFields({
       ...values,
       [editingKind]: normalized ?? "",
     };
+    if (onSave) {
+      const saved = await onSave(nextLinks);
+      if (saved === false) return;
+    }
     onChange(editingKind, nextLinks[editingKind]);
-    await onSave?.(nextLinks);
     closeEditor();
   };
 
@@ -134,7 +137,7 @@ export function WebSocialProfileLinksFields({
             <label className="web-social-profile-modal-field">
               <span>{editingLabel} URL</span>
               <input
-                type="url"
+                type="text"
                 autoFocus
                 inputMode="url"
                 autoCapitalize="none"
