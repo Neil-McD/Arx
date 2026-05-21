@@ -46,12 +46,17 @@ import {
 
 const WORKSPACE_RUN_HEARTBEAT_INTERVAL_MS = 2 * 60 * 1000;
 const WORKSPACE_SESSION_STATE_PERSIST_MAX_ATTEMPTS = 3;
+const WORKSPACE_SESSION_CREATE_TRANSIENT_WAIT_MS = 90_000;
+const WORKSPACE_SESSION_CREATE_TRANSIENT_POLL_MS = 2_000;
 const TERMINAL_TOOL_NAMES = new Set([
   "terminal_start",
   "terminal_read",
   "terminal_write",
   "terminal_stop",
 ] as const);
+const TRANSIENT_WORKSPACE_SESSION_CREATE_CODES = new Set([
+  "background_sandbox_creation_in_progress",
+]);
 
 type RuntimeExecutionSessionRunEvent = {
   eventType: string;
@@ -113,6 +118,14 @@ function formatToolOutput(toolName: string, value: unknown): string {
     return formatTerminalStartToolOutput(value);
   }
   return formatJsonToolOutput(value);
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isTransientWorkspaceSessionCreateFailure(code: unknown): boolean {
+  return TRANSIENT_WORKSPACE_SESSION_CREATE_CODES.has(String(code ?? "").trim());
 }
 
 function buildTerminalToolResultDetails(
@@ -563,12 +576,45 @@ export function createPolyNetExecutionSession(params: {
         },
         `${params.runId}:workspace_session_create_started:1`,
       );
-      const backgroundSandbox = await ensureProjectBackgroundSandbox({
-        ctx: params.ctx,
-        authSubject,
-        userId: params.userId,
-        projectId,
-      });
+      const createDeadlineMs = Date.now() + WORKSPACE_SESSION_CREATE_TRANSIENT_WAIT_MS;
+      let createAttemptCount = 0;
+      let backgroundSandbox: Awaited<ReturnType<typeof ensureProjectBackgroundSandbox>>;
+      for (;;) {
+        createAttemptCount += 1;
+        backgroundSandbox = await ensureProjectBackgroundSandbox({
+          ctx: params.ctx,
+          authSubject,
+          userId: params.userId,
+          projectId,
+        });
+        if (backgroundSandbox.ok) break;
+        if (
+          !isTransientWorkspaceSessionCreateFailure(backgroundSandbox.code) ||
+          Date.now() >= createDeadlineMs
+        ) {
+          break;
+        }
+        const retryAfterMs = Math.min(
+          WORKSPACE_SESSION_CREATE_TRANSIENT_POLL_MS,
+          Math.max(0, createDeadlineMs - Date.now()),
+        );
+        await emitRunEvent(
+          "workspace_session_create_waiting",
+          {
+            run_id: params.runId,
+            project_id: projectId,
+            tool_name: String(paramsForCreate?.toolName ?? "").trim() || null,
+            status: "waiting",
+            code: backgroundSandbox.code,
+            source: "project_background",
+            attempt_count: createAttemptCount,
+            retry_after_ms: retryAfterMs,
+          },
+          `${params.runId}:workspace_session_create_waiting:${createAttemptCount}`,
+        );
+        if (retryAfterMs <= 0) break;
+        await sleep(retryAfterMs);
+      }
       if (!backgroundSandbox.ok) {
         await emitRunEvent(
           "workspace_session_create_completed",
@@ -580,6 +626,7 @@ export function createPolyNetExecutionSession(params: {
             status: "error",
             code: backgroundSandbox.code,
             source: "project_background",
+            attempt_count: createAttemptCount,
           },
           `${params.runId}:workspace_session_create_completed:error`,
         );

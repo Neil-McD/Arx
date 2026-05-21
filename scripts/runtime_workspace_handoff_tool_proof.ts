@@ -52,6 +52,7 @@ function proveCodexWorkspaceToolContract() {
 
 async function proveCodexWorkspaceExecutionBridge() {
   const httpDaytona = await readRepoFile("convex/httpDaytona.ts");
+  const runtimeExecutionSession = await readRepoFile("convex/runtimeExecutionSession.ts");
   assert.match(
     httpDaytona,
     /toolName === "codex_workspace"/,
@@ -71,6 +72,21 @@ async function proveCodexWorkspaceExecutionBridge() {
     httpDaytona,
     /eventType: "codex_workspace_handoff_completed"/,
     "expected codex_workspace handoff completion evidence",
+  );
+  assert.match(
+    runtimeExecutionSession,
+    /background_sandbox_creation_in_progress/,
+    "expected transient background sandbox creation to be handled by the execution session",
+  );
+  assert.match(
+    runtimeExecutionSession,
+    /workspace_session_create_waiting/,
+    "expected workspace handoff to emit wait evidence instead of immediately surfacing boot-in-progress",
+  );
+  assert.match(
+    runtimeExecutionSession,
+    /WORKSPACE_SESSION_CREATE_TRANSIENT_WAIT_MS/,
+    "expected workspace handoff to keep a bounded wait budget for transient startup conflicts",
   );
 }
 

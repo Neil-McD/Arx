@@ -84,6 +84,7 @@ for (const token of [
   '"completed"',
   "buildAgentActivityTimeline",
   "workspace_session_create_started",
+  "workspace_session_create_waiting",
   "workspace_session_create_completed",
   "isVerificationShellCommand",
   "totalDurationMs",
@@ -115,6 +116,32 @@ assert.equal(startingWorkspaceSteps[1]?.title, "Starting workspace computer");
 assert.equal(startingWorkspaceSteps[1]?.status, "running");
 assert.equal(startingWorkspaceSteps[1]?.isActive, true);
 assert.match(startingWorkspaceSteps[1]?.summary ?? "", /coming online/);
+
+const waitingWorkspace = [
+  ...startingWorkspace,
+  event({
+    seq: 3,
+    event_type: "workspace_session_create_waiting",
+    payload: {
+      run_id: "run_1",
+      project_id: "project_1",
+      tool_name: "bash",
+      status: "waiting",
+      code: "background_sandbox_creation_in_progress",
+    },
+    created_at: "2026-04-25T12:00:05.000Z",
+  }),
+];
+const waitingWorkspaceStep = buildAgentActivityTimeline(waitingWorkspace).find(
+  (step) => step.kind === "connecting",
+);
+assert.equal(waitingWorkspaceStep?.status, "running");
+assert.equal(waitingWorkspaceStep?.isActive, true);
+assert.match(waitingWorkspaceStep?.summary ?? "", /coming online/);
+assert.match(
+  waitingWorkspaceStep?.items[0]?.detail ?? "",
+  /background_sandbox_creation_in_progress/,
+);
 
 const readyWorkspace = [
   ...startingWorkspace,

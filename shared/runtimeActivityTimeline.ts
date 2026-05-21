@@ -354,6 +354,7 @@ function extractWorkspaceSessionItems(events: RuntimeActivityEvent[]): Map<strin
   for (const event of events) {
     if (
       event.event_type !== "workspace_session_create_started" &&
+      event.event_type !== "workspace_session_create_waiting" &&
       event.event_type !== "workspace_session_adopted" &&
       event.event_type !== "workspace_session_create_completed"
     ) {
@@ -395,6 +396,9 @@ function extractWorkspaceSessionItems(events: RuntimeActivityEvent[]): Map<strin
     item.status = status === "running" && item.status === "error" ? "error" : status;
     item.title = buildWorkspaceSessionTitle(item.status);
     if (errorDetail) item.detail = errorDetail;
+    if (event.event_type === "workspace_session_create_waiting") {
+      item.detail = errorDetail || "Waiting for the workspace computer to finish starting.";
+    }
     if (finished) {
       item.finishedAt = event.created_at;
       item.durationMs =
