@@ -87,7 +87,7 @@ export function WebSocialProfileLinksFields({
           return (
             <button
               key={kind}
-              className={`web-social-profile-link-button${hasValue ? " connected" : ""}`}
+              className={`web-social-profile-link-button ${kind}${hasValue ? " connected" : ""}`}
               type="button"
               disabled={disabled}
               aria-label={`${hasValue ? "Edit" : "Add"} ${SOCIAL_PROFILE_LABELS[kind]} profile URL`}
@@ -114,7 +114,7 @@ export function WebSocialProfileLinksFields({
             }}
           >
             <div className="web-social-profile-modal-header">
-              <span className="web-social-profile-modal-icon" aria-hidden="true">
+              <span className={`web-social-profile-modal-icon ${editingKind}`} aria-hidden="true">
                 <SocialProfileIcon kind={editingKind} />
               </span>
               <div>

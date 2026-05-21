@@ -2642,6 +2642,7 @@ body {
   align-items: center;
   flex-wrap: wrap;
   gap: 14px;
+  width: 100%;
 }
 
 .polynet-onboarding-avatar-actions {
@@ -18183,7 +18184,7 @@ button.message-citation-chip:hover {
 }
 
 /* Settings panel buttons - consistent styling */
-.settings-panel button:not(.platform-save-button):not(.integration-mounted-menu-trigger):not(.integration-mounted-menu-item):not(.platform-switcher-btn):not(.analytics-range-btn):not(.ai-feed-moderate-button):not(.stripe-setup-button):not(.members-pagination-action) {
+.settings-panel button:not(.platform-save-button):not(.integration-mounted-menu-trigger):not(.integration-mounted-menu-item):not(.platform-switcher-btn):not(.analytics-range-btn):not(.ai-feed-moderate-button):not(.stripe-setup-button):not(.members-pagination-action):not(.web-social-profile-link-button) {
   padding: 10px 16px;
   font-size: 12px;
   font-weight: 500;
@@ -18195,12 +18196,12 @@ button.message-citation-chip:hover {
   color: var(--text-primary);
 }
 
-.settings-panel button:not(.platform-save-button):not(.integration-mounted-menu-trigger):not(.integration-mounted-menu-item):not(.platform-switcher-btn):not(.analytics-range-btn):not(.ai-feed-moderate-button):not(.stripe-setup-button):not(.members-pagination-action):hover:not(:disabled) {
+.settings-panel button:not(.platform-save-button):not(.integration-mounted-menu-trigger):not(.integration-mounted-menu-item):not(.platform-switcher-btn):not(.analytics-range-btn):not(.ai-feed-moderate-button):not(.stripe-setup-button):not(.members-pagination-action):not(.web-social-profile-link-button):hover:not(:disabled) {
   border-color: var(--border-default);
   background: var(--bg-card-hover);
 }
 
-.settings-panel button:not(.platform-save-button):not(.integration-mounted-menu-trigger):not(.integration-mounted-menu-item):not(.platform-switcher-btn):not(.analytics-range-btn):not(.ai-feed-moderate-button):not(.stripe-setup-button):not(.members-pagination-action):disabled {
+.settings-panel button:not(.platform-save-button):not(.integration-mounted-menu-trigger):not(.integration-mounted-menu-item):not(.platform-switcher-btn):not(.analytics-range-btn):not(.ai-feed-moderate-button):not(.stripe-setup-button):not(.members-pagination-action):not(.web-social-profile-link-button):disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
@@ -19961,56 +19962,94 @@ button.message-citation-chip:hover {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 18px;
   min-width: 0;
 }
 
 .web-social-profile-links.onboarding {
   flex: 0 0 auto;
+  margin-left: auto;
+  justify-content: flex-end;
 }
 
 .web-social-profile-links.settings {
   width: 100%;
+  gap: 30px;
+  padding: 12px 0 4px;
 }
 
 .web-social-profile-link-button,
 .polynet-onboarding-profile .web-social-profile-link-button {
-  width: 38px;
-  height: 38px;
-  min-width: 38px;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  padding: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--border-muted);
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--bg-card-alt) 88%, transparent);
-  color: var(--text-tertiary);
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: color-mix(in srgb, var(--text-secondary) 88%, transparent);
   cursor: pointer;
   transition:
-    border-color 140ms ease,
     color 140ms ease,
-    background 140ms ease;
+    opacity 140ms ease,
+    transform 140ms ease;
 }
 
 .web-social-profile-link-button:hover:not(:disabled),
-.polynet-onboarding-profile .web-social-profile-link-button:hover:not(:disabled),
+.polynet-onboarding-profile .web-social-profile-link-button:hover:not(:disabled) {
+  color: var(--text-primary);
+  transform: translateY(-1px);
+}
+
 .web-social-profile-link-button:focus-visible,
 .polynet-onboarding-profile .web-social-profile-link-button:focus-visible {
-  border-color: var(--accent-gold);
   color: var(--text-primary);
-  outline: none;
+  outline: 2px solid color-mix(in srgb, var(--text-primary) 42%, transparent);
+  outline-offset: 4px;
+}
+
+.web-social-profile-link-button:disabled,
+.polynet-onboarding-profile .web-social-profile-link-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.38;
 }
 
 .web-social-profile-link-button.connected,
 .polynet-onboarding-profile .web-social-profile-link-button.connected {
-  border-color: color-mix(in srgb, var(--accent-gold) 45%, var(--border-muted));
   color: var(--text-primary);
-  background: color-mix(in srgb, var(--accent-gold) 10%, var(--bg-card-alt));
 }
 
 .web-social-profile-link-button svg {
-  width: 16px;
-  height: 16px;
+  width: 28px;
+  height: 28px;
+}
+
+.web-social-profile-link-button.youtube svg {
+  width: 32px;
+}
+
+.web-social-profile-links.settings .web-social-profile-link-button {
+  width: 68px;
+  height: 68px;
+  min-width: 68px;
+}
+
+.web-social-profile-links.settings .web-social-profile-link-button svg {
+  width: 41px;
+  height: 41px;
+}
+
+.web-social-profile-links.settings .web-social-profile-link-button.youtube svg {
+  width: 41px;
+  height: 35px;
+}
+
+.web-social-profile-links.settings .web-social-profile-link-button.x svg {
+  width: 33px;
+  height: 33px;
 }
 
 .web-social-profile-modal-backdrop {
@@ -20037,25 +20076,26 @@ button.message-citation-chip:hover {
 
 .web-social-profile-modal-header {
   display: grid;
-  grid-template-columns: 38px minmax(0, 1fr) 32px;
+  grid-template-columns: 42px minmax(0, 1fr) 32px;
   align-items: center;
   gap: 12px;
 }
 
 .web-social-profile-modal-icon {
-  width: 38px;
-  height: 38px;
+  width: 42px;
+  height: 42px;
   display: grid;
   place-items: center;
-  border: 1px solid var(--border-muted);
-  border-radius: 10px;
   color: var(--text-secondary);
-  background: color-mix(in srgb, var(--bg-card-alt) 92%, transparent);
 }
 
 .web-social-profile-modal-icon svg {
-  width: 17px;
-  height: 17px;
+  width: 30px;
+  height: 30px;
+}
+
+.web-social-profile-modal-icon.youtube svg {
+  width: 36px;
 }
 
 .web-social-profile-modal h2 {
