@@ -95,7 +95,8 @@ export type CommunityLaunchPublishSaveDraft = {
 
 export type CommunityLaunchWorkflowImportDraft = {
   sourceHarness: string;
-  rawHarnessOutput: string;
+  rawHarnessOutput?: string;
+  packageFile?: File | null;
 };
 
 export type CommunityLaunchWorkflowImportStartResult = {
@@ -353,6 +354,8 @@ export function WebCommunityLaunchSetupModal(
     useState<string | null>(null);
   const [selectedHarnessOtherName, setSelectedHarnessOtherName] = useState("");
   const [harnessImportOutputDraft, setHarnessImportOutputDraft] = useState("");
+  const [harnessImportPackageFile, setHarnessImportPackageFile] = useState<File | null>(null);
+  const [harnessImportPackageDragOver, setHarnessImportPackageDragOver] = useState(false);
   const [workflowImportDraftId, setWorkflowImportDraftId] = useState<string | null>(null);
   const [workflowImportDraftStatus, setWorkflowImportDraftStatus] = useState<string | null>(null);
   const [workflowImportLedgerJson, setWorkflowImportLedgerJson] = useState<unknown | null>(null);
@@ -399,6 +402,8 @@ export function WebCommunityLaunchSetupModal(
       setSelectedHarnessImportSourceId(null);
       setSelectedHarnessOtherName("");
       setHarnessImportOutputDraft("");
+      setHarnessImportPackageFile(null);
+      setHarnessImportPackageDragOver(false);
       setWorkflowImportDraftId(null);
       setWorkflowImportDraftStatus(null);
       setWorkflowImportLedgerJson(null);
@@ -440,6 +445,8 @@ export function WebCommunityLaunchSetupModal(
     setSelectedHarnessImportSourceId(null);
     setSelectedHarnessOtherName("");
     setHarnessImportOutputDraft("");
+    setHarnessImportPackageFile(null);
+    setHarnessImportPackageDragOver(false);
     setWorkflowImportDraftId(null);
     setWorkflowImportDraftStatus(null);
     setWorkflowImportLedgerJson(null);
@@ -1156,11 +1163,26 @@ export function WebCommunityLaunchSetupModal(
         setDidCopyHarnessImportPrompt(true);
         window.setTimeout(() => setDidCopyHarnessImportPrompt(false), 1800);
       };
+      const assignHarnessImportPackageFile = (file: File | null) => {
+        if (!file) return;
+        if (!file.name.toLowerCase().endsWith(".zip")) {
+          setStepError("Use the workflow export zip file.");
+          return;
+        }
+        setHarnessImportPackageFile(file);
+        setStepError(null);
+      };
+      const handleHarnessPackageDrop = (event: DragEvent<HTMLLabelElement>) => {
+        event.preventDefault();
+        setHarnessImportPackageDragOver(false);
+        const file = event.dataTransfer.files?.[0] ?? null;
+        assignHarnessImportPackageFile(file);
+      };
       const handleStartWorkflowImport = async () => {
         if (savingStep || !onStartWorkflowImport) return;
         const rawHarnessOutput = harnessImportOutputDraft.trim();
-        if (!rawHarnessOutput) {
-          setStepError("Paste the harness output first.");
+        if (!harnessImportPackageFile && !rawHarnessOutput) {
+          setStepError("Drop the workflow export zip or paste the harness output first.");
           return;
         }
         setSavingStep("workflows");
@@ -1169,7 +1191,8 @@ export function WebCommunityLaunchSetupModal(
         try {
           const result = await onStartWorkflowImport({
             sourceHarness: selectedHarnessName,
-            rawHarnessOutput,
+            rawHarnessOutput: harnessImportPackageFile ? undefined : rawHarnessOutput,
+            packageFile: harnessImportPackageFile,
           });
           setWorkflowImportDraftId(result?.id ?? null);
           setWorkflowImportDraftStatus(result?.status ?? "working");
@@ -1393,6 +1416,12 @@ export function WebCommunityLaunchSetupModal(
                 {workflowReviewProjection.questionCount > 0 ? (
                   <span>{workflowReviewProjection.questionCount} questions</span>
                 ) : null}
+                {workflowReviewProjection.skillScan.itemCount !== null ? (
+                  <span>{workflowReviewProjection.skillScan.itemCount} skill-like found</span>
+                ) : null}
+                {workflowReviewProjection.skillScan.completenessConfidence ? (
+                  <span>Skill scan {workflowReviewProjection.skillScan.completenessConfidence}</span>
+                ) : null}
               </div>
               <div className="community-launch-review-sections">
                 <section className="community-launch-review-section">
@@ -1589,9 +1618,11 @@ export function WebCommunityLaunchSetupModal(
                     setWorkflowReviewSelections({});
                     setWorkflowReviewPanel(null);
                     setWorkflowSkillPreviewId(null);
+                    setHarnessImportPackageFile(null);
+                    setHarnessImportPackageDragOver(false);
                   }}
                 >
-                  Paste again
+                  Try again
                 </button>
               ) : importReady ? (
                 <button
@@ -1621,6 +1652,8 @@ export function WebCommunityLaunchSetupModal(
                   onClick={() => {
                     setWorkflowImportStage("harness");
                     setHarnessImportOutputDraft("");
+                    setHarnessImportPackageFile(null);
+                    setHarnessImportPackageDragOver(false);
                     setWorkflowImportDraftId(null);
                     setWorkflowImportDraftStatus(null);
                     setWorkflowImportLedgerJson(null);
@@ -1640,7 +1673,7 @@ export function WebCommunityLaunchSetupModal(
                 </button>
                 <div>
                   <span>{selectedHarnessName} import</span>
-                  <p>Copy the prompt into your agent harness, then paste the returned details here.</p>
+                  <p>Copy the prompt, then drag the exported workflow zip back here.</p>
                 </div>
               </div>
               {selectedHarnessImportSource.id === "other" ? (
@@ -1670,17 +1703,55 @@ export function WebCommunityLaunchSetupModal(
                 </div>
                 <pre className="community-launch-harness-prompt">{harnessImportPrompt}</pre>
               </div>
+              <label
+                className={`community-launch-workflow-package-dropzone${harnessImportPackageDragOver ? " is-drag-over" : ""}${harnessImportPackageFile ? " has-file" : ""}`}
+                onDragOver={(event) => {
+                  event.preventDefault();
+                  setHarnessImportPackageDragOver(true);
+                }}
+                onDragLeave={() => setHarnessImportPackageDragOver(false)}
+                onDrop={handleHarnessPackageDrop}
+              >
+                <input
+                  type="file"
+                  accept=".zip,application/zip,application/x-zip-compressed"
+                  onChange={(event) => {
+                    assignHarnessImportPackageFile(event.target.files?.[0] ?? null);
+                    event.currentTarget.value = "";
+                  }}
+                />
+                <FileText size={18} strokeWidth={2.2} aria-hidden="true" />
+                <span>
+                  {harnessImportPackageFile
+                    ? harnessImportPackageFile.name
+                    : "Drop polynet-workflow-export.zip"}
+                </span>
+                <small>
+                  {harnessImportPackageFile
+                    ? `${Math.max(1, Math.ceil(harnessImportPackageFile.size / 1024))} KB ready`
+                    : "Full skills, MCP metadata, repo decision, and evidence."}
+                </small>
+              </label>
+              {harnessImportPackageFile ? (
+                <button
+                  type="button"
+                  className="community-launch-harness-remove-package"
+                  onClick={() => setHarnessImportPackageFile(null)}
+                >
+                  Remove zip
+                </button>
+              ) : null}
               <label className="community-launch-field community-launch-harness-output-field">
-                <span>Harness output</span>
+                <span>Fallback pasted output</span>
                 <textarea
                   value={harnessImportOutputDraft}
                   onChange={(event) => setHarnessImportOutputDraft(event.target.value)}
                   rows={8}
-                  placeholder={`Paste the ${selectedHarnessName} export here`}
+                  placeholder={`Paste the ${selectedHarnessName} text export only if a zip could not be created`}
                 />
               </label>
               <p className="community-launch-inline-note">
-                PolyNet will use this output to map MCP servers, skills, Markdown files, and repository decisions into the community workflow setup.
+                Zip import is preferred because it carries complete skill markdown files instead of summaries.
               </p>
             </div>
             <div className="community-launch-step-actions">
@@ -1688,10 +1759,10 @@ export function WebCommunityLaunchSetupModal(
               <button
                 type="button"
                 className="polynet-onboarding-next"
-                disabled={!harnessImportOutputDraft.trim() || !onStartWorkflowImport || isSavingActiveStep}
+                disabled={(!harnessImportPackageFile && !harnessImportOutputDraft.trim()) || !onStartWorkflowImport || isSavingActiveStep}
                 onClick={() => void handleStartWorkflowImport()}
               >
-                {isSavingActiveStep ? "Starting..." : "Start import"}
+                {isSavingActiveStep ? "Starting..." : harnessImportPackageFile ? "Import zip" : "Start import"}
               </button>
             </div>
           </div>

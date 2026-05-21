@@ -113,6 +113,8 @@ import {
 import {
   applyCommunityWorkflowImportReview as applyCommunityWorkflowImportReviewImpl,
   createCommunityWorkflowImportDraft as createCommunityWorkflowImportDraftImpl,
+  createCommunityWorkflowImportDraftFromPackage as createCommunityWorkflowImportDraftFromPackageImpl,
+  generateCommunityWorkflowImportPackageUploadUrl as generateCommunityWorkflowImportPackageUploadUrlImpl,
   getCommunityWorkflowImportDraft as getCommunityWorkflowImportDraftImpl,
   listCommunityWorkflowImportEvents as listCommunityWorkflowImportEventsImpl,
 } from "./communityWorkflowImports";
@@ -219,6 +221,8 @@ export const saveCommunityLaunchProfile = saveCommunityLaunchProfileImpl;
 export const saveCommunityOneLiner = saveCommunityOneLinerImpl;
 export const getCommunityLaunchSetupStatus = getCommunityLaunchSetupStatusImpl;
 export const createCommunityWorkflowImportDraft = createCommunityWorkflowImportDraftImpl;
+export const generateCommunityWorkflowImportPackageUploadUrl = generateCommunityWorkflowImportPackageUploadUrlImpl;
+export const createCommunityWorkflowImportDraftFromPackage = createCommunityWorkflowImportDraftFromPackageImpl;
 export const getCommunityWorkflowImportDraft = getCommunityWorkflowImportDraftImpl;
 export const listCommunityWorkflowImportEvents = listCommunityWorkflowImportEventsImpl;
 export const applyCommunityWorkflowImportReview = applyCommunityWorkflowImportReviewImpl;

@@ -128,6 +128,7 @@ import {
 import {
   applyCloudCommunityWorkflowImportReview,
   createCloudCommunityWorkflowImportDraft,
+  createCloudCommunityWorkflowImportDraftFromPackage,
   loadCloudCommunityWorkflowImportDraft,
   loadCloudCommunityLaunchSetupStatus,
   saveCloudCommunityLaunchProfile,
@@ -7464,20 +7465,29 @@ export default function App() {
     };
     const handleStartCommunityLaunchWorkflowImport = async (draft: {
       sourceHarness: string;
-      rawHarnessOutput: string;
+      rawHarnessOutput?: string;
+      packageFile?: File | null;
     }) => {
       const { session, community } = requireCommunityLaunchSaveContext();
-      const result = await createCloudCommunityWorkflowImportDraft({
-        session,
-        communityId: community.id,
-        sourceHarness: draft.sourceHarness,
-        rawHarnessOutput: draft.rawHarnessOutput,
-      });
+      const result = draft.packageFile
+        ? await createCloudCommunityWorkflowImportDraftFromPackage({
+            session,
+            communityId: community.id,
+            sourceHarness: draft.sourceHarness,
+            file: draft.packageFile,
+          })
+        : await createCloudCommunityWorkflowImportDraft({
+            session,
+            communityId: community.id,
+            sourceHarness: draft.sourceHarness,
+            rawHarnessOutput: draft.rawHarnessOutput ?? "",
+          });
       if (!result) throw new Error("Failed to start workflow import.");
       return {
         id: result.id,
         status: result.status,
         currentLedgerJson: result.current_ledger_json,
+        errorMessage: result.error_message,
       };
     };
     const handleLoadCommunityLaunchWorkflowImport = async (draftId: string) => {

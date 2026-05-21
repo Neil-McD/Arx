@@ -1,10 +1,15 @@
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
+import { strToU8, zipSync } from "fflate";
 import {
   buildCommunityLaunchSetupStatus,
   COMMUNITY_LAUNCH_SETUP_STEPS,
 } from "../shared/communityLaunchSetup.ts";
 import { buildCommunityWorkflowImportFunctionTools } from "../shared/communityWorkflowImportToolProtocol.ts";
+import {
+  COMMUNITY_WORKFLOW_EXPORT_PACKAGE_SENTINEL,
+  parseCommunityWorkflowExportPackage,
+} from "../shared/communityWorkflowExportPackage.ts";
 
 function read(path: string): string {
   return readFileSync(path, "utf8");
@@ -42,8 +47,11 @@ const communityBarrel = read("convex/community.ts");
 const workflowImports = read("convex/communityWorkflowImports.ts");
 const workflowImportTools = read("shared/communityWorkflowImportToolProtocol.ts");
 const workflowImportPrompt = read("shared/communityWorkflowImportPrompt.ts");
+const workflowExportPackage = read("shared/communityWorkflowExportPackage.ts");
 const workflowImportCandidateIds = read("shared/communityWorkflowImportCandidateIds.ts");
+const workflowImportRepositoryIdentity = read("shared/communityWorkflowImportRepositoryIdentity.ts");
 const workflowImportReviewProjection = read("shared/communityWorkflowImportReviewProjection.ts");
+const discoverCatalog = read("shared/discoverCatalog.ts");
 const setupCard = read("apps/web/src/components/WebCommunityLaunchSetupCard.tsx");
 const setupModal = read("apps/web/src/components/WebCommunityLaunchSetupModal.tsx");
 const harnessImportSources = read("apps/web/src/lib/communityHarnessImportSources.ts");
@@ -53,6 +61,148 @@ const shellChromeHostProps = read("apps/web/src/controllers/buildWebShellChromeH
 const mobileShellController = read("apps/web/src/controllers/useWebMobileShellController.ts");
 const workspaceLandingProjection = read(
   "apps/web/src/controllers/buildWebWorkspaceLandingProjection.tsx",
+);
+
+function buildWorkflowExportZip(
+  files: Record<string, string>,
+): Uint8Array {
+  return zipSync(
+    Object.fromEntries(
+      Object.entries(files).map(([path, value]) => [path, strToU8(value)]),
+    ),
+  );
+}
+
+const validWorkflowExportPackage = await parseCommunityWorkflowExportPackage(
+  buildWorkflowExportZip({
+    "manifest.json": JSON.stringify({
+      schemaVersion: "polynet_workflow_export_v1",
+      sourceHarness: "Codex",
+      summary: { name: "Operator workflow", purpose: "Import test" },
+      scanSummary: {
+        searchedLocations: [".codex"],
+        skillSearchLocations: ["skills"],
+        skillLikeItemsSeen: 1,
+        selectedSkillCandidates: 1,
+        completenessConfidence: "high",
+      },
+    }),
+    "mcp/servers.json": JSON.stringify({
+      mcpServers: [
+        {
+          name: "GitHub",
+          catalog_app_id: "github",
+          purpose: "Repository work",
+          auth_type: "oauth",
+          confidence: "high",
+        },
+      ],
+    }),
+    "skills/frontend-skill/SKILL.md":
+      "# Frontend Skill\n\nUse this complete standalone behavior to review and improve frontend work in PolyNet communities.",
+    "skills/frontend-skill/metadata.json": JSON.stringify({
+      name: "Frontend Skill",
+      purpose: "Reusable frontend behavior.",
+      recommendedHandling: "import_as_skill",
+    }),
+    "markdown/decisions.json": JSON.stringify({ markdownFiles: [] }),
+    "repository.json": JSON.stringify({
+      present: "yes",
+      host: "github",
+      owner: "polynet",
+      repo: "workflow",
+      fullName: "polynet/workflow",
+      visibility: "public",
+      recommendedNextStep: "connect_public_github",
+    }),
+    "evidence.json": JSON.stringify([{ source: "skills/frontend-skill/SKILL.md" }]),
+  }),
+  {
+    communityId: "community_123",
+    builderUserId: "user_123",
+    sourceHarness: "Codex",
+    sourceFilename: "polynet-workflow-export.zip",
+  },
+);
+assert.equal(validWorkflowExportPackage.summary.skill_count, 1);
+assert.equal(validWorkflowExportPackage.summary.mcp_count, 1);
+assert.equal(
+  (validWorkflowExportPackage.ledger.skills as Array<Record<string, unknown>>)[0]
+    ?.proposedInstructionsMd,
+  "# Frontend Skill\n\nUse this complete standalone behavior to review and improve frontend work in PolyNet communities.",
+);
+await assert.rejects(
+  () =>
+    parseCommunityWorkflowExportPackage(
+      buildWorkflowExportZip({
+        "manifest.json": JSON.stringify({ schemaVersion: "polynet_workflow_export_v1" }),
+        "../evil.txt": "bad",
+      }),
+      { communityId: "community_123", builderUserId: "user_123", sourceHarness: "Codex" },
+    ),
+  /workflow_export_relative_path_rejected|workflow_export_unexpected_path/,
+);
+await assert.rejects(
+  () =>
+    parseCommunityWorkflowExportPackage(
+      buildWorkflowExportZip({
+        "manifest.json": JSON.stringify({ schemaVersion: "polynet_workflow_export_v1" }),
+        ".env": "SECRET=value",
+      }),
+      { communityId: "community_123", builderUserId: "user_123", sourceHarness: "Codex" },
+    ),
+  /workflow_export_junk_path_rejected|workflow_export_unexpected_path/,
+);
+await assert.rejects(
+  () =>
+    parseCommunityWorkflowExportPackage(
+      buildWorkflowExportZip({
+        "manifest.json": JSON.stringify({ schemaVersion: "polynet_workflow_export_v1" }),
+        "checksums.json": JSON.stringify({
+          sha256: {
+            "manifest.json": "0000000000000000000000000000000000000000000000000000000000000000",
+          },
+        }),
+      }),
+      { communityId: "community_123", builderUserId: "user_123", sourceHarness: "Codex" },
+    ),
+  /workflow_export_checksum_mismatch:manifest\.json/,
+);
+await assert.rejects(
+  () =>
+    parseCommunityWorkflowExportPackage(
+      buildWorkflowExportZip({
+        "manifest.json": JSON.stringify({ sourceHarness: "Codex" }),
+      }),
+      { communityId: "community_123", builderUserId: "user_123", sourceHarness: "Codex" },
+    ),
+  /workflow_export_schema_version_required/,
+);
+await assert.rejects(
+  () =>
+    parseCommunityWorkflowExportPackage(
+      buildWorkflowExportZip({
+        "manifest.json": JSON.stringify({ schemaVersion: "polynet_workflow_export_v1" }),
+        "mcp/servers.json": JSON.stringify({
+          mcpServers: Array.from({ length: 101 }, (_, index) => ({
+            name: `MCP ${index + 1}`,
+          })),
+        }),
+      }),
+      { communityId: "community_123", builderUserId: "user_123", sourceHarness: "Codex" },
+    ),
+  /workflow_export_too_many_mcp_servers/,
+);
+await assert.rejects(
+  () =>
+    parseCommunityWorkflowExportPackage(
+      buildWorkflowExportZip({
+        "manifest.json": JSON.stringify({ schemaVersion: "polynet_workflow_export_v1" }),
+        "skills/big/SKILL.md": "A".repeat(41_000),
+      }),
+      { communityId: "community_123", builderUserId: "user_123", sourceHarness: "Codex" },
+    ),
+  /workflow_export_skill_body_too_large:big/,
 );
 
 assert.deepEqual(COMMUNITY_LAUNCH_SETUP_STEPS, [
@@ -563,8 +713,8 @@ assert.doesNotMatch(
 );
 assert.match(
   workflowImportPrompt,
-  /buildCommunityWorkflowImportPrompt[\s\S]*read-only workflow audit[\s\S]*agent_workflow_inventory_v2[\s\S]*mcpServers[\s\S]*skills[\s\S]*markdownFiles[\s\S]*repository/,
-  "launch workflow import prompt must ask for a focused MCP, skill, markdown, and repository inventory",
+  /buildCommunityWorkflowImportPrompt[\s\S]*read-only workflow audit[\s\S]*polynet-workflow-export\.zip[\s\S]*mcp\/servers\.json[\s\S]*skills\/<slug>\/SKILL\.md[\s\S]*markdown\/decisions\.json[\s\S]*repository\.json/,
+  "launch workflow import prompt must ask for a focused workflow export zip with MCP, skill, markdown, and repository inventory",
 );
 assert.match(
   workflowImportPrompt,
@@ -573,8 +723,13 @@ assert.match(
 );
 assert.match(
   workflowImportPrompt,
-  /docsUrl[\s\S]*packageUrl[\s\S]*sourceUrl[\s\S]*publiclyVerifiable[\s\S]*configExampleFound[\s\S]*polynetAction[\s\S]*evidenceUrls/,
+  /mcp\/servers\.json[\s\S]*docsUrl[\s\S]*packageUrl[\s\S]*sourceUrl[\s\S]*publiclyVerifiable[\s\S]*configExampleFound[\s\S]*polynetAction[\s\S]*evidenceUrls/,
   "launch workflow import prompt must return integration readiness and source URL fields for downstream classification",
+);
+assert.match(
+  workflowImportPrompt,
+  /providerName[\s\S]*officialName[\s\S]*logoUrl[\s\S]*skillSearchLocations[\s\S]*skillLikeItemsSeen[\s\S]*complete standalone Markdown body[\s\S]*owner[\s\S]*repo[\s\S]*fullName[\s\S]*defaultBranch/,
+  "launch workflow import prompt must request MCP identity, skill completeness, and GitHub repository identity fields",
 );
 assert.match(
   workflowImportPrompt,
@@ -598,12 +753,12 @@ assert.doesNotMatch(
 );
 assert.match(
   setupModal,
-  /copyTextToClipboard\(harnessImportPrompt\)[\s\S]*Copy prompt[\s\S]*Harness output[\s\S]*Paste the \$\{selectedHarnessName\} export here/,
-  "launch workflow prompt step must provide copyable instructions and a paste target for provider output",
+  /copyTextToClipboard\(harnessImportPrompt\)[\s\S]*Copy prompt[\s\S]*Drop polynet-workflow-export\.zip[\s\S]*Fallback pasted output/,
+  "launch workflow prompt step must provide copyable instructions, preferred zip upload, and paste fallback",
 );
 assert.match(
   convexSchema,
-  /communityWorkflowImportDrafts: defineTable\([\s\S]*communityId: v\.id\("communities"\)[\s\S]*builderUserId: v\.id\("users"\)[\s\S]*sourceHarness: v\.string\(\)[\s\S]*status: v\.union\([\s\S]*working[\s\S]*ready_for_review[\s\S]*applied[\s\S]*failed[\s\S]*rawHarnessOutput: v\.string\(\)[\s\S]*currentLedgerJson/,
+  /communityWorkflowImportDrafts: defineTable\([\s\S]*communityId: v\.id\("communities"\)[\s\S]*builderUserId: v\.id\("users"\)[\s\S]*sourceHarness: v\.string\(\)[\s\S]*sourceKind[\s\S]*workflow_export_zip[\s\S]*status: v\.union\([\s\S]*working[\s\S]*ready_for_review[\s\S]*applied[\s\S]*failed[\s\S]*rawHarnessOutput: v\.string\(\)[\s\S]*currentLedgerJson[\s\S]*packageSha256/,
   "workflow import must have a dedicated community-scoped draft ledger table",
 );
 assert.match(
@@ -625,6 +780,36 @@ assert.match(
   workflowImports,
   /createCommunityWorkflowImportDraft[\s\S]*resolveUserIdForAuthenticatedRequest[\s\S]*requireCommunityManager[\s\S]*normalizeHarnessOutput/,
   "workflow import draft creation must be authenticated and manager-gated",
+);
+assert.match(
+  workflowImports,
+  /generateCommunityWorkflowImportPackageUploadUrl[\s\S]*resolveUserIdForAuthenticatedRequest[\s\S]*requireCommunityManager[\s\S]*ctx\.storage\.generateUploadUrl/,
+  "workflow import package upload URL creation must be authenticated and manager-gated",
+);
+assert.match(
+  workflowImports,
+  /createCommunityWorkflowImportDraftFromPackage = action[\s\S]*assertCommunityManagerAccessInternal[\s\S]*ctx\.storage\.get[\s\S]*parseCommunityWorkflowExportPackage[\s\S]*ctx\.storage\.delete/,
+  "workflow import package action must parse uploaded zips without Daytona and delete temporary storage",
+);
+assert.match(
+  workflowExportPackage,
+  /maxZipBytes[\s\S]*maxFiles[\s\S]*maxSkillBodyChars[\s\S]*readAllowedPathKind[\s\S]*manifest\.json[\s\S]*mcp\/servers\.json[\s\S]*skillBody/,
+  "workflow export package parser must enforce tight limits and a narrow allowed path contract",
+);
+assert.match(
+  workflowExportPackage,
+  /validateWorkflowExportZipDirectory\(bytes\)[\s\S]*unzipSync\(bytes\)/,
+  "workflow export package parser must validate zip paths and uncompressed sizes before inflating entries",
+);
+assert.match(
+  workflowExportPackage,
+  /normalizePath[\s\S]*absolute_path_rejected[\s\S]*relative_path_rejected[\s\S]*junk_path_rejected[\s\S]*isLikelyBinary/,
+  "workflow export package parser must reject path traversal, junk paths, and binary files",
+);
+assert.match(
+  workflowExportPackage,
+  /sha256Hex[\s\S]*readChecksumMap[\s\S]*workflow_export_checksum_mismatch/,
+  "workflow export package parser must validate package checksums when provided",
 );
 assert.match(
   workflowImports,
@@ -751,13 +936,18 @@ assert.doesNotMatch(
 );
 assert.match(
   communityBarrel,
-  /createCommunityWorkflowImportDraft[\s\S]*getCommunityWorkflowImportDraft[\s\S]*listCommunityWorkflowImportEvents[\s\S]*applyCommunityWorkflowImportReview/,
-  "community barrel must expose draft, event, and review apply functions without exposing raw ledger writes",
+  /createCommunityWorkflowImportDraft[\s\S]*generateCommunityWorkflowImportPackageUploadUrl[\s\S]*createCommunityWorkflowImportDraftFromPackage[\s\S]*getCommunityWorkflowImportDraft[\s\S]*listCommunityWorkflowImportEvents[\s\S]*applyCommunityWorkflowImportReview/,
+  "community barrel must expose draft, package import, event, and review apply functions without exposing raw ledger writes",
 );
 assert.match(
   launchGateway,
   /CloudCommunityWorkflowImportDraft[\s\S]*community:createCommunityWorkflowImportDraft/,
   "web gateway must create workflow import drafts through the community backend",
+);
+assert.match(
+  launchGateway,
+  /requestCloudCommunityWorkflowImportPackageUploadUrl[\s\S]*community:generateCommunityWorkflowImportPackageUploadUrl[\s\S]*uploadCloudCommunityWorkflowImportPackage[\s\S]*community:createCommunityWorkflowImportDraftFromPackage/,
+  "web gateway must upload workflow export packages through Convex storage and create package-backed drafts",
 );
 assert.match(
   launchGateway,
@@ -771,8 +961,8 @@ assert.match(
 );
 assert.match(
   setupModal,
-  /onStartWorkflowImport[\s\S]*handleStartWorkflowImport[\s\S]*setWorkflowImportStage\("understanding"\)/,
-  "launch workflow prompt step must hand pasted output to the backend",
+  /onStartWorkflowImport[\s\S]*handleStartWorkflowImport[\s\S]*packageFile: harnessImportPackageFile[\s\S]*setWorkflowImportStage\("understanding"\)/,
+  "launch workflow prompt step must hand preferred package uploads or pasted output to the backend",
 );
 assert.match(
   setupModal,
@@ -806,8 +996,40 @@ assert.match(
 );
 assert.match(
   workflowImportReviewProjection,
+  /skillScan[\s\S]*skillLikeItemsSeen[\s\S]*selectedSkillCandidates[\s\S]*completenessConfidence[\s\S]*importantOmissions/,
+  "launch workflow review projection must preserve skill scan completeness signals from the import ledger",
+);
+assert.match(
+  workflowImportReviewProjection,
   /catalogAppId[\s\S]*endpointUrl[\s\S]*authType[\s\S]*instructionsMd/,
   "launch workflow review projection must expose server-usable MCP and skill apply metadata from the sanitized ledger",
+);
+assert.match(
+  workflowImportReviewProjection,
+  /DISCOVER_APP_ALIASES[\s\S]*REVIEW_ONLY_LOGO_ALIASES[\s\S]*context7[\s\S]*fly-light[\s\S]*logoUrlDark \?\? app\.logoUrl/,
+  "launch workflow review projection must prefer light-on-dark catalog logos and support review-only known MCP aliases",
+);
+const reviewCatalogMatcher =
+  workflowImportReviewProjection.match(/function getReviewCatalogApp[\s\S]*?function normalizeReviewAuthType/)?.[0] ?? "";
+assert.doesNotMatch(
+  reviewCatalogMatcher,
+  /docsUrl|websiteUrl|packageUrl|sourceUrl/,
+  "launch workflow catalog matching must not bind unknown MCPs to catalog apps just because evidence links live on GitHub or another app host",
+);
+assert.match(
+  workflowImportReviewProjection,
+  /Boolean\(instructionsMd\)[\s\S]*!dependsOnRepo[\s\S]*!itemHasLowConfidence[\s\S]*!isRejectedWorkflowCandidate/,
+  "launch workflow review must not default-select skills unless complete importable instructions are present",
+);
+assert.match(
+  workflowImportReviewProjection,
+  /buildCommunityWorkflowImportRepositoryIdentity[\s\S]*identity\.displayName[\s\S]*identity\.host === "github"[\s\S]*"GitHub"/,
+  "launch workflow review must display GitHub repositories by real owner/repo identity while preserving the GitHub logo",
+);
+assert.match(
+  workflowImportRepositoryIdentity,
+  /parseCommunityWorkflowImportGitHubFullName[\s\S]*git@github[\s\S]*parsed\.hostname\.toLowerCase\(\) !== "github\.com"[\s\S]*fullName[\s\S]*displayName/,
+  "workflow import repository identity helper must parse GitHub HTTPS and SSH remotes into owner/repo display names",
 );
 assert.match(
   workflowImportCandidateIds,
@@ -825,9 +1047,29 @@ assert.match(
   "server apply planning must use the same workflow import candidate ids shown to the user",
 );
 assert.match(
+  workflowImports,
+  /mapCatalogCandidate[\s\S]*catalog_app_id: app\.id[\s\S]*logo_url: app\.logoUrl[\s\S]*logo_url_dark: app\.logoUrlDark[\s\S]*endpoint_url[\s\S]*auth_type/,
+  "workflow import candidate search must return catalog identity, logo, endpoint, and auth metadata for the analysis agent",
+);
+assert.match(
+  workflowImports,
+  /copy its catalog_app_id exactly[\s\S]*logo_url[\s\S]*logo_url_dark[\s\S]*proposedInstructionsMd[\s\S]*fullName/,
+  "workflow import agent instructions must preserve catalog identity, importable skill bodies, and GitHub repo names in the ledger",
+);
+assert.match(
+  workflowImports,
+  /buildCommunityWorkflowImportRepositoryIdentity[\s\S]*identity\.displayName[\s\S]*repositoryUrl: identity\.remoteUrl/,
+  "server workflow import apply plan must use the same repository identity display name as the review projection",
+);
+assert.match(
   setupModal,
   /MCP servers[\s\S]*showSummary: false[\s\S]*Skills[\s\S]*showSummary: true[\s\S]*GitHub/,
   "launch workflow review must keep MCP rows minimal while giving skills a compact explanation surface",
+);
+assert.match(
+  setupModal,
+  /skillScan\.itemCount[\s\S]*skill-like found[\s\S]*skillScan\.completenessConfidence[\s\S]*Skill scan/,
+  "launch workflow review must show compact skill scan completeness status when the ledger provides it",
 );
 assert.match(
   setupModal,
@@ -880,6 +1122,19 @@ for (const logoPath of [
 ]) {
   assert.equal(existsSync(logoPath), true, `missing harness logo asset: ${logoPath}`);
 }
+for (const logoPath of [
+  "apps/web/public/app-logos/github-light.svg",
+  "apps/web/public/app-logos/vercel-light.svg",
+  "apps/web/public/app-logos/context7.svg",
+  "apps/web/public/app-logos/fly-light.svg",
+]) {
+  assert.equal(existsSync(logoPath), true, `missing workflow import review logo asset: ${logoPath}`);
+}
+assert.match(
+  discoverCatalog,
+  /id: "github"[\s\S]*logoUrl: "\/app-logos\/github\.svg"[\s\S]*logoUrlDark: "\/app-logos\/github-light\.svg"[\s\S]*id: "vercel"[\s\S]*logoUrl: "\/app-logos\/vercel\.svg"[\s\S]*logoUrlDark: "\/app-logos\/vercel-light\.svg"/,
+  "Discover catalog must expose light-on-dark GitHub and Vercel logo variants for dark review surfaces",
+);
 assert.equal(
   existsSync("apps/web/public/harness-logos/opencode.svg"),
   false,

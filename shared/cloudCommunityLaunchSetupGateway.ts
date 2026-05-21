@@ -51,9 +51,14 @@ export type CloudCommunityWorkflowImportDraft = {
   community_id: string;
   builder_user_id: string;
   source_harness: string;
+  source_kind?: "pasted_output" | "workflow_export_zip";
   status: "working" | "ready_for_review" | "applied" | "failed";
   current_ledger_json: unknown | null;
   error_message: string | null;
+  package_filename?: string | null;
+  package_sha256?: string | null;
+  package_byte_count?: number | null;
+  package_summary?: unknown | null;
   created_at: string;
   updated_at: string;
 };
@@ -140,6 +145,78 @@ export async function createCloudCommunityWorkflowImportDraft<SessionT>(
     communityId: params.communityId,
     sourceHarness: params.sourceHarness,
     rawHarnessOutput: params.rawHarnessOutput,
+  });
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return null;
+  }
+  return payload as CloudCommunityWorkflowImportDraft;
+}
+
+async function requestCloudCommunityWorkflowImportPackageUploadUrl<SessionT>(
+  params: CloudCommunityLaunchSetupGatewayParams<SessionT> & {
+    communityId: string;
+  },
+): Promise<string> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(
+    params.session,
+  );
+  const payload = await client.mutation("community:generateCommunityWorkflowImportPackageUploadUrl" as any, {
+    authSubject,
+    communityId: params.communityId,
+  });
+  const uploadUrl =
+    payload && typeof payload === "object" && !Array.isArray(payload)
+      ? String((payload as { uploadUrl?: unknown }).uploadUrl ?? "").trim()
+      : "";
+  if (!uploadUrl) throw new Error("workflow_import_package_upload_failed");
+  return uploadUrl;
+}
+
+async function uploadCloudCommunityWorkflowImportPackage<SessionT>(
+  params: CloudCommunityLaunchSetupGatewayParams<SessionT> & {
+    communityId: string;
+    file: File;
+  },
+): Promise<string> {
+  const uploadUrl = await requestCloudCommunityWorkflowImportPackageUploadUrl({
+    session: params.session,
+    communityId: params.communityId,
+  });
+  const response = await fetch(uploadUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": params.file.type || "application/zip",
+    },
+    body: params.file,
+  });
+  if (!response.ok) throw new Error("workflow_import_package_upload_failed");
+  const payload = (await response.json()) as { storageId?: string | null };
+  const storageId = String(payload?.storageId ?? "").trim();
+  if (!storageId) throw new Error("workflow_import_package_upload_failed");
+  return storageId;
+}
+
+export async function createCloudCommunityWorkflowImportDraftFromPackage<SessionT>(
+  params: CloudCommunityLaunchSetupGatewayParams<SessionT> & {
+    communityId: string;
+    sourceHarness: string;
+    file: File;
+  },
+): Promise<CloudCommunityWorkflowImportDraft | null> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(
+    params.session,
+  );
+  const storageId = await uploadCloudCommunityWorkflowImportPackage({
+    session: params.session,
+    communityId: params.communityId,
+    file: params.file,
+  });
+  const payload = await client.action("community:createCommunityWorkflowImportDraftFromPackage" as any, {
+    authSubject,
+    communityId: params.communityId,
+    sourceHarness: params.sourceHarness,
+    storageId,
+    sourceFilename: params.file.name,
   });
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
     return null;

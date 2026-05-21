@@ -1467,6 +1467,7 @@ export const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
     websiteUrl: "https://github.com",
     docsUrl: "https://github.com/github/github-mcp-server",
     logoUrl: "/app-logos/github.svg",
+    logoUrlDark: "/app-logos/github-light.svg",
     personalConnect: {
       connectionKind: "known",
       availability: "ready",
@@ -1541,6 +1542,7 @@ export const DISCOVER_APP_CATALOG: DiscoverAppCatalogEntry[] = [
     websiteUrl: "https://vercel.com",
     docsUrl: "https://vercel.com/docs/agent-resources/vercel-mcp",
     logoUrl: "/app-logos/vercel.svg",
+    logoUrlDark: "/app-logos/vercel-light.svg",
     personalConnect: {
       connectionKind: "known",
       availability: "later",

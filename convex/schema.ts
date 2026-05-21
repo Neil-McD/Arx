@@ -1133,6 +1133,9 @@ export default defineSchema({
     communityId: v.id("communities"),
     builderUserId: v.id("users"),
     sourceHarness: v.string(),
+    sourceKind: v.optional(
+      v.union(v.literal("pasted_output"), v.literal("workflow_export_zip")),
+    ),
     status: v.union(
       v.literal("working"),
       v.literal("ready_for_review"),
@@ -1142,6 +1145,10 @@ export default defineSchema({
     rawHarnessOutput: v.string(),
     currentLedgerJson: v.optional(v.any()),
     errorMessage: v.optional(v.string()),
+    packageFilename: v.optional(v.string()),
+    packageSha256: v.optional(v.string()),
+    packageByteCount: v.optional(v.number()),
+    packageSummary: v.optional(v.any()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
