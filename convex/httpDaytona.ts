@@ -43,10 +43,7 @@ import {
   type WebResearchCreditAction,
 } from "../shared/workspaceCredits";
 import { runOpenRouterNativeToolCompletion } from "./openRouterNativeTransport";
-import {
-  buildCodexAppServerRuntimeAgentHarness,
-  executeCodexHarnessProbeIfSelected,
-} from "./codexHarnessBridge";
+import { buildCodexAppServerRuntimeAgentHarness } from "./codexHarnessBridge";
 import {
   type RetrievalToolName,
   isComputerUseToolName,
@@ -82,8 +79,6 @@ import {
   buildPolynetNativeRuntimeAgentHarness,
   buildPreparedRuntimeAgentTurn,
   buildPreparedRuntimeAgentTurnEventPayload,
-  buildRuntimeAgentHarnessSelectedEventPayload,
-  resolveRuntimeAgentHarnessSelection,
   type RuntimeAgentHarnessDescriptor,
   type RuntimeAgentHarnessExecutionPlacement,
   type RuntimeAgentHarnessId,
@@ -134,12 +129,9 @@ import {
   type RuntimeToolSchedulePlan,
 } from "../shared/runtimeToolPolicy";
 import {
-  isCodexHarnessExperimentEnabled,
-  isCodexHarnessPrimaryEnabled,
-  isCodexHarnessPrimaryStreamingEnabled,
-  resolveCodexHarnessProbeMode,
-  resolveCodexHarnessRoute,
-} from "../shared/codexHarnessRoute.ts";
+  isCodexWorkspaceHandoffEnabled,
+  resolveCodexWorkspaceHandoffEligibility,
+} from "../shared/codexWorkspaceHandoffPolicy.ts";
 import {
   buildCodexMcpProjection,
   buildCodexMcpProjectionAuditPayload,
@@ -939,8 +931,6 @@ async function executeRetrievalAgentLoop(
     threadWorkingState?: ThreadWorkingStatePrompt | null;
     authSubject?: string | null;
     workspaceSession?: WorkspaceSandboxSession | null;
-    codexPrimaryCanary?: boolean;
-    emitLiveAssistantDelta?: (delta: string) => Promise<boolean> | boolean;
     apiKeyOverride?: string | null;
     appendRunEvent: (params: {
       eventType: string;
@@ -1107,13 +1097,7 @@ async function executeRetrievalAgentLoop(
       buildResolverResponsesTool: buildResolveMountedToolsResponsesTool,
     });
   const initialProviderTools = buildActiveProviderTools();
-  const codexPrimaryRoute = resolveCodexHarnessRoute({
-    experimentEnabled: isCodexHarnessExperimentEnabled(),
-    explicitPrimaryRequest: params.codexPrimaryCanary === true,
-    inferenceSource: params.inferenceSource,
-    projectId: params.projectId,
-  });
-  if (codexPrimaryRoute.experimentEnabled || codexMcpProjection.tools.length > 0) {
+  if (codexMcpProjection.tools.length > 0) {
     try {
       await params.appendRunEvent({
         eventType: "codex_mcp_projection_resolved",
@@ -1123,7 +1107,6 @@ async function executeRetrievalAgentLoop(
           user_scope_id: params.userId ?? null,
           community_scope_id: params.communityId ?? null,
           projection_owner: "polynet",
-          codex_route_selected: codexPrimaryRoute.selected,
           ...buildCodexMcpProjectionAuditPayload(codexMcpProjection),
         },
       });
@@ -1131,15 +1114,8 @@ async function executeRetrievalAgentLoop(
       // Best-effort runtime evidence only.
     }
   }
-  const runtimeHarnessSelection = resolveRuntimeAgentHarnessSelection({
-    codexPrimaryEnabled: isCodexHarnessPrimaryEnabled(),
-    codexPrimaryStreamingEnabled: isCodexHarnessPrimaryStreamingEnabled(),
-    codexRouteSelected: codexPrimaryRoute.selected,
-    codexPrimaryAdapterAvailable: true,
-    stream: params.stream ?? false,
-  });
   const preparedRuntimeTurn = buildPreparedRuntimeAgentTurn({
-    harnessId: runtimeHarnessSelection.selectedHarness.id,
+    harnessId: POLYNET_NATIVE_RUNTIME_AGENT_HARNESS.id,
     runId: params.runId,
     userId: params.userId,
     threadId: params.threadId ?? null,
@@ -1148,16 +1124,12 @@ async function executeRetrievalAgentLoop(
     requestedModelId: params.requestedModelId,
     inferenceSource: params.inferenceSource,
     stream: params.stream ?? false,
-    executionPlacement: runtimeHarnessSelection.selectedHarness.executionPlacement,
+    executionPlacement: POLYNET_NATIVE_RUNTIME_AGENT_HARNESS.executionPlacement,
     nativeTranscript,
     activeToolNames: initialProviderTools.activeToolNames,
     fixedAllowedToolNames: params.allowedToolNames,
     mountedToolCount: runtimeMountedUserPlatformAppTools.length,
     codexMcpProjection: codexMcpProjectionSummary,
-    codexPrimaryCanary: {
-      forcePolyNetReadOnlyDynamicTools: params.codexPrimaryCanary === true,
-      searchQuery: "codex primary dynamic bridge canary",
-    },
     skillCounts: {
       installedPersonal: installedUserPlatformSkills.length,
       selectedPersonal: selectedUserPlatformSkills.length,
@@ -1432,70 +1404,8 @@ async function executeRetrievalAgentLoop(
       eventKey: `${params.runId}:runtime_agent_harness_prepared:1`,
       payload: buildPreparedRuntimeAgentTurnEventPayload(preparedRuntimeTurn),
     });
-    await params.appendRunEvent({
-      eventType: "runtime_agent_harness_selected",
-      eventKey: `${params.runId}:runtime_agent_harness_selected:1`,
-      payload: buildRuntimeAgentHarnessSelectedEventPayload({
-        runId: params.runId,
-        selection: runtimeHarnessSelection,
-      }),
-    });
   } catch {
     // Best-effort runtime evidence only.
-  }
-  try {
-    await executeCodexHarnessProbeIfSelected({
-      ctx: params.ctx,
-      userId: params.userId,
-      runId: params.runId,
-      projectId: params.projectId,
-      explicitPrimaryRequest: params.codexPrimaryCanary === true,
-      inferenceSource: params.inferenceSource,
-      allowedToolNames: params.allowedToolNames,
-      messages: params.messages,
-      stream: params.stream ?? false,
-      executionSession,
-      appendRunEvent: params.appendRunEvent,
-    });
-  } catch (error) {
-    const summary = summarizeErrorForLog(error);
-    const probeMode = resolveCodexHarnessProbeMode();
-    logStructuredError("codex_harness_probe_crashed", {
-      error,
-      runId: params.runId,
-      threadId: params.threadId ?? undefined,
-      projectId: params.projectId ?? undefined,
-      communityId: params.communityId ?? undefined,
-    });
-    try {
-      await params.appendRunEvent({
-        eventType: "codex_harness_probe_completed",
-        eventKey: `${params.runId}:codex_harness_probe_completed:unhandled`,
-        payload: {
-          run_id: params.runId,
-          status: "error",
-          code: "codex_probe_unhandled",
-          message: summary.message,
-        },
-      });
-      if (probeMode !== "off") {
-        await params.appendRunEvent({
-          eventType: "codex_harness_readiness",
-          eventKey: `${params.runId}:codex_harness_readiness:${probeMode}`,
-          payload: {
-            run_id: params.runId,
-            probe_mode: probeMode,
-            status: "not_ready",
-            ready: false,
-            code: "codex_probe_unhandled",
-            message: summary.message,
-            stage: "unhandled",
-          },
-        });
-      }
-    } catch {
-      // Best-effort runtime evidence only.
-    }
   }
   try {
     const throwIfCancelled = async (): Promise<void> => {
@@ -1805,6 +1715,149 @@ async function executeRetrievalAgentLoop(
           }
         }
 
+        if (toolName === "codex_workspace") {
+          const task = String(normalizedArgs.task ?? "").trim();
+          if (!task) {
+            return {
+              status: "error",
+              exitCode: null,
+              outputText: "",
+              errorCode: "invalid_tool_args",
+              errorMessage: "codex_workspace requires task.",
+            };
+          }
+          if (!isCodexWorkspaceHandoffEnabled()) {
+            return {
+              status: "error",
+              exitCode: null,
+              outputText: "",
+              errorCode: "codex_workspace_disabled",
+              errorMessage: "Codex workspace handoff is not enabled for this deployment.",
+            };
+          }
+          const handoffEligibility = resolveCodexWorkspaceHandoffEligibility({
+            handoffEnabled: true,
+            inferenceSource: params.inferenceSource,
+            projectId: params.projectId,
+          });
+          if (!handoffEligibility.ok) {
+            return {
+              status: "error",
+              exitCode: null,
+              outputText: "",
+              errorCode: handoffEligibility.reason,
+              errorMessage: handoffEligibility.message,
+            };
+          }
+          try {
+            await params.appendRunEvent({
+              eventType: "codex_workspace_handoff_started",
+              eventKey: `${params.runId}:codex_workspace_handoff_started:${providerCallId}`,
+              payload: {
+                run_id: params.runId,
+                provider_call_id: providerCallId,
+                project_id: params.projectId ?? null,
+                inference_source: params.inferenceSource,
+                task_chars: task.length,
+                execution_placement: handoffEligibility.executionPlacement,
+              },
+            });
+          } catch {
+            // Best-effort runtime evidence only.
+          }
+          const codexPreparedTurn = buildPreparedRuntimeAgentTurn({
+            harnessId: "codex_app_server",
+            runId: params.runId,
+            userId: params.userId,
+            threadId: params.threadId ?? null,
+            projectId: params.projectId ?? null,
+            communityId: params.communityId ?? null,
+            requestedModelId: params.requestedModelId,
+            inferenceSource: params.inferenceSource,
+            stream: false,
+            executionPlacement: "daytona_sidecar",
+            nativeTranscript: [
+              ...preparedRuntimeTurn.nativeTranscript,
+              {
+                role: "user",
+                content: [
+                  "PolyNet workspace handoff task:",
+                  task,
+                  "",
+                  "Use Codex native workspace tools as needed. Return the concrete result for PolyNet to show the user.",
+                ].join("\n"),
+              },
+            ],
+            activeToolNames: preparedRuntimeTurn.activeToolNames,
+            fixedAllowedToolNames: preparedRuntimeTurn.fixedAllowedToolNames,
+            mountedToolCount: preparedRuntimeTurn.mountedToolCount,
+            codexMcpProjection: preparedRuntimeTurn.codexMcpProjection,
+            skillCounts: preparedRuntimeTurn.skillCounts,
+          });
+          const codexHarness = buildCodexAppServerRuntimeAgentHarness({
+            ctx: params.ctx,
+            userId: params.userId,
+            authSubject: params.authSubject,
+            runId: params.runId,
+            projectId: params.projectId,
+            preparedTurn: codexPreparedTurn,
+            executionSession,
+            appendRunEvent: params.appendRunEvent,
+          });
+          const codexResult = await codexHarness.execute();
+          if (!codexResult.ok) {
+            try {
+              await params.appendRunEvent({
+                eventType: "codex_workspace_handoff_completed",
+                eventKey: `${params.runId}:codex_workspace_handoff_completed:${providerCallId}`,
+                payload: {
+                  run_id: params.runId,
+                  provider_call_id: providerCallId,
+                  status: "error",
+                  code: codexResult.code,
+                  message: codexResult.message,
+                },
+              });
+            } catch {
+              // Best-effort runtime evidence only.
+            }
+            return {
+              status: "error",
+              exitCode: null,
+              outputText: "",
+              errorCode: codexResult.code,
+              errorMessage: codexResult.message,
+            };
+          }
+          try {
+            await params.appendRunEvent({
+              eventType: "codex_workspace_handoff_completed",
+              eventKey: `${params.runId}:codex_workspace_handoff_completed:${providerCallId}`,
+              payload: {
+                run_id: params.runId,
+                provider_call_id: providerCallId,
+                status: "ok",
+                output_chars: codexResult.assistantText.length,
+                step_count: codexResult.stepCount,
+              },
+            });
+          } catch {
+            // Best-effort runtime evidence only.
+          }
+          return {
+            status: "ok",
+            exitCode: 0,
+            outputText: codexResult.assistantText || "(Codex workspace completed without text output.)",
+            errorCode: null,
+            errorMessage: null,
+            details: {
+              runtime_harness_id: "codex_app_server",
+              execution_placement: "daytona_sidecar",
+              step_count: codexResult.stepCount,
+            },
+          };
+        }
+
         if (
           toolName === "terminal_start" ||
           toolName === "terminal_read" ||
@@ -2095,85 +2148,10 @@ async function executeRetrievalAgentLoop(
       },
       }),
     });
-    let codexLiveAssistantDeltaEmitted = false;
-    const emitCodexLiveAssistantDelta = async (delta: string): Promise<boolean> => {
-      const text = String(delta ?? "");
-      if (!text || !params.stream || !params.emitLiveAssistantDelta) return false;
-      try {
-        const emitted = await params.emitLiveAssistantDelta(text);
-        if (emitted === true) {
-          codexLiveAssistantDeltaEmitted = true;
-          return true;
-        }
-      } catch {
-        // Live stream transport is not product truth; final answer persistence remains authoritative.
-      }
-      return false;
-    };
-    const codexRuntimeHarness = buildCodexAppServerRuntimeAgentHarness({
-      ctx: params.ctx,
-      userId: params.userId,
-      authSubject: params.authSubject ?? null,
-      runId: params.runId,
-      projectId: params.projectId,
-      preparedTurn: preparedRuntimeTurn,
-      executionSession,
-      appendRunEvent: params.appendRunEvent,
-      emitLiveAssistantDelta: emitCodexLiveAssistantDelta,
-    });
-    const selectedRuntimeHarness =
-      runtimeHarnessSelection.selectedHarness.id === "codex_app_server"
-        ? codexRuntimeHarness
-        : nativeRuntimeHarness;
     let loopResult = withRuntimeAgentLoopAttribution(
-      await selectedRuntimeHarness.execute(),
-      selectedRuntimeHarness,
+      await nativeRuntimeHarness.execute(),
+      nativeRuntimeHarness,
     );
-    if (
-      !loopResult.ok &&
-      selectedRuntimeHarness.id === "codex_app_server" &&
-      runtimeHarnessSelection.fallbackHarness?.id === "polynet_native"
-    ) {
-      const failedCodexLoopResult = loopResult as RuntimeAgentLoopFailure;
-      if (codexLiveAssistantDeltaEmitted) {
-        try {
-          await params.appendRunEvent({
-            eventType: "runtime_agent_harness_fallback_skipped",
-            eventKey: `${params.runId}:runtime_agent_harness_fallback_skipped:1`,
-            payload: {
-              run_id: params.runId,
-              failed_harness_id: selectedRuntimeHarness.id,
-              fallback_harness_id: nativeRuntimeHarness.id,
-              skipped_reason: "visible_output_started",
-              failed_code: failedCodexLoopResult.code,
-              failed_message: failedCodexLoopResult.message,
-            },
-          });
-        } catch {
-          // Best-effort runtime evidence only.
-        }
-      } else {
-        try {
-          await params.appendRunEvent({
-            eventType: "runtime_agent_harness_fallback_started",
-            eventKey: `${params.runId}:runtime_agent_harness_fallback_started:1`,
-            payload: {
-              run_id: params.runId,
-              failed_harness_id: selectedRuntimeHarness.id,
-              fallback_harness_id: nativeRuntimeHarness.id,
-              failed_code: failedCodexLoopResult.code,
-              failed_message: failedCodexLoopResult.message,
-            },
-          });
-        } catch {
-          // Best-effort runtime evidence only.
-        }
-        loopResult = withRuntimeAgentLoopAttribution(
-          await nativeRuntimeHarness.execute(),
-          nativeRuntimeHarness,
-        );
-      }
-    }
     const loopFailure = loopResult.ok
       ? null
       : (loopResult as RuntimeKernelFailure<string>);
@@ -2204,10 +2182,10 @@ async function executeRetrievalAgentLoop(
           run_id: params.runId,
           harness: {
             kind: params.harnessName,
-            selected_agent_harness_id: selectedRuntimeHarness.id,
-            selected_agent_harness_label: selectedRuntimeHarness.label,
+            selected_agent_harness_id: nativeRuntimeHarness.id,
+            selected_agent_harness_label: nativeRuntimeHarness.label,
             selected_agent_harness_execution_placement:
-              selectedRuntimeHarness.executionPlacement,
+              nativeRuntimeHarness.executionPlacement,
           },
           stop_reason: loopResult.stopReason,
           step_count: loopResult.stepCount,
@@ -2318,8 +2296,6 @@ async function executeChatToolsAgentLoop(
     communitySystemPrompt?: string | null;
     threadWorkingState?: ThreadWorkingStatePrompt | null;
     apiKeyOverride?: string | null;
-    codexPrimaryCanary?: boolean;
-    emitLiveAssistantDelta?: (delta: string) => Promise<boolean> | boolean;
     appendRunEvent: (params: {
       eventType: string;
       eventKey?: string;

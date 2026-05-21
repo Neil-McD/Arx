@@ -63,15 +63,14 @@ const BILLING_TRUST_AUDIT_EVENT_TYPES = new Set([
 ]);
 const RUNTIME_RUN_STATUSES = ["running", "ok", "error", "cancelled"] as const;
 const CODEX_HARNESS_EVENT_TYPES = [
-  "codex_harness_route_resolved",
-  "codex_harness_executor_resolved",
+  "codex_workspace_handoff_started",
+  "codex_workspace_handoff_completed",
   "codex_harness_probe_started",
   "codex_harness_app_server_started",
   "codex_harness_auth_applied",
   "codex_harness_account_resolved",
   "codex_harness_rate_limits_updated",
   "codex_harness_execution_started",
-  "codex_harness_shadow_started",
   "codex_harness_thread_started",
   "codex_harness_event_adapter_summary",
   "codex_harness_event_adapter_event",
@@ -83,9 +82,6 @@ const CODEX_HARNESS_EVENT_TYPES = [
   "codex_harness_tool_call_readiness",
   "codex_harness_execution_completed",
   "codex_harness_execution_readiness",
-  "codex_harness_shadow_completed",
-  "codex_harness_shadow_readiness",
-  "codex_harness_shadow_comparison",
   "codex_harness_probe_completed",
   "codex_harness_readiness",
 ] as const;
@@ -814,24 +810,22 @@ function normalizeCodexHarnessReadinessStatus(value: unknown) {
 }
 
 function buildCodexHarnessDiagnostics(runtimeEvents: any[]) {
-  const routeRows = runtimeEvents.filter((row: any) => row.eventType === "codex_harness_route_resolved");
-  const executorRows = runtimeEvents.filter((row: any) => row.eventType === "codex_harness_executor_resolved");
+  const workspaceHandoffStartRows = runtimeEvents.filter((row: any) => row.eventType === "codex_workspace_handoff_started");
+  const workspaceHandoffCompletionRows = runtimeEvents.filter((row: any) => row.eventType === "codex_workspace_handoff_completed");
   const probeStartRows = runtimeEvents.filter((row: any) => row.eventType === "codex_harness_probe_started");
   const probeCompletionRows = runtimeEvents.filter((row: any) => row.eventType === "codex_harness_probe_completed");
   const readinessRows = runtimeEvents.filter((row: any) => row.eventType === "codex_harness_readiness");
   const executionStartRows = runtimeEvents.filter((row: any) => row.eventType === "codex_harness_execution_started");
   const executionCompletionRows = runtimeEvents.filter((row: any) => row.eventType === "codex_harness_execution_completed");
   const executionReadinessRows = runtimeEvents.filter((row: any) => row.eventType === "codex_harness_execution_readiness");
-  const shadowStartRows = runtimeEvents.filter((row: any) => row.eventType === "codex_harness_shadow_started");
-  const shadowCompletionRows = runtimeEvents.filter((row: any) => row.eventType === "codex_harness_shadow_completed");
-  const shadowReadinessRows = runtimeEvents.filter((row: any) => row.eventType === "codex_harness_shadow_readiness");
-  const shadowComparisonRows = runtimeEvents.filter((row: any) => row.eventType === "codex_harness_shadow_comparison");
   const adapterSummaryRows = runtimeEvents.filter((row: any) => row.eventType === "codex_harness_event_adapter_summary");
   const adapterEventRows = runtimeEvents.filter((row: any) => row.eventType === "codex_harness_event_adapter_event");
   const streamSummaryRows = runtimeEvents.filter((row: any) => row.eventType === "codex_harness_stream_event_summary");
   const streamEventRows = runtimeEvents.filter((row: any) => row.eventType === "codex_harness_stream_event");
-  const selectedRouteRows = routeRows.filter((row: any) => readPayloadBoolean(readPayloadRecord(row), "selected"));
-  const selectedExecutorRows = executorRows.filter((row: any) => readPayloadBoolean(readPayloadRecord(row), "selected"));
+  const workspaceHandoffFailureRows = workspaceHandoffCompletionRows.filter((row: any) => {
+    const payload = readPayloadRecord(row);
+    return readPayloadString(payload, "status") !== "ok";
+  });
   const readyRows = readinessRows.filter((row: any) => {
     const payload = readPayloadRecord(row);
     return readPayloadBoolean(payload, "ready") || readPayloadString(payload, "status") === "ready";
@@ -840,42 +834,28 @@ function buildCodexHarnessDiagnostics(runtimeEvents: any[]) {
     const payload = readPayloadRecord(row);
     return readPayloadBoolean(payload, "ready") || readPayloadString(payload, "status") === "ready";
   });
-  const shadowReadyRows = shadowReadinessRows.filter((row: any) => {
-    const payload = readPayloadRecord(row);
-    return readPayloadBoolean(payload, "ready") || readPayloadString(payload, "status") === "ready";
-  });
-  const shadowComparisonMatchRows = shadowComparisonRows.filter((row: any) => {
-    const payload = readPayloadRecord(row);
-    return readPayloadBoolean(payload, "exact_hash_match");
-  });
-  const latestRouteRow = latestRuntimeEventByCreatedAt(routeRows);
-  const latestExecutorRow = latestRuntimeEventByCreatedAt(executorRows);
+  const latestWorkspaceHandoffRow = latestRuntimeEventByCreatedAt([
+    ...workspaceHandoffCompletionRows,
+    ...workspaceHandoffStartRows,
+  ]);
   const latestProbeRow = latestRuntimeEventByCreatedAt(probeCompletionRows);
   const latestReadinessRow = latestRuntimeEventByCreatedAt(readinessRows);
   const latestExecutionRow = latestRuntimeEventByCreatedAt(executionCompletionRows);
   const latestExecutionReadinessRow = latestRuntimeEventByCreatedAt(executionReadinessRows);
-  const latestShadowRow = latestRuntimeEventByCreatedAt(shadowCompletionRows);
-  const latestShadowReadinessRow = latestRuntimeEventByCreatedAt(shadowReadinessRows);
-  const latestShadowComparisonRow = latestRuntimeEventByCreatedAt(shadowComparisonRows);
   const latestAdapterSummaryRow = latestRuntimeEventByCreatedAt(adapterSummaryRows);
   const latestStreamSummaryRow = latestRuntimeEventByCreatedAt(streamSummaryRows);
-  const latestRoutePayload = latestRouteRow ? readPayloadRecord(latestRouteRow) : null;
-  const latestExecutorPayload = latestExecutorRow ? readPayloadRecord(latestExecutorRow) : null;
+  const latestWorkspaceHandoffPayload = latestWorkspaceHandoffRow ? readPayloadRecord(latestWorkspaceHandoffRow) : null;
   const latestProbePayload = latestProbeRow ? readPayloadRecord(latestProbeRow) : null;
   const latestReadinessPayload = latestReadinessRow ? readPayloadRecord(latestReadinessRow) : null;
   const latestExecutionPayload = latestExecutionRow ? readPayloadRecord(latestExecutionRow) : null;
   const latestExecutionReadinessPayload = latestExecutionReadinessRow ? readPayloadRecord(latestExecutionReadinessRow) : null;
-  const latestShadowPayload = latestShadowRow ? readPayloadRecord(latestShadowRow) : null;
-  const latestShadowReadinessPayload = latestShadowReadinessRow ? readPayloadRecord(latestShadowReadinessRow) : null;
-  const latestShadowComparisonPayload = latestShadowComparisonRow ? readPayloadRecord(latestShadowComparisonRow) : null;
   const latestAdapterSummaryPayload = latestAdapterSummaryRow ? readPayloadRecord(latestAdapterSummaryRow) : null;
   const latestStreamSummaryPayload = latestStreamSummaryRow ? readPayloadRecord(latestStreamSummaryRow) : null;
 
   return {
-    routeDecisions: routeRows.length,
-    selectedRoutes: selectedRouteRows.length,
-    executorDecisions: executorRows.length,
-    executorCandidates: selectedExecutorRows.length,
+    workspaceHandoffStarts: workspaceHandoffStartRows.length,
+    workspaceHandoffCompletions: workspaceHandoffCompletionRows.length,
+    workspaceHandoffFailures: workspaceHandoffFailureRows.length,
     probeStarts: probeStartRows.length,
     probeCompletions: probeCompletionRows.length,
     readinessEvents: readinessRows.length,
@@ -884,36 +864,25 @@ function buildCodexHarnessDiagnostics(runtimeEvents: any[]) {
     executionCompletions: executionCompletionRows.length,
     executionReadinessEvents: executionReadinessRows.length,
     executionReadyEvents: executionReadyRows.length,
-    shadowStarts: shadowStartRows.length,
-    shadowCompletions: shadowCompletionRows.length,
-    shadowReadinessEvents: shadowReadinessRows.length,
-    shadowReadyEvents: shadowReadyRows.length,
-    shadowComparisons: shadowComparisonRows.length,
-    shadowComparisonMatches: shadowComparisonMatchRows.length,
     adapterSummaries: adapterSummaryRows.length,
     adapterEvents: adapterEventRows.length,
     streamSummaries: streamSummaryRows.length,
     streamEvents: streamEventRows.length,
-    latestRoute: latestRouteRow && latestRoutePayload
+    latestWorkspaceHandoff: latestWorkspaceHandoffRow && latestWorkspaceHandoffPayload
       ? {
-          selected: readPayloadBoolean(latestRoutePayload, "selected"),
-          reason: readPayloadString(latestRoutePayload, "reason") ?? "unknown",
-          engine: readPayloadString(latestRoutePayload, "engine") ?? "unknown",
-          probeMode: readPayloadString(latestRoutePayload, "probe_mode") ?? "off",
-          runId: String(latestRouteRow.runId ?? readPayloadString(latestRoutePayload, "run_id") ?? "") || null,
-          createdAt: readRowCreatedAt(latestRouteRow) || null,
-        }
-      : null,
-    latestExecutor: latestExecutorRow && latestExecutorPayload
-      ? {
-          selected: readPayloadBoolean(latestExecutorPayload, "selected"),
-          mode: readPayloadString(latestExecutorPayload, "mode") ?? "off",
-          reason: readPayloadString(latestExecutorPayload, "reason") ?? "unknown",
-          candidateEngine: readPayloadString(latestExecutorPayload, "candidate_engine") ?? "none",
-          visibleAnswerEngine: readPayloadString(latestExecutorPayload, "visible_answer_engine") ?? "current_harness",
-          probeMode: readPayloadString(latestExecutorPayload, "probe_mode") ?? "off",
-          runId: String(latestExecutorRow.runId ?? readPayloadString(latestExecutorPayload, "run_id") ?? "") || null,
-          createdAt: readRowCreatedAt(latestExecutorRow) || null,
+          status: readPayloadString(latestWorkspaceHandoffPayload, "status") ?? (
+            latestWorkspaceHandoffRow.eventType === "codex_workspace_handoff_started" ? "started" : "unknown"
+          ),
+          code:
+            readPayloadString(latestWorkspaceHandoffPayload, "code") ??
+            readPayloadString(latestWorkspaceHandoffPayload, "error_code"),
+          executionPlacement: readPayloadString(latestWorkspaceHandoffPayload, "execution_placement"),
+          projectId: readPayloadString(latestWorkspaceHandoffPayload, "project_id"),
+          taskChars: readPayloadNumber(latestWorkspaceHandoffPayload, "task_chars"),
+          outputChars: readPayloadNumber(latestWorkspaceHandoffPayload, "output_chars"),
+          providerCallId: readPayloadString(latestWorkspaceHandoffPayload, "provider_call_id"),
+          runId: String(latestWorkspaceHandoffRow.runId ?? readPayloadString(latestWorkspaceHandoffPayload, "run_id") ?? "") || null,
+          createdAt: readRowCreatedAt(latestWorkspaceHandoffRow) || null,
         }
       : null,
     latestProbe: latestProbeRow && latestProbePayload
@@ -964,48 +933,6 @@ function buildCodexHarnessDiagnostics(runtimeEvents: any[]) {
           stage: readPayloadString(latestExecutionReadinessPayload, "stage"),
           runId: String(latestExecutionReadinessRow.runId ?? readPayloadString(latestExecutionReadinessPayload, "run_id") ?? "") || null,
           createdAt: readRowCreatedAt(latestExecutionReadinessRow) || null,
-        }
-      : null,
-    latestShadow: latestShadowRow && latestShadowPayload
-      ? {
-          ok: readPayloadString(latestShadowPayload, "status") === "ok",
-          code:
-            readPayloadString(latestShadowPayload, "code") ??
-            readPayloadString(latestShadowPayload, "error_code"),
-          stage: readPayloadString(latestShadowPayload, "stage"),
-          completed: readPayloadBoolean(latestShadowPayload, "completed"),
-          outputPresent: readPayloadBoolean(latestShadowPayload, "output_present"),
-          outputChars: readPayloadNumber(latestShadowPayload, "output_chars"),
-          outputSha256: readPayloadString(latestShadowPayload, "output_sha256"),
-          runId: String(latestShadowRow.runId ?? readPayloadString(latestShadowPayload, "run_id") ?? "") || null,
-          createdAt: readRowCreatedAt(latestShadowRow) || null,
-        }
-      : null,
-    latestShadowReadiness: latestShadowReadinessRow && latestShadowReadinessPayload
-      ? {
-          status: readPayloadString(latestShadowReadinessPayload, "status") === "ready" ? "ready" : "not_ready",
-          ready: readPayloadBoolean(latestShadowReadinessPayload, "ready"),
-          code:
-            readPayloadString(latestShadowReadinessPayload, "code") ??
-            readPayloadString(latestShadowReadinessPayload, "error_code"),
-          stage: readPayloadString(latestShadowReadinessPayload, "stage"),
-          outputChars: readPayloadNumber(latestShadowReadinessPayload, "output_chars"),
-          outputSha256: readPayloadString(latestShadowReadinessPayload, "output_sha256"),
-          runId: String(latestShadowReadinessRow.runId ?? readPayloadString(latestShadowReadinessPayload, "run_id") ?? "") || null,
-          createdAt: readRowCreatedAt(latestShadowReadinessRow) || null,
-        }
-      : null,
-    latestShadowComparison: latestShadowComparisonRow && latestShadowComparisonPayload
-      ? {
-          exactHashMatch: readPayloadBoolean(latestShadowComparisonPayload, "exact_hash_match"),
-          visibleAnswerChars: readPayloadNumber(latestShadowComparisonPayload, "visible_answer_chars"),
-          shadowOutputChars: readPayloadNumber(latestShadowComparisonPayload, "shadow_output_chars"),
-          lengthDelta: readPayloadNumber(latestShadowComparisonPayload, "length_delta"),
-          visibleAnswerSha256: readPayloadString(latestShadowComparisonPayload, "visible_answer_sha256"),
-          shadowOutputSha256: readPayloadString(latestShadowComparisonPayload, "shadow_output_sha256"),
-          shadowReady: readPayloadBoolean(latestShadowComparisonPayload, "shadow_ready"),
-          runId: String(latestShadowComparisonRow.runId ?? readPayloadString(latestShadowComparisonPayload, "run_id") ?? "") || null,
-          createdAt: readRowCreatedAt(latestShadowComparisonRow) || null,
         }
       : null,
     latestAdapterSummary: latestAdapterSummaryRow && latestAdapterSummaryPayload

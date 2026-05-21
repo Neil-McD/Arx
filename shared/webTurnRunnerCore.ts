@@ -114,7 +114,6 @@ export type RunAgentTurnParams = {
   messages?: PublicTurnThreadMessage[];
   suppressStreamingUi?: boolean;
   stream?: boolean;
-  codexPrimaryCanary?: boolean;
 };
 
 export type CreateThreadMessageParams = {

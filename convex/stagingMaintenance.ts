@@ -27,10 +27,10 @@ const STAGING_MCP_CANARY_NAMESPACED_TOOL_NAME =
 const STAGING_MCP_CANARY_RUNTIME_TOOL_NAME =
   `me__${STAGING_MCP_CANARY_NAMESPACED_TOOL_NAME}`;
 const DEFAULT_CODEX_MCP_CANARY_THREAD_KEY = "staging-codex-mounted-mcp-canary-v2";
-const DEFAULT_CODEX_STREAMING_CANARY_THREAD_KEY =
-  "staging-codex-primary-streaming-canary-v1";
 const DEFAULT_NATIVE_HARNESS_CANARY_THREAD_KEY =
   "staging-native-default-harness-canary-v1";
+const DEFAULT_CODEX_WORKSPACE_HANDOFF_CANARY_THREAD_KEY =
+  "staging-codex-workspace-handoff-canary-v1";
 
 const expectedCommunityArg = v.object({
   slug: v.string(),
@@ -113,6 +113,8 @@ const CODEX_THREAD_BINDING_EVIDENCE_EVENT_TYPES = new Set([
   "codex_harness_dynamic_tool_bridge_call_failed",
   "codex_harness_dynamic_tool_bridge_call_finished",
   "codex_harness_dynamic_tool_bridge_call_denied",
+  "codex_workspace_handoff_started",
+  "codex_workspace_handoff_completed",
   "mcp_connection_bundle_loaded",
   "mcp_session_initialized",
   "mcp_session_reused",
@@ -142,6 +144,8 @@ const CODEX_THREAD_BINDING_COMPACT_EVIDENCE_EVENT_TYPES = new Set([
   "runtime_agent_harness_fallback_started",
   "runtime_agent_harness_fallback_skipped",
   "codex_harness_primary_dynamic_tool_event",
+  "codex_workspace_handoff_started",
+  "codex_workspace_handoff_completed",
   "workspace_session_create_started",
   "workspace_session_adopted",
   "workspace_session_create_completed",
@@ -226,7 +230,6 @@ function summarizeCodexThreadBindingEvidencePayload(args: {
       "mounted_tool_count",
       "active_tool_count",
       "fixed_allowed_tool_count",
-      "codex_primary_canary",
       "codex_mcp_projection",
       "skill_counts",
     ]);
@@ -482,6 +485,24 @@ function summarizeCodexThreadBindingEvidencePayload(args: {
       "output_chars",
       "output_sha256",
       "error_code",
+    ]);
+  }
+  if (
+    args.eventType === "codex_workspace_handoff_started" ||
+    args.eventType === "codex_workspace_handoff_completed"
+  ) {
+    return pickPayloadFields(args.payload, [
+      ...common,
+      "provider_call_id",
+      "project_id",
+      "inference_source",
+      "task_chars",
+      "execution_placement",
+      "status",
+      "code",
+      "message",
+      "output_chars",
+      "step_count",
     ]);
   }
   if (
@@ -1147,8 +1168,9 @@ async function buildFingerprint(args: {
     codex: {
       harnessEnabled: readEnv("POLYNET_CODEX_HARNESS_ENABLED").toLowerCase() === "true",
       executorEnabled: readEnv("POLYNET_CODEX_HARNESS_EXECUTOR_ENABLED").toLowerCase() === "true",
-      primaryEnabled: readEnv("POLYNET_CODEX_HARNESS_PRIMARY_ENABLED").toLowerCase() === "true",
-      primaryStreamingEnabled: readEnv("POLYNET_CODEX_HARNESS_PRIMARY_STREAMING_ENABLED").toLowerCase() === "true",
+      workspaceHandoffEnabled:
+        readEnv("POLYNET_CODEX_WORKSPACE_HANDOFF_ENABLED").toLowerCase() === "true" ||
+        readEnv("POLYNET_CODEX_HARNESS_PRIMARY_ENABLED").toLowerCase() === "true",
       probeMode: readEnv("POLYNET_CODEX_HARNESS_PROBE_MODE") || null,
       dynamicToolBridgeUrlConfigured: Boolean(readCodexDynamicToolBridgeUrl()),
       daytonaApiKeyPresent: Boolean(readEnv("DAYTONA_API_KEY")),
@@ -1508,13 +1530,17 @@ export const runCodexMountedMcpCanaryTurn = action({
       normalizeText(args.runId) ||
       `agent_web:staging-mounted-mcp-canary:${crypto.randomUUID()}`;
     const prompt = [
-      "Run the staging mounted MCP canary.",
-      "Before answering, perform these three PolyNet dynamic tool calls in this exact order:",
-      "1. get_active_community_context with {}.",
-      '2. community_search with {"query":"codex primary dynamic bridge canary"}.',
-      `3. ${STAGING_MCP_CANARY_RUNTIME_TOOL_NAME} with {"marker":"codex-mounted-mcp-canary"}.`,
-      "Do not produce the final answer until all three tool results have been observed.",
-      "Then answer with a single sentence that says whether the platform tools and mounted MCP canary returned ok evidence.",
+      "Run the staging mounted MCP canary through Codex workspace handoff.",
+      "Before answering, call codex_workspace exactly once.",
+      [
+        "Use this task for codex_workspace:",
+        "Perform these three PolyNet dynamic tool calls inside Codex in this exact order:",
+        "1. get_active_community_context with {}.",
+        '2. community_search with {"query":"codex mounted MCP dynamic bridge canary"}.',
+        `3. ${STAGING_MCP_CANARY_RUNTIME_TOOL_NAME} with {"marker":"codex-mounted-mcp-canary"}.`,
+        "Do not produce the final answer until all three tool results have been observed.",
+        "Return one sentence that says whether the platform tools and mounted MCP canary returned ok evidence.",
+      ].join(" "),
     ].join(" ");
     const req = new Request("https://polynet-staging.vercel.app/runtime/runtime_turn", {
       method: "POST",
@@ -1528,7 +1554,6 @@ export const runCodexMountedMcpCanaryTurn = action({
         requested_agentic_tools: true,
         requested_funding_source: "user_chatgpt",
         stream: false,
-        codex_primary_canary: true,
         idempotency_key: runId,
         user_message_key: `user:${threadKey}:${runId}`,
         message: {
@@ -1654,7 +1679,6 @@ export const runNativeDefaultHarnessCanaryTurn = action({
         requested_agentic_tools: true,
         requested_funding_source: "user_chatgpt",
         stream: false,
-        codex_primary_canary: false,
         idempotency_key: runId,
         user_message_key: `user:${threadKey}:${runId}`,
         message: {
@@ -1723,7 +1747,7 @@ export const runNativeDefaultHarnessCanaryTurn = action({
   },
 });
 
-export const runCodexPrimaryStreamingCanaryTurn = action({
+export const runCodexWorkspaceHandoffCanaryTurn = action({
   args: {
     maintenanceToken: v.string(),
     ownerId: v.optional(v.string()),
@@ -1747,25 +1771,27 @@ export const runCodexPrimaryStreamingCanaryTurn = action({
         projectName: args.projectName ?? undefined,
         threadKey:
           normalizeText(args.threadKey) ||
-          DEFAULT_CODEX_STREAMING_CANARY_THREAD_KEY,
+          DEFAULT_CODEX_WORKSPACE_HANDOFF_CANARY_THREAD_KEY,
         nowMs,
       },
     )) as Record<string, any>;
-    if (setup?.ok !== true) throw new Error("staging_streaming_canary_setup_failed");
+    if (setup?.ok !== true) throw new Error("staging_codex_workspace_handoff_setup_failed");
     const ownerId = String(setup.owner?.id ?? "").trim();
     const ownerAuthSubject = normalizeText(setup.ownerAuthSubject);
     const threadKey = normalizeText(setup.thread?.threadKey);
     if (!ownerId || !ownerAuthSubject || !threadKey) {
-      throw new Error("staging_streaming_canary_setup_incomplete");
+      throw new Error("staging_codex_workspace_handoff_setup_incomplete");
     }
 
+    const marker = `POLYNET_CODEX_WORKSPACE_HANDOFF_OK_${crypto.randomUUID().replace(/-/g, "")}`;
     const runId =
       normalizeText(args.runId) ||
-      `agent_web:staging-codex-streaming-canary:${crypto.randomUUID()}`;
+      `agent_web:staging-codex-workspace-handoff-canary:${crypto.randomUUID()}`;
     const prompt = [
-      "Run the staging Codex primary streaming canary.",
-      "Use the PolyNet read-only dynamic tools requested by the Codex primary canary before answering.",
-      "Then answer with one short sentence containing POLYNET_CODEX_STREAMING_OK.",
+      "Workspace handoff smoke.",
+      "Before answering, call codex_workspace exactly once.",
+      `Use this task for codex_workspace: List the workspace root directory and include ${marker} in the concrete result.`,
+      `After codex_workspace returns, reply with one sentence containing exactly this marker: ${marker}`,
     ].join(" ");
     const req = new Request("https://polynet-staging.vercel.app/runtime/runtime_turn", {
       method: "POST",
@@ -1778,8 +1804,7 @@ export const runCodexPrimaryStreamingCanaryTurn = action({
         surface: "web",
         requested_agentic_tools: true,
         requested_funding_source: "user_chatgpt",
-        stream: true,
-        codex_primary_canary: true,
+        stream: false,
         idempotency_key: runId,
         user_message_key: `user:${threadKey}:${runId}`,
         message: {
@@ -1808,27 +1833,41 @@ export const runCodexPrimaryStreamingCanaryTurn = action({
       requireAuthenticatedActor,
     });
     const responseText = await response.text();
-    const sseSummary = summarizeStagingRuntimeSseResponse(responseText);
-    const deltaEventCount = Number(sseSummary.deltaEventCount ?? 0);
-    const doneEventCount = Number(sseSummary.doneEventCount ?? 0);
-    const errorEventCount = Number(sseSummary.errorEventCount ?? 0);
+    let responseJson: unknown = null;
+    try {
+      responseJson = responseText ? JSON.parse(responseText) : null;
+    } catch {
+      responseJson = null;
+    }
+    const responseRecord =
+      responseJson && typeof responseJson === "object" && !Array.isArray(responseJson)
+        ? (responseJson as Record<string, unknown>)
+        : {};
+    const content = typeof responseRecord.content === "string"
+      ? responseRecord.content
+      : "";
     return {
       ok:
         response.status >= 200 &&
         response.status < 300 &&
-        deltaEventCount > 0 &&
-        doneEventCount > 0 &&
-        errorEventCount === 0,
+        responseRecord.ok !== false &&
+        content.includes(marker),
       status: response.status,
       latencyMs: Date.now() - startedAt,
       runId,
+      marker,
       threadKey,
       threadId: setup.thread?.id ?? null,
       project: setup.project ?? null,
       owner: setup.owner ?? null,
       response: {
-        sse: sseSummary,
-        responseTextChars: responseText.length,
+        ok: responseRecord.ok ?? null,
+        engineId: responseRecord.engine_id ?? null,
+        runtimeHarnessId: responseRecord.runtime_harness_id ?? null,
+        contentChars: content.length,
+        markerPresent: content.includes(marker),
+        code: responseRecord.code ?? responseRecord.error ?? null,
+        message: responseRecord.message ?? null,
       },
     };
   },

@@ -112,7 +112,6 @@ export type UseWebSendFlowControllerArgs<
       messages?: ThreadMessageT[];
       suppressStreamingUi?: boolean;
       stream?: boolean;
-      codexPrimaryCanary?: boolean;
     },
   ) => Promise<{ cancelled: boolean; error: string | null }>;
   createThreadMessage: (

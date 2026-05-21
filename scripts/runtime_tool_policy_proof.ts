@@ -67,6 +67,7 @@ function proveFixedPolicyBoundaries() {
 
   const exclusiveTools: RetrievalToolName[] = [
     "community_write",
+    "codex_workspace",
     "write",
     "edit",
     "bash",
@@ -103,6 +104,8 @@ function proveFixedPolicyBoundaries() {
   );
   assert.equal(getFixedRuntimeToolPolicy("community_write").mutatesState, true);
   assert.equal(getFixedRuntimeToolPolicy("community_write").requiresCommunity, true);
+  assert.equal(getFixedRuntimeToolPolicy("codex_workspace").requiresWorkspace, true);
+  assert.equal(getFixedRuntimeToolPolicy("codex_workspace").exclusive, true);
   assert.equal(
     getFixedRuntimeToolPolicy("terminal_read").exclusive,
     true,

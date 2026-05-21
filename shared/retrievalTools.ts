@@ -5,6 +5,7 @@ export const RETRIEVAL_TOOL_NAMES = [
   "community_search",
   "community_write",
   "web_research",
+  "codex_workspace",
   "list_dir",
   "read",
   "glob",
@@ -63,6 +64,10 @@ export const NON_SANDBOX_TOOL_NAMES: readonly RetrievalToolName[] = [
   "community_search",
   "community_write",
   "web_research",
+];
+
+export const WORKSPACE_HANDOFF_TOOL_NAMES: readonly RetrievalToolName[] = [
+  "codex_workspace",
 ];
 
 const WORKSPACE_SANDBOX_TOOL_NAME_SET = new Set<RetrievalToolName>(

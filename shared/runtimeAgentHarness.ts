@@ -53,36 +53,12 @@ export type PreparedRuntimeAgentTurn = {
     serverCount: number;
     eligibleRuntimeToolNames: string[];
   } | null;
-  codexPrimaryCanary: {
-    forcePolyNetReadOnlyDynamicTools: boolean;
-    searchQuery: string | null;
-  };
   skillCounts: {
     installedPersonal: number;
     selectedPersonal: number;
     attachedCommunity: number;
     selectedCommunity: number;
   };
-};
-
-export type RuntimeAgentHarnessSelectionReason =
-  | "codex_primary_disabled"
-  | "codex_primary_streaming_not_supported"
-  | "codex_route_not_selected"
-  | "codex_primary_adapter_unavailable"
-  | "codex_primary_selected";
-
-export type RuntimeAgentHarnessSelection = {
-  selectedHarness: RuntimeAgentHarnessDescriptor;
-  candidateHarness: RuntimeAgentHarnessDescriptor | null;
-  fallbackHarness: RuntimeAgentHarnessDescriptor | null;
-  codexPrimaryEnabled: boolean;
-  codexPrimaryStreamingEnabled: boolean;
-  codexRouteSelected: boolean;
-  codexPrimaryAdapterAvailable: boolean;
-  stream: boolean;
-  reason: RuntimeAgentHarnessSelectionReason;
-  selectionPolicy: "codex_primary_flag_then_native_fallback";
 };
 
 export const POLYNET_NATIVE_RUNTIME_AGENT_HARNESS: RuntimeAgentHarnessDescriptor = {
@@ -113,7 +89,6 @@ export function buildPreparedRuntimeAgentTurn(params: {
   fixedAllowedToolNames: readonly RetrievalToolName[];
   mountedToolCount: number;
   codexMcpProjection?: PreparedRuntimeAgentTurn["codexMcpProjection"];
-  codexPrimaryCanary?: PreparedRuntimeAgentTurn["codexPrimaryCanary"];
   skillCounts: PreparedRuntimeAgentTurn["skillCounts"];
 }): PreparedRuntimeAgentTurn {
   return {
@@ -132,10 +107,6 @@ export function buildPreparedRuntimeAgentTurn(params: {
     fixedAllowedToolNames: [...params.fixedAllowedToolNames],
     mountedToolCount: params.mountedToolCount,
     codexMcpProjection: params.codexMcpProjection ?? null,
-    codexPrimaryCanary: params.codexPrimaryCanary ?? {
-      forcePolyNetReadOnlyDynamicTools: false,
-      searchQuery: null,
-    },
     skillCounts: params.skillCounts,
   };
 }
@@ -161,115 +132,7 @@ export function buildPreparedRuntimeAgentTurnEventPayload(
     fixed_allowed_tool_names: turn.fixedAllowedToolNames,
     mounted_tool_count: turn.mountedToolCount,
     codex_mcp_projection: turn.codexMcpProjection,
-    codex_primary_canary: turn.codexPrimaryCanary,
     skill_counts: turn.skillCounts,
-  };
-}
-
-export function resolveRuntimeAgentHarnessSelection(params: {
-  codexPrimaryEnabled: boolean;
-  codexPrimaryStreamingEnabled?: boolean;
-  codexRouteSelected: boolean;
-  codexPrimaryAdapterAvailable: boolean;
-  stream?: boolean;
-}): RuntimeAgentHarnessSelection {
-  const codexCandidate = CODEX_APP_SERVER_RUNTIME_AGENT_HARNESS;
-  const nativeFallback = POLYNET_NATIVE_RUNTIME_AGENT_HARNESS;
-  const stream = params.stream ?? false;
-  const codexPrimaryStreamingEnabled =
-    params.codexPrimaryStreamingEnabled ?? false;
-  if (!params.codexPrimaryEnabled) {
-    return {
-      selectedHarness: nativeFallback,
-      candidateHarness: null,
-      fallbackHarness: null,
-      codexPrimaryEnabled: false,
-      codexPrimaryStreamingEnabled,
-      codexRouteSelected: params.codexRouteSelected,
-      codexPrimaryAdapterAvailable: params.codexPrimaryAdapterAvailable,
-      stream,
-      reason: "codex_primary_disabled",
-      selectionPolicy: "codex_primary_flag_then_native_fallback",
-    };
-  }
-  if (stream && !codexPrimaryStreamingEnabled) {
-    return {
-      selectedHarness: nativeFallback,
-      candidateHarness: codexCandidate,
-      fallbackHarness: nativeFallback,
-      codexPrimaryEnabled: true,
-      codexPrimaryStreamingEnabled,
-      codexRouteSelected: params.codexRouteSelected,
-      codexPrimaryAdapterAvailable: params.codexPrimaryAdapterAvailable,
-      stream,
-      reason: "codex_primary_streaming_not_supported",
-      selectionPolicy: "codex_primary_flag_then_native_fallback",
-    };
-  }
-  if (!params.codexRouteSelected) {
-    return {
-      selectedHarness: nativeFallback,
-      candidateHarness: codexCandidate,
-      fallbackHarness: nativeFallback,
-      codexPrimaryEnabled: true,
-      codexPrimaryStreamingEnabled,
-      codexRouteSelected: false,
-      codexPrimaryAdapterAvailable: params.codexPrimaryAdapterAvailable,
-      stream,
-      reason: "codex_route_not_selected",
-      selectionPolicy: "codex_primary_flag_then_native_fallback",
-    };
-  }
-  if (!params.codexPrimaryAdapterAvailable) {
-    return {
-      selectedHarness: nativeFallback,
-      candidateHarness: codexCandidate,
-      fallbackHarness: nativeFallback,
-      codexPrimaryEnabled: true,
-      codexPrimaryStreamingEnabled,
-      codexRouteSelected: true,
-      codexPrimaryAdapterAvailable: false,
-      stream,
-      reason: "codex_primary_adapter_unavailable",
-      selectionPolicy: "codex_primary_flag_then_native_fallback",
-    };
-  }
-  return {
-    selectedHarness: codexCandidate,
-    candidateHarness: codexCandidate,
-    fallbackHarness: nativeFallback,
-    codexPrimaryEnabled: true,
-    codexPrimaryStreamingEnabled,
-    codexRouteSelected: true,
-    codexPrimaryAdapterAvailable: true,
-    stream,
-    reason: "codex_primary_selected",
-    selectionPolicy: "codex_primary_flag_then_native_fallback",
-  };
-}
-
-export function buildRuntimeAgentHarnessSelectedEventPayload(params: {
-  runId: string;
-  selection: RuntimeAgentHarnessSelection;
-}): Record<string, unknown> {
-  return {
-    run_id: params.runId,
-    selected_harness_id: params.selection.selectedHarness.id,
-    selected_harness_label: params.selection.selectedHarness.label,
-    execution_placement: params.selection.selectedHarness.executionPlacement,
-    selection_policy: params.selection.selectionPolicy,
-    selection_reason: params.selection.reason,
-    fallback_harness_id: params.selection.fallbackHarness?.id ?? null,
-    candidate_harness_id: params.selection.candidateHarness?.id ?? null,
-    candidate_execution_placement:
-      params.selection.candidateHarness?.executionPlacement ?? null,
-    codex_primary_enabled: params.selection.codexPrimaryEnabled,
-    codex_primary_streaming_enabled:
-      params.selection.codexPrimaryStreamingEnabled,
-    codex_route_selected: params.selection.codexRouteSelected,
-    codex_primary_adapter_available:
-      params.selection.codexPrimaryAdapterAvailable,
-    stream: params.selection.stream,
   };
 }
 

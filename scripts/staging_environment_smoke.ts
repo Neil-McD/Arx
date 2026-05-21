@@ -32,6 +32,7 @@ async function readStagingBundleFingerprint(stagingUrl: string, deploymentName: 
   const expectedConvexUrl = `https://${deploymentName}.convex.cloud`;
   let convexUrlPresent = false;
   let stagingHostPresent = false;
+  let codexWorkspaceToolPresent = false;
   let codexPrimaryCanaryFlagPresent = false;
   let codexPrimaryCanaryTogglePresent = false;
   let codexPrimaryStreamingCanaryPresent = false;
@@ -40,6 +41,7 @@ async function readStagingBundleFingerprint(stagingUrl: string, deploymentName: 
     if (asset.status < 200 || asset.status >= 300) continue;
     if (asset.text.includes(expectedConvexUrl)) convexUrlPresent = true;
     if (asset.text.includes("polynet-staging")) stagingHostPresent = true;
+    if (asset.text.includes("codex_workspace")) codexWorkspaceToolPresent = true;
     if (asset.text.includes("codex_primary_canary")) codexPrimaryCanaryFlagPresent = true;
     if (asset.text.includes("workspace-codex-canary-toggle")) codexPrimaryCanaryTogglePresent = true;
     if (asset.text.includes("forceCodexPrimaryStreamingCanaryTurn")) {
@@ -48,9 +50,7 @@ async function readStagingBundleFingerprint(stagingUrl: string, deploymentName: 
     if (
       convexUrlPresent &&
       stagingHostPresent &&
-      codexPrimaryCanaryFlagPresent &&
-      codexPrimaryCanaryTogglePresent &&
-      codexPrimaryStreamingCanaryPresent
+      codexWorkspaceToolPresent
     ) break;
   }
 
@@ -60,6 +60,7 @@ async function readStagingBundleFingerprint(stagingUrl: string, deploymentName: 
     expectedConvexUrl,
     convexUrlPresent,
     stagingHostPresent,
+    codexWorkspaceToolPresent,
     codexPrimaryCanaryFlagPresent,
     codexPrimaryCanaryTogglePresent,
     codexPrimaryStreamingCanaryPresent,
@@ -100,8 +101,7 @@ assert(
   "staging default General project must not have duplicate exact-name rows",
 );
 assert(fingerprint?.codex?.harnessEnabled === true, "Codex harness flag must be enabled in staging");
-assert(fingerprint?.codex?.executorEnabled === true, "Codex executor flag must be enabled in staging");
-assert(fingerprint?.codex?.primaryEnabled === true, "Codex primary flag must be enabled in staging");
+assert(fingerprint?.codex?.workspaceHandoffEnabled === true, "Codex workspace handoff flag must be enabled in staging");
 assert(fingerprint?.codex?.probeMode === "canary", "Codex probe mode must be canary in staging");
 assert(fingerprint?.codex?.dynamicToolBridgeUrlConfigured === true, "Codex dynamic tool bridge URL must resolve in staging");
 assert(fingerprint?.codex?.daytonaApiKeyPresent === true, "Daytona API key must be present in staging");
@@ -127,9 +127,10 @@ assert(
 );
 assert(web.convexUrlPresent, `staging web bundle must point at ${web.expectedConvexUrl}`);
 assert(web.stagingHostPresent, "staging web bundle must include staging host wiring");
-assert(web.codexPrimaryCanaryFlagPresent, "staging web bundle must send the explicit codex_primary_canary flag");
-assert(web.codexPrimaryCanaryTogglePresent, "staging web bundle must include the Codex primary canary toggle");
-assert(web.codexPrimaryStreamingCanaryPresent, "staging web bundle must keep the Codex primary canary on streaming SSE");
+assert(web.codexWorkspaceToolPresent, "staging web bundle must include the codex_workspace handoff tool");
+assert(!web.codexPrimaryCanaryFlagPresent, "staging web bundle must not send the old codex_primary_canary flag");
+assert(!web.codexPrimaryCanaryTogglePresent, "staging web bundle must not include the old Codex primary canary toggle");
+assert(!web.codexPrimaryStreamingCanaryPresent, "staging web bundle must not include the old primary streaming canary path");
 
 console.log(
   JSON.stringify(
@@ -148,6 +149,7 @@ console.log(
         expectedConvexUrl: web.expectedConvexUrl,
         convexUrlPresent: web.convexUrlPresent,
         stagingHostPresent: web.stagingHostPresent,
+        codexWorkspaceToolPresent: web.codexWorkspaceToolPresent,
         codexPrimaryCanaryFlagPresent: web.codexPrimaryCanaryFlagPresent,
         codexPrimaryCanaryTogglePresent: web.codexPrimaryCanaryTogglePresent,
         codexPrimaryStreamingCanaryPresent: web.codexPrimaryStreamingCanaryPresent,

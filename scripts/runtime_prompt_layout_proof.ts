@@ -251,7 +251,7 @@ assert.match(prompt, /recovery=Check the connected account, workspace\/resource 
 assert.match(prompt, /Do not say exact failed tool calls are unavailable when they are listed here/);
 assert.match(prompt, /When a connected app\/MCP tool fails/);
 assert.match(prompt, /Do not repeatedly call the same failing connected-app tool/);
-assert.match(prompt, /Workspace tools can start paid workspace computer compute/);
+assert.match(prompt, /Workspace computer tools can start paid workspace compute/);
 assert.match(prompt, /For greetings, casual replies, and general questions/);
 assert.doesNotMatch(prompt, /WORKSPACE_RUNTIME_STATE/);
 assert.doesNotMatch(prompt, /BACKGROUND_TERMINAL_STATE/);

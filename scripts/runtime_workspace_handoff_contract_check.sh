@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-echo "== Runtime router/loop contract guard =="
+echo "== Runtime workspace handoff contract guard =="
 
 HTTP_FILE="$ROOT/convex/httpRuntimeRoutes.ts"
 HANDLERS_FILE="$ROOT/convex/runtimeTurnHandlers.ts"
@@ -15,6 +15,8 @@ TOOL_TYPES_FILE="$ROOT/shared/retrievalTools.ts"
 NATIVE_LOOP_FILE="$ROOT/shared/nativeToolLoop.ts"
 PROMPT_FILE="$ROOT/shared/runtimePrompt.ts"
 ROUTER_FILE="$ROOT/shared/routerLevels.ts"
+CODEX_ROUTE_FILE="$ROOT/shared/codexHarnessRoute.ts"
+HANDOFF_POLICY_FILE="$ROOT/shared/codexWorkspaceHandoffPolicy.ts"
 
 require_match_in_file() {
   local file="$1"
@@ -45,6 +47,17 @@ if [[ -e "$ROUTER_FILE" ]]; then
 fi
 echo "OK: legacy router file deleted"
 
+if [[ -e "$CODEX_ROUTE_FILE" ]]; then
+  echo "FAIL: legacy Codex route file still exists: $CODEX_ROUTE_FILE"
+  exit 1
+fi
+echo "OK: legacy Codex route file deleted"
+
+require_match_in_file "$HANDOFF_POLICY_FILE" 'resolveCodexWorkspaceHandoffEligibility' \
+  "Codex workspace handoff uses direct eligibility policy"
+forbid_match_in_file "$HANDOFF_POLICY_FILE" 'resolveCodexHarnessRoute|resolveCodexHarnessExecutorDecision|selectedHarness' \
+  "Codex handoff policy does not reintroduce router decisions"
+
 require_match_in_file "$RESOLUTION_FILE" 'function resolveAllowedToolNames\(' \
   "runtime derives allowed tools directly"
 require_match_in_file "$HANDLERS_FILE" 'tool_policy_resolved' \
@@ -64,11 +77,19 @@ forbid_match_in_file "$HANDLERS_FILE" 'router_level_selected' \
   "runtime no longer emits router_level_selected"
 forbid_match_in_file "$HANDLERS_FILE" 'debug_force_router_level' \
   "runtime no longer accepts debug_force_router_level"
+forbid_match_in_file "$HANDLERS_FILE" 'codex_harness_route_resolved|codex_harness_executor_resolved|codex_harness_shadow_comparison' \
+  "runtime no longer emits pre-turn Codex route or shadow comparison events"
 
 require_match_in_file "$DAYTONA_FILE" 'function executeRetrievalAgentLoop\(' \
   "shared loop core still exists"
 require_match_in_file "$DAYTONA_FILE" 'harnessName: "chat_tools"' \
   "runtime uses the unified chat_tools harness name"
+forbid_match_in_file "$DAYTONA_FILE" 'runtimeHarnessSelection|runtime_agent_harness_selected|executeCodexHarnessProbeIfSelected|resolveCodexHarnessRoute' \
+  "runtime no longer preselects Codex for whole turns"
+require_match_in_file "$DAYTONA_FILE" 'toolName === "codex_workspace"' \
+  "runtime exposes Codex through the workspace handoff tool"
+require_match_in_file "$DAYTONA_FILE" 'resolveCodexWorkspaceHandoffEligibility' \
+  "Codex workspace handoff is gated by direct eligibility"
 forbid_match_in_file "$DAYTONA_FILE" 'harnessName: "workspace"' \
   "runtime no longer carries a separate workspace harness name"
 require_match_in_file "$PROMPT_FILE" 'Use native tool calls\. Do not describe tool calls in JSON or markdown\.' \
@@ -140,6 +161,8 @@ require_match_in_file "$TOOL_TYPES_FILE" '"get_active_community_context"' \
   "tool name type includes get_active_community_context"
 require_match_in_file "$TOOL_TYPES_FILE" '"community_write"' \
   "tool name type includes community_write"
+require_match_in_file "$TOOL_TYPES_FILE" '"codex_workspace"' \
+  "tool name type includes Codex workspace handoff"
 require_match_in_file "$TOOL_TYPES_FILE" '"list_dir"' \
   "tool name type includes list_dir"
 require_match_in_file "$TOOL_TYPES_FILE" '"web_research"' \
@@ -176,22 +199,8 @@ require_match_in_file "$RESOLUTION_FILE" 'toolNames.push\("web_research"\)' \
   "runtime capability resolution includes web research tools"
 require_match_in_file "$RESOLUTION_FILE" 'if \(params.activeCapabilityFamilies.includes\("workspace_tools"\)\)' \
   "runtime capability resolution gates workspace tools structurally"
-require_match_in_file "$RESOLUTION_FILE" '"list_dir"' \
-  "runtime capability resolution includes list_dir"
-require_match_in_file "$RESOLUTION_FILE" '"read"' \
-  "runtime capability resolution includes read"
-require_match_in_file "$RESOLUTION_FILE" '"glob"' \
-  "runtime capability resolution includes glob"
-require_match_in_file "$RESOLUTION_FILE" '"grep"' \
-  "runtime capability resolution includes grep"
-require_match_in_file "$RESOLUTION_FILE" '"sha256"' \
-  "runtime capability resolution includes sha256"
-require_match_in_file "$RESOLUTION_FILE" '"write"' \
-  "runtime capability resolution includes write"
-require_match_in_file "$RESOLUTION_FILE" '"edit"' \
-  "runtime capability resolution includes edit"
-require_match_in_file "$RESOLUTION_FILE" '"bash"' \
-  "runtime capability resolution includes bash"
+require_match_in_file "$RESOLUTION_FILE" 'toolNames.push\("codex_workspace"\)' \
+  "runtime workspace capability exposes Codex handoff instead of raw Daytona tools"
 
 echo "== Runtime tool loop proof =="
 node --experimental-strip-types --experimental-specifier-resolution=node "$ROOT/scripts/runtime_tool_loop_proof.ts"

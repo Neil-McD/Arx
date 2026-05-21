@@ -70,12 +70,24 @@ const evidenceRun = Array.isArray(result?.evidence?.runs)
   : null;
 assert(Boolean(evidenceRun), "mounted MCP canary evidence should include the run");
 
+const prepared = findEvent(evidenceRun, "runtime_agent_harness_prepared");
+const handoffStarted = findEvent(evidenceRun, "codex_workspace_handoff_started");
+const handoffCompleted = findEvent(evidenceRun, "codex_workspace_handoff_completed");
 const projection = findEvent(evidenceRun, "codex_mcp_projection_resolved");
 const primaryStarted = findEvent(evidenceRun, "codex_harness_primary_started");
 const mcpExecution = eventsOfType(evidenceRun, "mcp_tool_execution_completed")
   .find((event: any) => event?.payload?.runtime_tool_name === runtimeToolName);
 const successfulTools = successfulDynamicToolNames(evidenceRun);
 
+assert(
+  prepared?.payload?.harness_id === "polynet_native",
+  "mounted MCP canary should start in PolyNet native before the Codex handoff",
+);
+assert(Boolean(handoffStarted), "mounted MCP canary should enter Codex through codex_workspace");
+assert(
+  handoffCompleted?.payload?.status === "ok",
+  "mounted MCP canary codex_workspace handoff should complete successfully",
+);
 assert(
   Array.isArray(projection?.payload?.eligible_runtime_tool_names) &&
     projection.payload.eligible_runtime_tool_names.includes(runtimeToolName),
@@ -84,7 +96,7 @@ assert(
 assert(
   Array.isArray(primaryStarted?.payload?.dynamic_mcp_tool_active_names) &&
     primaryStarted.payload.dynamic_mcp_tool_active_names.includes(runtimeToolName),
-  "Codex primary harness should activate the staging mounted MCP dynamic tool",
+  "Codex handoff harness should activate the staging mounted MCP dynamic tool",
 );
 assert(
   successfulTools.includes(runtimeToolName),
@@ -111,6 +123,9 @@ console.log(
       evidence: {
         runId: evidenceRun.runId,
         status: evidenceRun.status,
+        prepared: prepared?.payload ?? null,
+        handoffStarted: handoffStarted?.payload ?? null,
+        handoffCompleted: handoffCompleted?.payload ?? null,
         projection: projection?.payload ?? null,
         primaryStarted: primaryStarted?.payload ?? null,
         successfulDynamicToolNames: successfulTools,

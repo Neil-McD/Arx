@@ -1,5 +1,5 @@
 import type { AccountSetupMissing, AccountSetupStatus, AccountSetupStep } from "./accountSetup";
-import type { CodexHarnessReadinessStatus } from "./codexHarnessRoute";
+import type { CodexHarnessReadinessStatus } from "./codexWorkspaceHandoffPolicy";
 
 export type OperatorRange = "7d" | "30d" | "90d" | "all";
 
@@ -448,10 +448,9 @@ export type OperatorPaidToolLane = {
 };
 
 export type OperatorCodexHarnessDiagnostics = {
-  routeDecisions: number;
-  selectedRoutes: number;
-  executorDecisions: number;
-  executorCandidates: number;
+  workspaceHandoffStarts: number;
+  workspaceHandoffCompletions: number;
+  workspaceHandoffFailures: number;
   probeStarts: number;
   probeCompletions: number;
   readinessEvents: number;
@@ -460,31 +459,18 @@ export type OperatorCodexHarnessDiagnostics = {
   executionCompletions: number;
   executionReadinessEvents: number;
   executionReadyEvents: number;
-  shadowStarts: number;
-  shadowCompletions: number;
-  shadowReadinessEvents: number;
-  shadowReadyEvents: number;
-  shadowComparisons: number;
-  shadowComparisonMatches: number;
   adapterSummaries: number;
   adapterEvents: number;
   streamSummaries: number;
   streamEvents: number;
-  latestRoute: {
-    selected: boolean;
-    reason: string;
-    engine: string;
-    probeMode: string;
-    runId: string | null;
-    createdAt: number | null;
-  } | null;
-  latestExecutor: {
-    selected: boolean;
-    mode: string;
-    reason: string;
-    candidateEngine: string;
-    visibleAnswerEngine: string;
-    probeMode: string;
+  latestWorkspaceHandoff: {
+    status: string;
+    code: string | null;
+    executionPlacement: string | null;
+    projectId: string | null;
+    taskChars: number | null;
+    outputChars: number | null;
+    providerCallId: string | null;
     runId: string | null;
     createdAt: number | null;
   } | null;
@@ -517,38 +503,6 @@ export type OperatorCodexHarnessDiagnostics = {
     ready: boolean;
     code: string | null;
     stage: string | null;
-    runId: string | null;
-    createdAt: number | null;
-  } | null;
-  latestShadow: {
-    ok: boolean;
-    code: string | null;
-    stage: string | null;
-    completed: boolean;
-    outputPresent: boolean;
-    outputChars: number | null;
-    outputSha256: string | null;
-    runId: string | null;
-    createdAt: number | null;
-  } | null;
-  latestShadowReadiness: {
-    status: "ready" | "not_ready";
-    ready: boolean;
-    code: string | null;
-    stage: string | null;
-    outputChars: number | null;
-    outputSha256: string | null;
-    runId: string | null;
-    createdAt: number | null;
-  } | null;
-  latestShadowComparison: {
-    exactHashMatch: boolean;
-    visibleAnswerChars: number | null;
-    shadowOutputChars: number | null;
-    lengthDelta: number | null;
-    visibleAnswerSha256: string | null;
-    shadowOutputSha256: string | null;
-    shadowReady: boolean;
     runId: string | null;
     createdAt: number | null;
   } | null;

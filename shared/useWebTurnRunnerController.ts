@@ -750,7 +750,6 @@ export function useWebTurnRunnerController<
               idempotency_key: params.runIdHint,
               user_message_key: params.userMessageKey ?? undefined,
               requested_agentic_tools: params.requestedAgenticTools === true,
-              codex_primary_canary: params.codexPrimaryCanary === true,
               ...(laneMessages.length > 0 ? { messages: laneMessages } : null),
             },
             signal: abort.signal,

@@ -16,7 +16,7 @@ function main() {
 	  const stagingMaintenance = readText("convex/stagingMaintenance.ts");
 		  const stagingMaintenanceCli = readText("scripts/staging_maintenance_cli.ts");
 		  const stagingThreadBindingEvidence = readText("scripts/staging_codex_thread_binding_evidence.ts");
-		  const stagingStreamingCanary = readText("scripts/staging_codex_primary_streaming_canary.ts");
+		  const stagingWorkspaceHandoffCanary = readText("scripts/staging_codex_workspace_handoff_canary.ts");
 		  const packageJson = readText("package.json");
 
   assert.match(
@@ -132,16 +132,6 @@ function main() {
 		  );
 		  assert.match(
 		    stagingMaintenance,
-		    /runCodexPrimaryStreamingCanaryTurn/,
-		    "staging should expose a gated Codex primary streaming canary turn",
-		  );
-		  assert.match(
-		    stagingMaintenance,
-		    /stream:\s*true[\s\S]*codex_primary_canary:\s*true/,
-		    "staging streaming canary should exercise the real streaming Codex primary route",
-		  );
-		  assert.match(
-		    stagingMaintenance,
 		    /summarizeStagingRuntimeSseResponse/,
 		    "staging streaming canary should parse the SSE response into safe counts",
 		  );
@@ -154,16 +144,6 @@ function main() {
 		    stagingMaintenance,
 		    /mcp_tool_execution_completed/,
 		    "staging Codex evidence should include runtime MCP execution events",
-		  );
-		  assert.match(
-		    stagingMaintenance,
-		    /codex_harness_stream_event_summary/,
-		    "staging Codex evidence should include stream-event summary events",
-		  );
-		  assert.match(
-		    stagingMaintenance,
-		    /runtime_agent_harness_fallback_skipped/,
-		    "staging Codex evidence should expose skipped fallback events for streaming safety",
 		  );
 	  assert.match(
 	    stagingMaintenance,
@@ -182,33 +162,23 @@ function main() {
 		  );
 		  assert.match(
 		    packageJson,
-		    /check:staging-codex-primary-streaming-canary/,
-		    "package scripts should include the staging Codex primary streaming canary",
+		    /check:staging-codex-workspace-handoff-canary/,
+		    "package scripts should include the staging Codex workspace handoff canary",
 		  );
 		  assert.match(
-		    stagingStreamingCanary,
-		    /stagingMaintenance:runCodexPrimaryStreamingCanaryTurn/,
-		    "streaming canary script should call the gated staging maintenance action",
+		    stagingWorkspaceHandoffCanary,
+		    /stagingMaintenance:runCodexWorkspaceHandoffCanaryTurn/,
+		    "workspace handoff canary script should call the gated staging maintenance action",
 		  );
 		  assert.match(
-		    stagingStreamingCanary,
-		    /deltaEventCount[\s\S]*doneFullContentChars[\s\S]*codex_app_server/,
-		    "streaming canary script should assert live deltas, final content, and Codex harness selection",
+		    stagingWorkspaceHandoffCanary,
+		    /codex_workspace_handoff_started[\s\S]*codex_workspace_handoff_completed/,
+		    "workspace handoff canary should assert Codex handoff start and completion evidence",
 		  );
 		  assert.match(
-		    stagingStreamingCanary,
-		    /codex_primary_streaming_enabled/,
-		    "streaming canary script should assert the primary streaming flag evidence",
-		  );
-		  assert.match(
-		    stagingStreamingCanary,
-		    /live_stream_delta_events/,
-		    "streaming canary script should assert Codex live-delta relay evidence",
-		  );
-		  assert.match(
-		    stagingStreamingCanary,
-		    /codex_harness_stream_event_summary/,
-		    "streaming canary script should assert Codex stream summary evidence",
+		    stagingWorkspaceHandoffCanary,
+		    /harness_id === "polynet_native"/,
+		    "workspace handoff canary should assert PolyNet native remains the outer runtime",
 		  );
   assert.match(
     stagingMaintenanceCli,

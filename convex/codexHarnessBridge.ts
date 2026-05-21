@@ -25,15 +25,13 @@ import {
 } from "../shared/codexHarnessDynamicTools.ts";
 import {
   classifyCodexHarnessReadiness,
-  isCodexHarnessExecutorEnabled,
-  isCodexHarnessExperimentEnabled,
   isCodexHarnessReadinessReady,
-  resolveCodexHarnessExecutorDecision,
   resolveCodexHarnessProbeMode,
-  resolveCodexHarnessRoute,
+  isCodexWorkspaceHandoffEnabled,
+  resolveCodexWorkspaceHandoffEligibility,
   type CodexHarnessProbeMode,
   type CodexHarnessReadinessStatus,
-} from "../shared/codexHarnessRoute.ts";
+} from "../shared/codexWorkspaceHandoffPolicy.ts";
 import {
   CODEX_HARNESS_PROBE_RESULT_MARKER,
   buildCodexHarnessProbeScript,
@@ -166,10 +164,6 @@ function buildCodexPrimaryRuntimeInstructions(params: {
     .map((message) => message.content.trim())
     .filter(Boolean);
   const dynamicToolNames = params.dynamicToolSpecs.map((tool) => tool.name);
-  const canaryRequiresDynamicTools =
-    turn.codexPrimaryCanary.forcePolyNetReadOnlyDynamicTools &&
-    dynamicToolNames.includes("get_active_community_context") &&
-    dynamicToolNames.includes("community_search");
   return [
     "You are the Codex app-server runtime embedded inside PolyNet.",
     "Use Codex native workspace tools when the latest user turn requires file inspection, shell execution, or workspace edits.",
@@ -190,14 +184,6 @@ function buildCodexPrimaryRuntimeInstructions(params: {
       : null,
     dynamicToolNames.length > 0
       ? `Available PolyNet read-only dynamic tools: ${dynamicToolNames.join(", ")}. Use community tools when active community profile or memory/search evidence is relevant. Use mounted MCP app tools when the user's connected app data is relevant.`
-      : null,
-    canaryRequiresDynamicTools
-      ? [
-          "Codex primary canary requirement:",
-          "Before producing the final answer, call get_active_community_context with empty arguments.",
-          `Then call community_search with query ${JSON.stringify(turn.codexPrimaryCanary.searchQuery ?? "codex primary dynamic bridge canary")}.`,
-          "In the final answer, state whether both PolyNet read-only dynamic tools returned usable evidence.",
-        ].join("\n")
       : null,
     "When you use tools, keep the final answer concise and mention the concrete command or file action that mattered.",
     ...systemMessages,
@@ -229,18 +215,8 @@ function buildCodexPrimaryRuntimePrompt(turn: PreparedRuntimeAgentTurn): string 
     "Conversation transcript:",
     ...conversationLines,
     "",
-    turn.codexPrimaryCanary.forcePolyNetReadOnlyDynamicTools
-      ? [
-          "Codex primary canary:",
-          "This is a one-turn staging canary. Use the PolyNet read-only dynamic tools before answering:",
-          "1. get_active_community_context({})",
-          `2. community_search({"query": ${JSON.stringify(turn.codexPrimaryCanary.searchQuery ?? "codex primary dynamic bridge canary")}})`,
-          "Then answer the latest user turn briefly.",
-          "",
-        ].join("\n")
-      : null,
     "Produce the assistant answer for the latest user turn.",
-  ].filter((part): part is string => part !== null).join("\n");
+  ].join("\n");
   if (prompt.length <= CODEX_PRIMARY_RUNTIME_PROMPT_MAX_CHARS) return prompt;
   return prompt.slice(prompt.length - CODEX_PRIMARY_RUNTIME_PROMPT_MAX_CHARS);
 }
@@ -1927,27 +1903,23 @@ export async function executeCodexHarnessProbeIfSelected(params: {
   appendRunEvent: RuntimeRunEventAppender;
 }): Promise<void> {
   const probeMode = resolveCodexHarnessProbeMode();
-  const route = resolveCodexHarnessRoute({
-    experimentEnabled: isCodexHarnessExperimentEnabled(),
-    explicitPrimaryRequest: params.explicitPrimaryRequest === true,
+  if (params.explicitPrimaryRequest !== true) return;
+  const handoffEligibility = resolveCodexWorkspaceHandoffEligibility({
+    handoffEnabled: isCodexWorkspaceHandoffEnabled(),
     inferenceSource: params.inferenceSource,
     projectId: params.projectId,
   });
-  if (!route.selected) return;
+  if (!handoffEligibility.ok) return;
   if (probeMode === "off") return;
+  const probePlacement = {
+    reason: "explicit_codex_workspace_probe",
+    executionPlacement: handoffEligibility.executionPlacement,
+    authBridge: handoffEligibility.authBridge,
+    codexHomePlacement: handoffEligibility.codexHomePlacement,
+  };
   const executionSmokeRequested = probeMode === "execution_canary";
   const shadowTurnRequested = probeMode === "shadow_turn";
   const toolCallCanaryRequested = probeMode === "tool_call_canary";
-  if (shadowTurnRequested) {
-    const executorDecision = resolveCodexHarnessExecutorDecision({
-      route,
-      executorEnabled: isCodexHarnessExecutorEnabled(),
-      runtimeExecutionMode: "agentic",
-      stream: params.stream,
-      probeMode,
-    });
-    if (!executorDecision.selected) return;
-  }
   const codexTurnRequested = executionSmokeRequested || shadowTurnRequested || toolCallCanaryRequested;
   const shadowUserPrompt = shadowTurnRequested
     ? readLatestUserMessageTextForCodexShadow(params.messages)
@@ -1977,8 +1949,8 @@ export async function executeCodexHarnessProbeIfSelected(params: {
       message: "Codex shadow turn did not receive a latest user message.",
       stage: "shadow_prompt",
       evidence: {
-        route_reason: route.reason,
-        execution_placement: route.executionPlacement,
+        handoff_reason: probePlacement.reason,
+        execution_placement: probePlacement.executionPlacement,
         shadow_turn_requested: true,
       },
     });
@@ -2001,9 +1973,9 @@ export async function executeCodexHarnessProbeIfSelected(params: {
     eventKeySuffix: "1",
     payload: {
       project_id: params.projectId ?? null,
-      execution_placement: route.executionPlacement,
-      auth_bridge: route.authBridge,
-      codex_home_placement: route.codexHomePlacement,
+      execution_placement: probePlacement.executionPlacement,
+      auth_bridge: probePlacement.authBridge,
+      codex_home_placement: probePlacement.codexHomePlacement,
       probe_mode: probeMode,
       execution_smoke_requested: executionSmokeRequested,
       shadow_turn_requested: shadowTurnRequested,
@@ -2048,9 +2020,9 @@ export async function executeCodexHarnessProbeIfSelected(params: {
       stage: "auth_bridge",
       latencyMs,
       evidence: {
-        route_reason: route.reason,
-        execution_placement: route.executionPlacement,
-        auth_bridge: route.authBridge,
+        handoff_reason: probePlacement.reason,
+        execution_placement: probePlacement.executionPlacement,
+        auth_bridge: probePlacement.authBridge,
       },
     });
     return;
@@ -2084,8 +2056,8 @@ export async function executeCodexHarnessProbeIfSelected(params: {
       stage: "workspace",
       latencyMs,
       evidence: {
-        route_reason: route.reason,
-        execution_placement: route.executionPlacement,
+        handoff_reason: probePlacement.reason,
+        execution_placement: probePlacement.executionPlacement,
       },
     });
     return;
@@ -2138,8 +2110,8 @@ export async function executeCodexHarnessProbeIfSelected(params: {
       stage: "script_upload",
       latencyMs,
       evidence: {
-        route_reason: route.reason,
-        execution_placement: route.executionPlacement,
+        handoff_reason: probePlacement.reason,
+        execution_placement: probePlacement.executionPlacement,
       },
     });
     return;
@@ -2181,8 +2153,8 @@ export async function executeCodexHarnessProbeIfSelected(params: {
         stage: "shadow_prompt_upload",
         latencyMs,
         evidence: {
-          route_reason: route.reason,
-          execution_placement: route.executionPlacement,
+          handoff_reason: probePlacement.reason,
+          execution_placement: probePlacement.executionPlacement,
           shadow_turn_requested: true,
         },
       });
@@ -2225,8 +2197,8 @@ export async function executeCodexHarnessProbeIfSelected(params: {
       stage: "auth_upload",
       latencyMs,
       evidence: {
-        route_reason: route.reason,
-        execution_placement: route.executionPlacement,
+        handoff_reason: probePlacement.reason,
+        execution_placement: probePlacement.executionPlacement,
       },
     });
     return;
@@ -2241,8 +2213,8 @@ export async function executeCodexHarnessProbeIfSelected(params: {
       payload: {
         status: "started",
         project_id: params.projectId ?? null,
-        execution_placement: route.executionPlacement,
-        auth_bridge: route.authBridge,
+        execution_placement: probePlacement.executionPlacement,
+        auth_bridge: probePlacement.authBridge,
         expected_text: "polynet codex execution ok",
         model: "gpt-5.3-codex-spark",
       },
@@ -2257,8 +2229,8 @@ export async function executeCodexHarnessProbeIfSelected(params: {
       payload: {
         status: "started",
         project_id: params.projectId ?? null,
-        execution_placement: route.executionPlacement,
-        auth_bridge: route.authBridge,
+        execution_placement: probePlacement.executionPlacement,
+        auth_bridge: probePlacement.authBridge,
         model: "gpt-5.3-codex-spark",
         user_message_chars: shadowUserPrompt.length,
         user_message_truncated: shadowUserPrompt.length >= CODEX_SHADOW_USER_PROMPT_MAX_CHARS,
@@ -2275,8 +2247,8 @@ export async function executeCodexHarnessProbeIfSelected(params: {
       payload: {
         status: "started",
         project_id: params.projectId ?? null,
-        execution_placement: route.executionPlacement,
-        auth_bridge: route.authBridge,
+        execution_placement: probePlacement.executionPlacement,
+        auth_bridge: probePlacement.authBridge,
         model: "gpt-5.3-codex-spark",
         file_name: toolCanaryFileName,
         expected_chars: toolCanaryExpectedText.length,
@@ -2358,8 +2330,8 @@ export async function executeCodexHarnessProbeIfSelected(params: {
       stage: "daytona_command",
       latencyMs,
       evidence: {
-        route_reason: route.reason,
-        execution_placement: route.executionPlacement,
+        handoff_reason: probePlacement.reason,
+        execution_placement: probePlacement.executionPlacement,
         toolbox_error_code: executed.code,
       },
     });
@@ -2404,8 +2376,8 @@ export async function executeCodexHarnessProbeIfSelected(params: {
       stage: "parse_result",
       latencyMs,
       evidence: {
-        route_reason: route.reason,
-        execution_placement: route.executionPlacement,
+        handoff_reason: probePlacement.reason,
+        execution_placement: probePlacement.executionPlacement,
         exit_code: executed.exitCode,
       },
     });
@@ -2715,10 +2687,10 @@ export async function executeCodexHarnessProbeIfSelected(params: {
     stage: probeStage,
     latencyMs,
     evidence: {
-      route_reason: route.reason,
-      execution_placement: route.executionPlacement,
-      auth_bridge: route.authBridge,
-      codex_home_placement: route.codexHomePlacement,
+      handoff_reason: probePlacement.reason,
+      execution_placement: probePlacement.executionPlacement,
+      auth_bridge: probePlacement.authBridge,
+      codex_home_placement: probePlacement.codexHomePlacement,
       codex_path_present: codexPathPresent,
       app_server_started: appServerStarted,
       auth_applied: authApplied,

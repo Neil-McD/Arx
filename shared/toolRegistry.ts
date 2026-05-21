@@ -78,6 +78,19 @@ const WEB_RESEARCH_TOOL_SCHEMA: JsonSchema = {
   },
 };
 
+const CODEX_WORKSPACE_TOOL_SCHEMA: JsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["task"],
+  properties: {
+    task: {
+      type: "string",
+      minLength: 1,
+      maxLength: 12000,
+    },
+  },
+};
+
 const COMMUNITY_SEARCH_TOOL_SCHEMA: JsonSchema = {
   type: "object",
   additionalProperties: false,
@@ -492,6 +505,11 @@ const TOOL_REGISTRY: Record<RetrievalToolName, ToolRegistryEntry> = {
     name: "web_research",
     description: "Research the live web by searching documentation, opening a page, or finding text within a page.",
     inputSchema: WEB_RESEARCH_TOOL_SCHEMA,
+  },
+  codex_workspace: {
+    name: "codex_workspace",
+    description: "Hand a filesystem, shell, repo, preview, browser/computer, or artifact task to the Codex workspace harness running in the bound Daytona computer.",
+    inputSchema: CODEX_WORKSPACE_TOOL_SCHEMA,
   },
   list_dir: {
     name: "list_dir",
@@ -1071,6 +1089,13 @@ export function normalizeToolArguments(
       };
     }
     throw new Error("web_research action must be search, open_page, or find_in_page.");
+  }
+  if (toolName === "codex_workspace") {
+    const task = normalizeString(args.task);
+    if (!task) throw new Error("codex_workspace requires task.");
+    return {
+      task: task.slice(0, 12000),
+    };
   }
   if (toolName === "read") {
     const path = normalizeString(args.path);

@@ -55,7 +55,6 @@ const evidenceRun = Array.isArray(result?.evidence?.runs)
   : null;
 assert(Boolean(evidenceRun), "native default harness evidence should include the run");
 
-const selected = findEvent(evidenceRun, "runtime_agent_harness_selected");
 const prepared = findEvent(evidenceRun, "runtime_agent_harness_prepared");
 const codexPrimaryStarted = findEvent(evidenceRun, "codex_harness_primary_started");
 const codexPrimaryCompleted = findEvent(evidenceRun, "codex_harness_primary_completed");
@@ -65,16 +64,12 @@ const workspaceStarted = findEvent(evidenceRun, "workspace_session_create_starte
 const workspaceCompleted = findEvent(evidenceRun, "workspace_session_create_completed");
 
 assert(
-  selected?.payload?.selected_harness_id === "polynet_native",
+  prepared?.payload?.harness_id === "polynet_native",
   "plain default canary should select the PolyNet native harness",
 );
 assert(
-  selected?.payload?.codex_route_selected === false,
-  "plain default canary should not select the Codex route",
-);
-assert(
-  prepared?.payload?.codex_primary_canary?.forcePolyNetReadOnlyDynamicTools !== true,
-  "plain default canary should not set the explicit Codex primary canary flag",
+  prepared?.payload?.execution_placement === "convex_action",
+  "plain default canary should not prepare a Daytona-sidecar harness",
 );
 assert(!codexPrimaryStarted, "plain default canary should not start Codex primary");
 assert(!codexPrimaryCompleted, "plain default canary should not complete Codex primary");
@@ -98,7 +93,6 @@ console.log(
       evidence: {
         runId: evidenceRun.runId,
         status: evidenceRun.status,
-        selected: selected?.payload ?? null,
         prepared: prepared?.payload ?? null,
       },
     },

@@ -318,7 +318,7 @@ function buildPlatformHarnessOperatingPolicyPrompt(params: {
   const toolGuidance: string[] = [];
   const workspaceToolsEnabled = params.allowedToolNames.some((toolName) =>
     WORKSPACE_SANDBOX_TOOL_NAMES.includes(toolName),
-  );
+  ) || params.allowedToolNames.includes("codex_workspace");
   if (
     params.allowedToolNames.includes("search_product_docs") ||
     params.allowedToolNames.includes("get_product_doc")
@@ -363,8 +363,14 @@ function buildPlatformHarnessOperatingPolicyPrompt(params: {
   );
   if (workspaceToolsEnabled) {
     toolGuidance.push(
-      "- Workspace tools can start paid workspace computer compute. Use them only when the task needs filesystem, shell, repo, preview, browser/computer, or artifact execution.",
+      "- Workspace computer tools can start paid workspace compute. Use them only when the task needs filesystem, shell, repo, preview, browser/computer, or artifact execution.",
       "- For greetings, casual replies, and general questions that current prompt/context can answer, reply directly without workspace tools.",
+    );
+  }
+  if (params.allowedToolNames.includes("codex_workspace")) {
+    toolGuidance.push(
+      "- Use codex_workspace as the single handoff to the Codex engineering harness when the task needs Daytona workspace execution. Do not simulate filesystem, shell, repo, preview, browser/computer, or artifact work in normal chat.",
+      "- When codex_workspace returns, ground the final reply in the Codex workspace result and keep it concise.",
     );
   }
   if (params.allowedToolNames.includes("list_dir")) {

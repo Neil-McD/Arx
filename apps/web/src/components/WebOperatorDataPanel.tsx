@@ -675,11 +675,8 @@ function OperatorPlatformInsights(props: {
   const runtimeTopFailureCodes = runtimeExecution?.topFailureCodes ?? props.runtimeTools?.topFailureCodes ?? [];
   const codexHarness = props.runtimeTools?.codexHarness ?? null;
   const latestCodexReadiness = codexHarness?.latestReadiness ?? null;
-  const latestCodexRoute = codexHarness?.latestRoute ?? null;
-  const latestCodexExecutor = codexHarness?.latestExecutor ?? null;
+  const latestCodexHandoff = codexHarness?.latestWorkspaceHandoff ?? null;
   const latestCodexExecution = codexHarness?.latestExecution ?? null;
-  const latestCodexShadow = codexHarness?.latestShadow ?? null;
-  const latestCodexShadowComparison = codexHarness?.latestShadowComparison ?? null;
   const latestCodexAdapter = codexHarness?.latestAdapterSummary ?? null;
   return (
     <div className="operator-data-panel__grid">
@@ -1023,42 +1020,34 @@ function OperatorPlatformInsights(props: {
             <strong>{formatCodexHarnessStatus(latestCodexReadiness?.status)}</strong>
           </div>
           <div className="operator-dashboard__row">
-            <span>Codex route selections</span>
-            <strong>{codexHarness ? `${codexHarness.selectedRoutes}/${codexHarness.routeDecisions}` : "0/0"}</strong>
+            <span>Codex workspace handoffs</span>
+            <strong>{codexHarness ? `${codexHarness.workspaceHandoffCompletions}/${codexHarness.workspaceHandoffStarts}` : "0/0"}</strong>
           </div>
           <div className="operator-dashboard__row">
-            <span>Codex executor candidates</span>
-            <strong>{codexHarness ? `${codexHarness.executorCandidates}/${codexHarness.executorDecisions}` : "0/0"}</strong>
+            <span>Codex handoff failures</span>
+            <strong>{codexHarness?.workspaceHandoffFailures ?? 0}</strong>
           </div>
-          {latestCodexExecutor ? (
+          {latestCodexHandoff ? (
             <div className="operator-dashboard__row">
               <div>
-                <strong>Latest Codex executor</strong>
+                <strong>Latest Codex handoff</strong>
                 <span>
                   {[
-                    latestCodexExecutor.reason,
-                    latestCodexExecutor.mode,
-                    latestCodexExecutor.probeMode,
-                    latestCodexExecutor.createdAt ? formatEventTime(latestCodexExecutor.createdAt) : null,
+                    latestCodexHandoff.status,
+                    latestCodexHandoff.executionPlacement,
+                    latestCodexHandoff.outputChars == null ? null : `${latestCodexHandoff.outputChars} chars`,
+                    latestCodexHandoff.createdAt ? formatEventTime(latestCodexHandoff.createdAt) : null,
                   ]
                     .filter(Boolean)
                     .join(" · ")}
                 </span>
               </div>
-              <span>{latestCodexExecutor.selected ? "shadow" : latestCodexExecutor.visibleAnswerEngine}</span>
+              <span>{latestCodexHandoff.code ?? "handoff"}</span>
             </div>
           ) : null}
           <div className="operator-dashboard__row">
             <span>Codex execution canary</span>
             <strong>{codexHarness ? `${codexHarness.executionReadyEvents}/${codexHarness.executionReadinessEvents}` : "0/0"}</strong>
-          </div>
-          <div className="operator-dashboard__row">
-            <span>Codex shadow turns</span>
-            <strong>{codexHarness ? `${codexHarness.shadowReadyEvents}/${codexHarness.shadowReadinessEvents}` : "0/0"}</strong>
-          </div>
-          <div className="operator-dashboard__row">
-            <span>Codex shadow comparisons</span>
-            <strong>{codexHarness ? `${codexHarness.shadowComparisonMatches}/${codexHarness.shadowComparisons}` : "0/0"}</strong>
           </div>
           <div className="operator-dashboard__row">
             <span>Codex adapter events</span>
@@ -1097,48 +1086,6 @@ function OperatorPlatformInsights(props: {
               <span>{latestCodexExecution.ok && latestCodexExecution.matchedExpected ? "matched" : "not matched"}</span>
             </div>
           ) : null}
-          {latestCodexShadow ? (
-            <div className="operator-dashboard__row">
-              <div>
-                <strong>Latest Codex shadow</strong>
-                <span>
-                  {[
-                    latestCodexShadow.code ?? latestCodexShadow.stage,
-                    latestCodexShadow.outputChars == null ? null : `${latestCodexShadow.outputChars} chars`,
-                    latestCodexShadow.outputSha256 ? `sha256 ${latestCodexShadow.outputSha256.slice(0, 10)}` : null,
-                    latestCodexShadow.createdAt ? formatEventTime(latestCodexShadow.createdAt) : null,
-                  ]
-                    .filter(Boolean)
-                    .join(" · ")}
-                </span>
-              </div>
-              <span>{latestCodexShadow.ok && latestCodexShadow.outputPresent ? "observed" : "not observed"}</span>
-            </div>
-          ) : null}
-          {latestCodexShadowComparison ? (
-            <div className="operator-dashboard__row">
-              <div>
-                <strong>Latest Codex comparison</strong>
-                <span>
-                  {[
-                    latestCodexShadowComparison.visibleAnswerChars == null
-                      ? null
-                      : `visible ${latestCodexShadowComparison.visibleAnswerChars}`,
-                    latestCodexShadowComparison.shadowOutputChars == null
-                      ? null
-                      : `shadow ${latestCodexShadowComparison.shadowOutputChars}`,
-                    latestCodexShadowComparison.lengthDelta == null
-                      ? null
-                      : `delta ${latestCodexShadowComparison.lengthDelta}`,
-                    latestCodexShadowComparison.createdAt ? formatEventTime(latestCodexShadowComparison.createdAt) : null,
-                  ]
-                    .filter(Boolean)
-                    .join(" · ")}
-                </span>
-              </div>
-              <span>{latestCodexShadowComparison.exactHashMatch ? "same hash" : "different"}</span>
-            </div>
-          ) : null}
           {latestCodexReadiness ? (
             <div className="operator-dashboard__row">
               <div>
@@ -1153,22 +1100,6 @@ function OperatorPlatformInsights(props: {
                 </span>
               </div>
               <span>{latestCodexReadiness.ready ? "ready" : "not ready"}</span>
-            </div>
-          ) : latestCodexRoute ? (
-            <div className="operator-dashboard__row">
-              <div>
-                <strong>Latest Codex route</strong>
-                <span>
-                  {[
-                    latestCodexRoute.reason,
-                    latestCodexRoute.probeMode,
-                    latestCodexRoute.createdAt ? formatEventTime(latestCodexRoute.createdAt) : null,
-                  ]
-                    .filter(Boolean)
-                    .join(" · ")}
-                </span>
-              </div>
-              <span>{latestCodexRoute.selected ? "selected" : "current harness"}</span>
             </div>
           ) : null}
           {runtimeTopFailureCodes.length ? (

@@ -27,7 +27,6 @@ export type RuntimeTurnInput = {
   model_id?: string | null;
   surface?: "web";
   requested_agentic_tools?: boolean | null;
-  codex_primary_canary?: boolean | null;
   requested_funding_source?:
     | "demo_public"
     | "user_key"
@@ -239,31 +238,7 @@ export function resolveAllowedToolNames(params: {
     toolNames.push("web_research");
   }
   if (params.activeCapabilityFamilies.includes("workspace_tools")) {
-    toolNames.push(
-      "list_dir",
-      "read",
-      "glob",
-      "grep",
-      "sha256",
-      "write",
-      "edit",
-      "bash",
-      "terminal_start",
-      "terminal_read",
-      "terminal_write",
-      "terminal_stop",
-    );
-    if (params.inferenceSource === "chatgpt") {
-      toolNames.push(
-        "computer_open_url",
-        "computer_screenshot",
-        "computer_click",
-        "computer_type",
-        "computer_keypress",
-        "computer_scroll",
-        "computer_stop",
-      );
-    }
+    toolNames.push("codex_workspace");
   }
   return toolNames.filter((value, index, list) => list.indexOf(value) === index);
 }

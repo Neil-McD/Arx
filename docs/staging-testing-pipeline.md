@@ -149,11 +149,11 @@ May 14, 2026 validation against `https://polynet-staging.vercel.app`:
 - A real authenticated workspace thread was created: `6d05e300-e14e-441b-a8b8-78eb03dcc44b`.
 - The user-visible response persisted successfully as `POLYNET_STAGING_AUTH_OK`.
 - Convex run id: `agent_web:be28f5e9-958e-463d-b315-eea02eac7778`.
-- Runtime evidence selected the Codex route as a candidate, but visible output still used `polynet_native` because the current browser turn was streaming and Codex primary is non-streaming only.
+- Runtime evidence kept the visible turn on `polynet_native`; the later Codex-specific proof was superseded by the current `codex_workspace` handoff canary.
 - Codex canary still executed in Daytona and reported `ready=true`, `codex-cli 0.114.0`, ChatGPT account resolved, rate limits present, and app-server startup successful.
-- A second one-turn Codex primary visible canary was run from the same authenticated staging thread with the staging-only toggle enabled.
+- The old one-turn visible Codex canary/toggle path has been removed; use the workspace handoff canary below for current staging proof.
 - The user-visible response persisted successfully as `POLYNET_CODEX_PRIMARY_OK`.
-- Codex primary run id: `agent_web:fc55a04b-e456-426f-9300-0809fdb04f05`.
+- Historical Codex canary run id: `agent_web:fc55a04b-e456-426f-9300-0809fdb04f05`.
 - Runtime evidence selected `codex_app_server`, used Daytona sidecar placement, resolved ChatGPT subscription auth, started `codex-cli 0.114.0`, completed with `status=ok`, and wrote the assistant response back to Convex.
 
 ## Codex Harness Staging Checklist
@@ -164,18 +164,18 @@ For Codex harness work, additionally verify:
 2. Probe mode is explicitly set, for example `POLYNET_CODEX_HARNESS_PROBE_MODE=canary`.
 3. Daytona staging credentials are present.
 4. The selected workspace can create or resume a Daytona sandbox.
-5. The harness decision is visible in runtime evidence.
-6. Codex shadow or primary execution emits observable events.
-7. The legacy PolyNet harness fallback remains available.
+5. Normal turns prepare the PolyNet native runtime in runtime evidence.
+6. Workspace turns enter Codex only through `codex_workspace` handoff evidence.
+7. The mounted MCP canary proves Codex can call PolyNet-owned read-only platform and MCP tools during a handoff.
 8. The staging run can be repeated without manually repairing auth or provider config.
 
 Use `POLYNET_CODEX_HARNESS_PROBE_MODE=tool_call_canary` only as a temporary diagnostic mode. It creates a short-lived marker file in the Daytona workspace, asks Codex app-server to read it through a read-only turn, records hash/length/tool-event evidence, and removes the file. Reset staging back to `canary` after the proof unless the current test specifically needs tool-call evidence.
 
-For the Codex primary streaming canary, staging exposes the one-turn Codex primary toggle for signed-in users on `polynet-staging.vercel.app` without requiring a staging `operatorRoles` seed. The operator data panel remains operator-only, and production must not depend on this staging-only debug path.
+For default routing, use `npm run check:staging-native-default-harness-canary`. It proves a plain chat turn stays in PolyNet native and does not start Daytona/Codex.
 
-The staging web bundle must send the explicit `codex_primary_canary` request flag and keep the request on streaming SSE for Codex primary canaries. Runtime no longer infers a canary turn from non-streaming staging requests.
+For Codex workspace execution, use `npm run check:staging-codex-workspace-handoff-canary`. It proves the outer runtime remains PolyNet native while a model-called `codex_workspace` tool starts the Daytona-sidecar Codex harness.
 
-For Codex primary token streaming, use `npm run check:staging-codex-primary-streaming-canary` after staging has `POLYNET_CODEX_HARNESS_PRIMARY_STREAMING_ENABLED=true`. The canary runs a real streaming runtime turn through the staging maintenance gate, parses SSE `delta`/`done` evidence, and verifies Codex stream summary events without returning raw assistant text.
+For Codex plus PolyNet MCP projection, use `npm run check:staging-codex-mounted-mcp-canary`. It proves the handoff Codex run can call PolyNet read-only platform tools and the staging mounted MCP tool through the dynamic bridge.
 
 ## Anti-Patterns
 

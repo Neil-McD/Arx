@@ -30,10 +30,9 @@ assert.match(
   "operator diagnostics should have a first-class Codex harness canary projection",
 );
 for (const field of [
-  "routeDecisions",
-  "selectedRoutes",
-  "executorDecisions",
-  "executorCandidates",
+  "workspaceHandoffStarts",
+  "workspaceHandoffCompletions",
+  "workspaceHandoffFailures",
   "probeStarts",
   "probeCompletions",
   "readinessEvents",
@@ -42,23 +41,13 @@ for (const field of [
   "executionCompletions",
   "executionReadinessEvents",
   "executionReadyEvents",
-  "shadowStarts",
-  "shadowCompletions",
-  "shadowReadinessEvents",
-  "shadowReadyEvents",
-  "shadowComparisons",
-  "shadowComparisonMatches",
   "adapterSummaries",
   "adapterEvents",
-  "latestRoute",
-  "latestExecutor",
+  "latestWorkspaceHandoff",
   "latestProbe",
   "latestReadiness",
   "latestExecution",
   "latestExecutionReadiness",
-  "latestShadow",
-  "latestShadowReadiness",
-  "latestShadowComparison",
   "latestAdapterSummary",
   "latestStreamSummary",
 ]) {
@@ -71,21 +60,17 @@ assert.match(
 );
 
 for (const eventType of [
-  "codex_harness_route_resolved",
-  "codex_harness_executor_resolved",
+  "codex_workspace_handoff_started",
+  "codex_workspace_handoff_completed",
   "codex_harness_probe_started",
   "codex_harness_app_server_started",
   "codex_harness_auth_applied",
   "codex_harness_account_resolved",
   "codex_harness_rate_limits_updated",
   "codex_harness_execution_started",
-  "codex_harness_shadow_started",
   "codex_harness_thread_started",
   "codex_harness_execution_completed",
   "codex_harness_execution_readiness",
-  "codex_harness_shadow_completed",
-  "codex_harness_shadow_readiness",
-  "codex_harness_shadow_comparison",
   "codex_harness_event_adapter_summary",
   "codex_harness_event_adapter_event",
   "codex_harness_stream_event_summary",
@@ -136,28 +121,13 @@ assert.match(
 );
 assert.match(
   operatorPanel,
-  /Codex canary[\s\S]*Codex route selections[\s\S]*Latest Codex readiness/,
-  "operator panel should render canary status, route selection, and latest readiness evidence",
-);
-assert.match(
-  operatorPanel,
-  /Codex executor candidates[\s\S]*Latest Codex executor/,
-  "operator panel should render executor candidate decisions separately from route readiness",
+  /Codex canary[\s\S]*Codex workspace handoffs[\s\S]*Latest Codex handoff[\s\S]*Latest Codex readiness/,
+  "operator panel should render canary status, workspace handoff evidence, and latest readiness evidence",
 );
 assert.match(
   operatorPanel,
   /Codex execution canary[\s\S]*Latest Codex execution/,
   "operator panel should render execution canary status and latest execution evidence",
-);
-assert.match(
-  operatorPanel,
-  /Codex shadow turns[\s\S]*Latest Codex shadow/,
-  "operator panel should render real-turn shadow status without raw shadow output",
-);
-assert.match(
-  operatorPanel,
-  /Codex shadow comparisons[\s\S]*Latest Codex comparison/,
-  "operator panel should render safe visible-vs-shadow comparison evidence",
 );
 assert.match(
   operatorPanel,

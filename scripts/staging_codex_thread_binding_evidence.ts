@@ -249,18 +249,18 @@ function assertSuccessfulPlatformDynamicTools(run: CodexThreadBindingSummary | n
   const toolNames = new Set(run?.successfulDynamicToolNames ?? []);
   assert(
     run?.dynamicToolBridgeConfigured === true,
-    "Codex primary canary should have the dynamic tool bridge configured",
+    "Codex workspace handoff run should have the dynamic tool bridge configured",
   );
   assert(
     Number(run?.dynamicToolRequestCount ?? 0) >= 2 &&
       Number(run?.dynamicToolResponseCount ?? 0) >= 2 &&
       Number(run?.dynamicToolFailureCount ?? 0) === 0,
-    "Codex primary canary should complete both PolyNet dynamic tool calls without failures",
+    "Codex workspace handoff run should complete both PolyNet dynamic tool calls without failures",
   );
   assert(
     toolNames.has("get_active_community_context") &&
       toolNames.has("community_search"),
-    "Codex primary canary should successfully call both PolyNet read-only dynamic tools",
+    "Codex workspace handoff run should successfully call both PolyNet read-only dynamic tools",
   );
 }
 

@@ -262,8 +262,8 @@ function proveConvexBridgeAndRoute() {
   );
   assert.match(
     bridge,
-    /Codex primary canary requirement:[\s\S]*get_active_community_context[\s\S]*community_search/,
-    "Codex primary canary should explicitly force both read-only PolyNet dynamic tools before the final answer",
+    /Available PolyNet read-only dynamic tools:[\s\S]*Use community tools[\s\S]*mounted MCP app tools/,
+    "Codex workspace handoff instructions should describe when to use PolyNet dynamic tools without a canary-only router flag",
   );
   assert.match(
     bridge,

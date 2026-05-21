@@ -302,8 +302,8 @@ async function proveSourceContract() {
   );
   assert.match(
     runtimeTurnResolutionSource,
-    /if \(params\.activeCapabilityFamilies\.includes\("workspace_tools"\)\)[\s\S]*"terminal_start"[\s\S]*"terminal_stop"/,
-    "workspace tools should be exposed by capability family, not product tier",
+    /if \(params\.activeCapabilityFamilies\.includes\("workspace_tools"\)\)[\s\S]*toolNames\.push\("codex_workspace"\)/,
+    "workspace execution should be exposed as the Codex handoff capability, not raw PolyNet Daytona tools",
   );
   assert.match(
     runtimeTurnResolutionSource,

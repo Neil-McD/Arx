@@ -562,22 +562,6 @@ function readFirstLocalStorageValue(keys: readonly string[]): string | null {
   return null;
 }
 
-function isStagingCodexPrimaryCanaryDebugAllowed(): boolean {
-  if (typeof window === "undefined") return false;
-  try {
-    const hostname = window.location.hostname.toLowerCase();
-    if (hostname === "polynet-staging.vercel.app") return true;
-    if (hostname !== "localhost" && hostname !== "127.0.0.1") return false;
-    const params = new URLSearchParams(window.location.search);
-    return (
-      params.get("codex_primary_canary") === "1" ||
-      params.get("codexPrimaryCanary") === "1"
-    );
-  } catch {
-    return false;
-  }
-}
-
 function loadGuestModelId(): string {
   try {
     const raw = (
@@ -1449,8 +1433,6 @@ export default function App() {
   const [workspaceOperatorPanelLayout, setWorkspaceOperatorPanelLayout] =
     useState<WorkspaceOperatorPanelLayout>({ open: false, width: 0, gutter: 0 });
   const [isWorkspaceOperatorDataPanelOpen, setIsWorkspaceOperatorDataPanelOpen] =
-    useState(false);
-  const [isCodexPrimaryCanaryEnabled, setIsCodexPrimaryCanaryEnabled] =
     useState(false);
   const handleWorkspaceOperatorPanelLayoutChange = useCallback((layout: WorkspaceOperatorPanelLayout) => {
     setWorkspaceOperatorPanelLayout((current) =>
@@ -7479,10 +7461,6 @@ export default function App() {
       setIsOnboardingModalOpen(true);
     },
   });
-  const hasCodexPrimaryCanaryAccess = Boolean(
-    session &&
-    (hasOperatorDataPanelAccess || isStagingCodexPrimaryCanaryDebugAllowed())
-  );
   const { workspaceHostProps } = buildWebWorkspaceSurfaceProjection({
     session: session,
     hasAuthenticatedPresentation: hasAuthenticatedAppShellPresentation,
@@ -7516,22 +7494,11 @@ export default function App() {
     loadThreadMessages: (threadId, session) =>
       loadThreadMessages(threadId, session as AuthSession),
     onSendMessage: ({ text, attachments, clearComposer }) => {
-      const useCodexPrimaryCanaryForNextTurn = Boolean(
-        isCodexPrimaryCanaryEnabled &&
-        hasCodexPrimaryCanaryAccess &&
-        session &&
-        activePage === "workspace" &&
-        activeView === "home",
-      );
       void sendUserMessage({
         text,
         attachments: attachments as MessageAttachment[],
         clearComposer,
-        forceCodexPrimaryStreamingCanaryTurn: useCodexPrimaryCanaryForNextTurn,
       });
-      if (useCodexPrimaryCanaryForNextTurn) {
-        setIsCodexPrimaryCanaryEnabled(false);
-      }
     },
     onStopStreamingTurn: () => {
       stopStreamingTurn(activeThreadId ?? undefined);
@@ -7581,7 +7548,7 @@ export default function App() {
     renderMarkdown,
   });
   const showWorkspaceOperatorControl = Boolean(
-    (hasOperatorDataPanelAccess || hasCodexPrimaryCanaryAccess) &&
+    hasOperatorDataPanelAccess &&
     session &&
     !showMobileAppShell &&
     activePage === "workspace" &&
@@ -7593,9 +7560,6 @@ export default function App() {
   const handleToggleWorkspaceOperatorDataPanel = useCallback(() => {
     setIsWorkspaceOperatorDataPanelOpen((value) => !value);
   }, []);
-  const handleToggleCodexPrimaryCanary = useCallback(() => {
-    setIsCodexPrimaryCanaryEnabled((value) => !value);
-  }, []);
 
   useEffect(() => {
     if (showWorkspaceOperatorControl) {
@@ -7605,7 +7569,6 @@ export default function App() {
       return;
     }
     setIsWorkspaceOperatorDataPanelOpen(false);
-    setIsCodexPrimaryCanaryEnabled(false);
     handleWorkspaceOperatorPanelLayoutChange({ open: false, width: 0, gutter: 0 });
   }, [
     handleWorkspaceOperatorPanelLayoutChange,
@@ -7615,30 +7578,6 @@ export default function App() {
 
   const workspaceOperatorDataToggle = showWorkspaceOperatorControl ? (
     <>
-      {hasCodexPrimaryCanaryAccess ? (
-        <button
-          type="button"
-          className={`icon-button workspace-codex-canary-toggle${isCodexPrimaryCanaryEnabled ? " active" : ""}`}
-          onClick={handleToggleCodexPrimaryCanary}
-          aria-pressed={isCodexPrimaryCanaryEnabled}
-          aria-label={
-            isCodexPrimaryCanaryEnabled
-              ? "Disable Codex primary canary"
-              : "Enable Codex primary canary"
-          }
-          title={
-            isCodexPrimaryCanaryEnabled
-              ? "Codex primary canary on"
-              : "Codex primary canary off"
-          }
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M8 7 4 12l4 5" />
-            <path d="M16 7l4 5-4 5" />
-            <path d="M14 4 10 20" />
-          </svg>
-        </button>
-      ) : null}
       {showWorkspaceOperatorDataPanelControl ? (
         <button
           type="button"
