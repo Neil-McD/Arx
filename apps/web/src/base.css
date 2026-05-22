@@ -18934,45 +18934,6 @@ button.message-citation-chip:hover {
   gap: 18px;
 }
 
-.member-onboarding-heading {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.member-onboarding-heading > div {
-  display: grid;
-  gap: 5px;
-  min-width: 0;
-}
-
-.member-onboarding-heading .settings-section-title {
-  line-height: 1.25;
-}
-
-.member-onboarding-heading .settings-section-desc {
-  margin: 0;
-  line-height: 1.4;
-}
-
-.member-onboarding-state {
-  flex: 0 0 auto;
-  padding: 5px 8px;
-  border-radius: 999px;
-  border: 1px solid var(--border-muted);
-  color: var(--text-faint);
-  font-size: 11px;
-  font-weight: 650;
-  line-height: 1;
-}
-
-.member-onboarding-state.is-on {
-  border-color: color-mix(in srgb, var(--accent-rose) 42%, var(--border-muted));
-  color: var(--text-primary);
-  background: color-mix(in srgb, var(--accent-rose) 12%, transparent);
-}
-
 .member-onboarding-toggle {
   position: relative;
   display: grid;
@@ -19178,16 +19139,6 @@ button.message-citation-chip:hover {
   .member-onboarding-layout,
   .member-onboarding-field-grid {
     grid-template-columns: minmax(0, 1fr);
-  }
-
-  .member-onboarding-heading {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .member-onboarding-state {
-    justify-self: start;
-    width: fit-content;
   }
 }
 

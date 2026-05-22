@@ -291,17 +291,6 @@ function CommunityMemberOnboardingSettingsSection({
   return (
     <>
       <div className="settings-section member-onboarding-settings-section">
-        <div className="member-onboarding-heading">
-          <div>
-            <div className="settings-section-title">Member onboarding</div>
-            <div className="settings-section-desc">
-              Configure the welcome experience new members see after joining {activeCommunity.name}.
-            </div>
-          </div>
-          <span className={`member-onboarding-state ${config.enabled ? "is-on" : "is-off"}`}>
-            {config.enabled ? "Live for new members" : "Hidden"}
-          </span>
-        </div>
         <label className="member-onboarding-toggle">
           <input
             type="checkbox"
