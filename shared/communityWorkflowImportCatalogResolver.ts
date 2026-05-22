@@ -463,6 +463,27 @@ function readRemoteTransport(
   );
 }
 
+function readRegistryEndpointUrl(
+  record: Record<string, unknown>,
+  entry: CommunityWorkflowImportMcpRegistryEntry | null,
+): string | null {
+  return (
+    readNestedRecordString(
+      record,
+      ["officialConnection", "official_connection"],
+      ["remoteEndpoint", "remote_endpoint"],
+    ) ||
+    readRecordString(record, [
+      "endpoint_url",
+      "endpointUrl",
+      "endpoint",
+      "url",
+    ]) ||
+    entry?.defaultEndpointUrl ||
+    null
+  );
+}
+
 function normalizeAuthType(value: string): DeveloperAppAuthType | null {
   const normalized = value.trim().toLowerCase();
   if (
@@ -529,6 +550,20 @@ function readRequiredConfigParams(
       ...(entry?.requiredConfigParams ?? []),
     ]),
   ];
+}
+
+function isRegistryEntryDirectlyConnectable(
+  entry: CommunityWorkflowImportMcpRegistryEntry | null,
+  endpointUrl: string | null,
+  authType: DeveloperAppAuthType | null,
+): boolean {
+  if (!entry || entry.status !== "ready") return false;
+  if (entry.connectionClass !== "hosted_remote") return false;
+  if (!endpointUrl || !authType) return false;
+  if (authType !== "none") return false;
+  return entry.supportedTransports.some(
+    (transport) => transport === "http" || transport === "streamable_http",
+  );
 }
 
 function readPortabilityClassification(
@@ -681,45 +716,40 @@ export function resolveCommunityWorkflowImportMcpCatalogMatch(args: {
     : null;
 
   if (!app) {
+    const endpointUrl = readRegistryEndpointUrl(args.record, registryEntry);
+    const authType =
+      normalizeAuthType(
+        readNestedRecordString(
+          args.record,
+          ["officialConnection", "official_connection"],
+          ["authMode", "auth_mode"],
+        ),
+      ) ??
+      normalizeAuthType(
+        readRecordString(args.record, [
+          "auth_type",
+          "authType",
+          "authMode",
+          "auth_mode",
+        ]),
+      ) ??
+      registryEntry?.defaultAuthType ??
+      null;
     return {
       app: null,
       catalogAppId: registryEntry?.catalogAppId ?? null,
       registryId: registryEntry?.id ?? null,
       appName: registryEntry?.name ?? null,
-      endpointUrl:
-        readNestedRecordString(
-          args.record,
-          ["officialConnection", "official_connection"],
-          ["remoteEndpoint", "remote_endpoint"],
-        ) ||
-        readRecordString(args.record, [
-          "endpoint_url",
-          "endpointUrl",
-          "endpoint",
-          "url",
-        ]) ||
-        null,
-      authType:
-        normalizeAuthType(
-          readNestedRecordString(
-            args.record,
-            ["officialConnection", "official_connection"],
-            ["authMode", "auth_mode"],
-          ),
-        ) ??
-        normalizeAuthType(
-          readRecordString(args.record, [
-            "auth_type",
-            "authType",
-            "authMode",
-            "auth_mode",
-          ]),
-        ) ??
-        null,
+      endpointUrl,
+      authType,
       logoUrl: null,
       logoUrlDark: null,
       reviewLogoUrl: registryLogoUrl,
-      connectable: false,
+      connectable: isRegistryEntryDirectlyConnectable(
+        registryEntry,
+        endpointUrl,
+        authType,
+      ),
       status: registryEntry?.status ?? "unknown",
       matchedBy,
       sourceTransport,

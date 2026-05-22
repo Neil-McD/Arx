@@ -41,6 +41,7 @@ export type CommunityWorkflowImportMcpRegistryEntry = {
   aliases: string[];
   packageNames: string[];
   endpointHosts: string[];
+  defaultEndpointUrl?: string | null;
   commandTokens: string[];
   reviewLogoUrl: string | null;
   docsUrls: string[];
@@ -51,6 +52,7 @@ export type CommunityWorkflowImportMcpRegistryEntry = {
   supportedTransports: string[];
   supportedAuthTypes: DeveloperAppAuthType[];
   defaultAuthType: DeveloperAppAuthType | null;
+  oauthScopes?: string[];
   authHeaderStrategy: CommunityWorkflowImportMcpRegistryAuthHeaderStrategy;
   requiredSecretNames: string[];
   requiredConfigParams: string[];
@@ -97,6 +99,7 @@ export const COMMUNITY_WORKFLOW_IMPORT_MCP_REGISTRY: CommunityWorkflowImportMcpR
         "github-mcp-server",
       ],
       endpointHosts: ["api.githubcopilot.com"],
+      defaultEndpointUrl: "https://api.githubcopilot.com/mcp/readonly",
       commandTokens: ["github-mcp-server"],
       reviewLogoUrl: null,
       docsUrls: ["https://github.com/github/github-mcp-server"],
@@ -134,6 +137,7 @@ export const COMMUNITY_WORKFLOW_IMPORT_MCP_REGISTRY: CommunityWorkflowImportMcpR
       aliases: ["supabase", "supabase mcp", "supabase mcp server"],
       packageNames: ["@supabase/mcp-server-supabase"],
       endpointHosts: ["mcp.supabase.com"],
+      defaultEndpointUrl: "https://mcp.supabase.com/mcp",
       commandTokens: ["supabase-mcp-server"],
       reviewLogoUrl: null,
       docsUrls: ["https://supabase.com/docs/guides/getting-started/mcp"],
@@ -171,6 +175,7 @@ export const COMMUNITY_WORKFLOW_IMPORT_MCP_REGISTRY: CommunityWorkflowImportMcpR
       aliases: ["vercel", "vercel mcp", "vercel mcp server"],
       packageNames: [],
       endpointHosts: ["mcp.vercel.com"],
+      defaultEndpointUrl: "https://mcp.vercel.com",
       commandTokens: [],
       reviewLogoUrl: null,
       docsUrls: ["https://vercel.com/docs/agent-resources/vercel-mcp"],
@@ -181,6 +186,7 @@ export const COMMUNITY_WORKFLOW_IMPORT_MCP_REGISTRY: CommunityWorkflowImportMcpR
       supportedTransports: ["streamable_http", "http"],
       supportedAuthTypes: ["oauth"],
       defaultAuthType: "oauth",
+      oauthScopes: ["openid", "email", "profile", "offline_access"],
       authHeaderStrategy: "oauth_bearer",
       requiredSecretNames: [],
       requiredConfigParams: [],
@@ -213,22 +219,23 @@ export const COMMUNITY_WORKFLOW_IMPORT_MCP_REGISTRY: CommunityWorkflowImportMcpR
       ],
       packageNames: ["@upstash/context7-mcp"],
       endpointHosts: ["mcp.context7.com"],
+      defaultEndpointUrl: "https://mcp.context7.com/mcp",
       commandTokens: ["context7", "context7-mcp"],
       reviewLogoUrl: "/app-logos/context7.svg",
       docsUrls: [],
       sourceUrls: [],
-      status: "needs_auth",
+      status: "ready",
       connectionClass: "hosted_remote",
-      setupKind: "needs_user_auth",
+      setupKind: "remote_ready",
       supportedTransports: ["streamable_http", "stdio"],
-      supportedAuthTypes: ["api_key", "bearer"],
-      defaultAuthType: "api_key",
+      supportedAuthTypes: ["none", "api_key", "bearer"],
+      defaultAuthType: "none",
       authHeaderStrategy: "provider_specific",
-      requiredSecretNames: ["CONTEXT7_API_KEY"],
+      requiredSecretNames: [],
       requiredConfigParams: [],
       structuredConfigParams: [],
       reason:
-        "Context7 is recognized as a hosted remote MCP, but it needs a user-supplied API key or bearer token before tools can be live.",
+        "Context7 is recognized as a hosted remote MCP that can expose documentation tools without required user authentication. API key or bearer auth can be added later for higher limits.",
     },
     {
       id: "fly",
@@ -244,6 +251,7 @@ export const COMMUNITY_WORKFLOW_IMPORT_MCP_REGISTRY: CommunityWorkflowImportMcpR
       ],
       packageNames: [],
       endpointHosts: [],
+      defaultEndpointUrl: null,
       commandTokens: ["flyctl"],
       reviewLogoUrl: "/app-logos/fly-light.svg",
       docsUrls: [],
@@ -287,6 +295,7 @@ export const COMMUNITY_WORKFLOW_IMPORT_MCP_REGISTRY: CommunityWorkflowImportMcpR
       ],
       packageNames: ["convex"],
       endpointHosts: [],
+      defaultEndpointUrl: null,
       commandTokens: ["convex", "convex mcp"],
       reviewLogoUrl: null,
       docsUrls: ["https://docs.convex.dev"],
@@ -336,6 +345,7 @@ export const COMMUNITY_WORKFLOW_IMPORT_MCP_REGISTRY: CommunityWorkflowImportMcpR
       ],
       packageNames: ["@workos/mcp-docs-server"],
       endpointHosts: [],
+      defaultEndpointUrl: null,
       commandTokens: ["workos", "mcp-docs-server"],
       reviewLogoUrl: null,
       docsUrls: ["https://workos.com/docs"],
@@ -360,6 +370,7 @@ export const COMMUNITY_WORKFLOW_IMPORT_MCP_REGISTRY: CommunityWorkflowImportMcpR
       aliases: ["posthog", "posthog mcp", "posthog mcp server"],
       packageNames: [],
       endpointHosts: ["mcp.posthog.com"],
+      defaultEndpointUrl: "https://mcp.posthog.com",
       commandTokens: ["posthog"],
       reviewLogoUrl: null,
       docsUrls: ["https://posthog.com/docs"],
@@ -397,6 +408,7 @@ export const COMMUNITY_WORKFLOW_IMPORT_MCP_REGISTRY: CommunityWorkflowImportMcpR
       aliases: ["sentry", "sentry mcp", "sentry mcp server"],
       packageNames: [],
       endpointHosts: ["mcp.sentry.dev"],
+      defaultEndpointUrl: "https://mcp.sentry.dev",
       commandTokens: ["sentry"],
       reviewLogoUrl: null,
       docsUrls: ["https://docs.sentry.io"],
@@ -407,6 +419,7 @@ export const COMMUNITY_WORKFLOW_IMPORT_MCP_REGISTRY: CommunityWorkflowImportMcpR
       supportedTransports: ["streamable_http", "http", "stdio"],
       supportedAuthTypes: ["oauth"],
       defaultAuthType: "oauth",
+      oauthScopes: ["org:read", "project:write", "team:write", "event:write"],
       authHeaderStrategy: "oauth_bearer",
       requiredSecretNames: [],
       requiredConfigParams: [],
@@ -439,6 +452,7 @@ export const COMMUNITY_WORKFLOW_IMPORT_MCP_REGISTRY: CommunityWorkflowImportMcpR
       ],
       packageNames: [],
       endpointHosts: [],
+      defaultEndpointUrl: null,
       commandTokens: ["computer-use"],
       reviewLogoUrl: null,
       docsUrls: [],
@@ -470,6 +484,7 @@ export const COMMUNITY_WORKFLOW_IMPORT_MCP_REGISTRY: CommunityWorkflowImportMcpR
       aliases: ["node_repl", "node repl", "node-repl"],
       packageNames: [],
       endpointHosts: [],
+      defaultEndpointUrl: null,
       commandTokens: ["node-repl", "node_repl"],
       reviewLogoUrl: null,
       docsUrls: [],

@@ -24,7 +24,10 @@ import {
   type DiscoverAppCatalogEntry,
   type DiscoverAppOAuthClientConfig,
 } from "../shared/discoverCatalog";
-import { resolveCommunityWorkflowImportMcpRegistryConnectPolicy } from "../shared/communityWorkflowImportMcpRegistry";
+import {
+  findCommunityWorkflowImportMcpRegistryEntryById,
+  resolveCommunityWorkflowImportMcpRegistryConnectPolicy,
+} from "../shared/communityWorkflowImportMcpRegistry";
 import { requireCommunityChatAccess } from "./communityCore";
 
 type StoredOAuthTokenBundleV1 = {
@@ -412,7 +415,10 @@ function buildAuthorizationServerMetadataUrls(authServer: string): string[] {
   return [...new Set([oauthPathInsertion, oidcPathInsertion, oidcPathAppend].filter(Boolean))];
 }
 
-async function discoverOAuthMetadata(mcpServerUrl: string): Promise<{
+async function discoverOAuthMetadata(
+  mcpServerUrl: string,
+  options: { preferredScopes?: string[] } = {},
+): Promise<{
   issuer: string | null;
   authorizationEndpoint: string;
   tokenEndpoint: string;
@@ -474,12 +480,17 @@ async function discoverOAuthMetadata(mcpServerUrl: string): Promise<{
   const scopesSupported = Array.isArray(metadata.scopes_supported)
     ? metadata.scopes_supported.map((scope) => normalizeString(scope, 80)).filter(Boolean)
     : [];
+  const preferredScopes = (options.preferredScopes ?? [])
+    .map((scope) => normalizeString(scope, 80))
+    .filter((scope) => scope && scopesSupported.includes(scope));
   return {
     issuer: normalizeString(metadata.issuer, 2_000) || authServer,
     authorizationEndpoint,
     tokenEndpoint,
     registrationEndpoint,
-    scope: scopesSupported.includes("offline_access")
+    scope: preferredScopes.length > 0
+      ? preferredScopes.join(" ")
+      : scopesSupported.includes("offline_access")
       ? "offline_access"
       : scopesSupported.includes("default")
         ? "default"
@@ -1165,7 +1176,12 @@ export const beginUserPlatformAppOAuth = action({
       };
     }
     const redirectUri = buildCallbackUri(args.callbackBaseUrl);
-    const metadata = await discoverOAuthMetadata(source.endpointUrl);
+    const registryEntry = source.mcpRegistryId
+      ? findCommunityWorkflowImportMcpRegistryEntryById(source.mcpRegistryId)
+      : null;
+    const metadata = await discoverOAuthMetadata(source.endpointUrl, {
+      preferredScopes: registryEntry?.oauthScopes,
+    });
     const client = clientApp && resolveDiscoverAppOAuthClientConfig(clientApp)
       ? await resolveOAuthClientCredentials({
           app: clientApp,

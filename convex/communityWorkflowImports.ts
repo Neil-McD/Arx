@@ -865,12 +865,13 @@ function buildWorkflowImportMcpApplyPlanItems(
     });
     if (
       !catalogMatch.connectable ||
-      !catalogAppId ||
+      (!catalogAppId && !catalogMatch.registryId) ||
       !endpointUrl ||
       !authType
     ) {
       const missing: string[] = [];
-      if (!catalogAppId) missing.push("vetted catalog app");
+      if (!catalogAppId && !catalogMatch.registryId)
+        missing.push("vetted registry app");
       if (!endpointUrl) missing.push("endpoint");
       if (!authType) missing.push("auth mode");
       const recognizedMcp = Boolean(catalogAppId || catalogMatch.registryId);
@@ -1897,7 +1898,7 @@ async function applyWorkflowImportMcpPlanItem(args: {
   }
   if (
     args.item.action !== "connect_mcp" ||
-    !args.item.catalogAppId ||
+    (!args.item.catalogAppId && !args.item.mcpRegistryId) ||
     !args.item.endpointUrl ||
     !args.item.authType
   ) {
@@ -1917,24 +1918,35 @@ async function applyWorkflowImportMcpPlanItem(args: {
         .findExistingCommunityAppMountByIdentityInternal as any,
       {
         communityId: args.communityId,
-        catalogAppId: args.item.catalogAppId,
+        catalogAppId: args.item.catalogAppId ?? undefined,
         endpointUrl: args.item.endpointUrl,
         authType: args.item.authType,
       },
     )) as { mount?: { _id?: unknown; enabled?: unknown } } | null;
     const hadExistingEnabledGrant = existingGrant?.mount?.enabled === true;
-    const mounted = (await args.ctx.runAction(
-      api.community.connectCommunityApp as any,
-      {
-        authSubject: args.authSubject,
-        communityId: args.communityId,
-        catalogAppId: args.item.catalogAppId,
-        name: args.item.name,
-        endpointUrl: args.item.endpointUrl,
-        authType: args.item.authType,
-        description: args.item.summary,
-      },
-    )) as Record<string, any> | null;
+    const mounted = (await (args.item.catalogAppId
+      ? args.ctx.runAction(api.community.connectCommunityApp as any, {
+          authSubject: args.authSubject,
+          communityId: args.communityId,
+          catalogAppId: args.item.catalogAppId,
+          name: args.item.name,
+          endpointUrl: args.item.endpointUrl,
+          authType: args.item.authType,
+          description: args.item.summary,
+        })
+      : args.ctx.runAction(
+          internalRefs.communityAppMounts
+            .connectImportedCommunityMcpAppInternal as any,
+          {
+            userId: args.userId,
+            communityId: args.communityId,
+            name: args.item.name,
+            endpointUrl: args.item.endpointUrl,
+            authType: args.item.authType,
+            description: args.item.summary,
+            mcpRegistryId: args.item.mcpRegistryId,
+          },
+        ))) as Record<string, any> | null;
     if (!isPlainRecord(mounted)) {
       return {
         id: args.item.id,

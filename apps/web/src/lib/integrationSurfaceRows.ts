@@ -136,6 +136,12 @@ export function buildIntegrationSurfaceRowFromEffectiveApp(
     enabled,
     effectiveApp,
     fallbackAuthType: effectiveApp.app.auth_type,
+    fallbackSetupStatus:
+      effectiveApp.personal_mount?.app.setup_status ??
+      effectiveApp.community_mount?.app.setup_status,
+    fallbackNotLiveReason:
+      effectiveApp.personal_mount?.not_live_reason ??
+      effectiveApp.community_mount?.not_live_reason,
   });
   return {
     id: effectiveApp.app_identity_key,

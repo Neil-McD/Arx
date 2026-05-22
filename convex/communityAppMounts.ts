@@ -841,6 +841,130 @@ export const stageCommunityMcpAppForSetupInternal = internalAction({
   },
 });
 
+export const connectImportedCommunityMcpAppInternal = internalAction({
+  args: {
+    userId: v.id("users"),
+    communityId: v.id("communities"),
+    name: v.string(),
+    endpointUrl: v.string(),
+    authType: v.union(
+      v.literal("none"),
+      v.literal("api_key"),
+      v.literal("bearer"),
+      v.literal("oauth"),
+    ),
+    description: v.optional(v.string()),
+    mcpRegistryId: v.string(),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args): Promise<unknown> => {
+    await ctx.runQuery(
+      internal.communityAppMounts.assertCommunityManagerAccessInternal,
+      {
+        userId: args.userId,
+        communityId: args.communityId,
+      },
+    );
+
+    const policy = resolveCommunityWorkflowImportMcpRegistryConnectPolicy({
+      mcpRegistryId: args.mcpRegistryId,
+      name: args.name,
+      endpointUrl: args.endpointUrl,
+      authType: args.authType,
+    });
+    if (!policy.ok) throw new Error(policy.message);
+    if (policy.authType !== "none") {
+      throw new Error(
+        `${policy.name} needs member authentication before it can be live.`,
+      );
+    }
+
+    const nowMs = args.nowMs ?? Date.now();
+    const existingGrant = (await ctx.runQuery(
+      internal.communityAppMounts.findExistingCommunityAppMountByIdentityInternal,
+      {
+        communityId: args.communityId,
+        catalogAppId: undefined,
+        endpointUrl: policy.endpointUrl,
+        authType: policy.authType,
+      },
+    )) as {
+      mount: CommunityAppMountRow;
+      app: DeveloperAppRow;
+    } | null;
+    if (existingGrant) {
+      return await mountDeveloperAppForCommunity({
+        ctx,
+        userId: args.userId,
+        communityId: args.communityId,
+        developerAppId: existingGrant.app._id,
+        toolSnapshotId: existingGrant.mount.toolSnapshotId,
+        enabledTools: existingGrant.mount.enabledTools,
+        nowMs,
+      });
+    }
+
+    const developerAppId = (await ctx.runMutation(
+      internal.developerApps.createDeveloperAppInternal,
+      {
+        ownerUserId: args.userId,
+        catalogAppId: undefined,
+        mcpRegistryId: policy.mcpRegistryId,
+        name: policy.name,
+        slug: undefined,
+        description: args.description,
+        endpointUrl: policy.endpointUrl,
+        authType: policy.authType,
+        nowMs,
+      },
+    )) as any;
+
+    const validation = (await ctx.runAction(
+      internal.appValidation.validateDeveloperAppInternal,
+      {
+        developerAppId,
+      },
+    )) as {
+      validation_status?: unknown;
+      snapshot?: { tools?: unknown };
+    };
+    const app = (await ctx.runQuery(
+      internal.developerApps.getDeveloperAppByIdInternal,
+      {
+        developerAppId,
+      },
+    )) as DeveloperAppRow | null;
+
+    if (String(validation.validation_status ?? "") !== "ok" || !app?.activeSnapshotId) {
+      return await mountDeveloperAppForCommunity({
+        ctx,
+        userId: args.userId,
+        communityId: args.communityId,
+        developerAppId,
+        toolSnapshotId: app?.activeSnapshotId,
+        nowMs,
+      });
+    }
+
+    const mountedTools = Array.isArray(validation.snapshot?.tools)
+      ? (validation.snapshot?.tools as Array<{ tool_name?: unknown }>)
+      : [];
+    const enabledTools = mountedTools
+      .map((tool) => normalizeString(tool.tool_name, 200))
+      .filter(Boolean);
+
+    return await mountDeveloperAppForCommunity({
+      ctx,
+      userId: args.userId,
+      communityId: args.communityId,
+      developerAppId,
+      toolSnapshotId: app.activeSnapshotId,
+      enabledTools,
+      nowMs,
+    });
+  },
+});
+
 export const refreshCommunityApp = action({
   args: {
     authSubject: v.optional(v.string()),
