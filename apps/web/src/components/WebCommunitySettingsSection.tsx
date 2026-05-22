@@ -279,6 +279,7 @@ function CommunityMemberOnboardingSettingsSection({
 }: SharedSettingsProps & {
   activeCommunity: ActiveCommunity;
 }) {
+  const [previewMode, setPreviewMode] = useState<"workspace" | "open">("workspace");
   const config = state.communityMemberOnboardingConfig;
   const updateConfig = (patch: Partial<CommunityMemberOnboardingConfig>) => {
     actions.setCommunityMemberOnboardingConfig((prev) => ({ ...prev, ...patch }));
@@ -287,6 +288,8 @@ function CommunityMemberOnboardingSettingsSection({
   const videoUrl = config.video_url ?? "";
   const videoPreview = resolveMemberOnboardingVideoPreview(videoUrl);
   const actionLabel = COMMUNITY_MEMBER_ONBOARDING_ACTION_LABELS[config.primary_action];
+  const previewTitle = config.title || `Welcome to ${activeCommunity.name}`;
+  const previewDescription = config.description;
 
   return (
     <>
@@ -376,26 +379,94 @@ function CommunityMemberOnboardingSettingsSection({
             </label>
           </div>
           <div className="member-onboarding-preview">
-            <div className="member-onboarding-preview-label">Member preview</div>
+            <div className="member-onboarding-preview-top">
+              <div className="member-onboarding-preview-label">Member preview</div>
+              <div className="member-onboarding-preview-modes" role="group" aria-label="Preview state">
+                <button
+                  type="button"
+                  className={previewMode === "workspace" ? "is-active" : ""}
+                  aria-pressed={previewMode === "workspace"}
+                  onClick={() => setPreviewMode("workspace")}
+                >
+                  Workspace
+                </button>
+                <button
+                  type="button"
+                  className={previewMode === "open" ? "is-active" : ""}
+                  aria-pressed={previewMode === "open"}
+                  onClick={() => setPreviewMode("open")}
+                >
+                  Open
+                </button>
+              </div>
+            </div>
             <div className={`member-onboarding-preview-surface${config.enabled ? "" : " is-muted"}`}>
-              <div className="member-onboarding-preview-media">
-                {videoPreview.thumbnailUrl ? (
-                  <img src={videoPreview.thumbnailUrl} alt="" loading="lazy" />
-                ) : (
-                  <div className="member-onboarding-preview-media-empty">Video</div>
-                )}
-                <span className="member-onboarding-preview-play">Play</span>
+              <div className="member-onboarding-preview-workspace">
+                <div className="member-onboarding-preview-hero">
+                  <div className="member-onboarding-preview-avatar" aria-hidden="true">
+                    {activeCommunity.name.slice(0, 1).toUpperCase()}
+                  </div>
+                  <strong>Welcome to {activeCommunity.name}</strong>
+                  <span>You are in Computer 1 workspace</span>
+                </div>
+                <div className="member-onboarding-preview-composer">
+                  Describe what you need help with...
+                </div>
+                <button
+                  type="button"
+                  className="member-onboarding-preview-card"
+                  onClick={() => setPreviewMode("open")}
+                >
+                  <span className="member-onboarding-preview-card-media" aria-hidden="true">
+                    {videoPreview.thumbnailUrl ? (
+                      <img src={videoPreview.thumbnailUrl} alt="" loading="lazy" />
+                    ) : (
+                      <span>Video</span>
+                    )}
+                    <span className="member-onboarding-preview-play">Play</span>
+                  </span>
+                  <span className="member-onboarding-preview-card-copy">
+                    <strong>{previewTitle}</strong>
+                    <span>{previewDescription}</span>
+                    <small>{videoPreview.host ? videoPreview.host : "Welcome video"}</small>
+                  </span>
+                </button>
               </div>
-              <div className="member-onboarding-preview-copy">
-                <strong>{config.title || `Welcome to ${activeCommunity.name}`}</strong>
-                <span>{config.description}</span>
-                {videoPreview.host ? (
-                  <small>Video from {videoPreview.host}</small>
-                ) : (
-                  <small>No video set yet.</small>
-                )}
-              </div>
-              <div className="member-onboarding-preview-action">{actionLabel}</div>
+              {previewMode === "open" ? (
+                <div className="member-onboarding-preview-modal-layer">
+                  <div className="member-onboarding-preview-modal" role="presentation">
+                    <button
+                      type="button"
+                      className="member-onboarding-preview-close"
+                      aria-label="Close preview"
+                      onClick={() => setPreviewMode("workspace")}
+                    >
+                      x
+                    </button>
+                    <div className="member-onboarding-preview-modal-media">
+                      {videoPreview.thumbnailUrl ? (
+                        <img src={videoPreview.thumbnailUrl} alt="" loading="lazy" />
+                      ) : (
+                        <div className="member-onboarding-preview-media-empty">Video</div>
+                      )}
+                      <span className="member-onboarding-preview-play">Play</span>
+                    </div>
+                    <div className="member-onboarding-preview-modal-copy">
+                      <strong>{previewTitle}</strong>
+                      <span>{previewDescription}</span>
+                      {videoPreview.host ? (
+                        <small>Video from {videoPreview.host}</small>
+                      ) : (
+                        <small>No video set yet.</small>
+                      )}
+                    </div>
+                    <div className="member-onboarding-preview-guide">
+                      <span>First action</span>
+                      <strong>{actionLabel}</strong>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
             </div>
           </div>
         </div>
