@@ -98,6 +98,19 @@ function createErrorValidationReport(
   };
 }
 
+function getSetupRequiredValidationError(app: DeveloperAppRow): string | null {
+  if (app.setupStatus === "needs_auth") {
+    return "This MCP app needs authentication before validation.";
+  }
+  if (app.setupStatus === "needs_config") {
+    return "This MCP app needs endpoint or configuration before validation.";
+  }
+  if (app.setupStatus === "needs_runtime") {
+    return "This MCP app needs a compatible runtime before validation.";
+  }
+  return null;
+}
+
 function setValidationStage(
   stages: ValidationStage[],
   id: ValidationStageId,
@@ -416,11 +429,18 @@ export const validateDeveloperAppInternal = internalAction({
       stages: createBaseValidationStages(),
     };
 
-    const secretPolicy = validateDiscoverAppSecretForCatalogAppId(
-      app.catalogAppId,
-      secret,
-    );
-    if (!secretPolicy.ok) {
+    const setupRequiredError = getSetupRequiredValidationError(app);
+    const secretPolicy = setupRequiredError
+      ? null
+      : validateDiscoverAppSecretForCatalogAppId(app.catalogAppId, secret);
+    if (setupRequiredError) {
+      validationStatus = "error";
+      validationError = setupRequiredError;
+      toolsJson = [];
+      fetchedAt = Date.now();
+      snapshotVersion = `error-${fetchedAt}`;
+      validationReport = createErrorValidationReport(validationError);
+    } else if (secretPolicy && !secretPolicy.ok) {
       validationStatus = "error";
       validationError = secretPolicy.message;
       toolsJson = [];

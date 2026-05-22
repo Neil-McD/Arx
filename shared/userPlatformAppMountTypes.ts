@@ -25,6 +25,9 @@ export type UserPlatformMountedApp = {
     endpoint_url: string;
     auth_type: string;
     status: string;
+    setup_status?: string | null;
+    setup_reason?: string | null;
+    mcp_registry_id?: string | null;
   };
   connection: {
     connection_status: string;
@@ -40,6 +43,14 @@ export type ConnectUserPlatformAppInput = {
   description?: string;
   secret?: string;
   connect_attempt_id?: string;
+};
+
+export type SetupImportedCommunityMcpUserHarnessInput = {
+  community_id: string;
+  community_app_mount_id: string;
+  endpoint_url: string;
+  auth_type: DeveloperAppAuthType;
+  secret?: string;
 };
 
 export type UserPlatformAppValidationStageId =
@@ -94,6 +105,12 @@ export type BeginUserPlatformAppOAuthResult = {
   authorize_url: string | null;
   redirect_uri?: string | null;
   error_message?: string | null;
+};
+
+export type BeginUserPlatformAppOAuthOptions = {
+  community_id?: string | null;
+  community_app_mount_id?: string | null;
+  endpoint_url?: string | null;
 };
 
 export type FinalizeUserPlatformAppOAuthResult = {

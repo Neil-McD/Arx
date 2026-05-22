@@ -1,10 +1,12 @@
 import { useCallback, useRef, useState } from "react";
 
 import type {
+  BeginUserPlatformAppOAuthOptions,
   BeginUserPlatformAppOAuthResult,
   ConnectUserPlatformAppResult,
   ConnectUserPlatformAppInput,
   FinalizeUserPlatformAppOAuthResult,
+  SetupImportedCommunityMcpUserHarnessInput,
   UserPlatformMountedApp,
 } from "../../../../shared/userPlatformAppMountTypes";
 import {
@@ -15,6 +17,7 @@ import {
   reconnectCloudUserPlatformApp,
   refreshCloudUserPlatformApp,
   unmountCloudUserPlatformApp,
+  setupCloudImportedCommunityMcpUserHarness,
   updateCloudUserPlatformAppMount,
 } from "../../../../shared/cloudUserPlatformAppMountGateway";
 import {
@@ -158,8 +161,13 @@ export function useWebUserPlatformAppMountsController<
     async (params: {
       catalogAppId: string;
       returnToPath?: string | null;
-    }): Promise<BeginUserPlatformAppOAuthResult> => {
-      if (beginOAuthInFlightCatalogAppIdRef.current === params.catalogAppId) {
+    } & BeginUserPlatformAppOAuthOptions): Promise<BeginUserPlatformAppOAuthResult> => {
+      const inFlightKey = [
+        params.catalogAppId,
+        params.community_id ?? "",
+        params.community_app_mount_id ?? "",
+      ].join(":");
+      if (beginOAuthInFlightCatalogAppIdRef.current === inFlightKey) {
         return {
           ok: false,
           catalog_app_id: params.catalogAppId,
@@ -167,14 +175,14 @@ export function useWebUserPlatformAppMountsController<
           error_message: "OAuth connection is already starting.",
         };
       }
-      beginOAuthInFlightCatalogAppIdRef.current = params.catalogAppId;
+      beginOAuthInFlightCatalogAppIdRef.current = inFlightKey;
       const current = argsRef.current;
       const usableSession = await resolveUsableSession(
         current.session,
         current.ensureSession,
       );
       if (!usableSession) {
-        if (beginOAuthInFlightCatalogAppIdRef.current === params.catalogAppId) {
+        if (beginOAuthInFlightCatalogAppIdRef.current === inFlightKey) {
           beginOAuthInFlightCatalogAppIdRef.current = null;
         }
         return {
@@ -191,6 +199,9 @@ export function useWebUserPlatformAppMountsController<
           session: usableSession,
           catalogAppId: params.catalogAppId,
           returnToPath: params.returnToPath,
+          community_id: params.community_id,
+          community_app_mount_id: params.community_app_mount_id,
+          endpoint_url: params.endpoint_url,
         });
         if (!result.ok && result.error_message) {
           setUserPlatformAppMutationError(result.error_message);
@@ -209,7 +220,7 @@ export function useWebUserPlatformAppMountsController<
           error_message: message,
         };
       } finally {
-        if (beginOAuthInFlightCatalogAppIdRef.current === params.catalogAppId) {
+        if (beginOAuthInFlightCatalogAppIdRef.current === inFlightKey) {
           beginOAuthInFlightCatalogAppIdRef.current = null;
         }
         setIsConnectingUserPlatformApp(false);
@@ -337,6 +348,64 @@ export function useWebUserPlatformAppMountsController<
     [],
   );
 
+  const setupImportedCommunityMcpUserHarness = useCallback(
+    async (
+      input: SetupImportedCommunityMcpUserHarnessInput,
+    ): Promise<ConnectUserPlatformAppResult> => {
+      const current = argsRef.current;
+      const usableSession = await resolveUsableSession(
+        current.session,
+        current.ensureSession,
+      );
+      if (!usableSession) {
+        return {
+          ok: false,
+          mount: null,
+          validation_report: null,
+          error_code: "authenticated_user_required",
+          error_message: "Sign in to connect this imported MCP.",
+          connect_attempt_id: null,
+        };
+      }
+      setIsConnectingUserPlatformApp(true);
+      setUserPlatformAppMutationError(null);
+      try {
+        const result = await setupCloudImportedCommunityMcpUserHarness({
+          session: usableSession,
+          input,
+        });
+        if (result.mount) {
+          setUserPlatformAppMounts((prev) => {
+            const next = prev.filter((entry) => entry.id !== result.mount?.id);
+            next.unshift(result.mount as UserPlatformMountedApp);
+            return next;
+          });
+        }
+        if (!result.ok && result.error_message) {
+          setUserPlatformAppMutationError(result.error_message);
+        }
+        return result;
+      } catch (error) {
+        const message = toErrorMessage(
+          error,
+          "Failed to connect imported MCP to your harness.",
+        );
+        setUserPlatformAppMutationError(message);
+        return {
+          ok: false,
+          mount: null,
+          validation_report: null,
+          error_code: "server_unavailable",
+          error_message: message,
+          connect_attempt_id: null,
+        };
+      } finally {
+        setIsConnectingUserPlatformApp(false);
+      }
+    },
+    [],
+  );
+
   const reconnectUserPlatformApp = useCallback(
     async (
       userPlatformAppMountId: string,
@@ -424,6 +493,7 @@ export function useWebUserPlatformAppMountsController<
     finalizeUserPlatformAppOAuth,
     updateUserPlatformAppMount,
     refreshUserPlatformApp,
+    setupImportedCommunityMcpUserHarness,
     reconnectUserPlatformApp,
     unmountUserPlatformApp,
   };

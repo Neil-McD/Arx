@@ -24,6 +24,8 @@ import {
   type DiscoverAppCatalogEntry,
   type DiscoverAppOAuthClientConfig,
 } from "../shared/discoverCatalog";
+import { resolveCommunityWorkflowImportMcpRegistryConnectPolicy } from "../shared/communityWorkflowImportMcpRegistry";
+import { requireCommunityChatAccess } from "./communityCore";
 
 type StoredOAuthTokenBundleV1 = {
   kind: "oauth_tokens_v1";
@@ -80,6 +82,28 @@ type AppOAuthFinalizeResult = {
   validation_status?: string | null;
   error_message?: string | null;
 };
+
+type AppOAuthConnectionSource =
+  | {
+      sourceType: "personal";
+      stateCatalogAppId: string;
+      mountCatalogAppId: string;
+      mcpRegistryId?: string;
+      name: string;
+      description?: string;
+      endpointUrl: string;
+    }
+  | {
+      sourceType: "community";
+      stateCatalogAppId: string;
+      mountCatalogAppId?: string;
+      mcpRegistryId: string;
+      name: string;
+      description?: string;
+      endpointUrl: string;
+      communityId: any;
+      communityAppMountId: any;
+    };
 
 const APP_OAUTH_STATE_TTL_MS = 10 * 60_000;
 const APP_OAUTH_REFRESH_WINDOW_MS = 60_000;
@@ -532,6 +556,21 @@ async function resolveOAuthClientCredentials(params: {
   };
 }
 
+async function resolveDynamicOAuthClientCredentials(params: {
+  metadata: Awaited<ReturnType<typeof discoverOAuthMetadata>>;
+  redirectUri: string;
+}): Promise<ResolvedOAuthClientCredentials> {
+  const client = await registerOAuthClient({
+    metadata: params.metadata,
+    redirectUri: params.redirectUri,
+  });
+  return {
+    ...client,
+    clientSecretSource: client.clientSecret ? "stored" : "none",
+    mode: "dynamic_registration",
+  };
+}
+
 function resolveStaticOAuthClientSecret(
   app: DiscoverAppCatalogEntry,
   oauthClient = resolveDiscoverAppOAuthClientConfig(app),
@@ -795,6 +834,58 @@ async function resolveAuthenticatedActionUser(args: {
   };
 }
 
+async function resolveImportedCommunityOAuthSource(args: {
+  ctx: any;
+  userId: any;
+  communityId: any;
+  communityAppMountId: any;
+  endpointUrl?: unknown;
+}): Promise<AppOAuthConnectionSource> {
+  await requireCommunityChatAccess({
+    ctx: args.ctx,
+    communityId: args.communityId,
+    userId: args.userId,
+  });
+  const seedSource = (await args.ctx.runQuery(
+    internal.communityAppMounts.getCommunityAppMountSeedSourceInternal as any,
+    {
+      communityAppMountId: args.communityAppMountId,
+    },
+  )) as {
+    mount: {
+      _id: any;
+      communityId: any;
+    };
+    app: DeveloperAppRow;
+  } | null;
+  if (
+    !seedSource ||
+    String(seedSource.mount.communityId) !== String(args.communityId) ||
+    !seedSource.app.mcpRegistryId
+  ) {
+    throw new Error("imported_mcp_community_app_not_found");
+  }
+  const policy = resolveCommunityWorkflowImportMcpRegistryConnectPolicy({
+    mcpRegistryId: seedSource.app.mcpRegistryId,
+    name: seedSource.app.name,
+    endpointUrl: args.endpointUrl || seedSource.app.endpointUrl,
+    authType: "oauth",
+  });
+  if (!policy.ok) throw new Error(policy.message);
+  const mountCatalogAppId = normalizeString(seedSource.app.catalogAppId, 120);
+  return {
+    sourceType: "community",
+    stateCatalogAppId: mountCatalogAppId || `imported-${policy.mcpRegistryId}`,
+    mountCatalogAppId: mountCatalogAppId || undefined,
+    mcpRegistryId: policy.mcpRegistryId,
+    name: policy.name,
+    description: seedSource.app.description,
+    endpointUrl: policy.endpointUrl,
+    communityId: seedSource.mount.communityId,
+    communityAppMountId: seedSource.mount._id,
+  };
+}
+
 export const getAppOAuthStateByStateInternal = internalQuery({
   args: {
     state: v.string(),
@@ -811,6 +902,10 @@ export const insertAppOAuthStateInternal = internalMutation({
   args: {
     userId: v.id("users"),
     catalogAppId: v.string(),
+    sourceType: v.optional(v.union(v.literal("personal"), v.literal("community"))),
+    communityId: v.optional(v.id("communities")),
+    communityAppMountId: v.optional(v.id("communityAppMounts")),
+    mcpRegistryId: v.optional(v.string()),
     state: v.string(),
     codeVerifier: v.string(),
     redirectUri: v.string(),
@@ -1026,28 +1121,61 @@ export const beginUserPlatformAppOAuth = action({
     catalogAppId: v.string(),
     returnToPath: v.optional(v.string()),
     callbackBaseUrl: v.optional(v.string()),
+    communityId: v.optional(v.id("communities")),
+    communityAppMountId: v.optional(v.id("communityAppMounts")),
+    endpointUrl: v.optional(v.string()),
   },
   handler: async (ctx, args): Promise<unknown> => {
     const { userId } = await resolveAuthenticatedActionUser({
       ctx,
       authSubject: args.authSubject ?? null,
     });
-    const app = findDiscoverAppCatalogEntryById(args.catalogAppId);
-    if (!app) throw new Error("catalog_app_not_found");
-    const connectPolicy = resolveDiscoverAppCatalogConnectPolicy({
-      catalogAppId: app.id,
-      name: app.name,
-      endpointUrl: app.personalConnect.endpointUrl,
-      authType: "oauth",
-    });
-    if (!connectPolicy.ok) throw new Error(connectPolicy.message);
+    let source: AppOAuthConnectionSource;
+    let clientApp: DiscoverAppCatalogEntry | null = null;
+    if (args.communityAppMountId) {
+      if (!args.communityId) throw new Error("community_app_oauth_source_required");
+      source = await resolveImportedCommunityOAuthSource({
+        ctx,
+        userId,
+        communityId: args.communityId,
+        communityAppMountId: args.communityAppMountId,
+        endpointUrl: args.endpointUrl,
+      });
+      clientApp = source.mountCatalogAppId
+        ? findDiscoverAppCatalogEntryById(source.mountCatalogAppId)
+        : null;
+    } else {
+      const app = findDiscoverAppCatalogEntryById(args.catalogAppId);
+      if (!app) throw new Error("catalog_app_not_found");
+      const connectPolicy = resolveDiscoverAppCatalogConnectPolicy({
+        catalogAppId: app.id,
+        name: app.name,
+        endpointUrl: app.personalConnect.endpointUrl,
+        authType: "oauth",
+      });
+      if (!connectPolicy.ok) throw new Error(connectPolicy.message);
+      clientApp = app;
+      source = {
+        sourceType: "personal",
+        stateCatalogAppId: connectPolicy.catalogAppId,
+        mountCatalogAppId: connectPolicy.catalogAppId,
+        name: connectPolicy.name,
+        description: app.description,
+        endpointUrl: connectPolicy.endpointUrl,
+      };
+    }
     const redirectUri = buildCallbackUri(args.callbackBaseUrl);
-    const metadata = await discoverOAuthMetadata(connectPolicy.endpointUrl);
-    const client = await resolveOAuthClientCredentials({
-      app,
-      metadata,
-      redirectUri,
-    });
+    const metadata = await discoverOAuthMetadata(source.endpointUrl);
+    const client = clientApp && resolveDiscoverAppOAuthClientConfig(clientApp)
+      ? await resolveOAuthClientCredentials({
+          app: clientApp,
+          metadata,
+          redirectUri,
+        })
+      : await resolveDynamicOAuthClientCredentials({
+          metadata,
+          redirectUri,
+        });
     const codeVerifier = randomBase64Url(32);
     const codeChallenge = await sha256Base64Url(codeVerifier);
     const state = randomBase64Url(32);
@@ -1059,12 +1187,18 @@ export const beginUserPlatformAppOAuth = action({
         : null;
     await ctx.runMutation(internal.appOAuth.insertAppOAuthStateInternal as any, {
       userId,
-      catalogAppId: connectPolicy.catalogAppId,
+      catalogAppId: source.stateCatalogAppId,
+      sourceType: source.sourceType,
+      communityId: source.sourceType === "community" ? source.communityId : undefined,
+      communityAppMountId:
+        source.sourceType === "community" ? source.communityAppMountId : undefined,
+      mcpRegistryId:
+        source.sourceType === "community" ? source.mcpRegistryId : undefined,
       state,
       codeVerifier,
       redirectUri,
       returnToPath,
-      endpointUrl: connectPolicy.endpointUrl,
+      endpointUrl: source.endpointUrl,
       clientId: client.clientId,
       clientSecretEncryptedHex: encryptedClientSecret?.encryptedSecretHex,
       clientSecretIvHex: encryptedClientSecret?.secretIvHex,
@@ -1089,7 +1223,7 @@ export const beginUserPlatformAppOAuth = action({
     if (metadata.scope) authorizationUrl.searchParams.set("scope", metadata.scope);
     return {
       ok: true,
-      catalog_app_id: connectPolicy.catalogAppId,
+      catalog_app_id: source.stateCatalogAppId,
       authorize_url: authorizationUrl.toString(),
       redirect_uri: redirectUri,
     };
@@ -1293,15 +1427,39 @@ export const finalizeUserPlatformAppOAuth = action({
         error_message: "OAuth callback did not include an authorization code.",
       };
     }
-    const app = findDiscoverAppCatalogEntryById(catalogAppId);
-    if (!app) throw new Error("catalog_app_not_found");
-    const connectPolicy = resolveDiscoverAppCatalogConnectPolicy({
-      catalogAppId,
-      name: app.name,
-      endpointUrl: row.endpointUrl,
-      authType: "oauth",
-    });
-    if (!connectPolicy.ok) throw new Error(connectPolicy.message);
+    let source: AppOAuthConnectionSource;
+    const stateSourceType = normalizeString(row.sourceType, 40);
+    if (stateSourceType === "community") {
+      if (!row.communityId || !row.communityAppMountId || !row.mcpRegistryId) {
+        throw new Error("community_app_oauth_state_incomplete");
+      }
+      source = await resolveImportedCommunityOAuthSource({
+        ctx,
+        userId,
+        communityId: row.communityId,
+        communityAppMountId: row.communityAppMountId,
+        endpointUrl: row.endpointUrl,
+      });
+    } else {
+      const app = findDiscoverAppCatalogEntryById(catalogAppId);
+      if (!app) throw new Error("catalog_app_not_found");
+      const connectPolicy = resolveDiscoverAppCatalogConnectPolicy({
+        catalogAppId,
+        name: app.name,
+        endpointUrl: row.endpointUrl,
+        authType: "oauth",
+      });
+      if (!connectPolicy.ok) throw new Error(connectPolicy.message);
+      source = {
+        sourceType: "personal",
+        stateCatalogAppId: connectPolicy.catalogAppId,
+        mountCatalogAppId: connectPolicy.catalogAppId,
+        name: connectPolicy.name,
+        description: app.description,
+        endpointUrl: connectPolicy.endpointUrl,
+      };
+    }
+    const tokenCatalogAppId = source.mountCatalogAppId || source.stateCatalogAppId;
     const nowMs = Date.now();
     const clientSecret =
       row.clientSecretEncryptedHex && row.clientSecretIvHex
@@ -1311,18 +1469,18 @@ export const finalizeUserPlatformAppOAuth = action({
           })
         : null;
     const clientSecretSource = inferOAuthClientSecretSource({
-      catalogAppId,
+      catalogAppId: tokenCatalogAppId,
       storedClientSecret: normalizeString(clientSecret, 2_000) || null,
     });
     let tokenBundle: StoredOAuthTokenBundleV1;
     try {
       const tokenRequestClientSecret = resolveOAuthClientSecretForTokenRequest({
-        catalogAppId,
+        catalogAppId: tokenCatalogAppId,
         storedClientSecret: normalizeString(clientSecret, 2_000) || null,
         clientSecretSource,
       });
       tokenBundle = await exchangeCodeForTokenBundle({
-        catalogAppId,
+        catalogAppId: tokenCatalogAppId,
         code,
         codeVerifier: row.codeVerifier,
         redirectUri: row.redirectUri,
@@ -1339,7 +1497,7 @@ export const finalizeUserPlatformAppOAuth = action({
       const result: AppOAuthFinalizeResult = {
         ok: false,
         catalog_app_id: catalogAppId || null,
-        error_message: `${app.name} authorization could not be finalized. Start again.`,
+        error_message: `${source.name} authorization could not be finalized. Start again.`,
       };
       await ctx.runMutation(internal.appOAuth.failAppOAuthFinalizeInternal as any, {
         stateId: row._id,
@@ -1351,13 +1509,17 @@ export const finalizeUserPlatformAppOAuth = action({
     }
     await ctx.runAction(internal.userPlatformAppMounts.ensureUserHarnessAppInternal, {
       userId: row.userId,
-      catalogAppId: connectPolicy.catalogAppId,
-      name: connectPolicy.name,
-      description: app.description,
-      endpointUrl: connectPolicy.endpointUrl,
+      catalogAppId: source.mountCatalogAppId,
+      mcpRegistryId: source.sourceType === "community" ? source.mcpRegistryId : undefined,
+      name: source.name,
+      description: source.description,
+      endpointUrl: source.endpointUrl,
       authType: "oauth",
       enabled: true,
-      sourceType: "personal",
+      sourceType: source.sourceType,
+      communityId: source.sourceType === "community" ? source.communityId : undefined,
+      communityAppMountId:
+        source.sourceType === "community" ? source.communityAppMountId : undefined,
       updateExistingMount: true,
       nowMs,
     });
@@ -1365,8 +1527,8 @@ export const finalizeUserPlatformAppOAuth = action({
       internal.userPlatformAppMounts.findExistingUserPlatformMountByIdentityInternal,
       {
         userId: row.userId,
-        catalogAppId: connectPolicy.catalogAppId,
-        endpointUrl: connectPolicy.endpointUrl,
+        catalogAppId: source.mountCatalogAppId,
+        endpointUrl: source.endpointUrl,
         authType: "oauth",
       },
     )) as { mount: any; app: DeveloperAppRow; connection: AppConnectionRow | null } | null;
@@ -1402,15 +1564,21 @@ export const finalizeUserPlatformAppOAuth = action({
         internal.userPlatformAppMounts.ensureUserHarnessAppInternal,
         {
           userId: row.userId,
-          catalogAppId: connectPolicy.catalogAppId,
-          name: connectPolicy.name,
-          description: app.description,
-          endpointUrl: connectPolicy.endpointUrl,
+          catalogAppId: source.mountCatalogAppId,
+          mcpRegistryId:
+            source.sourceType === "community" ? source.mcpRegistryId : undefined,
+          name: source.name,
+          description: source.description,
+          endpointUrl: source.endpointUrl,
           authType: "oauth",
           toolSnapshotId: refreshedApp?.activeSnapshotId,
           enabled: true,
           enabledTools,
-          sourceType: "personal",
+          sourceType: source.sourceType,
+          communityId:
+            source.sourceType === "community" ? source.communityId : undefined,
+          communityAppMountId:
+            source.sourceType === "community" ? source.communityAppMountId : undefined,
           updateExistingMount: true,
           nowMs: Date.now(),
         },

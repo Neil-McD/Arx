@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import {
   type AppConnectionRow,
   type DeveloperAppRow,
+  type DeveloperAppSetupStatus,
   isDeveloperAppAuthType,
   normalizeDeveloperAppCatalogId,
   normalizeDeveloperAppDescription,
@@ -10,6 +11,36 @@ import {
   normalizeDeveloperAppName,
   normalizeDeveloperAppSlug,
 } from "./appCore";
+
+const IMPORTED_MCP_PENDING_ENDPOINT_HOST = "pending-mcp.polynet.ai";
+
+function normalizeSetupStatus(value: unknown): DeveloperAppSetupStatus {
+  if (
+    value === "needs_auth" ||
+    value === "needs_config" ||
+    value === "needs_runtime"
+  ) {
+    return value;
+  }
+  return "needs_config";
+}
+
+function buildImportedMcpPendingEndpointUrl(args: {
+  catalogAppId?: string | null;
+  mcpRegistryId?: string | null;
+  name: string;
+}): string {
+  const slug =
+    args.catalogAppId
+      ? normalizeDeveloperAppSlug(args.catalogAppId, "mcp")
+      : [
+          normalizeDeveloperAppSlug(args.mcpRegistryId, "mcp"),
+          normalizeDeveloperAppSlug(args.name, "mcp"),
+        ]
+          .filter(Boolean)
+          .join("/");
+  return `https://${IMPORTED_MCP_PENDING_ENDPOINT_HOST}/${slug}`;
+}
 
 async function getDeveloperAppById(ctx: any, developerAppId: any): Promise<DeveloperAppRow | null> {
   return ((await ctx.db.get(developerAppId)) as DeveloperAppRow | null) ?? null;
@@ -111,6 +142,7 @@ export const createDeveloperAppInternal = internalMutation({
       v.literal("none"),
       v.literal("oauth"),
     ),
+    mcpRegistryId: v.optional(v.string()),
     nowMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
@@ -139,10 +171,151 @@ export const createDeveloperAppInternal = internalMutation({
       description: description || undefined,
       endpointUrl,
       authType: args.authType,
+      mcpRegistryId:
+        normalizeDeveloperAppCatalogId(args.mcpRegistryId) || undefined,
       status: "draft",
       createdAt: nowMs,
       updatedAt: nowMs,
     });
+  },
+});
+
+export const upsertImportedMcpDeveloperAppInternal = internalMutation({
+  args: {
+    ownerUserId: v.id("users"),
+    catalogAppId: v.optional(v.string()),
+    name: v.string(),
+    slug: v.optional(v.string()),
+    description: v.optional(v.string()),
+    endpointUrl: v.optional(v.string()),
+    authType: v.optional(
+      v.union(
+        v.literal("api_key"),
+        v.literal("bearer"),
+        v.literal("none"),
+        v.literal("oauth"),
+      ),
+    ),
+    setupStatus: v.union(
+      v.literal("needs_auth"),
+      v.literal("needs_config"),
+      v.literal("needs_runtime"),
+    ),
+    setupReason: v.optional(v.string()),
+    mcpRegistryId: v.optional(v.string()),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const nowMs = args.nowMs ?? Date.now();
+    const catalogAppId = normalizeDeveloperAppCatalogId(args.catalogAppId);
+    const name = normalizeDeveloperAppName(args.name);
+    if (!name) throw new Error("developer_app_name_required");
+    const setupStatus = normalizeSetupStatus(args.setupStatus);
+    const description = normalizeDeveloperAppDescription(args.description);
+    const mcpRegistryId = normalizeDeveloperAppCatalogId(args.mcpRegistryId);
+    const endpointUrl =
+      normalizeDeveloperAppEndpointUrl(args.endpointUrl) ||
+      buildImportedMcpPendingEndpointUrl({
+        catalogAppId,
+        mcpRegistryId,
+        name,
+      });
+    const authType =
+      args.authType && isDeveloperAppAuthType(args.authType)
+        ? args.authType
+        : setupStatus === "needs_auth"
+          ? "bearer"
+          : "none";
+    const baseSlug = normalizeDeveloperAppSlug(
+      args.slug,
+      catalogAppId || mcpRegistryId || name,
+    );
+    if (!baseSlug) throw new Error("developer_app_slug_required");
+
+    const ownerApps = (await ctx.db
+      .query("developerApps")
+      .withIndex("by_owner", (q: any) => q.eq("ownerUserId", args.ownerUserId))
+      .collect()) as DeveloperAppRow[];
+    const existing =
+      ownerApps.find(
+        (app) =>
+          catalogAppId &&
+          normalizeDeveloperAppCatalogId(app.catalogAppId) === catalogAppId,
+      ) ??
+      ownerApps.find(
+        (app) =>
+          normalizeDeveloperAppEndpointUrl(app.endpointUrl) === endpointUrl &&
+          app.authType === authType,
+      ) ??
+      null;
+
+    const patch = {
+      catalogAppId: catalogAppId || undefined,
+      name,
+      description: description || undefined,
+      endpointUrl:
+        existing?.status === "valid" && existing.endpointUrl
+          ? existing.endpointUrl
+          : endpointUrl,
+      authType: existing?.status === "valid" ? existing.authType : authType,
+      setupStatus: existing?.status === "valid" ? undefined : setupStatus,
+      setupReason: normalizeDeveloperAppDescription(args.setupReason) || undefined,
+      mcpRegistryId: mcpRegistryId || undefined,
+      updatedAt: nowMs,
+    };
+
+    if (existing) {
+      await ctx.db.patch(existing._id, patch as any);
+      return existing._id;
+    }
+
+    const slug = await resolveUniqueSlugForOwner({
+      ctx,
+      ownerUserId: args.ownerUserId,
+      slug: baseSlug,
+    });
+    return await ctx.db.insert("developerApps", {
+      ownerUserId: args.ownerUserId,
+      slug,
+      status: "draft",
+      createdAt: nowMs,
+      ...patch,
+    } as any);
+  },
+});
+
+export const configureImportedMcpDeveloperAppInternal = internalMutation({
+  args: {
+    developerAppId: v.id("developerApps"),
+    endpointUrl: v.string(),
+    authType: v.union(
+      v.literal("api_key"),
+      v.literal("bearer"),
+      v.literal("none"),
+      v.literal("oauth"),
+    ),
+    clearSetupStatus: v.optional(v.boolean()),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const app = await getDeveloperAppById(ctx, args.developerAppId);
+    if (!app) throw new Error("developer_app_not_found");
+    if (!normalizeDeveloperAppCatalogId(app.mcpRegistryId)) {
+      throw new Error("imported_mcp_registry_id_required");
+    }
+    const endpointUrl = normalizeDeveloperAppEndpointUrl(args.endpointUrl);
+    if (!endpointUrl) throw new Error("developer_app_endpoint_url_invalid");
+    const patch: Record<string, unknown> = {
+      endpointUrl,
+      authType: args.authType,
+      updatedAt: args.nowMs ?? Date.now(),
+    };
+    if (args.clearSetupStatus !== false) {
+      patch.setupStatus = undefined;
+      patch.setupReason = undefined;
+    }
+    await ctx.db.patch(args.developerAppId, patch as any);
+    return args.developerAppId;
   },
 });
 

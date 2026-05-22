@@ -740,7 +740,8 @@ export function resolveCommunityWorkflowImportMcpCatalogMatch(args: {
       : null;
   const catalogAuthType =
     app.personalConnect.connectionKind === "known"
-      ? (app.personalConnect.authType ?? null)
+      ? (app.personalConnect.authType ??
+        (app.personalConnect.authMethod === "oauth" ? "oauth" : null))
       : null;
 
   if (

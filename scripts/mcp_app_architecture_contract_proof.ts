@@ -41,6 +41,9 @@ function main() {
   const discoverCatalogMatching = readText(
     join(root, "apps/web/src/lib/discoverCatalogMatching.ts"),
   );
+  const integrationSurfaceRows = readText(
+    join(root, "apps/web/src/lib/integrationSurfaceRows.ts"),
+  );
   const communityAppsEditor = readText(
     join(root, "apps/web/src/components/WebCommunityAiAgentAppsEditor.tsx"),
   );
@@ -299,10 +302,14 @@ function main() {
     "findDiscoverCatalogEntryForAppIdentity",
     "Canonical Discover catalog identity matcher",
   );
+  assertIncludes(
+    integrationSurfaceRows,
+    "findDiscoverCatalogEntryForAppIdentity",
+    "Shared integration surface row mapper uses canonical Discover catalog identity matcher",
+  );
   for (const appSurface of [
     ["Community Settings", communitySettings],
     ["Integrations Settings", integrationsSettings],
-    ["Community app editor", communityAppsEditor],
   ] as const) {
     assertIncludes(
       appSurface[1],
@@ -310,6 +317,11 @@ function main() {
       `${appSurface[0]} uses canonical Discover catalog identity matcher`,
     );
   }
+  assertIncludes(
+    communityAppsEditor,
+    "buildIntegrationSurfaceRowFromCommunityMount",
+    "Community app editor uses shared integration surface row mapper",
+  );
   for (const duplicatedCatalogLookup of [
     "function findCatalogEntryForCommunityMount",
     "function findCatalogEntryForApp",

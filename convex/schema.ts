@@ -1230,6 +1230,15 @@ export default defineSchema({
     activeSnapshotId: v.optional(v.id("appToolSnapshots")),
     lastValidatedAt: v.optional(v.number()),
     lastValidationError: v.optional(v.string()),
+    setupStatus: v.optional(
+      v.union(
+        v.literal("needs_auth"),
+        v.literal("needs_config"),
+        v.literal("needs_runtime"),
+      ),
+    ),
+    setupReason: v.optional(v.string()),
+    mcpRegistryId: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -1255,6 +1264,10 @@ export default defineSchema({
   appOAuthStates: defineTable({
     userId: v.id("users"),
     catalogAppId: v.string(),
+    sourceType: v.optional(v.union(v.literal("personal"), v.literal("community"))),
+    communityId: v.optional(v.id("communities")),
+    communityAppMountId: v.optional(v.id("communityAppMounts")),
+    mcpRegistryId: v.optional(v.string()),
     state: v.string(),
     codeVerifier: v.string(),
     redirectUri: v.string(),

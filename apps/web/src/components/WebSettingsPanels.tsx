@@ -12,9 +12,11 @@ import type {
 import type { PendingPurchaseClaim } from "../../../../shared/pay_first";
 import type { EffectiveMcpApp } from "../../../../shared/effectiveMcpApps";
 import type { EffectiveSkill } from "../../../../shared/effectiveSkills";
+import type { DeveloperAppAuthType } from "../../../../shared/communityAppMountTypes";
 import type { CreateSkillPackageInput } from "../../../../shared/skillPackageTypes";
 import type { UserPlatformInstalledSkill } from "../../../../shared/userPlatformSkillTypes";
 import type {
+  BeginUserPlatformAppOAuthOptions,
   BeginUserPlatformAppOAuthResult,
   ConnectUserPlatformAppInput,
   ConnectUserPlatformAppResult,
@@ -160,6 +162,7 @@ export type WebSettingsPanelsProps = {
     isConnectingUserPlatformApp: boolean;
     updatingUserPlatformAppMountId: string | null;
     refreshingUserPlatformAppMountId: string | null;
+    refreshingCommunityAppMountId: string | null;
     reconnectingUserPlatformAppMountId: string | null;
     removingUserPlatformAppMountId: string | null;
     userPlatformSkills: UserPlatformInstalledSkill[];
@@ -174,6 +177,7 @@ export type WebSettingsPanelsProps = {
     ) => Promise<ConnectUserPlatformAppResult>;
     onBeginUserPlatformAppOAuth: (
       catalogAppId: string,
+      options?: BeginUserPlatformAppOAuthOptions,
     ) => Promise<BeginUserPlatformAppOAuthResult>;
     onUpdateUserPlatformAppMount: (
       userPlatformAppMountId: string,
@@ -189,6 +193,12 @@ export type WebSettingsPanelsProps = {
       userPlatformAppMountId: string,
       secret: string,
     ) => Promise<void> | Promise<boolean> | boolean | void;
+    onSetupImportedCommunityMcpApp: (input: {
+      community_app_mount_id: string;
+      endpoint_url: string;
+      auth_type: DeveloperAppAuthType;
+      secret?: string;
+    }) => Promise<void> | Promise<boolean> | boolean | void;
     onUnmountUserPlatformApp: (
       userPlatformAppMountId: string,
     ) => Promise<void> | Promise<boolean> | boolean | void;
@@ -379,6 +389,7 @@ export function WebSettingsPanels(props: WebSettingsPanelsProps) {
     updatingUserPlatformAppMountId: integrations.updatingUserPlatformAppMountId,
     refreshingUserPlatformAppMountId:
       integrations.refreshingUserPlatformAppMountId,
+    refreshingCommunityAppMountId: integrations.refreshingCommunityAppMountId,
     reconnectingUserPlatformAppMountId:
       integrations.reconnectingUserPlatformAppMountId,
     removingUserPlatformAppMountId: integrations.removingUserPlatformAppMountId,
@@ -396,6 +407,8 @@ export function WebSettingsPanels(props: WebSettingsPanelsProps) {
     onUpdateUserPlatformAppMount: integrations.onUpdateUserPlatformAppMount,
     onRefreshUserPlatformApp: integrations.onRefreshUserPlatformApp,
     onReconnectUserPlatformApp: integrations.onReconnectUserPlatformApp,
+    onSetupImportedCommunityMcpApp:
+      integrations.onSetupImportedCommunityMcpApp,
     onUnmountUserPlatformApp: integrations.onUnmountUserPlatformApp,
     onCreateUserPlatformSkill: integrations.onCreateUserPlatformSkill,
     onSaveUserPlatformSkill: integrations.onSaveUserPlatformSkill,

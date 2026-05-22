@@ -2471,6 +2471,7 @@ export default function App() {
     connectCommunityApp,
     updateCommunityAppMount,
     refreshCommunityApp,
+    setupImportedCommunityMcpApp,
     unmountCommunityApp,
   } = useWebCommunityAppsController<AuthSession>({
     activeCommunityId,
@@ -2495,6 +2496,7 @@ export default function App() {
     finalizeUserPlatformAppOAuth,
     updateUserPlatformAppMount,
     refreshUserPlatformApp,
+    setupImportedCommunityMcpUserHarness,
     reconnectUserPlatformApp,
     unmountUserPlatformApp,
   } = useWebUserPlatformAppMountsController<AuthSession>({
@@ -3582,17 +3584,29 @@ export default function App() {
   );
 
   const handleBeginUserPlatformAppOAuth = useCallback(
-    async (catalogAppId: string) => {
+    async (
+      catalogAppId: string,
+      options?: {
+        community_id?: string | null;
+        community_app_mount_id?: string | null;
+        endpoint_url?: string | null;
+      },
+    ) => {
       const result = await beginUserPlatformAppOAuth({
         catalogAppId,
         returnToPath: `${window.location.pathname}${window.location.search}`,
+        community_id:
+          options?.community_id ??
+          (options?.community_app_mount_id ? activeCommunityId : undefined),
+        community_app_mount_id: options?.community_app_mount_id,
+        endpoint_url: options?.endpoint_url,
       });
       if (result.ok && result.authorize_url) {
         window.location.assign(result.authorize_url);
       }
       return result;
     },
-    [beginUserPlatformAppOAuth],
+    [activeCommunityId, beginUserPlatformAppOAuth],
   );
 
   const handleUpdateUserPlatformAppMount = useCallback(
@@ -3673,6 +3687,48 @@ export default function App() {
       return ok;
     },
     [refreshCommunityApp, reloadEffectiveMcpApps],
+  );
+
+  const handleSetupImportedCommunityMcpApp = useCallback(
+    async (input: {
+      community_app_mount_id: string;
+      endpoint_url: string;
+      auth_type: "none" | "api_key" | "bearer" | "oauth";
+      secret?: string;
+    }) => {
+      if (input.auth_type !== "none") {
+        if (!activeCommunityId) return false;
+        const result = await setupImportedCommunityMcpUserHarness({
+          community_id: activeCommunityId,
+          community_app_mount_id: input.community_app_mount_id,
+          endpoint_url: input.endpoint_url,
+          auth_type: input.auth_type,
+          secret: input.secret,
+        });
+        if (!result.ok) return false;
+      }
+      const ok = await setupImportedCommunityMcpApp({
+        community_app_mount_id: input.community_app_mount_id,
+        endpoint_url: input.endpoint_url,
+        auth_type: input.auth_type,
+      });
+      if (!ok) return false;
+      if (session) {
+        userPlatformAppMountsLoadedUserIdRef.current = null;
+        void loadUserPlatformAppMounts(session);
+      }
+      void reloadEffectiveMcpApps();
+      return ok;
+    },
+    [
+      activeCommunityId,
+      loadUserPlatformAppMounts,
+      reloadEffectiveMcpApps,
+      session,
+      setupImportedCommunityMcpUserHarness,
+      setupImportedCommunityMcpApp,
+      userPlatformAppMountsLoadedUserIdRef,
+    ],
   );
 
   const handleCreateCommunitySkill = useCallback(
@@ -8002,6 +8058,7 @@ export default function App() {
         onBrowseCatalog: handleOpenDiscoverApps,
         onUpdateMount: handleUpdateCommunityAppMount,
         onRefreshApp: handleRefreshCommunityApp,
+        onSetupImportedMcpApp: handleSetupImportedCommunityMcpApp,
         onUnmountApp: handleUnmountCommunityApp,
         isOptingIntoApp: isConnectingUserPlatformApp,
         refreshingPersonalMountId: refreshingUserPlatformAppMountId,
@@ -8596,6 +8653,7 @@ export default function App() {
       isConnectingUserPlatformApp,
       updatingUserPlatformAppMountId,
       refreshingUserPlatformAppMountId,
+      refreshingCommunityAppMountId,
       reconnectingUserPlatformAppMountId,
       removingUserPlatformAppMountId,
       userPlatformSkills,
@@ -8610,6 +8668,7 @@ export default function App() {
       onUpdateUserPlatformAppMount: handleUpdateUserPlatformAppMount,
       onRefreshUserPlatformApp: handleRefreshUserPlatformApp,
       onReconnectUserPlatformApp: handleReconnectUserPlatformApp,
+      onSetupImportedCommunityMcpApp: handleSetupImportedCommunityMcpApp,
       onUnmountUserPlatformApp: handleUnmountUserPlatformApp,
       onCreateUserPlatformSkill: handleCreateUserPlatformSkill,
       onSaveUserPlatformSkill: handleSaveUserPlatformSkill,

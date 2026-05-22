@@ -1,5 +1,9 @@
 export type DeveloperAppAuthType = "api_key" | "bearer" | "none" | "oauth";
 export type DeveloperAppStatus = "draft" | "valid" | "invalid";
+export type DeveloperAppSetupStatus =
+  | "needs_auth"
+  | "needs_config"
+  | "needs_runtime";
 export type AppConnectionStatus = "connected" | "error";
 export type AppConnectionAuthKind = "secret" | "oauth_tokens";
 export type AppToolValidationStatus = "ok" | "error";
@@ -17,6 +21,9 @@ export type DeveloperAppRow = {
   activeSnapshotId?: any;
   lastValidatedAt?: number;
   lastValidationError?: string;
+  setupStatus?: DeveloperAppSetupStatus;
+  setupReason?: string;
+  mcpRegistryId?: string;
   createdAt: number;
   updatedAt: number;
 };
@@ -168,5 +175,8 @@ export function mapDeveloperAppReadModel(app: DeveloperAppRow) {
     endpoint_url: app.endpointUrl,
     auth_type: app.authType,
     status: app.status,
+    setup_status: app.setupStatus ?? null,
+    setup_reason: app.setupReason ?? null,
+    mcp_registry_id: app.mcpRegistryId ?? null,
   };
 }

@@ -14,6 +14,7 @@ import type { DiscoverCommunitySnapshot } from "../../../../shared/communityType
 import type { CreateSkillPackageInput } from "../../../../shared/skillPackageTypes";
 import type { DiscoverTab } from "../../../../shared/appShellNavigation";
 import type {
+  BeginUserPlatformAppOAuthOptions,
   BeginUserPlatformAppOAuthResult,
   ConnectUserPlatformAppResult,
   ConnectUserPlatformAppInput,
@@ -90,6 +91,7 @@ type WebDiscoverPanelProps = {
   ) => Promise<ConnectUserPlatformAppResult> | ConnectUserPlatformAppResult;
   onBeginUserPlatformAppOAuth: (
     catalogAppId: string,
+    options?: BeginUserPlatformAppOAuthOptions,
   ) => Promise<BeginUserPlatformAppOAuthResult> | BeginUserPlatformAppOAuthResult;
   manageableCommunityTargetName: string | null;
   communityAppMounts: CommunityMountedApp[];

@@ -114,6 +114,24 @@ function deriveHarnessLiveState(args: {
       not_live_reason: "disabled" as const,
     };
   }
+  if (args.app.setupStatus === "needs_runtime") {
+    return {
+      live_status: "not_live" as const,
+      not_live_reason: "needs_runtime" as const,
+    };
+  }
+  if (args.app.setupStatus === "needs_config") {
+    return {
+      live_status: "not_live" as const,
+      not_live_reason: "needs_config" as const,
+    };
+  }
+  if (args.app.setupStatus === "needs_auth") {
+    return {
+      live_status: "not_live" as const,
+      not_live_reason: "needs_auth" as const,
+    };
+  }
   if (
     args.app.authType !== "none" &&
     args.connection?.connectionStatus !== "connected"

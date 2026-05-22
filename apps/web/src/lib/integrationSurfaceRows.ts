@@ -63,6 +63,8 @@ function getIntegrationState(args: {
   enabled: boolean;
   effectiveApp: EffectiveMcpApp | null;
   fallbackAuthType?: string | null;
+  fallbackSetupStatus?: string | null;
+  fallbackNotLiveReason?: string | null;
   isResolvingCanonicalState?: boolean;
 }): {
   stateLabel: string;
@@ -72,6 +74,15 @@ function getIntegrationState(args: {
   if (args.effectiveApp?.live_for_current_user) {
     return { stateLabel: "Live", stateTone: "live" };
   }
+  if (args.fallbackSetupStatus === "needs_auth") {
+    return { stateLabel: "Needs auth", stateTone: "setup" };
+  }
+  if (args.fallbackSetupStatus === "needs_config") {
+    return { stateLabel: "Needs config", stateTone: "setup" };
+  }
+  if (args.fallbackSetupStatus === "needs_runtime") {
+    return { stateLabel: "Needs runtime", stateTone: "setup" };
+  }
   if (args.effectiveApp?.credential_state === "needs_personal_setup") {
     return { stateLabel: "Setup needed", stateTone: "setup" };
   }
@@ -80,6 +91,12 @@ function getIntegrationState(args: {
   }
   if (args.isResolvingCanonicalState) {
     return { stateLabel: "Checking", stateTone: "attached" };
+  }
+  if (args.fallbackNotLiveReason === "needs_config") {
+    return { stateLabel: "Needs config", stateTone: "setup" };
+  }
+  if (args.fallbackNotLiveReason === "needs_runtime") {
+    return { stateLabel: "Needs runtime", stateTone: "setup" };
   }
   if (args.fallbackAuthType && args.fallbackAuthType !== "none") {
     return { stateLabel: "Setup needed", stateTone: "setup" };
@@ -160,6 +177,8 @@ export function buildIntegrationSurfaceRowFromCommunityMount(
     enabled: mount.enabled,
     effectiveApp,
     fallbackAuthType: mount.app.auth_type,
+    fallbackSetupStatus: mount.app.setup_status,
+    fallbackNotLiveReason: mount.not_live_reason,
     isResolvingCanonicalState: options.isResolvingCanonicalState,
   });
   return {
@@ -176,8 +195,11 @@ export function buildIntegrationSurfaceRowFromCommunityMount(
     canToggle: options.canToggle ?? false,
     canSetup:
       options.canSetup ??
-      (effectiveApp?.primary_action === "setup_personal" ||
-        (mount.app.auth_type !== "none" && !effectiveApp?.has_personal_mount)),
+      (!effectiveApp?.live_for_current_user &&
+        (effectiveApp?.primary_action === "setup_personal" ||
+          mount.app.setup_status === "needs_auth" ||
+          mount.app.setup_status === "needs_config" ||
+          (mount.app.auth_type !== "none" && !effectiveApp?.has_personal_mount))),
     isBusy: options.isBusy ?? false,
     effectiveApp,
     communityMount: mount,

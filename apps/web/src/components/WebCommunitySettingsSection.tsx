@@ -24,9 +24,13 @@ import { DiscoverCatalogLogo } from "./DiscoverCatalogLogo";
 import { StripeConnectCountrySelect } from "./StripeConnectCountrySelect";
 import { StripeSetupButton } from "./StripeSetupButton";
 import { PersonalAppSetupModal } from "./PersonalAppSetupModal";
-import type { CommunityMountedApp } from "../../../../shared/communityAppMountTypes";
+import type {
+  DeveloperAppAuthType,
+  CommunityMountedApp,
+} from "../../../../shared/communityAppMountTypes";
 import type { EffectiveMcpApp } from "../../../../shared/effectiveMcpApps";
 import type {
+  BeginUserPlatformAppOAuthOptions,
   BeginUserPlatformAppOAuthResult,
   ConnectUserPlatformAppInput,
   ConnectUserPlatformAppResult,
@@ -88,11 +92,15 @@ type WebCommunitySettingsSectionProps = {
     ) => Promise<ConnectUserPlatformAppResult>;
     onBeginPersonalAppOAuth: (
       catalogAppId: string,
+      options?: BeginUserPlatformAppOAuthOptions,
     ) => Promise<BeginUserPlatformAppOAuthResult>;
     onRefreshPersonalApp: (userPlatformAppMountId: string) => Promise<boolean> | boolean;
     onReconnectPersonalApp: (
       userPlatformAppMountId: string,
       secret: string,
+    ) => Promise<boolean> | boolean;
+    onSetupImportedMcpApp: (
+      input: SetupImportedCommunityMcpFromSettingsInput,
     ) => Promise<boolean> | boolean;
   };
   state: {
@@ -177,6 +185,13 @@ type WebCommunitySettingsSectionProps = {
 };
 
 type SharedSettingsProps = Pick<WebCommunitySettingsSectionProps, "state" | "actions">;
+
+type SetupImportedCommunityMcpFromSettingsInput = {
+  community_app_mount_id: string;
+  endpoint_url: string;
+  auth_type: DeveloperAppAuthType;
+  secret?: string;
+};
 
 function buildPersonalOptInInput(args: {
   mount: CommunityMountedApp;
@@ -517,10 +532,12 @@ function CommunityIntegrationsSettingsSection({
     isConnecting: integrations.isOptingIntoApp,
     refreshingPersonalMountId: integrations.refreshingPersonalMountId,
     reconnectingPersonalMountId: integrations.reconnectingPersonalMountId,
+    refreshingCommunityMountId: integrations.refreshingMountId,
     onConnectApp: integrations.onOptInApp,
     onBeginOAuth: integrations.onBeginPersonalAppOAuth,
     onRefreshApp: integrations.onRefreshPersonalApp,
     onReconnectApp: integrations.onReconnectPersonalApp,
+    onSetupImportedCommunityMcpApp: integrations.onSetupImportedMcpApp,
   });
 
   const handleOptIn = async (
@@ -602,13 +619,27 @@ function CommunityIntegrationsSettingsSection({
             );
             const effectiveApp = row.effectiveApp;
             const hasPersonalMount = effectiveApp?.has_personal_mount === true;
-            const canSetupPersonal =
-              Boolean(
+            const canSetupCatalog = Boolean(
+              catalogEntry &&
+                isDiscoverAppPersonallyConnectable(catalogEntry) &&
+                !effectiveApp?.live_for_current_user &&
+                (row.canSetup ||
+                  (!hasPersonalMount && mount.app.auth_type !== "none")),
+            );
+            const canSetupImported = Boolean(
+              canManage &&
+                mount.app.mcp_registry_id &&
+                !effectiveApp?.live_for_current_user &&
+                (mount.app.setup_status === "needs_auth" ||
+                  mount.app.setup_status === "needs_config"),
+            );
+            const canSetupPersonal = canSetupCatalog || canSetupImported;
+            const canAddToMyHarness = Boolean(
+              !hasPersonalMount &&
+                !canSetupPersonal &&
                 catalogEntry &&
-                  isDiscoverAppPersonallyConnectable(catalogEntry) &&
-                  (row.canSetup ||
-                    (!hasPersonalMount && mount.app.auth_type !== "none")),
-              );
+                isDiscoverAppPersonallyConnectable(catalogEntry),
+            );
             return (
               <div key={mount.id} className="integration-mounted-row">
                 <div className="integration-mounted-top">
@@ -633,7 +664,7 @@ function CommunityIntegrationsSettingsSection({
                       </div>
                     </div>
                   </div>
-                  {canManage || !hasPersonalMount || canSetupPersonal ? (
+                  {canManage || canAddToMyHarness || canSetupPersonal ? (
                     <div className="integration-mounted-rail">
                       {canSetupPersonal ? (
                         <button
@@ -678,7 +709,7 @@ function CommunityIntegrationsSettingsSection({
                         </label>
                       ) : null}
                       <div className="agent-capability-toolbar-actions">
-                        {!hasPersonalMount && !canSetupPersonal ? (
+                        {canAddToMyHarness ? (
                           <button
                             type="button"
                             onClick={() => void handleOptIn(mount, catalogEntry)}

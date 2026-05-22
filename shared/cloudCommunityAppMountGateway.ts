@@ -2,6 +2,7 @@ import { bootstrapConvexAuthenticatedClient } from "./convexAuthenticatedClient"
 import type {
   CommunityMountedApp,
   ConnectCommunityAppInput,
+  SetupImportedCommunityMcpAppInput,
 } from "./communityAppMountTypes";
 
 type CloudCommunityAppMountGatewayParams<SessionT> = {
@@ -82,6 +83,26 @@ export async function refreshCloudCommunityApp<SessionT>(
     communityId: params.communityId,
     communityAppMountId: params.communityAppMountId,
   })) as CommunityMountedApp | null;
+  return payload ?? null;
+}
+
+export async function setupCloudImportedCommunityMcpApp<SessionT>(
+  params: CloudCommunityAppMountGatewayParams<SessionT> & {
+    communityId: string;
+    input: SetupImportedCommunityMcpAppInput;
+  },
+): Promise<CommunityMountedApp | null> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  const payload = (await client.action(
+    "community:setupImportedCommunityMcpApp" as any,
+    {
+      authSubject,
+      communityId: params.communityId,
+      communityAppMountId: params.input.community_app_mount_id,
+      endpointUrl: params.input.endpoint_url,
+      authType: params.input.auth_type,
+    },
+  )) as CommunityMountedApp | null;
   return payload ?? null;
 }
 

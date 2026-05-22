@@ -5,6 +5,8 @@ export type HarnessMountLiveStatus = "live" | "not_live";
 export type HarnessMountNotLiveReason =
   | "disabled"
   | "needs_auth"
+  | "needs_config"
+  | "needs_runtime"
   | "validation_failed"
   | "no_tools_discovered"
   | "missing_snapshot"
@@ -35,6 +37,9 @@ export type HarnessMount = {
     endpoint_url: string;
     auth_type: string;
     status: string;
+    setup_status?: string | null;
+    setup_reason?: string | null;
+    mcp_registry_id?: string | null;
   };
   connection: {
     connection_status: string;

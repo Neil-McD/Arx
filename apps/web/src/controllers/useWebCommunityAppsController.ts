@@ -1,10 +1,15 @@
 import { useCallback, useRef, useState } from "react";
 
-import type { ConnectCommunityAppInput, CommunityMountedApp } from "../../../../shared/communityAppMountTypes";
+import type {
+  ConnectCommunityAppInput,
+  CommunityMountedApp,
+  SetupImportedCommunityMcpAppInput,
+} from "../../../../shared/communityAppMountTypes";
 import {
   connectCloudCommunityApp,
   listCloudCommunityAppMounts,
   refreshCloudCommunityApp,
+  setupCloudImportedCommunityMcpApp,
   unmountCloudCommunityApp,
   updateCloudCommunityAppMount,
 } from "../../../../shared/cloudCommunityAppMountGateway";
@@ -205,6 +210,40 @@ export function useWebCommunityAppsController<SessionT extends SessionLike>(
     }
   }, [isCurrentCommunitySession]);
 
+  const setupImportedCommunityMcpApp = useCallback(
+    async (input: SetupImportedCommunityMcpAppInput): Promise<boolean> => {
+      const current = argsRef.current;
+      const usableSession = await resolveUsableSession(current.session, current.ensureSession);
+      const communityId = current.activeCommunityId;
+      if (!usableSession || !communityId) return false;
+      setRefreshingCommunityAppMountId(input.community_app_mount_id);
+      setCommunityAppMutationError(null);
+      try {
+        const mounted = await setupCloudImportedCommunityMcpApp({
+          session: usableSession,
+          communityId,
+          input,
+        });
+        if (!mounted) return false;
+        if (!isCurrentCommunitySession(usableSession, communityId)) return true;
+        setCommunityAppMounts((prev) =>
+          prev.map((entry) => (entry.id === mounted.id ? mounted : entry)),
+        );
+        return true;
+      } catch (error) {
+        if (isCurrentCommunitySession(usableSession, communityId)) {
+          setCommunityAppMutationError(
+            toErrorMessage(error, "Failed to set up imported MCP app."),
+          );
+        }
+        return false;
+      } finally {
+        setRefreshingCommunityAppMountId(null);
+      }
+    },
+    [isCurrentCommunitySession],
+  );
+
   const unmountCommunityApp = useCallback(async (communityAppMountId: string): Promise<boolean> => {
     const current = argsRef.current;
     const usableSession = await resolveUsableSession(current.session, current.ensureSession);
@@ -248,6 +287,7 @@ export function useWebCommunityAppsController<SessionT extends SessionLike>(
     connectCommunityApp,
     updateCommunityAppMount,
     refreshCommunityApp,
+    setupImportedCommunityMcpApp,
     unmountCommunityApp,
   };
 }

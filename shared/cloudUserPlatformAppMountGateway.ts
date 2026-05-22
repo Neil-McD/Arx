@@ -1,9 +1,11 @@
 import { bootstrapConvexAuthenticatedClient } from "./convexAuthenticatedClient";
 import type {
+  BeginUserPlatformAppOAuthOptions,
   BeginUserPlatformAppOAuthResult,
   ConnectUserPlatformAppResult,
   ConnectUserPlatformAppInput,
   FinalizeUserPlatformAppOAuthResult,
+  SetupImportedCommunityMcpUserHarnessInput,
   UserPlatformMountedApp,
 } from "./userPlatformAppMountTypes";
 import { readConvexRuntimeUrl } from "./convexRuntime";
@@ -82,11 +84,50 @@ export async function connectCloudUserPlatformApp<SessionT>(
   };
 }
 
+export async function setupCloudImportedCommunityMcpUserHarness<SessionT>(
+  params: CloudUserPlatformAppMountGatewayParams<SessionT> & {
+    input: SetupImportedCommunityMcpUserHarnessInput;
+  },
+): Promise<ConnectUserPlatformAppResult> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(
+    params.session,
+  );
+  const payload = (await client.action(
+    "userPlatformAppMounts:setupImportedCommunityMcpUserHarness" as any,
+    {
+      authSubject,
+      communityId: params.input.community_id,
+      communityAppMountId: params.input.community_app_mount_id,
+      endpointUrl: params.input.endpoint_url,
+      authType: params.input.auth_type,
+      secret: params.input.secret,
+    },
+  )) as ConnectUserPlatformAppResult | UserPlatformMountedApp | null;
+  if (
+    payload &&
+    typeof payload === "object" &&
+    !Array.isArray(payload) &&
+    "ok" in payload
+  ) {
+    return payload as ConnectUserPlatformAppResult;
+  }
+  return {
+    ok: Boolean(payload),
+    mount: (payload as UserPlatformMountedApp | null) ?? null,
+    validation_report: null,
+    error_code: payload ? null : "server_unavailable",
+    error_message: payload
+      ? null
+      : "The personal app service is unavailable right now. Try again.",
+    connect_attempt_id: null,
+  };
+}
+
 export async function beginCloudUserPlatformAppOAuth<SessionT>(
   params: CloudUserPlatformAppMountGatewayParams<SessionT> & {
     catalogAppId: string;
     returnToPath?: string | null;
-  },
+  } & BeginUserPlatformAppOAuthOptions,
 ): Promise<BeginUserPlatformAppOAuthResult> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(
     params.session,
@@ -98,6 +139,9 @@ export async function beginCloudUserPlatformAppOAuth<SessionT>(
       catalogAppId: params.catalogAppId,
       returnToPath: String(params.returnToPath ?? "").trim() || "/discover",
       callbackBaseUrl: readConvexRuntimeUrl() ?? undefined,
+      communityId: params.community_id || undefined,
+      communityAppMountId: params.community_app_mount_id || undefined,
+      endpointUrl: params.endpoint_url || undefined,
     },
   )) as {
     ok?: unknown;

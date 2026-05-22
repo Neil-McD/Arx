@@ -214,6 +214,7 @@ type WorkflowImportApplyOutcome = {
 
 type WorkflowImportApplyPlanAction =
   | "connect_mcp"
+  | "attach_mcp_needs_setup"
   | "attach_skill"
   | "record_repo_next_action"
   | "manual_setup"
@@ -238,6 +239,11 @@ type WorkflowImportApplyPlanItem = {
   mcpRequiredSecretNames?: string[];
   mcpRequiredConfigParams?: string[];
   mcpPortabilityClassification?: string | null;
+  mcpSetupStatus?:
+    | "needs_auth"
+    | "needs_config"
+    | "needs_runtime"
+    | null;
   instructionsMd?: string | null;
   bodySha256?: string | null;
   repositoryUrl?: string | null;
@@ -789,6 +795,18 @@ function normalizeWorkflowReviewSelectionIds(input: unknown): Set<string> {
   );
 }
 
+function resolveWorkflowImportMcpSetupStatus(args: {
+  mcpStatus: CommunityWorkflowImportMcpRegistryStatus | null;
+  hasEndpoint: boolean;
+  hasAuthType: boolean;
+}): NonNullable<WorkflowImportApplyPlanItem["mcpSetupStatus"]> {
+  if (args.mcpStatus === "needs_auth") return "needs_auth";
+  if (args.mcpStatus === "needs_runtime") return "needs_runtime";
+  if (args.mcpStatus === "needs_config") return "needs_config";
+  if (!args.hasEndpoint || !args.hasAuthType) return "needs_config";
+  return "needs_auth";
+}
+
 function buildWorkflowImportMcpApplyPlanItems(
   ledger: Record<string, unknown>,
 ): WorkflowImportApplyPlanItem[] {
@@ -840,6 +858,11 @@ function buildWorkflowImportMcpApplyPlanItems(
         "capabilities",
       ]) || "MCP server",
     );
+    const setupStatus = resolveWorkflowImportMcpSetupStatus({
+      mcpStatus: catalogMatch.status,
+      hasEndpoint: Boolean(endpointUrl),
+      hasAuthType: Boolean(authType),
+    });
     if (
       !catalogMatch.connectable ||
       !catalogAppId ||
@@ -850,11 +873,16 @@ function buildWorkflowImportMcpApplyPlanItems(
       if (!catalogAppId) missing.push("vetted catalog app");
       if (!endpointUrl) missing.push("endpoint");
       if (!authType) missing.push("auth mode");
+      const recognizedMcp = Boolean(catalogAppId || catalogMatch.registryId);
+      const attachable =
+        recognizedMcp &&
+        catalogMatch.status !== "unsupported" &&
+        catalogMatch.status !== "unknown";
       return {
         id,
         kind: "mcp",
         name,
-        action: "manual_setup",
+        action: attachable ? "attach_mcp_needs_setup" : "manual_setup",
         reason:
           catalogMatch.reason ||
           `MCP import needs manual setup because it is missing ${missing.join(", ")}.`,
@@ -871,6 +899,7 @@ function buildWorkflowImportMcpApplyPlanItems(
         mcpRequiredSecretNames: catalogMatch.requiredSecretNames,
         mcpRequiredConfigParams: catalogMatch.requiredConfigParams,
         mcpPortabilityClassification: catalogMatch.portabilityClassification,
+        mcpSetupStatus: attachable ? setupStatus : null,
       };
     }
     return {
@@ -893,6 +922,7 @@ function buildWorkflowImportMcpApplyPlanItems(
       mcpRequiredSecretNames: catalogMatch.requiredSecretNames,
       mcpRequiredConfigParams: catalogMatch.requiredConfigParams,
       mcpPortabilityClassification: catalogMatch.portabilityClassification,
+      mcpSetupStatus: null,
     };
   });
 }
@@ -1168,6 +1198,12 @@ function describeWorkflowImportMcpSetupReason(reason: string | null): string {
   switch (reason) {
     case "needs_auth":
       return "needs user authentication";
+    case "needs_config":
+      return "needs configuration";
+    case "needs_runtime":
+      return "needs a compatible runtime";
+    case "unsupported":
+      return "is not supported by the current harness runtime";
     case "missing_snapshot":
       return "has no validated tool snapshot";
     case "validation_failed":
@@ -1259,7 +1295,7 @@ function buildWorkflowImportMcpMountedOutcome(args: {
       kind: args.item.kind,
       name: args.item.name,
       status: "needs_manual_setup",
-      reason: `Mounted through the catalog, but the community attachment is not live: ${reason}.`,
+      reason: `Attached to the community harness, but it is not live yet: ${reason}.`,
       referenceId: readWorkflowImportRecordString(args.mounted, ["id"]) || null,
       ...diagnostics,
     };
@@ -1271,8 +1307,8 @@ function buildWorkflowImportMcpMountedOutcome(args: {
       name: args.item.name,
       status: "needs_manual_setup",
       reason: personalSeedReason
-        ? `Mounted through the catalog, but the personal harness seed needs attention: ${personalSeedReason}.`
-        : "Mounted through the catalog, but PolyNet could not confirm the personal harness seed.",
+        ? `Attached to the community harness, but the personal harness seed needs attention: ${personalSeedReason}.`
+        : "Attached to the community harness, but PolyNet could not confirm the personal harness seed.",
       referenceId: readWorkflowImportRecordString(args.mounted, ["id"]) || null,
       ...diagnostics,
     };
@@ -1793,9 +1829,72 @@ export const findWorkflowImportSkillPackageByMentionTokenInternal =
 async function applyWorkflowImportMcpPlanItem(args: {
   ctx: any;
   authSubject: string;
+  userId: any;
   communityId: any;
   item: WorkflowImportApplyPlanItem;
 }): Promise<WorkflowImportApplyOutcome> {
+  if (args.item.action === "attach_mcp_needs_setup") {
+    if (!args.item.mcpSetupStatus) {
+      return {
+        id: args.item.id,
+        kind: args.item.kind,
+        name: args.item.name,
+        status: "needs_manual_setup",
+        reason: args.item.reason,
+        mounted: false,
+        ...buildWorkflowImportMcpOutcomeBase(args.item),
+      };
+    }
+    try {
+      const mounted = (await args.ctx.runAction(
+        internalRefs.communityAppMounts
+          .stageCommunityMcpAppForSetupInternal as any,
+        {
+          userId: args.userId,
+          communityId: args.communityId,
+          catalogAppId: args.item.catalogAppId ?? undefined,
+          name: args.item.name,
+          endpointUrl: args.item.endpointUrl ?? undefined,
+          authType: args.item.authType ?? undefined,
+          description: args.item.summary,
+          setupStatus: args.item.mcpSetupStatus,
+          setupReason: args.item.reason,
+          mcpRegistryId: args.item.mcpRegistryId ?? undefined,
+        },
+      )) as Record<string, any> | null;
+      if (!isPlainRecord(mounted)) {
+        return {
+          id: args.item.id,
+          kind: args.item.kind,
+          name: args.item.name,
+          status: "failed",
+          reason:
+            "The setup-needed MCP attachment path did not return a mount read model.",
+          mounted: false,
+          ...buildWorkflowImportMcpOutcomeBase(args.item),
+        };
+      }
+      return buildWorkflowImportMcpMountedOutcome({
+        item: args.item,
+        mounted,
+        hadExistingEnabledGrant: false,
+      });
+    } catch (error) {
+      return {
+        id: args.item.id,
+        kind: args.item.kind,
+        name: args.item.name,
+        status: "failed",
+        reason:
+          normalizeBoundedText(
+            error instanceof Error ? error.message : String(error),
+            500,
+          ) || "Failed to attach setup-needed MCP.",
+        mounted: false,
+        ...buildWorkflowImportMcpOutcomeBase(args.item),
+      };
+    }
+  }
   if (
     args.item.action !== "connect_mcp" ||
     !args.item.catalogAppId ||
@@ -2031,6 +2130,7 @@ export const applyCommunityWorkflowImportReview = action({
           await applyWorkflowImportMcpPlanItem({
             ctx,
             authSubject,
+            userId,
             communityId: args.communityId,
             item,
           }),

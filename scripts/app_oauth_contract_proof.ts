@@ -122,6 +122,8 @@ function main() {
     "registrationEndpoint: string | null",
     "resolveDiscoverAppOAuthClientConfig",
     "resolveOAuthClientCredentials",
+    "resolveDynamicOAuthClientCredentials",
+    "resolveImportedCommunityOAuthSource",
     "oauthClient.mode === \"static_env\"",
     "readEnv(oauthClient.clientIdEnv)",
     "readEnv(oauthClient.clientSecretEnv)",
@@ -213,6 +215,9 @@ function main() {
     "resource: normalizeString(row.resource, 2_000)",
     "ensureUserHarnessAppInternal",
     "storeOAuthTokenBundle",
+    "sourceType: source.sourceType",
+    "communityAppMountId",
+    "mcpRegistryId",
     "completeAppOAuthFinalizeInternal",
     "failAppOAuthFinalizeInternal",
     "validateDeveloperAppInternal",
@@ -264,6 +269,9 @@ function main() {
       schemaSource.includes("finalizeTokenHash") &&
       schemaSource.includes("finalizeStatus") &&
       schemaSource.includes("finalizeResultJson") &&
+      schemaSource.includes('sourceType: v.optional(v.union(v.literal("personal"), v.literal("community")))') &&
+      schemaSource.includes("communityAppMountId: v.optional(v.id(\"communityAppMounts\"))") &&
+      schemaSource.includes("mcpRegistryId: v.optional(v.string())") &&
       schemaSource.includes("resource: v.string()") &&
       !schemaSource.includes("clientSecret: v.optional(v.string())"),
     "Transient OAuth state must keep dynamic secrets/callback codes encrypted, resource-bound, and finalization-idempotent",

@@ -2,6 +2,7 @@ import { useState } from "react";
 
 import type { DeveloperAppAuthType } from "../../../../shared/communityAppMountTypes";
 import type {
+  BeginUserPlatformAppOAuthOptions,
   BeginUserPlatformAppOAuthResult,
   ConnectUserPlatformAppInput,
   ConnectUserPlatformAppResult,
@@ -19,10 +20,24 @@ type PersonalAppSetupCatalogEntry = DiscoverAppCatalogEntry & {
   >;
 };
 
+type SetupImportedCommunityMcpFromModalInput = {
+  community_app_mount_id: string;
+  endpoint_url: string;
+  auth_type: DeveloperAppAuthType;
+  secret?: string;
+};
+
 type PersonalAppSetupTarget = {
+  id?: string | null;
   app: {
+    name?: string | null;
+    slug?: string | null;
+    catalog_app_id?: string | null;
     endpoint_url?: string | null;
     auth_type?: string | null;
+    setup_status?: string | null;
+    setup_reason?: string | null;
+    mcp_registry_id?: string | null;
   };
   personal_mount?: {
     source_mount_id?: string | null;
@@ -40,11 +55,13 @@ type UsePersonalAppSetupControllerArgs = {
   isConnecting: boolean;
   refreshingPersonalMountId: string | null;
   reconnectingPersonalMountId: string | null;
+  refreshingCommunityMountId?: string | null;
   onConnectApp: (
     input: ConnectUserPlatformAppInput,
   ) => Promise<ConnectUserPlatformAppResult>;
   onBeginOAuth: (
     catalogAppId: string,
+    options?: BeginUserPlatformAppOAuthOptions,
   ) => Promise<BeginUserPlatformAppOAuthResult>;
   onRefreshApp: (
     userPlatformAppMountId: string,
@@ -52,6 +69,9 @@ type UsePersonalAppSetupControllerArgs = {
   onReconnectApp: (
     userPlatformAppMountId: string,
     secret: string,
+  ) => Promise<boolean> | Promise<void> | boolean | void;
+  onSetupImportedCommunityMcpApp?: (
+    input: SetupImportedCommunityMcpFromModalInput,
   ) => Promise<boolean> | Promise<void> | boolean | void;
 };
 
@@ -71,6 +91,7 @@ type OpenPersonalAppSetupResult =
     };
 
 type PersonalAppSetupState = {
+  mode: "catalog" | "imported_community";
   source: PersonalAppSetupTarget;
   effectiveSource: PersonalAppSetupTarget | null;
   catalogEntry: PersonalAppSetupCatalogEntry;
@@ -139,6 +160,98 @@ function booleanActionSucceeded(value: boolean | void): boolean {
   return value !== false;
 }
 
+function isImportedCommunityMcpSetupTarget(
+  source: PersonalAppSetupTarget,
+): boolean {
+  const setupStatus = source.app.setup_status ?? null;
+  return Boolean(
+    source.id &&
+      source.app.mcp_registry_id &&
+      (setupStatus === "needs_auth" || setupStatus === "needs_config"),
+  );
+}
+
+function isPendingImportedMcpEndpoint(value: string | null | undefined): boolean {
+  return /pending-mcp\.polynet\.ai/i.test(String(value ?? ""));
+}
+
+function buildImportedCommunityMcpSetupCatalogEntry(
+  source: PersonalAppSetupTarget,
+): PersonalAppSetupCatalogEntry {
+  const name =
+    source.app.name?.trim() ||
+    source.app.slug?.trim() ||
+    source.app.mcp_registry_id?.trim() ||
+    "Imported MCP";
+  const endpointUrl = isPendingImportedMcpEndpoint(source.app.endpoint_url)
+    ? ""
+    : (source.app.endpoint_url?.trim() ?? "");
+  const common = {
+    id: `imported-${source.app.mcp_registry_id?.trim() || source.id || "mcp"}`,
+    name,
+    tagline: "Imported community MCP",
+    description:
+      source.app.setup_reason?.trim() ||
+      "Review the remote MCP endpoint and auth details to make this imported community app live.",
+    supportLabel: "Imported MCP",
+    supportNote:
+      "This app came from a community workflow import and is not listed in Discover.",
+    heroNote: "Imported workflow app",
+    capabilities: [
+      "Remote MCP endpoint",
+      "Community workflow import",
+      "Personal harness setup",
+    ] as [string, string, string],
+    websiteUrl: "",
+    docsUrl: "",
+    logoUrl: null,
+    logoUrlDark: null,
+  };
+  if (source.app.auth_type === "oauth") {
+    return {
+      ...common,
+      personalConnect: {
+        connectionKind: "known",
+        availability: "ready",
+        authMethod: "oauth",
+        connectionStrategy: {
+          defaultMode: "oauth",
+          supportedModes: ["oauth"],
+        },
+        endpointUrl,
+        authType: "oauth",
+        authLabel: "OAuth",
+        note:
+          "Connect this imported MCP with OAuth. PolyNet will attach it to your personal harness for this community.",
+      },
+    };
+  }
+  return {
+    ...common,
+    personalConnect: {
+      connectionKind: "custom",
+      availability: "ready",
+      authMethod: "custom",
+      connectionStrategy: {
+        defaultMode:
+          source.app.auth_type === "none" ? "none" : "token",
+        supportedModes: ["custom", "token", "none"],
+      },
+      endpointUrl: null,
+      authType: null,
+      authLabel: "Auth",
+      note:
+        "Imported MCPs must use a vetted remote HTTPS endpoint before PolyNet can make them live.",
+      endpointPlaceholder: "https://mcp.example.com",
+      supportedAuthTypes: [
+        { value: "bearer", label: "Bearer token", secretLabel: "Bearer token" },
+        { value: "api_key", label: "API key", secretLabel: "API key" },
+        { value: "none", label: "No auth" },
+      ],
+    },
+  };
+}
+
 export function usePersonalAppSetupController(
   args: UsePersonalAppSetupControllerArgs,
 ) {
@@ -155,8 +268,16 @@ export function usePersonalAppSetupController(
     catalogEntry.personalConnect.authMethod === "oauth";
   const existingMountId =
     effectiveSource?.personal_mount?.source_mount_id ?? null;
+  const isImportedCommunitySetup =
+    setupState?.mode === "imported_community" &&
+    Boolean(setupState.source.id);
   const isSubmitting =
     args.isConnecting ||
+    Boolean(
+      isImportedCommunitySetup &&
+        setupState?.source.id &&
+        args.refreshingCommunityMountId === setupState.source.id,
+    ) ||
     Boolean(
       existingMountId &&
         (args.refreshingPersonalMountId === existingMountId ||
@@ -179,26 +300,46 @@ export function usePersonalAppSetupController(
       return { opened: false, reason: "auth_required" };
     }
     if (
-      !openArgs.catalogEntry ||
-      !isDiscoverAppPersonallyConnectable(openArgs.catalogEntry)
+      openArgs.catalogEntry &&
+      isDiscoverAppPersonallyConnectable(openArgs.catalogEntry)
     ) {
+      const readyCatalogEntry = openArgs.catalogEntry;
+      const initialEndpoint =
+        readyCatalogEntry.personalConnect.connectionKind === "custom"
+          ? (openArgs.source.app.endpoint_url ?? "")
+          : readyCatalogEntry.personalConnect.endpointUrl;
+      setSetupState({
+        mode: "catalog",
+        source: openArgs.source,
+        effectiveSource: openArgs.effectiveSource ?? openArgs.source,
+        catalogEntry: readyCatalogEntry,
+      });
+      setEndpoint(initialEndpoint);
+      setAuthType(
+        resolveInitialPersonalAppSetupAuthType(openArgs.source, readyCatalogEntry),
+      );
+      setSecret("");
+      setError(null);
+      return { opened: true };
+    }
+    if (!isImportedCommunityMcpSetupTarget(openArgs.source)) {
       args.onUnavailable();
       return { opened: false, reason: "not_connectable" };
     }
-    const readyCatalogEntry = openArgs.catalogEntry;
+    const readyCatalogEntry =
+      buildImportedCommunityMcpSetupCatalogEntry(openArgs.source);
     const initialEndpoint =
-      readyCatalogEntry.personalConnect.connectionKind === "custom"
-        ? (openArgs.source.app.endpoint_url ?? "")
-        : readyCatalogEntry.personalConnect.endpointUrl;
+      isPendingImportedMcpEndpoint(openArgs.source.app.endpoint_url)
+        ? ""
+        : (openArgs.source.app.endpoint_url ?? "");
     setSetupState({
+      mode: "imported_community",
       source: openArgs.source,
       effectiveSource: openArgs.effectiveSource ?? openArgs.source,
       catalogEntry: readyCatalogEntry,
     });
     setEndpoint(initialEndpoint);
-    setAuthType(
-      resolveInitialPersonalAppSetupAuthType(openArgs.source, readyCatalogEntry),
-    );
+    setAuthType(resolveInitialPersonalAppSetupAuthType(openArgs.source, readyCatalogEntry));
     setSecret("");
     setError(null);
     return { opened: true };
@@ -212,7 +353,19 @@ export function usePersonalAppSetupController(
       return;
     }
     if (isOauth) {
-      const result = await args.onBeginOAuth(catalogEntry.id);
+      const communityAppMountId =
+        setupState.mode === "imported_community"
+          ? (setupState.source.id?.trim() ?? "")
+          : "";
+      const result = await args.onBeginOAuth(
+        catalogEntry.id,
+        communityAppMountId
+          ? {
+              community_app_mount_id: communityAppMountId,
+              endpoint_url: endpoint.trim() || undefined,
+            }
+          : undefined,
+      );
       if (!result.ok) {
         setError(
           result.error_message ??
@@ -225,6 +378,33 @@ export function usePersonalAppSetupController(
     const trimmedSecret = secret.trim();
     if (personalAppSetupRequiresSecret(catalogEntry, authType) && !trimmedSecret) {
       setError(`Paste your ${catalogEntry.name} token to continue.`);
+      return;
+    }
+
+    if (setupState.mode === "imported_community") {
+      const communityAppMountId = setupState.source.id?.trim() ?? "";
+      const endpointUrl = endpoint.trim();
+      if (!communityAppMountId || !args.onSetupImportedCommunityMcpApp) {
+        setError("This imported app is not ready for setup yet.");
+        return;
+      }
+      if (!endpointUrl) {
+        setError("Paste the remote MCP endpoint to continue.");
+        return;
+      }
+      const ok = await args.onSetupImportedCommunityMcpApp({
+        community_app_mount_id: communityAppMountId,
+        endpoint_url: endpointUrl,
+        auth_type: authType,
+        secret: trimmedSecret || undefined,
+      });
+      if (!booleanActionSucceeded(ok)) {
+        setError(
+          `Couldn't finish setting up ${catalogEntry.name}. Check the endpoint and credentials, then try again.`,
+        );
+        return;
+      }
+      close();
       return;
     }
 

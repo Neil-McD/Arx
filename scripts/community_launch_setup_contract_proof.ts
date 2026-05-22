@@ -460,8 +460,8 @@ assert.equal(
 );
 assert.equal(
   localContext7CatalogMatch.status,
-  "needs_config",
-  "workflow import catalog resolver must explain why recognized non-catalog MCP candidates stay manual",
+  "needs_auth",
+  "workflow import catalog resolver must explain why recognized non-catalog MCP candidates stage for setup",
 );
 assert.equal(
   localContext7CatalogMatch.reviewLogoUrl,
@@ -1643,12 +1643,12 @@ assert.match(
 );
 assert.match(
   workflowImportMcpRegistry,
-  /COMMUNITY_WORKFLOW_IMPORT_MCP_REGISTRY[\s\S]*github[\s\S]*supabase[\s\S]*context7[\s\S]*fly-light[\s\S]*needs_runtime/,
+  /COMMUNITY_WORKFLOW_IMPORT_MCP_REGISTRY[\s\S]*github[\s\S]*supabase[\s\S]*context7[\s\S]*fly-light[\s\S]*convex[\s\S]*workos_docs[\s\S]*posthog[\s\S]*sentry[\s\S]*needs_runtime/,
   "launch workflow MCP registry must classify vetted and review-only MCP candidates without relying on Discover alone",
 );
 assert.doesNotMatch(
   workflowImportMcpRegistry,
-  /endpointUrl|authType|logoUrlDark|id: "workos"|id: "posthog"|id: "sentry"|id: "convex"/,
+  /logoUrlDark|status: "unknown"/,
   "launch workflow MCP registry must not duplicate Discover connection authority or carry no-value unknown rows",
 );
 assert.match(

@@ -5,6 +5,10 @@ import { postMcpJson } from "../convex/mcpHttpClient.ts";
 import {
   resolveDiscoverAppCatalogConnectPolicy,
 } from "../shared/discoverCatalog.ts";
+import {
+  resolveCommunityWorkflowImportMcpRegistryConnectPolicy,
+} from "../shared/communityWorkflowImportMcpRegistry.ts";
+import { assertDeveloperAppServerFetchAllowed } from "../convex/appFetchPolicy.ts";
 
 function readText(path: string | URL): string {
   return readFileSync(path, "utf8");
@@ -56,6 +60,90 @@ async function main() {
     uncatalogedPolicy.ok,
     false,
     "uncataloged remote MCP endpoints must not be server-fetched from public connect flows",
+  );
+  const importedContext7Policy = resolveCommunityWorkflowImportMcpRegistryConnectPolicy({
+    mcpRegistryId: "context7",
+    name: "Context7",
+    endpointUrl: "https://mcp.context7.com/mcp",
+    authType: "api_key",
+  });
+  assert.equal(
+    importedContext7Policy.ok,
+    true,
+    "vetted imported remote MCP registry entries should be setup-connectable with provider-supported auth outside Discover",
+  );
+  assert.equal(
+    resolveCommunityWorkflowImportMcpRegistryConnectPolicy({
+      mcpRegistryId: "context7",
+      name: "Context7",
+      endpointUrl: "https://mcp.context7.com/mcp",
+      authType: "none",
+    }).ok,
+    false,
+    "setup-needed imported MCP registry entries must reject unsupported no-auth setup",
+  );
+  assert.equal(
+    resolveCommunityWorkflowImportMcpRegistryConnectPolicy({
+      mcpRegistryId: "posthog",
+      name: "PostHog",
+      endpointUrl: "https://mcp.posthog.com/mcp",
+      authType: "oauth",
+    }).ok,
+    true,
+    "reviewed hosted OAuth MCP registry entries should accept OAuth setup",
+  );
+  assert.equal(
+    resolveCommunityWorkflowImportMcpRegistryConnectPolicy({
+      mcpRegistryId: "sentry",
+      name: "Sentry",
+      endpointUrl: "https://mcp.sentry.dev",
+      authType: "oauth",
+    }).ok,
+    true,
+    "reviewed hosted OAuth MCP registry entries should accept OAuth setup without Discover publication",
+  );
+  assert.equal(
+    resolveCommunityWorkflowImportMcpRegistryConnectPolicy({
+      mcpRegistryId: "sentry",
+      name: "Sentry",
+      endpointUrl: "https://attacker.example/mcp",
+      authType: "oauth",
+    }).ok,
+    false,
+    "OAuth imported MCP setup must still be bound to reviewed endpoint hosts",
+  );
+  assert.doesNotThrow(
+    () =>
+      assertDeveloperAppServerFetchAllowed({
+        catalogAppId: null,
+        mcpRegistryId: "context7",
+        name: "Context7",
+        endpointUrl: "https://mcp.context7.com/mcp",
+        authType: "api_key",
+      }),
+    "vetted imported remote MCP registry entries should pass server-fetch policy",
+  );
+  assert.equal(
+    resolveCommunityWorkflowImportMcpRegistryConnectPolicy({
+      mcpRegistryId: "fly",
+      name: "Fly",
+      endpointUrl: "https://fly.io/mcp",
+      authType: "none",
+    }).ok,
+    false,
+    "runtime-only imported MCP registry entries must not become server-fetchable",
+  );
+  assert.throws(
+    () =>
+      assertDeveloperAppServerFetchAllowed({
+        catalogAppId: null,
+        mcpRegistryId: "fly",
+        name: "Fly",
+        endpointUrl: "https://fly.io/mcp",
+        authType: "none",
+      }),
+    /runtime|not available|remote/i,
+    "runtime-only imported MCP registry entries should stay blocked from server fetch",
   );
 
   await withFetchStub(
@@ -110,12 +198,18 @@ async function main() {
     "validation fetches must enforce catalog server-fetch policy",
   );
   assert.ok(
+    validationSource.includes("getSetupRequiredValidationError") &&
+      validationSource.indexOf("const setupRequiredError") <
+        validationSource.indexOf("validateStreamableHttpApp({"),
+    "setup-needed imported MCP apps must fail validation before any remote fetch",
+  );
+  assert.ok(
     runtimeManagerSource.includes("assertDeveloperAppServerFetchAllowed"),
     "runtime MCP fetches must enforce catalog server-fetch policy",
   );
 
   console.log(
-    "PASS: MCP endpoint guard rejects local/private endpoints, disallows redirects, caps response bodies, and blocks uncataloged server fetches.",
+    "PASS: MCP endpoint guard rejects local/private endpoints, disallows redirects, caps response bodies, blocks uncataloged server fetches, and only allows vetted imported remote MCP registry entries.",
   );
 }
 

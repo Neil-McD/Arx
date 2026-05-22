@@ -1,6 +1,7 @@
 import { internal } from "./_generated/api";
 import {
   action,
+  internalAction,
   internalMutation,
   internalQuery,
   mutation,
@@ -10,7 +11,9 @@ import { v } from "convex/values";
 import {
   type AppConnectionRow,
   type AppToolSnapshotRow,
+  type DeveloperAppAuthType,
   type DeveloperAppRow,
+  type DeveloperAppSetupStatus,
   mapAppConnectionReadModel,
   mapDeveloperAppReadModel,
   normalizeDeveloperAppEndpointUrl,
@@ -28,6 +31,9 @@ import {
   isDiscoverAppCatalogSingletonIdentity,
   resolveDiscoverAppCatalogConnectPolicy,
 } from "../shared/discoverCatalog";
+import {
+  resolveCommunityWorkflowImportMcpRegistryConnectPolicy,
+} from "../shared/communityWorkflowImportMcpRegistry";
 
 type CommunityAppMountRow = {
   _id: any;
@@ -57,9 +63,22 @@ type CommunityAppMountLiveStatus = "live" | "not_live";
 type CommunityAppMountNotLiveReason =
   | "disabled"
   | "needs_auth"
+  | "needs_config"
+  | "needs_runtime"
   | "validation_failed"
   | "no_tools_discovered"
   | "missing_snapshot";
+
+function normalizeSetupStatus(value: unknown): DeveloperAppSetupStatus | null {
+  if (
+    value === "needs_auth" ||
+    value === "needs_config" ||
+    value === "needs_runtime"
+  ) {
+    return value;
+  }
+  return null;
+}
 
 function normalizeStringList(input: unknown): string[] {
   if (!Array.isArray(input)) return [];
@@ -112,6 +131,16 @@ function deriveCommunityMountLiveState(args: {
 } {
   if (!args.mount.enabled) {
     return { live_status: "not_live", not_live_reason: "disabled" };
+  }
+  const setupStatus = normalizeSetupStatus(args.app.setupStatus);
+  if (setupStatus === "needs_runtime") {
+    return { live_status: "not_live", not_live_reason: "needs_runtime" };
+  }
+  if (setupStatus === "needs_config") {
+    return { live_status: "not_live", not_live_reason: "needs_config" };
+  }
+  if (setupStatus === "needs_auth") {
+    return { live_status: "not_live", not_live_reason: "needs_auth" };
   }
   if (
     args.app.authType !== "none" &&
@@ -750,6 +779,68 @@ export const connectCommunityApp = action({
   },
 });
 
+export const stageCommunityMcpAppForSetupInternal = internalAction({
+  args: {
+    userId: v.id("users"),
+    communityId: v.id("communities"),
+    catalogAppId: v.optional(v.string()),
+    name: v.string(),
+    endpointUrl: v.optional(v.string()),
+    authType: v.optional(
+      v.union(
+        v.literal("none"),
+        v.literal("api_key"),
+        v.literal("bearer"),
+        v.literal("oauth"),
+      ),
+    ),
+    description: v.optional(v.string()),
+    setupStatus: v.union(
+      v.literal("needs_auth"),
+      v.literal("needs_config"),
+      v.literal("needs_runtime"),
+    ),
+    setupReason: v.optional(v.string()),
+    mcpRegistryId: v.optional(v.string()),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args): Promise<unknown> => {
+    await ctx.runQuery(
+      internal.communityAppMounts.assertCommunityManagerAccessInternal,
+      {
+        userId: args.userId,
+        communityId: args.communityId,
+      },
+    );
+
+    const nowMs = args.nowMs ?? Date.now();
+    const developerAppId = (await ctx.runMutation(
+      (internal as any).developerApps.upsertImportedMcpDeveloperAppInternal,
+      {
+        ownerUserId: args.userId,
+        catalogAppId: args.catalogAppId,
+        name: args.name,
+        description: args.description,
+        endpointUrl: args.endpointUrl,
+        authType: args.authType as DeveloperAppAuthType | undefined,
+        setupStatus: args.setupStatus,
+        setupReason: args.setupReason,
+        mcpRegistryId: args.mcpRegistryId,
+        nowMs,
+      },
+    )) as any;
+
+    return await mountDeveloperAppForCommunity({
+      ctx,
+      userId: args.userId,
+      communityId: args.communityId,
+      developerAppId,
+      enabledTools: [],
+      nowMs,
+    });
+  },
+});
+
 export const refreshCommunityApp = action({
   args: {
     authSubject: v.optional(v.string()),
@@ -797,6 +888,112 @@ export const refreshCommunityApp = action({
       communityId: args.communityId,
       communityAppMountId: args.communityAppMountId,
     });
+  },
+});
+
+export const setupImportedCommunityMcpApp = action({
+  args: {
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+    communityAppMountId: v.id("communityAppMounts"),
+    endpointUrl: v.string(),
+    authType: v.union(
+      v.literal("none"),
+      v.literal("api_key"),
+      v.literal("bearer"),
+      v.literal("oauth"),
+    ),
+  },
+  handler: async (ctx, args): Promise<unknown> => {
+    const { userId } = await resolveAuthenticatedActionUser({
+      ctx,
+      authSubject: args.authSubject ?? null,
+    });
+    const lifecycle = (await ctx.runQuery(
+      internal.communityAppMounts.getCommunityAppMountLifecycleContextInternal,
+      {
+        userId,
+        communityId: args.communityId,
+        communityAppMountId: args.communityAppMountId,
+      },
+    )) as {
+      mountId: any;
+      developerAppId: any;
+      authType: string;
+    };
+    const app = (await ctx.runQuery(
+      internal.developerApps.getDeveloperAppByIdInternal,
+      {
+        developerAppId: lifecycle.developerAppId,
+      },
+    )) as DeveloperAppRow | null;
+    if (!app) throw new Error("community_app_mount_missing_dependency");
+    const policy = resolveCommunityWorkflowImportMcpRegistryConnectPolicy({
+      mcpRegistryId: app.mcpRegistryId,
+      name: app.name,
+      endpointUrl: args.endpointUrl,
+      authType: args.authType,
+    });
+    if (!policy.ok) throw new Error(policy.message);
+    const nowMs = Date.now();
+    await ctx.runMutation(
+      internal.developerApps.configureImportedMcpDeveloperAppInternal,
+      {
+        developerAppId: lifecycle.developerAppId,
+        endpointUrl: policy.endpointUrl,
+        authType: policy.authType,
+        clearSetupStatus: policy.authType === "none",
+        nowMs,
+      },
+    );
+
+    if (policy.authType === "none") {
+      await ctx.runAction(internal.appValidation.validateDeveloperAppInternal, {
+        developerAppId: lifecycle.developerAppId,
+      });
+
+      const refreshedApp = (await ctx.runQuery(
+        internal.developerApps.getDeveloperAppByIdInternal,
+        {
+          developerAppId: lifecycle.developerAppId,
+        },
+      )) as DeveloperAppRow | null;
+      if (refreshedApp?.activeSnapshotId) {
+        await ctx.runMutation(
+          internal.communityAppMounts
+            .patchCommunityAppMountsForDeveloperAppSnapshotInternal,
+          {
+            developerAppId: lifecycle.developerAppId,
+            toolSnapshotId: refreshedApp.activeSnapshotId,
+            nowMs,
+          },
+        );
+      }
+
+      try {
+        await ctx.runAction(
+          internal.userPlatformAppMounts
+            .seedCommunityAppGrantIntoUserHarnessInternal,
+          {
+            userId,
+            communityAppMountId: args.communityAppMountId,
+            nowMs,
+          },
+        );
+      } catch {
+        // The canonical community app mount is still the source of truth; personal
+        // seeding can be retried through the existing grant seed path.
+      }
+    }
+
+    return await ctx.runQuery(
+      internal.communityAppMounts.getCommunityAppMountReadModelInternal,
+      {
+        userId,
+        communityId: args.communityId,
+        communityAppMountId: args.communityAppMountId,
+      },
+    );
   },
 });
 
@@ -938,13 +1135,18 @@ export const upsertCommunityAppMountInternal = internalMutation({
       )
       .first();
     if (existing) {
-      await ctx.db.patch(existing._id, {
-        toolSnapshotId: args.toolSnapshotId ?? undefined,
+      const patch: Record<string, unknown> = {
         mountedByUserId: args.mountedByUserId,
         enabled: args.enabled,
-        enabledTools: args.enabledTools ?? existing.enabledTools,
         updatedAt: nowMs,
-      });
+      };
+      if (args.toolSnapshotId !== undefined) {
+        patch.toolSnapshotId = args.toolSnapshotId;
+      }
+      if (args.enabledTools !== undefined) {
+        patch.enabledTools = args.enabledTools;
+      }
+      await ctx.db.patch(existing._id, patch as any);
       return existing._id;
     }
     return await ctx.db.insert("communityAppMounts", {

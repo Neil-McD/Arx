@@ -4,7 +4,9 @@ import type { CreateSkillPackageInput } from "../../../../shared/skillPackageTyp
 import type { UserPlatformInstalledSkill } from "../../../../shared/userPlatformSkillTypes";
 import type { EffectiveMcpApp } from "../../../../shared/effectiveMcpApps";
 import type { EffectiveSkill } from "../../../../shared/effectiveSkills";
+import type { DeveloperAppAuthType } from "../../../../shared/communityAppMountTypes";
 import type {
+  BeginUserPlatformAppOAuthOptions,
   BeginUserPlatformAppOAuthResult,
   ConnectUserPlatformAppInput,
   ConnectUserPlatformAppResult,
@@ -42,6 +44,7 @@ type WebIntegrationsSettingsSectionProps = {
   isConnectingUserPlatformApp: boolean;
   updatingUserPlatformAppMountId: string | null;
   refreshingUserPlatformAppMountId: string | null;
+  refreshingCommunityAppMountId: string | null;
   reconnectingUserPlatformAppMountId: string | null;
   removingUserPlatformAppMountId: string | null;
   onConnectUserPlatformApp: (
@@ -49,6 +52,7 @@ type WebIntegrationsSettingsSectionProps = {
   ) => Promise<ConnectUserPlatformAppResult>;
   onBeginUserPlatformAppOAuth: (
     catalogAppId: string,
+    options?: BeginUserPlatformAppOAuthOptions,
   ) => Promise<BeginUserPlatformAppOAuthResult>;
   onUpdateUserPlatformAppMount: (
     userPlatformAppMountId: string,
@@ -64,6 +68,12 @@ type WebIntegrationsSettingsSectionProps = {
     userPlatformAppMountId: string,
     secret: string,
   ) => Promise<void> | Promise<boolean> | boolean | void;
+  onSetupImportedCommunityMcpApp: (input: {
+    community_app_mount_id: string;
+    endpoint_url: string;
+    auth_type: DeveloperAppAuthType;
+    secret?: string;
+  }) => Promise<void> | Promise<boolean> | boolean | void;
   onUnmountUserPlatformApp: (
     userPlatformAppMountId: string,
   ) => Promise<void> | Promise<boolean> | boolean | void;
@@ -154,6 +164,7 @@ export function WebIntegrationsSettingsSection(
     isConnectingUserPlatformApp,
     updatingUserPlatformAppMountId,
     refreshingUserPlatformAppMountId,
+    refreshingCommunityAppMountId,
     reconnectingUserPlatformAppMountId,
     removingUserPlatformAppMountId,
     onConnectUserPlatformApp,
@@ -161,6 +172,7 @@ export function WebIntegrationsSettingsSection(
     onUpdateUserPlatformAppMount,
     onRefreshUserPlatformApp,
     onReconnectUserPlatformApp,
+    onSetupImportedCommunityMcpApp,
     onUnmountUserPlatformApp,
     userPlatformSkills,
     isLoadingUserPlatformSkills,
@@ -221,11 +233,13 @@ export function WebIntegrationsSettingsSection(
     onUnavailable: openDiscoverApps,
     isConnecting: isConnectingUserPlatformApp,
     refreshingPersonalMountId: refreshingUserPlatformAppMountId,
+    refreshingCommunityMountId: refreshingCommunityAppMountId,
     reconnectingPersonalMountId: reconnectingUserPlatformAppMountId,
     onConnectApp: onConnectUserPlatformApp,
     onBeginOAuth: onBeginUserPlatformAppOAuth,
     onRefreshApp: onRefreshUserPlatformApp,
     onReconnectApp: onReconnectUserPlatformApp,
+    onSetupImportedCommunityMcpApp,
   });
 
   useEffect(() => {
@@ -353,11 +367,18 @@ export function WebIntegrationsSettingsSection(
               const catalogEntry = findDiscoverCatalogEntryForAppIdentity(
                 effectiveApp.app,
               );
+              const importedCommunityMount = effectiveApp.community_mount;
+              const canSetupImportedCommunity = Boolean(
+                importedCommunityMount?.app.mcp_registry_id &&
+                  (importedCommunityMount.app.setup_status === "needs_auth" ||
+                    importedCommunityMount.app.setup_status === "needs_config"),
+              );
               const canSetupPersonal =
                 effectiveApp.primary_action === "setup_personal" &&
                 Boolean(
-                  catalogEntry &&
-                    isDiscoverAppPersonallyConnectable(catalogEntry),
+                  (catalogEntry &&
+                    isDiscoverAppPersonallyConnectable(catalogEntry)) ||
+                    canSetupImportedCommunity,
                 );
               const row = buildIntegrationSurfaceRowFromEffectiveApp(effectiveApp, {
                 enabled:
@@ -417,7 +438,12 @@ export function WebIntegrationsSettingsSection(
                               setReconnectSecret("");
                               setReconnectError(null);
                               personalAppSetup.open({
-                                source: effectiveApp,
+                                source:
+                                  canSetupImportedCommunity &&
+                                  importedCommunityMount
+                                    ? importedCommunityMount
+                                    : effectiveApp,
+                                effectiveSource: effectiveApp,
                                 catalogEntry,
                               });
                             }}

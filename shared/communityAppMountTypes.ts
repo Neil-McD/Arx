@@ -5,6 +5,8 @@ export type AppMountLiveStatus = "live" | "not_live";
 export type AppMountNotLiveReason =
   | "disabled"
   | "needs_auth"
+  | "needs_config"
+  | "needs_runtime"
   | "validation_failed"
   | "no_tools_discovered"
   | "missing_snapshot"
@@ -31,6 +33,9 @@ export type CommunityMountedApp = {
     endpoint_url: string;
     auth_type: string;
     status: string;
+    setup_status?: string | null;
+    setup_reason?: string | null;
+    mcp_registry_id?: string | null;
   };
   connection: {
     connection_status: string;
@@ -44,4 +49,10 @@ export type ConnectCommunityAppInput = {
   endpoint_url: string;
   auth_type: DeveloperAppAuthType;
   description?: string;
+};
+
+export type SetupImportedCommunityMcpAppInput = {
+  community_app_mount_id: string;
+  endpoint_url: string;
+  auth_type: DeveloperAppAuthType;
 };

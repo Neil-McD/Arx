@@ -36,6 +36,9 @@ import {
   resolveDiscoverAppCatalogConnectPolicy,
   validateDiscoverAppSecretForCatalogAppId,
 } from "../shared/discoverCatalog";
+import {
+  resolveCommunityWorkflowImportMcpRegistryConnectPolicy,
+} from "../shared/communityWorkflowImportMcpRegistry";
 
 function coerceValidationReport(
   rawReport: unknown,
@@ -122,7 +125,10 @@ function withMountedStage(
   };
 }
 import { encryptSecret } from "./providerConnections";
-import { resolveUserIdForAuthenticatedRequest } from "./communityCore";
+import {
+  requireCommunityChatAccess,
+  resolveUserIdForAuthenticatedRequest,
+} from "./communityCore";
 
 type UserPlatformAppMountRow = {
   _id: any;
@@ -182,6 +188,8 @@ type UserPlatformAppMountLiveStatus = "live" | "not_live";
 type UserPlatformAppMountNotLiveReason =
   | "disabled"
   | "needs_auth"
+  | "needs_config"
+  | "needs_runtime"
   | "validation_failed"
   | "no_tools_discovered"
   | "missing_snapshot";
@@ -710,6 +718,15 @@ function deriveUserPlatformMountLiveState(args: {
 } {
   if (!args.mount.enabled) {
     return { live_status: "not_live", not_live_reason: "disabled" };
+  }
+  if (args.app.setupStatus === "needs_runtime") {
+    return { live_status: "not_live", not_live_reason: "needs_runtime" };
+  }
+  if (args.app.setupStatus === "needs_config") {
+    return { live_status: "not_live", not_live_reason: "needs_config" };
+  }
+  if (args.app.setupStatus === "needs_auth") {
+    return { live_status: "not_live", not_live_reason: "needs_auth" };
   }
   if (
     args.app.authType !== "none" &&
@@ -2004,6 +2021,251 @@ export const connectUserPlatformApp = action({
   },
 });
 
+export const connectImportedCommunityMcpUserHarnessInternal = internalAction({
+  args: {
+    userId: v.id("users"),
+    communityId: v.id("communities"),
+    communityAppMountId: v.id("communityAppMounts"),
+    catalogAppId: v.optional(v.string()),
+    mcpRegistryId: v.string(),
+    name: v.string(),
+    description: v.optional(v.string()),
+    endpointUrl: v.string(),
+    authType: v.union(
+      v.literal("none"),
+      v.literal("api_key"),
+      v.literal("bearer"),
+      v.literal("oauth"),
+    ),
+    secret: v.optional(v.string()),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args): Promise<unknown> => {
+    const nowMs = args.nowMs ?? Date.now();
+    const policy = resolveCommunityWorkflowImportMcpRegistryConnectPolicy({
+      mcpRegistryId: args.mcpRegistryId,
+      name: args.name,
+      endpointUrl: args.endpointUrl,
+      authType: args.authType,
+    });
+    if (!policy.ok) {
+      return {
+        ok: false,
+        mount: null,
+        error_message: policy.message,
+      };
+    }
+    const normalizedSecret = normalizeString(args.secret, 10_000);
+    if (policy.authType !== "none" && !normalizedSecret) {
+      return {
+        ok: false,
+        mount: null,
+        error_message: `${policy.name} requires a token or API key.`,
+      };
+    }
+    const secretPolicy = validateDiscoverAppSecretForCatalogAppId(
+      args.catalogAppId,
+      normalizedSecret,
+    );
+    if (!secretPolicy.ok) {
+      return {
+        ok: false,
+        mount: null,
+        error_message: secretPolicy.message,
+      };
+    }
+
+    const source: UserHarnessAppSourceInput = {
+      sourceType: "community",
+      communityId: args.communityId,
+      communityAppMountId: args.communityAppMountId,
+    };
+    const existingMount = await resolveExistingMountForConnect({
+      ctx,
+      userId: args.userId,
+      endpointUrl: policy.endpointUrl,
+      authType: policy.authType,
+    });
+    let developerAppId = existingMount?.app._id ?? null;
+    if (!developerAppId) {
+      developerAppId = (await ctx.runMutation(
+        internal.developerApps.createDeveloperAppInternal,
+        {
+          ownerUserId: args.userId,
+          catalogAppId: args.catalogAppId,
+          mcpRegistryId: policy.mcpRegistryId,
+          name: policy.name,
+          slug: undefined,
+          description: args.description,
+          endpointUrl: policy.endpointUrl,
+          authType: policy.authType,
+          nowMs,
+        },
+      )) as any;
+    }
+
+    if (policy.authType !== "none") {
+      await upsertConnectedSecretForConnect({
+        ctx,
+        developerAppId,
+        secret: normalizedSecret,
+        nowMs,
+      });
+    }
+
+    const validation = await validateDeveloperAppForConnect({
+      ctx,
+      developerAppId,
+    });
+    const app = (await ctx.runQuery(
+      internal.developerApps.getDeveloperAppByIdInternal,
+      {
+        developerAppId,
+      },
+    )) as DeveloperAppRow | null;
+    if (validation.validationStatus !== "ok" || !app?.activeSnapshotId) {
+      const mount = await mountSetupNeededDeveloperAppForUser({
+        ctx,
+        userId: args.userId,
+        developerAppId,
+        toolSnapshotId: app?.activeSnapshotId,
+        source,
+        nowMs,
+      });
+      return {
+        ok: false,
+        mount,
+        error_message:
+          validation.validationError ||
+          "The imported MCP endpoint could not be validated.",
+      };
+    }
+
+    const enabledTools = buildDiscoverAppDefaultEnabledToolNames(
+      args.catalogAppId,
+      validation.snapshotTools.map((tool) => ({
+        tool_name: normalizeString(tool.tool_name, 200),
+      })),
+    );
+    if (enabledTools.length === 0) {
+      const mount = await mountSetupNeededDeveloperAppForUser({
+        ctx,
+        userId: args.userId,
+        developerAppId,
+        toolSnapshotId: app.activeSnapshotId,
+        enabledTools: [],
+        source,
+        nowMs,
+      });
+      return {
+        ok: false,
+        mount,
+        error_message: "The imported MCP endpoint did not expose usable tools.",
+      };
+    }
+
+    const mounted = await mountValidatedDeveloperAppForUser({
+      ctx,
+      userId: args.userId,
+      developerAppId,
+      toolSnapshotId: app.activeSnapshotId,
+      enabledTools,
+      source,
+      nowMs,
+    });
+    return {
+      ok: true,
+      mount: mounted.mount,
+      error_message: null,
+    };
+  },
+});
+
+export const setupImportedCommunityMcpUserHarness = action({
+  args: {
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+    communityAppMountId: v.id("communityAppMounts"),
+    endpointUrl: v.string(),
+    authType: v.union(
+      v.literal("none"),
+      v.literal("api_key"),
+      v.literal("bearer"),
+      v.literal("oauth"),
+    ),
+    secret: v.optional(v.string()),
+  },
+  handler: async (ctx, args): Promise<unknown> => {
+    const { userId } = await resolveAuthenticatedActionUser({
+      ctx,
+      authSubject: args.authSubject ?? null,
+    });
+    await requireCommunityChatAccess({
+      ctx,
+      communityId: args.communityId,
+      userId,
+    });
+    const seedSource = (await ctx.runQuery(
+      internal.communityAppMounts.getCommunityAppMountSeedSourceInternal,
+      {
+        communityAppMountId: args.communityAppMountId,
+      },
+    )) as {
+      mount: {
+        _id: any;
+        communityId: any;
+      };
+      app: DeveloperAppRow;
+    } | null;
+    if (
+      !seedSource ||
+      String(seedSource.mount.communityId) !== String(args.communityId) ||
+      !seedSource.app.mcpRegistryId
+    ) {
+      return {
+        ok: false,
+        mount: null,
+        validation_report: null,
+        error_code: "developer_app_connect_failed",
+        error_message: "Imported MCP community app not found.",
+        connect_attempt_id: null,
+      };
+    }
+    const result = (await ctx.runAction(
+      internal.userPlatformAppMounts.connectImportedCommunityMcpUserHarnessInternal,
+      {
+        userId,
+        communityId: args.communityId,
+        communityAppMountId: args.communityAppMountId,
+        catalogAppId: seedSource.app.catalogAppId,
+        mcpRegistryId: seedSource.app.mcpRegistryId,
+        name: seedSource.app.name,
+        description: seedSource.app.description,
+        endpointUrl: args.endpointUrl,
+        authType: args.authType,
+        secret: args.secret,
+        nowMs: Date.now(),
+      },
+    )) as {
+      ok?: boolean;
+      mount?: unknown;
+      error_message?: string | null;
+    } | null;
+    return {
+      ok: result?.ok === true,
+      mount: result?.mount ?? null,
+      validation_report: null,
+      error_code: result?.ok === true ? null : "developer_app_connect_failed",
+      error_message:
+        result?.ok === true
+          ? null
+          : result?.error_message ||
+            "The imported MCP could not be connected to your harness.",
+      connect_attempt_id: null,
+    };
+  },
+});
+
 export const refreshUserPlatformApp = action({
   args: {
     authSubject: v.optional(v.string()),
@@ -2478,6 +2740,7 @@ export const ensureUserHarnessAppInternal = internalAction({
   args: {
     userId: v.id("users"),
     catalogAppId: v.optional(v.string()),
+    mcpRegistryId: v.optional(v.string()),
     name: v.string(),
     description: v.optional(v.string()),
     endpointUrl: v.string(),
@@ -2567,6 +2830,7 @@ export const ensureUserHarnessAppInternal = internalAction({
       {
         ownerUserId: args.userId,
         catalogAppId: args.catalogAppId,
+        mcpRegistryId: args.mcpRegistryId,
         name: args.name,
         slug: undefined,
         description: args.description,
@@ -2650,6 +2914,7 @@ export const seedCommunityAppGrantIntoUserHarnessInternal = internalAction({
         description: seedSource.app.description,
         endpointUrl: seedSource.app.endpointUrl,
         authType: seedSource.app.authType,
+        mcpRegistryId: seedSource.app.mcpRegistryId,
         enabled: seedSource.mount.enabled !== false,
         enabledTools: Array.isArray(seedSource.mount.enabledTools)
           ? seedSource.mount.enabledTools
@@ -2777,6 +3042,7 @@ export const seedCommunityAppGrantsForUserInternal = internalAction({
             description: seedSource.app.description,
             endpointUrl: seedSource.app.endpointUrl,
             authType: seedSource.app.authType,
+            mcpRegistryId: seedSource.app.mcpRegistryId,
             enabled: seedSource.mount.enabled !== false,
             enabledTools: Array.isArray(seedSource.mount.enabledTools)
               ? seedSource.mount.enabledTools

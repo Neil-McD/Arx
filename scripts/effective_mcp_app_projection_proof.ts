@@ -151,6 +151,13 @@ function proveSettingsRowPreservesCommunityAttachmentContract() {
     ),
     "utf8",
   );
+  const communitySettingsSource = readFileSync(
+    new URL(
+      "../apps/web/src/components/WebCommunitySettingsSection.tsx",
+      import.meta.url,
+    ),
+    "utf8",
+  );
 
   assert.match(
     integrationRowsSource,
@@ -158,9 +165,29 @@ function proveSettingsRowPreservesCommunityAttachmentContract() {
     "settings row projection must preserve the effective community MCP mount",
   );
   assert.match(
+    integrationRowsSource,
+    /!effectiveApp\?\.live_for_current_user/,
+    "community setup rows must not keep prompting setup after the user's effective app is live",
+  );
+  assert.match(
+    communitySettingsSource,
+    /!effectiveApp\?\.live_for_current_user/,
+    "community settings actions must hide setup once the selected user's effective MCP is live",
+  );
+  assert.match(
     settingsSource,
     /const communityScopeLabel = row\.communityMount[\s\S]*Personal \+ community/,
     "settings rows must label merged personal and selected-community MCPs",
+  );
+  assert.match(
+    settingsSource,
+    /canSetupImportedCommunity/,
+    "personal integration settings must allow setup for imported selected-community MCPs",
+  );
+  assert.match(
+    settingsSource,
+    /onSetupImportedCommunityMcpApp/,
+    "personal integration settings must route imported community MCP setup to the canonical setup action",
   );
   assert.match(
     settingsSource,
