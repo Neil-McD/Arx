@@ -131,10 +131,6 @@ import {
   setCloudCommunityFreeAccessMode,
 } from "../../../shared/cloudCommunityAdminGateway";
 import {
-  applyCloudCommunityWorkflowImportReview,
-  createCloudCommunityWorkflowImportDraft,
-  createCloudCommunityWorkflowImportDraftFromPackage,
-  loadCloudCommunityWorkflowImportDraft,
   loadCloudCommunityLaunchSetupStatus,
   saveCloudCommunityLaunchProfile,
   type CloudCommunityLaunchProfileSaveInput,
@@ -7470,11 +7466,6 @@ export default function App() {
         openCommunityTab(nextCommunitySlug, "ai_agent", { pushSnapshot: false });
         return;
       }
-      if (step === "workflows") {
-        setCommunityAiAgentPreferredTab("apps");
-        openCommunityTab(nextCommunitySlug, "ai_agent", { pushSnapshot: false });
-        return;
-      }
       openCommunityTab(nextCommunitySlug, "settings", { pushSnapshot: false });
     };
     const communityLaunchAgentStarterPrompts = useMemo(() => {
@@ -7676,77 +7667,6 @@ export default function App() {
       activeCommunityAgentLandingCommunityIdRef.current = community.id;
       setActiveCommunityAgentLanding(normalizedLanding);
       await refreshActiveCommunityLaunchSetupStatus();
-    };
-    const handleStartCommunityLaunchWorkflowImport = async (draft: {
-      sourceHarness: string;
-      rawHarnessOutput?: string;
-      packageFile?: File | null;
-    }) => {
-      const { session, community } = requireCommunityLaunchSaveContext();
-      const result = draft.packageFile
-        ? await createCloudCommunityWorkflowImportDraftFromPackage({
-            session,
-            communityId: community.id,
-            sourceHarness: draft.sourceHarness,
-            file: draft.packageFile,
-          })
-        : await createCloudCommunityWorkflowImportDraft({
-            session,
-            communityId: community.id,
-            sourceHarness: draft.sourceHarness,
-            rawHarnessOutput: draft.rawHarnessOutput ?? "",
-          });
-      if (!result) throw new Error("Failed to start workflow import.");
-      return {
-        id: result.id,
-        status: result.status,
-        currentLedgerJson: result.current_ledger_json,
-        errorMessage: result.error_message,
-      };
-    };
-    const handleLoadCommunityLaunchWorkflowImport = async (draftId: string) => {
-      const { session, community } = requireCommunityLaunchSaveContext();
-      const result = await loadCloudCommunityWorkflowImportDraft({
-        session,
-        communityId: community.id,
-        draftId,
-      });
-      if (!result) throw new Error("Failed to load workflow import.");
-      return {
-        id: result.id,
-        status: result.status,
-        currentLedgerJson: result.current_ledger_json,
-        errorMessage: result.error_message,
-      };
-    };
-    const handleApplyCommunityLaunchWorkflowImport = async (draft: {
-      draftId: string;
-      selectedItemIds: string[];
-    }) => {
-      const { session, community } = requireCommunityLaunchSaveContext();
-      const result = await applyCloudCommunityWorkflowImportReview({
-        session,
-        communityId: community.id,
-        draftId: draft.draftId,
-        selectedItemIds: draft.selectedItemIds,
-      });
-      if (!result) throw new Error("Failed to apply workflow import.");
-      await Promise.all([
-        loadCommunityAppMounts(community.id, session),
-        loadCommunitySkillAttachments(community.id, session),
-        loadOwnedSkillPackages(session),
-        reloadEffectiveMcpApps(),
-        reloadEffectiveSkills(),
-        refreshActiveCommunityLaunchSetupStatus(),
-      ]);
-      return {
-        id: result.id,
-        status: result.status,
-        currentLedgerJson: result.current_ledger_json,
-        errorMessage: result.error_message,
-        outcomes: result.outcomes,
-        summary: result.summary,
-      };
     };
     const handleSaveCommunityLaunchAccess = async (draft: {
       entryPolicy: "open" | "approval";
@@ -9422,9 +9342,6 @@ export default function App() {
         onSaveAbout={handleSaveCommunityLaunchAbout}
         onAddKnowledgeLink={handleAddCommunityLaunchKnowledgeLink}
         onSaveAgent={handleSaveCommunityLaunchAgent}
-        onStartWorkflowImport={handleStartCommunityLaunchWorkflowImport}
-        onLoadWorkflowImport={handleLoadCommunityLaunchWorkflowImport}
-        onApplyWorkflowImport={handleApplyCommunityLaunchWorkflowImport}
         onSaveAccess={handleSaveCommunityLaunchAccess}
         onSavePublish={handleSaveCommunityLaunchPublish}
       />

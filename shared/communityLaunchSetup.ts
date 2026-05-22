@@ -7,7 +7,6 @@ export type CommunityLaunchSetupStep =
   | "profile"
   | "about"
   | "agent"
-  | "workflows"
   | "access"
   | "knowledge"
   | "publish";
@@ -20,7 +19,6 @@ export type CommunityLaunchSetupMissing =
   | "community_knowledge_material"
   | "community_knowledge_published"
   | "community_agent"
-  | "community_workflow"
   | "community_access"
   | "community_publish";
 
@@ -53,7 +51,6 @@ export type CommunityLaunchSetupStatusInput = {
   hasKnowledgeMaterial?: boolean | null;
   hasPublishedKnowledge?: boolean | null;
   hasAgentConfig?: boolean | null;
-  hasWorkflow?: boolean | null;
   entryPolicy?: string | null;
   hasPaidAccessConfig?: boolean | null;
   visibility?: string | null;
@@ -63,7 +60,6 @@ export const COMMUNITY_LAUNCH_SETUP_STEPS: CommunityLaunchSetupStep[] = [
   "profile",
   "about",
   "agent",
-  "workflows",
   "access",
   "knowledge",
   "publish",
@@ -127,9 +123,6 @@ export function buildCommunityLaunchSetupStatus(
   const agentMissing: CommunityLaunchSetupMissing[] = input.hasAgentConfig
     ? []
     : ["community_agent"];
-  const workflowMissing: CommunityLaunchSetupMissing[] = input.hasWorkflow
-    ? []
-    : ["community_workflow"];
   const accessMissing: CommunityLaunchSetupMissing[] = isKnownEntryPolicy(input.entryPolicy) &&
     isAccessConfigured(input)
     ? []
@@ -143,7 +136,6 @@ export function buildCommunityLaunchSetupStatus(
     buildStepStatus("profile", profileMissing, COMMUNITY_PROFILE_TOTAL_ITEMS),
     buildStepStatus("about", aboutMissing, 1),
     buildStepStatus("agent", agentMissing, 1),
-    buildStepStatus("workflows", workflowMissing, 1),
     buildStepStatus("access", accessMissing, 1),
     buildStepStatus("knowledge", knowledgeMissing, 2),
     buildStepStatus("publish", publishMissing, 1),

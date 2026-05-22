@@ -69,21 +69,13 @@ export const getCommunityLaunchSetupStatus = query({
       userId,
     });
 
-    const [knowledgeResourceProgress, agentConfigRows, appMountRows, skillAttachmentRows, currentPricePointRows] =
+    const [knowledgeResourceProgress, agentConfigRows, currentPricePointRows] =
       await Promise.all([
         getKnowledgeResourceProgress(ctx, args.communityId),
         ctx.db
           .query("communityAgentConfigs" as any)
           .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
           .take(5),
-        ctx.db
-          .query("communityAppMounts" as any)
-          .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
-          .take(50),
-        ctx.db
-          .query("communitySkillAttachments" as any)
-          .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
-          .take(50),
         ctx.db
           .query("communityPricePoints" as any)
           .withIndex("by_community_current", (q: any) => q.eq("communityId", args.communityId).eq("isCurrent", true))
@@ -93,13 +85,6 @@ export const getCommunityLaunchSetupStatus = query({
       (agentConfigRows as CommunityAgentConfigLike[])
         .slice()
         .sort((left, right) => right.updatedAt - left.updatedAt)[0] ?? null;
-    const hasWorkflow =
-      (appMountRows as Array<{ enabled?: boolean }>).some(
-        (mount) => mount.enabled !== false,
-      ) ||
-      (skillAttachmentRows as Array<{ enabled?: boolean }>).some(
-        (attachment) => attachment.enabled !== false,
-      );
 
     return buildCommunityLaunchSetupStatus({
       name: (community as CommunityLike).name,
@@ -112,7 +97,6 @@ export const getCommunityLaunchSetupStatus = query({
       hasKnowledgeMaterial: knowledgeResourceProgress.hasKnowledgeMaterial,
       hasPublishedKnowledge: knowledgeResourceProgress.hasPublishedKnowledge,
       hasAgentConfig: hasAgentConfig(primaryAgentConfig),
-      hasWorkflow,
       entryPolicy: resolveCommunityEntryPolicy(community as CommunityLike),
       hasPaidAccessConfig: hasUsablePaidAccessConfig(currentPricePointRows as CommunityPricePointLike[]),
       visibility: (community as CommunityLike).visibility,

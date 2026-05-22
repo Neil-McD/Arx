@@ -1168,47 +1168,6 @@ export default defineSchema({
     .index("by_community_status_createdAt", ["communityId", "status", "createdAt"])
     .index("by_sponsor_createdAt", ["sponsorUserId", "createdAt"]),
 
-  communityWorkflowImportDrafts: defineTable({
-    communityId: v.id("communities"),
-    builderUserId: v.id("users"),
-    sourceHarness: v.string(),
-    sourceKind: v.optional(
-      v.union(v.literal("pasted_output"), v.literal("workflow_export_zip")),
-    ),
-    status: v.union(
-      v.literal("working"),
-      v.literal("ready_for_review"),
-      v.literal("applied"),
-      v.literal("failed"),
-    ),
-    rawHarnessOutput: v.string(),
-    currentLedgerJson: v.optional(v.any()),
-    errorMessage: v.optional(v.string()),
-    packageFilename: v.optional(v.string()),
-    packageSha256: v.optional(v.string()),
-    packageByteCount: v.optional(v.number()),
-    packageSummary: v.optional(v.any()),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-  })
-    .index("by_community", ["communityId"])
-    .index("by_builder", ["builderUserId"])
-    .index("by_community_status", ["communityId", "status"])
-    .index("by_builder_createdAt", ["builderUserId", "createdAt"]),
-
-  communityWorkflowImportEvents: defineTable({
-    draftId: v.id("communityWorkflowImportDrafts"),
-    communityId: v.id("communities"),
-    builderUserId: v.id("users"),
-    seq: v.number(),
-    eventType: v.string(),
-    payload: v.any(),
-    createdAt: v.number(),
-  })
-    .index("by_draft_seq", ["draftId", "seq"])
-    .index("by_community_createdAt", ["communityId", "createdAt"])
-    .index("by_builder_createdAt", ["builderUserId", "createdAt"]),
-
   developerApps: defineTable({
     ownerUserId: v.id("users"),
     catalogAppId: v.optional(v.string()),

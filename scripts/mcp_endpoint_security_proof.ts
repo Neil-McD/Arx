@@ -74,13 +74,13 @@ async function main() {
   );
   assert.equal(
     resolveCommunityWorkflowImportMcpRegistryConnectPolicy({
-      mcpRegistryId: "context7",
-      name: "Context7",
-      endpointUrl: "https://mcp.context7.com/mcp",
+      mcpRegistryId: "vercel",
+      name: "Vercel",
+      endpointUrl: "https://mcp.vercel.com",
       authType: "none",
     }).ok,
     false,
-    "setup-needed imported MCP registry entries must reject unsupported no-auth setup",
+    "setup-needed remote MCP registry entries must reject unsupported no-auth setup",
   );
   assert.equal(
     resolveCommunityWorkflowImportMcpRegistryConnectPolicy({

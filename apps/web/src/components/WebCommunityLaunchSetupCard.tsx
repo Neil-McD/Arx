@@ -14,7 +14,6 @@ const STEP_DESCRIPTIONS: Record<CommunityLaunchSetupStep, string> = {
   profile: "Add the public profile pieces.",
   about: "Add the about section.",
   agent: "Configure the community agent.",
-  workflows: "Connect a skill, app, or workflow.",
   access: "Choose the access model.",
   knowledge: "Prepare resources and source systems.",
   publish: "Publish when ready.",

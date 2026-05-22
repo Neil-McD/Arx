@@ -195,11 +195,11 @@ function buildImportedCommunityMcpSetupCatalogEntry(
       "Review the remote MCP endpoint and auth details to make this imported community app live.",
     supportLabel: "Imported MCP",
     supportNote:
-      "This app came from a community workflow import and is not listed in Discover.",
-    heroNote: "Imported workflow app",
+      "This app was added by the selected community and is not listed in Discover.",
+    heroNote: "Community-provided app",
     capabilities: [
       "Remote MCP endpoint",
-      "Community workflow import",
+      "Community-provided setup",
       "Personal harness setup",
     ] as [string, string, string],
     websiteUrl: "",
