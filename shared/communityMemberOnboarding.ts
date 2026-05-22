@@ -13,7 +13,6 @@ export type CommunityMemberOnboardingConfig = {
   title: string;
   description: string;
   video_url: string | null;
-  thumbnail_url: string | null;
   primary_action: CommunityMemberOnboardingPrimaryAction;
   ai_guide_prompt: string;
 };
@@ -21,7 +20,6 @@ export type CommunityMemberOnboardingConfig = {
 export type CommunityMemberOnboardingConfigInput = Partial<
   CommunityMemberOnboardingConfig & {
     videoUrl: string | null;
-    thumbnailUrl: string | null;
     primaryAction: CommunityMemberOnboardingPrimaryAction;
     aiGuidePrompt: string;
   }
@@ -71,7 +69,6 @@ export function buildDefaultCommunityMemberOnboardingConfig(
     title: `Welcome to ${name}`,
     description: DEFAULT_DESCRIPTION,
     video_url: null,
-    thumbnail_url: null,
     primary_action: "ask_agent",
     ai_guide_prompt: DEFAULT_AI_GUIDE_PROMPT,
   };
@@ -88,7 +85,6 @@ export function normalizeCommunityMemberOnboardingConfig(
     title: normalizeBoundedText(source.title, defaults.title, 120),
     description: normalizeBoundedText(source.description, defaults.description, 400),
     video_url: normalizeOptionalUrl(source.video_url ?? source.videoUrl ?? null),
-    thumbnail_url: normalizeOptionalUrl(source.thumbnail_url ?? source.thumbnailUrl ?? null),
     primary_action: normalizePrimaryAction(source.primary_action ?? source.primaryAction),
     ai_guide_prompt: normalizeBoundedText(
       source.ai_guide_prompt ?? source.aiGuidePrompt,

@@ -28,7 +28,6 @@ export type CommunityLike = {
     title: string;
     description: string;
     videoUrl?: string | null;
-    thumbnailUrl?: string | null;
     primaryAction: CommunityMemberOnboardingPrimaryAction;
     aiGuidePrompt: string;
     updatedAt?: number;

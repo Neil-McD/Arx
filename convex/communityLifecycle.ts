@@ -118,7 +118,6 @@ function buildStoredMemberOnboardingConfig(args: {
     title: normalized.title,
     description: normalized.description,
     videoUrl: normalized.video_url,
-    thumbnailUrl: normalized.thumbnail_url,
     primaryAction: normalized.primary_action,
     aiGuidePrompt: normalized.ai_guide_prompt,
     updatedAt: args.nowMs,
@@ -137,7 +136,6 @@ function mapStoredMemberOnboardingConfig(
           title: config.title,
           description: config.description,
           video_url: config.videoUrl ?? null,
-          thumbnail_url: config.thumbnailUrl ?? null,
           primary_action: config.primaryAction,
           ai_guide_prompt: config.aiGuidePrompt,
         }
@@ -746,7 +744,6 @@ export const saveCommunityMemberOnboardingConfig = mutation({
       title: v.string(),
       description: v.string(),
       video_url: v.optional(v.union(v.string(), v.null())),
-      thumbnail_url: v.optional(v.union(v.string(), v.null())),
       primary_action: v.union(
         v.literal("introduce"),
         v.literal("ask_agent"),

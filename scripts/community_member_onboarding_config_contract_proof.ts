@@ -43,6 +43,16 @@ assert.match(
   /memberOnboarding: v\.optional\([\s\S]*enabled: v\.boolean\(\)[\s\S]*primaryAction: v\.union\([\s\S]*aiGuidePrompt: v\.string\(\)/,
   "community schema must store the persisted member onboarding config",
 );
+assert.doesNotMatch(
+  sharedConfig,
+  /thumbnail_url|thumbnailUrl/,
+  "member onboarding config must not store a separate thumbnail URL",
+);
+assert.doesNotMatch(
+  schema,
+  /thumbnailUrl/,
+  "community schema must not store a separate member onboarding thumbnail URL",
+);
 
 assert.match(
   lifecycle,
@@ -112,8 +122,13 @@ assert.match(
 );
 assert.match(
   settingsSection,
-  /CommunityMemberOnboardingSettingsSection[\s\S]*Show onboarding to new members[\s\S]*Welcome video URL[\s\S]*AI guide prompt[\s\S]*Save onboarding/,
+  /CommunityMemberOnboardingSettingsSection[\s\S]*Show onboarding to new members[\s\S]*Welcome video URL[\s\S]*AI guide prompt[\s\S]*Member preview[\s\S]*Save onboarding/,
   "onboarding settings pane must render the persisted config form",
+);
+assert.doesNotMatch(
+  settingsSection,
+  /Thumbnail URL|thumbnail_url/,
+  "onboarding settings pane must derive thumbnails from the video URL instead of asking for one",
 );
 assert.doesNotMatch(
   settingsSection,

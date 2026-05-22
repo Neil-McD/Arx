@@ -71,7 +71,6 @@ function mapCommunityMemberOnboardingForOutput(community: CommunityLike) {
           title: config.title,
           description: config.description,
           video_url: config.videoUrl ?? null,
-          thumbnail_url: config.thumbnailUrl ?? null,
           primary_action: config.primaryAction,
           ai_guide_prompt: config.aiGuidePrompt,
         }

@@ -870,7 +870,6 @@ export default defineSchema({
         title: v.string(),
         description: v.string(),
         videoUrl: v.optional(v.union(v.string(), v.null())),
-        thumbnailUrl: v.optional(v.union(v.string(), v.null())),
         primaryAction: v.union(
           v.literal("introduce"),
           v.literal("ask_agent"),

@@ -8,6 +8,7 @@ import type {
   CommunityMemberOnboardingConfig,
   CommunityMemberOnboardingPrimaryAction,
 } from "../../../../shared/communityMemberOnboarding";
+import { normalizeExternalUrl, parseEmbedUrl } from "../../../../shared/linkEmbedUi";
 import { formatStripeConnectCountry } from "../../../../shared/stripeConnectCountries";
 import { buildPlatformSwitcherStyle } from "../../../../shared/platformSwitcherUi";
 import type { CommunitySettingsPane } from "../../../../shared/appShellNavigation";
@@ -254,6 +255,23 @@ const COMMUNITY_MEMBER_ONBOARDING_ACTION_LABELS: Record<
   start_workflow: "Start a recommended workflow",
 };
 
+function resolveMemberOnboardingVideoPreview(videoUrl: string): {
+  host: string;
+  thumbnailUrl: string | null;
+} {
+  const embed = videoUrl ? parseEmbedUrl(videoUrl) : null;
+  const normalizedUrl = videoUrl ? normalizeExternalUrl(videoUrl) : null;
+  const host = normalizedUrl ? normalizedUrl.hostname.replace(/^www\./, "") : "";
+  const thumbnailUrl =
+    embed && "thumbnailUrls" in embed
+      ? (embed.thumbnailUrls[embed.thumbnailUrls.length - 1] ?? embed.thumbnailUrl)
+      : null;
+  return {
+    host,
+    thumbnailUrl,
+  };
+}
+
 function CommunityMemberOnboardingSettingsSection({
   activeCommunity,
   state,
@@ -267,105 +285,135 @@ function CommunityMemberOnboardingSettingsSection({
     actions.markCommunityMemberOnboardingDirty();
   };
   const videoUrl = config.video_url ?? "";
-  const thumbnailUrl = config.thumbnail_url ?? "";
+  const videoPreview = resolveMemberOnboardingVideoPreview(videoUrl);
+  const actionLabel = COMMUNITY_MEMBER_ONBOARDING_ACTION_LABELS[config.primary_action];
 
   return (
     <>
-      <div className="settings-section">
-        <div className="settings-section-title">Member onboarding</div>
-        <div className="settings-section-desc">
-          Configure the welcome experience new members see after joining {activeCommunity.name}.
-        </div>
-        <div className="model-list">
-          <label className="model-toggle">
-            <span>Show onboarding to new members</span>
-            <input
-              type="checkbox"
-              checked={config.enabled}
-              disabled={state.isSavingCommunityMemberOnboarding}
-              onChange={(event) => updateConfig({ enabled: event.target.checked })}
-            />
-          </label>
-        </div>
-        <label className="create-community-field">
-          <span>Welcome title</span>
-          <input
-            type="text"
-            value={config.title}
-            maxLength={120}
-            disabled={state.isSavingCommunityMemberOnboarding}
-            onChange={(event) => updateConfig({ title: event.target.value })}
-          />
-        </label>
-        <label className="create-community-field">
-          <span>Short description</span>
-          <textarea
-            rows={3}
-            value={config.description}
-            maxLength={400}
-            disabled={state.isSavingCommunityMemberOnboarding}
-            onChange={(event) => updateConfig({ description: event.target.value })}
-          />
-        </label>
-        <label className="create-community-field">
-          <span>Welcome video URL</span>
-          <input
-            type="url"
-            placeholder="https://youtube.com/..."
-            value={videoUrl}
-            disabled={state.isSavingCommunityMemberOnboarding}
-            onChange={(event) => updateConfig({ video_url: event.target.value.trim() || null })}
-          />
-          <span className="create-community-hint">
-            Optional. The member display will open this in the welcome modal.
+      <div className="settings-section member-onboarding-settings-section">
+        <div className="member-onboarding-heading">
+          <div>
+            <div className="settings-section-title">Member onboarding</div>
+            <div className="settings-section-desc">
+              Configure the welcome experience new members see after joining {activeCommunity.name}.
+            </div>
+          </div>
+          <span className={`member-onboarding-state ${config.enabled ? "is-on" : "is-off"}`}>
+            {config.enabled ? "Live for new members" : "Hidden"}
           </span>
-        </label>
-        <label className="create-community-field">
-          <span>Thumbnail URL</span>
+        </div>
+        <label className="member-onboarding-toggle">
           <input
-            type="url"
-            placeholder="https://..."
-            value={thumbnailUrl}
+            type="checkbox"
+            checked={config.enabled}
             disabled={state.isSavingCommunityMemberOnboarding}
-            onChange={(event) => updateConfig({ thumbnail_url: event.target.value.trim() || null })}
+            onChange={(event) => updateConfig({ enabled: event.target.checked })}
           />
-        </label>
-        <label className="create-community-field">
-          <span>Primary first action</span>
-          <select
-            className="select-styled"
-            value={config.primary_action}
-            disabled={state.isSavingCommunityMemberOnboarding}
-            onChange={(event) =>
-              updateConfig({
-                primary_action: event.target.value as CommunityMemberOnboardingPrimaryAction,
-              })
-            }
-          >
-            {Object.entries(COMMUNITY_MEMBER_ONBOARDING_ACTION_LABELS).map(([key, label]) => (
-              <option key={key} value={key}>
-                {label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="create-community-field">
-          <span>AI guide prompt</span>
-          <textarea
-            rows={5}
-            value={config.ai_guide_prompt}
-            maxLength={1000}
-            disabled={state.isSavingCommunityMemberOnboarding}
-            onChange={(event) => updateConfig({ ai_guide_prompt: event.target.value })}
-          />
-          <span className="create-community-hint">
-            Used later by the community agent to orient new members.
+          <span className="member-onboarding-toggle-copy">
+            <strong>Show onboarding to new members</strong>
+            <span>When enabled, new members see the welcome prompt after joining.</span>
           </span>
+          <span className="member-onboarding-switch" aria-hidden="true" />
         </label>
+
+        <div className="member-onboarding-layout">
+          <div className="member-onboarding-form">
+            <label className="create-community-field">
+              <span>Welcome title</span>
+              <input
+                type="text"
+                value={config.title}
+                maxLength={120}
+                disabled={state.isSavingCommunityMemberOnboarding}
+                onChange={(event) => updateConfig({ title: event.target.value })}
+              />
+            </label>
+            <label className="create-community-field">
+              <span>Short description</span>
+              <textarea
+                rows={3}
+                value={config.description}
+                maxLength={400}
+                disabled={state.isSavingCommunityMemberOnboarding}
+                onChange={(event) => updateConfig({ description: event.target.value })}
+              />
+            </label>
+            <div className="member-onboarding-field-grid">
+              <label className="create-community-field">
+                <span>Welcome video URL</span>
+                <input
+                  type="url"
+                  placeholder="https://youtube.com/..."
+                  value={videoUrl}
+                  disabled={state.isSavingCommunityMemberOnboarding}
+                  onChange={(event) => updateConfig({ video_url: event.target.value.trim() || null })}
+                />
+                <span className="create-community-hint">
+                  The thumbnail is pulled from the video link when available.
+                </span>
+              </label>
+              <label className="create-community-field">
+                <span>Primary first action</span>
+                <select
+                  className="select-styled"
+                  value={config.primary_action}
+                  disabled={state.isSavingCommunityMemberOnboarding}
+                  onChange={(event) =>
+                    updateConfig({
+                      primary_action: event.target.value as CommunityMemberOnboardingPrimaryAction,
+                    })
+                  }
+                >
+                  {Object.entries(COMMUNITY_MEMBER_ONBOARDING_ACTION_LABELS).map(([key, label]) => (
+                    <option key={key} value={key}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <label className="create-community-field">
+              <span>AI guide prompt</span>
+              <textarea
+                rows={4}
+                value={config.ai_guide_prompt}
+                maxLength={1000}
+                disabled={state.isSavingCommunityMemberOnboarding}
+                onChange={(event) => updateConfig({ ai_guide_prompt: event.target.value })}
+              />
+              <span className="create-community-hint">
+                Used later by the community agent to orient new members.
+              </span>
+            </label>
+          </div>
+          <div className="member-onboarding-preview">
+            <div className="member-onboarding-preview-label">Member preview</div>
+            <div className={`member-onboarding-preview-surface${config.enabled ? "" : " is-muted"}`}>
+              <div className="member-onboarding-preview-media">
+                {videoPreview.thumbnailUrl ? (
+                  <img src={videoPreview.thumbnailUrl} alt="" loading="lazy" />
+                ) : (
+                  <div className="member-onboarding-preview-media-empty">Video</div>
+                )}
+                <span className="member-onboarding-preview-play">Play</span>
+              </div>
+              <div className="member-onboarding-preview-copy">
+                <strong>{config.title || `Welcome to ${activeCommunity.name}`}</strong>
+                <span>{config.description}</span>
+                {videoPreview.host ? (
+                  <small>Video from {videoPreview.host}</small>
+                ) : (
+                  <small>No video set yet.</small>
+                )}
+              </div>
+              <div className="member-onboarding-preview-action">{actionLabel}</div>
+            </div>
+          </div>
+        </div>
         {state.communityMemberOnboardingError ? (
           <div className="auth-error">{state.communityMemberOnboardingError}</div>
         ) : null}
-        <div className="create-community-actions">
+        <div className="create-community-actions member-onboarding-actions">
           <button
             className={`platform-save-button${
               state.isCommunityMemberOnboardingDirty ? " is-dirty" : " is-saved"
@@ -383,16 +431,6 @@ function CommunityMemberOnboardingSettingsSection({
                 ? "Save onboarding"
                 : "Saved"}
           </button>
-        </div>
-      </div>
-      <div className="settings-section">
-        <div className="settings-section-title">Preview</div>
-        <div className="model-note">
-          <strong>{config.title || `Welcome to ${activeCommunity.name}`}</strong>
-          <br />
-          {config.description}
-          <br />
-          First action: {COMMUNITY_MEMBER_ONBOARDING_ACTION_LABELS[config.primary_action]}.
         </div>
       </div>
     </>
